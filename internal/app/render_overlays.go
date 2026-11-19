@@ -62,7 +62,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		timeLayer := lipgloss.NewLayer(renderedTime).
 			X(badgeX).
-			Y(m.GetTimeYPosition()).
+			Y(m.badgeY(kind)).
 			Z(config.ZIndexTime).
 			ID("time")
 

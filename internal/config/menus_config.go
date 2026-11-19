@@ -46,6 +46,29 @@ import (
 // MenuTargets are the reserved menu names, the right-click menus tuios ships.
 var MenuTargets = []string{"pane", "selection", "desktop", "dock", "dock_item", "workspace", "session", "repo", "machine", "file"}
 
+// shippedMenus are the menus tuios ships under a name a person may use too.
+// A [menus.NAME] or [keybindings.menus.NAME] of the person's own takes the
+// place of one.
+//
+// start is the short menu in plain words: the few things a person new to
+// terminals does, in the order they do them, and the full list one row away.
+var shippedMenus = map[string]MenuSpec{
+	"start": {Title: "Menu", Items: []any{
+		map[string]any{"action": "new_window", "key": "n", "label": "New terminal"},
+		map[string]any{"action": "split_vertical", "key": "s", "label": "Split side by side"},
+		map[string]any{"action": "split_horizontal", "key": "d", "label": "Split top and bottom"},
+		map[string]any{"action": "toggle_zoom", "key": "z", "label": "Make this pane full screen"},
+		map[string]any{"action": "close_window", "key": "x", "label": "Close this pane"},
+		MenuSeparator,
+		map[string]any{"action": "prefix_file_search", "key": "f", "label": "Find a file"},
+		map[string]any{"action": "prefix_selection", "key": "c", "label": "Select and copy text"},
+		map[string]any{"action": "command_palette", "key": "a", "label": "All commands"},
+		MenuSeparator,
+		map[string]any{"action": "open_settings", "key": ",", "label": "Settings"},
+		map[string]any{"action": "toggle_help", "key": "?", "label": "Help"},
+	}},
+}
+
 // MenuSeparator is the row that draws a separator.
 const MenuSeparator = "---"
 
@@ -180,11 +203,14 @@ func (c *UserConfig) MenuRows(name string) ([]MenuEntry, string, bool) {
 		rows, _ := spec.MenuItems()
 		return rows, strings.TrimSpace(spec.Title), true
 	}
-	old, ok := c.Keybindings.Menus[name]
-	if !ok || c.foldedMenus[name] {
-		return nil, "", false
+	if old, ok := c.Keybindings.Menus[name]; ok && !c.foldedMenus[name] {
+		return keyedRows(old.Keys), strings.TrimSpace(old.Title), true
 	}
-	return keyedRows(old.Keys), strings.TrimSpace(old.Title), true
+	if spec, ok := shippedMenus[name]; ok {
+		rows, _ := spec.MenuItems()
+		return rows, spec.Title, true
+	}
+	return nil, "", false
 }
 
 // keyedRows is a keys table as rows: submenus first, then by key, as the
@@ -225,19 +251,40 @@ func keyedRows(keys map[string][]string) []MenuEntry {
 // in the place of a [keybindings.menus.NAME] of the same name.
 func (c *UserConfig) foldMenus() {
 	kb := &c.Keybindings
-	for _, name := range slices.Sorted(maps.Keys(c.Menus)) {
+	specs := maps.Clone(c.Menus)
+	for name, spec := range shippedMenus {
+		_, mine := c.Menus[name]
+		_, old := kb.Menus[name]
+		if !mine && !old {
+			if specs == nil {
+				specs = map[string]MenuSpec{}
+			}
+			specs[name] = spec
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(specs)) {
 		if IsMenuTarget(name) || !validMenuName(name) {
 			continue
 		}
-		spec := c.Menus[name]
+		spec := specs[name]
 		rows, _ := spec.MenuItems()
 		keys := map[string][]string{}
 		labels := map[string]string{}
+		// The rows keep the order they were written in, and a separator
+		// starts a new group, so the panel reads as the menu does.
+		groups := [][]string{nil}
 		for _, e := range rows {
-			if len(e.Keys) == 0 || e.Sep {
+			if e.Sep {
+				groups = append(groups, nil)
+				continue
+			}
+			if len(e.Keys) == 0 {
 				continue
 			}
 			a := e.RowAction()
+			if _, seen := keys[a]; !seen {
+				groups[len(groups)-1] = append(groups[len(groups)-1], a)
+			}
 			keys[a] = append(keys[a], e.Keys...)
 			label := e.Label
 			if ua, ok := c.UserActionFor(a); ok && label == "" {
@@ -263,7 +310,7 @@ func (c *UserConfig) foldMenus() {
 			c.foldedMenus = map[string]bool{}
 		}
 		c.foldedMenus[name] = true
-		kb.Menus[name] = MenuConfig{Title: spec.Title, Sticky: spec.Sticky, Keys: keys, labels: labels}
+		kb.Menus[name] = MenuConfig{Title: spec.Title, Sticky: spec.Sticky, Keys: keys, labels: labels, groups: groups}
 	}
 }
 

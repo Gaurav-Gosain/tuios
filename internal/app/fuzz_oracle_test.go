@@ -690,7 +690,7 @@ func bandCovers(m *OS, x, y, n int) bool {
 // with one cell of padding on each side.
 func leaderBadgeCovers(m *OS, x, y, n int) bool {
 	text, kind := m.statusBadge()
-	if kind != badgeLeader || y != m.GetTimeYPosition() {
+	if kind != badgeLeader || y != m.badgeY(kind) {
 		return false
 	}
 	end := badgeX + ansi.StringWidth(text) + 2

@@ -146,7 +146,7 @@ toggle_zoom = ["z"]
 	if err := term.SendKeys(tuitest.Ctrl('b'), "t", "u"); err != nil {
 		t.Fatalf("send leader t u: %v", err)
 	}
-	waitMenu(t, term, "which-key", "my tools", "Save the pane name", "Cancel")
+	waitMenu(t, term, "which-key", "My tools", "Save the pane name", "Cancel")
 	fmt.Fprintf(&log, "== which-key\n%s\n", term.Screen().Text())
 	if err := term.SendKeys("s"); err != nil {
 		t.Fatalf("send s: %v", err)

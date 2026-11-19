@@ -301,6 +301,20 @@ func (m *OS) GetTimeYPosition() int {
 	return 0
 }
 
+// badgeY is the row the floating badge of kind sits on. An armed leader
+// with a full dock goes on the dock's rule row, the dock's own chrome. On the
+// panes' edge row it covered the focused pane's title for every dock that
+// lists no mode pill.
+func (m *OS) badgeY(kind badgeKind) int {
+	if kind == badgeLeader && m.Settings.DockbarPosition != "hidden" && m.Settings.DockHeight() >= 2 {
+		if m.Settings.DockbarPosition == "top" {
+			return m.Settings.DockHeight() - 1
+		}
+		return m.Height - m.Settings.DockHeight()
+	}
+	return m.GetTimeYPosition()
+}
+
 // badgeOnBottomRow reports whether the floating badge sits on the screen's
 // last row, which it does when the dock has the first.
 func (m *OS) badgeOnBottomRow() bool {

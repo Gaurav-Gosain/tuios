@@ -578,7 +578,7 @@ func (m *OS) renderWhichKey() (string, int, int) {
 	pad := overlay.Style(bg).Render("  ")
 	blank := overlay.Style(bg).Render(strings.Repeat(" ", contentWidth+4))
 	lines := []string{blank,
-		pad + overlay.Fill(overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate(strings.ToLower(title), contentWidth)), contentWidth, bg) + pad,
+		pad + overlay.Fill(overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate(whichKeyTitle(title, m.Menu != ""), contentWidth)), contentWidth, bg) + pad,
 		pad + overlay.Rule(contentWidth, bg, pal) + pad,
 	}
 	for _, l := range body {
@@ -589,4 +589,14 @@ func (m *OS) renderWhichKey() (string, int, int) {
 	// panel keeps a hairline edge the way every Panel does.
 	lines = overlay.FrameBlock(lines, contentWidth+4, bg, pal)
 	return strings.Join(lines, "\n"), contentWidth + 4, len(lines)
+}
+
+// whichKeyTitle is the panel's title as drawn. The leader's own panels are in
+// lower case. A declared menu keeps the title its table gives, so "Menu"
+// stays "Menu".
+func whichKeyTitle(title string, declared bool) string {
+	if declared {
+		return title
+	}
+	return strings.ToLower(title)
 }

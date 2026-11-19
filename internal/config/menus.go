@@ -50,6 +50,9 @@ type MenuConfig struct {
 	// labels are the rows' own labels of a [menus.NAME], which the panel
 	// shows in the place of the action's description.
 	labels map[string]string
+	// groups are the actions of a [menus.NAME] in the order the rows give
+	// them, split where a separator is. The panel shows them in that order.
+	groups [][]string
 }
 
 // OpenMenuAction is the action that opens the menu called name.
@@ -220,6 +223,9 @@ func MenuKeybindingGroups(kb *KeybindingsConfig, name string) []KeybindingGroup 
 		}
 		rows = append(rows, row)
 	}
+	if len(menu.groups) > 0 {
+		return orderedMenuGroups(menu.groups, rows, escBound)
+	}
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].Submenu != rows[j].Submenu {
 			return rows[i].Submenu
@@ -234,6 +240,28 @@ func MenuKeybindingGroups(kb *KeybindingsConfig, name string) []KeybindingGroup 
 		rows = append(rows, Keybinding{Key: "esc", Description: "Cancel", Action: "menu_cancel"})
 	}
 	return []KeybindingGroup{{Bindings: rows}}
+}
+
+// orderedMenuGroups lays rows out in the order of groups, one panel section
+// per group. The esc row goes last when the menu does not bind esc.
+func orderedMenuGroups(groups [][]string, rows []Keybinding, escBound bool) []KeybindingGroup {
+	var out []KeybindingGroup
+	for _, g := range groups {
+		var section []Keybinding
+		for _, action := range g {
+			if i := slices.IndexFunc(rows, func(r Keybinding) bool { return r.Action == action }); i >= 0 {
+				section = append(section, rows[i])
+			}
+		}
+		if len(section) > 0 {
+			out = append(out, KeybindingGroup{Bindings: section})
+		}
+	}
+	if !escBound && len(out) > 0 {
+		last := &out[len(out)-1]
+		last.Bindings = append(last.Bindings, Keybinding{Key: "esc", Description: "Cancel", Action: "menu_cancel"})
+	}
+	return out
 }
 
 // menuRowDescription is the sentence for an action in a menu's panel.

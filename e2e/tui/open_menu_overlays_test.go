@@ -90,7 +90,7 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 	// The Inbox: x opens the menu over it.
 	openInbox()
 	press("x")
-	if err := term.WaitForText("inbox x", uiTimeout); err != nil {
+	if err := term.WaitForText("Inbox x", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: x in the Inbox did not open the menu: %v\n%s", err, term.Snapshot())
 	}
 	if !inboxOpen() {
@@ -99,7 +99,7 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 	saveFrame(t, term, "inbox-menu")
 	// Esc closes the menu, and the Inbox stays.
 	press(tuitest.Esc)
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "inbox x") }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Inbox x") }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: esc did not close the menu: %v\n%s", err, term.Snapshot())
 	}
 	if !inboxOpen() {
@@ -118,7 +118,7 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 	}
 	// x then c: the menu's inbox_close.
 	press("x")
-	if err := term.WaitForText("inbox x", uiTimeout); err != nil {
+	if err := term.WaitForText("Inbox x", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: x did not open the menu a second time: %v\n%s", err, term.Snapshot())
 	}
 	press("c")
@@ -154,12 +154,12 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 	press(tuitest.Ctrl('b'), "e")
 	_ = term.WaitStable(uiTimeout)
 	press("z")
-	if err := term.WaitForText("rail g", uiTimeout); err != nil {
+	if err := term.WaitForText("Rail g", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: z in the rail did not open the menu: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "rail-menu")
 	press(tuitest.Esc)
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "rail g") }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Rail g") }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: esc did not close the rail's menu: %v\n%s", err, term.Snapshot())
 	}
 	press("w")
@@ -169,11 +169,11 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 	}
 	// The esc may have left the rail; focus it again if so.
 	press("z")
-	if err := term.WaitForText("rail g", uiTimeout); err != nil {
+	if err := term.WaitForText("Rail g", uiTimeout); err != nil {
 		press(tuitest.Ctrl('b'), "e")
 		_ = term.WaitStable(uiTimeout)
 		press("z")
-		if err := term.WaitForText("rail g", uiTimeout); err != nil {
+		if err := term.WaitForText("Rail g", uiTimeout); err != nil {
 			t.Fatalf("ASSERTION: z did not open the rail's menu a second time: %v\n%s", err, term.Snapshot())
 		}
 	}
@@ -235,12 +235,12 @@ func TestOpenMenuInTheReview(t *testing.T) {
 	_ = term.WaitStable(uiTimeout)
 
 	sendKeys(t, term, "m")
-	if err := term.WaitForText("quick stage", uiTimeout); err != nil {
+	if err := term.WaitForText("Quick stage", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: m in the review did not open the menu: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "review-menu")
 	sendKeys(t, term, tuitest.Esc)
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "quick stage") }, uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Quick stage") }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: esc did not close the review's menu: %v\n%s", err, term.Snapshot())
 	}
 	if !strings.Contains(term.Screen().Text(), "esc close") {
