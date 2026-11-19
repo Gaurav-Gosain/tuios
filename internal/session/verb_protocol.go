@@ -771,7 +771,7 @@ func buildVerbRegistry() map[string]verbEntry {
 		"display-env": {
 			scope:       scopeRead,
 			link:        needList,
-			description: "Report the display a new pane of the session gets now: WAYLAND_DISPLAY naming the session's Wayland link, and DISPLAY and XAUTHORITY of the newest local client. It is empty unless [daemon] display is follow, the daemon has no display of its own, and a local client with a display is attached.",
+			description: "Report the display a new pane of the session gets now: WAYLAND_DISPLAY naming the session's Wayland link, and DISPLAY and XAUTHORITY of the newest local client. WAYLAND_DISPLAY is there also before a client attaches, and left out when the session's clients have an X11 display and no Wayland socket. It is empty unless [daemon] display is follow and the daemon has no display of its own.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Description: "Session whose display to report."},
 			},

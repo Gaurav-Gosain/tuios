@@ -663,7 +663,10 @@ How the service and the daemon work together:
 - **The display follows the client.** The unit removes `DISPLAY`,
   `WAYLAND_DISPLAY` and `XAUTHORITY`. With `[daemon] display = "follow"`, the
   default, each session gets the display of the local client that attached
-  last. A shell that already runs gets it with `eval "$(tuios display-env)"`.
+  last. A pane that the service restores before you attach gets
+  `WAYLAND_DISPLAY` too. The display works in that pane when a client
+  attaches. A shell that already runs gets it with
+  `eval "$(tuios display-env)"`.
 - **The panes do not see the service manager.** tuios removes
   `INVOCATION_ID`, `JOURNAL_STREAM`, `NOTIFY_SOCKET`, `MANAGERPID` and
   `SYSTEMD_EXEC_PID` from each pane.

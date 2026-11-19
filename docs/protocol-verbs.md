@@ -1185,7 +1185,7 @@ Close one Inbox item for the person. Only a client attached right now can do it,
 
 ### `display-env`
 
-Report the display a new pane of the session gets now: WAYLAND_DISPLAY naming the session's Wayland link, and DISPLAY and XAUTHORITY of the newest local client. It is empty unless [daemon] display is follow, the daemon has no display of its own, and a local client with a display is attached.
+Report the display a new pane of the session gets now: WAYLAND_DISPLAY naming the session's Wayland link, and DISPLAY and XAUTHORITY of the newest local client. WAYLAND_DISPLAY is there also before a client attaches, and left out when the session's clients have an X11 display and no Wayland socket. It is empty unless [daemon] display is follow and the daemon has no display of its own.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|

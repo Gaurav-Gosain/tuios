@@ -289,8 +289,8 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 		t.Fatalf("create session: %v: %s", err, out)
 	}
 	r := readDisplayEnv(t, base, sess)
-	if !r.Follow || r.Own || len(r.Env) != 0 || r.Target != "" {
-		t.Fatalf("before any client: display-env = %+v, want follow, no display of its own, no variables", r)
+	if !r.Follow || r.Own || len(r.Env) != 1 || r.Env["WAYLAND_DISPLAY"] != r.Link || r.Target != "" {
+		t.Fatalf("before any client: display-env = %+v, want follow, no display of its own, WAYLAND_DISPLAY naming the link alone", r)
 	}
 	link := r.Link
 
@@ -395,7 +395,7 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 	if target, err := os.Readlink(otherLink); err == nil {
 		t.Fatalf("a client inside a pane made the Wayland link of %s point at %s", other, target)
 	}
-	if env := readDisplayEnv(t, base, other).Env; len(env) != 0 {
+	if env := readDisplayEnv(t, base, other).Env; len(env) != 1 || env["WAYLAND_DISPLAY"] != otherLink {
 		t.Fatalf("a client inside a pane gave %s the display %v", other, env)
 	}
 	outside := displayClient(t, base, other, "WAYLAND_DISPLAY="+sockA)
@@ -420,8 +420,8 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 	}
 	waitExit(t, a, "A's detach")
 	waitLinkTo(t, link, "", "after the last client left")
-	if env := readDisplayEnv(t, base, sess).Env; len(env) != 0 {
-		t.Fatalf("with no client left the display is %v, want none", env)
+	if env := readDisplayEnv(t, base, sess).Env; len(env) != 1 || env["WAYLAND_DISPLAY"] != link {
+		t.Fatalf("with no client left the display is %v, want the link alone", env)
 	}
 }
 
@@ -453,13 +453,13 @@ func TestDisplayFollowIgnoresAHostLinkClient(t *testing.T) {
 	}
 	time.Sleep(1500 * time.Millisecond)
 	far := readDisplayEnv(t, remote, "far-agent")
-	if len(far.Env) != 0 || far.Target != "" {
+	if len(far.Env) != 1 || far.Env["WAYLAND_DISPLAY"] != far.Link || far.Target != "" {
 		t.Fatalf("a client over a host link gave the far session the display %+v", far)
 	}
 	if target, err := os.Readlink(far.Link); err == nil {
 		t.Fatalf("a client over a host link made the far link point at %s", target)
 	}
-	if hub := readDisplayEnv(t, base, "home"); len(hub.Env) != 0 {
+	if hub := readDisplayEnv(t, base, "home"); len(hub.Env) != 1 || hub.Env["WAYLAND_DISPLAY"] != hub.Link {
 		t.Fatalf("a client over a host link gave the hub's session the display %+v", hub)
 	}
 	saveArtifact(t, term, artifactDir(t), "display-host-link")

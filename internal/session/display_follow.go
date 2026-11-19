@@ -34,9 +34,15 @@ import (
 //     in its hello (ClientDisplay). Only tuios attach and tuios new send them.
 //   - Each session has one link, wayland-<id>.sock beside the daemon socket,
 //     that points at the Wayland socket of the newest client that has one.
-//     A new pane started while the session has such a client gets
-//     WAYLAND_DISPLAY set to the link's absolute path, which libwayland
-//     accepts as is. The link moves when a client comes or goes, so a pane
+//     Every pane of the session gets WAYLAND_DISPLAY set to the link's
+//     absolute path, which libwayland accepts as is, also a pane started or
+//     restored before any client attached: the link appears under it when a
+//     client comes. The one exception is a session whose clients have an X11
+//     display and no Wayland socket: a link that points at nothing would make
+//     a toolkit try Wayland first, so those panes get DISPLAY alone.
+//   - A client with no Wayland socket never moves or removes the link while
+//     a client with one is still there. Before, two such clients that took
+//     turns at the keyboard made the link flap every second. The link moves when a client comes or goes, so a pane
 //     started under one desktop client still reaches the compositor after
 //     that client detaches and another attaches.
 //   - DISPLAY is a name, :N, and cannot be a link. A new pane gets the
@@ -448,19 +454,18 @@ func (d *Daemon) relinkDisplayLocked(sessionID string) {
 	if f.stopped {
 		return
 	}
-	list := f.bySession[sessionID]
-	for len(list) > 0 && !stillShown(list[0].shown) {
-		list = list[1:]
-	}
+	list := slices.DeleteFunc(f.bySession[sessionID], func(c displayCandidate) bool { return !stillShown(c.shown) })
 	if len(list) == 0 {
 		delete(f.bySession, sessionID)
 	} else {
 		f.bySession[sessionID] = list
 	}
 	link := DisplayLinkPath(d.manager.SocketPath(), sessionID)
-	want := ""
-	if len(list) > 0 {
-		want = list[0].shown.wayland
+	// The newest client with a Wayland socket, not the newest client: one
+	// with X11 alone does not take the link from it.
+	want, by := "", ""
+	if i := slices.IndexFunc(list, func(c displayCandidate) bool { return c.shown.wayland != "" }); i >= 0 {
+		want, by = list[i].shown.wayland, list[i].clientID
 	}
 	if want == "" {
 		if _, ok := f.target[sessionID]; ok {
@@ -476,19 +481,22 @@ func (d *Daemon) relinkDisplayLocked(sessionID string) {
 		}
 	}
 	if err := replaceSymlink(want, link); err != nil {
-		LogBasic("Could not point the Wayland link of session %s at the socket of client %s: %v", shortID(sessionID), list[0].clientID, err)
+		LogBasic("Could not point the Wayland link of session %s at the socket of client %s: %v", shortID(sessionID), by, err)
 		return
 	}
 	if f.target == nil {
 		f.target = make(map[string]string)
 	}
 	f.target[sessionID] = want
-	LogBasic("Pointed the Wayland link of session %s at the socket of client %s", shortID(sessionID), list[0].clientID)
+	LogBasic("Pointed the Wayland link of session %s at the socket of client %s", shortID(sessionID), by)
 }
 
 // displayVars is the session's display as pane variables: WAYLAND_DISPLAY
-// naming the link while it points somewhere, and the newest client's DISPLAY
-// and XAUTHORITY. Nil when the follow is off or no client counts.
+// naming the link, and DISPLAY and XAUTHORITY of the newest client with an
+// X11 display. The link is named also before it points anywhere, so a pane
+// restored before any client attached reaches the display once one does. It
+// is left out when the session's clients have X11 and no Wayland socket. Nil
+// when the follow is off.
 func (d *Daemon) displayVars(sessionID string) []string {
 	if sessionID == "" || !d.displayFollowing() {
 		return nil
@@ -497,14 +505,13 @@ func (d *Daemon) displayVars(sessionID string) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	list := f.bySession[sessionID]
-	if len(list) == 0 {
-		return nil
-	}
+	x := slices.IndexFunc(list, func(c displayCandidate) bool { return c.shown.x11 != "" })
 	var env []string
-	if _, linked := f.target[sessionID]; linked {
+	if _, linked := f.target[sessionID]; linked || x < 0 {
 		env = append(env, "WAYLAND_DISPLAY="+DisplayLinkPath(d.manager.SocketPath(), sessionID))
 	}
-	if s := list[0].shown; s.x11 != "" {
+	if x >= 0 {
+		s := list[x].shown
 		env = append(env, "DISPLAY="+s.x11)
 		if s.xauth != "" {
 			env = append(env, "XAUTHORITY="+s.xauth)

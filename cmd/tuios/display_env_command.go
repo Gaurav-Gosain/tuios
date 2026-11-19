@@ -33,7 +33,8 @@ put it in your shell rc:
   eval "$(tuios display-env 2>/dev/null)"
 
 The command prints export lines for WAYLAND_DISPLAY, DISPLAY and XAUTHORITY.
-It prints nothing when the session has no display to give.
+WAYLAND_DISPLAY names the link of the session, also before a client attaches.
+The command prints nothing when the follow is off.
 
 In a pane, the session is the session of the pane. Outside a pane, give it
 with -s.`,

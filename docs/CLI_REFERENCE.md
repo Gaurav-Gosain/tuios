@@ -835,9 +835,9 @@ tuios display-env [-s NAME] [--json]
 - `--json`: Output as JSON, with `follow`, `own`, the Wayland `link`, the socket it points at (`target`) and the variables (`env`)
 
 The command prints an `export` line for each of `WAYLAND_DISPLAY`, `DISPLAY`
-and `XAUTHORITY` that the session has. It prints nothing when the session has
-no display to give. A shell that started before a desktop client attached
-has no display. Run this line in that shell, or add it to your shell rc:
+and `XAUTHORITY` that the session has. It prints nothing when the follow is
+off. `WAYLAND_DISPLAY` names the session's link, also before a client attaches.
+A shell that started before the follow existed has no display. Run this line in that shell, or add it to your shell rc:
 
 ```bash
 eval "$(tuios display-env 2>/dev/null)"

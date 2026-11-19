@@ -5384,8 +5384,9 @@ The controls were run on 2026-10-12 on branch `fix/one-daemon-per-user`.
 ## The display follow
 
 `TestDisplayFollowsTheLocalClient`, `TestDisplayFollowReachesTheDesktopFromANewPane`,
-`TestDisplayFollowIgnoresAHostLinkClient` and
-`TestDisplayFollowLeavesADaemonWithADisplayAlone` start daemons with no
+`TestDisplayFollowIgnoresAHostLinkClient`,
+`TestDisplayFollowLeavesADaemonWithADisplayAlone` and
+`TestDisplayFollowReachesAPaneStartedBeforeAnyClient` start daemons with no
 `WAYLAND_DISPLAY` or `DISPLAY`, as a host link over ssh starts them. Fake
 Wayland and X11 servers answer each connection with a token, and a probe in a
 pane reads the token through the variables it was started with.
@@ -5402,6 +5403,8 @@ pane reads the token through the variables it was started with.
 | New panes do not get the display | `Manager.CreateSession`: the `cfg.DisplayEnv` stamp cut | `TestDisplayFollowsTheLocalClient` ("the new pane did not reach the desktop's Wayland socket ... WL_GOT:none") | **caught** |
 | A daemon with its own display follows too | `SetDisplay` ignores `daemonHasDisplay` | `TestDisplayFollowLeavesADaemonWithADisplayAlone/own_display` ("display-env = {Follow:true Own:true ...}") | **caught** |
 | A leave does not move the link | `notifyClientLeft`: the `displayForget` call cut | `TestDisplayFollowsTheLocalClient` ("after the only client with a display left e2e-display-other: ... want (no link)") | **caught** |
+| A pane started before any client gets no link | `display_follow.go` as on main | `TestDisplayFollowReachesAPaneStartedBeforeAnyClient` ("a pane started before any client has WAYLAND_DISPLAY \"\", want the link ...") | **caught** |
+| An X11 client takes the link from a Wayland client | `relinkDisplayLocked` points at the newest client, not the newest with a Wayland socket | `TestDisplayFollowReachesAPaneStartedBeforeAnyClient` ("with a Wayland and an X11 client the display is map[DISPLAY::6125], want the link and :6125") | **caught** |
 ## An image paste on another machine
 
 `TestAnImagePasteNeedsFilesOnTheFarMachine` pastes into a pane on a host by
