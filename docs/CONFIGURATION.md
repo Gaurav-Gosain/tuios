@@ -2228,7 +2228,7 @@ active_fg        = "bg"
 inactive_bg      = "bright_black"
 active_underline = false
 ```
-Besides `{index}` and `{name}`, the tab format takes `{icon}` and `{zoom}`.
+Besides `{index}` and `{name}`, the tab format takes `{title}`, `{icon}` and `{zoom}`.
 `{name}` is the name you gave the workspace. A workspace you did not name
 shows the name its active pane gave with OSC 1. The active pane is the focused
 one, or the one that had the focus last. Only OSC 1 counts: shells and agents
@@ -2240,6 +2240,12 @@ A workspace with neither name has an empty `{name}` when the format has
 dropped with it, so `"{index} {name}"` shows `7` for such a workspace and
 `7 api` for one named `api`. In a format without `{index}`, such as the
 default `{name}`, its `{name}` is its number.
+`{title}` is the title of the workspace's active pane, as its title bar shows
+it through `appearance.window_title_format`. The tab follows the title, as
+tmux's `automatic-rename` does, also for a workspace you are not looking at.
+With `"{index} {title}"` a tab reads `1 nvim` while you edit and `1 ~/src`
+at the prompt. An empty title goes with its separator, as an empty `{name}`
+does. A format that comes out empty shows the number.
 `{index}` is the workspace's number, which is its position: dragging a tab to
 another place, or moving the workspace with `move_workspace_left` and
 `move_workspace_right`, renumbers it, and `Alt+N` goes to it by its new number.

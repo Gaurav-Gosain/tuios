@@ -81,6 +81,15 @@ func (m *OS) updateRailTitles() (changed bool) {
 	return changed
 }
 
+// windowUnwatched reports whether w is a daemon pane whose output this client
+// is not subscribed to, so its local title is the one it last saw. A custom
+// name is the user's, set here and never stale, so a named pane is not
+// counted.
+func (m *OS) windowUnwatched(w *terminal.Window) bool {
+	return w != nil && w.DaemonMode && w.CustomName == "" &&
+		w.PTYID != "" && !m.SubscribedPTYs[w.PTYID]
+}
+
 // unwatchedTitles maps window ID to the title the daemon reports, for the
 // windows of this session whose PTY this client is not subscribed to. Leaving a
 // workspace drops those subscriptions, so their output (and the title in it)
@@ -93,11 +102,7 @@ func (m *OS) unwatchedTitles() map[string]string {
 	if m.DaemonClient == nil {
 		return nil
 	}
-	unwatched := func(w *terminal.Window) bool {
-		// A custom name is the user's, set here and never stale.
-		return w != nil && w.DaemonMode && w.CustomName == "" &&
-			w.PTYID != "" && !m.SubscribedPTYs[w.PTYID]
-	}
+	unwatched := m.windowUnwatched
 	any := slices.ContainsFunc(m.Windows, unwatched)
 	if !any {
 		return nil

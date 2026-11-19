@@ -672,15 +672,19 @@ func expandTitle(format, title string, index int, cwd string, extra ...string) s
 
 // FormatWorkspaceTab renders a dock workspace tab label from the configured
 // DockWorkspaceTabFormat. Placeholders are {index} (the workspace number),
-// {name} (the workspace's name), {icon} (the [dock.tabs] number_glyphs entry
-// for the number) and {zoom} (the [dock.tabs] zoom_marker while the workspace
-// has a zoomed pane). name is empty for a workspace with no name.
+// {name} (the workspace's name), {title} (the title of the workspace's active
+// pane, as its title bar shows it), {icon} (the [dock.tabs] number_glyphs
+// entry for the number) and {zoom} (the [dock.tabs] zoom_marker while the
+// workspace has a zoomed pane). name is empty for a workspace with no name,
+// and title for one whose active pane shows no title.
 //
 // An unnamed workspace's {name} is empty when the format also has {index},
 // and the separator next to it goes too, so "{index} {name}" reads "7", not
 // "7 7". In any other format it is the number, and an empty format returns the
-// name, or the number, unchanged: the default look.
-func (s *Settings) FormatWorkspaceTab(name string, index int, icon, zoom string) string {
+// name, or the number, unchanged: the default look. An empty {title} goes
+// with its separator the same way, and a format that comes out empty, such as
+// "{title}" over a pane with no title, shows the number.
+func (s *Settings) FormatWorkspaceTab(name, title string, index int, icon, zoom string) string {
 	number := strconv.Itoa(index - s.WorkspaceIndexOffset)
 	format := s.DockWorkspaceTabFormat
 	if name == "" && (format == "" || !strings.Contains(format, "{index}")) {
@@ -689,18 +693,25 @@ func (s *Settings) FormatWorkspaceTab(name string, index int, icon, zoom string)
 	if format == "" {
 		return name
 	}
-	field := name
+	field, titleField := name, title
 	if name == "" {
 		field = emptyTabField
 	}
+	if title == "" {
+		titleField = emptyTabField
+	}
 	label := strings.NewReplacer(
 		"{name}", field,
+		"{title}", titleField,
 		"{index}", number,
 		"{icon}", icon,
 		"{zoom}", zoom,
 	).Replace(format)
-	if name == "" {
+	if name == "" || title == "" {
 		label = dropEmptyTabFields(label)
+	}
+	if strings.TrimSpace(label) == "" {
+		return number
 	}
 	return label
 }
