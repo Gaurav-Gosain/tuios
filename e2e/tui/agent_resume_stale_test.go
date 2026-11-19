@@ -59,7 +59,7 @@ argv = ["echo", "resumed-{session_id}"]
 			if time.Now().After(deadline) {
 				t.Fatalf("ASSERTION: %s:\n%s", what, out)
 			}
-			time.Sleep(50 * time.Millisecond)
+			pause(t, "poll list-attention again until the offer changes", 50*time.Millisecond)
 		}
 	}
 	offered := func(conv string) func(string) bool {
