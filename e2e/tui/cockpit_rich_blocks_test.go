@@ -145,3 +145,27 @@ func waitUnplaced(t *testing.T, term *tuitest.Terminal, host *lockedBuffer, img 
 		t.Fatalf("ASSERTION: %s, and the picture is still placed: %+v", why, livePlaces([]byte(host.String())))
 	}
 }
+
+// lrBackEdgeAnswer is a reply with a flowchart that runs across: six boxes
+// and a back edge. Drawn as one row it is a little wider than the thread at
+// 120 columns.
+const lrBackEdgeAnswer = "The loop:\n\n" +
+	"```mermaid\nflowchart LR\n  A[Read issue] --> B[Write test] --> C[Fix bug] --> D[Run suite] --> E[Open PR] --> F[Merge] --> G[Deploy]\n  D -->|fails| C\n```\n"
+
+// TestCockpitThreadMermaidLRStaysAcross draws a flowchart LR of seven boxes
+// and a back edge as text in the thread at 120 columns. It fits across once
+// the gaps close up, so it keeps running across: the first and the last box
+// are on one row, and the back edge's label shows. Turned to run down, it
+// took over thirty rows with one box a row. The artifact is the frame
+// mermaid-lr-across.
+func TestCockpitThreadMermaidLRStaysAcross(t *testing.T) {
+	_, term := openTextThreadOn(t, lrBackEdgeAnswer, "mermaid = \"text\"\n", nil, "The loop:")
+	waitText(t, term, "the chart's first box", "Read issue")
+	saveCockpitFrames(t, term, "mermaid-lr-across")
+	railLists(t, term, "the chart is drawn across, as text", []string{"Read issue", "Deploy", "fails"}, []string{"flowchart LR"})
+	s := term.Screen()
+	if first, last := rowWith(s, "Read issue"), rowWith(s, "Deploy"); first != last {
+		t.Fatalf("ASSERTION: the chart runs down: its first box is on row %d and its last on row %d\n%s", first, last, term.Snapshot())
+	}
+	alive(t, term, "after the LR chart")
+}
