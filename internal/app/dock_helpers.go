@@ -179,8 +179,61 @@ func (m *OS) workspaceTabText(tabs *config.DockTabsConfig, n int) string {
 		zoom = tabs.ZoomMarker
 	}
 	// An unnamed workspace passes no name, so the format can leave {name}
-	// out rather than repeat the number {index} already shows.
-	return m.Settings.FormatWorkspaceTab(printableTitle(m.workspaceGivenName(n)), n, tabs.Icon(n), zoom)
+	// out rather than repeat the number {index} already shows. The title is
+	// worked out only for a format that shows it.
+	title := ""
+	if strings.Contains(m.Settings.DockWorkspaceTabFormat, "{title}") {
+		title = m.workspaceTabTitle(n)
+	}
+	return m.Settings.FormatWorkspaceTab(printableTitle(m.workspaceGivenName(n)), title, n, tabs.Icon(n), zoom)
+}
+
+// workspaceTabTitle is what {title} shows on workspace n's tab: the title of
+// the pane that speaks for it (workspaceActivePane), as that pane's title bar
+// names it, through appearance.window_title_format. Empty when no pane speaks
+// for it or the pane shows no title.
+//
+// A pane this client does not watch kept the title its emulator last saw, so
+// its title comes from the daemon's listing, which reads every pane. That is
+// the case for every pane of a workspace out of view, which is most tabs.
+func (m *OS) workspaceTabTitle(n int) string {
+	w := m.workspaceActivePane(n)
+	if w == nil {
+		return ""
+	}
+	name := paneName(w, &m.Settings)
+	if m.windowUnwatched(w) {
+		if t := m.daemonWindowTitle(w.ID); t != "" && !isDefaultTitle(t, w.ID) {
+			name = printableTitle(t)
+		}
+	}
+	if name == "" && m.Settings.WindowTitleFormat == "" {
+		return ""
+	}
+	return strings.TrimSpace(m.Settings.FormatWindowTitle(name, m.workspacePosition(w), w.CWD()))
+}
+
+// dockTabsReadListing reports whether the dock's tabs read the daemon's
+// listing: the tab format shows {title} and the dock is on screen. The
+// listing is then kept fresh on the daemon's push, as it is for an open rail,
+// so a tab follows a pane out of view.
+func (m *OS) dockTabsReadListing() bool {
+	return m.Settings.DockbarPosition != "hidden" &&
+		strings.Contains(m.Settings.DockWorkspaceTabFormat, "{title}")
+}
+
+// daemonWindowTitle is the title the daemon's listing holds for window id of
+// the attached session, or empty when the listing does not have it.
+func (m *OS) daemonWindowTitle(id string) string {
+	if m.DaemonClient == nil {
+		return ""
+	}
+	for _, s := range m.DaemonClient.SessionWindows(m.SessionName) {
+		if s.ID == id {
+			return s.Title
+		}
+	}
+	return ""
 }
 
 // workspacePillName is the whole name a pill stands for: the workspace's

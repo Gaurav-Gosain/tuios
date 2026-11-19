@@ -249,7 +249,8 @@ The dock's workspace tabs take two composition knobs of their own:
 `appearance.dock_workspace_label_max` caps the label in cells, so one long
 name cannot push the other pills off the bar. The cap is 12; `0` draws the
 whole name and lets the strip scroll.
-`{index}`, `{name}`, `{icon}` and `{zoom}` are the format's placeholders.
+`{index}`, `{name}`, `{title}`, `{icon}` and `{zoom}` are the format's placeholders.
+`{title}` is the title of the workspace's active pane, and the tab follows it.
 When the format has `{index}`, `{name}` is empty for a workspace with no
 name, and the separator next to it goes too: with `"{index} {name}"` an
 unnamed tab reads `7` and a named one `7 api`. The

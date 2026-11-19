@@ -859,7 +859,8 @@ func (m *OS) foreignSessionReplanCmd() tea.Cmd {
 
 // foreignSessionRefreshPlan decides whether the next poll should hit the daemon
 // and how long to wait before re-arming. A consumer is on screen when the
-// sidebar reserves columns or the go-to picker is open;
+// sidebar reserves columns, the go-to picker is open, or the dock's tabs show
+// {title};
 // poll fast then, even for a lone session, because the listing is where the
 // rail reads the titles of windows this client has unsubscribed from. Off screen, fall back to a slow
 // cache-warming poll while foreign sessions exist, and do nothing at all for a
@@ -868,7 +869,7 @@ func (m *OS) foreignSessionRefreshPlan() (after time.Duration, refresh bool) {
 	if m.DaemonClient == nil {
 		return foreignSessionRefreshIdle, false
 	}
-	if m.SidebarActive() || m.gotoPicker.open {
+	if m.SidebarActive() || m.gotoPicker.open || m.dockTabsReadListing() {
 		return foreignSessionRefreshActive, true
 	}
 	if m.DaemonClient.SessionCount() <= 1 {

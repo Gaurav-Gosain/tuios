@@ -18362,3 +18362,16 @@ Run on 2026-11-18 on Linux (x86_64), with GOMAXPROCS=4. Each control cuts one ca
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers$' -v .`.
+## A workspace tab that follows its pane's title
+
+`TestWorkspaceTabFollowsPaneTitle` in `workspace_tab_title_test.go` (issue #2090). The tab format is `"{index} {title}"`. A pane on workspace 2, which the client does not show, sets its title twice, and the tab must follow both. The focused pane on workspace 1 sets its title, and its tab must show it. An empty title must leave the tab its number.
+
+Run on Linux on 2026-11-19. The branch passes the test.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `workspaceTabTitle` returns nothing | "ASSERTION: workspace 2's tab shows its pane's title" | **caught** |
+| `dockTabsReadListing` returns false, so the listing is not refreshed | "ASSERTION: workspace 2's tab shows its pane's title" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWorkspaceTabFollowsPaneTitle$' -v .`.
