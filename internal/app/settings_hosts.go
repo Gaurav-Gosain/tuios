@@ -34,11 +34,8 @@ import (
 // There is no row on this page that starts, changes or stops anything on
 // another machine.
 
-// hostAddRowLabel is the label of the row that adds a machine. It is matched by
-// name in the tests, so it is spelled once.
-const hostAddRowLabel = "Add a machine"
-
 // hostTestRowLabel is the label of the row that dials every configured host.
+// It is the English label, matched by name in the tests.
 const hostTestRowLabel = "Test the links"
 
 // HostTestDoneMsg carries the result of the settings page's link test back to
@@ -55,7 +52,7 @@ func (m *OS) hostsCategory() settingsCategory {
 		items = append(items, m.hostItem(name))
 	}
 	items = append(items, m.hostAddItem(), m.hostTestItem())
-	return settingsCategory{Name: "Hosts", Items: items}
+	return m.settingsCat("Hosts", items)
 }
 
 // configuredHostNames is the [hosts] table's names, in order.
@@ -83,8 +80,8 @@ func (m *OS) hostItem(name string) settingItem {
 		Label:       name,
 		Desc:        m.hostRowStatus(name),
 		Control:     controlString,
-		Placeholder: "user@machine",
-		Unset:       "(no address)",
+		Placeholder: m.loc().Row("hosts.placeholder"),
+		Unset:       m.loc().Row("hosts.unset"),
 		value: func(m *OS) string {
 			if m.UserConfig == nil {
 				return ""
@@ -107,38 +104,38 @@ func (m *OS) hostItem(name string) settingItem {
 // A host that is not up keeps its row and says why. Hiding it would leave the
 // user looking for a machine they know they configured.
 func (m *OS) hostRowStatus(name string) string {
+	edit := " " + m.loc().Row("hosts.edit_hint")
 	if r, ok := m.hostTests[name]; ok {
-		return hostStateSentence(string(r.Status), r.Reason, r.Detail) +
-			" Press enter to change the address. Clear it to remove the host."
+		return m.hostStateSentence(string(r.Status), r.Reason, r.Detail) + edit
 	}
 	for _, h := range m.FederationHosts {
 		if h.Name != name {
 			continue
 		}
-		return hostStateSentence(h.Status, h.Reason, "") +
-			" Press enter to change the address. Clear it to remove the host."
+		return m.hostStateSentence(h.Status, h.Reason, "") + edit
 	}
-	return "The daemon has not reported this link yet. Press enter to change the address. Clear it to remove the host."
+	return m.loc().Row("hosts.state.unreported") + edit
 }
 
 // hostStateSentence turns a link state into one plain sentence.
-func hostStateSentence(status, reason, detail string) string {
-	head := "The link state is " + status + "."
+func (m *OS) hostStateSentence(status, reason, detail string) string {
+	loc := m.loc()
+	head := loc.Rowf("hosts.state.raw", "status", status)
 	switch federation.Status(status) {
 	case federation.StatusUp:
-		head = "The host answers."
+		head = loc.Row("hosts.state.up")
 	case federation.StatusNoDaemon:
-		head = "The host is up and no tuios daemon runs on it."
+		head = loc.Row("hosts.state.no_daemon")
 	case federation.StatusNoBinary:
-		head = "The host is up and the link cannot find tuios on it."
+		head = loc.Row("hosts.state.no_binary")
 	case federation.StatusUnreachable:
-		head = "The host does not answer."
+		head = loc.Row("hosts.state.unreachable")
 	case federation.StatusIncompatible:
-		head = "The host runs a tuios this one cannot talk to."
+		head = loc.Row("hosts.state.incompatible")
 	case federation.StatusConnecting:
-		head = "The link is starting."
+		head = loc.Row("hosts.state.connecting")
 	case federation.StatusReconnecting:
-		head = "The link dropped and tuios is connecting again."
+		head = loc.Row("hosts.state.reconnecting")
 	case federation.StatusApproval:
 		head = federation.SignInSentence
 	}
@@ -153,7 +150,7 @@ func hostStateSentence(status, reason, detail string) string {
 	if detail != "" {
 		// The detail comes from ssh or from the other machine. It is labelled
 		// so a reader cannot mistake it for something tuios said.
-		parts = append(parts, "The link reported: "+detail)
+		parts = append(parts, loc.Rowf("hosts.state.reported", "detail", detail))
 	}
 	return strings.Join(parts, " ")
 }
@@ -162,11 +159,11 @@ func hostStateSentence(status, reason, detail string) string {
 // installs tuios there when it is missing, and adds it. See machine_sheet.go.
 func (m *OS) hostAddItem() settingItem {
 	return settingItem{
-		Label:   hostAddRowLabel,
-		Desc:    "Test a machine over ssh, install tuios there, and add it. Press enter.",
+		Label:   m.loc().Row("hosts.add.label"),
+		Desc:    m.loc().Row("hosts.add.desc"),
 		Control: controlEnum,
 		Options: []string{"open"},
-		value:   func(_ *OS) string { return "open" },
+		value:   func(m *OS) string { return m.loc().Value("hosts.open") },
 		activate: func(m *OS) tea.Cmd {
 			return m.OpenMachineSheet("")
 		},
@@ -217,14 +214,14 @@ func tailnetOptionsFromFile() (federation.TailnetOptions, bool) {
 func (m *OS) hostTestItem() settingItem {
 	return settingItem{
 		Label:   hostTestRowLabel,
-		Desc:    "Dial every host now and show what each one said. Press enter.",
+		Desc:    m.loc().Row("hosts.test.desc"),
 		Control: controlEnum,
 		Options: []string{"run"},
 		value: func(m *OS) string {
 			if m.hostTestRunning {
-				return "testing"
+				return m.loc().Value("hosts.testing")
 			}
-			return "run"
+			return m.loc().Value("hosts.run")
 		},
 		activate: func(m *OS) tea.Cmd { return m.startHostTest() },
 	}
@@ -234,7 +231,7 @@ func (m *OS) hostTestItem() settingItem {
 func (m *OS) addHostFromRow(v string) {
 	fields := strings.Fields(v)
 	if len(fields) < 2 {
-		m.ShowNotification("Type a name and an address, separated by a space.", "warning", m.Settings.NotificationWarningDuration)
+		m.ShowNotification(m.loc().Notify("hosts.type_name_address"), "warning", m.Settings.NotificationWarningDuration)
 		return
 	}
 	name, addr := fields[0], strings.Join(fields[1:], " ")
@@ -270,7 +267,7 @@ func (m *OS) setHostAddr(name, addr string) {
 	m.federationPolling = true
 	delete(m.hostTests, name)
 	m.noteHostToApply(name)
-	m.ShowNotification("Host "+name+" now points at "+addr+".", "success", m.Settings.NotificationDuration)
+	m.ShowNotification(m.loc().Notifyf("hosts.saved", "name", name, "addr", addr), "success", m.Settings.NotificationDuration)
 }
 
 // removeHost drops one host from this client's config.
@@ -285,7 +282,7 @@ func (m *OS) removeHost(name string) {
 	if m.settingsList.Cursor > 0 {
 		m.settingsList.Cursor--
 	}
-	m.ShowNotification("Host "+name+" is removed.", "success", m.Settings.NotificationDuration)
+	m.ShowNotification(m.loc().Notifyf("hosts.removed", "name", name), "success", m.Settings.NotificationDuration)
 }
 
 // hostTestBudget bounds one run of the test row.
@@ -305,16 +302,16 @@ func (m *OS) startHostTest() tea.Cmd {
 		return nil
 	}
 	if m.ConfigReadOnly {
-		m.ShowNotification("This session cannot test the links. It does not own the config file.", "warning", m.Settings.NotificationWarningDuration)
+		m.ShowNotification(m.loc().Notify("hosts.test_denied"), "warning", m.Settings.NotificationWarningDuration)
 		return nil
 	}
 	hosts := m.federationHostsFromConfig()
 	if len(hosts) == 0 {
-		m.ShowNotification("No hosts are configured. Add one on the row above.", "warning", m.Settings.NotificationWarningDuration)
+		m.ShowNotification(m.loc().Notify("hosts.none_configured"), "warning", m.Settings.NotificationWarningDuration)
 		return nil
 	}
 	m.hostTestRunning = true
-	m.ShowNotification("The link test is running.", "info", m.Settings.NotificationDuration)
+	m.ShowNotification(m.loc().Notify("hosts.test_running"), "info", m.Settings.NotificationDuration)
 	return hostTestCmd(hosts)
 }
 
@@ -364,11 +361,11 @@ func (m *OS) applyHostTest(msg HostTestDoneMsg) {
 	total := len(msg.Reports)
 	switch {
 	case total == 0:
-		m.ShowNotification("No host answered the test.", "warning", m.Settings.NotificationWarningDuration)
+		m.ShowNotification(m.loc().Notify("hosts.test_none_answered"), "warning", m.Settings.NotificationWarningDuration)
 	case up == total:
-		m.ShowNotification("Every host answers.", "success", m.Settings.NotificationDuration)
+		m.ShowNotification(m.loc().Notify("hosts.test_all_answer"), "success", m.Settings.NotificationDuration)
 	default:
-		m.ShowNotification("Some hosts do not answer. Each row says why.", "warning", m.Settings.NotificationWarningDuration)
+		m.ShowNotification(m.loc().Notify("hosts.test_some_no_answer"), "warning", m.Settings.NotificationWarningDuration)
 	}
 }
 

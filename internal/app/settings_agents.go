@@ -283,7 +283,7 @@ func (m *OS) agentIntegrationNotice(st integration.Status) string {
 	}
 	where := shortenHome(st.Path)
 	if t, ok := integration.LookupTarget(st.Harness); ok {
-		where = joinPaths(t.Paths(agentsEnv()))
+		where = m.joinPaths(t.Paths(agentsEnv()))
 	}
 	// The key comes right after the state, as in the version notice, so the
 	// dock shows it even when it cuts the file.
@@ -314,11 +314,11 @@ func (m *OS) installFromNotice(id string) {
 		return
 	}
 	if !st.NeedsAction() {
-		m.ShowNotification(st.Name+" integration is already installed and current.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(m.loc().Notifyf("agents.notify.already_current", "name", st.Name), "info", m.Settings.NotificationDuration)
 		return
 	}
 	if p.busy {
-		m.ShowNotification("Another change is running. Wait for it to end.", "info", m.Settings.NotificationDuration)
+		m.ShowNotification(m.loc().Notify("agents.notify.busy"), "info", m.Settings.NotificationDuration)
 		return
 	}
 	verb := agentInstall
@@ -347,7 +347,7 @@ func (m *OS) OpenAgentsSettings() {
 func (m *OS) showAgentsTab(row int) {
 	m.settingsSearch = settingsSearchState{}
 	for i, c := range m.settingsCategories() {
-		if c.Name == agentsTabName {
+		if c.Key == agentsTabName {
 			m.SettingsCategory = i
 			break
 		}
@@ -377,21 +377,25 @@ func (m *OS) SettingsBack() bool {
 // agentsHints is the footer on the Agents tab's list, and agentsActionHints
 // on its action rows. The rows have nothing to change with the arrows, and
 // esc goes back from the action rows.
-var (
-	agentsHints = []overlay.Hint{
-		{Key: hintListMove, Label: "move"},
-		{Key: "enter", Label: "choose"},
-		{Key: "tab", Label: "section"},
-		{Key: "/", Label: "search"},
-		{Key: "esc", Label: "close"},
+func (m *OS) agentsHints() []overlay.Hint {
+	return []overlay.Hint{
+		{Key: hintListMove, Label: m.loc().Hint("move")},
+		{Key: "enter", Label: m.loc().Hint("choose")},
+		{Key: "tab", Label: m.loc().Hint("section")},
+		{Key: "/", Label: m.loc().Hint("search")},
+		{Key: "esc", Label: m.loc().Hint("close")},
 	}
-	agentsActionHints = []overlay.Hint{
-		{Key: hintListMove, Label: "move"},
-		{Key: "enter", Label: "confirm"},
-		{Key: "tab", Label: "section"},
-		{Key: "esc", Label: "back"},
+}
+
+// agentsActionHints is the footer on the Agents tab's action rows.
+func (m *OS) agentsActionHints() []overlay.Hint {
+	return []overlay.Hint{
+		{Key: hintListMove, Label: m.loc().Hint("move")},
+		{Key: "enter", Label: m.loc().Hint("confirm")},
+		{Key: "tab", Label: m.loc().Hint("section")},
+		{Key: "esc", Label: m.loc().Hint("back")},
 	}
-)
+}
 
 // onAgentsTab reports whether the page shows the Agents tab's rows.
 func (m *OS) onAgentsTab() bool {
@@ -400,14 +404,14 @@ func (m *OS) onAgentsTab() bool {
 
 // agentsCategory is the Agents tab.
 func (m *OS) agentsCategory() settingsCategory {
-	cat := settingsCategory{Name: agentsTabName}
+	cat := m.settingsCat(agentsTabName, nil)
 	p := &m.agentsPage
 	if p.overview == nil {
 		cat.Items = []settingItem{{
-			Label:   "Reading the agents",
-			Desc:    "tuios reads each agent's configuration. The rows come next.",
+			Label:   m.loc().Row("agents.reading.label"),
+			Desc:    m.loc().Row("agents.reading.desc"),
 			Control: controlStatus,
-			value:   func(*OS) string { return "wait" },
+			value:   func(m *OS) string { return m.loc().Value("agents.wait") },
 			ink:     func(pal overlay.Palette) color.Color { return pal.FgMute },
 		}}
 		return cat
@@ -422,9 +426,9 @@ func (m *OS) agentsCategory() settingsCategory {
 	if !p.overview.TuiosOnPath {
 		cat.Items = append(cat.Items, settingItem{
 			Label:   "tuios",
-			Desc:    `The hooks run "tuios agent-hook". They cannot start until tuios is on PATH. Put tuios on PATH.`,
+			Desc:    m.loc().Row("agents.tuios_row.desc"),
 			Control: controlStatus,
-			value:   func(*OS) string { return "not on PATH" },
+			value:   func(m *OS) string { return m.loc().Value("agents.not_on_path") },
 			ink:     func(pal overlay.Palette) color.Color { return pal.Warning },
 		})
 	}
@@ -434,9 +438,9 @@ func (m *OS) agentsCategory() settingsCategory {
 	for _, u := range p.overview.Unsupported {
 		cat.Items = append(cat.Items, settingItem{
 			Label:   u.Harness,
-			Desc:    "tuios has no integration for " + u.Harness + ". The reason: " + u.Reason + ".",
+			Desc:    m.loc().Rowf("agents.unsupported.desc", "harness", u.Harness, "reason", u.Reason),
 			Control: controlStatus,
-			value:   func(*OS) string { return "no integration" },
+			value:   func(m *OS) string { return m.loc().Value("agents.no_integration") },
 			ink:     func(pal overlay.Palette) color.Color { return pal.FgMute },
 		})
 	}
@@ -474,9 +478,9 @@ func (m *OS) agentRowIndex(id string) int {
 }
 
 // agentStateWord is the value a harness row shows.
-func agentStateWord(st integration.Status) string {
+func (m *OS) agentStateWord(st integration.Status) string {
 	if st.Unreadable {
-		return "cannot read"
+		return m.loc().Value("agents.cannot_read")
 	}
 	return st.State().String()
 }
@@ -498,28 +502,29 @@ func agentStateInk(st integration.Status) func(overlay.Palette) color.Color {
 
 // agentItem is one harness's row in the list.
 func (m *OS) agentItem(st integration.Status) settingItem {
-	aside := "not on PATH"
+	loc := m.loc()
+	aside := loc.Value("agents.not_on_path")
 	if st.BinaryPath != "" {
-		aside = "on PATH"
+		aside = loc.Value("agents.on_path")
 	}
 	return settingItem{
 		Label:   st.Name,
 		Aside:   aside,
-		Desc:    agentRowDesc(st),
+		Desc:    m.agentRowDesc(st),
 		Control: controlStatus,
-		value:   func(*OS) string { return agentStateWord(st) },
+		value:   func(m *OS) string { return m.agentStateWord(st) },
 		ink:     agentStateInk(st),
 		activate: func(m *OS) tea.Cmd {
 			if m.agentsPage.busy {
-				m.ShowNotification("Another change is running. Wait for it to end.", "info", m.Settings.NotificationDuration)
+				m.ShowNotification(m.loc().Notify("agents.notify.busy"), "info", m.Settings.NotificationDuration)
 				return nil
 			}
 			if st.Unreadable {
-				m.ShowNotification("tuios cannot read the "+st.Name+" integration. Fix the file the line under the row names, then open this tab again.", "warning", m.Settings.NotificationWarningDuration)
+				m.ShowNotification(m.loc().Notifyf("agents.notify.cannot_read", "name", st.Name), "warning", m.Settings.NotificationWarningDuration)
 				return nil
 			}
-			if parts, _ := installedParts(st, lookupTarget(st.Harness), agentsEnv()); st.State() == integration.StateNotRun && len(parts) == 0 {
-				m.ShowNotification(st.Name+" has not run here. Run it once, then install.", "info", m.Settings.NotificationDuration)
+			if parts, _ := m.installedParts(st, lookupTarget(st.Harness), agentsEnv()); st.State() == integration.StateNotRun && len(parts) == 0 {
+				m.ShowNotification(m.loc().Notifyf("agents.notify.not_run", "name", st.Name), "info", m.Settings.NotificationDuration)
 				return nil
 			}
 			m.agentsPage.action = st.Harness
@@ -536,42 +541,43 @@ func lookupTarget(id string) *integration.Target {
 }
 
 // agentRowDesc is the line under a harness row.
-func agentRowDesc(st integration.Status) string {
+func (m *OS) agentRowDesc(st integration.Status) string {
+	loc := m.loc()
 	var parts []string
 	switch st.State() {
 	case integration.StateInstalled:
-		parts = append(parts, "Installed and current (v"+strconv.Itoa(st.Version)+") in "+shortenHome(st.Path)+".")
+		parts = append(parts, loc.Rowf("agents.status.installed", "version", strconv.Itoa(st.Version), "path", shortenHome(st.Path)))
 		if st.OtherProgram {
-			parts = append(parts, "The hooks run "+shortenHome(st.Program)+".")
+			parts = append(parts, loc.Rowf("agents.status.other_program", "program", shortenHome(st.Program)))
 		}
-		parts = append(parts, "Press enter to uninstall it.")
+		parts = append(parts, loc.Row("agents.status.press_uninstall"))
 	case integration.StateOutOfDate:
-		parts = append(parts, "Out of date: v"+strconv.Itoa(st.Version)+" is installed and this tuios installs v"+strconv.Itoa(st.WantVersion)+". Press enter to update it.")
+		parts = append(parts, loc.Rowf("agents.status.out_of_date", "have", strconv.Itoa(st.Version), "want", strconv.Itoa(st.WantVersion)))
 		if st.Program != "" && st.Program != agentsCommand {
-			parts = append(parts, "The update keeps "+shortenHome(st.Program)+" as the program the hooks run.")
+			parts = append(parts, loc.Rowf("agents.status.update_keeps", "program", shortenHome(st.Program)))
 		}
 	case integration.StateNotInstalled:
-		parts = append(parts, "Not installed. Press enter to install it in "+shortenHome(st.Path)+".")
+		parts = append(parts, loc.Rowf("agents.status.not_installed", "path", shortenHome(st.Path)))
 	default:
-		parts = append(parts, "Not installed. "+st.Name+" has not run here. Run it once, then install.")
+		parts = append(parts, loc.Rowf("agents.status.not_run", "name", st.Name))
 	}
 	if !st.Installed {
 		var other []string
 		if st.MCP != nil && st.MCP.Installed {
-			other = append(other, "the MCP server")
+			other = append(other, loc.Value("agents.mcp_server"))
 		}
 		if st.StatusLine != nil && st.StatusLine.Installed {
-			other = append(other, "the status line")
+			other = append(other, loc.Value("agents.status_line"))
 		}
 		if len(other) > 0 {
-			parts = append(parts, "tuios still has "+joinWords(other)+" installed. Press enter to remove it.")
+			parts = append(parts, loc.Rowf("agents.status.still_installed", "parts", m.joinWords(other)))
 		}
 	}
 	if st.Reports == integration.ReportsSession {
-		parts = append(parts, "It reports the session id. The state comes from screen rules.")
+		parts = append(parts, loc.Row("agents.status.session_rules"))
 	}
 	for _, n := range st.Notes {
-		parts = append(parts, "Note: "+n)
+		parts = append(parts, loc.Rowf("agents.status.note", "note", n))
 	}
 	return strings.Join(parts, " ")
 }
@@ -579,27 +585,29 @@ func agentRowDesc(st integration.Status) string {
 // agentActionItems are the rows that open on a harness: what can be done, each
 // naming the file it changes, and the way back.
 func (m *OS) agentActionItems(st integration.Status) []settingItem {
+	loc := m.loc()
 	t, _ := integration.LookupTarget(st.Harness)
 	env := agentsEnv()
 	var items []settingItem
 	if st.NeedsAction() && t != nil {
-		verb, label := agentInstall, "Install "+st.Name
+		verb := agentInstall
+		label := loc.Rowf("agents.action.install", "name", st.Name)
 		if st.State() == integration.StateOutOfDate {
-			verb, label = agentUpdate, "Update "+st.Name
+			verb, label = agentUpdate, loc.Rowf("agents.action.update", "name", st.Name)
 		}
 		paths := t.Paths(env)
 		items = append(items, m.agentActionItem(st, verb, label,
-			"This writes the hook entries to "+joinPaths(paths)+". Press enter to "+verbWord(verb)+" the integration.", paths))
+			loc.Rowf("agents.action.install.desc", "paths", m.joinPaths(paths), "verb", m.verbWord(verb)), paths))
 	}
-	if parts, paths := installedParts(st, t, env); len(parts) > 0 {
-		items = append(items, m.agentActionItem(st, agentUninstall, "Uninstall "+st.Name,
-			"This removes "+joinWords(parts)+" that tuios wrote, from "+joinPaths(paths)+". Your own entries stay. Press enter to uninstall.", paths))
+	if parts, paths := m.installedParts(st, t, env); len(parts) > 0 {
+		items = append(items, m.agentActionItem(st, agentUninstall, loc.Rowf("agents.action.uninstall", "name", st.Name),
+			loc.Rowf("agents.action.uninstall.desc", "parts", m.joinWords(parts), "paths", m.joinPaths(paths)), paths))
 	}
 	items = append(items, settingItem{
-		Label:    "Back",
-		Desc:     "Go back to the list. Nothing changes.",
+		Label:    loc.Row("agents.action.back"),
+		Desc:     loc.Row("agents.action.back.desc"),
 		Control:  controlStatus,
-		value:    func(*OS) string { return "esc" },
+		value:    func(m *OS) string { return m.loc().Value("agents.esc") },
 		ink:      func(pal overlay.Palette) color.Color { return pal.FgMute },
 		activate: func(m *OS) tea.Cmd { m.SettingsBack(); return nil },
 	})
@@ -610,10 +618,11 @@ func (m *OS) agentActionItems(st integration.Status) []settingItem {
 // the uninstall row names them, and the files they are in: the hooks, the MCP
 // server and the status line, each only when it is there. Uninstall removes
 // every part, so it is offered when any one of them is installed.
-func installedParts(st integration.Status, t *integration.Target, env integration.Env) (parts, paths []string) {
+func (m *OS) installedParts(st integration.Status, t *integration.Target, env integration.Env) (parts, paths []string) {
 	if t == nil {
 		return nil, nil
 	}
+	loc := m.loc()
 	add := func(part string, files ...string) {
 		parts = append(parts, part)
 		for _, f := range files {
@@ -623,13 +632,13 @@ func installedParts(st integration.Status, t *integration.Target, env integratio
 		}
 	}
 	if st.Installed {
-		add("the hooks", t.Paths(env)...)
+		add(loc.Value("agents.hooks"), t.Paths(env)...)
 	}
 	if st.MCP != nil && st.MCP.Installed {
-		add("the MCP server", st.MCP.Path)
+		add(loc.Value("agents.mcp_server"), st.MCP.Path)
 	}
 	if st.StatusLine != nil && st.StatusLine.Installed {
-		add("the status line", t.Path(env))
+		add(loc.Value("agents.status_line"), t.Path(env))
 	}
 	return parts, paths
 }
@@ -643,7 +652,7 @@ func (m *OS) agentActionItem(st integration.Status, verb agentVerb, label, desc 
 		Control: controlStatus,
 		value: func(m *OS) string {
 			if m.agentsPage.busy {
-				return "working"
+				return m.loc().Value("agents.working")
 			}
 			return file
 		},
@@ -658,34 +667,35 @@ func (m *OS) agentActionItem(st integration.Status, verb agentVerb, label, desc 
 }
 
 // verbWord is the verb as the rows say it.
-func verbWord(v agentVerb) string {
+func (m *OS) verbWord(v agentVerb) string {
 	switch v {
 	case agentUpdate:
-		return "update"
+		return m.loc().Value("agents.verb_update")
 	case agentUninstall:
-		return "uninstall"
+		return m.loc().Value("agents.verb_uninstall")
 	}
-	return "install"
+	return m.loc().Value("agents.verb_install")
 }
 
 // joinWords lists words the way a sentence does: "a", "a and b", "a, b and c".
-func joinWords(words []string) string {
+func (m *OS) joinWords(words []string) string {
 	switch len(words) {
 	case 0:
 		return ""
 	case 1:
 		return words[0]
 	}
-	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
+	loc := m.loc()
+	return strings.Join(words[:len(words)-1], loc.Value("agents.join_comma")) + loc.Value("agents.join_and") + words[len(words)-1]
 }
 
 // joinPaths names files the way a person reads them.
-func joinPaths(paths []string) string {
+func (m *OS) joinPaths(paths []string) string {
 	shown := make([]string, len(paths))
 	for i, p := range paths {
 		shown[i] = shortenHome(p)
 	}
-	return joinWords(shown)
+	return m.joinWords(shown)
 }
 
 // runAgentAction runs an install or uninstall off the UI goroutine. They are
@@ -727,7 +737,7 @@ func (m *OS) applyAgentAction(msg agentsActionMsg) tea.Cmd {
 	if t, ok := integration.LookupTarget(msg.harness); ok {
 		name = t.Name
 	}
-	text, level := agentActionOutcome(name, msg)
+	text, level := m.agentActionOutcome(name, msg)
 	m.ShowNotification(text, level, m.Settings.NotificationDuration)
 	if p.action == msg.harness {
 		p.action = ""
@@ -750,52 +760,52 @@ func (m *OS) applyAgentAction(msg agentsActionMsg) tea.Cmd {
 }
 
 // agentActionOutcome is the sentence an action leaves, and its level.
-func agentActionOutcome(name string, msg agentsActionMsg) (string, string) {
+func (m *OS) agentActionOutcome(name string, msg agentsActionMsg) (string, string) {
+	loc := m.loc()
 	if msg.verb == agentUninstall {
 		var failed []string
 		removed := ""
 		for _, s := range msg.steps {
 			switch {
 			case s.Err != nil:
-				what := "the integration"
+				what := loc.Value("agents.the_integration")
 				if s.Part != "" {
-					what = "the " + s.Part
+					what = loc.Valuef("agents.the_part", "part", s.Part)
 				}
-				failed = append(failed, "Could not remove "+what+": "+s.Err.Error())
+				failed = append(failed, loc.Notifyf("agents.notify.remove_failed", "what", what, "err", s.Err.Error()))
 			case s.Part == "" && s.Result.Changed:
-				removed = name + " integration is removed from " + shortenHome(s.Result.Path) + "."
+				removed = loc.Notifyf("agents.notify.removed", "name", name, "path", shortenHome(s.Result.Path))
 			}
 		}
 		if len(failed) > 0 {
-			return strings.Join(append([]string{name + ":"}, failed...), " "), "error"
+			return strings.Join(append([]string{loc.Notifyf("agents.notify.failed_header", "name", name)}, failed...), " "), "error"
 		}
 		if removed == "" {
-			return "Nothing of tuios's is installed for " + name + ".", "info"
+			return loc.Notifyf("agents.notify.nothing_installed", "name", name), "info"
 		}
 		return removed, "success"
 	}
 	if msg.err != nil {
-		return "Could not " + verbWord(msg.verb) + " the " + name + " integration. " + msg.err.Error(), "error"
+		return loc.Notifyf("agents.notify.action_failed", "verb", m.verbWord(msg.verb), "name", name, "err", msg.err.Error()), "error"
 	}
 	if !msg.result.Changed {
-		return name + " integration is already installed and current.", "info"
+		return loc.Notifyf("agents.notify.already_current", "name", name), "info"
 	}
 	// The file comes first, so the dock shows it before it cuts the rest.
-	done := "Installed in "
+	text := loc.Notifyf("agents.notify.installed_in", "path", shortenHome(msg.result.Path))
 	if msg.verb == agentUpdate {
-		done = "Updated in "
+		text = loc.Notifyf("agents.notify.updated_in", "path", shortenHome(msg.result.Path))
 	}
-	text := done + shortenHome(msg.result.Path) + "."
 	// A harness reads its hooks when it starts, so a pane that runs it now
 	// reports its state only after a restart.
 	if t, ok := integration.LookupTarget(msg.harness); ok && t.Reports != integration.ReportsSession {
-		text += " Restart " + name + " to make it report its state."
+		text += " " + loc.Notifyf("agents.notify.restart", "name", name)
 	}
 	if msg.result.Backup != "" {
-		text += " The previous copy is in " + shortenHome(msg.result.Backup) + "."
+		text += " " + loc.Notifyf("agents.notify.backup", "path", shortenHome(msg.result.Backup))
 	}
 	for _, n := range msg.result.Notes {
-		text += " Note: " + n
+		text += " " + loc.Notifyf("agents.notify.note", "note", n)
 	}
 	return text, "success"
 }

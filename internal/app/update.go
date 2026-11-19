@@ -3260,7 +3260,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// to know it will not outlive the session.
 		// The change is in no file, so the next save carries it again.
 		config.RewindSave(m.UserConfig, msg.err)
-		m.ShowNotification("Could not save settings: "+msg.err.Error(), "error", 0)
+		m.ShowNotification(m.loc().Notifyf("save_failed", "err", msg.err.Error()), "error", 0)
 		return m, nil
 
 	case settingsSaveRedirectedMsg:

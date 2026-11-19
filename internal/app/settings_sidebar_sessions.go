@@ -74,20 +74,21 @@ func (m *OS) sidebarSessionSettingItems() []settingItem {
 	}
 	for _, side := range []struct {
 		edge sidebarEdge
-		name string
+		key  string
 	}{
-		{sidebarLeft, "Left"}, {sidebarRight, "Right"},
+		{sidebarLeft, "left"}, {sidebarRight, "right"},
 	} {
-		edge, name := side.edge, side.name
+		edge, key := side.edge, side.key
+		loc := m.loc()
 		rows = append(rows,
 			settingItem{
-				Label: name + " rail", Desc: "Show the rail on this edge, independent of the other edge.",
+				Label: loc.Row("sidebar." + key + "_rail.label"), Desc: loc.Row("sidebar.edge_rail.desc"),
 				Control: controlBool,
 				boolVal: func(m *OS) bool { return m.sidebarEdgeEnabled(edge) },
 				adjust:  func(m *OS, _ int) { m.sidebarSetEdgeEnabled(edge, !m.sidebarEdgeEnabled(edge)) },
 			},
 			settingItem{
-				Label: name + " width", Desc: "Width of this edge in columns. A narrow screen makes it smaller.",
+				Label: loc.Row("sidebar." + key + "_width.label"), Desc: loc.Row("sidebar.edge_width.desc"),
 				Control: controlInt, numMin: 10, numMax: 80,
 				value: func(m *OS) string { return strconv.Itoa(m.sidebarEdgePreferredWidth(edge)) },
 				adjust: func(m *OS, dir int) {
@@ -96,8 +97,8 @@ func (m *OS) sidebarSessionSettingItems() []settingItem {
 				setNum: func(m *OS, width int) { m.sidebarSetEdgeWidth(edge, width) },
 			},
 			settingItem{
-				Label: name + " session", Desc: "Show the panes of a daemon session. Leave it empty to show the usual rail sections.",
-				Control: controlString, Unset: "ordinary rail", Placeholder: "session name",
+				Label: loc.Row("sidebar." + key + "_session.label"), Desc: loc.Row("sidebar.edge_session.desc"),
+				Control: controlString, Unset: loc.Row("sidebar.edge_session.unset"), Placeholder: loc.Row("sidebar.edge_session.placeholder"),
 				value: func(m *OS) string {
 					if cfg := m.sidebarSessionConfig(edge); cfg != nil {
 						return cfg.Session
@@ -113,13 +114,13 @@ func (m *OS) sidebarSessionSettingItems() []settingItem {
 				},
 			},
 			settingItem{
-				Label: name + " workspaces", Desc: "Show the assigned session on every center workspace, or only on the numbered workspace.",
+				Label: loc.Row("sidebar." + key + "_workspaces.label"), Desc: loc.Row("sidebar.edge_workspaces.desc"),
 				Control: controlEnum, Options: workspaces,
 				value: func(m *OS) string {
 					if cfg := m.sidebarSessionConfig(edge); cfg != nil && cfg.SessionWorkspace > 0 {
 						return strconv.Itoa(m.workspaceDisplayNumber(cfg.SessionWorkspace))
 					}
-					return "all"
+					return m.loc().Value("sidebar.all")
 				},
 				adjust: func(m *OS, dir int) {
 					cfg := m.editableSidebarEdge(edge)

@@ -63,7 +63,7 @@ func TestAgentChromeWaitsForAnAgent(t *testing.T) {
 	}
 	// The Alerts tab says what it folded.
 	for _, cat := range m.settingsCategories() {
-		if cat.Name != "Alerts" {
+		if cat.Key != "Alerts" {
 			continue
 		}
 		last := cat.Items[len(cat.Items)-1]

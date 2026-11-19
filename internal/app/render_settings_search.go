@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -27,7 +26,7 @@ func (m *OS) settingsSearchLine(found, width int, pal overlay.Palette) string {
 	left := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())
 	if query == "" {
 		left += overlay.Cursor(" ", bg, pal.Fg) +
-			overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render(" name, key, value or description")
+			overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render(" "+m.loc().Row("search.placeholder"))
 	} else {
 		// The query with its caret, leaving the count on the right its room.
 		before, at, after := m.settingsSearch.query.Parts()
@@ -38,11 +37,9 @@ func (m *OS) settingsSearchLine(found, width int, pal overlay.Palette) string {
 	switch {
 	case query == "":
 	case found == 0:
-		count = "no matches"
-	case found == 1:
-		count = "1 match"
+		count = m.loc().Value("no_matches")
 	default:
-		count = strconv.Itoa(found) + " matches"
+		count = m.loc().ValueN("n_matches", found)
 	}
 	right := overlay.Style(bg).Foreground(pal.FgMute).Render(count)
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
@@ -54,10 +51,10 @@ func (m *OS) settingsSearchLine(found, width int, pal overlay.Palette) string {
 
 // settingsSearchEmpty is the line a search that found nothing shows in place
 // of the rows.
-func settingsSearchEmpty(query string, width int, pal overlay.Palette) string {
-	msg := "No settings match"
-	if strings.TrimSpace(query) == "" {
-		msg = "Type to search every tab"
+func (m *OS) settingsSearchEmpty(width int, pal overlay.Palette) string {
+	msg := m.loc().Row("search.empty_none")
+	if strings.TrimSpace(m.settingsSearch.query.String()) == "" {
+		msg = m.loc().Row("search.empty_hint")
 	}
 	return overlay.Style(pal.Surface).Foreground(pal.FgDim).Italic(true).
 		Render("  " + overlay.Truncate(msg, max(width-2, 1)))
@@ -74,7 +71,7 @@ func (m *OS) settingsSearchDescription(items []settingItem, hits []settingsHit, 
 	item, hit := items[m.settingsList.Cursor], hits[m.settingsList.Cursor]
 	bg := pal.Surface
 
-	where := cats[hit.cat].Name + " tab"
+	where := m.loc().Rowf("search.where", "tab", cats[hit.cat].Name)
 	key := item.Path
 	var match []int
 	if hit.field == settingsFieldKey {

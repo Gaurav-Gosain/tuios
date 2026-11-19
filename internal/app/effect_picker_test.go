@@ -31,7 +31,7 @@ func effectPickerOS(t *testing.T, w, h int) (*OS, *terminal.Window) {
 
 	m.ShowSettings = true
 	for i, c := range m.settingsCategories() {
-		if c.Name == "Saver" {
+		if c.Key == "Saver" {
 			m.SettingsCategory = i
 		}
 	}

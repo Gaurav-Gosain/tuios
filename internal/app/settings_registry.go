@@ -2,7 +2,6 @@ package app
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
@@ -35,223 +34,6 @@ func custom(covers string, item settingItem) settingsRow {
 	return settingsRow{item: &item}
 }
 
-// settingLabels overrides the label derived from a path's last segment, for the
-// paths where the derived one reads worse than the name the row has always had.
-var settingLabels = map[string]string{
-	"agents.enabled":                      "Agent features",
-	"agents.fold_working":                 "Fold Working",
-	"agents.answer_advance":               "Next after an answer",
-	"agents.view_list":                    "Agent list",
-	"agents.acp_version":                  "ACP version",
-	"agents.name_hint":                    "Agents name their panes",
-	"agents.reply_markers":                "Reply markers",
-	"agents.list_width":                   "Agent list width",
-	"agents.card_preview":                 "Task card preview",
-	"agents.card_preview_width":           "Task card preview width",
-	"agents.reply_rows":                   "Reply rows",
-	"tasks.auto_stage":                    "Move task cards",
-	"tasks.machine_cap":                   "Agents before Any machine looks elsewhere",
-	"tasks.attachment_max_mib":            "Largest file on a card (MiB)",
-	"tasks.attachments_per_card":          "Attachments on one card",
-	"tasks.attachment_session_mib":        "Card files in one session (MiB)",
-	"appearance.sidebar.editor":           "File editor",
-	"appearance.dock_workspace_label_max": "Workspace label cap",
-	"appearance.dock_mode_icon_window":    "Window mode icon",
-	"appearance.dock_mode_icon_terminal":  "Terminal mode icon",
-	"appearance.dock_mode_icon_tiling":    "Tiling mode icon",
-	"appearance.dockbar_position":         "Dock position",
-	"appearance.glyphs":                   "Glyph set",
-	"appearance.frame_panels":             "Frame panels",
-	"appearance.pane_overlays":            "Overlays like panes",
-	"appearance.theme_light":              "Light theme",
-	"appearance.sidebar.row_style":        "Current row",
-	"appearance.sidebar.header_style":     "Section headers",
-	"appearance.sidebar.density":          "Section spacing",
-	"appearance.window_title_style":       "Title style",
-	"appearance.window_title_align":       "Title place",
-	"appearance.border_focused_gradient":  "Focused border gradient",
-	"appearance.border_gradient_angle":    "Gradient angle",
-	"appearance.hide_clock":               "Clock in the badge",
-	"appearance.hide_scrollbar":           "Scrollbar",
-	"appearance.hide_window_buttons":      "Window buttons",
-	"appearance.scrollbar.style":          "Scrollbar style",
-	"appearance.show_clock":               "Clock",
-	"appearance.show_cpu":                 "CPU meter",
-	"appearance.show_ram":                 "RAM meter",
-	"appearance.sidebar.enabled":          "Sidebar",
-	"appearance.sidebar.per_session":      "Sidebar per session",
-	"spotlight.shake":                     "Shake to toggle",
-	"appearance.sidebar.position":         "Position",
-	"appearance.sidebar.width":            "Width",
-	"appearance.window_title_position":    "Window title",
-	"appearance.whichkey_enabled":         "Which-key",
-	"appearance.whichkey_position":        "Which-key position",
-	"appearance.whichkey_delay_ms":        "Which-key delay",
-	"appearance.tooltip_delay_ms":         "Tooltip delay",
-	"appearance.zen_reveal_ms":            "Zen reveal delay",
-	"appearance.paste_preview_ms":         "Paste card time",
-	"appearance.chord_timeout_ms":         "Chord timeout",
-	"appearance.wrap_lists":               "Wrap lists at the ends",
-	"appearance.gap":                      "Pane gap",
-	"appearance.drop_preview":             "Drop preview",
-	"appearance.drop_preview_delay":       "Drop preview delay",
-	"appearance.niri_reverse_scroll":      "Reverse scroll",
-	"appearance.niri_scroll_cells":        "Strip scroll step",
-	"mouse.double_click_ms":               "Double click interval",
-	"mouse.drag_threshold":                "Drag threshold",
-	"appearance.niri_scroll_snap":         "Strip snap",
-	"appearance.scroll_column_max":        "Column width cap",
-	"appearance.niri_click_reveals":       "Click reveals column",
-	"appearance.niri_hover_reveals":       "Hover reveals column",
-	"appearance.motion":                   "Motion",
-	"appearance.calm":                     "Calm mode",
-	"appearance.modal_dim":                "Dim behind panels",
-	"appearance.popup_dim":                "Dim behind popups",
-	"appearance.confirm_close":            "Confirm pane close",
-	"appearance.confirm_quit":             "Confirm quit",
-	"appearance.session_colors":           "Session colors",
-	"appearance.session_border":           "Session border",
-	"appearance.global_session":           "Global session",
-	"appearance.git_dirty":                "Git dirty counts",
-	"appearance.links":                    "Links",
-	"appearance.link_click":               "Link click",
-	"appearance.link_opener":              "Link opener",
-	"appearance.right_click_opens_menu":   "Right-click menu",
-	"appearance.new_window_inherit_cwd":   "Inherit directory",
-	"appearance.new_window_follow_ssh":    "Follow ssh",
-	"appearance.kitty_placeholders":       "Kitty placeholders",
-	"appearance.image_symbols":            "Images as text",
-	"appearance.dock_pill_caps":           "Pill caps",
-	"appearance.dock_mode_split_letter":   "Split letter",
-	"appearance.dock_mode_pill":           "Mode pill",
-	"keybindings.window_mode":             "Window mode",
-	"appearance.dock_prefix_indicator":    "Prefix indicator",
-	"appearance.dock_compact":             "Compact dock",
-	"appearance.dock_workspace_tabs":      "Workspace tabs",
-	"appearance.dock_workspace_tooltip":   "Workspace name on hover",
-	"dock.clock.format":                   "Dock clock format",
-	"debug.show_key_events":               "Show keys",
-	"debug.show_key_count":                "Keys kept",
-	"appearance.idle_fps":                 "Idle poll rate",
-	"appearance.multi_copy_dim":           "Multi copy dim",
-	"appearance.copy_search_max_matches":  "Search match limit",
-	"notifications.rate_limit_ms":         "Notification rate limit",
-	"notifications.bell_rate_limit_ms":    "Bell rate limit",
-	"tape.banner_ms":                      "Tape banner time",
-	"tape.done_linger_ms":                 "Tape DONE time",
-	"appearance.sidebar.marquee_pause_ms": "Marquee pause",
-	"appearance.sidebar.marquee_step_ms":  "Marquee step",
-	"dock.meter_interval_ms":              "Meter interval",
-	"appearance.sidebar.git_refresh_ms":   "Git refresh",
-	"daemon.log_level":                    "Log level",
-	"daemon.window_size":                  "Session size",
-	"tape.auto_review":                    "Auto-open review",
-	"tape.show_status":                    "Show tape status",
-	"hints.builtins":                      "Hint patterns",
-	"hints.alphabet":                      "Hint letters",
-	"panes.label_keys":                    "Pane label keys",
-	"panes.navigator_layout":              "Navigator layout",
-	"path_picker.show_hidden":             "Path picker hidden files",
-	"hints.open":                          "Ctrl opens a hint",
-	"hints.dim":                           "Dim around hints",
-	"hints.all_panes":                     "Hints on all panes",
-	"scratch.width":                       "Scratch width",
-	"pip.width":                           "Picture-in-picture width",
-	"pip.height":                          "Picture-in-picture height",
-	"pip.corner":                          "Picture-in-picture corner",
-	"scratch.height":                      "Scratch height",
-	"launcher.gui_command":                "Launcher GUI command",
-	"launcher.keep_open":                  "Keep launched panes open",
-	"workspaces.return_when_empty":        "Go back from an empty workspace",
-	"shell.integration":                   "Shell integration",
-	"shell.login":                         "Login shell",
-	"workspaces.new_window_when_empty":    "Open a pane on an empty workspace",
-	"worktree.path":                       "Worktree folder",
-	"worktree.setup":                      "Worktree setup command",
-	"worktree.setup_async":                "Start the agent during setup",
-	"review.focus":                        "Review opens on",
-	"review.scope":                        "Review shows",
-	"paste_buffers.limit":                 "Paste buffers to keep",
-	"paste_buffers.max_kb":                "Paste buffer size limit",
-
-	"appearance.sidebar.sections":               "Sections",
-	"appearance.sidebar.file_icons":             "File icons",
-	"appearance.sidebar.file_icon_colors":       "File icon colors",
-	"appearance.sidebar.folder_click":           "Click a folder",
-	"appearance.sidebar.file_drag":              "Drag a file into a pane",
-	"appearance.sidebar.files_style":            "Files style",
-	"appearance.sidebar.file_actions":           "File actions",
-	"appearance.sidebar.group_main":             "Separate repository row",
-	"appearance.sidebar.file_delete":            "Delete sends to",
-	"files.open_copy_ask_mb":                    "Ask before a far copy above (MiB)",
-	"files.open_copy_max_mb":                    "Largest far copy (MiB)",
-	"files.open_copy_keep_days":                 "Keep far copies (days)",
-	"appearance.sidebar.agent_rest_fold":        "Fold agents at rest after",
-	"appearance.sidebar.subagent_rows":          "Show subagents as",
-	"appearance.sidebar.subagent_collapse":      "Subagent heading",
-	"appearance.sidebar.subagent_fields":        "Subagent fields",
-	"appearance.sidebar.subagent_max_rows":      "Subagent row limit",
-	"appearance.sidebar.subagent_hide_finished": "Hide finished subagents after",
-	"appearance.dock_workspace_tab_format":      "Workspace tab format",
-	"appearance.zoom_size":                      "Zoom size",
-	"appearance.animation_speed":                "Animation speed",
-	"appearance.theme_transition":               "Theme transition",
-	"appearance.theme_transition_duration":      "Theme transition time (ms)",
-	"motion.workspace":                          "Workspace switch",
-	"motion.workspace_ms":                       "Workspace switch time (ms)",
-	"motion.layout":                             "Pane moves",
-	"motion.layout_ms":                          "Pane move time (ms)",
-	"motion.zoom":                               "Zoom",
-	"motion.zoom_ms":                            "Zoom time (ms)",
-	"motion.overlays":                           "Overlay fade",
-	"motion.overlays_ms":                        "Overlay fade time (ms)",
-	"motion.sidebar":                            "Sidebar shimmer",
-	"motion.scroll":                             "Scrolling layout",
-	"motion.scroll_ms":                          "Scrolling layout time (ms)",
-	"motion.copy":                               "Copy sweep motion",
-	"motion.confetti":                           "Confetti",
-	"appearance.zoom_borderless":                "Borderless zoom",
-	"appearance.zoom_follows_focus":             "Zoom follows focus",
-	"appearance.window_button_zoom":             "Tiled zoom button",
-	"appearance.zoom_max_width":                 "Zoom width",
-	"appearance.alt_drag":                       "Alt-drag to move",
-	"appearance.focus_wrap":                     "Focus wraps at the edge",
-	"appearance.auto_enter_terminal_on_focus":   "Type in a pane when focus moves to it",
-	"appearance.focus_follows_mouse_pause":      "Key that pauses focus follows mouse",
-	"startup.tiled":                             "Start tiled",
-	"startup.daemon":                            "Daemon by default",
-	"startup.session":                           "Start session",
-	"startup.window":                            "Start pane",
-
-	// The [notifications] rows sit under one tab, where a row called "Duration"
-	// or "Sound" does not say which of the three durations or whose sound.
-	"notifications.duration":                     "Info duration",
-	"notifications.warning_duration":             "Warning duration",
-	"notifications.error_duration":               "Error duration",
-	"notifications.error_sticky":                 "Errors wait for esc",
-	"notifications.bell":                         "Pane bell",
-	"notifications.style":                        "Message style",
-	"notifications.level":                        "Messages shown",
-	"notifications.log_hidden":                   "Log hidden messages",
-	"notifications.machine_offer":                "Offer to add machines",
-	"notifications.agent.enabled":                "Agent alerts",
-	"notifications.agent.notify":                 "Agent alert on the desktop",
-	"notifications.agent.dock":                   "Agent alert in the dock",
-	"notifications.agent.sound":                  "Agent alert sound",
-	"notifications.agent.sound_mode":             "How an alert sounds",
-	"notifications.agent.sound_cooldown_seconds": "Gap between sounds",
-	"notifications.agent.settle_seconds":         "Wait before alerting",
-	"notifications.agent.suppress_focused":       "Skip the pane you are in",
-	"notifications.agent.quiet_hours":            "Agent quiet hours",
-	"notifications.agent.command":                "Agent alert command",
-	"notifications.agent.states.working":         "Alert when it starts work",
-	"notifications.agent.states.idle":            "Alert when it goes quiet",
-	"notifications.agent.states.done":            "Alert when it finishes",
-	"notifications.agent.states.needs_input":     "Alert when it waits for you",
-	"notifications.agent.states.errored":         "Alert when it fails",
-	"notifications.mail.between_agents":          "Mail between agents alerts",
-}
-
 // settingInverted are the bool options whose row reads as the positive. The
 // config spells three of them as a hide flag, and a toggle labelled "Window
 // buttons" that is on when the buttons are there is the row a person expects;
@@ -260,38 +42,6 @@ var settingInverted = map[string]bool{
 	"appearance.hide_window_buttons": true,
 	"appearance.hide_scrollbar":      true,
 	"appearance.hide_clock":          true,
-}
-
-// settingPlaceholders are the examples shown on a text row's description line,
-// where the registry description alone does not say what a value looks like.
-var settingPlaceholders = map[string]string{
-	"appearance.sidebar.editor":            "micro, nano, or vim -f",
-	"appearance.window_title_format":       "{index}: {title}",
-	"appearance.host_title":                "{title} · {session}",
-	"appearance.dock_workspace_tab_format": "{index}: {name}",
-	"appearance.sidebar.sections":          "sessions:25,terminals,files:25,agents:34",
-	"appearance.clock_format":              "Mon 3:04PM",
-	"dock.clock.format":                    "15:04",
-	"appearance.preferred_shell":           "/bin/bash",
-	"appearance.word_characters":           "@-./_~?&=%+#",
-	"hints.builtins":                       "url,path,sha,ip",
-	"notifications.agent.command":          "notify-send {state} {title}",
-	"notifications.agent.quiet_hours":      "22:00-08:00",
-}
-
-// settingUnset is what a text row shows when nothing is set: what happens
-// instead, in the row's own terms.
-var settingUnset = map[string]string{
-	"appearance.sidebar.editor":            "($EDITOR / $VISUAL / vi)",
-	"appearance.window_title_format":       "(raw title)",
-	"appearance.host_title":                "(off)",
-	"appearance.dock_workspace_tab_format": "(name only)",
-	"appearance.preferred_shell":           "(auto-detect)",
-	"appearance.clock_format":              config.DefaultClockFormat,
-	"dock.clock.format":                    "(appearance.clock_format)",
-	"appearance.dock_mode_icon_window":     "(no icon)",
-	"appearance.dock_mode_icon_terminal":   "(no icon)",
-	"appearance.dock_mode_icon_tiling":     "(no icon)",
 }
 
 // settingSteps is the stride an int row moves by, for the ranges where one is
@@ -311,23 +61,6 @@ var settingSteps = map[string]int{
 	"motion.scroll_ms":                     50,
 	"hints.dim":                            5,
 	"appearance.sidebar.width":             2,
-}
-
-// settingLabel is the row's name: an override where there is one, otherwise the
-// path's last segment with its underscores opened out.
-func settingLabel(path string) string {
-	if label, ok := settingLabels[path]; ok {
-		return label
-	}
-	segment := path
-	if i := strings.LastIndex(path, "."); i >= 0 {
-		segment = path[i+1:]
-	}
-	words := strings.ReplaceAll(segment, "_", " ")
-	if words == "" {
-		return path
-	}
-	return strings.ToUpper(words[:1]) + words[1:]
 }
 
 // optionValue is what the config holds at path, or the option's default when no
@@ -440,8 +173,8 @@ func (m *OS) registryItem(path string) settingItem {
 
 	item := settingItem{
 		Path:    path,
-		Label:   settingLabel(path),
-		Desc:    o.Description,
+		Label:   m.loc().Label(path),
+		Desc:    m.loc().Desc(path),
 		derived: true,
 	}
 
@@ -509,13 +242,10 @@ func (m *OS) registryItem(path string) settingItem {
 
 	default:
 		item.Control = controlString
-		item.Placeholder = settingPlaceholders[path]
-		item.Unset = settingUnset[path]
-		if item.Unset == "" {
-			item.Unset = "(default)"
-		}
+		item.Placeholder = m.loc().Placeholder(path)
+		item.Unset = m.loc().Unset(path)
 		if item.Placeholder != "" {
-			item.Desc += ", e.g. " + item.Placeholder
+			item.Desc += m.loc().Value("example_joiner") + item.Placeholder
 		}
 		item.value = func(m *OS) string { return m.optionValue(path) }
 		item.setStr = func(m *OS, v string) { m.setOption(path, v) }
