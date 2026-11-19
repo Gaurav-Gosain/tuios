@@ -2444,6 +2444,7 @@ package) and against what links them:
 | internal/hostsync, internal/herdrcli, internal/worktree, internal/risk, internal/agenthook, internal/tutor | run once per command, verb, approval or hook event |
 | internal/capture, internal/explore, internal/release, internal/restartplan, internal/pushnotify, internal/mermaid | a screenshot, an explorer, a release lookup, a restart, a phone notification, a diagram |
 | `tuios.dev/swatch/omarchy`, `swatch/termconfig`, internal/tape/trust, internal/sound, internal/diffview/lexers | read once per theme load, tape, alert cue or reviewed file |
+| `go-toml/v2/...`, go-proxyproto | the config and plugin TOML, read once per load; the PROXY header of an ssh connection, read once when it opens |
 
 | Left off | Hot path that calls into it |
 |---|---|

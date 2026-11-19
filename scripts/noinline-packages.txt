@@ -69,8 +69,11 @@ rsc.io/qr/...
 github.com/Gaurav-Gosain/tuios/internal/tape
 github.com/Gaurav-Gosain/tuios/internal/hostsetup
 tuios.dev/shot
-github.com/pelletier/go-toml/v2
+github.com/pelletier/go-toml/v2/...
 github.com/Gaurav-Gosain/tuios/internal/transcriptview
+# The PROXY protocol header of a connection to the ssh server, read once
+# when the connection opens.
+github.com/pires/go-proxyproto
 
 # Syntax highlighting: a code block, a diff or a file is lexed once when it
 # is read or laid out, and its spans are kept (thread cards, the review's
