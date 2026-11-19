@@ -129,9 +129,16 @@ func printKeybindReport(rep config.KeybindReport) {
 		if c.CrossSection {
 			across = "  [claims are in different config tables]"
 		}
-		fmt.Printf("  %-22s %s runs %s%s\n", c.Press, c.ScopeName, c.Winner, across)
+		fmt.Printf("  %-22s %s runs %s (%s)%s\n", c.Press, c.ScopeName, c.Winner, c.WinnerSource, across)
 		for _, l := range c.Losers {
-			fmt.Printf("  %-22s   dead: %s [%s]\n", "", l.Action, l.Section)
+			fmt.Printf("  %-22s   dead: %s [%s] (%s)\n", "", l.Action, l.Section, l.Source)
+		}
+	}
+	if len(rep.LeaderClashes) > 0 {
+		fmt.Printf("\nKEYS THAT ARE ALSO THE LEADER (%s)\n", config.EvidenceCertain)
+		fmt.Println("  Each key runs an action and starts the prefix chord. Only one of the two works.")
+		for _, c := range rep.LeaderClashes {
+			fmt.Printf("  %-22s %s runs %s (%s). The leader is set in %s.\n", c.Press, c.ScopeName, c.Action, c.Source, c.LeaderSource)
 		}
 	}
 

@@ -154,10 +154,22 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 	// Keys two actions contest. The first action in each list is the one that
 	// runs; the rest never fire.
-	for key, actions := range findConflicts(cfg, normalizer) {
-		// The message names the winner and says how to act on it. A warning
-		// that only listed the actions left the reader with a fact and no
-		// verb, and the verb is the whole point of reporting it.
+	registry := NewKeybindRegistry(cfg)
+	for _, c := range registry.Collisions() {
+		// The whole chord, not the bare key: "1" means one thing in window
+		// mode and another after the layout chord, and a warning that said
+		// only "1" could not be acted on.
+		key := c.Press
+		actions := []string{c.Winner}
+		where := []string{c.Winner + " in " + c.WinnerSource.String()}
+		for _, l := range c.Losers {
+			actions = append(actions, l.Action)
+			where = append(where, l.Action+" in "+l.Source.String())
+		}
+		// The message names the winner, where each binding is set, and how
+		// to act on it. A warning that only listed the actions left the
+		// reader with a fact and no verb, and the verb is the whole point of
+		// reporting it.
 		how := fmt.Sprintf("Run `tuios keybinds unbind <action> %s` to take the key off one of them.", key)
 		if slices.ContainsFunc(actions, func(a string) bool { return strings.HasPrefix(a, CommandActionPrefix) }) {
 			how = "To move a command entry, edit its key in the [[keybindings.command]] table of config.toml. For an action, run `tuios keybinds unbind <action> " + key + "`."
@@ -165,7 +177,15 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "keybindings",
 			Key:     key,
-			Message: fmt.Sprintf("%s runs %s. These never run: %s. %s", key, actions[0], strings.Join(actions[1:], ", "), how),
+			Message: fmt.Sprintf("%s runs %s. These never run: %s. The bindings are set here: %s. %s", key, actions[0], strings.Join(actions[1:], ", "), strings.Join(where, ", "), how),
+		})
+	}
+	for _, c := range registry.LeaderClashes() {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "keybindings",
+			Key:   c.Press,
+			Message: fmt.Sprintf("%s runs %s in %s (%s), and it is also the leader key (%s). Only one of the two works. Move one of them to another key.",
+				c.Press, c.Action, strings.ToLower(c.ScopeName), c.Source, c.LeaderSource),
 		})
 	}
 
@@ -726,38 +746,6 @@ func validateTitleFormat(field, key, format string, allowed []string, result *Va
 	}
 }
 
-// findConflicts returns every key that two actions contest, keyed by the key,
-// with the winner first and the dead actions after it.
-//
-// It delegates to KeybindRegistry.Collisions rather than deciding for itself.
-// It used to keep its own idea of which actions could compete, in the form of a
-// tilingModeActions and a nonTilingModeActions list, and it suppressed any
-// clash that straddled the two. That partition described a scope that does not
-// exist: the lookup flattens window_management and layout into one keymap and
-// never consults the mode, and only the handler checks it, by which point the
-// losing action's handler is not being called. It was also simply wrong about
-// select_window_N, which has no tiling guard at all and works in both modes.
-//
-// The cost of the disagreement was four dead bindings in the shipped defaults
-// that this function stayed silent about for as long as they existed, while the
-// keybind report named all four. Two conflict detectors that disagree means the
-// quieter one is load-bearing for nobody and misleading for everybody, so there
-// is now one.
-func findConflicts(cfg *UserConfig, _ *KeyNormalizer) map[string][]string {
-	conflicts := make(map[string][]string)
-	for _, c := range NewKeybindRegistry(cfg).Collisions() {
-		actions := []string{c.Winner}
-		for _, l := range c.Losers {
-			actions = append(actions, l.Action)
-		}
-		// Keyed by the whole chord, not the bare key: "1" means one thing in
-		// window mode and another after the layout chord, and a warning that
-		// said only "1" could not be acted on.
-		conflicts[c.Press] = actions
-	}
-	return conflicts
-}
-
 // keySection is one keybinding table of config.toml, by its name there.
 type keySection struct {
 	name string
@@ -859,6 +847,7 @@ func DropUnreadableKeys(cfg *UserConfig, lc *LayeredConfig) []DroppedKey {
 	if cfg == nil {
 		return nil
 	}
+	cfg.layers = lc
 	normalizer := NewKeyNormalizer()
 	defaults := DefaultConfig().Keybindings
 	fileOf := func(path ...string) string {

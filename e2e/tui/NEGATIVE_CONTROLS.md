@@ -18473,3 +18473,16 @@ Run on Linux on 2026-11-19. The branch passes it.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestUserActionAsksAndTakesTypedArgs$' -v .`.
+
+## Key conflicts say where
+
+`TestKeyConflictsNameBothBindings` in `keybind_conflicts_test.go`, and `TestKeyConflictsSayWhereEachBindingIs` in `internal/config/key_sources_test.go`. A key claimed in config.toml and in a config.d file, and a key that is also the leader, must be reported by `tuios keybinds doctor` and at load with the file and line of each binding.
+
+Run on Linux on 2026-11-19. The branch passes both.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| `BindingSource` returns no source | "keybinds doctor does not say \"config.d/keys.toml:3\"" and the load checks | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKeyConflictsNameBothBindings$' -v .`.

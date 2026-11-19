@@ -119,6 +119,9 @@ type UserConfig struct {
 	// baseline is this config as TOML when it was parsed, or when it was last
 	// saved. A save writes the difference from it to now and nothing else.
 	baseline []byte
+	// layers are the files the config was read from, when known. They say
+	// where a key binding is set (BindingSource).
+	layers *LayeredConfig
 	// holds are the options set without saving, which every save leaves
 	// alone. See hold.go.
 	holds *optionHolds

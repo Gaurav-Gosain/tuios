@@ -107,6 +107,8 @@ type Collision struct {
 	// one of them is dead.
 	CrossSection bool     `json:"cross_section"`
 	Evidence     Evidence `json:"evidence"`
+	// WinnerSource is where the winning binding is set.
+	WinnerSource KeySource `json:"winner_source"`
 }
 
 // CollisionLoser is one action that lost a key.
@@ -114,6 +116,8 @@ type CollisionLoser struct {
 	Action  string `json:"action"`
 	Desc    string `json:"description"`
 	Section string `json:"section"`
+	// Source is where this binding is set.
+	Source KeySource `json:"source"`
 }
 
 // Collisions returns every key claimed more than once inside a single scope.
@@ -178,9 +182,11 @@ func (r *KeybindRegistry) Collisions() []Collision {
 			WinnerDesc:   g.winner.Desc,
 			CrossSection: len(g.sections) > 1,
 			Evidence:     EvidenceCertain,
+			WinnerSource: r.config.BindingSource(g.winner.Section, g.winner.Action),
 		}
 		for _, l := range g.losers {
-			c.Losers = append(c.Losers, CollisionLoser{Action: l.Action, Desc: l.Desc, Section: l.Section})
+			c.Losers = append(c.Losers, CollisionLoser{Action: l.Action, Desc: l.Desc, Section: l.Section,
+				Source: r.config.BindingSource(l.Section, l.Action)})
 		}
 		out = append(out, c)
 	}
@@ -192,6 +198,43 @@ func (r *KeybindRegistry) Collisions() []Collision {
 		}
 		return false
 	})
+	return out
+}
+
+// LeaderClash is a key in global, window or terminal mode that runs an
+// action and is also the leader, which starts the prefix chord. The two
+// bindings are in different places, so the collisions do not show it.
+type LeaderClash struct {
+	ScopeName string    `json:"scope_name"`
+	Press     string    `json:"press"`
+	Action    string    `json:"action"`
+	Section   string    `json:"section"`
+	Source    KeySource `json:"source"`
+	// LeaderSource is where the leader is set.
+	LeaderSource KeySource `json:"leader_source"`
+}
+
+// LeaderClashes returns every binding the leader key also claims.
+func (r *KeybindRegistry) LeaderClashes() []LeaderClash {
+	leader := r.config.Keybindings.LeaderKey
+	if leader == "" {
+		leader = DefaultLeaderKey
+	}
+	var out []LeaderClash
+	for _, b := range r.Bindings() {
+		if b.Unbound || b.Shadowed || lookupForm(b.Press) != lookupForm(leader) ||
+			b.Scope != ScopeGlobal && b.Scope != ScopeWindowMode && b.Scope != ScopeTerminalMode {
+			continue
+		}
+		name := b.Scope
+		for _, s := range Scopes(leader) {
+			if s.ID == b.Scope {
+				name = s.Name
+			}
+		}
+		out = append(out, LeaderClash{ScopeName: name, Press: b.Press, Action: b.Action, Section: b.Section,
+			Source: r.config.BindingSource(b.Section, b.Action), LeaderSource: r.config.BindingSource("keybindings", "leader_key")})
+	}
 	return out
 }
 
@@ -340,9 +383,11 @@ type KeybindReport struct {
 	Observations []Observation       `json:"observations"`
 	Bindings     []Binding           `json:"bindings"`
 	Collisions   []Collision         `json:"collisions"`
-	Swallowed    []Swallow           `json:"terminal_mode_swallowed"`
-	GuestClashes []GuestClash        `json:"guest_clashes"`
-	Ambiguous    []AmbiguousBinding  `json:"ambiguous_bindings"`
+	// LeaderClashes are the keys that run an action and are the leader too.
+	LeaderClashes []LeaderClash      `json:"leader_clashes"`
+	Swallowed     []Swallow          `json:"terminal_mode_swallowed"`
+	GuestClashes  []GuestClash       `json:"guest_clashes"`
+	Ambiguous     []AmbiguousBinding `json:"ambiguous_bindings"`
 	// Yielded are new default bindings tuios left off because the key was
 	// already bound to another action in the same table.
 	Yielded []YieldedDefault `json:"yielded_defaults,omitempty"`
@@ -375,17 +420,18 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 			EvidenceObserved:  "Read from the pane when this report was built. True then, and possibly stale now.",
 			EvidenceReference: "A fixed list of what these programs bind by default. Nothing was detected. If you rebound the program, this entry is wrong for you.",
 		},
-		Pane:         facts,
-		Yielded:      r.config.YieldedDefaults,
-		Retired:      r.config.RetiredKeybinds,
-		Observations: facts.Observations(),
-		Bindings:     r.Bindings(),
-		Collisions:   r.Collisions(),
-		Swallowed:    r.TerminalModeSwallowed(),
-		GuestClashes: r.GuestClashes(facts.Command),
-		LeaderReadAs: readAs(leader),
-		KeyProblems:  r.KeyProblems(),
-		OptionKeys:   r.OptionKeys(),
+		Pane:          facts,
+		Yielded:       r.config.YieldedDefaults,
+		Retired:       r.config.RetiredKeybinds,
+		Observations:  facts.Observations(),
+		Bindings:      r.Bindings(),
+		Collisions:    r.Collisions(),
+		LeaderClashes: r.LeaderClashes(),
+		Swallowed:     r.TerminalModeSwallowed(),
+		GuestClashes:  r.GuestClashes(facts.Command),
+		LeaderReadAs:  readAs(leader),
+		KeyProblems:   r.KeyProblems(),
+		OptionKeys:    r.OptionKeys(),
 
 		CommandProblems:  r.config.Keybindings.CommandProblems(),
 		CopyModeProblems: r.config.Keybindings.CopyModeProblems(),
@@ -442,6 +488,9 @@ func (rep KeybindReport) Summary() string {
 	}
 	if n := len(rep.Collisions); n > 0 {
 		parts = append(parts, plural.CountAs(n, "key claimed twice", "keys claimed twice"))
+	}
+	if n := len(rep.LeaderClashes); n > 0 {
+		parts = append(parts, plural.CountAs(n, "key that is also the leader", "keys that are also the leader"))
 	}
 	if n := len(rep.GuestClashes); n > 0 {
 		parts = append(parts, plural.CountAs(n, "key a guest wants", "keys a guest wants"))

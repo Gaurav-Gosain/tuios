@@ -506,7 +506,11 @@ modifier runs over such a program too. Other mouse gestures are fixed.
 
 You can use one `config.toml` on macOS and on Linux. On Linux, `opt+1` is `alt+1`. `tuios keybinds doctor` lists these keys for information.
 
-tuios ignores a key that it cannot read, such as `ctrl+nope`, and loads the rest of the file. The action gets its default key when it has no other key. If another action already has that default key, the action has no key. A leader that tuios cannot read changes to `ctrl+b`. tuios shows a config problem when it starts. The log viewer (leader `D` `l`) names each key and its file. `tuios keybinds doctor` shows the same information. A table name that tuios does not have, such as `[keybindings.terminal]`, is reported the same way, with the table you most likely meant.
+tuios ignores a key that it cannot read, such as `ctrl+nope`, and loads the rest of the file. The action gets its default key when it has no other key. If another action already has that default key, the action has no key. A leader that tuios cannot read changes to `ctrl+b`. tuios shows a config problem when it starts. The log viewer (leader `D` `l`) names each key and its file. `tuios keybinds doctor` shows the same information.
+
+A key that two entries claim in one place is a config problem too. So is a key in global, window or terminal mode that is also the leader: the key runs an action and starts the prefix chord, and only one of the two works. The warning names each binding and the file and line it is set in, such as `config.toml:12` or `config.d/keys.toml:3`. A binding that no file sets is from the defaults. `tuios keybinds doctor` lists the same keys under CONFLICTS WITHIN TUIOS and KEYS THAT ARE ALSO THE LEADER, and `--json` adds `winner_source`, `source` and `leader_clashes`.
+
+A table name that tuios does not have, such as `[keybindings.terminal]`, is reported the same way, with the table you most likely meant.
 
 A `super+` chord needs a terminal that sends the Super key. Most macOS terminals keep Command chords for their own menus. Ghostty and kitty send an unbound Command chord under the Kitty keyboard protocol.
 
