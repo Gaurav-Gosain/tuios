@@ -248,6 +248,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateLinks(cfg, result)
 	validatePanes(cfg, result)
 	validateScratch(cfg, result)
+	validatePiP(cfg, result)
 	validateFilesOpen(cfg, result)
 
 	return result

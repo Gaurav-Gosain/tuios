@@ -400,9 +400,9 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| <a id="pip.corner"></a>`pip.corner` | string | `bottom-right` | Corner the picture-in-picture view goes to first. It moves to another corner when the cursor enters it Values: `bottom-right`, `bottom-left`, `top-right`, `top-left`. |
-| <a id="pip.height"></a>`pip.height` | int | `12` | Height of the picture-in-picture view, border included, in cells Range: 3 to 100. |
-| <a id="pip.width"></a>`pip.width` | int | `40` | Width of the picture-in-picture view, border included, in cells Range: 12 to 200. |
+| <a id="pip.corner"></a>`pip.corner` | string | `bottom-right` | Place the picture-in-picture view goes to first: a corner, or the centre of the top or bottom edge. It moves to another place when the cursor enters it Values: `bottom-right`, `bottom-left`, `top-right`, `top-left`, `top-center`, `bottom-center`. |
+| <a id="pip.height"></a>`pip.height` | string | `12` | Height of the picture-in-picture view, border included: cells (3 to 100) or percent of the pane area (30%) |
+| <a id="pip.width"></a>`pip.width` | string | `40` | Width of the picture-in-picture view, border included: cells (12 to 200) or percent of the pane area (30%) |
 
 ## review
 

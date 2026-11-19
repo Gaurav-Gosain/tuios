@@ -1905,20 +1905,20 @@ var optionSpecs = []Option{
 	// [pip]. Read each time the picture-in-picture view is drawn, and
 	// client-local like the spotlight.
 	{
-		Path: "pip.width", Type: OptionInt, Section: "pip",
-		Unit:        "cells",
-		Description: "Width of the picture-in-picture view, border included, in cells",
-		Min:         PiPMinWidth, Max: PiPMaxWidth,
+		Path: "pip.width", Type: OptionString, Section: "pip",
+		Description: fmt.Sprintf("Width of the picture-in-picture view, border included: cells (%d to %d) or percent of the pane area (30%%)", PiPMinWidth, PiPMaxWidth),
+		Default:     strconv.Itoa(PiPDefaultWidth),
+		BoxSize:     true,
 	},
 	{
-		Path: "pip.height", Type: OptionInt, Section: "pip",
-		Unit:        "cells",
-		Description: "Height of the picture-in-picture view, border included, in cells",
-		Min:         PiPMinHeight, Max: PiPMaxHeight,
+		Path: "pip.height", Type: OptionString, Section: "pip",
+		Description: fmt.Sprintf("Height of the picture-in-picture view, border included: cells (%d to %d) or percent of the pane area (30%%)", PiPMinHeight, PiPMaxHeight),
+		Default:     strconv.Itoa(PiPDefaultHeight),
+		BoxSize:     true,
 	},
 	{
 		Path: "pip.corner", Type: OptionString, Section: "pip",
-		Description: "Corner the picture-in-picture view goes to first. It moves to another corner when the cursor enters it",
+		Description: "Place the picture-in-picture view goes to first: a corner, or the centre of the top or bottom edge. It moves to another place when the cursor enters it",
 		Accepted:    PiPCorners,
 	},
 

@@ -489,3 +489,152 @@ func TestPiPDoesNotFreezeAcrossASessionSwitch(t *testing.T) {
 		t.Fatalf("the view is frozen at tick %d after the session round trip\n%s", before, term.Snapshot())
 	}
 }
+
+// findPiPBoxWide finds a box w cells wide, of any height, with name on its
+// top edge. The panes here are 60 wide, so a box of another width is the view.
+func findPiPBoxWide(s tuitest.Screen, name string, w int) (pipBox, bool) {
+	cols, rows := s.Size()
+	for y := range rows {
+		if !strings.Contains(s.Line(y), name) {
+			continue
+		}
+		for x := 0; x+w-1 < cols; x++ {
+			if s.Cell(x, y).Content != "╭" || s.Cell(x+w-1, y).Content != "╮" {
+				continue
+			}
+			var top strings.Builder
+			for c := x; c < x+w; c++ {
+				top.WriteString(s.Cell(c, y).Content)
+			}
+			if !strings.Contains(top.String(), " "+name+" ") {
+				continue
+			}
+			for yb := y + 2; yb < rows; yb++ {
+				if s.Cell(x, yb).Content == "╰" && s.Cell(x+w-1, yb).Content == "╯" {
+					return pipBox{x, y, x + w - 1, yb}, true
+				}
+			}
+		}
+	}
+	return pipBox{}, false
+}
+
+// TestPiPSizeInPercentAtTheEdgeCentre is issue #2250: pip.width and
+// pip.height as a percent of the pane area, and the box in the centre of the
+// bottom edge, moving to the centre of the top edge when the line being typed
+// reaches it.
+//
+//  1. width = "40%" and height = "25%" on a 120 by 40 screen draw a box 48
+//     cells wide and a quarter of the pane area high, centred on the bottom
+//     edge.
+//  2. A line typed along the bottom row of a zoomed pane reaches the box. The
+//     box moves to the centre of the top edge and never covers the cursor.
+//  3. set-config refuses a percent over 100.
+//
+// The frames "pip-bottom-center" and "pip-top-center" show the two places,
+// under TUIOS_E2E_FRAMES.
+//
+// Negative control: on main, no view 48 cells wide and a quarter of the pane
+// area high is drawn, so step 1 fails. See NEGATIVE_CONTROLS.md.
+func TestPiPSizeInPercentAtTheEdgeCentre(t *testing.T) {
+	const wide = 48 // 40% of 120 columns
+	base := t.TempDir()
+	writeConfig(t, base, "[pip]\nwidth = \"40%\"\nheight = \"25%\"\ncorner = \"bottom-center\"\n")
+	term := startPiPPanes(t, base, []string{"new", "work"},
+		`i=0; while :; do i=$((i+1)); echo PIPTICK-$i; sleep 0.2; done`)
+	pinWithKey(t, term, "Pinned agent")
+	mouseClick(t, term, 20, 10, tuitest.MouseLeft, 0)
+
+	var box pipBox
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		b, ok := findPiPBoxWide(s, "agent", wide)
+		box = b
+		return ok
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: no view %d cells wide on the screen\n%s", wide, term.Snapshot())
+	}
+	cols, rows := term.Screen().Size()
+	if h := box.y1 - box.y0 + 1; h < 8 || h > 10 {
+		t.Fatalf("ASSERTION: the view is %d rows high, want a quarter of the pane area (8 to 10)\n%s", h, term.Snapshot())
+	}
+	if left, right := box.x0, cols-1-box.x1; left-right > 1 || right-left > 1 {
+		t.Fatalf("ASSERTION: the view is not centred: %d columns on the left, %d on the right\n%s", left, right, term.Snapshot())
+	}
+	if box.y0 < rows/2 {
+		t.Fatalf("ASSERTION: the view is not on the bottom edge: top row %d\n%s", box.y0, term.Snapshot())
+	}
+	railShot(t, term, "pip-bottom-center")
+
+	// 2. Type along the bottom row of the zoomed pane into the box.
+	watch := watchCursorWide(term, "agent", wide)
+	toWindowMode(t, term)
+	if err := term.SendKeys("z"); err != nil {
+		t.Fatalf("send z: %v", err)
+	}
+	enterTerminalMode(t, term)
+	runInShell(t, term, "seq 1 60; echo SEQ$((6*10))DONE", "SEQ60DONE", shellTimeout)
+	if err := term.SendKeys(strings.Repeat("x", 60)); err != nil {
+		t.Fatalf("type: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		b, ok := findPiPBoxWide(s, "agent", wide)
+		box = b
+		return ok && b.y1 < rows/2 && strings.Contains(s.Text(), strings.Repeat("x", 60))
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the view did not move to the top edge when the line reached it\n%s", term.Snapshot())
+	}
+	if left, right := box.x0, cols-1-box.x1; left-right > 1 || right-left > 1 {
+		t.Fatalf("ASSERTION: on the top edge the view is not centred: %d columns on the left, %d on the right\n%s", left, right, term.Snapshot())
+	}
+	railShot(t, term, "pip-top-center")
+	// The step is short, so the sampler's floor of 20 frames does not apply.
+	// It must still have seen the view with the cursor, and never over it.
+	close(watch.stop)
+	<-watch.done
+	t.Logf("cursor sampler: %d frames with the view and a visible cursor, %d with the cursor inside the view",
+		watch.samples.Load(), watch.covered.Load())
+	if watch.covered.Load() > 0 {
+		t.Fatalf("ASSERTION: the view covered the cursor in %d samples; first: %s", watch.covered.Load(), watch.first)
+	}
+	if watch.samples.Load() == 0 {
+		t.Fatalf("the sampler never saw the view with a cursor")
+	}
+	if err := term.SendKeys(tuitest.Ctrl('u')); err != nil {
+		t.Fatalf("clear the line: %v", err)
+	}
+
+	// 3. A percent over 100 is refused.
+	if out, err := tuiosCLI(t, base, "set-config", "pip.width", "130%"); err == nil {
+		t.Fatalf("ASSERTION: set-config pip.width 130%% was accepted\n%s", out)
+	}
+}
+
+// watchCursorWide is watchCursor for a view w cells wide.
+func watchCursorWide(term *tuitest.Terminal, name string, w int) *cursorWatch {
+	cw := &cursorWatch{stop: make(chan struct{}), done: make(chan struct{})}
+	go func() {
+		defer close(cw.done)
+		tick := time.NewTicker(40 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-cw.stop:
+				return
+			case <-tick.C:
+			}
+			s := term.Screen()
+			box, ok := findPiPBoxWide(s, name, w)
+			col, row, visible := s.Cursor()
+			if !ok || !visible {
+				continue
+			}
+			cw.samples.Add(1)
+			if box.holds(col, row) && cw.covered.Add(1) == 1 {
+				cw.mu.Lock()
+				cw.first = fmt.Sprintf("cursor (%d,%d) inside box %+v", col, row, box)
+				cw.mu.Unlock()
+			}
+		}
+	}()
+	return cw
+}

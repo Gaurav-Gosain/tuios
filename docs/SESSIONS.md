@@ -492,7 +492,8 @@ unpin it.
 - The view does not show while its pane has the focus.
 - The view does not cover the cursor of the focused pane or the text to the
   left of the cursor. When that text reaches the view, the view moves to a
-  different corner.
+  different place. From the centre of an edge, it goes to the centre of the
+  other edge first.
 - When the pane closes, the view closes and the dock shows a message.
 - Each client has its own view. The view is not in the session state, so a
   different client does not see it. A detach or a switch to a different
@@ -508,10 +509,23 @@ unpin it.
 
 ```toml
 [pip]
-width = 40               # cells, border included
+width = 40               # cells, border included, or a percent such as "30%"
 height = 12
-corner = "bottom-right"  # bottom-right, bottom-left, top-right or top-left
+corner = "bottom-right"  # bottom-right, bottom-left, top-right, top-left,
+                         # top-center or bottom-center
 ```
+
+- `width` and `height` take a number of cells or a percent of the pane area,
+  such as `"30%"`. Write a percent in quotes. A percent is from 1 to 100.
+- A number of cells is from 12 to 200 for the width and from 3 to 100 for
+  the height. The view uses the nearest end of the range for a number
+  outside it.
+- The view is at least 12 cells wide and 3 rows high. On a small screen, the
+  view gets smaller to fit.
+- A value that tuios cannot read shows as a config problem, and the view
+  uses the default size.
+- `top-center` and `bottom-center` put the view in the middle of the top or
+  the bottom edge.
 
 The action is `toggle_pip`. If your config puts `p` on a different window
 mode action, `toggle_pip` has no key. `tuios keybinds doctor` shows this.

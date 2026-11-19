@@ -18366,6 +18366,9 @@ Repeat from `e2e/tui` with
 ## Window mode off
 
 `TestWindowModeOffKeepsTheClientInThePane` in `lock_mode_test.go`. With `[keybindings] window_mode = false`, alt+esc must show the notice and keep terminal mode, the leader menu must list no window mode row, leader `t` `H` must swap the pane and keep terminal mode, and a click on a title bar must focus that pane and keep terminal mode.
+## Picture in picture in percent, at the centre of an edge
+
+`TestPiPSizeInPercentAtTheEdgeCentre` in `pip_test.go`. With `[pip] width = "40%"`, `height = "25%"` and `corner = "bottom-center"` on a 120 by 40 screen, the view must be 48 cells wide, a quarter of the pane area high and centred on the bottom edge. A line typed along the bottom row must move it to the centre of the top edge without covering the cursor, and `set-config pip.width 130%` must be refused.
 
 Run on Linux on 2026-11-19. The branch passes.
 
@@ -18377,3 +18380,7 @@ Run on Linux on 2026-11-19. The branch passes.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestWindowModeOffKeepsTheClientInThePane$' -v .`.
+| Main | "ASSERTION: the view is 38 rows high, want a quarter of the pane area (8 to 10)" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPiPSizeInPercentAtTheEdgeCentre$' -v .`.

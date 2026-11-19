@@ -58,7 +58,8 @@ const pipLayerID = "pip"
 // region, so the box never sits on a pane's border row or column.
 const pipMargin = 1
 
-// pipCorner is one of the four places the box can sit.
+// pipCorner is one of the six places the box can sit: the four corners, and
+// the centre of the top and the bottom edge.
 type pipCorner int
 
 const (
@@ -66,6 +67,8 @@ const (
 	pipBottomLeft
 	pipTopRight
 	pipTopLeft
+	pipTopCenter
+	pipBottomCenter
 )
 
 // parsePiPCorner reads a [pip] corner value. An unknown one is bottom-right.
@@ -77,18 +80,30 @@ func parsePiPCorner(s string) pipCorner {
 		return pipTopRight
 	case config.PiPCornerTopLeft:
 		return pipTopLeft
+	case config.PiPCornerTopCenter:
+		return pipTopCenter
+	case config.PiPCornerBottomCenter:
+		return pipBottomCenter
 	}
 	return pipBottomRight
 }
 
-// pipCornerOrder is the order the corners are tried in, starting from the
-// preferred one: the preferred corner, then the other end of the same edge
-// (the box keeps to the same edge of the screen when it can), then the
-// opposite edge, same side first.
-func pipCornerOrder(preferred pipCorner) [4]pipCorner {
+// pipCornerOrder is the order the places are tried in, starting from the
+// preferred one. From a corner: the other end of the same edge (the box
+// keeps to the same edge of the screen when it can), then the opposite edge,
+// same side first. From a centre: the centre of the opposite edge, so the box
+// stays in the middle, then the corners of its own edge and of the opposite
+// one.
+func pipCornerOrder(preferred pipCorner) []pipCorner {
+	switch preferred {
+	case pipBottomCenter:
+		return []pipCorner{pipBottomCenter, pipTopCenter, pipBottomRight, pipBottomLeft, pipTopRight, pipTopLeft}
+	case pipTopCenter:
+		return []pipCorner{pipTopCenter, pipBottomCenter, pipTopRight, pipTopLeft, pipBottomRight, pipBottomLeft}
+	}
 	mirrorX := map[pipCorner]pipCorner{pipBottomRight: pipBottomLeft, pipBottomLeft: pipBottomRight, pipTopRight: pipTopLeft, pipTopLeft: pipTopRight}
 	mirrorY := map[pipCorner]pipCorner{pipBottomRight: pipTopRight, pipBottomLeft: pipTopLeft, pipTopRight: pipBottomRight, pipTopLeft: pipBottomLeft}
-	return [4]pipCorner{preferred, mirrorX[preferred], mirrorY[preferred], mirrorY[mirrorX[preferred]]}
+	return []pipCorner{preferred, mirrorX[preferred], mirrorY[preferred], mirrorY[mirrorX[preferred]]}
 }
 
 // pipBox is the box of a w by h view in corner c of region, kept pipMargin
@@ -103,10 +118,13 @@ func pipBox(region image.Rectangle, w, h int, c pipCorner) (image.Rectangle, boo
 	}
 	x := region.Max.X - pipMargin - w
 	y := region.Max.Y - pipMargin - h
-	if c == pipBottomLeft || c == pipTopLeft {
+	switch c {
+	case pipBottomLeft, pipTopLeft:
 		x = region.Min.X + pipMargin
+	case pipTopCenter, pipBottomCenter:
+		x = region.Min.X + (region.Dx()-w)/2
 	}
-	if c == pipTopRight || c == pipTopLeft {
+	if c == pipTopRight || c == pipTopLeft || c == pipTopCenter {
 		y = region.Min.Y + pipMargin
 	}
 	return image.Rect(x, y, x+w, y+h), true
@@ -421,13 +439,13 @@ func (m *OS) renderPiP() *lipgloss.Layer {
 	}
 	src := m.pipSource()
 	cfg := m.pipConfig()
-	w, h := cfg.Size()
+	region := m.pipRegion()
+	w, h := cfg.SizeIn(region.Dx(), region.Dy())
 	preferred := cfg.CornerName()
 	if m.pip.from != preferred {
 		m.pip.from = preferred
 		m.pip.corner = parsePiPCorner(preferred)
 	}
-	region := m.pipRegion()
 	corner, ok := pipChooseCorner(region, w, h, m.pip.corner, parsePiPCorner(preferred), m.pipKeepClear())
 	if !ok {
 		return nil
