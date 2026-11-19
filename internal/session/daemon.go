@@ -27,6 +27,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/google/uuid"
 )
 
@@ -1911,6 +1912,13 @@ func (d *Daemon) serve() {
 	// The copies the previous daemon did not finish go on from their parts,
 	// once the links are on their way up. See transfer_journal.go.
 	d.transfers.load()
+	// The temporary git folders a crashed daemon left, or a live upgrade's
+	// old image, go. Off the start path: the temp dir can be large.
+	d.goTracked(func() {
+		if n := worktree.SweepTemp(); n > 0 {
+			LogBasic("Removed %d temporary git folders an earlier daemon left", n)
+		}
+	})
 	// Each linked host's agents are followed from here on. See host_fleet.go.
 	d.fleet.start(d.ctx)
 	// The config file is followed from here on, so a host added while the daemon

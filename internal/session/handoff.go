@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"tuios.dev/vt"
 )
 
@@ -614,6 +615,9 @@ func (r *handoffRun) commit() error {
 	// descriptor, which stays close-on-exec, and elsewhere its private copy.
 	// A script runs by its path, as its interpreter opens it.
 	path := r.bin.execTarget()
+	// No deferred call survives the exec: a checkpoint that runs now would
+	// leave its temporary index folder in the temp dir.
+	worktree.RemoveTemp(tempRemoveWait)
 	err := execHandoff(path, argv, withOldCopies(withoutEnv(os.Environ(), handoffFallbackEnv)), r.fds, r.req.inWindow)
 	LogError("Live upgrade: exec %s failed, the daemon carries on: %v", r.bin.path, err)
 	r.bin.close()

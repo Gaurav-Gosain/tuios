@@ -168,19 +168,19 @@ func mergeTree(path, target, head string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tmp, err := os.MkdirTemp("", "tuios-merge-tree-")
+	tmp, ctx, err := newTemp(context.Background(), "merge-tree")
 	if err != nil {
 		return "", err
 	}
-	defer os.RemoveAll(tmp)
+	defer tmp.remove()
 	alternates := strings.TrimSpace(objects)
 	if prev := os.Getenv("GIT_ALTERNATE_OBJECT_DIRECTORIES"); prev != "" {
 		alternates += string(os.PathListSeparator) + prev
 	}
-	env := []string{"GIT_OBJECT_DIRECTORY=" + tmp, "GIT_ALTERNATE_OBJECT_DIRECTORIES=" + alternates}
+	env := []string{"GIT_OBJECT_DIRECTORY=" + tmp.path, "GIT_ALTERNATE_OBJECT_DIRECTORIES=" + alternates}
 	// merge-tree prints the merged tree on its first line, and exits non-zero
 	// on a conflict, which runEnv reports as an error.
-	out, err := runEnv(path, env, "merge-tree", "--write-tree", target, head)
+	out, err := runGit(ctx, path, env, nil, "merge-tree", "--write-tree", target, head)
 	if err != nil {
 		return "", err
 	}

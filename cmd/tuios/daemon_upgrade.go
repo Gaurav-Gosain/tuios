@@ -76,7 +76,9 @@ func handoffArgs(manifestFD int) []string {
 // starting fresh. The socket is live, so the running-daemon check a fresh
 // start makes would find this very process.
 func runAdoptingDaemon(manifestFD int) error {
-	return session.NewDaemon(foregroundDaemonConfig()).RunAdopted(manifestFD)
+	err := session.NewDaemon(foregroundDaemonConfig()).RunAdopted(manifestFD)
+	session.RemoveTempFolders()
+	return err
 }
 
 // handoffAcceptsCommand is the preflight a live upgrade runs on the binary it

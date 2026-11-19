@@ -33,6 +33,17 @@ import (
 // On a work tree of 50,000 files a checkpoint takes about 100 ms.
 const checkpointTimeout = 30 * time.Second
 
+// tempRemoveWait bounds how long the daemon waits, before an exec or the end
+// of its process, for the git work in its temporary folders to stop. A git
+// that is ended returns in milliseconds.
+const tempRemoveWait = time.Second
+
+// RemoveTempFolders ends the git work in the temporary folders of this
+// process and removes the folders. The daemon's process calls it after the
+// daemon has stopped: a call that outlived the shutdown's wait would
+// otherwise leave its folder in the temp dir.
+func RemoveTempFolders() { worktree.RemoveTemp(tempRemoveWait) }
+
 // checkpointer holds the daemon's checkpoint switch and the work in flight.
 // Its zero value is on, with the default keep.
 type checkpointer struct {

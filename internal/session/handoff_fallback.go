@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
 // The fallback of a live handoff.
@@ -132,6 +133,7 @@ func (f *adoptFallback) reexec(why error) bool {
 	argv := append([]string{path}, os.Args[1:]...)
 	env := append(withOldCopies(withoutEnv(os.Environ(), handoffFallbackEnv)), handoffFallbackEnv+"=1")
 	LogError("Live upgrade: falling back to %s (%v)", path, why)
+	worktree.RemoveTemp(tempRemoveWait)
 	err := execHandoff(path, argv, env, fds, nil)
 	LogError("Live upgrade: the fallback exec of %s failed: %v. The panes end with this process", path, err)
 	return true

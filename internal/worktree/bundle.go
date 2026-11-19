@@ -123,23 +123,21 @@ func Bundle(path, branch, exclude, dest string) error {
 // The patch is read through a temporary index, so the worktree's own index
 // is not touched: what the agent staged stays staged, and nothing is added.
 func WorkingPatch(path, dest string) (int, error) {
-	dir, err := os.MkdirTemp("", "tuios-index-*")
+	tmp, ctx, err := newTemp(context.Background(), "index")
 	if err != nil {
 		return 0, err
 	}
-	// git writes index.lock beside the index, and leaves it when it is
-	// stopped mid-write, so the whole folder goes, not only the index.
-	defer func() { _ = os.RemoveAll(dir) }()
+	defer tmp.remove()
 	// The index does not exist yet: git refuses an empty file as an index.
-	index := filepath.Join(dir, "index")
+	index := filepath.Join(tmp.path, "index")
 	env := []string{"GIT_INDEX_FILE=" + index}
-	if _, err := runEnv(path, env, "read-tree", "HEAD"); err != nil {
+	if _, err := runGit(ctx, path, env, nil, "read-tree", "HEAD"); err != nil {
 		return 0, err
 	}
-	if err := StageAll(context.Background(), path, env, nil, nil); err != nil {
+	if err := StageAll(ctx, path, env, nil, nil); err != nil {
 		return 0, err
 	}
-	names, err := runEnv(path, env, "diff", "--cached", "--name-only", "HEAD")
+	names, err := runGit(ctx, path, env, nil, "diff", "--cached", "--name-only", "HEAD")
 	if err != nil {
 		return 0, err
 	}
@@ -149,7 +147,7 @@ func WorkingPatch(path, dest string) (int, error) {
 			count++
 		}
 	}
-	patch, err := runEnv(path, env, "diff", "--cached", "--binary", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", "HEAD")
+	patch, err := runGit(ctx, path, env, nil, "diff", "--cached", "--binary", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/", "HEAD")
 	if err != nil {
 		return 0, err
 	}

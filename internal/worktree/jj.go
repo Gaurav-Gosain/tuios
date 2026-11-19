@@ -291,15 +291,12 @@ func jjStatusEnv(ctx context.Context, path string) (env []string, done func(), e
 	if err != nil {
 		return nil, nil, err
 	}
-	tmp, err := os.CreateTemp("", "tuios-jj-index-*")
+	tmp, ctx, err := newTemp(ctx, "index")
 	if err != nil {
 		return nil, nil, err
 	}
-	index := tmp.Name()
-	_ = tmp.Close()
-	_ = os.Remove(index)
-	done = func() { _ = os.Remove(index) }
-	env = []string{"GIT_INDEX_FILE=" + index}
+	done = tmp.remove
+	env = []string{"GIT_INDEX_FILE=" + filepath.Join(tmp.path, "index")}
 	if _, err := runCtx(ctx, path, env, "read-tree", tree); err != nil {
 		done()
 		return nil, nil, err

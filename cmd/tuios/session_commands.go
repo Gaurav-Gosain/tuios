@@ -1238,7 +1238,9 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 	daemonCfg.DisableAutoRestore = disableAutoRestore
 	daemon := session.NewDaemon(daemonCfg)
 
-	return daemon.Run()
+	err := daemon.Run()
+	session.RemoveTempFolders()
+	return err
 }
 
 // foregroundDaemonConfig is the configuration of the daemon this process

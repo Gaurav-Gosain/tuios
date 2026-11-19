@@ -18513,3 +18513,25 @@ Run on Linux on 2026-11-19. The branch passes both.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKeyConflictsNameBothBindings$' -v .`.
+
+## Temporary index folders
+
+`TestNoTempIndexLeftWhenTheDaemonStops` (`tmp_index_leak_test.go`) catches a daemon in a checkpoint with its temporary index folder made: a stand-in git on the daemon's PATH stops at `write-tree` on a `tuios-index-*` index until it is killed. The daemon has a temp dir of its own. Then the daemon stops three ways, and the folder must be gone: after `kill-server`, after a live upgrade (and the held git must be ended before the exec), and after a SIGKILL once the next daemon is up. A folder named for a process that still runs must stay.
+
+The e2e run's temp folder check had failed now and then with `tuios-index-NNNN: holds index`, with every test passing.
+
+Each control is a build that cuts one line, run on 2026-11-19 on Linux (go1.27.4-X:nodwarf5). The branch is based on main at 79138af83.
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| Main, no fix | build of main | `live_upgrade`: "after the live upgrade returned the daemon's temp dir still holds [tuios-index-2549367145]". `SIGKILL`: "the next daemon to remove the killed daemon's index folder ... temp dir holds [tuios-index-3646359589]" | **caught** |
+| No removal before the exec | replace `worktree.RemoveTemp(tempRemoveWait)` in `handoffRun.commit` with `_ = worktree.RemoveTemp` | `live_upgrade`: "git 769902, held at write-tree, still runs after the live upgrade" | **caught** |
+| No sweep at start | replace `worktree.SweepTemp()` in `serve` with `0` | `SIGKILL`: "temp dir holds [tuios-index-763362-running tuios-index-763659-2349015687], want only tuios-index-763362-running" | **caught** |
+| Main, no fix | build of main | `kill-server` passes: the shutdown already ends the checkpoint's context, and the deferred removal runs | not a control, kept as a guard |
+
+The new image of a live upgrade also sweeps the folders of its own pid, so the folder alone does not show the old image removed it. The check on the held git does.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^TestNoTempIndexLeftWhenTheDaemonStops$' -v .
+```

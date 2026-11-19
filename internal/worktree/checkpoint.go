@@ -558,14 +558,12 @@ func RestoreTree(ctx context.Context, root, current, tree string) (RestoreResult
 	if len(write) == 0 {
 		return res, nil
 	}
-	tmp, err := os.CreateTemp("", "tuios-restore-index-*")
+	tmp, ctx, err := newTemp(ctx, "index")
 	if err != nil {
 		return res, err
 	}
-	index := tmp.Name()
-	_ = tmp.Close()
-	_ = os.Remove(index)
-	defer func() { _ = os.Remove(index) }()
+	defer tmp.remove()
+	index := filepath.Join(tmp.path, "index")
 	env := []string{"GIT_INDEX_FILE=" + index}
 	if _, err := runCtx(ctx, root, env, "read-tree", tree); err != nil {
 		return res, err
