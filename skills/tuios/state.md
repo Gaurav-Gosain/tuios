@@ -276,7 +276,8 @@ running at save, whose harness has a `[resume]` command in its manifest (Claude
 Code, Codex, opencode, Copilot, Cursor Agent, Qwen and more), the restore offers
 to run it with the stored conversation id. `daemon.resume_agents` decides how:
 `ask` (the default) puts a Resume row in the Inbox, `auto` types the command,
-`off` does neither. So report your id early, from the session start hook.
+`off` does neither. A Resume row closes when any pane reports the same
+conversation id. So report your id early, from the session start hook.
 
 ```sh
 tuios resume-agent -s work -w build --dry-run   # print the command

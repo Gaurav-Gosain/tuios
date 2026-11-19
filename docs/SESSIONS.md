@@ -779,7 +779,9 @@ id in the state file. For such a pane, when its harness has a resume command
 harness again on the same conversation, as `daemon.resume_agents` says: `ask`
 (the default) puts a Resume row in the Inbox that you answer with `y`, `auto`
 types `claude --resume <id>` (or the harness's own form) into the new shell,
-and `off` does neither. `tuios resume-agent -w <pane>` does it by hand. See
+and `off` does neither. A Resume row goes away when any pane reports that
+conversation, for example after you resume it by hand in another pane.
+`tuios resume-agent -w <pane>` does it by hand. See
 [Agent state](AGENT_STATE.md#resuming-after-a-restart).
 
 Start the daemon with `--no-restore` to skip automatic restoration; saved state

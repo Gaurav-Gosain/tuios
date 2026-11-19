@@ -187,6 +187,9 @@ type AttentionItem struct {
 	// RiskyFlags are, on a resume item, the flags in the command that turn
 	// off approvals or sandboxing (see ResumeWarning).
 	RiskyFlags []string `json:"risky_flags,omitempty"`
+	// AgentSessionID is, on a resume item, the conversation the command
+	// resumes. A pane that reports this conversation closes the item.
+	AgentSessionID string `json:"agent_session_id,omitempty"`
 	// Options are the answers reply-approval takes for this item, set only
 	// while RequestID is: once, always and deny, or the subset the harness can
 	// honour. See approvals.go.
@@ -574,7 +577,7 @@ func attentionSame(a, b AttentionItem) bool {
 		slices.Equal(a.Risk, b.Risk) && a.DenyMessage == b.DenyMessage &&
 		a.PlanLines == b.PlanLines && a.PlanSHA == b.PlanSHA &&
 		samePaneRef(a.Parent, b.Parent) && samePaneRef(a.Root, b.Root) &&
-		a.WithParentUntil == b.WithParentUntil
+		a.WithParentUntil == b.WithParentUntil && a.AgentSessionID == b.AgentSessionID
 }
 
 // closeLocked closes the item with this id, if it is open. The caller holds mu.
@@ -909,6 +912,31 @@ func (a *attentionStore) closeResume(sessionName, window, reason string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.closeKeyLocked(attentionKey(AttentionResume, sessionName, window, 0), reason)
+}
+
+// closeResumesOf closes every resume item, open or snoozed, for the
+// conversation a pane reported just now: y on it would start the
+// conversation a second time. A harness given on both sides must match.
+func (a *attentionStore) closeResumesOf(harnessID, conversation string) {
+	if a == nil || conversation == "" {
+		return
+	}
+	match := func(it *AttentionItem) bool {
+		return it.Kind == AttentionResume && it.AgentSessionID == conversation &&
+			(harnessID == "" || it.Harness == "" || it.Harness == harnessID)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, id := range a.sortedIDsLocked() {
+		if match(a.items[id]) {
+			a.closeLocked(id, AttentionClosedResolved)
+		}
+	}
+	for _, id := range a.snoozedIDsLocked() {
+		if match(a.snoozed[id]) {
+			a.dropSnoozedLocked(id, AttentionClosedResolved)
+		}
+	}
 }
 
 // closeSession closes every item in a session that ended.

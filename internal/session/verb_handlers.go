@@ -1789,6 +1789,10 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 	if refusedAsForeign(reason) {
 		debugLog("[DEBUG] set-agent-state: %s refused session %q of %s", reason, p.AgentSessionID, p.Harness)
 	}
+	// A pane runs this conversation now, so an offer to resume it is stale.
+	if applied && p.AgentSessionID != "" && report.State != AgentStateNone {
+		d.attention.closeResumesOf(p.Harness, p.AgentSessionID)
+	}
 	transcriptRefused := ""
 	switch {
 	case applied && p.TranscriptPath != "":
@@ -2049,6 +2053,10 @@ func (d *Daemon) verbSetAgentSession(cs *connState, params json.RawMessage) (any
 	})
 	if err != nil {
 		return nil, mapResolveErr(err, sess)
+	}
+	// A pane runs this conversation now, so an offer to resume it is stale.
+	if applied {
+		d.attention.closeResumesOf(harnessID, stored)
 	}
 	out := map[string]any{
 		"type":             "agent_session_set",

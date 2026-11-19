@@ -5405,6 +5405,17 @@ pane reads the token through the variables it was started with.
 | A leave does not move the link | `notifyClientLeft`: the `displayForget` call cut | `TestDisplayFollowsTheLocalClient` ("after the only client with a display left e2e-display-other: ... want (no link)") | **caught** |
 | A pane started before any client gets no link | `display_follow.go` as on main | `TestDisplayFollowReachesAPaneStartedBeforeAnyClient` ("a pane started before any client has WAYLAND_DISPLAY \"\", want the link ...") | **caught** |
 | An X11 client takes the link from a Wayland client | `relinkDisplayLocked` points at the newest client, not the newest with a Wayland socket | `TestDisplayFollowReachesAPaneStartedBeforeAnyClient` ("with a Wayland and an X11 client the display is map[DISPLAY::6125], want the link and :6125") | **caught** |
+## A stale resume offer
+
+`TestResumeOfferClosesWhenAPaneRunsTheConversation` restarts a daemon with three
+resumable conversations, then reports two of them from other panes: one by
+`set-agent-state` in the same session, one by `set-agent-session` in another
+session. The third offer must stay (the positive half).
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A report does not close the offer | both `closeResumesOf` calls in `verb_handlers.go` cut | `TestResumeOfferClosesWhenAPaneRunsTheConversation` ("the offer for a conversation a pane runs stayed open") | **caught** |
+
 ## An image paste on another machine
 
 `TestAnImagePasteNeedsFilesOnTheFarMachine` pastes into a pane on a host by

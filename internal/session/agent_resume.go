@@ -200,6 +200,8 @@ func (d *Daemon) resumeItem(o resumeOffer) AttentionItem {
 		Name:       attentionText(o.name, attentionMaxSummary),
 		Summary:    attentionText(harness.ResumeCommandLine(o.argv), attentionMaxSummary),
 		RiskyFlags: o.risky,
+
+		AgentSessionID: o.sessionID,
 	}
 }
 
