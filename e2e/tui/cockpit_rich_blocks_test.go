@@ -9,13 +9,15 @@ import (
 )
 
 // richBlocksAnswer is an agent's reply with a TML block, a TML block that is
-// not valid, and a Mermaid block last, so C copies the Mermaid one.
+// not valid, and a Mermaid block, the last block, so C copies the Mermaid one.
+// A line of text follows the diagram.
 const richBlocksAnswer = "The state of the build:\n\n" +
 	"```tml\n<row gap=\"2\"><badge role=\"success\">Ready</badge><progress value=\"0.6\" label=\"60 percent\"/></row>\n```\n\n" +
 	"A broken one:\n\n" +
 	"```tml\n<nosuch/>\n```\n\n" +
 	"The flow:\n\n" +
-	"```mermaid\nflowchart LR\n  A[Plan] --> B[Ship]\n```\n"
+	"```mermaid\nflowchart LR\n  A[Plan] --> B[Ship]\n```\n\n" +
+	"Then it ships.\n"
 
 // richBlocksSource is the Mermaid block's source.
 const richBlocksSource = "flowchart LR\n  A[Plan] --> B[Ship]"
@@ -45,6 +47,12 @@ func TestCockpitThreadDrawsRichBlocks(t *testing.T) {
 	head := lastRowWith(term.Screen(), "picture / text")
 	pic := waitPlaced(t, term, host, func(p hostPlace) bool { return p.row == head+1 && p.rows > 0 })
 	saveCockpitFrames(t, term, "rich-blocks-picture", hostPictures(t, []byte(host.String()))...)
+	// The picture takes the rows it draws on, and the next line follows it
+	// after one blank row at most.
+	if next := lastRowWith(term.Screen(), "Then it ships."); next < 0 || next > pic.row+pic.rows+1 {
+		t.Fatalf("ASSERTION: the picture takes rows %d to %d, and the next line is on row %d, more than one row under it\n%s",
+			pic.row, pic.row+pic.rows-1, next, term.Snapshot())
+	}
 	if strings.Contains(term.Screen().Text(), "Plan") || strings.Contains(term.Screen().Text(), "Ship") {
 		t.Fatalf("ASSERTION: the diagram is a picture, and its node names are drawn as text too\n%s", term.Snapshot())
 	}

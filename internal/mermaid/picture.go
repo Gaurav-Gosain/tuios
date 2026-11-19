@@ -46,12 +46,36 @@ func DrawSVG(out sketch.SVG, th *sketch.Theme, o PictureOptions) (Picture, error
 	if err != nil {
 		return Picture{}, err
 	}
+	if !o.Background {
+		// Clear around the diagram is the margin sketch leaves: the box
+		// would take rows that show nothing.
+		img = trimClear(img, 2)
+	}
 	box, c, r := CellBox(img, cellW, cellH, o.Cols, o.Rows, o.Background, th)
 	var b bytes.Buffer
 	if err := png.Encode(&b, box); err != nil {
 		return Picture{}, err
 	}
 	return Picture{PNG: b.Bytes(), Cols: c, Rows: r}, nil
+}
+
+// trimClear cuts the clear rows and columns off the sides of img, and keeps
+// pad pixels of them. An image with nothing drawn is kept whole.
+func trimClear(img *image.RGBA, pad int) *image.RGBA {
+	b := img.Bounds()
+	x0, y0, x1, y1 := b.Max.X, b.Max.Y, b.Min.X, b.Min.Y
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		row := img.Pix[img.PixOffset(b.Min.X, y):]
+		for x := range b.Dx() {
+			if row[4*x+3] != 0 {
+				x0, y0, x1, y1 = min(x0, b.Min.X+x), min(y0, y), max(x1, b.Min.X+x+1), max(y1, y+1)
+			}
+		}
+	}
+	if x0 >= x1 || y0 >= y1 {
+		return img
+	}
+	return img.SubImage(image.Rect(x0-pad, y0-pad, x1+pad, y1+pad).Intersect(b)).(*image.RGBA)
 }
 
 // diagramFontSize is the size in SVG units of a diagram's body text. sketch

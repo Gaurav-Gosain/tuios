@@ -112,7 +112,10 @@ func (md *ckMD) richBlock(b markdown.Block, first, rest []ckSeg, avail int) bool
 		}
 	}
 	md.lines[start] = ckBlockHead(head, key, can, drawn, pal)
-	md.lines = append(md.lines, ckLine{segs: slicesClone(rest)})
+	if !drawn {
+		// A picture keeps a little clear room of its own under it.
+		md.lines = append(md.lines, ckLine{segs: slicesClone(rest)})
+	}
 	if md.t != nil {
 		// C and the source's own header copy the source.
 		code := md.id + "/" + strconv.Itoa(md.codes)
