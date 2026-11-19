@@ -80,6 +80,14 @@ chrome uses the Charple accent. See
 `gilt` is a dark theme of cool obsidian, warm parchment and gold. Its chrome
 accent is gold.
 
+`ember`, `boreal` and `plum` are dark themes. `ember` is warm charcoal with an
+orange accent. `boreal` is a deep night blue with mint and violet accents.
+`plum` is a muted aubergine with an orchid accent. Their dialogs use the
+theme's own dark steps.
+
+`dune` and `fjord` are light themes. `dune` is warm sand with a terracotta
+accent. `fjord` is cold mist with a deep blue accent.
+
 Leaving the theme unset disables theming entirely and TUIOS uses your terminal's
 own colors. An unknown theme name logs a warning and leaves the colors as they
 were, rather than failing to start.

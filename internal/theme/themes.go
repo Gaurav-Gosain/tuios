@@ -45,6 +45,7 @@ func EnsureRegistry() {
 		newBuiltinRegistry()
 		registerCharmToneThemes()
 		registerGiltTheme()
+		registerCraftedThemes()
 		registerOmarchyThemes()
 		rememberBuiltins()
 		if themesDir, err := GetThemesDir(); err == nil {
