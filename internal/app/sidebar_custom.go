@@ -4,6 +4,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/Gaurav-Gosain/tuios/internal/dockengine"
 
 	tea "charm.land/bubbletea/v2"
@@ -119,10 +121,60 @@ func (m *OS) railCustomRows() []string {
 // sidebarCustomRow draws one row: the command's own text, colour included,
 // cut to the rail's columns and closed with a reset so a colour the command
 // left open cannot run into the padding or the row below.
+//
+// A row with a link is cut by ansi.Truncate, which keeps every sequence past
+// the cut, so the link's end that the engine wrote at the line's end
+// (dockengine.Lines) still closes it.
 func (m *OS) sidebarCustomRow(text string, cw int, pal overlay.Palette, st sidebarRowState) string {
 	rowBg := sidebarRowBg(st, pal)
-	body := overlay.Truncate(strings.TrimRight(text, " "), max(cw-1, 0)) + "\x1b[0m"
+	text = strings.TrimRight(text, " ")
+	var body string
+	if strings.Contains(text, "\x1b]8;") {
+		body = ansi.Truncate(text, max(cw-1, 0), overlay.Ellipsis())
+	} else {
+		body = overlay.Truncate(text, max(cw-1, 0))
+	}
+	body += "\x1b[0m"
 	return sidebarFit(sidebarStyle(rowBg, nil).Render(" ")+body, cw, rowBg)
+}
+
+// railRowLink is an OSC 8 link in a row of the custom section: its address,
+// and the columns of the row's text it covers, x1 the column after the last.
+type railRowLink struct {
+	url    string
+	x0, x1 int
+}
+
+// railRowLinks reads the links out of a row the section draws, in the order
+// the row shows them. The engine kept each one in a single form
+// (dockengine.Lines), so a link starts at an OSC 8 with an address and ends
+// at the next OSC 8. Only a row that holds one is parsed.
+func railRowLinks(text string) []railRowLink {
+	if !strings.Contains(text, "\x1b]8;") {
+		return nil
+	}
+	var links []railRowLink
+	col, start, open := 0, 0, ""
+	state := byte(ansi.NormalState)
+	for text != "" {
+		seq, width, n, next := ansi.DecodeSequence(text, state, nil)
+		state = next
+		text = text[n:]
+		if body, ok := strings.CutPrefix(seq, "\x1b]8;"); ok {
+			body = strings.TrimSuffix(strings.TrimSuffix(body, "\x1b\\"), "\x07")
+			_, url, _ := strings.Cut(body, ";")
+			if open != "" && col > start {
+				links = append(links, railRowLink{url: open, x0: start, x1: col})
+			}
+			open, start = url, col
+			continue
+		}
+		col += width
+	}
+	if open != "" && col > start {
+		links = append(links, railRowLink{url: open, x0: start, x1: col})
+	}
+	return links
 }
 
 // railCustomRunnable reports whether the config gives the section something

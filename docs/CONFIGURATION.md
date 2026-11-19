@@ -2776,7 +2776,8 @@ These options are in the [option reference](config-options.md): [`appearance.sid
 
 The command is a dock component that draws on the rail, so the dock's rules
 apply: it runs in the client, under a three second timeout, with bounded
-output; SGR colour survives and every other control sequence is stripped; a
+output; SGR colour and OSC 8 links survive and every other control sequence
+is stripped; a
 command that fails, times out or prints nothing leaves the title over an
 empty section, never an earlier run's rows; five failures in a row stop it
 until the config reloads or `tuios refresh-dock rail/custom`; and
@@ -2785,6 +2786,11 @@ nothing. Rows are cut to the rail's width and to the lines the section's
 share gives it, with `… +N` for the ones below the fold. While some are below
 the fold the section draws a scroll thumb in the rail's edge rule (see
 [A rail section that overflows](#a-rail-section-that-overflows)).
+A row keeps the OSC 8 links its command prints. A click on a link opens it,
+a click on the rest of the row opens the row's first link, and
+<kbd>Enter</kbd> on the row's cursor does the same. The link opens as a link
+in a pane does, through `appearance.link_opener`. A row with no link opens
+nothing.
 
 Each run gets the client's environment plus `TUIOS_SESSION`, `TUIOS_SOCKET`,
 `TUIOS_RAIL_SECTION` (`custom`), `TUIOS_RAIL_WIDTH` (the columns a row may
@@ -4447,7 +4453,15 @@ refresh = "event:window-focused,agent-state"
 
 These options are in the [option reference](config-options.md): [`appearance.sidebar.custom.title`](config-options.md#appearance.sidebar.custom.title), [`appearance.sidebar.custom.command`](config-options.md#appearance.sidebar.custom.command), [`appearance.sidebar.custom.refresh`](config-options.md#appearance.sidebar.custom.refresh).
 
-The command follows the rules of a [dock component](#custom-components). It runs in the client, under a three second timeout, with bounded output. SGR colour stays, and every other control sequence is removed. A command that fails, times out or prints nothing leaves the title over an empty section. Five failures in a row stop it until the config reloads or you run `tuios refresh-dock rail/custom`. `tuios list-dock-components` lists it as `rail/custom`. Rows are cut to the rail's width and to the section's lines, with `… +N` for the rows below.
+The command follows the rules of a [dock component](#custom-components). It runs in the client, under a three second timeout, with bounded output. SGR colour and OSC 8 links stay, and every other control sequence is removed. A command that fails, times out or prints nothing leaves the title over an empty section. Five failures in a row stop it until the config reloads or you run `tuios refresh-dock rail/custom`. `tuios list-dock-components` lists it as `rail/custom`. Rows are cut to the rail's width and to the section's lines, with `… +N` for the rows below.
+
+A row can link to a page or a file. Print the link as an OSC 8 hyperlink, as for a link in a pane:
+
+```sh
+printf '\033]8;;https://example.com/pull/12\033\\#12 fix the parser\033]8;;\033\\\n'
+```
+
+A click on the link opens it. A click on the rest of the row opens the first link of the row. With the rail cursor on the row, <kbd>Enter</kbd> opens the first link. The link opens the same way as a link in a pane, through `appearance.link_opener`. A row with no link opens nothing.
 
 Each run gets the client's environment and these variables: `TUIOS_SESSION`, `TUIOS_SOCKET`, `TUIOS_RAIL_SECTION` (`custom`), `TUIOS_RAIL_WIDTH`, `TUIOS_RAIL_HEIGHT`, `TUIOS_ACTIVE_PANE_ID` and `TUIOS_ACTIVE_PANE_CWD`. An event that arrives during a run causes one more run after it, so a quick focus change never leaves the old pane's rows on screen. The command does not run while the rail is hidden or folded.
 

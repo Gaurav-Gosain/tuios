@@ -998,7 +998,8 @@ func FirstLine(out []byte) string {
 }
 
 // Lines is every line of a command's stdout, laundered one line at a
-// time and joined with newlines. Split first and sanitise after, because
+// time and joined with newlines. A rail row keeps its OSC 8 links as well as
+// its colour, so a row can name what a click on it opens (issue #2179). Split first and sanitise after, because
 // Sanitize drops control characters and a newline is one; a line's
 // worth of SGR is kept the same way a cell's is. Trailing blank lines go,
 // so a command that ends with a newline does not draw an empty row.
@@ -1009,7 +1010,7 @@ func Lines(out []byte) string {
 	}
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
-		lines[i] = Sanitize(strings.TrimRight(line, "\r"))
+		lines[i] = sanitize(strings.TrimRight(line, "\r"), true)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -1032,7 +1033,25 @@ func Lines(out []byte) string {
 // reorder the bar around the cell, and a zero-width character hides text a
 // person cannot see. Printable text, wide characters and emoji stay.
 func Sanitize(s string) string {
+	return sanitize(s, false)
+}
+
+// osc8Open and osc8Close are the one form a kept link is written in: no
+// parameters, ST as the terminator.
+const (
+	osc8Open  = "\x1b]8;;"
+	osc8Close = "\x1b]8;;\x1b\\"
+)
+
+// sanitize is Sanitize, and with links it also keeps OSC 8 hyperlinks. A link
+// is rewritten in one form, without its parameters, and only when its address
+// is clean: no control character and no space, the rule OpenLink applies too.
+// An unterminated one goes with the rest of the line, as any string sequence
+// does. A link left open at the end of the line is closed there, so it cannot
+// run into the padding, the next row or a cut the renderer makes.
+func sanitize(s string, links bool) string {
 	s = invisible.Strip(s)
+	open := false
 	var b strings.Builder
 	b.Grow(len(s))
 	for i := 0; i < len(s); {
@@ -1064,16 +1083,33 @@ func Sanitize(s string) string {
 			// window title is the case that found this.
 			if i+1 < len(s) && strings.IndexByte("]P_^X", s[i+1]) >= 0 {
 				j := i + 2
+				end := -1 // where the payload ends, -1 while unterminated
 				for j < len(s) {
 					if s[j] == 0x07 { // BEL
+						end = j
 						j++
 						break
 					}
 					if s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\' { // ST
+						end = j
 						j += 2
 						break
 					}
 					j++
+				}
+				if links && s[i+1] == ']' && end >= 0 {
+					if uri, ok := osc8Address(s[i+2 : end]); ok {
+						switch {
+						case uri != "":
+							b.WriteString(osc8Open)
+							b.WriteString(uri)
+							b.WriteString("\x1b\\")
+							open = true
+						case open:
+							b.WriteString(osc8Close)
+							open = false
+						}
+					}
 				}
 				i = j
 				continue
@@ -1099,7 +1135,30 @@ func Sanitize(s string) string {
 		b.WriteString(s[i : i+size])
 		i += size
 	}
+	if open {
+		b.WriteString(osc8Close)
+	}
 	return b.String()
+}
+
+// osc8Address reads the address of an OSC 8 payload ("8;params;uri"). ok is
+// false for any other OSC, and for an address with a control character, a
+// space or a byte that is not UTF-8. An empty address is a link's end.
+func osc8Address(payload string) (string, bool) {
+	rest, found := strings.CutPrefix(payload, "8;")
+	if !found {
+		return "", false
+	}
+	_, uri, found := strings.Cut(rest, ";")
+	if !found || !utf8.ValidString(uri) {
+		return "", false
+	}
+	for _, r := range uri {
+		if r <= 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return "", false
+		}
+	}
+	return uri, true
 }
 
 // RailComponent and RailSecondaryComponent are the engine names of the

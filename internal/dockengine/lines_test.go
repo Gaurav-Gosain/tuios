@@ -20,3 +20,25 @@ func TestDockLinesStripsControlSequences(t *testing.T) {
 		}
 	}
 }
+
+// TestDockLinesKeepsCleanLinks: a rail row keeps an OSC 8 link (issue #2179),
+// rewritten in one form without its parameters, and closed at the line's end
+// when the command left it open, so it cannot run into the next row. A link
+// whose address has a space or a control character is dropped and its text
+// kept. A dock cell keeps no link at all.
+func TestDockLinesKeepsCleanLinks(t *testing.T) {
+	for _, tc := range []struct{ out, want string }{
+		{"\x1b]8;id=1;https://e.com/a\x1b\\PR\x1b]8;;\x07 x\n", "\x1b]8;;https://e.com/a\x1b\\PR\x1b]8;;\x1b\\ x"},
+		{"\x1b]8;;https://e.com/b\x07open\nnext\n", "\x1b]8;;https://e.com/b\x1b\\open\x1b]8;;\x1b\\\nnext"},
+		{"\x1b]8;;https://e.com/a b\x07bad\x1b]8;;\x07\n", "bad"},
+		{"\x1b]8;;https://e.com/\x1b[2Jc\x07cut\n", "cut"},
+		{"\x1b]8;;https://e.com/u\nrest\n", "\nrest"},
+	} {
+		if got := Lines([]byte(tc.out)); got != tc.want {
+			t.Errorf("Lines(%q) = %q, want %q", tc.out, got, tc.want)
+		}
+	}
+	if got := FirstLine([]byte("\x1b]8;;https://e.com/a\x07PR\x1b]8;;\x07\n")); got != "PR" {
+		t.Errorf("FirstLine = %q, want the link dropped", got)
+	}
+}

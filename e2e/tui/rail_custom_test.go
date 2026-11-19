@@ -709,3 +709,88 @@ func TestRailCustomSectionWaitsWhileTheRailIsShut(t *testing.T) {
 		})
 	}
 }
+
+// TestRailCustomRowLinkOpensOnClickAndEnter (issue #2179): a row of the
+// custom section keeps the OSC 8 links its command printed. A click on a link
+// opens it, a click on the rest of the row opens the row's first link, and a
+// row with no link opens nothing. Enter on a row with the rail cursor opens
+// it too. What opened is read from the link opener's record. The artifact is
+// the frame rail-custom-links.
+//
+// Negative control: with the sidebarRowCustomLink case cut from sidebarClick,
+// the wait after the click on PR-THREE fails with the opener never started.
+func TestRailCustomRowLinkOpensOnClickAndEnter(t *testing.T) {
+	dir := t.TempDir()
+	record := filepath.Join(dir, "opened.txt")
+	opener := filepath.Join(dir, "opener.sh")
+	if err := os.WriteFile(opener, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" >> '"+record+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "rows.sh")
+	body := "#!/bin/sh\n" +
+		"printf 'plain row\\n'\n" +
+		"printf '\\033]8;;https://example.com/pr/1\\033\\\\PR-ONE\\033]8;;\\033\\\\ ok\\n'\n" +
+		"printf 'two \\033]8;;https://example.com/pr/2\\033\\\\PR-TWO\\033]8;;\\033\\\\ and \\033]8;id=x;https://example.com/pr/3\\007PR-THREE\\033]8;;\\007\\n'\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	config := "[appearance]\nlink_opener = " + strconv.Quote(opener) + "\n\n" +
+		railCustomConfig("sessions,custom:40", "command = "+strconv.Quote("sh "+script)+"\nrefresh = \"once\"")
+	term, _ := railClient(t, "e2e", config, startOpts{cols: 120, rows: 40,
+		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor", "SSH_CONNECTION=", "SSH_CLIENT=", "SSH_TTY="}})
+	waitRailShows(t, term, "PR-ONE", "at attach")
+	waitRailShows(t, term, "PR-THREE", "at attach")
+	_ = term.WaitStable(uiTimeout)
+	saveFrame(t, term, "rail-custom-links")
+
+	var want []string
+	click := func(text string, off int, url, what string) {
+		t.Helper()
+		col, row := mustFind(t, term, text)
+		mouseClick(t, term, col+off, row, tuitest.MouseLeft, 0)
+		if url != "" {
+			want = append(want, url)
+		}
+		waitOpened(t, record, want, what)
+	}
+	// The row with no link first: had it opened anything, every later wait
+	// would see one address too many.
+	click("plain row", 2, "", "ASSERTION: a click on a row with no link")
+	click("PR-THREE", 3, "https://example.com/pr/3", "ASSERTION: a click on the second link of a row")
+	click("two PR-TWO", 0, "https://example.com/pr/2", "ASSERTION: a click on a row beside its links")
+	click("PR-TWO", 2, "https://example.com/pr/2", "ASSERTION: a click on the first link of a row")
+
+	// Keyboard: esc hands the keyboard back, and s gives it to the rail on
+	// the row it was left on, the one clicked last. The plain row holds no
+	// link, so it is no stop for the cursor: one k lands on the PR-ONE row,
+	// which the cursor marks, and enter opens its link.
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), railPill) }, uiTimeout); err != nil {
+		t.Fatalf("esc did not leave the rail: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("s"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText(railPill, uiTimeout); err != nil {
+		t.Fatalf("s did not give the keyboard to the rail: %v\n%s", err, term.Snapshot())
+	}
+	_, two := mustFind(t, term, "two PR-TWO")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowMarkedOffGround(s, two) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the rail cursor is not on the row clicked last: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("k"); err != nil {
+		t.Fatal(err)
+	}
+	_, one := mustFind(t, term, "PR-ONE")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowMarkedOffGround(s, one) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: k did not move the rail cursor to the PR-ONE row: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "rail-custom-links-cursor")
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	want = append(want, "https://example.com/pr/1")
+	waitOpened(t, record, want, "ASSERTION: enter on a row with a link")
+}

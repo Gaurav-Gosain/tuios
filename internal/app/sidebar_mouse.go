@@ -470,6 +470,8 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 		m.SidebarNewGlobalSession()
 	case sidebarRowRailPaneStart:
 		m.RestartRailPane()
+	case sidebarRowCustomLink:
+		m.queueSidebarCmd(m.OpenLink(hit.WindowID))
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
@@ -1020,6 +1022,11 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	}
 
 	switch hit.Kind {
+	case sidebarRowCustomLink:
+		// A row of the command's output names no session or pane, so it
+		// offers what blank rail does, as it did before it took a click.
+		m.openRailSettingsMenu(x, y)
+		return
 	case sidebarRowHost:
 		// A machine's header. Its menu says where the machine sits among the
 		// others, and the rows that move it act on the rail's cursor, so the

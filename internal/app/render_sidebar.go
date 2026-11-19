@@ -154,6 +154,12 @@ const (
 	// those rows. It carries the parent's session and window. See
 	// SidebarToggleKin.
 	sidebarRowAgentKin
+	// sidebarRowCustomLink is a row of the custom section that holds an OSC 8
+	// link, or one link's columns on that row. Activating it opens the link
+	// the way a click on a link in a pane does. It carries the address in
+	// WindowID: the row's first link for the row, the link's own for its
+	// columns. See railRowLinks.
+	sidebarRowCustomLink
 )
 
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
@@ -2394,7 +2400,33 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			if idx >= len(customRows) {
 				break
 			}
-			st := m.railRowState(idx == hoverRow[sidebarSectionCustom], false)
+			// A row with a link takes a click and the cursor. Each link's
+			// columns open that link, and the rest of the row opens its first
+			// one, so a row of one link is one target. The columns go first,
+			// because a click takes the first rectangle that holds it. A link
+			// the cut hid takes no click.
+			links := railRowLinks(customRows[idx])
+			first := ""
+			if limit := max(cw-1, 0); len(links) > 0 {
+				textX, y := contentX0+1, topMargin+len(lines)
+				for _, l := range links {
+					if l.x0 >= limit {
+						continue
+					}
+					if first == "" {
+						first = l.url
+					}
+					m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
+						X0: textX + l.x0, X1: textX + min(l.x1, limit),
+						Y0: y, Y1: y + 1,
+						Kind: sidebarRowCustomLink, WindowID: l.url, WindowIndex: -1,
+					})
+				}
+				if first != "" {
+					recordHit(sidebarRowCustomLink, "", first, -1, 1)
+				}
+			}
+			st := m.railRowState(idx == hoverRow[sidebarSectionCustom], first != "" && isCursor(sidebarRowCustomLink, "", first))
 			lines = append(lines, compose(st.mark(pal, m.sidebarCustomRow(customRows[idx], cw, pal, st))))
 		}
 		if h := hidden[sidebarSectionCustom]; h > 0 {

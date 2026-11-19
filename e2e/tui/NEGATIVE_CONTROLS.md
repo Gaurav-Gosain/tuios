@@ -18384,3 +18384,15 @@ Repeat from `e2e/tui` with
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPiPSizeInPercentAtTheEdgeCentre$' -v .`.
+## Links in the rows of the custom rail section
+
+`TestRailCustomRowLinkOpensOnClickAndEnter` in `rail_custom_test.go` (issue #2179). The section's command prints a row with no link, a row with one OSC 8 link and a row with two. A click on a link must open it, a click on the rest of a row must open the row's first link, and a click on the row with no link must open nothing. Enter with the rail cursor on a row must open its first link. What opened is read from the link opener's record.
+
+Run on Linux on 2026-11-19. The branch passes the test.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The `sidebarRowCustomLink` case cut from `sidebarClick` | "ASSERTION: a click on the second link of a row: the opener was started with [], want [https://example.com/pr/3]" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRailCustomRowLinkOpensOnClickAndEnter$' -v .`.
