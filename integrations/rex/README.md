@@ -4,10 +4,10 @@
 [Rex](https://www.superlogical.com/rex)'s: each time Rex loads its config, it
 asks `tuios actions --json` for the actions and defines one Rex action per
 row, named `tuios_` and the tuios action, and one per action of your own
-config.toml, `tuios_user_NAME`. It adds Start an Agent, which opens tuios's
-New agent sheet or takes harness, name, prompt, folder and machine, Answer
-an Agent, which answers an agent that waits on an approval or a question,
-and a check. Keys are off until you choose some; `keys = "suggested"` binds a set
+config.toml, `tuios_user_NAME`. It adds Start an Agent, which asks for the
+harness, machine, folder and prompt in Rex's palette, Switch or Attach a
+Session, Answer an Agent, which answers an agent that waits on an approval
+or a question, and a check. Keys are off until you choose some; `keys = "suggested"` binds a set
 that no Rex for Mac key uses. Each action works on the tuios session
 shown in the focused Rex pane. [docs/REX.md](../../docs/REX.md) has the list
 and the options.

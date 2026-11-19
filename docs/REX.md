@@ -64,16 +64,31 @@ pane is left out, since Rex runs it on the focused pane. When tuios cannot
 read `config.toml`, Rex still gets the built-in actions and `tuios_check`
 says why. Run `rex config reload` after you add an action.
 
-Three more are written in `tuios.lua`:
+Four more are written in `tuios.lua`:
 
 | Action | Palette title | What it does |
 | --- | --- | --- |
-| `tuios_start_agent` | tuios: Start an Agent | With no field given, opens tuios's New agent sheet. With fields, starts the agent in a new tuios pane and focuses it |
+| `tuios_start_agent` | tuios: Start an Agent | Asks for the agent, the machine, the folder and the first prompt, then starts the agent in a new tuios pane and focuses it. See "Start an agent" |
+| `tuios_switch_session` | tuios: Switch or Attach a Session | Lists the tuios sessions. The tuios client in the focused pane switches to the session you pick. From a pane with no tuios client, a new Rex window attaches it |
 | `tuios_answer` | tuios: Answer an Agent | Lists the agents that wait on an approval or a question, shows the answers of the one you pick, and sends the answer you pick. See "Answer an agent" |
 | `tuios_check` | tuios: Check the Rex Integration | Says which tuios the actions run, its version, the focused pane's session, whether the default agent is found, and whether Rex has the actions this tuios lists |
 
-Start an Agent takes `harness`, `name`, `prompt`, `folder` and `machine` (a
-machine of tuios's `[hosts]` table). The harnesses tuios knows are the
+### Start an agent
+
+`tuios_start_agent` asks each question in Rex's palette:
+
+1. The agent. The list holds the harnesses tuios knows, with the default
+   (`harness` in `setup`) first. Type a command to start another program.
+2. The machine, only when tuios's `[hosts]` table has a machine.
+3. The folder. The list holds the folders of the session's panes, with the
+   focused pane's folder first. Type a path to start somewhere else. On
+   another machine you type the folder, and an empty field means the home
+   folder.
+4. The first prompt. An empty field starts the agent with no prompt.
+
+The action takes `harness`, `name`, `prompt`, `folder` and `machine` as
+arguments, and asks only what they leave out. An empty value counts as
+given, so `prompt=` starts with no prompt. The harnesses tuios knows are the
 choices `rex actions --json` shows for `harness`. Rex does not hold a value
 to that list, so any program start-agent can run works too.
 
@@ -81,10 +96,31 @@ to that list, so any program start-agent can run works too.
 rex do tuios_start_agent harness=codex name=review prompt='Review the diff.' folder=~/src/app
 ```
 
-The go-to picker and the New agent sheet are tuios's own, drawn in the
-focused pane. A Lua action in Rex has no picker or form of its own to open,
-and a list made when Rex loads its config is out of date by the time it is
-used, while tuios's own are always current.
+When no Rex app can show a question (`no_client` or `unsupported`), a run
+with no argument opens tuios's New agent sheet in the focused pane. A run
+with arguments starts the agent with the defaults for the rest: the default
+harness, this machine, the focused pane's folder and no prompt. When you
+close a question, nothing starts. `timeout`, `busy` and `failed` stop the
+action with a message, as for "Answer an agent".
+
+### Switch or attach a session
+
+`tuios_switch_session` lists the tuios sessions on this machine. Each row
+shows the number of panes and whether a client is attached. The session the
+focused pane shows says "shown here". Type a new name to create a session.
+
+- When the focused Rex pane shows a tuios client, that client switches to
+  the session, as the go-to picker does (`tuios switch-session`).
+- Otherwise, a new Rex window runs `tuios attach` for the session.
+
+`session` skips the question, and `create=true` creates a missing session:
+
+```sh
+rex do tuios_switch_session session=api
+```
+
+The go-to picker (`tuios_goto_picker`) is tuios's own, drawn in the focused
+pane. It also lists the agents, the workspaces and the panes.
 
 ### Answer an agent
 
@@ -153,7 +189,8 @@ the tuios on disk gives, and to reload.
 
 When tuios cannot give the list (none is found, or one older than this
 `tuios.lua`), Rex still loads the config, with the go-to, agents view, mail,
-oldest waiting, Start an Agent, Answer an Agent and check actions. `tuios_check` says why.
+oldest waiting, Start an Agent, Switch or Attach a Session, Answer an Agent
+and check actions. `tuios_check` says why.
 
 ### Keys
 
@@ -165,7 +202,7 @@ Keys are off until you name them. `keys = "suggested"` binds this set:
 | `ctrl+cmd+j` | `tuios_prefix_next_attention`: jump to the agent that has waited longest |
 | `ctrl+cmd+g` | `tuios_goto_picker`: go to an agent, session, workspace or pane |
 | `ctrl+cmd+m` | `tuios_prefix_mail`: your mail |
-| `ctrl+cmd+n` | `tuios_start_agent`: the New agent sheet |
+| `ctrl+cmd+n` | `tuios_start_agent`: start an agent |
 
 Each holds `cmd`, which a Mac never sends to a program in a terminal, so no
 key of tuios's (such as `ctrl+b`) or of your shell's is taken. None is a

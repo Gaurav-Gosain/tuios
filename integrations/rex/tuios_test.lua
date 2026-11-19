@@ -40,9 +40,15 @@ local list_tbl
 -- respond_from_shell, or "changed" for a prompt that changed. Each refusal
 -- is JSON on stdout, as tuios prints it with --json.
 local att_tbl, peek_tbl, respond_mode = { items = {} }, {}, "ok"
+-- What hosts, list-windows and ls give, for Start an Agent and the session
+-- picker, and the Rex windows switch_session opens.
+local hosts_tbl, windows_tbl, ls_tbl, rex_windows = { hosts = {} }, { windows = {} }, {}, {}
 -- ui_answers is the queue of what the person answers to each rex.ui call,
 -- as { value, reason, detail }. ui_asked records each call.
 local ui_answers, ui_asked = {}, {}
+-- With ui_strict a question with no answer queued fails the test; without
+-- it the stub answers no_client, as Rex does with no app connected.
+local ui_strict = false
 local icons = {}
 for _, n in ipairs({ "document", "folder", "branch", "terminal", "code", "server", "database", "package", "globe", "link", "person", "tag", "clock", "star", "gear", "plus" }) do
   icons[n] = true
@@ -71,6 +77,9 @@ local function ui(kind)
       return nil, "failed", "a prompt inside pcall"
     end
     local a = table.remove(ui_answers, 1)
+    if a == nil and not ui_strict then
+      return nil, "no_client"
+    end
     assert(a ~= nil, "rex.ui." .. kind .. " asked with no answer queued: " .. spec.title)
     if a[1] ~= nil and kind == "pick" and type(a[1]) == "string" and not spec.allow_other then
       assert(ids[a[1]], "the answer " .. a[1] .. " is not an item of " .. spec.title)
@@ -145,6 +154,15 @@ rex = {
       assert(argv[4] == "ENC", "readiness params not encoded by rex.json.encode")
       return { ok = true, code = 0, stdout = "READY", stderr = "" }
     end
+    if argv[2] == "hosts" then
+      return { ok = true, code = 0, stdout = "HOSTS", stderr = "" }
+    end
+    if argv[2] == "list-windows" then
+      return { ok = true, code = 0, stdout = "WINDOWS", stderr = "" }
+    end
+    if argv[2] == "ls" then
+      return { ok = true, code = 0, stdout = "LS", stderr = "" }
+    end
     if argv[2] == "list-attention" then
       return { ok = true, code = 0, stdout = "ATT", stderr = "" }
     end
@@ -166,6 +184,19 @@ rex = {
     return { ok = true, code = 0, stdout = "", stderr = "" }
   end,
   ui = { input = ui("input"), pick = ui("pick") },
+  session = {
+    new_window = function(spec)
+      assert(type(spec) == "table" and type(spec.layout) == "table", "new_window without a layout")
+      rex_windows[#rex_windows + 1] = spec
+      return { window_id = "window:" .. #rex_windows }
+    end,
+  },
+  layout = {
+    block = function(b)
+      assert(type(b.flavor) == "string", "a block without a flavor")
+      return { block = b }
+    end,
+  },
   block = {
     call = function(creator, method, args)
       assert(creator == "com.superlogical.terminal" and method == "process", "unexpected block call")
@@ -179,6 +210,15 @@ rex = {
       end
       if text == "LIST" then
         return list_tbl
+      end
+      if text == "HOSTS" then
+        return hosts_tbl
+      end
+      if text == "WINDOWS" then
+        return windows_tbl
+      end
+      if text == "LS" then
+        return ls_tbl
       end
       if text == "ATT" then
         return att_tbl
@@ -215,6 +255,12 @@ local function check(cond, what)
     io.stderr:write("FAIL: " .. what .. "\n")
   end
 end
+-- try runs an action as Rex does, outside pcall, where a question can be
+-- asked, and returns ok and what it returned or raised.
+local function try(f, ...)
+  local co = coroutine.create(f)
+  return coroutine.resume(co, ...)
+end
 local function argv_is(got, want, what)
   got = got or {}
   local same = #got == #want
@@ -236,7 +282,7 @@ clients = {
 tuios.setup{ bin = "/opt/bin/tuios", keys = { tuios_prefix_inbox = "cmd+shift+a", tuios_mail = "cmd+shift+m" } }
 argv_is(execs[1], { "/opt/bin/tuios", "actions", "--json" }, "setup asks tuios for its actions")
 argv_is(order, { "tuios_new_window", "tuios_prefix_inbox", "tuios_prefix_mail", "tuios_prefix_next_attention", "tuios_goto_picker",
-  "tuios_prefix_selection", "tuios_start_agent", "tuios_answer", "tuios_check" }, "one action per entry, in its order, once, without new_agent or a bad name")
+  "tuios_prefix_selection", "tuios_start_agent", "tuios_switch_session", "tuios_answer", "tuios_check" }, "one action per entry, in its order, once, without new_agent or a bad name")
 check(actions.tuios_prefix_inbox.title == "tuios: Agents: What Needs You", "title in Rex's style: " .. tostring(actions.tuios_prefix_inbox.title))
 check(actions.tuios_goto_picker.title == "tuios: Go To: An Agent, Session, Workspace or Pane", "go-to title: " .. tostring(actions.tuios_goto_picker.title))
 check(actions.tuios_new_window.description == "desc of new_window" and actions.tuios_new_window.category == "tuios", "description and category")
@@ -270,19 +316,19 @@ for _, f in ipairs({ "harness", "name", "prompt", "folder", "machine" }) do
   check(form.properties[f] ~= nil and form.properties[f].type == "string", "the form has " .. f)
 end
 execs = {}
-local res = actions.tuios_start_agent.run(ctx, {})
-argv_is(execs[#execs], { "/opt/bin/tuios", "run-command", "-s", "work", "Action", "new_agent" }, "start with no field opens the New agent sheet")
+local _, res = try(actions.tuios_start_agent.run, ctx, {})
+argv_is(execs[#execs], { "/opt/bin/tuios", "run-command", "-s", "work", "Action", "new_agent" }, "start with no field and no Rex app opens the New agent sheet")
 check(res.opened == "the New agent sheet", "start says it opened the sheet")
 execs = {}
-res = actions.tuios_start_agent.run(ctx, { harness = "codex", name = "review", prompt = "Review the diff.", folder = "/src/x" })
+_, res = try(actions.tuios_start_agent.run, ctx, { harness = "codex", name = "review", prompt = "Review the diff.", folder = "/src/x" })
 argv_is(execs[#execs], { "/opt/bin/tuios", "start-agent", "codex", "-s", "work", "--focus", "--no-wait", "--print-id",
   "--name", "review", "--prompt", "Review the diff.", "--cwd", "/src/x" }, "start with fields")
 check(res.window == "w-new", "start returns the new pane: got " .. tostring(res.window))
-actions.tuios_start_agent.run(ctx, { prompt = "Hi.", machine = "arch" })
+try(actions.tuios_start_agent.run, ctx, { prompt = "Hi.", machine = "arch" })
 argv_is(execs[#execs], { "/opt/bin/tuios", "start-agent", "claude", "-s", "arch:work", "--focus", "--no-wait", "--print-id", "--prompt", "Hi." },
   "a machine starts it there, the default harness when none is given")
 start_fail = true
-local sok, serr = pcall(actions.tuios_start_agent.run, ctx, { harness = "claude" })
+local sok, serr = try(actions.tuios_start_agent.run, ctx, { harness = "claude" })
 check(not sok and tostring(serr):find("nor on the daemon's PATH", 1, true), "a failed start reports tuios's own message: " .. tostring(serr))
 start_fail = false
 
@@ -290,7 +336,7 @@ start_fail = false
 local c = actions.tuios_check.run(ctx, {})
 check(c.tuios == "/opt/bin/tuios" and c.version == "tuios version 9.9.9" and c.session == "work", "tuios_check reports the program, version and session")
 check(c.agent == "claude" and c.agent_installed == true, "tuios_check says the default agent is found")
-check(c.actions == 10 and c.actions_current == true and c.actions_note == nil, "tuios_check says Rex has the list tuios gives: " .. tostring(c.actions))
+check(c.actions == 11 and c.actions_current == true and c.actions_note == nil, "tuios_check says Rex has the list tuios gives: " .. tostring(c.actions))
 list_tbl.actions[#list_tbl.actions + 1] = row("layout_off", "Layout: off", "Layout")
 c = actions.tuios_check.run(ctx, {})
 check(c.actions_current == false, "tuios_check sees a list that changed since Rex loaded it")
@@ -309,7 +355,7 @@ c = actions.tuios_check.run(ctx, {})
 check(tostring(c.keys_note):find("tuios_nope", 1, true), "tuios_check names the unbound key: " .. tostring(c.keys_note))
 
 -- Each way the list can fail: no error, the fallback, and a note.
-local fallback = { "tuios_goto_picker", "tuios_prefix_inbox", "tuios_prefix_mail", "tuios_prefix_next_attention", "tuios_start_agent", "tuios_answer", "tuios_check" }
+local fallback = { "tuios_goto_picker", "tuios_prefix_inbox", "tuios_prefix_mail", "tuios_prefix_next_attention", "tuios_start_agent", "tuios_switch_session", "tuios_answer", "tuios_check" }
 for _, case in ipairs({
   { mode = "old", note = "older than this tuios.lua" },
   { mode = "garbage", note = "gave no list" },
@@ -326,7 +372,7 @@ for _, case in ipairs({
   check(tostring(c.actions_note):find(case.note, 1, true), case.mode .. ": tuios_check says why: " .. tostring(c.actions_note))
   -- With no list, start has no sheet to open, and starts the default.
   execs = {}
-  actions.tuios_start_agent.run(ctx, {})
+  try(actions.tuios_start_agent.run, ctx, {})
   argv_is(execs[#execs], { "/opt/bin/tuios", "start-agent", "claude", "-s", "work", "--focus", "--no-wait", "--print-id" }, case.mode .. ": start with no sheet")
 end
 list_mode = "ok"
@@ -379,7 +425,7 @@ execs = {}
 actions.tuios_prefix_mail.run(ctx, {})
 argv_is(execs[#execs], { "/home/u/.local/bin/tuios", "run-command", "-s", "work", "Action", "prefix_mail" }, "a tuios outside PATH is found in ~/.local/bin")
 execs = {}
-actions.tuios_start_agent.run(ctx, { harness = "claude" })
+try(actions.tuios_start_agent.run, ctx, { harness = "claude" })
 argv_is(execs[#execs], { "/home/u/.local/bin/tuios", "start-agent", "claude", "-s", "work", "--focus", "--no-wait", "--print-id" }, "start_agent finds tuios outside PATH")
 
 stub_env({ HOME = "/home/u", PATH = "/usr/bin:/srv/bin" }, { ["/srv/bin/tuios"] = true, ["/home/u/.local/bin/tuios"] = true })
@@ -426,12 +472,7 @@ tuios.env = real_env
 --     words and its reason.
 reset_rex()
 tuios.setup{ bin = "/opt/bin/tuios" }
--- try runs an action as Rex does, outside pcall, and returns ok and what it
--- returned or raised.
-local function try(f, ...)
-  local co = coroutine.create(f)
-  return coroutine.resume(co, ...)
-end
+ui_strict = true
 local function find(argvs, verb)
   for i = #argvs, 1, -1 do
     if argvs[i][2] == verb then
@@ -563,6 +604,118 @@ aok, ares = try(actions.tuios_answer.run, ctx, { window = "review", answer = "ap
 check(not aok and ares == "respond failed: nothing was pressed: the prompt changed", "a changed prompt gives tuios's own line: " .. tostring(ares))
 respond_mode = "ok"
 check(tuios.waited(now_ns - 30e9) == "30s" and tuios.waited(now_ns - 90000e9) == "1d", "waited reads seconds and days")
+
+-- Start an Agent asks for each field the args leave out, and Switch or
+-- Attach a Session picks a session.
+--
+-- How it could pass wrongly, written down first:
+--   - A question could be asked for a field the args give, or one skipped:
+--     each case counts the questions and reads their titles.
+--   - An answer could be dropped on the way: the argv of start-agent must
+--     hold each one.
+--   - A script with fields and no Rex app could stop working: with
+--     no_client it starts with the defaults for the rest.
+--   - The person at tuios could lose the sheet: with no field and no Rex
+--     app, the sheet opens.
+--   - A cancel could still start an agent or switch a session: nothing runs
+--     after it.
+ui_strict = true
+reset_rex()
+tuios.setup{ bin = "/opt/bin/tuios" }
+local env_before = tuios.env
+tuios.env = { getenv = function(k) if k == "HOME" then return "/home/u" end return os.getenv(k) end, exists = env_before.exists }
+fg_pid = 42
+hosts_tbl = { hosts = { { host = "build", addr = "me@build", status = "up" } } }
+windows_tbl = { focused_window_id = "w2", windows = {
+  { window_id = "w1", cwd = "/home/u/src/a" },
+  { window_id = "w2", cwd = "/home/u/src/b", focused = true },
+  { window_id = "w3", cwd = "/home/u/src/a" },
+} }
+local function start(args, answers)
+  execs, ui_asked, ui_answers = {}, {}, answers
+  local ok, res = try(actions.tuios_start_agent.run, ctx, args)
+  return ok, res
+end
+local sok2, sres = start({}, { { "codex" }, { "local" }, { "/home/u/src/a" }, { "Fix it." } })
+check(sok2 and #ui_asked == 4, "start asks harness, machine, folder and prompt: " .. #ui_asked .. " " .. tostring(sres))
+local h = ui_asked[1] and ui_asked[1].spec.items or {}
+check(#h == 2 and h[1].id == "claude" and h[1].title == "Claude Code" and h[2].id == "codex" and ui_asked[1].spec.allow_other == true,
+  "the harnesses come from tuios, the default first, and a typed command is taken")
+local m = ui_asked[2] and ui_asked[2].spec.items or {}
+check(#m == 2 and m[1].id == "local" and m[2].id == "build" and m[2].icon == "server", "the machines are this one and the [hosts]")
+local f = ui_asked[3] and ui_asked[3].spec.items or {}
+check(#f == 2 and f[1].id == "/home/u/src/b" and f[1].title == "b" and f[1].subtitle == "~/src/b" and f[1].detail == "focused pane"
+  and f[2].id == "/home/u/src/a", "the folders are the panes', the focused pane's first, each once")
+check(ui_asked[4] and ui_asked[4].kind == "input" and ui_asked[4].spec.title == "First prompt", "the prompt is a text field")
+argv_is(execs[#execs], { "/opt/bin/tuios", "start-agent", "codex", "-s", "work", "--focus", "--no-wait", "--print-id", "--prompt", "Fix it.", "--cwd", "/home/u/src/a" },
+  "start runs with each answer")
+
+start({}, { { "claude" }, { "build" }, { "" }, { "" } })
+check(ui_asked[3] and ui_asked[3].kind == "input" and ui_asked[3].spec.title == "Folder on build", "a folder on another machine is typed")
+argv_is(execs[#execs], { "/opt/bin/tuios", "start-agent", "claude", "-s", "build:work", "--focus", "--no-wait", "--print-id" },
+  "another machine, its home folder and no prompt")
+
+start({}, { { { text = "aider" } }, { "local" }, { { text = "~/x" } }, { "Go." } })
+argv_is(execs[#execs], { "/opt/bin/tuios", "start-agent", "aider", "-s", "work", "--focus", "--no-wait", "--print-id", "--prompt", "Go.", "--cwd", "/home/u/x" },
+  "a typed harness and a typed ~ folder")
+
+start({ harness = "codex", prompt = "" }, { { "local" }, { "/home/u/src/b" } })
+check(#ui_asked == 2 and ui_asked[1].spec.title == "Start it on" and ui_asked[2].spec.title == "Start it in", "args skip their questions, and prompt= is given")
+argv_is(execs[#execs], { "/opt/bin/tuios", "start-agent", "codex", "-s", "work", "--focus", "--no-wait", "--print-id", "--cwd", "/home/u/src/b" }, "args and answers together")
+
+hosts_tbl = { hosts = {} }
+start({}, { { "claude" }, { "/home/u/src/a" }, { "" } })
+check(#ui_asked == 3 and ui_asked[2].spec.title == "Start it in", "with no [hosts], no machine question")
+
+for n = 1, 3 do
+  local answers = { { "claude" }, { "/home/u/src/a" }, { "" } }
+  answers[n] = { nil, "cancelled" }
+  local cok, cres = start({}, answers)
+  check(cok and cres.cancelled == true and #ui_asked == n and find(execs, "start-agent") == nil and find(execs, "run-command") == nil,
+    "a cancel at question " .. n .. " starts nothing and asks nothing more")
+end
+for _, why in ipairs({ "timeout", "busy", "failed" }) do
+  local eok, eres = start({}, { { "claude" }, { nil, why, "detail" } })
+  check(not eok and tostring(eres):find("(" .. why .. ")", 1, true) and find(execs, "start-agent") == nil, "start stops on " .. why .. ": " .. tostring(eres))
+end
+start({}, { { nil, "unsupported" } })
+argv_is(execs[#execs], { "/opt/bin/tuios", "run-command", "-s", "work", "Action", "new_agent" }, "an app that cannot ask: the New agent sheet")
+start({ name = "x" }, { { nil, "no_client" } })
+check(#ui_asked == 1, "after no_client nothing more is asked")
+argv_is(execs[#execs], { "/opt/bin/tuios", "start-agent", "claude", "-s", "work", "--focus", "--no-wait", "--print-id", "--name", "x" }, "fields and no app: the defaults for the rest")
+
+-- Switch or Attach a Session.
+ls_tbl = { { name = "work", window_count = 3, attached = true }, { name = "api", window_count = 1 } }
+local function switch(args, answers)
+  execs, ui_asked, ui_answers, rex_windows = {}, {}, answers, {}
+  return try(actions.tuios_switch_session.run, ctx, args)
+end
+local wok, wres = switch({}, { { "api" } })
+local si = ui_asked[1] and ui_asked[1].spec.items or {}
+check(wok and ui_asked[1].spec.title == "Switch to a session" and #si == 2 and si[1].detail == "shown here" and si[1].subtitle == "3 panes, attached"
+  and si[2].subtitle == "1 pane" and si[2].detail == nil, "the sessions, and the one the pane shows")
+argv_is(execs[#execs], { "/opt/bin/tuios", "switch-session", "--client", "c3", "api" }, "the client in the focused pane switches")
+switch({}, { { { text = "new1" } } })
+argv_is(execs[#execs], { "/opt/bin/tuios", "switch-session", "--client", "c3", "new1", "--create" }, "a typed name creates the session")
+switch({ session = "api" }, {})
+check(#ui_asked == 0, "session in args asks nothing")
+argv_is(execs[#execs], { "/opt/bin/tuios", "switch-session", "--client", "c3", "api" }, "the session in args")
+wok, wres = switch({}, { { nil, "cancelled" } })
+check(wok and wres.cancelled and find(execs, "switch-session") == nil, "a cancel switches nothing")
+wok, wres = switch({}, { { nil, "no_client" } })
+check(not wok and tostring(wres):find("(no_client)", 1, true) and tostring(wres):find("session", 1, true), "no app: says why and the arg: " .. tostring(wres))
+fg_pid = 1234
+wok, wres = switch({}, { { "api" } })
+local spec = rex_windows[1] and rex_windows[1].layout.block or {}
+local cmd = spec.options and spec.options.command or {}
+check(wok and ui_asked[1].spec.title == "Attach a session" and find(execs, "switch-session") == nil, "a pane with no tuios client attaches in a new window")
+argv_is(cmd, { "/opt/bin/tuios", "attach", "api" }, "the new Rex window runs tuios attach")
+check(wres.window_id == "window:1" and spec.flavor == "com.superlogical.terminal.shell", "the new window is a terminal: " .. tostring(wres.window_id))
+switch({}, { { { text = "fresh" } } })
+argv_is(rex_windows[1] and rex_windows[1].layout.block.options.command or {}, { "/opt/bin/tuios", "attach", "fresh", "--create" }, "a typed name attaches with --create")
+fg_pid = 42
+tuios.env = env_before
+ui_strict = false
 
 if failed > 0 then
   io.stderr:write(failed .. " checks failed\n")

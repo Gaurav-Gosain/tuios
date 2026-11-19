@@ -241,6 +241,31 @@ tu capture-pane -s demo -w approver > "$out/answer-after.txt" 2>&1
 grep -q 'ANSWER=' "$out/answer-before.txt" && echo "the agent had an answer before Rex sent one" || echo "no answer before Rex sent one, as it should"
 grep -o 'ANSWER=.' "$out/answer-after.txt" || echo "the agent got NO answer"
 
+# Switch or attach a session: with args it asks nothing. The client in
+# the tuios block switches to the session and back. From a block with no
+# tuios client, a new Rex window runs tuios attach. With no args and no Rex
+# app, the picker gets no_client.
+step "switch or attach a session"
+tu new other --detach > /dev/null 2>&1
+clientpid=$(python3 -c 'import json,sys; print([c["pid"] for c in json.load(open(sys.argv[1])) if c.get("session") == "demo"][0])' "$out/tuios-clients.json")
+timeout 30 env "${xdg[@]}" PATH="/usr/bin:/bin" REX_CONFIG="$cfg" REX_SERVER="$server" "$rexbin" -S "$server" do -b "$blk" tuios_switch_session > "$out/switch-no-app.txt" 2>&1
+echo "no app: rc=$?"; cat "$out/switch-no-app.txt"
+rx do -b "$blk" tuios_switch_session session=other > "$out/switch-other.txt" 2>&1
+echo "switch: rc=$?"; cat "$out/switch-other.txt"
+for _ in $(seq 50); do tu list-clients --json 2>/dev/null | python3 -c 'import json,sys; sys.exit(0 if any(c["pid"] == int(sys.argv[1]) and c.get("session") == "other" for c in json.load(sys.stdin)) else 1)' "$clientpid" && break; sleep 0.1; done
+tu list-clients --json > "$out/switch-clients.json" 2>&1
+python3 -c 'import json,sys; print("the Rex block client shows", [c.get("session") for c in json.load(open(sys.argv[1])) if c["pid"] == int(sys.argv[2])])' "$out/switch-clients.json" "$clientpid"
+rx do -b "$blk" tuios_switch_session session=demo > "$out/switch-back.txt" 2>&1; echo "switch back: rc=$?"
+rx split -b "$blk" --json -- /bin/sleep 600 > "$out/switch-split.json" 2>&1
+blk3=$(grep -o '"block:[^"]*"' "$out/switch-split.json" | tr -d '"' | grep -vx "$blk" | head -1)
+echo "block with no tuios: $blk3"
+before=$(tu list-clients --json | python3 -c 'import json,sys; print(sum(1 for c in json.load(sys.stdin) if c.get("session") == "other"))')
+rx do -b "$blk3" tuios_switch_session session=other > "$out/switch-attach.txt" 2>&1
+echo "attach from a block with no tuios: rc=$?"; cat "$out/switch-attach.txt"
+for _ in $(seq 50); do n=$(tu list-clients --json | python3 -c 'import json,sys; print(sum(1 for c in json.load(sys.stdin) if c.get("session") == "other"))'); [ "$n" -gt "$before" ] && break; sleep 0.1; done
+echo "clients on other: $before before, $n after"
+rx focus "$blk" > /dev/null 2>&1
+
 step "status"
 env "${xdg[@]}" PATH="/usr/bin:/bin:$(dirname "$rexbin")" REX_CONFIG="$cfg" REX_SERVER="$server" "$bin" integration status rex > "$out/status.txt" 2>&1
 cat "$out/status.txt"

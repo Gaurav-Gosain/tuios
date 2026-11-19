@@ -15,7 +15,7 @@ local M = {}
 
 -- M.version is the version of this file. tuios integration status compares it
 -- with the one the installed tuios ships.
-M.version = 5
+M.version = 6
 
 -- The Rex block kind that runs a terminal.
 local TERMINAL = "com.superlogical.terminal"
@@ -181,11 +181,11 @@ local function foreground(ctx)
   return p.foreground.pid
 end
 
--- M.session_of returns the name of the tuios session that the client in the
--- focused block shows, or nil and why not. The client is the block's
+-- M.client_of returns the tuios client in the focused block, as tuios
+-- list-clients gives it, or nil and why not. The client is the block's
 -- foreground process, so its pid is in tuios list-clients with the session
 -- it shows. A block that runs ssh, or a shell, shows no local tuios client.
-function M.session_of(ctx)
+function M.client_of(ctx)
   local pid = foreground(ctx)
   if pid == nil then
     return nil, "the focused pane is not a terminal"
@@ -197,10 +197,20 @@ function M.session_of(ctx)
   end
   for _, c in ipairs(clients) do
     if c.pid == pid and type(c.session) == "string" and c.session ~= "" then
-      return c.session
+      return c
     end
   end
   return nil, "The focused Rex pane does not show a tuios session on this machine. Focus a pane that runs tuios, or run tuios in it."
+end
+
+-- M.session_of returns the name of the tuios session that the client in the
+-- focused block shows, or nil and why not.
+function M.session_of(ctx)
+  local c, why = M.client_of(ctx)
+  if c == nil then
+    return nil, why
+  end
+  return c.session
 end
 
 -- session_or_error is session_of for an action: it raises the reason.
@@ -310,7 +320,7 @@ local loaded = {}
 -- start_args is the form of tuios_start_agent: a JSON Schema, with the
 -- harnesses tuios knows as the choices for harness.
 local function start_args(harnesses)
-  local harness = { type = "string", description = "The agent to start, as you type it at a shell. Without it: " .. tostring(opts.harness) .. "." }
+  local harness = { type = "string", description = "The agent to start, as you type it at a shell. Without it: Rex asks, else " .. tostring(opts.harness) .. "." }
   local names = {}
   for _, h in ipairs(harnesses or {}) do
     if type(h) == "table" and type(h.command) == "string" and h.command ~= "" then
@@ -326,7 +336,7 @@ local function start_args(harnesses)
       harness = harness,
       name = { type = "string", description = "The pane's name, which list-agents shows and -w takes." },
       prompt = { type = "string", description = "The first prompt, typed once the agent is ready." },
-      folder = { type = "string", description = "The folder to start in. Without it: the focused tuios pane's folder." },
+      folder = { type = "string", description = "The folder to start in. Without it: Rex asks, else the focused tuios pane's folder." },
       machine = { type = "string", description = "A machine of tuios's [hosts] table to start it on." },
     },
   }
@@ -335,44 +345,6 @@ end
 -- filled reports whether a form field was given.
 local function filled(v)
   return v ~= nil and v ~= ""
-end
-
--- start_agent is tuios_start_agent. With no field given and a tuios that has
--- the new_agent action, it opens tuios's own New agent sheet, which has every
--- field and checks them as the person types. Otherwise it runs start-agent
--- with --no-wait, which answers once the agent runs, well inside the 30
--- seconds Rex gives an action, so a failure reaches the person as tuios's
--- own message. The prompt is typed once the agent is ready.
-local function start_agent(ctx, args)
-  args = args or {}
-  local s = session_or_error(ctx)
-  if loaded.sheet and not (filled(args.harness) or filled(args.name) or filled(args.prompt) or filled(args.folder) or filled(args.machine)) then
-    run({ "run-command", "-s", s, "Action", "new_agent" })
-    return { session = s, opened = "the New agent sheet" }
-  end
-  local target = s
-  if filled(args.machine) then
-    target = args.machine .. ":" .. s
-  end
-  local harness = args.harness
-  if not filled(harness) then
-    harness = opts.harness
-  end
-  local argv = { "start-agent", harness, "-s", target, "--focus", "--no-wait", "--print-id" }
-  if filled(args.name) then
-    argv[#argv + 1] = "--name"
-    argv[#argv + 1] = args.name
-  end
-  if filled(args.prompt) then
-    argv[#argv + 1] = "--prompt"
-    argv[#argv + 1] = args.prompt
-  end
-  if filled(args.folder) then
-    argv[#argv + 1] = "--cwd"
-    argv[#argv + 1] = args.folder
-  end
-  local r = run(argv)
-  return { session = s, window = (r.stdout or ""):match("^%s*(%S+)") }
 end
 
 -- answer_kinds are the Inbox kinds tuios_answer offers: a prompt on a pane
@@ -652,6 +624,275 @@ local answer_args = {
   },
 }
 
+-- start_how is the hint for a run of Start an Agent with nobody there.
+local start_how = "Give the fields as args: harness, folder, machine and prompt."
+
+-- home_path writes a path under HOME as ~/..., for a short line.
+local function home_path(p)
+  local home = M.env.getenv("HOME") or ""
+  if home ~= "" and p:sub(1, #home) == home and (#p == #home or p:sub(#home + 1, #home + 1) == "/") then
+    return "~" .. p:sub(#home + 1)
+  end
+  return p
+end
+
+-- expand_home turns a typed ~ or ~/... into a path under HOME, as a shell
+-- would, since start-agent takes the folder as it is.
+local function expand_home(p)
+  local home = M.env.getenv("HOME") or ""
+  if home ~= "" and (p == "~" or p:sub(1, 2) == "~/") then
+    return home .. p:sub(2)
+  end
+  return p
+end
+
+-- M.harness_items are the rex.ui.pick items for the harnesses tuios knows,
+-- the default first.
+function M.harness_items(harnesses, default)
+  local items, seen = {}, {}
+  local function add(command, name)
+    if type(command) == "string" and command ~= "" and not seen[command] then
+      seen[command] = true
+      items[#items + 1] = { id = command, title = name ~= nil and name ~= "" and name or command, subtitle = command, icon = "terminal" }
+    end
+  end
+  for _, h in ipairs(harnesses or {}) do
+    if type(h) == "table" and h.command == default then
+      add(h.command, h.name)
+    end
+  end
+  add(default, nil)
+  for _, h in ipairs(harnesses or {}) do
+    if type(h) == "table" then
+      add(h.command, h.name)
+    end
+  end
+  return items
+end
+
+-- M.folder_items are the rex.ui.pick items for the folders the session's
+-- panes are in: the focused pane's first, then each other once.
+function M.folder_items(windows)
+  local items, seen = {}, {}
+  local list = type(windows) == "table" and type(windows.windows) == "table" and windows.windows or {}
+  local function add(w, detail)
+    local cwd = type(w) == "table" and w.cwd or nil
+    if type(cwd) == "string" and cwd ~= "" and not seen[cwd] then
+      seen[cwd] = true
+      local short = home_path(cwd)
+      items[#items + 1] = { id = cwd, title = short:match("([^/]+)/?$") or short, subtitle = short, icon = "folder", detail = detail }
+    end
+  end
+  for _, w in ipairs(list) do
+    if type(w) == "table" and (w.focused == true or w.window_id == windows.focused_window_id) then
+      add(w, "focused pane")
+    end
+  end
+  for _, w in ipairs(list) do
+    add(w, nil)
+  end
+  return items
+end
+
+-- answer_of reads a rex.ui answer: the id or text, the typed text of an
+-- allow_other pick, or nil.
+local function answer_of(v)
+  if type(v) == "table" then
+    return v.text
+  end
+  return v
+end
+
+-- start_agent is tuios_start_agent. It asks for each field the args leave
+-- out: the harness, the machine (only when tuios has [hosts]), the folder
+-- and the first prompt. It then runs start-agent with --no-wait, which
+-- answers once the agent runs, well inside the 30 seconds Rex gives an
+-- action, so a failure reaches the person as tuios's own message. The
+-- prompt is typed once the agent is ready.
+--
+-- When no Rex app can show a question (no_client, unsupported), a run with
+-- no field opens tuios's own New agent sheet, and a run with fields starts
+-- the agent with the defaults for the rest, as a script expects. A field
+-- given as an empty string is given: prompt= starts with no prompt.
+local function start_agent(ctx, args)
+  args = args or {}
+  local s = session_or_error(ctx)
+  local given = args.harness ~= nil or args.name ~= nil or args.prompt ~= nil or args.folder ~= nil or args.machine ~= nil
+  local asking = true
+  local stop
+  -- ask puts one question, and returns the answer, or nil when there is
+  -- none. It sets stop to "cancelled" or "sheet" when the run ends there.
+  local function ask(kind, spec)
+    if not asking or stop ~= nil then
+      return nil
+    end
+    local v, why, detail
+    if kind == "pick" then
+      v, why, detail = rex.ui.pick(spec)
+    else
+      v, why, detail = rex.ui.input(spec)
+    end
+    if v ~= nil then
+      return answer_of(v)
+    end
+    if why == "cancelled" then
+      stop = "cancelled"
+    elseif why == "no_client" or why == "unsupported" then
+      asking = false
+      if not given and loaded.sheet then
+        stop = "sheet"
+      end
+    else
+      unanswered(why, detail, start_how)
+    end
+    return nil
+  end
+  local harness = args.harness
+  if harness == nil then
+    local items = M.harness_items(loaded.harnesses, opts.harness)
+    harness = ask("pick", {
+      title = "Start an agent",
+      placeholder = "Filter agents, or type a command",
+      confirm = "Use this agent",
+      items = items,
+      allow_other = true,
+    })
+  end
+  local machine = args.machine
+  if machine == nil and asking and stop == nil then
+    local ok, hosts = pcall(json_call, { "hosts", "--json" })
+    local list = ok and type(hosts.hosts) == "table" and hosts.hosts or {}
+    if #list > 0 then
+      local items = { { id = "local", title = "This machine", icon = "terminal" } }
+      for _, h in ipairs(list) do
+        if type(h) == "table" and type(h.host) == "string" and h.host ~= "" and h.host ~= "local" then
+          items[#items + 1] = { id = h.host, title = h.host, subtitle = h.addr, icon = "server", detail = h.status }
+        end
+      end
+      machine = ask("pick", { title = "Start it on", placeholder = "Filter machines", items = items })
+      if machine == "local" then
+        machine = ""
+      end
+    end
+  end
+  local folder = args.folder
+  if folder == nil and asking and stop == nil then
+    if filled(machine) then
+      folder = ask("input", { title = "Folder on " .. machine, placeholder = "Empty: the home folder" })
+    else
+      local ok, windows = pcall(json_call, { "list-windows", "-s", s, "--json" })
+      folder = ask("pick", {
+        title = "Start it in",
+        placeholder = "Filter folders, or type a path",
+        items = M.folder_items(ok and windows or nil),
+        allow_other = true,
+      })
+      if filled(folder) then
+        folder = expand_home(folder)
+      end
+    end
+  end
+  local prompt = args.prompt
+  if prompt == nil then
+    prompt = ask("input", { title = "First prompt", placeholder = "Empty: no prompt", confirm = "Start the agent" })
+  end
+  if stop == "cancelled" then
+    return { session = s, cancelled = true }
+  end
+  if stop == "sheet" then
+    run({ "run-command", "-s", s, "Action", "new_agent" })
+    return { session = s, opened = "the New agent sheet" }
+  end
+  local target = s
+  if filled(machine) then
+    target = machine .. ":" .. s
+  end
+  if not filled(harness) then
+    harness = opts.harness
+  end
+  local argv = { "start-agent", harness, "-s", target, "--focus", "--no-wait", "--print-id" }
+  if filled(args.name) then
+    argv[#argv + 1] = "--name"
+    argv[#argv + 1] = args.name
+  end
+  if filled(prompt) then
+    argv[#argv + 1] = "--prompt"
+    argv[#argv + 1] = prompt
+  end
+  if filled(folder) then
+    argv[#argv + 1] = "--cwd"
+    argv[#argv + 1] = folder
+  end
+  local r = run(argv)
+  return { session = s, window = (r.stdout or ""):match("^%s*(%S+)") }
+end
+
+-- switch_session is tuios_switch_session: pick a tuios session, or type a
+-- new name, then show it. When the focused Rex pane shows a tuios client,
+-- that client switches to the session, as go-to does. Otherwise a new Rex
+-- window attaches it. args.session skips the question.
+local function switch_session(ctx, args)
+  args = args or {}
+  local client = M.client_of(ctx)
+  local name, create = args.session, args.create == true
+  if not filled(name) then
+    local sessions = json_call({ "ls", "--json" })
+    local items = {}
+    for _, x in ipairs(sessions) do
+      if type(x) == "table" and type(x.name) == "string" and x.name ~= "" then
+        local n = tonumber(x.window_count) or 0
+        local sub = n .. (n == 1 and " pane" or " panes")
+        if x.attached == true then
+          sub = sub .. ", attached"
+        end
+        items[#items + 1] = {
+          id = x.name, title = x.name, subtitle = sub, icon = "terminal",
+          detail = client ~= nil and client.session == x.name and "shown here" or nil,
+        }
+      end
+    end
+    local v, why, detail = rex.ui.pick{
+      title = client ~= nil and "Switch to a session" or "Attach a session",
+      placeholder = "Filter sessions, or type a new name",
+      items = items,
+      allow_other = true,
+    }
+    if v == nil then
+      if why == "cancelled" then
+        return { cancelled = true }
+      end
+      unanswered(why, detail, "Give the session as an arg: session.")
+    end
+    if type(v) == "table" then
+      name, create = v.text, true
+    else
+      name = v
+    end
+    if not filled(name) then
+      return { cancelled = true }
+    end
+  end
+  if client ~= nil then
+    local argv = { "switch-session", "--client", tostring(client.client_id), name }
+    if create then
+      argv[#argv + 1] = "--create"
+    end
+    run(argv)
+    return { session = name, switched = true }
+  end
+  local cmd = { M.program(), "attach", name }
+  if create then
+    cmd[#cmd + 1] = "--create"
+  end
+  local w, err = rex.session.new_window{
+    layout = rex.layout.block{ flavor = "com.superlogical.terminal.shell", options = { command = cmd } },
+  }
+  if w == nil then
+    error("Rex could not open a window: " .. tostring(err), 0)
+  end
+  return { session = name, window_id = w.window_id }
+end
+
 -- check is tuios_check: which tuios the actions run, its version, the
 -- focused pane's session, whether Start an Agent finds its agent, and
 -- whether the actions Rex loaded are the ones that tuios lists now.
@@ -727,7 +968,7 @@ function M.actions(list)
   if list ~= nil then
     rows = list.actions
   end
-  local out, seen, clash = {}, { tuios_start_agent = true, tuios_answer = true, tuios_check = true }, {}
+  local out, seen, clash = {}, { tuios_start_agent = true, tuios_switch_session = true, tuios_answer = true, tuios_check = true }, {}
   for _, a in ipairs(rows) do
     local name = type(a) == "table" and type(a.name) == "string" and a.name or ""
     local rexname = name ~= "" and M.rex_name(name) or nil
@@ -753,10 +994,24 @@ function M.actions(list)
   out[#out + 1] = {
     name = "tuios_start_agent",
     title = "tuios: Start an Agent",
-    description = "Start an agent in a new tuios pane and focus it. With no field given, open tuios's New agent sheet.",
+    description = "Start an agent in a new tuios pane and focus it. Rex asks for the agent, the folder and the first prompt.",
     keywords = "tuios agent start new claude codex",
     args = start_args(list and list.harnesses),
     run = start_agent,
+  }
+  out[#out + 1] = {
+    name = "tuios_switch_session",
+    title = "tuios: Switch or Attach a Session",
+    description = "Pick a tuios session, or type a new name. The tuios client in the focused pane switches to it, or a new Rex window attaches it.",
+    keywords = "tuios session switch attach open new",
+    args = {
+      type = "object",
+      properties = {
+        session = { type = "string", description = "The session to show. Without it: Rex asks." },
+        create = { type = "boolean", description = "Create the session when it does not exist." },
+      },
+    },
+    run = switch_session,
   }
   out[#out + 1] = {
     name = "tuios_answer",
@@ -796,6 +1051,7 @@ function M.setup(o)
     loaded.note = why
   else
     loaded.signature = signature(list.actions)
+    loaded.harnesses = list.harnesses
     for _, a in ipairs(list.actions) do
       if type(a) == "table" and a.name == "new_agent" then
         loaded.sheet = true
