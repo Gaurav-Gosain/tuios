@@ -38,10 +38,18 @@ func openCodeThread(t *testing.T, text string) (string, *tuitest.Terminal) {
 // the thread.
 func openTextThread(t *testing.T, text string, want ...string) (string, *tuitest.Terminal) {
 	t.Helper()
+	return openTextThreadOn(t, text, "", nil, want...)
+}
+
+// openTextThreadOn is openTextThread with extra lines in the [agents] table
+// of the config, and the client's output to its host copied to host when it
+// is not nil.
+func openTextThreadOn(t *testing.T, text, extra string, host *lockedBuffer, want ...string) (string, *tuitest.Terminal) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
-	writeConfig(t, base, "[agents]\nview_list = \"strip\"\n")
+	writeConfig(t, base, "[agents]\nview_list = \"strip\"\n"+extra)
 	for _, s := range []string{"home", "api"} {
 		if out, err := tuiosCLI(t, base, "new", s, "--detach"); err != nil {
 			t.Fatalf("create session %s: %v\n%s", s, err, out)
@@ -85,8 +93,12 @@ func openTextThread(t *testing.T, text string, want ...string) (string, *tuitest
 	if out, err := tuiosCLI(t, base, "set-agent-state", "idle", "-s", "api", "-w", "words", "--harness", "claude-code"); err != nil {
 		t.Fatalf("set-agent-state: %v\n%s", err, out)
 	}
-	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 120, rows: 60, shippedLooks: true,
-		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
+	opts := startOpts{args: []string{"attach", "home"}, cols: 120, rows: 60, shippedLooks: true,
+		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}}
+	if host != nil {
+		opts.out = host
+	}
+	term := startIn(t, base, opts)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}

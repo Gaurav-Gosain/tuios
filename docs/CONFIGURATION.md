@@ -3263,6 +3263,23 @@ screen. `C` copies the source. A block that is not valid shows its source
 under a line that says why. With `reply_markers` on, the agents hear of these
 blocks too.
 
+A Mermaid diagram is a picture where the terminal has kitty graphics, and
+box-drawing text elsewhere. The text in the picture has the size of the
+terminal text, and the picture is never wider than the thread. A diagram
+taller than 20 rows shows its top 20 rows and a line under them. In the agents
+view, click the picture to see all of it. The line above the diagram shows `picture / text`.
+Click it to change how that diagram is drawn. In the agents view, `T` does the
+same for the lowest diagram on the screen. `[agents] mermaid` sets the default:
+
+```toml
+[agents]
+mermaid = "text"   # "auto" (default), "picture" or "text"
+```
+
+`auto` draws a picture where the terminal has kitty graphics. `picture` also
+draws one with block characters on a terminal with 256 colours or more.
+`text` always draws text.
+
 `tuios start-agent` can tell Claude Code about the markers. It passes the
 guidance with `--append-system-prompt`. This is off by default:
 

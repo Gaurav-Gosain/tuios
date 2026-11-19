@@ -1308,8 +1308,18 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyMentionFolder(msg)
 		return m, nil
 
+	case mermaidPicMsg:
+		return m, m.applyMermaidPic(msg)
+
 	case replyPreviewMsg:
 		m.applyReplyPreview(msg)
+		if m.mermaidCellsWait {
+			// A Mermaid picture drawn as glyphs waits for them: its rows
+			// are laid out again.
+			m.mermaidCellsWait = false
+			m.blockView++
+			m.blocksChanged()
+		}
 		// A picture of the Markdown in quick look may be one of them.
 		if ql := &m.quickLook; ql.open && len(ql.mdImgs) > 0 {
 			ql.mdGen++

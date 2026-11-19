@@ -3012,13 +3012,15 @@ func TestQuickLookShowsADiff(t *testing.T) {
 // How this could pass wrongly: the words would be there as raw source too. So the test
 // also checks that no tag, no marker and no fence reaches the panel.
 //
-// The diagram is a flowchart, which loom draws in tuios through the block
-// renderer the agents thread shares: its two nodes are on the panel under a
-// header that offers the source. A stand-in sketch plugin is installed and
+// The diagram is a flowchart. On this host, which has kitty graphics, it is
+// a picture under a header that offers the source and the switch to text. A
+// click on "text" draws it through the block renderer the agents thread
+// shares: its two nodes are on the panel. A stand-in sketch plugin is installed and
 // answers with fakeCells, which spell PLUGIN-DREW, for a type tuios does not
 // draw itself; a flowchart never reaches it.
 func TestQuickLookReadsRichMarkdown(t *testing.T) {
-	term, dir, base := quickLookListedBase(t, nil, nil)
+	host := &lockedBuffer{}
+	term, dir, base := quickLookListedBase(t, nil, host)
 	plug := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(plug, "bin"), 0o755); err != nil {
 		t.Fatal(err)
@@ -3074,17 +3076,27 @@ The secret body.
 	quickLookFocusRail(t, term, "zrich.md")
 	sendKeys(t, term, " ")
 	railLists(t, term, "the document did not read as Markdown",
-		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "Image: a logo", "Start", "Stop", "show the source"},
-		[]string{"<h2", "<b>", "</", "[!WARNING]", "[^one]", "[site]", "hidden", "The secret body.", "```", "flowchart", "-->", "PLUGIN-DREW"})
-	saveCockpitFrames(t, term, "quick-look-rich-markdown")
+		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "Image: a logo", "picture / text", "show the source"},
+		[]string{"<h2", "<b>", "</", "[!WARNING]", "[^one]", "[site]", "hidden", "The secret body.", "```", "flowchart", "-->", "PLUGIN-DREW", "Start", "Stop"})
+	// On a host with kitty graphics the diagram is a picture on the rows
+	// under its header. A click on "text" in the header draws it as text, as
+	// in the thread.
+	row := rowWith(term.Screen(), "picture / text")
+	waitPlaced(t, term, host, func(p hostPlace) bool { return p.row == row+1 && p.rows > 0 })
+	saveCockpitFrames(t, term, "quick-look-rich-markdown", hostPictures(t, []byte(host.String()))...)
+	col := strings.Index(term.Screen().Line(row), "text   show the source")
+	mouseClick(t, term, len([]rune(term.Screen().Line(row)[:col]))+1, row, tuitest.MouseLeft, 0)
+	railLists(t, term, "ASSERTION: a click on text draws the diagram as text", []string{"Start", "Stop", "picture / text"}, []string{"flowchart"})
+	saveCockpitFrames(t, term, "quick-look-rich-markdown-text")
+	pause(t, "a click, not a double click", time.Second)
 	// A click on the diagram's header shows its source, as in the thread.
-	row := rowWith(term.Screen(), "show the source")
+	row = rowWith(term.Screen(), "show the source")
 	if row < 0 {
 		t.Fatalf("ASSERTION: the diagram has no header that offers its source\n%s", term.Snapshot())
 	}
-	col := strings.Index(term.Screen().Line(row), "show the source")
+	col = strings.Index(term.Screen().Line(row), "show the source")
 	mouseClick(t, term, len([]rune(term.Screen().Line(row)[:col]))+1, row, tuitest.MouseLeft, 0)
-	railLists(t, term, "ASSERTION: a click on the header shows the source", []string{"flowchart LR", "show the picture"}, nil)
+	railLists(t, term, "ASSERTION: a click on the header shows the source", []string{"flowchart LR", "show the diagram"}, nil)
 	sendKeys(t, term, tuitest.Tab, tuitest.Enter)
 	railLists(t, term, "enter did not open the section", []string{"The secret body."}, nil)
 	alive(t, term, "after rich Markdown")

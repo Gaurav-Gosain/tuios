@@ -922,7 +922,7 @@ func (m *OS) QuickLookMouseClick(x, y int) bool {
 		}
 		if !m.quickLookRulerClick(x, y) {
 			m.quickLookBarClick(x, y)
-			m.quickLookBlockClick(y)
+			m.quickLookBlockClick(x, y)
 		}
 		return true
 	}

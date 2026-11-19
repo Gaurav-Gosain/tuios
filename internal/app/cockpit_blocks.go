@@ -82,24 +82,36 @@ func (md *ckMD) richBlock(b markdown.Block, first, rest []ckSeg, avail int) bool
 	md.nblocks++
 	at := ckSegsWidth(rest)
 	head := ckLine{bg: l.panel, bgAt: at, segs: append(slicesClone(first), ckSeg{t: " " + kind, fg: pal.FgMute}), hit: ckBlockHit + key}
+	pic, can := false, false
+	if kind == "mermaid" {
+		pic, can = m.mermaidShowsPicture(key)
+	}
 	if m.richSource[key] {
-		head.right = []ckSeg{{t: "show the picture", fg: pal.FgMute}, {t: "  "}}
+		again := "show the picture"
+		if kind == "mermaid" {
+			again = "show the diagram"
+		}
+		head.right = []ckSeg{{t: again, fg: pal.FgMute}, {t: "  "}}
 		md.lines = append(md.lines, head)
 		md.code(b, rest, rest, avail)
 		return true
 	}
-	d := m.blockDrawing(kind, src, max(avail-2, 8), pal)
-	if d.fail != "" {
-		md.text([]ckSeg{{t: "Not drawn: " + d.fail, fg: pal.Warning}}, first, rest, avail)
-		md.code(b, rest, rest, avail)
-		return true
-	}
-	head.right = []ckSeg{{t: "show the source", fg: pal.FgMute}, {t: "  "}}
 	start := len(md.lines)
 	md.lines = append(md.lines, head)
-	for _, row := range d.rows {
-		md.lines = append(md.lines, ckLine{indent: at + 1, raw: row})
+	drawn := pic && md.mermaidPictureLines(src, avail)
+	if !drawn {
+		d := m.blockDrawing(kind, src, max(avail-2, 8), pal)
+		if d.fail != "" {
+			md.lines = md.lines[:start]
+			md.text([]ckSeg{{t: "Not drawn: " + d.fail, fg: pal.Warning}}, first, rest, avail)
+			md.code(b, rest, rest, avail)
+			return true
+		}
+		for _, row := range d.rows {
+			md.lines = append(md.lines, ckLine{indent: at + 1, raw: row})
+		}
 	}
+	md.lines[start] = ckBlockHead(head, key, can, drawn, pal)
 	md.lines = append(md.lines, ckLine{segs: slicesClone(rest)})
 	if md.t != nil {
 		// C and the source's own header copy the source.
@@ -184,25 +196,100 @@ func (m *OS) ToggleBlock(key string) {
 }
 
 // CockpitBlockToggle is P: the lowest rich block on screen shows its source,
-// or its picture again. A block whose header scrolled off the top counts when
-// its lines reach the top row.
-func (m *OS) CockpitBlockToggle() {
+// or its picture again. With pic it is T: the lowest Mermaid block on screen
+// that can be a picture is drawn as a picture, or as text. A block whose
+// header scrolled off the top counts when its lines reach the top row.
+func (m *OS) CockpitBlockToggle(pic bool) {
 	v := m.Inbox.ck.code
 	if v.t != nil {
 		lines := v.t.lines
 		for i := min(v.end, len(lines)) - 1; i >= 0; i-- {
-			key, ok := strings.CutPrefix(lines[i].hit, ckBlockHit)
+			main, alt, _, _, split := ckSplitRead(lines[i].hit)
+			key, ok := strings.CutPrefix(main, ckBlockHit)
 			if !ok {
 				continue
 			}
-			if i >= v.start || (i+1 < len(lines) && v.start < len(lines) && lines[v.start].code != "" && lines[v.start].code == lines[i+1].code) {
+			if i < v.start && (i+1 >= len(lines) || v.start >= len(lines) || lines[v.start].code == "" || lines[v.start].code != lines[i+1].code) {
+				break
+			}
+			switch {
+			case !pic:
 				m.ToggleBlock(key)
 				return
+			case split:
+				m.ToggleBlockPicture(strings.TrimPrefix(alt, ckBlockPicHit))
+				return
 			}
-			break
 		}
 	}
-	m.ShowNotification("No diagram on screen.", "info", m.Settings.NotificationDuration)
+	what := "No diagram on screen."
+	if pic {
+		what = "No Mermaid diagram on screen that can be a picture."
+	}
+	m.ShowNotification(what, "info", m.Settings.NotificationDuration)
+}
+
+// ckBlockPicHit starts the hit of a Mermaid block's picture and text switch.
+const ckBlockPicHit = "bpic:"
+
+// ckBlockHead is a drawn block's header: "show the source" on the right, and,
+// for a Mermaid block this client can draw as a picture, the switch between
+// picture and text before it, the drawing in use in bold. A click on the
+// switch flips the drawing. A click anywhere else on the header shows the
+// source.
+func ckBlockHead(head ckLine, key string, can, pic bool, pal overlay.Palette) ckLine {
+	source := []ckSeg{{t: "show the source", fg: pal.FgMute}, {t: "  "}}
+	if !can {
+		head.right = source
+		return head
+	}
+	p, x := ckSeg{t: "picture", fg: pal.FgMute}, ckSeg{t: "text", fg: pal.FgMute}
+	if pic {
+		p.fg, p.attrs = pal.Fg, ckBold
+	} else {
+		x.fg, x.attrs = pal.Fg, ckBold
+	}
+	sw := []ckSeg{p, {t: " / ", fg: pal.FgMute}, x}
+	head.right = append(append(sw, ckSeg{t: "   "}), source...)
+	from := ckSegsWidth(head.right)
+	head.hit = ckSplitHit(head.hit, ckBlockPicHit+key, from, from-ckSegsWidth(sw))
+	return head
+}
+
+// ckSplitHit gives part of a line's hit to another action: a click from
+// "from" cells to "to" cells left of the line's right edge does alt, and a
+// click anywhere else on the line does hit.
+func ckSplitHit(hit, alt string, from, to int) string {
+	return hit + "\x1f" + strconv.Itoa(from) + "\x1f" + strconv.Itoa(to) + "\x1f" + alt
+}
+
+// ckSplitRead reads a hit ckSplitHit made. A plain hit is main, with split
+// false.
+func ckSplitRead(hit string) (main, alt string, from, to int, split bool) {
+	parts := strings.SplitN(hit, "\x1f", 4)
+	if len(parts) != 4 {
+		return hit, "", 0, 0, false
+	}
+	f, e1 := strconv.Atoi(parts[1])
+	t, e2 := strconv.Atoi(parts[2])
+	if e1 != nil || e2 != nil {
+		return parts[0], "", 0, 0, false
+	}
+	return parts[0], parts[3], f, t, true
+}
+
+// ckLineHits adds the hits of a line from column x0 to x1 on screen row y,
+// its right edge at column edge: the switch of a split hit first, so a click
+// on it finds it before the line's own action.
+func ckLineHits(hits []ckHit, hit string, x0, x1, edge, y int) []ckHit {
+	main, alt, from, to, split := ckSplitRead(hit)
+	if split {
+		a, b := max(edge-from, x0), min(edge-to, x1)
+		if a < b {
+			hits = append(hits, ckHit{x0: a, y0: y, x1: b, y1: y + 1, kind: ckHitAction, action: alt})
+		}
+	}
+	return append(hits, ckHit{x0: x0, y0: y, x1: x1, y1: y + 1, kind: ckHitAction, action: main})
 }
 
 // blocksChanged makes every layout that may hold a rich block again: the

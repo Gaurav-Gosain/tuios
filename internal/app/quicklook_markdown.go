@@ -61,6 +61,7 @@ type quickLookMDImageMsg struct {
 // quickLookMDLayout lays out the Markdown on the panel at width.
 func (m *OS) quickLookMDLayout(l ckLook, r *quickLookResult, width int, open bool) []ckLine {
 	md := &ckMD{m: m, l: l, heads: true, blockScope: "ql:" + r.target.host + ":" + r.target.path}
+	md.pics = m.quickLookPics(r)
 	md.hook = func(md *ckMD, b markdown.Block, first, rest []ckSeg, width int) bool {
 		if b.Kind != markdown.Image {
 			return false
@@ -261,6 +262,9 @@ func (m *OS) quickLookMDImagesCmd() tea.Cmd {
 		switch {
 		case ti.img != nil:
 			cols, rows := m.quickLookMDImageBox(ti.img, ql.textW)
+			if ti.cols > 0 {
+				cols, rows = ti.cols, ti.rows
+			}
 			if m.replyPreviewer().Mode() != composer.PreviewText {
 				cmds = append(cmds, m.quickLookPrepare(ti.img, cols, rows))
 			}
@@ -341,18 +345,57 @@ func (m *OS) quickLookMDMarks(lines []ckLine, from, rows, top int) {
 	}
 }
 
+// quickLookPics is quick look's ckPics: the rows are a picture of the
+// Markdown's, read from the file r.
+func (m *OS) quickLookPics(r *quickLookResult) *ckPics {
+	ql := &m.quickLook
+	return &ckPics{hit: "qimg:", indent: quickLookMDImageIndent,
+		add: func(id string, ti *ckThreadImage) {
+			if ql.mdImgsFor != r {
+				ql.mdImgs, ql.mdImgsFor = map[string]*ckThreadImage{}, r
+			}
+			ql.mdImgs[id] = ti
+		},
+		cells: func(ti *ckThreadImage) []string {
+			p := m.replyPreviewer()
+			var cells []string
+			switch p.Mode() {
+			case composer.PreviewPixels:
+				cells = m.placeholderLines(ti.img, ti.cols, ti.rows)
+			case composer.PreviewCells:
+				p.mu.Lock()
+				if pic := p.pics[quickLookCellsKey(p, ti.img, ti.cols, ti.rows)]; pic != nil {
+					cells = pic.lines
+				}
+				p.mu.Unlock()
+			}
+			if cells == nil {
+				ql.mdNeed = true
+			}
+			return cells
+		}}
+}
+
 // quickLookBlockClick shows the source of the rich block whose header is on
-// screen row y, or its picture again.
-func (m *OS) quickLookBlockClick(y int) {
+// screen row y, or its picture again. A click at column x on the switch of a
+// Mermaid block draws it as a picture, or as text.
+func (m *OS) quickLookBlockClick(x, y int) {
 	ql := &m.quickLook
 	if ql.res == nil || ql.res.kind != "markdown" || ql.copy != nil || ql.textW <= 0 {
 		return
 	}
 	row := y - (ql.box.Y0 + 1 + ql.textY)
 	if i := ql.mdFrom + row; row >= 0 && row < ql.bodyRows && i < len(ql.mdLines) {
-		if key, ok := strings.CutPrefix(ql.mdLines[i].hit, ckBlockHit); ok {
-			m.ToggleBlock(key)
+		main, alt, from, to, split := ckSplitRead(ql.mdLines[i].hit)
+		key, ok := strings.CutPrefix(main, ckBlockHit)
+		if !ok {
+			return
 		}
+		if col := x - (ql.box.X0 + 1 + ql.textX); split && col >= ql.textW-from && col < ql.textW-to {
+			m.ToggleBlockPicture(strings.TrimPrefix(alt, ckBlockPicHit))
+			return
+		}
+		m.ToggleBlock(key)
 	}
 }
 

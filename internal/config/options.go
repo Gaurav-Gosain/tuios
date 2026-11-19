@@ -1276,6 +1276,12 @@ var optionSpecs = []Option{
 		Fallback:    AgentsViewListColumn, Normalize: trimLower,
 	},
 	{
+		Path: "agents.mermaid", Type: OptionString, Section: "agents",
+		Description: "How the agents view and quick look draw a Mermaid block: picture for kitty graphics, text for box-drawing text, or auto for a picture where the terminal has kitty graphics. The header of a block switches that block.",
+		Accepted:    AgentsMermaids,
+		Fallback:    AgentsMermaidAuto, Normalize: trimLower,
+	},
+	{
 		Path: "agents.name_hint", Type: OptionString, Section: "agents",
 		Description: "Whether the start hint tells an agent to name its pane after its task. Off leaves that line out and tells the agent not to rename its pane or its session, so the title the program sets and the session's label stay as they are. A running agent keeps the hint it got at its start.",
 		Accepted:    NameHints,

@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"image"
-	"image/draw"
 	"image/png"
-	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -421,64 +418,15 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 	if o.fit {
 		maxRows = max(rows-2, 4)
 	}
-	scale := kittyScale(out.Width, out.Height, cols, maxRows, cellW, cellH)
-	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Background: background, Readable: true})
+	pic, err := mermaid.DrawSVG(out, th, mermaid.PictureOptions{Cols: cols, Rows: maxRows, CellW: cellW, CellH: cellH, Background: background})
 	if err != nil {
 		return errfmt.Errorf("cannot draw diagram %d: %w", i+1, err)
-	}
-	box, c, r := cellBox(img, cellW, cellH, cols, maxRows, background, th)
-	var b bytes.Buffer
-	if err := png.Encode(&b, box); err != nil {
-		return err
 	}
 	if i > 0 {
 		// A blank line between two diagrams.
 		fmt.Fprintln(stdout)
 	}
-	return mermaid.Kitty(stdout, b.Bytes(), c, r)
-}
-
-// diagramFontSize is the size in SVG units of a diagram's body text. sketch
-// draws labels at 16px, as pele does.
-const diagramFontSize = 16
-
-// kittyScale is the pixels a diagram unit takes in a picture of the terminal.
-// Its body text gets the size of the terminal's own text, about four fifths of
-// a cell's height, so every diagram of a file has one text size. It is
-// smaller only where the diagram would be wider than cols cells, or taller
-// than rows cells when rows is above 0, or larger than a picture can be. A
-// small diagram is not made larger than that.
-func kittyScale(width, height float64, cols, rows, cellW, cellH int) float64 {
-	width, height = math.Max(1, width), math.Max(1, height)
-	scale := math.Min(0.8*float64(cellH)/diagramFontSize, float64(cols*cellW)/width)
-	if rows > 0 {
-		scale = math.Min(scale, float64(rows*cellH)/height)
-	}
-	// raster.Draw refuses a side past 32768 pixels or 40 million pixels in all.
-	return math.Min(scale, math.Min(32000/math.Max(width, height), math.Sqrt(39e6/(width*height))))
-}
-
-// cellBox pads a picture to whole cells, so the box of c by r cells the
-// terminal draws it into has the picture's own aspect. The padding is the
-// diagram's background, or clear when there is none. The box is at most cols
-// cells wide, and rows cells tall when rows is above 0.
-func cellBox(img image.Image, cellW, cellH, cols, rows int, background bool, th *sketch.Theme) (image.Image, int, int) {
-	b := img.Bounds()
-	c := min(max(int(math.Ceil(float64(b.Dx())/float64(cellW))), 1), max(cols, 1))
-	r := max(int(math.Ceil(float64(b.Dy())/float64(cellH))), 1)
-	if rows > 0 {
-		r = min(r, rows)
-	}
-	w, h := c*cellW, r*cellH
-	if w == b.Dx() && h == b.Dy() {
-		return img, c, r
-	}
-	dst := image.NewNRGBA(image.Rect(0, 0, max(w, b.Dx()), max(h, b.Dy())))
-	if background && th != nil && th.Bg != nil {
-		draw.Draw(dst, dst.Bounds(), &image.Uniform{th.Bg}, image.Point{}, draw.Src)
-	}
-	draw.Draw(dst, b.Sub(b.Min), img, b.Min, draw.Over)
-	return dst, c, r
+	return mermaid.Kitty(stdout, pic.PNG, pic.Cols, pic.Rows)
 }
 
 // terminalCells is the width of the terminal in cells and the size of a cell

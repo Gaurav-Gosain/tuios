@@ -1354,7 +1354,14 @@ type OS struct {
 	// richSource holds the rich blocks shown as their source, by key, and
 	// blocks the drawings of rich blocks, made again when blockGen moves.
 	// See cockpit_blocks.go.
-	richSource       map[string]bool
+	richSource map[string]bool
+	// richPicture holds the Mermaid blocks flipped from the default of
+	// [agents] mermaid, mermaidPics their pictures, and mermaidCellsWait
+	// says a laid out picture waits for its glyphs. See
+	// cockpit_mermaid_pic.go.
+	richPicture      map[string]bool
+	mermaidPics      map[mermaidPicKey]*mermaidPic
+	mermaidCellsWait bool
 	blocks           map[ckBlockKey]*ckBlockDrawing
 	blockGen         int
 	blockView        int

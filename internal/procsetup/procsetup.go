@@ -8,6 +8,7 @@
 package procsetup
 
 import (
+	"image/color"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,6 +18,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/mermaid"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -50,7 +53,16 @@ func Setup(o Options) {
 		}
 		return prog
 	}
+	app.MermaidPicture = drawMermaidPicture
 	app.SetInputHandler(input.HandleInput)
+}
+
+// drawMermaidPicture draws a Mermaid block of the agents view as a picture,
+// in the colours of the view, clear where the diagram draws nothing.
+func drawMermaidPicture(src string, cols, rows, cellW, cellH int, pal overlay.Palette, ansi [16]color.Color, bg color.Color) ([]byte, int, int, error) {
+	th := mermaid.Theme(pal, ansi, bg, pal.Fg)
+	pic, err := mermaid.Draw(src, th, mermaid.PictureOptions{Cols: cols, Rows: rows, CellW: cellW, CellH: cellH})
+	return pic.PNG, pic.Cols, pic.Rows, err
 }
 
 // Reaper is the argv the daemon runs a plugin command under, or nil where no

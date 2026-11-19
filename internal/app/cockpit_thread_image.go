@@ -46,6 +46,9 @@ type ckThreadImage struct {
 	img     *composer.Image
 	err     string
 	loading bool
+	// cols and rows are the picture's own box, for a picture drawn to fit
+	// one, such as a Mermaid diagram. Zero fits the image to the card.
+	cols, rows int
 }
 
 // threadImageMsg carries an image's bytes back to the Update goroutine.
@@ -157,6 +160,9 @@ func (m *OS) threadPicturesCmd(t *agentThread) tea.Cmd {
 			continue
 		}
 		cols, rows := m.ckImageBox(ti.img, t.imgWidth)
+		if ti.cols > 0 {
+			cols, rows = ti.cols, ti.rows
+		}
 		k := pixelsKey(ti.img, cols, rows)
 		if mode == composer.PreviewCells {
 			k = p.cellsKey(ti.img, cols, rows)

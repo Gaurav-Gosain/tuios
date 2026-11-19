@@ -2623,7 +2623,7 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 			y := base - (end - i)
 			c.draw(x, y, w, lines[i])
 			if hits != nil && hits[i] != "" {
-				st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + y, x1: right, y1: top + y + 1, kind: ckHitAction, action: hits[i]})
+				st.ck.hits = ckLineHits(st.ck.hits, hits[i], x, right, x+w, top+y)
 			}
 		}
 		if t != nil {

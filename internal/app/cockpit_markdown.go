@@ -75,6 +75,9 @@ type ckMD struct {
 	// far, for each block's key. See cockpit_blocks.go.
 	blockScope string
 	nblocks    int
+	// pics takes the pictures of Mermaid blocks, nil for a layout that
+	// draws them as text. See cockpit_mermaid_pic.go.
+	pics *ckPics
 }
 
 // ckCodeFold is how many lines of a code block a closed message shows.
@@ -88,6 +91,7 @@ func (m *OS) ckMarkdownFold(l ckLook, text string, width int, id string, open bo
 	md := &ckMD{m: m, l: l, fold: "fold:" + id, open: open, wrap: m.Inbox.ck.codeWrap, t: t, id: id}
 	if t != nil {
 		md.blockScope = t.key + "#" + id
+		md.pics = m.threadPics(t)
 	}
 	return md.layout(text, width, markdown.Options{})
 }

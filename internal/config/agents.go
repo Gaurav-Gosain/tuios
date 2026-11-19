@@ -102,6 +102,12 @@ type AgentsConfig struct {
 	// list key (\ by default) switches it, and the choice is kept in the
 	// client's state file, where it wins over this value. See ViewListMode.
 	ViewList string `toml:"view_list,omitempty"`
+	// Mermaid is how the agents view and quick look draw a fenced Mermaid
+	// block: "picture" as kitty graphics, "text" as box-drawing text, and
+	// "auto" (the default) as a picture where the terminal has kitty graphics
+	// and as text elsewhere. The header of each block flips that block. See
+	// MermaidMode.
+	Mermaid string `toml:"mermaid,omitempty"`
 	// ListWidth is the width of the agents view's list column: a number of
 	// cells ("52") or a share of the view ("30%"). Empty keeps the width
 	// that follows the screen: 38, 48 or 56 cells. < and > and a drag on
@@ -252,6 +258,29 @@ func NormalizeAgentsViewList(v string) string {
 
 // ViewListMode is view_list with its default applied.
 func (a AgentsConfig) ViewListMode() string { return NormalizeAgentsViewList(a.ViewList) }
+
+// The values of [agents] mermaid.
+const (
+	AgentsMermaidAuto    = "auto"
+	AgentsMermaidPicture = "picture"
+	AgentsMermaidText    = "text"
+)
+
+// AgentsMermaids is every value [agents] mermaid accepts.
+var AgentsMermaids = []string{AgentsMermaidAuto, AgentsMermaidPicture, AgentsMermaidText}
+
+// NormalizeAgentsMermaid reads an [agents] mermaid value. Empty and anything
+// unrecognised mean the default, "auto".
+func NormalizeAgentsMermaid(v string) string {
+	switch v = strings.ToLower(strings.TrimSpace(v)); v {
+	case AgentsMermaidPicture, AgentsMermaidText:
+		return v
+	}
+	return AgentsMermaidAuto
+}
+
+// MermaidMode is mermaid with its default applied.
+func (a AgentsConfig) MermaidMode() string { return NormalizeAgentsMermaid(a.Mermaid) }
 
 // The values of [agents] name_hint.
 const (

@@ -42,6 +42,7 @@ var settingLabels = map[string]string{
 	"agents.fold_working":                 "Fold Working",
 	"agents.answer_advance":               "Next after an answer",
 	"agents.view_list":                    "Agent list",
+	"agents.mermaid":                      "Mermaid diagrams",
 	"agents.acp_version":                  "ACP version",
 	"agents.name_hint":                    "Agents name their panes",
 	"agents.reply_markers":                "Reply markers",

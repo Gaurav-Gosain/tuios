@@ -1456,6 +1456,7 @@ func DefaultConfig() *UserConfig {
 		Review:       defaultReviewConfig(),
 		Agents: AgentsConfig{
 			ViewList:          AgentsViewListColumn,
+			Mermaid:           AgentsMermaidAuto,
 			NameHint:          NameHintOn,
 			CardPreview:       CardPreviewAuto,
 			AskWaitSeconds:    DefaultAskWaitSeconds,
@@ -2060,6 +2061,9 @@ const (
 	// ActionInboxBlockSource shows the lowest picture on screen, a drawn
 	// Mermaid or TML block, as its source, or its source as the picture.
 	ActionInboxBlockSource = "inbox_block_source"
+	// ActionInboxBlockPicture draws the lowest Mermaid block on screen as a
+	// picture, or as text.
+	ActionInboxBlockPicture = "inbox_block_picture"
 	// The thread's previous and next prompt, the marks on its ruler.
 	ActionInboxPromptPrev = "inbox_prompt_prev"
 	ActionInboxPromptNext = "inbox_prompt_next"
@@ -2192,6 +2196,7 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxCodeRight:     {")"},
 		ActionInboxCodeCopy:      {"C"},
 		ActionInboxBlockSource:   {"P"},
+		ActionInboxBlockPicture:  {"T"},
 		// [ and ] step the tabs, so the prompt jumps take the braces.
 		ActionInboxPromptPrev: {"{"},
 		ActionInboxPromptNext: {"}"},
@@ -3947,6 +3952,8 @@ var yieldingDefaults = map[string]bool{
 	"inbox_child":      true,
 	// P, new with the rich blocks.
 	"inbox_block_source": true,
+	// T, new with the Mermaid pictures.
+	"inbox_block_picture": true,
 	// ctrl+o, new with the message cards.
 	"inbox_jump_back": true,
 	// ctrl+alt+N (ctrl+opt+N on macOS), the first default for
