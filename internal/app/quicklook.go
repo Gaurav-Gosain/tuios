@@ -336,7 +336,9 @@ type quickLookMDKey struct {
 	open  bool
 	res   *quickLookResult
 	width int
-	look  ckLookKey
+	// rows is the body's height, which bounds a picture's rows.
+	rows int
+	look ckLookKey
 }
 
 // QuickLookOpen reports whether the preview is up.
@@ -1225,11 +1227,13 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		}
 	case "markdown":
 		width := max(w-3, 4)
-		mk := quickLookMDKey{gen: ql.mdGen, res: r, width: width, look: ql.lookKey, open: ql.mdOpen}
+		// The layout sizes its pictures to the body, so the body's size is
+		// set first: the size of the frame before is stale after f.
+		ql.textX, ql.textY, ql.textW, ql.bodyRows = 1, bodyTop, width, bodyRows
+		mk := quickLookMDKey{gen: ql.mdGen, res: r, width: width, rows: bodyRows, look: ql.lookKey, open: ql.mdOpen}
 		if ql.mdKey != mk || ql.mdLines == nil {
 			ql.mdLines, ql.mdKey = m.quickLookMDLayout(l, r, width, ql.mdOpen), mk
 		}
-		ql.textX, ql.textY, ql.textW, ql.bodyRows = 1, bodyTop, width, bodyRows
 		if q := ql.copy; q != nil && q.md != nil {
 			if q.w == width && q.h == bodyRows {
 				m.drawQuickLookMDCopy(c, q, 1, bodyTop)

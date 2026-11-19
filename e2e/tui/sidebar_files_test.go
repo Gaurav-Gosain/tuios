@@ -1969,12 +1969,23 @@ func quickLookListed(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Te
 // base, for a test that installs a plugin.
 func quickLookListedBase(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Terminal, string, string) {
 	t.Helper()
-	dir := quickLookFixture(t)
 	opts := startOpts{cols: 140, rows: 40, env: env}
 	if out != nil {
 		opts.out = out
 	}
-	term, base := start(t, opts)
+	return quickLookListedIn(t, "", opts)
+}
+
+// quickLookListedIn is quickLookListedBase with a config and a client of its
+// own size.
+func quickLookListedIn(t *testing.T, cfg string, opts startOpts) (*tuitest.Terminal, string, string) {
+	t.Helper()
+	dir := quickLookFixture(t)
+	base := t.TempDir()
+	if cfg != "" {
+		writeConfig(t, base, cfg)
+	}
+	term := startIn(t, base, opts)
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "opening a shell for the listing")

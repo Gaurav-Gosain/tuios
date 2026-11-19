@@ -169,7 +169,12 @@ func (m *OS) quickLookMDImage(md *ckMD, r *quickLookResult, b markdown.Block, fi
 		// A host that draws placeholders gets the picture as cells that
 		// scroll and clip with the text.
 		cells = m.placeholderLines(ti.img, cols, rows)
-		if cells == nil {
+		// The cells name the picture at this box, so the box must be
+		// prepared: a new width (full size, a resize) is a new box.
+		p.mu.Lock()
+		ready := p.pics[pixelsKey(ti.img, cols, rows)] != nil
+		p.mu.Unlock()
+		if cells == nil || !ready {
 			ql.mdNeed = true
 		}
 	case composer.PreviewCells:
