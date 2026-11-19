@@ -20,12 +20,19 @@ import (
 // manager. The pane's shell reads its own cgroup, the manager reports the
 // scope's OOMPolicy, and the scope is gone once the pane closes.
 //
-// It skips where there is no user manager to ask.
+// It changes the real user manager, so it runs only on a machine or in a
+// container kept for tests, which says so with TUIOS_E2E_OWN_USER_MANAGER=1,
+// as TestDaemonRunsAsAService does. TestPaneWithoutAUserManagerStartsAsBefore
+// runs everywhere.
 //
 // Negative control: see NEGATIVE_CONTROLS.md, "A pane's own scope".
 func TestPaneRunsInItsOwnScope(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("systemd scopes are on Linux")
+	}
+	requireReal(t, "the scope holds the daemon's own pane processes")
+	if os.Getenv("TUIOS_E2E_OWN_USER_MANAGER") != "1" {
+		t.Skip("changes the real systemd user manager; set TUIOS_E2E_OWN_USER_MANAGER=1 on a machine kept for tests")
 	}
 	if err := exec.Command("systemctl", "--user", "show", "-p", "Version").Run(); err != nil {
 		t.Skipf("no systemd user manager: %v", err)
@@ -54,44 +61,53 @@ func TestPaneRunsInItsOwnScope(t *testing.T) {
 			paneScope(t, base)
 		})
 	}
-	// No user manager to ask: the pane starts as before, in the daemon's
-	// cgroup, and the daemon says once why.
-	t.Run("no user manager", func(t *testing.T) {
-		base := t.TempDir()
-		killDaemon(t, base)
-		t.Setenv(testknob.Env, testknob.Merge(os.Getenv(testknob.Env), "pane_scope=1"))
-		// The daemon's runtime dir is the test's, with no systemd/private
-		// and no bus in it.
-		t.Setenv("DBUS_SESSION_BUS_ADDRESS", "")
-		const sess = "e2e-noscope"
-		mustCLI(t, base, "new", sess, "--detach")
-		out := filepath.Join(base, "cgroup.txt")
-		deadline := time.Now().Add(uiTimeout)
-		for {
-			// Sent again until it runs, as paneScope does.
-			mustCLI(t, base, "send-text", "-s", sess, "cat /proc/$$/cgroup > "+out+".tmp && mv "+out+".tmp "+out+"\n")
-			time.Sleep(100 * time.Millisecond)
-			if raw, err := os.ReadFile(out); err == nil {
-				if strings.Contains(string(raw), "tuios-pane-") {
-					t.Fatalf("ASSERTION: a pane got a scope with no user manager: %s", raw)
-				}
-				break
+}
+
+// TestPaneWithoutAUserManagerStartsAsBefore is the fallback of
+// TestPaneRunsInItsOwnScope, and it runs everywhere: with no user manager to
+// ask, the pane starts as before, in the daemon's cgroup, and the daemon says
+// once why. The daemon's runtime dir is the test's, with no systemd/private
+// and no bus in it, and the bus address is cleared, so nothing reaches the
+// real user manager.
+func TestPaneWithoutAUserManagerStartsAsBefore(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("systemd scopes are on Linux")
+	}
+	requireReal(t, "reads the cgroup of the daemon's own pane process")
+	base := t.TempDir()
+	killDaemon(t, base)
+	t.Setenv(testknob.Env, testknob.Merge(os.Getenv(testknob.Env), "pane_scope=1"))
+	// The daemon's runtime dir is the test's, with no systemd/private
+	// and no bus in it.
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "")
+	const sess = "e2e-noscope"
+	mustCLI(t, base, "new", sess, "--detach")
+	out := filepath.Join(base, "cgroup.txt")
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		// Sent again until it runs, as paneScope does.
+		mustCLI(t, base, "send-text", "-s", sess, "cat /proc/$$/cgroup > "+out+".tmp && mv "+out+".tmp "+out+"\n")
+		time.Sleep(100 * time.Millisecond)
+		if raw, err := os.ReadFile(out); err == nil {
+			if strings.Contains(string(raw), "tuios-pane-") {
+				t.Fatalf("ASSERTION: a pane got a scope with no user manager: %s", raw)
 			}
-			if time.Now().After(deadline) {
-				t.Fatal("ASSERTION: the pane never ran its command")
-			}
+			break
 		}
-		for {
-			raw, _ := os.ReadFile(daemonLogOf(t, base))
-			if strings.Contains(string(raw), "Panes stay in the daemon's unit") {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("ASSERTION: the daemon did not say why the panes have no scope:\n%s", raw)
-			}
-			time.Sleep(50 * time.Millisecond)
+		if time.Now().After(deadline) {
+			t.Fatal("ASSERTION: the pane never ran its command")
 		}
-	})
+	}
+	for {
+		raw, _ := os.ReadFile(daemonLogOf(t, base))
+		if strings.Contains(string(raw), "Panes stay in the daemon's unit") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the daemon did not say why the panes have no scope:\n%s", raw)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // paneScope checks the scope of the first pane of a new session, and that it

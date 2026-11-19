@@ -5437,9 +5437,11 @@ cell after them against the cursor ground.
 ## A pane's own scope
 
 `TestPaneRunsInItsOwnScope` runs a scratch daemon with the `pane_scope` knob,
-which skips the check that the daemon is a systemd service. The person's own
-user manager makes the scope, through the bus and through its private socket.
-A third case has no manager to ask, and the pane must start as before.
+which skips the check that the daemon is a systemd service. The user manager
+makes the scope, through the bus and through its private socket. It changes
+that manager, so it runs only with `TUIOS_E2E_OWN_USER_MANAGER=1`. The control
+below was run before that gate. `TestPaneWithoutAUserManagerStartsAsBefore`
+has no manager to ask and runs everywhere: the pane must start as before.
 
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
