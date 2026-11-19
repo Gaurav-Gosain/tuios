@@ -83,7 +83,7 @@ func TestKeyModeStaysOnStacksAndLeavesOnEsc(t *testing.T) {
 			if got = width(); got < from {
 				return got
 			}
-			time.Sleep(150 * time.Millisecond)
+			pause(t, "poll the pane width again until the mode resizes it", 150*time.Millisecond)
 		}
 		t.Fatalf("ASSERTION: %s: pane b is still %d wide, want less than %d\n%s", what, got, from, term.Snapshot())
 		return got
