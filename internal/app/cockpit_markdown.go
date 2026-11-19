@@ -21,7 +21,7 @@ import (
 // width, in the look's colours. Headings, strong and emphasis are bold and
 // italic in the body ink, code spans and links take the accent, a code block
 // sits on the card ground highlighted by internal/diffview, a table is drawn
-// with rules and cut to fit, and a link carries its address as OSC 8.
+// with rules and keeps every cell, and a link carries its address as OSC 8.
 //
 // The lines are built once per card: the thread keeps a card until its
 // entry's text, the width or the look changes.
@@ -67,10 +67,6 @@ type ckMD struct {
 	// lead says the next runs start a paragraph, whose first bold run is
 	// its lead label. See runs.
 	lead bool
-	// whole keeps every cell of a table: a cell wraps in its column, and a
-	// table too wide for any column wraps as one record a row. Without it the
-	// widest cells are cut.
-	whole bool
 	// blockScope names the layout's rich blocks: the thread and entry, or the
 	// file, "" for a layout that draws them as code. nblocks counts them so
 	// far, for each block's key. See cockpit_blocks.go.
@@ -804,9 +800,17 @@ func ckSpansIn(spans []diffview.Span, a, b int) []diffview.Span {
 	return out
 }
 
-// table lays out a table: the header bold over a rule, columns set off by
-// a line, each column as wide as its widest cell until the table is wider
-// than the thread, then the widest columns give way and their cells are cut.
+// ckTableMinCol is the narrowest column a table wraps its cells in.
+// Narrower than that, the table is drawn as one record a row.
+const ckTableMinCol = 6
+
+// table lays out a table and keeps every cell, in the thread, quick look and
+// every other reader. The header is bold over a rule, and the columns are set
+// off by a line, each as wide as its widest cell. A table wider than the room
+// gives its widest columns one cap, the largest that fits, and a cell wraps in
+// its column. A row of more than one line has a rule under it, so the rows
+// stay apart. A table that does not fit at ckTableMinCol cells a column is
+// drawn as records: each row its cells under the header's names.
 func (md *ckMD) table(b markdown.Block, first, rest []ckSeg, avail int) {
 	l := md.l
 	pal := l.pal
@@ -828,80 +832,6 @@ func (md *ckMD) table(b markdown.Block, first, rest []ckSeg, avail int) {
 			widths[i] = max(widths[i], ckSegsWidth(c))
 		}
 	}
-	if md.whole {
-		md.tableWhole(b, rows, widths, first, rest, avail)
-		return
-	}
-	// The widest columns give way first: every column is cut to one cap,
-	// the largest cap that fits, found by halving. No column goes under
-	// three cells.
-	fits := func(cap int) bool {
-		n := 3 * (cols - 1)
-		for _, w := range widths {
-			n += min(w, cap)
-		}
-		return n <= avail
-	}
-	if !fits(math.MaxInt) {
-		lo, hi := 3, 0
-		for _, w := range widths {
-			hi = max(hi, w)
-		}
-		for lo < hi {
-			mid := (lo + hi + 1) / 2
-			if fits(mid) {
-				lo = mid
-			} else {
-				hi = mid - 1
-			}
-		}
-		for i := range widths {
-			widths[i] = min(widths[i], lo)
-		}
-	}
-	vert, cross, horiz := " │ ", "─┼─", "─"
-	if l.ascii {
-		vert, cross, horiz = " | ", "-+-", "-"
-	}
-	for ri, r := range rows {
-		pre := rest
-		if ri == 0 {
-			pre = first
-		}
-		segs := slicesClone(pre)
-		for i, c := range r {
-			if i > 0 {
-				segs = append(segs, ckSeg{t: vert, fg: l.edge})
-			}
-			segs = append(segs, ckAlignSegs(c, widths[i], b.Align[i])...)
-		}
-		md.lines = append(md.lines, ckLine{segs: segs})
-		if ri == 0 {
-			segs := slicesClone(rest)
-			for i, w := range widths {
-				if i > 0 {
-					segs = append(segs, ckSeg{t: cross, fg: l.edge})
-				}
-				segs = append(segs, ckSeg{t: strings.Repeat(horiz, w), fg: l.edge})
-			}
-			md.lines = append(md.lines, ckLine{segs: segs})
-		}
-	}
-}
-
-// ckTableMinCol is the narrowest column a whole table wraps its cells in.
-// Narrower than that, the table is drawn as one record a row.
-const ckTableMinCol = 6
-
-// tableWhole lays out a table and keeps every cell. A table that fits is
-// drawn as table does. A wider one gives its widest columns one cap, the
-// largest that fits, and a cell wraps in its column. A row of more than one
-// line has a rule under it, so the rows stay apart. A table that does not fit
-// at ckTableMinCol cells a column is drawn as records: each row its cells
-// under the header's names.
-func (md *ckMD) tableWhole(b markdown.Block, rows [][][]ckSeg, widths []int, first, rest []ckSeg, avail int) {
-	l := md.l
-	cols := len(widths)
 	fits := func(cap int) bool {
 		n := 3 * (cols - 1)
 		for _, w := range widths {

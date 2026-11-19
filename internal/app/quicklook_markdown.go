@@ -60,7 +60,7 @@ type quickLookMDImageMsg struct {
 
 // quickLookMDLayout lays out the Markdown on the panel at width.
 func (m *OS) quickLookMDLayout(l ckLook, r *quickLookResult, width int, open bool) []ckLine {
-	md := &ckMD{m: m, l: l, whole: true, heads: true, blockScope: "ql:" + r.target.host + ":" + r.target.path}
+	md := &ckMD{m: m, l: l, heads: true, blockScope: "ql:" + r.target.host + ":" + r.target.path}
 	md.hook = func(md *ckMD, b markdown.Block, first, rest []ckSeg, width int) bool {
 		if b.Kind != markdown.Image {
 			return false

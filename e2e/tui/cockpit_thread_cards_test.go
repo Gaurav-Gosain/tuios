@@ -31,9 +31,10 @@ import (
 // click on that line opens it. The thought shows its time and first line, and
 // a click opens the rest. The code block shows 12 lines and "10 more lines",
 // and a click shows all of it. Turn 2 says "Working for 3m". Its todo list is
-// pinned above the thread, its items drawn once. A click on the image card
-// opens the image view. The artifacts are the frames thread-cards-closed and
-// thread-cards-open, with the host's pictures drawn in.
+// pinned above the thread, its items drawn once. Its results table has a cell
+// wider than the thread, and every cell shows whole. A click on the image card
+// opens the image view. The artifacts are the frames thread-cards-closed,
+// thread-cards-table and thread-cards-open, with the host's pictures drawn in.
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md):
 //   - with the image case cut from threadCardLines, the image is a "You"
@@ -49,6 +50,8 @@ import (
 //     "the todo list is not pinned".
 //   - with the timg prefix cut from cockpitAction, the test fails at "the
 //     image view did not open".
+//   - with the cut layout of main in ckMD.table, the test fails at "the
+//     thread cut a table cell".
 func TestCockpitThreadFoldsAndImages(t *testing.T) {
 	term, host := startCardsThread(t, 200, 90, "")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
@@ -96,6 +99,20 @@ func TestCockpitThreadFoldsAndImages(t *testing.T) {
 		t.Fatalf("ASSERTION: no picture on the image card (head at row %d col %d): %v\n%s", headRow, headCol, err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "thread-cards-closed", hostPictures(t, []byte(host.String()))...)
+
+	// The results table keeps every cell: the long cell wraps in its column,
+	// so its last word shows, and no cell ends in an ellipsis.
+	scrollUntil(t, term, "J", "ui tests")
+	saveCockpitFrames(t, term, "thread-cards-table")
+	var tableRows []string
+	for ln := range strings.SplitSeq(term.Screen().Text(), "\n") {
+		if strings.Contains(ln, "│") && containsAny(ln, "Check", "padding", "overlap", "list grid", "TABLEEND") {
+			tableRows = append(tableRows, ln)
+		}
+	}
+	if all := strings.Join(tableRows, "\n"); !containsAll(all, "TABLEEND", "ui tests", "overlap", "fixed") || strings.Contains(all, "…") {
+		t.Fatalf("ASSERTION: the thread cut a table cell\n%s", term.Snapshot())
+	}
 
 	// The finished turn opens on a click on its line.
 	row, col := findText(t, term, "Worked for 1m 0s")
@@ -204,6 +221,10 @@ func cardsTranscript(t *testing.T, now time.Time) []byte {
 		code = append(code, fmt.Sprintf("\tline%d := %d", i, i))
 	}
 	answer := "The header overlaps the list by two rows:\n\n```go\nfunc layout() {\n" + strings.Join(code, "\n") + "\n}\n```\n\nThe grid starts too high."
+	// A results table whose long cell is wider than the thread.
+	table := "| Check | Result | Note |\n|-------|--------|------|\n" +
+		"| padding | " + strings.Repeat("the header keeps two rows of padding above the list grid ", 4) + "TABLEEND | ui tests |\n" +
+		"| overlap | fixed | none |"
 	recs := []map[string]any{
 		{"type": "user", "timestamp": at(5 * time.Minute), "message": map[string]any{"role": "user", "content": []any{
 			map[string]any{"type": "text", "text": "Show me where the header overlaps."},
@@ -231,6 +252,9 @@ func cardsTranscript(t *testing.T, now time.Time) []byte {
 		}}},
 		{"type": "user", "timestamp": at(3*time.Minute + 4*time.Second), "message": map[string]any{"role": "user", "content": []any{
 			map[string]any{"type": "tool_result", "tool_use_id": "toolu_t", "content": "Todos have been modified successfully."},
+		}}},
+		{"type": "assistant", "timestamp": at(3*time.Minute + 2*time.Second), "message": map[string]any{"role": "assistant", "content": []any{
+			map[string]any{"type": "text", "text": table},
 		}}},
 		{"type": "assistant", "timestamp": at(3 * time.Minute), "message": map[string]any{"role": "assistant", "content": []any{
 			map[string]any{"type": "tool_use", "id": "toolu_b", "name": "Bash", "input": map[string]any{"command": "go test ./ui/..."}},
