@@ -65,7 +65,7 @@ func TestPromptPickInThePalette(t *testing.T) {
 	run := startCLIBackground(t, base, "prompt", "pick", "Deploy to?", "--timeout", "60000",
 		"--item", "stg=Staging", "--item", "prod=Production")
 	waitPrompt(t, term, "prompt-pick", "Prompt from a command", "Deploy to?", "Staging", "Production", "choose", "cancel")
-	time.Sleep(answerSettle)
+	pause(t, "a new prompt ignores Enter for its first moment", answerSettle)
 
 	pressKeys(t, term, "p", "r", "o", "d")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -91,7 +91,7 @@ func TestPromptPickMarksMoreThanOne(t *testing.T) {
 	run := startCLIBackground(t, base, "prompt", "pick", "Which hosts?", "--multiple", "--timeout", "60000",
 		"--item", "a=Alpha", "--item", "b=Beta", "--item", "c=Gamma")
 	waitPrompt(t, term, "prompt-multiple", "Which hosts?", "Alpha", "Gamma", "mark")
-	time.Sleep(answerSettle)
+	pause(t, "a new prompt ignores Enter for its first moment", answerSettle)
 
 	pressKeys(t, term, promptKeyTab, promptKeyDown, promptKeyDown, promptKeyTab)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Count(s.Text(), "✓") >= 2 }, uiTimeout); err != nil {
@@ -110,7 +110,7 @@ func TestPromptInputTypesALine(t *testing.T) {
 	term, base := attachClientBase(t)
 	run := startCLIBackground(t, base, "prompt", "input", "Branch name?", "--placeholder", "feature/x", "--timeout", "60000")
 	waitPrompt(t, term, "prompt-input", "Branch name?", "feature/x", "send", "cancel")
-	time.Sleep(answerSettle)
+	pause(t, "a new prompt ignores Enter for its first moment", answerSettle)
 	pressKeys(t, term, "f", "i", "x", "/", "m", "e", "n", "u")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "fix/menu") }, uiTimeout); err != nil {
 		t.Fatalf("the typed text never showed: %v\n%s", err, term.Snapshot())
@@ -123,7 +123,7 @@ func TestPromptInputTypesALine(t *testing.T) {
 
 	run = startCLIBackground(t, base, "prompt", "input", "Tag?", "--timeout", "60000")
 	waitPrompt(t, term, "prompt-input-cancel", "Tag?")
-	time.Sleep(answerSettle)
+	pause(t, "a new prompt ignores Enter for its first moment", answerSettle)
 	pressKeys(t, term, promptKeyEsc)
 	if r := promptRun(t, term, run); promptExit(r.err) != 1 || r.out != "" {
 		t.Fatalf("Esc: tuios prompt printed %q and exited %d, want nothing and 1", r.out, promptExit(r.err))
@@ -185,7 +185,7 @@ func TestPluginPromptsThePerson(t *testing.T) {
 	}
 	run := startCLIBackground(t, base, "plugins", "run", "e2e.prompt", "ask", "--wait")
 	waitPrompt(t, term, "prompt-plugin", "Prompt from plugin e2e.prompt", "Run which job?", "Lint", "Test")
-	time.Sleep(answerSettle)
+	pause(t, "a new prompt ignores Enter for its first moment", answerSettle)
 	pressKeys(t, term, promptKeyDown, promptKeyEnter)
 	if r := promptRun(t, term, run); r.err != nil {
 		t.Fatalf("plugins run: %v\n%s", r.err, r.out)
