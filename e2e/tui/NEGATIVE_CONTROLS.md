@@ -18534,4 +18534,18 @@ The new image of a live upgrade also sweeps the folders of its own pid, so the f
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^TestNoTempIndexLeftWhenTheDaemonStops$' -v .
+## A screenshot save that outlives its test
+
+`TestScreenshotRegionDragOpensThePreview` ended once the preview panel was up. The panel is up before the file is written. Under the sim backend the client runs in the test process, so its save went on after the test ended and left the test's folder in the run's temp dir. The run's temp folder check then failed now and then with `TestScreenshotRegionDragOpensThePreview<n>: holds 001`, with every test passing. The test now waits for the file as well.
+
+Run on 2026-11-19 on Linux, sim backend, against main at 61507834e. The control is a local build that waits 3 s in `capture.Save` before it writes, so the save always outlives the test. It is not committed. A second test runs after this one, so the process is still up when the save ends. `GOTMPDIR` is unset: `t.TempDir` uses it, and a folder made there is outside the run's temp dir, which the check reads.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Slow save, test without the wait | run's temp folder check | "the tests left 1 entries ... TestScreenshotRegionDragOpensThePreview10447295 (130.8 KiB): holds 001" | **caught** |
+| Slow save, test with the wait | run's temp folder check | passes, the test takes 6.7 s while it waits for the file | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -v -run '^(TestScreenshotRegionDragOpensThePreview|TestScreenshotTwoCapturesInOneSecondKeepBothFiles)$' .
 ```

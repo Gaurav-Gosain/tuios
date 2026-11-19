@@ -272,6 +272,12 @@ func TestScreenshotRegionDragCapturesTheDraggedRectangle(t *testing.T) {
 // always came up. It is kept as the control that separates the plain host from
 // the graphics host, where the same gesture did go wrong; without it the
 // graphics test below cannot say which half of the panel was at fault.
+//
+// The panel is up before the file is written, so the test also waits for the
+// file. Without that wait it ended with the save still running. Under the sim
+// backend the client runs in the test process, and its save then wrote into
+// the test's folder after the folder was removed, which failed the run's temp
+// folder check now and then.
 func TestScreenshotRegionDragOpensThePreview(t *testing.T) {
 	term, base := start(t, startOpts{args: []string{"new", "e2e-shot"}})
 	killDaemon(t, base)
@@ -290,6 +296,7 @@ func TestScreenshotRegionDragOpensThePreview(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the preview never appeared after a region drag: %v\n%s", err, term.Snapshot())
 	}
+	waitForShot(t, term, dir, 1)
 	alive(t, term, "after a region drag preview")
 }
 
