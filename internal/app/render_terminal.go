@@ -38,7 +38,7 @@ type markStyles struct {
 
 // markInputs is what the mark styles were built from.
 type markInputs struct {
-	gen                         uint64
+	gen, hostGen                uint64
 	depth                       overlay.Depth
 	selBg, selFg                string
 	selBold                     bool
@@ -66,7 +66,7 @@ func markStyle(bg, fg string, bold bool) lipgloss.Style {
 func (m *OS) marks() *markStyles {
 	s := &m.Settings
 	in := markInputs{
-		gen: theme.Generation(), depth: theme.Depth(),
+		gen: theme.Generation(), hostGen: m.host.gen, depth: theme.Depth(),
 		selBg: s.SelectionBg, selFg: s.SelectionFg, selBold: s.SelectionBold,
 		searchBg: s.SearchBg, searchFg: s.SearchFg, matchBg: s.MatchBg, matchFg: s.MatchFg,
 		cursorBg: s.CopyCursorBg, cursorFg: s.CopyCursorFg,
@@ -76,7 +76,7 @@ func (m *OS) marks() *markStyles {
 	}
 	m.markStyleCache = &markStyles{
 		markInputs: in,
-		selection:  markStyle(s.SelectionBg, s.SelectionFg, s.SelectionBold),
+		selection:  m.selectionStyle(s),
 		search:     markStyle(s.SearchBg, s.SearchFg, false),
 		// The match under the cursor is bold as well as brighter. It is the
 		// one of many that the next keypress acts on, and two marks that
@@ -85,6 +85,31 @@ func (m *OS) marks() *markStyles {
 		cursor: markStyle(s.CopyCursorBg, s.CopyCursorFg, true),
 	}
 	return m.markStyleCache
+}
+
+// selectionStyle is the selection's mark. A selected cell is drawn in the
+// selection style alone, so with no selection text colour set its text is
+// the pane's default colour. On a light theme that is dark, and so is the
+// default selection ground: the text could not be read. When the two miss
+// the contrast floor, the text takes the colour overlay.Readable picks
+// against the ground. Where they meet it, nothing changes.
+func (m *OS) selectionStyle(s *config.Settings) lipgloss.Style {
+	st := markStyle(s.SelectionBg, s.SelectionFg, s.SelectionBold)
+	if s.SelectionFg != "" {
+		return st
+	}
+	bg := theme.ConfigColor(s.SelectionBg)
+	if bg == nil {
+		return st
+	}
+	ink := theme.TerminalFg()
+	if theme.Current() == nil && m.host.fg != nil {
+		ink = m.host.fg
+	}
+	if overlay.ContrastRatio(overlay.Shown(ink), overlay.Shown(bg)) >= overlay.ContrastFloor {
+		return st
+	}
+	return st.Foreground(overlay.Readable(ink, bg))
 }
 
 // linkHoverStyle is the link under the pointer. An underline and a colour

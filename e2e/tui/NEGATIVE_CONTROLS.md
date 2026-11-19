@@ -5415,6 +5415,15 @@ session. The third offer must stay (the positive half).
 | Control | How | Tests that fail | Verdict |
 | --- | --- | --- | --- |
 | A report does not close the offer | both `closeResumesOf` calls in `verb_handlers.go` cut | `TestResumeOfferClosesWhenAPaneRunsTheConversation` ("the offer for a conversation a pane runs stayed open") | **caught** |
+## Copy mode selection
+
+`TestCopySelectionTextIsReadable` selects a line in copy mode under the dark
+default and under catppuccin_latte, and measures each selected glyph against
+the selection ground. The dark run is the positive half.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The fix is absent | build `origin/main` | `TestCopySelectionTextIsReadable/light` ("selected \"S\" at column 26 is 1.14:1 ... under 4.5") | **caught** |
 
 ## An image paste on another machine
 
