@@ -191,10 +191,15 @@ func TestCtrlClickOpensLinksWithTheirTarget(t *testing.T) {
 // underlines the other run as well, and the label names the target rather
 // than the text.
 //
-// Negative control, confirmed red: with hoverByID forced false in
-// renderTerminal, the wait for part-two's underline times out.
+// The pointer then goes from the link straight onto the rail, which takes
+// the motion before the pane's hover is asked, and the label goes with it.
+//
+// Negative controls, confirmed red: with hoverByID forced false in
+// renderTerminal, the wait for part-two's underline times out; without the
+// DropLinkHover call on the sidebar branch of handleMouseMotion, the label
+// stays up over the rail.
 func TestHoverLightsEveryRunOfAnIDLink(t *testing.T) {
-	term, _, _ := linkOpenSetup(t, "", "x")
+	term, _, _ := linkOpenSetup(t, "\n[appearance.sidebar]\nenabled = true\n", "x")
 
 	col1, row := mustFind(t, term, "part-one")
 	col2, _ := mustFind(t, term, "part-two")
@@ -213,6 +218,14 @@ func TestHoverLightsEveryRunOfAnIDLink(t *testing.T) {
 	}
 	if err := term.WaitForText("ctrl+click to open", uiTimeout); err != nil {
 		t.Fatalf("the hover label does not name ctrl+click: %v\n%s", err, term.Snapshot())
+	}
+
+	railCol, railRow := mustFind(t, term, "local")
+	mouseHover(t, term, railCol+1, railRow)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "ctrl+click to open") && !cellUnderlined(s, col1+2, row)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the link label stayed up after the pointer moved onto the rail: %v\n%s", err, term.Snapshot())
 	}
 }
 

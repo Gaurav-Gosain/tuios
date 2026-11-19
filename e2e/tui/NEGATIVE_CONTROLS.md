@@ -18606,4 +18606,19 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestWorktree
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestWorktreeNewFromAPaneSwitchesTheClient$' .
+## A link label that follows the pointer onto the rail
+
+`TestHoverLightsEveryRunOfAnIDLink` now runs with the rail on. After the hover label is up, the pointer moves from the link straight onto a rail row, and the label and the underline must go. The rail takes that motion in `handleMouseMotion` before `TrackLinkPointer` runs, so before the fix nothing cleared the hover and the label stayed drawn over the rail.
+
+Run on 2026-11-19 on Linux (go1.27.4), real and sim backends, on a branch based on main at d83a5f7de. The control is this branch with one line cut. It is not committed.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| No `DropLinkHover` on the sidebar branch of `handleMouseMotion` | `TestHoverLightsEveryRunOfAnIDLink` | "the link label stayed up after the pointer moved onto the rail: tuitest: WaitForDesc timed out after 10.009s" | **caught** |
+
+The overlay and rail-pane branches got the same call. This test does not reach them.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^TestHoverLightsEveryRunOfAnIDLink$' -v .
 ```

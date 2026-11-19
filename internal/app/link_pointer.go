@@ -113,6 +113,11 @@ func (m *OS) TrackLinkPointer(x, y int) {
 	}
 }
 
+// DropLinkHover clears the run under the pointer. A chrome surface that takes
+// a motion before TrackLinkPointer runs calls it, so a pointer that leaves a
+// link straight for that surface does not leave the label behind.
+func (m *OS) DropLinkHover() { m.clearLinkHover() }
+
 // LinkHoverAt resolves what the pointer at absolute screen (x, y) is on and
 // records it. It returns whether that is a link.
 //

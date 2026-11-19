@@ -127,12 +127,16 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	if !o.Dragging && !o.Resizing && !o.ScrollbarDragging {
+		// The surfaces below consume the motion before TrackLinkPointer runs,
+		// so each takes a pane link's underline and label with it.
 		if o.OverlayMouseMotion(mouse.X, mouse.Y) {
+			o.DropLinkHover()
 			return o, nil
 		}
 		// A docked session is a real pane, not a list of sidebar rows. Send
 		// tracking motion to its guest before the rail hover path consumes it.
 		if w := o.SidebarSessionPaneAt(mouse.X, mouse.Y); w != nil {
+			o.DropLinkHover()
 			if paneWantsMotion(o, w, mouse.Button) {
 				if tx, ty, inside := w.ScreenToTerminal(mouse.X, mouse.Y); inside {
 					sendMouseToWindow(o, w, uv.MouseMotionEvent{X: tx, Y: ty, Button: uv.MouseButton(mouse.Button), Mod: uv.KeyMod(mouse.Mod)})
@@ -148,6 +152,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// stays a grab for as long as the rail owns the motion. The rail offers
 		// no pointer shape of its own, so the default is right while it does.
 		if o.SidebarActive() && o.SidebarMotion(mouse.X, mouse.Y) {
+			o.DropLinkHover()
 			o.ResetPointerShape()
 			return o, nil
 		}
