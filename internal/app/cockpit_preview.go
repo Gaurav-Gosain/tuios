@@ -535,7 +535,10 @@ func (m *OS) ckCardBody(l ckLook, r ckRow, card session.TaskRow, width int, now 
 	if d.prompt != "" {
 		gap()
 		line(ckSeg{t: "Prompt", fg: pal.FgDim, attrs: ckBold})
-		out = append(out, m.ckMarkdown(l, d.prompt, max(width, 8))...)
+		if k := m.ckMDKeyFor(l, max(width, 8)); d.md == nil || d.mdKey != k {
+			d.md, d.mdKey = m.ckMarkdown(l, d.prompt, max(width, 8)), k
+		}
+		out = append(out, d.md...)
 	}
 	if len(d.attachments) > 0 {
 		gap()
