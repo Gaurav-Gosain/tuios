@@ -2,6 +2,7 @@ package app
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -91,7 +92,7 @@ func ckCopyOf(l ckLook, lines []ckLine, ids []string, w int) []ckCopyRow {
 		} else {
 			x := ln.indent
 			for _, sg := range ln.segs {
-				if glyphs[strings.TrimSpace(sg.t)] {
+				if t := strings.TrimSpace(sg.t); glyphs[t] || ckChromeGlyph(t) {
 					x += ckTextWidth(sg.t)
 					continue
 				}
@@ -105,6 +106,13 @@ func ckCopyOf(l ckLook, lines []ckLine, ids []string, w int) []ckCopyRow {
 		}
 	}
 	return rows
+}
+
+// ckChromeGlyph reports whether t is one Nerd Font glyph alone, such as a
+// pill's cap or icon or a label's icon: chrome that copy mode leaves out.
+func ckChromeGlyph(t string) bool {
+	r, n := utf8.DecodeRuneInString(t)
+	return n == len(t) && r >= 0xe000 && r <= 0xf8ff
 }
 
 // ckGlyphSet is the glyphs the thread draws as chrome, in the look's glyph

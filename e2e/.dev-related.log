@@ -1,0 +1,554 @@
+--- FAIL: TestCockpitThreadMarkerLook (4.93s)
+    --- FAIL: TestCockpitThreadMarkerLook/16 (2.46s)
+        cockpit_reply_markers_test.go:220: pause 150ms: no sign on screen says a client that just booted is ready for keys
+        cockpit_reply_markers_test.go:238: ASSERTION: the bold anchor term is in the plain ink
+              V    1     +   1:1                                                                                                            +    
+                0-0 fg:12
+                1-5 b,fg:15,bg:12
+                6-6 fg:12
+                9-9 u,fg:12
+                10-10 b,u,fg:12
+                11-11 u,fg:12
+                19-23 fg:8
+                130-135 b
+                136-138 fg:8
+            ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                0-139 fg:0
+            
+              Agents   ● 0 needs you   ○ 1 idle   Board    Group: state                         /  Search agents, sessions, machines    + New agent
+                2-7 b
+                11-12 fg:3
+                13-13 b
+                27-28 fg:8
+                29-29 b
+                44-44 fg:8
+                61-61 fg:8
+                86-121 fg:8
+                125-137 b,r
+            ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+                0-47 fg:12
+                                                             │
+                49-49 fg:8
+              Idle  1  ───────────────────────────────────   │ release   claude                                                   D  Settle    ○ idle
+                2-5 b
+                6-8 fg:8
+                11-45 fg:8
+                49-49 fg:8
+                51-57 b
+                117-119 b,r
+                120-127 r
+                130-137 b,r
+            ▌ ○  release      claude   api              0s   │ api
+                0-0 fg:12
+                1-4 r
+                5-11 b,r
+                12-47 r
+                49-49 fg:8
+                                                             │
+                49-49 fg:8
+                                                             │ Thread    Changes    Checkpoints    Pane
+                49-49 fg:8
+                51-56 b
+                61-67 fg:8
+                72-82 fg:8
+                87-90 fg:8
+                                                             │ ━━━━━━─────────────────────────────────────────────────────────────────────────────────
+                49-49 fg:8
+                51-56 fg:12
+                57-137 fg:8
+                                                             │
+                49-49 fg:8
+                                                             │ You  08:12
+                49-49 fg:8
+                51-53 b,fg:14
+                54-60 fg:8
+                                                             │ ▎
+                49-49 fg:8
+                51-51 fg:14
+                                                             │ ▎  Report on the release.
+                49-49 fg:8
+                51-51 fg:14
+                                                             │ ▎
+                49-49 fg:8
+                51-51 fg:14
+                                                             │
+                49-49 fg:8
+                                                             │ claude  08:13
+                49-49 fg:8
+                51-56 b
+                57-63 fg:8
+                                                             │  Finding: the cache drops entries early.  Failed: 3 tests
+                49-49 fg:8
+                51-60 b,fg:14
+                61-61 fg:14
+                93-93 fg:9
+                94-110 b,r,fg:9
+                111-111 fg:9
+                                                             │
+                49-49 fg:8
+                                                             │  Cause: the eviction clock runs in wall time.
+                49-49 fg:8
+                51-58 b,fg:14
+                59-59 fg:14
+                64-77 b
+                                                             │
+                49-49 fg:8
+                                                             │  Plan:
+                49-49 fg:8
+                51-57 b,fg:14
+                                                             │
+                49-49 fg:8
+                                                             │ 1. Switch to the monotonic clock  Implement
+                49-49 fg:8
+                51-53 fg:12
+                84-84 fg:12
+                85-95 b,r,fg:12
+                96-96 fg:12
+                                                             │ 2. Run the store tests again  Pending
+                49-49 fg:8
+                51-53 fg:12
+                80-80 fg:3
+                81-89 b,r,fg:3
+                90-90 fg:3
+                                                             │ • Store package  Owned
+                49-49 fg:8
+                51-52 fg:12
+                67-67 fg:12
+                68-74 b,r,fg:12
+                75-75 fg:12
+                                                             │ • Config migration  Destructive
+                49-49 fg:8
+                51-52 fg:12
+                70-70 fg:9
+                71-83 b,r,fg:9
+                84-84 fg:9
+                                                             │ • Retry budget  New
+                49-49 fg:8
+                51-52 fg:12
+                66-66 fg:12
+                67-71 b,r,fg:12
+                72-72 fg:12
+                                                             │ • Docs  Done
+                49-49 fg:8
+                51-52 fg:12
+                58-58 fg:10
+                59-64 b,r,fg:10
+                65-65 fg:10
+                                                             │
+                49-49 fg:8
+                                                             │ ✓ unit tests pass ✗ lint fails → fix lint next
+                49-49 fg:8
+                51-52 fg:10
+                69-70 fg:9
+                82-83 fg:12
+                                                             │
+                49-49 fg:8
+                                                             │  Next: run the bench  Needs you
+                49-49 fg:8
+                51-57 b,fg:14
+                58-58 fg:14
+                73-73 fg:3
+                74-84 b,r,fg:3
+                85-85 fg:3
+                                                             │
+                49-49 fg:8
+                                                             │
+                49-49 fg:8
+                                                             │
+                49-49 fg:8
+                                                             │ ───────────────────────────────────────────────────────────────────────────────────────
+                49-49 fg:8
+                51-137 fg:8
+                                                             │     Reply to release                                                    typed at once
+                49-49 fg:8
+                64-70 b
+                                                             │     Write a reply.
+                49-49 fg:8
+                53-53 bg:8
+                                                             │
+                49-49 fg:8
+                                                             │     @ mention   ctrl+v image   ctrl+j new line                                ↵ Send
+                49-49 fg:8
+                55-55 b,fg:14
+                67-72 b,fg:14
+                82-87 b,fg:14
+                128-135 b,r
+            
+              List ›   ↵ open pane   D settle   r reply   n new agent   b board   \ strip   v review   f filter   / search   esc close         1 agent
+                2-5 b
+                11-11 b,fg:14
+                12-21 fg:8
+                25-25 b,fg:14
+                26-32 fg:8
+                36-36 b,fg:14
+                37-42 fg:8
+                46-46 b,fg:14
+                47-56 fg:8
+                60-60 b,fg:14
+                61-66 fg:8
+                70-70 b,fg:14
+                71-76 fg:8
+                80-80 b,fg:14
+                81-87 fg:8
+                91-91 b,fg:14
+                92-98 fg:8
+                102-102 b,fg:14
+                103-109 fg:8
+                113-115 b,fg:14
+                116-121 fg:8
+                131-137 fg:8
+        overlay_ground_test.go:123: frames of the failed test kept in /tmp/tuios-e2e-artifacts/TestCockpitThreadMarkerLook_16
+        harness_test.go:522: 3 processes in /home/gaurav/.cache/agent-tmp/gotmp/1233743/TestCockpitThreadMarkerLook161719165605/001 are the daemon and its panes, which killDaemon stops after this; not listed
+        harness_test.go:510: last bytes of the pty log:
+            "t\x1b[m\x1b[K\x1b[?2026l\x1b[?2026h\x1b[2;125H\x1b[30m─\x1b[m\x1b[10;59H   \x1b[90mChanges\x1b[m    \x1b[90mCheckpoints\x1b[m    \x1b[90mPane\x1b[m\x1b[13;52H\x1b[96;1mYou\x1b[90;22m  08:12\x1b[m\x1b[14;52H\x1b[96m▎\x1b[m\n\b\x1b[96m▎\x1b[m  Report on the release.\x1b[16;52H\x1b[96m▎\x1b[m\n\n\b\x1b[1mclaude\x1b[90;22m  08:13\x1b[m\x1b[19;52H\x1b[96;1m\uf002 Finding:\x1b[22m \x1b[mthe cache drops entries early. \x1b[91m\ue0b6\x1b[1;7m\uf00d Failed: 3 tests\x1b[22;27m\ue0b4\x1b[m\x1b[21;52H\x1b[96;1m\uf0e7 Cause:\x1b[22m \x1b[mthe \x1b[1meviction clock\x1b[m runs in wall time.\x1b[23;52H\x1b[96;1m\uf0ae Plan:\x1b[m\x1b[25;52H\x1b[94m1. \x1b[mSwitch to the monotonic clock \x1b[94m\ue0b6\x1b[1;7m\uf0ad Implement\x1b[22;27m\ue0b4\x1b[m\x1b[26;52H\x1b[94m2. \x1b[mRun the store tests again \x1b[33m\ue0b6\x1b[1;7m\uf017 Pending\x1b[22;27m\ue0b4\x1b[m\x1b[27;52H\x1b[94m• \x1b[mStore package \x1b[94m\ue0b6\x1b[1;7m\uf007 Owned\x1b[22;27m\ue0b4\x1b[m\x1b[28;52H\x1b[94m• \x1b[mConfig migration \x1b[91m\ue0b6\x1b[1;7m\uf1f8 Destructive\x1b[22;27m\ue0b4\x1b[m\x1b[29;52H\x1b[94m• \x1b[mRetry budget \x1b[94m\ue0b6\x1b[1;7m\uf067 New\x1b[22;27m\ue0b4\x1b[m\x1b[30;52H\x1b[94m• \x1b[mDocs \x1b[92m\ue0b6\x1b[1;7m\uf00c Done\x1b[22;27m\ue0b4\x1b[m\x1b[32;52H\x1b[92m✓ \x1b[munit tests pass \x1b[91m✗ \x1b[mlint fails \x1b[94m→ \x1b[mfix lint next\x1b[34;52H\x1b[96;1m\uf061 Next:\x1b[22m \x1b[mrun the bench \x1b[33m\ue0b6\x1b[1;7m\uf0f3 Needs you\x1b[22;27m\ue0b4\x1b[m\x1b[35;54H\x1b[K\x1b[?2026l\x1b[?2026h\x1b[2;124H\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\x1b[A\b\b\x1b[27X\n\x1b[30m─\x1b[m\x1b[?2026l\x1b[?2026h\x1b[>4m\x1b[<1u\x1b[44;1H\x1b[?1049l\x1b[?25h\x1b[?2004l\x1b[?1004l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2026l\x1b[!p\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?1016l\x1b[?2004l\x1b[?2031l\x1b[?25h\x1b[?7h\x1b]22;default\x1b\\\x1b[?47l\x1b[0m\r\r\nDetached from session 'home'.\r\n"
+    --- FAIL: TestCockpitThreadMarkerLook/truecolor (2.46s)
+        cockpit_reply_markers_test.go:220: pause 150ms: no sign on screen says a client that just booted is ready for keys
+        cockpit_reply_markers_test.go:238: ASSERTION: the bold anchor term is in the plain ink
+              V   1   +  1:1                                                                                                            +    
+                0-0 fg:#5C5CFF
+                1-5 b,fg:#FFFAF1,bg:#5C5CFF
+                6-6 fg:#5C5CFF
+                8-8 fg:#2D2C36
+                9-9 u,fg:#918DFF,bg:#2D2C36
+                10-10 b,u,fg:#918DFF,bg:#2D2C36
+                11-11 u,fg:#918DFF,bg:#2D2C36
+                12-12 fg:#2D2C36
+                14-14 fg:#2D2C36
+                15-17 fg:#BFBCC8,bg:#2D2C36
+                18-18 fg:#2D2C36
+                19-23 fg:#858392
+                130-135 b,fg:#FFFAF1
+                136-138 fg:#8C8A98
+            ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                0-139 fg:#3D3B39
+            
+                0-139 bg:#201F26
+              Agents   ● 0 needs you   ○ 1 idle   Board    Group: state                         /  Search agents, sessions, machines    + New agent
+                0-1 bg:#201F26
+                2-7 b,fg:#FFFAF1,bg:#201F26
+                8-10 bg:#201F26
+                11-12 fg:#FF985A,bg:#201F26
+                13-13 b,fg:#FFFAF1,bg:#201F26
+                14-23 fg:#BFBCC8,bg:#201F26
+                24-26 bg:#201F26
+                27-28 fg:#858392,bg:#201F26
+                29-29 b,fg:#FFFAF1,bg:#201F26
+                30-34 fg:#BFBCC8,bg:#201F26
+                35-37 bg:#201F26
+                38-43 fg:#BFBCC8,bg:#201F26
+                44-44 fg:#858392,bg:#201F26
+                45-47 bg:#201F26
+                48-60 fg:#BFBCC8,bg:#201F26
+                61-61 fg:#858392,bg:#201F26
+                62-84 bg:#201F26
+                85-85 bg:#2D2C36
+                86-121 fg:#858392,bg:#2D2C36
+                122-122 bg:#2D2C36
+                123-124 bg:#201F26
+                125-137 b,fg:#FFFAF1,bg:#6B50FF
+                138-139 bg:#201F26
+            ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+                0-47 fg:#6B50FF,bg:#201F26
+                48-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+              Idle  1  ───────────────────────────────────     release   claude                                                   D  Settle    ○ idle
+                0-1 bg:#2D2C36
+                2-5 b,fg:#BFBCC8,bg:#2D2C36
+                6-8 fg:#858392,bg:#2D2C36
+                9-10 bg:#2D2C36
+                11-45 fg:#57565D,bg:#2D2C36
+                46-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-57 b,fg:#FFFAF1,bg:#201F26
+                58-66 fg:#BFBCC8,bg:#201F26
+                67-116 bg:#201F26
+                117-119 b,fg:#C1BAFD,bg:#4D4C57
+                120-127 fg:#FFFAF1,bg:#3A3943
+                128-129 bg:#201F26
+                130-137 b,fg:#9B98A3,bg:#2D2C36
+                138-139 bg:#201F26
+            ▌ ○  release      claude   api              0s     api
+                0-0 fg:#6B50FF,bg:#3A3943
+                1-1 bg:#3A3943
+                2-2 fg:#858392,bg:#3A3943
+                3-4 bg:#3A3943
+                5-11 b,fg:#BFBCC8,bg:#3A3943
+                12-17 bg:#3A3943
+                18-26 fg:#BFBCC8,bg:#3A3943
+                27-29 fg:#A9A7AF,bg:#3A3943
+                30-43 bg:#3A3943
+                44-45 fg:#A9A7AF,bg:#3A3943
+                46-47 bg:#3A3943
+                48-50 bg:#201F26
+                51-53 fg:#BFBCC8,bg:#201F26
+                54-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+                                                               Thread    Changes    Checkpoints    Pane
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-56 b,fg:#FFFAF1,bg:#201F26
+                57-60 bg:#201F26
+                61-67 fg:#858392,bg:#201F26
+                68-71 bg:#201F26
+                72-82 fg:#858392,bg:#201F26
+                83-86 bg:#201F26
+                87-90 fg:#858392,bg:#201F26
+                91-139 bg:#201F26
+                                                               ━━━━━━─────────────────────────────────────────────────────────────────────────────────
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-56 fg:#6B50FF,bg:#201F26
+                57-137 fg:#4D4B50,bg:#201F26
+                138-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+                                                               You  08:12
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-53 b,fg:#8B75FF,bg:#201F26
+                54-60 fg:#858392,bg:#201F26
+                61-139 bg:#201F26
+                                                               ▎
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-51 fg:#8B75FF,bg:#2D2C36
+                52-137 bg:#2D2C36
+                138-139 bg:#201F26
+                                                               ▎  Report on the release.
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-51 fg:#8B75FF,bg:#2D2C36
+                52-53 bg:#2D2C36
+                54-75 fg:#FFFAF1,bg:#2D2C36
+                76-137 bg:#2D2C36
+                138-139 bg:#201F26
+                                                               ▎
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-51 fg:#8B75FF,bg:#2D2C36
+                52-137 bg:#2D2C36
+                138-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+                                                               claude  08:13
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-56 b,fg:#BFBCC8,bg:#201F26
+                57-63 fg:#858392,bg:#201F26
+                64-139 bg:#201F26
+                                                                Finding: the cache drops entries early.  Failed: 3 tests
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-60 b,fg:#8B75FF,bg:#201F26
+                61-61 fg:#8B75FF,bg:#201F26
+                62-92 fg:#FFFAF1,bg:#201F26
+                93-93 fg:#492938,bg:#201F26
+                94-110 b,fg:#FF699D,bg:#492938
+                111-111 fg:#492938,bg:#201F26
+                112-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+                                                                Cause: the eviction clock runs in wall time.
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-58 b,fg:#8B75FF,bg:#201F26
+                59-59 fg:#8B75FF,bg:#201F26
+                60-63 fg:#FFFAF1,bg:#201F26
+                64-77 b,fg:#FFFAF1,bg:#201F26
+                78-96 fg:#FFFAF1,bg:#201F26
+                97-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+                                                                Plan:
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-57 b,fg:#8B75FF,bg:#201F26
+                58-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+                                                               1. Switch to the monotonic clock  Implement
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-53 fg:#6B50FF,bg:#201F26
+                54-83 fg:#FFFAF1,bg:#201F26
+                84-84 fg:#27374C,bg:#201F26
+                85-95 b,fg:#2EAAFF,bg:#27374C
+                96-96 fg:#27374C,bg:#201F26
+                97-139 bg:#201F26
+                                                               2. Run the store tests again  Pending
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-53 fg:#6B50FF,bg:#201F26
+                54-79 fg:#FFFAF1,bg:#201F26
+                80-80 fg:#473633,bg:#201F26
+                81-89 b,fg:#FF985A,bg:#473633
+                90-90 fg:#473633,bg:#201F26
+                91-139 bg:#201F26
+                                                               • Store package  Owned
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-52 fg:#6B50FF,bg:#201F26
+                53-66 fg:#FFFAF1,bg:#201F26
+                67-67 fg:#00A4FF,bg:#201F26
+                68-74 b,fg:#2B2A31,bg:#00A4FF
+                75-75 fg:#00A4FF,bg:#201F26
+                76-139 bg:#201F26
+                                                               • Config migration  Destructive
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-52 fg:#6B50FF,bg:#201F26
+                53-69 fg:#FFFAF1,bg:#201F26
+                70-70 fg:#FF388B,bg:#201F26
+                71-83 b,fg:#201F26,bg:#FF388B
+                84-84 fg:#FF388B,bg:#201F26
+                85-139 bg:#201F26
+                                                               • Retry budget  New
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-52 fg:#6B50FF,bg:#201F26
+                53-65 fg:#FFFAF1,bg:#201F26
+                66-66 fg:#27374C,bg:#201F26
+                67-71 b,fg:#2EAAFF,bg:#27374C
+                72-72 fg:#27374C,bg:#201F26
+                73-139 bg:#201F26
+                                                               • Docs  Done
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-52 fg:#6B50FF,bg:#201F26
+                53-57 fg:#FFFAF1,bg:#201F26
+                58-58 fg:#2D4640,bg:#201F26
+                59-64 b,fg:#00FFB2,bg:#2D4640
+                65-65 fg:#2D4640,bg:#201F26
+                66-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+                                                               ✓ unit tests pass ✗ lint fails → fix lint next
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-52 fg:#00FFB2,bg:#201F26
+                53-68 fg:#FFFAF1,bg:#201F26
+                69-70 fg:#FF388B,bg:#201F26
+                71-81 fg:#FFFAF1,bg:#201F26
+                82-83 fg:#6B50FF,bg:#201F26
+                84-96 fg:#FFFAF1,bg:#201F26
+                97-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+                                                                Next: run the bench  Needs you
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-57 b,fg:#8B75FF,bg:#201F26
+                58-58 fg:#8B75FF,bg:#201F26
+                59-72 fg:#FFFAF1,bg:#201F26
+                73-73 fg:#473633,bg:#201F26
+                74-84 b,fg:#FF985A,bg:#473633
+                85-85 fg:#473633,bg:#201F26
+                86-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-139 bg:#201F26
+                                                               ───────────────────────────────────────────────────────────────────────────────────────
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-137 fg:#4D4B50,bg:#201F26
+                138-139 bg:#201F26
+                                                                   Reply to release                                                    typed at once
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-54 bg:#2D2C36
+                55-63 fg:#BFBCC8,bg:#2D2C36
+                64-70 b,fg:#FFFAF1,bg:#2D2C36
+                71-122 bg:#2D2C36
+                123-135 fg:#BFBCC8,bg:#2D2C36
+                136-137 bg:#2D2C36
+                138-139 bg:#201F26
+                                                                   Write a reply.
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-52 bg:#2D2C36
+                53-53 bg:#858392
+                54-68 fg:#BFBCC8,bg:#2D2C36
+                69-137 bg:#2D2C36
+                138-139 bg:#201F26
+            
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-137 bg:#2D2C36
+                138-139 bg:#201F26
+                                                                   @ mention   ctrl+v image   ctrl+j new line                                ↵ Send
+                0-47 bg:#2D2C36
+                48-50 bg:#201F26
+                51-54 bg:#2D2C36
+                55-55 b,fg:#8B75FF,bg:#2D2C36
+                56-66 fg:#BFBCC8,bg:#2D2C36
+                67-72 b,fg:#8B75FF,bg:#2D2C36
+                73-81 fg:#BFBCC8,bg:#2D2C36
+                82-87 b,fg:#8B75FF,bg:#2D2C36
+                88-96 fg:#BFBCC8,bg:#2D2C36
+                97-127 bg:#2D2C36
+                128-135 b,fg:#FFFAF1,bg:#4D4C57
+                136-137 bg:#2D2C36
+                138-139 bg:#201F26
+            
+                0-139 bg:#201F26
+              List ›   ↵ open pane   D settle   r reply   n new agent   b board   \ strip   v review   f filter   / search   esc close         1 agent
+                0-1 bg:#201F26
+                2-5 b,fg:#FFFAF1,bg:#201F26
+                6-7 fg:#BFBCC8,bg:#201F26
+                8-10 bg:#201F26
+                11-11 b,fg:#8B75FF,bg:#201F26
+                12-21 fg:#858392,bg:#201F26
+                22-24 bg:#201F26
+                25-25 b,fg:#8B75FF,bg:#201F26
+                26-32 fg:#858392,bg:#201F26
+                33-35 bg:#201F26
+                36-36 b,fg:#8B75FF,bg:#201F26
+                37-42 fg:#858392,bg:#201F26
+                43-45 bg:#201F26
+                46-46 b,fg:#8B75FF,bg:#201F26
+                47-56 fg:#858392,bg:#201F26
+                57-59 bg:#201F26
+                60-60 b,fg:#8B75FF,bg:#201F26
+                61-66 fg:#858392,bg:#201F26
+                67-69 bg:#201F26
+                70-70 b,fg:#8B75FF,bg:#201F26
+                71-76 fg:#858392,bg:#201F26
+                77-79 bg:#201F26
+                80-80 b,fg:#8B75FF,bg:#201F26
+                81-87 fg:#858392,bg:#201F26
+                88-90 bg:#201F26
+                91-91 b,fg:#8B75FF,bg:#201F26
+                92-98 fg:#858392,bg:#201F26
+                99-101 bg:#201F26
+                102-102 b,fg:#8B75FF,bg:#201F26
+                103-109 fg:#858392,bg:#201F26
+                110-112 bg:#201F26
+                113-115 b,fg:#8B75FF,bg:#201F26
+                116-121 fg:#858392,bg:#201F26
+                122-130 bg:#201F26
+                131-137 fg:#858392,bg:#201F26
+                138-139 bg:#201F26
+        overlay_ground_test.go:123: frames of the failed test kept in /tmp/tuios-e2e-artifacts/TestCockpitThreadMarkerLook_truecolor
+        harness_test.go:522: 3 processes in /home/gaurav/.cache/agent-tmp/gotmp/1233743/TestCockpitThreadMarkerLooktruecolor1602001783/001 are the daemon and its panes, which killDaemon stops after this; not listed
+        harness_test.go:510: last bytes of the pty log:
+            ";2;32;31;38;48;2;255;56;139;1m\uf1f8 Destructive\x1b[38;2;255;56;139;48;2;32;31;38;22m\ue0b4\x1b[m\x1b[29;52H\x1b[38;2;107;80;255;48;2;32;31;38m• \x1b[38;2;255;250;241mRetry budget \x1b[38;2;39;55;76m\ue0b6\x1b[38;2;46;170;255;48;2;39;55;76;1m\uf067 New\x1b[38;2;39;55;76;48;2;32;31;38;22m\ue0b4\x1b[m\x1b[30;52H\x1b[38;2;107;80;255;48;2;32;31;38m• \x1b[38;2;255;250;241mDocs \x1b[38;2;45;70;64m\ue0b6\x1b[38;2;0;255;178;48;2;45;70;64;1m\uf00c Done\x1b[38;2;45;70;64;48;2;32;31;38;22m\ue0b4\x1b[m\x1b[32;52H\x1b[38;2;0;255;178;48;2;32;31;38m✓ \x1b[38;2;255;250;241munit tests pass \x1b[38;2;255;56;139m✗ \x1b[38;2;255;250;241mlint fails \x1b[38;2;107;80;255m→ \x1b[38;2;255;250;241mfix lint next\x1b[m\x1b[34;52H\x1b[38;2;139;117;255;48;2;32;31;38;1m\uf061 Next:\x1b[22m \x1b[38;2;255;250;241mrun the bench \x1b[38;2;71;54;51m\ue0b6\x1b[38;2;255;152;90;48;2;71;54;51;1m\uf0f3 Needs you\x1b[38;2;71;54;51;48;2;32;31;38;22m\ue0b4\x1b[m\x1b[35;52H\x1b[48;2;32;31;38m\x1b[K\x1b[m\x1b[?2026l\x1b[?2026h\x1b[2;124H\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\b\b\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\x1b[A\b\b\x1b[27X\n\x1b[38;2;61;59;57m─\x1b[m\x1b[?2026l\x1b[?2026h\x1b[>4m\x1b[<1u\x1b[44;1H\x1b[?1049l\x1b[?25h\x1b[?2004l\x1b[?1004l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2026l\x1b[!p\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?1016l\x1b[?2004l\x1b[?2031l\x1b[?25h\x1b[?7h\x1b]22;default\x1b\\\x1b[?47l\x1b[0m\r\r\nDetached from session 'home'.\r\n"
+FAIL
+FAIL	github.com/Gaurav-Gosain/tuios/e2e/tui	280.816s
+FAIL

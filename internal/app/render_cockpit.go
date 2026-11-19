@@ -40,7 +40,9 @@ type ckLook struct {
 	attnTint, busyTint     color.Color
 	okTint, warnTint       color.Color
 	// accTint is the ground of a reply marker the list does not know.
-	accTint     color.Color
+	accTint color.Color
+	// infoTint is the ground of a context marker, such as New or Changed.
+	infoTint    color.Color
 	nerd, ascii bool
 }
 
@@ -139,7 +141,7 @@ func (m *OS) buildCockpitLook(pal overlay.Palette) ckLook {
 	l.del = overlay.MixColors(pal.Warn, pal.FgDim, 0.4)
 	tint := func(c color.Color) color.Color { return overlay.MixColors(c, pal.Canvas, 0.8) }
 	l.attnTint, l.busyTint, l.okTint, l.warnTint = tint(pal.Attention), tint(pal.Busy), tint(pal.Success), tint(pal.Warn)
-	l.accTint = tint(pal.Accent)
+	l.accTint, l.infoTint = tint(pal.Accent), tint(pal.Info)
 	switch pal.Depth {
 	case overlay.Depth256:
 		l.cursor = overlay.Apart256(l.cursor, pal.Panel)
@@ -147,11 +149,11 @@ func (m *OS) buildCockpitLook(pal overlay.Palette) ckLook {
 		l.add, l.del = overlay.To256(l.add), overlay.To256(l.del)
 		l.attnTint, l.busyTint = overlay.To256(l.attnTint), overlay.To256(l.busyTint)
 		l.okTint, l.warnTint = overlay.To256(l.okTint), overlay.To256(l.warnTint)
-		l.accTint = overlay.To256(l.accTint)
+		l.accTint, l.infoTint = overlay.To256(l.accTint), overlay.To256(l.infoTint)
 	case overlay.Depth16:
 		l.cursor, l.hover = overlay.NoColor, overlay.NoColor
 		l.attnTint, l.busyTint, l.okTint, l.warnTint = overlay.NoColor, overlay.NoColor, overlay.NoColor, overlay.NoColor
-		l.accTint = overlay.NoColor
+		l.accTint, l.infoTint = overlay.NoColor, overlay.NoColor
 		l.add, l.del = pal.Success, pal.Warn
 		l.edge, l.edgePanel = pal.Edge, pal.Edge
 	}

@@ -206,14 +206,22 @@ leaves undone. Name the host when the work ran on another machine.
 
 ## Reply markers
 
-The agents view shows a marker in double square brackets as a coloured label.
-Put a marker beside the thing it marks:
+The agents view shows a marker in double square brackets as a coloured pill.
+Put a marker beside the thing it marks. Use these words:
 
-- `[[Done]]`, `[[Failed]]`, `[[Blocked]]`, `[[Needs you]]`, `[[Unverified]]`
+- A problem: `[[Failed]]`, `[[Blocked]]`, `[[Broken]]`
+- For the person: `[[Needs you]]`, `[[Unverified]]`, `[[Skipped]]`, `[[Pending]]`
+- Settled: `[[Done]]`, `[[Passed]]`, `[[Observed]]`, `[[Recommended]]`
+- A consequence: `[[Destructive]]`, `[[Irreversible]]`, `[[Costs money]]`
+- The kind of work: `[[Investigate]]`, `[[Implement]]`
+- Ownership: `[[Owned]]`, `[[Shared]]`
+- Context: `[[New]]`, `[[Changed]]`, `[[Inferred]]`, `[[Decision]]`
 - A detail after a colon: `[[Failed: 3 tests]]`
 
-Red is a problem, yellow needs the person, and green is settled. Keep a
-marker under 32 characters. A marker in code stays as text.
+Start a reply, and each part of a long one, with a bold lead label, such as
+`**Finding:**`, `**Result:**`, `**Risk:**` or `**Next:**`. Keep a marker
+under 32 characters. A marker in code stays as text. Do not type icons: the
+view adds them.
 
 ## Topics
 

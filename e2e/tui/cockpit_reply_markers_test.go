@@ -65,7 +65,7 @@ func TestCockpitThreadReplyMarkers(t *testing.T) {
 					t.Errorf("ASSERTION: the thread does not show %q:\n%s", want, term.Snapshot())
 				}
 			}
-			if !regexp.MustCompile(`Done\s+docs updated`).MatchString(text) {
+			if !regexp.MustCompile(`Done\S?\s+docs updated`).MatchString(text) {
 				t.Errorf("ASSERTION: the Complete marker does not show as Done:\n%s", term.Snapshot())
 			}
 			s := term.Screen()
@@ -81,11 +81,12 @@ func TestCockpitThreadReplyMarkers(t *testing.T) {
 					t.Errorf("ASSERTION: the %s pill has the ground of plain text and is not in reverse\n%s", name, term.SnapshotStyled())
 				}
 			}
-			// The cell before the gap after a pill is the pill's own: a
-			// pill in reverse whose end cells read as spaces between words
-			// lost them.
-			if end := cell("in the store", -2); !end.Reverse && end.Bg == plain.Bg {
-				t.Errorf("ASSERTION: the Failed pill has no cell of its ground after its label\n%s", term.SnapshotStyled())
+			// The cell before the gap after a pill ends the pill: its
+			// rounded cap, or with square ends a cell of its ground. A pill
+			// in reverse whose end cells read as spaces between words lost
+			// them.
+			if end := cell("in the store", -2); end.Content != "\ue0b4" && !end.Reverse && end.Bg == plain.Bg {
+				t.Errorf("ASSERTION: the Failed pill has no end after its label\n%s", term.SnapshotStyled())
 			}
 			if failed.Fg == done.Fg && failed.Bg == done.Bg {
 				t.Errorf("ASSERTION: the Failed and Done pills are in the same colours\n%s", term.SnapshotStyled())
@@ -124,6 +125,13 @@ func TestCockpitThreadReplyMarkers(t *testing.T) {
 // a client with env.
 func replyMarkersThread(t *testing.T, env []string) *tuitest.Terminal {
 	t.Helper()
+	return replyThread(t, env, replyMarkersAnswer, "on Windows", "in a block")
+}
+
+// replyThread is replyMarkersThread for any answer: it waits for want in the
+// thread.
+func replyThread(t *testing.T, env []string, answer string, want ...string) *tuitest.Terminal {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
@@ -137,7 +145,7 @@ func replyMarkersThread(t *testing.T, env []string) *tuitest.Terminal {
 	recs := []map[string]any{
 		{"type": "user", "timestamp": at(2 * time.Minute), "message": map[string]any{"role": "user", "content": "Report on the release."}},
 		{"type": "assistant", "timestamp": at(time.Minute), "message": map[string]any{"role": "assistant", "content": []any{
-			map[string]any{"type": "text", "text": replyMarkersAnswer},
+			map[string]any{"type": "text", "text": answer},
 		}}},
 	}
 	var buf bytes.Buffer
@@ -178,10 +186,67 @@ func replyMarkersThread(t *testing.T, env []string) *tuitest.Terminal {
 	windowManagementMode(t, term)
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "on Windows") && strings.Contains(s.Text(), "in a block")
+		for _, w := range want {
+			if !strings.Contains(s.Text(), w) {
+				return false
+			}
+		}
+		return true
 	}, 20*time.Second); err != nil {
 		t.Fatalf("the thread never showed the answer: %v\n%s", err, term.Snapshot())
 	}
 	_ = term.WaitStable(uiTimeout)
 	return term
+}
+
+// markerLookAnswer is a reply written the way the guidance asks: lead labels,
+// a pill of each group, a numbered list, bold anchor terms and a tree.
+const markerLookAnswer = "**Finding:** the cache drops entries early. [[Failed: 3 tests]]\n\n" +
+	"**Cause:** the **eviction clock** runs in wall time.\n\n" +
+	"**Plan:**\n\n1. Switch to the monotonic clock [[Implement]]\n2. Run the store tests again [[Pending]]\n\n" +
+	"- Store package [[Owned]]\n- Config migration [[Destructive]]\n- Retry budget [[New]]\n- Docs [[Done]]\n\n" +
+	"✓ unit tests pass ✗ lint fails → fix lint next\n\n" +
+	"**Next:** run the bench [[Needs you]]"
+
+// TestCockpitThreadMarkerLook reads a reply written as the guidance asks, at
+// truecolor and at 16 colours. With Nerd Fonts, a pill has a rounded cap
+// before it, and a lead label the list knows has its icon. A consequence is a
+// solid pill, unlike a problem's tinted one, at truecolor. A bold anchor term and a list's
+// mark are not in the plain text's ink. The artifacts are the frames
+// marker-look-truecolor and marker-look-16.
+func TestCockpitThreadMarkerLook(t *testing.T) {
+	for _, d := range []chromeDepth{chromeDepths[0], chromeDepths[2]} {
+		t.Run(d.name, func(t *testing.T) {
+			term := replyThread(t, d.env, markerLookAnswer, "run the bench", "Retry budget")
+			name := "marker-look-" + d.name
+			saveFrame(t, term, name)
+			savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), name)
+			s := term.Screen()
+			cell := func(want string, at int) tuitest.Cell {
+				row, col := findText(t, term, want)
+				return s.Cell(col+at, row)
+			}
+			// The Done pill: its cap, its icon and a space before the word.
+			if c := cell("Done", -3); c.Content != "\ue0b6" {
+				t.Errorf("ASSERTION: the Done pill has no rounded cap before its icon: %q\n%s", c.Content, term.Snapshot())
+			}
+			if c := cell("Finding:", -2); c.Content == " " || c.Content == "" {
+				t.Errorf("ASSERTION: the Finding lead label has no icon\n%s", term.Snapshot())
+			}
+			plain := cell("runs in wall", 0)
+			if anchor := cell("eviction clock", 0); anchor.Fg == plain.Fg {
+				t.Errorf("ASSERTION: the bold anchor term is in the plain ink\n%s", term.SnapshotStyled())
+			}
+			if mark := cell("Switch to the", -3); mark.Fg == plain.Fg {
+				t.Errorf("ASSERTION: the list number is in the plain ink\n%s", term.SnapshotStyled())
+			}
+			// At 16 colours there are no tints: a problem and a consequence
+			// are both the error colour in reverse.
+			failed, destructive := cell("Failed: 3", 0), cell("Destructive", 0)
+			if d.name == "truecolor" && failed.Bg == destructive.Bg && failed.Reverse == destructive.Reverse && failed.Fg == destructive.Fg {
+				t.Errorf("ASSERTION: the Destructive pill looks like the Failed one\n%s", term.SnapshotStyled())
+			}
+			alive(t, term, "after a reply in the marker look")
+		})
+	}
 }
