@@ -543,6 +543,12 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if cmd, ok := pasteKeyIntoTextField(msg, o); ok {
 		return o, cmd
 	}
+	// A prompt in the palette owns every key while it is up: the person
+	// answers it or cancels it. See app/prompt.go.
+	if o.PromptOpen() {
+		cmd, _ := o.ListPickerKey(msg.String(), msg)
+		return o, cmd
+	}
 	// The close confirmation outranks even the quit menu: it is the last thing
 	// between a keystroke and a session that cannot be brought back, so nothing
 	// underneath may answer for it.

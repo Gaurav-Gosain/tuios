@@ -1886,7 +1886,7 @@ The verbs, grouped by what they do. [protocol-verbs.md](protocol-verbs.md) lists
 
 ### Input and output
 
-[`send-text`](protocol-verbs.md#send-text), [`paste-image`](protocol-verbs.md#paste-image), [`send-keys`](protocol-verbs.md#send-keys), [`list-keys`](protocol-verbs.md#list-keys), [`capture-pane`](protocol-verbs.md#capture-pane), [`run`](protocol-verbs.md#run).
+[`send-text`](protocol-verbs.md#send-text), [`paste-image`](protocol-verbs.md#paste-image), [`send-keys`](protocol-verbs.md#send-keys), [`list-keys`](protocol-verbs.md#list-keys), [`capture-pane`](protocol-verbs.md#capture-pane), [`run`](protocol-verbs.md#run), [`prompt`](protocol-verbs.md#prompt), [`answer-prompt`](protocol-verbs.md#answer-prompt).
 
 ### Search
 
@@ -2223,7 +2223,7 @@ What a restricted connection may call:
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
 | across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks`, `get-keep-awake` | `forbidden` | allowed |
 | read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env` | session in reach | allowed |
-| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-hook-event`, `agent-statusline-event`, `report-program-status`, `agent-mail-notice`, `ask-human` | own pane only | allowed |
+| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-hook-event`, `agent-statusline-event`, `report-program-status`, `agent-mail-notice`, `ask-human`, `prompt` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
 | start sessions | `fan`, `start-agent` | needs a pane; `start-agent` opens its pane in a session in reach | `forbidden` |
@@ -6739,6 +6739,74 @@ approval already uses. An older client lists an `ask` item under its own
 heading, or not at all, and cannot answer it; an older daemon answers
 `unknown_verb`.
 
+
+### prompt
+
+Show a text field or a list in the command palette of every TUI client
+attached on this machine, and wait for the answer. Actions, scripts and
+plugins call it. Only the person at a client can answer, with
+`answer-prompt`. It works with the agent features off: it does not ride the
+Inbox.
+
+Params:
+
+- `kind` (required): `input` (a text field) or `pick` (a list).
+- `title` (required): the question, one line of printable text of at most
+  160 bytes.
+- `placeholder` (optional): text that shows in the empty field.
+- `default` (optional, input only): the text the field starts with.
+- `items` (required for pick): 1 to 1000 rows, each `{id, title, subtitle,
+  icon}`. `id` and `title` are required, and no two ids are the same.
+  Typing filters the rows by title.
+- `multiple` (optional bool, pick only): Tab marks more than one row.
+- `allow_other` (optional bool, pick only): the person may send typed text
+  that is not a row.
+- `timeout` (optional int): milliseconds to wait, default 120000, at most
+  one hour. The prompt closes when it runs out.
+
+Response:
+
+```json
+{"result": {"type": "prompt_result", "request_id": "9f86d081884c7d65", "status": "answered", "ids": ["prod"], "answered_by": "client-1790155072046345000"}}
+```
+
+`status` is `answered`, `cancelled` (the person pressed Esc),
+`timeout`, `no_client` (no attached client could show it, so nothing was
+shown), `busy` (another prompt is open; one shows at a time) or
+`shutdown`. An answered input carries `value`. An answered pick carries
+`ids`, in list order, and `other` when the person sent typed text.
+`request_id` is there when the prompt was shown.
+
+The daemon sends the prompt to each client whose hello set `prompts`, as
+`MsgPrompt` (the binary message after `MsgPluginUI`, payload `{Prompt,
+Closed, Reason}`): `Prompt` is the open prompt, and a message with no
+`Prompt` closes the one `Closed` names, ended for `Reason`. A client
+that attaches while a prompt is open is sent it. Only a local client that
+takes keys counts: one attached through a link, a passive or view-only
+client, and `gui-bridge` (which does not set `upgrade_dialog` on attach)
+are sent nothing. An older client sets no `prompts`, so with only older
+clients attached the call answers `no_client`.
+
+Refused over a link (`forbidden`). Scope: `self`.
+
+### answer-prompt
+
+Answer the open prompt for the person. Only a client attached right now can,
+with `human_nonce` from its attach reply and from a process outside every
+pane; anything else is `not_human`. The first answer wins.
+
+Params: `request_id` (required), `human_nonce` (required), `cancel`
+(optional bool: the person cancelled; it takes nothing else), `value` (input:
+one line, at most 4096 bytes), `ids` (pick: the rows chosen, one unless the
+prompt takes `multiple`), `other` (pick with `allow_other`: typed text).
+An answer the prompt does not offer, or a prompt that is not open, is
+`invalid_params`.
+
+Response:
+
+```json
+{"result": {"type": "prompt_answered", "request_id": "9f86d081884c7d65", "applied": true, "status": "answered"}}
+```
 ### Following linked hosts
 
 A daemon with a `[hosts]` table follows the agents and the Inbox of every
@@ -7213,11 +7281,11 @@ the one before. The configuration is in
 | `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-keep-awake`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task`, `get-task-attachment` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task`, `attach-task`, `detach-task` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `prompt` (whose handler refuses a link caller too), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task`, `attach-task`, `detach-task` |
 | `open` and `write` | `verify-fan` |
 | `open` and `files` | `paste-pane-image` |
 | `write` and `files` | `paste-image` |
-| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention`, `register-push`, `list-push`, `remove-push`, `reply-history`, `add-reply-history` |
+| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `answer-prompt`, `mark-attention`, `register-push`, `list-push`, `remove-push`, `reply-history`, `add-reply-history` |
 | `transcripts` (or `respond`, which includes it) | `agent-transcript`. The call also needs the nonce of a person's attach. |
 | `files` | `file-read`, `file-preview`, `file-hash`, `file-walk`, `open-file-stream`, `file-mkdir`, `file-rename`, `file-remove`, `file-commit`, `file-abort`, `file-drop-dir`, `file-check`, `open-tree-stream`, `speed-test`. Writes are also held to `files_roots` and the deny list in [Files and transfers](#files-and-transfers), and reads to the read deny list. |
 | every one | `open-host-connection`, `retry-host`, `set-pane-grants` (whose handler refuses a link caller anyway), `transfer-start`, `transfer-list`, `transfer-pause`, `transfer-resume`, `transfer-cancel`, `transfer-answer`, `transfer-clear`, `host-speed-test`, `drop-files` (they make this daemon use its own links) |

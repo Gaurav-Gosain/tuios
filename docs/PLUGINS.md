@@ -267,7 +267,7 @@ A plugin holds only the grants you allowed, in every session. It is in no pane.
 | `read` | Reads every session and pane on this machine. |
 | `write` | Types into your panes and shells, so it can run commands as you. It stops at an agent's approval prompt. |
 | `fan` | Starts agents in new sessions. |
-| `ui` | Shows cells, panels and messages. It cannot type or read panes. |
+| `ui` | Shows cells, panels, messages and prompts. It cannot type or read panes. |
 | `admin` | Does all that you can do in tuios. It needs `--grant admin`. |
 
 A plugin never holds `respond`, and it never acts as you. Ask for the least you
@@ -309,6 +309,15 @@ change only, and the same text costs nothing.
 - The cells go when the plugin stops. A new daemon starts with no cells. Set them
   again from a `startup` process or the next action.
 - To place a cell yourself, add `plugin/ID/CELL` to a list in `[dock]`.
+
+With `ui`, a plugin asks you for text or a choice in the palette. The
+command prints your answer:
+
+```sh
+env=$("$TUIOS_BIN" prompt pick "Deploy to?" --item stg=Staging --item prod=Production) || exit
+```
+
+`tuios prompt --help` has the exit statuses.
 
 `"$TUIOS_BIN" tml show FILE -s "$TUIOS_PLUGIN_SESSION"` opens a panel. With `ui`, a
 plugin opens, changes and closes its own panels. A `pane()` action in a panel of

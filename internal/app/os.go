@@ -1864,6 +1864,8 @@ type OS struct {
 	// upgradeConfirm is the dialog that asks the person whether a pane may
 	// upgrade the daemon. See upgrade_confirm.go.
 	upgradeConfirm upgradeConfirmState
+	// prompt is the prompt the palette shows. See prompt.go.
+	prompt promptState
 	// pressingTapeKeys is true while a tape's Press runs keys through the
 	// input handler (PressKeys). Those keys are not the person's: the
 	// plugin approval dialog ignores them.

@@ -137,6 +137,12 @@ type CommandPaletteItem struct {
 	// glyph (sessionPaletteLabel), so the renderer can color the glyph without
 	// putting ANSI into Name, which the fuzzy filter matches raw.
 	AgentState string
+	// promptID is the id of the pick row this row shows, promptOther marks
+	// the row that sends the typed text, and promptMark is the row's mark in
+	// a pick that takes more than one row. See prompt.go.
+	promptID    string
+	promptOther bool
+	promptMark  int8
 	// AgentSeen is the unread bit behind a done AgentState: true once the
 	// person has looked at the pane, which draws idle's mark (agentMark).
 	AgentSeen bool

@@ -293,6 +293,10 @@ type TUIClient struct {
 	// a handler did: the daemon sends it right behind the attach reply.
 	pluginAsksHandler func(PluginApprovalsPayload)
 	pluginAsksLast    *PluginApprovalsPayload
+	// promptHandler takes the daemon's MsgPrompt push. See OnPrompt.
+	// promptLast is the newest push that came before the handler.
+	promptHandler func(PromptPayload)
+	promptLast    *PromptPayload
 	// pluginUIHandler takes MsgPluginUI. pluginUILast is the newest list of
 	// cells that came before it was set. See plugin_ui.go.
 	pluginUIHandler func(PluginUIPayload)
@@ -459,6 +463,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	// Plugins run on this machine's daemon, and only the person here
 	// answers for them. See plugin_approval.go.
 	hello.PluginApprovals = c.viaHost == ""
+	// A prompt asks the person at this machine. See prompt.go.
+	hello.Prompts = c.viaHost == ""
 
 	// Add graphics capabilities if provided
 	if caps != nil {
@@ -1308,6 +1314,21 @@ func (c *TUIClient) OnPluginApprovals(handler func(PluginApprovalsPayload)) {
 	}
 }
 
+// OnPrompt registers the handler for MsgPrompt, the daemon's open prompt
+// or the mark that it closed. A push that came before the handler is handed
+// to it now. It runs on the read-loop goroutine, so it only queues. See
+// prompt.go.
+func (c *TUIClient) OnPrompt(handler func(PromptPayload)) {
+	c.multiClientMu.Lock()
+	c.promptHandler = handler
+	last := c.promptLast
+	c.promptLast = nil
+	c.multiClientMu.Unlock()
+	if handler != nil && last != nil {
+		handler(*last)
+	}
+}
+
 // DrawsTML reports whether this client draws TML surfaces: a client of this
 // machine's daemon, or one through a host whose daemon takes what the person
 // does on a surface over the link. See the hello.
@@ -2101,6 +2122,22 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		handler := c.pluginUIHandler
 		if handler == nil && payload.Notice == "" {
 			c.pluginUILast = &payload
+		}
+		c.multiClientMu.Unlock()
+		if handler != nil {
+			handler(payload)
+		}
+
+	case MsgPrompt:
+		var payload PromptPayload
+		if err := msg.ParsePayload(&payload); err != nil {
+			debugLog("[CLIENT] Failed to parse a prompt: %v", err)
+			return
+		}
+		c.multiClientMu.Lock()
+		handler := c.promptHandler
+		if handler == nil {
+			c.promptLast = &payload
 		}
 		c.multiClientMu.Unlock()
 		if handler != nil {

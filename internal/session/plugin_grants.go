@@ -77,9 +77,10 @@ func (d *Daemon) pluginAuthority(cs *connState) *paneAuth {
 }
 
 // pluginUIVerbs are what the ui grant lets a plugin call. A surface verb
-// still reaches only the plugin's own surfaces (tmlOwnerCheck).
+// still reaches only the plugin's own surfaces (tmlOwnerCheck). prompt asks
+// the person in the palette, and only the person answers it (prompt.go).
 var pluginUIVerbs = map[string]bool{
-	"plugin-cell": true, "plugin-notify": true,
+	"plugin-cell": true, "plugin-notify": true, "prompt": true,
 	"tml-open": true, "tml-close": true, "tml-patch": true, "tml-replace": true,
 }
 
@@ -98,7 +99,7 @@ func (d *Daemon) checkPluginGrants(cs *connState, verb string, pa *paneAuth, par
 	if pluginUIVerbs[verb] && pa.grants.Has(GrantUI) {
 		return params, nil
 	}
-	if verb == "plugin-cell" || verb == "plugin-notify" {
+	if verb == "plugin-cell" || verb == "plugin-notify" || verb == "prompt" {
 		return nil, deny(verb + " needs the ui grant")
 	}
 	if !pa.grants.Has(GrantAdmin) {

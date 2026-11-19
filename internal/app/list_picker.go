@@ -192,6 +192,9 @@ func searchLine(st *listnav.State, width int, pal overlay.Palette) string {
 // is open. The order is the order overlay_keys.go routes keys in.
 func (m *OS) openListPicker() *listPicker {
 	switch {
+	case m.prompt.req != nil:
+		// A prompt takes the keys ahead of any other picker. See prompt.go.
+		return palettePicker()
 	case m.gotoPicker.open:
 		return gotoPicker()
 	case m.ShowCommandPalette:

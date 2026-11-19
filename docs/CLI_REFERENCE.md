@@ -2342,6 +2342,58 @@ tuios ask-human 'Which region?' -o us -o eu --no-wait
 tuios ask-human --request-id 9f86d081884c7d65
 ```
 
+### `tuios prompt`
+
+Ask the person for a line of text or a choice, in the command palette of
+every client attached on this machine, and print the answer.
+
+**Usage:**
+```bash
+tuios prompt input [flags] <title>
+tuios prompt pick [flags] <title> (--item <id=title>... | --items <file|->)
+```
+
+The palette opens on every attached client. The first answer from any client
+wins, and the prompt closes on the others. Enter answers, and Esc cancels.
+Only the person at a client can answer. An agent, a plugin or a script cannot.
+One prompt shows at a time. Prompts work with the agent features off.
+
+`input` shows a text field. `pick` shows a list, and typing filters it by
+title. Give the rows with `--item`, as `id=title` or as a title that is its
+own id, or with `--items`, a JSON list of `{id, title, subtitle, icon}`
+from a file or from standard input (`-`). The subtitle shows on the right of
+the row, and the icon before the title.
+
+**Flags:**
+- `--placeholder <text>`: Text that shows in the empty field
+- `--default <text>`: For `input`, the text the field starts with
+- `-i, --item <id=title>`: For `pick`, a row. Repeat it for each row
+- `--items <file|->`: For `pick`, a JSON list of rows
+- `--multiple`: For `pick`, Tab marks more than one row
+- `--allow-other`: For `pick`, the person can send typed text that is not a row
+- `--timeout <ms>`: Milliseconds to wait for the answer (default: 120000, at most one hour)
+- `--json`: Output the result as JSON: `status`, `request_id`, `value`, `ids`, `other`, `answered_by`
+
+**Exit status:** `0` with the answer on stdout: the typed line, or the id of
+each row chosen, one per line, then any typed text. `1` when the person
+cancelled. `2` when the wait ran out. `3` when no client was attached to show
+it. `4` when another prompt was open.
+
+A plugin calls the same command. It needs the `ui` grant.
+
+**Examples:**
+```bash
+# Ask for a branch name
+branch=$(tuios prompt input 'Branch name?' --placeholder feature/x) || exit
+
+# Choose where to deploy
+env=$(tuios prompt pick 'Deploy to?' --item stg=Staging --item prod=Production) || exit
+
+# Rows from a program, more than one allowed
+jq -n '[{id:"a",title:"Alpha",subtitle:"first"},{id:"b",title:"Beta"}]' |
+  tuios prompt pick 'Which ones?' --items - --multiple
+```
+
 ### `tuios run-command`
 
 Execute a TUIOS command (same commands available via tape scripts).
@@ -8253,7 +8305,8 @@ tuios list-verbs --json          # for scripting
   running one with no sessions, which exits `0`
 
 `tuios run` exits with the status of the command it ran, and `tuios popup
---wait` with its command's status (`130` when the popup is closed).
+--wait` with its command's status (`130` when the popup is closed). `tuios
+prompt` has its own exit statuses (see `tuios prompt`).
 
 `tuios cp` and `tuios transfers wait` have their own exit codes: see
 [Exit codes of tuios cp](#exit-codes-of-tuios-cp).

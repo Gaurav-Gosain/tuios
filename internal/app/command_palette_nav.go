@@ -72,6 +72,9 @@ func (m *OS) rebuildPaletteItems() {
 // filteredPaletteItems returns the command palette entries matching the current
 // query.
 func (m *OS) filteredPaletteItems() []CommandPaletteItem {
+	if m.prompt.req != nil {
+		return m.promptRows()
+	}
 	if m.fileSearch {
 		return matchPaletteItems(m.allPaletteItems(), m.paletteList.Query.String())
 	}
@@ -125,6 +128,9 @@ func palettePicker() *listPicker {
 		page:     func(m *OS) int { return m.PalettePageRows() },
 		rescroll: func(m *OS) { m.paletteRescroll() },
 		keys: func(m *OS, key string) (tea.Cmd, bool) {
+			if m.prompt.req != nil {
+				return m.promptKey(key)
+			}
 			if key == PaletteRebindKey {
 				m.RebindPaletteSelection()
 				return nil, true
@@ -133,6 +139,9 @@ func palettePicker() *listPicker {
 		},
 		accept: func(m *OS) tea.Cmd { return m.ActivateCommandPalette() },
 		close: func(m *OS) tea.Cmd {
+			if m.prompt.req != nil {
+				return m.promptCancel()
+			}
 			m.CloseCommandPalette()
 			return nil
 		},
@@ -148,6 +157,12 @@ func (m *OS) PalettePageRows() int {
 
 // CloseCommandPalette hides the palette and resets its state.
 func (m *OS) CloseCommandPalette() {
+	if m.prompt.req != nil {
+		// Closed for another reason than an answer: this client stops
+		// showing it, and another client can still answer it.
+		m.endPrompt()
+		return
+	}
 	m.ShowCommandPalette = false
 	if m.fileSearch {
 		if m.fileSearchCancel != nil {
@@ -190,6 +205,9 @@ func getSettingPaletteItems(m *OS) []CommandPaletteItem {
 // ActivateCommandPalette runs the currently selected command and closes the
 // palette, returning its command. Shared by keyboard Enter and mouse click.
 func (m *OS) ActivateCommandPalette() tea.Cmd {
+	if m.prompt.req != nil {
+		return m.promptAccept()
+	}
 	filtered := m.filteredPaletteItems()
 	if m.paletteList.Cursor < 0 || m.paletteList.Cursor >= len(filtered) {
 		// Nothing to run. Closing here would dismiss the panel and throw away

@@ -199,6 +199,10 @@ const (
 	// (PluginUIPayload), to the clients that read MsgPluginApprovals. See
 	// plugin_ui.go.
 	MsgPluginUI
+	// MsgPrompt carries the open prompt, or a mark that it closed
+	// (PromptPayload). The daemon sends it only to a client whose hello set
+	// Prompts. An older client sends none and is sent none. See prompt.go.
+	MsgPrompt
 
 	// msgTypeEnd is one past the last message type. It stays last: a type
 	// added above it is walked by the tests that sweep every type.
@@ -347,6 +351,9 @@ type HelloPayload struct {
 	// that wait for approval: it reads MsgPluginApprovals. The daemon sends
 	// it to no other client. See plugin_approval.go.
 	PluginApprovals bool `json:"plugin_approvals,omitzero"`
+	// Prompts says the client shows prompts in its palette: it reads
+	// MsgPrompt. The daemon sends it to no other client. See prompt.go.
+	Prompts bool `json:"prompts,omitzero"`
 }
 
 // WelcomePayload is sent by server in response to Hello.

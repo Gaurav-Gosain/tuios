@@ -143,6 +143,12 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 			clientLog("ClientEventChan full, displaced an event for plugin approvals")
 		}
 	})
+	// A prompt opened or closed. See prompt.go.
+	client.OnPrompt(func(p session.PromptPayload) {
+		if m.QueueClientEvent(ClientEvent{Type: "prompt", Prompt: p}) {
+			clientLog("ClientEventChan full, displaced an event for a prompt")
+		}
+	})
 	// A plugin's cells or notice. See plugin_ui.go.
 	client.OnPluginUI(func(p session.PluginUIPayload) {
 		if p.Notice == "" && m.queuePluginCells(p) {

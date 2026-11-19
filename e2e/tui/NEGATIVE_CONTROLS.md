@@ -18417,3 +18417,16 @@ deleted, so the modes still turn on and show their chip but read no key.
 
 The frames are under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKeyMode' -v .`.
+## Prompts in the palette
+
+`TestPromptPickInThePalette`, `TestPromptPickMarksMoreThanOne`, `TestPromptInputTypesALine`, `TestPromptWithNoClientSaysSo` and `TestPluginPromptsThePerson` in `prompt_test.go`, and `TestPromptPickRoundTrip` in `internal/session/prompt_test.go`. A prompt must open in the palette of the attached client, take the person's keys, and print the answer. The daemon must refuse an answer the prompt does not offer.
+
+Run on Linux on 2026-11-19. The branch passes all of them.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The client's hello does not set `prompts` | "the prompt never showed" | **caught** |
+| `promptStore.answer` does not check the answer | "expected error, got: ... applied:true" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^Test(Prompt|PluginPrompts)' -v .`.
