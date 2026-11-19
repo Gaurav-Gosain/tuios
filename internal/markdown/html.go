@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,12 +19,15 @@ type Options struct {
 	// Images reads an image that stands alone in its paragraph as an Image
 	// block, for a reader that can draw it. Every other image is its words.
 	Images bool
+	// Dark says the reader's ground is dark: a <picture> shows the source for
+	// prefers-color-scheme: dark, and otherwise the one for light.
+	Dark bool
 }
 
 // htmlExprs is the expressions of this file, compiled on first use: a client that
 // never meets HTML does not pay for them at startup.
 type htmlExprs struct {
-	htmlComment, htmlDropped, htmlDetails, htmlLink, htmlImage, htmlAlt, htmlSrc, htmlHeading, htmlTag, refDefLine, noteDefLine, noteMark, refFull, alertLine, imageMark, imageLine *regexp.Regexp
+	htmlComment, htmlDropped, htmlDetails, htmlLink, htmlIndent, htmlImage, htmlAlt, htmlSrc, htmlPicture, htmlSource, htmlSrcset, htmlMedia, htmlType, htmlHeading, htmlTag, refDefLine, noteDefLine, noteMark, refFull, alertLine, imageMark, imageLine *regexp.Regexp
 }
 
 var rx = sync.OnceValue(func() *htmlExprs {
@@ -32,9 +36,15 @@ var rx = sync.OnceValue(func() *htmlExprs {
 		htmlDropped: regexp.MustCompile(`(?is)<(script|style|title|textarea|xmp|iframe|noembed|noframes|plaintext)\b[^>]*>.*?</(?:script|style|title|textarea|xmp|iframe|noembed|noframes|plaintext)\s*>`),
 		htmlDetails: regexp.MustCompile(`(?is)<details\b([^>]*)>\s*(?:<summary\b[^>]*>(.*?)</summary>)?(.*?)</details\s*>`),
 		htmlLink:    regexp.MustCompile(`(?is)<a\b[^>]*\bhref\s*=\s*["']([^"']*)["'][^>]*>(.*?)</a\s*>`),
+		htmlIndent:  regexp.MustCompile(`(?m)^[ \t]+(</?[a-zA-Z])`),
 		htmlImage:   regexp.MustCompile(`(?is)<img\b[^>]*>`),
 		htmlAlt:     regexp.MustCompile(`(?is)\balt\s*=\s*["']([^"']*)["']`),
 		htmlSrc:     regexp.MustCompile(`(?is)\bsrc\s*=\s*["']([^"'\s)<>]+)["']`),
+		htmlPicture: regexp.MustCompile(`(?is)<picture\b[^>]*>(.*?)</picture\s*>`),
+		htmlSource:  regexp.MustCompile(`(?is)<source\b[^>]*>`),
+		htmlSrcset:  regexp.MustCompile(`(?is)\bsrcset\s*=\s*["']\s*([^"'\s,)<>]+)`),
+		htmlMedia:   regexp.MustCompile(`(?is)\bmedia\s*=\s*["']([^"']*)["']`),
+		htmlType:    regexp.MustCompile(`(?is)\btype\s*=\s*["']([^"']*)["']`),
 		htmlHeading: regexp.MustCompile(`(?is)<h([1-6])\b[^>]*>(.*?)</h[1-6]\s*>`),
 		htmlTag:     regexp.MustCompile(`(?s)</?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^<>]*)?/?>`),
 		refDefLine:  regexp.MustCompile(`(?m)^ {0,3}\[([^\]^][^\]]*)\]:[ ]+(\S+)[^\n]*$`),
@@ -155,6 +165,9 @@ func splitFences(src string) []string {
 // cleanHTML turns HTML into Markdown. A tag with no Markdown form goes, and its text
 // stays. Each pass is one regular expression over the text, so the cost is linear.
 func cleanHTML(s string, opt Options) string {
+	// A line that starts with a tag is HTML laid out for the eye: its indent
+	// would make it a code block once the tags go.
+	s = rx().htmlIndent.ReplaceAllString(s, "$1")
 	s = rx().htmlComment.ReplaceAllString(s, "")
 	s = rx().htmlDropped.ReplaceAllString(s, "")
 	s = rx().htmlDetails.ReplaceAllStringFunc(s, func(m string) string {
@@ -165,22 +178,28 @@ func cleanHTML(s string, opt Options) string {
 		}
 		return "\n\n" + strings.Replace(head, "▸", "▾", 1) + "\n\n" + g[3] + "\n\n"
 	})
-	s = rx().htmlLink.ReplaceAllString(s, "[$2]($1)")
+	s = rx().htmlPicture.ReplaceAllStringFunc(s, func(m string) string { return picture(m, opt.Dark) })
+	// An image inside a link is the link's words: the link stays one link.
+	s = rx().htmlLink.ReplaceAllStringFunc(s, func(m string) string {
+		g := rx().htmlLink.FindStringSubmatch(m)
+		return "[" + rx().htmlImage.ReplaceAllStringFunc(g[2], htmlImageWords) + "](" + g[1] + ")"
+	})
 	s = rx().htmlHeading.ReplaceAllStringFunc(s, func(m string) string {
 		g := rx().htmlHeading.FindStringSubmatch(m)
 		n, _ := strconv.Atoi(g[1])
 		return "\n\n" + strings.Repeat("#", n) + " " + strings.TrimSpace(rx().htmlTag.ReplaceAllString(g[2], "")) + "\n\n"
 	})
 	s = rx().htmlImage.ReplaceAllStringFunc(s, func(m string) string {
-		alt := "image"
-		if g := rx().htmlAlt.FindStringSubmatch(m); g != nil && g[1] != "" {
-			alt = g[1]
-		}
-		// A reader that draws pictures gets the image as a paragraph of its own.
-		if g := rx().htmlSrc.FindStringSubmatch(m); opt.Images && g != nil {
+		// A reader that draws pictures gets an image it can read as a
+		// paragraph of its own.
+		if g := rx().htmlSrc.FindStringSubmatch(m); opt.Images && g != nil && Drawable(g[1], "") {
+			alt := "image"
+			if a := rx().htmlAlt.FindStringSubmatch(m); a != nil && a[1] != "" {
+				alt = a[1]
+			}
 			return "\n\n![" + strings.ReplaceAll(alt, "]", "") + "](" + g[1] + ")\n\n"
 		}
-		return "\\[Image: " + alt + "\\]"
+		return htmlImageWords(m)
 	})
 	return rx().htmlTag.ReplaceAllStringFunc(s, func(m string) string {
 		closing := strings.HasPrefix(m, "</")
@@ -222,6 +241,96 @@ func alert(text string) (kind, rest string) {
 	return strings.ToUpper(rx().alertLine.FindStringSubmatch(text)[1]), text[len(m):]
 }
 
+// htmlImageWords is an <img> as its short words.
+func htmlImageWords(m string) string {
+	alt := ""
+	if g := rx().htmlAlt.FindStringSubmatch(m); g != nil {
+		alt = g[1]
+	}
+	return imageWords(alt)
+}
+
+// imageWords is an image as one short line of its words: at most
+// imageWordsMax characters, cut at a space.
+func imageWords(alt string) string {
+	alt = strings.Join(strings.Fields(alt), " ")
+	if alt == "" {
+		alt = "image"
+	}
+	if r := []rune(alt); len(r) > imageWordsMax {
+		cut := string(r[:imageWordsMax])
+		if i := strings.LastIndexByte(cut, ' '); i > imageWordsMax/2 {
+			cut = cut[:i]
+		}
+		alt = strings.TrimRight(cut, " ,.;:") + "…"
+	}
+	return "\\[Image: " + strings.NewReplacer("[", "\\[", "]", "\\]").Replace(alt) + "\\]"
+}
+
+// imageWordsMax bounds the words of an image shown in its place.
+const imageWordsMax = 40
+
+// picture is a <picture> as the <img> to show: the first <source> that suits
+// the reader's ground and holds a picture a reader can draw, or the <img> in
+// it.
+func picture(m string, dark bool) string {
+	alt := ""
+	img := rx().htmlImage.FindString(m)
+	if g := rx().htmlAlt.FindStringSubmatch(img); g != nil {
+		alt = g[1]
+	}
+	alt = strings.NewReplacer(`"`, "", "<", "", ">", "").Replace(alt)
+	for _, src := range rx().htmlSource.FindAllString(m, -1) {
+		set := rx().htmlSrcset.FindStringSubmatch(src)
+		if set == nil {
+			continue
+		}
+		typ := ""
+		if g := rx().htmlType.FindStringSubmatch(src); g != nil {
+			typ = g[1]
+		}
+		if !Drawable(set[1], typ) {
+			continue
+		}
+		if g := rx().htmlMedia.FindStringSubmatch(src); g != nil {
+			media := strings.ToLower(g[1])
+			if strings.Contains(media, "prefers-color-scheme") && strings.Contains(media, "dark") != dark {
+				continue
+			}
+		}
+		return `<img alt="` + alt + `" src="` + set[1] + `">`
+	}
+	if img == "" {
+		return ""
+	}
+	return img
+}
+
+// Drawable reports whether an image at src, of MIME type typ when the text
+// names one, is a kind a reader can draw: PNG, JPEG or GIF, on this machine.
+// An address on the web, a WebP, an SVG and an AVIF are not.
+func Drawable(src, typ string) bool {
+	low := strings.ToLower(src)
+	if strings.HasPrefix(low, "//") || strings.Contains(low, "://") && !strings.HasPrefix(low, "file://") {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(typ)) {
+	case "":
+	case "image/png", "image/jpeg", "image/jpg", "image/gif":
+		return true
+	default:
+		return false
+	}
+	if i := strings.IndexAny(low, "?#"); i >= 0 {
+		low = low[:i]
+	}
+	switch path.Ext(low) {
+	case ".png", ".jpg", ".jpeg", ".gif":
+		return true
+	}
+	return false
+}
+
 // plainImages shows a Markdown image as its words. keep leaves a line that is
 // one image alone, which the parser reads as an Image block.
 func plainImages(s string, keep bool) string {
@@ -239,10 +348,6 @@ func plainImages(s string, keep bool) string {
 		return strings.Join(lines, "")
 	}
 	return rx().imageMark.ReplaceAllStringFunc(s, func(m string) string {
-		alt := rx().imageMark.FindStringSubmatch(m)[1]
-		if alt == "" {
-			alt = "image"
-		}
-		return "\\[Image: " + alt + "\\]"
+		return imageWords(rx().imageMark.FindStringSubmatch(m)[1])
 	})
 }

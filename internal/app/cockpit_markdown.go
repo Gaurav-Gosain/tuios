@@ -61,14 +61,13 @@ type ckMD struct {
 	// and reports whether it did. A reader plugs a kind in here; nil draws
 	// every block the usual way. See quicklook_markdown.go.
 	hook func(md *ckMD, b markdown.Block, first, rest []ckSeg, width int) bool
+	// heads draws a second level heading in the accent too, and a third in
+	// the body ink, for a document read as a page: quick look's Markdown.
+	heads bool
 	// whole keeps every cell of a table: a cell wraps in its column, and a
 	// table too wide for any column wraps as one record a row. Without it the
 	// widest cells are cut.
 	whole bool
-	// big marks the lines of a top heading for a host that draws text at a
-	// larger size: each line of it is followed by a blank line the larger
-	// text covers. See ckLine.big.
-	big bool
 }
 
 // ckCodeFold is how many lines of a code block a closed message shows.
@@ -159,21 +158,10 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 		switch {
 		case b.Level == 1:
 			hink = pal.AccentBright
-		case b.Level > 2:
+		case b.Level == 2 && md.heads:
+			hink = pal.Accent
+		case b.Level > 2 && !md.heads, b.Level > 3:
 			hink = pal.FgDim
-		}
-		if md.big && b.Level <= 2 && avail >= 8 {
-			// Drawn twice the size: half the cells hold a line of it, and the
-			// blank line under each is the lower half.
-			n := len(md.lines)
-			md.text(md.runs(markdown.Inline(b.Text), hink, ckBold), first, rest, avail/2)
-			heads := append([]ckLine(nil), md.lines[n:]...)
-			md.lines = md.lines[:n]
-			for _, ln := range heads {
-				ln.big, ln.wrap = uint8(b.Level), false
-				md.lines = append(md.lines, ln, ckLine{segs: slicesClone(rest)})
-			}
-			return
 		}
 		md.text(md.runs(markdown.Inline(b.Text), hink, ckBold), first, rest, avail)
 	case markdown.Item:
@@ -303,6 +291,10 @@ func ckLinkTarget(u string) string {
 // text wraps segments to avail cells and adds them as lines, the first
 // with first before it and the rest with rest.
 func (md *ckMD) text(segs []ckSeg, first, rest []ckSeg, avail int) {
+	if ckHasTree(segs) {
+		md.treeText(segs, first, rest, avail)
+		return
+	}
 	lines := ckWrapSegs(segs, avail)
 	for i, ln := range lines {
 		pre := rest
@@ -311,6 +303,124 @@ func (md *ckMD) text(segs []ckSeg, first, rest []ckSeg, avail int) {
 		}
 		md.lines = append(md.lines, ckLine{segs: append(slicesClone(pre), ln...), wrap: i < len(lines)-1})
 	}
+}
+
+// ckHasTree reports whether segs hold a row of a tree an agent drew.
+func ckHasTree(segs []ckSeg) bool {
+	for _, s := range segs {
+		if strings.ContainsAny(s.t, "├└") {
+			return true
+		}
+	}
+	return false
+}
+
+// ckTreeGuide is a tree row's lead as its wrapped rows show it: a branch
+// that goes on below (├) is a guide (│), and the rest of the branch is
+// blank, so the row's text lines up under its first line.
+var ckTreeGuide = strings.NewReplacer("├", "│", "└", " ", "─", " ")
+
+// treeText is text for a paragraph that holds tree rows. Each row is wrapped
+// on its own, with a hanging indent: a row that runs past the width goes on
+// under its text, after the branch, and the guides of the rows around it go
+// on beside it.
+func (md *ckMD) treeText(segs []ckSeg, first, rest []ckSeg, avail int) {
+	for i, row := range ckSplitRows(segs) {
+		pre := rest
+		if i == 0 {
+			pre = first
+		}
+		lead, body := ckTreeLead(row)
+		hang := ckSegsWidth(lead)
+		if hang == 0 || hang > avail/2 {
+			lines := ckWrapSegs(row, avail)
+			for k, ln := range lines {
+				p := rest
+				if k == 0 {
+					p = pre
+				}
+				md.lines = append(md.lines, ckLine{segs: append(slicesClone(p), ln...), wrap: k < len(lines)-1})
+			}
+			continue
+		}
+		guide := make([]ckSeg, len(lead))
+		for k, s := range lead {
+			s.t = ckTreeGuide.Replace(s.t)
+			guide[k] = s
+		}
+		lines := ckWrapSegs(body, avail-hang)
+		for k, ln := range lines {
+			p, l := append(slicesClone(rest), guide...), ln
+			if k == 0 {
+				p = append(slicesClone(pre), lead...)
+			}
+			md.lines = append(md.lines, ckLine{segs: append(p, l...), wrap: k < len(lines)-1})
+		}
+	}
+}
+
+// ckSplitRows cuts segments at their hard breaks into rows.
+func ckSplitRows(segs []ckSeg) [][]ckSeg {
+	var rows [][]ckSeg
+	var cur []ckSeg
+	for _, s := range segs {
+		for {
+			i := strings.IndexByte(s.t, '\n')
+			if i < 0 {
+				break
+			}
+			if i > 0 {
+				p := s
+				p.t = s.t[:i]
+				cur = append(cur, p)
+			}
+			rows = append(rows, cur)
+			cur = nil
+			s.t = s.t[i+1:]
+		}
+		if s.t != "" {
+			cur = append(cur, s)
+		}
+	}
+	return append(rows, cur)
+}
+
+// ckTreeLead cuts a row at the end of its tree lead: the spaces, guides and
+// branch before its text, and the space after the branch. lead is empty for a
+// row that is not a tree row.
+func ckTreeLead(row []ckSeg) (lead, body []ckSeg) {
+	n, branch := 0, false
+	for _, s := range row {
+		for _, r := range s.t {
+			switch r {
+			case '├', '└':
+				branch = true
+			case '│', '─', ' ':
+			default:
+				goto done
+			}
+			n += utf8.RuneLen(r)
+		}
+	}
+done:
+	if !branch {
+		return nil, row
+	}
+	for _, s := range row {
+		switch {
+		case n <= 0:
+			body = append(body, s)
+		case n >= len(s.t):
+			lead = append(lead, s)
+			n -= len(s.t)
+		default:
+			a, b := s, s
+			a.t, b.t = s.t[:n], s.t[n:]
+			lead, body = append(lead, a), append(body, b)
+			n = 0
+		}
+	}
+	return lead, body
 }
 
 // ckRuneWidth is the cells a rune takes as ckCanvas.text draws it: one

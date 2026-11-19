@@ -222,15 +222,13 @@ type quickLookState struct {
 	held  bool
 	// mdImgs is the pictures of the Markdown file mdImgsFor, by path, and
 	// mdNeed says the layout asked for one not read or not prepared. mdGen
-	// counts the pictures that came, so the layout is made again. mdPics and
-	// bigHeads are the pictures and large headings the last frame drew, in
-	// the body. See quicklook_markdown.go.
+	// counts the pictures that came, so the layout is made again. mdPics are
+	// the pictures the last frame drew, in the body. See quicklook_markdown.go.
 	mdImgs    map[string]*ckThreadImage
 	mdImgsFor *quickLookResult
 	mdNeed    bool
 	mdGen     int
 	mdPics    []previewPlacement
-	bigHeads  []quickLookBigHead
 	// hostOlder holds the machines whose file-preview verb has no windows, and
 	// hostAsked those it was asked of, once per link.
 	hostOlder map[string]bool
@@ -332,7 +330,6 @@ type quickLookPic struct {
 // quickLookMDKey is what a Markdown layout was made for.
 type quickLookMDKey struct {
 	gen   int
-	big   bool
 	open  bool
 	res   *quickLookResult
 	width int
@@ -432,7 +429,7 @@ func (m *OS) dropQuickLook() {
 	ql.copy = nil
 	ql.mouse, ql.held, ql.textW = CopyMouseGesture{}, false, 0
 	ql.mdImgs, ql.mdImgsFor, ql.mdNeed = nil, nil, false
-	ql.mdPics, ql.bigHeads = ql.mdPics[:0], ql.bigHeads[:0]
+	ql.mdPics = ql.mdPics[:0]
 	ql.target = quickLookTarget{}
 	ql.borrowed = false
 	ql.free, ql.wantLine = false, 0
@@ -1061,7 +1058,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) quickLookPic {
 	ql := &m.quickLook
 	ql.textW = 0
-	ql.mdPics, ql.bigHeads = ql.mdPics[:0], ql.bigHeads[:0]
+	ql.mdPics = ql.mdPics[:0]
 	pal := l.pal
 	t := ql.target
 	// center draws a sentence in the middle of the body, wrapped: a refusal
@@ -1225,7 +1222,7 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		}
 	case "markdown":
 		width := max(w-3, 4)
-		mk := quickLookMDKey{gen: ql.mdGen, big: m.hostCaps().TextSizing, res: r, width: width, look: ql.lookKey, open: ql.mdOpen}
+		mk := quickLookMDKey{gen: ql.mdGen, res: r, width: width, look: ql.lookKey, open: ql.mdOpen}
 		if ql.mdKey != mk || ql.mdLines == nil {
 			ql.mdLines, ql.mdKey = m.quickLookMDLayout(l, r, width, ql.mdOpen), mk
 		}

@@ -75,10 +75,6 @@ type threadDiffLine struct {
 
 // ckLine is one line of a card, before it is drawn.
 type ckLine struct {
-	// big is the level of a heading drawn twice the size on a host that
-	// draws text sizes (OSC 66), 0 for a line drawn as it is. The line after
-	// it is blank, for the lower half. See ckMD.big.
-	big uint8
 	// bg is the line's ground from column bgAt to the width, nil for the
 	// canvas.
 	bg   color.Color

@@ -53,13 +53,7 @@ type HostCapabilities struct {
 	// version; see kitty_placeholder_caps.go for why, and for why guessing
 	// wrong here costs nothing.
 	KittyPlaceholders bool
-	// TextSizing is whether the host draws OSC 66 text sizing: text at twice
-	// the size, as kitty does. It is set only by TUIOS_TEXT_SIZING=1. The
-	// startup probe does not ask: the question draws a scaled space on the
-	// host's own screen, below the shell's last line, before tuios takes the
-	// alternate screen, and that cut the line on exit.
-	TextSizing    bool
-	SixelGraphics bool
+	SixelGraphics     bool
 	// SixelPinned says SixelGraphics was set by TUIOS_SIXEL_GRAPHICS, or by a
 	// host that stores images in its cells, so no later answer from the
 	// terminal changes it.
@@ -786,13 +780,6 @@ func applyEnvironmentOverrides(caps *HostCapabilities) {
 	case "0":
 		caps.KittyGraphics = false
 		caps.KittyPinned = true
-	}
-
-	switch os.Getenv("TUIOS_TEXT_SIZING") {
-	case "1":
-		caps.TextSizing = true
-	case "0":
-		caps.TextSizing = false
 	}
 
 	switch os.Getenv("TUIOS_KITTY_PLACEHOLDERS") {
