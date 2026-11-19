@@ -302,6 +302,8 @@ profile = "simple"   # simple or keyboard (default)
 
 The leader key, the which-key panel, the command palette and every action still work. A key that you set in the file wins over the profile. The profile does not write to the file.
 
+To change the profile, open Settings, go to Behavior and turn Simple controls on or off. The command palette has Use simple controls and Use keyboard controls. Each one writes the `profile` line and applies at once.
+
 On the first start, when tuios writes a new config.toml, the welcome screen asks how you want to use tuios. Press 1, 2 or 3, or click a choice:
 
 - Simple writes `profile = "simple"`.

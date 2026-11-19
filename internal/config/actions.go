@@ -554,6 +554,8 @@ var actionTable = [...]ActionSpec{
 	{Name: "window_prefix_float", Desc: "Float the pane or tile it. A TML popup becomes a pane, and a TML pane a popup", GUI: true},
 	{Name: "prefix_tuios", Desc: "Open the tuios menu: the tuios keys a preset moved"},
 	{Name: "open_keybind_presets", Desc: "Choose the keys: tuios, tmux, screen or zellij"},
+	{Name: "use_simple_controls", Desc: "Use simple controls: buttons on the dock, no window mode"},
+	{Name: "use_keyboard_controls", Desc: "Use keyboard controls: the leader key and window mode"},
 	// Command palette rows that had their own code and no action. As actions
 	// they can be bound to a key and named in a tape. None has a default key.
 	{Name: "new_window_on_host", Desc: "Open a new window on another machine"},

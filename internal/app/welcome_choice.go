@@ -24,7 +24,7 @@ type welcomeChoice struct {
 }
 
 var (
-	welcomeSimple   = welcomeChoice{"simple", "Simple", "Click buttons to open, split and close panes."}
+	welcomeSimple   = welcomeChoice{"simple", "Simple controls", "Click buttons to open, split and close panes."}
 	welcomeKeyboard = welcomeChoice{"keyboard", "Keyboard", "Press Ctrl+B, then a key. Window mode moves panes."}
 	welcomeTmux     = welcomeChoice{"tmux", "tmux keys", "Your tmux keys after Ctrl+B. No window mode."}
 )
@@ -55,7 +55,7 @@ func (m *OS) welcomeQuestionLines(width int) []string {
 	ui := theme.UI()
 	lines := []string{
 		lipgloss.NewStyle().Foreground(ui.Fg).Bold(true).Render("How do you want to use tuios?"),
-		lipgloss.NewStyle().Foreground(ui.FgDim).Render("Pick one. You can change it later in the config file."),
+		lipgloss.NewStyle().Foreground(ui.FgDim).Render("Pick one. You can change it later in Settings."),
 		"",
 	}
 	keys := []string{"1", "2", "3"}
@@ -143,7 +143,7 @@ func (m *OS) ChooseWelcome(i int) tea.Cmd {
 	}
 	switch c.name {
 	case welcomeSimple.name:
-		m.UserConfig.Profile = config.ProfileSimple
+		return m.SetProfile(config.ProfileSimple)
 	case welcomeTmux.name:
 		kb := &m.UserConfig.Keybindings
 		off := false
@@ -161,6 +161,47 @@ func (m *OS) ChooseWelcome(i int) tea.Cmd {
 	}
 }
 
+// SetProfile writes profile = name to the config file and reloads it, so the
+// profile applies now. Keyboard is the default, so it takes the line out.
+// The Settings row, the palette and the welcome question use it.
+func (m *OS) SetProfile(name string) tea.Cmd {
+	if m.UserConfig == nil || m.ConfigReadOnly {
+		m.ShowNotification("This client cannot change the config file.", "warning", m.Settings.NotificationWarningDuration)
+		return nil
+	}
+	title := "Keyboard controls"
+	m.UserConfig.Profile = ""
+	if name == config.ProfileSimple {
+		title = "Simple controls"
+		m.UserConfig.Profile = config.ProfileSimple
+	}
+	write, err := config.RenderUserConfig(m.UserConfig)
+	if err != nil {
+		m.ShowNotification("The choice was not saved: "+err.Error(), "error", 0)
+		return nil
+	}
+	write = m.queueSettingsSave(write)
+	return func() tea.Msg {
+		_, err := write()
+		return welcomeSavedMsg{title: title, err: err}
+	}
+}
+
+// profileItem is the Settings row of the profile.
+func (m *OS) profileItem() settingItem {
+	item := boolItem("Simple controls", "Buttons on the dock, no window mode, and a workspace is a tab.",
+		func() bool { return m.UserConfig.Simple() },
+		func(m *OS, v bool) {})
+	item.adjust = nil
+	item.activate = func(m *OS) tea.Cmd {
+		if m.UserConfig.Simple() {
+			return m.SetProfile(config.ProfileKeyboard)
+		}
+		return m.SetProfile(config.ProfileSimple)
+	}
+	return item
+}
+
 // handleWelcomeSaved reloads the config the answer was written to.
 func (m *OS) handleWelcomeSaved(msg welcomeSavedMsg) tea.Cmd {
 	if msg.err != nil {
@@ -168,6 +209,6 @@ func (m *OS) handleWelcomeSaved(msg welcomeSavedMsg) tea.Cmd {
 		m.ShowNotification("The choice was not saved: "+msg.err.Error(), "error", 0)
 		return nil
 	}
-	m.ShowNotification(msg.title+" is on. Change it in the config file.", "success", m.Settings.NotificationWarningDuration)
+	m.ShowNotification(msg.title+" are on. Change them in Settings, under Behavior.", "success", m.Settings.NotificationWarningDuration)
 	return m.ReloadConfigFromDisk()
 }

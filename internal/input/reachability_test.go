@@ -490,7 +490,10 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"kill_session_next": "context menu row",
 	"kill_session_quit": "context menu row",
 	"restart_daemon":    "command palette row, rail machine menu row, settings row, version notice",
-	"paste_clipboard":   "context menu row",
+	// The profile: the palette rows, beside the Settings row Simple controls.
+	"use_simple_controls":   "command palette row",
+	"use_keyboard_controls": "command palette row",
+	"paste_clipboard":       "context menu row",
 	// The menu of a right click on a selection in the agents view's thread.
 	"selection_copy":          "agents view selection menu row",
 	"selection_copy_markdown": "agents view selection menu row",

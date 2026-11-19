@@ -623,6 +623,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 	behavior := settingsCategory{
 		Name: "Behavior",
 		Items: m.resolveRows([]settingsRow{
+			custom("", m.profileItem()),
 			custom("appearance.calm", m.calmItem()),
 			opt("appearance.motion"),
 			opt("appearance.animation_speed"),

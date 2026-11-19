@@ -570,6 +570,16 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Session",
 		},
 		{
+			Name:     "Use simple controls",
+			Bind:     "use_simple_controls",
+			Category: "Session",
+		},
+		{
+			Name:     "Use keyboard controls",
+			Bind:     "use_keyboard_controls",
+			Category: "Session",
+		},
+		{
 			Name:     "Theme picker",
 			Bind:     "theme_picker",
 			Category: "Session",

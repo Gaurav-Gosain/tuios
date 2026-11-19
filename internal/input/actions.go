@@ -217,6 +217,12 @@ func (d *ActionDispatcher) registerHandlers() {
 		o.OpenKeybindPresets()
 		return o, nil
 	})
+	d.Register("use_simple_controls", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		return o, o.SetProfile(config.ProfileSimple)
+	})
+	d.Register("use_keyboard_controls", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		return o, o.SetProfile(config.ProfileKeyboard)
+	})
 	d.Register("quit", handleQuit)
 
 	// Enter the sidebar rail's keyboard scope (window mode "s"). The exit and the

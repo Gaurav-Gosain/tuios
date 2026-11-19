@@ -891,4 +891,6 @@ Run `tuios keybinds list` to see the keys that your config sets.
 |  | `toggle_mouse` | Turn mouse capture off or on (off: the terminal selects text) |
 |  | `toggle_multifocus_all` | Add all panes on the workspace to multifocus, or clear it |
 |  | `toggle_shared_borders` | Toggle shared borders between neighbouring panes |
+|  | `use_keyboard_controls` | Use keyboard controls: the leader key and window mode |
+|  | `use_simple_controls` | Use simple controls: buttons on the dock, no window mode |
 |  | `workspace_pill_switch` | Switch to workspace |
