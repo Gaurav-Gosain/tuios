@@ -58,6 +58,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 
 	key := msg.String()
 
+	// The first start's welcome question takes 1, 2, 3 and esc while it is up.
+	if cmd, ok := o.WelcomeChoiceKey(key); ok {
+		return o, cmd
+	}
+
 	// Handle cache stats viewer (takes priority in window management mode)
 	if o.ShowCacheStats {
 		return handleCacheStatsKey(msg, o)

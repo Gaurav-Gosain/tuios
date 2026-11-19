@@ -466,6 +466,8 @@ type OS struct {
 	notifDrawn             notifDrawn                    // what the last frame showed of the live message
 	dockSessionHover       DockSessionAction             // which session control the pointer is on, DockSessionNone for neither
 	dockCustomHits         []dockCustomHit               // where the custom components were drawn last frame
+	welcomeAsk             bool                          // the first start's welcome question waits for an answer; see welcome_choice.go
+	welcomeHits            []welcomeChoiceHit            // where the welcome choices were drawn last frame
 	dockButtonHover        int                           // the dock button under the pointer, plus one; 0 for none
 	dockButtonsShown       int                           // how many dock buttons the last frame drew before the more button
 	dockPlan               dockPlan                      // which components are on which side, in draw order

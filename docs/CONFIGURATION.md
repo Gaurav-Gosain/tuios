@@ -302,6 +302,14 @@ profile = "simple"   # simple or keyboard (default)
 
 The leader key, the which-key panel, the command palette and every action still work. A key that you set in the file wins over the profile. The profile does not write to the file.
 
+On the first start, when tuios writes a new config.toml, the welcome screen asks how you want to use tuios. Press 1, 2 or 3, or click a choice:
+
+- Simple writes `profile = "simple"`.
+- Keyboard writes nothing. This is today's tuios.
+- tmux keys writes `[keybindings] preset = "tmux"` and `window_mode = false`. When tuios finds a tmux.conf, this choice is first and uses its prefix.
+
+Esc keeps the keyboard and writes nothing. An existing install does not see the question.
+
 ## Window mode off
 
 ```toml

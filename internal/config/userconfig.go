@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
@@ -113,6 +114,9 @@ type UserConfig struct {
 	// skipped: an included file that is not there, or an include cycle. It is
 	// worked out on load and never written. See include.go.
 	LoadWarnings []string `toml:"-"`
+	// FirstRun is true when this load wrote a new config.toml: the first
+	// start. The welcome screen asks its question then. Never written.
+	FirstRun bool `toml:"-"`
 	// DroppedKeys are the keys the load took out because tuios cannot read
 	// them. Worked out on load and never written. See DropUnreadableKeys.
 	DroppedKeys []DroppedKey `toml:"-"`
@@ -2616,6 +2620,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	// A key tuios cannot read on this platform costs that key, not the file.
 	// The lines reach the TUI through ConfigWarnings.
 	cfg.LoadWarnings = append(cfg.LoadWarnings, DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
+	cfg.FirstRun = wroteFirstConfig.Load()
 
 	// Loading is pure: it never mutates package globals. Callers apply the
 	// appearance globals exactly once, on the Bubble Tea goroutine, via
@@ -2780,6 +2785,11 @@ func seedDefaults(data []byte, parsed *UserConfig) ([]byte, bool) {
 // a config.d directory or an include from a dotfiles repo applies in full. A
 // config.toml that cannot be written is not an error: the config loads
 // without it.
+// wroteFirstConfig is set once this process wrote the first-start
+// config.toml. A later load in the same process, such as the attach path
+// after the client loaded, is still the first start.
+var wroteFirstConfig atomic.Bool
+
 func createDefaultConfig() (*UserConfig, error) {
 	configPath, err := xdg.ConfigFile("tuios/config.toml")
 	if err != nil {
@@ -2808,6 +2818,8 @@ func createDefaultConfig() (*UserConfig, error) {
 	// A config.d file or an include can hold a key tuios cannot read on the
 	// first start too.
 	cfg.LoadWarnings = append(cfg.LoadWarnings, DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
+	cfg.FirstRun = true
+	wroteFirstConfig.Store(true)
 	return cfg, nil
 }
 

@@ -339,6 +339,9 @@ func NewOS(opts OSOptions) *OS {
 		// Hold the loaded config so the in-app settings page can persist live
 		// changes back to disk.
 		os.UserConfig = cfg
+		// The first start asks how the person wants to use tuios. A served
+		// client is on the operator's machine, so only a local one asks.
+		os.welcomeAsk = cfg.FirstRun && opts.Client == ClientLocal
 		os.ListKeys = config.ListKeymap(cfg)
 		// Collected here and reported from Init, once there is a TUI to report
 		// them in.

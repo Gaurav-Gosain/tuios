@@ -130,7 +130,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// chip took the splash from three rows of hints to four on a narrow
 		// terminal, and the box then squeezed out the subtitle to fit.
 		hints := make([]string, 0, 4)
-		for _, h := range []overlay.Hint{
+		hintList := []overlay.Hint{
 			{Key: "n", Label: "new window"},
 			// The splash is what somebody with no session is looking at, so
 			// the way to make one belongs on it. It was on neither the splash
@@ -140,16 +140,29 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			{Key: "?", Label: "help"},
 			{Key: ",", Label: "settings"},
 			m.welcomePresetChip(),
-		} {
+		}
+		// The first start asks its question in the place of the hints. See
+		// welcome_choice.go.
+		if m.WelcomeQuestionShown() {
+			hintList = nil
+		} else if m.Settings.Simple {
+			// The Simple profile's words: a terminal, and no key picker.
+			hintList = []overlay.Hint{{Key: "n", Label: "new terminal"}, {Key: "?", Label: "help"}, {Key: ",", Label: "settings"}}
+		}
+		for _, h := range hintList {
 			if h.Key == "" {
 				continue
 			}
 			hints = append(hints, overlay.KeyBadge(h.Key, ui)+
 				lipgloss.NewStyle().Foreground(ui.FgDim).Render(" "+h.Label))
 		}
-		parts = append(parts, "", lipgloss.NewStyle().
-			Align(lipgloss.Center).
-			Render(packHints(hints, avail)))
+		if m.WelcomeQuestionShown() {
+			parts = append(parts, "", lipgloss.JoinVertical(lipgloss.Left, m.welcomeQuestionLines(avail)...))
+		} else {
+			parts = append(parts, "", lipgloss.NewStyle().
+				Align(lipgloss.Center).
+				Render(packHints(hints, avail)))
+		}
 
 		content := lipgloss.JoinVertical(lipgloss.Center, squeezeLines(parts, availRows)...)
 
@@ -177,6 +190,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			box,
 		)
 
+		if m.WelcomeQuestionShown() {
+			m.recordWelcomeChoices(centeredContent, m.viewReserve().Left, m.viewReserve().Top)
+		}
 		welcomeLayer := lipgloss.NewLayer(centeredContent).
 			X(m.viewReserve().Left).Y(m.viewReserve().Top).Z(1).ID("welcome")
 

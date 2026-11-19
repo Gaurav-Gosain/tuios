@@ -3141,6 +3141,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case keybindPresetSavedMsg:
 		return m, m.handleKeybindPresetSaved(msg)
 
+	case welcomeSavedMsg:
+		return m, m.handleWelcomeSaved(msg)
+
 	case configWatchMsg:
 		// A delivery from the file watcher: re-arm the listener, then apply it
 		// like a reload from anywhere else.

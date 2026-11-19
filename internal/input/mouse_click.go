@@ -37,6 +37,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// A click on a choice of the first start's welcome question answers it.
+	if msg.Button == tea.MouseLeft {
+		if i := o.WelcomeChoiceAt(X, Y); i >= 0 {
+			return o, o.ChooseWelcome(i)
+		}
+	}
+
 	// The path picker is modal to the mouse the same way: a press on a row
 	// types that path, and a press anywhere else closes it. Either way the
 	// press stops here.
