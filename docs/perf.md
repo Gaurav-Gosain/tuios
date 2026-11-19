@@ -2523,6 +2523,14 @@ On 2026-11-19 four standard packages joined the list: `runtime/pprof`,
 `archive/tar`, `text/template` and `encoding/xml`. Each runs on request only.
 Together they saved 41,472 bytes on windows/amd64.
 
+On 2026-11-19 `net/http/...`, `crypto/tls` and `crypto/x509` joined the list.
+tuios uses them only on request: the release lookup, phone notices, an
+opencode transcript read, the look gallery, the type check of a file preview
+and the parse of an SSH private key. No pane, frame, input or link traffic goes
+over HTTP or TLS. A keep-alive GET to a local server took 47.3 us without
+inlining against 45.5 us with it, and a new TLS connection 1.85 ms against
+1.87 ms (fastest of 12 runs each).
+
 The next two savings, measured but not taken: inlining off in internal/session
 too (688,128 bytes more on top of the old cold set) needs the pane output
 stream and the broadcast moved to a package of their own first, or the

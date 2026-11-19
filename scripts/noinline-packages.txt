@@ -97,3 +97,10 @@ runtime/pprof
 archive/tar
 text/template/...
 encoding/xml
+# The HTTP client and its TLS, on request only: the release lookup, phone
+# notices, an opencode transcript read, the look gallery, and the private key
+# parse of an SSH key (crypto/x509). net/http also has the type check of a
+# file preview. No pane, frame, input or link traffic goes over HTTP or TLS.
+net/http/...
+crypto/tls
+crypto/x509
