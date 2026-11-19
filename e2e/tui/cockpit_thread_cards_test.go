@@ -53,7 +53,7 @@ import (
 //   - with the cut layout of main in ckMD.table, the test fails at "the
 //     thread cut a table cell".
 func TestCockpitThreadFoldsAndImages(t *testing.T) {
-	term, host := startCardsThread(t, 200, 90, "")
+	term, host := startCardsThreadWith(t, 200, 90, "", true)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
@@ -155,6 +155,14 @@ func TestCockpitThreadFoldsAndImages(t *testing.T) {
 // stream it wrote to its host.
 func startCardsThread(t *testing.T, cols, rows int, extra string) (*tuitest.Terminal, *lockedBuffer) {
 	t.Helper()
+	return startCardsThreadWith(t, cols, rows, extra, false)
+}
+
+// startCardsThreadWith is startCardsThread, and with table the thread also
+// has the results table with a cell wider than the thread. The table is tall
+// when it wraps, so the tests on a short screen leave it out.
+func startCardsThreadWith(t *testing.T, cols, rows int, extra string, table bool) (*tuitest.Terminal, *lockedBuffer) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
@@ -168,7 +176,7 @@ func startCardsThread(t *testing.T, cols, rows int, extra string) (*tuitest.Term
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, cardsTranscript(t, time.Now()), 0o600); err != nil {
+	if err := os.WriteFile(path, cardsTranscript(t, time.Now(), table), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if out, err := tuiosCLI(t, base, "set-window", "-s", "api", "-w", "0", "--name", "header-fix"); err != nil {
@@ -211,8 +219,8 @@ func scrollUntil(t *testing.T, term *tuitest.Terminal, key, want string) {
 }
 
 // cardsTranscript is the transcript of TestCockpitThreadFoldsAndImages, with
-// times before now.
-func cardsTranscript(t *testing.T, now time.Time) []byte {
+// times before now. withTable adds the results table to turn 2.
+func cardsTranscript(t *testing.T, now time.Time, withTable bool) []byte {
 	t.Helper()
 	at := func(ago time.Duration) string { return now.Add(-ago).UTC().Format("2006-01-02T15:04:05.000Z") }
 	png := base64.StdEncoding.EncodeToString(gradientPNG(t, 320, 180))
@@ -253,12 +261,16 @@ func cardsTranscript(t *testing.T, now time.Time) []byte {
 		{"type": "user", "timestamp": at(3*time.Minute + 4*time.Second), "message": map[string]any{"role": "user", "content": []any{
 			map[string]any{"type": "tool_result", "tool_use_id": "toolu_t", "content": "Todos have been modified successfully."},
 		}}},
-		{"type": "assistant", "timestamp": at(3*time.Minute + 2*time.Second), "message": map[string]any{"role": "assistant", "content": []any{
-			map[string]any{"type": "text", "text": table},
-		}}},
 		{"type": "assistant", "timestamp": at(3 * time.Minute), "message": map[string]any{"role": "assistant", "content": []any{
 			map[string]any{"type": "tool_use", "id": "toolu_b", "name": "Bash", "input": map[string]any{"command": "go test ./ui/..."}},
 		}}},
+	}
+	if withTable {
+		// The table goes before the Bash call, the last record.
+		rec := map[string]any{"type": "assistant", "timestamp": at(3*time.Minute + 2*time.Second), "message": map[string]any{"role": "assistant", "content": []any{
+			map[string]any{"type": "text", "text": table},
+		}}}
+		recs = append(recs[:len(recs)-1], rec, recs[len(recs)-1])
 	}
 	var buf bytes.Buffer
 	for i, r := range recs {
