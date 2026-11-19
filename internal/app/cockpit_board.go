@@ -34,6 +34,9 @@ type ckTaskDetail struct {
 	attachments []session.TaskAttachment
 	err         string
 	loading     bool
+	// md is the prompt laid out as preview lines, for mdKey.
+	md    []ckLine
+	mdKey ckMDKey
 }
 
 // ckTaskMsg is a get-task reply.

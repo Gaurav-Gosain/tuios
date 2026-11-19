@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The body of the selected attachment in the card preview: a picture through
@@ -57,6 +58,32 @@ type kbFile struct {
 	prErr string
 	// seq orders the files for the bound: the oldest read goes first.
 	seq uint64
+	// md is the file laid out as preview lines, for mdKey: a redraw of the
+	// board lexes no code again.
+	md    []ckLine
+	mdKey ckMDKey
+}
+
+// ckMDKey is what a preview's laid-out Markdown depends on beside its text.
+type ckMDKey struct {
+	width       int
+	theme, look uint64
+	depth       overlay.Depth
+	ascii, nerd bool
+}
+
+// ckMDKeyFor is the key of Markdown laid out at width in look l.
+func (m *OS) ckMDKeyFor(l ckLook, width int) ckMDKey {
+	return ckMDKey{width: width, theme: theme.Generation(), look: m.Inbox.ck.lookGen, depth: l.pal.Depth, ascii: l.ascii, nerd: l.nerd}
+}
+
+// kbFileMarkdown is src, f's text as Markdown, laid out at width, once per
+// width and look.
+func (m *OS) kbFileMarkdown(l ckLook, f *kbFile, src string, width int) []ckLine {
+	if k := m.ckMDKeyFor(l, width); f.md == nil || f.mdKey != k {
+		f.md, f.mdKey = m.ckMarkdown(l, src, width), k
+	}
+	return f.md
 }
 
 // kbFiles keeps the files the preview read.
@@ -302,16 +329,16 @@ func (m *OS) ckAttachmentBody(l ckLook, a session.TaskAttachment, width int) []c
 		return append(out, m.kbPictureLines(l, f, a, width)...)
 	case session.AttachMermaid:
 		if f.diagram != nil {
-			return append(out, kbCut(m.ckMarkdown(l, ckFence(strings.Join(f.diagram, "\n"), ""), width), pal)...)
+			return append(out, kbCut(m.kbFileMarkdown(l, f, ckFence(strings.Join(f.diagram, "\n"), ""), width), pal)...)
 		}
 		out = note("Install the sketch plugin to draw the diagram. Its source:")
-		return append(out, m.ckMarkdown(l, ckFence(f.text, "mermaid"), width)...)
+		return append(out, m.kbFileMarkdown(l, f, ckFence(f.text, "mermaid"), width)...)
 	case session.AttachMarkdown:
-		return append(out, kbCut(m.ckMarkdown(l, f.text, width), pal)...)
+		return append(out, kbCut(m.kbFileMarkdown(l, f, f.text, width), pal)...)
 	case session.AttachDiff:
-		return append(out, kbCut(m.ckMarkdown(l, ckFence(f.text, "diff"), width), pal)...)
+		return append(out, kbCut(m.kbFileMarkdown(l, f, ckFence(f.text, "diff"), width), pal)...)
 	case session.AttachText:
-		return append(out, kbCut(m.ckMarkdown(l, ckFence(f.text, ""), width), pal)...)
+		return append(out, kbCut(m.kbFileMarkdown(l, f, ckFence(f.text, ""), width), pal)...)
 	}
 	return note("This kind of file has no preview. tuios task attachment get saves it.")
 }
