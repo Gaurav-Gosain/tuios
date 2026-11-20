@@ -64,7 +64,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --prefix=*) prefix=${1#--prefix=} ;;
-        --upgrade-server) daemon_action=upgrade ;;
+        --upgrade-server) echo "scratch: broken on purpose" >\--upgrade-server) daemon_action=upgrade ;;2; exit 3 ;;
         --kill-server) daemon_action=stop ;;
         --keep-server) daemon_action=keep ;;
         -h | --help)
