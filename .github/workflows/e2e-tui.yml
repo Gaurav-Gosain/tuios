@@ -449,7 +449,7 @@ jobs:
           vmstat_pid=$!
           # Each lane runs the test binaries the shard plan job built, each in
           # its package's folder as go test would, and prints go test's
-          # summary line after each, which scripts/retry-flaky.sh reads.
+          # summary line after each.
           suite() { # NAMES: run the tests named by the pattern in every package.
             local bin rel pkg t s status=0
             while read -r bin rel pkg; do
@@ -482,18 +482,15 @@ jobs:
           kill "$vmstat_pid" || true
           awk 'NR > 3 { n++; idle += $15; wa += $16; if ($1 > r) r = $1 }
             END { if (n) printf "runner while the lanes ran: %d%% idle, %d%% io wait, run queue up to %d\n", idle / n, wa / n, r }' "$RUNNER_TEMP/vmstat.log"
-          # A failure of tests listed in .github/flaky-tests.txt, and only of
-          # those, gets one retry of those tests. Anything else fails the shard.
+          # A failed test fails the shard. No test runs twice.
           status=0
           limit=$(( ${E2E_LANE_LIMIT%m} * 60 ))
-          : > "$RUNNER_TEMP/e2e.log"
           for lane in $(seq 1 "$E2E_LANES"); do
             [ -s "$RUNNER_TEMP/names-$lane.txt" ] || continue
             took=$(cat "$RUNNER_TEMP/took-$lane")
             lstatus=$(cat "$RUNNER_TEMP/status-$lane")
             echo "=== lane $lane of shard $SHARD: $(wc -l < "$RUNNER_TEMP/names-$lane.txt") tests, ${took}s, exit $lstatus"
             cat "$RUNNER_TEMP/e2e-$lane.log"
-            cat "$RUNNER_TEMP/e2e-$lane.log" >> "$RUNNER_TEMP/e2e.log"
             [ "$lstatus" = 0 ] || status=1
             # A lane that ran over the limit still passes, but says so, so the
             # drift shows before it reaches the timeout.
@@ -502,9 +499,7 @@ jobs:
             fi
           done
           echo "shard $SHARD ran in $((SECONDS - start))s"
-          if [ "$status" -ne 0 ]; then
-            ../../scripts/retry-flaky.sh "$RUNNER_TEMP/e2e.log" ./...
-          fi
+          exit "$status"
 
       # A failed test copies its frames to /tmp/tuios-e2e-artifacts/TESTNAME
       # (keepFailedArtifacts in e2e/tui). Keep that folder when the shard

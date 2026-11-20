@@ -75,7 +75,7 @@ var inert = []*regexp.Regexp{
 // The paths that always run the whole suite, checked before anything else.
 var global = []*regexp.Regexp{
 	regexp.MustCompile(`^\.github/`),
-	regexp.MustCompile(`^scripts/(e2e-tested|retry-flaky)\.sh$`),
+	regexp.MustCompile(`^scripts/e2e-tested\.sh$`),
 }
 
 // committedMap is the map in the repository. scripts/e2e-select.sh may pass

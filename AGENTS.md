@@ -134,9 +134,9 @@ daemon one minor release apart must work together. The job runs when a change
 reaches the packages `internal/session` builds from, and on main. Move its
 release with each minor release.
 
-A test that fails now and then on code that cannot reach it goes in
-`.github/flaky-tests.txt`. A failed run whose failures are all on that list
-retries them once. Any other failure fails the job.
+CI runs each test once. A failed test fails the job, and no job retries it.
+A test that fails now and then has a bug: find the cause and fix it. Do not
+rerun the job until it passes.
 
 ### Keep main green
 
@@ -144,8 +144,8 @@ Main runs every Go test job and the whole e2e suite, so it catches what a
 pull request's selection left out. The idle-cost tests (`TestIdleCostStaysLow`,
 `TestDockIdleCostWithComponentsStaysLow` and the like) and the timing budgets
 in the unit tests fail there first. When one fails on main after your change
-lands, fix the cause at once. Do not retry it away, add it to the flaky list,
-or loosen its budget to make it pass.
+lands, fix the cause at once. Do not retry it away or loosen its budget to
+make it pass.
 
 A timing test waits on a condition, never on a fixed sleep. A clock budget
 compares the fastest of several short runs, because load only adds time, and

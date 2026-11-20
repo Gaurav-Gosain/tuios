@@ -24,8 +24,8 @@
 #
 # Every test, fuzz target and example that `go test -list .` names in a split
 # package runs in exactly one lane. The output of each process goes to LOG
-# (default go-test-lanes.log) one after another, and then to stdout, so
-# scripts/retry-flaky.sh reads it as one go test run. The exit status is 0
+# (default go-test-lanes.log) one after another, and then to stdout, so it
+# reads as one go test run. The exit status is 0
 # only when every process passed.
 #
 # A SPLIT package that PATTERN does not select runs no lane. If no package is

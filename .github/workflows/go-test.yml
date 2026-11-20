@@ -161,8 +161,7 @@ jobs:
         run: |
           set -o pipefail
           # shellcheck disable=SC2046
-          go test -count=1 -timeout 20m -skip '^TestTheSuiteWritesNothingOutsideItsOwnTree$' $(cat "$RUNNER_TEMP/rest.txt") 2>&1 | tee "$RUNNER_TEMP/unit.log" ||
-            scripts/retry-flaky.sh "$RUNNER_TEMP/unit.log" $(cat "$RUNNER_TEMP/rest.txt")
+          go test -count=1 -timeout 20m -skip '^TestTheSuiteWritesNothingOutsideItsOwnTree$' $(cat "$RUNNER_TEMP/rest.txt")
 
       - name: Test
         if: steps.affected.outputs.pkgs == 'all'
@@ -182,17 +181,13 @@ jobs:
         # -count=1 because the test cache replays a pass across a change the
         # cache key does not see, which is how a mutation sweep can come back
         # green on code that no longer exists.
-        #
-        # A failure of tests listed in .github/flaky-tests.txt, and only of
-        # those, gets one retry of those tests. Anything else fails the job.
         run: |
           set -o pipefail
           pkgs="./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/..."
           # $pkgs is split on purpose: one argument per pattern.
           # shellcheck disable=SC2086
           SPLIT="./internal/app ./internal/session" ONLY=rest LOG="$RUNNER_TEMP/unit.log" \
-            scripts/go-test-lanes.sh -count=1 -timeout 20m -skip '^TestTheSuiteWritesNothingOutsideItsOwnTree$' -- $pkgs ||
-            scripts/retry-flaky.sh "$RUNNER_TEMP/unit.log" $pkgs
+            scripts/go-test-lanes.sh -count=1 -timeout 20m -skip '^TestTheSuiteWritesNothingOutsideItsOwnTree$' -- $pkgs
 
   app-session:
     name: go test (internal/app and internal/session)
@@ -245,8 +240,7 @@ jobs:
           set -o pipefail
           # shellcheck disable=SC2086
           SPLIT="$PKGS" ONLY=split LOG="$RUNNER_TEMP/unit.log" \
-            scripts/go-test-lanes.sh -count=1 -timeout 20m -- $PKGS ||
-            scripts/retry-flaky.sh "$RUNNER_TEMP/unit.log" $PKGS
+            scripts/go-test-lanes.sh -count=1 -timeout 20m -- $PKGS
 
   isolation:
     name: go test isolation guard

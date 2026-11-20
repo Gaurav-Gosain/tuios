@@ -20,7 +20,7 @@
 # package runs on a change to a go.mod, go.sum, go.work or go.work.sum beyond
 # the pins of tuios.dev libraries, to
 # .github/workflows/go-test.yml, to .github/actions, to this script, to
-# scripts/go-test-lanes.sh or scripts/retry-flaky.sh, when a package folder
+# scripts/go-test-lanes.sh, when a package folder
 # was removed, and when the diff or go list fails.
 set -uo pipefail
 
@@ -43,7 +43,7 @@ fi
 changed=$(git diff --no-renames --name-only "$base" HEAD) || all
 [ -n "$changed" ] || exit 0
 
-if grep -qE '^\.github/workflows/(ci|go-test)\.yml$|^\.github/actions/|^scripts/(ci-changes|go-test-affected|go-test-lanes|go-test-lanes-test|retry-flaky)\.sh$' <<<"$changed"; then
+if grep -qE '^\.github/workflows/(ci|go-test)\.yml$|^\.github/actions/|^scripts/(ci-changes|go-test-affected|go-test-lanes|go-test-lanes-test)\.sh$' <<<"$changed"; then
 	all
 fi
 
