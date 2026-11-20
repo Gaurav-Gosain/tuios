@@ -117,6 +117,11 @@ while IFS= read -r p; do
 	scripts/library-pins.sh) f[pins]=1 f[go]=1 pkg=no ;;
 	scripts/binary-size.sh | scripts/binary-size-report.sh) f[binary_size]=1 pkg=no ;;
 	scripts/check.sh | scripts/platforms.txt) f[go]=1 pkg=no ;;
+	# The noinline list sets the GOFLAGS of every shipped or measured build of
+	# cmd/tuios: binary size, the image, the mixed-version build and the
+	# example tape build of go test ./.... go-test-affected.sh adds the
+	# packages whose tests read the list (internal/lint).
+	scripts/noinline-packages.txt | scripts/goflags.sh) f[binary_size]=1 f[docker]=1 f[mixed]=1 f[go]=1 pkg=no ;;
 	scripts/ghostty-lib.sh | scripts/minisign/*) f[ghostty]=1 pkg=no ;;
 	scripts/e2e-mixed-versions.sh) f[mixed]=1 pkg=no ;;
 	scripts/e2e-*.sh | scripts/fuzz-target.sh | scripts/contributors*.sh | scripts/contributors-mosaic.go | scripts/star-history.sh | scripts/rebase.sh | scripts/vt-rename.sh | scripts/install.sh | scripts/zigcc/*) pkg=no ;;
