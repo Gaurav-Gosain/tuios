@@ -69,7 +69,7 @@ type Session struct {
 	r       *renderer
 	buf     []rune
 	shown   bool
-	running bool
+	work    workPhase
 	ready   bool
 	queued  string
 	reply   strings.Builder
@@ -91,10 +91,48 @@ type Session struct {
 	// keysHandled, when set, is called after Run has handled the keys of one
 	// read. Tests use it to know a key was handled, not only read.
 	keysHandled func()
-	// waiting is set while an ACP version 2 agent reports requires_action,
-	// and background while it works with no turn of the person's running.
-	waiting    bool
-	background bool
+	// waiting is set while an ACP version 2 agent reports requires_action.
+	waiting bool
+}
+
+// workPhase is what the agent is doing as far as the pane knows.
+type workPhase uint8
+
+const (
+	workNone workPhase = iota
+	// workTurn is a turn of the person's.
+	workTurn
+	// workOwn is work the agent started with no turn of the person's.
+	workOwn
+)
+
+// workEvent is what can change a workPhase.
+type workEvent uint8
+
+const (
+	// evPrompt is the person sending a prompt.
+	evPrompt workEvent = iota
+	// evTurnEnd is a turn's Prompt call returning.
+	evTurnEnd
+	evAgentRunning
+	evAgentIdle
+)
+
+// after is the one place that decides a move. A move it does not allow
+// returns the phase unchanged and false. A prompt takes own work in as its
+// turn; the agent's reports never move a turn.
+func (p workPhase) after(ev workEvent) (next workPhase, moved bool) {
+	switch {
+	case ev == evPrompt && p != workTurn:
+		return workTurn, true
+	case ev == evTurnEnd && p == workTurn:
+		return workNone, true
+	case ev == evAgentRunning && p == workNone:
+		return workOwn, true
+	case ev == evAgentIdle && p == workOwn:
+		return workNone, true
+	}
+	return p, false
 }
 
 // defaultSettle is how long a permission is on screen before a key answers it,
@@ -322,15 +360,15 @@ func (s *Session) onAgentState(state string) {
 				s.report("working", "", "", "needs_input")
 			}
 		}
-		if !s.running && !s.background {
-			s.background = true
+		if next, moved := s.work.after(evAgentRunning); moved {
+			s.work = next
 			s.write(s.r.line("the agent is working on its own"))
 			s.report("working", "", "", "")
 		}
 	case "idle":
 		s.waiting = false
-		if s.background && !s.running {
-			s.background = false
+		if next, moved := s.work.after(evAgentIdle); moved {
+			s.work = next
 			s.write(s.r.line("the agent stopped working on its own"))
 			s.report("done", "", "", "")
 		}
@@ -450,14 +488,14 @@ func (s *Session) onKey(ctx context.Context, k key, turns chan turnResult) bool 
 	case keyCtrlU:
 		s.buf = s.buf[:0]
 	case keyCtrlC:
-		if s.running {
+		if s.work == workTurn {
 			s.Agent.Cancel()
 			s.write(s.r.line("cancelling the turn"))
 		} else {
 			s.buf = s.buf[:0]
 		}
 	case keyCtrlD:
-		if len(s.buf) == 0 && !s.running {
+		if len(s.buf) == 0 && s.work != workTurn {
 			return true
 		}
 	case keyEnter:
@@ -466,7 +504,7 @@ func (s *Session) onKey(ctx context.Context, k key, turns chan turnResult) bool 
 			break
 		}
 		switch {
-		case s.running:
+		case s.work == workTurn:
 			s.write(s.r.line("a turn is running: wait for it to end, or press Ctrl+C to cancel it"))
 			return false
 		case !s.ready:
@@ -517,7 +555,7 @@ func (s *Session) permissionKey(k key) bool {
 }
 
 func (s *Session) startTurn(ctx context.Context, text string, turns chan turnResult) {
-	s.running = true
+	s.work, _ = s.work.after(evPrompt)
 	s.reply.Reset()
 	s.write(s.r.prompt(text))
 	s.report("working", "", "", "")
@@ -535,7 +573,7 @@ func (s *Session) startTurn(ctx context.Context, text string, turns chan turnRes
 }
 
 func (s *Session) endTurn(t turnResult) {
-	s.running = false
+	s.work, _ = s.work.after(evTurnEnd)
 	// A permission still up belongs to a turn that is over.
 	if len(s.perms) > 0 {
 		s.endHold()
@@ -651,7 +689,7 @@ func (s *Session) cancelAll() {
 		p.Cancel()
 	}
 	s.perms = nil
-	if s.running {
+	if s.work == workTurn {
 		s.Agent.Cancel()
 	}
 }
@@ -735,7 +773,7 @@ func (s *Session) inputLine() string {
 		switch {
 		case !s.ready:
 			hint = "starting"
-		case s.running:
+		case s.work == workTurn:
 			hint = "working, Ctrl+C cancels"
 		}
 		return ansi.Truncate(sgrBold+"> "+sgrReset+sgrDim+hint+sgrReset, width-1, "")

@@ -21,6 +21,10 @@
 // waits for session/cancel; for "withdraw" asks permission and takes the
 // question back with $/cancel_request; for "usage" also sends a notice, a
 // compaction, the slash commands, and an update of a kind no client knows.
+// For "later" it starts work of its own 900 ms after the turn ends and says
+// running again 900 ms on, and for "later chain" it stops that work, starts
+// it again and says running again, 900 ms apart, with no turn of the
+// person's.
 package main
 
 import (
@@ -246,6 +250,20 @@ func prompt(id json.RawMessage, params json.RawMessage) {
 	}
 	if version >= 2 {
 		state("idle", map[string]any{"stopReason": reason})
+		if strings.Contains(text, "later") {
+			go func() {
+				time.Sleep(900 * time.Millisecond)
+				state("running", nil)
+				if strings.Contains(text, "chain") {
+					time.Sleep(900 * time.Millisecond)
+					state("idle", map[string]any{"stopReason": "end_turn"})
+					time.Sleep(900 * time.Millisecond)
+					state("running", nil)
+				}
+				time.Sleep(900 * time.Millisecond)
+				state("running", nil)
+			}()
+		}
 		return
 	}
 	respond(id, map[string]any{"stopReason": reason})

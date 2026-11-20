@@ -18622,3 +18622,21 @@ The overlay and rail-pane branches got the same call. This test does not reach t
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^TestHoverLightsEveryRunOfAnIDLink$' -v .
 ```
+
+## An agent's own work after a turn
+
+`TestProtocolPaneReportsOwnWorkAfterATurn` and `TestProtocolPaneReportsOwnWorkTwice` (`agent_protocol_own_work_test.go`) run the stand-in ACP version 2 agent, which for a prompt with "later" starts work of its own after the turn and for "later chain" stops it and starts it again. The first test sends a prompt while that work runs and checks that the agent's next own work, after the turn, is reported again; the second is its positive half, with no turn between.
+
+Run on Linux on 2026-11-20. The branch was based on main at 466a7e9d2. Each control is a build of the branch with one change in `internal/agentproto/session.go`; the branch passes both tests three times in one process.
+
+| Control | How | Test | Failure | Verdict |
+| --- | --- | --- | --- | --- |
+| Main, no fix | build of main | `TestProtocolPaneReportsOwnWorkAfterATurn` | "the agent's own work after the second turn is reported": "\"the agent is working on its own\" 1 times, list-agents reads \"done\"" | **caught**; `TestProtocolPaneReportsOwnWorkTwice` passes on main |
+| The prompt move cut (own work stays own work when a prompt is sent) | in `after`, `ev == evPrompt && p != workTurn` becomes `ev == evPrompt && p == workNone` | `TestProtocolPaneReportsOwnWorkAfterATurn` | "the own-work line stays at two and no stopped line shows": the pane prints "the agent stopped working on its own" before the second turn's "turn finished" | **caught** |
+| The idle move from own work cut | in `after`, the `ev == evAgentIdle && p == workOwn` case removed | `TestProtocolPaneReportsOwnWorkTwice` | "own work, its end and own work again are reported in order": "\"the agent is working on its own\" 1 times, \"the agent stopped working on its own\" 0 times, in order false, list-agents reads \"working\"" | **caught** |
+| The turn's end not wired | in `endTurn`, `s.work, _ = s.work.after(evTurnEnd)` removed | both | `TestProtocolPaneReportsOwnWorkAfterATurn`: "the pane never showed ECHO: later one \| the agent is working on its own", the input line reads "working, Ctrl+C cancels" after "turn finished"; `TestProtocolPaneReportsOwnWorkTwice`: "\"the agent is working on its own\" 0 times, ... list-agents reads \"done\"" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -v -run '^(TestProtocolPaneReportsOwnWorkAfterATurn|TestProtocolPaneReportsOwnWorkTwice)$' .
+```
