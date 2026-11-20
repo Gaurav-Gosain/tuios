@@ -88,6 +88,7 @@ jobs:
       shards: ${{ steps.shards.outputs.shards }}
       total: ${{ steps.shards.outputs.total }}
       frames: ${{ steps.frames.outputs.frames }}
+      debs_key: ${{ steps.debs.outputs.key }}
     # actions: read lets scripts/e2e-select.sh download the newest test map.
     permissions:
       contents: read
@@ -229,6 +230,53 @@ jobs:
           done
           cat "$out/packages.txt"
           du -sh "$out"
+
+      # The apt packages the shards' tests may need, as .deb files, so a
+      # shard installs them with dpkg and runs no apt-get. Each package's
+      # folder holds the files it needs beyond the runner image. The key names
+      # the runner image version, which fixes the version of each package,
+      # and the packages. Only a miss downloads them, once, here.
+      - name: Name the shard tools cache
+        id: debs
+        if: steps.shards.outputs.shards != '[]' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+        run: |
+          pkgs="fish zsh lua5.1 poppler-utils"
+          echo "pkgs=$pkgs" >> "$GITHUB_OUTPUT"
+          echo "key=e2e-debs-$ImageOS-$ImageVersion-${pkgs// /-}" >> "$GITHUB_OUTPUT"
+
+      - name: Look up the shard tools cache
+        id: debs-cache
+        if: steps.shards.outputs.shards != '[]' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/debs
+          key: ${{ steps.debs.outputs.key }}
+          lookup-only: true
+
+      - name: Download the shard tools
+        if: steps.shards.outputs.shards != '[]' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && steps.debs-cache.outputs.cache-hit != 'true'
+        env:
+          PKGS: ${{ steps.debs.outputs.pkgs }}
+        run: |
+          set -euo pipefail
+          # With no package the script only repairs the apt sources.
+          .github/scripts/apt-install.sh
+          sudo apt-get -o Acquire::Retries=3 update -qq
+          for pkg in $PKGS; do
+            dir=$RUNNER_TEMP/debs/$pkg
+            mkdir -p "$dir/partial"
+            sudo apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends --download-only -o Dir::Cache::archives="$dir" "$pkg"
+            sudo rm -rf "$dir/partial" "$dir/lock"
+            sudo chown -R "$(id -u):$(id -g)" "$dir"
+            echo "$pkg: $(ls "$dir" | tr '\n' ' ')"
+          done
+
+      - name: Save the shard tools
+        if: steps.shards.outputs.shards != '[]' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && steps.debs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/debs
+          key: ${{ steps.debs.outputs.key }}
 
       - name: Keep the build and the lists for the shards
         if: steps.shards.outputs.shards != '[]' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
@@ -375,7 +423,11 @@ jobs:
       # names lives here. Only a shard that holds one of those tests pays for
       # its packages. The test step sets TUIOS_E2E_REQUIRE_TOOLS, so a tool
       # that is still missing fails the test and does not skip it.
-      - name: Install the tools this shard's tests need
+      #
+      # TestRailQuickLookKittyPicture resizes a PDF page, the case the bug was
+      # reported on, and skips that step without pdftoppm (poppler-utils).
+      - name: Choose the tools this shard's tests need
+        id: tools
         if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         run: |
           set -euo pipefail
@@ -388,20 +440,61 @@ jobs:
             zsh) pkgs+=(zsh) ;;
             # Lua 5.1, the version Rex embeds. The package puts lua on PATH.
             lua) pkgs+=(lua5.1) ;;
-            # jj has no apt package on the runner. A release binary at the
-            # version the tests were written against, checked against its
-            # sha256 (the digest GitHub shows for the asset), so a changed
-            # jj is a change in this file. The musl build is static.
             jj) need_jj=1 ;;
             *) echo "e2e/tui/tools.txt names the tool $tool, which this step does not know how to install" >&2; exit 1 ;;
             esac
           done
-          if [ "${#pkgs[@]}" -gt 0 ]; then
-            start=$(date +%s)
-            .github/scripts/apt-install.sh "${pkgs[@]}"
-            echo "Installed ${pkgs[*]} in $(( $(date +%s) - start )) s"
+          if grep -qx 'TestRailQuickLookKittyPicture' "$RUNNER_TEMP/names.txt"; then
+            pkgs+=(poppler-utils)
           fi
-          if [ -n "$need_jj" ]; then
+          echo "pkgs=${pkgs[*]:-}" >> "$GITHUB_OUTPUT"
+          echo "jj=$need_jj" >> "$GITHUB_OUTPUT"
+
+      # The .deb files the shard plan job keeps for this runner image.
+      - name: Restore the shard tools
+        id: debs
+        if: env.TESTED_URL == '' && steps.tools.outputs.pkgs != ''
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/debs
+          key: ${{ needs.shard-plan.outputs.debs_key }}
+
+      - name: Install the tools this shard's tests need
+        if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
+        env:
+          PKGS: ${{ steps.tools.outputs.pkgs }}
+          NEED_JJ: ${{ steps.tools.outputs.jj }}
+          DEBS_HIT: ${{ steps.debs.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PKGS" ]; then
+            start=$(date +%s)
+            if [ "$DEBS_HIT" = true ]; then
+              # Each package's folder holds the files it needs beyond the
+              # runner image. One dpkg call installs them in order. A file
+              # that two packages need is installed once.
+              # shellcheck disable=SC2086 # one package name a word
+              debs=$(for pkg in $PKGS; do ls "$RUNNER_TEMP/debs/$pkg"/*.deb 2>/dev/null || true; done | awk -F/ '!seen[$NF]++')
+              if [ -n "$debs" ]; then
+                # shellcheck disable=SC2086 # one path a line, none with a space
+                sudo dpkg -i $debs > "$RUNNER_TEMP/dpkg.log" 2>&1 || { cat "$RUNNER_TEMP/dpkg.log"; exit 1; }
+              fi
+              echo "Installed $PKGS from the cache in $(( $(date +%s) - start )) s"
+            else
+              # The runner image is newer or older than the one the shard
+              # plan job ran on, or the cache was evicted.
+              echo "::warning title=Shard tools::The tools cache has no files for this runner image, so apt installs $PKGS."
+              # shellcheck disable=SC2086 # one package name a word
+              .github/scripts/apt-install.sh $PKGS
+              echo "Installed $PKGS with apt in $(( $(date +%s) - start )) s"
+            fi
+            command -v pdftoppm >/dev/null && pdftoppm -v 2>&1 | head -1 || true
+          fi
+          # jj has no apt package on the runner. A release binary at the
+          # version the tests were written against, checked against its
+          # sha256 (the digest GitHub shows for the asset), so a changed
+          # jj is a change in this file. The musl build is static.
+          if [ -n "$NEED_JJ" ]; then
             jj_version=0.47.1
             jj_sha256=d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7
             asset="jj-v${jj_version}-x86_64-unknown-linux-musl.tar.gz"
@@ -411,17 +504,6 @@ jobs:
             tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/jjbin" ./jj
             echo "$RUNNER_TEMP/jjbin" >> "$GITHUB_PATH"
             "$RUNNER_TEMP/jjbin/jj" --version
-          fi
-
-      # TestRailQuickLookKittyPicture resizes a PDF page, the case the bug was
-      # reported on, and skips that step without pdftoppm. Only the shard that
-      # holds the test pays for the package.
-      - name: Install pdftoppm for the shard that needs it
-        if: env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
-        run: |
-          if grep -qx 'TestRailQuickLookKittyPicture' "$RUNNER_TEMP/names.txt"; then
-            .github/scripts/apt-install.sh poppler-utils
-            pdftoppm -v 2>&1 | head -1
           fi
 
       - name: Run this shard of the end-to-end suite
