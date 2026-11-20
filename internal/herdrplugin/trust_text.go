@@ -63,7 +63,7 @@ func RunsLines(p *Plugin) []string {
 		out = append(out, "startup  "+ShownArgv(s.Command...))
 	}
 	if p.PluginID == SketchID {
-		out = append(out, "mermaid  bin/sketch, for the diagrams tuios does not draw, in tuios mermaid and in TML panels")
+		out = append(out, "mermaid  bin/sketch, for the diagrams tuios does not draw, in tuios mermaid, TML panels, the agents view and quick look")
 	}
 	var hooks, actions, panes, links, cells, themes, savers []string
 	for _, s := range p.Savers {

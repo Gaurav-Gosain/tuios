@@ -1336,6 +1336,7 @@ func (m *OS) OpenInbox(filter string) {
 	}
 	st := &m.Inbox
 	m.ShowInbox = true
+	m.retrySketch()
 	// The cockpit is the agents view: the selector line searches the
 	// agents as well as narrowing the items.
 	st.agents.on = true

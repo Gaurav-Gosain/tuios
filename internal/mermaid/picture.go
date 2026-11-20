@@ -9,6 +9,8 @@ import (
 
 	sketch "tuios.dev/sketch/core"
 	"tuios.dev/sketch/raster"
+
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // Picture is a diagram drawn for a terminal: a PNG that fills a box of whole
@@ -22,15 +24,30 @@ type Picture struct {
 // cells, and Rows its height when above 0. CellW and CellH are the size of a
 // cell in pixels. Background paints the theme's background behind the
 // diagram; without it the picture is clear where the diagram draws nothing.
+// Plugin draws a type this build does not draw as SVG, with the sketch
+// plugin: the SVG and its size in SVG units. Nil draws only the types of this
+// build.
 type PictureOptions struct {
 	Cols, Rows   int
 	CellW, CellH int
 	Background   bool
+	Plugin       func(src string) (svg string, width, height float64, err error)
 }
 
 // Draw draws a Mermaid source as a picture for a terminal. tuios mermaid
-// --format kitty and the agents view both draw with it.
+// --format kitty and the agents view both draw with it. A type this build
+// does not draw comes from o.Plugin, in the colours of th.
 func Draw(src string, th *sketch.Theme, o PictureOptions) (Picture, error) {
+	if typ, known := sketch.Detect(src); known && !sketch.Supports(src) {
+		if o.Plugin == nil {
+			return Picture{}, errfmt.Errorf("the sketch plugin draws %s diagrams", typ)
+		}
+		data, w, h, err := o.Plugin(src)
+		if err != nil {
+			return Picture{}, err
+		}
+		return DrawSVG(sketch.SVG{Data: data, Width: w, Height: h}, th, o)
+	}
 	out, err := sketch.Render(src, sketch.RenderOptions{Theme: th})
 	if err != nil {
 		return Picture{}, err
@@ -42,7 +59,9 @@ func Draw(src string, th *sketch.Theme, o PictureOptions) (Picture, error) {
 func DrawSVG(out sketch.SVG, th *sketch.Theme, o PictureOptions) (Picture, error) {
 	cellW, cellH := max(o.CellW, 1), max(o.CellH, 1)
 	scale := Scale(out.Width, out.Height, o.Cols, o.Rows, cellW, cellH)
-	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Background: o.Background, Readable: true})
+	// The theme sets the --pele-* tokens, so an SVG drawn in another theme,
+	// such as the sketch plugin's, takes th's colours.
+	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Theme: th, Background: o.Background, Readable: true})
 	if err != nil {
 		return Picture{}, err
 	}

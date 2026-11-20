@@ -6691,8 +6691,15 @@ sankey diagrams. Install it with `tuios plugins install sketch`. Then
 `tuios mermaid` runs the plugin for such a diagram, with `--format`, `--out`,
 `--cols`, `--diagram` and `--theme`. Without the plugin, the command says what
 to run and exits 3. `--watch` and `--demo` draw the eight types only. A TML
-panel draws another type with the plugin too. Without the plugin it shows the
-source, and a notice says what to run.
+panel, the agents thread and quick look draw another type with the plugin too.
+A picture in the agents thread comes from the plugin as SVG, in the colours of
+tuios. Without the plugin they show the source, and a notice says what to run.
+When the plugin is on and has no program, the note says to run
+`tuios plugins build tuios.sketch`. A plugin you install or build while tuios
+runs draws the diagram when you open the agents view or quick look again.
+
+An install from the plugin folder or from GitHub builds the program with Go.
+An install by the name `sketch` takes the program of the tuios release.
 
 `text` draws every type of the eight. Another type is written as its source,
 with a note on stderr. A drawing wider than the terminal

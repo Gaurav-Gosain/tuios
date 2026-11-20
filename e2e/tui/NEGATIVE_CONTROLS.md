@@ -12866,6 +12866,20 @@ branch head with one change:
 | The plan names the program tuios runs | the line names `bin/sketch2` | `TestSketchPluginPlanNamesItsProgram`: "the plan of the sketch plugin does not name its program" | **caught** |
 | A dev build keeps installing the folder | the release name taken on every build (the `runningTag` check cut) | `TestPluginsReleaseNameBeatsAFolder`: "install pr-status on a dev build: exit status 1", tuios printing "this tuios is a dev build, which no release made, so it has no plugin assets" | **caught** |
 
+## The sketch plugin in the agents thread
+
+`TestCockpitThreadSketchPluginText` and `TestCockpitThreadSketchPluginPicture`
+show a reply with a timeline in the agents thread: with no plugin, with the
+plugin on and no program, and with a fake program, installed while the client
+runs. Run on 2026-11-20 on Linux, each control against the branch head with
+one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A plugin installed while the client runs draws the block when the agents view opens again | the `retrySketch` call cut from `OpenInbox` | `TestCockpitThreadSketchPluginText`: "the note says the plugin has no program" | **caught** |
+| The note says why the plugin did not draw the block | loom's note keeps "the sketch plugin draws timeline diagrams" and drops the error | `TestCockpitThreadSketchPluginText`: "the note says the plugin has no program" | **caught** |
+| A picture comes from the plugin's SVG | the SVG run in `drawMermaidPicture` replaced by an error | `TestCockpitThreadSketchPluginPicture`: "no picture where the card is" | **caught** |
+
 ## Native event hooks
 
 `TestPluginPRStatus` now runs `plugins/pr-status` with one manifest, its hook a

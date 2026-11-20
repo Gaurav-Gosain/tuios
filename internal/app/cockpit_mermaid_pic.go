@@ -154,6 +154,9 @@ func (m *OS) applyMermaidPic(msg mermaidPicMsg) tea.Cmd {
 		return nil
 	}
 	p.ti.loading = false
+	if msg.err != nil && needsSketchPlugin(msg.key.src) {
+		sketchFailed.Store(true)
+	}
 	switch {
 	case errors.Is(msg.err, composer.ErrImageTooLarge):
 		p.ti.err = "The picture is larger than 8 MB."

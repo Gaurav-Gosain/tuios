@@ -3,3 +3,14 @@ id = "tuios.sketch"
 name = "Sketch"
 version = "0.1.0"
 description = "Draws every Mermaid diagram type in tuios mermaid. tuios draws eight types itself"
+
+# An install from this folder or from GitHub builds bin/sketch from the sketch
+# module of the repository, so it needs Go. An install from the release takes
+# the release's program and runs no build.
+[[build]]
+platforms = ["linux", "macos"]
+command = ["go", "build", "-C", "../../sketch", "-trimpath", "-o", "../plugins/sketch/bin/sketch", "./cmd/sketch"]
+
+[[build]]
+platforms = ["windows"]
+command = ["go", "build", "-C", "../../sketch", "-trimpath", "-o", "../plugins/sketch/bin/sketch.exe", "./cmd/sketch"]

@@ -8,6 +8,7 @@
 package procsetup
 
 import (
+	"errors"
 	"image/color"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/sketchplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -46,23 +48,37 @@ func Setup(o Options) {
 	if o.Releases != nil {
 		app.MachineReleases = o.Releases
 	}
-	app.SketchProgram = func() string {
-		prog, e, err := FindSketch()
-		if err != nil || e == nil || !e.Runnable() {
-			return ""
-		}
-		return prog
-	}
+	app.SketchProgram = sketchProgram
 	app.MermaidPicture = drawMermaidPicture
 	app.SetInputHandler(input.HandleInput)
 }
 
 // drawMermaidPicture draws a Mermaid block of the agents view as a picture,
 // in the colours of the view, clear where the diagram draws nothing.
+// A type this build does not draw comes from the sketch plugin as SVG.
 func drawMermaidPicture(src string, cols, rows, cellW, cellH int, pal overlay.Palette, ansi [16]color.Color, bg color.Color) ([]byte, int, int, error) {
 	th := mermaid.Theme(pal, ansi, bg, pal.Fg)
-	pic, err := mermaid.Draw(src, th, mermaid.PictureOptions{Cols: cols, Rows: rows, CellW: cellW, CellH: cellH})
+	pic, err := mermaid.Draw(src, th, mermaid.PictureOptions{Cols: cols, Rows: rows, CellW: cellW, CellH: cellH,
+		Plugin: func(src string) (string, float64, float64, error) {
+			prog, err := sketchProgram()
+			if err != nil {
+				return "", 0, 0, err
+			}
+			return sketchplugin.SVG(prog, src)
+		}})
 	return pic.PNG, pic.Cols, pic.Rows, err
+}
+
+// sketchProgram is the program of the sketch plugin, for app.SketchProgram.
+func sketchProgram() (string, error) {
+	prog, e, err := FindSketch()
+	switch {
+	case e == nil || !e.Runnable():
+		return "", errors.New("the sketch plugin does not run here")
+	case err != nil:
+		return "", app.ErrSketchNoProgram
+	}
+	return prog, nil
 }
 
 // Reaper is the argv the daemon runs a plugin command under, or nil where no

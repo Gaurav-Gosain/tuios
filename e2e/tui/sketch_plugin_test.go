@@ -94,7 +94,7 @@ func TestSketchPlugin(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(plug, "bin", "sketch"), []byte("#!/bin/sh\ncase \"$*\" in *cells*) cat >/dev/null; echo '"+fakeCells+"'; exit 0 ;; esac\necho \"plugin drew: $*\"\ncat\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := tuiosCLI(t, base, "plugins", "install", plug, "--yes"); err != nil {
+	if out, err := tuiosCLI(t, base, "plugins", "install", plug, "--yes", "--no-build"); err != nil {
 		t.Fatalf("install the plugin: %v\n%s", err, out)
 	}
 	out, err = tuiosCLI(t, base, "mermaid", "t.mmd", "-f", "text", "--cols", "60")
@@ -155,7 +155,7 @@ func TestSketchPluginPlanNamesItsProgram(t *testing.T) {
 	other := t.TempDir()
 	writeFiles(t, other, map[string]string{"tuios-plugin.toml": "api = 1\nid = \"e2e.quiet\"\nname = \"Quiet\"\nversion = \"0.1.0\"\n"})
 
-	out, err := tuiosCLI(t, base, "plugins", "install", sketch, "--yes")
+	out, err := tuiosCLI(t, base, "plugins", "install", sketch, "--yes", "--no-build")
 	if err != nil || !strings.Contains(out, "mermaid  bin/sketch, ") || !strings.Contains(out, "TML panels") {
 		t.Errorf("the plan of the sketch plugin does not name its program: %v\n%s", err, out)
 	}

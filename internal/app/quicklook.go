@@ -375,6 +375,7 @@ func (m *OS) SidebarQuickLook() tea.Cmd {
 		return nil
 	}
 	m.quickLook.open = true
+	m.retrySketch()
 	return m.quickLookShow(t)
 }
 
@@ -407,6 +408,7 @@ func (m *OS) quickLookMenu(f fileMenuTarget) tea.Cmd {
 	}
 	m.sidebarSetCursor(row)
 	ql.open = true
+	m.retrySketch()
 	return m.quickLookShow(t)
 }
 

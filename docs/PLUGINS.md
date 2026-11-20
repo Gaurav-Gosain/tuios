@@ -355,6 +355,7 @@ a plugin does nothing. `tuios --skill tml` has the components.
 | next | New: `tuios plugins new`, `check` and `dev`. `check` warns on an old key such as `schema`. | Run `tuios plugins check` in your CI. |
 | next | New: `run = "event"` with `on`, `TUIOS_PLUGIN_EVENT` and `TUIOS_PLUGIN_EVENT_JSON`. | Move hooks out of a `herdr-plugin.toml`. |
 | next | New: `tuios plugins install NAME` for the plugins of the tuios release. | Nothing. |
+| next | The sketch plugin draws in the agents thread and in quick look, as text and as a picture. An install from its folder or from GitHub builds its program. A plugin of the tuios release runs no build command. | Nothing. |
 | next | tuios draws eight Mermaid types itself. `tuios plugins install sketch` brings the rest to `tuios mermaid` and to TML panels. | Nothing. |
 | next | New: the `ui` grant, `[[cell]]`, `tuios plugin-cell` and `tuios plugin-notify`. | A plugin that uses them sets `min_tuios`. A plugin that held `write` only to open a panel can ask for `ui`. |
 | next | `api` replaces `schema`. `schema = 1` still works and `tuios plugins info` warns. | Write `api = 1`. |

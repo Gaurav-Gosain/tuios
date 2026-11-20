@@ -442,7 +442,9 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 	if p, err = loadInside(root, dir); err != nil {
 		return fail(err)
 	}
-	built := !slices.ContainsFunc(p.Build, func(b herdrplugin.Command) bool { return p.Supported(b.Platforms, "build") == nil })
+	// A plugin of the release comes with what its build makes, such as the
+	// sketch program, so its build commands are for a folder install only.
+	built := e.Release() || !slices.ContainsFunc(p.Build, func(b herdrplugin.Command) bool { return p.Supported(b.Platforms, "build") == nil })
 	if !in.o.noBuild && !built {
 		if err := runPluginBuild(in.sig.ctx, in.cmd, p, in.dirs); err != nil {
 			return fail(errfmt.Errorf("%w. The plugin is not installed", err))
@@ -783,7 +785,10 @@ func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, 
 	}
 	f("\n  folder  %s\n", folder)
 	head := "\nBuild commands (run now, in that folder, with your rights):\n"
-	if o.noBuild {
+	switch {
+	case e.Release():
+		head = "\nBuild commands (not run now, because the release has what they make):\n"
+	case o.noBuild:
 		head = "\nBuild commands (not run now, because of --no-build):\n"
 	}
 	for _, c := range p.Build {

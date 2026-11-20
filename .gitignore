@@ -45,3 +45,6 @@ zz_*_test.go
 
 # Frames of an e2e run under TUIOS_E2E_FRAMES, one folder per test.
 /e2e/tui/**/Test*/
+
+# The program a folder install of the sketch plugin builds.
+/plugins/sketch/bin/

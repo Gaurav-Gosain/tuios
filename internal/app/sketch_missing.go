@@ -1,26 +1,31 @@
 package app
 
 import (
-	"context"
 	"errors"
-	"os/exec"
-	"strconv"
-	"strings"
+	"sync/atomic"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
-	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
-	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/sketchplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
 	"tuios.dev/loom"
+	sketch "tuios.dev/sketch/core"
 	sketchtext "tuios.dev/sketch/text"
 )
 
-// A TML <mermaid> of a type tuios does not draw shows its source under a
-// note (loom/mermaid.go), and the person hears once per type in this client
-// session what to do. loom tells of each source once, when it parses it, so
-// nothing here runs per frame.
+// Every Mermaid block tuios draws in a client goes through loom: a TML
+// <mermaid>, and a fenced Mermaid block of the agents thread and of quick
+// look, which cockpit_blocks.go draws as a TML document of one <mermaid>. A
+// type this build does not draw goes to the sketch plugin's program through
+// the hooks of renderSurface, off the frame path: the block shows a pending
+// note, and the drawing comes back as a sketchDrawnMsg that draws the blocks
+// again. A picture of the thread (cockpit_mermaid_pic.go) asks the same
+// program for SVG through MermaidPicture, and keeps the text drawing until
+// the picture comes, or when it cannot come.
+//
+// Without the plugin a block shows its source under a note, and the person
+// hears once per type in this client session what to run. loom tells of each
+// source once, when it parses it, so nothing here runs per frame.
 
 // missingDiagramMsg is a diagram type a surface could not draw.
 type missingDiagramMsg struct{ typ string }
@@ -42,57 +47,91 @@ func (m *OS) renderSurface(s *loom.Surface, w, h int) *loom.Buffer {
 // sketchDrawnMsg is a drawing of the sketch plugin that came in.
 type sketchDrawnMsg struct{}
 
-// SketchProgram, when set, is the program of the sketch plugin, "" when it
-// is not installed or does not run. The binary sets it.
-var SketchProgram func() string
+// SketchProgram, when set, is the program of the sketch plugin, or why there
+// is none: ErrSketchNoProgram when the plugin is on and has no program, any
+// other error when the plugin does not run here. The binary sets it.
+var SketchProgram func() (string, error)
 
-// sketchDrawTimeout bounds one run of the plugin's program.
-const sketchDrawTimeout = 20 * time.Second
+// ErrSketchNoProgram is the sketch plugin on, with no program in its folder:
+// a folder or a GitHub install that was not built.
+var ErrSketchNoProgram = errors.New("the sketch plugin has no program")
 
-// drawWithSketchPlugin runs the sketch plugin's program for one diagram and
-// reads its cells.
-func drawWithSketchPlugin(src string, cols int) ([][]sketchtext.Cell, bool, error) {
-	prog := ""
-	if SketchProgram != nil {
-		prog = SketchProgram()
+// errSketchNotInstalled is the sketch plugin not installed, or not on.
+var errSketchNotInstalled = errors.New("the sketch plugin is not installed")
+
+// sketchFailed says a drawing of the sketch plugin failed since the last
+// retry. Opening the agents view or quick look then asks again, once, so a
+// plugin installed or built while tuios runs draws the diagram.
+var sketchFailed atomic.Bool
+
+// sketchProgram is SketchProgram, or errSketchNotInstalled when it is unset.
+func sketchProgram() (string, error) {
+	if SketchProgram == nil {
+		return "", errSketchNotInstalled
 	}
-	if prog == "" {
-		return nil, false, errors.New("the sketch plugin is not installed")
+	prog, err := SketchProgram()
+	if err == nil && prog == "" {
+		err = errSketchNotInstalled
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), sketchDrawTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, prog, "-f", "cells", "-cols", strconv.Itoa(cols), "-") //nolint:gosec // the program of the plugin the person installed
-	cmd.Stdin = strings.NewReader(src)
-	data, err := cmd.Output()
-	if err != nil {
-		return nil, false, err
-	}
-	if len(data) > sketchMaxCells {
-		return nil, false, errors.New("the drawing is too large")
-	}
-	var got struct {
-		Rows [][][3]int `json:"rows"`
-		Cut  bool       `json:"cut"`
-	}
-	if err := jsonx.Unmarshal(data, &got); err != nil {
-		return nil, false, errfmt.Errorf("the sketch plugin gave no cells: %w", err)
-	}
-	rows := make([][]sketchtext.Cell, len(got.Rows))
-	for y, row := range got.Rows {
-		rows[y] = make([]sketchtext.Cell, len(row))
-		for x, c := range row {
-			r := rune(c[0])
-			if r != 0 && (r < ' ' || r == 0x7f || (r >= 0x80 && r < 0xa0)) {
-				r = ' '
-			}
-			rows[y][x] = sketchtext.Cell{Rune: r, Role: sketchtext.Role(c[1]), Bg: sketchtext.Role(c[2])} //nolint:gosec // a role is a small number
-		}
-	}
-	return rows, got.Cut, nil
+	return prog, err
 }
 
-// sketchMaxCells bounds what the plugin's program may answer, in bytes.
-const sketchMaxCells = 16 << 20
+// drawWithSketchPlugin runs the sketch plugin's program for one diagram and
+// reads its cells. The error is the line over the diagram's source.
+func drawWithSketchPlugin(src string, cols int) ([][]sketchtext.Cell, bool, error) {
+	prog, err := sketchProgram()
+	if err != nil {
+		sketchFailed.Store(true)
+		if errors.Is(err, ErrSketchNoProgram) {
+			return nil, false, errors.New("the sketch plugin has no program. Run tuios plugins build tuios.sketch")
+		}
+		typ, _ := sketch.Detect(src)
+		return nil, false, errfmt.Errorf("the sketch plugin draws %s diagrams", typ)
+	}
+	rows, cut, err := sketchplugin.Cells(prog, src, cols)
+	if err != nil {
+		sketchFailed.Store(true)
+		return nil, false, errfmt.Errorf("the sketch plugin could not draw it: %w", err)
+	}
+	return rows, cut, nil
+}
+
+// needsSketchPlugin reports whether src is of a type this build does not
+// draw.
+func needsSketchPlugin(src string) bool {
+	_, known := sketch.Detect(src)
+	return known && !sketch.Supports(src)
+}
+
+// redrawDiagrams draws the rich blocks and the TML surfaces again, which
+// take the drawings from loom's cache.
+func (m *OS) redrawDiagrams() {
+	m.blockGen++
+	m.blocksChanged()
+	for id, v := range m.tml.views {
+		if v.surface != nil {
+			v.surface.Invalidate()
+			m.markTMLDirty(id)
+		}
+	}
+	m.MarkAllDirty()
+}
+
+// retrySketch asks the sketch plugin again for the diagrams it could not
+// draw, when one failed since the last retry. The agents view and quick look
+// call it when they open, so it never runs per frame.
+func (m *OS) retrySketch() {
+	if !sketchFailed.Swap(false) {
+		return
+	}
+	loom.RetryExternal()
+	for k, p := range m.mermaidPics {
+		if p.ti.err != "" && needsSketchPlugin(k.src) {
+			delete(m.mermaidPics, k)
+		}
+	}
+	m.redrawDiagrams()
+}
 
 // noteMissingDiagram tells the person about typ, once in this session.
 func (m *OS) noteMissingDiagram(typ string) {
@@ -104,23 +143,15 @@ func (m *OS) noteMissingDiagram(typ string) {
 	}
 	m.diagramsTold[typ] = true
 	// Short enough for the dock, so the command is not cut.
-	// With the plugin, the surface draws the diagram, so there is nothing
-	// to tell.
-	if sketchPluginInstalled(m.UserConfig) {
-		return
-	}
+	// With the plugin's program, the surface draws the diagram, so there is
+	// nothing to tell.
 	text := "Run tuios plugins install sketch to draw this diagram."
+	switch _, err := sketchProgram(); {
+	case err == nil:
+		return
+	case errors.Is(err, ErrSketchNoProgram):
+		text = "Run tuios plugins build tuios.sketch to draw this diagram."
+	}
 	m.ShowNotification(text, "info", max(m.Settings.NotificationDuration, 8*time.Second))
 	m.MarkAllDirty()
-}
-
-// sketchPluginInstalled reports whether the sketch plugin runs here. It reads
-// the plugin files, once per type in a session.
-func sketchPluginInstalled(cfg *config.UserConfig) bool {
-	path, err := config.GetConfigPath()
-	if err != nil || cfg == nil {
-		return false
-	}
-	e := herdrplugin.Find(herdrplugin.Discover(herdrplugin.DefaultDirs(path, cfg.Plugins.Dirs), cfg.Plugins.Enabled), herdrplugin.SketchID)
-	return e != nil && e.Runnable()
 }
