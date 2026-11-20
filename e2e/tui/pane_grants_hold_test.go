@@ -121,8 +121,11 @@ func TestAStrictPaneCannotTypeThroughTheLinkSocket(t *testing.T) {
 // a prompt would approve it, so the call is refused and names the respond
 // grant. The sibling receives nothing.
 //
-// Negative control: with the admin early return back in front of the prompt
-// check in checkGrants, SK_EXIT=0 appears and the sibling shows the 1.
+// Negative control: the prompt check runs three times for send-keys. With the
+// admin early return back in front of the prompt check in checkGrants, and the
+// recheckTyping and recheckBlocked calls cut from the send-keys handler,
+// SK_EXIT=1 never appears. With the first cut alone, or with the first and
+// recheckBlocked, the call is still refused.
 func TestAnOpenPaneCannotApproveAnotherPanesPrompt(t *testing.T) {
 	term, base := attachClientBase(t)
 	if out, err := tuiosCLI(t, base, "new-window", "-s", "e2e-ctrlp", "prompted", "--no-focus"); err != nil {
@@ -239,7 +242,9 @@ func TestTheShimHolderChecksTheCallersGrants(t *testing.T) {
 // terminal, and PREFIX is refused.
 //
 // Negative control: with paneTypesRaw back to holding only panes without
-// admin, NX_EXIT=0 appears and the sibling receives the 1.
+// admin and the typingNeedsWindow check cut from holdTypingTarget, NX_EXIT=1
+// never appears. With either one in place the call is refused: a pane must
+// name the window, and a pane without respond may not send PREFIX.
 func TestAnOpenPaneCannotReachAPromptThroughTheClient(t *testing.T) {
 	term, base := attachClientBase(t)
 	if out, err := tuiosCLI(t, base, "new-window", "-s", "e2e-ctrlp", "prompted", "--no-focus"); err != nil {

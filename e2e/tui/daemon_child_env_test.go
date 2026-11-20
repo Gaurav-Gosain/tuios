@@ -13,9 +13,9 @@ import (
 // environment a pane gets.
 //
 // The failure modes this is written against:
-//   - a daemon hook, a plugin command or an exec line keeps the variables of
-//     the agent tool call that started the daemon: its session ids, its
-//     credential, NO_COLOR;
+//   - a daemon hook, a plugin command, an exec line or a task verify command
+//     keeps the variables of the agent tool call that started the daemon: its
+//     session ids, its credential, NO_COLOR;
 //   - after a restart from pane X the daemon holds TUIOS_PANE_ID=X, and every
 //     exec line and hook is then placed in pane X and may act as X;
 //   - the filter takes away an ordinary variable of the person's.
@@ -152,4 +152,48 @@ func TestExecAfterARestartFromAPaneIsNotThatPane(t *testing.T) {
 	if strings.Contains(got, x) {
 		t.Errorf("ASSERTION: after a restart from pane %s, an exec line is placed in that pane:\n%s", x, got)
 	}
+}
+
+// TestATaskVerifyDoesNotInheritTheAgentThatStartedTheDaemon starts the daemon
+// from an agent's tool call, then has the board's verify command write its
+// environment. The command runs in the agent's worktree as a child of the
+// daemon, so it gets what the hook, the plugin and the exec line above get.
+//
+// How it could pass wrongly: a verify that never ran writes no file and
+// leaves the card in verify, so the test waits for the card to reach review
+// with a passed record before it reads the file. A verify run with an empty
+// environment would drop the ordinary variable, which checkChildEnv wants
+// kept.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with cmd.Env cut from runVerify,
+// the verify command keeps the agent and pane variables.
+func TestATaskVerifyDoesNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
+	const sess = "childenv-verify"
+	if o, err := tuiosCLIEnv(t, base, childEnvAgent, "new", sess, "--detach"); err != nil {
+		t.Fatalf("start the daemon: %v\n%s", err, o)
+	}
+	waitForSessionInfo(t, base, sess)
+
+	repo := filepath.Join(base, "demo")
+	lifeRepo(t, repo)
+	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent-a", "--no-focus", "--print-id", "--cwd", repo))
+	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "working", "--harness", "claude-code", "-m", "on it")
+	verifyFile := filepath.Join(base, "verify-env.txt")
+	mustCLI(t, base, "task", "dispatch", "verify", "-s", sess, "env > "+verifyFile)
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do it", "the work") // t1
+	mustCLI(t, base, "task", "claim", "t1", "-s", sess, "-w", a)
+	mustCLI(t, base, "task", "stage", "t1", "verify", "-s", sess)
+	cards, raw := waitLife(t, base, sess, 20*time.Second, "t1 did not reach review after its verify",
+		func(c map[string]lifeCard) bool { return c["t1"].Stage == "review" })
+	if c := cards["t1"]; c.Verify == nil || c.Verify.State != "passed" {
+		t.Fatalf("t1 in review has verify %+v, want passed:\n%s", c.Verify, raw)
+	}
+	got, err := os.ReadFile(verifyFile)
+	if err != nil {
+		t.Fatalf("the verify command passed and wrote no environment: %v", err)
+	}
+	checkChildEnv(t, "verify command", string(got))
 }

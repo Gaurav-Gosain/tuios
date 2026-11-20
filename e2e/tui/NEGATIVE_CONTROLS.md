@@ -9585,6 +9585,19 @@ it fails with "git started by childproc ran the repository's core.fsmonitor".
 Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1
 -run '^(TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt|TestADaemonChildCannotMarkAnotherPane)$' -v .`
 from `e2e/tui`.
+
+### The link half (GHSA-78rj-pghh-vh42)
+
+The tests above are the pane half. A report over a link is about a pane on this machine, and the state it sets is what the typing rule reads, so it needs `respond` in the link's policy. A build with the branch below cut passes the two tests above and `TestAPaneOverALinkCannotAnswerAPrompt`. `TestALinkCannotMarkAPaneOffItsPrompt` in `internal/session/link_policy_test.go` is a kept unit test of that boundary. It puts a pane on `needs_input`, then reports `working` for it with `set-agent-state` over a link with the default policy, which allows everything but `respond`. The report must be refused, naming answering prompts, and the pane must stay on `needs_input`. The positive half is in the same fixture: a link whose policy adds `respond` reports `working` and the pane reads it, and the person on this machine reports `idle`.
+
+Run on 2026-11-20 on macOS (arm64), based on upstream/main at 079302be4. The branch passes it.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The `cs.viaLink && grantKind(verb) == scopeSelf` branch of `checkGrants` (`internal/session/pane_grants.go`) made `if false && ...` | `a_link_without_respond`: "ASSERTION: a link without respond moved the pane on a prompt to working", "ASSERTION: set-agent-state over a link without respond: map[id:1 result:map[applied:true message: source:report state:working type:agent_state_set]]". `a_link_that_may_respond` and `the_person` pass | **caught** |
+
+Repeat from the repository root with `go test -count=1 -run '^TestALinkCannotMarkAPaneOffItsPrompt$' -v ./internal/session/`.
+
 ## Live handoff
 
 `e2e/tui/live_handoff_test.go` drives the daemon live upgrade of `docs/design/live-handoff.md` against real daemons. The daemon runs with `knob handoff=1`, which registers the test-only verbs `test-quiesce` and `test-handoff`. Each test writes what it measured to `handoff.json` under `artifactDir`.
@@ -11601,6 +11614,21 @@ Each negative step has its positive half in the same fixture: the four
 admitted clients get a version line and stay open past the fifth, and the
 first key login draws its session and opens a pane before the second is
 refused.
+
+## The tuios ssh idle limit
+
+`TestSSHServerIdleTimeout` runs `tuios ssh` in daemon mode with key authentication and `idle_timeout = "3s"` in `[ssh]`. Two clients log in with `ssh -N`, so neither opens a session. The one that sends nothing must be closed between 1.5 s and 8 s after its login: half the timeout leaves room for a late login line, and a server that closes the connection at its login still fails. The one that sends an OpenSSH keepalive every second must still be open 6 s after its login. Run on 2026-11-20 on macOS (arm64), based on upstream/main at 079302be4. The branch passes 10 of 10 with `-race`.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| `opts = append(opts, limitOptions(limits)...)` and `sessionLimitMiddleware(limits.MaxSessions)` out of `StartSSHServer`, the server as it was before the limits | "a logged in connection with no traffic was still open 8s after its login, with idle_timeout = 3s" | **caught** |
+| `opts = append(opts, wish.WithIdleTimeout(l.IdleTimeout))` out of `limitOptions` | the same | **caught** |
+| `wish.WithIdleTimeout(l.IdleTimeout/4)` in `limitOptions`, a server that closes too soon | "the idle connection closed 752.103458ms after its login, before the 3s idle timeout" | **caught** |
+
+The negative step has its positive half in the same fixture: the client that sends keepalives logs in on the same server and outlives two idle timeouts, so the limit counts traffic and not the age of the connection.
+
+The lower bound was widened from 2.5 s to 1.5 s on 2026-11-20 and the controls run again: the second row fails as shown, the third row is the lower bound's own control, and the branch closes the idle client 3 s after its login, 3 of 3 runs.
+
 ## An empty paste under WSL reads the Windows clipboard
 
 `TestAnEmptyPasteUnderWSLReadsTheWindowsClipboard` sends the empty bracketed paste Windows Terminal sends when the clipboard holds only an image, from a client under WSL (`WSL_DISTRO_NAME` set). A `powershell.exe` stand-in answers for the Windows clipboard with the image, and a `wl-paste` stand-in for WSLg's lists text only, as WSLg's bridge does when Windows holds an image. The image has to be pasted into the pane as a file path, and the pane's shell has to read the file. The control was built into its own binary and the test run against it 5 times; the unmodified binary passed 5 of 5. Run on 2026-10-28 on Linux (WSL2, x86_64).
@@ -18111,6 +18139,17 @@ Run on 2026-11-16 on Linux (x86_64), OpenSSH sshd. The branch passes both tests.
 
 The transcripts are `pair-remove.txt` and `hosts-remove-keys.txt` under `TUIOS_E2E_FRAMES`, in each test's folder. Both tests skip when ssh or ssh-keygen is missing, and the first skips when sshd is missing. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestRemovedPairedDeviceLosesItsLink|TestHostRemoveKeepsTheTableWhenTheKeyStays)$' -v .`.
+
+The controls were run again on 2026-11-20 on macOS (arm64) with the OpenSSH sshd of the system, based on upstream/main at 079302be4, each one cutting a call site and not the body of a helper. The branch passes both tests 5 of 5.
+
+| Control: the call site that was cut | The test fails with | Result |
+|---------|---------------------|--------|
+| 5311f0184 and 5dc174942 reverted in the production code, tests kept | `TestRemovedPairedDeviceLosesItsLink`: "the open link still lists panes after its table went". `TestHostRemoveKeepsTheTableWhenTheKeyStays`: "authorized_keys mode 000: hosts remove reported success", "the table went while the key stayed" | **caught** |
+| The `pinnedWithoutTable` check out of `linkPolicy` | `TestRemovedPairedDeviceLosesItsLink`: "the open link still lists panes after its table went", waited 20s | **caught** |
+| `PairTag(name)` out of the tags `RemoveAuthorizedKeys` matches | `TestRemovedPairedDeviceLosesItsLink`: "hosts remove of a device with only its key line left failed", "authorized_keys is not the person's own key alone", "the removed key still opens the link" | **caught** |
+| `runHostRemove` drops the error of `RemoveAuthorizedKeys` | `TestHostRemoveKeepsTheTableWhenTheKeyStays`: "authorized_keys mode 000: hosts remove reported success", "the table went while the key stayed" | **caught** |
+| `RemoveAuthorizedKeys` writes with `os.WriteFile` in place of `atomicfile.Write` | `TestHostRemoveKeepsTheTableWhenTheKeyStays`: "~/.ssh mode 0500: hosts remove reported success", "the table went while the key stayed", "a failed rewrite changed authorized_keys" | **caught** |
+
 ## The command text an OSC 133 C mark captures is bounded
 
 `TestCommandCaptureIsBounded`, `TestCommandCaptureBytesAreBounded` and `TestCommandCaptureKeepsShortCommands` in `vt/semantic_capture_bound_test.go` are kept unit tests of a resource bound. They count the bytes the C marks keep and the bytes their writing allocates, and time nothing. The bound test writes one B, 9000 lines (past the line bound) or 60 lines (under it), and 300 C marks. The C marks must keep at most 16 KiB between them, and writing them must allocate at most 4 MiB. The bytes test writes 60 lines of 398 two-byte runes on a 400 column pane. One C must keep at most 16 KiB, cut at a rune boundary. The short command test holds normal shell use: one command per prompt, a command of three lines, a long command that soft-wraps, and a second C after one B.
@@ -18125,6 +18164,20 @@ Run on 2026-11-16 on Linux (x86_64), pure Go backend. The branch passes all thre
 | No byte bound (`capBytes` and the loop bound cut) | `TestCommandCaptureBytesAreBounded`: "a C mark on a 400 column pane kept 47819 bytes, want at most 16384" | **caught** |
 
 The ghostty backend was not run: libghostty-vt is not built on this machine. Both backends call the same `captureCommandText`. Repeat from `vt` with `go test -count=1 -run '^TestCommandCapture' -v .`, and with `-tags ghostty` where libghostty-vt is built.
+
+Two more kept tests close the paths the controls above leave open. `TestCommandCaptureRunIsLinear` in the same file writes one B, a command and 900 C marks, under the marker cap of both backends. It counts the allocations the run makes, at most 16 per C mark, and every C must still carry the command. `TestFallbackCommandIsBounded` in `internal/scrollback/parser_bound_test.go` writes 1000 lines between B and C, so the C captures nothing and the scrollback browser reads the command from the buffer. It must read at most 64 lines, starting at the command line, and a command of three lines with no C mark is still read whole.
+
+Run on 2026-11-20 on macOS (arm64), pure Go backend. The branch passes both, 20 runs each with and without `-race`.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The walk in `commandStartForCapture` goes on past the first C to the B, as before the walk fix | `TestCommandCaptureRunIsLinear`: "writing 900 C marks after one B made 407272 allocations, want at most 14400" | **caught** |
+| No line bound on the fallback in `parseWithMarkers` (`end := cmdEndLine(cMarker, dMarker, bMarker)`) | `TestFallbackCommandIsBounded/1000_lines_before_the_C_mark`: "the command read from the buffer has 1001 lines (79013 bytes), want at most 64" | **caught** |
+
+The branch makes 1814 allocations for the 900 C marks, against the bound of 14400 (16 per C mark): a margin of 7.9x, and the control's 407272 is 28x the bound. The count is the same in 30 runs of the test alone, 3 runs of the whole `vt` package, and the whole package under `-race`; one run in 20 of the test alone under `-race` made 1815.
+
+Repeat the second from the repository root with `go test -count=1 -run '^TestFallbackCommandIsBounded$' -v ./internal/scrollback/`.
+
 ## Panes cannot take the person's connections
 
 `TestPanesCannotTakeThePersonsConnections` in `pane_conn_cap_test.go` starts a real daemon. A python3 holder in a pane opens connections to the daemon's own socket, sends `{` on each and holds them. A refused connection is told why and closed, so it turns readable, and the holder counts the ones that stay open. Pane 1 asks for 100 and must hold 64. Four children of pane 1, each in a new session with no terminal, ask for 64 each and must hold 0: they are still pane 1's. Pane 2 asks for 10 and must hold 10. 14 more panes ask for 64 each: the 16 panes must hold at most 896 (1024 less the 128 kept for the person). Last, `tuios ls` and `tuios list-windows` from outside every pane must work. The unit subtest `TestFrameBudgetReadsLargeFramesInTurn/a_pane_draws_on_the_other_budget` holds a caller inside a pane, with admin, to the read budget that is not the person's.
@@ -18137,8 +18190,9 @@ Run on 2026-11-16 on Linux (x86_64). The branch passes both: pane 1 holds 64, it
 | The cap per pane keyed on the terminal, not the pane | "a setsid child of a full pane holds 64 connections, want 0" (4 times) | **caught** |
 | No person reserve (the pane pool is all 1024) | "programs in panes hold 970 connections, want at most 896" | **caught** |
 | `readBudgetFor` as on main | `a_pane_draws_on_the_other_budget`: "a caller inside a pane draws on the person's budget" | **caught** |
+| The `admitPeer` call cut from `handleConnectionOn`, the call site of both caps | "one pane holds 100 connections, want 64", "a setsid child of a full pane holds 64 connections, want 0" (4 times), then send-text refused once the pool is full | **caught** |
 
-The transcript is `pane-conns.txt` under `TUIOS_E2E_FRAMES`. The test skips when python3 is missing. Repeat from `e2e/tui` with
+Rerun on 2026-11-20 on macOS (arm64), every row above and the call site row: each fails as shown, and the branch passes 5 runs in a row. The holders end with their parent, so the setsid children do not outlive the test. The transcript is `pane-conns.txt` under `TUIOS_E2E_FRAMES`. The test skips when python3 is missing. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPanesCannotTakeThePersonsConnections$' -v .`.
 
 ## Daemon children get the environment a pane gets
@@ -18156,6 +18210,20 @@ Run on 2026-11-16 on Linux (x86_64). The branch passes both. The exec line after
 
 The transcript of the restart case is `exec-after-restart.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon|TestExecAfterARestartFromAPaneIsNotThatPane)$' -v .`.
+
+The fix covers a fourth child, the board's verify command, and no test above runs one. `TestATaskVerifyDoesNotInheritTheAgentThatStartedTheDaemon` starts the daemon from the same agent environment, sets the board's verify command to `env > FILE`, and moves a card a pane holds to verify. It waits for the card to reach review with a passed record, then reads the file with `checkChildEnv`: no agent or pane variable, and the ordinary one kept.
+
+Run on 2026-11-20 on macOS (arm64), each control a build of main at 079302be4 with one line cut. The branch passes all three tests.
+
+| Control | Test that fails | The test fails with | Result |
+|---------|-----------------|---------------------|--------|
+| `runVerify` with no `cmd.Env` | `TestATaskVerifyDoesNotInheritTheAgentThatStartedTheDaemon` only | "the verify command kept CLAUDECODE=[1] CLAUDE_CODE_SESSION_ID=[outer-session] CLAUDE_CODE_MESSAGING_TOKEN=[outer-token] CODEX_THREAD_ID=[outer-thread] TUIOS_PANE_ID=[outer-pane] TUIOS_PANE_TOKEN=[outer-pane-token] NO_COLOR=[1] from the agent tool call that started the daemon, want them unset" | **caught** |
+| `runExecLine` with no `cmd.Env` | the two tests above; this one passes | "the exec line kept ...", "after a restart from pane X, an exec line is placed in that pane" | guard: each child is held by its own line |
+| `m.SetDaemonEnv(true)` cut from `buildHookTable` | `TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon` only | "the hook kept CLAUDECODE=[1] ... NO_COLOR=[1]" | **caught** |
+| The `WithoutHostMultiplexer` line cut from `cleanEnv` | `TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon` only | "the plugin kept CLAUDECODE=[1] ... NO_COLOR=[1]" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestATaskVerifyDoesNotInheritTheAgentThatStartedTheDaemon$' -v .`.
 
 ## A scrolled pane holds its place in the frame that draws new output
 
@@ -18571,6 +18639,8 @@ The new image of a live upgrade also sweeps the folders of its own pid, so the f
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^TestNoTempIndexLeftWhenTheDaemonStops$' -v .
+```
+
 ## A screenshot save that outlives its test
 
 `TestScreenshotRegionDragOpensThePreview` ended once the preview panel was up. The panel is up before the file is written. Under the sim backend the client runs in the test process, so its save went on after the test ended and left the test's folder in the run's temp dir. The run's temp folder check then failed now and then with `TestScreenshotRegionDragOpensThePreview<n>: holds 001`, with every test passing. The test now waits for the file as well.
@@ -18585,4 +18655,77 @@ Run on 2026-11-19 on Linux, sim backend, against main at 61507834e. The control 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -v -run '^(TestScreenshotRegionDragOpensThePreview|TestScreenshotTwoCapturesInOneSecondKeepBothFiles)$' .
+```
+
+## GHSA-jf76-3ff5-gjjv: pane grants and pane output (v0.8.1)
+
+The advisory has eleven findings. The v0.8.1 tests for them carried their negative controls in their doc comments only. Each control below cuts one call site on main (079302be4), or the few that one protection is spread over, builds, runs the tests named, and restores the file. The e2e controls run a binary built with the cut. Run on 2026-11-20 on macOS (arm64, go1.27.4).
+
+`TestWebPasswordGuardsTheSession` is new. It starts tuios-web on loopback with `--password-file`. A handshake with no credentials, a wrong password or another user name must get 401. The right password must get a session, which is the positive half. The unit tests in `cmd/tuios-web` call `webAccess.apply` themselves, so no test failed when the binary did not hand the password to sip, other than `TestWebAllowHostLetsAProxyNameIn` on its proxy name.
+
+| Finding | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| 1, `.link` socket | `linkFromPane` check cut from `checkLinkVerb` | `TestAPaneCannotDialTheLinkSocket` ("a pane holding read typed through tuios.sock.link"), `TestAStrictPaneCannotTypeThroughTheLinkSocket` (no refusal) | **caught** |
+| 2, config widening | `reloadPanePermissions(perms)` in `applyUserConfig` replaced with `manager.SetPanePermissions(perms)` | `TestAPermissionReloadOnlyTightens` ("after a reload to open the pane holds admin"), `TestAWideningReloadSaysItWaits` ("a reload to open did not wait") | **caught** |
+| 2, config apply | `mayActAsHuman` check cut from `verbApplyConfig` | `TestAPaneCannotApplyConfig` ("a pane applied config.toml") | **caught** |
+| 3, unreadable caller | `peerChanged` hold cut from `paneAuthority` | `TestAnUnreadableCallerIsHeldToTheStrictDefault` (kill-session passed under open). `TestAConnectionWhoseProcessChangedIsHeld` passes: the unplaced-caller hold below holds the caller | **caught** |
+| 3, daemon child | unplaced-caller hold cut from `paneAuthority` | `TestADaemonChildOutsideEveryPaneIsHeld` ("set a pane's grants") | **caught** |
+| 3, both holds | both cuts above | the three tests above | **caught** |
+| 4, Inbox answers | each `refuseRemoteAnswer` call alone | `InboxAnswerAsk`: `TestInboxQuestionDigitFromSendKeysAnswersNothing`. `InboxRelease`: `TestInboxReleaseFromSendKeysPassesNothing`, on its wording only. `InboxReplyApproval`, `InboxConfirmKey`, `inboxApprovalGate`, the question choice: none | not caught alone: another check refuses |
+| 4, Inbox answers | `refuseRemoteAnswer` in `InboxReplyApproval`, `InboxConfirmKey` and `inboxApprovalGate`, and the `notThePersonsKey` check in `inboxNonce` | `TestInboxDigitsFromSendKeysAnswerNothing`, `TestInboxRiskySecondPressFromSendKeysAnswersNothing` (the reply is sent) | **caught** |
+| 4, send-keys through the client | `paneTypesRaw` back to admin only | `TestAPaneSendKeysNeverDrivesTheClient` (PREFIX answered invalid_params). `TestAnOpenPaneCannotReachAPromptThroughTheClient` passes: `typingNeedsWindow` refuses | **caught** by the unit test |
+| 4, send-keys through the client | `paneTypesRaw` back to admin only, and `typingNeedsWindow` cut from `holdTypingTarget` | `TestAnOpenPaneCannotReachAPromptThroughTheClient` (NX_EXIT=1 never appears). With only `typingNeedsWindow` cut it passes | **caught** |
+| Admin answers a prompt | admin early return back in front of the prompt check in `checkGrants` | `TestAnAdminPaneCannotAnswerAnotherPanesPrompt` (on `run` only). `TestAnOpenPaneCannotApproveAnotherPanesPrompt` passes, also with `recheckBlocked` cut from the send-keys handler | **caught** by the unit test |
+| Admin answers a prompt | the cut above, and `recheckTyping` and `recheckBlocked` cut from the send-keys handler | `TestAnOpenPaneCannotApproveAnotherPanesPrompt` (SK_EXIT=1 never appears) | **caught** |
+| 5, OSC 99 to the host | `NotifyFunc` back to `strings.TrimSpace` and `WriteToHost(ansi.Notify(hostText))` | `TestPaneNotificationCannotWriteEscapesToHost` (5 of 5 cases), `TestPaneNotifyPayloadWritesNoEscapesToHost` (`ESC]52;c;UFdORUQ=` reached the host) | **caught** |
+| 5, clipboard reply | `ClaimPasteReply` check cut from `HandleInput` | `TestUnrequestedClipboardReplyIsDropped`, `TestRequestedClipboardReplyIsPasted`, `TestUnrequestedClipboardReplyIsNotPasted` | **caught** |
+| 6, OSC 52 writes | `paneClipboardWrite(msg)` in `Update` replaced with `clipboardWriteCmd(msg.Text)` | `TestOSC52FromABackgroundPaneDoesNotReachTheHostClipboard` and 8 more in `osc52_write_test.go`; `TestClipboardAskIsAllowedByAClick`, `TestClipboardAskSettlesBeforeAClickAllows` (no ask), `TestFocusedPaneOSC52WriteReachesHostWithMessage` (no dock line) | **caught** |
+| 6, paste end marker | `SanitizePaste` call cut from `PastePayload` | `paste_escape_test.go` (3 tests), `TestClipboardPasteCannotEndBracketedPaste` | **caught** |
+| 7, layout save (TUI) | `layoutPaneDir(w)` replaced with `paneDir(w)` | `TestLayoutSaveRecordsTheKernelCwdOverASpoofedOne`, `TestLayoutSaveDropsACwdItCannotCheck` | **caught** |
+| 7, layout load (TUI) | the v0.8.0 `cd %q && clear` typed into each reused pane in place of `cdAtPrompt` | `TestLayoutLoadTypesNothingIntoAPaneItCannotSee`, `TestLayoutLoadRefusesAQuoteInTheFolder`, `TestLayoutLoadDoesNotTypeIntoAProgram`, `TestLayoutLoadMovesALocalShellAtItsPrompt` | **caught** |
+| 7, layout load (daemon) | the v0.8.0 `cd %q && clear` typed into each reused pane in `loadLayoutTemplate` | `TestLayoutWithSpoofedCwdRunsNothing` ("loading the layout ran the command") | **caught** |
+| 7, cd here (daemon) | `shellAtPrompt` check cut from `handleTypeAtPrompt` | `TestTypeAtPromptTypesOnlyAtAShellPrompt`, `TestDaemonFolderClickCdOnlyAtAPrompt` | **caught** |
+| 7, cd here (daemon) | `refuseTypingInto` check cut from `handleTypeAtPrompt` | `TestAnAdminPaneCannotCdIntoAPromptOverTheClientProtocol`, `TestAPaneWithoutTheTargetsGrantsCannotCdIt` | **caught** |
+| 7, cd here (daemon) | `CdLine` refusal cut from `handleTypeAtPrompt` | `TestTypeAtPromptRefusesAnUnsafeFolder` | **caught** |
+| 8, kitty file media | `kittyMediumPath` call in `forwardFileTransmit` replaced with the v0.8.0 path | 7 tests in `kitty_file_medium_test.go`. `TestKittyShmNameCannotLeaveDevShm` skips with no `/dev/shm`; `TestKittyTempFileInProcIsRefused` passes with no `/proc` | **caught** |
+| 9, tuios-web password | `access.apply(&sipConfig)` cut from `runWebServer` | `TestWebPasswordGuardsTheSession` ("a handshake with no credentials got 101, want 401"), `TestWebAllowHostLetsAProxyNameIn` (proxy name 403) | **caught** |
+| 9, tuios-web password | `cfg.BasicUsername`/`BasicPassword` cut from `webAccess.apply` | `TestPasswordGuardsTheSession`, `TestAllowHostAddsAName` | **caught** |
+| 9, Host check | `"*"` added to `cfg.AllowedHosts` | `TestLoopbackRefusesAForeignHost`, `TestAllowHostAddsAName` | **caught** |
+| 9, network bind | the no-password refusal in `planWebAccess` returns the plan | `TestNetworkBindNeedsAPassword` | **caught** |
+| 10, keys with options | the `len(options) > 0` check cut from `parseAuthorizedKeys` | `TestKeyWithOptionsIsNotAdmitted` (3 of 4 subtests; the plain key is the positive half), `TestFileOfOnlyRestrictedKeysIsAnError` | **caught** |
+| 10, `~/.ssh/authorized_keys` | the file added back to `AuthorizedKeysCandidates` | `TestNoSilentFallbackToSSHAuthorizedKeys` | **caught** |
+| 11, shim holder | `authorize` call cut from `acceptRespawns` | `TestHolderAsksTheDaemonAboutTheCaller`, `TestHolderRefusesADaemonThatIgnoresThePeer`, `TestHolderSendsTheCallersStartTime`, `TestTheShimHolderChecksTheCallersGrants` | **caught** |
+| 11, shim holder | `Authorize` cut from the `PaneOptions` of `tuios tmux-pane` | `TestTheShimHolderChecksTheCallersGrants` | **caught** |
+
+Each test passes with the cut restored. `TestWebPasswordGuardsTheSession` passed 10 runs of 10.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_WEB_BIN=/path/to/tuios-web \
+  go test -count=1 -run '^TestWebPasswordGuardsTheSession$' -v .
+```
+
+## The rail's git section and the ship verbs run no program of a pane's repository
+
+GHSA-qcx6-vr32-xr8q. `TestRailGitIgnoresAReportedFolder` puts a pane's shell in one repository and cats a file that holds an OSC 7 report naming another. The files section must show the reported folder, so the client took the report. The git section must stay on the shell's repository and show the branch it moves to after the report; then the shell really changes into the other repository, and the section must follow it there. `TestShipFromAPaneRunsNoRepositoryHook` gives a worktree session's repository a `pre-commit`, a `post-commit`, a `post-merge` and a `pre-push` hook. `ship commit`, `ship merge` and `ship push` run from a shell inside the session's pane and must run none of them, the push once the person allows it in the Inbox. The same verbs from the person's CLI must run them. The rows below also cut the wiring under the three tests of "git runs no program the pane's repository names", one line at a time.
+
+Each control is a build of the branch with one line changed. Run on 2026-11-20 on macOS against upstream main at 079302be4. The branch passes every test below, and the two new tests passed 10 of 10 runs each on the real backend and 3 of 3 on `sim`.
+
+| Control: what was cut | Where | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The git section reads the files section's folder, which follows OSC 7 | `GitSyncCmd` in `internal/app/sidebar_git.go`: `m.gitWantDir()` → `m.filesWantDir()` | `TestRailGitIgnoresAReportedFolder` ("the git section follows the OSC 7 report, not the shell's repository"). `TestRailGitOneLineOwnsUpToItsRows`, `TestRailGitWheelRedraws`, `TestRailGitReftable`, `TestDualRailLeftGit` and the three tests of "git runs no program the pane's repository names" pass on this build | **caught** |
+| A pane's ship commit runs git as the person's | `shipContext` in `internal/session/verb_ship.go`: `if d.shipCallerIsPerson(cs)` → `if true \|\| d.shipCallerIsPerson(cs)` | `TestShipFromAPaneRunsNoRepositoryHook` ("ship commit from a pane ran the repository's hooks: [pre-commit post-commit]"). Every other e2e test whose name holds `Ship` passes on this build (`TestShipJJRefusals` skips: no jj) | **caught** |
+| A pane's ship merge runs git as the person's | `verbShipMerge` in `internal/session/verb_ship.go`: `d.shipMerge(d.shipCallerIsPerson(cs), …)` → `d.shipMerge(true, …)` | `TestShipFromAPaneRunsNoRepositoryHook` ("ship merge from a pane ran the repository's hooks: [post-merge]") | **caught** |
+| A pane's ship push, once allowed, runs git as the person's | `verbShipPush` in `internal/session/verb_ship.go`: `d.shipPush(d.shipCallerIsPerson(cs), o)` → `d.shipPush(true, o)` | `TestShipFromAPaneRunsNoRepositoryHook` ("ship push from a pane ran the repository's hooks: [pre-push]") | **caught** |
+| No fixed settings: hooks, fsmonitor, `diff.external`, ext transport, submodule work trees | `GitEnv` in `internal/childproc/git.go`: `append(over, fixedSettings()...)` → `over` | `TestGitRunsNoProgramOfThePaneRepository`: the checkpoint runs `hook-post-index-change` and `hook-reference-transaction`, review and fan compare run `hook-post-index-change`, fan runs `hook-post-checkout` | **caught** |
+| No override of a program the repository's own config names | `GitEnv`: the `repoOverrides` call replaced by a nil list | `TestGitRunsNoProgramOfThePaneRepository`: every step runs `clean`, fan also runs `smudge` | **caught** |
+| No `--no-ext-diff --no-textconv` on diff, log and show | `Git`: `args = diffFlags(args)` cut | `TestGitRunsNoProgramOfThePaneRepository` ("worktree diff does not show a.txt": git fails on the empty `diff.external` the override leaves, so no program runs either way) | **caught** |
+| Staging with `git add --all` again, which reads a submodule's own config | `addAndWriteTree` in `internal/worktree/numstat.go` and `CommitAll` in `internal/worktree/ship.go`: `StageAll` → `git add --all -- .` | no e2e test: the e2e repository has no submodule. `TestGitRunsNoRepositoryProgram` in `internal/worktree` (checkpoint, numstat, detail and review run `submodule`) and `TestShipCommitRunsHooksOnlyForThePerson` | **caught** (unit) |
+| The New agent sheet takes the OSC 7 report | `spawnFolder` in `internal/app/cockpit_spawn.go`: `paneShellDir(w, true)` → `w.Cwd` | `TestSpawnSheetIgnoresAReportedFolder` ("the sheet does not name the pane's repository", "the reported repository got a worktree") | **caught** |
+| The daemon's pane repository falls back to the OSC 7 report | `paneRepo` in `internal/session/verb_review.go`: `sess.windowStartDir(target.ID)` → `target.Cwd` | `TestCheckpointIgnoresAReportedFolderWithoutProcessCwd` ("the checkpoint was not taken in the folder the pane started in", "the checkpoint was taken in the reported folder") | **caught** |
+
+With the OSC 7 cuts, no probe of the reported repository runs: childproc.Git already turns its programs off, so the tests catch the cut by the folder they read, not by a probe.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -v -run '^(TestRailGitIgnoresAReportedFolder|TestShipFromAPaneRunsNoRepositoryHook|TestGitRunsNoProgramOfThePaneRepository|TestSpawnSheetIgnoresAReportedFolder|TestCheckpointIgnoresAReportedFolderWithoutProcessCwd)$' .
 ```
