@@ -860,6 +860,8 @@ func (d *Daemon) zoomPane(sess *Session, w WindowState, on bool) (bool, *verbErr
 		if !changed {
 			return 0, errLayoutUnchanged
 		}
+		// mutateState advances the Version once this edit returns.
+		sess.zoomOpAt = state.Version + 1
 		if on && w.Workspace == state.CurrentWorkspace && state.FocusedWindowID != w.ID {
 			sess.markFocusIntentLocked()
 			state.FocusedWindowID = w.ID

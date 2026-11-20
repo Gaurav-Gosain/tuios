@@ -1692,6 +1692,11 @@ type Session struct {
 	// stateMu. A fixed ring, so it never grows. See missedMutationLocked and
 	// missedPeerTreeLocked.
 	treeOps [1024]treeOpRecord
+	// zoomOpAt is the Version of the last zoom the daemon set itself
+	// (zoom-window), guarded by stateMu. A push built before it carries the
+	// zoom the client had, and the stale merge keeps the daemon's. See
+	// keepDaemonZoom.
+	zoomOpAt int
 	// recountMu is held across counting the session's clients and applying
 	// the answer, so two recounts cannot apply their answers in the opposite
 	// order to the one they worked them out in. See Daemon.recountTUIClients.
@@ -3795,6 +3800,11 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 			}
 			mine := focusViewOf(state)
 			reconcileStale(state, prev, s.hasLivePTY)
+			if state.BaseVersion < s.zoomOpAt {
+				// The daemon set a zoom the client had not seen when it
+				// built the push, so the push's zoom flags are older.
+				keepDaemonZoom(state, prev)
+			}
 			if s.pushOwnsFocusLocked(origin, state.BaseVersion, mine) {
 				// Nothing the client missed moved the focus, so the focus in
 				// the push is the person's latest move.

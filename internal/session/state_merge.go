@@ -530,6 +530,21 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 // closes its PTY before the sync goes out, so a missing window whose PTY is gone
 // was closed by the client and stays closed, while one whose PTY is still live
 // was created by the daemon after the snapshot and is restored.
+// keepDaemonZoom takes each window's zoom from canonical into a stale push.
+// Zoom is shared, and zoom-window sets it in the daemon with a client
+// attached. A push the client built before that state reached it still says
+// the pane is not zoomed, and taking it ended the zoom before any client drew
+// it.
+func keepDaemonZoom(incoming, canonical *SessionState) {
+	for i := range incoming.Windows {
+		w := &incoming.Windows[i]
+		if cw, ok := findWindowState(canonical, w.ID); ok {
+			w.Zoomed = cw.Zoomed
+			w.PreZoomX, w.PreZoomY, w.PreZoomW, w.PreZoomH = cw.PreZoomX, cw.PreZoomY, cw.PreZoomW, cw.PreZoomH
+		}
+	}
+}
+
 func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID string) bool) {
 	canonicalByID := make(map[string]*WindowState, len(canonical.Windows))
 	for i := range canonical.Windows {
