@@ -208,8 +208,11 @@ func (m *OS) hostSignInWatching() bool {
 }
 
 // retryHostCmd asks the daemon to dial a machine again now, off the Update
-// goroutine.
+// goroutine. This machine has no link, so it asks nothing for it.
 func retryHostCmd(host string) tea.Cmd {
+	if host == federation.LocalHostName {
+		return nil
+	}
 	return func() tea.Msg {
 		client, err := session.DialVerbClient()
 		if err != nil {
