@@ -102,12 +102,10 @@ func (m *OS) hostProgramStatusProbe() tea.Cmd {
 // handleHostProgramStatusMsg takes the terminal's answer and the batch timer.
 // It reports whether msg was one of them.
 func (m *OS) handleHostProgramStatusMsg(msg tea.Msg) (tea.Cmd, bool) {
-	switch msg := msg.(type) {
-	case uv.UnknownOscEvent:
-		if !strings.HasPrefix(string(msg), progstatus.QueryReply) {
-			return nil, false
-		}
-		// Anything after the "?" is for a later revision, and is ignored.
+	switch msg.(type) {
+	case tea.ProgramStatusSupportMsg, uv.ProgramStatusSupportEvent:
+		// The decoder reads the answer (OSC 7501 ; ?) as its own event, and
+		// ignores anything after the "?", which is for a later revision.
 		if m.hostPS.asked && !m.hostPS.supported {
 			m.hostPS.supported = true
 			m.hostPS.dirty = true
