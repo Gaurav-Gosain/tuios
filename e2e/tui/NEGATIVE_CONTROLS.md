@@ -18465,6 +18465,20 @@ Run on 2026-11-16 on Linux (x86_64), pure Go backend. The branch passes all thre
 | No byte bound (`capBytes` and the loop bound cut) | `TestCommandCaptureBytesAreBounded`: "a C mark on a 400 column pane kept 47819 bytes, want at most 16384" | **caught** |
 
 The ghostty backend was not run: libghostty-vt is not built on this machine. Both backends call the same `captureCommandText`. Repeat from `vt` with `go test -count=1 -run '^TestCommandCapture' -v .`, and with `-tags ghostty` where libghostty-vt is built.
+
+Two more kept tests close the paths the controls above leave open. `TestCommandCaptureRunIsLinear` in the same file writes one B, a command and 900 C marks, under the marker cap of both backends. It counts the allocations the run makes, at most 16 per C mark, and every C must still carry the command. `TestFallbackCommandIsBounded` in `internal/scrollback/parser_bound_test.go` writes 1000 lines between B and C, so the C captures nothing and the scrollback browser reads the command from the buffer. It must read at most 64 lines, starting at the command line, and a command of three lines with no C mark is still read whole.
+
+Run on 2026-11-20 on macOS (arm64), pure Go backend. The branch passes both, 20 runs each with and without `-race`.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The walk in `commandStartForCapture` goes on past the first C to the B, as before the walk fix | `TestCommandCaptureRunIsLinear`: "writing 900 C marks after one B made 407272 allocations, want at most 14400" | **caught** |
+| No line bound on the fallback in `parseWithMarkers` (`end := cmdEndLine(cMarker, dMarker, bMarker)`) | `TestFallbackCommandIsBounded/1000_lines_before_the_C_mark`: "the command read from the buffer has 1001 lines (79013 bytes), want at most 64" | **caught** |
+
+The branch makes 1814 allocations for the 900 C marks, against the bound of 14400 (16 per C mark): a margin of 7.9x, and the control's 407272 is 28x the bound. The count is the same in 30 runs of the test alone, 3 runs of the whole `vt` package, and the whole package under `-race`; one run in 20 of the test alone under `-race` made 1815.
+
+Repeat the second from the repository root with `go test -count=1 -run '^TestFallbackCommandIsBounded$' -v ./internal/scrollback/`.
+
 ## Panes cannot take the person's connections
 
 `TestPanesCannotTakeThePersonsConnections` in `pane_conn_cap_test.go` starts a real daemon. A python3 holder in a pane opens connections to the daemon's own socket, sends `{` on each and holds them. A refused connection is told why and closed, so it turns readable, and the holder counts the ones that stay open. Pane 1 asks for 100 and must hold 64. Four children of pane 1, each in a new session with no terminal, ask for 64 each and must hold 0: they are still pane 1's. Pane 2 asks for 10 and must hold 10. 14 more panes ask for 64 each: the 16 panes must hold at most 896 (1024 less the 128 kept for the person). Last, `tuios ls` and `tuios list-windows` from outside every pane must work. The unit subtest `TestFrameBudgetReadsLargeFramesInTurn/a_pane_draws_on_the_other_budget` holds a caller inside a pane, with admin, to the read budget that is not the person's.
