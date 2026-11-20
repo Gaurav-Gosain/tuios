@@ -11765,6 +11765,21 @@ Each negative step has its positive half in the same fixture: the four
 admitted clients get a version line and stay open past the fifth, and the
 first key login draws its session and opens a pane before the second is
 refused.
+
+## The tuios ssh idle limit
+
+`TestSSHServerIdleTimeout` runs `tuios ssh` in daemon mode with key authentication and `idle_timeout = "3s"` in `[ssh]`. Two clients log in with `ssh -N`, so neither opens a session. The one that sends nothing must be closed between 1.5 s and 8 s after its login: half the timeout leaves room for a late login line, and a server that closes the connection at its login still fails. The one that sends an OpenSSH keepalive every second must still be open 6 s after its login. Run on 2026-11-20 on macOS (arm64), based on upstream/main at 079302be4. The branch passes 10 of 10 with `-race`.
+
+| Control: what was cut | Test failure | Verdict |
+| --- | --- | --- |
+| `opts = append(opts, limitOptions(limits)...)` and `sessionLimitMiddleware(limits.MaxSessions)` out of `StartSSHServer`, the server as it was before the limits | "a logged in connection with no traffic was still open 8s after its login, with idle_timeout = 3s" | **caught** |
+| `opts = append(opts, wish.WithIdleTimeout(l.IdleTimeout))` out of `limitOptions` | the same | **caught** |
+| `wish.WithIdleTimeout(l.IdleTimeout/4)` in `limitOptions`, a server that closes too soon | "the idle connection closed 752.103458ms after its login, before the 3s idle timeout" | **caught** |
+
+The negative step has its positive half in the same fixture: the client that sends keepalives logs in on the same server and outlives two idle timeouts, so the limit counts traffic and not the age of the connection.
+
+The lower bound was widened from 2.5 s to 1.5 s on 2026-11-20 and the controls run again: the second row fails as shown, the third row is the lower bound's own control, and the branch closes the idle client 3 s after its login, 3 of 3 runs.
+
 ## An empty paste under WSL reads the Windows clipboard
 
 `TestAnEmptyPasteUnderWSLReadsTheWindowsClipboard` sends the empty bracketed paste Windows Terminal sends when the clipboard holds only an image, from a client under WSL (`WSL_DISTRO_NAME` set). A `powershell.exe` stand-in answers for the Windows clipboard with the image, and a `wl-paste` stand-in for WSLg's lists text only, as WSLg's bridge does when Windows holds an image. The image has to be pasted into the pane as a file path, and the pane's shell has to read the file. The control was built into its own binary and the test run against it 5 times; the unmodified binary passed 5 of 5. Run on 2026-10-28 on Linux (WSL2, x86_64).

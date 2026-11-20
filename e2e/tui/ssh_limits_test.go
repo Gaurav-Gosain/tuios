@@ -287,3 +287,149 @@ max_sessions = 1
 		t.Fatalf("ASSERTION: the first session no longer draws after the handshake timeout\n%s", first.Snapshot())
 	}
 }
+
+// The idle limit TestSSHServerIdleTimeout configures. It is short so the test
+// can wait it out, and long enough that a client keepalive every second
+// always lands inside it.
+const sshLimitIdle = 3 * time.Second
+
+// sshLogin is an ssh client that logged in with a key and opened no session.
+// loggedIn receives the time the client logged in. exited is closed when the
+// client ends, after endedAt is set.
+type sshLogin struct {
+	cmd      *exec.Cmd
+	stderr   *lockedBuf
+	loggedIn chan time.Time
+	exited   chan struct{}
+	endedAt  time.Time
+}
+
+// startSSHLogin logs in to the server on port with key and runs no command
+// (ssh -N), so the connection carries no traffic of its own. With keepalive
+// the client sends an OpenSSH keepalive every second. It does not reuse
+// sshKeyArgs, whose -tt asks for a terminal that -N opens no session for.
+func startSSHLogin(t *testing.T, key, home string, port int, keepalive bool) *sshLogin {
+	t.Helper()
+	args := []string{"-N", "-F", "/dev/null", "-p", strconv.Itoa(port), "-i", key,
+		"-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", "-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=VERBOSE"}
+	if keepalive {
+		args = append(args, "-o", "ServerAliveInterval=1", "-o", "ServerAliveCountMax=60")
+	}
+	args = append(args, "idle@127.0.0.1")
+	l := &sshLogin{
+		cmd:      exec.Command("ssh", args...),
+		stderr:   &lockedBuf{},
+		loggedIn: make(chan time.Time, 1),
+		exited:   make(chan struct{}),
+	}
+	l.cmd.Env = append(os.Environ(), "HOME="+home)
+	pipe, err := l.cmd.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := l.cmd.Start(); err != nil {
+		t.Fatalf("start ssh: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = l.cmd.Process.Kill()
+		<-l.exited
+	})
+	go func() {
+		sc := bufio.NewScanner(pipe)
+		said := false
+		for sc.Scan() {
+			_, _ = l.stderr.Write(append(sc.Bytes(), '\n'))
+			if !said && strings.Contains(sc.Text(), "Authenticated to") {
+				said = true
+				l.loggedIn <- time.Now()
+			}
+		}
+		if err := sc.Err(); err != nil {
+			_, _ = fmt.Fprintf(l.stderr, "reading the ssh output: %v\n", err)
+		}
+		_ = l.cmd.Wait()
+		l.endedAt = time.Now()
+		close(l.exited)
+	}()
+	return l
+}
+
+// TestSSHServerIdleTimeout runs tuios ssh in daemon mode with key
+// authentication and idle_timeout = 3s in the [ssh] section. Two clients log
+// in and open no session:
+//
+//   - One sends nothing more. The server must close it after the idle
+//     timeout, not before.
+//   - One sends a keepalive every second. It must still be open at twice the
+//     idle timeout, so the limit counts traffic and not the age of the
+//     connection.
+func TestSSHServerIdleTimeout(t *testing.T) {
+	requireReal(t, "real ssh")
+	for _, bin := range []string{"ssh", "ssh-keygen"} {
+		if _, err := exec.LookPath(bin); err != nil {
+			t.Skipf("no %s", bin)
+		}
+	}
+
+	base := t.TempDir()
+	writeConfig(t, base, fmt.Sprintf("[ssh]\nidle_timeout = \"%s\"\n", sshLimitIdle))
+	key := filepath.Join(base, "id_ed25519")
+	if out, err := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", key).CombinedOutput(); err != nil {
+		t.Fatalf("ssh-keygen: %v: %s", err, out)
+	}
+	pub, err := os.ReadFile(key + ".pub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	authKeys := filepath.Join(base, "authorized_keys")
+	if err := os.WriteFile(authKeys, pub, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := startSSHServerIn(t, base, "daemon", "--authorized-keys", authKeys)
+	serverLog := func() string { data, _ := os.ReadFile(srv.log); return string(data) }
+	home := xdgDir(base, "HOME")
+
+	idle := startSSHLogin(t, key, home, srv.port, false)
+	alive := startSSHLogin(t, key, home, srv.port, true)
+	loginOf := func(name string, l *sshLogin) time.Time {
+		select {
+		case at := <-l.loggedIn:
+			return at
+		case <-l.exited:
+			t.Fatalf("ASSERTION: the %s client ended before it logged in:\n%s\nserver log:\n%s", name, l.stderr, serverLog())
+		case <-time.After(bootTimeout):
+			t.Fatalf("ASSERTION: the %s client did not log in within %s:\n%s\nserver log:\n%s", name, bootTimeout, l.stderr, serverLog())
+		}
+		return time.Time{}
+	}
+	idleAt := loginOf("idle", idle)
+	aliveAt := loginOf("keepalive", alive)
+
+	// 1. The connection with no traffic is closed after the idle timeout.
+	select {
+	case <-idle.exited:
+		after := idle.endedAt.Sub(idleAt)
+		t.Logf("the idle connection closed %s after its login", after.Round(10*time.Millisecond))
+		// Only a close by the idle timer passes: half the timeout leaves room
+		// for a late "Authenticated to" line, and still fails a server that
+		// closes the connection at its login.
+		if after < sshLimitIdle/2 {
+			t.Fatalf("ASSERTION: the idle connection closed %s after its login, before the %s idle timeout:\n%s",
+				after, sshLimitIdle, idle.stderr)
+		}
+	case <-time.After(time.Until(idleAt.Add(sshLimitIdle + 5*time.Second))):
+		t.Fatalf("ASSERTION: a logged in connection with no traffic was still open %s after its login, with idle_timeout = %s\nserver log:\n%s",
+			time.Since(idleAt).Round(time.Second), sshLimitIdle, serverLog())
+	}
+
+	// 2. The connection with traffic outlives two idle timeouts.
+	select {
+	case <-alive.exited:
+		t.Fatalf("ASSERTION: a connection that sends a keepalive every second was closed %s after its login, with idle_timeout = %s:\n%s",
+			alive.endedAt.Sub(aliveAt).Round(10*time.Millisecond), sshLimitIdle, alive.stderr)
+	case <-time.After(time.Until(aliveAt.Add(2 * sshLimitIdle))):
+	}
+}
