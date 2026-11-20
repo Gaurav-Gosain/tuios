@@ -90,5 +90,5 @@ require (
 	tuios.dev/sketch v0.4.1-0.20261119182137-67b7911dffff
 	tuios.dev/swatch v0.1.2-0.20261030111253-c0f512aa3148
 	tuios.dev/tml v0.1.2-0.20261112200225-e5512e40c8da
-	tuios.dev/vt v0.3.4-0.20261117042519-2f2d93c6ac72
+	tuios.dev/vt v0.3.4-0.20261120211954-cf0ac48d4a22
 )
