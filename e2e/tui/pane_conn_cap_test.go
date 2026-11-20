@@ -26,12 +26,17 @@ import (
 // is told why and closed, so it turns readable. Once the count of held ones
 // stops changing, it writes that count to out+"."+tag. With forks, it first
 // starts that many children, each in a new session with no terminal, which
-// do the same under the tags c0, c1 and so on.
+// do the same under the tags c0, c1 and so on. A holder ends when its parent
+// does: a child in a session of its own outlives the pane, and would
+// otherwise hold its connections after the test.
 func connHolderScript(t *testing.T, dir string) string {
 	t.Helper()
 	body := `import os, select, socket, sys, time
 sock, out, n, forks = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
-def hold(tag):
+# Read before any fork: a parent read after it may be gone already, and the
+# holder would then watch the pid that adopted it and never end.
+script, shell = os.getpid(), os.getppid()
+def hold(tag, parent):
     conns = []
     for _ in range(n):
         s = socket.socket(socket.AF_UNIX)
@@ -57,14 +62,15 @@ def hold(tag):
     with open(out + "." + tag + ".tmp", "w") as f:
         f.write(str(last))
     os.rename(out + "." + tag + ".tmp", out + "." + tag)
-    while True:
-        time.sleep(3600)
+    while os.getppid() == parent:
+        time.sleep(0.5)
+    os._exit(0)
 for i in range(forks):
     if os.fork() == 0:
         os.setsid()
-        hold("c" + str(i))
+        hold("c" + str(i), script)
 if forks == 0:
-    hold("main")
+    hold("main", shell)
 while True:
     time.sleep(3600)
 `

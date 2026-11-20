@@ -18491,8 +18491,9 @@ Run on 2026-11-16 on Linux (x86_64). The branch passes both: pane 1 holds 64, it
 | The cap per pane keyed on the terminal, not the pane | "a setsid child of a full pane holds 64 connections, want 0" (4 times) | **caught** |
 | No person reserve (the pane pool is all 1024) | "programs in panes hold 970 connections, want at most 896" | **caught** |
 | `readBudgetFor` as on main | `a_pane_draws_on_the_other_budget`: "a caller inside a pane draws on the person's budget" | **caught** |
+| The `admitPeer` call cut from `handleConnectionOn`, the call site of both caps | "one pane holds 100 connections, want 64", "a setsid child of a full pane holds 64 connections, want 0" (4 times), then send-text refused once the pool is full | **caught** |
 
-The transcript is `pane-conns.txt` under `TUIOS_E2E_FRAMES`. The test skips when python3 is missing. Repeat from `e2e/tui` with
+Rerun on 2026-11-20 on macOS (arm64), every row above and the call site row: each fails as shown, and the branch passes 5 runs in a row. The holders end with their parent, so the setsid children do not outlive the test. The transcript is `pane-conns.txt` under `TUIOS_E2E_FRAMES`. The test skips when python3 is missing. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPanesCannotTakeThePersonsConnections$' -v .`.
 
 ## Daemon children get the environment a pane gets
