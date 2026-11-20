@@ -717,12 +717,15 @@ func (m *OS) maybeFocusScratch() {
 }
 
 // windowCountForNotice is the window count the created and closed notices
-// report. The scratch terminal is not counted: its show and hide are not a
-// window made or closed.
+// report. The scratch terminal and the rail pane are not counted: the scratch
+// terminal's show and hide, and the rail pane's start and stop, are not a
+// window the person made or closed. The rail pane arrives on a push soon
+// after an attach, and counted, its "Window created (2 total)" covered the
+// mode notice the person had just asked for, on a dock that shows one window.
 func (m *OS) windowCountForNotice() int {
 	n := 0
 	for _, w := range m.Windows {
-		if !isScratch(w) {
+		if !hiddenFromLists(w) {
 			n++
 		}
 	}
@@ -735,7 +738,7 @@ func (m *OS) windowCountForNotice() int {
 func (m *OS) panesMadeForNotice() int {
 	n := 0
 	for _, w := range m.Windows {
-		if !isScratch(w) && w.Kind != session.WindowKindTML {
+		if !hiddenFromLists(w) && w.Kind != session.WindowKindTML {
 			n++
 		}
 	}
@@ -747,7 +750,7 @@ func (m *OS) panesMadeForNotice() int {
 func (m *OS) windowLabelsForNotice() map[string]string {
 	labels := make(map[string]string, len(m.Windows))
 	for _, w := range m.Windows {
-		if !isScratch(w) {
+		if !hiddenFromLists(w) {
 			labels[w.ID] = windowRowTitle(w)
 		}
 	}

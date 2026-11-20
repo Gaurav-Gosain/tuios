@@ -187,3 +187,42 @@ func TestRailPaneSection(t *testing.T) {
 	}
 	snap("rail-pane-shown-again")
 }
+
+// TestRailPaneArrivalSaysNothing: the rail pane is no window the person made,
+// so its arrival puts no "Window created" notice on the dock. It arrives on a
+// push soon after an attach, and the notice it raised covered "Window
+// management mode" from the alt+esc sent just before: TestRailPaneSection
+// waited for that text and failed on CI when the push came second.
+//
+// The pane is made here with the rail-pane verb after the client has settled,
+// which is the order CI hit, every time.
+//
+// Negative control: with windowCountForNotice and panesMadeForNotice counting
+// the rail pane again, the dock says "Window created (2 total)" and the
+// stayTrue fails.
+func TestRailPaneArrivalSaysNothing(t *testing.T) {
+	config := "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 28\n"
+	term, base := railClient(t, "e2e", config, startOpts{cols: 120, rows: 40})
+	params := `{"session":"e2e","key":"sleep 600","command":["sleep","600"],"width":27,"height":8}`
+	if out, err := tuiosCLI(t, base, "call", "rail-pane", params); err != nil {
+		t.Fatalf("make the rail pane: %v\n%s", err, out)
+	}
+	if all := railPaneWindows(t, base, true); len(all) != 2 {
+		t.Fatalf("list-windows --rail lists %d windows after the rail-pane call, want 2: %v", len(all), all)
+	}
+	// The frame is kept whichever way it goes: the dock on a failure, the
+	// dock after two quiet seconds on a pass.
+	frames := artifactDir(t)
+	snap := func() {
+		saveArtifact(t, term, frames, "rail-pane-arrived")
+		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "rail-pane-arrived")
+	}
+	stayTrue(t, "the dock says no window was created for the rail pane", 2*time.Second, func() (bool, string) {
+		if strings.Contains(term.Screen().Text(), "Window created") {
+			snap()
+			return false, term.Snapshot()
+		}
+		return true, ""
+	})
+	snap()
+}
