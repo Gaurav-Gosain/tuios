@@ -18458,6 +18458,20 @@ Run on 2026-11-16 on Linux (x86_64). The branch passes both. The exec line after
 The transcript of the restart case is `exec-after-restart.txt` under `TUIOS_E2E_FRAMES`. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon|TestExecAfterARestartFromAPaneIsNotThatPane)$' -v .`.
 
+The fix covers a fourth child, the board's verify command, and no test above runs one. `TestATaskVerifyDoesNotInheritTheAgentThatStartedTheDaemon` starts the daemon from the same agent environment, sets the board's verify command to `env > FILE`, and moves a card a pane holds to verify. It waits for the card to reach review with a passed record, then reads the file with `checkChildEnv`: no agent or pane variable, and the ordinary one kept.
+
+Run on 2026-11-20 on macOS (arm64), each control a build of main at 079302be4 with one line cut. The branch passes all three tests.
+
+| Control | Test that fails | The test fails with | Result |
+|---------|-----------------|---------------------|--------|
+| `runVerify` with no `cmd.Env` | `TestATaskVerifyDoesNotInheritTheAgentThatStartedTheDaemon` only | "the verify command kept CLAUDECODE=[1] CLAUDE_CODE_SESSION_ID=[outer-session] CLAUDE_CODE_MESSAGING_TOKEN=[outer-token] CODEX_THREAD_ID=[outer-thread] TUIOS_PANE_ID=[outer-pane] TUIOS_PANE_TOKEN=[outer-pane-token] NO_COLOR=[1] from the agent tool call that started the daemon, want them unset" | **caught** |
+| `runExecLine` with no `cmd.Env` | the two tests above; this one passes | "the exec line kept ...", "after a restart from pane X, an exec line is placed in that pane" | guard: each child is held by its own line |
+| `m.SetDaemonEnv(true)` cut from `buildHookTable` | `TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon` only | "the hook kept CLAUDECODE=[1] ... NO_COLOR=[1]" | **caught** |
+| The `WithoutHostMultiplexer` line cut from `cleanEnv` | `TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon` only | "the plugin kept CLAUDECODE=[1] ... NO_COLOR=[1]" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestATaskVerifyDoesNotInheritTheAgentThatStartedTheDaemon$' -v .`.
+
 ## A scrolled pane holds its place in the frame that draws new output
 
 `TestARemoteSendKeysLeavesAScrolledPaneScrolled` in `mouse_test.go` scrolls a daemon pane up ten wheel notches, then types a command into it with `tuios send-keys`. For 1.5 s the newest marker line on screen must stay where the wheel left it. The command's output must not move the view.
