@@ -2452,6 +2452,16 @@ has one, is a pane on another machine. The view does not change it: `t` and
 `tuios task claim ID -s HOST:SESSION`, and its Card tab names
 `tuios task get`, which reads it from its machine.
 
+On a client attached to a session on another machine (`tuios attach --host
+HOST`), the board is that machine's, as `tuios` run there shows it, and the
+linked machines' project cards are not read. Every key acts there: `H` `L`
+move the card, `t` takes it, `n` adds one, `enter` starts the agent on that
+machine, and `Ctrl+T` and `Ctrl+X` set its dispatch, for the project of the
+focused pane's folder there. The machine's link policy for yours decides what
+goes through, and a refusal names the grant to add there. A push and a pull
+request from Ready to merge are refused over the link: run them on that
+machine.
+
 A bulk key acts only on the marked agents the list shows. An agent in a
 folded group, or one a search hides, is left out, and closing the view clears
 the marks. An approval whose command does not fit on the card is not answered

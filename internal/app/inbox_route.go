@@ -25,7 +25,10 @@ import (
 // watch (startInboxWatch) reads the queue through inboxDialer, and every act
 // (dismiss-attention, mark-attention, reply-approval, answer-ask,
 // peek-prompt, respond, release-agent-message, get-approval) goes through
-// inboxActCaller.
+// inboxActCaller. The board's cards come with the watch, so the board's
+// reads and acts on them (get-task, get-task-attachment, set-task-stage,
+// add-task, claim-task, get-task-dispatch, set-task-dispatch) go through
+// inboxActCaller too.
 
 // inboxDialer opens a verb connection to the daemon that holds the Inbox.
 func (m *OS) inboxDialer() inboxDial {
@@ -85,18 +88,28 @@ func (m *OS) inboxElsewhere(it session.AttentionItem, what string) bool {
 type InboxRewatchMsg struct{}
 
 // restartInboxWatch drops the Inbox of the daemon the client left and
-// follows the one it is attached to now.
+// follows the one it is attached to now. The board's cards, far cards,
+// dispatch and card detail were the left daemon's too, and an open board
+// reads them again.
 func (m *OS) restartInboxWatch() tea.Cmd {
+	ck := &m.Inbox.ck
+	ck.farCards, ck.dispatch, ck.dispatchBoard, ck.dispatchBusy, ck.card = nil, nil, "", false, nil
+	ck.cardsGen++
+	var board tea.Cmd
+	if ck.board {
+		board = tea.Batch(m.cockpitFarCardsCmd(), m.cockpitDispatchCmd())
+	}
 	if m.inboxEvents == nil {
-		return m.startInboxWatch()
+		ck.cards = nil
+		return tea.Batch(m.startInboxWatch(), board)
 	}
 	m.endInboxWatch()
 	m.inboxEvents = nil
 	m.Inbox.Items = nil
-	m.Inbox.ck.cards = nil
+	ck.cards = nil
 	m.Inbox.Live = false
 	m.MarkAllDirty()
-	return m.startInboxWatch()
+	return tea.Batch(m.startInboxWatch(), board)
 }
 
 // inboxActErr is what the person reads when an act did not go through. A

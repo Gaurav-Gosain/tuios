@@ -3,14 +3,12 @@ package app
 import (
 	"cmp"
 	"strconv"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
 // Task dispatch on the board (internal/session/task_dispatch.go).
@@ -33,26 +31,40 @@ type ckDispatchMsg struct {
 	err     error
 	// set says the reply is to a change the person made.
 	set bool
+	// host is the machine the call went to, "" for this one. A reply from a
+	// machine the client has left is dropped.
+	host string
 }
 
 // cockpitDispatchCmd reads the dispatch of the board the header names.
 func (m *OS) cockpitDispatchCmd() tea.Cmd {
-	if m.AttachedHost != "" || m.SessionName == "" || (m.DaemonClient == nil && m.Inbox.call == nil) {
+	if m.SessionName == "" || (m.DaemonClient == nil && m.Inbox.call == nil) {
 		return nil
 	}
-	call, sess := m.inboxCaller(), m.SessionName
-	dir := ""
-	if !m.BrowserClient && (!m.RemoteClient || m.SSHIsLoopback) {
+	call, sess, host := m.inboxActCaller(), m.SessionName, m.AttachedHost
+	// The board is the project of the focused pane's folder. A client
+	// attached through a host cannot read that folder, so it names the pane
+	// and the host's daemon reads it.
+	dir, win := "", ""
+	switch {
+	case m.AttachedHost != "":
+		if w := m.GetFocusedWindow(); w != nil {
+			win = w.ID
+		}
+	case !m.BrowserClient && (!m.RemoteClient || m.SSHIsLoopback):
 		dir = m.spawnFolder()
 	}
 	return func() tea.Msg {
-		project := dispatchProjectOf(dir)
+		project := session.FolderProject(dir)
 		params := map[string]any{"session": sess}
-		if project != "" {
+		switch {
+		case project != "":
 			params = map[string]any{"project": project}
+		case win != "":
+			params["window"] = win
 		}
 		raw, err := call("get-task-dispatch", params, 5*time.Second)
-		msg := ckDispatchMsg{project: project, err: err}
+		msg := ckDispatchMsg{project: project, err: err, host: host}
 		if err == nil {
 			msg.err = jsonx.Unmarshal(raw, &msg.st)
 		}
@@ -60,28 +72,18 @@ func (m *OS) cockpitDispatchCmd() tea.Cmd {
 	}
 }
 
-// dispatchProjectOf is the project of dir, "" for a folder with no origin
-// this client can read.
-func dispatchProjectOf(dir string) string {
-	if dir == "" {
-		return ""
-	}
-	url, err := worktree.OriginURL(dir)
-	if n := worktree.NormalizeRemote(url); err != nil || n == "" || strings.HasPrefix(n, "file:") {
-		return ""
-	}
-	return url
-}
-
 // applyDispatch takes a dispatch reply.
 func (m *OS) applyDispatch(msg ckDispatchMsg) {
 	ck := &m.Inbox.ck
+	if msg.host != m.AttachedHost {
+		return
+	}
 	if msg.set {
 		ck.dispatchBusy = false
 	}
 	if msg.err != nil {
 		if msg.set {
-			m.ShowNotification("Dispatch did not change: "+printableTitle(msg.err.Error()), "error", m.Settings.NotificationDuration)
+			m.ShowNotification("Dispatch did not change: "+printableTitle(inboxActErr(msg.err, m.AttachedHost)), "error", m.Settings.NotificationDuration)
 		}
 		return
 	}
@@ -158,14 +160,14 @@ func (m *OS) setDispatch(params map[string]any, nonce string) tea.Cmd {
 	ck := &m.Inbox.ck
 	ck.dispatchBusy = true
 	params["human_nonce"] = nonce
-	call := m.inboxCaller()
+	call, host := m.inboxActCaller(), m.AttachedHost
 	project := ""
 	if ck.dispatch != nil && ck.dispatch.Board != nil {
 		project = ck.dispatch.Board.Project
 	}
 	return func() tea.Msg {
 		raw, err := call("set-task-dispatch", params, 5*time.Second)
-		msg := ckDispatchMsg{project: project, err: err, set: true}
+		msg := ckDispatchMsg{project: project, err: err, set: true, host: host}
 		if err == nil {
 			msg.err = jsonx.Unmarshal(raw, &msg.st)
 		}
@@ -213,6 +215,11 @@ func (m *OS) CockpitDispatchMode() tea.Cmd {
 		params["agent"] = "claude"
 		if pr := m.Inbox.ck.spawnPreset; pr != nil {
 			params["agent"], params["model"], params["effort"], params["permission_mode"], params["machine"] = cmp.Or(pr.Agent, "claude"), pr.Model, pr.Effort, pr.Permission, pr.Host
+			// The board is the attached host's, and to its daemon that host
+			// is here, not a linked machine.
+			if pr.Host != "" && pr.Host == m.AttachedHost {
+				params["machine"] = ""
+			}
 		}
 	}
 	if b.Project != "" {

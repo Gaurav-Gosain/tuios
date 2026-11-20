@@ -18572,3 +18572,32 @@ Run on 2026-11-19 on Linux, sim backend, against main at 61507834e. The control 
 TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -v -run '^(TestScreenshotRegionDragOpensThePreview|TestScreenshotTwoCapturesInOneSecondKeepBothFiles)$' .
 ```
+
+## The board of a client attached through a host (#2306)
+
+`TestTheBoardShowsTheAttachedHostsCards` attaches a client on this machine to session `far` on alpha through a host link, opens the board, and checks it shows alpha's session card and project card and not this machine's own card, that L moves alpha's `t1` on alpha and leaves this machine's `t1` alone, and that ctrl+t sets far's board on alpha to pull.
+
+Main already listed alpha's cards: the Inbox watch, which carries the board's cards, has followed the attached host since 541eeed6b. So the empty columns of the issue no longer happen. What failed on main is everything after the listing: the dispatch header never read alpha's board, and every act on a card went to this machine's daemon.
+
+Run on 2026-11-20 on Linux (go1.27.4), on main at 466a7e9d2.
+
+| Control | How | Failure | Verdict |
+| --- | --- | --- | --- |
+| Main, no fix | build of main | "the board does not show far's cards on alpha and its dispatch": the cards show, `Dispatch Manual` never does | **caught** |
+| Stage sent to this machine | `kanbanSetStage` calls `inboxCaller` again | "L on alpha's card did not move it on alpha", alpha's stages `{"t1":"todo","t2":"todo"}`, the toast "The card did not move: session far not found" | **caught** |
+| Dispatch refused over every link | the client fix without the change to `verbSetTaskDispatch` | "waiting for the board in pull mode", the toast "Dispatch did not change: set-task-dispatch is refused" | **caught** |
+| Session board while attached | the client reads the session's board, with no `window` to `get-task-dispatch` | "ctrl+t did not set the project's board on alpha to pull, and only it", alpha lists `pull   session:far` | **caught** |
+
+`TestTheBoardFollowsTheClientToAnotherHost` opens the board on home, moves the client to far on alpha from the rail, and back. `TestTheBoardStartsAnAgentOnTheAttachedHostsCard` presses enter on alpha's free card on the attached board and starts the agent the sheet offers.
+
+| Control | How | Failure | Verdict |
+| --- | --- | --- | --- |
+| Board state kept across a host switch | `restartInboxWatch` without the reset of the far cards and the dispatch, and `applyFarCards` and `applyDispatch` with no check of the machine | "the board on alpha shows alpha's card 2 times (want 1), a card of beta or home, or home's pause": alpha's card once as its own and once "on alpha", beta's card, and `Paused` from home | **caught** |
+| Sheet ignores the card's machine | `CockpitNewAgentFor` and `spawnStart` without the card's `host` | "the agent started from the board never held alpha's t1": the sheet picks this machine, and the agent starts here | **caught** |
+
+The frames are under `TUIOS_E2E_FRAMES`, in each test's folder.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^TestTheBoard(ShowsTheAttachedHostsCards|FollowsTheClientToAnotherHost|StartsAnAgentOnTheAttachedHostsCard)$' -v .
+```

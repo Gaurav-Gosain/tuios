@@ -180,7 +180,7 @@ func (m *OS) shipCall(verb, label, confirm string) tea.Cmd {
 		params["confirm"] = confirm
 	}
 	sh.busy, sh.label = true, label
-	call := m.inboxCaller()
+	call := m.inboxActCaller()
 	return func() tea.Msg {
 		raw, err := call(verb, params, 3*time.Minute)
 		msg := ckShipMsg{sh: sh, verb: verb, label: label, err: err}
@@ -213,7 +213,7 @@ func (m *OS) applyShip(msg ckShipMsg) {
 		if open {
 			m.Inbox.ck.ship = nil
 		}
-		m.ShowNotification(what+" did not go: "+printableTitle(msg.err.Error()), "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification(what+" did not go: "+printableTitle(inboxActErr(msg.err, m.AttachedHost)), "error", m.Settings.NotificationDuration*2)
 	case msg.confirm != "" && open:
 		sh.busy = false
 		sh.verb, sh.label, sh.confirm, sh.lines = msg.verb, msg.label, msg.confirm, msg.lines

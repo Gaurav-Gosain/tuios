@@ -25,6 +25,11 @@ import (
 // line two, so who holds what reads in one glance. The cards come through
 // the Inbox watcher (inboxListCards and the task events), and a card's prompt
 // and history are read with get-task for the Card tab, after the frame.
+//
+// The cards are the Inbox's daemon's: this machine's, or the host's a client
+// is attached through (#2306). Every read and act on a card (get-task,
+// set-task-stage, add-task, claim-task, the dispatch and ship verbs) goes
+// through inboxActCaller, to that same daemon, signed with its attach nonce.
 
 // ckTaskDetail is the Card tab's detail of one card.
 type ckTaskDetail struct {
@@ -83,7 +88,8 @@ type ckFarCardsMsg struct{ rows []session.TaskRow }
 // cockpitFarCardsCmd asks this daemon for every linked machine's project
 // cards. It runs when the board opens, never on a frame: each machine may
 // take the link's budget to answer. A daemon from before projects, or with
-// no links, answers none.
+// no links, answers none. A client attached through a host shows that
+// host's cards alone.
 func (m *OS) cockpitFarCardsCmd() tea.Cmd {
 	if m.AttachedHost != "" || (m.DaemonClient == nil && m.Inbox.call == nil) {
 		return nil
@@ -110,8 +116,13 @@ func (m *OS) cockpitFarCardsCmd() tea.Cmd {
 	}
 }
 
-// applyFarCards puts the linked machines' cards after this machine's.
+// applyFarCards puts the linked machines' cards after this machine's. A
+// reply that arrives after the client moved to another machine is dropped:
+// that machine's board shows its own cards alone.
 func (m *OS) applyFarCards(msg ckFarCardsMsg) {
+	if m.AttachedHost != "" {
+		return
+	}
 	ck := &m.Inbox.ck
 	local := ck.cards[:0:0]
 	for _, c := range ck.cards {
@@ -366,9 +377,9 @@ func (m *OS) cockpitCard() (ckRow, session.TaskRow, bool) {
 }
 
 // ckTakeWindow is the pane t takes a card for: the focused pane behind the
-// agents view, when it is in the card's session on this machine.
+// agents view, when it is in the card's session on the board's daemon.
 func (m *OS) ckTakeWindow(c session.TaskRow) string {
-	if m.AttachedHost != "" || !m.IsDaemonSession || c.Host != "" || c.Session != m.SessionName {
+	if !m.IsDaemonSession || c.Host != "" || c.Session != m.SessionName {
 		return ""
 	}
 	if w := m.GetFocusedWindow(); w != nil {
@@ -396,7 +407,7 @@ func (m *OS) CockpitTake() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	call := m.inboxCaller()
+	call := m.inboxActCaller()
 	return func() tea.Msg {
 		raw, err := call("claim-task", map[string]any{"session": c.Session, "id": c.ID, "window": win, "human_nonce": nonce}, 5*time.Second)
 		msg := ckTakeMsg{err: err}
@@ -410,7 +421,7 @@ func (m *OS) CockpitTake() tea.Cmd {
 // applyTake takes a claim-task reply. The event stream brings the same row.
 func (m *OS) applyTake(msg ckTakeMsg) {
 	if msg.err != nil {
-		m.ShowNotification("The card was not taken: "+printableTitle(msg.err.Error()), "error", m.Settings.NotificationDuration)
+		m.ShowNotification("The card was not taken: "+printableTitle(inboxActErr(msg.err, m.AttachedHost)), "error", m.Settings.NotificationDuration)
 		return
 	}
 	m.applyTaskEvent(session.TaskActionClaimed, msg.row)
@@ -440,12 +451,18 @@ func (m *OS) CockpitNewAgentFor(c session.TaskRow) tea.Cmd {
 	}
 	s.task.SetText(text)
 	m.spawnFollowTask(s)
-	s.card = &spawnCard{session: c.Session, id: c.ID}
-	// The card says where its agent starts: any, a machine, or this one.
+	s.card = &spawnCard{session: c.Session, id: c.ID, host: m.AttachedHost}
+	// The card says where its agent starts: any, a machine, or its own. The
+	// card of a client attached through a host is that host's, so its own
+	// machine is the host's row.
+	machine := c.Machine
+	if machine == "" {
+		machine = m.AttachedHost
+	}
 	for i, mc := range s.machines {
 		switch {
-		case c.Machine == session.TaskMachineAny && mc.any,
-			c.Machine != session.TaskMachineAny && !mc.any && mc.host == c.Machine && mc.up:
+		case machine == session.TaskMachineAny && mc.any,
+			machine != session.TaskMachineAny && !mc.any && mc.host == machine && mc.up:
 			s.machine = i
 		}
 	}
@@ -453,8 +470,9 @@ func (m *OS) CockpitNewAgentFor(c session.TaskRow) tea.Cmd {
 }
 
 // spawnCard is the card a sheet opened on, which Start claims for the new
-// pane.
-type spawnCard struct{ session, id string }
+// pane. host is the machine that holds it, "" for this one, or the host the
+// client is attached through.
+type spawnCard struct{ session, id, host string }
 
 // spawnClaim claims the sheet's card for the pane start-agent opened. It runs
 // in the start's command, after the start answered.
@@ -504,7 +522,7 @@ func (m *OS) cockpitCardFetch() tea.Cmd {
 		return nil
 	}
 	ck.card = &ckTaskDetail{key: key, loading: true}
-	call, sess, id := m.inboxCaller(), c.Session, c.ID
+	call, sess, id := m.inboxActCaller(), c.Session, c.ID
 	return func() tea.Msg {
 		raw, err := call("get-task", map[string]any{"session": sess, "id": id}, threadReadTimeout)
 		msg := ckTaskMsg{key: key, err: err}
@@ -543,7 +561,7 @@ func (m *OS) applyCard(msg ckTaskMsg) {
 		case ok && verr.Code == session.ErrVerbUnknownVerb:
 			d.err = "This daemon has no task cards. " + m.restartHint()
 		default:
-			d.err = "tuios cannot read the card now: " + printableTitle(msg.err.Error())
+			d.err = "tuios cannot read the card now: " + printableTitle(inboxActErr(msg.err, m.AttachedHost))
 		}
 	}
 	m.cockpitTouch()
@@ -795,7 +813,11 @@ func (m *OS) ckBoardEmptyLines() []string {
 	case st.ck.boardErr != "":
 		return []string{"tuios cannot list the cards: " + printableTitle(st.ck.boardErr), back}
 	case m.ckScope() != "" && m.ckScope() != "local":
-		return []string{"The board lists only the cards on this machine.", "It does not list the cards on " + ckHostLabel(m.ckScope()) + ". " + back}
+		where := "this machine"
+		if m.AttachedHost != "" {
+			where = printableTitle(m.AttachedHost)
+		}
+		return []string{"The board lists only the cards on " + where + ".", "It does not list the cards on " + ckHostLabel(m.ckScope()) + ". " + back}
 	case st.Select != "" || st.agents.query != "":
 		return []string{"No card matches the search.", "/ changes the search. " + back}
 	}

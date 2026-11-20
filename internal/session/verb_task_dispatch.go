@@ -7,14 +7,18 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
 // taskDispatchParams are what get-task-dispatch and set-task-dispatch take.
 type taskDispatchParams struct {
-	Action     string `json:"action"`
-	Mode       string `json:"mode"`
-	Session    string `json:"session"`
-	Project    string `json:"project"`
+	Action  string `json:"action"`
+	Mode    string `json:"mode"`
+	Session string `json:"session"`
+	Project string `json:"project"`
+	// Window, on get-task-dispatch with no project: a window of the session
+	// whose folder names the project board.
+	Window     string `json:"window"`
 	Quiet      string `json:"quiet"`
 	HumanNonce string `json:"human_nonce"`
 	// With preset, or mode auto: the board's preset.
@@ -76,6 +80,13 @@ func (d *Daemon) verbGetTaskDispatch(cs *connState, params json.RawMessage) (any
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	if p.Project == "" && p.Window != "" {
+		sess, verr := d.resolveVerbSession(cs, p.Session)
+		if verr != nil {
+			return nil, verr
+		}
+		p.Project = FolderProject(sess.windowCwd(p.Window))
+	}
 	board, _, verr := d.dispatchBoardParam(cs, p, false)
 	if verr != nil {
 		return nil, verr
@@ -84,6 +95,21 @@ func (d *Daemon) verbGetTaskDispatch(cs *connState, params json.RawMessage) (any
 	d.autoStatus(&st)
 	st.Type = "task_dispatch"
 	return st, nil
+}
+
+// FolderProject is the project of dir, its origin URL, "" for a folder with
+// no origin or a file: one. The board applies it to the focused pane's
+// folder: on the client, or here for a client attached from another machine,
+// which cannot read the folder itself.
+func FolderProject(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	url, err := worktree.OriginURL(dir)
+	if n := worktree.NormalizeRemote(url); err != nil || n == "" || strings.HasPrefix(n, "file:") {
+		return ""
+	}
+	return url
 }
 
 // verbSetTaskDispatch answers set-task-dispatch. Anyone may pause. A mode,
@@ -98,9 +124,6 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 	if !slices.Contains(dispatchActions, p.Action) {
 		return nil, invalidParam("action", "action is one of mode, pause, resume, quiet, preset, cap or verify", dispatchActions...)
 	}
-	if cs != nil && cs.viaLink {
-		return nil, newVerbError(ErrVerbForbidden, "set-task-dispatch is refused over the link: each machine's dispatch is set on that machine")
-	}
 	board, sess, verr := d.dispatchBoardParam(cs, p, p.Action == dispatchActionMode || p.Action == dispatchActionPreset || p.Action == dispatchActionVerify)
 	if verr != nil {
 		return nil, verr
@@ -113,6 +136,12 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 	caller, verr := d.taskCallerOf(cs, "set-task-dispatch", sess, p.HumanNonce)
 	if verr != nil {
 		return nil, verr
+	}
+	// Each machine's dispatch is set on that machine. The person on a client
+	// attached here through a link is on this machine: the attach nonce it
+	// signs with is this daemon's (#2306).
+	if cs != nil && cs.viaLink && caller.by != queueByHuman {
+		return nil, newVerbError(ErrVerbForbidden, "set-task-dispatch is refused over the link: each machine's dispatch is set on that machine")
 	}
 	if p.Action != dispatchActionPause && caller.window != "" && !caller.admin {
 		return nil, hintedVerbError(ErrVerbForbidden, "set-task-dispatch "+p.Action+" is refused from a pane: only pause is open to every pane", &VerbHint{
@@ -238,12 +267,13 @@ func taskDispatchVerbs(humanNonce verbParam) map[string]verbEntry {
 		sessionParam,
 		{Name: "project", Type: "string", Description: "The project board, by origin URL. Omit for the session's own cards."},
 	}
+	window := verbParam{Name: "window", Type: "string", Description: "With no project: a window of the session. The board is the project of the window's folder, or the session's own cards when the folder has no origin."}
 	return map[string]verbEntry{
 		"get-task-dispatch": {
 			scope:       scopeRead,
 			link:        needList,
 			description: "Read the task dispatch settings: each board's mode (manual or pull) and the switches that stop dispatch (pause, quiet hours, a board stopped after 3 failures in a row, a usage limit).",
-			params:      board,
+			params:      append(slices.Clone(board), window),
 			returns:     status,
 			examples:    []string{`{"id":1,"verb":"get-task-dispatch","params":{"project":"git@github.com:acme/api.git"}}`},
 			handler:     (*Daemon).verbGetTaskDispatch,
@@ -251,7 +281,7 @@ func taskDispatchVerbs(humanNonce verbParam) map[string]verbEntry {
 		"set-task-dispatch": {
 			scope:       scopeTask,
 			link:        needWrite,
-			description: "Change task dispatch. mode sets a board to manual, pull or auto: in pull, an agent that finishes its card is given the board's next open card, as mail from tuios; in auto, the daemon starts the board's preset agent for each open card, in a new worktree, and mails it the card. preset sets that agent; auto needs one. cap bounds the agents at once. verify sets the command run in a card's worktree when its agent is done: a pass moves the card to review, a fail to todo. pause stops all dispatch at once, and any pane may pause. resume lifts the pause and every stop. quiet sets the hours when dispatch gives no card. A pane needs admin for every action but pause, and verify is refused from every pane. Refused over a link.",
+			description: "Change task dispatch. mode sets a board to manual, pull or auto: in pull, an agent that finishes its card is given the board's next open card, as mail from tuios; in auto, the daemon starts the board's preset agent for each open card, in a new worktree, and mails it the card. preset sets that agent; auto needs one. cap bounds the agents at once. verify sets the command run in a card's worktree when its agent is done: a pass moves the card to review, a fail to todo. pause stops all dispatch at once, and any pane may pause. resume lifts the pause and every stop. quiet sets the hours when dispatch gives no card. A pane needs admin for every action but pause, and verify is refused from every pane. Over a link it is refused unless human_nonce proves the person on a client attached through it.",
 			params: append(slices.Clone(board),
 				verbParam{Name: "action", Type: "string", Required: true, Description: "What to change.", Accepted: dispatchActions},
 				verbParam{Name: "mode", Type: "string", Description: "With mode: the board's new mode.", Accepted: DispatchModes},
