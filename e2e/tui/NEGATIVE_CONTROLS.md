@@ -19954,4 +19954,29 @@ Each test passes with the cut restored. `TestWebPasswordGuardsTheSession` passed
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_WEB_BIN=/path/to/tuios-web \
   go test -count=1 -run '^TestWebPasswordGuardsTheSession$' -v .
 ```
+
+## The rail's git section and the ship verbs run no program of a pane's repository
+
+GHSA-qcx6-vr32-xr8q. `TestRailGitIgnoresAReportedFolder` puts a pane's shell in one repository and cats a file that holds an OSC 7 report naming another. The files section must show the reported folder, so the client took the report. The git section must stay on the shell's repository and show the branch it moves to after the report; then the shell really changes into the other repository, and the section must follow it there. `TestShipFromAPaneRunsNoRepositoryHook` gives a worktree session's repository a `pre-commit`, a `post-commit`, a `post-merge` and a `pre-push` hook. `ship commit`, `ship merge` and `ship push` run from a shell inside the session's pane and must run none of them, the push once the person allows it in the Inbox. The same verbs from the person's CLI must run them. The rows below also cut the wiring under the three tests of "git runs no program the pane's repository names", one line at a time.
+
+Each control is a build of the branch with one line changed. Run on 2026-11-20 on macOS against upstream main at 079302be4. The branch passes every test below, and the two new tests passed 10 of 10 runs each on the real backend and 3 of 3 on `sim`.
+
+| Control: what was cut | Where | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The git section reads the files section's folder, which follows OSC 7 | `GitSyncCmd` in `internal/app/sidebar_git.go`: `m.gitWantDir()` → `m.filesWantDir()` | `TestRailGitIgnoresAReportedFolder` ("the git section follows the OSC 7 report, not the shell's repository"). `TestRailGitOneLineOwnsUpToItsRows`, `TestRailGitWheelRedraws`, `TestRailGitReftable`, `TestDualRailLeftGit` and the three tests of "git runs no program the pane's repository names" pass on this build | **caught** |
+| A pane's ship commit runs git as the person's | `shipContext` in `internal/session/verb_ship.go`: `if d.shipCallerIsPerson(cs)` → `if true \|\| d.shipCallerIsPerson(cs)` | `TestShipFromAPaneRunsNoRepositoryHook` ("ship commit from a pane ran the repository's hooks: [pre-commit post-commit]"). Every other e2e test whose name holds `Ship` passes on this build (`TestShipJJRefusals` skips: no jj) | **caught** |
+| A pane's ship merge runs git as the person's | `verbShipMerge` in `internal/session/verb_ship.go`: `d.shipMerge(d.shipCallerIsPerson(cs), …)` → `d.shipMerge(true, …)` | `TestShipFromAPaneRunsNoRepositoryHook` ("ship merge from a pane ran the repository's hooks: [post-merge]") | **caught** |
+| A pane's ship push, once allowed, runs git as the person's | `verbShipPush` in `internal/session/verb_ship.go`: `d.shipPush(d.shipCallerIsPerson(cs), o)` → `d.shipPush(true, o)` | `TestShipFromAPaneRunsNoRepositoryHook` ("ship push from a pane ran the repository's hooks: [pre-push]") | **caught** |
+| No fixed settings: hooks, fsmonitor, `diff.external`, ext transport, submodule work trees | `GitEnv` in `internal/childproc/git.go`: `append(over, fixedSettings()...)` → `over` | `TestGitRunsNoProgramOfThePaneRepository`: the checkpoint runs `hook-post-index-change` and `hook-reference-transaction`, review and fan compare run `hook-post-index-change`, fan runs `hook-post-checkout` | **caught** |
+| No override of a program the repository's own config names | `GitEnv`: the `repoOverrides` call replaced by a nil list | `TestGitRunsNoProgramOfThePaneRepository`: every step runs `clean`, fan also runs `smudge` | **caught** |
+| No `--no-ext-diff --no-textconv` on diff, log and show | `Git`: `args = diffFlags(args)` cut | `TestGitRunsNoProgramOfThePaneRepository` ("worktree diff does not show a.txt": git fails on the empty `diff.external` the override leaves, so no program runs either way) | **caught** |
+| Staging with `git add --all` again, which reads a submodule's own config | `addAndWriteTree` in `internal/worktree/numstat.go` and `CommitAll` in `internal/worktree/ship.go`: `StageAll` → `git add --all -- .` | no e2e test: the e2e repository has no submodule. `TestGitRunsNoRepositoryProgram` in `internal/worktree` (checkpoint, numstat, detail and review run `submodule`) and `TestShipCommitRunsHooksOnlyForThePerson` | **caught** (unit) |
+| The New agent sheet takes the OSC 7 report | `spawnFolder` in `internal/app/cockpit_spawn.go`: `paneShellDir(w, true)` → `w.Cwd` | `TestSpawnSheetIgnoresAReportedFolder` ("the sheet does not name the pane's repository", "the reported repository got a worktree") | **caught** |
+| The daemon's pane repository falls back to the OSC 7 report | `paneRepo` in `internal/session/verb_review.go`: `sess.windowStartDir(target.ID)` → `target.Cwd` | `TestCheckpointIgnoresAReportedFolderWithoutProcessCwd` ("the checkpoint was not taken in the folder the pane started in", "the checkpoint was taken in the reported folder") | **caught** |
+
+With the OSC 7 cuts, no probe of the reported repository runs: childproc.Git already turns its programs off, so the tests catch the cut by the folder they read, not by a probe.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -v -run '^(TestRailGitIgnoresAReportedFolder|TestShipFromAPaneRunsNoRepositoryHook|TestGitRunsNoProgramOfThePaneRepository|TestSpawnSheetIgnoresAReportedFolder|TestCheckpointIgnoresAReportedFolderWithoutProcessCwd)$' .
 ```
