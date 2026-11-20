@@ -240,6 +240,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 				return o, nil
 			}
+			// The help control turns hover help on or off, as Ctrl+b h does.
+			if name == config.DockComponentHelp {
+				if msg.Button == tea.MouseLeft {
+					o.ToggleHoverHelp()
+				}
+				return o, nil
+			}
 			if o.RunDockComponentClick(name, int(msg.Button)) {
 				return o, nil
 			}

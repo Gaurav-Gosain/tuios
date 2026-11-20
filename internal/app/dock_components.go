@@ -214,6 +214,9 @@ func (m *OS) dockCustomCell(name string) string {
 	if strings.HasPrefix(name, config.DockPluginPrefix) {
 		return m.pluginCellDrawn(name)
 	}
+	if name == config.DockComponentHelp {
+		return m.dockHelpCell()
+	}
 	text := m.dockEngine.Text(name)
 	if name == config.DockComponentClock && text == "" {
 		// The clock is a built-in that carries a value, so it draws through the
@@ -321,14 +324,31 @@ func (m *OS) dockCustomCells(names []string) (cells []string, widths []int, keys
 // value the engine holds, rather than from model state the renderer reads.
 func dockCellComponent(name string) bool {
 	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentClock ||
-		name == config.DockComponentTransfers || name == config.DockComponentSession
+		name == config.DockComponentTransfers || name == config.DockComponentSession || name == config.DockComponentHelp
 }
 
 // dockCellClickable reports whether a cell records where it was drawn, for a
-// click: a custom component, which runs its on-click command, and the
-// copies, which open the Copies panel.
+// click: a custom component, which runs its on-click command, the copies,
+// which open the Copies panel, and the help control, which turns hover help
+// on or off.
 func dockCellClickable(name string) bool {
-	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentTransfers
+	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) ||
+		name == config.DockComponentTransfers || name == config.DockComponentHelp
+}
+
+// dockHelpCell draws the help control, "?". While hover help is on it is lit:
+// on the accent ground, and in reverse video at 16 colours, where there is no
+// ground to give. Off, it is a quiet cell like any other.
+func (m *OS) dockHelpCell() string {
+	pal := m.groundUI()
+	if !m.hoverHelp.on {
+		return renderDockCell("?", config.DockCellStyle{}, pal)
+	}
+	if pal.Depth == overlay.Depth16 {
+		return pal.Mark(renderDockCell("?", config.DockCellStyle{}, pal), overlay.RowState{Cursor: true, Focused: true})
+	}
+	return lipgloss.NewStyle().Background(pal.Accent).Foreground(pal.PillFg).
+		Bold(true).Render(" ? ")
 }
 
 // dockCustomWidth is the room a side's custom cells want.

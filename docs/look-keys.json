@@ -785,6 +785,7 @@
         "clock",
         "copy-help",
         "cpu",
+        "help",
         "mode",
         "notifications",
         "ram",
@@ -796,7 +797,7 @@
         "windows",
         "workspaces"
       ],
-      "max_items": 28,
+      "max_items": 30,
       "max_bytes": 32
     },
     {
@@ -815,6 +816,7 @@
         "clock",
         "copy-help",
         "cpu",
+        "help",
         "mode",
         "notifications",
         "ram",
@@ -826,7 +828,7 @@
         "windows",
         "workspaces"
       ],
-      "max_items": 28,
+      "max_items": 30,
       "max_bytes": 32
     },
     {
@@ -839,6 +841,7 @@
         "clock",
         "copy-help",
         "cpu",
+        "help",
         "mode",
         "notifications",
         "ram",
@@ -850,7 +853,7 @@
         "windows",
         "workspaces"
       ],
-      "max_items": 28,
+      "max_items": 30,
       "max_bytes": 32
     },
     {

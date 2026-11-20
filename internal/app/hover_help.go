@@ -595,6 +595,12 @@ func (m *OS) helpDockCellComponent(name, parent string, rect image.Rectangle) he
 			"clients are attached. Clicking it opens the session switcher."
 		c.keys = m.helpKeys("prefix_session_switcher", "prefix_close_session")
 		c.cli = []string{"tuios rename-session <name>", "tuios set-session-accent <colour>", "tuios ls"}
+	case name == config.DockComponentHelp:
+		c.title = "Help control"
+		c.purpose = "The ? control. A click turns hover help on or off, and it is lit while " +
+			"hover help is on. It is in no default list; a [dock] list that names \"help\" draws it."
+		c.keys = m.helpKeys(config.ActionToggleHoverHelp)
+		c.cli = []string{"tuios list-dock-components"}
 	case name == config.DockComponentButtons:
 		c.title = "Buttons"
 		c.purpose = "Buttons for the things a person new to tuios looks for first. Each one " +

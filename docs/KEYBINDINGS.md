@@ -992,6 +992,15 @@ help_keys = ["alt+shift+k"]
 
 `?` still shows the list of all keys.
 
+The dock can carry a `?` control. It is in no default list: add `help` to a
+`[dock]` list to draw it. A click on it turns hover help on or off, and it is
+lit while hover help is on.
+
+```toml
+[dock]
+left = ["mode", "workspaces", "trail", "tape", "help"]
+```
+
 ## Links
 
 `Ctrl+click` on a link opens it. `Shift+click` also opens it, but most

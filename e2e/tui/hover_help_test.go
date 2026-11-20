@@ -34,6 +34,11 @@ import (
 //     find the dock's page. The pointer goes to the mode pill, whose page is
 //     "Dock › Mode", and the test waits for "Dock (" with no "Dock › Mode".
 //
+//   - A ? on the dock could come from another cell, and the explainer could
+//     open by another path. The control is found as a lone ? on the dock's
+//     row, the default dock has none, and only the click comes between the
+//     dock with no explainer and the dock with one.
+//
 //   - A page could be reached by the walk while the pointer finds nothing. The
 //     pane and rail tests hover a cell first and wait for that part's own page
 //     by its path, then walk.
@@ -48,7 +53,8 @@ import (
 // build without the leader menu's stand-aside, the leader test fails waiting
 // for the explainer to go, and on one that hides the explainer but lets the
 // pointer retarget under the menu, it fails waiting for the dock's page after
-// the menu.
+// the menu. On a build without the dock control, the dock test fails waiting
+// for the ? on the dock.
 
 // The help keys as xterm sends them: CSI 1 ; 7 for ctrl+alt, ESC before a
 // character for alt.
@@ -416,4 +422,52 @@ func TestHoverHelpStandsAsideForTheLeaderMenu(t *testing.T) {
 		t.Fatalf("the pointer under the leader menu moved the target to the mode pill:\n%s", term.Snapshot())
 	}
 	saveArtifact(t, term, dir, "2-back")
+}
+
+// hhDockControl finds the dock's ? control on the last row and returns its
+// column, or -1.
+func hhDockControl(term *tuitest.Terminal) (col, row int) {
+	_, rows := term.Screen().Size()
+	dock := []rune(strings.Split(term.Screen().Text(), "\n")[rows-1])
+	for i := 1; i+1 < len(dock); i++ {
+		if dock[i] == '?' && dock[i-1] == ' ' && dock[i+1] == ' ' {
+			return i, rows - 1
+		}
+	}
+	return -1, rows - 1
+}
+
+// TestHoverHelpDockControl puts the ? control on the dock through a [dock]
+// list. A click turns hover help on, the control is lit while it is, hovering
+// it explains it, and a second click turns hover help off. The default dock
+// has no control.
+func TestHoverHelpDockControl(t *testing.T) {
+	plain, _ := hoverHelpStart(t, "")
+	if col, _ := hhDockControl(plain); col >= 0 {
+		t.Fatalf("the default dock draws the ? control\n%s", plain.Snapshot())
+	}
+
+	term, dir := hoverHelpStart(t, "[dock]\nleft = [\"mode\", \"workspaces\", \"trail\", \"tape\", \"help\"]\n")
+	waitTextOf(t, "the ? control on the dock", uiTimeout, func() string { return term.Screen().Text() },
+		func(string) bool { c, _ := hhDockControl(term); return c >= 0 })
+	col, row := hhDockControl(term)
+	off := term.Screen().Cell(col, row)
+	saveArtifact(t, term, dir, "1-off")
+
+	clickAt(t, term, col, row, 1)
+	waitText(t, term, "the explainer after a click on ?", hhClose)
+	waitTextOf(t, "the ? control lit", uiTimeout, func() string { return term.Screen().Text() },
+		func(string) bool {
+			on := term.Screen().Cell(col, row)
+			return on.Content == "?" && (on.Bg != off.Bg || on.Reverse != off.Reverse)
+		})
+	saveArtifact(t, term, dir, "2-on")
+
+	mouseHover(t, term, col, row)
+	waitText(t, term, "the control's page", "Dock › Help control", "turns hover help on or off")
+	saveArtifact(t, term, dir, "3-page")
+
+	clickAt(t, term, col, row, 1)
+	waitGone(t, term, "the explainer after a second click on ?", hhClose)
+	saveArtifact(t, term, dir, "4-off-again")
 }
