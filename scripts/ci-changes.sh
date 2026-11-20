@@ -12,7 +12,8 @@
 #   - on a push, $CHANGES_BEFORE (github.event.before), but only for the five
 #     jobs that a push to main always filtered by path: ghostty, learn_web,
 #     clienttests, docker and nix. Every other job runs in full on main;
-#   - every other event runs everything.
+#   - every other event runs everything, and so does CHANGES_FULL=true (a
+#     pull request with the full-suite label).
 #
 # The rule is the same as e2e/tui/testselect: a path that no rule here names
 # and that is in no Go package runs everything. So do a change to a go.mod,
@@ -59,6 +60,8 @@ everything() {
 	out[pkgs]=all out[ghostty_pkgs]=all out[lint_libs]=all out[lib_alone]='["vt","sketch","nitpick","small"]'
 	emit
 }
+
+[ "${CHANGES_FULL:-}" != true ] || everything "the pull request has the full-suite label"
 
 # The five jobs a push to main ran only on a path match keep that rule.
 pathgated=(ghostty learn_web clienttests docker nix)

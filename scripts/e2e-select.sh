@@ -8,7 +8,8 @@
 #
 # On a pull request the checkout is the merge of the head into the base, so
 # HEAD^1 is the base, and e2e/tui/testselect keeps the tests that diff can
-# reach. Every other event, and any error, selects every test.
+# reach. Every other event, any error, and E2E_SELECT_FULL=true (the
+# full-suite label) select every test.
 #
 # The test map is the newest one the e2e-tui test map workflow made on main
 # before this run started (see map_for_run), or the committed one when that
@@ -54,7 +55,10 @@ if [ "${GITHUB_EVENT_NAME:-}" = pull_request ] && [ "$(git rev-list --parents -n
 	base=$(git rev-parse HEAD^1)
 fi
 
-if ! selected=$(go run ./testselect -base "$base" -map "$map" -summary "${GITHUB_STEP_SUMMARY:-/dev/null}" <"$all"); then
+if [ "${E2E_SELECT_FULL:-}" = true ]; then
+	echo "e2e-select: the pull request has the full-suite label, so every test runs" >&2
+	selected=$(cat "$all")
+elif ! selected=$(go run ./testselect -base "$base" -map "$map" -summary "${GITHUB_STEP_SUMMARY:-/dev/null}" <"$all"); then
 	echo "::warning title=Test selection failed::testselect failed, so every e2e test runs."
 	selected=$(cat "$all")
 fi

@@ -11,14 +11,21 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    # labeled: the full-suite label starts a run of the whole suite on the
+    # head (see "Choose the frame paths"). Any other label starts a run whose
+    # jobs all skip.
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
     # No path filter: the shard plan job runs on every pull request, so a
     # pull request always shows that this workflow started. A change that
     # reaches no test, such as one to the docs, starts no shard.
+  # The merge queue runs the whole suite on the commit it is about to land,
+  # on every frame path and backend (see "Choose the frame paths").
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
     inputs:
       skip_if_tested:
-        description: Skip the shards when this commit already passed them as a pull request head
+        description: Skip the real cells shards when this commit already passed them in a pull request or merge queue run
         type: boolean
         default: false
 
@@ -28,8 +35,9 @@ permissions:
 concurrency:
   # A pull request's group is its ref, so a newer push cancels the run in
   # progress. Every other run (main, the nightly, a manual run) gets a group of
-  # its own and is never cancelled or replaced while it waits.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  # its own and is never cancelled or replaced while it waits. So does a run
+  # for a label other than full-suite, so it cancels nothing.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && !(github.event.action == 'labeled' && github.event.label.name != 'full-suite') && github.ref || github.run_id }}
   cancel-in-progress: true
 
 # The shard count, the lanes in each shard, and the time each lane may take.
@@ -48,11 +56,11 @@ env:
   E2E_LANE_FILL: 3m
 
 jobs:
-  # ff-merge lands the exact commit that passed as the pull request head, so
-  # the push to main would run the same suite on the same tree again. This job
-  # looks for that pull request run. When it finds one, the shards pass at once
-  # with a note that links it. When it finds none, or the API fails, the shards
-  # run in full.
+  # The merge queue lands the exact commit its run tested, so the push to main
+  # would run the same suite on the same tree again. A pull request run of the
+  # whole suite on the same commit counts too. This job looks for
+  # that run. When it finds one, the shards pass at once with a note that links
+  # it. When it finds none, or the API fails, the shards run in full.
   tested:
     name: e2e-tui already tested
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.skip_if_tested)
@@ -68,7 +76,7 @@ jobs:
         with:
           sparse-checkout: scripts
 
-      - name: Find a pull request run that passed every shard on this commit
+      - name: Find a run that passed every shard on this commit
         id: find
         env:
           GH_TOKEN: ${{ github.token }}
@@ -76,19 +84,21 @@ jobs:
           url=$(scripts/e2e-tested.sh "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$E2E_SHARDS" || true)
           echo "url=$url" >> "$GITHUB_OUTPUT"
           if [ -n "$url" ]; then
-            echo "This commit passed every shard as a pull request head: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "This commit passed every shard in an earlier run: $url" | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            echo "No pull request run passed every shard on this commit. The shards run in full." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "No earlier run passed every shard on this commit. The shards run in full." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
   shard-plan:
     name: e2e-tui shard plan
+    if: github.event.action != 'labeled' || github.event.label.name == 'full-suite'
     runs-on: ubuntu-latest
     outputs:
       shards: ${{ steps.shards.outputs.shards }}
       total: ${{ steps.shards.outputs.total }}
       frames: ${{ steps.frames.outputs.frames }}
       debs_key: ${{ steps.debs.outputs.key }}
+      backends: ${{ steps.frames.outputs.backends }}
     # actions: read lets scripts/e2e-select.sh download the newest test map.
     permissions:
       contents: read
@@ -115,6 +125,8 @@ jobs:
           TUIOS_E2E: "1"
           GH_TOKEN: ${{ github.token }}
           E2E_SELECT_ALL: ${{ runner.temp }}/all.txt
+          # The full-suite label runs every test.
+          E2E_SELECT_FULL: ${{ contains(github.event.pull_request.labels.*.name, 'full-suite') }}
         run: |
           set -euo pipefail
           GITHUB_OUTPUT="$RUNNER_TEMP/select.out" ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt"
@@ -127,17 +139,40 @@ jobs:
           set -euo pipefail
           go run ./shardplan -shards "$((E2E_SHARDS * E2E_LANES))" -max "$E2E_LANE_LIMIT" < "$RUNNER_TEMP/all.txt"
 
-      # The frame paths the shards run on (appearance.cell_frames). A pull
-      # request runs the default path, cells. A push to main, and a run by
-      # hand, also run every shard on Bubble Tea's renderer, the other path,
-      # so it cannot break unseen while both paths exist.
+      # The frame paths (appearance.cell_frames) and the backends the shards
+      # run on. A pull request runs the default path, cells, on the real
+      # binary. A pull request with the full-suite label, the merge queue and
+      # a run by hand also run every shard on Bubble Tea's renderer, the other
+      # path, and on the sim backend, so neither breaks unseen while both
+      # exist. Such a run leaves the notice "full" titled "e2e-tui frames".
+      # A push to main of a commit that passed such a run runs cells on the
+      # real binary only, and the tested job finds that run for those. Any
+      # other push runs all of them.
       - name: Choose the frame paths
         id: frames
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LABELED: ${{ contains(github.event.pull_request.labels.*.name, 'full-suite') }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            echo 'frames=["cells"]' >> "$GITHUB_OUTPUT"
-          else
+          set -euo pipefail
+          full=true
+          case $GITHUB_EVENT_NAME in
+          pull_request) [ "$LABELED" = true ] || full=false ;;
+          push)
+            url=$(scripts/e2e-tested.sh "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$E2E_SHARDS" full || true)
+            if [ -n "$url" ]; then
+              full=false
+              echo "This commit passed every frame path and backend in $url" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+            ;;
+          esac
+          if $full; then
+            echo "::notice title=e2e-tui frames::full"
             echo 'frames=["cells","string"]' >> "$GITHUB_OUTPUT"
+            echo 'backends=["real","sim"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'frames=["cells"]' >> "$GITHUB_OUTPUT"
+            echo 'backends=["real"]' >> "$GITHUB_OUTPUT"
           fi
 
       # The tests of each lane of each shard, packed by measured time
@@ -336,9 +371,10 @@ jobs:
         # the test process (e2e/tui/backend_test.go), on the cells path only,
         # and only the tests in e2e/tui/shardplan/sim.txt: the ones that pass
         # there. A pull request runs real only: a red sim shard would block
-        # every landing. A push to main and a run by hand add sim, so main
-        # builds the record of three green days that makes sim a check.
-        backend: ${{ fromJSON(github.event_name == 'pull_request' && '["real"]' || '["real","sim"]') }}
+        # every landing. The merge queue and a run by hand add sim, as a check
+        # that is not required, so the queue builds the record of three green
+        # days that makes sim a check.
+        backend: ${{ fromJSON(needs.shard-plan.outputs.backends) }}
         exclude:
           - frame: string
             backend: sim
@@ -349,10 +385,12 @@ jobs:
     # success. A draft skips the shards.
     if: ${{ !cancelled() && needs.shard-plan.result == 'success' && needs.shard-plan.outputs.shards != '[]' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     timeout-minutes: 20
+    # A red sim shard does not fail the run or the e2e-tui result check.
+    continue-on-error: ${{ matrix.backend == 'sim' }}
     env:
-      # A pull request runs only the cells path, so a pass there says nothing
-      # about the string path. The sim shards always run on main: their record
-      # there is what decides when sim becomes the default.
+      # Only the real cells shards are skipped for a commit that passed them
+      # before. The string and sim shards run wherever the frame step put
+      # them.
       TESTED_URL: ${{ matrix.frame == 'cells' && matrix.backend == 'real' && needs.tested.outputs.url || '' }}
 
     steps:
@@ -622,3 +660,24 @@ jobs:
         # runner. Never fail the job on this.
         if: always() && env.TESTED_URL == '' && steps.plan.outputs.run == 'true'
         run: pkill -f "$RUNNER_TEMP/suite/tuios" || true
+
+  # The one check of this workflow that landing waits for. A pull request
+  # starts only the shards its selection fills, so a shard is not a check that
+  # can be required by name. A run for a label other than full-suite skips it.
+  # The sim shards may fail (continue-on-error above) until
+  # e2e/tui/shardplan/sim.txt is green. A cancelled run skips it.
+  e2e-result:
+    name: e2e-tui result
+    if: ${{ !cancelled() && (github.event.action != 'labeled' || github.event.label.name == 'full-suite') }}
+    needs: [shard-plan, e2e-tui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every shard passed or was not needed
+        env:
+          PLAN: ${{ needs.shard-plan.result }}
+          SHARDS: ${{ needs.e2e-tui.result }}
+        run: |
+          echo "shard plan: $PLAN, shards: $SHARDS"
+          [ "$PLAN" = success ] || exit 1
+          case $SHARDS in success | skipped) ;; *) exit 1 ;; esac

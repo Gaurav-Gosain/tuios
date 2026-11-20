@@ -138,6 +138,22 @@ CI runs each test once. A failed test fails the job, and no job retries it.
 A test that fails now and then has a bug: find the cause and fix it. Do not
 rerun the job until it passes.
 
+### Land a pull request
+
+A pull request lands on main by fast-forward (`ff-merge`), after the whole
+suite passed on its head:
+
+1. Rebase the branch on main, so main can fast-forward to the head.
+2. Add the `full-suite` label. The label runs every CI job and the whole e2e
+   suite on the head, with the string frame and sim shards.
+3. Wait until `CI result` and `e2e-tui result` pass on that run.
+   `scripts/full-suite-passed.sh OWNER/REPO SHA` exits 0 when both did.
+4. Fast-forward main to that exact SHA.
+
+A push after the label runs the whole suite again. The push to main then
+skips the real cells and string and sim shards it already ran. A red sim shard
+does not fail `e2e-tui result`.
+
 ### Keep main green
 
 Main runs every Go test job and the whole e2e suite, so it catches what a
