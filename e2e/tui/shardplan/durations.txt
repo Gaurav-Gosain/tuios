@@ -820,7 +820,7 @@ TestHoverLightsEveryRunOfAnIDLink 2.7
 TestHoveringALinkUnderlinesItOnScreen 2.8
 TestIcatPlaceholdersNameTheHostImage 3.7
 TestIcatStyleStreamReachesHost 3.4
-TestIdleCostStaysLow 159.1
+TestIdleCostStaysLow 400.0
 TestImageSymbolsAreShaded 6.1
 TestImageSymbolsAutoPicksByTerminal 8.6
 TestImageSymbolsDimEvenly 12.4
