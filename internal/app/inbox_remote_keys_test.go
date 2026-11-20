@@ -18,8 +18,11 @@ import (
 // digit that send-keys typed must answer nothing. The reason line, the peek
 // and the reply queue already refuse such keys; the digits must too.
 //
-// Negative control: without the ProcessingRemoteKeys check in
-// InboxReplyApproval, the first InboxNumber returns the reply command.
+// Negative control: the refusal is held at several places, and the test fails
+// only with all of them cut: refuseRemoteAnswer in InboxReplyApproval,
+// inboxApprovalGate and InboxConfirmKey, and the notThePersonsKey check in
+// inboxNonce. Then the 1 and enter from send-keys send the reply. With any
+// one of them in place, the reply is not sent.
 func TestInboxDigitsFromSendKeysAnswerNothing(t *testing.T) {
 	m, r := approvalsOS(t, heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalAlways, session.ApprovalDeny))
 	m.ProcessingRemoteKeys = true

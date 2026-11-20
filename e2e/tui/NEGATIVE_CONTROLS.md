@@ -18571,6 +18571,8 @@ The new image of a live upgrade also sweeps the folders of its own pid, so the f
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^TestNoTempIndexLeftWhenTheDaemonStops$' -v .
+```
+
 ## A screenshot save that outlives its test
 
 `TestScreenshotRegionDragOpensThePreview` ended once the preview panel was up. The panel is up before the file is written. Under the sim backend the client runs in the test process, so its save went on after the test ended and left the test's folder in the run's temp dir. The run's temp folder check then failed now and then with `TestScreenshotRegionDragOpensThePreview<n>: holds 001`, with every test passing. The test now waits for the file as well.
@@ -18585,4 +18587,52 @@ Run on 2026-11-19 on Linux, sim backend, against main at 61507834e. The control 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -v -run '^(TestScreenshotRegionDragOpensThePreview|TestScreenshotTwoCapturesInOneSecondKeepBothFiles)$' .
+```
+
+## GHSA-jf76-3ff5-gjjv: pane grants and pane output (v0.8.1)
+
+The advisory has eleven findings. The v0.8.1 tests for them carried their negative controls in their doc comments only. Each control below cuts one call site on main (079302be4), or the few that one protection is spread over, builds, runs the tests named, and restores the file. The e2e controls run a binary built with the cut. Run on 2026-11-20 on macOS (arm64, go1.27.4).
+
+`TestWebPasswordGuardsTheSession` is new. It starts tuios-web on loopback with `--password-file`. A handshake with no credentials, a wrong password or another user name must get 401. The right password must get a session, which is the positive half. The unit tests in `cmd/tuios-web` call `webAccess.apply` themselves, so no test failed when the binary did not hand the password to sip, other than `TestWebAllowHostLetsAProxyNameIn` on its proxy name.
+
+| Finding | Cut | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| 1, `.link` socket | `linkFromPane` check cut from `checkLinkVerb` | `TestAPaneCannotDialTheLinkSocket` ("a pane holding read typed through tuios.sock.link"), `TestAStrictPaneCannotTypeThroughTheLinkSocket` (no refusal) | **caught** |
+| 2, config widening | `reloadPanePermissions(perms)` in `applyUserConfig` replaced with `manager.SetPanePermissions(perms)` | `TestAPermissionReloadOnlyTightens` ("after a reload to open the pane holds admin"), `TestAWideningReloadSaysItWaits` ("a reload to open did not wait") | **caught** |
+| 2, config apply | `mayActAsHuman` check cut from `verbApplyConfig` | `TestAPaneCannotApplyConfig` ("a pane applied config.toml") | **caught** |
+| 3, unreadable caller | `peerChanged` hold cut from `paneAuthority` | `TestAnUnreadableCallerIsHeldToTheStrictDefault` (kill-session passed under open). `TestAConnectionWhoseProcessChangedIsHeld` passes: the unplaced-caller hold below holds the caller | **caught** |
+| 3, daemon child | unplaced-caller hold cut from `paneAuthority` | `TestADaemonChildOutsideEveryPaneIsHeld` ("set a pane's grants") | **caught** |
+| 3, both holds | both cuts above | the three tests above | **caught** |
+| 4, Inbox answers | each `refuseRemoteAnswer` call alone | `InboxAnswerAsk`: `TestInboxQuestionDigitFromSendKeysAnswersNothing`. `InboxRelease`: `TestInboxReleaseFromSendKeysPassesNothing`, on its wording only. `InboxReplyApproval`, `InboxConfirmKey`, `inboxApprovalGate`, the question choice: none | not caught alone: another check refuses |
+| 4, Inbox answers | `refuseRemoteAnswer` in `InboxReplyApproval`, `InboxConfirmKey` and `inboxApprovalGate`, and the `notThePersonsKey` check in `inboxNonce` | `TestInboxDigitsFromSendKeysAnswerNothing`, `TestInboxRiskySecondPressFromSendKeysAnswersNothing` (the reply is sent) | **caught** |
+| 4, send-keys through the client | `paneTypesRaw` back to admin only | `TestAPaneSendKeysNeverDrivesTheClient` (PREFIX answered invalid_params). `TestAnOpenPaneCannotReachAPromptThroughTheClient` passes: `typingNeedsWindow` refuses | **caught** by the unit test |
+| 4, send-keys through the client | `paneTypesRaw` back to admin only, and `typingNeedsWindow` cut from `holdTypingTarget` | `TestAnOpenPaneCannotReachAPromptThroughTheClient` (NX_EXIT=1 never appears). With only `typingNeedsWindow` cut it passes | **caught** |
+| Admin answers a prompt | admin early return back in front of the prompt check in `checkGrants` | `TestAnAdminPaneCannotAnswerAnotherPanesPrompt` (on `run` only). `TestAnOpenPaneCannotApproveAnotherPanesPrompt` passes, also with `recheckBlocked` cut from the send-keys handler | **caught** by the unit test |
+| Admin answers a prompt | the cut above, and `recheckTyping` and `recheckBlocked` cut from the send-keys handler | `TestAnOpenPaneCannotApproveAnotherPanesPrompt` (SK_EXIT=1 never appears) | **caught** |
+| 5, OSC 99 to the host | `NotifyFunc` back to `strings.TrimSpace` and `WriteToHost(ansi.Notify(hostText))` | `TestPaneNotificationCannotWriteEscapesToHost` (5 of 5 cases), `TestPaneNotifyPayloadWritesNoEscapesToHost` (`ESC]52;c;UFdORUQ=` reached the host) | **caught** |
+| 5, clipboard reply | `ClaimPasteReply` check cut from `HandleInput` | `TestUnrequestedClipboardReplyIsDropped`, `TestRequestedClipboardReplyIsPasted`, `TestUnrequestedClipboardReplyIsNotPasted` | **caught** |
+| 6, OSC 52 writes | `paneClipboardWrite(msg)` in `Update` replaced with `clipboardWriteCmd(msg.Text)` | `TestOSC52FromABackgroundPaneDoesNotReachTheHostClipboard` and 8 more in `osc52_write_test.go`; `TestClipboardAskIsAllowedByAClick`, `TestClipboardAskSettlesBeforeAClickAllows` (no ask), `TestFocusedPaneOSC52WriteReachesHostWithMessage` (no dock line) | **caught** |
+| 6, paste end marker | `SanitizePaste` call cut from `PastePayload` | `paste_escape_test.go` (3 tests), `TestClipboardPasteCannotEndBracketedPaste` | **caught** |
+| 7, layout save (TUI) | `layoutPaneDir(w)` replaced with `paneDir(w)` | `TestLayoutSaveRecordsTheKernelCwdOverASpoofedOne`, `TestLayoutSaveDropsACwdItCannotCheck` | **caught** |
+| 7, layout load (TUI) | the v0.8.0 `cd %q && clear` typed into each reused pane in place of `cdAtPrompt` | `TestLayoutLoadTypesNothingIntoAPaneItCannotSee`, `TestLayoutLoadRefusesAQuoteInTheFolder`, `TestLayoutLoadDoesNotTypeIntoAProgram`, `TestLayoutLoadMovesALocalShellAtItsPrompt` | **caught** |
+| 7, layout load (daemon) | the v0.8.0 `cd %q && clear` typed into each reused pane in `loadLayoutTemplate` | `TestLayoutWithSpoofedCwdRunsNothing` ("loading the layout ran the command") | **caught** |
+| 7, cd here (daemon) | `shellAtPrompt` check cut from `handleTypeAtPrompt` | `TestTypeAtPromptTypesOnlyAtAShellPrompt`, `TestDaemonFolderClickCdOnlyAtAPrompt` | **caught** |
+| 7, cd here (daemon) | `refuseTypingInto` check cut from `handleTypeAtPrompt` | `TestAnAdminPaneCannotCdIntoAPromptOverTheClientProtocol`, `TestAPaneWithoutTheTargetsGrantsCannotCdIt` | **caught** |
+| 7, cd here (daemon) | `CdLine` refusal cut from `handleTypeAtPrompt` | `TestTypeAtPromptRefusesAnUnsafeFolder` | **caught** |
+| 8, kitty file media | `kittyMediumPath` call in `forwardFileTransmit` replaced with the v0.8.0 path | 7 tests in `kitty_file_medium_test.go`. `TestKittyShmNameCannotLeaveDevShm` skips with no `/dev/shm`; `TestKittyTempFileInProcIsRefused` passes with no `/proc` | **caught** |
+| 9, tuios-web password | `access.apply(&sipConfig)` cut from `runWebServer` | `TestWebPasswordGuardsTheSession` ("a handshake with no credentials got 101, want 401"), `TestWebAllowHostLetsAProxyNameIn` (proxy name 403) | **caught** |
+| 9, tuios-web password | `cfg.BasicUsername`/`BasicPassword` cut from `webAccess.apply` | `TestPasswordGuardsTheSession`, `TestAllowHostAddsAName` | **caught** |
+| 9, Host check | `"*"` added to `cfg.AllowedHosts` | `TestLoopbackRefusesAForeignHost`, `TestAllowHostAddsAName` | **caught** |
+| 9, network bind | the no-password refusal in `planWebAccess` returns the plan | `TestNetworkBindNeedsAPassword` | **caught** |
+| 10, keys with options | the `len(options) > 0` check cut from `parseAuthorizedKeys` | `TestKeyWithOptionsIsNotAdmitted` (3 of 4 subtests; the plain key is the positive half), `TestFileOfOnlyRestrictedKeysIsAnError` | **caught** |
+| 10, `~/.ssh/authorized_keys` | the file added back to `AuthorizedKeysCandidates` | `TestNoSilentFallbackToSSHAuthorizedKeys` | **caught** |
+| 11, shim holder | `authorize` call cut from `acceptRespawns` | `TestHolderAsksTheDaemonAboutTheCaller`, `TestHolderRefusesADaemonThatIgnoresThePeer`, `TestHolderSendsTheCallersStartTime`, `TestTheShimHolderChecksTheCallersGrants` | **caught** |
+| 11, shim holder | `Authorize` cut from the `PaneOptions` of `tuios tmux-pane` | `TestTheShimHolderChecksTheCallersGrants` | **caught** |
+
+Each test passes with the cut restored. `TestWebPasswordGuardsTheSession` passed 10 runs of 10.
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_WEB_BIN=/path/to/tuios-web \
+  go test -count=1 -run '^TestWebPasswordGuardsTheSession$' -v .
+```
 ```
