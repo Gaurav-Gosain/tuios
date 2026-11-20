@@ -18139,6 +18139,17 @@ Run on 2026-11-16 on Linux (x86_64), OpenSSH sshd. The branch passes both tests.
 
 The transcripts are `pair-remove.txt` and `hosts-remove-keys.txt` under `TUIOS_E2E_FRAMES`, in each test's folder. Both tests skip when ssh or ssh-keygen is missing, and the first skips when sshd is missing. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestRemovedPairedDeviceLosesItsLink|TestHostRemoveKeepsTheTableWhenTheKeyStays)$' -v .`.
+
+The controls were run again on 2026-11-20 on macOS (arm64) with the OpenSSH sshd of the system, based on upstream/main at 079302be4, each one cutting a call site and not the body of a helper. The branch passes both tests 5 of 5.
+
+| Control: the call site that was cut | The test fails with | Result |
+|---------|---------------------|--------|
+| 5311f0184 and 5dc174942 reverted in the production code, tests kept | `TestRemovedPairedDeviceLosesItsLink`: "the open link still lists panes after its table went". `TestHostRemoveKeepsTheTableWhenTheKeyStays`: "authorized_keys mode 000: hosts remove reported success", "the table went while the key stayed" | **caught** |
+| The `pinnedWithoutTable` check out of `linkPolicy` | `TestRemovedPairedDeviceLosesItsLink`: "the open link still lists panes after its table went", waited 20s | **caught** |
+| `PairTag(name)` out of the tags `RemoveAuthorizedKeys` matches | `TestRemovedPairedDeviceLosesItsLink`: "hosts remove of a device with only its key line left failed", "authorized_keys is not the person's own key alone", "the removed key still opens the link" | **caught** |
+| `runHostRemove` drops the error of `RemoveAuthorizedKeys` | `TestHostRemoveKeepsTheTableWhenTheKeyStays`: "authorized_keys mode 000: hosts remove reported success", "the table went while the key stayed" | **caught** |
+| `RemoveAuthorizedKeys` writes with `os.WriteFile` in place of `atomicfile.Write` | `TestHostRemoveKeepsTheTableWhenTheKeyStays`: "~/.ssh mode 0500: hosts remove reported success", "the table went while the key stayed", "a failed rewrite changed authorized_keys" | **caught** |
+
 ## The command text an OSC 133 C mark captures is bounded
 
 `TestCommandCaptureIsBounded`, `TestCommandCaptureBytesAreBounded` and `TestCommandCaptureKeepsShortCommands` in `vt/semantic_capture_bound_test.go` are kept unit tests of a resource bound. They count the bytes the C marks keep and the bytes their writing allocates, and time nothing. The bound test writes one B, 9000 lines (past the line bound) or 60 lines (under it), and 300 C marks. The C marks must keep at most 16 KiB between them, and writing them must allocate at most 4 MiB. The bytes test writes 60 lines of 398 two-byte runes on a 400 column pane. One C must keep at most 16 KiB, cut at a rune boundary. The short command test holds normal shell use: one command per prompt, a command of three lines, a long command that soft-wraps, and a second C after one B.
