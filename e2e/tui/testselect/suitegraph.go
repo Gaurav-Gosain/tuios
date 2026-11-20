@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -138,6 +140,46 @@ func (g *suiteGraph) testsUsing(decls []string) []string {
 
 // suiteFile reports whether p, relative to the repository root, is a test
 // file of the suite's own package.
+// suiteSources reads e2e/tui/*_test.go under root, by file name.
+func suiteSources(root string) (map[string][]byte, error) {
+	files, err := filepath.Glob(filepath.Join(root, "e2e/tui/*_test.go"))
+	if err != nil {
+		return nil, err
+	}
+	srcs := make(map[string][]byte, len(files))
+	for _, file := range files {
+		src, err := os.ReadFile(file)
+		if err != nil {
+			return nil, err
+		}
+		srcs[file] = src
+	}
+	return srcs, nil
+}
+
+// readers returns the tests of the suite's files that name the file p, a
+// path from the repository root, by its base name in a string literal, such
+// as filepath.Join(root, "scripts", "install.sh") or "../../scripts/goflags.sh".
+// Such a test may run or read p, though no package of the binary builds it.
+// A file that names it for another reason only adds its tests.
+func readers(srcs map[string][]byte, p string) []string {
+	base := path.Base(p)
+	var tests []string
+	for file, src := range srcs {
+		if !bytes.Contains(src, []byte(`"`+base+`"`)) && !bytes.Contains(src, []byte("/"+base+`"`)) {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), file, src, parser.SkipObjectResolution)
+		if err != nil {
+			// go test -list fails on such a file before the selection
+			// runs, so the run never gets here with one.
+			continue
+		}
+		tests = append(tests, testsIn(f)...)
+	}
+	return tests
+}
+
 func suiteFile(p string) bool {
 	return strings.HasPrefix(p, "e2e/tui/") && !strings.Contains(strings.TrimPrefix(p, "e2e/tui/"), "/") && strings.HasSuffix(p, "_test.go")
 }

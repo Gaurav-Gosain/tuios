@@ -72,6 +72,11 @@ var inert = []*regexp.Regexp{
 	regexp.MustCompile(`^(LICENSE|CITATION\.cff|FUNDING\.yml|Dockerfile|\.dockerignore|justfile|flake\.nix|flake\.lock|tuios\.nix|install\.sh|install-web\.sh|\.envrc|\.gitignore|\.gitattributes|\.golangci\.yml|\.goreleaser\.yml|\.markdownlint\.json|demo\.gif|demo\.avif)$`),
 }
 
+// The files that set the build flags of the binary under test (see
+// scripts/goflags.sh). A change to one changes the binary as a whole, as a
+// change no name carries does.
+var buildFlags = regexp.MustCompile(`^scripts/(goflags\.sh|noinline-packages\.txt)$`)
+
 // The paths that always run the whole suite, checked before anything else.
 var global = []*regexp.Regexp{
 	regexp.MustCompile(`^\.github/`),
@@ -114,6 +119,7 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 	declPkgs := map[string]bool{}   // packages changed in a way only their importers bound
 	var names []name                // declarations that changed
 	reaches := false                // the change reaches the binary or the suite
+	var srcs map[string][]byte      // the suite's test files, read on first use
 	for _, c := range changes {
 		p := c.path
 		switch {
@@ -231,11 +237,29 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 			}
 			continue
 		}
+		if buildFlags.MatchString(p) {
+			reaches = true
+			sel.reasons = append(sel.reasons, p+": sets the build flags of the binary")
+		}
+		// A test can run or read a file that no package of the binary
+		// builds, by its path: TestInstallScriptUpgradesTheDaemonLive runs
+		// scripts/install.sh.
+		if srcs == nil {
+			if srcs, err = suiteSources(root); err != nil {
+				return everything(fmt.Sprintf("the suite's test files cannot be read: %v", err))
+			}
+		}
+		if tests := readers(srcs, p); len(tests) > 0 {
+			for _, t := range tests {
+				sel.tests[t] = true
+			}
+			sel.reasons = append(sel.reasons, fmt.Sprintf("%s: named in the files of %d tests", p, len(tests)))
+		}
 		if inGoPackage(root, p) {
 			sel.reasons = append(sel.reasons, p+": in a package neither the binary nor the suite builds")
 			continue
 		}
-		if matchAny(inert, p) {
+		if matchAny(inert, p) || buildFlags.MatchString(p) {
 			sel.reasons = append(sel.reasons, p+": documentation or tooling")
 			continue
 		}
