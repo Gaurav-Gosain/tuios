@@ -81,6 +81,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		if o.ReviewOpen() {
 			return o, nil
 		}
+		// The explainer is text to read, so a click on it does nothing. A
+		// click anywhere else reaches what it lands on. See hover_help.go.
+		if o.HelpExplainerAt(msg.X, msg.Y) {
+			return o, nil
+		}
 		if o.ShowScrollbackBrowser {
 			result, cmd = handleScrollbackBrowserMouseClick(msg, o)
 		} else {
@@ -98,6 +103,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		if o.ReviewOpen() {
 			return o, nil
 		}
+		// Hover help explains what the pointer is over. The motion then goes
+		// on to whatever else wants it.
+		o.HelpHoverAt(msg.X, msg.Y)
 		if o.ShowScrollbackBrowser {
 			result, cmd = handleScrollbackBrowserMouseMotion(msg, o)
 			// Don't sync motion events
@@ -151,6 +159,16 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 				o.ReviewWheel(-3)
 			case tea.MouseWheelDown:
 				o.ReviewWheel(3)
+			}
+			return o, nil
+		}
+		// The wheel scrolls the explainer only over the explainer.
+		if o.HelpExplainerAt(msg.X, msg.Y) {
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				o.HelpScroll(-3)
+			case tea.MouseWheelDown:
+				o.HelpScroll(3)
 			}
 			return o, nil
 		}
@@ -418,6 +436,12 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// window-management and terminal mode. It only observes; it never consumes.
 	if o.ShowKeys {
 		o.CaptureKeyEvent(msg)
+	}
+
+	// Hover help's walk and scroll keys. They are all modified, and every
+	// other key goes on as if hover help were off. See hover_help.go.
+	if hoverHelpKey(msg, o) {
+		return o, nil
 	}
 
 	// Hold-to-window-mode. The trigger is consumed here, before any mode routing,

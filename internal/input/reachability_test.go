@@ -168,7 +168,19 @@ func reachSections(t *testing.T) []bindingSection {
 		{name: "copy_mode", binds: k.CopyMode, modes: bothModes, newOS: reachCopyModeOS},
 		// The review overlay owns the keyboard in either mode while it is open.
 		{name: "review", binds: k.Review, modes: bothModes, newOS: reachReviewOS},
+		// Hover help's keys answer in either mode while it is up, ahead of
+		// the pane.
+		{name: "help", binds: k.Help, modes: bothModes, newOS: reachHelpOS},
 	}
+}
+
+// reachHelpOS is reachOS with hover help up, the only state the help section
+// answers in.
+func reachHelpOS(t *testing.T) *app.OS {
+	t.Helper()
+	o := reachOS(t)
+	o.ToggleHoverHelp()
+	return o
 }
 
 // reachReviewOS is a client with the review overlay open on a diff.
@@ -269,8 +281,30 @@ func reachMailOS(t *testing.T) *app.OS {
 // handler can see them, and the eight negative controls that mutate a handler
 // all pass while the feature is dead.
 func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
+	checkDefaultBindingsReach(t, false)
+}
+
+// TestHoverHelpShadowsNoDefaultBinding runs the same table with hover help up.
+// Hover help's keys are read ahead of every other route, so a default help key
+// that another section also binds takes that key from it for as long as the
+// explainer is up: the shifted arrows once stopped scrolling the pane in
+// terminal mode, moving by word in copy mode and reordering the rail. The help
+// section itself is left out, since it is the one being checked against.
+func TestHoverHelpShadowsNoDefaultBinding(t *testing.T) {
+	checkDefaultBindingsReach(t, true)
+}
+
+// checkDefaultBindingsReach presses every default key of every section in
+// every mode it is live in, and checks the key ran its action. With helpUp,
+// hover help is turned on in each fixture first, and its own section is
+// skipped.
+func checkDefaultBindingsReach(t *testing.T, helpUp bool) {
+	t.Helper()
 	k := config.DefaultConfig().Keybindings
 	for _, sec := range reachSections(t) {
+		if helpUp && sec.name == config.SectionHelp {
+			continue
+		}
 		for _, mode := range sec.modes {
 			for _, action := range sortedActions(sec.binds) {
 				for _, key := range sec.binds[action] {
@@ -280,6 +314,9 @@ func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
 							t.Skipf("%s is bound ahead of its work (%s)", action, unit)
 						}
 						o := sec.newOS(t)
+						if helpUp && !o.HoverHelpOn() {
+							o.ToggleHoverHelp()
+						}
 						o.Mode = mode
 						if sec.leader {
 							o = pressKey(t, o, k.LeaderKey)
@@ -891,7 +928,7 @@ func TestEveryDescribedActionIsHandled(t *testing.T) {
 	// below does not name it; runCopyModeAction runs it through its constant.
 	handled := map[string]bool{app.HoldModeAction: true, config.ActionCopyModeFirstNonBlank: true}
 	k := config.DefaultConfig().Keybindings
-	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode, k.Transfers, k.Lists, k.Review} {
+	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode, k.Transfers, k.Lists, k.Review, k.Help} {
 		for action := range section {
 			handled[action] = true
 		}
