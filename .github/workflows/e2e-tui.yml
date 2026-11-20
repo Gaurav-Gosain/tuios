@@ -114,19 +114,17 @@ jobs:
           set -euo pipefail
           go test -list '^Test' ./... | grep '^Test' | go run ./shardplan -shards "$((E2E_SHARDS * E2E_LANES))" -max "$E2E_LANE_LIMIT"
 
-      # The only selection of the run: the shards read its lists. Its notice
-      # "mode=all" is how scripts/e2e-tested.sh knows that every test ran, so
-      # the push to main skips the suite only after a pull request run of the
-      # whole suite.
+      # The only selection of the run: the shards read its lists. all.txt
+      # keeps every test, for a selection that fills every shard (below).
       - name: Select the tests this change can reach
         working-directory: e2e/tui
         env:
           TUIOS_E2E: "1"
           GH_TOKEN: ${{ github.token }}
+          E2E_SELECT_ALL: ${{ runner.temp }}/all.txt
         run: |
           set -euo pipefail
           GITHUB_OUTPUT="$RUNNER_TEMP/select.out" ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt"
-          echo "::notice title=e2e-tui selection::$(grep '^mode=' "$RUNNER_TEMP/select.out")"
 
       # The frame paths the shards run on (appearance.cell_frames). A pull
       # request runs the default path, cells. A push to main, and a run by
@@ -148,7 +146,13 @@ jobs:
       # fills as few lanes as it needs, and a shard with no test does not
       # start, so a small change takes two or three runners instead of
       # sixteen. When the fill gives no shard a test, the selection spreads
-      # over every shard instead.
+      # over every shard instead. When the fill gives every shard a test, the
+      # run costs the same runners as the whole suite, so the whole suite
+      # runs. The push to main then finds this run and does not run it again.
+      #
+      # The notice "mode=all" titled "e2e-tui selection" is how
+      # scripts/e2e-tested.sh knows that every test ran, so the step writes
+      # it once, with the mode the shards run.
       - name: Choose the shards that run
         id: shards
         working-directory: e2e/tui
@@ -186,10 +190,16 @@ jobs:
             if [ ! -s "$RUNNER_TEMP/shards.txt" ]; then
               echo "::warning title=Shard plan::The selection holds tests but no shard got one, so they spread over every shard."
               pack > "$RUNNER_TEMP/shards.txt"
+            elif [ "$(grep -c . "$RUNNER_TEMP/shards.txt")" -eq "$E2E_SHARDS" ]; then
+              echo "The selection of $(grep -c . "$RUNNER_TEMP/selected.txt") of $(grep -c . "$RUNNER_TEMP/all.txt") tests fills every shard, so every test runs." | tee -a "$GITHUB_STEP_SUMMARY"
+              mode=all
+              cp "$RUNNER_TEMP/all.txt" "$RUNNER_TEMP/selected.txt"
+              pack > "$RUNNER_TEMP/shards.txt"
             fi
           else
             pack > "$RUNNER_TEMP/shards.txt"
           fi
+          echo "::notice title=e2e-tui selection::mode=$mode"
           mapfile -t shards < "$RUNNER_TEMP/shards.txt"
           list=$(IFS=,; echo "${shards[*]:-}")
           echo "shards=[$list]" >> "$GITHUB_OUTPUT"
