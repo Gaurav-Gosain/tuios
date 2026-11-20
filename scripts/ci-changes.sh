@@ -119,9 +119,9 @@ while IFS= read -r p; do
 	scripts/check.sh | scripts/platforms.txt) f[go]=1 pkg=no ;;
 	# The noinline list sets the GOFLAGS of every shipped or measured build of
 	# cmd/tuios: binary size, the image, the mixed-version build and the
-	# example tape build of go test ./.... go-test-affected.sh adds the
-	# packages whose tests read the list (internal/lint).
-	scripts/noinline-packages.txt | scripts/goflags.sh) f[binary_size]=1 f[docker]=1 f[mixed]=1 f[go]=1 pkg=no ;;
+	# example tape build of go test ./.... The internal/lint tests check the
+	# list and every build path that reads it.
+	scripts/noinline-packages.txt | scripts/goflags.sh) f[binary_size]=1 f[docker]=1 f[mixed]=1 f[go]=1 f[lint_tests]=1 pkg=no ;;
 	scripts/ghostty-lib.sh | scripts/minisign/*) f[ghostty]=1 pkg=no ;;
 	scripts/e2e-mixed-versions.sh) f[mixed]=1 pkg=no ;;
 	scripts/e2e-*.sh | scripts/fuzz-target.sh | scripts/contributors*.sh | scripts/contributors-mosaic.go | scripts/star-history.sh | scripts/rebase.sh | scripts/vt-rename.sh | scripts/install.sh | scripts/zigcc/*) pkg=no ;;
@@ -207,6 +207,12 @@ for n in pkgs win mac wasm gpk bin bindarwin; do
 done
 pkgs=$(cat "$tmp/pkgs") win=$(cat "$tmp/win") mac=$(cat "$tmp/mac") wasm=$(cat "$tmp/wasm")
 gpk=$(cat "$tmp/gpk") bin=$(cat "$tmp/bin") bindarwin=$(cat "$tmp/bindarwin")
+# go-test-affected.sh finds a test that reads a changed file only by a "../"
+# path in the same file. The internal/lint tests read from the repository
+# root, so a rule above names them.
+if [ -n "${f[lint_tests]:-}" ]; then
+	pkgs=$(printf '%s\n%s\n' "$pkgs" github.com/Gaurav-Gosain/tuios/internal/lint | grep . | sort -u)
+fi
 
 # The packages whose tests link the emulator, as ghostty-vt.yml finds them.
 vtlinked=$(go list -tags ghostty -test -f '{{.ForTest}} {{join .Deps " "}}' "${ALL[@]}" 2>/dev/null |
