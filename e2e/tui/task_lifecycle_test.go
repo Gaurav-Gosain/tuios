@@ -84,7 +84,7 @@ func lifeRepo(t *testing.T, dir string) {
 	}
 	for _, args := range [][]string{
 		{"init", "-q", "-b", "main"},
-		{"-c", "user.email=e2e@example.com", "-c", "user.name=e2e", "commit", "-q", "--allow-empty", "-m", "start"},
+		{"-c", "user.email=e2e@example.com", "-c", "user.name=e2e", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "start"},
 	} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir

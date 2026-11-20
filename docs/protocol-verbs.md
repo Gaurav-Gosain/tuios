@@ -1941,6 +1941,7 @@ Read the task dispatch settings: each board's mode (manual or pull) and the swit
 |---|---|---|---|---|
 | `session` | string |  |  | Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one. |
 | `project` | string |  |  | The project board, by origin URL. Omit for the session's own cards. |
+| `window` | string |  |  | With no project: a window of the session. The board is the project of the window's folder, or the session's own cards when the folder has no origin. |
 
 | Result field | Type | Description |
 |---|---|---|
@@ -4909,7 +4910,7 @@ File a session under a space, a named group of related sessions that tuios ls an
 
 ### `set-task-dispatch`
 
-Change task dispatch. mode sets a board to manual, pull or auto: in pull, an agent that finishes its card is given the board's next open card, as mail from tuios; in auto, the daemon starts the board's preset agent for each open card, in a new worktree, and mails it the card. preset sets that agent; auto needs one. cap bounds the agents at once. verify sets the command run in a card's worktree when its agent is done: a pass moves the card to review, a fail to todo. pause stops all dispatch at once, and any pane may pause. resume lifts the pause and every stop. quiet sets the hours when dispatch gives no card. A pane needs admin for every action but pause, and verify is refused from every pane. Refused over a link.
+Change task dispatch. mode sets a board to manual, pull or auto: in pull, an agent that finishes its card is given the board's next open card, as mail from tuios; in auto, the daemon starts the board's preset agent for each open card, in a new worktree, and mails it the card. preset sets that agent; auto needs one. cap bounds the agents at once. verify sets the command run in a card's worktree when its agent is done: a pass moves the card to review, a fail to todo. pause stops all dispatch at once, and any pane may pause. resume lifts the pause and every stop. quiet sets the hours when dispatch gives no card. A pane needs admin for every action but pause, and verify is refused from every pane. Over a link it is refused unless human_nonce proves the person on a client attached through it.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|

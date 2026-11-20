@@ -137,7 +137,7 @@ func (m *OS) kbPreviewFileFetch() tea.Cmd {
 		return nil
 	}
 	files.m[key] = &kbFile{loading: true}
-	call, sess, id, name, kind := m.inboxCaller(), card.Session, card.ID, a.Name, a.Kind
+	call, sess, id, name, kind := m.inboxActCaller(), card.Session, card.ID, a.Name, a.Kind
 	return func() tea.Msg {
 		raw, err := call("get-task-attachment", map[string]any{"session": sess, "id": id, "name": name}, threadReadTimeout)
 		msg := kbFileMsg{key: key}

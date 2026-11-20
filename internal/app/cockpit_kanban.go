@@ -262,7 +262,7 @@ func (m *OS) kanbanSetStage(c session.TaskRow, stage string) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	call := m.inboxCaller()
+	call := m.inboxActCaller()
 	return func() tea.Msg {
 		raw, err := call("set-task-stage", map[string]any{"session": c.Session, "id": c.ID, "stage": stage, "human_nonce": nonce}, 5*time.Second)
 		msg := ckCardMsg{err: err, failed: "The card did not move: "}
@@ -277,7 +277,7 @@ func (m *OS) kanbanSetStage(c session.TaskRow, stage string) tea.Cmd {
 func (m *OS) applyCardReply(msg ckCardMsg) {
 	ck := &m.Inbox.ck
 	if msg.err != nil {
-		m.ShowNotification(msg.failed+printableTitle(msg.err.Error()), "error", m.Settings.NotificationDuration)
+		m.ShowNotification(msg.failed+printableTitle(inboxActErr(msg.err, m.AttachedHost)), "error", m.Settings.NotificationDuration)
 		return
 	}
 	m.applyTaskEvent(session.TaskActionStaged, msg.row)
@@ -290,9 +290,10 @@ func (m *OS) applyCardReply(msg ckCardMsg) {
 }
 
 // kanbanAddSession is the session a new card goes to: the one this client
-// is attached to, "" when it is not attached to one here.
+// is attached to, here or on the host it is attached through, "" when it is
+// not attached to one.
 func (m *OS) kanbanAddSession() string {
-	if m.AttachedHost != "" || !m.IsDaemonSession {
+	if !m.IsDaemonSession {
 		return ""
 	}
 	return m.SessionName
@@ -377,7 +378,7 @@ func (m *OS) kanbanAddSend() tea.Cmd {
 	if title == "" {
 		return nil
 	}
-	call := m.inboxCaller()
+	call := m.inboxActCaller()
 	return func() tea.Msg {
 		raw, err := call("add-task", map[string]any{"session": a.session, "title": title, "stage": a.stage, "human_nonce": nonce}, 5*time.Second)
 		msg := ckCardMsg{err: err, failed: "The card was not added: ", focus: true}

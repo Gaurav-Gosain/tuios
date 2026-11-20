@@ -295,7 +295,8 @@ func (m *OS) spawnPlaceCmd(s *spawnSheet, start bool) tea.Cmd {
 	if s.origin != "" {
 		params["repo_url"], params["local_origin"] = s.origin, s.origin
 	}
-	if c := s.card; c != nil {
+	// The pick is this machine's daemon's, which knows its own cards only.
+	if c := s.card; c != nil && c.host == "" {
 		params["task"], params["task_session"] = c.id, c.session
 	}
 	if m.AttachedHost == "" {
@@ -1536,7 +1537,10 @@ func (m *OS) spawnStart() tea.Cmd {
 		if s.folder != "" {
 			params["cwd"] = s.folder
 		}
-		if m.AttachedHost == "" && m.SessionName != "" {
+		// The attached session is on the attached machine. A client attached
+		// through a host names it only to that host: this machine has no
+		// session of that name to start in.
+		if (m.AttachedHost == "" || host == m.AttachedHost) && m.SessionName != "" {
 			params["session"] = m.SessionName
 		}
 		// The agent is named after its task, as a worktree's is after its
@@ -1562,11 +1566,15 @@ func (m *OS) spawnStart() tea.Cmd {
 	}
 	call, nonce, card := m.inboxCaller(), m.inboxNonce(), s.card
 	parts, stashIn := s.task.Parts(), m.SessionName
-	if host != "" {
+	elsewhere := ""
+	if card != nil && host != card.host {
 		// A card on this machine goes with an agent on another one only
-		// through start-agent and that machine's link back (task_host).
-		if card != nil && verb == "start-agent" && placedTaskHost != "" {
+		// through start-agent and that machine's link back (task_host). A
+		// card of the host the client is attached through stays there.
+		if card.host == "" && verb == "start-agent" && placedTaskHost != "" {
 			params["task"], params["task_host"], params["task_session"] = card.id, placedTaskHost, card.session
+		} else if card.host != "" {
+			elsewhere = " " + card.id + " stays free: it is on " + printableTitle(card.host) + "."
 		}
 		card = nil
 	}
@@ -1654,6 +1662,8 @@ func (m *OS) spawnStart() tea.Cmd {
 			// A fan claims nothing after, so this is the one place the
 			// person hears the card was left out.
 			held = " " + taskID + " was left out: " + printableTitle(leftOut)
+		case elsewhere != "":
+			held = elsewhere
 		}
 		switch {
 		case verb == "fan" && res.Total > 1:
