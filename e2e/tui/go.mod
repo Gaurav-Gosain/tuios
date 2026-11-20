@@ -41,7 +41,7 @@ require (
 	golang.org/x/image v0.47.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	tuios.dev/acp v0.0.0-20261113051439-2ceb1b54cbd2 // indirect
+	tuios.dev/acp v0.0.0-20261120180431-437c5b45ae51 // indirect
 	tuios.dev/harness v0.0.0-20261118102828-066550f827f5 // indirect
 	tuios.dev/loom v0.2.3-0.20261120122552-107c1a5ef7e3 // indirect
 	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 // indirect
