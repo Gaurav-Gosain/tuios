@@ -3,6 +3,7 @@
 package session
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
@@ -34,21 +35,33 @@ func TestForegroundGroupStaysInTheGroup(t *testing.T) {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 	})
-	// setsid is reached through a fork of the shell, so the second child is
-	// briefly a shell in the leader's group before it moves out. Wait for the
-	// tree to settle into one child in the group and one outside it.
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		in, out := 0, 0
+	// Each child starts as a fork of the shell, a shell in the leader's group,
+	// and becomes sleep when it execs. The second also moves out of the group
+	// through setsid. Counting one child in the group and one outside is not
+	// enough: the one in the group can still be the shell, before its exec.
+	// Wait for the tree to settle into an in-group sleep and one child
+	// outside the group.
+	settled := func() (bool, string) {
+		var in []string
+		out := 0
 		for _, child := range readChildren(leader) {
 			if readPGRP(child) == leader {
-				in++
+				in = append(in, readComm(child))
 			} else {
 				out++
 			}
 		}
-		if in == 1 && out == 1 {
+		state := fmt.Sprintf("in the group %q, outside it %d", in, out)
+		return len(in) == 1 && in[0] == "sleep" && out == 1, state
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		ok, state := settled()
+		if ok {
 			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the process tree did not settle within 5s: %s", state)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
