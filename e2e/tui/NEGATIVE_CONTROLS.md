@@ -9585,6 +9585,19 @@ it fails with "git started by childproc ran the repository's core.fsmonitor".
 Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1
 -run '^(TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt|TestADaemonChildCannotMarkAnotherPane)$' -v .`
 from `e2e/tui`.
+
+### The link half (GHSA-78rj-pghh-vh42)
+
+The tests above are the pane half. A report over a link is about a pane on this machine, and the state it sets is what the typing rule reads, so it needs `respond` in the link's policy. A build with the branch below cut passes the two tests above and `TestAPaneOverALinkCannotAnswerAPrompt`. `TestALinkCannotMarkAPaneOffItsPrompt` in `internal/session/link_policy_test.go` is a kept unit test of that boundary. It puts a pane on `needs_input`, then reports `working` for it with `set-agent-state` over a link with the default policy, which allows everything but `respond`. The report must be refused, naming answering prompts, and the pane must stay on `needs_input`. The positive half is in the same fixture: a link whose policy adds `respond` reports `working` and the pane reads it, and the person on this machine reports `idle`.
+
+Run on 2026-11-20 on macOS (arm64), based on upstream/main at 079302be4. The branch passes it.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The `cs.viaLink && grantKind(verb) == scopeSelf` branch of `checkGrants` (`internal/session/pane_grants.go`) made `if false && ...` | `a_link_without_respond`: "ASSERTION: a link without respond moved the pane on a prompt to working", "ASSERTION: set-agent-state over a link without respond: map[id:1 result:map[applied:true message: source:report state:working type:agent_state_set]]". `a_link_that_may_respond` and `the_person` pass | **caught** |
+
+Repeat from the repository root with `go test -count=1 -run '^TestALinkCannotMarkAPaneOffItsPrompt$' -v ./internal/session/`.
+
 ## Live handoff
 
 `e2e/tui/live_handoff_test.go` drives the daemon live upgrade of `docs/design/live-handoff.md` against real daemons. The daemon runs with `knob handoff=1`, which registers the test-only verbs `test-quiesce` and `test-handoff`. Each test writes what it measured to `handoff.json` under `artifactDir`.
