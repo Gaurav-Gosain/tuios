@@ -34,6 +34,6 @@ replace tuios.dev/vt v0.3.4-0.20261117042519-2f2d93c6ac72 => ./vt
 
 replace tuios.dev/harness v0.0.0-20261118102828-066550f827f5 => ./harness
 
-replace tuios.dev/loom v0.2.3-0.20261119182247-ceb657be89ee => ./loom
-
 replace tuios.dev/sketch v0.4.1-0.20261119182137-67b7911dffff => ./sketch
+
+replace tuios.dev/loom v0.2.3-0.20261120122552-107c1a5ef7e3 => ./loom

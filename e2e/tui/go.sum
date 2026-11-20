@@ -140,8 +140,8 @@ tuios.dev/acp v0.0.0-20261113051439-2ceb1b54cbd2 h1:4XsmEhMFIkGOI68ePSd3NANRpLdi
 tuios.dev/acp v0.0.0-20261113051439-2ceb1b54cbd2/go.mod h1:G4Fh5G1rF22PhcsoVn8D4spw7iH4jpbmMt2Vi9XUCXA=
 tuios.dev/harness v0.0.0-20261118102828-066550f827f5 h1:FiPAkXzqrF5JWTvsA2xNfmDvGuvc8oycb7jh1XbUXH4=
 tuios.dev/harness v0.0.0-20261118102828-066550f827f5/go.mod h1:zmyQFcmW7tVCfeyMX7lC/F7i5yxt3vkrMCrojhrk8ss=
-tuios.dev/loom v0.2.3-0.20261119182247-ceb657be89ee h1:v1YuGyN8wu6I+OldufAQgh65zlFw9jUsv3XngJ0ALnA=
-tuios.dev/loom v0.2.3-0.20261119182247-ceb657be89ee/go.mod h1:4xTeeXt5RFKPtkKDkwv4QYFXwg4IuOPVOgWdx/+zsu4=
+tuios.dev/loom v0.2.3-0.20261120122552-107c1a5ef7e3 h1:BcAMHUdZpVF3V95UXQK2ZQ3VvKmA7Gs56YUCwA0DrDQ=
+tuios.dev/loom v0.2.3-0.20261120122552-107c1a5ef7e3/go.mod h1:4xTeeXt5RFKPtkKDkwv4QYFXwg4IuOPVOgWdx/+zsu4=
 tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 h1:zx+RE1mRYo4Mrlx85nMAurWev07ys/iGO46NYCVz3ec=
 tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8/go.mod h1:YNjGUvsZUCEfRcs27dMp8Y09OYHMj7ahPdXN8jzXiKc=
 tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 h1:QViiX2hALI5Eq0mBQgaDcp6FHOH+kmtFJwHY6CYyHW8=
