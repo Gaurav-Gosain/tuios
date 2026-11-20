@@ -1,6 +1,7 @@
 package loom
 
 import (
+	"cmp"
 	"errors"
 	"strconv"
 	"strings"
@@ -66,7 +67,8 @@ type Hooks struct {
 	// runs the sketch plugin's program. It runs in a goroutine of its own,
 	// once per source and width, and its answer is kept, so no frame waits
 	// for it and no frame runs it again. An error leaves the source under
-	// its note.
+	// its note, and the note says the error. RetryExternal forgets the
+	// errors, so the next drawing asks again.
 	External func(src string, cols int) (rows [][]sketchtext.Cell, cut bool, err error)
 	// Drawn hears that an External answer came in, so the host draws a
 	// frame.
@@ -88,6 +90,7 @@ type externalDrawing struct {
 	state int
 	rows  [][]sketchtext.Cell
 	cut   bool
+	fail  string // why External could not draw it
 }
 
 // externals holds the external drawings of every surface, by source and
@@ -97,13 +100,32 @@ var externals = struct {
 	m map[sketchKey]*externalDrawing
 }{m: map[sketchKey]*externalDrawing{}}
 
+// RetryExternal forgets every External drawing that failed, so the next
+// drawing of each asks External again. A host calls it when the program
+// External runs may have changed, such as after a plugin install. It reports
+// whether it forgot any. The surfaces keep their own drawings: Invalidate
+// them too.
+func RetryExternal() bool {
+	externals.Lock()
+	defer externals.Unlock()
+	forgot := false
+	for k, d := range externals.m {
+		if d.state == externalFailed {
+			delete(externals.m, k)
+			forgot = true
+		}
+	}
+	return forgot
+}
+
 // external is the drawing of src at width w, and starts it when nothing has.
-func external(src string, w int, h Hooks) ([][]sketchtext.Cell, bool, int) {
+// fail is why it failed.
+func external(src string, w int, h Hooks) (rows [][]sketchtext.Cell, cut bool, state int, fail string) {
 	k := sketchKey{src, w}
 	externals.Lock()
 	defer externals.Unlock()
 	if d, ok := externals.m[k]; ok {
-		return d.rows, d.cut, d.state
+		return d.rows, d.cut, d.state, d.fail
 	}
 	if len(externals.m) >= sketchCacheMax {
 		clear(externals.m)
@@ -115,7 +137,7 @@ func external(src string, w int, h Hooks) ([][]sketchtext.Cell, bool, int) {
 		rows, cut, err := draw(src, w)
 		externals.Lock()
 		if err != nil {
-			d.state = externalFailed
+			d.state, d.fail = externalFailed, err.Error()
 		} else {
 			d.rows, d.cut, d.state = rows, cut, externalDone
 		}
@@ -124,7 +146,7 @@ func external(src string, w int, h Hooks) ([][]sketchtext.Cell, bool, int) {
 			drawn()
 		}
 	}()
-	return nil, false, externalPending
+	return nil, false, externalPending, ""
 }
 
 type sketchKey struct {
@@ -162,7 +184,7 @@ func (s *Surface) drawMermaid(src string, w int) *mermaidDrawing {
 	out := &mermaidDrawing{width: w}
 	switch {
 	case p.missing != "" && s.hooks.External != nil:
-		rows, cut, state := external(src, w, s.hooks)
+		rows, cut, state, fail := external(src, w, s.hooks)
 		switch state {
 		case externalPending:
 			// Not kept: the next frame after the drawing comes in asks again.
@@ -175,7 +197,10 @@ func (s *Surface) drawMermaid(src string, w int) *mermaidDrawing {
 				out.w = max(out.w, len(r))
 			}
 		default:
-			out.fail = "the sketch plugin draws " + p.missing + " diagrams"
+			// Not kept either: after RetryExternal the next frame asks
+			// again. external answers from its own map until then.
+			out.fail = oneLine(cmp.Or(fail, "the sketch plugin draws "+p.missing+" diagrams"))
+			return out
 		}
 	case p.missing != "":
 		out.fail = "the sketch plugin draws " + p.missing + " diagrams"
