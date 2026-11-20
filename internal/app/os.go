@@ -1879,6 +1879,13 @@ type OS struct {
 	// input handler (PressKeys). Those keys are not the person's: the
 	// plugin approval dialog ignores them.
 	pressingTapeKeys bool
+	// runningScriptAction is true while RunAction runs an action for a tape,
+	// run-command or another program. The action is not the person's: a
+	// Reload config run that way does not turn on a new hook.
+	runningScriptAction bool
+	// hooksWaitTold is set once the client has said that config.toml has a
+	// hook that waits for Reload config. See hook_reload.go.
+	hooksWaitTold bool
 	// fileClip is what a copy or a cut in the files section captured, waiting
 	// for a paste. It holds paths and no bytes, so it costs nothing to carry.
 	fileClip fileClipboard

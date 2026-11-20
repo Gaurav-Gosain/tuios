@@ -41,7 +41,19 @@ type scriptWait struct {
 
 // RunAction runs the keybinding action name, as the key bound to it would.
 // It implements tape.Executor for the Action command.
+//
+// RunAction is the way in for a tape, run-command and the GUI bridge, so the
+// action it runs is not counted as the person's (runningScriptAction). The
+// palette, which the person drives, runs its rows through runAction.
 func (m *OS) RunAction(name string) error {
+	was := m.runningScriptAction
+	m.runningScriptAction = true
+	defer func() { m.runningScriptAction = was }()
+	return m.runAction(name)
+}
+
+// runAction runs a keybinding action by its registry name.
+func (m *OS) runAction(name string) error {
 	r := actionRunner.Load()
 	if r == nil {
 		return errors.New("actions cannot run here: this program has no key handling")

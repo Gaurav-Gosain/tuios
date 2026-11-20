@@ -85,7 +85,7 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 
 	// Tools.
 	d.Register("reload_config", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-		return o, o.ReloadConfigFromDisk()
+		return o, o.ReloadConfigAsked()
 	})
 	d.Register("toggle_mouse", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ToggleMouse()

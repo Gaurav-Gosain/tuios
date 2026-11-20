@@ -259,7 +259,7 @@ func (it CommandPaletteItem) Run(m *OS) (*OS, tea.Cmd) {
 	if it.Bind == "" {
 		return m, nil
 	}
-	if err := m.RunAction(it.Bind); err != nil {
+	if err := m.runAction(it.Bind); err != nil {
 		m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration)
 		return m, nil
 	}

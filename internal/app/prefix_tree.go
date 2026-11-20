@@ -262,9 +262,22 @@ func (m *OS) ToggleMouse() {
 	}
 }
 
+// ReloadConfigAsked is the Reload config action. Run by the person's own key
+// or palette row, it also turns on a hook that is new in the file. Run by
+// send-keys, a tape or run-command, it is ReloadConfigFromDisk.
+func (m *OS) ReloadConfigAsked() tea.Cmd {
+	return m.reloadConfigFromDisk(!m.notThePersonsAction())
+}
+
 // ReloadConfigFromDisk reads the config file again and applies it, saying
-// whether it did. A config with an error is not applied.
+// whether it did. A config with an error is not applied. A new or changed
+// hook in the file waits, as on a file change.
 func (m *OS) ReloadConfigFromDisk() tea.Cmd {
+	return m.reloadConfigFromDisk(false)
+}
+
+// reloadConfigFromDisk is ReloadConfigFromDisk. byPerson lets a new hook run.
+func (m *OS) reloadConfigFromDisk(byPerson bool) tea.Cmd {
 	configPath, err := config.GetConfigPath()
 	if err != nil {
 		m.ShowNotification("Config path error: "+err.Error(), "error", 0)
@@ -277,7 +290,11 @@ func (m *OS) ReloadConfigFromDisk() tea.Cmd {
 		m.ShowNotification("Config not reloaded: "+err.Error(), "error", 0)
 		return nil
 	}
-	cmd := m.ApplyReloadedConfig(newCfg)
+	cmd := m.applyReloadedConfig(newCfg, byPerson)
+	if !byPerson && m.hooksWaitTold {
+		// The notice that a hook waits stays on screen: it says what to do.
+		return cmd
+	}
 	m.ShowNotification("Config reloaded", "success", 0)
 	return cmd
 }

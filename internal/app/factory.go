@@ -2,7 +2,6 @@ package app
 
 import (
 	"io"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -365,16 +364,9 @@ func NewOS(opts OSOptions) *OS {
 		if cfg.Spotlight.IsEnabled() {
 			os.spotlight.on = true
 		}
-		if cfg.Hooks != nil {
-			os.HookManager.LoadFromConfig(cfg.Hooks)
-		}
-		// [notifications.agent].command is shorthand for the after-agent-state
-		// hook, so it is discoverable beside the toggles that gate it. Registering
-		// rather than replacing means a user who wrote both spellings gets both,
-		// which is what [hooks] does for two commands on any other event.
-		if cmd := strings.TrimSpace(cfg.Notifications.Agent.Command); cmd != "" {
-			os.HookManager.Register(hooks.AfterAgentState, cmd)
-		}
+		// The file as it stands at start is the person's: they started the
+		// client. A later reload follows the rule in hook_reload.go.
+		os.HookManager.ReplaceFrom(clientHookTable(cfg))
 	}
 
 	// Default to BSP layout mode

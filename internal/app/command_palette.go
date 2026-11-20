@@ -44,7 +44,17 @@ type ConfigReloadFailedMsg struct {
 // one. What the file does not name is untouched: the focused pane, the mode,
 // where the beam is pointing, and whether this session may write the file at
 // all.
+//
+// A config that arrives this way is not the person's word: a process in a
+// pane can write the file. So a new or changed hook in it waits (see
+// hook_reload.go). ReloadConfigAsked is the way in that can turn one on.
 func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
+	return m.applyReloadedConfig(cfg, false)
+}
+
+// applyReloadedConfig is ApplyReloadedConfig. byPerson says the person asked
+// for the reload with their own key, which lets a new hook run.
+func (m *OS) applyReloadedConfig(cfg *config.UserConfig, byPerson bool) tea.Cmd {
 	if cfg == nil {
 		return nil
 	}
@@ -56,6 +66,7 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	// A value set with set-config --no-save stays in force over the file
 	// until the client exits or the option is saved. See config/hold.go.
 	cfg.KeepHolds(m.UserConfig)
+	m.reloadHooks(cfg, byPerson)
 	themeBefore := theme.Generation()
 	config.ApplyAppearanceConfig(m.overrides.Config(cfg), &m.Settings)
 	m.ListKeys = config.ListKeymap(cfg)
