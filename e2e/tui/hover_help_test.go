@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"image"
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,8 +27,17 @@ import (
 //     screen that makes one, and the dock's counter names workspace 2 only
 //     once it exists.
 //
+//   - A page could be reached by the walk while the pointer finds nothing. The
+//     pane and rail tests hover a cell first and wait for that part's own page
+//     by its path, then walk.
+//
 // Negative control, run: on a build of main, which has no hover help, every
-// test fails at its first wait for the explainer.
+// test fails at its first wait for the explainer. On a build with hover help
+// over the dock and the desktop only, the pane test fails at the body's page
+// and the rail test at the rail's. With the meter parts measured with their
+// margin again, the meter test shows the CPU page at the RAM readout's first
+// column. With the parts ranked by size alone, the on-top test shows the page
+// of the pane under the popup. NEGATIVE_CONTROLS.md has those two runs.
 
 // The help keys as xterm sends them: CSI 1 ; 7 for ctrl+alt, ESC before a
 // character for alt.
@@ -120,20 +131,20 @@ func TestHoverHelpExplainsEachMeter(t *testing.T) {
 	saveArtifact(t, term, dir, "cpu")
 }
 
-// TestHoverHelpWalksWithTheHelpKeys walks from the dock to the desktop and
-// back, into the dock's parts and out, then shows every key and goes back.
+// TestHoverHelpWalksWithTheHelpKeys walks from the dock round to the
+// desktop and back, into the dock's parts and out, then shows every key and goes back.
 func TestHoverHelpWalksWithTheHelpKeys(t *testing.T) {
 	term, dir := hoverHelpStart(t, "")
 	toggleHoverHelp(t, term)
 	waitText(t, term, "hover help opens on the dock", "Dock (", hhClose)
 	saveArtifact(t, term, dir, "1-dock")
 
-	sendKeys(t, term, hhNext)
-	waitText(t, term, "ctrl+alt+right reaches the desktop", "The desktop behind the panes")
+	sendKeys(t, term, hhPrev)
+	waitText(t, term, "ctrl+alt+left wraps round to the desktop", "The desktop behind the panes")
 	saveArtifact(t, term, dir, "2-desktop")
 
-	sendKeys(t, term, hhPrev)
-	waitText(t, term, "ctrl+alt+left comes back to the dock", "Dock (")
+	sendKeys(t, term, hhNext)
+	waitText(t, term, "ctrl+alt+right comes back to the dock", "Dock (")
 
 	sendKeys(t, term, hhDeeper)
 	waitText(t, term, "ctrl+alt+down goes into the dock", "Dock › ")
@@ -163,7 +174,7 @@ func TestHoverHelpLeavesTypingToThePane(t *testing.T) {
 }
 
 // TestHoverHelpPassesPlainKeysThrough runs cat -v in the pane with hover help
-// up, then presses up, down, h and the help keys. The pane must get the plain
+// up, then presses up, down, h and a help key. The pane must get the plain
 // keys, and none of the help keys, which walk the explainer instead.
 func TestHoverHelpPassesPlainKeysThrough(t *testing.T) {
 	term, dir := hoverHelpStart(t, "")
@@ -172,8 +183,8 @@ func TestHoverHelpPassesPlainKeysThrough(t *testing.T) {
 	toggleHoverHelp(t, term)
 	waitText(t, term, "the explainer opens on the dock", "Dock (", hhClose)
 
-	sendKeys(t, term, hhUp, hhDown, "h", hhNext)
-	waitText(t, term, "ctrl+alt+right walks to the desktop", "The desktop behind the panes")
+	sendKeys(t, term, hhUp, hhDown, "h", hhPrev)
+	waitText(t, term, "ctrl+alt+left walks round to the desktop", "The desktop behind the panes")
 	sendKeys(t, term, tuitest.Enter)
 	// cat -v writes the line back after enter, so the line is on screen twice
 	// once the pane had it: the terminal's echo and cat's copy.
@@ -234,4 +245,139 @@ func TestHoverHelpLetsClicksThrough(t *testing.T) {
 	waitText(t, term, "the dock after a click on the new-workspace button with hover help up", "2:0")
 	waitText(t, term, "the explainer after the click", hhClose)
 	saveArtifact(t, term, dir, "clicked")
+}
+
+// TestHoverHelpExplainsAPaneAndItsParts hovers a floating pane's body and its
+// title bar, then walks between them and out to the pane itself. The suite
+// pins the title bar to the bottom, so the test puts it on top, the default.
+// The body is hovered first, while the explainer is on the dock's page and
+// leaves the pane uncovered.
+func TestHoverHelpExplainsAPaneAndItsParts(t *testing.T) {
+	term, dir := hoverHelpStart(t, "[appearance]\nwindow_title_position = \"top\"\n")
+	toggleHoverHelp(t, term)
+	waitText(t, term, "the explainer", "Dock (", hhClose)
+	left, top := -1, -1
+	for y, line := range strings.Split(term.Screen().Text(), "\n") {
+		if before, _, ok := strings.Cut(line, "╭"); ok {
+			left, top = len([]rune(before)), y
+			break
+		}
+	}
+	if top < 0 {
+		t.Fatalf("no floating pane's top border on screen\n%s", term.Snapshot())
+	}
+	mouseHover(t, term, left+10, top+2)
+	waitText(t, term, "the body's page", "› Terminal: ")
+	saveArtifact(t, term, dir, "1-body")
+
+	mouseHover(t, term, left+10, top)
+	waitText(t, term, "the title bar's page", "› Title bar: ", "It names the pane")
+	saveArtifact(t, term, dir, "2-title-bar")
+
+	sendKeys(t, term, hhDeeper)
+	waitText(t, term, "ctrl+alt+down from the title bar reaches the body", "› Terminal: ")
+	sendKeys(t, term, hhShallower)
+	waitText(t, term, "ctrl+alt+up from the body reaches the title bar", "› Title bar: ")
+	sendKeys(t, term, hhShallower)
+	waitText(t, term, "ctrl+alt+up from the title bar reaches the pane", "(2 parts)", "One terminal.")
+	saveArtifact(t, term, dir, "3-pane")
+}
+
+// TestHoverHelpExplainsThePaneOnTop opens a popup larger than the floating
+// pane under it and hovers a cell the two share. The popup is drawn on top, so
+// the page is the popup's; once the smallest part under the pointer won, the
+// smaller pane underneath was explained through the popup.
+func TestHoverHelpExplainsThePaneOnTop(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance]\nwindow_title_position = \"top\"\n")
+	term := startIn(t, base, startOpts{args: []string{"new", "hh"}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	dir := artifactDir(t)
+	cover := openPopup(t, base, "--width", "95%", "--height", "95%", "--name", "cover",
+		"--", "sh", "-c", "printf 'COVER-IS-UP\\n'; sleep 600")
+	waitText(t, term, "the popup", "COVER-IS-UP")
+	rects := waitForSettledGeometryIn(t, base, "hh", 2)
+	top := rectFor(t, rects, cover.WindowID)
+	var under winRect
+	for _, r := range rects {
+		if r.ID != cover.WindowID {
+			under = r
+		}
+	}
+	both := image.Rect(top.X, top.Y, top.X+top.Width, top.Y+top.Height).
+		Intersect(image.Rect(under.X, under.Y, under.X+under.Width, under.Y+under.Height))
+	if both.Dx() < 6 || both.Dy() < 6 {
+		t.Fatalf("the popup %+v does not cover the pane %+v", top, under)
+	}
+	toggleHoverHelp(t, term)
+	waitText(t, term, "the explainer", hhClose)
+	// Near the overlap's corner: the explainer sits in the middle, and motion
+	// over it is ignored.
+	at := both.Min.Add(image.Pt(3, 3))
+	mouseHover(t, term, at.X, at.Y)
+	waitText(t, term, "the page of the popup drawn over the pane", "Terminal: cover")
+	saveArtifact(t, term, dir, "on-top")
+}
+
+// TestHoverHelpExplainsTheRailSections turns the rail on, walks into its
+// sections, and hovers one.
+func TestHoverHelpExplainsTheRailSections(t *testing.T) {
+	term, dir := hoverHelpStart(t, "[appearance.sidebar]\nenabled = true\n")
+	toggleHoverHelp(t, term)
+	waitText(t, term, "hover help opens on the dock", "Dock (", hhClose)
+
+	sendKeys(t, term, hhNext)
+	waitText(t, term, "ctrl+alt+right reaches the rail", "Rail (", "The rail is the column")
+	saveArtifact(t, term, dir, "1-rail")
+
+	sendKeys(t, term, hhDeeper)
+	waitText(t, term, "ctrl+alt+down goes into the rail's first section", "Rail › Sessions")
+	sendKeys(t, term, hhDeeper)
+	waitText(t, term, "ctrl+alt+down goes on to the next section", "Rail › Terminals")
+	saveArtifact(t, term, dir, "2-terminals")
+	hhRightOfRail(t, term, "Rail › Terminals")
+	sendKeys(t, term, hhShallower, hhShallower)
+	waitText(t, term, "ctrl+alt+up twice comes out to the rail", "Rail (")
+
+	// The suite pins the rail to the left. Its sessions header is the row to
+	// hover, and the explainer does not cover it.
+	row := -1
+	for y, line := range strings.Split(term.Screen().Text(), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "sessions") {
+			row = y
+			break
+		}
+	}
+	if row < 0 {
+		t.Fatalf("no sessions header on screen\n%s", term.Snapshot())
+	}
+	mouseHover(t, term, 3, row)
+	waitText(t, term, "hovering the rail's sessions header", "Rail › Sessions")
+	saveArtifact(t, term, dir, "3-hover")
+	hhRightOfRail(t, term, "Rail › Sessions")
+}
+
+// hhRightOfRail fails unless the explainer's line that names title starts
+// right of the rail's edge, the │ on the sessions header's row: below a
+// section is the rest of the rail, and the explainer must not cover it.
+func hhRightOfRail(t *testing.T, term *tuitest.Terminal, title string) {
+	t.Helper()
+	edge, at := -1, -1
+	for _, line := range strings.Split(term.Screen().Text(), "\n") {
+		runes := []rune(line)
+		if edge < 0 && strings.HasPrefix(strings.TrimSpace(line), "sessions") {
+			edge = slices.Index(runes, '│')
+		}
+		if i := strings.Index(line, title); i >= 0 && at < 0 {
+			at = len([]rune(line[:i]))
+		}
+	}
+	if edge < 0 || at < 0 {
+		t.Fatalf("no rail edge (%d) or no %q (%d) on screen\n%s", edge, title, at, term.Snapshot())
+	}
+	if at <= edge {
+		t.Fatalf("ASSERTION: the explainer for %q starts at column %d, over the rail, whose edge is column %d\n%s",
+			title, at, edge, term.Snapshot())
+	}
 }

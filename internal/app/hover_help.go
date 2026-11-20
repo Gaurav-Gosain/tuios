@@ -2,6 +2,7 @@ package app
 
 import (
 	"image"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -55,7 +56,14 @@ type helpComponent struct {
 	allKeys []helpKey
 	cli     []string
 	rect    image.Rectangle
+	// layer is the rank the part is drawn at: the desktop at the bottom, each
+	// pane at its HitZ above it, and the dock and the rail over every pane.
+	// The pointer picks from the highest layer under it first.
+	layer int
 }
+
+// helpLayerChrome is the layer of the dock and the rail, drawn over the panes.
+const helpLayerChrome = math.MaxInt
 
 // hoverHelpState is hover help's state on one client.
 type hoverHelpState struct {
@@ -230,15 +238,18 @@ func (m *OS) HelpExplainerAt(x, y int) bool {
 	return m.hoverHelp.on && image.Pt(m.ScreenPoint(x, y)).In(m.hoverHelp.rect)
 }
 
-// helpSmallestAt is the target with the smallest rectangle holding p.
+// helpSmallestAt is the target under p: of the parts holding p on the highest
+// layer, the one with the smallest rectangle. Comparing sizes alone picked a
+// smaller pane, or its title bar, through a floating pane drawn over it.
 func helpSmallestAt(comps []helpComponent, p image.Point) string {
-	best, bestArea := "", 0
+	best, bestLayer, bestArea := "", 0, 0
 	for _, c := range comps {
 		if !p.In(c.rect) {
 			continue
 		}
-		if area := c.rect.Dx() * c.rect.Dy(); best == "" || area < bestArea {
-			best, bestArea = c.id, area
+		area := c.rect.Dx() * c.rect.Dy()
+		if best == "" || c.layer > bestLayer || c.layer == bestLayer && area < bestArea {
+			best, bestLayer, bestArea = c.id, c.layer, area
 		}
 	}
 	return best
@@ -373,6 +384,11 @@ func helpCap(keys []helpKey, n int) []helpKey {
 func (m *OS) buildHelpComponents() []helpComponent {
 	comps := make([]helpComponent, 0, 24)
 	comps = append(comps, m.helpDockComponents()...)
+	comps = append(comps, m.helpRailComponents()...)
+	for i := range comps {
+		comps[i].layer = helpLayerChrome
+	}
+	comps = append(comps, m.helpPaneComponents()...)
 	comps = append(comps, m.helpDesktopComponent())
 	return comps
 }
@@ -735,7 +751,13 @@ func (m *OS) renderHoverHelp() *lipgloss.Layer {
 	if pal.Depth == overlay.Depth16 {
 		gap = 1
 	}
-	x, y := m.placeExplainer(cur.rect, boxW, boxH, gap)
+	// A part's explainer keeps off the whole component when it can: below a
+	// rail section is the rest of the rail.
+	var keepOff image.Rectangle
+	if parent := helpComponentByID(comps, cur.parent); parent != nil {
+		keepOff = parent.rect
+	}
+	x, y := m.placeExplainer(cur.rect, keepOff, boxW, boxH, gap)
 	h.rect = image.Rect(x, y, x+boxW, y+boxH)
 	return lipgloss.NewLayer(box).X(x).Y(y).Z(config.ZIndexWhichKey + 1).ID(helpLayerID)
 }
@@ -937,10 +959,12 @@ func (m *OS) helpFooterLines(comps []helpComponent, cur *helpComponent, inner in
 }
 
 // placeExplainer puts the explainer below its target, then above it, then
-// beside it, gap cells away. Only when none of those fits does it clamp into
-// the screen, the one case where it covers what it explains. It keeps off the
+// beside it, gap cells away. It first looks for a place that also keeps off
+// keepOff, the component a part belongs to, and only then for one that keeps
+// off the target alone. Only when none of those fits does it clamp into the
+// screen, the one case where it covers what it explains. It keeps off the
 // dock unless the target is on the dock.
-func (m *OS) placeExplainer(anchor image.Rectangle, w, h, gap int) (int, int) {
+func (m *OS) placeExplainer(anchor, keepOff image.Rectangle, w, h, gap int) (int, int) {
 	screenW, screenH := m.GetRenderWidth(), m.GetRenderHeight()
 	clamp := func(x, y int) (int, int) {
 		return min(max(x, 0), max(screenW-w, 0)), min(max(y, 0), max(screenH-h, 0))
@@ -959,13 +983,32 @@ func (m *OS) placeExplainer(anchor image.Rectangle, w, h, gap int) (int, int) {
 		return dock.Empty() || anchor.Overlaps(dock) || !r.Overlaps(dock)
 	}
 	cx := min(max(anchor.Min.X+(anchor.Dx()-w)/2, 0), max(screenW-w, 0))
-	cy := anchor.Min.Y + (anchor.Dy()-h)/2
-	for _, p := range []image.Point{
+	// Beside the target, the explainer is centred on it but stays within the
+	// rows it may use, so a short target such as a rail section still has a
+	// place beside it.
+	top, bottom := 0, screenH
+	if !dock.Empty() && !anchor.Overlaps(dock) {
+		if dock.Min.Y <= 0 {
+			top = dock.Max.Y
+		} else {
+			bottom = dock.Min.Y
+		}
+	}
+	cy := min(max(anchor.Min.Y+(anchor.Dy()-h)/2, top), max(bottom-h, top))
+	spots := []image.Point{
 		{X: cx, Y: anchor.Max.Y + gap},
 		{X: cx, Y: anchor.Min.Y - h - gap},
 		{X: anchor.Max.X + gap, Y: cy},
 		{X: anchor.Min.X - w - gap, Y: cy},
-	} {
+	}
+	if !keepOff.Empty() {
+		for _, p := range spots {
+			if fits(p) && !image.Rect(p.X, p.Y, p.X+w, p.Y+h).Overlaps(keepOff) {
+				return p.X, p.Y
+			}
+		}
+	}
+	for _, p := range spots {
 		if fits(p) {
 			return p.X, p.Y
 		}
