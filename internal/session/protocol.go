@@ -203,6 +203,11 @@ const (
 	// (PromptPayload). The daemon sends it only to a client whose hello set
 	// Prompts. An older client sends none and is sent none. See prompt.go.
 	MsgPrompt
+	// MsgClientTheme reports the theme a TUI client shows, previews from the
+	// theme picker included (ClientThemePayload). The daemon publishes it as a
+	// theme event. A client sends it only to a daemon whose welcome set
+	// ThemeEvents. See theme_event.go.
+	MsgClientTheme
 
 	// msgTypeEnd is one past the last message type. It stays last: a type
 	// added above it is walked by the tests that sweep every type.
@@ -394,6 +399,9 @@ type WelcomePayload struct {
 	// the rail is shown as session state. A client that does not see it keeps
 	// its rail to itself, as every client did before.
 	SidebarOps bool `json:"sidebar_ops,omitzero"`
+	// ThemeEvents says the daemon reads MsgClientTheme. A client that does
+	// not see it reports no theme.
+	ThemeEvents bool `json:"theme_events,omitzero"`
 	// RequestIDs says the daemon reads tagged frames and tags its answer to a
 	// tagged request with the same id (see Message.ReqID). A client that does
 	// not see it matches replies by message type, as every client did before.

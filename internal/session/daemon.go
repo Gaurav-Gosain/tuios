@@ -2661,6 +2661,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleClientGraphics(cs, msg)
 	case MsgClientActivity:
 		return d.handleClientActivity(cs)
+	case MsgClientTheme:
+		return d.handleClientTheme(cs, msg)
 	case MsgTypeAtPrompt:
 		return d.handleTypeAtPrompt(cs, msg)
 	case MsgClosePTY:

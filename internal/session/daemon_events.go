@@ -156,7 +156,12 @@ const (
 	// off, on or agents, State is held or released, Working is the number of
 	// working agent panes on this machine, and Reason says why the machine
 	// could not be held awake, when it could not. It names no session.
-	EventKeepAwake  = "keep-awake"
+	EventKeepAwake = "keep-awake"
+	// EventTheme is the theme a TUI client shows, on each change, previews
+	// from the theme picker included (theme_event.go). Theme carries the id,
+	// the background, whether it is light and whether it is a preview. It
+	// reaches only a subscriber that names it in types.
+	EventTheme      = "theme"
 	EventSubscribed = "subscribed" // subscribe ack result type
 )
 
@@ -272,6 +277,8 @@ type streamEvent struct {
 	Working *int `json:"working,omitempty"`
 	// Path is a worktree-removed event's folder.
 	Path string `json:"path,omitempty"`
+	// Theme is a theme event's theme.
+	Theme *ThemeEvent `json:"theme,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,
@@ -461,7 +468,7 @@ func (f eventFilter) match(ev streamEvent) bool {
 // optInEventTypes are the event types a subscription receives only when its
 // types filter names them. They arrive at the speed an agent works rather
 // than the speed a person does.
-var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true, EventTMLSurface: true}
+var optInEventTypes = map[string]bool{EventLayoutChanged: true, EventAgentActivity: true, EventTranscript: true, EventTransferProgress: true, EventTransferFile: true, EventTML: true, EventTMLSurface: true, EventTheme: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.

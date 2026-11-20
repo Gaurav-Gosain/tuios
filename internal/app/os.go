@@ -1707,6 +1707,9 @@ type OS struct {
 	// themeHook is what the after-theme-change hook last saw. See
 	// theme_hook.go.
 	themeHook themeHookState
+	// themeEvent is the theme this client last reported for the theme
+	// event. See theme_event.go.
+	themeEvent themeEventState
 	// gradient is the focused border's gradient. See border_gradient.go.
 	gradient borderGradient
 	// themeEditor is the theme editor side sheet. See theme_editor.go.

@@ -824,6 +824,7 @@ func (m *OS) composeFrameParts() (*frameCanvas, string) {
 	// background.go.
 	m.syncReportColors()
 	m.noteThemeChange()
+	m.noteThemeEvent()
 
 	// The screen saver is the frame, not a layer over one.
 	//

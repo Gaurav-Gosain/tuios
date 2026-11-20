@@ -375,6 +375,7 @@ var messageTypeNames = [...]string{
 	MsgPluginApprovals:   "PluginApprovals",
 	MsgPluginUI:          "PluginUI",
 	MsgPrompt:            "Prompt",
+	MsgClientTheme:       "ClientTheme",
 }
 
 // MessageTypeName returns a human-readable name for a message type.

@@ -266,6 +266,8 @@ type TUIClient struct {
 	attachClients atomic.Int64
 	// tmlLink says the daemon's welcome set TMLLink. See DrawsTML.
 	tmlLink bool
+	// themeEvents says the daemon's welcome set ThemeEvents. See ReportTheme.
+	themeEvents bool
 	// dirChangedHandler takes the daemon's MsgDirChanged push. Guarded by
 	// multiClientMu like the other push handlers.
 	dirChangedHandler func(dir string)
@@ -555,6 +557,9 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	// Every daemon this build talks to (v0.12 and later) offers the
 	// welcome's other capabilities, so only TMLLink, new in v0.13, is read.
 	c.tmlLink = welcome.TMLLink
+	// ThemeEvents is newer than the oldest daemon this build talks to. See
+	// theme_event.go.
+	c.themeEvents = welcome.ThemeEvents
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))

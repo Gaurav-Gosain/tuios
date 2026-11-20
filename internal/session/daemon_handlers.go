@@ -83,6 +83,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		DirWatch: true,
 		// See sidebar_visibility.go.
 		SidebarOps: true,
+		// See theme_event.go.
+		ThemeEvents: true,
 		// See Message.ReqID.
 		RequestIDs: true,
 		// See ExecuteCommandPayload.FocusIfShown.

@@ -395,6 +395,8 @@ var EventTypes = []string{
 	"keep-awake",
 	// git removed a worktree tuios made.
 	"worktree-removed",
+	// A client shows another theme, previews included. Opt-in.
+	"theme",
 }
 
 // defaultEventTypes are the types a call that names none gets: what an agent

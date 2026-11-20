@@ -50,6 +50,12 @@ type subscribeEvent struct {
 		Target string `json:"target"`
 		Text   string `json:"text"`
 	} `json:"entry"`
+	Theme *struct {
+		ID         string `json:"id"`
+		Background string `json:"background"`
+		Light      *bool  `json:"light"`
+		Preview    bool   `json:"preview"`
+	} `json:"theme"`
 	Transfer *struct {
 		ID    string `json:"id"`
 		Name  string `json:"name"`
@@ -263,6 +269,8 @@ func (p *textPrinter) what(ev *subscribeEvent) string {
 		return p.attention(ev)
 	case session.EventHostChanged:
 		return "host " + plainLine(ev.Host) + " " + orNone(plainLine(ev.Status))
+	case session.EventTheme:
+		return themeText(ev)
 	case session.EventPrompt:
 		return "prompt"
 	case session.EventCommandStarted:
@@ -393,4 +401,27 @@ func joinText(head string, parts ...string) string {
 		}
 	}
 	return strings.Join(out, " ")
+}
+
+// themeText is the text line of a theme event: "theme dracula #282a36 dark",
+// with "preview" after it for a theme the picker shows on the way to a pick.
+func themeText(ev *subscribeEvent) string {
+	if ev.Theme == nil {
+		return "theme"
+	}
+	parts := []string{"theme", orNone(plainLine(ev.Theme.ID))}
+	if ev.Theme.Background != "" {
+		parts = append(parts, plainLine(ev.Theme.Background))
+	}
+	if ev.Theme.Light != nil {
+		if *ev.Theme.Light {
+			parts = append(parts, "light")
+		} else {
+			parts = append(parts, "dark")
+		}
+	}
+	if ev.Theme.Preview {
+		parts = append(parts, "preview")
+	}
+	return strings.Join(parts, " ")
 }
