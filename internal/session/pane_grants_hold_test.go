@@ -154,7 +154,10 @@ func TestAnUnreadableCallerIsHeldToTheStrictDefault(t *testing.T) {
 // for admin. The person, and the pane itself, are not held by it.
 //
 // Negative control: with the admin early return back in front of the prompt
-// check in checkGrants, the send-keys below is served.
+// check in checkGrants, run into the prompt is no longer refused for the
+// respond grant, and send-keys with no window is refused as forbidden rather
+// than invalid_params. send-keys, send-text and ask-agent into the prompt are
+// still refused there, by recheckTyping and recheckBlocked in their handlers.
 func TestAnAdminPaneCannotAnswerAnotherPanesPrompt(t *testing.T) {
 	d, sp, a1, a2, _ := scopeFixture(t)
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
@@ -585,7 +588,10 @@ func TestAnAdminPaneCannotTypeIntoAPromptOverTheClientProtocol(t *testing.T) {
 // instead, and a PREFIX is refused.
 //
 // Negative control: with paneTypesRaw back to holding only panes without
-// admin, the first send-keys is answered sent_to client.
+// admin, the PREFIX is answered invalid_params, not forbidden, and the
+// refusal does not say PREFIX is refused from a pane. The keys still never go
+// to the client: a pane must name the window (typingNeedsWindow), and keys
+// for a named window go to its terminal.
 func TestAPaneSendKeysNeverDrivesTheClient(t *testing.T) {
 	d, sp, a1, _, _ := scopeFixture(t)
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })

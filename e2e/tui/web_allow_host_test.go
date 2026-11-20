@@ -16,6 +16,13 @@ import (
 // would. It returns the status code of the answer: 101 means a session.
 func webHandshake(t *testing.T, addr, host string) int {
 	t.Helper()
+	return webHandshakeAs(t, addr, host, "")
+}
+
+// webHandshakeAs is webHandshake with HTTP Basic credentials, given as
+// user:password. An empty login sends no Authorization header.
+func webHandshakeAs(t *testing.T, addr, host, login string) int {
+	t.Helper()
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
 		t.Fatalf("dial %s: %v", addr, err)
@@ -24,8 +31,12 @@ func webHandshake(t *testing.T, addr, host string) int {
 	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 	nonce := make([]byte, 16)
 	_, _ = rand.Read(nonce)
-	fmt.Fprintf(conn, "GET /ws HTTP/1.1\r\nHost: %s\r\nOrigin: http://%s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"+
-		"Sec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n", host, host, base64.StdEncoding.EncodeToString(nonce))
+	auth := ""
+	if login != "" {
+		auth = "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte(login)) + "\r\n"
+	}
+	fmt.Fprintf(conn, "GET /ws HTTP/1.1\r\nHost: %s\r\nOrigin: http://%s\r\n%sUpgrade: websocket\r\nConnection: Upgrade\r\n"+
+		"Sec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n", host, host, auth, base64.StdEncoding.EncodeToString(nonce))
 	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 	if err != nil {
 		t.Fatalf("read the handshake answer for Host %s: %v", host, err)
