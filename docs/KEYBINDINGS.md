@@ -977,7 +977,9 @@ mode and reorder the rail. Some host terminals and desktops keep `Ctrl+Alt`
 with the arrows for themselves, Ghostty on Linux among them; bind other keys
 there. A click goes to what it lands on. A
 click on the explanation does nothing. The wheel scrolls the explanation when
-the pointer is over it.
+the pointer is over it. The explanation hides while the leader or one of its
+menus waits for a key, and comes back on the same part when the menu closes:
+moving the pointer under the menu does not change it.
 
 Bind the help keys in `[keybindings.help]`. The explanation's last line shows
 the keys you bound.

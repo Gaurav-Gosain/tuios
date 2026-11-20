@@ -27,6 +27,13 @@ import (
 //     screen that makes one, and the dock's counter names workspace 2 only
 //     once it exists.
 //
+//   - The explainer could be gone under the leader menu because the menu
+//     covers it, not because it stood aside. The marker is its footer, which
+//     a build without the stand-aside draws beside the menu, not under it.
+//   - The target could follow the pointer under the menu and the test still
+//     find the dock's page. The pointer goes to the mode pill, whose page is
+//     "Dock › Mode", and the test waits for "Dock (" with no "Dock › Mode".
+//
 //   - A page could be reached by the walk while the pointer finds nothing. The
 //     pane and rail tests hover a cell first and wait for that part's own page
 //     by its path, then walk.
@@ -37,7 +44,11 @@ import (
 // and the rail test at the rail's. With the meter parts measured with their
 // margin again, the meter test shows the CPU page at the RAM readout's first
 // column. With the parts ranked by size alone, the on-top test shows the page
-// of the pane under the popup. NEGATIVE_CONTROLS.md has those two runs.
+// of the pane under the popup. NEGATIVE_CONTROLS.md has those two runs. On a
+// build without the leader menu's stand-aside, the leader test fails waiting
+// for the explainer to go, and on one that hides the explainer but lets the
+// pointer retarget under the menu, it fails waiting for the dock's page after
+// the menu.
 
 // The help keys as xterm sends them: CSI 1 ; 7 for ctrl+alt, ESC before a
 // character for alt.
@@ -380,4 +391,29 @@ func hhRightOfRail(t *testing.T, term *tuitest.Terminal, title string) {
 		t.Fatalf("ASSERTION: the explainer for %q starts at column %d, over the rail, whose edge is column %d\n%s",
 			title, at, edge, term.Snapshot())
 	}
+}
+
+// TestHoverHelpStandsAsideForTheLeaderMenu opens the leader menu over hover
+// help. The explainer goes while the menu is up, the pointer moved under the
+// menu does not change its target, and it comes back on the dock once the menu
+// closes.
+func TestHoverHelpStandsAsideForTheLeaderMenu(t *testing.T) {
+	term, dir := hoverHelpStart(t, "")
+	toggleHoverHelp(t, term)
+	waitText(t, term, "hover help opens on the dock", "Dock (", hhClose)
+
+	sendKeys(t, term, tuitest.Ctrl('b'))
+	waitText(t, term, "the leader menu", "Command palette")
+	waitGone(t, term, "the explainer under the leader menu", hhClose)
+	_, rows := term.Screen().Size()
+	mouseHover(t, term, 2, rows-1)
+	saveArtifact(t, term, dir, "1-leader-menu")
+
+	sendKeys(t, term, "esc")
+	waitGone(t, term, "the leader menu after esc", "Command palette")
+	waitText(t, term, "the explainer back after the menu", "Dock (", hhClose)
+	if strings.Contains(term.Snapshot(), "Dock › Mode") {
+		t.Fatalf("the pointer under the leader menu moved the target to the mode pill:\n%s", term.Snapshot())
+	}
+	saveArtifact(t, term, dir, "2-back")
 }

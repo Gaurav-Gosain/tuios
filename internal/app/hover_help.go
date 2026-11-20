@@ -220,7 +220,9 @@ func (m *OS) HelpToggleKeys() {
 // HelpHoverAt makes the smallest target under the pointer the one explained.
 // Motion over the explainer itself is ignored.
 func (m *OS) HelpHoverAt(x, y int) {
-	if !m.hoverHelp.on {
+	// Under an open leader menu the pointer is not choosing a target: the
+	// explainer comes back on the one it left.
+	if !m.hoverHelp.on || m.MenuOpen() {
 		return
 	}
 	p := image.Pt(m.ScreenPoint(x, y))
@@ -691,10 +693,12 @@ func helpRectUnion(rects []image.Rectangle) image.Rectangle {
 const helpLayerID = "hover-help"
 
 // renderHoverHelp draws the explainer for the target. It runs after the dock
-// has drawn, so the rectangles it places against are the ones on screen.
+// has drawn, so the rectangles it places against are the ones on screen. It
+// stands aside while the leader or one of its menus waits for a key: that
+// menu is the next thing read, and two overlays would compete for one glance.
 func (m *OS) renderHoverHelp() *lipgloss.Layer {
 	h := &m.hoverHelp
-	if !h.on {
+	if !h.on || m.MenuOpen() {
 		h.rect = image.Rectangle{}
 		return nil
 	}
