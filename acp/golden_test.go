@@ -349,12 +349,14 @@ func TestGoldenV2Turn(t *testing.T) {
 	note(p, "s2", map[string]any{"sessionUpdate": "state_update", "state": "idle", "stopReason": "end_turn"})
 	got := wait(t, turn)
 	r.result("turn=%+v err=%v", got.end, got.err)
-	go func() {
-		if err := s.Close(context.Background()); err != nil {
-			t.Error(err)
-		}
-	}()
+	// The test waits for Close. A Close still running when the test returns
+	// sees the cleanup close the connection, and reports after the end.
+	closed := make(chan error, 1)
+	go func() { closed <- s.Close(context.Background()) }()
 	p.respond(r.expect(p, "session/close"), map[string]any{})
+	if err := wait(t, closed); err != nil {
+		t.Error(err)
+	}
 	golden(t, "v2-turn", r)
 }
 
