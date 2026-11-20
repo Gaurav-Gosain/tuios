@@ -3033,7 +3033,9 @@ func TestQuickLookReadsRichMarkdown(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(plug, "bin", "sketch"), []byte("#!/bin/sh\ncat >/dev/null\necho '"+fakeCells+"'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := tuiosCLI(t, base, "plugins", "install", plug, "--yes"); err != nil {
+	// The folder holds its program, so the build step does not run: it
+	// builds from the sketch module of the repository, which a copy lacks.
+	if out, err := tuiosCLI(t, base, "plugins", "install", plug, "--yes", "--no-build"); err != nil {
 		t.Fatalf("install the plugin: %v\n%s", err, out)
 	}
 	// The install writes config.toml, and the reload puts the rail back as the
