@@ -106,14 +106,6 @@ jobs:
           go-version-file: e2e/tui/go.mod
           cache-id: e2e
 
-      - name: Check that every shard fits its time
-        working-directory: e2e/tui
-        env:
-          TUIOS_E2E: "1"
-        run: |
-          set -euo pipefail
-          go test -list '^Test' ./... | grep '^Test' | go run ./shardplan -shards "$((E2E_SHARDS * E2E_LANES))" -max "$E2E_LANE_LIMIT"
-
       # The only selection of the run: the shards read its lists. all.txt
       # keeps every test, for a selection that fills every shard (below).
       - name: Select the tests this change can reach
@@ -125,6 +117,14 @@ jobs:
         run: |
           set -euo pipefail
           GITHUB_OUTPUT="$RUNNER_TEMP/select.out" ../../scripts/e2e-select.sh > "$RUNNER_TEMP/selected.txt"
+
+      # The full test list from the step above, so the suite is compiled and
+      # listed once. The listing is most of the time of this job.
+      - name: Check that every shard fits its time
+        working-directory: e2e/tui
+        run: |
+          set -euo pipefail
+          go run ./shardplan -shards "$((E2E_SHARDS * E2E_LANES))" -max "$E2E_LANE_LIMIT" < "$RUNNER_TEMP/all.txt"
 
       # The frame paths the shards run on (appearance.cell_frames). A pull
       # request runs the default path, cells. A push to main, and a run by
