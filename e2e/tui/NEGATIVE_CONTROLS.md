@@ -18640,3 +18640,22 @@ Run on Linux on 2026-11-20. The branch was based on main at 466a7e9d2. Each cont
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -v -run '^(TestProtocolPaneReportsOwnWorkAfterATurn|TestProtocolPaneReportsOwnWorkTwice)$' .
 ```
+
+## The table of what a restricted connection may call
+
+`TestRestrictedTableNamesEveryVerbItAllows` in `internal/session/protocol_restricted_doc_test.go` reads the table after "What a restricted connection may call:" in `docs/protocol.md`. Every verb whose registry scope lets a restricted connection call it must be named once, in the row of its scope, no verb a restricted connection may not call is named, every name is a verb, and every row is the class of a scope or "everything else", which names no verb. On main at 768026bf6 the table missed 60 verbs the daemon answers, and the test names each of them.
+
+Run on 2026-11-20 on Linux. Each control is one change to the branch's `docs/protocol.md`, run alone and then restored.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The whole table deleted | `TestRestrictedTableNamesEveryVerbItAllows` | "protocol.md has no table rows after \"What a restricted connection may call:\"" | **caught** |
+| `list-keys` named a second time in the open row | `TestRestrictedTableNamesEveryVerbItAllows` | "names \"list-keys\" 2 times (rows [\"open\" \"open\"]). Name it once, in the row \"open\"" | **caught** |
+| `kill-session`, a verb a restricted connection may not call, added to the open row | `TestRestrictedTableNamesEveryVerbItAllows` | "names \"kill-session\" (rows [\"open\"]), which a restricted connection may not call. Remove it, or give the verb a scope" | **caught** |
+| The row "task cards" renamed "tasks" | `TestRestrictedTableNamesEveryVerbItAllows` | "has a row \"tasks\", which is no class of a verb's scope" and ten of "names \"add-task\" in the row \"tasks\", and its scope puts it in the row \"task cards\". Move it" | **caught** |
+
+The cells "Under `own`" and "Under `read_only`" are prose and are not checked.
+
+```sh
+go test -count=1 -run '^TestRestrictedTableNamesEveryVerbItAllows$' ./internal/session/
+```

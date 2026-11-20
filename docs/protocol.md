@@ -2182,9 +2182,10 @@ Params:
   single `fan` started together, in the same repository) and the sessions a
   `fan` run from its session started. `all` leaves the sessions alone, for
   `read_only` by itself.
-- `read_only`: refuse `send-text`, `send-keys`, `ask-agent`, `respond` and
-  `fan`. The caller may still read, report its own pane's state and meta, and
-  leave mail.
+- `read_only`: refuse every verb that types into a pane, starts sessions,
+  changes the task cards or changes the paste buffers: the rows marked
+  `forbidden` under `read_only` in the table below. The caller may still
+  read, report its own pane's state and meta, and leave mail.
 - `pane_id`, `pane_token`: the caller's `$TUIOS_PANE_ID` and
   `$TUIOS_PANE_TOKEN`, for when the kernel cannot place the caller.
 
@@ -2220,16 +2221,17 @@ What a restricted connection may call:
 
 | Class | Verbs | Under `own` | Under `read_only` |
 |---|---|---|---|
-| open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
-| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks`, `get-keep-awake` | `forbidden` | allowed |
-| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env` | session in reach | allowed |
-| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-hook-event`, `agent-statusline-event`, `report-program-status`, `agent-mail-notice`, `ask-human`, `prompt` | own pane only | allowed |
+| open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection`, `artifact-list`, `list-keys`, `pane-grants`, `tml-get`, `tml-validate` | allowed | allowed |
+| across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks`, `get-keep-awake`, `list-recordings`, `list-routes`, `search-panes` | `forbidden` | allowed |
+| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env`, `agent-activity`, `agent-message-receipts`, `checkpoint-diff`, `command-history`, `compare-fan`, `get-approval`, `get-note`, `get-task`, `get-task-attachment`, `get-task-dispatch`, `list-checkpoints`, `list-ports`, `list-queued`, `list-tasks`, `review-diff`, `ship-status`, `stream-pane`, `tml-list` | session in reach | allowed |
+| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-hook-event`, `agent-statusline-event`, `report-program-status`, `agent-mail-notice`, `ask-human`, `prompt`, `mark-recording` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
-| type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
-| start sessions | `fan`, `start-agent` | needs a pane; `start-agent` opens its pane in a session in reach | `forbidden` |
+| type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run`, `cancel-queued`, `clear-history`, `queue-prompt`, `restore-checkpoint`, `review-note`, `send-review`, `set-note`, `ship-commit`, `ship-merge`, `ship-pr`, `ship-push`, `tml-close`, `tml-open`, `tml-patch`, `tml-replace` | session in reach | `forbidden` |
+| start sessions | `fan`, `start-agent`, `agent-preset`, `agent-readiness`, `delegate`, `judge-fan`, `place-agent`, `run-task-verify`, `set-fan-verdict`, `verify-fan` | needs a pane; `start-agent` opens its pane in a session in reach | `forbidden` |
 | read the paste buffers | `list-buffers`, `show-buffer` | `forbidden` | allowed |
 | change the paste buffers | `set-buffer`, `delete-buffer` | `forbidden` | `forbidden` |
 | paste a buffer | `paste-buffer` | `forbidden`: it reads the buffers | `forbidden` |
+| task cards | `add-task`, `attach-task`, `block-task`, `claim-task`, `detach-task`, `finish-task`, `release-task`, `remove-task`, `set-task-dispatch`, `set-task-stage` | session in reach | `forbidden` |
 | everything else | | `forbidden` | `forbidden` |
 
 Under `own`:
