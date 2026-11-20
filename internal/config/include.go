@@ -155,7 +155,8 @@ type LayeredConfig struct {
 // main file that cannot be read is returned as the error os.ReadFile gave, so
 // a caller can test it with errors.Is(err, fs.ErrNotExist).
 func LoadLayered(mainPath string) (*LayeredConfig, error) {
-	return loadLayered(mainPath, false)
+	lc, err := loadLayered(mainPath, false)
+	return lc, err
 }
 
 // loadLayered is LoadLayered. With allowMissing, a config.toml that is not
