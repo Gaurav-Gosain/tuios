@@ -3984,11 +3984,11 @@ there, it cannot ask on a terminal. tuios asks you in the Inbox instead.
 - Every pane starts with `SSH_ASKPASS` set to tuios's askpass program, and
   `SSH_ASKPASS_REQUIRE=force`. ssh, ssh-add, ssh-keygen and git over ssh run
   that program for each passphrase, password or PIN.
-- When you type an ssh or git command yourself in a shell pane, the program
-  asks in the pane, as ssh does without it. The answer does not show on the
-  screen.
-- Any other prompt goes to the Inbox: a command with no terminal, and a
-  command that another program, such as an agent, runs in its own job.
+- In a pane where tuios sees no agent, a command in the foreground asks in
+  the pane, as ssh does without tuios, whatever runs ssh: ssh itself, git,
+  make or a script. The answer does not show on the screen.
+- In a pane where tuios sees an agent, and for a command with no terminal,
+  the prompt goes to the Inbox. The agent's terminal is never read.
 - The client that shows the pane opens a dialog with a hidden field. Another
   client shows the usual Inbox alert. The dialog belongs to one pane: when you
   move to another pane, it closes and the prompt waits in the Inbox.

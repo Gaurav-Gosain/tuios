@@ -126,7 +126,7 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []
 		Upgrade: &UpgradeAsk{Binary: bin.path, Version: bin.accepts.Version, CloseExited: closeExited},
 	}
 	_, window := d.peerPane(cs)
-	if window == "" || !d.placeOnPane(window, &item) {
+	if _, ok := d.placeOnPane(window, &item); window == "" || !ok {
 		// A pane that cannot be placed still needs a session for its item.
 		if all := d.manager.AllSessions(); len(all) > 0 {
 			item.Session = all[0].Name()
@@ -162,18 +162,19 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []
 }
 
 // placeOnPane fills in the item's session, pane, name, harness and workspace
-// from the pane window, and reports false when no session holds it.
-func (d *Daemon) placeOnPane(window string, item *AttentionItem) bool {
+// from the pane window and returns the pane, with false when no session
+// holds it.
+func (d *Daemon) placeOnPane(window string, item *AttentionItem) (WindowState, bool) {
 	for _, sess := range d.manager.AllSessions() {
 		st := sess.GetState()
 		if idx, err := findWindowStateIndex(st.Windows, window); err == nil {
 			w := st.Windows[idx]
 			item.Session, item.Window, item.Name = sess.Name(), w.ID, windowLabelOf(w)
 			item.Harness, item.Workspace = w.AgentHarness, w.Workspace
-			return true
+			return w, true
 		}
 	}
-	return false
+	return WindowState{}, false
 }
 
 // upgradeDialogRefusal says why no dialog could be shown for a pane's upgrade
