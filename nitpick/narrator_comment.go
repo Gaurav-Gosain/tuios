@@ -39,8 +39,6 @@ func runNarratorComment(pass *analysis.Pass) (any, error) {
 		if err != nil {
 			continue
 		}
-		// next maps a line to the statement in a function body that starts
-		// on it, and to where that body starts.
 		type stmtAt struct {
 			stmt  ast.Stmt
 			start token.Pos
@@ -58,7 +56,6 @@ func runNarratorComment(pass *analysis.Pass) (any, error) {
 				list, start = n.Body, n.Colon
 			}
 			for _, s := range list {
-				// A comment above a case names the case; it does not narrate.
 				switch s.(type) {
 				case *ast.CaseClause, *ast.CommClause:
 					continue
@@ -73,7 +70,6 @@ func runNarratorComment(pass *analysis.Pass) (any, error) {
 			if len(g.List) > 2 || strings.HasPrefix(g.List[0].Text, "/*") || !ownLine(src, tf.Offset(g.Pos())) {
 				continue
 			}
-			// The comment must be in the body, not the doc of a one-line func.
 			at, ok := next[tf.Line(g.End())+1]
 			if !ok || g.Pos() < at.start || !narrates(g.Text(), stmtWords(at.stmt)) {
 				continue
@@ -88,7 +84,6 @@ func runNarratorComment(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-// ownLine reports whether only blanks come before offset on its line.
 func ownLine(src []byte, offset int) bool {
 	for i := offset - 1; i >= 0; i-- {
 		switch src[i] {
@@ -103,9 +98,7 @@ func ownLine(src []byte, offset int) bool {
 	return true
 }
 
-// narrates reports whether every content word of the comment is in code.
 func narrates(text string, code map[string]bool) bool {
-	// A formula or an invariant (x = a*b, 0 <= i < n) is not narration.
 	if strings.ContainsAny(text, "=<>") {
 		return false
 	}
@@ -136,9 +129,6 @@ func narrates(text string, code map[string]bool) bool {
 	return miss <= allowed
 }
 
-// stmtWords returns the words of the head of a statement: the condition of
-// an if, the clause of a for, the whole of a simple statement. Function
-// literal bodies and nested blocks are left out.
 func stmtWords(s ast.Stmt) map[string]bool {
 	out := map[string]bool{}
 	add := func(ws ...string) {
@@ -217,8 +207,6 @@ func stmtWords(s ast.Stmt) map[string]bool {
 	return out
 }
 
-// splitWords splits text and identifiers into lower-case words:
-// "parseHTTPRequest" gives parse, http and request.
 func splitWords(s string) []string {
 	var out []string
 	rs := []rune(s)
@@ -249,7 +237,6 @@ func splitWords(s string) []string {
 	return out
 }
 
-// canon maps a word to one form: plurals and short forms join the word.
 func canon(w string) string {
 	if c, ok := synonyms[w]; ok {
 		return c
@@ -277,7 +264,6 @@ var stopWords = setOf("the", "a", "an", "to", "of", "and", "or", "in", "on", "fo
 	"we", "our", "us", "now", "then", "here", "there", "by", "as", "at", "all", "each", "some",
 	"any", "up", "out", "via", "my", "your", "their", "will", "just", "do", "does")
 
-// reasonWords mark a comment that explains rather than narrates.
 var reasonWords = setOf("because", "since", "why", "so", "otherwise", "unless", "until", "avoid",
 	"prevent", "must", "should", "need", "needs", "never", "always", "only", "instead",
 	"workaround", "hack", "todo", "fixme", "xxx", "note", "bug", "but", "however", "although",

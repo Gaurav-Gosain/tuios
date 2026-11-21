@@ -14,9 +14,6 @@ import (
 	"tuios.dev/nitpick"
 )
 
-// These tests build the nitpick binary and run it in scratch git
-// repositories, the way a person or an agent runs it.
-
 var bin string
 
 func TestMain(m *testing.M) {
@@ -36,17 +33,11 @@ func TestMain(m *testing.M) {
 }
 
 const (
-	// fileA has one finding, on line 6.
 	fileA = "package m\n\nimport \"os\"\n\nfunc A() error {\n\t_ = os.Chdir(\"a\")\n\treturn nil\n}\n"
-	// fileB is fileA with a second finding, on line 11.
 	fileB = fileA + "\nfunc B() error {\n\t_ = os.Chdir(\"b\")\n\treturn nil\n}\n"
-	// fileC is fileB with a third finding, on line 16.
 	fileC = fileB + "\nfunc C() error {\n\t_ = os.Chdir(\"c\")\n\treturn nil\n}\n"
 )
 
-// newRepo makes a module in a new git repository with no commit. The tests
-// make no commit: git needs an author for that, and a tree from
-// git write-tree is a base that needs none.
 func newRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -72,7 +63,6 @@ func gitRun(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// snapshot stages the working tree and returns its tree hash.
 func snapshot(t *testing.T, dir string) string {
 	t.Helper()
 	gitRun(t, dir, "add", "-A")
@@ -90,8 +80,6 @@ func nitpickIn(t *testing.T, dir string, args ...string) runOut {
 	return runIn(t, cmd, dir)
 }
 
-// withSwallowed runs nitpick with swallowed_error, the opt-in rule that the
-// fixtures trip, on as well.
 func withSwallowed(t *testing.T, dir string, args ...string) runOut {
 	t.Helper()
 	args = append([]string{args[0], "--enable", "swallowed_error"}, args[1:]...)
@@ -189,7 +177,7 @@ func TestDiffStagedLeavesOutTheWorkingTree(t *testing.T) {
 
 func TestDiffCountsUntrackedFilesAsNew(t *testing.T) {
 	dir := newRepo(t)
-	writeFile(t, dir, "a.go", fileB) // untracked, and HEAD has no commit
+	writeFile(t, dir, "a.go", fileB)
 	res := findings(t, withSwallowed(t, dir, "diff", "--json"))
 	if got := lines(res); !slices.Equal(got, []int{6, 11}) {
 		t.Fatalf("finding lines %v, want [6 11]", got)

@@ -66,15 +66,11 @@ func all[T any](xs []T, f func(T) bool) bool {
 	return true
 }
 
-// indented reports whether a line comment starts with a tab or two
-// spaces: the form of an example, not of a line that an editor commented
-// out.
 func indented(c string) bool {
 	t := strings.TrimPrefix(c, "//")
 	return strings.HasPrefix(t, "\t") || strings.HasPrefix(t, "  ") || strings.HasPrefix(t, " \t")
 }
 
-// docComments returns the doc comments of the declarations of f.
 func docComments(f *ast.File) map[*ast.CommentGroup]bool {
 	out := map[*ast.CommentGroup]bool{}
 	if f.Doc != nil {
@@ -102,8 +98,6 @@ func docComments(f *ast.File) map[*ast.CommentGroup]bool {
 	return out
 }
 
-// codeText returns the text of a line comment that is not a directive or
-// a note.
 func codeText(c string) (string, bool) {
 	if !strings.HasPrefix(c, "//") {
 		return "", false
@@ -126,7 +120,6 @@ func looksLikeCode(c string) bool {
 		strings.HasSuffix(t, "++") || strings.HasSuffix(t, "--") {
 		return true
 	}
-	// A bare statement inside a block of commented code: "return", "break".
 	switch t {
 	case "return", "break", "continue", "fallthrough", "default:":
 		return true
@@ -139,8 +132,6 @@ func looksLikeCode(c string) bool {
 	return false
 }
 
-// parseCode parses the lines as Go statements or declarations, and
-// returns nil when they are not code.
 func parseCode(run []*ast.Comment) *ast.File {
 	var b strings.Builder
 	for _, c := range run {
@@ -149,7 +140,6 @@ func parseCode(run []*ast.Comment) *ast.File {
 		b.WriteByte('\n')
 	}
 	text := b.String()
-	// A lone keyword such as "fallthrough" marks a case; it is not code.
 	switch strings.TrimSpace(text) {
 	case "return", "break", "continue", "fallthrough", "default:":
 		return nil
@@ -168,11 +158,6 @@ func parseCode(run []*ast.Comment) *ast.File {
 	return f
 }
 
-// realStatements reports whether the statements are ones a person writes:
-// an expression statement must be a call or a receive, an assignment must
-// assign to a variable, and a label is prose ("Have: i++"). The parser
-// accepts "a < b" and "f(x) = y" as statements, and the type checker would
-// not.
 func realStatements(f *ast.File) bool {
 	ok := true
 	ast.Inspect(f, func(n ast.Node) bool {
@@ -201,10 +186,6 @@ func realStatements(f *ast.File) bool {
 	return ok
 }
 
-// namesResolve reports whether most names in the code are names at pos in
-// the package: dead code uses the variables around it, and a formula or a
-// sketch of syntax uses names of its own. A selector's package, such as
-// fmt in fmt.Println, counts when the file imports it.
 func namesResolve(pass *analysis.Pass, f *ast.File, pos token.Pos, code *ast.File) bool {
 	imports := map[string]bool{}
 	for _, im := range f.Imports {
@@ -240,7 +221,7 @@ func namesResolve(pass *analysis.Pass, f *ast.File, pos token.Pos, code *ast.Fil
 				}
 				return true
 			})
-			return false // the field or method name is not a name in scope
+			return false
 		case *ast.KeyValueExpr:
 			ast.Inspect(n.Value, func(m ast.Node) bool {
 				if id, ok := m.(*ast.Ident); ok {
@@ -250,7 +231,7 @@ func namesResolve(pass *analysis.Pass, f *ast.File, pos token.Pos, code *ast.Fil
 			})
 			return false
 		case *ast.Ident:
-			if n.Name != "_" && n.Name != "p" { // p is the wrapper package
+			if n.Name != "_" && n.Name != "p" {
 				seen[n.Name] = true
 			}
 		}
