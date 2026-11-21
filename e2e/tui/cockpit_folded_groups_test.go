@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,9 +14,11 @@ import (
 var foldedHeads = []struct {
 	title string
 	re    *regexp.Regexp
+	// rows are the agents of the group, whose rows go when it folds.
+	rows []string
 }{
-	{"Working", regexp.MustCompile(`Working\s+2\b`)},
-	{"Idle", regexp.MustCompile(`Idle\s+2\b`)},
+	{"Working", regexp.MustCompile(`Working\s+2\b`), []string{"build-a", "build-b"}},
+	{"Idle", regexp.MustCompile(`Idle\s+2\b`), []string{"docs-a", "docs-b"}},
 }
 
 // TestCockpitFoldedGroupsKeepTheirHeadings folds every group of the agents
@@ -79,10 +82,27 @@ func TestCockpitFoldedGroupsKeepTheirHeadings(t *testing.T) {
 
 	// Fold each group from its first row: F on a row folds its group and
 	// leaves the cursor on the heading, and j goes on to the next one.
+	// Each fold moves the headings under it, so the next heading is found
+	// only once the list no longer has the folded group's rows.
 	for _, h := range foldedHeads {
 		row, col := findText(t, term, h.title)
 		mouseClick(t, term, col, row+1, tuitest.MouseLeft, 0)
 		sendKeys(t, term, "F")
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			_, rows := s.Size()
+			for y := range rows {
+				line := []rune(s.Line(y))
+				list := string(line[:min(len(line), col+30)])
+				for _, name := range h.rows {
+					if strings.Contains(list, name) {
+						return false
+					}
+				}
+			}
+			return true
+		}, uiTimeout); err != nil {
+			t.Fatalf("F on %s left its rows in the list: %v\n%s", h.title, err, term.Snapshot())
+		}
 	}
 	check := func(when string) {
 		t.Helper()

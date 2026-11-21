@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -311,11 +312,30 @@ func checkReviewCursor16(t *testing.T, term *tuitest.Terminal, host *shot.Palett
 		}
 		return false
 	}
+	// reversed is where the screen draws reverse video, which j moves.
+	reversed := func(s tuitest.Screen) string {
+		cols, rows := s.Size()
+		var b strings.Builder
+		for y := range rows {
+			for x := range cols {
+				if s.Cell(x, y).Reverse {
+					fmt.Fprintf(&b, "%d,%d ", x, y)
+				}
+			}
+		}
+		return b.String()
+	}
 	for range 20 {
 		if onLine(term.Screen()) {
 			break
 		}
+		before := reversed(term.Screen())
 		sendKeys(t, term, "j")
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			return onLine(s) || reversed(s) != before
+		}, uiTimeout); err != nil {
+			t.Fatalf("j did not move the cursor: %v\n%s", err, term.SnapshotStyled())
+		}
 	}
 	if !onLine(term.Screen()) {
 		t.Fatalf("the cursor never reached the changed line with its number reversed\n%s", term.SnapshotStyled())
