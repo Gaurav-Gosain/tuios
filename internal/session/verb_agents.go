@@ -138,7 +138,7 @@ func (d *Daemon) verbListAgents(cs *connState, params json.RawMessage) (any, *ve
 		if p.Session != "" {
 			return nil, invalidParam("all_sessions", "all_sessions lists every session, so it takes no session. Drop one or the other")
 		}
-		return d.listAgentsAllSessions(p.All, sel), nil
+		return d.listAgentsAllSessions(p.All, sel, listingPane(cs)), nil
 	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
@@ -147,6 +147,14 @@ func (d *Daemon) verbListAgents(cs *connState, params json.RawMessage) (any, *ve
 
 	unread := d.agents.unreadCounts(sess.Name())
 	agents := d.agentRows(sess, p.All, unread, d.evidenceNow().UnixNano(), sel)
+	if pa := listingPane(cs); pa != nil && !d.paneReads(pa, sess.Name()) {
+		// A pane listing a session it may not read, by the mail grant,
+		// gets what addressing needs (mail_grant.go).
+		for i := range agents {
+			agents[i] = mailListingRow(agents[i])
+		}
+		unread = nil
+	}
 
 	out := map[string]any{
 		"type":    "agent_list",
@@ -189,8 +197,10 @@ func addSelection(out map[string]any, sel *Selector, rows []map[string]any, noTo
 
 // listAgentsAllSessions is list-agents over every session, in session name
 // order. human_unread is the person's unread mail summed over the sessions.
-// sel, when not nil, keeps only the rows it matches.
-func (d *Daemon) listAgentsAllSessions(all bool, sel *Selector) map[string]any {
+// sel, when not nil, keeps only the rows it matches. pa, when not nil, is a
+// pane without admin: the rows of a session it may not read are cut to what
+// addressing needs (mailListingRow), and that session's mail is not counted.
+func (d *Daemon) listAgentsAllSessions(all bool, sel *Selector, pa *paneAuth) map[string]any {
 	sessions := d.manager.AllSessions()
 	slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name(), b.Name()) })
 	now := d.evidenceNow().UnixNano()
@@ -198,8 +208,15 @@ func (d *Daemon) listAgentsAllSessions(all bool, sel *Selector) map[string]any {
 	humanUnread := 0
 	for _, sess := range sessions {
 		unread := d.agents.unreadCounts(sess.Name())
-		humanUnread += unread[AgentInboxHuman]
-		agents = append(agents, d.agentRows(sess, all, unread, now, sel)...)
+		rows := d.agentRows(sess, all, unread, now, sel)
+		if pa != nil && !d.paneReads(pa, sess.Name()) {
+			for i := range rows {
+				rows[i] = mailListingRow(rows[i])
+			}
+		} else {
+			humanUnread += unread[AgentInboxHuman]
+		}
+		agents = append(agents, rows...)
 	}
 	out := map[string]any{
 		"type":         "agent_list",
@@ -650,7 +667,16 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		msg.To, msg.ToLabel = AgentInboxHuman, AgentInboxHuman
 	}
 
+	// A pane that reaches this session by the mail grant alone attaches only
+	// what is its own to hand out (mail_grant.go).
+	mailOnly := d.mailOnlyPane(cs, sess.Name())
 	for _, path := range p.Attachments {
+		if mailOnly != nil {
+			if why := d.mailAttachmentRefusal(mailOnly, path); why != "" {
+				LogBasic("Pane %s refused send-agent-message: attachment %s: %s", shortWindowID(mailOnly.window), echoName(path), why)
+				return nil, grantForbidden("send-agent-message", mailOnly, "attachment "+echoName(path)+": "+why)
+			}
+		}
 		// A path from another machine names a file on this one, and the only
 		// files another machine may name here are the ones it put in the
 		// stash. Anything else is refused before it is looked at, so a

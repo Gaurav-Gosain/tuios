@@ -24,7 +24,9 @@ import (
 // right before typing. The entry's origin is the caller that sent the mail,
 // as the connection proved it, not the from the message claims. A pane that
 // may not type into the recipient cannot wake it either; its mail waits for
-// the recipient's next hook or read. A connection restricted to read_only,
+// the recipient's next hook or read. A pane holding the mail grant can: the
+// line is tuios's own, so the rules about what the typed text runs with do
+// not apply to it, and only the prompt rules do (mailWakeRefusal). A connection restricted to read_only,
 // and a pane on another machine, which queue-prompt refuses, wake nothing.
 //
 // The line is written by tuios alone, and holds no text a sender chose: not
@@ -320,8 +322,9 @@ func (d *Daemon) mailWakeLook(window string) {
 		return d.childTally(session, got)
 	}
 	e := &queueEntry{
-		text: mailWakeText(sum, session, window, tally()),
-		by:   mailWakeBy,
+		text:     mailWakeText(sum, session, window, tally()),
+		by:       mailWakeBy,
+		mailWake: true,
 	}
 	// The newest sender that may type into the pane now lends the wake its
 	// authority. The queue checks it again before typing.

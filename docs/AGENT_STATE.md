@@ -5198,8 +5198,9 @@ new count.
   adds none. Two wakes of one pane are at least 30 seconds apart.
 - **Grants.** The wake carries the authority of the caller that sent the
   mail, as its connection proved it, not the `from` the message claims. A
-  pane that may not type into the recipient cannot wake it, and the queue
-  checks again right before it types. A connection restricted to `read_only`
+  pane that may not type into the recipient cannot wake it, unless it holds
+  the `mail` grant, since the line is tuios's own; the queue checks again
+  right before it types. A connection restricted to `read_only`
   (`tuios mcp` without `--write`) and a pane on another machine wake nothing,
   as `queue-prompt` refuses them.
 - **At rest** means `idle` or `done`, and `unknown` only for a harness that
@@ -5863,16 +5864,51 @@ every pane, are held to nothing new.
 | --- | --- |
 | `read` | Read its own session and its fan group: list, capture, agent state, waits, the event stream, mail |
 | `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) that hold nothing it does not, and leave mail and stashed files there |
+| `mail` | Leave mail with `send-agent-message` in any session on this daemon, by `-s`/`-w` or `--select`, always as itself, and list the agent panes of every session to address it (`list-agents --all-sessions`, `--select`), names, harness and state only. Types into nothing |
 | `fan` | Do what `write` does in its fan group and the sessions it launched, and start agents with `fan` and `start-agent`. Close its own tree with `close-window`, and wait for it with `wait-for agent-state --select` (see [A pane's own tree](#a-panes-own-tree)) |
 | `respond` | Answer another pane's prompt with `respond`, without the person (see [Who may answer](#who-may-answer)), and type into a pane waiting on a prompt |
 | `files` | Copy files with `tuios cp`, inside the pane's own folder, and see and control its own copies |
 | `task` | Add, claim, finish, stage, block and release the task cards of its own session (`tuios task`). It claims only for itself and changes only the card it holds |
-| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, `run-command`, attach, any task card and `tuios task rm`. Includes `read`, `write`, `fan`, `files` and `task`, never `respond` |
+| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, `run-command`, attach, any task card and `tuios task rm`. Includes `read`, `write`, `mail`, `fan`, `files` and `task`, never `respond` |
 
 Whatever it holds, a pane can always report about itself (`set-agent-state`,
 `set-agent-meta`, `set-agent-session`, `ask-human`, `request-approval`, on its
 own pane only), and ask what it holds with `tuios pane-grants`. So
 `tuios agent-hook` works in every pane, whatever the pane holds.
+
+### Mail to another session
+
+`mail` is for an agent held to its own session, such as one in an OS sandbox
+that was dropped to `read,write,task`, that still has to coordinate with the
+agents of other sessions, one per repository. `fan` and `admin` reach those
+sessions too, but they also start programs the daemon runs outside the
+sandbox. `mail` starts nothing and types nothing:
+
+```sh
+tuios set-pane-grants --grants read,write,mail,task && exec claude
+tuios list-agents --select 'session:infra'
+tuios send-agent-message -s infra -w claude 'The app needs a queue in the staging stack'
+```
+
+- The mail is always from the pane itself: `from` is the pane the daemon
+  placed the caller in, and naming another pane, `human` included, is refused.
+  `host` is refused: another machine is not this daemon.
+- A `list-agents` row of a session the pane may not read carries only
+  `session`, `window_id`, `name`, `state` and `harness_id`, with
+  `limited: true`. `--all` beyond the sessions it may read is refused.
+  `capture-pane`, `peek-prompt`, transcripts and another session's mail stay
+  with `read` in reach and `admin` beyond it.
+- An attachment to mail for a session outside the pane's `write` reach must
+  be a file inside the pane's own folder or in its own session's stash.
+- The mail wake (see [Mail that wakes an agent at rest](#mail-that-wakes-an-agent-at-rest))
+  types only its fixed line, with the count and the read command, so a pane
+  with `mail` may wake a pane it could not type into. The wake is still never
+  typed into a pane on a prompt.
+
+`write` does not include `mail`, so no existing setup reaches further. A
+prompt-injected agent with `mail` can write to every agent's inbox, which
+every pane on the open default can do already; the recipient reads the body
+as untrusted data under its own grants.
 
 ### Typing into another pane
 

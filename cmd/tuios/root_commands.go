@@ -725,7 +725,7 @@ window as one line with its uri.`,
 	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the calling pane's, else the focused pane's)")
 	newWindowCmd.Flags().BoolVar(&newWindowNoFocus, "no-focus", false, "Leave the focus where it is")
 	newWindowCmd.Flags().StringVar(&newWindowHost, "host", "", "Run the window's process on this machine from the [hosts] table (default: this machine)")
-	newWindowCmd.Flags().StringSliceVar(&newWindowGrants, "grants", nil, "What the window's process may do through tuios, comma separated: read, write, fan, files, task, respond, admin, or none (default: [agents.permissions])")
+	newWindowCmd.Flags().StringSliceVar(&newWindowGrants, "grants", nil, "What the window's process may do through tuios, comma separated: read, write, mail, fan, files, task, respond, admin, or none (default: [agents.permissions])")
 	addJSONFlag(newWindowCmd, &newWindowJSON)
 	newWindowCmd.Flags().BoolVar(&newWindowPrintID, "print-id", false, "Print only the new window's full id, for id=$(...)")
 	newWindowCmd.Flags().StringVar(&newWindowKind, "kind", "", "What draws the window: terminal, or view, web or app for a native renderer (default: terminal)")

@@ -14,11 +14,12 @@ tuios pane-grants --json | jq -r '.grants | join(",")'
 | --- | --- |
 | `read` | Read your own session and your fan group: list, `get-window`, capture, agent state, waits, the event stream, mail |
 | `write` | Type into the panes of your own session that hold nothing you do not, and leave mail and stashed files there |
+| `mail` | Leave mail with `send-agent-message` in any session, by `-s`/`-w` or `--select`, always as yourself, and list every session's agents (`list-agents --all-sessions`, `--select`), names, harness and state only. Types into nothing |
 | `fan` | Write in your fan group and the sessions you launched, and start agents with `fan` and `start-agent`. Close the panes that you started, and the panes that they started, with `close-window`, and wait for them with `wait-for agent-state --select` |
 | `respond` | Answer another pane's prompt with `respond`, for the person, and type into a pane waiting on a prompt. You answer for the panes of your own session. With `fan` you also answer in your fan group, and with `admin` in every session |
 | `files` | Copy files with `tuios cp`, and see and control your own copies with `tuios transfers` |
 | `task` | Add, claim, finish, stage, block and release the task cards of your own session (`tuios task`). You claim only for yourself and change only the card you hold |
-| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, `switch-session`, `detach-client`, attach, any task card and `tuios task rm`. Includes `read`, `write`, `fan`, `files` and `task`, never `respond` |
+| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, `switch-session`, `detach-client`, attach, any task card and `tuios task rm`. Includes `read`, `write`, `mail`, `fan`, `files` and `task`, never `respond` |
 
 Whatever you hold, you can report about your own pane (`set-agent-state`,
 `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `report-program-status`,
@@ -152,6 +153,15 @@ To drop your own pane's grants before you start an agent in it:
 
 ```sh
 tuios set-pane-grants --grants read,write && exec claude
+```
+
+With `mail` added, the agent still reaches the agents of other sessions, by
+mail only. A row of a session you may not read shows only who is there
+(`limited: true`), and mail you attach a file to for another session takes
+only files in your own folder or your session's stash:
+
+```sh
+tuios set-pane-grants --grants read,write,mail,task && exec claude
 ```
 
 A supervisor the person trusts to approve its workers' tool calls is the one

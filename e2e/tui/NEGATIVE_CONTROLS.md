@@ -19021,6 +19021,31 @@ Run on 2026-11-21 on Linux, real backend.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestALayoutSavedThenLeftHoldsItsWorkspace$' .
+## The mail grant reaches another session by mail only
+
+`TestMailGrantReachesAnotherSessionByMailOnly` (`mail_grant_test.go`) runs a
+real pane in one session that drops its own grants to `read,write,mail,task`,
+as a sandbox wrapper does, then works against a stand-in agent at rest in
+another session. `send-text` and `capture-pane` into that session must be
+refused. `list-agents --select session:...` must give the agent's row cut to
+what addressing needs (`limited`, no `cwd`). The mail must arrive from the
+sender's own pane, and the agent must be woken with the fixed line and no
+marker text from the mail. The artifact is `mail-grant.log`: what the sender
+printed, the listing it got, what the agent was typed, and the mail as the
+person reads it.
+
+Run on Linux on 2026-11-21. The branch passes it. On main `set-pane-grants
+--grants ...,mail,...` is refused as an unknown grant, so each control is this
+branch with one change.
+
+| Control | How | Failure | Verdict |
+| --- | --- | --- | --- |
+| The send is held to the write reach | the mail case cut from `checkGrants` (`if false`) | "ASSERTION: the sender did not print MAIL=0" | **caught** |
+| The wake takes no authority from mail | `mailWakeRefusal` not consulted in `queueOriginRefusal` | "ASSERTION: the agent in the other session was not woken for its mail" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^TestMailGrantReachesAnotherSessionByMailOnly$' -v .
 ```
 
 ## A tape position taken after a wait on the screen

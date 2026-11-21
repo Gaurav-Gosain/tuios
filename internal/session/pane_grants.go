@@ -36,6 +36,12 @@ import (
 //     does not, since what it types runs with the target's grants, and not
 //     into a pane waiting on a prompt unless it holds respond
 //     (holdTypingTarget).
+//   - mail: leave mail with send-agent-message in any session on this
+//     daemon, by session and window or by selector, as the pane itself
+//     (holdMailSend), and list the agent panes of every session to address
+//     it, names, harness and state only (holdMailListing). It types into
+//     nothing, and its mail wakes the recipient only with the fixed line
+//     (queueOriginRefusal).
 //   - fan: what write does, in the sessions of its fan group and the ones it
 //     launched, and start agents with fan and start-agent.
 //   - respond: answer an on-screen prompt with respond, without the person's
@@ -49,8 +55,8 @@ import (
 //     on the card it holds; remove-task needs admin.
 //   - admin: everything else a pane could do before grants existed, which is
 //     every verb on every session, the listings across sessions, and the
-//     binary protocol (attach, input). It implies read, write, fan, files and
-//     task.
+//     binary protocol (attach, input). It implies read, write, mail, fan,
+//     files and task.
 //
 // Every pane may also report its own state, meta and conversation id, ask
 // the person as itself, hold its own approval prompt, and call the verbs that
@@ -88,8 +94,9 @@ import (
 // tests, and is then treated as the person, as human_origin.go explains for
 // the same checks.
 
-// Grants is a set of pane grants.
-type Grants uint8
+// Grants is a set of pane grants. It is kept and sent by name (Names), never
+// as a number, so a bit's place is free to change.
+type Grants uint16
 
 // The grants, one bit each.
 const (
@@ -109,6 +116,9 @@ const (
 	// plugin holds it, so it is not in config.PaneGrantNames. See
 	// plugin_grants.go.
 	GrantUI
+	// GrantMail leaves mail in any session on this daemon and lists the
+	// agent panes of every session to address it. See holdMailSend.
+	GrantMail
 )
 
 // grantNameUI is the name of GrantUI in a plugin's manifest.
@@ -120,6 +130,7 @@ const grantNone = "none"
 var grantByName = map[string]Grants{
 	config.PaneGrantRead:    GrantRead,
 	config.PaneGrantWrite:   GrantWrite,
+	config.PaneGrantMail:    GrantMail,
 	config.PaneGrantFan:     GrantFan,
 	config.PaneGrantRespond: GrantRespond,
 	config.PaneGrantFiles:   GrantFiles,
@@ -160,7 +171,7 @@ func parseGrantsParam(names []string) (Grants, *verbError) {
 // expand adds what admin implies.
 func (g Grants) expand() Grants {
 	if g&GrantAdmin != 0 {
-		g |= GrantRead | GrantWrite | GrantFan | GrantFiles | GrantTask | GrantUI
+		g |= GrantRead | GrantWrite | GrantMail | GrantFan | GrantFiles | GrantTask | GrantUI
 	}
 	return g
 }
@@ -778,6 +789,18 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 	}
 	if readsBuffers(verb) && !pa.grants.Has(GrantRead) {
 		return nil, deny(verb + " reads the paste buffers, which needs the read grant")
+	}
+	if pa.grants.Has(GrantMail) && pa.inPane() && pa.session != "" {
+		// Mail reaches every session of this daemon, as the pane itself,
+		// and the listing that addresses it (mail_grant.go).
+		switch verb {
+		case "send-agent-message":
+			return d.holdMailSend(pa, params, deny)
+		case "list-agents":
+			if out, verr, held := d.holdMailListing(pa, params, deny); held {
+				return out, verr
+			}
+		}
 	}
 	var reach func(target string) string
 	switch kind {

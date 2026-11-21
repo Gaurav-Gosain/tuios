@@ -30,6 +30,12 @@ const (
 	// PaneGrantWrite types into the panes of its own session and leaves mail
 	// and stashed files there.
 	PaneGrantWrite = "write"
+	// PaneGrantMail leaves mail with send-agent-message in any session on
+	// this daemon, by session and window or by selector, as the pane itself,
+	// and lists the agent panes of every session to address it: names,
+	// harness and state only. It types into nothing. Admin implies it; write
+	// does not.
+	PaneGrantMail = "mail"
 	// PaneGrantFan does what write does in the sessions of its fan group and
 	// the sessions it launched, and starts agents with fan and start-agent.
 	PaneGrantFan = "fan"
@@ -49,13 +55,13 @@ const (
 	PaneGrantTask = "task"
 	// PaneGrantAdmin is everything else a pane could do before grants
 	// existed: every session, the listings across sessions, windows,
-	// layouts, options, attach and the rest. It implies read, write, fan,
-	// files and task.
+	// layouts, options, attach and the rest. It implies read, write, mail,
+	// fan, files and task.
 	PaneGrantAdmin = "admin"
 )
 
 // PaneGrantNames is every grant, in the order they are documented.
-var PaneGrantNames = []string{PaneGrantRead, PaneGrantWrite, PaneGrantFan, PaneGrantRespond, PaneGrantFiles, PaneGrantTask, PaneGrantAdmin}
+var PaneGrantNames = []string{PaneGrantRead, PaneGrantWrite, PaneGrantMail, PaneGrantFan, PaneGrantRespond, PaneGrantFiles, PaneGrantTask, PaneGrantAdmin}
 
 // Permission modes, the values of mode.
 const (

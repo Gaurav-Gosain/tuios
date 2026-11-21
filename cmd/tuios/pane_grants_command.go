@@ -24,6 +24,8 @@ Every pane holds grants:
 
   read     read its own session and its fan group
   write    type into the panes of its own session, and leave mail there
+  mail     leave mail in any session as itself, and list every session's
+           agents (names, harness and state) to address it; types nothing
   fan      write in its fan group, and start agents with fan and start-agent
   respond  answer another pane's prompt without the person
   files    copy files with tuios cp, inside its own folder
@@ -31,7 +33,7 @@ Every pane holds grants:
   admin    everything else, as every pane could before grants existed, such
            as run-command and attach
 
-admin implies read, write, fan, files and task, and never respond. A pane without admin
+admin implies read, write, mail, fan, files and task, and never respond. A pane without admin
 types only into panes that hold nothing it does not, since what it types runs
 with the target's grants, and into a pane waiting on a prompt only with
 respond. A pane holds the grants
@@ -63,8 +65,8 @@ func newSetPaneGrantsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set-pane-grants",
 		Short: "Give a pane grants, or the default back",
-		Long: `Say what a pane may do through tuios: read, write, fan, files, task,
-respond, admin, or none. See 'tuios pane-grants' for what each allows. --reset gives the pane the
+		Long: `Say what a pane may do through tuios: read, write, mail, fan, files,
+task, respond, admin, or none. See 'tuios pane-grants' for what each allows. --reset gives the pane the
 default of [agents.permissions] again, which then follows the config.
 
 From outside every pane anything may be given. From inside a pane, a pane may
@@ -83,6 +85,9 @@ TUIOS_PANE_GRANTS its process started with is not rewritten.`,
   # Drop this pane's grants before starting an agent in it
   tuios set-pane-grants --grants read,write && exec claude
 
+  # The same, keeping mail to the agents of other sessions
+  tuios set-pane-grants --grants read,write,mail,task && exec claude
+
   # Back to the default
   tuios set-pane-grants -w reviewer --reset`,
 		Args: cobra.NoArgs,
@@ -98,7 +103,7 @@ TUIOS_PANE_GRANTS its process started with is not rewritten.`,
 	}
 	addSessionFlag(cmd, &sessionName)
 	addWindowFlag(cmd, &window, "The pane, by name or id (default: this pane)")
-	cmd.Flags().StringSliceVar(&grants, "grants", nil, "The grants, comma separated: read, write, fan, files, task, respond, admin, or none")
+	cmd.Flags().StringSliceVar(&grants, "grants", nil, "The grants, comma separated: read, write, mail, fan, files, task, respond, admin, or none")
 	cmd.Flags().BoolVar(&reset, "reset", false, "Give the pane the default of [agents.permissions]")
 	addJSONFlag(cmd, &jsonOutput)
 	_ = cmd.RegisterFlagCompletionFunc("grants", completeGrantNames)

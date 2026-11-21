@@ -144,6 +144,10 @@ type queueEntry struct {
 	// by being typed, refused or found stale.
 	recheck func() (string, bool)
 	done    func()
+	// mailWake marks the wake line the daemon writes for unread mail
+	// (mail_wake.go), which holds no text a sender chose. Only mailWakeLook
+	// sets it.
+	mailWake bool
 	// unwatch is closed when a stalled entry leaves the queue, which ends
 	// the watch for it taken late (watchStalledQueue). nil otherwise.
 	unwatch chan struct{}
@@ -839,6 +843,9 @@ func (d *Daemon) queueOriginRefusal(e *queueEntry, sess *Session, target WindowS
 		pa := &paneAuth{window: o.window, session: session, grants: g, explicit: explicit}
 		if g.Has(GrantAdmin) {
 			return ""
+		}
+		if e.mailWake && g.Has(GrantMail) {
+			return d.mailWakeRefusal(pa, sess, target)
 		}
 		if why := d.paneWriteReach(pa, sess.Name()); why != "" {
 			return "window " + shortWindowID(o.window) + " that queued it holds " + g.String() + " now: " + why

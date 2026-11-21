@@ -3747,8 +3747,9 @@ attachments_per_card = 10
 
 Every pane holds grants that say what a process in it may do through tuios:
 `read` (its own session and fan group), `write` (type into its own session,
-into panes that hold nothing it does not), `fan` (write in its fan group and
-start agents), `respond` (answer prompts without you, and type into a pane
+into panes that hold nothing it does not), `mail` (leave mail in any session
+as itself, and list every session's agents to address it), `fan` (write in
+its fan group and start agents), `respond` (answer prompts without you, and type into a pane
 waiting on one), `files` (copy files with `tuios cp`, see below) and `admin`
 (everything else, as before grants). A pane started
 with `--grants` (`tuios start-agent`, `fan`, `new-window`) or given grants
