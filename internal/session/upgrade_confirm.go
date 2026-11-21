@@ -7,39 +7,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
-// A live upgrade asked for from inside a pane.
-//
-// The binary a live upgrade names runs as the daemon, which holds every
-// pane's terminal and the key that signs every pane's token. So a process
-// inside a pane does not get one by asking: the person has to say yes. But
-// someone who works entirely inside tuios has no terminal outside it, so the
-// daemon asks them where they are, in a dialog on every attached client.
-//
-// The dialog is an ask (ask_human.go) with the answers No and Yes, marked
-// with the binary and its version (AttentionItem.Upgrade). That gives it the
-// ask's proof that a person answered: answer-ask takes only the nonce of a
-// client attached right now, from a process outside every pane
-// (human_sender.go, human_origin.go), and never over a link. For an upgrade it
-// also takes only an answer marked upgrade_dialog, which a client sends from
-// its dialog alone and the GUI bridge never passes on, since a nonce proves a
-// client and not a key. The client adds the other half: only a key the person
-// pressed at that client answers it,
-// never one send-keys or a tape put through the client, and never a paste
-// (internal/app/upgrade_confirm.go). The first answer closes the ask, and the
-// close takes the dialog off every other client.
-//
-// Anything but Yes refuses, with the refusal a pane always got: No, Esc, the
-// wait running out, the ask being dismissed or superseded, and no client
-// that could answer. A plugin is refused without a dialog, as is a call over
-// a link, and a caller outside every pane needs none.
-
-// upgradeConfirmWait is how long a pane's upgrade waits for the person.
 const upgradeConfirmWait = 60 * time.Second
 
 // UpgradeConfirmWait is upgradeConfirmWait, for the CLI's call timeout.
 const UpgradeConfirmWait = upgradeConfirmWait
 
-// The answers the dialog offers. No is first, so it is the default.
 const (
 	upgradeAnswerNo  = "No"
 	upgradeAnswerYes = "Yes"
@@ -56,7 +28,6 @@ type UpgradeAsk struct {
 	CloseExited []string `json:"close_exited,omitempty"`
 }
 
-// upgradeConfirmTimeout is upgradeConfirmWait, or a test's shorter one.
 func upgradeConfirmTimeout() time.Duration {
 	if handoffTestOn() {
 		if d := testknob.Millis("upgrade_confirm_ms"); d > 0 {
@@ -66,19 +37,10 @@ func upgradeConfirmTimeout() time.Duration {
 	return upgradeConfirmWait
 }
 
-// callerIsPlugin reports whether the process on cs is a plugin: it presented
-// a plugin's token, or the kernel placed it in a plugin's process session.
 func (d *Daemon) callerIsPlugin(cs *connState) bool {
 	return cs != nil && (cs.pluginBound.Load() != nil || d.pluginOfPeer(cs) != nil)
 }
 
-// personClients is how many attached clients could answer for the person:
-// local, taking input, showing the dialog, with a process outside every pane.
-// A view-only client, such as tuios-web --read-only, sends no keys, so it
-// cannot answer. Neither can a client whose attach did not say it shows the
-// dialog: gui-bridge, whose renderer is never a key, and a client that
-// predates the dialog, whose Inbox offers No and Yes and sends neither as an
-// answer the ask takes.
 func (d *Daemon) personClients() int {
 	var attached []*connState
 	d.clientsMu.RLock()
@@ -99,24 +61,15 @@ func (d *Daemon) personClients() int {
 	return n
 }
 
-// confirmUpgrade asks the person whether the pane on cs may upgrade the
-// daemon to bin. It returns "" when they said yes, and otherwise why not, as
-// a sentence that says what to do next, so an agent can tell a No (stop
-// asking) from a dialog that could not be shown (ask the person to attach).
-// It returns at once when no client could answer.
 func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []string) string {
 	refuse := func(why string) string {
 		LogBasic("Live upgrade from a pane refused: %s", why)
 		return why
 	}
-	// Checked again here: the preflight can take seconds, and the last client
-	// can detach while it runs.
 	if why := d.upgradeDialogRefusal(); why != "" {
 		return refuse(why)
 	}
 	if !askLinePrintable(bin.path) || !askLineShown(bin.accepts.Version, askMaxOption) {
-		// What the dialog shows must be what the exec runs, character for
-		// character.
 		return refuse("The binary's path or version cannot be shown in the dialog as it is. Ask the person to run tuios daemon upgrade from a terminal outside tuios")
 	}
 	item := AttentionItem{
@@ -128,8 +81,6 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []
 	_, window := d.peerPane(cs)
 	for _, sess := range d.manager.AllSessions() {
 		if item.Session == "" {
-			// A pane that cannot be placed still needs a session for its
-			// item.
 			item.Session = sess.Name()
 		}
 		st := sess.GetState()
@@ -169,23 +120,16 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []
 	return fmt.Sprintf("The dialog closed without an answer (%s). Run the command again, and ask the person to choose Yes in the dialog", out.Reason)
 }
 
-// upgradeDialogRefusal says why no dialog could be shown for a pane's upgrade
-// right now, and "" when one can.
 func (d *Daemon) upgradeDialogRefusal() string {
 	if d.personClients() == 0 {
 		return "No client is attached to show the dialog. Ask the person to attach a client, then run the command again"
 	}
 	if !d.agentsEnabled() {
-		// The dialog rides the Inbox, which clients do not watch with the
-		// agent features off.
 		return "The agent features are off, so no client shows the dialog. Ask the person to run tuios daemon upgrade from a terminal outside tuios"
 	}
 	return ""
 }
 
-// closeAsk ends an open question that a waiting call gives up on, and takes
-// it off every client, with reason. It reports how the question ended when
-// an answer came first.
 func (a *attentionStore) closeAsk(h *askHold, reason string) (askOutcome, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -202,8 +146,6 @@ func (a *attentionStore) closeAsk(h *askHold, reason string) (askOutcome, bool) 
 	}
 }
 
-// askIsUpgrade reports whether the open question under requestID is a live
-// upgrade's confirm.
 func (a *attentionStore) askIsUpgrade(requestID string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()

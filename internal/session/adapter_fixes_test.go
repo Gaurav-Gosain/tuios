@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// Fixes a native Collie adapter over the verb socket needs.
-
 // TestSetAgentStateFromAPaneMarksThatPane runs set-agent-state with no
 // window from inside a pane. It must mark that pane, in its own session,
 // and not the focused pane of the session last active. Outside every pane
@@ -39,7 +37,6 @@ func TestSetAgentStateFromAPaneMarksThatPane(t *testing.T) {
 		t.Errorf("session b, the last active, is %s, want none", got.Name())
 	}
 
-	// Outside every pane, no window means the focused one.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	person := dialVerb(t, sp)
 	result(t, callP(person, t, "set-agent-state", map[string]any{"session": "a", "state": "idle"}))
@@ -68,7 +65,6 @@ func TestWorkspaceRenamedEvent(t *testing.T) {
 			t.Errorf("after naming workspace %d %q: event %v", step.ws, step.name, ev)
 		}
 	}
-	// A name set again to itself raises nothing.
 	result(t, callP(c, t, "set-workspace-name", map[string]any{"session": "ws", "workspace": 3, "name": "x"}))
 	readEvent(t, sub)
 	result(t, callP(c, t, "set-workspace-name", map[string]any{"session": "ws", "workspace": 3, "name": "x"}))
@@ -128,7 +124,6 @@ func TestSessionIDSurvivesRestore(t *testing.T) {
 		t.Errorf("restored id %q, want %q", back.ID, id)
 	}
 
-	// Old state has no id.
 	old := *saved
 	old.Name, old.SessionID = "old", ""
 	fresh, err := d.restoreSession(&old)
@@ -138,7 +133,6 @@ func TestSessionIDSurvivesRestore(t *testing.T) {
 	if fresh.ID == "" || fresh.ID == id {
 		t.Errorf("state with no id restored as %q", fresh.ID)
 	}
-	// An id a live session holds is not taken twice.
 	dup := *saved
 	dup.Name = "dup"
 	other, err := d.restoreSession(&dup)

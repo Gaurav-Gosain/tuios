@@ -13,30 +13,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 )
 
-// This file carries the machine-readable remedy surface of the verb protocol.
-//
-// Every error envelope may carry a "hint" object alongside its stable code and
-// human message. The hint names the thing that resolves the failure: the verb to
-// call, the CLI command to run, the parameter that was wrong and what it
-// accepts, the closest spelling to what the caller asked for, and the set of
-// values that do exist. All fields are omitempty, so an existing consumer that
-// only reads code and message is unaffected.
-
 // The closed value sets the protocol accepts. They are the single source of
 // truth for both the list-verbs parameter schema and the "accepted" field on an
 // invalid_params hint, so the two can never drift apart.
 var (
-	// captureSources are the buffers capture-pane can read. last-command-output
-	// is what the last finished command printed, read between its OSC 133
-	// marks (shell_commands.go).
-	captureSources = []string{"visible", "recent", captureLastCommand}
-	// waitOutputSources are the buffers wait-for window-output matches
-	// against. last-command-output is not one: a wait for a command to finish
-	// is command-finished.
+	captureSources    = []string{"visible", "recent", captureLastCommand}
 	waitOutputSources = []string{"visible", "recent"}
-	// screenshotFormats and screenshotFrames are the screenshot verb's closed
-	// sets. They are the config registry's own lists rather than copies, so a
-	// format added to one place cannot be missing from the other.
 	screenshotFormats = config.ScreenshotFormats
 	screenshotFrames  = config.ScreenshotFrames
 	// retiredCaptureSources maps a capture source that was once accepted to the
@@ -53,7 +35,6 @@ var (
 	retiredCaptureSources = map[string]string{
 		"recent-unwrapped": "unwrapped capture is not implemented. It returned the same physical rows as \"recent\" without unwrapping them",
 	}
-	// waitConditions are the conditions wait-for understands.
 	waitConditions = WaitConditionNames
 	// EventTypeNames are the event types a subscribe filter can name. It is
 	// exported so the CLI completes exactly this set.
@@ -69,13 +50,9 @@ var (
 		EventTML, EventTMLSurface, EventTaskClaimed, EventTaskFinished, EventTaskChanged, EventTaskDispatch,
 		EventKeepAwake, EventWorktreeRemoved, EventTheme,
 	}
-	// knownEventTypes are the event types a subscribe filter can name.
 	knownEventTypes = EventTypeNames
 )
 
-// errorCodeCatalog documents every stable error code for the list-verbs result,
-// so an agent can learn the failure vocabulary without reading the docs. Keep it
-// in sync with the ErrVerb* constants.
 var errorCodeCatalog = []struct {
 	Code        string `json:"code"`
 	Description string `json:"description"`
@@ -206,16 +183,12 @@ type VerbHint struct {
 	Host string `json:"host,omitempty"`
 }
 
-// empty reports whether the hint carries nothing worth serializing.
 func (h *VerbHint) empty() bool {
 	return h == nil || (h.Verb == "" && h.Command == "" && h.Param == "" &&
 		len(h.Accepted) == 0 && h.DidYouMean == "" && len(h.Available) == 0 && h.Detail == "" && h.Confirm == "" &&
 		len(h.Missing) == 0 && h.Table == "" && h.Host == "")
 }
 
-// hintedVerbError builds a *verbError carrying a hint. A hint with no populated
-// field is dropped so the envelope stays clean.
-//
 //go:noinline
 func hintedVerbError(code, message string, hint *VerbHint) *verbError {
 	e := newVerbError(code, message)
@@ -225,9 +198,6 @@ func hintedVerbError(code, message string, hint *VerbHint) *verbError {
 	return e
 }
 
-// invalidParam builds an invalid_params error naming the offending parameter and
-// the values it accepts (accepted may be nil when the set is open).
-//
 //go:noinline
 func invalidParam(param, message string, accepted ...string) *verbError {
 	return hintedVerbError(ErrVerbInvalidParams, message, &VerbHint{
@@ -237,10 +207,6 @@ func invalidParam(param, message string, accepted ...string) *verbError {
 	})
 }
 
-// validateCaptureSource checks a capture-pane source against the accepted set.
-// An empty source is valid and means the default. A source that was once
-// accepted is rejected with the reason it went away, so a caller that was
-// relying on it learns why rather than only what to use instead.
 func validateCaptureSource(source string) *verbError {
 	if source == "" || slices.Contains(captureSources, source) {
 		return nil
@@ -252,9 +218,6 @@ func validateCaptureSource(source string) *verbError {
 		Verb:     "list-verbs",
 	}
 	if reason, retired := retiredCaptureSources[source]; retired {
-		// A retired value is a closed-set miss with history: name the successor
-		// directly instead of relying on edit distance, which would not connect
-		// "recent-unwrapped" to "recent".
 		hint.DidYouMean = "recent"
 		hint.Detail = reason
 	} else {
@@ -263,15 +226,8 @@ func validateCaptureSource(source string) *verbError {
 	return hintedVerbError(ErrVerbInvalidParams, msg, hint)
 }
 
-// maxEchoedName bounds a caller-supplied name echoed back in an error message.
-// The request line cap is 16 MiB, so echoing the name verbatim let a client
-// amplify a small request into a large response. A name this long is already
-// far past anything the caller could have meant.
 const maxEchoedName = 128
 
-// echoName renders a caller-supplied name for an error message, truncating it
-// so the response stays proportional to the request. An empty name comes back
-// as "", so a message about it does not end in a blank.
 func echoName(name string) string {
 	if name == "" {
 		return `""`
@@ -289,35 +245,14 @@ func ClosestMatch(target string, candidates []string) string {
 	return closestMatch(target, candidates)
 }
 
-// closestMatch returns the candidate closest to target by edit distance, or ""
-// when nothing is close enough to suggest. The threshold scales with the length
-// of the target so short names do not match everything: a 3-character target
-// tolerates one edit, a 10-character target tolerates three.
 func closestMatch(target string, candidates []string) string {
 	if target == "" || len(candidates) == 0 {
 		return ""
 	}
-	// Scale the tolerance with the length of the target so a short name does not
-	// match everything, and cap it so two long but genuinely different names
-	// ("list-windows" and "close-window") are never suggested for each other.
 	limit := min(len(target)/4+1, 3)
 
-	// The Levenshtein distance between two strings is at least the difference in
-	// their lengths, so a candidate whose length is further than the tolerance
-	// can never win and is skipped before the O(n*m) comparison. Without this,
-	// the verb name from a socket client sizes the work: the request line cap is
-	// 16 MiB, and a name that long cost about five seconds of CPU per request,
-	// on the connection's own goroutine, for a suggestion that was always empty.
 	targetLen := utf8.RuneCountInString(target)
 
-	// A name that is a verb is not a typo. The caller failed for some other
-	// reason, and both "did you mean the thing you typed" and "did you mean
-	// this other verb" are noise on top of the real error.
-	//
-	// This used to skip the exact match and keep looking, which held only for
-	// as long as no other verb was within the tolerance of any real one.
-	// Adding pane-agent put a neighbour next to ask-agent and the hint started
-	// proposing it to callers who had spelled ask-agent correctly.
 	if slices.Contains(candidates, target) {
 		return ""
 	}
@@ -340,8 +275,6 @@ func closestMatch(target string, candidates []string) string {
 	return best
 }
 
-// editDistance returns the Levenshtein distance between a and b using a single
-// rolling row, which is enough for the short identifiers compared here.
 func editDistance(a, b string) int {
 	ar := []rune(a)
 	br := []rune(b)
@@ -372,7 +305,6 @@ func editDistance(a, b string) int {
 	return prev[len(br)]
 }
 
-// knownVerbNames returns every registered verb name in sorted order.
 func knownVerbNames() []string {
 	names := make([]string, 0, len(verbRegistry()))
 	for name := range verbRegistry() {
@@ -382,8 +314,6 @@ func knownVerbNames() []string {
 	return names
 }
 
-// sessionNames returns the names of every live session, sorted, for the
-// available list on a session_not_found hint.
 func (d *Daemon) sessionNames() []string {
 	infos := d.manager.ListSessions()
 	names := make([]string, 0, len(infos))
@@ -394,9 +324,6 @@ func (d *Daemon) sessionNames() []string {
 	return names
 }
 
-// windowTargets returns the addressable identifiers of a session's windows (id
-// and display name for each), sorted. They are the candidates a did-you-mean
-// suggestion is picked from, since the window parameter accepts both.
 func windowTargets(state *SessionState) []string {
 	if state == nil {
 		return nil
@@ -418,11 +345,6 @@ func windowTargets(state *SessionState) []string {
 	return targets
 }
 
-// windowChoices lists a session's windows for the available list of a
-// window_not_found hint: one entry a window, its name with the short id after
-// it ("review (523518d9)"), or the short id alone for a window with no name.
-// A list of ids and names side by side named every window twice and was hard
-// to read.
 func windowChoices(state *SessionState) []string {
 	if state == nil {
 		return nil
@@ -447,9 +369,6 @@ func windowChoices(state *SessionState) []string {
 	return out
 }
 
-// sessionArg is "-s SESSION" for a hint command. Without it the command runs
-// against the most recently active session, which need not be the one the
-// failed call named.
 func sessionArg(sess *Session) string {
 	if sess == nil {
 		return ""
@@ -457,9 +376,6 @@ func sessionArg(sess *Session) string {
 	return "-s " + shquote.Word(sess.Name())
 }
 
-// paneArgs is "-s SESSION -w WINDOW" for a hint command, so the command
-// reaches the pane the failed call was about. The window is named by its name
-// when that name picks it out alone, else by its short id.
 func paneArgs(sess *Session, windowID string) string {
 	window := shortWindowID(windowID)
 	if sess != nil {

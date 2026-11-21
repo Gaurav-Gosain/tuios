@@ -6,29 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// The pane's window title as an agent-state signal.
-//
-// tuios has always parsed OSC 0 and OSC 2 and kept the string for the window's
-// name, and no tier ever read it for what it says about the agent. The agents
-// are already writing to it: Claude Code puts a spinner there while it works,
-// Codex writes that an action is required when it blocks. It is the cheapest
-// signal in the building, one short string the program chose to publish, and
-// it was going in the bin.
-//
-// It is filed under the OSC source because that is what it is: an escape
-// sequence the program emitted about itself, alongside the progress sequence
-// already read there. It is not the screen tier, which reads a rendered frame
-// the program never meant as a report.
-//
-// It never creates a claim. A title proves that something set a title, not
-// that the something is an agent, and any program can set any string. So a
-// pane no other tier has recognised has nothing here to move, which is the
-// same gate the screen tier sits behind.
-
-// agentVerdict is what one tier read on a pane: a state, the message to report
-// with it, the kind of block the matching rule names, and the source to report
-// it as. ok is false when no rule matched. kind is carried into
-// AgentReport.Kind, which is what blocked_by reports for needs_input.
 type agentVerdict struct {
 	ok      bool
 	state   AgentState
@@ -37,8 +14,6 @@ type agentVerdict struct {
 	source  AgentSource
 }
 
-// titleVerdict matches the harness's title rules against the pane's title and,
-// for the rules that read osc_progress, its last progress report.
 func titleVerdict(pty *PTY, hid string, reg *harness.Registry) agentVerdict {
 	title := pty.Title()
 	progress := ""
@@ -61,60 +36,23 @@ func titleVerdict(pty *PTY, hid string, reg *harness.Registry) agentVerdict {
 	}
 }
 
-// scanTitleForAgent is the look at the title alone. It reports whether a rule
-// matched, on the terms scanPaneForAgent does.
 func (s *Session) scanTitleForAgent(ptyID string, reg *harness.Registry) bool {
 	return s.lookAtPane(ptyID, reg, paneLook{title: true})
 }
 
-// paneLook says which tiers a look reads and why it runs.
 type paneLook struct {
 	title, screen bool
-	// stalled marks the silence timer's look. The timer only runs on a pane
-	// that has written nothing for the whole stall window, and a title that
-	// says the agent is working is a spinner, which writes a new frame each
-	// time it turns. One that has not turned for that long is a frame left
-	// behind, not an answer, so the look ignores it and the timer can demote
-	// the pane.
-	stalled bool
+	stalled       bool
 }
 
-// scanPaneForAgent is the look the daemon takes at a pane that has gone quiet:
-// the title first, then the screen.
-//
-// Both run rather than the first match winning. They answer different
-// questions and the ranking decides between them anyway, so stopping at the
-// title would mean a pane whose title is stale never had its screen read. It
-// reports whether either found something, which is the question the silence
-// timer asks: a pane with a rule matching is not idle, whoever owns its claim.
 func (s *Session) scanPaneForAgent(ptyID string, reg *harness.Registry) bool {
 	return s.lookAtPane(ptyID, reg, paneLook{title: true, screen: true})
 }
 
-// scanStalledPane is the silence timer's look: scanPaneForAgent, except that a
-// working title does not count. See paneLook.stalled.
 func (s *Session) scanStalledPane(ptyID string, reg *harness.Registry) bool {
 	return s.lookAtPane(ptyID, reg, paneLook{title: true, screen: true, stalled: true})
 }
 
-// lookAtPane reads the tiers it is asked to and applies what they say.
-//
-// An idle reading from one tier gives way to a louder reading from the other.
-// A rest glyph in the title says nothing about the permission prompt painted
-// under it, and an empty prompt box on the screen says nothing about the
-// spinner in the title, so idle is only reported when no tier sees anything
-// louder. Every idle reading then goes through the confirmation gate in
-// agent_idle.go before it is published.
-//
-// A blocking reading on the screen also silences a working title. The prompt
-// is the fact a user needs, and a spinner frame left in the title would
-// otherwise take the pane back to working on every look, ahead of the screen
-// reading that is trying to override that claim.
-//
-// The result is whether the look found an answer the silence timer must
-// respect: any rule matching, except an idle reading a stronger claim would
-// refuse anyway, since that pane is still owned by whatever said it was
-// working and the timer is how that claim is retired.
 func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook) bool {
 	if reg == nil {
 		return false
@@ -141,10 +79,6 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 		s.noteAgentWaitsOn(winID, reg.WaitsOn(hid, pty.tailText(reg.ScreenLines(hid))))
 		screen, screenLooked = screenVerdict(pty, hid, reg)
 		if screenLooked && !screen.ok {
-			// Nothing on the screen now, so any claim a blocker or an idle
-			// box took here is given back. This look is the only thing that
-			// runs when the prompt goes away, and a prompt can only go away
-			// by being painted over, which is what brought us here.
 			s.releaseAgentBlockerOverride(winID)
 			s.releaseScreenIdle(winID)
 		}
@@ -160,7 +94,6 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 	if screen.ok && screen.state == AgentStateIdle && title.ok && title.state != AgentStateIdle {
 		screen.ok = false
 	}
-	// Both idle: one reading is enough, and the title's ranks higher.
 	if title.ok && screen.ok && title.state == AgentStateIdle && screen.state == AgentStateIdle {
 		screen.ok = false
 	}
@@ -180,7 +113,7 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 			continue
 		}
 		matched = true
-		_, _, _ = s.ApplyAgentReport(winID, AgentReport{ // a refusal is a normal outcome here
+		_, _, _ = s.ApplyAgentReport(winID, AgentReport{
 			State:       v.state,
 			Message:     v.message,
 			Kind:        v.kind,
@@ -195,22 +128,6 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook)
 	return matched
 }
 
-// applyIdleVerdict puts an idle reading through the confirmation gate and
-// publishes it once confirmed. It reports whether the reading counts: false
-// when a stronger claim owns the window, since publishing would be refused.
-// screenIdle says the screen tier read idle on this look, whichever tier's
-// reading v is.
-//
-// A prompt a hook reported from a one-off event (hookEventPrompt) ends only on
-// the screen's word, and only once that word holds as long as a working pane's
-// idle must. The title says nothing about it: Claude Code shows its rest glyph
-// at a menu as well as at its prompt box, so a frame that blanks the menu for
-// a redraw read as the prompt answered. A frame of the prompt box drawn in
-// the middle of a redraw is no answer either, nor is a form that marks its
-// focused row with the box's ❯, so the box must read empty (promptBoxEmpty).
-// A prompt that ends early is a prompt nobody answers, which costs more than
-// one that stays. The reading that passes is published as promptGone, the one
-// look hookPromptHolds lets end such a prompt; a working look never does.
 func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v agentVerdict, hid string, wrote int64, screenIdle bool) bool {
 	claim, held := s.agentClaimHeld(winID)
 	current, exists := s.windowAgentState(winID)
@@ -226,9 +143,6 @@ func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v
 		s.idle.cancel(winID)
 		return false
 	}
-	// Already idle on this tier's word: saying it again would restamp the
-	// state and push it to every client on each keystroke typed into the
-	// prompt box.
 	if current == AgentStateIdle && held && claim.source == v.source {
 		s.idle.cancel(winID)
 		return true
@@ -244,8 +158,6 @@ func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v
 		}
 		return true
 	}
-	// A refusal (outranked, unchanged, a claim held) is the normal outcome of
-	// a passive scan, and the scan has nothing to report it to.
 	_, _, _ = s.ApplyAgentReport(winID, AgentReport{
 		State:       AgentStateIdle,
 		Message:     v.message,
@@ -257,7 +169,6 @@ func (s *Session) applyIdleVerdict(winID, ptyID string, reg *harness.Registry, v
 	return true
 }
 
-// agentClaimHeld returns the claim on a window and whether one is held.
 func (s *Session) agentClaimHeld(windowID string) (agentClaim, bool) {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()

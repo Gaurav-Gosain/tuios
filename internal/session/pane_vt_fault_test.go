@@ -37,7 +37,6 @@ func TestFaultNoticesReachTheStreamInFaultOrder(t *testing.T) {
 	}
 
 	for range 200 {
-		// The reader holds streamMu, as it does while vtWriter faults.
 		p.streamMu.Lock()
 		queued := make(chan struct{})
 		go func() {
@@ -56,7 +55,6 @@ func TestFaultNoticesReachTheStreamInFaultOrder(t *testing.T) {
 		}
 	}
 
-	// The queue ran empty, so the next notice needs a goroutine of its own.
 	waitFor(t, "the notice queue runs empty", func() bool {
 		p.faultNotices.mu.Lock()
 		defer p.faultNotices.mu.Unlock()

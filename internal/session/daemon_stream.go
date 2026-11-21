@@ -10,51 +10,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
-// streamFrameInterval and streamFloodBytes gate how often a flooding pane is
-// written to one client. Once a subscription has sent streamFloodBytes inside
-// one streamFrameInterval, the next bytes wait for that interval to end and go
-// out together in one frame.
-//
-// Without the gate a flood went out one frame per PTY read. The stream
-// goroutine drains faster than the reader fills, so the batch loop below
-// rarely found more than one chunk queued, and on macOS a PTY read is about
-// 330 bytes. That was about 2,900 frames per MiB, each one a daemon write, a
-// client read and a handful of goroutine wakeups, for a client that draws at
-// most once every 8 ms anyway. Output below streamFloodBytes per interval is
-// never held, so a keystroke echo into a quiet pane goes out at once.
-//
-// Variables, not constants, so a test can widen the window enough to observe.
 var (
 	streamFrameInterval = time.Millisecond
 	streamFloodBytes    = 4096
 )
 
-// streamBatchKeep is the batch capacity a stream keeps across an idle spell.
-// A larger batch is let go once the stream has stayed idle for queueTrimAfter,
-// and the next output grows a new one. It is the batch's counterpart to
-// queueKeep, for a flood of large chunks that fills the batch without growing
-// the queue.
 const streamBatchKeep = 32 * 1024
 
-// streamPTYOutput streams raw PTY bytes to a subscriber with batching.
-// Multiple queued chunks are coalesced into a single connection write to
-// reduce syscall overhead (30K+ reads/sec at 500fps doom fire → one large
-// write per batch instead of one per read).
-//
-// sub is the subscription this goroutine owns. It is replaced only by
-// resumeAfterGap, and everything the goroutine releases it releases by
-// identity, never by client ID alone.
 func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
-	// On any exit, stop receiving from the PTY and drop the subscription entry so
-	// the connState is left coherent: a later re-subscribe must not be blocked by
-	// a stale "already subscribed" guard (daemon_handlers.go), and no PTY keeps
-	// broadcasting into an unread queue.
-	//
-	// Both act only while they still refer to this goroutine's subscriber. A
-	// pane hidden and shown quickly unsubscribes and subscribes again while
-	// this goroutine is still blocked in a write. Cleaning up by client ID then
-	// removed the new subscription and its entry, so the new goroutine's
-	// channel was closed under it and the pane stopped updating.
 	defer func() {
 		pty.unsubscribeSub(cs.clientID, sub)
 		cs.mu.Lock()
@@ -65,35 +28,20 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	}()
 
 	const maxBatch = 256 * 1024
-	// Grown by the first output. Made up front it was 256 KiB for every
-	// client and pane pair, including panes that never print. A flood grows
-	// it to maxBatch, so it is let go once the stream has stayed idle for
-	// queueTrimAfter, unless it is no larger than streamBatchKeep.
 	var batch []byte
 	queue := &sub.out
-	// take accounts for a chunk taken off the stream, so broadcast can tell
-	// how much this client still holds, and adds its bytes to the batch. A
-	// frame broadcast dropped for a newer one adds nothing.
 	take := func(c ptyChunk) {
 		batch = takeChunk(batch, c, sub)
 		pty.wakePacer()
 	}
 
-	// The frame window: when it opened and how many bytes went out in it.
-	// hold is the one timer a held stream waits on, made the first time.
 	var windowStart time.Time
 	windowBytes := 0
 	var hold *time.Timer
-	// trim fires once a queue the backlog grew, or a batch a flood grew, has
-	// stayed empty for queueTrimAfter. Made the first time either drains.
 	var trim *time.Timer
-	// resize is a value, not a pointer: taking the address of the receive
-	// variables made them escape, one allocation per chunk.
 	var resize ptyChunk
 
 	for {
-		// A client that went away stops the stream even while chunks are
-		// still queued.
 		select {
 		case <-cs.done:
 			return
@@ -106,8 +54,6 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 			return
 		}
 		if !ok {
-			// Wait only after a pop found the queue empty: the next push
-			// leaves a token on wake (subscriber_queue.go).
 			var trimC <-chan time.Time
 			if queue.oversized() || cap(batch) > streamBatchKeep {
 				if trim == nil {
@@ -133,13 +79,9 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 		}
 		batch = batch[:0]
 		resize = ptyChunk{}
-		// A dropped frame costs nothing to skip.
 		if chunk.frame != nil && chunk.frame.state.Load() == frameDropped {
 			goto send
 		}
-		// A resize is never held: it carries no bytes and it ends a batch
-		// anyway. Bytes after a full window wait for the window to end, and
-		// whatever queued meanwhile goes out with them below.
 		if !chunk.isResize() && windowBytes >= streamFloodBytes {
 			if wait := streamFrameInterval - time.Since(windowStart); wait > 0 {
 				if hold == nil {
@@ -156,10 +98,6 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 				}
 			}
 		}
-		// A resize marks the byte the daemon's emulator changed width at,
-		// so it ends the batch in front of it and is sent on its own.
-		// Coalescing it into the bytes either side would put the client's
-		// emulator at the wrong width for one of them.
 		if chunk.isResize() {
 			resize = chunk
 		} else {
@@ -177,8 +115,6 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 			}
 		}
 	send:
-		// A frame can make the batch larger than maxBatch, so it goes out
-		// in pieces of at most maxBatch, each with its own deadline.
 		for out := batch; len(out) > 0; {
 			piece := out[:min(len(out), maxBatch)]
 			out = out[len(piece):]
@@ -192,10 +128,6 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 				windowBytes += len(piece)
 			}
 			if err != nil {
-				// The write failed mid-frame (a slow/stuck client hitting the 5s
-				// deadline): the wire now carries a partial frame and every later
-				// send would append onto a desynced stream. Tear the whole client
-				// down rather than leaving it half-subscribed and desynced.
 				cs.drop()
 				return
 			}
@@ -209,10 +141,6 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 				return
 			}
 		}
-		// A stream that was gapped while this client was slow has drained
-		// by the time the queue is empty. Rebuild it from where it got
-		// to, so the client is handed what it missed instead of the rest
-		// of the stream painted over a hole.
 		if q, next := pty.resumeAfterGap(cs.clientID, sub); q != nil {
 			cs.mu.Lock()
 			if cs.ptySubscriptions[pty.ID] == sub {
@@ -224,9 +152,6 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	}
 }
 
-// takeChunk takes one chunk off a client's stream: it appends the chunk's
-// bytes to batch and settles the accounting broadcast reads. A frame that
-// broadcast dropped for a newer one adds nothing.
 func takeChunk(batch []byte, c ptyChunk, sub *ptySubscriber) []byte {
 	if c.frame != nil {
 		if c.frame.take() {
@@ -242,19 +167,7 @@ func takeChunk(batch []byte, c ptyChunk, sub *ptySubscriber) []byte {
 	return append(batch, c.data...)
 }
 
-// notifyPTYClosed sends MsgPTYClosed to every client attached to the session
-// that owns the PTY. This is called when the PTY process exits (e.g., user
-// types exit or Ctrl+D).
-//
-// It goes to every attached client, subscribed to the PTY or not. A client
-// streams only the panes on the workspace it shows, and this message is the
-// only way a client learns that a pane's program ended: the client closes
-// the window, and that close is what removes it from the session. Sent to
-// subscribers only, a pane on a hidden workspace outlived its program and
-// stayed listed until somebody showed its workspace and closed it by hand.
 func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
-	// A pane moved to another session is closed in the one that holds it
-	// now, not the one its exit callback was made in.
 	if holder := d.sessionHoldingPTY(ptyID); holder != nil {
 		sessionID = holder.ID
 	}
@@ -264,12 +177,7 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 	defer d.clientsMu.RUnlock()
 
 	for _, cs := range d.clients {
-		// Only notify clients attached to this session. Read the guarded
-		// fields under cs.mu (clientsMu is already held, preserving the
-		// clientsMu-then-cs.mu order).
 		cs.mu.Lock()
-		// attached for the same reason as broadcastToSession: nothing
-		// unsolicited reaches a client before its attach reply.
 		match := cs.sessionID == sessionID && cs.attached
 		cs.mu.Unlock()
 		if !match {
@@ -277,7 +185,6 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 		}
 
 		debugLog("[DEBUG] notifyPTYClosed: sending to client %s", cs.clientID)
-		// Send in a goroutine to avoid blocking if client is slow
 		client := cs
 		d.goTracked(func() {
 			defer func() {
@@ -300,31 +207,17 @@ func (d *Daemon) sendMessage(cs *connState, msgType MessageType, payload any) er
 	return d.sendEncoded(cs, msg)
 }
 
-// sendEncoded writes an already encoded message to one client, dropping the
-// client if the write fails.
 func (d *Daemon) sendEncoded(cs *connState, msg *Message) error {
 	cs.sendMu.Lock()
 	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	err := WriteMessage(cs.conn, msg)
 	cs.sendMu.Unlock()
 	if err != nil {
-		// A mid-frame write failure permanently desyncs framing for this
-		// connection; drop the client so the read loop runs its full cleanup
-		// instead of appending later frames onto a corrupt stream.
 		cs.drop()
 	}
 	return err
 }
 
-// reply sends msgType as the answer to req, tagged with req's request id so
-// the client can tell it from the answer to any other request. Everything a
-// handler sends in answer to the message it is handling goes through here or
-// replyError; a broadcast or push that happens to share a type does not.
-//
-// A client matched replies by type alone before ids existed, so an error a
-// fire-and-forget subscribe drew was taken as the answer to whatever state
-// request was waiting, and the state that request was really answered with
-// went to the next one. See requestIDs on TUIClient.
 func (d *Daemon) reply(cs *connState, req *Message, msgType MessageType, payload any) error {
 	msg, err := NewMessage(msgType, payload)
 	if err != nil {
@@ -336,8 +229,6 @@ func (d *Daemon) reply(cs *connState, req *Message, msgType MessageType, payload
 	return d.sendEncoded(cs, msg)
 }
 
-// replyError sends an error as the answer to req. See reply.
-//
 //go:noinline
 func (d *Daemon) replyError(cs *connState, req *Message, code int, message string) error {
 	return d.reply(cs, req, MsgError, &ErrorPayload{
@@ -346,21 +237,6 @@ func (d *Daemon) replyError(cs *connState, req *Message, code int, message strin
 	})
 }
 
-// sendAttachReply writes the attach reply and opens this client to the
-// session's broadcasts, in that order and with no gap between them.
-//
-// The flag is set inside the same send lock the reply is written under, which
-// is what makes the pair indivisible. A broadcast that reads the flag as set
-// queues behind the reply on that lock instead of overtaking it, and a
-// broadcast that reads it as unset ran before the reply was written, when the
-// client had nothing to reconcile against anyway.
-//
-// Setting it after the write instead leaves a window of exactly the wrong kind:
-// the client believes it is attached the moment the reply lands, and anything
-// the session says before the flag catches up (a session being killed, most of
-// all) is dropped on the floor. The window is a few instructions and has not
-// been caught in the act; it is closed here because it costs one lock to close
-// and nothing about it is bounded by how narrow it happens to be today.
 func (d *Daemon) sendAttachReply(cs *connState, req *Message, payload *AttachedPayload) error {
 	msg, err := NewMessage(MsgAttached, payload)
 	if err != nil {
@@ -371,17 +247,12 @@ func (d *Daemon) sendAttachReply(cs *connState, req *Message, payload *AttachedP
 	cs.sendMu.Lock()
 	cs.mu.Lock()
 	cs.attached = true
-	// Written with the reply, under sendMu: a message sent to the client
-	// for this session after this point cannot overtake the reply.
 	cs.repliedSession = payload.SessionID
 	paneMarks := cs.paneMarks
 	cs.mu.Unlock()
 	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	err = WriteMessage(cs.conn, msg)
 	cs.sendMu.Unlock()
-	// A client that reads pane marks hears the first output and bell of each
-	// pane after it arrives, not only of the panes no client looked at since.
-	// See pane_marks.go.
 	if paneMarks {
 		if s := d.manager.GetSessionByID(payload.SessionID); s != nil {
 			s.rearmPaneMarks()
@@ -389,24 +260,15 @@ func (d *Daemon) sendAttachReply(cs *connState, req *Message, payload *AttachedP
 	}
 
 	if err != nil {
-		// Same treatment as any other failed write: framing is unrecoverable,
-		// so the read loop is left to run its full cleanup.
 		cs.drop()
 	}
 	return err
 }
 
-// broadcastToSession sends a message to all TUI clients attached to a session.
-// If excludeClientID is non-empty, that client is excluded from the broadcast.
 func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, payload any, excludeClientID string) {
-	// A session with no member skips the encode, which for a state push is the
-	// whole session. Any member, attached or not, takes the path below.
 	if !d.sessionHasMember(sessionID, excludeClientID) {
 		return
 	}
-	// Encoded once. Every client speaks the one codec there is, and a state
-	// push is the whole session, so encoding it on each client's goroutine
-	// was the same gob of the same state as many times as there were peers.
 	msg, err := NewMessage(msgType, payload)
 	if err != nil {
 		debugLog("[DEBUG] broadcastToSession: encode: %v", err)
@@ -415,12 +277,6 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 	d.broadcastEncodedToSession(sessionID, msg, excludeClientID)
 }
 
-// sessionHasMember reports whether any client is attached to the session or
-// still attaching, by broadcastEncodedToSession's test, and writes nothing. A
-// state push is held under the session's pushMu across the sink, and the
-// attach handler takes that lock (forgetBroadcast) before the snapshot its
-// reply carries, so a client not yet a member gets the change in that reply;
-// for the other broadcasts such a client was not reached before either.
 func (d *Daemon) sessionHasMember(sessionID, excludeClientID string) bool {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
@@ -435,8 +291,6 @@ func (d *Daemon) sessionHasMember(sessionID, excludeClientID string) bool {
 	return false
 }
 
-// broadcastEncodedToSession is broadcastToSession for a message already
-// encoded, so a caller can encode it before it takes a lock.
 func (d *Daemon) broadcastEncodedToSession(sessionID string, msg *Message, excludeClientID string) {
 	msgType := msg.Type
 	d.clientsMu.RLock()
@@ -444,13 +298,8 @@ func (d *Daemon) broadcastEncodedToSession(sessionID string, msg *Message, exclu
 
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		// attached, not just sessionID: a client mid-attach is counted by
-		// everything that measures the session and spoken to by nothing. See
-		// connState.attached.
 		member := cs.sessionID == sessionID && cs.isTUIClient && cs.clientID != excludeClientID
 		match := member && cs.attached
-		// A client still attaching is told afterwards that it missed a state,
-		// by its attach handler. See connState.missedStateSync.
 		if member && !cs.attached && msgType == MsgStateSync {
 			cs.missedStateSync = true
 		}
@@ -462,27 +311,12 @@ func (d *Daemon) broadcastEncodedToSession(sessionID string, msg *Message, exclu
 	}
 }
 
-// broadcastSendHeld runs in each queued broadcast after its turn comes and
-// before it is written. It is unset outside tests, which use it to hold the
-// queue while something else is sent.
 var broadcastSendHeld atomic.Pointer[func()]
 
-// statePushTestHold is how long each state push waits, in its turn, before it
-// is written: the state_push_hold_ms knob, at most a minute. It lets an e2e
-// test send a routed command while the state before it is still on its way,
-// which a loaded machine does now and then (see sendInBroadcastOrder).
 var statePushTestHold = sync.OnceValue(func() time.Duration {
 	return min(testknob.Millis("state_push_hold_ms"), time.Minute)
 })
 
-// sendInBroadcastOrder writes a message to one client after every broadcast
-// already queued for it, on the caller's goroutine. A routed command goes
-// this way. A verb that changes the session and then routes a command to the
-// client queues the state first (publishState), and a command written past it
-// reached the client first: the client showed the focus the command named
-// while it still held the version before the change, and the next push it
-// built from that, such as a focus key, the daemon took for a stale one and
-// refused.
 func (d *Daemon) sendInBroadcastOrder(cs *connState, msgType MessageType, payload any) error {
 	msg, err := NewMessage(msgType, payload)
 	if err != nil {
@@ -494,14 +328,6 @@ func (d *Daemon) sendInBroadcastOrder(cs *connState, msgType MessageType, payloa
 	return d.sendEncoded(cs, msg)
 }
 
-// queueBroadcast writes one already encoded broadcast to one client, off this
-// goroutine and in turn.
-//
-// Sent off this goroutine so a slow client blocks nobody else, and behind a
-// ticket so two broadcasts to one client cannot pass each other on the way: a
-// goroutine per send with no order between them delivered a client's two
-// pushes to a peer swapped, and the peer that adopted the older one last held a
-// tree the session had moved on from. what names the caller in the log.
 func (d *Daemon) queueBroadcast(cs *connState, msg *Message, what string) {
 	ticket := cs.takeBroadcastTicket()
 	client := cs
@@ -526,9 +352,6 @@ func (d *Daemon) queueBroadcast(cs *connState, msg *Message, what string) {
 		}
 	})
 	if !started {
-		// The daemon is stopping, so the message is dropped. The ticket is
-		// still released in its turn: a later ticket that did start waits on
-		// it, and releasing it early would skip the count past that ticket.
 		go func() {
 			client.awaitBroadcastTurn(ticket)
 			client.finishBroadcast()

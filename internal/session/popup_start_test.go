@@ -14,12 +14,10 @@ import (
 func TestPopupContentSize(t *testing.T) {
 	r := LayoutReserve{Top: 2, Right: 20}
 	cols, rows := popupContentSize(120, 40, r, "80%", "80%")
-	// Region 100x38, box 80x30, content 78x28.
 	if cols != 78 || rows != 28 {
 		t.Fatalf("content = %dx%d, want 78x28", cols, rows)
 	}
 	cols, rows = popupContentSize(120, 40, LayoutReserve{}, "", "")
-	// Defaults 80% and 60% of 120x40: box 96x24, content 94x22.
 	if cols != 94 || rows != 22 {
 		t.Fatalf("default content = %dx%d, want 94x22", cols, rows)
 	}
@@ -63,7 +61,6 @@ func TestPopupStartsAtItsBox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Region 120x38: box 60x15, content 58x13.
 	pty := sess.GetPTY(win.PTYID)
 	if pty == nil {
 		t.Fatal("no PTY for the popup")
@@ -76,8 +73,6 @@ func TestPopupStartsAtItsBox(t *testing.T) {
 	}
 }
 
-// dialAnimationClient attaches a raw client whose hello says whether its
-// host makes kitty frame edits.
 func dialAnimationClient(t *testing.T, socketPath, session string, animates bool) *boundsClient {
 	t.Helper()
 	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
@@ -100,7 +95,6 @@ func dialAnimationClient(t *testing.T, socketPath, session string, animates bool
 	return c
 }
 
-// waitAnimation waits for the session's frame-edit support to read want.
 func waitAnimation(t *testing.T, d *Daemon, session string, want bool, what string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

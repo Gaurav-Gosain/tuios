@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// herdrDial sends one request to the herdr socket and returns the reply.
 func herdrDial(t *testing.T, sp, method string, params any) map[string]any {
 	t.Helper()
 	conn, err := net.Dial("unix", HerdrSocketPath(sp))
@@ -34,7 +33,6 @@ func herdrDial(t *testing.T, sp, method string, params any) map[string]any {
 	return out
 }
 
-// herdrOK is a reply's result, failing the test on an error reply.
 func herdrOK(t *testing.T, what string, reply map[string]any) map[string]any {
 	t.Helper()
 	if e, ok := reply["error"]; ok {
@@ -47,7 +45,6 @@ func herdrOK(t *testing.T, what string, reply map[string]any) map[string]any {
 	return res
 }
 
-// herdrCode is a reply's error code, "" for a success.
 func herdrCode(reply map[string]any) string {
 	e, ok := reply["error"].(map[string]any)
 	if !ok {
@@ -57,8 +54,6 @@ func herdrCode(reply map[string]any) string {
 	return code
 }
 
-// herdrCallAs sends one request over the socket, as the pane the daemon's
-// placer names, and returns the result or "code: message".
 func herdrCallAs(t *testing.T, sp, method string, params any) (map[string]any, string) {
 	t.Helper()
 	reply := herdrDial(t, sp, method, params)
@@ -89,7 +84,6 @@ func TestHerdrFindsObjectsByEveryForm(t *testing.T) {
 			t.Errorf("pane %q found %v, %v", id, w.ID, err)
 		}
 	}
-	// A window found by its window part, whatever session part the id has.
 	sb := d.manager.GetSession("b")
 	if _, w, err := d.herdrFindPane(herdrPaneID(sa.ID, b1)); err != nil || w.ID != b1 {
 		t.Errorf("pane with a stale session part: %v, %v", w.ID, err)
@@ -106,7 +100,6 @@ func TestHerdrFindsObjectsByEveryForm(t *testing.T) {
 		}
 	}
 	for _, n := range []int{2, 99} {
-		// 2 is an empty workspace, which is not a tab; 99 is past the last.
 		if _, _, err := d.herdrFindTab(herdrTabID(sa.ID, n)); err == nil || err.code != "tab_not_found" {
 			t.Errorf("tab %d: %v", n, err)
 		}
@@ -171,8 +164,6 @@ func TestHerdrSnapshotShape(t *testing.T) {
 			t.Errorf("window %s is not in %v", w, ids)
 		}
 	}
-	// An agent appears in its pane's status, in its tab's and workspace's
-	// summary, and in agents.
 	result(t, callP(dialVerb(t, sp), t, "set-agent-state",
 		map[string]any{"session": "a", "window": a2, "state": "needs_input", "harness": "claude-code", "message": "Allow?"}))
 	snap = herdrOK(t, "snapshot", herdrDial(t, sp, "session.snapshot", nil))["snapshot"].(map[string]any)
@@ -213,9 +204,6 @@ func TestHerdrReadAndType(t *testing.T) {
 		t.Fatal(err)
 	}
 	pane := herdrPaneID(sess.ID, win.ID)
-	// readUntil polls the pane until the text holds want copies of sub. The
-	// terminal echoes input before cat writes its copy, so each step waits for
-	// cat's copy before the next input goes in.
 	var text string
 	readUntil := func(sub string, want int) {
 		t.Helper()
@@ -376,7 +364,7 @@ func TestHerdrStructureMethods(t *testing.T) {
 func TestHerdrGrantsHoldAPane(t *testing.T) {
 	d, sp, a1, a2, b1 := scopeFixture(t)
 	sa, sb := d.manager.GetSession("a"), d.manager.GetSession("b")
-	setStrict(d) // read, write, fan
+	setStrict(d)
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 
 	snap, e := herdrCallAs(t, sp, "session.snapshot", nil)
@@ -406,7 +394,6 @@ func TestHerdrGrantsHoldAPane(t *testing.T) {
 		{"tab.create", map[string]any{"workspace_id": herdrWorkspaceID(sa.ID)}},
 		{"workspace.create", map[string]any{}},
 		{"workspace.close", map[string]any{"workspace_id": herdrWorkspaceID(sb.ID)}},
-		// agent.start names the pane, and a rename needs admin.
 		{"agent.start", map[string]any{"name": "helper", "kind": "claude", "pane_id": herdrPaneID(sa.ID, a2)}},
 	} {
 		if _, e := herdrCallAs(t, sp, m.method, m.params); !strings.HasPrefix(e, "forbidden") {
@@ -420,8 +407,6 @@ func TestHerdrGrantsHoldAPane(t *testing.T) {
 		t.Errorf("a refused agent.start named the pane %q", w.CustomName)
 	}
 
-	// A pane waiting on a prompt answers what is typed into it: that needs
-	// respond, which admin does not give.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	result(t, callP(dialVerb(t, sp), t, "set-agent-state", map[string]any{"session": "a", "window": a2, "state": "needs_input", "harness": "claude-code"}))
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
@@ -437,7 +422,6 @@ func TestHerdrGrantsHoldAPane(t *testing.T) {
 		t.Errorf("with respond: %s", e)
 	}
 
-	// The person, outside every pane, reads and types everywhere.
 	setStrict(d)
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	if n := len(herdrOK(t, "snapshot", herdrDial(t, sp, "session.snapshot", nil))["snapshot"].(map[string]any)["workspaces"].([]any)); n != 2 {

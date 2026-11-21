@@ -35,14 +35,10 @@ func TestTerminalStateSendsOnlyWhatTheCallerLacks(t *testing.T) {
 				t.Fatalf("a caller behind by %d wanted %d rows, got %d",
 					behind, behind, len(st.Scrollback))
 			}
-			// The true length, not the number of rows sent, or the client's own
-			// subtraction against it would discard what it is missing.
 			if st.ScrollbackLen != full.ScrollbackLen {
 				t.Fatalf("ScrollbackLen reported %d, want the true %d",
 					st.ScrollbackLen, full.ScrollbackLen)
 			}
-			// The rows must be the NEWEST ones. Handing back the oldest would
-			// leave a hole exactly where the client stopped watching.
 			for i := range st.Scrollback {
 				want := full.Scrollback[len(full.Scrollback)-behind+i]
 				got := st.Scrollback[i]
@@ -74,12 +70,9 @@ func TestTerminalStateHaveNeverWidensTheWindow(t *testing.T) {
 	if st := pty.GetTerminalState(10, 0); st == nil || len(st.Scrollback) != 10 {
 		t.Fatalf("a request bounded at 10 got %d rows", len(st.Scrollback))
 	}
-	// Behind by 50 but asking for at most 10 still yields 10.
 	if st := pty.GetTerminalState(10, depth-50); st == nil || len(st.Scrollback) != 10 {
 		t.Fatalf("a request bounded at 10 while 50 behind got %d rows", len(st.Scrollback))
 	}
-	// A caller claiming more than exists asks for nothing, not for a negative
-	// count that would wrap into the whole buffer.
 	if st := pty.GetTerminalState(depth, depth*10); st == nil || len(st.Scrollback) != 0 {
 		t.Fatalf("a caller claiming more than exists got %d rows", len(st.Scrollback))
 	}

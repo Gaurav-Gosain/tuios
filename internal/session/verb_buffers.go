@@ -16,50 +16,15 @@ import (
 	"tuios.dev/vt"
 )
 
-// Paste buffers: list-buffers, show-buffer, set-buffer, delete-buffer and
-// paste-buffer, after tmux's commands of the same names.
-//
-// The daemon holds one store (internal/pastebuf), so every client and every
-// session can share the buffers, as tmux's server does. A client adds a
-// buffer for each yank it makes, and the person pastes one back with the
-// prefix keys or the CLI. Nothing reaches disk: the buffers end with the
-// daemon.
-//
-// Ownership is one simple rule. A buffer is the person's, or it is one
-// pane's:
-//
-//   - A set from outside every pane, or from a pane that holds admin, makes
-//     the person's buffer. Admin is everything the person can do.
-//   - A set from a pane without admin makes that pane's buffer.
-//   - A pane without admin sees, reads, changes, appends to, deletes and
-//     pastes only its own buffers. Every other buffer, the person's or
-//     another pane's, in its session or not, is as if it were not there. It
-//     may not make a named buffer, and a name it may not change answers as a
-//     missing one, so it learns nothing about the others.
-//   - The person, with no name, takes only the person's buffers: a buffer a
-//     pane set never becomes the person's newest. With a name, the person
-//     reaches any buffer, and the chooser marks the ones a pane set.
-//
-// A buffer can hold whatever the person copied, a secret included, so a pane
-// is held to its grants as well (pane_grants.go): reading needs read, and
-// changing needs write. A paste needs both, because the text it types into
-// the caller's own pane is the text's way back to the caller. The paste is
-// also a typing verb, held to the same target rules as send-text.
-
 // ErrVerbNoBuffer is the code of a call naming a buffer there is not, or of a
 // call on the newest buffer when there is none.
 const ErrVerbNoBuffer = "no_buffer"
 
-// bufferSampleRunes is how much of a buffer a listing shows, and
-// maxSampleWidth the most a caller may ask for with sample_width.
 const (
 	bufferSampleRunes = 60
 	maxSampleWidth    = 200
 )
 
-// pasteBufferLimit is the count limit a daemon starts with: the default
-// when the config leaves it at zero, and 0 only when the file turned the
-// buffers off.
 func (c *DaemonConfig) pasteBufferLimit() int {
 	if c.PasteBuffersOff {
 		return 0
@@ -70,8 +35,6 @@ func (c *DaemonConfig) pasteBufferLimit() int {
 	return c.PasteBufferLimit
 }
 
-// bufferStore is the daemon's store. A daemon made without NewDaemon, in a
-// test, has none until the first call.
 func (d *Daemon) bufferStore() *pastebuf.Store {
 	d.buffersOnce.Do(func() {
 		if d.buffers == nil {
@@ -81,21 +44,13 @@ func (d *Daemon) bufferStore() *pastebuf.Store {
 	return d.buffers
 }
 
-// bufferCaller is who a call is to the buffers.
 type bufferCaller struct {
-	// owner is what a buffer the caller sets is.
 	owner pastebuf.Owner
-	// see is the buffers the caller may see, read, change and paste. nil is
-	// every buffer: the person.
-	see pastebuf.Filter
+	see   pastebuf.Filter
 }
 
-// person reports whether the caller is the person.
 func (c bufferCaller) person() bool { return c.see == nil }
 
-// bare is the filter of a call with no name: the newest automatic buffer
-// among these. The person takes only the person's own, so no buffer a pane
-// set can become the person's newest.
 func (c bufferCaller) bare() pastebuf.Filter {
 	if c.person() {
 		return func(b pastebuf.Buffer) bool { return b.Owner.Person() }
@@ -103,7 +58,6 @@ func (c bufferCaller) bare() pastebuf.Filter {
 	return c.see
 }
 
-// lookup is the filter of a call that names name, or none.
 func (c bufferCaller) lookup(name string) pastebuf.Filter {
 	if name == "" {
 		return c.bare()
@@ -111,10 +65,6 @@ func (c bufferCaller) lookup(name string) pastebuf.Filter {
 	return c.see
 }
 
-// bufferAccess says who the caller on cs is to the buffers. A connection
-// over a link is held as a pane of its own, never the person: the person on
-// the other machine reaches this machine's buffers only through its own
-// client here.
 func (d *Daemon) bufferAccess(cs *connState) bufferCaller {
 	if cs != nil && cs.viaLink {
 		id := "link:" + d.linkPolicy(cs).Peer
@@ -127,7 +77,6 @@ func (d *Daemon) bufferAccess(cs *connState) bufferCaller {
 	return paneBuffers(pa.window)
 }
 
-// paneBuffers is a caller held to the buffers it owns.
 func paneBuffers(id string) bufferCaller {
 	return bufferCaller{
 		owner: pastebuf.Owner{Pane: id},
@@ -135,7 +84,6 @@ func paneBuffers(id string) bufferCaller {
 	}
 }
 
-// bufferError maps a store error to the verb error for it.
 func (d *Daemon) bufferError(verb string, err error) *verbError {
 	switch {
 	case errors.Is(err, pastebuf.ErrNotFound), errors.Is(err, pastebuf.ErrNone):
@@ -165,7 +113,6 @@ func (d *Daemon) bufferError(verb string, err error) *verbError {
 	return newVerbError(ErrVerbInternal, verb+": "+err.Error())
 }
 
-// bufferRow is one buffer in a listing.
 func (d *Daemon) bufferRow(b pastebuf.Buffer, sampleWidth int) map[string]any {
 	row := map[string]any{
 		"name":      b.Name,
@@ -181,13 +128,9 @@ func (d *Daemon) bufferRow(b pastebuf.Buffer, sampleWidth int) map[string]any {
 	return row
 }
 
-// paneLabel is how a listing names the pane that owns a buffer: its window
-// name or title while it lives, else its short id.
 func (d *Daemon) paneLabel(id string) string {
 	if sess := d.sessionHoldingWindow(id); sess != nil {
 		if w, ok := findWindowState(sess.GetState(), id); ok {
-			// The title is the pane's to set: no control characters, each
-			// run of space one space, and not past 64 characters.
 			clean := strings.Join(strings.Fields(strings.Map(func(r rune) rune {
 				if unicode.IsControl(r) {
 					return ' '
@@ -205,8 +148,6 @@ func (d *Daemon) paneLabel(id string) string {
 	return shortWindowID(id)
 }
 
-// verbListBuffers lists the paste buffers the caller may see, newest first.
-// Every total is over those buffers alone.
 func (d *Daemon) verbListBuffers(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		SampleWidth int `json:"sample_width"`
@@ -237,8 +178,6 @@ func (d *Daemon) verbListBuffers(cs *connState, params json.RawMessage) (any, *v
 	}, nil
 }
 
-// verbShowBuffer returns one buffer's content: as text in data, and as
-// base64 in data_b64, which keeps every byte.
 func (d *Daemon) verbShowBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Name     string `json:"name"`
@@ -258,17 +197,12 @@ func (d *Daemon) verbShowBuffer(cs *connState, params json.RawMessage) (any, *ve
 	row := d.bufferRow(b, bufferSampleRunes)
 	row["type"] = "buffer"
 	if p.Encoding == "" {
-		// The text too, for a caller from before data_b64. A caller that
-		// reads data_b64 asks for it alone, and the reply is not doubled.
 		row["data"] = b.Data
 	}
 	row["data_b64"] = base64.StdEncoding.EncodeToString([]byte(b.Data))
 	return row, nil
 }
 
-// bufferUpload is a buffer being sent in parts. Nothing reaches the store
-// until the last part, so a half-sent buffer is never pasted, and a part is
-// never added to some older buffer.
 type bufferUpload struct {
 	id      string
 	data    []byte
@@ -276,22 +210,8 @@ type bufferUpload struct {
 	person  bool
 }
 
-// bufferUploadTTL is how long an upload waits for its next part.
 const bufferUploadTTL = time.Minute
 
-// uploadPart adds part to the upload id of the connection cs, and returns
-// the whole content when this is the last part. person says the caller is
-// the person: outside every pane, or in a pane that holds admin.
-//
-// The memory unfinished uploads hold is bounded. A connection has at most
-// one: a part with another id starts over and drops the first, and it holds
-// at most maxBytes, the byte cap of the buffers. The person's uploads
-// together hold at most maxBytes, and every other caller's together hold at
-// most maxBytes more, so no pane can use up what the person's own upload
-// needs. A part past a bound is refused and drops its own upload, never
-// another connection's, and the refusal says nothing of what other uploads
-// hold. An upload is dropped when its connection closes (dropUploads) and
-// after bufferUploadTTL without a part.
 func (d *Daemon) uploadPart(cs *connState, id string, part []byte, last bool, maxBytes int, person bool) ([]byte, *verbError) {
 	d.uploadsMu.Lock()
 	defer d.uploadsMu.Unlock()
@@ -333,21 +253,14 @@ func (d *Daemon) uploadPart(cs *connState, id string, part []byte, last bool, ma
 	return u.data, nil
 }
 
-// dropUploads drops the unfinished upload of a connection that closed.
 func (d *Daemon) dropUploads(cs *connState) {
 	d.uploadsMu.Lock()
 	delete(d.uploads, cs)
 	d.uploadsMu.Unlock()
 }
 
-// b64Bytes is a base64 JSON string decoded straight from the request. The
-// decoder hands UnmarshalJSON a slice of the request itself, so the encoded
-// form is never copied: one request holds its line and the decoded bytes, and
-// nothing else of its size.
 type b64Bytes []byte
 
-// UnmarshalJSON decodes a base64 string. A string with an escape, which no
-// base64 needs but JSON allows, takes the slow path through a plain string.
 func (b *b64Bytes) UnmarshalJSON(data []byte) error {
 	if len(data) >= 2 && data[0] == '"' && data[len(data)-1] == '"' && bytes.IndexByte(data, '\\') < 0 {
 		src := data[1 : len(data)-1]
@@ -371,13 +284,8 @@ func (b *b64Bytes) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// errNotBase64 is the error of a data_b64 that is not base64.
 var errNotBase64 = errors.New("data_b64 is not base64")
 
-// verbSetBuffer stores content in a buffer. The content comes as text in
-// data or, for any bytes, as base64 in data_b64. With upload it comes in
-// parts: every part but the last has more, and the buffer is set once, from
-// the whole content, when the last part arrives.
 func (d *Daemon) verbSetBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Name    string   `json:"name"`
@@ -421,7 +329,6 @@ func (d *Daemon) verbSetBuffer(cs *connState, params json.RawMessage) (any, *ver
 		return nil, d.bufferError("set-buffer", err)
 	}
 	if b.Name == "" {
-		// Empty content stores nothing and is no error, as in tmux.
 		return map[string]any{"type": "buffer_set", "stored": false}, nil
 	}
 	row := d.bufferRow(b, bufferSampleRunes)
@@ -430,7 +337,6 @@ func (d *Daemon) verbSetBuffer(cs *connState, params json.RawMessage) (any, *ver
 	return row, nil
 }
 
-// verbDeleteBuffer removes a buffer.
 func (d *Daemon) verbDeleteBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Name    string `json:"name"`
@@ -446,22 +352,15 @@ func (d *Daemon) verbDeleteBuffer(cs *connState, params json.RawMessage) (any, *
 	return map[string]any{"type": "buffer_deleted", "name": b.Name}, nil
 }
 
-// verbPasteBuffer types a buffer into a pane as a paste: each line feed
-// turned into a carriage return unless raw, as tmux does, then sanitized as
-// every paste is, and in the bracketed paste delimiters when the pane's
-// program turned bracketed paste on. With delete it removes the buffer it
-// pasted, and not a newer content set under the same name meanwhile.
 func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session string `json:"session"`
-		Window  string `json:"window"`
-		Name    string `json:"name"`
-		Delete  bool   `json:"delete"`
-		Raw     bool   `json:"raw"`
-		Version uint64 `json:"version"`
-		// AllowBlocked lets a pane paste into a pane on needs_input
-		// (typingBlocked).
-		AllowBlocked bool `json:"allow_blocked"`
+		Session      string `json:"session"`
+		Window       string `json:"window"`
+		Name         string `json:"name"`
+		Delete       bool   `json:"delete"`
+		Raw          bool   `json:"raw"`
+		Version      uint64 `json:"version"`
+		AllowBlocked bool   `json:"allow_blocked"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -509,7 +408,6 @@ func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *v
 	}, nil
 }
 
-// bufferVerbs are the paste buffer verbs, for the registry.
 func bufferVerbs() map[string]verbEntry {
 	nameParam := func(what string) verbParam {
 		return verbParam{Name: "name", Type: "string", Description: "The buffer to " + what + ". Omit for the newest buffer tuios named, as tmux does: for the person, the newest of the person's own, and for a pane without admin, the newest of its own."}
@@ -527,10 +425,6 @@ func bufferVerbs() map[string]verbEntry {
 	sampleWidth := verbParam{Name: "sample_width", Type: "int", Description: "How many characters each sample shows, at most 200.", Default: "60"}
 	return map[string]verbEntry{
 		"list-buffers": {
-			// The paste buffers (verb_buffers.go). They are shared by every session,
-			// so a caller restricted to its own session reaches none of them.
-			// paste-buffer types into a pane, and it also reads a buffer: see
-			// readsBuffers.
 			scope:       scopeBufferRead,
 			link:        needList,
 			description: "List the paste buffers, newest first. A yank in copy mode adds one, and so does set-buffer. From a pane this needs the read grant, and a pane without admin sees only the buffers it set. Every total counts only the buffers listed.",
@@ -596,10 +490,7 @@ func bufferVerbs() map[string]verbEntry {
 			handler:  (*Daemon).verbDeleteBuffer,
 		},
 		"paste-buffer": {
-			scope: scopeWrite,
-			// The paste buffers hold what the person copied on this machine. A
-			// link reads them only where it may also capture a pane, and changes
-			// or pastes them only where it may type.
+			scope:       scopeWrite,
 			link:        needWrite,
 			description: "Type a paste buffer into a window's PTY as a paste. Each line feed becomes a carriage return unless raw, as in tmux. Control characters other than tab, line feed and carriage return are removed, and the text is wrapped in the bracketed paste delimiters when the program in the pane turned bracketed paste on. From a pane this needs the read and write grants.",
 			params: []verbParam{

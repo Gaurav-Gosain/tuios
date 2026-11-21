@@ -9,53 +9,27 @@ import (
 	"time"
 )
 
-// The person's reply history: what they sent to each agent, so the reply
-// editor can bring an earlier message back with up and ctrl+r.
-//
-// It is kept in the daemon's memory and nowhere else, and it ends with the
-// daemon. Replies hold pasted logs and secrets, so nothing of them is written
-// to disk. It is the person's alone: both verbs take a live human_nonce, by
-// the rules every person's verb follows (human_sender.go), so no pane and no
-// caller without the nonce reads or adds to it. Over a link that also needs
-// respond, as agent-transcript does.
-//
-// A target is the key the client gives, such as the harness and the folder of
-// the pane, so a pane that closes and opens again on the same folder keeps its
-// history. Each target keeps replyHistoryEntries messages, at most
-// replyHistoryTargets targets are kept, the least used going first, one
-// message keeps at most replyHistoryEntryBytes of pastes and images (past
-// that the largest are dropped, and the entry names what was dropped), and
-// the whole history holds at most replyHistoryBytes.
-
 const (
 	replyHistoryEntries    = 100
 	replyHistoryTargets    = 64
 	replyHistoryEntryBytes = 256 << 10
 	replyHistoryTargetMax  = 512
-	// replyHistoryBytes bounds the whole history. Past it the oldest
-	// messages of the least used targets go first.
-	replyHistoryBytes = 32 << 20
+	replyHistoryBytes      = 32 << 20
 )
 
-// replyHistoryEntry is one sent message.
 type replyHistoryEntry struct {
-	Parts []queuePart `json:"parts"`
-	At    int64       `json:"at"`
-	// Dropped names the blocks that were too large to keep, such as
-	// "Pasted text #1".
-	Dropped []string `json:"dropped,omitempty"`
+	Parts   []queuePart `json:"parts"`
+	At      int64       `json:"at"`
+	Dropped []string    `json:"dropped,omitempty"`
 }
 
-// replyHistory is every target's history. The zero value is ready.
 type replyHistory struct {
 	mu      sync.Mutex
 	targets map[string][]replyHistoryEntry
 	order   []string
-	// bytes is what every entry holds, for replyHistoryBytes.
-	bytes int
+	bytes   int
 }
 
-// entryBytes is what an entry holds.
 func entryBytes(e replyHistoryEntry) int {
 	n := 0
 	for _, p := range e.Parts {
@@ -64,7 +38,6 @@ func entryBytes(e replyHistoryEntry) int {
 	return n
 }
 
-// add keeps a message for target, newest last.
 func (h *replyHistory) add(target string, e replyHistoryEntry) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -72,7 +45,6 @@ func (h *replyHistory) add(target string, e replyHistoryEntry) {
 		h.targets = make(map[string][]replyHistoryEntry)
 	}
 	list := h.targets[target]
-	// The same message again moves to the end, so up brings it back first.
 	list = slices.DeleteFunc(list, func(o replyHistoryEntry) bool {
 		if sameParts(o.Parts, e.Parts) {
 			h.bytes -= entryBytes(o)
@@ -88,8 +60,6 @@ func (h *replyHistory) add(target string, e replyHistoryEntry) {
 	}
 	h.targets[target] = list
 	h.touchLocked(target)
-	// Past the whole bound, the oldest messages of the least used targets
-	// go, never the one just added.
 	for i := 0; h.bytes > replyHistoryBytes && i < len(h.order); {
 		t := h.order[i]
 		l := h.targets[t]
@@ -106,8 +76,6 @@ func (h *replyHistory) add(target string, e replyHistoryEntry) {
 	}
 }
 
-// touchLocked marks target the most recently used and drops the least used
-// past the bound.
 func (h *replyHistory) touchLocked(target string) {
 	h.order = slices.DeleteFunc(h.order, func(o string) bool { return o == target })
 	h.order = append(h.order, target)
@@ -120,7 +88,6 @@ func (h *replyHistory) touchLocked(target string) {
 	}
 }
 
-// list is target's history, oldest first. The slice is a copy.
 func (h *replyHistory) list(target string) []replyHistoryEntry {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -131,15 +98,12 @@ func (h *replyHistory) list(target string) []replyHistoryEntry {
 	return slices.Clone(list)
 }
 
-// sameParts reports whether two messages are the same.
 func sameParts(a, b []queuePart) bool {
 	return slices.EqualFunc(a, b, func(x, y queuePart) bool {
 		return x.Kind == y.Kind && x.Text == y.Text && x.N == y.N && string(x.Data) == string(y.Data)
 	})
 }
 
-// boundHistoryParts drops the largest pastes and images until the message's
-// blocks fit replyHistoryEntryBytes, and names what it dropped.
 func boundHistoryParts(parts []queuePart) ([]queuePart, []string) {
 	size := 0
 	for _, p := range parts {
@@ -170,7 +134,6 @@ func boundHistoryParts(parts []queuePart) ([]queuePart, []string) {
 	return parts, dropped
 }
 
-// replyHistoryRefusal is the refusal for a caller that is not the person.
 func replyHistoryRefusal(verb string) *verbError {
 	return hintedVerbError(ErrVerbNotHuman, verb+" is for the person at an attached client", &VerbHint{
 		Param:  "human_nonce",
@@ -178,12 +141,6 @@ func replyHistoryRefusal(verb string) *verbError {
 	})
 }
 
-// replyHistoryHuman reports whether the caller is the person for the reply
-// history. A target is the client's own key and belongs to no one session,
-// so it takes a nonce that proves the person for an act in no one session:
-// an attach nonce, or a presence made with no session. A presence made for
-// one session reads nothing, since the history holds what was sent to the
-// agents of every session.
 func (d *Daemon) replyHistoryHuman(cs *connState, nonce string) bool {
 	if cs != nil && cs.paneOnly {
 		return false
@@ -192,7 +149,6 @@ func (d *Daemon) replyHistoryHuman(cs *connState, nonce string) bool {
 	return ok
 }
 
-// replyHistoryTarget checks a target key.
 func replyHistoryTarget(target string) *verbError {
 	if strings.TrimSpace(target) == "" {
 		return invalidParam("target", "target is required: the key the client keeps the history under")
@@ -203,7 +159,6 @@ func replyHistoryTarget(target string) *verbError {
 	return nil
 }
 
-// verbAddReplyHistory keeps a message the person sent.
 func (d *Daemon) verbAddReplyHistory(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Target     string      `json:"target"`
@@ -227,7 +182,6 @@ func (d *Daemon) verbAddReplyHistory(cs *connState, params json.RawMessage) (any
 	return map[string]any{"type": "reply_history_added", "target": p.Target, "dropped": dropped}, nil
 }
 
-// verbReplyHistory reads a target's history.
 func (d *Daemon) verbReplyHistory(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Target     string `json:"target"`

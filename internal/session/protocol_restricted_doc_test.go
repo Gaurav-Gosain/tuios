@@ -37,8 +37,6 @@ func TestRestrictedTableNamesEveryVerbItAllows(t *testing.T) {
 		t.Fatal(`protocol.md has no table rows after "What a restricted connection may call:"`)
 	}
 
-	// The row of each scope. A write verb that reads the paste buffers has a
-	// row of its own: under own it is refused as a buffer read is.
 	type rowKey struct {
 		kind    scopeKind
 		buffers bool

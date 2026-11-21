@@ -132,7 +132,6 @@ func TestFileImageBoundary(t *testing.T) {
 			t.Errorf("%s (%s): the read gave %v, want ErrNoImage", tc.id, tc.why, err)
 		}
 	}
-	// The caller names an entry, never a path, and an index the entry has.
 	for _, id := range []string{
 		fileImagePrefix + good + ".0",
 		fileImagePrefix + "p1.1",
@@ -146,11 +145,9 @@ func TestFileImageBoundary(t *testing.T) {
 			t.Errorf("image id %q gave %v, want ErrNoImage", id, err)
 		}
 	}
-	// No paste folder: no prompt names an image.
 	if paths := fileImagePaths(entries, 0, ""); len(paths) != 0 {
 		t.Errorf("with no paste folder the prompt names %q", paths)
 	}
-	// The media type is the bytes', not the name's.
 	jpg := write(filepath.Join(paste, "tuios-paste-3.jpg"), png)
 	if mt, _, err := openFileImage(jpg); err != nil || mt != "image/png" {
 		t.Errorf("a PNG named .jpg reads as %q, %v; want image/png", mt, err)

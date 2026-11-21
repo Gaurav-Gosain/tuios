@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// These tests pin the Inbox's lifecycle: snooze, wake, unread and restore.
-
-// fakeClock is a clock a test moves by hand.
 type fakeClock struct {
 	mu sync.Mutex
 	t  time.Time
@@ -29,7 +26,6 @@ func (c *fakeClock) add(d time.Duration) {
 	c.mu.Unlock()
 }
 
-// lifecycleStore is a recording store on a fake clock.
 func lifecycleStore(t *testing.T) (*attentionStore, *[]streamEvent, *fakeClock) {
 	t.Helper()
 	a, events := recordingAttention()
@@ -86,10 +82,6 @@ func TestSnoozedItemsSurviveARestart(t *testing.T) {
 	b, _, _ := lifecycleStore(t)
 	b.now = clock.now
 	b.load(path, func(string, string) bool { return true })
-	// load arms the wake timer with no delay for the overdue snooze, and the
-	// timer runs on its own goroutine. wakeDue does the same work here, so the
-	// result does not depend on which of the two gets there first. A count of
-	// the sleeping items straight after load raced that timer.
 	b.wakeDue()
 	open := openItems(t, b)
 	if len(open) != 1 || open[0].ID != items[1].ID {
@@ -116,8 +108,6 @@ func TestMarkAttentionRefusesAPaneWithACopiedNonce(t *testing.T) {
 	if verr == nil || verr.Code != ErrVerbNotHuman {
 		t.Fatalf("a pane with the person's nonce answered %v, want %s", verr, ErrVerbNotHuman)
 	}
-	// The same nonce from outside every pane passes the proof and reaches
-	// the item, which is not there.
 	_, verr = d.verbMarkAttention(&connState{}, raw)
 	if verr == nil || verr.Code != ErrVerbInvalidParams {
 		t.Fatalf("the person answered %v, want %s", verr, ErrVerbInvalidParams)
@@ -147,7 +137,6 @@ func TestALateWakeFireLeavesTheNewTimer(t *testing.T) {
 		t.Fatalf("the second snooze left timer %v at %d gen %d", current != nil, at, gen)
 	}
 
-	// The first timer's late fire.
 	a.wakeFired(staleGen)
 	a.mu.Lock()
 	gotTimer, gotAt, gotGen := a.wakeTimer, a.wakeAt, a.wakeGen
@@ -178,9 +167,6 @@ func TestRestoreCannotOutrunThePaneMovingOn(t *testing.T) {
 	result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"dismiss-attention","params":{"id":%q,"human_nonce":%q}}`, bid, nonce)))
 	waitAttention(t, c, "the dismiss", isEmpty)
 
-	// The pane moves on after the check and before the reopen. The fix holds
-	// the transition back until the reopen is done; without it the
-	// transition lands first and finds nothing to close.
 	moved := make(chan struct{})
 	d.attention.mu.Lock()
 	d.attention.beforeRestore = func() {

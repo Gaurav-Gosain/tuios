@@ -8,30 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 )
 
-// Plugin tokens: a second way for a process to say which native plugin it
-// belongs to.
-//
-// The first way is the kernel's: the session id of the caller's pid, which
-// the runner's owner table names (plugin_grants.go). It holds whatever the
-// process sends. A process that starts a session of its own leaves it, and
-// where the kernel gives no peer pid (Windows, the BSDs) there is no answer.
-//
-// For those, every process of a native plugin gets TUIOS_PLUGIN_ID and
-// TUIOS_PLUGIN_TOKEN, an HMAC of the plugin id under the key the pane
-// tokens use (pane_token.go): one daemon start, never written anywhere. The
-// tuios CLI presents them with pane-grants. A connection that presents a
-// good token is that plugin for as long as it is open: held to its grants
-// and never the person.
-//
-// A token only narrows. A caller the kernel places in another plugin is
-// refused, and one the kernel places in a pane stays the pane's. A caller
-// that presents nothing is placed as before, so a process that drops the
-// variable on purpose is not held by it: as with pane tokens, this scopes
-// mistakes and tools talked into misuse, not a program set on escaping.
-// That is why the runner still does not start a native plugin's commands
-// where the kernel gives no peer pid: the client protocol does not present
-// the token yet.
-
 // PluginToken is the token the processes of plugin id are started with, or
 // "" when this manager has no key.
 func (m *Manager) PluginToken(id string) string {
@@ -53,8 +29,6 @@ func (m *Manager) VerifyPluginToken(id, token string) bool {
 	return hmac.Equal([]byte(want), []byte(token))
 }
 
-// bindPluginToken places the connection in plugin id when token proves it
-// and nothing the kernel says disagrees.
 func (d *Daemon) bindPluginToken(cs *connState, id, token string) *verbError {
 	refuse := func(msg string) *verbError {
 		return hintedVerbError(ErrVerbForbidden, msg, &VerbHint{
@@ -78,8 +52,6 @@ func (d *Daemon) bindPluginToken(cs *connState, id, token string) *verbError {
 		return nil
 	}
 	if _, win := d.peerPane(cs); win != "" {
-		// A plugin's pane: the pane's grants hold it, which are no more
-		// than the plugin's.
 		return nil
 	}
 	if prev := cs.pluginBound.Load(); prev != nil && *prev != id {
@@ -89,11 +61,6 @@ func (d *Daemon) bindPluginToken(cs *connState, id, token string) *verbError {
 	return nil
 }
 
-// bindPeerPluginToken places the connection in the plugin whose token the
-// peer process was started with, read from its environment at accept. It
-// needs nothing from the caller, so a raw socket call and the client
-// protocol are held too. Where the environment cannot be read (Windows, the
-// BSDs), the CLI presents the token with pane-grants instead.
 func (d *Daemon) bindPeerPluginToken(cs *connState) {
 	if cs == nil || cs.viaLink || cs.paneOnly || cs.peerPID <= 0 {
 		return
@@ -111,8 +78,6 @@ func (d *Daemon) bindPeerPluginToken(cs *connState) {
 	}
 }
 
-// boundPluginGrants is what plugin id holds now: none when it is not a
-// native plugin that runs.
 func (d *Daemon) boundPluginGrants(id string) Grants {
 	if d.plugins == nil {
 		return 0

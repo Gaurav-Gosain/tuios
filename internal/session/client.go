@@ -18,11 +18,9 @@ type Client struct {
 	conn    net.Conn
 	version string
 
-	// Terminal size, reported to the daemon in the hello handshake.
 	width  int
 	height int
 
-	// Message handling
 	done      chan struct{}
 	closeOnce sync.Once
 	sendMu    sync.Mutex
@@ -56,10 +54,8 @@ func (c *Client) Connect() error {
 	}
 	c.conn = conn
 
-	// Get terminal size
 	c.width, c.height = c.getTerminalSize()
 
-	// Send hello
 	if err := c.sendHello(); err != nil {
 		_ = conn.Close()
 		return errfmt.Errorf("handshake failed: %w", err)
@@ -149,7 +145,7 @@ func (c *Client) createSession(name string, width, height int, global bool, cwd 
 
 	switch resp.Type {
 	case MsgSessionList:
-		return nil // Success
+		return nil
 
 	case MsgError:
 		var errPayload ErrorPayload
@@ -184,7 +180,7 @@ func (c *Client) ResurrectSession(name string) error {
 
 	switch resp.Type {
 	case MsgSessionList:
-		return nil // Success
+		return nil
 
 	case MsgError:
 		var errPayload ErrorPayload
@@ -198,14 +194,6 @@ func (c *Client) ResurrectSession(name string) error {
 	}
 }
 
-// helloTerm is the TERM and COLORTERM a hello names for this process: what
-// guestenv.DetectTerm finds, except for a command with no terminal on stdout
-// (a script, a service, CI, an agent). That detects NoTTY and answers dumb,
-// and a session it creates would keep TERM=dumb in every pane for its life,
-// although the panes are drawn by tuios and not by this stdout. It names no
-// TERM instead, so the daemon gives its xterm-256color and truecolor. A real
-// terminal that answers dumb keeps its answer, as it does for a standalone
-// window. Both hellos use it: the binary protocol's and the verb client's.
 func helloTerm() (termType, colorTerm string) {
 	termType, colorTerm = guestenv.DetectTerm()
 	if termType == "dumb" && !term.IsTerminal(int(os.Stdout.Fd())) {
@@ -215,12 +203,6 @@ func helloTerm() (termType, colorTerm string) {
 }
 
 func (c *Client) sendHello() error {
-	// The same TERM detection the standalone window path uses. The hello names
-	// no shell: the daemon resolves it from its appearance.preferred_shell,
-	// which a config reload keeps current, then $SHELL and the platform
-	// default. This client runs behind every control command and shell
-	// completion, so it must not load the config, write a default one, or print
-	// config warnings.
 	termType, colorTerm := helloTerm()
 
 	msg, err := NewMessage(MsgHello, &HelloPayload{
@@ -240,7 +222,6 @@ func (c *Client) sendHello() error {
 		return err
 	}
 
-	// Wait for welcome
 	resp, err := c.recv()
 	if err != nil {
 		return err
@@ -255,8 +236,6 @@ func (c *Client) sendHello() error {
 		return errfmt.Errorf("the daemon refused this client: %s", errPayload.Message)
 	}
 	if resp.Type != MsgWelcome {
-		// See TUIClient.ConnectWithCapabilities: a reply of another type means
-		// the daemon numbers its messages differently.
 		return numberingMismatch(c.version, resp.Type)
 	}
 
@@ -291,7 +270,7 @@ func (c *Client) recv() (*Message, error) {
 func (c *Client) getTerminalSize() (width, height int) {
 	width, height, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		return 80, 24 // Default
+		return 80, 24
 	}
 	return width, height
 }
@@ -320,7 +299,6 @@ func (c *Client) SendControlMessage(msg *Message) (*Message, error) {
 		return nil, errfmt.Errorf("failed to send message: %w", err)
 	}
 
-	// Wait for response
 	resp, err := c.recv()
 	if err != nil {
 		return nil, errfmt.Errorf("failed to receive response: %w", err)

@@ -8,8 +8,6 @@ import (
 	"syscall"
 )
 
-// fsKey names the filesystem that holds dir, so writes to one disk are
-// counted together. It is dir itself when the system cannot say.
 func fsKey(dir string) string {
 	fi, err := os.Stat(dir)
 	if err != nil {

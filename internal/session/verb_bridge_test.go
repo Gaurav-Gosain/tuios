@@ -18,7 +18,6 @@ func TestRouteToTUISyncTimeout(t *testing.T) {
 	defer d.manager.Shutdown()
 
 	tui, clientSide := newFakeTUI(t, d, "sess-2")
-	// Drain the command but never reply.
 	go func() { _, _ = ReadMessage(clientSide) }()
 
 	_, err := d.routeToTUISync(tui, "req-timeout",
@@ -47,7 +46,6 @@ func TestRenameWindowWithAttachedTUIUpdatesDaemonState(t *testing.T) {
 	win := sess.GetState().Windows[0]
 
 	_, clientSide := newFakeTUI(t, d, sess.ID)
-	// The client-side pipe must be drained or a daemon push would block.
 	go func() {
 		for {
 			if _, err := ReadMessage(clientSide); err != nil {
@@ -79,7 +77,6 @@ func TestRenameWindowWithAttachedTUIUpdatesDaemonState(t *testing.T) {
 			"but leaves daemon state stale makes list-windows report the old name", got.CustomName, "build")
 	}
 
-	// The window list is what the user actually reads back.
 	data := buildWindowListData(sess.GetState())
 	windows, ok := data["windows"].([]map[string]any)
 	if !ok || len(windows) != 1 {
@@ -91,8 +88,6 @@ func TestRenameWindowWithAttachedTUIUpdatesDaemonState(t *testing.T) {
 
 }
 
-// newDiscardConn returns a connection whose writes go nowhere, for a fake
-// requester that never reads its replies.
 func newDiscardConn(t *testing.T) net.Conn {
 	t.Helper()
 	a, b := net.Pipe()
@@ -122,8 +117,6 @@ func TestCloseWindowWithAttachedTUIRunsOnTheDaemon(t *testing.T) {
 	win := sess.GetState().Windows[0]
 
 	_, clientSide := newFakeTUI(t, d, sess.ID)
-	// Collect what the daemon pushes at the client, so the test can assert the
-	// client was told rather than left to find out on its next sync.
 	pushed := make(chan *SessionState, 8)
 	go func() {
 		for {

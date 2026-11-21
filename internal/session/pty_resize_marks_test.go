@@ -6,13 +6,6 @@ import (
 	"testing"
 )
 
-// A resize is a point in the stream, and the ring holds bytes only. These pin
-// the marks that let a catch-up cut from the ring replay a resize between the
-// same two bytes the live broadcast put it between. Without them, a subscriber
-// resumed across a resize was handed the whole span at one width, and every
-// line after the resize wrapped where the daemon had not wrapped it.
-
-// newResizablePTY is newBufferedPTY plus the fields Resize touches.
 func newResizablePTY(t *testing.T) *PTY {
 	t.Helper()
 	return &PTY{
@@ -24,7 +17,6 @@ func newResizablePTY(t *testing.T) *PTY {
 	}
 }
 
-// chunks collects everything queued on a subscriber queue without blocking.
 func chunks(ch *ptyQueue) []ptyChunk {
 	var out []ptyChunk
 	for {
@@ -65,8 +57,6 @@ func TestRolledCatchUpStartsAtTheRingsWidth(t *testing.T) {
 	if err := p.Resize(38, 9); err != nil {
 		t.Fatalf("resize: %v", err)
 	}
-	// Rolls the ring far past the resize, so the mark survives only as the
-	// width the ring's first byte was laid out at.
 	filler := bytes.Repeat([]byte("x"), 70*1024)
 	p.appendAndBroadcast(filler)
 

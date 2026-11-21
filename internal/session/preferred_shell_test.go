@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// linkShell makes a symlink to /bin/sh under a name of its own, so the pane's
-// process path says which setting picked it.
 func linkShell(t *testing.T, dir, name string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)

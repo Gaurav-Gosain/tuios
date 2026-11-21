@@ -9,15 +9,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// hasWindow reports whether id names one of these windows.
 func hasWindow(windows []WindowState, id string) bool {
 	return slices.ContainsFunc(windows, func(w WindowState) bool { return w.ID == id })
 }
 
-// clearLiveAgent drops what a saved window says about the agent running in it
-// and the program in its foreground, for a window whose process is gone. The
-// conversation id and its harness are kept: they name a conversation on disk,
-// not a process.
 func clearLiveAgent(w *WindowState) {
 	w.AgentState = AgentStateNone
 	w.AgentMessage = ""
@@ -25,9 +20,6 @@ func clearLiveAgent(w *WindowState) {
 	w.AgentStateAt = 0
 	w.AgentHarness = ""
 	w.AgentMeta = nil
-	// The delivery queue lives in daemon memory and dies with it, so a saved
-	// count names messages nobody holds any more. The subagents the count
-	// below says ran in a process that is gone.
 	w.AgentQueued = 0
 	w.AgentDraftHeld = false
 	w.AgentSettled = false
@@ -36,15 +28,9 @@ func clearLiveAgent(w *WindowState) {
 	w.AgentSubagentList = nil
 	w.ForegroundCmd = ""
 	w.SSHOffer = nil
-	// OSC 7501 records live in the pane's emulator, which a restore does
-	// not bring back.
 	w.ProgramStatus = nil
 }
 
-// restoreAllSessions recreates every resurrectable session that is not already
-// live. It is called once on daemon start (unless auto-restore is disabled).
-// Corrupt or incompatible state files are archived and skipped; a failure to
-// restore one session never blocks the others or the daemon.
 func (d *Daemon) restoreAllSessions() {
 	names, err := ListResurrectableSessions()
 	if err != nil {
@@ -54,17 +40,14 @@ func (d *Daemon) restoreAllSessions() {
 
 	for _, name := range names {
 		if d.manager.GetSession(name) != nil {
-			continue // already live
+			continue
 		}
 		state, err := LoadResurrectionState(name)
 		if err != nil {
-			// Corrupt/incompatible files are archived inside LoadResurrectionState.
 			log.Printf("Skipping resurrection of %q: %v", name, err)
 			continue
 		}
 		if len(state.Windows) == 0 {
-			// It can never restore, so leaving it would keep offering a session
-			// that 'tuios resurrect' lists and cannot bring back.
 			log.Printf("Discarding saved state for %q: it has no windows", name)
 			RemoveResurrectionState(name)
 			continue
@@ -74,20 +57,11 @@ func (d *Daemon) restoreAllSessions() {
 			LogError("Failed to restore session %q: %v", name, err)
 			continue
 		}
-		// Opened by the caller once the Inbox has loaded; see Daemon.Run.
 		d.pendingResumes = append(d.pendingResumes, offers...)
 		log.Printf("Restored session %q (%d windows)", name, len(state.Windows))
 	}
 }
 
-// restoreSession recreates a single session from a saved SessionState. It
-// respawns a fresh shell for every window (in the window's saved cwd, marked as
-// restored) and remaps each window to its new PTY, since the PTY IDs from the
-// previous daemon are dead. If the session is already live it is returned
-// unchanged.
-//
-// It also offers to resume the agent conversations the restored panes held,
-// as daemon.resume_agents says. See agent_resume.go.
 func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 	sess, offers, err := d.restoreSessionOffers(state)
 	if err != nil {
@@ -97,9 +71,6 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 	return sess, nil
 }
 
-// restoreSessionOffers is restoreSession without acting on the resume offers:
-// it returns them, one for each restored pane with a conversation that can be
-// resumed. A session that was already live has none.
 func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOffer, error) {
 	if state == nil || state.Name == "" {
 		return nil, nil, errfmt.Errorf("cannot restore session from empty state")
@@ -108,15 +79,11 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	if existing := d.manager.GetSession(state.Name); existing != nil {
 		return existing, nil, nil
 	}
-	// A fan's judge does not survive a restart: its pane comes back as a
-	// fresh shell, which must not keep the judge's reach.
 	if wt := state.Worktree; wt != nil && (wt.JudgeSession != "" || wt.JudgeWindow != "") {
 		w := *wt
 		w.JudgeSession, w.JudgeWindow = "", ""
 		state.Worktree = &w
 	}
-	// Nor does a setup that was running: its window comes back as a fresh
-	// shell, and no watcher is left to report how it ended.
 	if wt := state.Worktree; wt != nil && wt.Setup != nil && (wt.Setup.State == SetupRunning || wt.Setup.State == SetupPending) {
 		w, s := *wt, *wt.Setup
 		s.State, s.Note = SetupFailed, "The daemon restarted before the setup finished."
@@ -124,12 +91,6 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		state.Worktree = &w
 	}
 
-	// A session whose windows were all closed leaves a state file behind, and
-	// restoring it produced a session with nothing in it that no surface tells
-	// apart from a real one. There is nothing to bring back, so it is not a
-	// session; refusing here covers the automatic restore and the on-demand
-	// 'tuios resurrect' alike. Checked after the live lookup above, which is
-	// about the session that already exists rather than about what was saved.
 	if len(state.Windows) == 0 {
 		return nil, nil, errfmt.Errorf("saved state for session %q has no windows, there is nothing to restore", state.Name)
 	}
@@ -142,37 +103,17 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		height = 24
 	}
 
-	// No client is connected at restore time, so the shell/term config falls
-	// back to daemon defaults (getShell uses $SHELL).
-	// The saved id comes back, so a client that knew the session by its id
-	// (a phone bridge, a script) still finds it. State from before ids were
-	// saved has none and gets a new one.
 	d.sessionOrderMu.Lock()
-	// The global mark goes in here, at creation, because the UpdateState
-	// below keeps the new session's own value for it (state_merge.go), so a
-	// session restored without it came back as a plain local one (#2203).
 	sess, err := d.manager.CreateSession(state.Name, &SessionConfig{restoreID: state.SessionID, Space: state.Space, Rank: d.restoredRankLocked(state.Rank), Global: state.Global}, width, height)
 	d.sessionOrderMu.Unlock()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// The start directory comes back before any window is spawned. It is not
-	// checked: a folder missing when the daemon starts (a drive not mounted
-	// yet) would otherwise be saved as empty on the next save and lost. A
-	// shell asked to start in a missing folder starts in the daemon's.
 	sess.SetStartDir(state.StartDir)
-	// The graphics of the last client come back before any shell starts, so
-	// the shells are told the TERM_PROGRAM they were told before. See
-	// SessionState.KittyGraphics. State that names none (written before the
-	// field, or by a session no client drew) leaves the session to follow
-	// the daemon's most recent client.
 	if state.KittyGraphics || state.SixelGraphics {
 		sess.SetGraphicsCapabilities(state.KittyGraphics, state.SixelGraphics)
 	}
-	// When the person last used it comes back too. Without it every restored
-	// session looked unused, and a bare attach fell to the restore order.
-	// Nothing below touches it: restoring panes is not the person.
 	if state.LastUsed > 0 {
 		sess.setLastUsed(time.Unix(0, state.LastUsed))
 	}
@@ -182,10 +123,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		d.notifyPTYClosed(sessionID, ptyID)
 	}
 
-	// Work on a copy so the original (loaded) state is untouched.
 	restored := *state
-	// The graphics went to the session above. They belong in the saved file
-	// alone, so the live state, which every push carries, leaves them out.
 	restored.KittyGraphics, restored.SixelGraphics = false, false
 	restored.Windows = make([]WindowState, len(state.Windows))
 	copy(restored.Windows, state.Windows)
@@ -196,21 +134,9 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	restored.WorkspaceMasterLayout = maps.Clone(state.WorkspaceMasterLayout)
 	restored.WorkspaceHasCustom = maps.Clone(state.WorkspaceHasCustom)
 	restored.WorkspaceLayoutModes = maps.Clone(state.WorkspaceLayoutModes)
-	// A display order saved by a build that kept one comes back as the
-	// numbering it showed. See applyLegacyWorkspaceOrder.
 	restored.applyLegacyWorkspaceOrder()
-	// The shells below start before the state lands, and herdrTabFor gives
-	// each its HERDR_TAB_ID from the published keys, so the saved ones go
-	// out first.
 	sess.publishTabKeys(maps.Clone(restored.WorkspaceTabKeys))
 
-	// A window whose shell will not start is dropped rather than kept. Keeping it
-	// left its PTYID naming the dead daemon's PTY, which nothing will ever answer
-	// to: no output, no input, no way to revive it, and no UI anywhere that draws
-	// a pane as dead. Closing the window is what the daemon already does whenever
-	// a PTY goes away (see notifyPTYClosed), so the restore does the same.
-	// Each pane's saved history, by window id, which its new emulator shows
-	// above the banner. None when the setting is off.
 	var history map[string]*savedHistory
 	if d.manager.HistoryPolicy().Enabled {
 		history = loadHistory(state.Name)
@@ -221,30 +147,14 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	for i := range restored.Windows {
 		w := &restored.Windows[i]
 
-		// A popup does not survive the daemon. It is a pane for one command, and
-		// a restore respawns a shell rather than the command, so bringing one
-		// back gives the user a floating box holding a shell that will never
-		// exit and that nothing asked for. Dropping it is the same answer the
-		// loop gives a window whose shell will not start.
-		//
-		// A scratch pane is not a popup (see scratch_workspace.go): every
-		// pane of every scratch group comes back, a fresh shell in its own
-		// folder, on its group's workspace. So the group is hidden until its
-		// key shows it, with the layout it had. A scratch pane saved as a
-		// popup, before groups had a workspace, moves to one here.
 		if w.Popup && !w.Scratch {
 			debugLog("[DEBUG] dropping restored popup %s, a popup lives only as long as its command", shortID(w.ID))
 			continue
 		}
-		// The rail pane is a client's, started from its config on attach.
-		// Restored, it would be a shell under a mark that says it runs the
-		// command, and the client would keep it.
 		if w.Rail != "" {
 			debugLog("[DEBUG] dropping restored rail pane %s, the client starts it again", shortID(w.ID))
 			continue
 		}
-		// A TML surface lives in the daemon, so the daemon that held it took
-		// it along. Its window would come back empty.
 		if w.Kind == WindowKindTML {
 			debugLog("[DEBUG] dropping restored TML window %s, its surface ended with the daemon", shortID(w.ID))
 			continue
@@ -256,54 +166,22 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 			}
 		}
 
-		// WindowState dimensions are the outer window box (including the border);
-		// the shell gets the inner content size, matching AddDaemonWindow.
 		ptyWidth := max(w.Width-2, 1)
 		ptyHeight := max(w.Height-2, 1)
 
-		// A window whose process was on another machine comes back on this one,
-		// and it has to stop claiming otherwise.
-		//
-		// A restore respawns a shell here from saved state. It does not dial a
-		// host, and it should not: resurrection runs when the daemon starts,
-		// which is exactly when links are not up yet, and a restore that waited
-		// on a machine that may never answer would hold the whole session.
-		//
-		// So the record is corrected to match what was actually started. Left
-		// alone it would be worse than a gap: the frame marks a pane with the
-		// machine its shell runs on, and a mark that names the wrong machine is
-		// read and believed. The directory goes with it, because it was a path
-		// over there and means nothing here.
 		if w.Host != "" {
 			debugLog("[DEBUG] restored window %s ran on %s; it comes back on this machine", shortID(w.ID), w.Host)
 			w.Host = ""
 			w.Cwd = ""
-			// The conversation was on that machine too, and a resume here
-			// would name one this machine does not have.
 			w.AgentSessionID = ""
 			w.AgentSessionHarness = ""
 			w.AgentFlags = nil
 		}
 
-		// The window as it was saved, for the resume offer, which asks whether
-		// an agent was running in it then.
 		saved[w.ID] = *w
 
-		// The pane gets a new shell and no agent, so it must not keep claiming
-		// the one it had. Left alone, the saved state came back as sent: a pane
-		// at a fresh prompt showed working under the old harness, and nothing
-		// cleared it, because the detector clears only a claim whose process it
-		// saw. It also made the next save say an agent was live, so the resume
-		// offer came back on every restart. The conversation id stays.
 		clearLiveAgent(w)
 
-		// A pane saved with grants of its own comes back holding them, from
-		// the new shell's first instruction. Without this a pane narrowed on
-		// purpose would come back holding the default, which under open is
-		// admin.
-		// The start folder comes back from the saved state, which only the
-		// daemon writes. It is not taken from the restored shell's folder,
-		// which the pane chose.
 		sess.noteStartDir(w.ID, w.StartDir)
 		var pty *PTY
 		var err error
@@ -318,20 +196,13 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		}
 		w.PTYID = pty.ID
 		if h := history[w.ID]; h != nil {
-			// The first save records the restored history's own time. See
-			// historyMark.savedAt.
 			sess.history.setMark(w.ID, historyMark{ptyID: pty.ID, seq: -1, savedAt: h.SavedAt})
 		}
-		// The pid of the shell just respawned. Resurrection state carries no pid
-		// (see WindowState.ShellPID), so without this a restored pane waits for
-		// the detector's poll before the rail can check what it reports.
 		w.ShellPID = pty.ShellPID()
 		kept = append(kept, *w)
 	}
 	restored.Windows = kept
 
-	// Focus must not name a window that was just dropped, or the client restores
-	// a focus onto a pane that is not there.
 	if restored.FocusedWindowID != "" && !hasWindow(kept, restored.FocusedWindowID) {
 		restored.FocusedWindowID = ""
 	}
@@ -341,15 +212,13 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		}
 	}
 
-	// Read before UpdateState, which rewrites the daemon-owned fields of the
-	// windows it is handed in place.
 	var offers []resumeOffer
 	ids := make(map[string]WindowState, len(kept))
 	grants := make(map[string][]string)
 	startedBy := make(map[string]*PaneRef)
 	agentLinks := make(map[string]*AgentLink)
 	delegations := make(map[string]*Delegation)
-	var notes map[string]string // most panes have none
+	var notes map[string]string
 	for _, w := range kept {
 		if w.Note != "" {
 			if notes == nil {
@@ -389,48 +258,22 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		}
 	}
 
-	// UpdateState takes the daemon-owned fields from the new session, the
-	// tab keys among them, so they are put back from here afterwards.
 	tabKeys, nextTabKey := restored.WorkspaceTabKeys, restored.NextWorkspaceTabKey
 	masterLayouts := restored.WorkspaceMasterLayout
 	sess.UpdateState(&restored)
-	// After UpdateState, which takes this field from canonical state and would
-	// undo it if the restore wrote it into the pushed snapshot instead.
 	sess.MarkRestored()
-	// The master-stack shapes are daemon-owned in the same way. See
-	// RestoreMasterLayouts.
 	sess.RestoreMasterLayouts(masterLayouts)
-	// The herdr tab keys are daemon-owned in the same way.
 	sess.RestoreWorkspaceTabKeys(tabKeys, nextTabKey)
-	// The task cards are daemon-owned in the same way. Every holder is let
-	// go: clearLiveAgent took every agent above, and a holder's pane may not
-	// have come back.
 	d.restoreTasks(sess, state.Tasks, state.NextTaskID)
-	// Whether the rail is shown is daemon-owned in the same way. See
-	// RestoreSidebar.
 	sess.RestoreSidebar(state.Sidebar)
-	// The return notes are daemon-owned in the same way. See RestoreNotes.
 	sess.RestoreNotes(state.Note, notes)
-	// The scratch mark is daemon-owned in the same way: UpdateState keeps
-	// only the marks canonical state already has, and a new session has none.
 	if len(scratchPanes) > 0 {
 		sess.markRestoredScratch(scratchPanes)
 	}
-	// A window a renderer draws natively comes back as that kind of window,
-	// for the same reason.
 	if len(views) > 0 {
 		sess.markRestoredViews(views)
 	}
 
-	// The worktree record goes back on for the same reason: it is
-	// daemon-owned, and the new session has none. A fan's sessions lost their
-	// group and their managed mark on every restart, so review fell back to
-	// the default base and compare found no fan. A detected record is detected
-	// again from the folder the first shell started in, which the first save
-	// reads too. Left to that save, it came two seconds after the session was
-	// listed, and the rail drew every repository's sessions flat until then.
-	// The saved folder stands in where the shell's cannot be read; a saved
-	// folder that is gone started the shell elsewhere.
 	if wt := restoredWorktree(state.Worktree); wt != nil {
 		_ = sess.SetWorktree(wt)
 	} else if len(kept) > 0 {
@@ -443,10 +286,6 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		sess.refreshWorktree(cwd)
 	}
 
-	// The conversation ids go back on after UpdateState for the same reason:
-	// they are daemon-owned, UpdateState takes them from canonical state, and
-	// the session was created empty. Without this every restore dropped the
-	// ids the state file had kept for exactly this moment.
 	if len(ids) > 0 {
 		_ = sess.mutateState(func(st *SessionState) error {
 			for i := range st.Windows {
@@ -459,9 +298,6 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 			return nil
 		})
 	}
-	// The grants' copy in the state goes back on for the same reason. The
-	// panes already hold them: the table was given them before each shell
-	// started.
 	if len(grants) > 0 {
 		_ = sess.mutateState(func(st *SessionState) error {
 			for i := range st.Windows {
@@ -472,8 +308,6 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 			return nil
 		})
 	}
-	// Which pane started each pane goes back on for the same reason, and
-	// with it the agent link.
 	if len(startedBy) > 0 || len(agentLinks) > 0 || len(delegations) > 0 {
 		_ = sess.mutateState(func(st *SessionState) error {
 			for i := range st.Windows {
@@ -493,19 +327,11 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	return sess, offers, nil
 }
 
-// restoredWorktree is a saved managed worktree record as a restored session
-// takes it, or nil for a record detection owns. A fan prompt still waiting
-// when the daemon went down is said not to have been sent: nothing resumes the
-// wait across a restart, so a record left pending would say so forever. A
-// check that was running needs nothing here; fanVerifyReport reads it as ended
-// by the restart.
 func restoredWorktree(saved *WorktreeInfo) *WorktreeInfo {
 	if saved == nil || !saved.Managed {
 		return nil
 	}
 	wt := *saved
-	// A record from before launched_from_id names its lead by name alone,
-	// which another session may hold now. It reaches nothing, so drop it.
 	if wt.LaunchedFromID == "" {
 		wt.LaunchedFrom = ""
 	}
@@ -516,15 +342,11 @@ func restoredWorktree(saved *WorktreeInfo) *WorktreeInfo {
 	return &wt
 }
 
-// scratchPane is what a restore re-marks on one scratch pane.
 type scratchPane struct {
 	name      string
 	workspace int
 }
 
-// legacyScratchWorkspace is the workspace for a scratch group saved before
-// groups had one: the one another pane of the group already moved to, or the
-// lowest free one.
 func legacyScratchWorkspace(state *SessionState, key string) int {
 	for i := range state.Windows {
 		if w := &state.Windows[i]; w.Scratch && w.ScratchKey() == key && IsScratchWorkspace(w.Workspace) {

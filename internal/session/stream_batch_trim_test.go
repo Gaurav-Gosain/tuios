@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// streamTrimChunk is one 16 KiB chunk of a flood: 2048 numbered lines of eight
-// bytes each, starting at line first. Every call makes a fresh slice, since the
-// queue holds the chunk as it is.
 func streamTrimChunk(first int) []byte {
 	const lines = 2048
 	b := make([]byte, 0, 16<<10)
@@ -20,9 +17,6 @@ func streamTrimChunk(first int) []byte {
 	return b
 }
 
-// settledHeap is the heap still reachable after two collections. The second
-// one empties the victim cache of the pool the stream's frame buffers go back
-// to, which keeps them for one collection.
 func settledHeap() int64 {
 	runtime.GC()
 	runtime.GC()
@@ -31,13 +25,6 @@ func settledHeap() int64 {
 	return int64(ms.HeapAlloc)
 }
 
-// settledBaseline is settledHeap once the heap has stopped moving. Tests that ran
-// before this one in the package leave garbage behind, and goroutines and
-// timers that still hold memory: a daemon one of them started stays reachable
-// from a timer for seconds after that test ends. A reading taken at once can
-// hold megabytes that come off during the measurement. It takes readings a
-// short while apart until they have stayed within a few KiB of each other for
-// longer than the measurement that follows, for a bounded number of readings.
 func settledBaseline(t *testing.T) int64 {
 	t.Helper()
 	const margin = 16 << 10
@@ -62,9 +49,6 @@ func settledBaseline(t *testing.T) int64 {
 	return settledHeap()
 }
 
-// readStreamBytes reads frames from the rig until n bytes of output have come,
-// and returns them with the time the last frame was read. It fails the test if
-// they have not all come within limit.
 func readStreamBytes(t *testing.T, r *gateRig, n int, limit time.Duration, keep bool) (got []byte, last time.Time) {
 	t.Helper()
 	deadline := time.NewTimer(limit)
@@ -98,14 +82,9 @@ func readStreamBytes(t *testing.T, r *gateRig, n int, limit time.Duration, keep 
 func TestAFloodedStreamGivesBackItsBatchAfterASecond(t *testing.T) {
 	const chunks = 16
 	const chunkBytes = 16 << 10
-	// The batch a flood grows is at least 200 KiB; most of it must still be
-	// held right after the flood.
 	const kept = 150 << 10
 	const budget = 64 << 10
-	// The early reading must come well inside the second the batch is kept.
 	const earlyBy = 600 * time.Millisecond
-	// It is taken late inside that guard, so a batch let go well before the
-	// second is up fails it, not only one let go at once.
 	const earlyAt = 475 * time.Millisecond
 
 	r := newGateRig(t)

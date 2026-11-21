@@ -12,26 +12,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// startTestDaemon starts a real daemon listening on an isolated unix socket in a
-// temp XDG_RUNTIME_DIR, so it does not touch the developer's live daemon, socket,
-// or pid file. Resurrection state is redirected to a temp directory too, because
-// the state dir is resolved at package init and cannot be redirected by setting
-// an environment variable; without this, every test that creates a session writes
-// a real state file into the developer's state directory. It returns the daemon
-// and the socket path.
 func startTestDaemon(t *testing.T) (*Daemon, string) {
 	t.Helper()
 	return startTestDaemonSized(t, "")
 }
 
-// startTestDaemonSized is startTestDaemon with [daemon] window_size set to
-// policy, for a test about one policy rather than the default.
 func startTestDaemonSized(t *testing.T, policy string) (*Daemon, string) {
 	t.Helper()
 	return startTestDaemonWith(t, &DaemonConfig{WindowSize: policy})
 }
 
-// startTestDaemonWith is startTestDaemon with the fields cfg sets.
 func startTestDaemonWith(t *testing.T, cfg *DaemonConfig) (*Daemon, string) {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
@@ -52,8 +42,6 @@ func startTestDaemonWith(t *testing.T, cfg *DaemonConfig) (*Daemon, string) {
 	return d, sp
 }
 
-// setApprovalPeer stands place in for the process table that tells which pane
-// a connection comes from. Nil goes back to the process table.
 func (d *Daemon) setApprovalPeer(place peerPlacer) {
 	if place == nil {
 		d.approvalPeer.Store(nil)
@@ -62,7 +50,6 @@ func (d *Daemon) setApprovalPeer(place peerPlacer) {
 	d.approvalPeer.Store(&place)
 }
 
-// verbConn is a raw JSON line client for the daemon socket.
 type verbConn struct {
 	conn net.Conn
 	r    *bufio.Reader
@@ -78,7 +65,6 @@ func dialVerb(t *testing.T, socketPath string) *verbConn {
 	return &verbConn{conn: conn, r: bufio.NewReader(conn)}
 }
 
-// send writes a raw line (a newline is appended).
 func (c *verbConn) send(t *testing.T, line string) {
 	t.Helper()
 	_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second * testDeadlineScale))
@@ -87,7 +73,6 @@ func (c *verbConn) send(t *testing.T, line string) {
 	}
 }
 
-// readResp reads and decodes one response line.
 func (c *verbConn) readResp(t *testing.T) map[string]any {
 	t.Helper()
 	_ = c.conn.SetReadDeadline(time.Now().Add(5 * time.Second * testDeadlineScale))
@@ -102,14 +87,12 @@ func (c *verbConn) readResp(t *testing.T) map[string]any {
 	return resp
 }
 
-// call sends a request and returns the decoded response.
 func (c *verbConn) call(t *testing.T, line string) map[string]any {
 	t.Helper()
 	c.send(t, line)
 	return c.readResp(t)
 }
 
-// result extracts the result object, failing if the response carried an error.
 func result(t *testing.T, resp map[string]any) map[string]any {
 	t.Helper()
 	if e, ok := resp["error"]; ok && e != nil {
@@ -122,7 +105,6 @@ func result(t *testing.T, resp map[string]any) map[string]any {
 	return res
 }
 
-// errCode extracts the error code, failing if the response carried a result.
 func errCode(t *testing.T, resp map[string]any) string {
 	t.Helper()
 	e, ok := resp["error"].(map[string]any)
@@ -133,7 +115,6 @@ func errCode(t *testing.T, resp map[string]any) string {
 	return code
 }
 
-// makeSessionWithWindow creates a session holding one live daemon-owned window.
 func makeSessionWithWindow(t *testing.T, d *Daemon, name string) *Session {
 	t.Helper()
 	sess, err := d.manager.CreateSession(name, &SessionConfig{}, 80, 24)
@@ -193,7 +174,6 @@ func TestVerbIDEcho(t *testing.T) {
 	if got := c.call(t, `{"id":"req-42","verb":"list-verbs"}`)["id"]; got != "req-42" {
 		t.Errorf("string id = %v", got)
 	}
-	// An absent id yields no id field on the response.
 	if _, present := c.call(t, `{"verb":"list-verbs"}`)["id"]; present {
 		t.Error("id present on response when request omitted it")
 	}

@@ -29,11 +29,9 @@ func TestAStalePushKeepsAFocusTheDaemonNeverMoved(t *testing.T) {
 		t.Fatalf("setup: focus = %q, want the second window %q", got, second.ID)
 	}
 
-	// The client moves the focus, built on the version it saw.
 	push := clientSnapshot(sess)
 	push.FocusedWindowID = first.ID
 
-	// An agent reports before the push arrives. It moves no focus.
 	if err := sess.SetDaemonWindowAgentState(second.ID, AgentStateDone, ""); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
@@ -79,7 +77,6 @@ func TestAStalePushLosesToADaemonFocusMove(t *testing.T) {
 	}
 }
 
-// twoPanes is a session with two daemon windows, the second focused.
 func twoPanes(t *testing.T, name string) (*Session, string, string) {
 	t.Helper()
 	sess, err := NewSession(name, &SessionConfig{Shell: "/bin/sh"}, 80, 24)

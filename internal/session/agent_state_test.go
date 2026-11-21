@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// bareSessionWithWindow builds a session with one window but no daemon socket, so
-// a session can be exercised directly without any network.
 func bareSessionWithWindow(t *testing.T) (*Session, string) {
 	t.Helper()
 	t.Cleanup(useResurrectionDir(t.TempDir()))
@@ -55,9 +53,6 @@ func TestAClientSyncKeepsTheDaemonsWindowFields(t *testing.T) {
 			want:      WindowState{ID: "w1", AgentState: AgentStateNeedsInput, AgentKind: "approval", AgentSessionID: "s1"},
 		},
 		{
-			// A push echoing a state the daemon has since moved on from. The
-			// agent fields used to be carried only when the push left them all
-			// empty, so this put working back over needs_input.
 			name:      "a stale agent state in the push",
 			canonical: WindowState{ID: "w1", AgentState: AgentStateNeedsInput, AgentMessage: "approve?", AgentHarness: "claude-code", AgentStateAt: 9},
 			incoming:  WindowState{ID: "w1", AgentState: AgentStateWorking, AgentMessage: "building", AgentHarness: "claude-code", AgentStateAt: 5},
@@ -105,11 +100,10 @@ func TestStallHeuristicDemotesQuietWorking(t *testing.T) {
 	if err := sess.SetDaemonWindowAgentState(id, AgentStateWorking, ""); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
-	quiet := func(string) int64 { return 0 } // no output ever
+	quiet := func(string) int64 { return 0 }
 
 	const stall = 30 * time.Second
 
-	// Well within the window: no demotion.
 	now := time.Now()
 	if n := sess.applyStallHeuristic(now.Add(10*time.Second), stall, quiet, nil); n != 0 {
 		t.Fatalf("demoted %d windows inside the stall window, want 0", n)
@@ -118,7 +112,6 @@ func TestStallHeuristicDemotesQuietWorking(t *testing.T) {
 		t.Fatalf("state inside window = %q, want working", got)
 	}
 
-	// Past the window: demoted to idle.
 	if n := sess.applyStallHeuristic(now.Add(stall+time.Second), stall, quiet, nil); n != 1 {
 		t.Fatalf("demoted %d windows past the stall window, want 1", n)
 	}
@@ -135,9 +128,6 @@ func TestStallHeuristicRespectsRecentOutput(t *testing.T) {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
 	const stall = 30 * time.Second
-	// Evaluate well past the original working report, but with output that arrived
-	// only a second before this evaluation: a busy pane keeps emitting, so its
-	// last output stays fresh relative to now even though it has worked a while.
 	evalAt := time.Now().Add(5 * stall)
 	recent := func(string) int64 { return evalAt.Add(-time.Second).UnixNano() }
 	if n := sess.applyStallHeuristic(evalAt, stall, recent, nil); n != 0 {

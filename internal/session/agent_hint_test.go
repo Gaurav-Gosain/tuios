@@ -20,19 +20,16 @@ func TestAgentHintNamesAPaneBehindAnOpaqueWrapper(t *testing.T) {
 		t.Fatalf("wrapper with a hint: %+v %v", d, ok)
 	}
 
-	// The program name a manifest detects works as well as the id.
 	wrapper.hint = hint("codex")
 	if d, ok := m.identifyDetail(wrapper); !ok || d.harness != "codex" {
 		t.Fatalf("hint by program name: %+v %v", d, ok)
 	}
 
-	// A hint naming no manifest is not trusted into a claim.
 	wrapper.hint = hint("not-an-agent")
 	if d, ok := m.identifyDetail(wrapper); ok {
 		t.Fatalf("an unknown hint matched: %+v", d)
 	}
 
-	// A process that is itself an agent is recognised as what it is.
 	real := foregroundInfo{comm: "codex", argv: []string{"codex"}, pid: 43, hint: hint("claude-code")}
 	if d, ok := m.identifyDetail(real); !ok || d.harness != "codex" || d.tier == identityHint {
 		t.Fatalf("a real agent with a stray hint: %+v %v", d, ok)

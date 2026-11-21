@@ -160,10 +160,6 @@ func TestLayoutTreeOpNamingNoneOfTheSessionsWindowsIsRefused(t *testing.T) {
 		})
 	})
 
-	// The tree refusal and the window list refusal log through one field, which
-	// holds the origin of the last slip logged, so a slip is logged once
-	// whichever refusal sees it first, and again once the client names the
-	// session's windows.
 	t.Run("one log line a slip", func(t *testing.T) {
 		t.Run("c: a foreign op then a foreign push from the same client log one line in all", func(t *testing.T) {
 			sess, _, _ := tiledSession(t, d, "tree-thenpush")
@@ -226,7 +222,6 @@ func TestLayoutTreeOpNamingNoneOfTheSessionsWindowsIsRefused(t *testing.T) {
 			c := attachTestClient(t, sess.Name())
 			sendForeign(t, sess, c, 1)
 			v := sess.GetState().Version
-			// The tree the session was given, numbered as another client would.
 			after := sendTree(t, sess, c, 1, bspTree(bspSplit(1, 0.3, bspLeaf(5), bspLeaf(6))), map[int]string{5: a, 6: b}, v)
 			if after.Version != v {
 				t.Errorf("the session's version moved to %d on an op restating its tree, want %d", after.Version, v)
@@ -237,11 +232,6 @@ func TestLayoutTreeOpNamingNoneOfTheSessionsWindowsIsRefused(t *testing.T) {
 			}
 		})
 
-		// A stale op and a refused one both leave the tree and the version as
-		// they were. A refused foreign op is logged while the field is empty and
-		// a stale one is not, and an op naming held windows on a base after
-		// the peer's would be applied: that is how each stale op below shows it
-		// was stale.
 		t.Run("f: a stale op neither logs nor ends the slip", func(t *testing.T) {
 			sess, a, b := tiledSession(t, d, "tree-stale")
 			x := attachTestClient(t, sess.Name())
@@ -333,9 +323,6 @@ func TestLayoutTreeOpNamingNoneOfTheSessionsWindowsIsRefused(t *testing.T) {
 	})
 }
 
-// tiledSession is a session of the daemon's holding two windows, a and b, on
-// workspace 1, with a tree for them there. The tree is applied directly and
-// before any client attaches.
 func tiledSession(t *testing.T, d *Daemon, stem string) (*Session, string, string) {
 	t.Helper()
 	sess := makeSessionWithWindow(t, d, foreignSessionName(stem))
@@ -354,18 +341,14 @@ func tiledSession(t *testing.T, d *Daemon, stem string) (*Session, string, strin
 	return sess, a, b
 }
 
-// farLeaves names two windows no session of the test holds.
 func farLeaves() map[int]string {
 	return map[int]string{1: "far-window-one", 2: "far-window-two"}
 }
 
-// farTree is another session's tree for farLeaves.
 func farTree() *SerializedBSPTree {
 	return bspTree(bspSplit(2, 0.6, bspLeaf(1), bspLeaf(2)))
 }
 
-// farPush is the session's state with a window list naming none of its
-// windows.
 func farPush(sess *Session) *SessionState {
 	push := sess.GetState()
 	push.Windows = []WindowState{{ID: "far-window-one", PTYID: "far-pty-one", Title: "far", Workspace: 1, Width: 40, Height: 12}}
@@ -373,8 +356,6 @@ func farPush(sess *Session) *SessionState {
 	return push
 }
 
-// stalePush sends push from c built before a rename of the session, so the
-// stale path merges it, and checks that the session kept its windows.
 func stalePush(t *testing.T, sess *Session, c *TUIClient, push *SessionState) {
 	t.Helper()
 	held := windowPTYs(sess.GetState().Windows)
@@ -388,9 +369,6 @@ func stalePush(t *testing.T, sess *Session, c *TUIClient, push *SessionState) {
 	}
 }
 
-// sendTree sends a tree op from c and returns the session's state once the op
-// is counted. The count is taken under the lock the op is decided under, so
-// any line the op logs from there is in the log by then.
 func sendTree(t *testing.T, sess *Session, c *TUIClient, ws int, tree *SerializedBSPTree, leaves map[int]string, base int) *SessionState {
 	t.Helper()
 	if err := c.SendLayoutTree(ws, tree, leaves, base); err != nil {
@@ -399,25 +377,19 @@ func sendTree(t *testing.T, sess *Session, c *TUIClient, ws int, tree *Serialize
 	return stateOnceCounted(t, sess, c, c.pushSeq.Load())
 }
 
-// sendForeign sends farTree for ws from c, built on the session's version as
-// it stands, so it is never stale.
 func sendForeign(t *testing.T, sess *Session, c *TUIClient, ws int) *SessionState {
 	t.Helper()
 	return sendTree(t, sess, c, ws, farTree(), farLeaves(), sess.GetState().Version)
 }
 
-// treeKeyAt is the state's tree for ws with the leaves named by window.
 func treeKeyAt(st *SessionState, ws int) string {
 	return TreeKey(st.WorkspaceTrees[ws], SessionTreeNames(st))
 }
 
-// treeRefusalLine is the daemon's log line for a tree op it refused as
-// another session's tree.
 func treeRefusalLine(session string) string {
 	return "Refused a layout tree for " + session + ": it names none of the session's windows"
 }
 
-// logLines is how many lines of the log buffer hold text.
 func logLines(text string) int {
 	n := 0
 	for _, e := range GetLogEntries(0) {
@@ -428,19 +400,14 @@ func logLines(text string) int {
 	return n
 }
 
-// treeLines is how many lines of the log buffer are the tree refusal line for
-// session.
 func treeLines(session string) int {
 	return logLines(treeRefusalLine(session))
 }
 
-// slipLines is every refusal line for session: the tree's and the window
-// list's.
 func slipLines(session string) int {
 	return treeLines(session) + refusalCount(session)
 }
 
-// noTreeLine fails the test when the log holds a tree refusal line for sess.
 func noTreeLine(t *testing.T, sess *Session) {
 	t.Helper()
 	if n := treeLines(sess.Name()); n != 0 {
@@ -448,8 +415,6 @@ func noTreeLine(t *testing.T, sess *Session) {
 	}
 }
 
-// clientIDOf is the ID the daemon gave c's connection, which its log lines
-// about the connection name.
 func clientIDOf(t *testing.T, c *TUIClient) string {
 	t.Helper()
 	id := c.selfID.Load()
@@ -459,14 +424,11 @@ func clientIDOf(t *testing.T, c *TUIClient) string {
 	return *id
 }
 
-// layoutRefusalsFrom is how many lines of the log buffer are the daemon's
-// "Refused a layout tree from" line for c's connection.
 func layoutRefusalsFrom(t *testing.T, c *TUIClient) int {
 	t.Helper()
 	return logLines("Refused a layout tree from " + clientIDOf(t, c) + ":")
 }
 
-// waitSync is syncTaker.next with its wait stretched under the race detector.
 func waitSync(t *testing.T, s *syncTaker, trigger string) syncSeen {
 	t.Helper()
 	deadline := time.After(5 * time.Second * testDeadlineScale)
@@ -482,8 +444,6 @@ func waitSync(t *testing.T, s *syncTaker, trigger string) syncSeen {
 	}
 }
 
-// waitLogged waits until done reports true, failing with what when it never
-// does.
 func waitLogged(t *testing.T, what string, done func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second * testDeadlineScale)

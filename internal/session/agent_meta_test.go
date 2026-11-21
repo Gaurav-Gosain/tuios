@@ -35,7 +35,6 @@ func TestApplyAgentMetaKeepsFirstArrivalOrder(t *testing.T) {
 	if got, want := metaKeys(next), []string{"model=sonnet", "context=42%", "cost=$1"}; !slices.Equal(got, want) {
 		t.Errorf("order after update = %v, want %v", got, want)
 	}
-	// The input is shared with state snapshots and must not be edited in place.
 	if got := metaKeys(cur); !slices.Equal(got, []string{"model=opus", "context=10%"}) {
 		t.Errorf("applyAgentMeta wrote into its input: %v", got)
 	}
@@ -200,12 +199,10 @@ func TestWindowSummariesAgreeCoversEveryField(t *testing.T) {
 		case reflect.Uint64:
 			f.SetUint(1)
 		case reflect.Slice:
-			// One zero element of the field's own type is a difference.
 			f.Set(reflect.MakeSlice(f.Type(), 1, 1))
 		case reflect.Bool:
 			f.SetBool(true)
 		case reflect.Pointer:
-			// A value where there was none is a difference.
 			f.Set(reflect.New(f.Type().Elem()))
 		default:
 			t.Fatalf("field %s has a kind this test does not know: %s", rt.Field(i).Name, f.Kind())

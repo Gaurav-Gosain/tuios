@@ -7,18 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// The dock's two verbs.
-//
-// A thing an agent cannot enumerate or verify is a thing an agent cannot rice.
-// list-dock-components says what the bar is made of, what every cell currently
-// reads, and what each component's command last did; refresh-dock re-runs one.
-// Together they are the whole loop: write a script and a five-line table, apply
-// it, refresh it, read back whether it worked and why not.
-//
-// Both route to the attached client, because a dock component is UI. The bar is
-// composed in the client, so the components run there, and the daemon has
-// nothing to report about a dock nobody is drawing.
-
 func (d *Daemon) verbListDockComponents(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`

@@ -7,34 +7,25 @@ import (
 	"time"
 )
 
-// verbLineSeeds are request lines the daemon accepts on its socket, plus the
-// malformed and hostile shapes an untrusted client can send. Anything that can
-// open the socket can send these, so the decoder has to reject them cheaply.
-// FuzzVerbDispatch (fuzz_verb_test.go) runs them through the dispatcher.
 var verbLineSeeds = []string{
 	`{"id":1,"verb":"list-verbs","params":{}}`,
 	`{"id":1,"verb":"list-sessions"}`,
 	`{"verb":"new-session","params":{"name":"work"}}`,
 	`{"id":"str-id","verb":"list-windows","params":{"session":"work"}}`,
 	`{"id":null,"verb":"kill-session","params":{"session":"gone"}}`,
-	// A subagent's news, by its id and by the call that launched it, with an
-	// outcome and a tool count the daemon bounds.
 	`{"id":1,"verb":"report-agent-activity","params":{"session":"work","window":"build","harness":"claude-code","agent_session_id":"5f1c","activity":{"event":"subagent_update","agent_id":"ab34da07d2d63ee3c","tool":"Bash","target":"go test ./...","ok":true,"tools":3}}}`,
 	`{"id":1,"verb":"report-agent-activity","params":{"session":"work","activity":{"event":"subagent_update","call_id":"toolu_018oJpQiuuCwCqSvc1N1wGYd","outcome":"failed","text":"boom"}}}`,
 	`{"id":1,"verb":"report-agent-activity","params":{"activity":{"event":"subagent_update","agent_id":"a1","spawn":true,"agent_type":"Explore","target":"map the api","call_id":"x","outcome":"nope","tools":-1}}}`,
 	`{"id":1,"verb":"set-agent-state","params":{"state":"working","activity":{"event":"tool","tool":"Agent","target":"Research tmux","spawn":true,"agent_type":"general-purpose","call_id":"toolu_01"}}}`,
-	// Missing and empty fields.
 	`{}`,
 	`{"verb":""}`,
 	`{"id":1}`,
 	`{"params":{}}`,
-	// Wrong types for each field.
 	`{"verb":123}`,
 	`{"verb":["a"]}`,
 	`{"verb":{"a":1}}`,
 	`{"params":"not an object"}`,
 	`{"id":{"nested":{"deep":1}}}`,
-	// Malformed JSON.
 	``,
 	`{`,
 	`}`,
@@ -45,22 +36,17 @@ var verbLineSeeds = []string{
 	`"bare string"`,
 	`{"verb":"list-verbs",}`,
 	`{"verb":"list-verbs"` + "\x00",
-	// Duplicate and unknown keys.
 	`{"verb":"a","verb":"b"}`,
 	`{"verb":"list-verbs","unknown":1,"another":2}`,
-	// Unknown verbs, which route into the did-you-mean hint path.
 	`{"verb":"list-verb"}`,
 	`{"verb":"lst-sessions"}`,
 	`{"verb":"nonsense"}`,
 	`{"verb":"` + strings.Repeat("a", 65536) + `"}`,
 	`{"verb":"` + strings.Repeat("list-verbs", 4096) + `"}`,
-	// Deep nesting in params, which the handler unmarshals lazily.
 	`{"verb":"list-verbs","params":` + strings.Repeat("[", 1024) + strings.Repeat("]", 1024) + `}`,
 	`{"verb":"list-verbs","params":{"a":` + strings.Repeat(`{"a":`, 512) + `1` + strings.Repeat(`}`, 512) + `}}`,
-	// Numbers that do not fit.
 	`{"id":99999999999999999999999999,"verb":"list-verbs"}`,
 	`{"verb":"list-verbs","params":{"n":1e999}}`,
-	// Non-UTF-8 and control bytes.
 	"{\"verb\":\"\xff\xfe\"}",
 	"{\"verb\":\"a\\ud800\"}",
 	"{\"verb\":\"\\u0000\"}",
@@ -118,40 +104,29 @@ func FuzzReadMessageFraming(f *testing.F) {
 	}
 
 	f.Add(frame(2, byte(MsgPTYOutput), wireCodecGob))
-	f.Add(frame(6, byte(MsgInput), 1, 'a', 'b', 'c', 'd')) // codec byte 1: the reserved JSON value
-	// Truncated at every boundary.
+	f.Add(frame(6, byte(MsgInput), 1, 'a', 'b', 'c', 'd'))
 	f.Add([]byte{})
 	f.Add([]byte{0})
 	f.Add([]byte{0, 0, 0})
 	f.Add(frame(2))
 	f.Add(frame(100, byte(MsgInput)))
-	// Below the minimum frame.
 	f.Add(frame(0))
 	f.Add(frame(1, byte(MsgInput)))
-	// Exactly at, just under and just over the 16 MiB cap, with no body: the
-	// reader must reject the oversized ones without allocating for them.
 	f.Add(frame(16*1024*1024, byte(MsgInput), wireCodecGob))
 	f.Add(frame(16*1024*1024-1, byte(MsgInput), wireCodecGob))
 	f.Add(frame(16*1024*1024+1, byte(MsgInput), wireCodecGob))
 	f.Add(frame(0xFFFFFFFF, byte(MsgInput), wireCodecGob))
-	// A well-formed PTY frame and a truncated one.
 	f.Add(frame(2+36+4, byte(MsgPTYOutput), wireCodecGob,
 		'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
 		'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
 		'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
 		'u', 'v', 'w', 'x', 'y', 'z', 'd', 'a', 't', 'a'))
 	f.Add(frame(2+36, byte(MsgPTYOutput), wireCodecGob))
-	// A PTY frame whose id is all padding, and one whose codec byte is not
-	// the one a writer sends.
 	f.Add(append(frame(2+36+2, byte(MsgInput), wireCodecGob), append(make([]byte, 36), 'h', 'i')...))
 	f.Add(frame(3, byte(MsgResize), 1, 'x'))
-	// Tagged frames: an id and a payload, an id alone, and the id 0 that no
-	// sender writes.
 	f.Add(frame(2+8+2, byte(MsgList), wireCodecGobTagged, 0, 0, 0, 0, 0, 0, 0, 42, 'h', 'i'))
 	f.Add(frame(2+8, byte(MsgList), wireCodecGobTagged, 0, 0, 0, 0, 0, 0, 0, 42))
 	f.Add(frame(2+8, byte(MsgList), wireCodecGobTagged, 0, 0, 0, 0, 0, 0, 0, 0))
-	// The reserved codec byte 1 with a payload long enough to hold an id. It
-	// is plain gob, so the reader must not take the first 8 bytes as one.
 	f.Add(frame(2+10, byte(MsgList), 1, 0, 0, 0, 0, 0, 0, 0, 42, 'h', 'i'))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -160,8 +135,6 @@ func FuzzReadMessageFraming(f *testing.F) {
 		}
 
 		r := bytes.NewReader(data)
-		// A single reader can hold several frames; a desync on one frame must
-		// not turn into an unbounded read loop on the rest.
 		for range 64 {
 			off := len(data) - r.Len()
 			msg, err := ReadMessage(r)
@@ -171,12 +144,6 @@ func FuzzReadMessageFraming(f *testing.F) {
 			if msg == nil {
 				t.Fatalf("ReadMessage returned a nil message and no error")
 			}
-			// The writer must put back exactly the frame the reader took. The
-			// one byte it may change is a codec byte other than the tagged
-			// one: the reader takes any such value as plain gob, and the
-			// writer sends plain gob as 0. The tagged value is not ignored,
-			// so it must come back with its id. A frame that re-encodes to
-			// other bytes is one a relaying daemon forwards changed.
 			consumed := append([]byte(nil), data[off:len(data)-r.Len()]...)
 			if consumed[5] != wireCodecGobTagged {
 				consumed[5] = wireCodecGob
@@ -188,20 +155,14 @@ func FuzzReadMessageFraming(f *testing.F) {
 			if !bytes.Equal(back.Bytes(), consumed) {
 				t.Fatalf("frame re-encodes differently:\nread  %x\nwrote %x", consumed, back.Bytes())
 			}
-			// The reader accepted the frame, so it was within the cap and the
-			// body was fully present.
 			if len(msg.Payload) > 16*1024*1024 {
 				t.Fatalf("accepted a payload of %d bytes, over the 16 MiB cap",
 					len(msg.Payload))
 			}
-			// The payload can never exceed what the input actually held.
 			if len(msg.Payload) > len(data) {
 				t.Fatalf("payload of %d bytes from %d bytes of input",
 					len(msg.Payload), len(data))
 			}
-			// PTY frames are parsed further, with the ID taken from a fixed
-			// 36-byte prefix. The PTY writer never tags a frame, so only an
-			// untagged one can come back from it unchanged.
 			if (msg.Type == MsgPTYOutput || msg.Type == MsgInput) && msg.ReqID == 0 {
 				ptyID, payload, perr := ParseBinaryPTYMessage(msg.Payload)
 				if perr == nil {
@@ -214,7 +175,6 @@ func FuzzReadMessageFraming(f *testing.F) {
 					if strings.HasSuffix(ptyID, "\x00") {
 						t.Fatalf("ParseBinaryPTYMessage left padding on the ID: %q", ptyID)
 					}
-					// And the PTY writer puts the same frame back.
 					var pty bytes.Buffer
 					if err := writePTYFrame(&pty, msg.Type, ptyID, payload); err != nil {
 						t.Fatal(err)

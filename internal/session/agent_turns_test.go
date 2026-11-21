@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// backdateTurn moves the start of a window's working phase into the past,
-// standing in for the seconds a turn takes.
 func backdateTurn(t *testing.T, sess *Session, windowID string, by time.Duration) {
 	t.Helper()
 	sess.stateMu.Lock()
@@ -176,7 +174,6 @@ func TestListAgentsReportsFinishedTurns(t *testing.T) {
 	}
 }
 
-// reportAs is report with the harness the report names.
 func reportAs(t *testing.T, sess *Session, windowID string, state AgentState, harness string) {
 	t.Helper()
 	if _, _, err := sess.ApplyAgentReport(windowID, AgentReport{State: state, Harness: harness}); err != nil {

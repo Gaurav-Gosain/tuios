@@ -11,14 +11,6 @@ import (
 	"time"
 )
 
-// Every test here works on a throwaway repository under the test's own
-// temporary directory, with tuios's worktree directory pointed at another, and
-// makes its fan with new-worktree plus the group fan would record, so no agent
-// runs.
-
-// fakeFan makes n worktree sessions of one fan from main, the way fan records
-// them, and returns their names in fan order. launchedFrom, when set, is the
-// session each one says it was launched from.
 func fakeFan(t *testing.T, d *Daemon, c *verbConn, repo, stem string, n int, launchedFrom string) []string {
 	t.Helper()
 	var names []string
@@ -33,8 +25,6 @@ func fakeFan(t *testing.T, d *Daemon, c *verbConn, repo, stem string, n int, lau
 		info := sess.Worktree()
 		info.Group = stem
 		info.LaunchedFrom = launchedFrom
-		// A lead that is a session now is named by its ID, as fan records
-		// it. One that is not leaves a record from before the ID.
 		if lead := d.manager.GetSession(launchedFrom); lead != nil {
 			info.LaunchedFromID = lead.ID
 		}
@@ -47,8 +37,6 @@ func fakeFan(t *testing.T, d *Daemon, c *verbConn, repo, stem string, n int, lau
 	return names
 }
 
-// wantReached fails when a call was refused by the scope, grant or link check
-// rather than answered by its handler.
 func wantReached(t *testing.T, what string, resp map[string]any) {
 	t.Helper()
 	if e, ok := resp["error"].(map[string]any); ok {
@@ -86,7 +74,6 @@ func rowSessions(rows []map[string]any) []string {
 	return out
 }
 
-// waitVerify waits for a session's check to leave running and returns it.
 func waitVerify(t *testing.T, d *Daemon, name string) *FanVerify {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -112,7 +99,6 @@ func TestFanVerbsReachOnlyTheSiblingsThePaneReaches(t *testing.T) {
 	caller := makeSessionWithWindow(t, d, "lead")
 	makeSessionWithWindow(t, d, "other")
 	mine := fakeFan(t, d, c, repo, "fan/retry", 2, "lead")
-	// A third attempt of the same group, launched from another session.
 	stray := newWorktreeCall(t, c, repo, "fan/retry-3", map[string]any{"base": "main"})["session"].(string)
 	sess := d.manager.GetSession(stray)
 	info := sess.Worktree()
@@ -253,7 +239,6 @@ func worktreePath(t *testing.T, d *Daemon, name string) string {
 	return d.manager.GetSession(name).Worktree().Path
 }
 
-// verifyWindows lists the windows named verify in a session.
 func verifyWindows(d *Daemon, name string) []WindowState {
 	var out []WindowState
 	for _, w := range d.manager.GetSession(name).GetState().Windows {
@@ -309,8 +294,6 @@ func TestVerifyFanRecordsPassedAndFailed(t *testing.T) {
 	if len(kept) != 1 {
 		t.Fatalf("the failed check's window is not kept open: %d verify windows", len(kept))
 	}
-	// Kept open means its process still runs: an attached client closes a
-	// window whose process exited.
 	if _, exited := d.manager.GetSession(names[1]).GetPTY(kept[0].PTYID).ExitStatus(); exited {
 		t.Error("the failed check's process exited, so a client would close its window")
 	}
@@ -318,7 +301,6 @@ func TestVerifyFanRecordsPassedAndFailed(t *testing.T) {
 		t.Errorf("the verify window holds %s (explicit %v), want none", g.String(), explicit)
 	}
 
-	// compare-fan reports the checks.
 	for _, r := range rowsOf(t, result(t, callP(c, t, "compare-fan", map[string]any{"session": names[0], "changes": false}))) {
 		v, _ := r["verify"].(map[string]any)
 		want := VerifyPassed

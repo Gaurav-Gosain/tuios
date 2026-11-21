@@ -4,10 +4,6 @@ import (
 	"testing"
 )
 
-// These tests cover what set-agent-state gained for hook reporters: the kind
-// of a block, the harness's session id and the nested-session guard it drives,
-// the if_state condition, and the exact transcript join.
-
 func setAgentStateVerb(t *testing.T, c *verbConn, params string) map[string]any {
 	t.Helper()
 	return result(t, c.call(t, `{"id":1,"verb":"set-agent-state","params":`+params+`}`))
@@ -78,7 +74,6 @@ func TestSetAgentStateRefusesANestedSession(t *testing.T) {
 		t.Fatalf("the pane's own Stop: %v", res)
 	}
 
-	// At rest a new conversation takes the pane over: /clear, a restart.
 	res = setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"idle","harness":"claude-code","agent_session_id":"next"}`)
 	if res["applied"] != true {
 		t.Fatalf("a new session at rest: %v", res)
@@ -87,7 +82,6 @@ func TestSetAgentStateRefusesANestedSession(t *testing.T) {
 		t.Fatalf("session id = %q, want next", id)
 	}
 
-	// A report with no session id is not guarded, as before the field existed.
 	setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"working","harness":"claude-code","agent_session_id":"next"}`)
 	res = setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"done"}`)
 	if res["applied"] != true {
@@ -105,21 +99,17 @@ func TestSetAgentStateNewSessionInTheSameHarnessTakesOver(t *testing.T) {
 	sess := makeSessionWithWindow(t, d, "work")
 	c := dialVerb(t, sp)
 
-	// The turn starts and is interrupted: no Stop follows.
 	setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"working","harness":"claude-code","agent_session_id":"A","harness_pid":4100}`)
 
-	// A nested run in another process is still refused.
 	res := setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"done","harness":"claude-code","agent_session_id":"N","harness_pid":4200}`)
 	if res["applied"] != false || res["reason"] != "foreign_session" {
 		t.Fatalf("a nested run's Stop: %v", res)
 	}
-	// So is one that did not say which process it came from.
 	res = setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"done","harness":"claude-code","agent_session_id":"N"}`)
 	if res["applied"] != false || res["reason"] != "foreign_session" {
 		t.Fatalf("a report with no harness pid: %v", res)
 	}
 
-	// /clear in the same claude process: SessionStart for B.
 	res = setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"idle","harness":"claude-code","agent_session_id":"B","harness_pid":4100}`)
 	if res["applied"] != true || res["state"] != "idle" {
 		t.Fatalf("a new session from the same harness process: %v", res)
@@ -127,7 +117,6 @@ func TestSetAgentStateNewSessionInTheSameHarnessTakesOver(t *testing.T) {
 	if id := sess.GetState().Windows[0].AgentSessionID; id != "B" {
 		t.Fatalf("session id = %q, want B", id)
 	}
-	// And B's next turn reports as normal.
 	res = setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"working","harness":"claude-code","agent_session_id":"B","harness_pid":4100}`)
 	if res["applied"] != true {
 		t.Fatalf("B's next turn: %v", res)

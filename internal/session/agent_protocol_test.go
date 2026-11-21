@@ -7,9 +7,6 @@ import (
 	"time"
 )
 
-// fakeProtoExe points the daemon's protocol pane program at a script that
-// writes its argv, one word a line, to a file and then waits on stdin, the way
-// the real one waits for prompts. It returns the file.
 func fakeProtoExe(t *testing.T, d *Daemon) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -23,7 +20,6 @@ func fakeProtoExe(t *testing.T, d *Daemon) string {
 	return out
 }
 
-// fakeProgramOnPath puts an executable named name on PATH that waits on stdin.
 func fakeProgramOnPath(t *testing.T, name string) {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "bin")
@@ -36,10 +32,6 @@ func fakeProgramOnPath(t *testing.T, name string) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// waitOnlyPane waits for the session name to exist with n windows, and
-// returns the session and its newest window. start-agent holds its reply
-// until the agent is ready, so a test finds the pane from the daemon's side
-// and makes it ready.
 func waitOnlyPane(t *testing.T, d *Daemon, name string, n int) (*Session, string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

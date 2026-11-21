@@ -12,10 +12,6 @@ func TestRaisingToVerboseWarns(t *testing.T) {
 	restoreLevel(t, DebugOff)
 	ClearLogBuffer()
 
-	// The buffer is package state and other tests in this package log into it
-	// while this one runs, so the warning is not reliably the last entry. Read
-	// the length first and look only at what this call appended: that still
-	// fails if raising the level logs no warning, which is the property here.
 	before := len(GetLogEntries(0))
 
 	SetDebugLevel(DebugVerbose)
@@ -39,7 +35,6 @@ func TestRaisingToVerboseWarns(t *testing.T) {
 		t.Fatalf("no content warning on raising the level, got %q", got)
 	}
 
-	// Lowering must not warn, and neither must a level at or below messages.
 	ClearLogBuffer()
 	SetDebugLevel(DebugMessages)
 	for _, e := range GetLogEntries(0) {

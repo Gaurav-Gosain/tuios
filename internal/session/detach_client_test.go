@@ -7,12 +7,6 @@ import (
 	"time"
 )
 
-// Deterministic race regressions for detach_client.go. Each lands one event
-// at a fixed point inside an attach through attachSnapshotTaken, the hook
-// that runs between the attach's snapshot and its reply, with the session's
-// attach lock held.
-
-// dialTUI connects and handshakes a TUI client without attaching it.
 func dialTUI(t *testing.T, sp string) *TUIClient {
 	t.Helper()
 	conn, err := net.DialTimeout("unix", sp, 3*time.Second)
@@ -29,7 +23,6 @@ func dialTUI(t *testing.T, sp string) *TUIClient {
 	return c
 }
 
-// setAttachHook installs fn as attachSnapshotTaken for the rest of the test.
 func setAttachHook(t *testing.T, fn func()) {
 	t.Helper()
 	attachSnapshotTaken.Store(&fn)

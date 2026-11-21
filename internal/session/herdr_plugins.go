@@ -16,19 +16,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// herdr's plugin.* socket methods and popup.close, answered by the plugin
-// host (plugin_host.go). Each takes herdr's params and answers herdr's
-// result shape (src/api/schema/plugins.rs at herdrTargetVersion), so a
-// plugin or a tool that drives herdr's plugins drives tuios's the same way.
-
-// herdrPluginMethods returns the methods this file answers. It is built on
-// first use and not at package init, for the reason verbRegistry gives.
 func herdrPluginMethods() map[string]herdrPluginMethod {
 	herdrPluginMethodsOnce.Do(func() { herdrPluginMethodsMap = buildHerdrPluginMethods() })
 	return herdrPluginMethodsMap
 }
 
-// herdrPluginMethod answers one plugin method.
 type herdrPluginMethod = func(d *Daemon, cs *connState, params json.RawMessage) (any, *herdrError)
 
 var (
@@ -36,7 +28,6 @@ var (
 	herdrPluginMethodsMap  map[string]herdrPluginMethod
 )
 
-// buildHerdrPluginMethods makes the table herdrPluginMethods returns.
 func buildHerdrPluginMethods() map[string]herdrPluginMethod {
 	return map[string]herdrPluginMethod{
 		"plugin.list":   (*Daemon).herdrPluginList,
@@ -61,7 +52,6 @@ func buildHerdrPluginMethods() map[string]herdrPluginMethod {
 	}
 }
 
-// herdrPluginCall answers a plugin method. handled is false for any other.
 func (d *Daemon) herdrPluginCall(cs *connState, method string, params json.RawMessage) (any, *herdrError, bool) {
 	fn, ok := herdrPluginMethods()[method]
 	if !ok {
@@ -79,9 +69,6 @@ func (d *Daemon) herdrPluginCall(cs *connState, method string, params json.RawMe
 
 func fromPluginErr(e *herdrplugin.Error) *herdrError { return herdrErr(e.Code, e.Msg) }
 
-// herdrPluginTrust refuses a change to which plugins run unless the person
-// asks: never from a pane, from a process the daemon started (a plugin's
-// own command included), or over a link.
 func (d *Daemon) herdrPluginTrust(cs *connState, method string) *herdrError {
 	if cs != nil && (cs.viaLink || !d.mayActAsHuman(cs)) {
 		return herdrErr("forbidden", method+" is for the person: the caller runs inside a pane or a plugin of this tuios. Nothing was changed. Run tuios plugins from a terminal outside tuios")
@@ -89,9 +76,6 @@ func (d *Daemon) herdrPluginTrust(cs *connState, method string) *herdrError {
 	return nil
 }
 
-// herdrPluginMayRun refuses a pane that may not start processes. A plugin
-// command runs with the person's rights, so starting one needs what
-// starting a pane needs: admin.
 func (d *Daemon) herdrPluginMayRun(cs *connState) *herdrError {
 	if cs != nil && cs.viaLink {
 		return herdrErr("forbidden", "plugin commands are not run for another machine")
@@ -121,9 +105,7 @@ type herdrPluginIn struct {
 	Env        map[string]string   `json:"env"`
 	PaneID     string              `json:"pane_id"`
 	Source     *herdrplugin.Source `json:"source"`
-	// ClosePanes, on plugin.disable, closes the plugin's open panes too.
-	// tuios plugins uninstall sets it, because it removes their folder.
-	ClosePanes bool `json:"close_panes"`
+	ClosePanes bool                `json:"close_panes"`
 }
 
 func decodePluginIn(params json.RawMessage, required ...string) (*herdrPluginIn, *herdrError) {
@@ -134,7 +116,6 @@ func decodePluginIn(params json.RawMessage, required ...string) (*herdrPluginIn,
 	return in, nil
 }
 
-// pluginIDParam checks an optional plugin id filter.
 func pluginIDParam(id string) (string, *herdrError) {
 	if id == "" {
 		return "", nil
@@ -146,9 +127,6 @@ func pluginIDParam(id string) (string, *herdrError) {
 	return n, nil
 }
 
-// pluginRecord is a listing entry as herdr's InstalledPluginInfo. An entry
-// whose manifest did not load is listed with herdr's manifest unavailable
-// warning and runs nothing.
 func pluginRecord(e herdrplugin.Entry) herdrplugin.Plugin {
 	if e.Plugin != nil {
 		p := *e.Plugin
@@ -181,7 +159,6 @@ func (d *Daemon) herdrPluginList(_ *connState, params json.RawMessage) (any, *he
 	return map[string]any{"type": "plugin_list", "plugins": plugins}, nil
 }
 
-// herdrPluginEntry finds a runnable plugin: loaded, enabled, not shadowed.
 func (d *Daemon) herdrPluginEntry(id string) (*herdrplugin.Entry, *herdrError) {
 	n, herr := pluginIDParam(id)
 	if herr != nil {
@@ -199,8 +176,6 @@ func (d *Daemon) herdrPluginEntry(id string) (*herdrplugin.Entry, *herdrError) {
 	return e, nil
 }
 
-// herdrPluginSetEnabled is plugin.enable and plugin.disable: the person's
-// change to [plugins] enabled, written to config.toml and applied at once.
 func (d *Daemon) herdrPluginSetEnabled(cs *connState, params json.RawMessage, on bool) (any, *herdrError) {
 	method := "plugin.disable"
 	if on {
@@ -239,8 +214,6 @@ func (d *Daemon) herdrPluginSetEnabled(cs *connState, params json.RawMessage, on
 	return res, nil
 }
 
-// closePluginPanes closes the open panes plugin id opened, and returns how
-// many it closed. A pane that will not close is logged and forgotten.
 func (d *Daemon) closePluginPanes(cs *connState, id string) int {
 	h := d.plugins
 	h.mu.Lock()
@@ -274,11 +247,6 @@ func cmpHerr(a, b *herdrError) *herdrError {
 	return b
 }
 
-// writePlugins edits config.toml with edit, and applies change to the
-// [plugins] table the daemon runs. The daemon's own table is changed, not the
-// table read back from the file: an entry that a pane or a plugin wrote into
-// the file waits for the person, and the person's change to one plugin must
-// not apply it.
 func (d *Daemon) writePlugins(edit func(path string) error, change func(*config.PluginsConfig)) *herdrError {
 	path := d.configPath
 	if path == "" {
@@ -301,7 +269,6 @@ func (d *Daemon) writePlugins(edit func(path string) error, change func(*config.
 	return nil
 }
 
-// setPluginEnabled puts id on the enabled list of cfg, or takes it off.
 func setPluginEnabled(cfg *config.PluginsConfig, id string, on bool) {
 	cfg.Enabled = slices.DeleteFunc(cfg.Enabled, func(s string) bool { return s == id })
 	if on {
@@ -309,8 +276,6 @@ func setPluginEnabled(cfg *config.PluginsConfig, id string, on bool) {
 	}
 }
 
-// herdrPluginLink is plugin.link: list a plugin folder, as [plugins] dirs,
-// and enable it unless enabled is false, as herdr does.
 func (d *Daemon) herdrPluginLink(cs *connState, params json.RawMessage) (any, *herdrError) {
 	if herr := d.herdrPluginTrust(cs, "plugin.link"); herr != nil {
 		return nil, herr
@@ -351,9 +316,6 @@ func (d *Daemon) herdrPluginLink(cs *connState, params json.RawMessage) (any, *h
 	return map[string]any{"type": "plugin_linked", "plugin": pluginRecord(*e)}, nil
 }
 
-// herdrPluginUnlink is plugin.unlink: take a linked folder out of [plugins]
-// dirs and the plugin out of enabled. A plugin found in the tuios plugins
-// folder or in herdr's registry stays listed, disabled.
 func (d *Daemon) herdrPluginUnlink(cs *connState, params json.RawMessage) (any, *herdrError) {
 	if herr := d.herdrPluginTrust(cs, "plugin.unlink"); herr != nil {
 		return nil, herr
@@ -397,15 +359,11 @@ func (d *Daemon) herdrPluginUnlink(cs *connState, params json.RawMessage) (any, 
 	}); herr != nil {
 		return nil, herr
 	}
-	// The plugin's folder is out of the list, so its panes must not outlive
-	// it: a pane left open is saved with the session and comes back with it,
-	// running the plugin's command after the person took the plugin away.
 	closed := d.closePluginPanes(cs, id)
 	d.plugins.forgetPanes(id)
 	return map[string]any{"type": "plugin_unlinked", "plugin_id": id, "removed": removed, "panes_closed": closed}, nil
 }
 
-// herdrActionInfo is herdr's PluginActionInfo.
 type herdrActionInfo struct {
 	PluginID    string   `json:"plugin_id"`
 	ActionID    string   `json:"action_id"`
@@ -444,8 +402,6 @@ func (d *Daemon) herdrPluginActionList(_ *connState, params json.RawMessage) (an
 	return map[string]any{"type": "plugin_action_list", "actions": actions}, nil
 }
 
-// findPluginAction finds an action as herdr does: by plugin and action id,
-// or by an action id or qualified id that names one action only.
 func (d *Daemon) findPluginAction(pluginID, actionID string) (*herdrplugin.Entry, herdrplugin.Action, *herdrError) {
 	if pluginID != "" {
 		e, herr := d.herdrPluginEntryAny(pluginID)
@@ -463,7 +419,6 @@ func (d *Daemon) findPluginAction(pluginID, actionID string) (*herdrplugin.Entry
 		return e, a, nil
 	}
 	actionID = strings.TrimSpace(actionID)
-	// An enabled plugin wins over a disabled one with the same action id.
 	found := herdrplugin.FindAction(d.plugins.entries(true), actionID)
 	switch len(found) {
 	case 0:
@@ -478,7 +433,6 @@ func (d *Daemon) findPluginAction(pluginID, actionID string) (*herdrplugin.Entry
 	return nil, herdrplugin.Action{}, herdrErr("ambiguous_plugin_action", "plugin action id matches more than one action; include plugin_id")
 }
 
-// herdrPluginEntryAny finds a loaded plugin, enabled or not.
 func (d *Daemon) herdrPluginEntryAny(id string) (*herdrplugin.Entry, *herdrError) {
 	n, herr := pluginIDParam(id)
 	if herr != nil {
@@ -516,8 +470,6 @@ func (d *Daemon) herdrPluginActionInvoke(cs *connState, params json.RawMessage) 
 	ctx := d.pluginContextCurrent("plugin.action.invoke")
 	if in.Context != nil && in.Context.FocusedPaneID != "" {
 		if c, ok := d.pluginContextForPane(in.Context.FocusedPaneID, "plugin.action.invoke"); ok {
-			// The caller may name the pane by its tuios window id. The
-			// context carries herdr's id for it.
 			ctx = c
 			in.Context.FocusedPaneID = ""
 		}
@@ -535,8 +487,6 @@ func (d *Daemon) herdrPluginLogList(cs *connState, params json.RawMessage) (any,
 	if herr != nil {
 		return nil, herr
 	}
-	// A log holds what plugin commands printed, about any session. A pane
-	// that may not run a plugin command may not read what one printed.
 	if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
 		return nil, herdrErr("forbidden", "reading plugin logs needs the admin grant, and this pane holds "+pa.grants.String())
 	}
@@ -554,8 +504,6 @@ func (d *Daemon) herdrPluginLogList(cs *connState, params json.RawMessage) (any,
 	return map[string]any{"type": "plugin_log_list", "logs": logs}, nil
 }
 
-// pluginPaneProtected are the variables a caller's env may not set for a
-// plugin pane, as in herdr.
 var pluginPaneProtected = []string{
 	"HERDR_SOCKET_PATH", "HERDR_ENV", "HERDR_PLUGIN_ID", "HERDR_PLUGIN_ROOT",
 	"HERDR_PLUGIN_CONFIG_DIR", "HERDR_PLUGIN_STATE_DIR", "HERDR_PLUGIN_ENTRYPOINT_ID",
@@ -564,19 +512,8 @@ var pluginPaneProtected = []string{
 	"TUIOS_PLUGIN_CONTEXT_JSON", "TUIOS_PLUGIN_ENTRY", "TUIOS_PLUGIN_SESSION", "TUIOS_PLUGIN_PANE", "TUIOS_PLUGIN_CWD",
 }
 
-// overlaySize is the popup size of an overlay pane: herdr draws an overlay
-// over the active pane's area, and tuios has a popup for it.
 const overlaySize = "90%"
 
-// herdrPluginPaneOpen is plugin.pane.open. The pane is an ordinary tuios
-// pane that runs the entry's command, placed as the entry asks:
-//
-//	popup    a popup, sized by width and height
-//	overlay  a popup sized 90% by 90%
-//	split    a new pane on the target pane's workspace, which a tiling
-//	         client places beside it
-//	zoomed   split, then zoomed
-//	tab      a new pane on the first free workspace
 func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any, *herdrError) {
 	in, herr := decodePluginIn(params, "plugin_id", "entrypoint")
 	if herr != nil {
@@ -625,8 +562,6 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 		}
 	}
 
-	// Where the pane goes: the target pane's session and workspace, or the
-	// focused session's.
 	var sess *Session
 	workspace := 0
 	switch {
@@ -693,9 +628,6 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 		}
 	}
 	env = append(env, "PWD="+cwd)
-	// A plugin's pane is held by its pane grants, which are no more than
-	// the plugin's. It gets no plugin token: a tuios in it that talks to
-	// another daemon would present a token that daemon cannot prove.
 	for _, kv := range d.plugins.baseEnv(e.Plugin, dirs) {
 		if k, _, _ := strings.Cut(kv, "="); k != "TUIOS_PLUGIN_ID" && k != "TUIOS_PLUGIN_TOKEN" {
 			env = append(env, kv)
@@ -708,8 +640,6 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 
 	argv := slices.Clone(pane.Command)
 	if strings.ContainsAny(argv[0], `/\`) && !filepath.IsAbs(argv[0]) {
-		// herdr's program_for_cwd: a relative path with a separator is the
-		// plugin root's, whatever the pane's cwd.
 		argv[0] = filepath.Join(e.Plugin.PluginRoot, argv[0])
 	}
 	grants, verr := d.launchGrants(cs, nil)
@@ -717,13 +647,10 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 		return nil, herdrFromVerb(verr, "plugin_pane_open_failed")
 	}
 	if e.Plugin.Format == herdrplugin.FormatTuios {
-		// A native plugin's pane holds no more than the plugin: what the
-		// opener could give it, cut to the plugin's grants.
 		g := d.manager.grants.defaults()
 		if grants != nil {
 			g = *grants
 		}
-		// ui is the plugin's own, and a pane is not the plugin.
 		g = g.expand() & grantsFromNames(e.Plugin.Held).expand() &^ GrantUI
 		grants = &g
 	}
@@ -748,8 +675,6 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 	if _, err := os.Stat(cwd); err != nil {
 		return nil, herdrErr("plugin_pane_open_failed", "cannot start the pane in "+echoName(cwd)+": "+err.Error())
 	}
-	// The pane's program holds herdr's lease on the install it runs from
-	// until it exits, as a plugin command does (pluginHost.run).
 	lease, lerr := herdrplugin.HoldLease(dirs.HerdrConfig, e.Plugin.PluginRoot)
 	if lerr != nil {
 		LogBasic("Warning: a pane of plugin %s runs without herdr's install lease: %v", e.ID, lerr)
@@ -787,7 +712,6 @@ func (d *Daemon) herdrPluginPaneOpen(cs *connState, params json.RawMessage) (any
 		}
 	}
 	if placement == herdrplugin.PlacementPopup {
-		// herdr answers a popup with ok and no pane.
 		return herdrAck, nil
 	}
 	res, herr := d.herdrPaneResult(cs, "pane_info", paneID)
@@ -807,9 +731,6 @@ func cmpSize(a, b *herdrplugin.Size) string {
 	return ""
 }
 
-// freeWorkspace is the first workspace of a session that holds no window,
-// herdr's new tab. A session with every workspace in use gets its current
-// one.
 func freeWorkspace(st *SessionState) int {
 	used := map[int]bool{}
 	for _, w := range st.Windows {
@@ -823,7 +744,6 @@ func freeWorkspace(st *SessionState) int {
 	return max(st.CurrentWorkspace, 1)
 }
 
-// pluginPaneOf finds a pane plugin.pane.open made.
 func (d *Daemon) pluginPaneOf(id string) (*Session, WindowState, pluginPane, *herdrError) {
 	sess, win, ierr := d.herdrFindPane(id)
 	if ierr != nil {
@@ -872,8 +792,6 @@ func (d *Daemon) herdrPluginPaneClose(cs *connState, params json.RawMessage) (an
 	return map[string]any{"type": "plugin_pane_closed", "pane_id": in.PaneID}, nil
 }
 
-// herdrPopupClose is popup.close: the popup the caller runs in, or, for a
-// caller in no popup, the popup of the focused session.
 func (d *Daemon) herdrPopupClose(cs *connState, _ json.RawMessage) (any, *herdrError) {
 	var sess *Session
 	var win WindowState
@@ -903,7 +821,6 @@ func (d *Daemon) herdrPopupClose(cs *connState, _ json.RawMessage) (any, *herdrE
 	return herdrAck, nil
 }
 
-// forgetPanes drops the pane records of a plugin. The panes keep running.
 func (h *pluginHost) forgetPanes(id string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

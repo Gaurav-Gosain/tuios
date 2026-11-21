@@ -8,7 +8,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// tailShownWrite writes s to the pane's terminal under its lock.
 func tailShownWrite(p *PTY, s string) {
 	p.terminalMu.Lock()
 	defer p.terminalMu.Unlock()
@@ -24,11 +23,8 @@ func tailShownWrite(p *PTY, s string) {
 func TestTailShownAllocatesOnce(t *testing.T) {
 	p := &PTY{terminal: vt.NewEmulator(120, 40)}
 	tailShownWrite(p, "\x1b[36;1Hdone reading")
-	// Row 37 stays blank.
 	tailShownWrite(p, "\x1b[38;1H╭──❯ ask ──╮")
 	tailShownWrite(p, "\x1b[39;1H│ say \x1b[2mtry this\x1b[22m now")
-	// A row that ends in a faint run, the usual placeholder: shown cuts the
-	// blanks the faint cells leave at its end.
 	tailShownWrite(p, "\x1b[40;1Hx ❯ \x1b[2mTry this\x1b[22m")
 
 	wantTail := []string{"done reading", "╭──❯ ask ──╮", "│ say try this now", "x ❯ Try this"}
@@ -43,7 +39,6 @@ func TestTailShownAllocatesOnce(t *testing.T) {
 		t.Errorf("tailShown(10) on a 120x40 screen allocates %v times, want at most 10", got)
 	}
 
-	// A first call's rows stay as they were after the screen changes.
 	tailShownWrite(p, "\x1b[36;1HDONE READING")
 	tailShownWrite(p, "\x1b[39;1H│ say \x1b[2mTRY THIS\x1b[22m now")
 	tail2, shown2 := p.tailShown(10)

@@ -2,14 +2,6 @@
 
 package session
 
-// A row that wrapped a column early, because a double-width character did not
-// fit in its last column, ends in padding and not in a typed space. The pure
-// emulator records that as a flag beside the wrap flag, and a reflow drops the
-// padding when it joins the row to the next. The flag has to travel with the
-// rows: in a snapshot to a client, and in the history a daemon saves across a
-// restart. Without it the far side keeps the padding as a space, and once
-// both sides widen, the client shows a line the daemon does not have.
-
 import (
 	"bytes"
 	"strings"
@@ -20,11 +12,8 @@ import (
 	"tuios.dev/vt/snapshot"
 )
 
-// padLine wraps at 9 columns before the wide rune, leaving column 9 as
-// padding.
 const padLine = "abcdefgh世xyz"
 
-// textOf is the history and the screen as the lines the guest printed.
 func textOf(t vt.Terminal) string {
 	var b strings.Builder
 	row := func(cells func(x int) string, n int, wrapped bool) {
@@ -64,11 +53,8 @@ func TestSnapshotCarriesPadding(t *testing.T) {
 			_, _ = src.Write([]byte(stream))
 			dst := vt.NewWithScrollback(9, 4, 1000)
 			ApplyTerminalState(dst, throughWire(t, TerminalStateOf(src, 9, 4, 200, 0), packed))
-			// Taller as well as wider: the screen takes the history rows
-			// back, which is where a history row is laid out again.
 			src.Resize(20, 12)
 			dst.Resize(20, 12)
-			// The positive half: the daemon's own emulator joins the line.
 			if got := textOf(src); !strings.Contains(got, padLine) {
 				t.Fatalf("packed=%v history=%v: the daemon's line is not whole after widening:\n%s", packed, inHistory, got)
 			}
@@ -94,7 +80,6 @@ func TestSavedHistoryCarriesPadding(t *testing.T) {
 	}
 	restored := newRestoredEmulator(9, 4, 1000, "", &restoreSpec{history: back})
 	restored.Resize(20, 12)
-	// The positive half: the daemon that saved it joins the line too.
 	src.Resize(20, 12)
 	if got := textOf(src); !strings.Contains(got, padLine) {
 		t.Fatalf("the saving emulator's line is not whole after widening:\n%s", got)

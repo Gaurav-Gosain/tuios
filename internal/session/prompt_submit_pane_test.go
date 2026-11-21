@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// rawReaderScript is the program in the pane. Raw mode is set before bracketed
-// paste is announced, because setting it discards input already queued, and
-// the test writes as soon as the announcement is seen.
 const rawReaderScript = `
 import os, sys, time, tty
 tty.setraw(0)
@@ -29,8 +26,6 @@ sys.stdout.flush()
 time.sleep(60)
 `
 
-// rawReaderPane opens a window running rawReaderScript and waits until the
-// daemon's emulator has seen it turn bracketed paste on.
 func rawReaderPane(t *testing.T, d *Daemon, sess *Session) (string, *PTY) {
 	t.Helper()
 	python, err := exec.LookPath("python3")
@@ -55,7 +50,6 @@ func rawReaderPane(t *testing.T, d *Daemon, sess *Session) (string, *PTY) {
 	return w.ID, pty
 }
 
-// gotBytes pulls the bytes the reader reported out of its output.
 func gotBytes(t *testing.T, out string) (string, bool) {
 	t.Helper()
 	flat := strings.ReplaceAll(out, "\n", "")

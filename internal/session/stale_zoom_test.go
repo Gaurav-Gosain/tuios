@@ -15,7 +15,6 @@ func TestAStalePushKeepsTheDaemonsZoom(t *testing.T) {
 	sess, first, second := twoPanes(t, "zoom")
 	d := &Daemon{}
 
-	// The client builds a push before it sees the zoom.
 	push := clientSnapshot(sess)
 
 	w, ok := findWindowState(sess.GetState(), first)
@@ -35,8 +34,6 @@ func TestAStalePushKeepsTheDaemonsZoom(t *testing.T) {
 		t.Errorf("the other pane %s is zoomed after the push: %+v", second, w)
 	}
 
-	// A push built after the zoom is the client's own view: a client that
-	// ends the zoom with its key is taken at its word.
 	after := clientSnapshot(sess)
 	for i := range after.Windows {
 		after.Windows[i].Zoomed = false

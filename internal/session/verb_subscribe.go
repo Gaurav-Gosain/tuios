@@ -16,30 +16,12 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// This file implements the subscribe and wait-for verbs on top of the event hub
-// (daemon_events.go). subscribe turns a JSON connection into a long-lived event
-// stream; wait-for is sugar over a short-lived internal subscription that blocks
-// until a condition matches or a timeout elapses, replacing a caller's
-// capture-pane polling loop.
-
-// defaultWaitTimeout bounds a wait-for verb that omits an explicit timeout.
 const defaultWaitTimeout = 30 * time.Second
 
-// maxWaitTimeoutMS is the longest timeout a wait takes: 24 hours. A longer
-// one is refused, which also keeps it clear of overflowing a time.Duration.
 const maxWaitTimeoutMS = 24 * 60 * 60 * 1000
 
-// waitClientPoll is how often a wait looks whether its caller has closed the
-// connection.
 const waitClientPoll = 500 * time.Millisecond
 
-// waitDeadline is the channel a wait ends on: the timeout, or before it the
-// caller going away. A caller on a connection has gone when the other end
-// closed it (connPeerClosed). A call from a pane on another machine has gone
-// when the report channel it came on ends, which is the only way its answer
-// could go back. A wait whose caller has gone ends at once, so a client that
-// closes does not leave its goroutine and event subscription behind until
-// the timeout. stop ends the watch when the wait returns.
 func (d *Daemon) waitDeadline(cs *connState, timeout time.Duration) (deadline <-chan time.Time, stop func()) {
 	var conn net.Conn
 	var ended <-chan struct{}
@@ -84,57 +66,25 @@ func (d *Daemon) waitDeadline(cs *connState, timeout time.Duration) (deadline <-
 	return ends, func() { close(done) }
 }
 
-// defaultIdleWindow is the quiet period a window-idle wait uses when the request
-// omits an idle duration.
 const defaultIdleWindow = 500 * time.Millisecond
 
-// waitOutputMinGap is the shortest time between two captures one
-// wait-for-output takes. A flooding pane raises an output event per PTY read,
-// thousands a second, and each capture reads the whole scrollback under the
-// pane's emulator lock, so re-checking on every event made the pane several
-// times slower. Events that arrive inside the gap arm one deferred re-check at
-// its end instead, so output that matches is still seen within the gap.
 const waitOutputMinGap = 50 * time.Millisecond
 
-// waitOutputCaptured, when set, is told how long each capture a
-// wait-for-output takes held the pane's emulator lock. Test-only.
 var waitOutputCaptured atomic.Pointer[func(time.Duration)]
 
-// waitOutputRecheck is a cheap in-process backstop interval for wait-for-output.
-// The output events drive an immediate re-check; this ticker only guards the rare
-// case where the final matching output event was dropped by the slow-subscriber
-// policy, so the wait still resolves without a caller-side poll loop.
 const waitOutputRecheck = 200 * time.Millisecond
 
-// newOutputCarry is how much of the output it has already checked a wait-for
-// window-output with new keeps, so a pattern that spans two reads still
-// matches.
 const newOutputCarry = 64 << 10
 
-// verbSubscribe opens a long-lived event stream on this connection. It registers
-// a hub subscription with the requested filter, returns a subscribed ack (with
-// the current sequence baseline and the boot id), and hands the subscription to
-// the dispatch loop which starts the streamer after the ack is written. Only a
-// connection that issued this verb ever receives events.
-//
-// An omitted session means every session: the filter matches on session only
-// when one is named. That differs from most verbs, where an omitted session
-// means the most recently active one.
-//
-// With after_seq the stream first replays the retained events after that seq,
-// preceded by a gap marker when the replay cannot be exact (see replayLocked).
 func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session string   `json:"session"`
-		Window  string   `json:"window"`
-		Types   []string `json:"types"`
-		Queue   int      `json:"queue"`
-		// AfterSeq is a pointer so after_seq 0 ("everything since this daemon
-		// started") is distinguishable from not resuming at all.
-		AfterSeq *uint64 `json:"after_seq"`
-		BootID   string  `json:"boot_id"`
-		// Hosts adds the events this daemon relays from its linked hosts.
-		Hosts bool `json:"hosts"`
+		Session  string   `json:"session"`
+		Window   string   `json:"window"`
+		Types    []string `json:"types"`
+		Queue    int      `json:"queue"`
+		AfterSeq *uint64  `json:"after_seq"`
+		BootID   string   `json:"boot_id"`
+		Hosts    bool     `json:"hosts"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -154,17 +104,11 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 	cs.mu.Unlock()
 
 	filter := eventFilter{session: p.Session, window: p.Window, hosts: p.Hosts}
-	// A live session is followed through a rename. A name no session has yet
-	// stays a plain name, so a subscriber can wait for it to be made.
 	if p.Session != "" {
 		if live := d.manager.GetSession(p.Session); live != nil {
 			filter.sess = live
 		}
 	}
-	// A type no event has made the stream silent with no error: a typo, or a
-	// hook name such as after-new-window, subscribed to nothing. A link from
-	// another machine is let through, since a newer daemon there may name a
-	// type this one does not have yet, and its other types still apply.
 	if !cs.viaLink {
 		if verr := checkEventTypes(p.Types); verr != nil {
 			return nil, verr
@@ -208,9 +152,6 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 	return ack, nil
 }
 
-// verbUnsubscribe closes this connection's event stream. The streamer observes
-// the stop signal, clears the connection's stream state, and unsubscribes from
-// the hub.
 func (d *Daemon) verbUnsubscribe(cs *connState, _ json.RawMessage) (any, *verbError) {
 	cs.mu.Lock()
 	sub := cs.eventSub
@@ -221,15 +162,10 @@ func (d *Daemon) verbUnsubscribe(cs *connState, _ json.RawMessage) (any, *verbEr
 			Detail: "There is no event stream on this connection to close.",
 		})
 	}
-	// Signal the streamer to exit; it clears cs.eventSub/streaming and removes the
-	// hub subscription on its way out.
 	sub.close()
 	return map[string]any{"type": "unsubscribed"}, nil
 }
 
-// startPendingStream launches the event streamer for a subscription handed over
-// by the subscribe handler, once its ack has been written. It is a no-op for
-// every other verb.
 func (d *Daemon) startPendingStream(cs *connState) {
 	cs.mu.Lock()
 	sub := cs.pendingStream
@@ -238,18 +174,11 @@ func (d *Daemon) startPendingStream(cs *connState) {
 	if sub == nil {
 		return
 	}
-	// A daemon that is stopping refuses the streamer. Its connection is
-	// closing, so the subscription only has to be released.
 	if !d.goTracked(func() { d.streamEvents(cs, sub) }) {
 		d.events.unsubscribe(sub)
 	}
 }
 
-// streamEvents pushes events from a subscription to the connection until the
-// connection closes, the daemon shuts down, or the subscription is stopped. A
-// full subscriber queue drops events at publish time; the streamer surfaces those
-// drops as a gap marker written just before the next surviving event, so a slow
-// subscriber never blocks the daemon (the daemon_stream.go discipline).
 func (d *Daemon) streamEvents(cs *connState, sub *eventSub) {
 	defer d.events.unsubscribe(sub)
 	defer func() {
@@ -261,9 +190,6 @@ func (d *Daemon) streamEvents(cs *connState, sub *eventSub) {
 		cs.mu.Unlock()
 	}()
 
-	// A resumed subscription first writes what it missed. Live events that
-	// arrive meanwhile wait in sub.ch, and all of them are newer than anything
-	// in the preface.
 	for _, ev := range sub.preface {
 		if !d.eventInScope(cs, ev) {
 			continue
@@ -284,10 +210,6 @@ func (d *Daemon) streamEvents(cs *connState, sub *eventSub) {
 		case <-sub.stop:
 			return
 		case ev := <-sub.ch:
-			// A restricted connection's stream carries only the sessions it
-			// reaches. The check runs here, on the streamer's goroutine, and
-			// not in the hub's filter, because the hub publishes with a
-			// session's state lock held and the check reads session state.
 			if !d.eventInScope(cs, ev) {
 				continue
 			}
@@ -305,8 +227,6 @@ func (d *Daemon) streamEvents(cs *connState, sub *eventSub) {
 	}
 }
 
-// writeEventLine serializes ev as one newline-terminated JSON line and writes it
-// under the connection's send mutex with a write deadline.
 func (d *Daemon) writeEventLine(cs *connState, ev streamEvent) error {
 	data, err := jsonx.Marshal(ev)
 	if err != nil {
@@ -321,32 +241,22 @@ func (d *Daemon) writeEventLine(cs *connState, ev streamEvent) error {
 	return werr
 }
 
-// verbWaitFor blocks until a condition matches or a timeout elapses, returning a
-// wait_result on match and a timeout error otherwise. It is sugar over a
-// short-lived internal hub subscription, so a caller need not poll capture-pane.
 func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Condition string `json:"condition"`
-		Session   string `json:"session"`
-		Window    string `json:"window"`
-		Pattern   string `json:"pattern"`
-		Source    string `json:"source"`
-		// New makes window-output match only what the pane writes after
-		// the wait starts.
-		New     bool   `json:"new"`
-		Until   string `json:"until"`
-		Idle    int    `json:"idle"`
-		Thread  uint64 `json:"thread"`
-		Timeout int    `json:"timeout"`
-		// AnySession widens agent-state to every session on the daemon.
-		AnySession bool `json:"any_session"`
-		// CommandSeq makes command-finished match once the window has
-		// finished more commands than this.
+		Condition  string  `json:"condition"`
+		Session    string  `json:"session"`
+		Window     string  `json:"window"`
+		Pattern    string  `json:"pattern"`
+		Source     string  `json:"source"`
+		New        bool    `json:"new"`
+		Until      string  `json:"until"`
+		Idle       int     `json:"idle"`
+		Thread     uint64  `json:"thread"`
+		Timeout    int     `json:"timeout"`
+		AnySession bool    `json:"any_session"`
 		CommandSeq *uint64 `json:"command_seq"`
-		// Select narrows agent-state to the panes a selector matches, in
-		// every session. Every waits for all of them rather than any one.
-		Select string `json:"select"`
-		Every  bool   `json:"every"`
+		Select     string  `json:"select"`
+		Every      bool    `json:"every"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -397,10 +307,6 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		return d.waitAgentStateAnySession(p.Until, deadline)
 	}
 
-	// A window whose pane ran on another machine and cannot come back has
-	// nothing left to wait for: it fails at once with the error a write gets,
-	// rather than when its timeout runs out. window-exit waits on as before,
-	// and the pane has exited, so it answers at once.
 	if p.Window != "" && p.Condition != "window-exit" && p.Condition != "session-exists" {
 		if verr := d.endedPaneRefusal(cs, p.Session, p.Window); verr != nil {
 			return nil, verr
@@ -435,15 +341,12 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 	}
 }
 
-// waitMatched builds a successful wait_result for the given condition.
 func waitMatched(condition string, extra map[string]any) map[string]any {
 	res := map[string]any{"type": "wait_result", "condition": condition, "matched": true}
 	maps.Copy(res, extra)
 	return res
 }
 
-// waitSessionExists resolves when a session named name exists. It subscribes
-// before the initial check so a session created in the race window is not missed.
 func (d *Daemon) waitSessionExists(name string, deadline <-chan time.Time) (any, *verbError) {
 	if name == "" {
 		return nil, invalidParam("session", "session is required for the session-exists condition")
@@ -475,7 +378,6 @@ func (d *Daemon) waitSessionExists(name string, deadline <-chan time.Time) (any,
 	}
 }
 
-// waitWindowExit resolves when the target window's shell process exits.
 func (d *Daemon) waitWindowExit(cs *connState, sessionName, window string, deadline <-chan time.Time) (any, *verbError) {
 	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
@@ -494,8 +396,6 @@ func (d *Daemon) waitWindowExit(cs *connState, sessionName, window string, deadl
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
-	// The result carries the exit status, so a caller learns how the program
-	// ended in the same call. An older client reads only the fields it knows.
 	matched := func() map[string]any {
 		pty.awaitExitNote()
 		res := waitMatched("window-exit", map[string]any{"window": window})
@@ -520,8 +420,6 @@ func (d *Daemon) waitWindowExit(cs *connState, sessionName, window string, deadl
 	}
 }
 
-// waitWindowIdle resolves when the target window produces no output for idleMs
-// milliseconds. Each output event resets the idle timer.
 func (d *Daemon) waitWindowIdle(cs *connState, sessionName, window string, idleMs int, deadline <-chan time.Time) (any, *verbError) {
 	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
@@ -557,7 +455,6 @@ func (d *Daemon) waitWindowIdle(cs *connState, sessionName, window string, idleM
 		case <-d.ctx.Done():
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case <-sub.ch:
-			// Output arrived; restart the idle window.
 			if !timer.Stop() {
 				select {
 				case <-timer.C:
@@ -571,15 +468,6 @@ func (d *Daemon) waitWindowIdle(cs *connState, sessionName, window string, idleM
 	}
 }
 
-// waitAgentState resolves when a window's agent state becomes one of the states
-// named in until. With a window it watches that pane; without one it watches the
-// whole session, which is the shape automation actually wants: "tell me when any
-// agent here needs input" would otherwise take a poll loop over
-// get-agent-state.
-//
-// It subscribes before the initial check, so a transition in the race window is
-// not missed, and re-reads the canonical state on every event rather than
-// trusting the payload, the waitSessionExists discipline.
 func (d *Daemon) waitAgentState(cs *connState, sessionName, window, until string, deadline <-chan time.Time) (any, *verbError) {
 	states, verr := parseUntilStates(until)
 	if verr != nil {
@@ -589,8 +477,6 @@ func (d *Daemon) waitAgentState(cs *connState, sessionName, window, until string
 	if verr != nil {
 		return nil, verr
 	}
-	// The target is pinned to a window ID up front, so a wait keeps meaning the
-	// same pane if the session's focus or names change while it blocks.
 	targetID := ""
 	if window != "" {
 		state := sess.GetState()
@@ -603,8 +489,6 @@ func (d *Daemon) waitAgentState(cs *connState, sessionName, window, until string
 
 	types := map[string]bool{EventAgentState: true}
 	if targetID != "" {
-		// A watched pane closing must fail the wait rather than run out the
-		// clock: nothing will ever report a state for it again.
 		types[EventWindowClosed] = true
 	}
 	sub := d.events.subscribe(eventFilter{session: sess.Name(), sess: sess, types: types}, defaultEventQueue)
@@ -613,9 +497,6 @@ func (d *Daemon) waitAgentState(cs *connState, sessionName, window, until string
 	closed := func() *verbError {
 		return newVerbError(ErrVerbWindowNotFound, "the watched window closed before reaching "+until)
 	}
-	// check also says whether the watched pane is gone. A pane that closed
-	// after it was resolved and before the subscription sent its close event
-	// to nobody, so the read of the state is the only thing that can tell.
 	check := func() (id, name string, ok, gone bool) {
 		state := sess.GetState()
 		for i := range state.Windows {
@@ -660,7 +541,6 @@ func (d *Daemon) waitAgentState(cs *connState, sessionName, window, until string
 	}
 }
 
-// agentStateTimeout is the error an agent-state wait returns when it runs out.
 func agentStateTimeout(until string) *verbError {
 	return hintedVerbError(ErrVerbTimeout, "timed out waiting for agent state "+until, &VerbHint{
 		Param:  "until",
@@ -669,14 +549,6 @@ func agentStateTimeout(until string) *verbError {
 	})
 }
 
-// waitAgentStateAnySession is waitAgentState across every session on the
-// daemon, for a supervisor that watches agents in several sessions and would
-// otherwise hold one wait per session. It never fails because a session is
-// missing: sessions created while it blocks are watched too, since the check
-// reads the session list again on every event.
-//
-// The subscription is taken before the first check, the same discipline as
-// the single-session wait, so a transition in between is not missed.
 func (d *Daemon) waitAgentStateAnySession(until string, deadline <-chan time.Time) (any, *verbError) {
 	states, verr := parseUntilStates(until)
 	if verr != nil {
@@ -687,8 +559,6 @@ func (d *Daemon) waitAgentStateAnySession(until string, deadline <-chan time.Tim
 
 	check := func() (map[string]any, bool) {
 		sessions := d.manager.AllSessions()
-		// Sorted, so when several panes already match the answer does not
-		// depend on map order.
 		slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name(), b.Name()) })
 		for _, sess := range sessions {
 			state := sess.GetState()
@@ -721,15 +591,6 @@ func (d *Daemon) waitAgentStateAnySession(until string, deadline <-chan time.Tim
 	}
 }
 
-// waitAgentStateSelect is the agent-state wait over the panes a selector
-// matches, in every session. Without every it ends when any matched pane is
-// in one of the until states. With every it ends when at least one pane
-// matches and all of them are, which is "wait until the whole fan-out is done".
-//
-// The selector is resolved again on every event, so a pane that opens during
-// the wait and matches is watched, and one that closes stops counting. A state
-// term in the selector narrows which panes are watched at the moment of each
-// check, so the state to wait for belongs in until, not in the selector.
 func (d *Daemon) waitAgentStateSelect(sel *Selector, until string, every bool, deadline <-chan time.Time) (any, *verbError) {
 	states, verr := parseUntilStates(until)
 	if verr != nil {
@@ -790,8 +651,6 @@ func (d *Daemon) waitAgentStateSelect(sel *Selector, until string, every bool, d
 	}
 }
 
-// parseUntilStates turns the comma-separated until parameter into the set of
-// wire spellings a wait accepts.
 func parseUntilStates(until string) (map[string]bool, *verbError) {
 	if strings.TrimSpace(until) == "" {
 		return nil, invalidParam("until", "until is required for the agent-state condition")
@@ -815,20 +674,6 @@ func parseUntilStates(until string) (map[string]bool, *verbError) {
 	return states, nil
 }
 
-// waitWindowOutput resolves when the target window's captured content matches
-// pattern. It subscribes and checks once before waiting (so already-present
-// output matches immediately), then re-checks on output events, at most once
-// per waitOutputMinGap: an event inside the gap defers its re-check to the end
-// of the gap, so the last output of a burst is always checked. A gap marker or
-// dropped event cannot hang the wait because a low-rate backstop ticker also
-// re-checks.
-//
-// With fresh (the new parameter) it matches only what the pane writes after
-// the wait starts: a tap copies the pane's output from that moment, and the
-// pattern runs over that text with the escape sequences taken out. The screen
-// and the scrollback are never read, so a marker already on screen cannot
-// match. Text a program writes again counts, a full-screen redraw included:
-// the stream does not say which bytes repeat earlier ones.
 func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, source string, fresh bool, deadline <-chan time.Time) (any, *verbError) {
 	if pattern == "" {
 		return nil, invalidParam("pattern", "pattern is required for the window-output condition")
@@ -852,18 +697,8 @@ func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, s
 		return nil, mapResolveErr(err, sess)
 	}
 
-	// Default to matching recent (scrollback-inclusive) content so output that has
-	// already scrolled off the visible screen still matches; source "visible"
-	// restricts to the current screen.
 	scrollback := source != "visible"
-	// checked is the captureState of the last capture matched against. The
-	// backstop re-checks only when the pane has moved past it: with no new
-	// output and no resize the capture would read the same, and on a pane with
-	// a full scrollback one capture costs milliseconds.
 	var checked captureState
-	// lastCheck is when the last capture finished. The gap is measured from
-	// there, so on a pane whose capture is slow the waiter still leaves the
-	// emulator lock alone for most of the time.
 	var lastCheck time.Time
 	matches := func() bool {
 		var content string
@@ -875,20 +710,12 @@ func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, s
 		}
 		return re.MatchString(content)
 	}
-	// moved says whether a re-check could read something new.
 	moved := func() bool { return pty.currentCaptureState() != checked }
 	matched := map[string]any{"window": window, "pattern": pattern}
 
 	if fresh {
-		// The tap goes first, before the subscription and before anything
-		// else that takes time, so output written while the wait is being set
-		// up is already in it.
 		tap := pty.addOutputTap()
 		defer pty.removeOutputTap(tap)
-		// carry is the output read so far that has not matched, as written.
-		// The pattern runs over all of it, so a match split across two reads
-		// still matches. It keeps a tail, so a long build costs a bounded
-		// amount per check.
 		var carry []byte
 		matches = func() bool {
 			carry = append(carry, tap.take()...)
@@ -898,8 +725,6 @@ func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, s
 				return true
 			}
 			if cut := len(carry) - newOutputCarry; cut > 0 {
-				// Cut after a newline where there is one, so the tail does not
-				// start inside an escape sequence.
 				if i := bytes.IndexByte(carry[cut:], '\n'); i >= 0 {
 					cut += i + 1
 				}
@@ -925,8 +750,6 @@ func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, s
 
 	backstop := time.NewTicker(waitOutputRecheck)
 	defer backstop.Stop()
-	// deferred is the re-check an event inside the gap armed, nil when none
-	// is pending. One is enough however many events arrive before it fires.
 	var deferred <-chan time.Time
 	gapTimer := time.NewTimer(time.Hour)
 	gapTimer.Stop()
@@ -972,22 +795,6 @@ func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, s
 	}
 }
 
-// waitAgentMessage resolves when a message arrives for an inbox, and is what
-// makes the mailbox cost nothing while it is empty: a waiting agent is blocked
-// on the hub rather than asking every second whether anything showed up.
-//
-// The two shapes differ on purpose. With a window it is "wake me when I have
-// mail", so an unread message already sitting in the inbox matches at once; a
-// wait that could miss a message queued a moment before it started would be a
-// race every caller had to work around. Without a window it is "wake me when
-// anything is said here", which cannot use the same rule because the ring is
-// almost never empty, so it takes the newest message id as a baseline and
-// matches only what arrives after.
-//
-// A thread narrows either shape to one conversation and changes nothing else.
-// A thread the ring holds nothing from simply never matches, and times out like
-// any other wait: the ring forgets, so a thread nobody has started and a thread
-// that has aged out are the same thing to a reader.
 func (d *Daemon) waitAgentMessage(cs *connState, sessionName, window string, thread uint64, deadline <-chan time.Time) (any, *verbError) {
 	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
@@ -1003,19 +810,12 @@ func (d *Daemon) waitAgentMessage(cs *connState, sessionName, window string, thr
 		inbox = id
 	}
 
-	// The baseline is taken before the subscription so a message published in
-	// the race window is newer than it, and is therefore matched rather than
-	// missed.
 	baseline := d.agents.highestID()
 
-	// Any id in the thread names the thread, the same rule read-agent-messages
-	// follows, so a caller can wait on the id of the message it just sent.
 	thread = d.agents.resolveThread(sess.Name(), thread)
 
 	types := map[string]bool{EventAgentMessage: true}
 	if inbox != "" {
-		// A watched inbox closing has to fail the wait rather than run out the
-		// clock: nothing will ever be delivered to it again.
 		types[EventWindowClosed] = true
 	}
 	sub := d.events.subscribe(eventFilter{session: sess.Name(), sess: sess, types: types}, defaultEventQueue)
@@ -1052,9 +852,6 @@ func (d *Daemon) waitAgentMessage(cs *connState, sessionName, window string, thr
 	}
 }
 
-// agentMessageMatch renders the wait result. It reports the message's identity
-// and never its body: the caller reads it with read-agent-messages, which is
-// where the untrusted-content framing lives.
 func agentMessageMatch(inbox string, m AgentMessage) map[string]any {
 	return waitMatched("agent-message", map[string]any{
 		"window":     inbox,
@@ -1068,8 +865,6 @@ func agentMessageMatch(inbox string, m AgentMessage) map[string]any {
 	})
 }
 
-// checkEventTypes refuses a subscribe filter that names a type no event has.
-// A hook name is answered with the event it corresponds to.
 func checkEventTypes(types []string) *verbError {
 	for _, t := range types {
 		if slices.Contains(knownEventTypes, t) {
@@ -1085,9 +880,6 @@ func checkEventTypes(types []string) *verbError {
 	return nil
 }
 
-// endedPaneRefusal is the pane_ended refusal when the window names a pane on
-// another machine that cannot come back, and nil otherwise, including when
-// the window does not resolve: the wait reports that itself.
 func (d *Daemon) endedPaneRefusal(cs *connState, sessionName, window string) *verbError {
 	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {

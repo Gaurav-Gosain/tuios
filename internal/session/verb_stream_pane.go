@@ -15,167 +15,70 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// stream-pane: one pane as a byte stream, for a client that is not tuios.
-//
-// The attached client gets a pane's bytes over the gob protocol, which only Go
-// can read. A native phone app needs the same thing in a form any language
-// can read, and it needs to resume after a dropped network without a fresh
-// screen every time. stream-pane gives it that on a plain verb connection:
-// one JSON reply line, and then the connection carries binary frames both
-// ways, each a type byte, a 4-byte big-endian length and the payload.
-//
-// From the daemon:
-//
-//	'S' snapshot: u64 seq, u16 cols, u16 rows, then bytes that paint the pane
-//	    on a fresh emulator of cols by rows (snapshot.Replay).
-//	'O' output:   u64 seq, then the bytes the pane wrote. seq is the stream
-//	    position after the frame's last byte.
-//	'R' resize:   u64 seq, u16 cols, u16 rows: the pane changed size at seq.
-//	'E' error:    JSON {"code","message"}: an input or lease frame was refused.
-//	    The stream goes on.
-//	'X' exit:     UTF-8 reason. The pane is gone, or the caller may no
-//	    longer read it, and the daemon closes the connection.
-//
-// From the client:
-//
-//	'I' input:  bytes for the pane, as typed, at most maxPaneInputFrame.
-//	    Checked as send-text is.
-//	'L' lease:  u16 cols, u16 rows, or 0,0 to release (pane_lease.go).
-//
-// The stream position is the pane's outputSeq: every byte it ever wrote,
-// counted from the daemon's start. A snapshot is taken from the daemon's
-// emulator under the lock that also reads how far the emulator has got, so
-// the seq a snapshot carries is exactly the stream it shows. A client that
-// reconnects with the seq it reached and the daemon's boot id is resumed from
-// the ring when the ring still holds that position, and given a snapshot
-// otherwise. A client that falls behind by more than its queue holds is
-// resumed the same way, so it never paints the rest of the stream over a hole.
-//
-// Bytes the daemon itself skips do not count as a hole: a kitty graphics
-// frame replaced by a newer one before a slow client took it, or the rest of
-// a graphics command a catch-up began in the middle of. The seq still moves
-// past them.
-
-// The frame types.
 const (
-	paneFrameSnap   = 'S'
-	paneFrameOutput = 'O'
-	paneFrameResize = 'R'
-	paneFrameError  = 'E'
-	paneFrameExit   = 'X'
-	paneFrameInput  = 'I'
-	paneFrameLease  = 'L'
-	// paneFrameInputAt is input with the stream offset it starts at, typed
-	// only at the offset the stream expects (queueInput).
+	paneFrameSnap    = 'S'
+	paneFrameOutput  = 'O'
+	paneFrameResize  = 'R'
+	paneFrameError   = 'E'
+	paneFrameExit    = 'X'
+	paneFrameInput   = 'I'
+	paneFrameLease   = 'L'
 	paneFrameInputAt = 'J'
 )
 
 const (
-	// paneStreamScrollback is how many history rows a snapshot carries.
 	paneStreamScrollback = 500
-	// paneFrameHeader is a frame's type byte and length.
-	paneFrameHeader = 5
-	// maxPaneInputFrame bounds what one client frame may announce. A client
-	// that sends more is refused and the stream ends, since the bytes after
-	// the frame cannot be found again. It is largeFrame, the size up to which
-	// a frame is not charged to the read budget (frame_budget.go), because
-	// the frame is read here, outside that budget, and its buffer is made
-	// before its bytes arrive. At 1 MiB, a pane with the read grant could
-	// open streams that each announced a megabyte and never finished it, and
-	// hold a gigabyte of the daemon's memory.
-	maxPaneInputFrame = largeFrame
-	// maxPaneOutputFrame bounds one output frame's payload.
-	maxPaneOutputFrame = 256 << 10
-	// maxLeaseDim bounds a lease, which is a terminal size.
-	maxLeaseDim = 4096
-	// paneInputBytes and paneInputFrames bound the input that waits for the
-	// pane to read it: the bytes are the memory four full frames took, and
-	// the frames are many, since a client may send one frame per key and a
-	// burst of keys must never be refused while the pane reads. See
-	// paneInput.
-	paneInputBytes  = 4 * maxPaneInputFrame
-	paneInputFrames = 4096
-	// snapCellBytes is what one cell of a snapshot costs the daemon at most:
-	// its CellState in the TerminalState and its share of the VT bytes. A
-	// snapshot is charged this for every cell it may hold before it is taken.
-	snapCellBytes = 160
+	paneFrameHeader      = 5
+	maxPaneInputFrame    = largeFrame
+	maxPaneOutputFrame   = 256 << 10
+	maxLeaseDim          = 4096
+	paneInputBytes       = 4 * maxPaneInputFrame
+	paneInputFrames      = 4096
+	snapCellBytes        = 160
 )
 
-// paneLeaseTTL is how long a lease lasts without an L frame that renews it.
-// A phone that drops off the network sends nothing, and its connection can
-// stay open for as long as ssh and TCP take to notice, which is hours by
-// default. The lease ends after paneLeaseTTL instead, and the pane goes back
-// to the size its clients asked for. A variable so a test can shorten it.
 var paneLeaseTTL = 30 * time.Second
 
-// errPaneStreamGone ends a stream whose connection failed.
 var errPaneStreamGone = errors.New("pane stream connection gone")
 
-// paneStream is one stream-pane connection after its reply.
 type paneStream struct {
-	d      *Daemon
-	cs     *connState
-	sess   *Session
-	window string
-	pty    *PTY
-	subID  string
-	sub    *ptySubscriber
-	pos    int64
-	cols   int
-	rows   int
-	snap   *TerminalState // the snapshot to send first, nil in resume mode
-	// fit makes the stream's lease a viewer's, and viewer says the stream
-	// reported its terminal. See pane_lease.go and pane_viewers.go.
-	fit    bool
-	viewer bool
-	// viewerReport is the report the stream made, and viewerSess the
-	// session it is recorded in. A pane moved to another session takes its
-	// viewer with it (followHome). Guarded by leaseMu once the stream runs.
+	d            *Daemon
+	cs           *connState
+	sess         *Session
+	window       string
+	pty          *PTY
+	subID        string
+	sub          *ptySubscriber
+	pos          int64
+	cols         int
+	rows         int
+	snap         *TerminalState
+	fit          bool
+	viewer       bool
 	viewerReport ViewerReport
 	viewerSess   *Session
-	// leaseMu guards leased and closed. The client's frames are read on a
-	// goroutine of their own, so a lease frame can arrive while the stream
-	// is closing, and closed keeps it from setting a lease nobody releases.
-	leaseMu sync.Mutex
-	leased  bool
-	closed  bool
-	// leaseAt is when the client last set or renewed its lease, in unix
-	// nanoseconds. Guarded by leaseMu.
-	leaseAt int64
-	done    sync.Once
-	// admitMu serializes the access checks of the stream's two goroutines.
-	// A check stores the caller's pane authority on the connection
-	// (cs.paneView) and recheckTyping reads it back, so a check on the other
-	// goroutine in between would hand an input frame the authority another
-	// verb computed.
-	admitMu sync.Mutex
-	// in holds I frames for the goroutine that writes them to the pane, so
-	// a pane that does not read its input never holds up an L frame. quit
-	// closes when the stream ends.
-	in   paneInput
-	quit chan struct{}
-	// snapRelease gives back the read budget the snapshot in snap holds.
-	snapRelease func()
+	leaseMu      sync.Mutex
+	leased       bool
+	closed       bool
+	leaseAt      int64
+	done         sync.Once
+	admitMu      sync.Mutex
+	in           paneInput
+	quit         chan struct{}
+	snapRelease  func()
 }
 
-// verbStreamPane answers stream-pane and hands the connection to the stream.
 func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session   string `json:"session"`
-		Window    string `json:"window"`
-		FromSeq   *int64 `json:"from_seq"`
-		BootID    string `json:"boot_id"`
-		LeaseCols int    `json:"lease_cols"`
-		LeaseRows int    `json:"lease_rows"`
-		// SessionID names the session by its id, which a rename does not
-		// change. It wins over Session.
-		SessionID string `json:"session_id"`
-		// Fit makes the stream's lease a viewer's: it sizes the pane while
-		// no client shows the session. See pane_lease.go.
-		Fit bool `json:"fit"`
-		// Viewer is the terminal the stream shows the pane in. See
-		// pane_viewers.go.
-		Viewer *ViewerReport `json:"viewer"`
+		Session   string        `json:"session"`
+		Window    string        `json:"window"`
+		FromSeq   *int64        `json:"from_seq"`
+		BootID    string        `json:"boot_id"`
+		LeaseCols int           `json:"lease_cols"`
+		LeaseRows int           `json:"lease_rows"`
+		SessionID string        `json:"session_id"`
+		Fit       bool          `json:"fit"`
+		Viewer    *ViewerReport `json:"viewer"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -257,13 +160,12 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	cs.replyFailed = ps.close
 	cs.takeover = func(br *bufio.Reader) { ps.run(br) }
 	return map[string]any{
-		"type":    "pane_stream",
-		"mode":    mode,
-		"seq":     ps.pos,
-		"cols":    ps.cols,
-		"rows":    ps.rows,
-		"boot_id": boot,
-		// The stream takes J frames: input typed only at its offset.
+		"type":          "pane_stream",
+		"mode":          mode,
+		"seq":           ps.pos,
+		"cols":          ps.cols,
+		"rows":          ps.rows,
+		"boot_id":       boot,
 		"input_offsets": true,
 		"session":       sess.Name(),
 		"session_id":    sess.ID,
@@ -272,7 +174,6 @@ func (d *Daemon) verbStreamPane(cs *connState, params json.RawMessage) (any, *ve
 	}, nil
 }
 
-// bootID is this daemon start's boot id, "" when events are off.
 func (d *Daemon) bootID() string {
 	if d.events == nil {
 		return ""
@@ -280,8 +181,6 @@ func (d *Daemon) bootID() string {
 	return d.events.bootIdentity()
 }
 
-// checkLeaseSize refuses a lease that is not a size: both zero, or both
-// between 1 and maxLeaseDim.
 func checkLeaseSize(cols, rows int) *verbError {
 	if cols == 0 && rows == 0 {
 		return nil
@@ -292,24 +191,11 @@ func checkLeaseSize(cols, rows int) *verbError {
 	return nil
 }
 
-// setSub makes sub the stream's subscription. A phone never holds the pane's
-// output back for itself, as a viewer on another machine does not.
 func (ps *paneStream) setSub(sub *ptySubscriber) {
 	sub.noPace.Store(true)
 	ps.sub = sub
 }
 
-// snapshotSubscribe takes a snapshot and subscribes from the position it was
-// taken at. The two are separate steps, and output in between is in the ring,
-// unless more than the ring holds came between them. Then the snapshot is
-// taken again. A pane that floods that hard for every try is subscribed from
-// the ring's start, and the bytes in between are the one hole the stream
-// allows.
-//
-// The snapshot is charged to the connection's read budget (frame_budget.go)
-// before it is taken, and holds the charge until writeSnap sent it. A
-// snapshot of a wide pane with its history is megabytes, and a peer that
-// opened streams in a loop held that much for each without the charge.
 func (ps *paneStream) snapshotSubscribe() *verbError {
 	w, h := ps.pty.Size()
 	release, ok := ps.d.readBudgetFor(ps.cs).acquire(int64(paneStreamScrollback+h)*int64(w)*snapCellBytes, readBudgetWait)
@@ -342,11 +228,8 @@ func (ps *paneStream) snapshotSubscribe() *verbError {
 	}
 }
 
-// linkLeaseLinger is how long the lease of a stream over a link outlives the
-// stream. See close.
 const linkLeaseLinger = 15 * time.Second
 
-// close ends the stream's subscription and releases its lease. It runs once.
 func (ps *paneStream) close() {
 	ps.done.Do(func() {
 		if ps.sub != nil {
@@ -354,15 +237,6 @@ func (ps *paneStream) close() {
 		}
 		ps.leaseMu.Lock()
 		if ps.leased && ps.cs.viaLink && !ps.cs.linkClosedOnPurposeNow() {
-			// A stream over a link ends when the link drops, and its
-			// viewer opens it again when the link is back. Releasing the
-			// lease now would resize the pane twice, to its own size and
-			// back, and the program in it would redraw both times. The
-			// lease lingers for linkLeaseLinger: a viewer back by then
-			// holds the pane with its new stream's lease. A stream the
-			// far side closed on purpose, as a phone leaving the pane,
-			// has no viewer coming back, and stdio-proxy says so before
-			// it ends the connection. Its lease goes at once.
 			pty, holder := ps.pty, ps.subID
 			time.AfterFunc(linkLeaseLinger, func() { _ = pty.SetLease(holder, 0, 0) })
 		} else if ps.leased {
@@ -380,7 +254,6 @@ func (ps *paneStream) close() {
 	})
 }
 
-// run serves the stream until the client or the pane goes.
 func (ps *paneStream) run(br *bufio.Reader) {
 	defer ps.close()
 	go ps.writeInput()
@@ -404,15 +277,11 @@ func (ps *paneStream) run(br *bufio.Reader) {
 	}
 }
 
-// paneExit ends a stream because the pane is gone.
 type paneExit struct{ reason string }
 
 func (e *paneExit) Error() string { return e.reason }
 
-// exitReason says why the pane's stream ended.
 func (ps *paneStream) exitReason() *paneExit {
-	// A window closed by tuios ends its process with a signal of tuios's
-	// own; that is the window closing, not the program dying.
 	if ps.pty.ctx.Err() != nil {
 		return &paneExit{reason: "closed"}
 	}
@@ -425,9 +294,6 @@ func (ps *paneStream) exitReason() *paneExit {
 	return &paneExit{reason: "closed"}
 }
 
-// stream copies the subscription to the client as frames. It returns nil
-// when the client went, errPaneStreamGone when a write failed, and a
-// *paneExit when the pane went.
 func (ps *paneStream) stream(gone <-chan struct{}) error {
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
@@ -462,7 +328,7 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 			end = ps.pos + int64(len(data))
 		}
 		if end <= ps.pos {
-			return nil // already sent
+			return nil
 		}
 		if start := end - int64(len(data)); start < ps.pos {
 			data = data[ps.pos-start:]
@@ -484,30 +350,20 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 		case <-ps.d.ctx.Done():
 			return &paneExit{reason: "the daemon stopped"}
 		case <-tick.C:
-			// The caller was let in when the stream opened. A pane whose
-			// read grant is taken away, or a link whose policy no longer
-			// allows list, is held to that from here on: its stream ends.
 			if verr := ps.recheck(); verr != nil {
 				if err := flush(); err != nil {
 					return err
 				}
 				return &paneExit{reason: "refused: " + verr.Message}
 			}
-			// A lease the client stopped renewing ends. See paneLeaseTTL.
 			ps.expireLease()
-			// A queue the backlog grew and that is empty now lets its
-			// array go (subscriber_queue.go).
 			ps.sub.out.trim()
-			// A pane whose program exited stays open until a client closes
-			// its window. With nothing more coming from it, the stream ends.
 			if ps.pty.IsExited() && ps.sub.out.len() == 0 {
 				if quiet++; quiet >= 2 {
 					return ps.exitReason()
 				}
 			}
 		case <-ps.sub.out.wake:
-			// The token says a chunk may be waiting. Take every chunk queued,
-			// so the next push leaves a new token (subscriber_queue.go).
 			for {
 				c, ok, closed := ps.sub.out.pop()
 				if closed {
@@ -536,8 +392,6 @@ func (ps *paneStream) stream(gone <-chan struct{}) error {
 	}
 }
 
-// recheck runs the checks stream-pane passed at the start again, against
-// the caller's grants and link policy as they are now.
 func (ps *paneStream) recheck() *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
@@ -546,9 +400,6 @@ func (ps *paneStream) recheck() *verbError {
 	return verr
 }
 
-// recoverGap rebuilds a stream that fell out of its queue: from the ring when
-// the ring still holds where the client got to, from a fresh snapshot
-// otherwise.
 func (ps *paneStream) recoverGap() error {
 	ps.pty.unsubscribeSub(ps.subID, ps.sub)
 	if sub, ok := ps.pty.subscribeAt(ps.subID, ps.pos, false); ok {
@@ -564,7 +415,6 @@ func (ps *paneStream) recoverGap() error {
 	return ps.writeSnap()
 }
 
-// writeSnap sends the snapshot the stream holds, and forgets it.
 func (ps *paneStream) writeSnap() error {
 	st := ps.snap
 	defer ps.dropSnap()
@@ -577,8 +427,6 @@ func (ps *paneStream) writeSnap() error {
 	return ps.writeFrame(paneFrameSnap, payload)
 }
 
-// dropSnap forgets the snapshot the stream holds and gives back its charge.
-// The stream goroutine calls it, and close, which runs after it.
 func (ps *paneStream) dropSnap() {
 	ps.snap = nil
 	if ps.snapRelease != nil {
@@ -587,7 +435,6 @@ func (ps *paneStream) dropSnap() {
 	}
 }
 
-// writeResize sends the stream's current size at its current position.
 func (ps *paneStream) writeResize() error {
 	var payload [12]byte
 	binary.BigEndian.PutUint64(payload[0:8], uint64(ps.pos))
@@ -596,7 +443,6 @@ func (ps *paneStream) writeResize() error {
 	return ps.writeFrame(paneFrameResize, payload[:])
 }
 
-// writeSeqFrame sends a frame whose payload is a seq and then data.
 func (ps *paneStream) writeSeqFrame(typ byte, seq int64, data []byte) error {
 	var head [paneFrameHeader + 8]byte
 	head[0] = typ
@@ -605,7 +451,6 @@ func (ps *paneStream) writeSeqFrame(typ byte, seq int64, data []byte) error {
 	return ps.write(head[:], data)
 }
 
-// writeFrame sends one frame.
 func (ps *paneStream) writeFrame(typ byte, payload []byte) error {
 	var head [paneFrameHeader]byte
 	head[0] = typ
@@ -613,9 +458,6 @@ func (ps *paneStream) writeFrame(typ byte, payload []byte) error {
 	return ps.write(head[:], payload)
 }
 
-// write writes the parts of one frame under the connection's send lock. A
-// failed write leaves a partial frame on the wire, so the connection is
-// dropped.
 func (ps *paneStream) write(parts ...[]byte) error {
 	cs := ps.cs
 	cs.sendMu.Lock()
@@ -633,13 +475,11 @@ func (ps *paneStream) write(parts ...[]byte) error {
 	return nil
 }
 
-// writeError tells the client a frame it sent was refused.
 func (ps *paneStream) writeError(verr *verbError) {
 	body, _ := jsonx.Marshal(map[string]string{"code": verr.Code, "message": verr.Message})
 	_ = ps.writeFrame(paneFrameError, body)
 }
 
-// readClient reads the client's frames until the connection ends.
 func (ps *paneStream) readClient(br *bufio.Reader) {
 	var head [paneFrameHeader]byte
 	for {
@@ -676,17 +516,6 @@ func (ps *paneStream) readClient(br *bufio.Reader) {
 	}
 }
 
-// queueInput checks an I frame as send-text is checked, and queues it for
-// writeInput. A frame that does not fit is refused as busy, and so is every
-// frame after it until the pane has read what waits: the input a client gets
-// typed is always what it sent, in order, up to the offset the refusal gives
-// in accepted. It writes that refusal itself, and returns the refusal of a
-// check.
-//
-// at is the stream offset a J frame says its bytes start at, or -1 for an I
-// frame. A J frame at any other offset than the bytes the stream took is
-// refused the same way and changes nothing: a frame the client sent before it
-// went back to resend from a refusal is never typed after the resend.
 func (ps *paneStream) queueInput(at int64, data []byte) *verbError {
 	if len(data) == 0 {
 		return nil
@@ -702,8 +531,6 @@ func (ps *paneStream) queueInput(at int64, data []byte) *verbError {
 	if first {
 		LogBasic("Stream of pane %s refuses input: the pane has not read %d bytes. The client is told to send again from byte %d", shortWindowID(ps.window), waiting, accepted)
 	}
-	// The refusal carries the offset as a number, for a client to resend
-	// from.
 	msg := fmt.Sprintf("the pane has not read the last %d bytes of input. This frame and every frame after it until the pane reads were not typed. Send again from byte %d of this stream's input", waiting, accepted)
 	if at >= 0 && at != accepted {
 		msg = fmt.Sprintf("this frame starts at byte %d, and the stream has taken %d bytes. It was not typed. Send again from byte %d", at, accepted, accepted)
@@ -713,8 +540,6 @@ func (ps *paneStream) queueInput(at int64, data []byte) *verbError {
 	return nil
 }
 
-// inputFrame reads an I or J frame: the offset a J frame names, -1 for an
-// I frame, and the input bytes.
 func inputFrame(kind byte, payload []byte) (at int64, data []byte, ok bool) {
 	if kind == paneFrameInput {
 		return -1, payload, true
@@ -729,24 +554,16 @@ func inputFrame(kind byte, payload []byte) (at int64, data []byte, ok bool) {
 	return int64(off), payload[8:], true
 }
 
-// paneInput is the input that waits for the pane, in order. The zero value
-// is ready.
 type paneInput struct {
-	mu     sync.Mutex
-	wake   chan struct{}
-	frames [][]byte
-	bytes  int
-	// accepted counts every byte the stream took, typed or waiting.
+	mu       sync.Mutex
+	wake     chan struct{}
+	frames   [][]byte
+	bytes    int
 	accepted int64
-	// refusing is set by a refusal and cleared once nothing waits, so no
-	// frame after a refused one is typed before it.
 	refusing bool
 	closed   bool
 }
 
-// push queues data, or refuses it. at is where a J frame says data starts,
-// -1 for an I frame. It returns the bytes accepted so far, the bytes that
-// wait, and whether this refusal is the first of its run.
 func (q *paneInput) push(at int64, data []byte) (accepted int64, waiting int, first, ok bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -754,8 +571,6 @@ func (q *paneInput) push(at int64, data []byte) (accepted int64, waiting int, fi
 		return q.accepted, q.bytes, false, true
 	}
 	if at >= 0 && at != q.accepted {
-		// Not the next byte: refused, and the run of refusals is left as
-		// it is, so the frame at the right offset is not held up by it.
 		return q.accepted, q.bytes, false, false
 	}
 	if q.refusing || len(q.frames) > 0 && (q.bytes+len(data) > paneInputBytes || len(q.frames) >= paneInputFrames) {
@@ -776,7 +591,6 @@ func (q *paneInput) push(at int64, data []byte) (accepted int64, waiting int, fi
 	return q.accepted, q.bytes, false, true
 }
 
-// pop takes the frames that wait, and the channel that says more came.
 func (q *paneInput) pop() ([][]byte, chan struct{}) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -788,8 +602,6 @@ func (q *paneInput) pop() ([][]byte, chan struct{}) {
 	return frames, q.wake
 }
 
-// written gives back n bytes the pane took. Once nothing waits, a run of
-// refusals ends.
 func (q *paneInput) written(n int) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -799,14 +611,12 @@ func (q *paneInput) written(n int) {
 	}
 }
 
-// close drops what waits: the stream is gone.
 func (q *paneInput) close() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.closed, q.frames, q.bytes = true, nil, 0
 }
 
-// admitInput runs every check send-text passes.
 func (ps *paneStream) admitInput() *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
@@ -818,9 +628,6 @@ func (ps *paneStream) admitInput() *verbError {
 	return ps.d.recheckTyping(ps.cs, "send-text", home, ps.window)
 }
 
-// writeInput types the queued I frames into the pane, one after another,
-// until the stream ends. A write into a pane that does not read blocks here,
-// while the client's lease frames go on and further input is refused.
 func (ps *paneStream) writeInput() {
 	for {
 		frames, wake := ps.in.pop()
@@ -845,7 +652,6 @@ func (ps *paneStream) writeInput() {
 	}
 }
 
-// lease reads an 'L' frame and sets or releases the stream's lease.
 func (ps *paneStream) lease(payload []byte) *verbError {
 	if len(payload) != 4 {
 		return newVerbError(ErrVerbInvalidRequest, "a lease frame is 4 bytes: cols and rows")
@@ -866,8 +672,6 @@ func (ps *paneStream) lease(payload []byte) *verbError {
 	return nil
 }
 
-// admitLease runs the checks a resize of the pane passes: a lease changes
-// the pane's size for every client, so it needs what resize needs.
 func (ps *paneStream) admitLease(cols, rows int) *verbError {
 	ps.admitMu.Lock()
 	defer ps.admitMu.Unlock()
@@ -876,7 +680,6 @@ func (ps *paneStream) admitLease(cols, rows int) *verbError {
 	return verr
 }
 
-// setLease holds the pane at most at cols by rows, or releases it on 0,0.
 func (ps *paneStream) setLease(cols, rows int) error {
 	ps.leaseMu.Lock()
 	defer ps.leaseMu.Unlock()
@@ -892,9 +695,6 @@ func (ps *paneStream) setLease(cols, rows int) error {
 	return ps.pty.SetViewerLease(ps.subID, cols, rows, ps.fit)
 }
 
-// home is the session the pane belongs to now. A pane moved to another
-// session keeps its streams, and from then on that session's clients and
-// viewers decide its size, not the ones of the session the stream opened in.
 func (ps *paneStream) home() *Session {
 	if s := ps.pty.owner(); s != nil {
 		return s
@@ -902,8 +702,6 @@ func (ps *paneStream) home() *Session {
 	return ps.sess
 }
 
-// followHomeLocked moves the stream's viewer report to the session the pane
-// belongs to now, and returns that session. leaseMu is held.
 func (ps *paneStream) followHomeLocked() *Session {
 	home := ps.home()
 	if ps.viewer && ps.viewerSess != home {
@@ -916,9 +714,6 @@ func (ps *paneStream) followHomeLocked() *Session {
 	return home
 }
 
-// expireLease releases the lease when the client has not renewed it for
-// paneLeaseTTL, and tells the client with an E frame of code
-// lease_expired. An L frame sets the lease again.
 func (ps *paneStream) expireLease() {
 	ps.leaseMu.Lock()
 	if !ps.leased || ps.closed || time.Since(time.Unix(0, ps.leaseAt)) < paneLeaseTTL {
@@ -935,15 +730,9 @@ func (ps *paneStream) expireLease() {
 	ps.writeError(newVerbError(ErrVerbLeaseExpired, fmt.Sprintf("the lease was not renewed for %s and was released. Send an L frame to hold the pane again", paneLeaseTTL)))
 }
 
-// subscribeAt subscribes clientID from exactly fromSeq. It subscribes
-// nothing and reports false when the ring no longer holds the bytes from
-// fromSeq on, when fromSeq is past what the pane has written, or when the
-// pane is closing.
 func (p *PTY) subscribeAt(clientID string, fromSeq int64, fromSnapshot bool) (*ptySubscriber, bool) {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
-	// Close cancels the context before it closes the subscriptions, under
-	// this lock, so a subscription made after that would never be closed.
 	if p.ctx.Err() != nil {
 		return nil, false
 	}
@@ -967,9 +756,6 @@ func (p *PTY) subscribeAt(clientID string, fromSeq int64, fromSnapshot bool) (*p
 	return sub, true
 }
 
-// sizeAt is the size the pane's stream had at position seq: the newest resize
-// mark at or before it, or the size the pane was made at. The ring keeps the
-// newest mark behind it, so any seq the ring still holds is answered.
 func (p *PTY) sizeAt(seq int64) (int, int) {
 	p.outputMu.RLock()
 	defer p.outputMu.RUnlock()

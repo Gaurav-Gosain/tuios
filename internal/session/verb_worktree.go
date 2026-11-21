@@ -29,17 +29,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// The worktree verbs: a git worktree as a session, and one prompt fanned out
-// across several of them.
-//
-// new-worktree makes the worktree and the session in one call, so a caller
-// never holds a worktree with no session or a session in a directory that is
-// not there. list-worktrees is the listing the CLI and an orchestrating agent
-// read. remove-worktree is the one destructive verb, and it refuses to
-// discard uncommitted work unless told to in so many words. fan is
-// new-worktree n times with an agent started in each and the prompt typed at
-// it once the agent is ready to read.
-
 // Error codes the worktree verbs raise, on top of the shared ones.
 const (
 	// ErrVerbNotWorktree reports a session that is not in a git worktree, so
@@ -65,32 +54,15 @@ const (
 	ErrVerbGitFailed = "git_failed"
 )
 
-// fanDefaultReadyTimeout bounds how long a fan-out waits for an agent to be
-// ready before it gives up on typing the prompt. It is long because the wait
-// covers a person answering a first-run question in the pane.
 const fanDefaultReadyTimeout = 10 * time.Minute
 
-// fanMaxCount bounds a fan-out. Every worktree is a full checkout and every
-// agent is a process, and a count typed by mistake should not fill a disk.
 const fanMaxCount = 16
 
-// fanReadyStates are the states in which the fan-out types its prompt. idle
-// and done are an agent at its prompt. unknown is not here: it is what the
-// silence timer writes when nothing on the screen said what the agent is
-// doing, and a quiet agent that has not proved it is at its prompt may be
-// mid-startup or mid-call. That holds for the harnesses whose manifests carry
-// an idle rule (harness.Registry.CanProveIdle), which reach idle from their
-// prompt box or title. A harness without one can never show that evidence, so for it
-// agentReady counts unknown as ready, as fan did before idle rules existed.
-// needs_input is not here either: an agent asking to trust the
-// folder must be answered by the person, and the prompt is typed after.
 var fanReadyStates = map[string]bool{
 	AgentStateIdle.Name(): true,
 	AgentStateDone.Name(): true,
 }
 
-// worktreeTarget is what every worktree verb needs from a session: the
-// session itself and its record, or the error saying it has none.
 func (d *Daemon) worktreeTarget(cs *connState, name string) (*Session, *WorktreeInfo, *verbError) {
 	sess, verr := d.resolveVerbSession(cs, name)
 	if verr != nil {
@@ -105,9 +77,6 @@ func (d *Daemon) worktreeTarget(cs *connState, name string) (*Session, *Worktree
 			Available: d.worktreeSessionNames(),
 		})
 	}
-	// The main checkout rides the record for the listing's sake, but it is not
-	// a worktree: git refuses to remove it, and a remove that first stashed
-	// its changes would be stashing a working tree nobody asked to touch.
 	if info.Main {
 		return nil, nil, hintedVerbError(ErrVerbNotWorktree, "session "+sess.Name()+" is in the repository's main checkout, which is not a worktree", &VerbHint{
 			Param:     "session",
@@ -119,9 +88,6 @@ func (d *Daemon) worktreeTarget(cs *connState, name string) (*Session, *Worktree
 	return sess, info, nil
 }
 
-// worktreeSessionNames lists the sessions that are in a worktree. The main
-// checkout is not one a worktree verb can act on, so it stays out of the
-// hints.
 func (d *Daemon) worktreeSessionNames() []string {
 	var out []string
 	for _, s := range d.manager.ListSessions() {
@@ -132,8 +98,6 @@ func (d *Daemon) worktreeSessionNames() []string {
 	return out
 }
 
-// repoRootParam resolves the repo parameter, a directory inside the
-// repository, to the main checkout.
 func repoRootParam(dir string) (string, *verbError) {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {
@@ -155,7 +119,6 @@ func (d *Daemon) SetWorktreePath(template string) {
 	d.worktreePath.Store(&template)
 }
 
-// worktreeTemplate is what SetWorktreePath last set, or "".
 func (d *Daemon) worktreeTemplate() string {
 	if t := d.worktreePath.Load(); t != nil {
 		return *t
@@ -163,9 +126,6 @@ func (d *Daemon) worktreeTemplate() string {
 	return ""
 }
 
-// worktreePathFor is where a worktree of root on branch goes by template. A
-// template that does not render is the config's fault, and the error says
-// where to fix it.
 func worktreePathFor(template, root, branch string) (string, *verbError) {
 	path, err := worktree.PathFor(template, root, branch)
 	if err != nil {
@@ -176,11 +136,6 @@ func worktreePathFor(template, root, branch string) (string, *verbError) {
 	return path, nil
 }
 
-// worktreeAgentName is the name of the agent's window in a worktree: the last
-// part of its branch, "add-json-flag" for agent/add-json-flag. The name is
-// set when the window opens, so the agent is never known by the title its
-// program sets ("main.go --json flag"). A shell, with no command, keeps the
-// default name.
 func worktreeAgentName(branch string, command []string) string {
 	if len(command) == 0 {
 		return ""
@@ -188,25 +143,12 @@ func worktreeAgentName(branch string, command []string) string {
 	return branch[strings.LastIndex(branch, "/")+1:]
 }
 
-// createWorktreeSession is what new-worktree and fan share: the worktree, then
-// the session in it, then the record that ties them. The worktree is never
-// removed on a later failure. It exists on disk and git lists it, and taking
-// it away because a session failed to start would be removing something the
-// caller asked for and can still use. The session gets the caller's terminal
-// from its hello, as one made by new-session does.
-//
-// A setup (see verb_worktree_setup.go) runs in a window of its own first. A
-// sync one holds the agent's window until it passes, so the result then has
-// no window_id and says agent_pending. onAgent runs once the agent's window
-// is open, now or after the setup.
 func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessionName string, command, env []string, grants *Grants, setup setupSpec, record func(*WorktreeInfo), onAgent func(*Session, WindowState)) (map[string]any, *verbError) {
 	template := d.worktreeTemplate()
 	path, verr := worktreePathFor(template, root, branch)
 	if verr != nil {
 		return nil, verr
 	}
-	// The setup's record goes on with the rest, before the record is set on
-	// the session, so a client that adopts it sees the setup from the start.
 	withSetup := func(info *WorktreeInfo) {
 		if record != nil {
 			record(info)
@@ -254,8 +196,6 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 			return nil, agentFailed(err)
 		}
 	} else {
-		// An async setup's agent opens first, so it has the focus and the
-		// first place in the session.
 		if setup.Async {
 			if win, err = startAgent(); err != nil {
 				return nil, agentFailed(err)
@@ -266,8 +206,6 @@ func (d *Daemon) createWorktreeSession(cs *connState, root, branch, base, sessio
 			agent: startAgent, onAgent: onAgent,
 		})
 		if err != nil {
-			// The setup never ran, so nothing is undone. An async setup's
-			// agent runs, and a sync one's can be started by hand.
 			agent := SetupAgentNotStarted
 			if setup.Async {
 				agent = SetupAgentStarted
@@ -349,37 +287,18 @@ func (d *Daemon) makeWorktreeSession(cs *connState, root, path, branch, base, se
 		Base:    base,
 		Managed: true,
 	}
-	// Where the branch starts, so list-worktrees can tell a branch with
-	// commits of its own from a fresh one. A failure leaves it empty, and the
-	// listing falls back to the merge base.
 	if start, err := worktree.HeadCommit(path); err == nil {
 		info.StartCommit = start
 	}
 	if record != nil {
 		record(info)
 	}
-	// The record goes on before the window, so a client that adopts the
-	// session on the window's push already sees it under its repository.
 	_ = sess.SetWorktree(info)
 
-	// The after-new-worktree hook runs before the first window, and the call
-	// waits for it, so what it puts into the tree is there when the shell or
-	// agent starts. Nothing is locked here: CreateSession and SetWorktree have
-	// returned, and a fan's reservation is a name, not a mutex, so other
-	// clients and verbs go on while the hook runs. A hook that fails keeps the
-	// worktree and the session, and its error goes back with the result.
 	hookErr = d.runWorktreeHook(sess.Name(), info, created)
 	return sess, info, created, hookErr, nil
 }
 
-// unignoredWorktreeWarning says so when a worktree was put inside its own
-// repository where git does not ignore it, and what to ignore. tuios never
-// edits the ignore files itself: they are the user's.
-//
-// The hint names the folder that holds every branch's worktree, so one line
-// covers the next worktree too, and nothing beside that folder is ignored with
-// it: for .claude/worktrees/{{ branch | slug }} it is /.claude/worktrees/, not
-// /.claude/, which holds files people commit.
 func unignoredWorktreeWarning(template, root, path string) string {
 	if !worktree.UnignoredInRepo(root, path) {
 		return ""
@@ -388,8 +307,6 @@ func unignoredWorktreeWarning(template, root, path string) string {
 	if dir, err := worktree.HoldingDir(template, root); err == nil {
 		rel, _ = filepath.Rel(root, dir)
 	}
-	// A worktree straight in the main checkout has no folder of its own to
-	// ignore, so the hint names the worktree.
 	if rel == "" || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		rel, _ = filepath.Rel(root, path)
 	}
@@ -397,15 +314,8 @@ func unignoredWorktreeWarning(template, root, path string) string {
 	return filepath.Join(root, rel) + " is inside the repository and git does not ignore it, so the main checkout lists the worktree as untracked. Add /" + rel + "/ to .gitignore or .git/info/exclude."
 }
 
-// worktreeHookTimeout bounds the after-new-worktree hook. Hooks have no
-// timeout option, and a fixed one keeps it that way: a minute covers copying
-// ignored files and a cached install, and stays well inside the five minutes
-// the CLI and the rail wait for the whole verb.
 const worktreeHookTimeout = time.Minute
 
-// runWorktreeHook runs the after-new-worktree hook in the worktree and waits
-// for it. It returns the hook's error for the caller to show, or empty when no
-// hook is set or the hook succeeded.
 func (d *Daemon) runWorktreeHook(sessionName string, info *WorktreeInfo, created bool) string {
 	if d.hooks == nil || !d.hooks.HasEvent(hooks.AfterNewWorktree) {
 		return ""
@@ -431,17 +341,12 @@ func (d *Daemon) runWorktreeHook(sessionName string, info *WorktreeInfo, created
 func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		repoSource
-		Branch  string   `json:"branch"`
-		Base    string   `json:"base"`
-		Name    string   `json:"name"`
-		Command []string `json:"command"`
-		// NewBranch refuses a branch, worktree folder or session that
-		// exists, so a caller that names one from a title never lands on
-		// work of the person's.
-		NewBranch bool `json:"new_branch"`
-		// Prompt is typed into the agent once it is at its prompt, the
-		// way start-agent and fan type theirs.
-		Prompt string `json:"prompt"`
+		Branch    string   `json:"branch"`
+		Base      string   `json:"base"`
+		Name      string   `json:"name"`
+		Command   []string `json:"command"`
+		NewBranch bool     `json:"new_branch"`
+		Prompt    string   `json:"prompt"`
 		setupParam
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -462,7 +367,6 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 	if len(p.Command) > 0 && p.Command[0] == "" {
 		return nil, invalidParam("command", "command[0] is the program to exec and cannot be empty")
 	}
-	// A child is never wider than its parent (child_clamp.go).
 	command, verr := d.clampChildMode(cs, "new-worktree", "", p.Command, nil, false)
 	if verr != nil {
 		return nil, verr
@@ -489,10 +393,6 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 			info.PromptStatus = PromptPending
 		}
 	}
-	// An agent window that opens during the call gets its prompt in the
-	// call, so the answer says whether it was taken. One that opens later,
-	// after a sync setup passes, gets it in the background, and worktree ls
-	// says what became of it.
 	var (
 		promptMu  sync.Mutex
 		returned  bool
@@ -561,9 +461,6 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 		if p.Group != "" && wt.Group != p.Group {
 			continue
 		}
-		// One session only. The counts under changes walk ignored and
-		// untracked trees — node_modules included — and the close dialog is
-		// the only caller that needs them, for one worktree it names.
 		if p.Session != "" && s.Name != p.Session {
 			continue
 		}
@@ -580,25 +477,23 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 			state = AgentStateNone.Name()
 		}
 		row := map[string]any{
-			"session":       s.Name,
-			"repo":          wt.Repo,
-			"repo_root":     wt.RepoRoot,
-			"branch":        wt.Branch,
-			"path":          wt.Path,
-			"base":          wt.Base,
-			"group":         wt.Group,
-			"fan_id":        wt.FanID,
-			"managed":       wt.Managed,
-			"gone":          wt.Gone,
-			"main":          wt.Main,
-			"state":         state,
-			"harness":       harnessID,
-			"windows":       s.WindowCount,
-			"attached":      s.Attached,
-			"prompt_status": wt.PromptStatus,
-			"prompt_note":   wt.PromptNote,
-			// What the agent showed when its prompt was typed, and the agent
-			// the fan-out started here, as it was named.
+			"session":         s.Name,
+			"repo":            wt.Repo,
+			"repo_root":       wt.RepoRoot,
+			"branch":          wt.Branch,
+			"path":            wt.Path,
+			"base":            wt.Base,
+			"group":           wt.Group,
+			"fan_id":          wt.FanID,
+			"managed":         wt.Managed,
+			"gone":            wt.Gone,
+			"main":            wt.Main,
+			"state":           state,
+			"harness":         harnessID,
+			"windows":         s.WindowCount,
+			"attached":        s.Attached,
+			"prompt_status":   wt.PromptStatus,
+			"prompt_note":     wt.PromptNote,
 			"prompt_ready_by": wt.PromptReadyBy,
 			"agent":           wt.Agent,
 		}
@@ -620,10 +515,6 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 		}
 		rows = append(rows, row)
 	}
-	// The change columns run one heavy git walk each, and a listing of many
-	// worktrees would pay for them serially. Each worker writes only the row
-	// it was given; the one thing shared is the merged cache, which takes
-	// its own lock.
 	if len(withChanges) > 0 {
 		group, ctx := errgroup.WithContext(context.Background())
 		group.SetLimit(worktreeListWorkers)
@@ -648,28 +539,15 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 	}, nil
 }
 
-// worktreeChanges carries one worktree row's git reads. The row map is the
-// worker's only write target.
 type worktreeChanges struct {
 	row map[string]any
 	wt  *WorktreeInfo
 }
 
-// worktreeListWorkers bounds how many worktrees' git reads run at once. Git
-// walks are I/O and stat bound, so a handful saturate a disk and more only
-// add scheduler noise.
 const worktreeListWorkers = 8
 
-// fill adds the change columns to one worktree row. Every column is set even
-// when its git read fails: -1 is a failed read, not a count, and a listing
-// that dropped a column because one worktree's walk broke would read as if
-// the worktree had none.
 func (c worktreeChanges) fill() {
 	row, wt := c.row, c.wt
-	// A git status per worktree, only when asked for: the rail never
-	// asks, and a listing an agent polls should not run git it did not
-	// want. One walk serves the two status columns: the heavy walk is the
-	// ignored one.
 	if changes, ignored, err := worktree.ChangeCounts(wt.Path); err == nil {
 		row["changes"] = changes
 		row["ignored"] = ignored
@@ -677,9 +555,6 @@ func (c worktreeChanges) fill() {
 		row["changes"] = -1
 		row["ignored"] = -1
 	}
-	// What the close dialog says the delete row will take. Ignored is
-	// the part nothing saves, counted in files, not in the entries git
-	// lists; own_commits is the part the delete refuses.
 	if n, err := worktree.OwnCommits(wt.Path); err == nil {
 		row["own_commits"] = n
 	} else {
@@ -690,9 +565,6 @@ func (c worktreeChanges) fill() {
 			row["ahead"] = n
 		}
 	}
-	// Merged into its base, or into the base's upstream. Cached per
-	// tip in the worktree package, so a polled listing runs git
-	// again only when a branch moves.
 	into, _ := worktree.Merged(wt.Path, wt.RepoRoot, wt.Branch, wt.StartCommit, wt.Base)
 	row["merged"] = into != ""
 	if into != "" {
@@ -719,10 +591,7 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 	if verr != nil {
 		return nil, verr
 	}
-	// A setup still running here stops being watched, so its undo does not
-	// race this removal.
 	d.setups.halt(sess.ID)
-	// Resolved now, while the directory is there to resolve.
 	notesRoot := canonRoot(info.Path)
 	killed := false
 
@@ -739,10 +608,6 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 	}
 
 	if _, err := os.Stat(info.Path); err != nil {
-		// The directory is already gone. Git still lists the worktree, and
-		// forgetting it is "git worktree prune", which this daemon never runs:
-		// prune forgets every worktree whose directory is missing, not only
-		// this one, and a directory can be missing because it is being moved.
 		out["gone"] = true
 		out["note"] = "The directory was already gone. Git still lists the worktree. Run 'git worktree prune' in " + info.RepoRoot + " to forget it."
 	} else {
@@ -753,9 +618,6 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 			})
 		}
 		out["changes"] = changes
-		// A jj workspace's work is its working-copy commit, which forgetting
-		// the workspace keeps: nothing to stash. What the snapshot left out,
-		// such as a new file over snapshot.max-new-file-size, is lost.
 		jj := gitstate.Find(info.Path).JJ
 		if jj {
 			changes = 0
@@ -788,24 +650,12 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 		} else {
 			out["own_commits"] = -1
 		}
-		// Ignored files are counted in files, not in the entries git lists: an
-		// ignored directory is one entry however many files it holds. They are
-		// not saved: git never stashes them, and git worktree remove deletes
-		// them without --force. -1 is a count git would not give, so the caller
-		// can tell a failed read from a clean 0.
 		if ignored, err := worktree.Ignored(info.Path); err == nil {
 			out["ignored"] = ignored
 		} else {
 			out["ignored"] = -1
 		}
-		// A nested repository in an ignored or untracked path is the one thing
-		// even a clean read cannot save: the removal deletes its .git, and no
-		// stash holds a nested repository's history.
 		if nested, err := worktree.NestedRepo(info.Path); err != nil {
-			// The check is what stands between the removal and a nested
-			// repository's history, so a failed read fails closed.
-			// The walk of the untracked and ignored paths fails with a
-			// *fs.PathError; git fails with a plain error.
 			detail := "git could not read the worktree's status for the nested repository check. Nothing was removed."
 			if _, walk := errors.AsType[*fs.PathError](err); walk {
 				detail = "tuios could not read the untracked and ignored folders for the nested repository check. Nothing was removed."
@@ -838,11 +688,6 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 			out["stash_message"] = "tuios: " + info.Branch
 		}
 		discard := changes > 0 && !p.Stash || jj && p.Force
-		// On Windows the session's shells hold the worktree as their cwd, and
-		// git cannot remove a directory a process sits inside. The stash has
-		// already run, so the session goes first and the removal has the
-		// directory to itself. Everywhere else the session outlives the verb
-		// when it is asked to, so the client can show the note before it kills.
 		if runtime.GOOS == "windows" && !p.KeepSession {
 			out["clients_switched"] = d.moveClientsOff(sess)
 			if err := d.manager.DeleteSession(sess.Name()); err == nil {
@@ -852,26 +697,17 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 		if err := worktree.Remove(info.RepoRoot, info.Path, discard); err != nil {
 			msg := "git refused to remove the worktree: " + err.Error() + " It is still there."
 			if stashed, _ := out["stashed"].(bool); stashed {
-				// The stash ran before the remove, so the refusal leaves the
-				// worktree in place but empty: the changes are in git stash,
-				// and this error is the one place that says so.
 				msg += " The changes were already stashed: they are in git stash under the message \"tuios: " + info.Branch + "\"."
 			}
 			if killed {
 				msg += " The session was killed to free the directory for the removal."
 			}
-			// The message carries the whole story — the refusal, the stash, the
-			// kill — and the client prints message and Detail together, so a
-			// Detail that repeats it prints the story twice.
 			return nil, hintedVerbError(ErrVerbGitFailed, msg, nil)
 		}
 		out["discarded"] = discard
 		d.worktreeRemoved(sess.Name(), info.Path)
 	}
-	// The notes on the worktree's changes go with it.
 	d.reviewNotes.dropRoot(notesRoot)
-	// So do the checkpoints taken in it. The refs are the repository's, so
-	// git runs in the main checkout, which is still there.
 	d.dropCheckpointsOf(info.RepoRoot, notesRoot)
 
 	out["session_killed"] = killed
@@ -884,15 +720,6 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 	return out, nil
 }
 
-// moveClientsOff asks every client that shows sess to switch to another
-// session before the kill, and reports how many did. A kill under a client
-// ends it, and a person who removes the worktree they are looking at wants
-// to land where they were before, as the quit menu's kill-and-go-next row
-// does. The client picks: the session it showed before, when that is still
-// here, else the first other one. The live names go with the request, so a
-// client never picks a session it only remembers, which a switch would
-// create. A client with nowhere to go, or one too old to know the command,
-// is left to the kill, as before.
 func (d *Daemon) moveClientsOff(sess *Session) int {
 	var tuis []*connState
 	d.clientsMu.RLock()
@@ -926,8 +753,6 @@ func (d *Daemon) moveClientsOff(sess *Session) int {
 		if err != nil || !res.Success {
 			continue
 		}
-		// The client answers before it switches, as for switch-session, so
-		// the kill waits for the switch to show on the session it went to.
 		to, _ := res.Data["session"].(string)
 		dest, _ := d.manager.ResolveSession(to)
 		if dest == nil || dest.ID == sess.ID {
@@ -940,23 +765,16 @@ func (d *Daemon) moveClientsOff(sess *Session) int {
 	return moved
 }
 
-// worktreeRemoved tells the event stream, and with it the plugin hooks on
-// worktree.removed, that git removed the worktree at path.
 func (d *Daemon) worktreeRemoved(session, path string) {
 	d.events.publish(streamEvent{Type: EventWorktreeRemoved, Session: session, Path: path})
 }
 
-// fanStopWords are the words a branch stem drops. They carry no meaning on
-// their own, and a stem has room for four words.
 var fanStopWords = map[string]bool{
 	"a": true, "an": true, "the": true, "to": true, "of": true, "in": true, "on": true,
 	"for": true, "with": true, "and": true, "or": true, "is": true, "it": true, "this": true,
 	"that": true, "please": true, "into": true, "from": true, "by": true, "at": true,
 }
 
-// fanStem turns a prompt into a branch stem a person can read: "fan/" and the
-// first content words of the prompt. "Add a retry to the client" is
-// fan/add-retry-client.
 func fanStem(prompt string) string {
 	var words []string
 	for _, w := range regexp.MustCompile(`[A-Za-z0-9]+`).FindAllString(strings.ToLower(prompt), -1) {
@@ -981,10 +799,6 @@ func fanStem(prompt string) string {
 	return "fan/" + stem
 }
 
-// fanBranches picks count branch names from stem that are free in the
-// repository and on disk: stem, then stem-2, stem-3, and so on, skipping any
-// that exist. Numbering from 2 keeps the first name bare, so a fan of one
-// reads like a worktree made by hand.
 func fanBranches(template, root, stem string, count int) []string {
 	names := make([]string, 0, count)
 	for i := 1; len(names) < count && i < count+100; i++ {
@@ -995,7 +809,6 @@ func fanBranches(template, root, stem string, count int) []string {
 		if worktree.BranchExists(root, name) {
 			continue
 		}
-		// A template that does not render is reported by the create.
 		if path, err := worktree.PathFor(template, root, name); err == nil {
 			if _, err := os.Lstat(path); err == nil {
 				continue
@@ -1033,14 +846,10 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	if verr != nil {
 		return nil, verr
 	}
-	// What every new pane may do through tuios, decided before anything is
-	// made. See pane_grants.go.
 	grants, verr := d.launchGrants(cs, p.Grants)
 	if verr != nil {
 		return nil, verr
 	}
-	// The card the fan works on, checked before anything is made, so a
-	// refused stamp costs no worktree. See task_auto.go.
 	var task *taskParam
 	if p.TaskSession != "" && p.Task == "" {
 		return nil, invalidParam("task_session", "task_session names the session of task, so it takes a task")
@@ -1050,8 +859,6 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 			return nil, verr
 		}
 	}
-	// One prompt for every session, or one per session: prompts sets the
-	// count when count is left out.
 	if len(p.Prompts) > 0 {
 		if p.Prompt != "" {
 			return nil, invalidParam("prompts", "prompt is the same for every session and prompts is one per session. Pass one or the other")
@@ -1079,7 +886,6 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		}
 		return p.Prompt
 	}
-	// One agent for every session, or several cycled across them.
 	specs := p.Agents
 	switch {
 	case p.Agent != "" && len(p.Agents) > 0:
@@ -1089,8 +895,6 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	case len(p.Agents) > fanMaxCount:
 		return nil, invalidParam("agents", fmt.Sprintf("agents names at most %d agents", fanMaxCount))
 	}
-	// Every agent is resolved before anything is created, so a missing one
-	// costs no worktree.
 	var env []string
 	var launches []agentLaunch
 	resolveAgents := func() *verbError {
@@ -1111,17 +915,12 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 			if launches[i], verr = d.withChoice(launches[i], p.launchChoice); verr != nil {
 				return verr
 			}
-			// Each agent's permission mode is held to the calling agent's
-			// (child_clamp.go).
 			if launches[i].argv, verr = d.clampChildMode(cs, "fan", launches[i].harness, launches[i].argv, env, false); verr != nil {
 				return verr
 			}
 		}
 		return nil
 	}
-	// The repository is checked first, as it always was, except that the
-	// agents are also checked before a clone, so a missing agent does not
-	// cost a clone.
 	root, cloned, verr := d.resolveRepoSource(cs, "fan", p.repoSource, resolveAgents)
 	if verr != nil {
 		return nil, verr
@@ -1136,7 +935,6 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		return nil, verr
 	}
 	if join := strings.TrimSpace(p.Join); join != "" && stem == "" {
-		// The fan to join names itself.
 		if s := d.manager.GetSession(join); s != nil {
 			if wt := s.Worktree(); wt != nil {
 				stem = wt.Group
@@ -1154,8 +952,6 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	if verr != nil {
 		return nil, verr
 	}
-	// The name is held from the check until the call's sessions exist, so
-	// two calls cannot both take it as new.
 	defer release()
 	template := d.worktreeTemplate()
 	if _, verr := worktreePathFor(template, root, stem); verr != nil {
@@ -1166,8 +962,6 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		return nil, invalidParam("name", "could not find "+strconv.Itoa(p.Count)+" free branch names from "+stem)
 	}
 	readyTimeout := durationOr(p.ReadyTimeout, fanDefaultReadyTimeout)
-	// The session of the pane that asked, so a connection restricted to that
-	// session reaches the agents it started. See conn_scope.go.
 	launchedFrom, launchedFromID := "", ""
 	if s := d.callerSession(cs); s != nil {
 		launchedFrom, launchedFromID = s.Name(), s.ID
@@ -1175,8 +969,6 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 
 	sessions := make([]map[string]any, 0, p.Count)
 	var warnings []string
-	// stamp writes the fan onto the card once a session of it exists, and
-	// returns a line saying what became of the card.
 	stamp := func(out map[string]any) string {
 		if task == nil || len(sessions) == 0 {
 			return ""
@@ -1192,8 +984,6 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	startedBy := d.startedByLater(cs)
 	for i, branch := range branches {
 		launch, prompt := launches[i%len(launches)], promptFor(i)
-		// The prompt is typed once the agent's window is open: at once, or
-		// after a sync setup passes.
 		onAgent := func(sess *Session, win WindowState) {
 			startedBy(win.ID)
 			go d.deliverFanPrompt(sess, win.ID, launch.harness, prompt, readyTimeout)
@@ -1247,9 +1037,6 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		}
 		sessions = append(sessions, row)
 	}
-	// agent, command and prompt name the first session's, which for a fan of
-	// one agent and one prompt is every session's, as they always were. The
-	// sessions say which agent and command each got.
 	out := map[string]any{
 		"type":      "fan_started",
 		"group":     stem,
@@ -1272,15 +1059,6 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	return out, nil
 }
 
-// deliverFanPrompt types the prompt into the agent's pane once the agent is
-// ready to read it, and records what happened on the session's record.
-//
-// The wait is waitAgentStart's: positive evidence the agent is at its prompt
-// (fanReadyStates), with a needs_input the person answers first. An agent that
-// has not been ready for a while turns the status to held and puts a question
-// in the Inbox; the prompt is still typed as soon as it is ready. It runs
-// detached from the verb, so fan returns as soon as the sessions exist and the
-// person watches the rail rather than a blocked command.
 func (d *Daemon) deliverFanPrompt(sess *Session, windowID, harness, text string, timeout time.Duration) {
 	w, outcome := d.waitAgentStart(sess, windowID, harness, timeout, false, false, func(WindowState) {
 		sess.setPromptStatus(PromptHeld, "The agent is not at a prompt tuios recognises. Look at the pane: it may be showing a first-run choice. The prompt is typed as soon as the agent is ready.", 0)
@@ -1297,42 +1075,28 @@ func (d *Daemon) deliverFanPrompt(sess *Session, windowID, harness, text string,
 		return
 	}
 	sess.setPromptReadyBy(readyBy(w))
-	// The prompt stays pending for the few seconds the agent takes to show it
-	// took it. See prompt_gate.go.
 	status, note, at := d.typeFirstPrompt(sess, windowID, text)
 	sess.setPromptStatus(status, note, at)
 }
 
-// fanReservations hold the names of the fans being made now, by canonical
-// repository root and stem, from the check until the sessions exist.
 type fanReservations struct {
 	mu    sync.Mutex
 	names map[string]bool
 }
 
-// fanKey is the key of the fan stem in the repository at root.
 func fanKey(root, stem string) string { return canonRoot(root) + "\x00" + stem }
 
-// newFanID is a random ID for a new fan. Every session of the fan saves it,
-// a join copies it, and the fan's sessions are the ones that share it, so a
-// fan made later under the same name is never taken for this one, also
-// across a restart.
 func newFanID() string {
 	var b [12]byte
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
 }
 
-// sameFan reports whether a and b are sessions of one fan: the same group,
-// repository and fan ID. Two records from before the ID match by name.
 func sameFan(a, b *WorktreeInfo) bool {
 	return a != nil && b != nil && a.Group != "" && a.Group == b.Group &&
 		a.RepoRoot == b.RepoRoot && a.FanID == b.FanID
 }
 
-// reachedNames keeps the names of the sessions the caller on cs reaches. A
-// refusal lists a fan's sessions only to a caller that could list them
-// anyway.
 func (d *Daemon) reachedNames(cs *connState, names []string) []string {
 	var out []string
 	for _, n := range names {
@@ -1343,7 +1107,6 @@ func (d *Daemon) reachedNames(cs *connState, names []string) []string {
 	return out
 }
 
-// fanMembers are the sessions of the fan stem in the repository at root.
 func (d *Daemon) fanMembers(root, stem string) []*Session {
 	var out []*Session
 	for _, s := range d.manager.AllSessions() {
@@ -1354,21 +1117,6 @@ func (d *Daemon) fanMembers(root, stem string) []*Session {
 	return out
 }
 
-// reserveFan decides the fan a call makes or joins, and holds its name until
-// release. A fan's sessions reach each other (sessionInScope), so joining
-// one is never implicit:
-//
-//   - A name that is no fan yet starts a new fan.
-//   - A name that is already a fan, or is being made by another call now,
-//     is refused for every caller, the person included, unless the call
-//     names a session of that fan with join and the caller reaches it.
-//   - A name the caller did not give, the one fan makes from the prompt, is
-//     moved on to a free one: name-2, name-3.
-//
-// join with no fan of that name is refused too, so a join never starts one.
-//
-// It returns the fan's name and ID: a new ID for a new fan, the joined
-// session's for a join.
 func (d *Daemon) reserveFan(cs *connState, root, stem string, named bool, join string) (string, string, func(), *verbError) {
 	r := &d.fanReserved
 	r.mu.Lock()
@@ -1398,7 +1146,6 @@ func (d *Daemon) reserveFan(cs *connState, root, stem string, named bool, join s
 		if !d.callerReachesSession(cs, join) {
 			return "", "", nil, newVerbError(ErrVerbForbidden, "the caller cannot reach "+echoName(join)+", so it cannot add attempts to its fan")
 		}
-		// Joining an existing fan holds no reservation: the fan exists.
 		return stem, joined.Worktree().FanID, func() {}, nil
 	case taken(stem) && named:
 		var names []string
@@ -1427,11 +1174,6 @@ func (d *Daemon) reserveFan(cs *connState, root, stem string, named bool, join s
 	}, nil
 }
 
-// fanStemPlain refuses a fan name with a character outside A-Z, a-z, 0-9 and
-// / . _ -, the characters the name fan makes from a prompt already keeps to.
-// Anything wider lets a name read on screen as another fan's: a zero-width
-// space, a blank letter such as the Hangul filler, or a letter from another
-// script that looks like a Latin one.
 func fanStemPlain(stem string) *verbError {
 	for _, r := range stem {
 		if !FanNameChar(r) {

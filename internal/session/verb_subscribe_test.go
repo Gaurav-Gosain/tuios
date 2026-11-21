@@ -39,15 +39,12 @@ func TestUnsubscribedConnectionReceivesNoEvents(t *testing.T) {
 	sess := makeSessionWithWindow(t, d, "work")
 
 	c := dialVerb(t, sp)
-	// A normal request/response works.
 	result(t, c.call(t, `{"id":1,"verb":"list-windows","params":{"session":"work"}}`))
 
-	// Cause events on the daemon.
 	if _, err := sess.AddDaemonWindow("noise", nil); err != nil {
 		t.Fatalf("AddDaemonWindow: %v", err)
 	}
 
-	// No event line should arrive; a short read must time out.
 	_ = c.conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
 	if _, err := c.r.ReadBytes('\n'); err == nil {
 		t.Fatal("unsubscribed connection unexpectedly received an event line")

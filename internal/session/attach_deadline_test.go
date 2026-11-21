@@ -18,7 +18,6 @@ func TestAttachDeadlineBoundsTheReply(t *testing.T) {
 		_ = clientEnd.Close()
 		_ = daemonEnd.Close()
 	})
-	// The stalled daemon: it takes the attach and says nothing.
 	go func() {
 		for {
 			if _, err := ReadMessage(daemonEnd); err != nil {

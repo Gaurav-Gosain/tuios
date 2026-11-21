@@ -6,13 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// A popup is a floating pane that runs one command and closes when the command
-// exits. The size the caller asks for travels with the window; the rectangle it
-// resolves to does not, for the reason the zoom box does not (see
-// WindowState.Zoomed): the box is measured against one client's content region,
-// and a peer of another size has to measure it against its own. So the daemon
-// keeps the request as the caller wrote it and every client resolves it here.
-
 const (
 	// PopupDefaultWidth and PopupDefaultHeight are the size a popup takes when
 	// the caller names none. They are shares rather than cells so the default
@@ -75,11 +68,6 @@ func ResolvePopupSize(spec, fallback string, extent, floor int) int {
 	return max(size, 1)
 }
 
-// popupContentSize is the size a popup's command gets before any client has
-// placed it: the box a client resolves (see popupRect in internal/app) less
-// the border, measured against the session's size less its agreed chrome
-// reserve. That is the content region every client lays panes out in, so the
-// placement that follows does not change the size.
 func popupContentSize(sessW, sessH int, r LayoutReserve, width, height string) (cols, rows int) {
 	regionW := max(sessW-r.Left-r.Right, 1)
 	regionH := max(sessH-r.Top-r.Bottom, 1)

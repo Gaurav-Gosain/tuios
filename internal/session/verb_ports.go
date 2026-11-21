@@ -14,27 +14,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// list-ports: the TCP ports the processes in each pane listen on, so the GUI
-// can offer to open a dev server a pane started.
-//
-// A pane's processes are its program and every process under it. The listing
-// is read from the system each time it is older than portsCacheTTL: on Linux
-// from /proc (ports_linux.go), on macOS from lsof (ports_darwin.go). Elsewhere
-// the answer is empty with supported false.
-
-// portsCacheTTL is how long one reading of the system answers list-ports.
 const portsCacheTTL = time.Second
 
-// portsTreeMax bounds how many processes one pane's tree may hold. A pane
-// running a build can fork hundreds; past this the rest are not looked at.
 const portsTreeMax = 1024
 
-// paneProc names the pane a process is in.
 type paneProc struct {
 	session, window, worktree string
 }
 
-// listenHit is one listening socket of one process.
 type listenHit struct {
 	pid  int
 	port int
@@ -42,7 +29,6 @@ type listenHit struct {
 	comm string
 }
 
-// portRow is one row of a list-ports answer.
 type portRow struct {
 	Session  string `json:"session"`
 	Window   string `json:"window"`
@@ -53,8 +39,6 @@ type portRow struct {
 	Worktree string `json:"worktree"`
 }
 
-// portsCache holds the last reading for portsCacheTTL. The lock is held
-// through a reading, so callers that arrive together share one.
 type portsCache struct {
 	mu   sync.Mutex
 	at   time.Time
@@ -87,8 +71,6 @@ func (d *Daemon) verbListPorts(cs *connState, params json.RawMessage) (any, *ver
 	return map[string]any{"supported": portsSupported, "ports": rows}, nil
 }
 
-// readPorts returns every pane's listening ports, read at most once per
-// portsCacheTTL.
 func (d *Daemon) readPorts() []portRow {
 	c := &d.ports
 	c.mu.Lock()
@@ -96,7 +78,6 @@ func (d *Daemon) readPorts() []portRow {
 	if !c.at.IsZero() && time.Since(c.at) < portsCacheTTL {
 		return c.rows
 	}
-	// Each pane's program, by pid, and the pane it is in.
 	roots := map[int]paneProc{}
 	for _, sess := range d.manager.AllSessions() {
 		wt := ""
@@ -105,7 +86,6 @@ func (d *Daemon) readPorts() []portRow {
 		}
 		for _, w := range sess.GetState().Windows {
 			if w.Host != "" {
-				// The process runs on another machine.
 				continue
 			}
 			if pty := sess.GetPTY(w.PTYID); pty != nil {
@@ -140,9 +120,6 @@ func (d *Daemon) readPorts() []portRow {
 	return rows
 }
 
-// walkProcTree maps every process under each root to the root's pane, reading
-// children with children. A process is placed in the first pane that reaches
-// it.
 func walkProcTree(roots map[int]paneProc, children func(pid int) []int) map[int]paneProc {
 	owner := make(map[int]paneProc, len(roots))
 	for root, pp := range roots {
@@ -168,22 +145,14 @@ func walkProcTree(roots map[int]paneProc, children func(pid int) []int) map[int]
 	return owner
 }
 
-// procNetListen is one LISTEN socket of /proc/net/tcp or /proc/net/tcp6.
 type procNetListen struct {
 	addr  string
 	port  int
 	inode uint64
 }
 
-// tcpListen is the state /proc/net/tcp writes for a listening socket.
 const tcpListen = "0A"
 
-// parseProcNetTCP reads the lines of /proc/net/tcp or /proc/net/tcp6 and
-// returns the sockets in LISTEN state. A line it cannot read is skipped.
-//
-// A line is "sl local_address rem_address st ... inode ...", with the local
-// address as hex words in the host's byte order and the port as big-endian
-// hex: "0100007F:1F90" is 127.0.0.1:8080 on a little-endian machine.
 func parseProcNetTCP(data string) []procNetListen {
 	var out []procNetListen
 	for line := range strings.Lines(data) {
@@ -212,9 +181,6 @@ func parseProcNetTCP(data string) []procNetListen {
 	return out
 }
 
-// procNetAddr decodes /proc/net/tcp's address: 8 hex digits for IPv4, 32 for
-// IPv6, each 32-bit word in little-endian order. Every machine tuios runs on
-// is little-endian.
 func procNetAddr(h string) (string, bool) {
 	raw, err := hex.DecodeString(h)
 	if err != nil || (len(raw) != 4 && len(raw) != 16) {
@@ -227,6 +193,5 @@ func procNetAddr(h string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	// An IPv4 address a v6 socket also takes reads as itself.
 	return ip.Unmap().String(), true
 }

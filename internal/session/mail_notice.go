@@ -7,54 +7,20 @@ import (
 	"time"
 )
 
-// Mail notices: the one line that tells an agent it has unread mail.
-//
-// No harness reads a tuios inbox on its own, and an agent taught to check one
-// forgets after a few compactions. So the daemon says it for the agent, in two
-// places. A hook of a harness that takes context from its hooks asks for the
-// notice during a turn (agent-mail-notice, called by tuios agent-hook), and the
-// harness adds the line to the agent's context.
-//
-// Each message is announced once. The bus keeps, per pane, the newest message
-// id it announced, and a notice goes out only when an unread message is newer
-// than that. A conversation that starts, resumes or compacts asks with reset:
-// the agent no longer holds the earlier notice, so mail still unread is
-// announced again.
-//
-// The line is written by tuios alone. It carries a count, the senders' names
-// cut to a safe alphabet, and a command to run. It never carries a subject or a
-// body: those are written by another program, and the line goes into the
-// agent's context, where text is read as instructions. Mail stays data the
-// recipient reads on purpose, fenced, with read-agent-messages.
-
-// mailNoticeMaxSenders is how many senders a notice names before "and N more".
 const mailNoticeMaxSenders = 3
 
-// mailNoticeMaxName bounds one sender's name in a notice, in runes.
 const mailNoticeMaxName = 24
 
-// noticeMark is the newest message id announced to one pane, and the session
-// the pane was in, so a session that ends takes its marks with it.
-//
-// A hook takes a notice on a lease: the mail it describes counts as announced
-// until leaseUntil, and becomes announced for good only when the hook says it
-// wrote the line (commitNotice). A hook that missed its deadline printed
-// nothing, and its lease runs out, so the next hook announces the mail again.
 type noticeMark struct {
-	id      uint64
-	session string
-	// lease is the token of the open lease, 0 for none. leaseTo is the id
-	// it covers.
+	id         uint64
+	session    string
 	lease      uint64
 	leaseTo    uint64
 	leaseUntil time.Time
 }
 
-// noticeLease is how long a hook's notice counts as announced before the
-// hook says it wrote it. It is longer than a hook's whole run.
 const noticeLease = 3 * time.Second
 
-// effective is the newest id that counts as announced at now.
 func (m noticeMark) effective(now time.Time) uint64 {
 	if m.lease != 0 && now.Before(m.leaseUntil) {
 		return max(m.id, m.leaseTo)
@@ -62,18 +28,13 @@ func (m noticeMark) effective(now time.Time) uint64 {
 	return m.id
 }
 
-// mailSummary is a pane's unread mail as a notice describes it.
 type mailSummary struct {
 	unread  int
 	senders []string
-	// more is how many senders are left out of senders.
-	more int
-	// newest is the id of the newest unread message.
-	newest uint64
+	more    int
+	newest  uint64
 }
 
-// unreadSummary counts the unread direct messages in one inbox and names their
-// senders, newest sender first. Callers hold b.mu.
 func (b *agentBus) unreadSummaryLocked(session, inbox string) mailSummary {
 	var s mailSummary
 	seen := map[string]bool{}
@@ -100,11 +61,6 @@ func (b *agentBus) unreadSummaryLocked(session, inbox string) mailSummary {
 	return s
 }
 
-// takeNotice reports the inbox's unread mail and whether it holds a message
-// not yet announced, and marks everything it reports as announced: for good,
-// or with lease until the caller commits it with the token it returns. With
-// reset it announces whatever is unread. The check and the mark are one
-// step, so two hooks that run at once announce a message once.
 func (b *agentBus) takeNotice(session, inbox string, reset, lease bool) (mailSummary, bool, uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -132,8 +88,6 @@ func (b *agentBus) takeNotice(session, inbox string, reset, lease bool) (mailSum
 	return s, true, m.lease
 }
 
-// commitNotice makes the lease with token announced for good. It reports
-// false when the lease ran out or another took its place.
 func (b *agentBus) commitNotice(inbox string, token uint64) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -147,8 +101,6 @@ func (b *agentBus) commitNotice(inbox string, token uint64) bool {
 	return true
 }
 
-// forgetNotices drops the marks of one pane, or with window empty of every
-// pane in session.
 func (b *agentBus) forgetNotices(session, window string) {
 	if b == nil {
 		return
@@ -166,10 +118,6 @@ func (b *agentBus) forgetNotices(session, window string) {
 	}
 }
 
-// mailSenderName is the name a notice gives a message's sender: the label it
-// was sent with, cut to letters, digits and a few marks, or the sender's short
-// window id. Every part is a claim or a pane title, which the sending program
-// controls, so nothing outside that alphabet reaches the line.
 func mailSenderName(m AgentMessage) string {
 	name := safeNoticeName(m.FromLabel)
 	if name == "" {
@@ -190,8 +138,6 @@ func mailSenderName(m AgentMessage) string {
 	return name
 }
 
-// safeNoticeName keeps the letters, digits, spaces and the marks . _ - : @ of
-// s, joins runs of spaces, and cuts the result to mailNoticeMaxName runes.
 func safeNoticeName(s string) string {
 	var b strings.Builder
 	n := 0
@@ -223,8 +169,6 @@ func safeNoticeName(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// shellSafeSession reports whether a session name can go into a command line
-// as it is: letters, digits, '.', '_' and '-', at most 64 bytes.
 func shellSafeSession(name string) bool {
 	if name == "" || len(name) > 64 || strings.HasPrefix(name, "-") {
 		return false
@@ -238,8 +182,6 @@ func shellSafeSession(name string) bool {
 	return true
 }
 
-// mailReadCommand is the command a notice tells the agent to run. A session
-// name outside the safe alphabet is left to the agent's own TUIOS_SESSION.
 func mailReadCommand(session, window string) string {
 	s := `"$TUIOS_SESSION"`
 	if shellSafeSession(session) {
@@ -248,7 +190,6 @@ func mailReadCommand(session, window string) string {
 	return "tuios read-agent-messages -s " + s + " -w " + shortWindowID(window) + " --unread"
 }
 
-// mailNoticeText is the notice line, with no line break.
 func mailNoticeText(s mailSummary, session, window string) string {
 	if s.unread == 0 {
 		return ""
@@ -287,13 +228,6 @@ func mailNoticeText(s mailSummary, session, window string) string {
 	return b.String()
 }
 
-// verbAgentMailNotice answers a pane's hook with the notice line for its
-// unread mail, once per message. See the top of this file.
-//
-// A hook names its harness, conversation and process, and the call is held to
-// the guard a report from that hook would be: a nested harness, another
-// conversation's process, or a harness outside the pane gets no notice and the
-// reason. A hook asks with lease and commits once it wrote the line.
 func (d *Daemon) verbAgentMailNotice(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session        string `json:"session"`
@@ -359,18 +293,12 @@ func (d *Daemon) verbAgentMailNotice(cs *connState, params json.RawMessage) (any
 	return out, nil
 }
 
-// unannounced reports the inbox's unread mail and the newest message id
-// announced to it, an open lease included. Mail newer than mark was never
-// announced. It marks nothing.
 func (b *agentBus) unannounced(session, inbox string) (mailSummary, uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.unreadSummaryLocked(session, inbox), b.noticed[inbox].effective(time.Now())
 }
 
-// claimNotice marks the inbox's mail up to id announced, but only while the
-// mark is still was: nobody announced anything since the caller looked. It
-// reports whether it claimed. It never moves a mark back.
 func (b *agentBus) claimNotice(session, inbox string, id, was uint64) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -387,8 +315,6 @@ func (b *agentBus) claimNotice(session, inbox string, id, was uint64) bool {
 	return true
 }
 
-// unclaimNotice puts the mark back to was after a claim of id that came to
-// nothing, unless something moved it since.
 func (b *agentBus) unclaimNotice(inbox string, id, was uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

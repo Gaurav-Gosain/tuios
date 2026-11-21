@@ -11,86 +11,29 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// This file is the one way the daemon types a prompt into an agent's pane and
-// submits it. ask-agent and the fan prompt both go through it, so the two
-// cannot disagree about what a submitted prompt looks like.
-//
-// Both used to write the text and a line feed. That is wrong in two ways for
-// the TUIs agents run in. Claude Code and Codex submit on carriage return, which
-// is what the Enter key sends, and several agent TUIs bind a line feed (Ctrl+J)
-// to "insert a newline", so a prompt could sit in the input box unsent. And a
-// multi-line prompt typed as raw lines is a sequence of Enters, so an agent that
-// does submit on a line feed sent the first line alone.
-//
-// So the prompt is pasted and then submitted, the way a person pastes and
-// presses Enter:
-//
-//  1. The text, with its trailing line breaks dropped. When the pane has
-//     bracketed paste on (DECSET 2004), it is wrapped in ESC[200~ and ESC[201~,
-//     so the application reads it as one paste whatever lines it holds.
-//  2. A short wait, so the application has taken the paste in before the key
-//     that submits it arrives. TUIs that detect a paste by timing (Codex does)
-//     turn an Enter that arrives inside the burst into a newline.
-//  3. The submit key: a carriage return, unless the harness's manifest says
-//     it submits on a line feed.
-//
-// The harness's [input] block can change three things, and only these: the
-// submit key, whether a bracketed paste is allowed at all (a harness that
-// turns DECSET 2004 on and mishandles a paste can refuse it), and whether a
-// focus-in report (CSI I) goes first, for a harness that ignores a submit while
-// it believes it is unfocused. The focus report is only sent when the pane has
-// focus reporting (DECSET 1004) on, so an application that never asked for
-// focus events never sees the bytes. See harness.Input.
-
-// Bracketed paste delimiters, DECSET 2004.
 const (
 	bracketedPasteStart = "\x1b[200~"
 	bracketedPasteEnd   = "\x1b[201~"
 )
 
-// focusInReport is what a terminal sends when its window gains focus and the
-// application has DECSET 1004 on.
 const focusInReport = "\x1b[I"
 
-// promptSubmitMaxWait bounds the wait between the paste and the carriage
-// return. herdr waits this long unconditionally; see promptSubmitQuiet for when
-// the wait ends sooner.
 const promptSubmitMaxWait = 300 * time.Millisecond
 
-// promptSubmitQuiet is how long the pane must stay silent, after printing
-// something in answer to the paste, for the paste to count as taken in. An
-// application that echoes the paste and then goes quiet has drawn it, and the
-// full wait would only slow the ask down. One that prints nothing gets the whole
-// promptSubmitMaxWait, since silence then says nothing about whether it has
-// read the paste yet.
 const promptSubmitQuiet = 80 * time.Millisecond
 
-// promptSubmitPoll is how often the wait looks at the pane's output clock.
 const promptSubmitPoll = 10 * time.Millisecond
 
-// inputLiveMaxWait bounds the wait for a harness that pastes in brackets to
-// turn bracketed paste on before its first prompt is typed. See waitInputLive.
 const inputLiveMaxWait = 15 * time.Second
 
-// inputLiveQuiet is how long the pane must stay silent after it turns
-// bracketed paste on, so the input box it is drawing is in place when the
-// paste arrives.
 const inputLiveQuiet = 150 * time.Millisecond
 
-// inputLivePoll is how often waitInputLive looks at the pane's modes.
 const inputLivePoll = 20 * time.Millisecond
 
-// promptPane is what submitPrompt needs from a pane. *PTY implements it, and a
-// test implements it to record the bytes.
 type promptPane interface {
 	Write([]byte) (int, error)
-	// BracketedPasteOn reports whether the application in the pane has
-	// bracketed paste mode on.
 	BracketedPasteOn() bool
-	// LastOutput is the unix-nano time the pane last printed anything.
 	LastOutput() int64
-	// FocusReportingOn reports whether the application in the pane has focus
-	// event reporting (DECSET 1004) on.
 	FocusReportingOn() bool
 }
 
@@ -110,10 +53,6 @@ func (p *PTY) FocusReportingOn() bool {
 	return p.terminal != nil && p.terminal.FocusReportingEnabled()
 }
 
-// inputProfileFor is the input profile of the harness running in a window as
-// the session last recorded it, or the default when there is none: a pane no
-// harness has claimed still gets a prompt pasted and submitted with a carriage
-// return, as it always did.
 func (d *Daemon) inputProfileFor(sess *Session, windowID string) harness.InputProfile {
 	reg := d.agentMatcher.registry
 	if reg == nil || sess == nil {
@@ -131,47 +70,24 @@ func (d *Daemon) inputProfileFor(sess *Session, windowID string) harness.InputPr
 	return reg.InputProfile(hid)
 }
 
-// submitPrompt types text into the pane as one paste and submits it with the
-// harness's submit key. It returns once the submit key is written, or with the
-// first write error, or with ctx's error if ctx ends during the wait, in which
-// case the paste was written and the submit key was not.
-//
-// The time it returns is taken just before the submit key is written. It is
-// the line the stall gate draws: output from before it is the application
-// drawing the paste, and output after it is the application acting on Enter.
-// See prompt_gate.go.
 func submitPrompt(ctx context.Context, pane promptPane, text string, in harness.InputProfile) (time.Time, error) {
 	return submitPromptStamped(ctx, pane, text, in, promptSubmitQuiet, promptSubmitMaxWait)
 }
 
-// submitPromptStamped is submitPrompt with the waits as parameters. It also
-// returns when the submit key was sent.
 func submitPromptStamped(ctx context.Context, pane promptPane, text string, in harness.InputProfile, quiet, maxWait time.Duration) (time.Time, error) {
 	return submitPastesStamped(ctx, pane, []string{text}, in, quiet, maxWait)
 }
 
-// submitPastes types each of pastes as a paste of its own, waiting after each
-// for the application to take it in, and then submits once. A queued reply
-// with an image is typed this way: the text before the image, the image's
-// path alone, the text after it, so a harness that reads a pasted path as an
-// attached image sees the path as a paste by itself.
 func submitPastes(ctx context.Context, pane promptPane, pastes []string, in harness.InputProfile) (time.Time, error) {
 	return submitPastesStamped(ctx, pane, pastes, in, promptSubmitQuiet, promptSubmitMaxWait)
 }
 
-// submitGuardKey carries a check that runs right before the submit key.
 type submitGuardKey struct{}
 
-// withSubmitGuard returns ctx with check, which submitPastesStamped runs
-// right before it writes the submit key. The wait for the paste to be taken
-// can be long, and a pane can come to a prompt in it: the Enter would then
-// answer the prompt. A check that fails stops the submit, with its error
-// wrapped. The paste stays in the pane, unsubmitted.
 func withSubmitGuard(ctx context.Context, check func() *verbError) context.Context {
 	return context.WithValue(ctx, submitGuardKey{}, check)
 }
 
-// submitPastesStamped is submitPastes with the waits as parameters.
 func submitPastesStamped(ctx context.Context, pane promptPane, pastes []string, in harness.InputProfile, quiet, maxWait time.Duration) (time.Time, error) {
 	if in.SubmitKey == "" {
 		in.SubmitKey = "\r"
@@ -185,17 +101,11 @@ func submitPastesStamped(ctx context.Context, pane promptPane, pastes []string, 
 	for _, text := range pastes {
 		body := promptBody(text)
 		if body == "" && len(pastes) > 1 {
-			// A message that starts or ends with an image has nothing
-			// on that side. An empty bracketed paste is what a terminal
-			// sends for a clipboard with only an image, and must not be
-			// sent for nothing.
 			continue
 		}
 		if bracket {
 			body = bracketedPasteStart + body + bracketedPasteEnd
 		}
-		// Taken before the write, so output the paste caused counts
-		// however soon it arrives.
 		pastedAt := time.Now()
 		if body != "" {
 			if _, err := pane.Write([]byte(body)); err != nil {
@@ -218,25 +128,13 @@ func submitPastesStamped(ctx context.Context, pane promptPane, pastes []string, 
 	return submittedAt, nil
 }
 
-// promptBody is the text as it is pasted. Line endings are made line feeds,
-// since a carriage return inside the text is an Enter to an application
-// without bracketed paste. Trailing line breaks are dropped, because the
-// carriage return that follows is the Enter, and one more would submit an empty
-// line after it. The bracketed paste delimiters are removed from the text, so
-// the text cannot end the paste early and have the rest read as keystrokes.
 func promptBody(text string) string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
-	// Removing the delimiters as strings is not enough: removing one can join
-	// the text around it into a new one. Dropping every ESC leaves nothing to
-	// rebuild a delimiter from. It is the sanitizing every paste gets.
 	text = vt.SanitizePaste(text)
 	return strings.TrimRight(text, "\n")
 }
 
-// waitPasteTaken waits until the pane has printed something since pastedAt and
-// then been silent for quiet, or until maxWait has passed since pastedAt,
-// whichever is first.
 func waitPasteTaken(ctx context.Context, pane promptPane, pastedAt time.Time, quiet, maxWait time.Duration) error {
 	deadline := pastedAt.Add(maxWait)
 	ticker := time.NewTicker(promptSubmitPoll)
@@ -257,22 +155,6 @@ func waitPasteTaken(ctx context.Context, pane promptPane, pastedAt time.Time, qu
 	}
 }
 
-// waitInputLive waits until the application in the pane can take a prompt:
-// it has turned bracketed paste on and then been quiet for quiet. It returns
-// at once for a pane that has bracketed paste on and is quiet, so a prompt to
-// an agent long at rest costs nothing, and it returns when maxWait passes
-// whatever the pane shows, so a harness that never turns the mode on still
-// gets its prompt, as it did before this wait.
-//
-// The agent state alone does not say the input box is live. Claude Code runs
-// its SessionStart hook, which reports idle, before its input box is mounted.
-// Keys that arrive then go to its early-input capture: the text is put in the
-// box when it mounts, and the Enter is dropped. So the prompt sat in the box
-// unsent (measured on Claude Code 2.1.310: bracketed paste was still off when
-// the idle report came). The input box turns bracketed paste on when it
-// mounts, so the mode is the sign it is live. Only a harness whose profile
-// pastes in brackets waits for it: that profile says the harness turns the
-// mode on.
 func waitInputLive(ctx context.Context, pane promptPane, in harness.InputProfile, quiet, maxWait time.Duration) error {
 	if !in.BracketedPaste {
 		return nil

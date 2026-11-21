@@ -47,103 +47,37 @@ var AgentSourceNames = agentstate.SourceNames()
 // agentstate.ParseSource.
 func ParseAgentSource(s string) (AgentSource, bool) { return agentstate.ParseSource(s) }
 
-// agentClaim is who currently owns one window's agent state.
 type agentClaim struct {
-	// source is the ranked owner: a lower-ranked source may not write over it.
-	source AgentSource
-	// harness is the harness id the source named, empty when unknown.
-	harness string
-	// identity says what kind of evidence named harness, so a reader can tell a
-	// harness that reported itself from one the detector recognised by name.
-	// It is empty when nothing has named one.
-	identity identityTier
-	// misses counts consecutive detection ticks that found no agent in a pane
-	// the detector holds while something other than the pane's shell was in
-	// the foreground. The claim clears when the shell returns, or when this
-	// reaches agentDetectMissLimit: one missed read is not an exit.
-	misses int
-	// auto records that the foreground-process detector promoted this window and
-	// so is the one that clears it when the agent leaves the foreground. It is a
-	// lifecycle claim, not a precedence one, which is why it survives a
-	// higher-ranked source taking the state over: an explicit report during the
-	// agent's run wins, and the pane still clears when the agent exits.
-	auto bool
-	// sawProcess records that the detector has seen a real agent process in
-	// this pane at some point, whoever owns the claim.
-	//
-	// It is what tells a state that has gone stale from one that was never
-	// about a process at all. Most agents report for themselves, so the
-	// detector does not own their claim and cannot clear it when they exit;
-	// this says the exit is worth acting on. A claim set by hand, or by a
-	// screen rule on a pane that never ran an agent binary, has never had a
-	// process and is left alone.
-	sawProcess bool
-	// blocker marks a claim taken through the visible-blocker exception, and
-	// prior is the claim it displaced. They are kept together because the
-	// exception is a loan: the moment a later look finds the prompt gone, prior
-	// goes back exactly as it was.
-	blocker bool
-	prior   agentPriorClaim
-	// event marks a claim read from a one-off event, a desktop notification,
-	// which goes stale when the pane writes again. See AgentReport.event.
-	event bool
-	// herdrAt is when a herdr protocol reporter last set this claim, as Unix
-	// nanoseconds, and 0 for a claim no such report set. A reporter of this
-	// kind is a harness, and one that crashes sends no release, so its claim
-	// clears once the harness is gone. See herdrClaimLapsed.
-	herdrAt int64
-	// herdrAnchors are the processes whose life the claim follows: the
-	// process that reported and, when that one is a short-lived hook, the
-	// first program above it that is not a shell. The claim stands while any
-	// of them lives.
+	source       AgentSource
+	harness      string
+	identity     identityTier
+	misses       int
+	auto         bool
+	sawProcess   bool
+	blocker      bool
+	prior        agentPriorClaim
+	event        bool
+	herdrAt      int64
 	herdrAnchors []herdrAnchor
-	// screenWins lets a prompt the screen tier reads take this claim at once,
-	// with no grace and no output since the claim. It is set on a claim a
-	// reporter holds that is known to say working while its own prompt is
-	// up. See crushScreenWins.
-	screenWins bool
-	// promptHold is when a report from outside the pane moved the window off
-	// needs_input, as Unix nanoseconds, and 0 when nothing holds it. The
-	// prompt may still be on the screen, so typingRefusal holds the window as
-	// waiting on it. holdFg is the pane's foreground process group then, 0
-	// when it could not be read. See promptStillShown.
-	promptHold int64
-	holdFg     int
-	// heardAt is when a report from the pane's agent last arrived that did
-	// not set the state, an if_state refusal, as Unix nanoseconds. It counts
-	// against a silence like a report that applied. See agent_silent.go.
-	heardAt int64
-	// subagent is the subagent the needs_input this claim holds waits on.
-	// See AgentReport.Subagent.
-	subagent string
+	screenWins   bool
+	promptHold   int64
+	holdFg       int
+	heardAt      int64
+	subagent     string
 }
 
-// herdrAnchor is one process a herdr claim follows, named by pid and start
-// time so a reused pid is not taken for the same process.
 type herdrAnchor struct {
 	pid   int
 	start uint64
 }
 
-// alive reports whether the process is still the one recorded.
 func (a herdrAnchor) alive() bool {
 	st, ok := procinfo.StartTime(a.pid)
 	return ok && st == a.start
 }
 
-// herdrShellGrace is how long a herdr report is held against a reading that
-// finds the pane at its shell. The foreground is read before the claim is
-// judged, so a reading taken just before the harness started can meet the
-// harness's first report.
 const herdrShellGrace = 2 * time.Second
 
-// herdrClaimLapsed reports whether a claim a herdr reporter set has outlived
-// its harness: the last report is older than herdrShellGrace, and no process
-// the claim follows is alive. The foreground is not enough on its own: a
-// harness started under a wrapper (sh -c 'crush; exec fish', a script, a
-// command line) runs in the wrapper's process group, so the pane reads as
-// at its shell while the harness works. A claim with no anchor, from a
-// caller the daemon could not read, lapses on the foreground alone.
 func (c agentClaim) herdrClaimLapsed(now int64) bool {
 	if c.herdrAt == 0 || now-c.herdrAt < int64(herdrShellGrace) {
 		return false
@@ -156,29 +90,18 @@ func (c agentClaim) herdrClaimLapsed(now int64) bool {
 	return true
 }
 
-// agentPriorClaim is what a visible-blocker override displaced, held so the
-// override can be undone rather than only outranked. Without it the pane would
-// have no way back off needs_input: the screen tier asserts that state and no
-// other, so nothing else on the pane would ever move it.
 type agentPriorClaim struct {
-	source  AgentSource
-	state   AgentState
-	harness string
-	// The herdr fields of the claim, so a herdr reporter's claim comes back
-	// still following its harness, and still yielding to its prompt.
+	source       AgentSource
+	state        AgentState
+	harness      string
 	herdrAt      int64
 	herdrAnchors []herdrAnchor
 	screenWins   bool
-	// What the claim said and how it was read. A prompt a hook reported from
-	// a one-off event goes back as one, so the screen can still take it back
-	// once the prompt goes, and with the words and kind the person was shown.
-	message string
-	kind    string
-	event   bool
+	message      string
+	kind         string
+	event        bool
 }
 
-// setAgentClaim records a claim, allocating the map on first use. It is called
-// under stateMu, like every other read and write of agentClaims.
 func (s *Session) setAgentClaim(windowID string, c agentClaim) {
 	if s.agentClaims == nil {
 		s.agentClaims = make(map[string]agentClaim)
@@ -186,39 +109,12 @@ func (s *Session) setAgentClaim(windowID string, c agentClaim) {
 	s.agentClaims[windowID] = c
 }
 
-// agentClaimFor returns the claim on a window, or the zero claim when nothing
-// has claimed it. It takes the state read lock, so it is safe for a verb handler
-// to call.
 func (s *Session) agentClaimFor(windowID string) agentClaim {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 	return s.agentClaims[windowID]
 }
 
-// yieldAgentClaim drops a claim held by source, leaving the window's displayed
-// state exactly where it is and reporting whether it dropped anything.
-//
-// It is the way out of a problem the ranking creates on its own. A ranked claim
-// is held until something ranked at least as high replaces it, which is right
-// while the source can still speak, and wrong the moment it cannot: a source
-// reading a file whose agent has died holds the pane against every weaker tier
-// forever, and the pane's last known state becomes permanent. Yielding says "I
-// have nothing further to say about this window" without asserting anything in
-// place of what it said, so the screen tier and the silence timer take over as
-// if the source had never been there.
-//
-// The state is deliberately left alone rather than cleared. What was last read
-// is still the best answer anyone has; it just stops being defended.
-//
-// The auto bit survives, because it is a lifecycle fact about the detector
-// rather than a precedence one: the pane still clears when the agent exits. So
-// does sawProcess, for the same reason: it is what lets the detector clear a
-// claim it does not own once the agent has left, and a tier is often yielded in
-// the moment the agent exits, as a screen look that finds its idle box painted
-// over by the shell. A window carrying either goes back to AgentSourceDetect
-// rather than to the zero claim, because the zero claim's empty source ranks as
-// a report, and handing a window back at the highest rank is the opposite of
-// yielding it.
 func (s *Session) yieldAgentClaim(windowID string, source AgentSource) bool {
 	yielded := false
 	s.stateMu.Lock()

@@ -10,81 +10,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 )
 
-// The subagents an agent pane is running. A harness that hands work to
-// subagents, or to the teammates of an agent team, and then ends its turn
-// reports done, and its pane comes to rest, while that work goes on. So the
-// daemon keeps, per pane, the subagents the pane's own hooks reported: each
-// one's type and description, the tool it runs now, how many tools it ran,
-// and once it stopped, how it ended. The window carries the running count
-// (AgentSubagents) and the list (AgentSubagentList), which the rail draws, and
-// the reserved metadata key subagents says the count in words for
-// get-agent-state and list-agents.
-//
-// It is display only, like the rest of the pane's metadata: nothing reads it
-// to decide a state, a wait or an alert, and a subagent never changes the
-// pane's state, its message or now. The reports come with
-// report-agent-activity, which passes the identity guard first, so a nested
-// run's subagents are not the pane's.
-//
-// Pairing. Claude Code's SubagentStart names the subagent's id and type and
-// nothing else. The description is on the PreToolUse of the Agent tool that
-// launched it, which comes first, so that call leaves a spawn hint, and a
-// start takes the oldest hint of its type (else the oldest hint). Two
-// subagents of one type launched together can take each other's description;
-// the PostToolUse of a background launch and the background_tasks list of
-// every Stop name the right one by id and correct it. A foreground subagent
-// is corrected when its call completes.
-//
-// End states. A stop with a final message is done. A stop with none, or one
-// the main agent asked for (TaskStop), is stopped. A failed Agent call is
-// failed. A finished subagent stays on the list, with its end state, for
-// subagentFade (done and stopped) or five times that (failed), and then goes.
-//
-// The set is forgotten when the agent starts a conversation (the session_start
-// activity of a new, resumed or cleared session), when the pane's state goes
-// to none (the agent ended its session or left the pane), and when the window
-// closes. A running subagent the pane hears nothing more of for subagentQuiet
-// is dropped as well: a stop that never came, after an interrupt, would
-// otherwise leave a count on the row for as long as the agent runs. It is
-// daemon memory only, so a daemon restart, which ends every process in every
-// pane, starts it empty.
-
-// Bounds of a pane's subagents.
 const (
-	// subagentsMax bounds the running subagents one pane keeps. A harness
-	// runs a handful at once, and an agent team's lead a few teammates; the
-	// cap only stops a caller growing a map without end. A start past it is
-	// not kept, so the count stays at the cap until one stops.
-	subagentsMax = 64
-	// subagentsFinishedMax is how many finished subagents a pane keeps on
-	// its list while they fade. An older one goes for a newer one.
+	subagentsMax         = 64
 	subagentsFinishedMax = 8
-	// subagentListMax bounds the list a window carries to its clients.
-	subagentListMax = 16
-	// subagentTextMax bounds a description and a result on the wire, in
-	// bytes.
-	subagentTextMax = 80
-	// subagentToolMax bounds now and last, "Tool: target", in bytes.
-	subagentToolMax = 80
-	// subagentSpawnsMax bounds the spawn hints a pane holds, and
-	// subagentSpawnTTL is how long one waits for its subagent to start.
-	subagentSpawnsMax = 8
-	subagentSpawnTTL  = 30 * time.Second
-	// subagentPublishGap is the least time between two pushes of a
-	// session's state for a subagent's tool calls alone. A change in between
-	// is held and pushed by a trailing timer, so subagents busy with tools
-	// do not push state on every call.
-	subagentPublishGap = 250 * time.Millisecond
+	subagentListMax      = 16
+	subagentTextMax      = 80
+	subagentToolMax      = 80
+	subagentSpawnsMax    = 8
+	subagentSpawnTTL     = 30 * time.Second
+	subagentPublishGap   = 250 * time.Millisecond
 )
 
-// subagentQuiet is how long a running subagent stays counted after the last
-// event the pane reported for it. An hour is past what a subagent or a
-// teammate's stretch of work takes without a tool call, and short enough that
-// a missed stop does not outlive the afternoon.
 const subagentQuiet = time.Hour
 
-// defaultSubagentFade is how long a finished subagent that was done or
-// stopped stays on the list. A failed one stays five times as long.
 const defaultSubagentFade = 60 * time.Second
 
 // Subagent states, the values of SubagentInfo.State.
@@ -95,7 +33,6 @@ const (
 	SubagentStopped = "stopped"
 )
 
-// Subagent outcomes a subagent_update may report.
 const (
 	subagentOutcomeStopping = "stopping"
 	subagentOutcomeFailed   = "failed"
@@ -130,30 +67,21 @@ type SubagentInfo struct {
 	Result string `json:"result,omitempty"`
 }
 
-// subagent is one subagent a pane is running or ran.
 type subagent struct {
-	id          string
-	agentType   string
-	description string
-	callID      string
-	// seq is the subagent's place in the pane's start order.
-	seq uint64
-	// startedAt, seen and endedAt are unix nanoseconds. seen is when the
-	// pane last reported it; endedAt is 0 while it runs.
+	id                       string
+	agentType                string
+	description              string
+	callID                   string
+	seq                      uint64
 	startedAt, seen, endedAt int64
-	// tool and target are the call it runs, tool empty between calls.
-	tool, target string
-	// last is the call it ran last, "Tool: target".
-	last  string
-	tools int
-	// stopping says the main agent asked to stop it.
-	stopping bool
-	// state is one of the Subagent* states.
-	state  string
-	result string
+	tool, target             string
+	last                     string
+	tools                    int
+	stopping                 bool
+	state                    string
+	result                   string
 }
 
-// spawnHint is a launch the pane's agent made whose subagent has not started.
 type spawnHint struct {
 	agentType   string
 	description string
@@ -161,17 +89,13 @@ type spawnHint struct {
 	at          int64
 }
 
-// paneSubagents is one pane's subagents and spawn hints.
 type paneSubagents struct {
 	byID    map[string]*subagent
 	spawns  []spawnHint
 	nextSeq uint64
-	// held says a tool change is not on the window yet: see
-	// subagentPublishGap.
-	held bool
+	held    bool
 }
 
-// running is how many of the pane's subagents have not ended.
 func (ps *paneSubagents) running() int {
 	if ps == nil {
 		return 0
@@ -185,43 +109,28 @@ func (ps *paneSubagents) running() int {
 	return n
 }
 
-// empty reports whether the pane holds nothing worth keeping.
 func (ps *paneSubagents) empty() bool {
 	return ps == nil || (len(ps.byID) == 0 && len(ps.spawns) == 0)
 }
 
-// subagentEvent reports whether an activity event is a subagent's start or
-// stop, which the ring keeps.
 func subagentEvent(event string) bool {
 	return event == ActivitySubagentStart || event == ActivitySubagentStop
 }
 
-// subagentChange is what one activity does to a pane's subagents. The zero
-// value does nothing.
 type subagentChange struct {
-	// op is ActivitySubagentStart, ActivitySubagentStop,
-	// ActivitySubagentUpdate or ActivitySessionStart, or empty for nothing.
-	op        string
-	id        string
-	agentType string
-	// text is a stop's final message, an update's description, or with
-	// outcome failed the error.
-	text   string
-	callID string
-	// tool and target are an update's tool call; ok is nil while it starts
-	// and says how it ended after.
+	op           string
+	id           string
+	agentType    string
+	text         string
+	callID       string
 	tool, target string
 	ok           *bool
 	outcome      string
 	tools        int
-	// spawn is a launch hint: agentType, the description in spawnText and
-	// callID name a subagent about to start. It rides a tool event or an
-	// update.
-	spawn     bool
-	spawnText string
+	spawn        bool
+	spawnText    string
 }
 
-// subagentChangeOf is the change an activity report makes.
 func subagentChangeOf(r *AgentActivityReport) subagentChange {
 	clean := func(s string) string { return attentionText(integration.FirstLine(s), subagentTextMax) }
 	c := subagentChange{}
@@ -257,30 +166,20 @@ func subagentChangeOf(r *AgentActivityReport) subagentChange {
 	return c
 }
 
-// subagentMove is what a change did to a pane's subagents.
 type subagentMove int
 
 const (
-	// subagentNoMove changed nothing a client draws.
 	subagentNoMove subagentMove = iota
-	// subagentToolMove changed only the tool a subagent runs, which may be
-	// held for subagentPublishGap.
 	subagentToolMove
-	// subagentListMove changed the count or a row, pushed at once.
 	subagentListMove
 )
 
-// subagentOutcome is what applyActivityMeta reports about a subagent change:
-// whether it moved anything, and the subagent it was about, for the ring.
 type subagentOutcome struct {
-	move subagentMove
-	// ended says this change finished the subagent.
+	move  subagentMove
 	ended bool
 	sa    subagent
 }
 
-// paneSubagentsLocked is window id's subagents, made when create is true. The
-// caller holds stateMu.
 func (s *Session) paneSubagentsLocked(id string, create bool) *paneSubagents {
 	ps := s.agentSubagents[id]
 	if ps == nil && create {
@@ -293,9 +192,6 @@ func (s *Session) paneSubagentsLocked(id string, create bool) *paneSubagents {
 	return ps
 }
 
-// takeSpawn removes and returns the spawn hint a subagent of agentType
-// starting at now takes: the oldest of its type, else the oldest. Hints older
-// than subagentSpawnTTL are dropped first.
 func (ps *paneSubagents) takeSpawn(agentType string, now int64) (spawnHint, bool) {
 	ps.spawns = slices.DeleteFunc(ps.spawns, func(h spawnHint) bool { return now-h.at > int64(subagentSpawnTTL) })
 	if len(ps.spawns) == 0 {
@@ -313,8 +209,6 @@ func (ps *paneSubagents) takeSpawn(agentType string, now int64) (spawnHint, bool
 	return h, true
 }
 
-// find is the subagent an update names: by id, else by the call that
-// launched it.
 func (ps *paneSubagents) find(id, callID string) *subagent {
 	if ps == nil {
 		return nil
@@ -333,8 +227,6 @@ func (ps *paneSubagents) find(id, callID string) *subagent {
 	return nil
 }
 
-// finish ends sa as state at now and drops the oldest finished subagents past
-// subagentsFinishedMax.
 func (ps *paneSubagents) finish(sa *subagent, state, result string, now int64) {
 	sa.state, sa.endedAt, sa.seen = state, now, now
 	if result != "" {
@@ -359,7 +251,6 @@ func (ps *paneSubagents) finish(sa *subagent, state, result string, now int64) {
 	}
 }
 
-// toolLine is a tool call as now and last say it: "Bash: go test ./...".
 func toolLine(tool, target string) string {
 	if tool == "" {
 		return ""
@@ -371,11 +262,6 @@ func toolLine(tool, target string) string {
 	return attentionText(line, subagentToolMax)
 }
 
-// moveSubagentsLocked applies c, reported at now, to window w's subagents.
-// A start of one already running renews when it was last seen and moves
-// nothing. A start past subagentsMax, a stop or an update of one it does not
-// know, and a start on a pane with no agent state change nothing. The caller
-// holds stateMu.
 func (s *Session) moveSubagentsLocked(w *WindowState, c subagentChange, now int64) subagentOutcome {
 	var out subagentOutcome
 	if c.spawn && w.AgentState != AgentStateNone {
@@ -394,7 +280,6 @@ func (s *Session) moveSubagentsLocked(w *WindowState, c subagentChange, now int6
 				out.sa = *sa
 				return out
 			}
-			// A teammate that went idle wakes to work again under its id.
 			delete(ps.byID, c.id)
 		}
 		if ps.running() >= subagentsMax || w.AgentState == AgentStateNone {
@@ -409,9 +294,6 @@ func (s *Session) moveSubagentsLocked(w *WindowState, c subagentChange, now int6
 				sa.agentType = h.agentType
 			}
 		}
-		// A start that named what it was asked seeds the description when no
-		// spawn hint did: pi's subagent_start carries it, and claude-code's
-		// carries none.
 		if sa.description == "" && c.text != "" {
 			sa.description = c.text
 		}
@@ -432,8 +314,6 @@ func (s *Session) moveSubagentsLocked(w *WindowState, c subagentChange, now int6
 	case ActivitySubagentUpdate:
 		out = s.updateSubagentLocked(w, c, now)
 	case ActivitySessionStart:
-		// The window's count is checked as well as the set, so a count the
-		// set lost some other way is not left on the row.
 		ps := s.agentSubagents[w.ID]
 		delete(s.agentSubagents, w.ID)
 		if ps.empty() && w.AgentSubagents == 0 && len(w.AgentSubagentList) == 0 {
@@ -446,7 +326,6 @@ func (s *Session) moveSubagentsLocked(w *WindowState, c subagentChange, now int6
 	return out
 }
 
-// updateSubagentLocked applies a subagent_update. The caller holds stateMu.
 func (s *Session) updateSubagentLocked(w *WindowState, c subagentChange, now int64) subagentOutcome {
 	var out subagentOutcome
 	ps := s.agentSubagents[w.ID]
@@ -458,12 +337,6 @@ func (s *Session) updateSubagentLocked(w *WindowState, c subagentChange, now int
 	if sa.callID == "" && c.callID != "" && !c.spawn {
 		sa.callID = c.callID
 	}
-	// A bare update — no tool, target, text, outcome, ok, call id, spawn
-	// hint or tool count — is what pi's poller sends while a subagent runs
-	// between tools: it says only that the subagent is still at work. The
-	// tool it named last is over, so the line moves to last rather than
-	// hanging on the row, and carrying nothing else, it changes nothing but
-	// that: the count, description and type stay.
 	if c.tool == "" && c.target == "" && c.text == "" && c.outcome == "" && c.ok == nil &&
 		c.callID == "" && c.tools == 0 && !c.spawn && sa.endedAt == 0 {
 		if sa.tool != "" {
@@ -526,7 +399,6 @@ func (s *Session) updateSubagentLocked(w *WindowState, c subagentChange, now int
 	return out
 }
 
-// info is sa as the window carries it.
 func (sa *subagent) info() SubagentInfo {
 	return SubagentInfo{
 		ID:          sa.id,
@@ -542,10 +414,6 @@ func (sa *subagent) info() SubagentInfo {
 	}
 }
 
-// subagentListLocked is window id's subagents as the window carries them, in
-// start order, at most subagentListMax: finished ones go first, the longest
-// finished first, then the newest running. Nil when there are none. The
-// caller holds stateMu.
 func (s *Session) subagentListLocked(id string) []SubagentInfo {
 	ps := s.agentSubagents[id]
 	if ps == nil || len(ps.byID) == 0 {
@@ -572,10 +440,6 @@ func (s *Session) subagentListLocked(id string) []SubagentInfo {
 	return out
 }
 
-// showSubagentsLocked puts window w's subagents on the window: the running
-// count and the list, and the subagents key in tokens, which it returns. It
-// reports whether any of them changed. The caller holds stateMu and writes
-// the tokens to w.AgentMeta.
 func (s *Session) showSubagentsLocked(w *WindowState, tokens []AgentMetaToken, now int64) ([]AgentMetaToken, bool) {
 	ps := s.agentSubagents[w.ID]
 	if ps != nil {
@@ -605,8 +469,6 @@ func SubagentsText(n int) string {
 	return strconv.Itoa(n) + " subagents"
 }
 
-// subagentsMetaValue is the subagents key for n subagents, and nil to remove
-// the key at zero.
 func subagentsMetaValue(n int) *string {
 	if n <= 0 {
 		return nil
@@ -615,9 +477,6 @@ func subagentsMetaValue(n int) *string {
 	return &v
 }
 
-// withSubagentsKey is tokens with the subagents key saying n, or without it at
-// zero. A pane that already holds as many keys as it may keeps its tokens as
-// they are: the count the window carries still moves, and the rail draws that.
 func withSubagentsKey(tokens []AgentMetaToken, n int, now int64) []AgentMetaToken {
 	next, _, err := applyAgentMeta(tokens, AgentMetaUpdate{
 		Keys: []string{AgentMetaSubagents}, Values: []*string{subagentsMetaValue(n)}, Source: agentMetaActivitySource,
@@ -628,19 +487,11 @@ func withSubagentsKey(tokens []AgentMetaToken, n int, now int64) []AgentMetaToke
 	return next
 }
 
-// forgetSubagentsLocked drops the subagents of every window that is gone or
-// whose agent state is none, with the count, the list and the key that say
-// them. It runs inside every daemon-side mutation and after every client
-// push, so the set goes however the agent left: a SessionEnd reported as
-// none, the detector seeing the agent leave, set-agent-state none, or the
-// window closing. The caller holds stateMu.
 func (s *Session) forgetSubagentsLocked(st *SessionState) {
 	if len(s.agentSubagents) == 0 {
 		return
 	}
 	maps.DeleteFunc(s.agentSubagents, func(id string, _ *paneSubagents) bool {
-		// Few windows have subagents, so a scan for each costs less than a
-		// map of them all.
 		var w *WindowState
 		for i := range st.Windows {
 			if st.Windows[i].ID == id {
@@ -655,7 +506,6 @@ func (s *Session) forgetSubagentsLocked(st *SessionState) {
 			w.AgentSubagents = 0
 			w.AgentSubagentList = nil
 			if agentMetaValue(w.AgentMeta, AgentMetaSubagents) != "" {
-				// A new slice, since a published snapshot may share the old one.
 				w.AgentMeta = slices.DeleteFunc(slices.Clone(w.AgentMeta), func(t AgentMetaToken) bool { return t.Key == AgentMetaSubagents })
 				if len(w.AgentMeta) == 0 {
 					w.AgentMeta = nil
@@ -666,8 +516,6 @@ func (s *Session) forgetSubagentsLocked(st *SessionState) {
 	})
 }
 
-// subagentDue is when sa next needs the prune: when it goes quiet while it
-// runs, when it fades once it ended.
 func (s *Session) subagentDue(sa *subagent) int64 {
 	if sa.endedAt == 0 {
 		return sa.seen + int64(subagentQuiet)
@@ -682,9 +530,6 @@ func (s *Session) subagentDue(sa *subagent) int64 {
 	return sa.endedAt + int64(fade)
 }
 
-// subagentExpiryLocked is when the soonest of the session's subagents goes
-// quiet or fades, in unix nanoseconds, or 0 when it has none. The caller
-// holds stateMu.
 func (s *Session) subagentExpiryLocked() int64 {
 	var at int64
 	for _, ps := range s.agentSubagents {
@@ -697,11 +542,6 @@ func (s *Session) subagentExpiryLocked() int64 {
 	return at
 }
 
-// expireSubagents drops every running subagent the session has heard nothing
-// of for subagentQuiet as of now, and every finished one whose fade is over,
-// moves the windows that lost one, and arms the next prune. It reports how
-// many it dropped. now is passed in so a test can stand at any time without
-// waiting.
 func (s *Session) expireSubagents(now time.Time) int {
 	dropped := 0
 	var next int64
@@ -731,8 +571,6 @@ func (s *Session) expireSubagents(now time.Time) int {
 		}
 		next = s.subagentExpiryLocked()
 		if dropped == 0 {
-			// Nothing a client draws moved, so the version stays and nothing
-			// is pushed.
 			return errNoAgentMetaChange
 		}
 		s.subagentShownAt = at
@@ -742,15 +580,10 @@ func (s *Session) expireSubagents(now time.Time) int {
 	return dropped
 }
 
-// armSubagentPrune makes sure a prune runs by at, the way armAgentMetaPrune
-// does for metadata with a TTL. A timer already due sooner stands. It is armed
-// only while a pane has subagents, so a session without them costs nothing.
 func (s *Session) armSubagentPrune(at int64) {
 	s.subagentPrune.arm(at, func() { s.expireSubagents(time.Now()) })
 }
 
-// flushHeldSubagents puts on their windows the tool changes held back by
-// subagentPublishGap, in one push.
 func (s *Session) flushHeldSubagents() {
 	_ = s.mutateState(func(st *SessionState) error {
 		now := time.Now().UnixNano()
@@ -772,17 +605,12 @@ func (s *Session) flushHeldSubagents() {
 	})
 }
 
-// subagentCount is how many subagents the window's agent is running, as its
-// hooks reported them.
 func (s *Session) subagentCount(windowID string) int {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
 	return s.agentSubagents[windowID].running()
 }
 
-// subagentLabel is how the ring and agent-log name a subagent: its
-// description and type, "Research tmux (general-purpose)", or the one of the
-// two it has.
 func subagentLabel(sa subagent) string {
 	switch {
 	case sa.description != "" && sa.agentType != "":
@@ -793,8 +621,6 @@ func subagentLabel(sa subagent) string {
 	return sa.agentType
 }
 
-// subagentListOut is a window's list as list-agents and get-agent-state
-// return it: an empty list rather than null when there are none.
 func subagentListOut(list []SubagentInfo) []SubagentInfo {
 	if list == nil {
 		return []SubagentInfo{}
@@ -802,5 +628,4 @@ func subagentListOut(list []SubagentInfo) []SubagentInfo {
 	return list
 }
 
-// subagentListReturn documents subagent_list in list-verbs.
 var subagentListReturn = verbParam{Name: "subagent_list", Type: "[]object", Description: "The pane's subagents in start order, at most 16, each kept for a minute after it ends (five for a failed one): id, type, description (what it was asked to do), state (running, done, failed or stopped), started_at and ended_at (Unix nanoseconds, ended_at 0 while it runs), now (the tool it runs, such as \"Bash: go test ./...\"), last (the tool it ran last), tools (how many tool calls it made) and result (the first line it ended with, or the error). The strings are the agent's, cut to one line with likely secrets masked. Empty while there are none."}

@@ -7,25 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// A theme is the half of the appearance that list-options cannot describe. The
-// other 88 settings are scalars with a closed set of values, and the registry
-// says what each one takes; a theme is a name drawn from a list of hundreds
-// that grows whenever the user writes a file, standing for twenty colours kept
-// in a different format in a different directory. Published as a bare string
-// option it was undiscoverable and unverifiable at once: nothing said which
-// names resolve, and setting one that did not reported success.
-//
-// This verb is the three questions an agent has to be able to ask about that:
-// which themes are there, what is this one actually made of, and is what I just
-// chose legible.
-
-// maxThemeList caps how many ids are returned unfiltered. The registry holds
-// several hundred and a caller that wants a particular one is better served by
-// filtering for it than by paging through them; the total is always reported,
-// so a truncated list says so rather than looking complete.
 const maxThemeList = 100
 
-// verbListThemes reports the registered themes, and describes one when asked.
 func (d *Daemon) verbListThemes(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -36,9 +19,6 @@ func (d *Daemon) verbListThemes(cs *connState, params json.RawMessage) (any, *ve
 		return nil, verr
 	}
 
-	// The themes directory is re-read on every call. It is a handful of small
-	// files, and the alternative is reporting a stale list to the one caller
-	// most likely to have just written to it.
 	_, problems := theme.ReloadCustomThemes()
 
 	all := theme.AvailableThemes()
@@ -52,16 +32,10 @@ func (d *Daemon) verbListThemes(cs *connState, params json.RawMessage) (any, *ve
 	if dirErr != nil {
 		out["themes_dir_error"] = dirErr.Error()
 	}
-	// A malformed theme file is the likeliest reason a theme a caller expects is
-	// missing, and it is otherwise only ever a line in a log nobody outside the
-	// process can read.
 	if len(problems) > 0 {
 		out["problems"] = problems
 	}
 
-	// The theme in effect for this session, read from what the session was told
-	// rather than from this process's active tint: the daemon does not draw, and
-	// its own tint is not the attached client's.
 	if sess := d.findTargetSession(cs, p.Session); sess != nil {
 		out["session"] = sess.Name()
 		if v, source, ok := d.optionsFor(cs, sess).lookup("appearance.theme"); ok {
@@ -72,8 +46,6 @@ func (d *Daemon) verbListThemes(cs *connState, params json.RawMessage) (any, *ve
 		return nil, mustResolve(d, cs, p.Session)
 	}
 
-	// Omarchy, when it is installed or asked for. With no theme set, tuios
-	// follows it, and the person needs to be able to see that.
 	active, _ := out["active"].(string)
 	if st := theme.ReadOmarchyStatus(); st.Installed || active == theme.OmarchyID {
 		out["omarchy"] = map[string]any{
@@ -84,10 +56,6 @@ func (d *Daemon) verbListThemes(cs *connState, params json.RawMessage) (any, *ve
 		}
 	}
 
-	// A caller that named a theme asked about that theme. Answering with a
-	// hundred other ids buries the palette it wanted under the list it did not,
-	// so the roster is sent only when it is the question: no theme named, or a
-	// filter given alongside one.
 	matched := all
 	if p.Filter != "" {
 		needle := strings.ToLower(p.Filter)

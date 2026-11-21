@@ -9,11 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 )
 
-// fakeIntegratedShell is a shell with OSC 133 prompt integration in a few lines
-// of sh: it marks its prompt, reads a line, marks the command running, runs it
-// and marks it finished with its status. It is what zsh, fish or an injected
-// bash script send, without depending on which shell the test machine has or
-// how it is configured.
 const fakeIntegratedShell = `prompt() { printf '\033]133;A\007$ \033]133;B\007'; }
 prompt
 while IFS= read -r line; do
@@ -24,8 +19,6 @@ while IFS= read -r line; do
   prompt
 done`
 
-// openFakeShell opens a window running fakeIntegratedShell and waits for its
-// first prompt to reach the daemon.
 func openFakeShell(t *testing.T, c *verbConn, name string) {
 	t.Helper()
 	cmd, _ := json.Marshal([]string{"sh", "-c", fakeIntegratedShell})
@@ -33,8 +26,6 @@ func openFakeShell(t *testing.T, c *verbConn, name string) {
 	waitForWindowField(t, c, name, "at_prompt", true)
 }
 
-// waitForWindowField polls list-windows until the named window reports want
-// under key.
 func waitForWindowField(t *testing.T, c *verbConn, name, key string, want any) map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second * testDeadlineScale)
@@ -143,7 +134,6 @@ func TestRunRejectsAMultiLineCommand(t *testing.T) {
 	}
 }
 
-// containsLine reports whether any line of s contains sub.
 func containsLine(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
@@ -185,8 +175,6 @@ func TestRunReturnsExitCodeAndOutput(t *testing.T) {
 		t.Fatalf("capture last-command-output = %v, want the output and exit_code 3", cap)
 	}
 
-	// The command already finished: a wait that names the count it read
-	// before must still see it.
 	wait := result(t, c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"command-finished","session":"work","window":"build","command_seq":0,"timeout":2000}}`))
 	if wait["matched"] != true || wait["exit_code"] != float64(3) {
 		t.Fatalf("wait-for command-finished = %v, want a match with exit_code 3", wait)
@@ -198,9 +186,6 @@ func TestRunReturnsExitCodeAndOutput(t *testing.T) {
 	}
 }
 
-// promptOnlyShell marks its prompts and sends the status, and never the C
-// that says a command started, which is what the bash recipe does on bash
-// before 4.4, where PS0 is ignored.
 const promptOnlyShell = `prompt() { printf '\033]133;A\007$ \033]133;B\007'; }
 prompt
 while IFS= read -r line; do

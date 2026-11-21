@@ -6,25 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// Mail another machine keeps for this one.
-//
-// A machine whose link to this one is down keeps the mail it has for this
-// machine in its outbox (host_outbox.go), and its own Inbox says so. This
-// machine's person used to hear nothing, though this machine's own link to
-// that one is often up: two machines that link each other, one of whose
-// links waits for a Tailscale sign-in. Mail between them sat for hours.
-//
-// So a daemon answers the hello of a link connection with mail_waiting: how
-// many messages it holds for the machine that connection named, and its own
-// link's status for it. The name is the one the caller gave itself on the
-// link, matched against this daemon's [hosts] name for it, so a third machine
-// asking learns nothing about mail for anyone else. The answer carries no
-// sender, subject or text. The asking machine keeps it on the link
-// (federation.MailHeld) and raises one Inbox item, which closes when the count
-// goes to zero or that link goes down.
-
-// mailWaitingFor is the hello's mail_waiting for a link connection, or nil
-// when nothing waits for its machine.
 func (d *Daemon) mailWaitingFor(cs *connState) map[string]any {
 	if cs == nil || !cs.viaLink || cs.linkPeer == "" {
 		return nil
@@ -42,15 +23,10 @@ func (d *Daemon) mailWaitingFor(cs *connState) map[string]any {
 	return out
 }
 
-// onMailHeld is federation's OnMailHeld: what a linked machine said it holds
-// for this one.
 func (d *Daemon) onMailHeld(host string, held federation.MailHeld) {
 	d.attention.noteHeldMail(host, held.Count, heldMailWhy(host, held.Status))
 }
 
-// heldMailWhy is why the far machine's link to this one is down, said from
-// this machine's side. The far machine's own reason names its sign-in page,
-// which is for its person, so this machine words it from the status alone.
 func heldMailWhy(host string, status federation.Status) string {
 	switch status {
 	case federation.StatusApproval:
@@ -63,8 +39,6 @@ func heldMailWhy(host string, status federation.Status) string {
 	return ""
 }
 
-// noteHeldMail opens, updates or closes the held-mail item for host. A count
-// the person dismissed stays dismissed until it changes.
 func (a *attentionStore) noteHeldMail(host string, count int, why string) {
 	if a == nil {
 		return
@@ -97,8 +71,6 @@ func (a *attentionStore) noteHeldMail(host string, count int, why string) {
 	})
 }
 
-// noteHeldDismissed records that the person dismissed host's held-mail item
-// at count.
 func (a *attentionStore) noteHeldDismissed(host string, count int) {
 	if a == nil {
 		return

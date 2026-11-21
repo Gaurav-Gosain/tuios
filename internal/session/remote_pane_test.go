@@ -14,28 +14,11 @@ import (
 	"time"
 )
 
-// paneBudget is how long a wait on a far pane is given. It is generous because
-// these run beside the rest of the suite, each test of which starts a daemon
-// and a shell of its own, and a budget tuned to an idle machine is a test that
-// fails on a busy one for no reason of its own.
 const paneBudget = 30 * time.Second
 
-// A window whose process runs on another machine, proved against a real daemon
-// playing the other machine.
-//
-// The link is not in the picture on purpose. federation carries the bytes and
-// has its own tests; what is unproved without these is the pair of verbs at
-// each end and the claim that a paneIO built on them is interchangeable with a
-// pty. So the fake federation below dials the far daemon's socket directly,
-// which is exactly what the link does after ssh has been taken out of it.
-
-// socketFederation is a paneFederation whose one host is a daemon listening on
-// a unix socket in this test.
 type socketFederation struct {
 	socketPath string
-	// openErr, when set, is returned instead of a connection, which is what a
-	// host that is down looks like from here.
-	openErr error
+	openErr    error
 }
 
 func (f *socketFederation) OpenConnection(_ context.Context, _ string) (io.ReadWriteCloser, error) {
@@ -81,7 +64,6 @@ func (f *socketFederation) Call(_ context.Context, _, verb string, params any) (
 	return resp.Result, nil
 }
 
-// openTestPane opens a pane on the daemon d is, through fed.
 func openTestPane(t *testing.T, fed paneFederation, spec hostedPaneSpec) *remotePane {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -94,15 +76,6 @@ func openTestPane(t *testing.T, fed paneFederation, spec hostedPaneSpec) *remote
 	return p
 }
 
-// paneReader drains a pane from the moment it is opened and keeps everything
-// it saw.
-//
-// One reader for the pane's whole life, rather than one per wait, is the point.
-// A reader started per wait either stops mid-chunk and loses the rest or, when
-// its wait times out, goes on running and takes the bytes the next wait is
-// looking for. The second is a test that fails somewhere other than where it
-// broke, which is the worst kind, and it is what happened here under a loaded
-// machine before this existed.
 type paneReader struct {
 	mu   sync.Mutex
 	seen strings.Builder
@@ -135,8 +108,6 @@ func (r *paneReader) text() string {
 	return r.seen.String()
 }
 
-// waitFor returns once want has appeared, or the whole transcript when the
-// budget runs out, so a failure can print what did arrive.
 func (r *paneReader) waitFor(want string, budget time.Duration) string {
 	deadline := time.Now().Add(budget)
 	for {
@@ -150,13 +121,6 @@ func (r *paneReader) waitFor(want string, budget time.Duration) string {
 	}
 }
 
-// waitGone blocks until the far daemon has let go of the pane.
-//
-// Closing a pane is not synchronous and cannot be: the notice is the stream
-// ending, the far side hears it on its own goroutine, and only then does it
-// kill the process and drop the registration. A test that asserts immediately
-// after a close is racing that, which is a property of the design rather than
-// of the test.
 func waitGone(t *testing.T, d *Daemon, id string, budget time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(budget)
@@ -227,8 +191,6 @@ func TestAHostedPaneBelongsToNoSessionOnTheMachineItRunsOn(t *testing.T) {
 	before := len(d.manager.ListSessions())
 	p := openTestPane(t, fed, hostedPaneSpec{Width: 80, Height: 24, Command: []string{"/bin/sh"}})
 	out := drainPane(p)
-	// The shell printing its first prompt is proof the far side has finished
-	// doing whatever hosting a pane makes it do.
 	out.waitFor("$", paneBudget)
 
 	if after := len(d.manager.ListSessions()); after != before {
@@ -276,8 +238,6 @@ func TestAResizeForAPaneThatEndedSaysSo(t *testing.T) {
 	p := openTestPane(t, fed, hostedPaneSpec{Width: 80, Height: 24, Command: []string{"/bin/sh"}})
 	id := p.id
 	_ = p.Close()
-	// The close is heard on the far side's own goroutine, so the resize has to
-	// come after that has happened rather than race it.
 	waitGone(t, d, id, paneBudget)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -329,8 +289,6 @@ func TestTheFirstBytesOfTheProcessAreNotLost(t *testing.T) {
 	}
 }
 
-// scriptedStream is a far side that answers with a fixed reply and swallows
-// everything written to it.
 type scriptedStream struct {
 	reply string
 	read  int
@@ -351,10 +309,10 @@ func (s *scriptedStream) Close() error                { return nil }
 // boundary and nothing between there and here checked it.
 func TestASizeFromAnotherMachineIsTreatedAsInput(t *testing.T) {
 	for _, c := range []struct{ in, want int }{
-		{0, 80},                     // an omitted field, which is the common case
-		{-1, 80},                    // nonsense
-		{120, 120},                  // ordinary
-		{1 << 20, hostedPaneMaxDim}, // a number a pty cannot be asked for
+		{0, 80},
+		{-1, 80},
+		{120, 120},
+		{1 << 20, hostedPaneMaxDim},
 	} {
 		if got := clampHostedDim(c.in); got != c.want {
 			t.Errorf("clampHostedDim(%d) = %d, want %d", c.in, got, c.want)
@@ -384,9 +342,6 @@ func TestALocalWindowSerialisesWithNoHostField(t *testing.T) {
 	}
 }
 
-// waitForPaneText reads the pane's emulator until want shows up on it. It goes
-// through the emulator rather than the stream on purpose: what is being proved
-// is that a far pane's bytes reach the same screen a local pane's do.
 func waitForPaneText(t *testing.T, pty *PTY, want string, budget time.Duration) string {
 	t.Helper()
 	deadline := time.Now().Add(budget)
@@ -442,10 +397,6 @@ func TestARestoredWindowStopsClaimingAnotherMachine(t *testing.T) {
 	if got := windows[0].Host; got != "" {
 		t.Errorf("a window restored on this machine still says its process is on %q", got)
 	}
-	// The directory reported now is the live one of the shell that was just
-	// respawned here, which GetState fills from the process itself. What must
-	// not survive is the path from the other machine, which the restore would
-	// otherwise have tried to start the shell in.
 	if got := windows[0].Cwd; got == "/srv/only-on-the-build-box" {
 		t.Errorf("the restored shell was started in the other machine's directory: %q", got)
 	}
@@ -484,8 +435,6 @@ func TestTheAskingMachinesShellDoesNotTravel(t *testing.T) {
 	}
 }
 
-// captureOpenPaneSpec opens a pane against a federation that records the spec
-// instead of a daemon, so the request can be read as it would cross.
 func captureOpenPaneSpec(t *testing.T, sess *Session) hostedPaneSpec {
 	t.Helper()
 	rec := &specRecorder{}
@@ -497,8 +446,6 @@ func captureOpenPaneSpec(t *testing.T, sess *Session) hostedPaneSpec {
 	return rec.spec
 }
 
-// specRecorder is a paneFederation that reads the open-pane request and then
-// refuses it, which is all this needs: the question is what was asked for.
 type specRecorder struct {
 	spec hostedPaneSpec
 	seen bool
@@ -512,8 +459,6 @@ func (r *specRecorder) Call(context.Context, string, string, any) (json.RawMessa
 	return nil, nil
 }
 
-// specStream reads the request line, records its params, and answers with an
-// error so the open ends there.
 type specStream struct {
 	rec   *specRecorder
 	reply string
@@ -560,14 +505,11 @@ func TestAskingWhereAPaneIsDoesNotBlockTheCaller(t *testing.T) {
 	for range 50 {
 		p.Cwd()
 	}
-	// Fifty calls, every one of them answered from what was already known.
-	// Even one round trip over the fake link would be slower than this.
 	if took := time.Since(start); took > 100*time.Millisecond {
 		t.Errorf("fifty reads of the pane's directory took %v, so they were waiting on the far machine", took)
 	}
 }
 
-// waitUntil blocks until cond holds, or fails with why.
 func waitUntil(t *testing.T, cond func() bool, why string) {
 	t.Helper()
 	deadline := time.Now().Add(paneBudget)
@@ -597,15 +539,12 @@ func TestOutputAsksWhereARemotePaneIsAtMostOncePerSecond(t *testing.T) {
 	for range 20 {
 		pty.refreshRemoteCwdOnOutput()
 	}
-	// The asks are made on their own goroutines, so this waits for the first
-	// rather than assuming it has landed.
 	waitUntil(t, func() bool { return counter.calls() >= 1 }, "output never asked where the pane is")
 	if got := counter.calls(); got > 1 {
 		t.Errorf("twenty chunks asked the far machine %d times, want one", got)
 	}
 }
 
-// countingFederation records how many times it was asked.
 type countingFederation struct {
 	mu sync.Mutex
 	n  int
@@ -630,8 +569,6 @@ func (c *countingFederation) Call(_ context.Context, _, verb string, _ any) (jso
 	return json.RawMessage(`{"cwd":"/somewhere"}`), nil
 }
 
-// agentFederation answers pane-agent with a fixed process, so the near side's
-// detection path can be driven without a second machine.
 type agentFederation struct {
 	mu      sync.Mutex
 	calls   int
@@ -682,15 +619,11 @@ func TestWhatAPaneOnAnotherMachineIsRunningReachesTheDetector(t *testing.T) {
 	rp := &remotePane{host: "build", id: "p1", fed: fed, stream: &scriptedStream{}, br: bufio.NewReader(&scriptedStream{})}
 	pty := &PTY{host: "build", pty: rp}
 
-	// The first look never waits: it reports what is cached, which is nothing
-	// yet, and starts the ask. That is deliberate, because this runs on the
-	// detector's tick and a round trip must not hold it up.
 	if _, _, remote := pty.remoteForeground(); !remote {
 		t.Fatal("a pane on another machine was not recognised as one")
 	}
 	waitUntil(t, func() bool { return fed.count() >= 1 }, "the far machine was never asked what the pane is running")
 
-	// And once the answer has landed, it is what the detector sees.
 	waitUntil(t, func() bool {
 		info, running, _ := pty.remoteForeground()
 		return running && info.comm == "claude"

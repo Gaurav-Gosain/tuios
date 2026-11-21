@@ -13,42 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// Moving a window to another session.
-//
-// A window is a pane and a process, and the process is the part that cannot
-// be made again: an agent mid-turn, a build half done, a REPL holding state.
-// So the move hands the running PTY from one session to the other. Nothing is
-// respawned, the emulator and its scrollback go with it, and the window keeps
-// its id.
-//
-// What a session keeps about a pane is in three places, and each moves:
-//
-//   - The window's row (WindowState): name, cwd, start folder, agent state and
-//     metadata, grants, floating geometry. It leaves the source's window set
-//     and joins the destination's in two mutations, each pushed to its own
-//     clients, so a client of the source sees the window leave and a client
-//     of the destination sees it arrive.
-//   - The session's daemon memory keyed by window id: agent claims, harness
-//     pids, subagents, turns, holds, the transcript join, start folders.
-//     paneTransfer carries them.
-//   - The daemon's own stores keyed by session: the grant table, the Inbox,
-//     the activity rings, queued prompts. Daemon.moveWindowToSession moves
-//     the window's entries in each.
-//
-// The PTY's callbacks read the session they belong to through PTY.home rather
-// than a captured *Session, so a pane's events, focus and place reach its new
-// session from the moment the move lands.
-//
-// The process keeps the environment it started with: TUIOS_SESSION still
-// names the source. A call that names the source session and the moved
-// window is sent to the window's session (followMovedWindow), so the hooks of
-// an agent in the pane go on reporting to the right place. The source's name
-// is recorded with the move, so this holds after the source is killed.
-//
-// A stream of the pane (stream-pane, pane-view) stays open through the move.
-// Its lease and viewer report follow the pane to the destination, and the
-// pane is sized again against the destination's clients when it arrives.
-
 // Error codes of move-window with to_session.
 const (
 	// ErrVerbSameSession is a move to the session the window is already in.
@@ -58,12 +22,10 @@ const (
 	ErrVerbPaneNotMovable = "pane_not_movable"
 )
 
-// errPaneNotMovable says why a window cannot leave its session.
 type errPaneNotMovable struct{ why string }
 
 func (e errPaneNotMovable) Error() string { return e.why }
 
-// movableRefusal is why w cannot move to another session, "" when it can.
 func movableRefusal(w WindowState) string {
 	switch {
 	case w.Host != "":
@@ -80,7 +42,6 @@ func movableRefusal(w WindowState) string {
 	return ""
 }
 
-// paneTransfer is what a window takes from one session to another.
 type paneTransfer struct {
 	win WindowState
 	pty *PTY
@@ -95,12 +56,8 @@ type paneTransfer struct {
 	startDir  any
 	agentDirs map[string]string
 
-	// transcript is the join the window had, made again in the destination.
 	transcript *transcriptRejoin
 
-	// from is the label of the session the window left, recorded in the
-	// destination's WindowMoves when it arrives. Empty for a window put
-	// back where it was.
 	from string
 }
 
@@ -117,13 +74,8 @@ type WindowMove struct {
 	Away bool
 }
 
-// windowMovesKept bounds SessionState.WindowMoves. A client reads only the
-// entries for windows that left or arrived in the push it applies.
 const windowMovesKept = 8
 
-// recordWindowMove appends m to the session's moves, keeping the newest
-// windowMovesKept. It builds a new slice, so a snapshot that shares the old
-// one is not written through.
 func recordWindowMove(state *SessionState, m WindowMove) {
 	moves := state.WindowMoves
 	if over := len(moves) + 1 - windowMovesKept; over > 0 {
@@ -148,8 +100,6 @@ func (state *SessionState) LastWindowMove(windowID string) (WindowMove, bool) {
 	return WindowMove{}, false
 }
 
-// sessionLabel is the name a person knows the session by: its display name,
-// or its name when it has none.
 func sessionLabel(s *Session) string {
 	if st := s.GetState(); st != nil && st.DisplayName != "" {
 		return st.DisplayName
@@ -157,19 +107,11 @@ func sessionLabel(s *Session) string {
 	return s.Name()
 }
 
-// transcriptRejoin is a transcript join to make again.
 type transcriptRejoin struct {
 	harness, format, path, session string
 	exact                          bool
 }
 
-// releaseWindow takes a window out of the session for a move: its row, its
-// PTY and the daemon memory kept for it. The process goes on running and the
-// PTY is in no session until adoptWindow takes it.
-//
-// to is the label of the session the window goes to. It is recorded in the
-// session's WindowMoves in the same mutation, so a client of this session
-// says where the window went rather than that it closed.
 func (s *Session) releaseWindow(windowID, to string) (*paneTransfer, error) {
 	t := &paneTransfer{}
 	err := s.mutateState(func(state *SessionState) error {
@@ -194,8 +136,6 @@ func (s *Session) releaseWindow(windowID, to string) (*paneTransfer, error) {
 			t.harness = h
 			delete(s.agentHarnessPIDs, id)
 		}
-		// The shared-server guard stays behind and is dropped: the window
-		// fails open in its new session until the next SessionStart.
 		delete(s.agentSharedGuards, id)
 		if sa, ok := s.agentSubagents[id]; ok {
 			t.subagents = sa
@@ -209,8 +149,6 @@ func (s *Session) releaseWindow(windowID, to string) (*paneTransfer, error) {
 			t.seen = &seen
 			delete(s.completionSeen, id)
 		}
-		// A question the pane shows goes with it: the ask-human call that put it
-		// there ends it in whichever session the pane is in by then.
 		if a, ok := s.askShows[id]; ok {
 			t.askShow = &a
 			delete(s.askShows, id)
@@ -258,10 +196,6 @@ func (s *Session) releaseWindow(windowID, to string) (*paneTransfer, error) {
 	return t, nil
 }
 
-// adoptWindow puts a window released by another session into this one, on
-// workspace, and focuses it when focus is set. A tiled window arrives
-// unplaced, so a client of this session tiles it into the layout there. A
-// floating one keeps its box.
 func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (WindowState, error) {
 	pty := t.pty
 	s.ptysMu.Lock()
@@ -271,12 +205,7 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 	}
 	pty.home.Store(s)
 	s.ptysMu.Unlock()
-	// Whether a client shows the session was the source's. A viewer's fit
-	// lease sizes the pane only while none shows this one, so the pane is
-	// sized again against this session's clients.
 	pty.setNoClients(s.tuiClients.Load() == 0)
-	// The look the event sink installed reads the session it was made in.
-	// The sink here installs a new one on the pane's next output.
 	pty.setScreenLook(nil)
 	s.forgetCwdCache()
 
@@ -301,9 +230,6 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 		}
 		win = t.win
 		win.Workspace = workspace
-		// The zoom and the minimize were the source's layout. The pane
-		// arrives shown, and a tiled one is placed by the destination's
-		// client.
 		win.Zoomed = false
 		win.Minimized = false
 		if !win.IsFloating {
@@ -366,7 +292,6 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 		return nil
 	})
 	if err != nil {
-		// Nothing of the window stays here: the caller puts it back.
 		s.ptysMu.Lock()
 		delete(s.ptys, pty.ID)
 		s.places.Delete(pty.ID)
@@ -404,9 +329,6 @@ func (s *Session) adoptWindow(t *paneTransfer, workspace int, focus bool) (Windo
 	return win, nil
 }
 
-// returnWindow puts a window back into the session it was released from,
-// after the destination refused it. It is adoptWindow on the source, on the
-// workspace the window had.
 func (s *Session) returnWindow(t *paneTransfer) {
 	t.from = ""
 	ws := t.win.Workspace
@@ -418,13 +340,8 @@ func (s *Session) returnWindow(t *paneTransfer) {
 	}
 }
 
-// windowMove serialises moves between sessions, so two moves of one window
-// cannot both release it.
 var windowMove sync.Mutex
 
-// moveWindowToSession moves a window of src to dst, onto workspace (0 for
-// the workspace dst shows), and focuses it there when follow is set. It
-// returns the window as it is in dst.
 func (d *Daemon) moveWindowToSession(src, dst *Session, windowID string, workspace int, follow bool) (WindowState, error) {
 	windowMove.Lock()
 	defer windowMove.Unlock()
@@ -432,8 +349,6 @@ func (d *Daemon) moveWindowToSession(src, dst *Session, windowID string, workspa
 	if workspace == 0 {
 		workspace = max(dst.GetState().CurrentWorkspace, 1)
 	}
-	// Checked before anything leaves the source: a refusal here moves
-	// nothing.
 	if st := dst.GetState(); !st.workspaceAccepts(workspace) || IsScratchWorkspace(workspace) {
 		return WindowState{}, errfmt.Errorf("workspace %d out of range (1-%d)", workspace, st.workspaceBound())
 	}
@@ -448,7 +363,6 @@ func (d *Daemon) moveWindowToSession(src, dst *Session, windowID string, workspa
 
 	win, err := dst.adoptWindow(t, workspace, follow)
 	if err != nil {
-		// The destination refused the window: it goes back where it was.
 		src.returnWindow(t)
 		return WindowState{}, err
 	}
@@ -461,18 +375,12 @@ func (d *Daemon) moveWindowToSession(src, dst *Session, windowID string, workspa
 	d.noteMovedWindow(windowID, src.ID, srcName)
 	moveWindowHistory(src, dst, windowID)
 
-	// A process that exited while the pane was between the two sessions was
-	// heard by nobody attached to the destination.
 	if t.pty.IsExited() {
 		d.notifyPTYClosed(dst.ID, t.pty.ID)
 	}
 	return win, nil
 }
 
-// unsubscribeSessionClients ends the streams of pty to every client of the
-// session with id sessionID. A client of the source drops the window when
-// the state push reaches it, and its unsubscribe then finds no PTY in its
-// session to take the stream off.
 func (d *Daemon) unsubscribeSessionClients(sessionID string, pty *PTY) {
 	if pty == nil {
 		return
@@ -493,7 +401,6 @@ func (d *Daemon) unsubscribeSessionClients(sessionID string, pty *PTY) {
 	}
 }
 
-// sessionHoldingPTY is the session that holds the PTY now, nil for none.
 func (d *Daemon) sessionHoldingPTY(ptyID string) *Session {
 	if ptyID == "" || d.manager == nil {
 		return nil
@@ -506,13 +413,8 @@ func (d *Daemon) sessionHoldingPTY(ptyID string) *Session {
 	return nil
 }
 
-// movedWindows records, by window id, the sessions a window was moved out
-// of. See followMovedWindow.
 var movedWindows sync.Map
 
-// noteMovedWindow records that the window left the session with id fromID
-// and name fromName. The name is kept apart from the session, so a call that
-// names the source after the source is gone still finds the window.
 func (d *Daemon) noteMovedWindow(windowID, fromID, fromName string) {
 	v, _ := movedWindows.LoadOrStore(windowID, &movedFrom{})
 	m := v.(*movedFrom)
@@ -524,8 +426,6 @@ func (d *Daemon) noteMovedWindow(windowID, fromID, fromName string) {
 	m.mu.Unlock()
 }
 
-// forgetMovedWindow drops what noteMovedWindow recorded, for a window that
-// closed.
 func forgetMovedWindow(windowID string) { movedWindows.Delete(windowID) }
 
 type movedFrom struct {
@@ -540,19 +440,12 @@ func (m *movedFrom) has(id string) bool {
 	return slices.Contains(m.ids, id)
 }
 
-// hasName reports whether the window left a session that had this name or
-// id when it left.
 func (m *movedFrom) hasName(name string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return slices.Contains(m.names, name) || slices.Contains(m.ids, name)
 }
 
-// followMovedWindow sends a call that names a moved window together with a
-// session the window was moved out of to the session the window is in now.
-// A process in the pane still has the old session in TUIOS_SESSION, and its
-// agent's hooks pass that with the pane's own id. It runs before the pane
-// grants, beside followRenamedSession.
 func (d *Daemon) followMovedWindow(params json.RawMessage) json.RawMessage {
 	if len(params) == 0 {
 		return params
@@ -577,10 +470,6 @@ func (d *Daemon) followMovedWindow(params json.RawMessage) json.RawMessage {
 	if !ok {
 		return params
 	}
-	// The session named is the one the window left, or a name it had when
-	// the window left. The second holds after that session was killed or
-	// its name taken by another, when the name resolves to nothing or to a
-	// session that never held the window.
 	named, _ := d.manager.ResolveSession(session)
 	from := v.(*movedFrom)
 	if (named == nil || !from.has(named.ID)) && !from.hasName(session) {
@@ -598,10 +487,6 @@ func (d *Daemon) followMovedWindow(params json.RawMessage) json.RawMessage {
 	return out
 }
 
-// moveWindowHistory moves the window's saved history file to the
-// destination's folder, so a daemon that stops before the destination's next
-// save still brings the history back. Best effort: the destination's next
-// save writes the file anyway.
 func moveWindowHistory(src, dst *Session, windowID string) {
 	if !src.historyPolicy().Enabled || !validHistoryWindowID(windowID) {
 		return
@@ -627,7 +512,6 @@ func moveWindowHistory(src, dst *Session, windowID string) {
 	}
 }
 
-// moveWindow points the pane's entry at the session it moved to.
 func (t *paneGrantTable) moveWindow(windowID, session string) {
 	if t == nil {
 		return
@@ -640,8 +524,6 @@ func (t *paneGrantTable) moveWindow(windowID, session string) {
 	}
 }
 
-// moveWindow moves the items about one window of the session named old to
-// newName, the way renameSession moves a whole session's.
 func (a *attentionStore) moveWindow(old, newName, window string) {
 	if a == nil || old == newName || window == "" {
 		return
@@ -687,7 +569,6 @@ func (a *attentionStore) moveWindow(old, newName, window string) {
 	}
 }
 
-// moveWindow moves a pane's ring to the session it moved to.
 func (a *activityStore) moveWindow(fromID, toID, windowID string) {
 	if a == nil {
 		return
@@ -700,7 +581,6 @@ func (a *activityStore) moveWindow(fromID, toID, windowID string) {
 	}
 }
 
-// moveQueuedWindow points a pane's queued prompts at the session it moved to.
 func (d *Daemon) moveQueuedWindow(window, session string) {
 	q := &d.queue
 	if q.total.Load() == 0 && q.stamped.Load() == 0 {
@@ -717,7 +597,6 @@ func (d *Daemon) moveQueuedWindow(window, session string) {
 	}
 }
 
-// isPaneNotMovable reports whether err is a refusal to move the pane.
 func isPaneNotMovable(err error) (string, bool) {
 	if e, ok := errors.AsType[errPaneNotMovable](err); ok {
 		return e.why, true

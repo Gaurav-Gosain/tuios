@@ -10,9 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// captureLineByLine is the plain capture the long way: every scrollback line
-// decoded into cells and turned back into text, then the screen. The plain
-// capture must give exactly these bytes whichever way it reads the ring.
 func captureLineByLine(term vt.Terminal) string {
 	var sb strings.Builder
 	for i := range term.ScrollbackLen() {
@@ -98,8 +95,6 @@ func TestWaitForOutputBackstopSeesUnannouncedChange(t *testing.T) {
 				done <- c.call(t, `{"id":1,"verb":"wait-for","params":{"condition":"window-output","session":"work","pattern":"BACKSTOPMARK","timeout":8000}}`)
 			}()
 
-			// Let the waiter take its first capture and settle on the
-			// backstop before the content changes behind its back.
 			time.Sleep(3 * waitOutputRecheck)
 			pty.terminalMu.Lock()
 			tc.change(pty)
@@ -128,8 +123,8 @@ func TestUnwrapCaptureJoinsWrappedRows(t *testing.T) {
 		"short",
 		"exactly10!",
 		"a path/that/is/longer/than/the/pane/width.go:42",
-		"edge-at-9 wraps here", // a space lands in the last column
-		"wide 日本語日本語日本語 end",   // a wide character meets the edge
+		"edge-at-9 wraps here",
+		"wide 日本語日本語日本語 end",
 		"\x1b[31mred text that wraps around\x1b[0m",
 		"last",
 	}
@@ -150,13 +145,11 @@ func TestUnwrapCaptureJoinsWrappedRows(t *testing.T) {
 		t.Fatalf("unwrapped capture:\n got %q\nwant %q", got, want.String())
 	}
 
-	// Styled, the joined line keeps its escapes and still reads as one line.
 	styled, _ := p.CaptureContentMeta(true, true, true)
 	if n := strings.Count(trimCapture(styled), "\n"); n != len(lines) {
 		t.Fatalf("styled unwrapped capture has %d lines, want %d:\n%q", n, len(lines), styled)
 	}
 
-	// Without unwrap the rows stay as the pane shows them.
 	plain, _ := p.CaptureContentMeta(true, false, false)
 	if strings.Contains(plain, "longer/than/the/pane") {
 		t.Fatalf("a capture without unwrap joined rows: %q", plain)

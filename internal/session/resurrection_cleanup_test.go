@@ -13,9 +13,6 @@ func TestLeftoverTempFilesAreCleaned(t *testing.T) {
 	tmpDir := t.TempDir()
 	defer useResurrectionDir(tmpDir)()
 
-	// The residue of two interrupted writes, beside one good state file.
-	// The first two are the fixed names older builds used, the third the
-	// fresh name atomicfile gives a temporary file.
 	leftovers := []string{"work.json.tmp", "notes.json.tmp", ".work.json.2840193.tmp"}
 	for _, name := range leftovers {
 		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte("{partial"), 0600); err != nil {
@@ -34,8 +31,6 @@ func TestLeftoverTempFilesAreCleaned(t *testing.T) {
 			t.Errorf("leftover temp file %s survived the sweep (stat err: %v)", name, err)
 		}
 	}
-	// In the other state folders only an old temporary file goes: a young one
-	// may be a write still in flight.
 	attention := filepath.Dir(attentionPath())
 	if err := os.MkdirAll(attention, 0o700); err != nil {
 		t.Fatal(err)
@@ -58,7 +53,6 @@ func TestLeftoverTempFilesAreCleaned(t *testing.T) {
 	if _, err := os.Stat(young); err != nil {
 		t.Errorf("the sweep removed a temp file a write may still own: %v", err)
 	}
-	// The sweep must not touch real state.
 	if _, err := LoadResurrectionState("work"); err != nil {
 		t.Errorf("the sweep took a real state file with it: %v", err)
 	}

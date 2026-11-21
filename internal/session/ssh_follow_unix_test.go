@@ -87,9 +87,6 @@ func TestOwnedSocketFollowsASafeSymlinkAncestor(t *testing.T) {
 		t.Cleanup(func() { _ = l.Close() })
 		return path
 	}
-	// A short-named root, not t.TempDir(): a Unix domain socket's sun_path is
-	// capped (104 bytes on macOS/BSD), and t.TempDir() embeds this test's own
-	// (long) function name in the directory it hands back.
 	root := testutil.RuntimeDir(t)
 
 	safeTarget := filepath.Join(root, "real")
@@ -105,8 +102,6 @@ func TestOwnedSocketFollowsASafeSymlinkAncestor(t *testing.T) {
 	if !ok {
 		t.Fatalf("a socket reached through a symlink to a safe folder was refused: %s", sock)
 	}
-	// The path handed on is the one that was checked, so nothing after the
-	// check goes back through the link.
 	realTarget, err := filepath.EvalSymlinks(safeTarget)
 	if err != nil {
 		t.Fatal(err)
@@ -119,8 +114,6 @@ func TestOwnedSocketFollowsASafeSymlinkAncestor(t *testing.T) {
 	if err := os.Mkdir(unsafeTarget, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// Mkdir's mode is masked by umask; Chmod sets the exact bits, same as
-	// TestOwnedSocket's "open" case above does for the same reason.
 	if err := os.Chmod(unsafeTarget, 0o777); err != nil {
 		t.Fatal(err)
 	}
@@ -172,8 +165,6 @@ func TestCheckRemoteClientThroughAWrapper(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// The trailing : keeps sh from exec'ing the last command, so each
-	// script stays the parent of what it runs.
 	write("ssh", "echo $$ > \"$SSHPID\"\nsleep 30\n:\n")
 	for _, name := range []string{"tt", "rsync", "git", "scp"} {
 		write(name, "\"$@\"\n:\n")

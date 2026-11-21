@@ -10,11 +10,6 @@ import (
 	"unicode/utf8"
 )
 
-// herdr's methods beyond the ones herdr_panes.go answers: resizing a pane,
-// reloading the config, and the rest that herdr plugins call. Each is held to
-// the grants of the tuios verb that does the same work, as in herdr_panes.go.
-
-// herdrResize is herdr's PaneResizeResult.
 type herdrResize struct {
 	Changed       bool        `json:"changed"`
 	Reason        string      `json:"reason,omitempty"`
@@ -23,18 +18,11 @@ type herdrResize struct {
 	Layout        herdrLayout `json:"layout"`
 }
 
-// herdrResizeDefault and herdrResizeMax are herdr's default and largest
-// share of the tab a resize moves a border by.
 const (
 	herdrResizeDefault = 0.05
 	herdrResizeMax     = 0.5
 )
 
-// herdrPaneResize moves one border of a pane, as herdr's pane.resize does:
-// right and down move a border right or down, left and up move it left or
-// up. The border is the one on that side of the pane, or the other one when
-// the pane is at the edge of the tab there, as resize-window does. It needs
-// what set-layout needs.
 func (d *Daemon) herdrPaneResize(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	if herr := herdrDirection(in.Direction); herr != nil {
 		return nil, herr
@@ -68,8 +56,6 @@ func (d *Daemon) herdrPaneResize(cs *connState, in *herdrIn) (*herdrResult, *her
 	return &herdrResult{Type: "pane_resize", Resize: res}, nil
 }
 
-// herdrRouteClientData is herdrRouteClient for a command whose answer
-// carries data.
 func (d *Daemon) herdrRouteClientData(sess *Session, command, fail string, args ...string) (map[string]any, *herdrError) {
 	data, verr := d.routeData(sess, command, args)
 	if verr != nil {
@@ -78,11 +64,6 @@ func (d *Daemon) herdrRouteClientData(sess *Session, command, fail string, args 
 	return data, nil
 }
 
-// herdrReloadConfig answers server.reload_config. herdr reads its own
-// config.toml again. tuios does not read that file, and it reads its own
-// config.toml when the file changes, so there is nothing to reload. Tools
-// call it after they write a setting into herdr's file (terminal-browser
-// writes kitty_graphics), and go on when it succeeds.
 func (d *Daemon) herdrReloadConfig(_ *connState, _ *herdrIn) (*herdrResult, *herdrError) {
 	return &herdrResult{
 		Type:        "config_reload",
@@ -91,9 +72,6 @@ func (d *Daemon) herdrReloadConfig(_ *connState, _ *herdrIn) (*herdrResult, *her
 	}, nil
 }
 
-// herdrAgentRename names the agent a target finds, as herdr's agent.rename
-// does: the pane takes the name, which agent.get and the other agent methods
-// then find it by. No name clears it. It needs what set-window needs.
 func (d *Daemon) herdrAgentRename(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	id, herr := d.herdrAgentTarget(cs, in.Target)
 	if herr != nil {
@@ -125,10 +103,6 @@ func (d *Daemon) herdrAgentRename(cs *connState, in *herdrIn) (*herdrResult, *he
 	return d.herdrAgentResult(cs, "agent_info", paneID)
 }
 
-// herdrAgentExplain says why tuios sees an agent in a pane, or does not:
-// what explain-agent-detect reports, under herdr's explain field. herdr's
-// explain is its own detector's report, a free JSON value, so a tool that
-// reads it shows it and does not take it apart.
 func (d *Daemon) herdrAgentExplain(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	id, herr := d.herdrAgentTarget(cs, in.Target)
 	if herr != nil {
@@ -145,10 +119,6 @@ func (d *Daemon) herdrAgentExplain(cs *connState, in *herdrIn) (*herdrResult, *h
 	return &herdrResult{Type: "agent_explain", Explain: out}, nil
 }
 
-// herdrDismissStale answers release_notes.dismiss and
-// product_announcement.dismiss. herdr shows its own release notes and
-// announcements, and answers a dismiss with a stale error when none is
-// current. tuios shows none of herdr's, so none is ever current.
 func (d *Daemon) herdrDismissReleaseNotes(_ *connState, _ *herdrIn) (*herdrResult, *herdrError) {
 	return nil, herdrErr("stale_release_notes", "the release notes are no longer current")
 }
@@ -157,7 +127,6 @@ func (d *Daemon) herdrDismissAnnouncement(_ *connState, _ *herdrIn) (*herdrResul
 	return nil, herdrErr("stale_announcement", "the product announcement is no longer current")
 }
 
-// herdrMoveDest is herdr's PaneMoveDestination, tagged by type.
 type herdrMoveDest struct {
 	Type         string  `json:"type"`
 	TabID        string  `json:"tab_id"`
@@ -168,7 +137,6 @@ type herdrMoveDest struct {
 	TabLabel     *string `json:"tab_label"`
 }
 
-// herdrMove is herdr's PaneMoveResult.
 type herdrMove struct {
 	Changed             bool          `json:"changed"`
 	Reason              string        `json:"reason,omitempty"`
@@ -183,14 +151,6 @@ type herdrMove struct {
 	FocusedPaneID       string        `json:"focused_pane_id"`
 }
 
-// herdrPaneMove moves a pane to another tab, or to a new tab, as move-window
-// does, and needs what move-window needs. A herdr workspace is a tuios
-// session, so a tab of another workspace is a workspace of another session:
-// the pane moves there with its process running (move-window's to_session),
-// and its pane id changes with its workspace. A new workspace fails with
-// unsupported. In the same workspace the pane goes beside target_pane_id,
-// on the side split names. Across workspaces tuios places it itself. ratio
-// is not followed.
 func (d *Daemon) herdrPaneMove(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	dest := in.Destination
 	switch dest.Type {
@@ -279,8 +239,6 @@ func (d *Daemon) herdrPaneMove(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		if across {
 			args.ToSession = to.Name()
 		} else if dest.TargetPaneID != "" {
-			// In this session the pane goes beside the target, on the
-			// side split names.
 			if _, tw, ierr := d.herdrFindPane(dest.TargetPaneID); ierr == nil && tw.Workspace == ws {
 				args.Workspace, args.Beside, args.Side = 0, tw.ID, dest.Split
 			}
@@ -314,8 +272,6 @@ func (d *Daemon) herdrPaneMove(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		}
 	}
 	if res.Changed {
-		// The tab the pane left is in the source's view, which is another
-		// view when the pane changed workspace.
 		sv := v
 		if across {
 			if sv, herr = d.herdrSessionView(cs, site.sess); herr != nil {
@@ -340,16 +296,8 @@ func (d *Daemon) herdrPaneMove(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	return &herdrResult{Type: "pane_move", MoveResult: res}, nil
 }
 
-// herdrClientTitleMax bounds a client title, in runes.
 const herdrClientTitleMax = 256
 
-// herdrClientTitle sets or clears the title of the terminal a tuios client
-// runs in, as herdr's client.window_title.set and .clear do for herdr's
-// foreground client. The client is the one that shows the caller's session,
-// else the one that shows the session herdr calls the active workspace.
-// With none, nothing changes and the reason is no_foreground_client, as in
-// herdr. The title is what the person sees on their own window, so a pane
-// needs what run-command needs to set it. Control characters are taken out.
 func herdrClientTitle(clear bool) func(*Daemon, *connState, *herdrIn) (*herdrResult, *herdrError) {
 	return func(d *Daemon, cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 		var sess *Session
@@ -385,7 +333,6 @@ func herdrClientTitle(clear bool) func(*Daemon, *connState, *herdrIn) (*herdrRes
 	}
 }
 
-// herdr's limits on metadata tokens (src/app/api_helpers.rs).
 const (
 	herdrMetaKeysPerCall   = 16
 	herdrMetaKeysPerTarget = 32
@@ -396,11 +343,6 @@ const (
 	herdrMetaMaxTTLMS      = 86_400_000
 )
 
-// herdrWsMeta is the tokens tools report on each session through
-// workspace.report_metadata, kept in the daemon's memory as herdr keeps
-// them: a token is keyed by its name alone, a later report replaces it
-// whoever sends it, null clears it, and a ttl drops it when it runs out.
-// workspace.list, workspace.get and the snapshot show them under tokens.
 type herdrWsMeta struct {
 	mu       sync.Mutex
 	sessions map[string]*herdrWsTokens
@@ -416,7 +358,6 @@ type herdrWsToken struct {
 	expires time.Time
 }
 
-// tokens is the live tokens of a session, nil for none.
 func (m *herdrWsMeta) tokens(session string, now time.Time) map[string]string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -438,16 +379,12 @@ func (m *herdrWsMeta) tokens(session string, now time.Time) map[string]string {
 	return out
 }
 
-// forget drops a session's tokens, when the session closes.
 func (m *herdrWsMeta) forget(session string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.sessions, session)
 }
 
-// herdrWorkspaceReportMetadata applies one workspace.report_metadata, with
-// herdr's checks and words. The tokens are shown to everyone who reads the
-// session, so a pane needs what set-session-accent needs to report them.
 func (d *Daemon) herdrWorkspaceReportMetadata(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	sess, ierr := d.herdrFindSession(in.WorkspaceID)
 	if ierr != nil {
@@ -560,7 +497,6 @@ func (d *Daemon) herdrWorkspaceReportMetadata(cs *connState, in *herdrIn) (*herd
 	return herdrAck, nil
 }
 
-// herdrManifestInfo is herdr's AgentManifestInfo.
 type herdrManifestInfo struct {
 	Agent                        string `json:"agent"`
 	Source                       string `json:"source"`
@@ -568,10 +504,6 @@ type herdrManifestInfo struct {
 	LocalOverrideShadowingRemote bool   `json:"local_override_shadowing_remote"`
 }
 
-// herdrAgentManifests answers server.agent_manifests with tuios's harness
-// manifests: the agents tuios knows, each under herdr's name for it, from
-// the bundled set or from the person's own file. tuios does not fetch
-// manifests from the network, so there is no remote check to report.
 func (d *Daemon) herdrAgentManifests(_ *connState, _ *herdrIn) (*herdrResult, *herdrError) {
 	out := []herdrManifestInfo{}
 	if reg := d.agentMatcher.registry; reg != nil {

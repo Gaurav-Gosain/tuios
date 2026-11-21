@@ -2,30 +2,14 @@ package session
 
 import "time"
 
-// agentHoldWindow is how long a quieter state has to keep being true before it
-// is published. It exists because a sampled source can disagree with itself
-// between two samples, and a pane whose glyph changes twice for one event reads
-// as noise however correct each individual sample was.
-//
-// The value is short enough that a genuine change still feels immediate and long
-// enough to swallow the gap between a harness clearing its progress bar and
-// setting it again for the next step of the same task.
 const agentHoldWindow = 700 * time.Millisecond
 
-// agentHold is a quieter state waiting out agentHoldWindow.
 type agentHold struct {
 	state  AgentState
 	source AgentSource
 	since  time.Time
 }
 
-// agentLoudness ranks a state by how much it wants a human. The ordering is the
-// whole anti-flicker policy: a transition that does not lower it is published at
-// once, and only a transition that lowers it waits.
-//
-// It is deliberately asymmetric. Being slow to say "the agent needs you" costs
-// the user the thing the feature exists to prevent, while being slow to say "the
-// agent went quiet" costs them nothing.
 func agentLoudness(state AgentState) int {
 	switch state {
 	case AgentStateNeedsInput, AgentStateErrored:
@@ -34,27 +18,15 @@ func agentLoudness(state AgentState) int {
 		return 2
 	case AgentStateIdle, AgentStateDone, AgentStateUnknown:
 		return 1
-	default: // AgentStateNone
+	default:
 		return 0
 	}
 }
 
-// holdQuieterState decides whether a sampled source may publish next now.
-//
-// A state at or above the current loudness goes straight through, as does any
-// state once it has stood unchanged for agentHoldWindow. A quieter state that has
-// only just appeared is recorded and refused, so a source that flips and flips
-// back inside the window produces one transition rather than two: the reversal
-// finds the hold and cancels it, and nothing was ever published.
-//
-// A hold left behind by a source that then goes silent is settled by
-// settleAgentHolds, so a state cannot be held indefinitely.
 func (s *Session) holdQuieterState(windowID string, next, current AgentState, source AgentSource, now time.Time) bool {
 	s.agentHoldMu.Lock()
 	defer s.agentHoldMu.Unlock()
 	if next == current {
-		// Already there. Drop any hold, since what it was waiting to say is now
-		// what the window already says.
 		delete(s.agentHolds, windowID)
 		return false
 	}
@@ -78,18 +50,6 @@ func (s *Session) holdQuieterState(windowID string, next, current AgentState, so
 	return true
 }
 
-// scheduleHoldSettleLocked arms the one-shot that publishes the earliest hold
-// once its window elapses. Called with agentHoldMu held.
-//
-// The hold has to carry its own backstop. Relying on the stall monitor calling
-// settleAgentHolds on its tick would mean turning the silence timer off also
-// stops anything from ever publishing a held state: a harness that clears its
-// progress bar once and then goes quiet would stay working forever. A timer
-// belonging to the hold cannot be switched off by an unrelated setting.
-//
-// A pending timer is left alone rather than re-armed. Holds are recorded with
-// since = now, so the earliest deadline never moves closer, and a timer that
-// fires with nothing due simply re-arms for what is left.
 func (s *Session) scheduleHoldSettleLocked(now time.Time) {
 	if s.agentHoldTimer != nil || len(s.agentHolds) == 0 {
 		return
@@ -104,9 +64,6 @@ func (s *Session) scheduleHoldSettleLocked(now time.Time) {
 		s.settleHeldStates)
 }
 
-// settleHeldStates is what the hold timer runs: publish whatever is due and arm
-// again for anything still waiting. It is the only path that fires the timer, so
-// clearing the field first is what lets the next hold arm a fresh one.
 func (s *Session) settleHeldStates() {
 	s.agentHoldMu.Lock()
 	s.agentHoldTimer = nil
@@ -120,14 +77,6 @@ func (s *Session) settleHeldStates() {
 	s.agentHoldMu.Unlock()
 }
 
-// settleAgentHolds publishes every held state whose window has elapsed and
-// reports how many it published. It is the backstop for a source that says
-// something quieter once and then goes silent: without it that state would wait
-// for an event that never comes. Its caller is the hold's own timer, so no
-// unrelated setting can switch the backstop off.
-//
-// The reports are applied after the lock is dropped, since ApplyAgentReport takes
-// stateMu and holding two locks across it buys nothing.
 func (s *Session) settleAgentHolds(now time.Time) int {
 	s.agentHoldMu.Lock()
 	var due []struct {
@@ -147,11 +96,6 @@ func (s *Session) settleAgentHolds(now time.Time) int {
 
 	settled := 0
 	for _, d := range due {
-		// A hold is its source speaking late, so it needs what the source
-		// needed when it spoke: an agent in the pane. An agent that cleared its
-		// progress bar and exited inside the window has had its pane cleared at
-		// the shell by now, and publishing the clear would bring the pane back
-		// to idle with no agent in it.
 		if _, exists, agentPane := s.progressTarget(d.window); !exists || !agentPane {
 			continue
 		}
@@ -162,8 +106,6 @@ func (s *Session) settleAgentHolds(now time.Time) int {
 	return settled
 }
 
-// stopAgentHoldTimer disarms the backstop and forgets what it was waiting to
-// say, for a session being stopped.
 func (s *Session) stopAgentHoldTimer() {
 	s.agentHoldMu.Lock()
 	defer s.agentHoldMu.Unlock()
@@ -174,18 +116,12 @@ func (s *Session) stopAgentHoldTimer() {
 	clear(s.agentHolds)
 }
 
-// dropAgentHold forgets any hold on a window, so a window that goes away or whose
-// state a stronger source took over does not leave one behind to be published
-// later.
 func (s *Session) dropAgentHold(windowID string) {
 	s.agentHoldMu.Lock()
 	defer s.agentHoldMu.Unlock()
 	delete(s.agentHolds, windowID)
 }
 
-// eventClaimWrittenOver reports whether claim, on window windowID, was read
-// from a one-off event and the pane has written since, at wrote. An idle look
-// may then replace it, as any other look may (see eventClaimStale).
 func (s *Session) eventClaimWrittenOver(windowID string, claim agentClaim, wrote int64) bool {
 	if !claim.event {
 		return false
@@ -200,9 +136,6 @@ func (s *Session) eventClaimWrittenOver(windowID string, claim agentClaim, wrote
 	return false
 }
 
-// hookEventPrompt reports whether the claim stands for a prompt a hook
-// reported from a one-off event (set-agent-state's notification), itself or
-// as the claim a screen rule took the pane from while the prompt was drawn.
 func (c agentClaim) hookEventPrompt() bool {
 	if c.blocker {
 		return c.prior.event && c.prior.source == AgentSourceReport
@@ -210,8 +143,6 @@ func (c agentClaim) hookEventPrompt() bool {
 	return c.event && c.source == AgentSourceReport
 }
 
-// windowAgentState returns the current agent state of a window and whether the
-// window exists.
 func (s *Session) windowAgentState(windowID string) (AgentState, bool) {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()

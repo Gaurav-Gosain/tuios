@@ -16,37 +16,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
-// daemonOwnedCommands are the commands the daemon executes itself whether or not
-// a client is attached, because their entire effect is a change to a field the
-// daemon owns and no renderer has to be consulted to make it. Routing one of
-// these to the client instead is what made a remote rename report success while
-// list-windows kept reporting the old name: the client renamed its own copy and
-// the daemon, which every read verb answers from, never heard about it.
-//
-// Commands leave this set only when the daemon cannot produce the same result a
-// renderer would. Everything still absent from it is routed as before.
 var daemonOwnedCommands = map[string]bool{
 	"RenameWindow": true,
-	// Closing a window is removing it from the window set and killing its PTY,
-	// both of which the daemon owns outright. The renderer has nothing to
-	// contribute: it learns the window is gone from the state push and gives the
-	// space back.
-	"CloseWindow": true,
-	// Creating one is the same trade in reverse. The daemon spawns the PTY and
-	// adds the window; the one thing it cannot supply is where the window goes,
-	// because it has no viewport. It says so with WindowState.Unplaced instead of
-	// guessing, and the client that receives the push places it.
-	"NewWindow": true,
+	"CloseWindow":  true,
+	"NewWindow":    true,
 }
 
-// tapeResultTTL is how long the daemon keeps a tape exec's request open for
-// the result. The CLI gives up sooner when its own --timeout is shorter.
 const tapeResultTTL = 6 * time.Hour
 
-// clientQueryCommands are the names the attached client answers itself,
-// beside the tape commands. They are commands a caller can name too. All but
-// ShareLook only read. ShareLook writes a screenshot and the clipboard of the
-// person at the client, which is why it needs one attached.
 var clientQueryCommands = map[string]bool{
 	"ListWindows":    true,
 	"GetSessionInfo": true,
@@ -54,20 +31,6 @@ var clientQueryCommands = map[string]bool{
 	"ShareLook":      true,
 }
 
-// resolveCommandName turns the name a caller gave run-command into the one
-// the client and the daemon dispatch on, or reports that there is no such
-// command. The tape's name in any case and the keymap's name for the same
-// action both resolve; see tape.ResolveCommandName.
-//
-// A name nothing dispatches on used to be routed anyway, and the client's
-// executor ran it as nothing and reported success: run-command toggle_zoom
-// said "command executed" and changed nothing, on the path the docs call the
-// escape hatch for a binding that has no verb.
-//
-// Any other keybinding action, the name config.toml binds a key to, runs as
-// the tape's Action command with the name as its argument, so every action a
-// key can run is reachable here. It returns the arguments the command runs
-// with, which change only for an action.
 func resolveCommandName(name string, args []string) (string, []string, bool) {
 	if clientQueryCommands[name] {
 		return name, args, true
@@ -81,19 +44,15 @@ func resolveCommandName(name string, args []string) (string, []string, bool) {
 		}
 	}
 	if tape.IsActionName(name) && (len(args) == 0 || strings.HasPrefix(name, config.UserActionPrefix)) {
-		// A user action takes its arguments, key=value, after its name.
 		return string(tape.CommandTypeAction), append([]string{name}, args...), true
 	}
 	return "", nil, false
 }
 
-// unknownCommandMessage says what a caller can do about a name that is not a
-// command.
 func unknownCommandMessage(name string) string {
 	return fmt.Sprintf("unknown command %q. Run 'tuios run-command --list' for the command names, or 'tuios keybinds list' for the action names", name)
 }
 
-// handleExecuteCommand routes a tape command to the TUI client attached to the session.
 func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	var payload ExecuteCommandPayload
 	if err := msg.ParsePayload(&payload); err != nil {
@@ -102,7 +61,6 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 
 	LogBasic("Received execute command: %s (session=%s, args=%v)", payload.CommandType, payload.SessionName, payload.Args)
 
-	// Find the target session
 	session := d.findTargetSession(cs, payload.SessionName)
 	if session == nil {
 		LogBasic("Execute command: session not found")
@@ -117,21 +75,13 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		}
 		payload.CommandType, payload.Args = canonical, args
 	}
-	// The check runs on the resolved command, as in verbRunCommand. A keymap
-	// action name (paste_buffer, user:NAME) is not a tape name, so checked
-	// before resolution it passed, and then ran as an Action, which types.
 	if why := d.refuseTapeTyping(cs, &payload); why != "" {
 		return d.sendCommandResult(cs, payload.RequestID, false, "run-command is refused for this pane: "+why)
 	}
 	var newWindowEnv []string
 	if payload.SSHFrom != "" && payload.CommandType == "NewWindow" && len(payload.Args) <= 1 {
-		// The client asked for a pane on the machine another pane is ssh'd
-		// into. The daemon reads that pane's processes, because it is the side
-		// that owns them. With no ssh client there it is an ordinary window.
 		argv, env, why, ok := session.sshFollowArgv(payload.SSHFrom)
 		if why != "" && cs.isTUIClient {
-			// An ssh runs there and is not followed. The client that asked
-			// says why on its dock.
 			_ = d.sendInBroadcastOrder(cs, MsgRemoteCommand, &RemoteCommandPayload{CommandType: "notice", TapeArgs: []string{why}})
 		}
 		if ok {
@@ -151,17 +101,12 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		return d.sendCommandResult(cs, payload.RequestID, false, "run-command is refused for this pane: "+why)
 	}
 
-	// Find the TUI client attached to this session. When one is present most
-	// commands are routed to it (unchanged behavior). With no client attached,
-	// structural verbs execute directly against daemon-owned state.
 	tuiClient := d.findTUIClient(session.ID)
 	if tuiClient == nil || daemonOwnedCommands[payload.CommandType] {
 		if payload.TapeScript != "" {
 			return d.sendCommandResult(cs, payload.RequestID, false,
 				"tape scripts need an attached client. A headless daemon has no renderer to run them")
 		}
-		// A kept-open window is not reported closed, which is what makes an
-		// attached client close it. See the new-window verb.
 		keepOpen := payload.KeepOpen && payload.CommandType == "NewWindow" && len(payload.Args) > 1
 		onExit := func(ptyID string) {
 			if keepOpen {
@@ -172,9 +117,6 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		var data map[string]any
 		var err error
 		if payload.FocusIfShown && payload.CommandType == "NewWindow" {
-			// The pane a client opens on an empty workspace. See
-			// ExecuteCommandPayload.FocusIfShown. Its args are empty, or the
-			// ssh the source pane runs when SSHFrom asked to follow it.
 			var name string
 			var command []string
 			if len(payload.Args) > 0 {
@@ -191,8 +133,6 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 			}
 			switch {
 			case errors.Is(err, ErrWorkspaceHasPane):
-				// Another request opened it first. Nothing to do, and the
-				// shell this one started is closed already.
 				err = nil
 				data = map[string]any{"skipped": "the workspace has a pane already"}
 			case err == nil:
@@ -220,8 +160,6 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		if err != nil {
 			return d.sendCommandResult(cs, payload.RequestID, false, err.Error())
 		}
-		// The attached client, if any, has already been told: the mutation went
-		// through Session.mutateState, whose state sink broadcasts to it.
 		return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
 			RequestID: payload.RequestID,
 			Success:   true,
@@ -231,17 +169,14 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	}
 	LogBasic("Execute command: found TUI client %s", tuiClient.clientID)
 
-	// Forward the command to the TUI client
 	var remoteCmd *RemoteCommandPayload
 	if payload.TapeScript != "" {
-		// Execute a full tape script
 		remoteCmd = &RemoteCommandPayload{
 			RequestID:   payload.RequestID,
 			CommandType: "tape_script",
 			TapeScript:  payload.TapeScript,
 		}
 	} else {
-		// Execute a single tape command
 		remoteCmd = &RemoteCommandPayload{
 			RequestID:   payload.RequestID,
 			CommandType: "tape_command",
@@ -250,25 +185,15 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		}
 	}
 
-	// The request is recorded before the command goes out, not after. The TUI
-	// answers on its own connection, and it can do so in the time it takes this
-	// goroutine to get from the write back to the map; a result that finds no
-	// entry is dropped, and the requester then waited out its whole read
-	// deadline for an answer the client had already given. On a loaded runner
-	// that showed as `run-command` failing with an i/o timeout thirty seconds
-	// after a ToggleTiling the client had run at once.
 	forwarded := cs.clientID != tuiClient.clientID
 	if forwarded {
 		d.pendingRequestsMu.Lock()
 		pr := &pendingRequest{requester: cs, created: time.Now()}
 		if payload.TapeScript != "" {
-			// The client answers a tape when it ends. The CLI waits as long
-			// as its --timeout says; the daemon keeps the request that long.
 			pr.ttl = tapeResultTTL
 		}
 		d.pendingRequests[payload.RequestID] = pr
 		d.pendingRequestsMu.Unlock()
-		// cleanupLoop expires it if no result comes.
 		d.wakes.cleanup.Set()
 	}
 
@@ -281,23 +206,15 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		return d.sendCommandResult(cs, payload.RequestID, false, fmt.Sprintf("failed to send to TUI: %v", err))
 	}
 
-	// Don't send response here. Wait for TUI to send result via handleCommandResult
 	return nil
 }
 
-// handleCommandResult handles command results from TUI clients.
-// Forwards results back to the original requester if there's a pending request.
 func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	var payload CommandResultPayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		return errfmt.Errorf("invalid command result payload: %w", err)
 	}
 
-	// Data is map[string]any and can nest to any depth. Everything below
-	// walks it by recursion: the JSON reply of a verb, the gob encode that
-	// forwards it. A result no real command makes is turned into a failure,
-	// so the requester hears why instead of waiting out its timeout, and the
-	// sender is told too. See wire_bounds.go.
 	if err := checkResultData(payload.Data); err != nil {
 		LogError("Refused command result %s from %s: %v", payload.RequestID, cs.clientID, err)
 		_ = d.replyError(cs, msg, ErrCodeInvalidMessage, "command result refused: "+err.Error())
@@ -306,14 +223,11 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	}
 
 	if payload.Success {
-		// The keys only. Printing the values with %v walked them by recursion
-		// and put whatever a client sent into the daemon log.
 		LogBasic("Command %s succeeded: %s (data keys: %v)", payload.RequestID, payload.Message, slices.Sorted(maps.Keys(payload.Data)))
 	} else {
 		LogBasic("Command %s failed: %s", payload.RequestID, payload.Message)
 	}
 
-	// Check if there's a pending request from another client waiting for this result
 	d.pendingRequestsMu.Lock()
 	pending, found := d.pendingRequests[payload.RequestID]
 	if found {
@@ -321,18 +235,15 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	}
 	d.pendingRequestsMu.Unlock()
 
-	// Deliver to a JSON verb handler blocked in routeToTUISync, if any.
 	if found && pending != nil && pending.resultCh != nil {
 		result := payload
 		select {
 		case pending.resultCh <- &result:
 		default:
-			// The waiter already gave up (timeout/disconnect); drop the result.
 		}
 		return nil
 	}
 
-	// Forward the result to the original requester
 	if found && pending != nil && pending.requester != nil {
 		requester := pending.requester
 		LogBasic("Forwarding result to original requester %s", requester.clientID)
@@ -342,15 +253,7 @@ func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	return nil
 }
 
-// routeToTUISync sends a remote command to an attached TUI and blocks until the
-// TUI replies with its result, a timeout elapses, or the daemon shuts down. It
-// is the synchronous bridge the JSON verb front-end uses so a control verb that
-// must be handled by the live renderer (WM keys, structural changes, live config)
-// still returns a single request/response over the JSON connection. requestID
-// must be unique per in-flight call.
 func (d *Daemon) routeToTUISync(tui *connState, requestID string, cmd *RemoteCommandPayload, timeout time.Duration) (*CommandResultPayload, error) {
-	// Stamp the request ID onto the outgoing command so the TUI echoes it back on
-	// its result and handleCommandResult can match it to this pending waiter.
 	cmd.RequestID = requestID
 
 	ch := make(chan *CommandResultPayload, 1)
@@ -383,15 +286,6 @@ func (d *Daemon) routeToTUISync(tui *connState, requestID string, cmd *RemoteCom
 	}
 }
 
-// findTargetSession finds a session by name. With no name it is the session
-// of the pane the caller on cs runs in, and for a caller in no pane (the
-// person's CLI, a hook, a link) the most recently active session.
-// A name a session was renamed from still finds it: a pane started before the
-// rename keeps the old name in TUIOS_SESSION, and its commands send that.
-//
-// The pane's own session comes first because the most recent one is the
-// person's: an agent that left out -s used to read and type into whatever
-// session the person last touched, with nothing to tell it so.
 func (d *Daemon) findTargetSession(cs *connState, sessionName string) *Session {
 	if sessionName != "" {
 		sess, _ := d.manager.ResolveSession(sessionName)
@@ -403,22 +297,6 @@ func (d *Daemon) findTargetSession(cs *connState, sessionName string) *Session {
 	return d.manager.MostRecentSession()
 }
 
-// findTUIClient finds the TUI client attached to a session, and never one that
-// is still attaching: a routed command is an unsolicited message, and a client
-// inside its attach call has no read loop to tell one from its own reply. See
-// connState.attached.
-//
-// With several clients attached it is the one the person used last: the
-// newest key typed into a pane or activity reported, and with no input at any
-// of them, the one that attached last. A command routed here acts as that
-// person, and some of what it sets, multifocus for one, is the client's own.
-// It used to be whichever client the map gave first, so tuios xpanes turned
-// multifocus on at the other client half the time, and Enter at the client
-// that ran it reached one pane.
-//
-// A view-only client, such as a read-only web viewer, is not the person: it
-// is picked only when no other client shows the session. A passive rail viewer
-// cannot execute renderer commands at all, so it is never a routing target.
 func (d *Daemon) findTUIClient(sessionID string) *connState {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
@@ -456,7 +334,6 @@ func (d *Daemon) findTUIClient(sessionID string) *connState {
 	return viewer.cs
 }
 
-// sendCommandResult sends a command result to a client.
 func (d *Daemon) sendCommandResult(cs *connState, requestID string, success bool, message string) error {
 	return d.sendMessage(cs, MsgCommandResult, &CommandResultPayload{
 		RequestID: requestID,
@@ -465,7 +342,6 @@ func (d *Daemon) sendCommandResult(cs *connState, requestID string, success bool
 	})
 }
 
-// handleGetLogs retrieves recent log entries from the daemon's log buffer.
 func (d *Daemon) handleGetLogs(cs *connState, msg *Message) error {
 	var payload GetLogsPayload
 	if err := msg.ParsePayload(&payload); err != nil {
@@ -483,26 +359,14 @@ func (d *Daemon) handleGetLogs(cs *connState, msg *Message) error {
 	})
 }
 
-// paneHoldForTest lets the end-to-end tests hold the pane a client opens on
-// an empty workspace, so they can send the switches that follow while the
-// request waits, as a slow daemon would, or refuse it, as a failed request
-// would be.
-//
-// It does anything only with the hold_pane knob naming a file, which ordinary runs never set. A file that holds a number of
-// milliseconds makes each request wait that long, ten seconds at most. A file
-// that holds "refuse" makes each request fail. Messages are read one at a time
-// per connection, so the client's later messages wait behind a held request.
 func paneHoldForTest() error {
 	return holdForTest("hold_pane")
 }
 
-// newWindowHoldForTest is paneHoldForTest for the window a client's
-// new-window key asks for, read from the hold_new_window knob.
 func newWindowHoldForTest() error {
 	return holdForTest("hold_new_window")
 }
 
-// holdForTest is paneHoldForTest with the knob that names the hold file.
 func holdForTest(knob string) error {
 	path := testknob.String(knob)
 	if path == "" {

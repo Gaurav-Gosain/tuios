@@ -15,27 +15,10 @@ import (
 	"tuios.dev/vt"
 )
 
-// Finding things in panes, for the GUI's find bar and command palette:
-//
-//   - search-panes looks for text in every pane's history and screen;
-//   - command-history lists the commands shells ran, from their OSC 133 marks
-//     (shell_commands.go keeps the last shellHistoryMax per pane).
-//
-// list-ports is in verb_ports.go.
-//
-// Both read only what the daemon already holds. search-panes is bounded three
-// ways, because a pane holds up to its whole scrollback and a pattern is the
-// caller's: Go's regexp runs in linear time, a pattern is at most
-// searchPatternMax bytes, and each pane gets searchPaneBudget before it is
-// skipped and the answer says truncated.
-
 const (
-	// searchPatternMax bounds a search-panes query, in bytes.
 	searchPatternMax = 512
-	// searchPaneBudget is how long one pane's search may take.
 	searchPaneBudget = 50 * time.Millisecond
-	// searchTextMax is how many runes of a matched line come back.
-	searchTextMax = 400
+	searchTextMax    = 400
 
 	searchMaxDefault     = 200
 	searchMaxCap         = 1000
@@ -46,11 +29,8 @@ const (
 	historyLimitCap     = 2000
 )
 
-// searchCases are the values search-panes and command-history take for case.
 var searchCases = []string{"smart", "sensitive", "insensitive"}
 
-// smartCaseInsensitive reports whether a query matches without regard to
-// case. smart is insensitive unless the query has a capital letter.
 func smartCaseInsensitive(mode, query string) bool {
 	switch mode {
 	case "sensitive":
@@ -61,16 +41,12 @@ func smartCaseInsensitive(mode, query string) bool {
 	return !strings.ContainsFunc(query, unicode.IsUpper)
 }
 
-// searchPane is one pane a search or a history read walks.
 type searchPane struct {
 	sess *Session
 	win  WindowState
 	pty  *PTY
 }
 
-// localPanes lists the panes with a PTY on this daemon in the sessions named,
-// or in every session when names is empty, the pane with the newest output
-// first.
 func (d *Daemon) localPanes(cs *connState, names []string) ([]searchPane, *verbError) {
 	var sessions []*Session
 	if len(names) == 0 {
@@ -106,24 +82,12 @@ func (d *Daemon) localPanes(cs *connState, names []string) ([]searchPane, *verbE
 	return panes, nil
 }
 
-// searchChunkRows is how many history rows a search reads under one hold of
-// the pane's terminal lock. The lock is let go between chunks, so a search
-// never holds the pane's output back for more than a chunk's read.
 const searchChunkRows = 256
 
-// searchRowText is a row of cells as plain text, trailing blanks cut.
 func searchRowText(line uv.Line) string {
 	return strings.TrimRight(vt.StripSixelMarkers(line.String()), " ")
 }
 
-// scanLines calls fn for the pane's rows from the bottom up: the main screen,
-// then the history, newest first. Row i is the row search-panes reports as i:
-// history first from 0, then the screen, as the pane stood when the scan
-// began. fn returns false to stop. The history is read searchChunkRows at a
-// time, the lock let go between chunks, until deadline. A history line the
-// ring drops while the scan runs is not read; the scan follows the drop by
-// the marker list's count of trimmed lines. bottom is the last row, and
-// complete is false when the deadline cut the scan short.
 func (p *PTY) scanLines(deadline time.Time, fn func(row int, line string) bool) (bottom int, complete bool) {
 	p.terminalMu.RLock()
 	term := p.terminal
@@ -162,7 +126,6 @@ func (p *PTY) scanLines(deadline time.Time, fn func(row int, line string) bool) 
 			return bottom, true
 		}
 	}
-	// next is the end of what is left to read, in the rows of the start.
 	next := sbLen
 	chunk := make([]string, 0, searchChunkRows)
 	for next > 0 {
@@ -181,7 +144,6 @@ func (p *PTY) scanLines(deadline time.Time, fn func(row int, line string) bool) 
 		}
 		hi := min(next-dropped, term.ScrollbackLen())
 		if hi <= 0 {
-			// The rest of the history was dropped while the scan ran.
 			p.terminalMu.RUnlock()
 			return bottom, true
 		}
@@ -202,8 +164,6 @@ func (p *PTY) scanLines(deadline time.Time, fn func(row int, line string) bool) 
 	return bottom, true
 }
 
-// matchWindow cuts a line to at most searchTextMax runes around the match at
-// bytes [from, to), and returns the text and the match's rune offsets in it.
 func matchWindow(line string, from, to int) (text string, start, end int) {
 	runeFrom := utf8.RuneCountInString(line[:from])
 	runeTo := runeFrom + utf8.RuneCountInString(line[from:to])
@@ -211,7 +171,6 @@ func matchWindow(line string, from, to int) (text string, start, end int) {
 	if total <= searchTextMax {
 		return line, runeFrom, runeTo
 	}
-	// Centre the match, then pull the window back inside the line.
 	lead := max((searchTextMax-(runeTo-runeFrom))/2, 0)
 	first := max(runeFrom-lead, 0)
 	first = min(first, total-searchTextMax)
@@ -294,7 +253,7 @@ func (d *Daemon) verbSearchPanes(cs *connState, params json.RawMessage) (any, *v
 				"text":      text,
 				"start":     start,
 				"end":       end,
-				"age_rows":  -row, // set below, once the bottom is known
+				"age_rows":  -row,
 			})
 			found++
 			return true
@@ -313,7 +272,6 @@ func (d *Daemon) verbSearchPanes(cs *connState, params json.RawMessage) (any, *v
 	}, nil
 }
 
-// clampCount is a count param: def when it is not positive, at most limit.
 func clampCount(v, def, limit int) int {
 	if v <= 0 {
 		return def
@@ -395,7 +353,6 @@ func (d *Daemon) verbCommandHistory(cs *connState, params json.RawMessage) (any,
 			}
 			promptRow := r.promptOrigin - origin
 			if promptRow < 0 {
-				// The prompt has left the scrollback.
 				promptRow = -1
 			}
 			rows = append(rows, row{
@@ -429,11 +386,9 @@ func (d *Daemon) verbCommandHistory(cs *connState, params json.RawMessage) (any,
 	return map[string]any{"commands": commands}, nil
 }
 
-// findVerbs are the verbs of this file and of verb_ports.go.
 func findVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"search-panes": {
-			// search-panes takes a list of sessions, and every session without one.
 			scope:       scopeGlobal,
 			link:        needList,
 			description: "Find text in the history and the screen of panes on this machine. The newest match in a pane comes first, and the pane with the newest output comes first. Each pane gets 50 ms. A pane that takes longer is cut off, and truncated is then true.",

@@ -9,7 +9,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// readWinsize reads the real PTY's window size, as a guest would.
 func readWinsize(t *testing.T, p *PTY) *unix.Winsize {
 	t.Helper()
 	fd, ok := p.pty.(interface{ Fd() uintptr })
@@ -23,9 +22,6 @@ func readWinsize(t *testing.T, p *PTY) *unix.Winsize {
 	return ws
 }
 
-// settledWinsize is readWinsize once no resize is held back. A resize inside
-// a burst reaches the kernel when the burst's quiet period ends (see
-// pty_winsize.go), and this reads the size the guest is left at.
 func settledWinsize(t *testing.T, p *PTY) *unix.Winsize {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -67,7 +63,6 @@ func TestPTYResizeKeepsThePixelSize(t *testing.T) {
 			ws.Xpixel, ws.Ypixel, 50*9, 10*18)
 	}
 
-	// A cell size change on its own still reaches the PTY.
 	if err := pty.UpdatePixelDimensions(10, 20); err != nil {
 		t.Fatalf("UpdatePixelDimensions: %v", err)
 	}

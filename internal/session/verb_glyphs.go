@@ -11,19 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// A glyph set is the shape half of a rice and it has list-themes's problem: its
-// value is a name from an open set that grows whenever the user writes a file,
-// standing for a document kept in another format in another directory. Published
-// as a bare string option it would be undiscoverable and unverifiable at once,
-// so it gets the verb the palette got, answering the same three questions.
-//
-// The third of them is the one that matters most here and has no equivalent for
-// a theme. A set says only what it changes, so "what will this look like" cannot
-// be read off the file; and a role whose glyph was the wrong width is dropped
-// silently on screen. Both are answered by reporting what is actually drawn
-// rather than what the set asked for.
-
-// verbListGlyphs reports the glyph sets, and describes one when asked.
 func (d *Daemon) verbListGlyphs(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -33,8 +20,6 @@ func (d *Daemon) verbListGlyphs(cs *connState, params json.RawMessage) (any, *ve
 		return nil, verr
 	}
 
-	// Re-read every call, like the themes directory and for the same reason:
-	// the caller most likely to ask is the one that has just written the file.
 	_, problems := theme.ReloadGlyphSets()
 
 	all := theme.AvailableGlyphSets()
@@ -54,7 +39,6 @@ func (d *Daemon) verbListGlyphs(cs *connState, params json.RawMessage) (any, *ve
 		out["problems"] = problems
 	}
 
-	// One read of config.toml serves the whole request.
 	sess := d.findTargetSession(cs, p.Session)
 	opts := d.optionsFor(cs, sess)
 	if sess != nil {
@@ -81,9 +65,6 @@ func (d *Daemon) verbListGlyphs(cs *connState, params json.RawMessage) (any, *ve
 				"; write <id>.json there to add it.",
 		})
 	}
-	// What the session would draw, not the daemon's own config globals: the
-	// daemon does not draw, so it never applies an appearance config, and
-	// reading its BorderStyle reported the empty string for every session.
 	out["set"] = describeGlyphSet(p.Glyphs, glyphRenderSettings{
 		borderStyle:    opts.get("appearance.border_style"),
 		scrollbarStyle: opts.get("appearance.scrollbar.style"),
@@ -93,10 +74,6 @@ func (d *Daemon) verbListGlyphs(cs *connState, params json.RawMessage) (any, *ve
 	return out, nil
 }
 
-// glyphRenderSettings is what a session's other options say about the glyphs
-// this set would draw. The daemon does not draw, so its own copies of these
-// globals were never applied and reading them reported the defaults for every
-// session including the ones that had set something.
 type glyphRenderSettings struct {
 	borderStyle    string
 	scrollbarStyle string
@@ -104,42 +81,13 @@ type glyphRenderSettings struct {
 	scrollbarTrack string
 }
 
-// describeMu serializes the borrowed selection below. Every connection runs on
-// its own goroutine, so two list-glyphs calls naming different sets would
-// otherwise each read the other's "previous", hand back a mixed table, and
-// leave the process on whichever set lost the race.
 var describeMu sync.Mutex
 
-// describeGlyphSet reports one set: what it names, and what would actually be
-// drawn if it were selected.
-//
-// "Drawn" is answered by selecting it, reading the resolved glyphs and putting
-// the previous selection back. That is the honest answer and the only one that
-// cannot drift: the accessors it reads through are the same ones the renderer
-// calls, so a role this reports is a role that draws. It is safe because the
-// daemon does not draw: the selection it borrows is process-local state that
-// no frame of any attached client is composed from.
 func describeGlyphSet(id string, render glyphRenderSettings) map[string]any {
 	set := theme.ResolveGlyphSet(id)
 	named := map[string]string{}
 	maps.Copy(named, glyphSetNamedRoles(set))
 
-	// The settings the glyphs are resolved against are built here and thrown
-	// away, so nothing in the process ever sees them. A save/set/restore over
-	// the package globals would be safe under describeMu against a second
-	// describe call and against nothing else: a client composing a frame on
-	// another goroutine could read the borrowed border style mid-flight. A
-	// local value has no such window.
-	//
-	// They start from the built-in defaults, not from any process value:
-	// the answer is what the set draws under the session's border and
-	// scrollbar options on a capable terminal (Nerd Font, no ASCII fallback).
-	// The daemon never draws, and ASCII fallback is each client's terminal,
-	// which the daemon cannot know.
-	//
-	// The glyph set itself is still borrowed, because theme keeps it in a
-	// package global that has no per-call form yet; describeMu still guards
-	// that half.
 	settings := config.DefaultSettings()
 	settings.BorderStyle = render.borderStyle
 	settings.ScrollbarStyle = render.scrollbarStyle
@@ -153,28 +101,17 @@ func describeGlyphSet(id string, render glyphRenderSettings) map[string]any {
 	describeMu.Unlock()
 
 	return map[string]any{
-		"id":           id,
-		"display_name": set.DisplayName,
-		"inherits":     set.Inherits,
-		// border_style says whether the border rows of drawn are actually on
-		// screen. A set's border is selected by name rather than winning
-		// silently, so a set can carry one that nothing is currently drawing.
+		"id":               id,
+		"display_name":     set.DisplayName,
+		"inherits":         set.Inherits,
 		"border_style":     render.borderStyle,
 		"border_in_effect": render.borderStyle == config.BorderStyleGlyphs,
-		// Whether the frame this set draws is 7-bit throughout, which is what
-		// makes it offerable to a terminal that manages nothing else. Measured
-		// over the resolved glyphs rather than the set's own fields: a role the
-		// set leaves alone is empty and so trivially ASCII, while the built-in
-		// it falls back to may not be, and a set that named two ASCII glyphs
-		// was reporting itself drawable anywhere.
-		"ascii": drawnIsASCII(drawn),
-		"names": named,
-		"drawn": drawn,
+		"ascii":            drawnIsASCII(drawn),
+		"names":            named,
+		"drawn":            drawn,
 	}
 }
 
-// glyphSetNamedRoles is the roles this set says something about, as opposed to
-// the ones it leaves to the default.
 func glyphSetNamedRoles(set *theme.GlyphSet) map[string]string {
 	named := map[string]string{}
 	for role, glyph := range theme.GlyphSetRoles(set) {
@@ -192,8 +129,6 @@ func glyphSetNamedRoles(set *theme.GlyphSet) map[string]string {
 	return named
 }
 
-// glyphRoleNames is every role a set can name, sorted, so a caller writing one
-// does not have to guess the spelling or read the source.
 func glyphRoleNames() []string {
 	names := theme.GlyphRoleNames()
 	for _, b := range theme.GlyphBorderRoleNames() {
@@ -203,11 +138,6 @@ func glyphRoleNames() []string {
 	return names
 }
 
-// drawnIsASCII reports whether every glyph the set resolves to is 7-bit.
-//
-// The border rows are included even when border_style is not asking for them,
-// because the question is whether this set could be used on such a terminal,
-// and selecting its border is one more call away.
 func drawnIsASCII(drawn map[string]string) bool {
 	for _, glyph := range drawn {
 		if !overlay.IsASCII(glyph) {

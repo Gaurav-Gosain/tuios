@@ -8,29 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
-// Merging a client state sync into daemon-owned state.
-//
-// The daemon and its attached client both write session state, and they write
-// different parts of it. The daemon owns what a user would be surprised to lose
-// across a detach and reattach: which windows exist, what they are called, which
-// workspace they are on, whether they are minimized, and what is focused. The
-// client owns what is derived from its own viewport or is purely visual: pixel
-// geometry, z-order, the shell-reported title, pre-restore geometry, alt-screen
-// state, and the tiling topology it computes.
-//
-// A client sync does not replace the whole state, because that would silently
-// undo any daemon-side mutation made after the client built its snapshot. On
-// the fields the daemon owns, the daemon's value wins whenever the client is
-// demonstrably behind.
-
-// retainDaemonExclusive carries over the parts of canonical state that no client
-// ever sets, so a sync that simply omits them does not wipe them. Options come
-// from the JSON verb protocol; Cwd is captured daemon-side from the live shell
-// process; ResurrectionVersion is stamped when state is written to disk.
 func retainDaemonExclusive(incoming, canonical *SessionState) {
-	// When a window was minimized is the daemon's to stamp
-	// (stampMinimizedLocked): a client knows it only from a push, so its
-	// copy is never newer.
 	if len(canonical.Windows) > 0 {
 		at := make(map[string]int64, len(canonical.Windows))
 		for _, w := range canonical.Windows {
@@ -45,105 +23,46 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.Options == nil {
 		incoming.Options = canonical.Options
 	}
-	// The session label and accent are set only through their verbs, so a sync
-	// that omits them (every client sync today) must not clear them. Clearing
-	// stays the verb's job, which is why an empty incoming value is treated as
-	// "not sent" rather than "set to empty".
 	if incoming.DisplayName == "" {
 		incoming.DisplayName = canonical.DisplayName
 	}
 	if incoming.Accent == "" {
 		incoming.Accent = canonical.Accent
 	}
-	// The return note is written only by set-note, so canonical wins
-	// unconditionally: a sync can neither set it nor clear it.
 	incoming.Note = canonical.Note
-	// The OSC 1 names are the emulators', filled into each snapshot as it
-	// leaves (fillLiveFacts), so the stored state never holds any.
 	incoming.IconNames = nil
-	// Restored is set by the restore and cleared by the first attach, both
-	// daemon-side. A bool cannot say "not sent", so canonical simply wins: no
-	// client can either raise the mark or clear it by syncing.
 	incoming.Restored = canonical.Restored
-	// The master-stack shapes are written only by MsgMasterLayout, so the
-	// daemon's copy is the whole answer and a push never moves it. See
-	// master_layout.go.
 	incoming.WorkspaceMasterLayout = canonical.WorkspaceMasterLayout
-	// Whether the rail is shown is written only by MsgSidebarVisibility, on
-	// the same terms. See sidebar_visibility.go.
 	incoming.Sidebar = canonical.Sidebar
-	// Global is stamped once, when the session is created, and canonical wins
-	// for the same reason: a bool cannot say "not sent", and no client should
-	// be able to turn an ordinary session into a global one by syncing.
 	incoming.Global = canonical.Global
-	// The space is written only by set-session-space and new-session, so
-	// canonical wins the same way: no client sync can file a session under a
-	// space or take it out.
 	incoming.Space = canonical.Space
-	// The rank is written only by set-session-order, the same way.
 	incoming.Rank = canonical.Rank
-	// The worktree record is written by detection and by the worktree verbs,
-	// both daemon-side, so canonical wins the same way Restored does.
 	incoming.Worktree = canonical.Worktree
-	// The window moves are recorded by a move between sessions, daemon-side.
 	incoming.WindowMoves = canonical.WindowMoves
-	// The task cards are written only by the task verbs, so canonical wins
-	// and no client sync can add, change or drop one. See task.go.
 	incoming.Tasks, incoming.NextTaskID = canonical.Tasks, canonical.NextTaskID
 	if incoming.WorkspaceNames == nil {
 		incoming.WorkspaceNames = canonical.WorkspaceNames
 	}
-	// Older clients omit focus history.
 	if incoming.FocusHistory == nil {
 		incoming.FocusHistory = canonical.FocusHistory
 	}
-	// The herdr tab keys are written by a renumber and when a tab closes, both
-	// daemon-side, so canonical wins. A display order is never kept: a build
-	// that sent one arranged without renumbering, and the session's numbering
-	// is the arrangement.
 	incoming.WorkspaceTabKeys = canonical.WorkspaceTabKeys
 	incoming.NextWorkspaceTabKey = canonical.NextWorkspaceTabKey
 	incoming.WorkspaceOrder = nil
 	if incoming.ResurrectionVersion == 0 {
 		incoming.ResurrectionVersion = canonical.ResurrectionVersion
 	}
-	// The BSP trees are written by ops (see layout_tree.go), and a client that
-	// sends them that way leaves them out of its push. So a push without trees
-	// is saying nothing about them, and the session keeps its own, with the
-	// numbering the trees' leaves are read through. A push that does carry
-	// trees is from a client too old to send ops, and it is taken as sent, which
-	// is what every daemon did before: its trees and its numbering replace the
-	// session's together, so the two still agree.
 	if incoming.WorkspaceTrees == nil {
 		incoming.WorkspaceTrees = canonical.WorkspaceTrees
 		incoming.WindowToBSPID = canonical.WindowToBSPID
 		incoming.NextBSPWindowID = canonical.NextBSPWindowID
 	}
-	// The agreed pane geometry is written by every current client on every
-	// push, so nil means a client that predates the field, and letting it wipe
-	// the agreement would put the session back where the field started: every
-	// client on its own arithmetic.
 	if incoming.PaneGeometry == nil {
 		incoming.PaneGeometry = canonical.PaneGeometry
 	}
-	// The strip is carried over on the same terms, and for one more reason
-	// besides: a client says nothing about it whenever it is not in the
-	// scrolling layout, so without this the session would forget where its strip
-	// is every time anybody pushed from another layout, and a client joining
-	// later would come up at the left end.
 	if incoming.ScrollStrip == nil {
 		incoming.ScrollStrip = canonical.ScrollStrip
 	}
-	// The per-workspace master ratios are unioned rather than replaced. Every
-	// current client sends every entry it holds, but a client only ever holds the
-	// ones it has been told about or tuned itself, so a snapshot built before
-	// another client tuned a workspace would otherwise drop that workspace's ratio
-	// out of the session, which is the whole failure this field exists to stop,
-	// arriving one layer lower down. Nothing ever removes an entry, so the union
-	// is the complete answer, and the incoming value wins where both sides hold
-	// one: that is a client saying the ratio moved. A nil incoming map (an older
-	// peer, or a client with tiling off) is left holding the canonical set for the
-	// reason the pane geometry is.
 	if len(canonical.WorkspaceMasterRatio) > 0 {
 		if incoming.WorkspaceMasterRatio == nil {
 			incoming.WorkspaceMasterRatio = make(map[int]float64, len(canonical.WorkspaceMasterRatio))
@@ -154,8 +73,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			}
 		}
 	}
-	// The stack ratios beside them are unioned on the same terms and for the
-	// same reason.
 	if len(canonical.WorkspaceStackRatio) > 0 {
 		if incoming.WorkspaceStackRatio == nil {
 			incoming.WorkspaceStackRatio = make(map[int]float64, len(canonical.WorkspaceStackRatio))
@@ -166,7 +83,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			}
 		}
 	}
-	// And the splits of every other pane, on the same terms again.
 	if len(canonical.WorkspaceMasterSplits) > 0 {
 		if incoming.WorkspaceMasterSplits == nil {
 			incoming.WorkspaceMasterSplits = make(map[int]layout.MasterSplits, len(canonical.WorkspaceMasterSplits))
@@ -178,14 +94,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 	}
 
-	// The custom-layout flags are unioned on the same terms and for the same
-	// reason. A client only holds an entry for a workspace it has been told about
-	// or arranged itself, so replacing the set would drop the flag for every
-	// workspace the pushing client never heard of: the failure the field exists
-	// to stop, one layer lower down. The incoming value wins where both sides hold
-	// one, including an incoming false: a client that moved a pane off a workspace
-	// clears the flag there, and that is news. A push with no entry for a
-	// workspace is saying nothing about it and keeps what the session holds.
 	if len(canonical.WorkspaceHasCustom) > 0 {
 		if incoming.WorkspaceHasCustom == nil {
 			incoming.WorkspaceHasCustom = make(map[int]bool, len(canonical.WorkspaceHasCustom))
@@ -197,12 +105,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 	}
 
-	// The per-workspace layout modes are unioned on the same terms and for the
-	// same reason. A client only holds an entry for a workspace it has been told
-	// about or chose a layout on, so replacing the set would drop the choice for
-	// every workspace the pushing client never heard of: an older client attached
-	// to the same session would wipe every choice out of the daemon with one
-	// push, and the next client to attach would find none of them.
 	if len(canonical.WorkspaceLayoutModes) > 0 {
 		if incoming.WorkspaceLayoutModes == nil {
 			incoming.WorkspaceLayoutModes = make(map[int]string, len(canonical.WorkspaceLayoutModes))
@@ -215,24 +117,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	}
 
 	cwds := make(map[string]string, len(canonical.Windows))
-	// The foreground command is read daemon-side on the detector's poll and no
-	// client ever sends it, so canonical is always the truth: carrying it over by
-	// id both preserves a live command and lets one that exited clear.
 	fgCmds := make(map[string]string, len(canonical.Windows))
 	var offers map[string]*SSHOffer
-	// The shell pid is daemon-owned for the same reason and carried the same way:
-	// only the daemon holds the process, and a client sync never reports one.
-	// Without this every client push would strip the pid the corroboration needs.
 	shellPIDs := make(map[string]int, len(canonical.Windows))
-	// Agent state is daemon-owned and clients never set it, so canonical wins
-	// unconditionally, like the agent meta below. Without this a client sync
-	// (which omits it) would wipe every pane's reported state.
-	//
-	// It used to be carried only when the push left every agent field empty,
-	// which let any push that did carry them win: a snapshot echoing a state
-	// the daemon has since moved on from put the old state back, and a client
-	// could set a pane's state around the precedence set-agent-state enforces.
-	// The TUI never sends these fields, so nothing relied on that.
 	type agent struct {
 		state   AgentState
 		message string
@@ -241,8 +128,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		reason  string
 	}
 	agents := make(map[string]agent, len(canonical.Windows))
-	// The kind of a block and the harness's session id are daemon-owned too,
-	// and taken from canonical unconditionally on the same terms.
 	type agentIdentity struct {
 		kind           string
 		sessionID      string
@@ -250,26 +135,13 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		flags          *KeptFlags
 	}
 	agentIDs := make(map[string]agentIdentity, len(canonical.Windows))
-	// Agent metadata is daemon-owned for the same reason, and carried on its
-	// own because it is set by its own verb: a pane can have metadata and no
-	// state at all.
 	metas := make(map[string][]AgentMetaToken)
-	// The delivery queue's length is the daemon's count of what it holds for
-	// a pane, and no client sets it, so canonical wins like the meta. So does
-	// the subagent count, which only the pane's hooks move.
 	queued := make(map[string]int)
-	var draftHeld map[string]bool // set only while a draft holds a queue
-	var subagents map[string]int  // most sessions have none
-	// Only mark-attention and the daemon's own wake move the settle, so
-	// canonical wins like the queue.
+	var draftHeld map[string]bool
+	var subagents map[string]int
 	var settled map[string]bool
 	var quiet map[string]bool
 	var subagentLists map[string][]SubagentInfo
-	// The popup mark, requested size and dim override are stamped once, when
-	// the daemon creates the window, and nothing ever changes them. So canonical
-	// is always the truth and they are carried over by id the way Cwd is.
-	// Without this one client sync that omits them turns a popup back into an
-	// ordinary floating pane on every screen, which tiles it away.
 	type popup struct {
 		width   string
 		height  string
@@ -278,59 +150,24 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		name    string
 	}
 	popups := make(map[string]popup, len(canonical.Windows))
-	// The scratch mark, its name and its workspace are the daemon's too. A
-	// scratch pane is a tiled window on its group's workspace (see
-	// scratch_workspace.go), so a push can neither move one off that
-	// workspace nor put an ordinary window on one.
 	type scratchMark struct {
 		name      string
 		workspace int
 	}
 	scratches := make(map[string]scratchMark)
-	// The rail pane's mark, the daemon's like the scratch one.
 	var rails map[string]string
 	workspaces := make(map[string]int, len(canonical.Windows))
-	// The machine a window's process runs on is stamped once, when the daemon
-	// creates the window, and nothing moves a process between machines
-	// afterwards. So canonical is always the truth and it is carried by id the
-	// way the popup mark is.
-	//
-	// Without this the first client sync wiped it, and everything downstream
-	// read the pane as local: the rail stopped naming the machine, and the
-	// file section asked this machine for a directory that is on another one.
-	// The field is daemon-owned like every other one in this block, and it was
-	// added without being put here.
 	hosts := make(map[string]string, len(canonical.Windows))
-	// What draws a window and what it shows are set when it is made and only
-	// the daemon sets them, so canonical wins the way the host does.
 	type viewMark struct{ kind, uri string }
 	views := make(map[string]viewMark)
-	// The turn count is daemon-owned and only ever goes up. A client echoes the
-	// value it was last sent, which can be behind, and an older client sends
-	// none, so canonical wins whenever it is ahead.
 	completions := make(map[string]uint64, len(canonical.Windows))
-	// A pane's grants are set by the daemon alone, so canonical wins
-	// unconditionally, like the agent meta: a client can neither give a pane
-	// grants nor take them away by syncing. The daemon enforces them from its
-	// own table anyway; this is the copy that is shown and saved.
 	paneGrants := make(map[string][]string)
-	// A pane's OSC 7501 records are the daemon's alone, like the agent meta:
-	// only the pane's emulator writes them.
 	programStatus := make(map[string][]ProgramStatusRecord)
-	// Which pane started a pane is the daemon's record of a call, so
-	// canonical wins unconditionally, like the grants.
 	startedBy := make(map[string]*PaneRef)
-	// The agent link goes with it, for the same reason.
 	agentLinks := make(map[string]*AgentLink)
-	// And so does a delegation record (verb_delegate.go).
 	delegations := make(map[string]*Delegation)
-	// A window's start folder is fixed by the daemon when it makes the
-	// window, and a grant is held to it, so canonical wins unconditionally:
-	// a push can neither set one nor move it, even where canonical has none.
 	startDirs := make(map[string]string, len(canonical.Windows))
-	// A pane's return note is written only by set-note, so canonical wins
-	// unconditionally, like the start folder.
-	var notes map[string]string // most panes have none
+	var notes map[string]string
 	for i := range canonical.Windows {
 		w := &canonical.Windows[i]
 		if w.StartDir != "" {
@@ -439,11 +276,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	}
 	for i := range incoming.Windows {
 		w := &incoming.Windows[i]
-		// Where the daemon holds a value, it wins over whatever the push says:
-		// no client reads these from anything but the daemon, so a different
-		// value in a push is an older copy. Where it holds none, the push's
-		// value stands, which is how a restore hands in the directory and the
-		// pid of the shell it just respawned to a session created empty.
 		if cwd, ok := cwds[w.ID]; ok || w.Cwd == "" {
 			w.Cwd = cwd
 		}
@@ -455,8 +287,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if host, ok := hosts[w.ID]; ok || w.Host == "" {
 			w.Host = host
 		}
-		// The foreground command is canonical's whatever the push says, empty
-		// included: a command that exited has to be able to clear.
 		w.ForegroundCmd = fgCmds[w.ID]
 		w.SSHOffer = offers[w.ID]
 		if c := completions[w.ID]; c > w.CompletionSeq {
@@ -464,8 +294,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 		v := views[w.ID]
 		w.Kind, w.URI = v.kind, v.uri
-		// Only the daemon marks the scratch popup, so a push can neither set
-		// the mark on another pane nor clear it.
 		p, ok := popups[w.ID]
 		sm, isScratch := scratches[w.ID]
 		w.Scratch, w.ScratchName = isScratch, sm.name
@@ -478,13 +306,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 				w.Workspace = ws
 			}
 		}
-		w.PopupDim = p.dim // A client cannot set, clear or replace the override.
+		w.PopupDim = p.dim
 		if ok {
 			w.Popup = true
 			w.IsFloating = true
-			// The scratch terminal takes its size from [scratch] on each
-			// show, so the client that shows it may change the size. Any
-			// other popup keeps the size its caller asked for.
 			if !p.scratch || w.PopupWidth == "" {
 				w.PopupWidth = p.width
 			}
@@ -503,8 +328,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		w.AgentHarness = a.harness
 		w.AgentStateAt = a.at
 		w.AgentReason = a.reason
-		// Taken from canonical whatever the client sent: no client sets it, so
-		// a value in a client push is an echo of an older state at best.
 		w.AgentMeta = metas[w.ID]
 		w.AgentQueued = queued[w.ID]
 		w.AgentDraftHeld = draftHeld[w.ID]
@@ -520,21 +343,6 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	}
 }
 
-// reconcileStale rewrites a client snapshot that was built before a daemon-side
-// mutation the client has never seen. Every field the daemon owns is taken from
-// canonical state, because canonical is newer there by construction; everything
-// the client owns is left as the client sent it.
-//
-// hasLivePTY reports whether a PTY is still open on the daemon. It is how a
-// window missing from the client's snapshot is classified: closing a window
-// closes its PTY before the sync goes out, so a missing window whose PTY is gone
-// was closed by the client and stays closed, while one whose PTY is still live
-// was created by the daemon after the snapshot and is restored.
-// keepDaemonZoom takes each window's zoom from canonical into a stale push.
-// Zoom is shared, and zoom-window sets it in the daemon with a client
-// attached. A push the client built before that state reached it still says
-// the pane is not zoomed, and taking it ended the zoom before any client drew
-// it.
 func keepDaemonZoom(incoming, canonical *SessionState) {
 	for i := range incoming.Windows {
 		w := &incoming.Windows[i]
@@ -557,23 +365,10 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 		win := incoming.Windows[i]
 		cw, ok := canonicalByID[win.ID]
 		if !ok {
-			// A window the daemon has never heard of. Clients do not create
-			// windows any more (they ask the daemon to, and it pushes the result
-			// back), so this is not news, it is a snapshot taken before the daemon
-			// closed the window. Keeping it would undo the close, which is exactly
-			// what happened when the user pressed the close chord: the intent
-			// removed the window and the keystroke's own state push put it back.
 			continue
 		}
 		win.CustomName = cw.CustomName
 		win.Workspace = cw.Workspace
-		// A stack member's minimized flag says which member is open, and it
-		// goes with the tree op the same client sent for the edit, which the
-		// daemon took (tree ops are never stale). The stack key and order
-		// come from the push as well. Taking canonical's flag here split the
-		// two: a stack edit pushed just after another change came back with
-		// the member it collapsed open and with no tile, and every client's
-		// tiler gave it a new tile beside the stack.
 		if win.Stack == "" && cw.Stack == "" {
 			win.Minimized = cw.Minimized
 		}
@@ -588,37 +383,15 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 			continue
 		}
 		if win.PTYID != "" && !hasLivePTY(win.PTYID) {
-			continue // closed by the client; the close stands
+			continue
 		}
 		incoming.Windows = append(incoming.Windows, win)
 	}
 
-	// The strip offset is the offset of the workspace being shown, so it is only
-	// meaningful beside the workspace it was measured on. Where the workspace is
-	// rewritten to the daemon's, the offset the client sent belongs to the
-	// workspace it thought it was on and would scroll everyone's strip to a
-	// place taken from a different one, so the daemon's travels with it. On the
-	// same workspace the client's own offset stands: a scroll is exactly the
-	// kind of thing a client owns and a stale snapshot still reports correctly.
 	if canonical.CurrentWorkspace != incoming.CurrentWorkspace {
 		incoming.ScrollStrip = canonical.ScrollStrip
 	}
 
-	// WorkspaceHasCustom is deliberately not taken from canonical here, for the
-	// reason spelled out for the master ratio below: the daemon never marks a
-	// layout custom and never clears one, so canonical is not newer there by
-	// construction, and a stale snapshot still reports a flag the client itself
-	// just set correctly. What a stale snapshot can do is omit an entry it never
-	// learned, and the union in retainDaemonExclusive, which runs on this path
-	// too, is what stops that.
-
-	// WorkspaceMasterRatio is deliberately not taken from canonical here. The
-	// daemon never moves a master ratio (no headless operation touches it), so
-	// canonical is not newer there by construction the way it is for the focus,
-	// and a stale snapshot still reports a ratio the client itself just moved
-	// correctly. What a stale snapshot can do is omit an entry it never learned,
-	// and the union in retainDaemonExclusive, which runs on this path too, is what
-	// stops that. WorkspaceStackRatio is left alone for the same reason.
 	incoming.FocusedWindowID = canonical.FocusedWindowID
 	incoming.CurrentWorkspace = canonical.CurrentWorkspace
 	if canonical.WorkspaceFocus != nil {
@@ -687,9 +460,6 @@ func RemoveFocus(history map[int][]string, id string) map[int][]string {
 	return history
 }
 
-// focusView is the part of a state that says what the person is looking at:
-// the focused window, the workspace, each workspace's focus, and the strip
-// offset that is only meaningful beside the workspace.
 type focusView struct {
 	window    string
 	workspace int
@@ -711,18 +481,10 @@ func focusViewOf(s *SessionState) focusView {
 	}
 }
 
-// sameFocus reports whether two views name the same focus. The strip offset is
-// left out: scrolling is not a move of the focus.
 func (f focusView) sameFocus(g focusView) bool {
 	return f.window == g.window && f.workspace == g.workspace && maps.Equal(f.perWS, g.perWS)
 }
 
-// keepSessionFocus puts the session's focus on a push that did not move it
-// (SessionState.FocusUnmoved), and reports whether that changed the push.
-//
-// The session's focus is kept only when its window is in the push on the
-// workspace the session names. Otherwise the push's focus stands, as it did
-// before the flag existed.
 func keepSessionFocus(incoming, canonical *SessionState) bool {
 	theirs := focusViewOf(canonical)
 	if theirs.window != "" {
@@ -738,8 +500,6 @@ func keepSessionFocus(incoming, canonical *SessionState) bool {
 		}
 	}
 	mine := focusViewOf(incoming)
-	// A session that holds no strip offset has none to keep, and the push's
-	// stands.
 	strip := theirs.strip
 	if strip == nil {
 		strip = mine.strip
@@ -755,7 +515,6 @@ func keepSessionFocus(incoming, canonical *SessionState) bool {
 	return true
 }
 
-// sameStrip reports whether two strip offsets are the same, nil being none.
 func sameStrip(a, b *ScrollStripState) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -763,16 +522,6 @@ func sameStrip(a, b *ScrollStripState) bool {
 	return *a == *b
 }
 
-// keepClientFocus puts a stale push's own focus back after reconcileStale took
-// the daemon's. It is for a push whose snapshot predates some daemon mutation
-// but not any that moved the focus: then the focus in it is the person's own
-// latest move, and canonical's is the one they just left. Taking canonical's
-// there snapped the focus back whenever an agent reported a state between a
-// keypress and its push, and the reconcile reply carried the old focus to the
-// client.
-//
-// The push's focus is kept only when its window survived the merge on the
-// workspace the push names. Otherwise the daemon's stands.
 func keepClientFocus(incoming *SessionState, mine focusView) {
 	if mine.window != "" {
 		found := false
@@ -793,10 +542,6 @@ func keepClientFocus(incoming *SessionState, mine focusView) {
 	incoming.ScrollStrip = mine.strip
 }
 
-// stampMinimizedLocked stamps now on every minimized window with no stamp yet
-// and clears the stamp of every window that is not minimized, and reports
-// whether it stamped one. Windows minimized by one write are stamped in window
-// order, a nanosecond apart, so the order is total.
 func stampMinimizedLocked(state *SessionState, now int64) (stamped bool) {
 	if state == nil {
 		return false

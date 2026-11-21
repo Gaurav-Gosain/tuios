@@ -16,28 +16,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 )
 
-// exec runs one shell line on this machine and answers with what it printed,
-// on stdout and stderr apart, and how it ended. It is what tuios run --host
-// sends over a link: the one command, with no pane to open, wait on, read and
-// close. It needs open on a link, the power new-window already has there,
-// because a window runs any command too.
-//
-// The line runs under sh -c (cmd /c on Windows) in a process group of its
-// own, with no stdin and the environment a pane gets (guestenv.DaemonChild).
-// The group ends at the
-// timeout, when the caller goes away and when the daemon stops, so nothing
-// it started is left running on this machine. Each stream keeps its last
-// execMaxOutput bytes.
-
 const (
 	execDefaultTimeout = 30 * time.Second
 	execMaxTimeout     = time.Hour
 	execMaxLine        = 16 << 10
 	execMaxOutput      = 1 << 20
 	execMaxRunning     = 8
-	// execWaitDelay is how long the pipes may stay open after the group is
-	// gone, for a child that left the group and holds them.
-	execWaitDelay = 2 * time.Second
+	execWaitDelay      = 2 * time.Second
 )
 
 func execVerbs() map[string]verbEntry {
@@ -71,7 +56,6 @@ func execVerbs() map[string]verbEntry {
 	}
 }
 
-// execResult is the answer of exec.
 type execResult struct {
 	Stdout        []byte `json:"stdout"`
 	Stderr        []byte `json:"stderr"`
@@ -121,8 +105,6 @@ func (d *Daemon) verbExec(cs *connState, params json.RawMessage) (any, *verbErro
 	}
 	defer d.execRunning.Add(-1)
 
-	// The run ends with the daemon, and with the caller: a CLI that was
-	// stopped or a link that dropped leaves nothing running here.
 	ctx, cancel := context.WithCancel(d.ctx)
 	defer cancel()
 	gone, stopGone := askCancel(cs)
@@ -148,7 +130,6 @@ func (d *Daemon) verbExec(cs *connState, params json.RawMessage) (any, *verbErro
 	return res, nil
 }
 
-// runExecLine runs line in dir until it ends, ctx ends or timeout passes.
 func runExecLine(ctx context.Context, line, dir string, timeout time.Duration) execResult {
 	rctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -159,7 +140,6 @@ func runExecLine(ctx context.Context, line, dir string, timeout time.Duration) e
 		cmd = childproc.CommandContext(rctx, "/bin/sh", "-c", line)
 	}
 	cmd.Dir = dir
-	// The environment a pane gets, not the raw one: see guestenv.DaemonChild.
 	cmd.Env = guestenv.DaemonChild()
 	childproc.OwnGroup(cmd)
 	cmd.WaitDelay = execWaitDelay
@@ -189,7 +169,6 @@ func runExecLine(ctx context.Context, line, dir string, timeout time.Duration) e
 		code := exitErr.ExitCode()
 		res.Exit = &code
 	default:
-		// The shell itself did not start.
 		res.Stderr = append(res.Stderr, []byte("tuios could not start the shell: "+err.Error()+"\n")...)
 		code := 127
 		res.Exit = &code
@@ -197,7 +176,6 @@ func runExecLine(ctx context.Context, line, dir string, timeout time.Duration) e
 	return res
 }
 
-// execTail keeps the last max bytes written to it and counts the rest.
 type execTail struct {
 	buf     []byte
 	max     int

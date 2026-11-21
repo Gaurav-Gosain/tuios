@@ -11,14 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// The daemon half of host hot reload.
-//
-// What is proved here is the wiring: a change to the [hosts] table reaches the
-// running daemon's table and its listing verb, with no restart. The link layer
-// has its own tests for what happens to the ssh children, and e2e/tui drives
-// the whole path with a real config file, a real daemon and a real subprocess.
-
-// hostNamesFromVerb is what list-hosts currently reports.
 func hostNamesFromVerb(t *testing.T, d *Daemon) []string {
 	t.Helper()
 	result, verr := d.verbListHosts(nil, nil)
@@ -60,8 +52,6 @@ func TestABrokenConfigFileLeavesTheHostsAlone(t *testing.T) {
 	if err := os.WriteFile(path, []byte("[hosts.build\naddr = \"unbalanced"), 0o600); err != nil {
 		t.Fatalf("save a broken config: %v", err)
 	}
-	// Long enough for the debounce plus a reload, so this is a wait for the
-	// change that must not happen rather than a race against it.
 	time.Sleep(600 * time.Millisecond)
 	if got := strings.Join(hostNamesFromVerb(t, d), ","); got != "build" {
 		t.Errorf("ASSERTION: a config file with an error changed the hosts, got %q", got)

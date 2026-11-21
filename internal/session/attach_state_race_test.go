@@ -44,10 +44,6 @@ func TestAStateChangeDuringAnAttachReachesTheAttachingClient(t *testing.T) {
 		t.Fatal("the session already has shared borders, so the push below changes nothing")
 	}
 
-	// The hook runs on the daemon's connection goroutine and uses first, state
-	// and t. The atomic store orders what the test wrote before it, and
-	// hookDone orders what the hook did before the cleanups below close first
-	// and end the test. The socket orders neither for the race detector.
 	hookDone := make(chan struct{})
 	var once sync.Once
 	hook := func() {
@@ -141,16 +137,8 @@ func TestAStateChangeAfterAnAttachReachesTheAttachingClientOnce(t *testing.T) {
 		t.Fatal("the session already has shared borders, so the push below changes nothing")
 	}
 
-	// The hook below fires after an attach reply, and the first attach's
-	// handler goes on running after its reply reaches the test. Stored before
-	// that handler passes the hook, the hook ran on the first client's own
-	// connection goroutine: the push it sends waits behind the hook on that
-	// goroutine, so the daemon never applied it while the hook waited for it.
-	// The daemon serves one connection's messages in order, so a reply to a
-	// later request means the attach handler has returned.
 	waitForHandlerIdle(t, first)
 
-	// Ordered against the test the way the hook in the test above is.
 	hookDone := make(chan struct{})
 	var once sync.Once
 	hook := func() {
@@ -163,8 +151,6 @@ func TestAStateChangeAfterAnAttachReachesTheAttachingClientOnce(t *testing.T) {
 				t.Errorf("push: %v", err)
 				return
 			}
-			// Applied before the attach goes on to its checks, so a check that
-			// compares the state before and after the reply sees it move.
 			deadline := time.Now().Add(5 * time.Second)
 			for {
 				pg := d.manager.GetSession("geo").GetState().PaneGeometry
@@ -208,8 +194,6 @@ func TestAStateChangeAfterAnAttachReachesTheAttachingClientOnce(t *testing.T) {
 			t.Fatal("a state pushed just after this client attached never reached it")
 		}
 	}
-	// A second copy would follow the first at once: both are sent before the
-	// attach handler returns.
 	settle := time.After(time.Second)
 	for {
 		select {
@@ -226,9 +210,6 @@ func TestAStateChangeAfterAnAttachReachesTheAttachingClientOnce(t *testing.T) {
 	}
 }
 
-// waitForHandlerIdle returns once the daemon has finished every message c sent
-// before it. It sends a list request and reads up to the reply, dropping what
-// comes first. c must not have a read loop running.
 func waitForHandlerIdle(t *testing.T, c *TUIClient) {
 	t.Helper()
 	msg, err := NewMessage(MsgList, nil)

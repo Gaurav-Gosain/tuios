@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// enableApprovals turns approvals on for claude-code with a hold of hold.
 func enableApprovals(t *testing.T, d *Daemon, hold time.Duration) {
 	t.Helper()
 	oldMin := minApprovalHold
@@ -18,8 +17,6 @@ func enableApprovals(t *testing.T, d *Daemon, hold time.Duration) {
 	d.SetApprovalPolicy(ApprovalPolicy{Enabled: map[string]bool{"claude-code": true}, Hold: hold})
 }
 
-// requestApproval starts a request-approval call on its own connection and
-// returns a channel with its response.
 func requestApproval(t *testing.T, sp, session, window string, options ...string) (<-chan map[string]any, *verbConn) {
 	t.Helper()
 	params := map[string]any{"session": session, "window": window, "harness": "claude", "summary": testHeldLine}
@@ -32,14 +29,11 @@ func requestApproval(t *testing.T, sp, session, window string, options ...string
 	return requestApprovalWith(t, sp, params)
 }
 
-// testHeldLine and testHeldScope are the line and the always rule the test
-// hook holds a prompt with.
 const (
 	testHeldLine  = "approve Bash: go test ./..."
 	testHeldScope = "Bash(go test:*) in .claude/settings.local.json"
 )
 
-// requestApprovalWith is requestApproval with every parameter given.
 func requestApprovalWith(t *testing.T, sp string, params map[string]any) (<-chan map[string]any, *verbConn) {
 	t.Helper()
 	c := dialVerb(t, sp)
@@ -60,7 +54,6 @@ func requestApprovalWith(t *testing.T, sp string, params map[string]any) (<-chan
 	return out, c
 }
 
-// awaitResult waits for a request-approval answer.
 func awaitResult(t *testing.T, ch <-chan map[string]any) map[string]any {
 	t.Helper()
 	select {
@@ -72,7 +65,6 @@ func awaitResult(t *testing.T, ch <-chan map[string]any) map[string]any {
 	}
 }
 
-// heldItem waits for the pane's approval item to carry a request id.
 func heldItem(t *testing.T, c *verbConn, window string) map[string]any {
 	t.Helper()
 	items := waitAttention(t, c, "a held approval", func(items []map[string]any) bool {
@@ -91,7 +83,6 @@ func heldItem(t *testing.T, c *verbConn, window string) map[string]any {
 	return nil
 }
 
-// reply answers a hold the way the Inbox does: with the line its item shows.
 func reply(c *verbConn, t *testing.T, requestID, decision, nonce string) map[string]any {
 	t.Helper()
 	params := map[string]any{"request_id": requestID, "decision": decision, "human_nonce": nonce}
@@ -102,7 +93,6 @@ func reply(c *verbConn, t *testing.T, requestID, decision, nonce string) map[str
 	return c.call(t, fmt.Sprintf(`{"id":1,"verb":"reply-approval","params":%s}`, raw))
 }
 
-// heldLine is the line a held request's item shows, "" once it has ended.
 func heldLine(c *verbConn, t *testing.T, requestID string) string {
 	t.Helper()
 	resp := callP(c, t, "get-approval", map[string]any{"request_id": requestID})
@@ -169,12 +159,10 @@ func TestApprovalHeldAndAnsweredFromTheInbox(t *testing.T) {
 // asks in its pane, and each must leave the item without a request.
 func TestApprovalEndsWithNoDecision(t *testing.T) {
 	cases := []struct {
-		name   string
-		hold   time.Duration
-		end    func(t *testing.T, sp string, c *verbConn, sess *Session, window, requestID string, tui *TUIClient, conn *verbConn)
-		reason string
-		// itemGone says the item closes, rather than staying open without a
-		// request.
+		name     string
+		hold     time.Duration
+		end      func(t *testing.T, sp string, c *verbConn, sess *Session, window, requestID string, tui *TUIClient, conn *verbConn)
+		reason   string
 		itemGone bool
 	}{
 		{
@@ -226,7 +214,6 @@ func TestApprovalEndsWithNoDecision(t *testing.T) {
 		{
 			name: "a newer request for the pane", reason: approvalEndSuperseded,
 			end: func(t *testing.T, sp string, _ *verbConn, _ *Session, w, _ string, _ *TUIClient, _ *verbConn) {
-				// The newer request's own answer is not waited on here.
 				requestApproval(t, sp, "work", w)
 			},
 		},
@@ -253,8 +240,6 @@ func TestApprovalEndsWithNoDecision(t *testing.T) {
 			tc.end(t, sp, c, sess, a, id, tui, conn)
 
 			if tc.reason == approvalEndCallerGone {
-				// The response went nowhere; the hold is seen ending from the
-				// item.
 				waitAttention(t, c, "the item losing its request", func(items []map[string]any) bool {
 					return len(items) == 1 && items[0]["request_id"] == nil
 				})
@@ -270,8 +255,6 @@ func TestApprovalEndsWithNoDecision(t *testing.T) {
 			if tc.itemGone {
 				waitAttention(t, c, "the item closing", func(items []map[string]any) bool { return !hasKind(AttentionApproval, a)(items) })
 			} else {
-				// The item stays, without this request. A newer request may
-				// have put its own there.
 				waitAttention(t, c, "the item losing its request", func(items []map[string]any) bool {
 					for _, it := range items {
 						if it["window"] == a && it["request_id"] == id {
@@ -281,7 +264,6 @@ func TestApprovalEndsWithNoDecision(t *testing.T) {
 					return hasKind(AttentionApproval, a)(items) || hasKind(AttentionQuestion, a)(items)
 				})
 			}
-			// A reply after the hold ended decides nothing.
 			resp := reply(c, t, id, ApprovalOnce, tui.HumanNonce())
 			if code := errCode(t, resp); code != ErrVerbInvalidParams {
 				t.Errorf("a reply after the hold ended answered %s", code)
@@ -297,19 +279,16 @@ func TestApprovalRefusals(t *testing.T) {
 	_, a, b := twoWindowSession(t, d, "work")
 	c := dialVerb(t, sp)
 
-	// Not blocked: nothing to hold.
 	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code","summary":"ok?"}}`))
 	if res["reason"] != approvalEndNotBlocked || res["decision"] != "" {
 		t.Errorf("a pane not on needs_input answered %v", res)
 	}
-	// A question is not an approval.
 	setAgentState(t, c, "work", a, "needs_input", "question", "which?")
 	res = result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code","summary":"ok?"}}`))
 	if res["reason"] != approvalEndNotBlocked {
 		t.Errorf("a question answered %v", res)
 	}
 
-	// A process inside a pane may hold only its own pane's prompt.
 	setAgentState(t, c, "work", b, "needs_input", "approval", "ok?")
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
 	resp := c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code","summary":"ok?"}}`)
@@ -323,13 +302,11 @@ func TestApprovalRefusals(t *testing.T) {
 	}
 	d.setApprovalPeer(nil)
 
-	// Over a link, never.
 	raw := json.RawMessage(`{"session":"work","window":"` + b + `","harness":"claude-code"}`)
 	if _, verr := d.verbRequestApproval(&connState{viaLink: true, linkHuman: true}, raw); verr == nil || verr.Code != ErrVerbForbidden {
 		t.Errorf("a request over a link answered %v", verr)
 	}
 
-	// An option that is not a decision.
 	resp = c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code","summary":"ok?","options":["yes"]}}`)
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {
 		t.Errorf("options [yes] answered %s", code)
@@ -352,7 +329,6 @@ func TestApprovalOnlyOffersWhatTheHarnessCanDo(t *testing.T) {
 	if code := errCode(t, reply(c, t, id, ApprovalAlways, tui.HumanNonce())); code != ErrVerbInvalidParams {
 		t.Fatalf("always, which was not offered, answered %s", code)
 	}
-	// By pane rather than by request id.
 	res := result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"reply-approval","params":{"session":"work","window":%q,"decision":"deny","message":"not on main","human_nonce":%q}}`, a, tui.HumanNonce())))
 	if res["decision"] != ApprovalDeny {
 		t.Fatalf("a reply by pane answered %v", res)
@@ -382,7 +358,6 @@ func TestApprovalNotHeldForAPaneThePersonIsLookingAt(t *testing.T) {
 	}
 }
 
-// replyShown is reply with the summary the decision was made from.
 func replyShown(c *verbConn, t *testing.T, requestID, decision, nonce, shown string) map[string]any {
 	t.Helper()
 	raw, _ := json.Marshal(map[string]any{"request_id": requestID, "decision": decision, "human_nonce": nonce, "summary": shown})
@@ -410,7 +385,6 @@ func TestApprovalAnswersOnlyTheLineThePersonRead(t *testing.T) {
 		t.Fatalf("the held item is %v", it)
 	}
 
-	// Hook 2 reports its call; its hold is not open yet.
 	second := "approve Bash: rm -rf build"
 	setAgentState(t, c, "work", a, "needs_input", "approval", second)
 	items, _ := listAttention(t, c, "")
@@ -418,7 +392,6 @@ func TestApprovalAnswersOnlyTheLineThePersonRead(t *testing.T) {
 		t.Fatalf("a second report while held left %v, want the held line on the held request", items)
 	}
 
-	// A reply made from the second call's line does not answer the first.
 	res := result(t, replyShown(c, t, id, ApprovalOnce, tui.HumanNonce(), second))
 	if res["applied"] != false || res["reason"] != approvalEndChanged || res["decision"] != "" || res["summary"] != testHeldLine {
 		t.Fatalf("a reply from another line answered %v", res)
@@ -429,8 +402,6 @@ func TestApprovalAnswersOnlyTheLineThePersonRead(t *testing.T) {
 	default:
 	}
 
-	// Handing it back ends the hold, and the item then shows the newest
-	// report, which is what the pane is on.
 	result(t, replyShown(c, t, id, ApprovalAsk, tui.HumanNonce(), ""))
 	if got := awaitResult(t, pending); got["decision"] != "" || got["reason"] != approvalEndHandedBack {
 		t.Fatalf("the hook got %v", got)
@@ -442,7 +413,6 @@ func TestApprovalAnswersOnlyTheLineThePersonRead(t *testing.T) {
 		t.Errorf("the ended hold left its scope: %v", items[0])
 	}
 
-	// Hook 2's hold, answered from its own line, applies.
 	pending, _ = requestApprovalWith(t, sp, map[string]any{"session": "work", "window": a, "harness": "claude", "summary": second})
 	id2 := heldItem(t, c, a)["request_id"].(string)
 	res = result(t, replyShown(c, t, id2, ApprovalOnce, tui.HumanNonce(), second))
@@ -485,12 +455,10 @@ func TestApprovalNotHeldUnlessShownWhole(t *testing.T) {
 		})
 	}
 
-	// No summary at all is a bad call.
 	if code := errCode(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code"}}`)); code != ErrVerbInvalidParams {
 		t.Errorf("no summary answered %s", code)
 	}
 
-	// Always is offered only with a scope it can show.
 	for name, scope := range map[string][]string{
 		"no scope":         nil,
 		"too many rules":   {"a", "b", "c", "d", "e"},
@@ -560,7 +528,6 @@ func TestApprovalAllowMustNameTheLine(t *testing.T) {
 		t.Fatalf("the hook got %v", got)
 	}
 
-	// A deny names no line and still applies.
 	setAgentState(t, c, "work", a, "needs_input", "approval", testHeldLine)
 	pending, _ = requestApproval(t, sp, "work", a, "once", "deny")
 	id = heldItem(t, c, a)["request_id"].(string)

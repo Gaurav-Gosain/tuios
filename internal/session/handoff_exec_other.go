@@ -7,8 +7,6 @@ import (
 	"os"
 )
 
-// handoffSupported is false: a ConPTY is a pseudoconsole handle and pipe
-// handles, not descriptors an exec keeps, and there is no exec in place.
 func handoffSupported() bool { return false }
 
 func listenerFD(net.Listener, func(int)) bool { return false }

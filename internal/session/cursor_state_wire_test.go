@@ -7,32 +7,11 @@ import (
 	"tuios.dev/vt"
 )
 
-// State a snapshot has to carry that no cell shows. Each piece decides what
-// output that has not arrived yet does, so a client restored without it looks
-// right until the guest sends the sequence that reads it, and then diverges.
-//
-// Ways this can go wrong, each a group of cases below:
-//   - an open OSC 8 link on the pen is dropped, so the text after the
-//     snapshot is not a link on the client;
-//   - DECSCA protection is dropped, from the pen or from the cells, so a
-//     selective erase (DECSED, DECSEL) after the snapshot erases cells the
-//     guest protected, on either screen;
-//   - the character REP repeats is dropped, so CSI b after the snapshot
-//     prints nothing, or it is carried after the character set mapped it, so
-//     the repeat is mapped twice;
-//   - the cursor DECSC saved is dropped, in any of its parts (position, pen,
-//     character sets, origin mode, pending wrap, protection), so DECRC after
-//     the snapshot lands somewhere else; or the main screen's is dropped while
-//     the alternate screen is up, so leaving it with 1049 puts the shell's
-//     cursor somewhere else;
-//   - each of the above survives one wire form and not the other.
 var cursorStateCases = []seamCase{
-	// Gap 1: the pen's hyperlink.
 	{"open-link", "\x1b]8;;https://a.example/\x1b\\link ", "more\x1b]8;;\x1b\\ plain"},
 	{"open-link-left-open", "plain \x1b]8;;https://b.example/\x1b\\in", "side"},
 	{"open-link-under-pen", "\x1b[1;32m\x1b]8;;https://c.example/\x1b\\x", "y\x1b[m"},
 
-	// Gap 2: DECSCA.
 	{"protected-cells-decsed", "\x1b[1\"qPROT\x1b[0\"q free", "\x1b[H\x1b[?2J"},
 	{"protected-cells-decsed-below", "a\r\n\x1b[1\"qKEEP\x1b[0\"q gone\r\nlast", "\x1b[1;1H\x1b[?0J"},
 	{"protected-cells-decsel", "\x1b[2;1H\x1b[1\"qXY\x1b[0\"qzz", "\x1b[2;1H\x1b[?2K"},
@@ -42,10 +21,7 @@ var cursorStateCases = []seamCase{
 	{"protected-under-alt", "main\x1b[1\"qP\x1b[0\"q\x1b[?1049halt", "\x1b[?1049l\x1b[H\x1b[?2J"},
 	{"protected-on-alt", "\x1b[?1049h\x1b[1\"qALT\x1b[0\"q", "\x1b[H\x1b[?2J"},
 
-	// Gap 3: the character REP repeats.
 	{"rep-ascii", "abcX", "\x1b[3b"},
-	// The character is not the last one on the screen, so a restore that
-	// paints the screen row by row does not set it by accident.
 	{"rep-not-last-on-screen", "\x1b[5;1Hzz\x1b[1;1HX", "\x1b[2b"},
 	{"rep-under-pending-wrap", strings.Repeat("p", fidelityCols-1) + "\x1b[5;1Hk\x1b[1;40Hq", "\x1b[1b"},
 	{"rep-after-move", "Q\r\n", "\x1b[2b"},
@@ -54,7 +30,6 @@ var cursorStateCases = []seamCase{
 	{"rep-line-drawing", "\x1b(0q\x1b(B", "\x1b(0\x1b[3b\x1b(B"},
 	{"rep-after-reset", "abc\x1bc", "\x1b[3b"},
 
-	// Gap 4: the cursor DECSC saved.
 	{"saved-position", "\x1b[3;5H\x1b7\x1b[1;1Hhome", "\x1b8X"},
 	{"saved-pen", "\x1b[31;4m\x1b7\x1b[0m", "\x1b8red"},
 	{"saved-charsets", "\x1b(0\x1b7\x1b(B", "\x1b8qqq"},
@@ -63,8 +38,6 @@ var cursorStateCases = []seamCase{
 	{"saved-protected", "\x1b[1\"q\x1b7\x1b[0\"q", "\x1b8P\x1b[0\"q\x1b[H\x1b[?2J"},
 	{"saved-under-alt", "\x1b[4;7Hshell\x1b[?1049h\x1b[2;2Hvim", "\x1b[?1049lX"},
 	{"saved-in-alt", "\x1b[?1049h\x1b[3;3H\x1b7\x1b[1;1H", "\x1b8A"},
-	// Each screen saved its own, and 1047 switches without saving, so the
-	// main screen's is the one from before the switch.
 	{"saved-on-each-screen", "\x1b[2;2H\x1b7\x1b[?1047h\x1b[5;5H\x1b7\x1b[1;1H", "\x1b8A\x1b[?1047l\x1b8M"},
 	{"saved-by-scosc", "\x1b[6;2H\x1b[s\x1b[1;1H", "\x1b[uS"},
 }
@@ -74,12 +47,6 @@ func TestWireCarriesTheCursorState(t *testing.T) {
 	runSeamCases(t, cursorStateCases, newPure, newPure)
 }
 
-// Gap 5: a client bigger than the snapshot. ApplyTerminalState grew a client
-// that was too small and left one that was too big. Wider, the snapshot's
-// last column was not the client's: a wrap pending there went one column
-// right on the client and to the next row on the daemon, and so did every
-// line that reached the edge after it. Taller, a line feed on the snapshot's
-// last row moved the client's cursor down where the daemon scrolled.
 var widerClientCases = []seamCase{
 	{"pending", "$ " + strings.Repeat("x", fidelityCols-3) + "Z", "NEXT\r\n"},
 	{"pending-wide", strings.Repeat("x", fidelityCols-2) + "日", "NEXT"},
@@ -88,7 +55,6 @@ var widerClientCases = []seamCase{
 	{"line-feed-on-the-last-row", "top\x1b[8;1Hbottom", "\r\nnext"},
 }
 
-// biggerClients are the client sizes the cases run against.
 var biggerClients = []struct {
 	name       string
 	cols, rows int
@@ -167,12 +133,10 @@ func TestCursorStateFieldsAreOptionalOnTheWire(t *testing.T) {
 	if runs := client.ProtectedCells(false); len(runs) != 0 {
 		t.Errorf("protected cells after an old snapshot: %v, want none", runs)
 	}
-	// The positive half: a current snapshot does replace them.
 	ApplyTerminalState(client, throughWire(t, TerminalStateOf(src, fidelityCols, fidelityRows, 100, 0), true))
 	if got := client.LastPrinted(); got != "y" {
 		t.Errorf("REP's character after a current snapshot: %q, want %q", got, "y")
 	}
-	// Entering the alternate screen with 1049 saved the cursor after the x.
 	if got := client.SavedCursor(true); got.X != 4 || got.Y != 2 {
 		t.Errorf("main saved cursor after a current snapshot: (%d,%d), want (4,2)", got.X, got.Y)
 	}

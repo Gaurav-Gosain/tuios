@@ -52,8 +52,7 @@ func TestViewSearchSiblings(t *testing.T) {
 			name:  "two agents started together",
 			files: []file{{"a", time.Second}, {"b", 11 * time.Second}},
 			panes: []pane{{name: "A"}, {name: "B", started: 10 * time.Second}},
-			// b started near both agents, so it is no one's.
-			want: map[string]string{"A": "a"},
+			want:  map[string]string{"A": "a"},
 		},
 		{
 			name:  "a sibling's hook named its own file",

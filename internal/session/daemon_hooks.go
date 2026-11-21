@@ -12,38 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 )
 
-// Session-side hooks.
-//
-// Hooks wired only into the client would fire none for a session running
-// detached under the daemon: a pane could be created, exit, or finish an agent
-// turn with nobody attached and no hook would run. That is the opposite of what
-// a hook is for, because the detached session is exactly the one a program is
-// watching instead of a person.
-//
-// The rule applied here is that a hook fires from the side that owns the fact.
-//
-//   - The window set, the focused window, the current workspace and a pane's
-//     agent state are the daemon's. It owns them whether or not anybody is
-//     attached, so it fires their hooks. A client attached to a daemon session
-//     does not fire them (see FireHookContext in internal/app), which is also
-//     what makes three attached clients produce one firing rather than three.
-//   - A client's viewport size, its attach and its detach belong to that one
-//     client. They stay client-side: three clients attaching is three attaches,
-//     and the command has to run on the machine the person is sitting at. The
-//     layout stays client-side too, because tiling runs in the attached
-//     renderer and no daemon-side operation can change it.
-//
-// A standalone tuios (no daemon) is unaffected: it is the whole system, so it
-// keeps firing everything itself.
-//
-// Firing happens off the session's event sink, which is fed by the state diff
-// in state_events.go. The diff runs once per state convergence however the
-// mutation arrived, so a hook fires exactly once no matter how many clients are
-// attached or which one made the change.
-
-// sessionHookEvents maps a daemon stream event to the hook event it raises. An
-// event that is not in this map raises no hook, which is how the high-frequency
-// output and bell events cost nothing.
 var sessionHookEvents = map[string]hooks.Event{
 	EventWindowCreated:     hooks.AfterNewWindow,
 	EventWindowClosed:      hooks.AfterCloseWindow,
@@ -53,20 +21,12 @@ var sessionHookEvents = map[string]hooks.Event{
 	EventCommandFinished:   hooks.AfterCommandFinished,
 }
 
-// sessionSideHooks is sessionHookEvents keyed the other way, plus the one event
-// the daemon runs outside the event sink: the hook events the daemon fires.
-// Derived rather than written out, so the two can never disagree about which
-// side owns an event.
 var sessionSideHooks = func() map[hooks.Event]bool {
 	set := make(map[hooks.Event]bool, len(sessionHookEvents))
 	for _, ev := range sessionHookEvents {
 		set[ev] = true
 	}
-	// after-new-worktree comes from no stream event: createWorktreeSession
-	// runs it itself and waits for it. The worktree is the daemon's fact.
 	set[hooks.AfterNewWorktree] = true
-	// after-settle comes from no stream event either: settleAgent fires it
-	// (agent_settle.go). The settle is the daemon's fact.
 	set[hooks.AfterSettle] = true
 	return set
 }()
@@ -84,24 +44,17 @@ func SessionSideHookEvents() []hooks.Event {
 	return out
 }
 
-// hookDrainTimeout bounds how long a shutting-down daemon waits for the hooks
-// it has already started.
 const hookDrainTimeout = 2 * time.Second
 
-// agentHookGate holds the settle timers for after-agent-state. The settle
-// window is the anti-flicker rule the client already applies: a pane that flips
-// out of a state and back inside the window produces nothing rather than two
-// firings.
 type agentHookGate struct {
 	mu      sync.Mutex
-	pending map[string]*time.Timer // session name + "\x00" + window id
+	pending map[string]*time.Timer
 }
 
 func newAgentHookGate() *agentHookGate {
 	return &agentHookGate{pending: make(map[string]*time.Timer)}
 }
 
-// park cancels whatever was waiting for this window and schedules fire after d.
 func (g *agentHookGate) park(key string, d time.Duration, fire func()) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -117,7 +70,6 @@ func (g *agentHookGate) park(key string, d time.Duration, fire func()) {
 	})
 }
 
-// cancel drops a parked firing without running it.
 func (g *agentHookGate) cancel(key string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -127,7 +79,6 @@ func (g *agentHookGate) cancel(key string) {
 	}
 }
 
-// stop cancels every parked firing. It runs on daemon shutdown.
 func (g *agentHookGate) stop() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -157,10 +108,6 @@ func (cfg *DaemonConfig) ApplyUserHooks(uc *config.UserConfig) {
 	cfg.AgentHookCommand = uc.Notifications.Agent.Command
 }
 
-// loadHooks builds the daemon's hook table from the user config. The daemon
-// keeps the manager from here on, with no hooks in it when none are
-// configured: an event with no hook stops at a map lookup, and a reload fills
-// the same manager in place.
 func (d *Daemon) loadHooks(cfg *DaemonConfig) {
 	m, policy := buildHookTable(cfg)
 	m.SetHold(d.pipes.hold)
@@ -169,40 +116,23 @@ func (d *Daemon) loadHooks(cfg *DaemonConfig) {
 	d.agentHooks = newAgentHookGate()
 }
 
-// buildHookTable builds the hook table and the alert policy a DaemonConfig
-// describes, without touching the daemon.
 func buildHookTable(cfg *DaemonConfig) (*hooks.Manager, config.AgentAlertPolicy) {
 	m := hooks.NewManager()
 	m.SetDaemonEnv(true)
 	if len(cfg.Hooks) > 0 {
 		m.LoadFromConfig(cfg.Hooks)
 	}
-	// The client-side events are dropped rather than held and never fired. A
-	// table the daemon keeps but cannot run would appear in list-hooks as a
-	// command with no runs, which reads as "your hook is broken" when the truth
-	// is that the client runs it.
 	for _, e := range hooks.AllEvents() {
 		if !sessionSideHooks[e] {
 			m.Clear(e)
 		}
 	}
-	// [notifications.agent].command is the shorthand spelling of an
-	// after-agent-state hook. It is registered rather than substituted, so a
-	// user who wrote both spellings gets both, which is what [hooks] does for
-	// two commands on one event.
 	if cmd := strings.TrimSpace(cfg.AgentHookCommand); cmd != "" {
 		m.Register(hooks.AfterAgentState, cmd)
 	}
 	return m, config.ResolveAgentAlerts(cfg.AgentAlerts)
 }
 
-// reloadHooks loads the [hooks] table and [notifications.agent] of a config
-// the daemon reads while it runs (issue 1622). A hook runs a command as the
-// daemon's child, and a process in a pane can write config.toml, so from a
-// file change (byPerson false) the table applies only when every hook in it
-// already runs: it removes hooks, or changes nothing. A hook that is new or
-// changed waits for tuios config apply from outside every pane, or a restart.
-// The alert policy only times the hook and applies both ways.
 func (d *Daemon) reloadHooks(uc *config.UserConfig, byPerson bool) {
 	if d.hooks == nil || uc == nil {
 		return
@@ -226,14 +156,6 @@ func (d *Daemon) reloadHooks(uc *config.UserConfig, byPerson bool) {
 	d.hooksWaiting.Store(false)
 }
 
-// fireSessionHooks raises the hook a session event implies.
-//
-// It runs on the session's event sink, which is called with the session's state
-// lock held. Two rules follow from that and neither is optional. It must return
-// immediately for the events that carry no hook, because output and bell arrive
-// on every chunk a pane writes. And it must never read the session back: the
-// whole hook environment is built from the event, which is why the diff carries
-// the window's name and workspace rather than leaving them to be looked up.
 func (d *Daemon) fireSessionHooks(sess *Session, ev SessionEvent) {
 	if d.hooks == nil {
 		return
@@ -245,8 +167,6 @@ func (d *Daemon) fireSessionHooks(sess *Session, ev SessionEvent) {
 	if !d.hooks.HasEvent(event) {
 		return
 	}
-	// No agent hook runs while the agent features are off, including for
-	// the clear that turning them off makes. See agents_switch.go.
 	if d.agentsOff.Load() && isAgentEvent(ev.Type) {
 		return
 	}
@@ -257,8 +177,6 @@ func (d *Daemon) fireSessionHooks(sess *Session, ev SessionEvent) {
 	d.hooks.Fire(event, hookContext(sess.Name(), ev))
 }
 
-// hookContext is the environment a hook command reads, built from the event
-// alone.
 func hookContext(sessionName string, ev SessionEvent) hooks.Context {
 	ctx := hooks.Context{
 		SessionID:  sessionName,
@@ -286,7 +204,6 @@ func hookContext(sessionName string, ev SessionEvent) hooks.Context {
 	return ctx
 }
 
-// findWindowState returns a window row by id.
 func findWindowState(state *SessionState, id string) (WindowState, bool) {
 	if state == nil {
 		return WindowState{}, false
@@ -299,23 +216,6 @@ func findWindowState(state *SessionState, id string) (WindowState, bool) {
 	return WindowState{}, false
 }
 
-// fireAgentStateHook applies the [notifications.agent] policy to a transition
-// and fires the hook the policy leaves standing.
-//
-// The policy is the client's, read from the same config table, so a user who
-// muted a state stays muted whichever side runs the command. Two of its rules
-// are deliberately not applied the same way:
-//
-//   - suppress_focused asks not to be told about a pane the user is looking at.
-//     With no client attached nobody is looking at anything, so it applies only
-//     while a client is attached, and only while at least one attached
-//     client's terminal has not reported losing focus.
-//   - The dock message, the bell and the sound cue stay in the client. They
-//     need a terminal and a person. Only the command moves.
-//
-// Everything after the two pure checks runs off this goroutine, because reading
-// the client table or the session back from the sink would take a second lock
-// under the state lock the sink already holds.
 func (d *Daemon) fireAgentStateHook(sess *Session, ev SessionEvent) {
 	var policy config.AgentAlertPolicy
 	if p := d.agentAlerts.Load(); p != nil {
@@ -323,8 +223,6 @@ func (d *Daemon) fireAgentStateHook(sess *Session, ev SessionEvent) {
 	}
 	key := sess.Name() + "\x00" + ev.Window
 
-	// Any further transition retires whatever was parked for this pane: the
-	// state it was going to announce is no longer the state the pane is in.
 	d.agentHooks.cancel(key)
 
 	if !policy.Alerts(ev.State) {
@@ -337,9 +235,6 @@ func (d *Daemon) fireAgentStateHook(sess *Session, ev SessionEvent) {
 	sessionID, sessionName, window, to := sess.ID, sess.Name(), ev.Window, ev.State
 	ctx := hookContext(sessionName, ev)
 
-	// suppressed reports whether a client is attached and is showing this
-	// pane, on a terminal that has not said it lost focus. With every client's
-	// terminal out of focus nobody is looking at the pane, whatever it shows.
 	suppressed := func() bool {
 		if !policy.SuppressFocused || d.findTUIClient(sessionID) == nil {
 			return false
@@ -368,8 +263,6 @@ func (d *Daemon) fireAgentStateHook(sess *Session, ev SessionEvent) {
 		if suppressed() {
 			return
 		}
-		// Re-read rather than trust the parked state: the pane may have closed
-		// or moved on while it waited.
 		live := d.manager.GetSessionByID(sessionID)
 		if live == nil {
 			return

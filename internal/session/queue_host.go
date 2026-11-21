@@ -8,25 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// Queueing a reply for an agent on another machine.
-//
-// queue-prompt with host goes to the daemon of that machine over this
-// machine's link, on a connection of its own, as the reply's parts can be
-// megabytes. The far daemon takes it as any call over the link: the entry is
-// queued by link:THIS-MACHINE, its link policy here must allow write, a block
-// or an image needs files too, and it writes the files and types the reply on
-// its own machine, where the pane runs. See queue_parts.go.
-//
-// Only a caller outside every pane may send one: the person, with the nonce,
-// or their own shell. A pane would have its grants here bypassed, since the
-// far daemon sees only the link. A call that came over a link is not passed
-// on again.
-
-// queueHostBudget bounds a forward: the parts crossing the link, and the far
-// daemon's answer.
 const queueHostBudget = pasteHostedBudget
 
-// queuePromptToHost forwards queue-prompt to the daemon on host.
 func (d *Daemon) queuePromptToHost(cs *connState, p queuePromptParams) (any, *verbError) {
 	if cs != nil && (cs.viaLink || cs.paneOnly) {
 		return nil, hintedVerbError(ErrVerbForbidden, "queue-prompt with host is for a caller on this machine", &VerbHint{
@@ -64,8 +47,6 @@ func (d *Daemon) queuePromptToHost(cs *connState, p queuePromptParams) (any, *ve
 	if p.Parts != nil {
 		params["parts"] = p.Parts
 	}
-	// The far daemon cannot verify this machine's nonce, so the entry is
-	// the link's. The label says who sent it, as a claim.
 	from := linkSelfName(d.hostedPaneHostName())
 	if p.HumanNonce != "" {
 		from = "the person on " + firstNonEmpty(from, "the hub")
@@ -79,9 +60,6 @@ func (d *Daemon) queuePromptToHost(cs *connState, p queuePromptParams) (any, *ve
 	err := (fileEnd{d: d, host: p.Host}).callTimeout(ctx, "queue-prompt", params, &out, queueHostBudget)
 	if far, ok := errors.AsType[*VerbCallError](err); ok && far.Code == ErrVerbForbidden && p.Parts != nil && p.Text != "" &&
 		!hasImageParts(p.Parts) && strings.Contains(far.Message, "does not allow files") {
-		// The far machine's policy for this link has no files, so a block
-		// cannot go as a file there. The message as one text fits the limit,
-		// so it goes that way, each block typed in its place.
 		delete(params, "parts")
 		out = nil
 		err = (fileEnd{d: d, host: p.Host}).callTimeout(ctx, "queue-prompt", params, &out, queueHostBudget)
@@ -101,9 +79,6 @@ func (d *Daemon) queuePromptToHost(cs *connState, p queuePromptParams) (any, *ve
 	return out, nil
 }
 
-// queueHostRefusal is why a queue verb with host is refused before it goes
-// anywhere: one that came over a link, one from a pane, one that names this
-// machine, and one with no pane there. nil lets it through.
 func (d *Daemon) queueHostRefusal(cs *connState, verb, host, session string) *verbError {
 	if cs != nil && (cs.viaLink || cs.paneOnly) {
 		return hintedVerbError(ErrVerbForbidden, verb+" with host is for a caller on this machine", &VerbHint{Param: "host"})
@@ -126,10 +101,6 @@ func (d *Daemon) queueHostRefusal(cs *connState, verb, host, session string) *ve
 	return nil
 }
 
-// listQueuedOnHost forwards list-queued to the daemon on host, which lists
-// the pane's queue there as it would for any caller over the link. The
-// person's replies queued there are the link's, by link:THIS-MACHINE, with
-// "the person on THIS-MACHINE" as their from.
 func (d *Daemon) listQueuedOnHost(cs *connState, p listQueuedParams) (any, *verbError) {
 	if verr := d.queueHostRefusal(cs, "list-queued", p.Host, p.Session); verr != nil {
 		return nil, verr
@@ -151,10 +122,6 @@ func (d *Daemon) listQueuedOnHost(cs *connState, p listQueuedParams) (any, *verb
 	return out, nil
 }
 
-// cancelQueuedOnHost forwards cancel-queued to the daemon on host. The far
-// daemon lets the link drop only the entries it queued, which are the ones
-// this machine sent there. The person's nonce is checked here, as the far
-// daemon cannot check it.
 func (d *Daemon) cancelQueuedOnHost(cs *connState, p cancelQueuedParams) (any, *verbError) {
 	if verr := d.queueHostRefusal(cs, "cancel-queued", p.Host, p.Session); verr != nil {
 		return nil, verr
@@ -184,7 +151,6 @@ func (d *Daemon) cancelQueuedOnHost(cs *connState, p cancelQueuedParams) (any, *
 	return out, nil
 }
 
-// queueHostError is a forwarded queue verb's failure, named for its machine.
 func queueHostError(verb, host string, err error) *verbError {
 	if far, ok := errors.AsType[*VerbCallError](err); ok {
 		return hintedVerbError(far.Code, verb+" on "+host+": "+far.Message, refusedOn(far.Hint, host))

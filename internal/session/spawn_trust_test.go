@@ -27,8 +27,6 @@ func TestASharedProcessDaemonPlacesOnlyWhatItStarted(t *testing.T) {
 	d, sp := startTestDaemonWith(t, &DaemonConfig{SharedProcess: true})
 	sess := makeSessionWithWindow(t, d, "shared")
 
-	// A child of this process, with no tuios variable, stands for a CLI call
-	// the harness makes.
 	child := exec.Command("sleep", "30")
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "TUIOS_") {
@@ -52,7 +50,6 @@ func TestASharedProcessDaemonPlacesOnlyWhatItStarted(t *testing.T) {
 		t.Error("a pane's shell is not inside a pane")
 	}
 
-	// A process the pane's shell started.
 	if _, err := pty.Write([]byte("sleep 30\r")); err != nil {
 		t.Fatal(err)
 	}
@@ -79,8 +76,6 @@ func TestASharedProcessDaemonPlacesOnlyWhatItStarted(t *testing.T) {
 		t.Errorf("a shared-process daemon wrote a pid file, which kill-server would signal: %v", err)
 	}
 
-	// A daemon in a process of its own holds the same child: no pane
-	// started it, and it is the daemon's.
 	own := NewDaemon(&DaemonConfig{})
 	t.Cleanup(own.manager.Shutdown)
 	if from, _ := own.paneOrigin(child.Process.Pid); !from {

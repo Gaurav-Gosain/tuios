@@ -17,36 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Worktree setup: a shell line ([worktree] setup, or the call's setup) that
-// runs in every new worktree before its agent or shell, such as "pnpm i".
-//
-// It runs in a window of the new session named setup, through the same pane
-// machinery verify-fan uses: sh -c in the worktree, no grants, its status on
-// fd 3. The window is the output a person reads, and its screen is where the
-// last lines on the record come from, so nothing here keeps a log.
-//
-// The record moves through stages: the checkout (done before the setup
-// starts), the setup (pending, running, passed or failed, with the exit
-// status and the last four lines), and the agent (waiting, started or
-// not_started). list-worktrees reports it, and the client draws it as the
-// setup card.
-//
-// A sync setup holds the agent until it passes. One that fails before the
-// agent starts takes the worktree and the branch away again, but only what
-// this call made and nobody touched: a branch the call created that still
-// points where it started, and a worktree with no uncommitted change and no
-// nested repository. Anything else is kept and the note says why. The session
-// is kept either way, with the failed setup's window open, so the output can
-// still be read.
-//
-// An async setup releases the agent at once. A failure after that keeps
-// everything, because the agent may already have work in the worktree, and
-// only reports.
-//
-// Nothing here runs at idle. The watcher waits on the status pipe, and the
-// last lines follow the pane's output events, read at most once per
-// worktreeSetupTailEvery while output arrives and never once it stops.
-
 // Setup states, as the wire carries them.
 const (
 	SetupPending = "pending"
@@ -67,19 +37,13 @@ const (
 	SetupAgentNotStarted = "not_started"
 )
 
-// worktreeSetupWindow is the name of the window a setup runs in.
 const worktreeSetupWindow = "setup"
 
-// worktreeSetupTailLines is how many of the setup's last lines the record
-// keeps, and worktreeSetupTailWidth how many bytes of each.
 const (
 	worktreeSetupTailLines = 4
 	worktreeSetupTailWidth = 200
 )
 
-// worktreeSetupTailEvery is how often, at most, the last lines are read from
-// the screen while the setup writes. A package manager writes hundreds of
-// lines a second, and each read is a state push to every client.
 const worktreeSetupTailEvery = 250 * time.Millisecond
 
 // WorktreeSetup is the setup record of one worktree session.
@@ -114,35 +78,24 @@ type WorktreeSetup struct {
 	Note string `json:"note,omitempty"`
 }
 
-// setupSpec is the setup a new worktree runs: the command, empty for none,
-// and whether the agent waits for it.
 type setupSpec struct {
 	Command string
 	Async   bool
 }
 
-// setupParam is the part of new-worktree and fan that names a setup. Absent
-// takes [worktree] setup. An empty setup runs none.
 type setupParam struct {
 	Setup      *string `json:"setup"`
 	SetupAsync *bool   `json:"setup_async"`
 }
 
-// worktreeSetups holds the setup config in force and the setups running now,
-// by session ID. The zero value is ready. Its lock is taken inside a
-// session's state lock and never the other way round.
 type worktreeSetups struct {
-	cfg atomic.Pointer[setupSpec]
-	// waiting says config.toml names a new setup command that waits for
-	// tuios config apply or a restart.
+	cfg     atomic.Pointer[setupSpec]
 	waiting atomic.Bool
 
 	mu   sync.Mutex
 	runs map[string]*setupRun
 }
 
-// setupRun is one running setup: its window, the channel that stops its
-// watcher, and the pipe end whose close lets the script go on.
 type setupRun struct {
 	window string
 	stop   chan struct{}
@@ -153,8 +106,6 @@ type setupRun struct {
 
 func (r *setupRun) halt() { r.once.Do(func() { close(r.stop) }) }
 
-// letGo closes the pipe the script waits on after it reports, so it ends,
-// or keeps its window open on a failure.
 func (r *setupRun) letGo() {
 	r.holdMu.Lock()
 	defer r.holdMu.Unlock()
@@ -164,13 +115,10 @@ func (r *setupRun) letGo() {
 	}
 }
 
-// validSetupCommand reports whether cmd is a setup the daemon runs.
 func validSetupCommand(cmd string) bool {
 	return len(cmd) <= config.WorktreeSetupMaxBytes && !strings.ContainsRune(cmd, 0)
 }
 
-// setConfig sets the setup every new worktree runs. A command the
-// validation refuses runs nothing, as the config warning says.
 func (t *worktreeSetups) setConfig(cmd string, async bool) {
 	cmd = strings.TrimSpace(cmd)
 	if !validSetupCommand(cmd) {
@@ -179,7 +127,6 @@ func (t *worktreeSetups) setConfig(cmd string, async bool) {
 	t.cfg.Store(&setupSpec{Command: cmd, Async: async})
 }
 
-// config is the setup in force.
 func (t *worktreeSetups) config() setupSpec {
 	if c := t.cfg.Load(); c != nil {
 		return *c
@@ -187,10 +134,6 @@ func (t *worktreeSetups) config() setupSpec {
 	return setupSpec{}
 }
 
-// applyConfig applies a setup from config.toml and reports whether it did. A
-// change by the person applies. From a file change, which a process in a
-// pane can make, only a cleared or unchanged command applies: a new command
-// is a command the daemon would run, so it waits for the person.
 func (t *worktreeSetups) applyConfig(cmd string, async, byPerson bool) bool {
 	cmd = strings.TrimSpace(cmd)
 	if byPerson || cmd == "" || cmd == t.config().Command {
@@ -201,7 +144,6 @@ func (t *worktreeSetups) applyConfig(cmd string, async, byPerson bool) bool {
 	return false
 }
 
-// resolveSetup is the setup a call runs: its own, or the config's.
 func (d *Daemon) resolveSetup(p setupParam) (setupSpec, *verbError) {
 	spec := d.setups.config()
 	if p.Setup != nil {
@@ -219,7 +161,6 @@ func (d *Daemon) resolveSetup(p setupParam) (setupSpec, *verbError) {
 	return spec, nil
 }
 
-// put records run as the session's setup.
 func (t *worktreeSetups) put(session string, run *setupRun) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -229,8 +170,6 @@ func (t *worktreeSetups) put(session string, run *setupRun) {
 	t.runs[session] = run
 }
 
-// finish removes run when it is still the session's setup, and reports
-// whether it was.
 func (t *worktreeSetups) finish(session string, run *setupRun) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -241,15 +180,12 @@ func (t *worktreeSetups) finish(session string, run *setupRun) bool {
 	return true
 }
 
-// running reports whether a setup runs in the session now.
 func (t *worktreeSetups) running(session string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.runs[session] != nil
 }
 
-// halt stops the watcher of the session's setup, when one runs, so a
-// removal that is under way is not raced by the setup's own undo.
 func (t *worktreeSetups) halt(session string) {
 	t.mu.Lock()
 	run := t.runs[session]
@@ -261,12 +197,6 @@ func (t *worktreeSetups) halt(session string) {
 	}
 }
 
-// worktreeSetupScript runs the setup and reports its status on fd 3, which
-// the setup does not inherit. It then waits for the daemon to close fd 4: a
-// sync setup that passed keeps its window until the agent's is open, so the
-// session never runs out of windows between the two. A setup that passed
-// ends the window. One that failed keeps it open, so the output can be read,
-// until the person presses enter.
 const worktreeSetupScript = `printf 'tuios setup: %s\n\n' "$1"
 sh -c "$1" 3>&- 4<&-
 s=$?
@@ -279,8 +209,6 @@ printf '\nThe setup exited %s. This window stays open so you can read the output
 read -r _
 exit "$s"`
 
-// setupLaunch is what a setup needs to start the agent after it: the agent
-// window's options and what to do once it is open.
 type setupLaunch struct {
 	sess    *Session
 	info    *WorktreeInfo
@@ -291,8 +219,6 @@ type setupLaunch struct {
 	onAgent func(*Session, WindowState)
 }
 
-// startWorktreeSetup opens the setup window in the new session and watches
-// it. The record says running once the window is in.
 func (d *Daemon) startWorktreeSetup(l setupLaunch) (WindowState, error) {
 	var (
 		argv    []string
@@ -303,8 +229,6 @@ func (d *Daemon) startWorktreeSetup(l setupLaunch) (WindowState, error) {
 		release = func() {}
 	)
 	if runtime.GOOS == "windows" {
-		// No descriptor passes to a console process, so the window's own exit
-		// status is the setup's, and the window closes either way.
 		argv = []string{"cmd.exe", "/c", l.spec.Command}
 	} else {
 		r3, w3, err := os.Pipe()
@@ -321,9 +245,6 @@ func (d *Daemon) startWorktreeSetup(l setupLaunch) (WindowState, error) {
 		extras = []*os.File{w3, r4}
 		toClose = extras
 		argv = []string{"/bin/sh", "-c", worktreeSetupScript, "tuios-setup", l.spec.Command}
-		// Held before the window starts, as verify-fan holds it: a daemon
-		// handoff must not carry the window and close the pipe the setup
-		// reports on.
 		release = d.pipes.hold("a worktree setup is running in session " + l.sess.Name())
 	}
 	none := Grants(0)
@@ -338,8 +259,6 @@ func (d *Daemon) startWorktreeSetup(l setupLaunch) (WindowState, error) {
 		Focus:      !l.spec.Async,
 		extraFiles: extras,
 	}, onExit)
-	// The child holds its own copies. Closing these is what lets each end
-	// see the other go.
 	for _, f := range toClose {
 		_ = f.Close()
 	}
@@ -387,15 +306,9 @@ func (d *Daemon) startWorktreeSetup(l setupLaunch) (WindowState, error) {
 	return win, nil
 }
 
-// watchWorktreeSetup records how a setup ended and does what follows: the
-// agent after a sync pass, the undo after a sync failure.
-//
-// release lets a daemon handoff go ahead again. It runs once the agent of a
-// sync pass is open, so a handoff cannot fall between the pass and the agent.
 func (d *Daemon) watchWorktreeSetup(l setupLaunch, run *setupRun, codes <-chan *int, release func()) {
 	defer release()
 	defer run.letGo()
-	// The tail follower ends with the run.
 	defer run.halt()
 	var code *int
 	select {
@@ -406,8 +319,6 @@ func (d *Daemon) watchWorktreeSetup(l setupLaunch, run *setupRun, codes <-chan *
 		return
 	}
 	sess := l.sess
-	// A setup whose session was killed under it (remove-worktree, kill)
-	// has nobody left to report to.
 	if d.manager.GetSessionByID(sess.ID) != sess {
 		d.setups.finish(sess.ID, run)
 		return
@@ -428,8 +339,6 @@ func (d *Daemon) watchWorktreeSetup(l setupLaunch, run *setupRun, codes <-chan *
 
 	switch {
 	case passed && !l.spec.Async:
-		// The agent starts now. Its window opens before the setup's ends,
-		// which the script holds open until letGo.
 		win, err := l.agent()
 		if err != nil {
 			done.Agent = SetupAgentNotStarted
@@ -459,17 +368,10 @@ func (d *Daemon) watchWorktreeSetup(l setupLaunch, run *setupRun, codes <-chan *
 	})
 	run.letGo()
 	if current && passed {
-		// The window has ended on its own after letGo. Closing it here takes
-		// it out of a session no client is attached to.
 		_, _ = sess.CloseDaemonWindow(run.window, "the daemon, as its worktree setup passed")
 	}
 }
 
-// undoFailedSetup takes away what a sync setup's worktree call made, when
-// nothing in it is anyone's work: the worktree when it holds no uncommitted
-// change and no nested repository, and the branch when the call created it
-// and it still points where it started. It reports what it removed and a
-// sentence that says so.
 func (d *Daemon) undoFailedSetup(l setupLaunch) (removed, branchRemoved bool, note string) {
 	info := l.info
 	if _, err := os.Stat(info.Path); err != nil {
@@ -502,10 +404,6 @@ func (d *Daemon) undoFailedSetup(l setupLaunch) (removed, branchRemoved bool, no
 	return true, true, "The worktree and the branch " + info.Branch + " were removed."
 }
 
-// followSetupTail keeps the record's last lines current while the setup
-// runs. It reads the screen once when it starts, then wakes on the pane's
-// output events, and reads at most once per worktreeSetupTailEvery: the
-// timer runs only between an event and the read it schedules.
 func (d *Daemon) followSetupTail(sess *Session, run *setupRun, ptyID string) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
@@ -514,9 +412,6 @@ func (d *Daemon) followSetupTail(sess *Session, run *setupRun, ptyID string) {
 		types:   map[string]bool{EventOutput: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
-	// The first read is due at once. The setup starts before this
-	// subscribes, so the lines it printed in between brought no event, and
-	// a setup that then waits quietly would bring none at all.
 	timer := time.NewTimer(worktreeSetupTailEvery)
 	due := timer.C
 	defer func() {
@@ -548,12 +443,10 @@ func (d *Daemon) followSetupTail(sess *Session, run *setupRun, ptyID string) {
 			if !d.setups.running(sess.ID) {
 				return
 			}
-			// Read outside the state lock: setupTail reads the state.
 			tail := setupTail(sess, window, nil)
 			if tail == nil {
 				continue
 			}
-			// The same lines cost no state push.
 			if wt := sess.Worktree(); wt == nil || wt.Setup == nil || slices.Equal(tail, wt.Setup.Tail) {
 				continue
 			}
@@ -574,12 +467,6 @@ func (d *Daemon) followSetupTail(sess *Session, run *setupRun, ptyID string) {
 	}
 }
 
-// settleSetupOutput gives the setup's last output time to reach the screen
-// before the final tail is read. The status arrives on its own pipe, and the
-// lines printed just before it may still be in the pty or on their way to
-// the emulator. It waits for the pane to be quiet for a moment, at most a
-// third of a second, then for the emulator to apply what it was given. It
-// runs once per setup, when it ends.
 func settleSetupOutput(sess *Session, window string) {
 	var ptyID string
 	for _, w := range sess.GetState().Windows {
@@ -620,9 +507,6 @@ func settleSetupOutput(sess *Session, window string) {
 	}
 }
 
-// setupTail reads the last non-blank lines of the setup window's screen,
-// with the script's own heading left out. It returns old when the window
-// is gone.
 func setupTail(sess *Session, window string, old []string) []string {
 	var ptyID string
 	for _, w := range sess.GetState().Windows {
@@ -638,9 +522,6 @@ func setupTail(sess *Session, window string, old []string) []string {
 	return lastLines(pty.CaptureContent(false, false), worktreeSetupTailLines)
 }
 
-// lastLines is the last n non-blank lines of screen, each cut to
-// worktreeSetupTailWidth bytes on a rune boundary, the setup script's
-// heading left out.
 func lastLines(screen string, n int) []string {
 	lines := strings.Split(screen, "\n")
 	out := make([]string, 0, n)
@@ -664,7 +545,6 @@ func lastLines(screen string, n int) []string {
 	return out
 }
 
-// setWorktreeSetup replaces the session's setup record.
 func (s *Session) setWorktreeSetup(v *WorktreeSetup) {
 	_ = s.mutateState(func(st *SessionState) error {
 		if st.Worktree != nil {
@@ -674,7 +554,6 @@ func (s *Session) setWorktreeSetup(v *WorktreeSetup) {
 	})
 }
 
-// worktreeSetupOrEmpty is a copy of the session's setup record.
 func (s *Session) worktreeSetupOrEmpty() WorktreeSetup {
 	if wt := s.Worktree(); wt != nil && wt.Setup != nil {
 		cp := *wt.Setup
@@ -684,8 +563,6 @@ func (s *Session) worktreeSetupOrEmpty() WorktreeSetup {
 	return WorktreeSetup{}
 }
 
-// setPromptIfWaiting ends a fan prompt that is still waiting, so fan --wait
-// and the rail do not wait for an agent that never starts.
 func (s *Session) setPromptIfWaiting(status, note string) {
 	_ = s.mutateState(func(st *SessionState) error {
 		if wt := st.Worktree; wt != nil && PromptWaiting(wt.PromptStatus) {
@@ -695,16 +572,10 @@ func (s *Session) setPromptIfWaiting(status, note string) {
 	})
 }
 
-// setupReport is a session's setup record as it is reported: one recorded
-// as running or pending that no watcher of this daemon runs was ended by a
-// restart, and reads as failed with no exit status.
 func (d *Daemon) setupReport(s *Session, v *WorktreeSetup) *WorktreeSetup {
 	if v == nil || (v.State != SetupRunning && v.State != SetupPending) || d.setups.running(s.ID) {
 		return v
 	}
-	// The watcher writes the finished record and takes its run out of the
-	// table in one step, so a record read before that step and a table read
-	// after it are the setup finishing. The record is read again.
 	if wt := s.Worktree(); wt != nil && wt.Setup != nil {
 		if wt.Setup.State != SetupRunning && wt.Setup.State != SetupPending {
 			return wt.Setup
@@ -712,7 +583,6 @@ func (d *Daemon) setupReport(s *Session, v *WorktreeSetup) *WorktreeSetup {
 		v = wt.Setup
 	}
 	if v.State == SetupPending {
-		// Between the record and the window: the call is still making it.
 		return v
 	}
 	cp := *v
@@ -721,7 +591,6 @@ func (d *Daemon) setupReport(s *Session, v *WorktreeSetup) *WorktreeSetup {
 	return &cp
 }
 
-// setWorktreeSetupAgent sets the agent stage on the session's setup record.
 func (s *Session) setWorktreeSetupAgent(stage string) {
 	_ = s.mutateState(func(st *SessionState) error {
 		if wt := st.Worktree; wt != nil && wt.Setup != nil {
@@ -733,9 +602,6 @@ func (s *Session) setWorktreeSetupAgent(stage string) {
 	})
 }
 
-// startedByLater returns what records the caller's pane as the one that
-// started a window. The pane is read now, while the call is live, because
-// a sync setup opens the agent's window after the call has returned.
 func (d *Daemon) startedByLater(cs *connState) func(window string) {
 	ref := d.callerPaneRef(cs)
 	return func(window string) {
@@ -748,13 +614,11 @@ func (d *Daemon) startedByLater(cs *connState) func(window string) {
 	}
 }
 
-// setupParams are the parameters new-worktree and fan take for a setup.
 var setupParams = []verbParam{
 	{Name: "setup", Type: "string", Description: "A shell line to run with sh -c in each new worktree, in a window named setup, before the agent or shell starts. It holds no grants. Omit for [worktree] setup in config.toml. An empty string runs none."},
 	{Name: "setup_async", Type: "bool", Description: "Start the agent at once beside the setup. Omit for [worktree] setup_async. Without it the agent waits for the setup to pass, and a failed setup removes the new worktree and the branch it made when nothing in them is anyone's work. A failed async setup keeps both."},
 }
 
-// setupReturns are what new-worktree returns about a setup.
 var setupReturns = []verbParam{
 	{Name: "setup", Type: "object", Description: "The setup's record as list-worktrees reports it. Absent when no setup runs."},
 	{Name: "setup_window_id", Type: "string", Description: "Id of the setup's window. Absent when no setup runs."},

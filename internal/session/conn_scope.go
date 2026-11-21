@@ -9,56 +9,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// Restricted connections: the minimal form of scoped callers.
-//
-// Every connection on the daemon socket can call every verb. That is right for
-// the person's own CLI and wrong for an agent that a file it read or a page it
-// fetched has talked into acting on other panes. restrict-connection lets a
-// client give up authority on its own connection, and the daemon then holds
-// the connection to what is left for as long as it is open. A second call can
-// narrow further and never widen.
-//
-// Two restrictions exist:
-//
-//   - scope own. The connection reaches only its own session: the session of
-//     the pane the caller runs in, the sessions that share its fan group (the
-//     siblings a fan started together), and the sessions a fan run from it
-//     started. Every other session is invisible to it: reads fail with
-//     forbidden, and its event stream carries nothing from them. The pane is
-//     found by the kernel's record of the caller's pid first, and only when
-//     that places the caller in no pane by TUIOS_PANE_ID plus the
-//     TUIOS_PANE_TOKEN only that pane was started with (pane_token.go). A
-//     caller placed in no pane reaches no session at all: the restriction
-//     fails closed.
-//   - read_only. The connection may read, report its own pane's state and
-//     meta, and leave mail, and may not type into any pane: send-text,
-//     send-keys, ask-agent, respond and fan are refused.
-//
-// Verbs outside the table below are refused on any restricted connection. The
-// table has to name every verb, which a test checks, so a new verb is refused
-// here until someone decides what a restricted caller may do with it.
-//
-// tuios mcp restricts every connection it opens before its first call, so an
-// agent that drives tuios through MCP holds exactly what the server was
-// started with. This does not stop a process in a pane from opening its own
-// unrestricted connection with the tuios CLI; it bounds the MCP surface, which
-// is the one an agent reaches without writing a shell command. docs/protocol.md
-// has the whole contract.
-
-// connScope is what a connection was restricted to.
 type connScope struct {
-	// own restricts the connection to its own session and fan group.
-	own bool
-	// readOnly refuses every verb that types into a pane or starts one.
-	readOnly bool
-	// sessionID and window are the caller's pane, empty when the caller runs
-	// in no pane of this daemon. The session is kept by ID, not name, so a
-	// rename leaves the connection held to the same session.
+	own       bool
+	readOnly  bool
 	sessionID string
 	window    string
-	// via says how the pane was found: "pid" from the kernel, "token" from
-	// TUIOS_PANE_TOKEN, or "" when it was not.
-	via string
+	via       string
 }
 
 // Scope values restrict-connection accepts.
@@ -69,55 +25,28 @@ const (
 
 var scopeNames = []string{ScopeOwn, ScopeAll}
 
-// scopeKind is what a verb does, for a restricted connection.
 type scopeKind int
 
 const (
-	// scopeUnset is a verb entry that names no scope. It is refused as
-	// scopeDeny is, and TestEveryVerbNamesItsScope fails on it, so adding a
-	// verb is a decision about what a restricted caller may do with it.
 	scopeUnset scopeKind = iota
-	// scopeDeny: refused on any restricted connection.
 	scopeDeny
-	// scopeOpen touches no session: always allowed.
 	scopeOpen
-	// scopeGlobal reads across sessions. Allowed under read_only alone,
-	// refused under scope own.
 	scopeGlobal
-	// scopeRead reads one session.
 	scopeRead
-	// scopeSelf writes the caller's own pane's record: its state, meta or
-	// conversation id. Under scope own the window must be the caller's.
 	scopeSelf
-	// scopeMail leaves something in a session's store as the caller: mail or
-	// a stashed file. Nothing is typed.
 	scopeMail
-	// scopeWrite types into a pane. Refused under read_only.
 	scopeWrite
-	// scopeLaunch starts new sessions. Refused under read_only, and under
-	// scope own for a caller in no pane, whose launches it could not reach.
 	scopeLaunch
-	// scopeBufferRead reads the paste buffers, which every session shares
-	// and which hold whatever the person copied. Refused under scope own; a
-	// pane needs the read grant.
 	scopeBufferRead
-	// scopeBufferWrite changes the paste buffers. Refused under read_only
-	// and under scope own; a pane needs the write grant.
 	scopeBufferWrite
-	// scopeTask writes the task cards of one session (task.go). Nothing is
-	// typed. Refused under read_only; a pane needs the task grant.
 	scopeTask
 )
 
-// readsBuffers reports whether a verb reads the paste buffers. paste-buffer
-// does: it types a buffer's text into a pane, and the caller can read that
-// pane back.
 func readsBuffers(verb string) bool {
 	kind, _ := verbScope(verb)
 	return kind == scopeBufferRead || verb == "paste-buffer"
 }
 
-// verbRestrictConnection narrows what this connection may do from now on.
 func (d *Daemon) verbRestrictConnection(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Scope     string `json:"scope"`
@@ -144,8 +73,6 @@ func (d *Daemon) verbRestrictConnection(cs *connState, params json.RawMessage) (
 		if prev.readOnly && !next.readOnly {
 			return nil, scopeWidenError("read_only", "this connection is already read-only, and a restriction cannot be lifted")
 		}
-		// The pane was settled by the first call. A later claim may only
-		// repeat it.
 		if p.PaneID != "" && p.PaneID != prev.window {
 			return nil, scopeWidenError("pane_id", "this connection's pane was settled by its first restrict-connection call")
 		}
@@ -163,8 +90,6 @@ func (d *Daemon) verbRestrictConnection(cs *connState, params json.RawMessage) (
 		}
 	}
 	cs.scope.Store(next)
-	// A restricted connection is automation, never the person, so a
-	// presence it held ends here (human_sender.go, "Nonce scope").
 	cs.mu.Lock()
 	cs.presenceNonce, cs.presenceSession = "", ""
 	cs.mu.Unlock()
@@ -198,11 +123,6 @@ func scopeWidenError(param, msg string) *verbError {
 	})
 }
 
-// placeCaller finds the pane the process on cs runs in. The kernel's answer
-// comes first; a pane_id claim that disagrees with it is refused. Only when the
-// kernel places the caller in no pane is the claim checked against its token.
-// A caller placed nowhere gets an empty window and no error: its restriction
-// then reaches no session.
 func (d *Daemon) placeCaller(cs *connState, paneID, token string) (window, via string, verr *verbError) {
 	if !cs.viaLink && !cs.paneOnly {
 		if _, win := d.peerPane(cs); win != "" {
@@ -227,7 +147,6 @@ func (d *Daemon) placeCaller(cs *connState, paneID, token string) (window, via s
 	return paneID, "token", nil
 }
 
-// sessionOfWindow names the local session holding a window, "" for none.
 func (d *Daemon) sessionOfWindow(id string) string {
 	if sess := d.sessionHoldingWindow(id); sess != nil {
 		return sess.Name()
@@ -235,9 +154,6 @@ func (d *Daemon) sessionOfWindow(id string) string {
 	return ""
 }
 
-// sessionHoldingWindow is the local session holding a window, nil for none.
-// It runs on every verb a pane calls, so it reads each session's windows in
-// place rather than copying its state.
 func (d *Daemon) sessionHoldingWindow(id string) *Session {
 	if id == "" {
 		return nil
@@ -250,9 +166,6 @@ func (d *Daemon) sessionHoldingWindow(id string) *Session {
 	return nil
 }
 
-// sessionNameByID is the current name of the session with this ID, "" when
-// there is none. Callers that keep a session across calls keep its ID and
-// read the name here, so a rename does not cut them off from it.
 func (d *Daemon) sessionNameByID(id string) string {
 	if id == "" {
 		return ""
@@ -263,12 +176,6 @@ func (d *Daemon) sessionNameByID(id string) string {
 	return ""
 }
 
-// callerSession is the session of the pane the caller on cs runs in, nil when
-// it runs in none or cannot be placed.
-//
-// A caller that needs both the name and the ID reads them from this one
-// session, so a rename between two lookups cannot pair one session's name with
-// another's ID.
 func (d *Daemon) callerSession(cs *connState) *Session {
 	if cs == nil {
 		return nil
@@ -279,7 +186,6 @@ func (d *Daemon) callerSession(cs *connState) *Session {
 		}
 		return d.manager.GetSessionByID(sc.sessionID)
 	}
-	// A connection that presented its pane's token is in that pane.
 	if w := cs.paneBound.Load(); w != nil {
 		return d.sessionHoldingWindow(*w)
 	}
@@ -292,15 +198,10 @@ func (d *Daemon) callerSession(cs *connState) *Session {
 	return nil
 }
 
-// sessionInScope reports whether a connection whose pane is in session own may
-// reach session target: target is own, or it was launched from own, or it
-// shares own's fan group in the same repository.
 func (d *Daemon) sessionInScope(own, target string) bool {
 	if own == "" || target == "" {
 		return false
 	}
-	// Either name may be one a session was renamed from: a pane started
-	// before the rename still sends it.
 	if o, _ := d.manager.ResolveSession(own); o != nil {
 		own = o.Name()
 	}
@@ -319,9 +220,6 @@ func (d *Daemon) sessionInScope(own, target string) bool {
 		return false
 	}
 	o := d.manager.GetSession(own)
-	// The session that started this one, by its ID alone: a name is free
-	// once its session ends, and another session could take it. A record
-	// from before the ID names no launcher that reaches it.
 	if tw.LaunchedFromID != "" && o != nil && o.ID == tw.LaunchedFromID {
 		return true
 	}
@@ -335,7 +233,6 @@ func (d *Daemon) sessionInScope(own, target string) bool {
 	return ow != nil && ow.Managed && sameFan(ow, tw)
 }
 
-// scopeSessionNames lists the sessions own reaches, sorted.
 func (d *Daemon) scopeSessionNames(own string) []string {
 	out := []string{}
 	for _, sess := range d.manager.AllSessions() {
@@ -347,24 +244,10 @@ func (d *Daemon) scopeSessionNames(own string) []string {
 	return out
 }
 
-// eventInScope reports whether an event may be written to cs. Gap markers
-// always may, and transfer events reach only a caller that may list the
-// transfers. Under scope own an event reaches the stream only when its
-// session is one the connection reaches; an event with no session, such as
-// host-changed, does not.
-//
-// A pane without the admin grant is held the same way to the sessions it may
-// read, as they stood at its last call, which for a stream is its subscribe.
-// See pane_grants.go.
 func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 	if ev.Type == EventGap {
 		return true
 	}
-	// A copy is the person's, as the transfer verbs are (scopeDeny), so its
-	// events reach no restricted connection, and a pane without admin sees
-	// only the copies it started, with the files grant. A link hears them
-	// only when it may list the transfers, which needs the files capability
-	// and relay, not list alone.
 	if ev.Transfer != nil || ev.File != nil {
 		if cs.scope.Load() != nil {
 			return false
@@ -388,11 +271,6 @@ func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 		owners = append(owners, d.sessionNameByID(sc.sessionID))
 	}
 	if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) && pa.plugin == "" {
-		// A plugin is in no session, and the read grant its subscribe
-		// needed reaches every session (plugin_grants.go).
-		//
-		// The pane's session as it is named now: the view was taken at the
-		// stream's subscribe, and the session may have been renamed since.
 		own := pa.session
 		if pa.sessionID != "" {
 			own = d.sessionNameByID(pa.sessionID)
@@ -417,7 +295,6 @@ func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 	return true
 }
 
-// scopeForbidden is the refusal for a verb or target outside a restriction.
 func scopeForbidden(verb, why string) *verbError {
 	return hintedVerbError(ErrVerbForbidden, verb+" is refused on this connection: "+why, &VerbHint{
 		Verb:   "restrict-connection",
@@ -425,10 +302,6 @@ func scopeForbidden(verb, why string) *verbError {
 	})
 }
 
-// checkScope holds a call on a restricted connection to its restriction. It
-// returns the params the handler should see, which under scope own have the
-// caller's session, window and sender filled in where the call left them out,
-// or the refusal. A connection that was never restricted passes unchanged.
 func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) (json.RawMessage, *verbError) {
 	sc := cs.scope.Load()
 	if sc == nil {
@@ -473,21 +346,10 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 	return d.holdToPane(verb, kind, params, own, sc.window, "the connection is restricted to its own", reach, deny)
 }
 
-// holdToPane holds one call from a caller whose pane is window in session own
-// to the sessions reach allows, and fills in what the call left out: the
-// caller's own session where it named none, and its own window where a
-// parameter names the caller (window on a self report, from on mail and
-// typing). reach returns "" for a session the call may touch and the reason
-// it may not otherwise. bound ends the refusals for a parameter that reaches
-// every session, such as "the connection is restricted to its own". It is
-// shared by restrict-connection (checkScope) and pane grants (checkGrants),
-// which differ only in which sessions they reach and how they refuse.
 func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage, own, window, bound string, reach func(target string) string, deny func(why string) *verbError) (json.RawMessage, *verbError) {
 	var m map[string]json.RawMessage
 	if len(strings.TrimSpace(string(params))) > 0 {
 		if err := jsonx.Unmarshal(params, &m); err != nil {
-			// Not an object: the handler reports it as invalid_params. The
-			// session cannot be checked, so the call is refused here instead.
 			return nil, invalidParam("params", "params must be an object")
 		}
 	}
@@ -517,10 +379,6 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 		m[name] = raw
 	}
 
-	// The session. subscribe with none streams every session the connection
-	// reaches, and is filtered event by event (eventInScope). Every other
-	// verb gets the caller's own session when it names none, rather than the
-	// most recently active one, which could be anybody's.
 	session := str("session")
 	switch {
 	case session != "":
@@ -531,8 +389,6 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 	case declares("session"):
 		session = own
 		set("session", session)
-		// The caller's own session can still be out of reach, for a pane
-		// that holds no grant for this kind of call there.
 		if why := reach(session); why != "" {
 			return nil, deny(why)
 		}
@@ -543,13 +399,9 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 			return nil, deny(wide + " reaches every session, and " + bound)
 		}
 	}
-	// A selector reaches every session, except on list-agents, where the
-	// session filled in above narrows it to the caller's own.
 	if str("select") != "" && verb != "list-agents" {
 		return nil, deny("select reaches every session, and " + bound)
 	}
-	// A session on another machine is never in reach: send-agent-message's
-	// host sends there over this machine's link.
 	if h := str("host"); h != "" && h != "local" {
 		return nil, deny("host " + echoName(h) + " is another machine, and " + bound + " session")
 	}
@@ -573,7 +425,6 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 			return nil, verr
 		}
 	case scopeRead:
-		// A pane reads the receipts of its own mail only.
 		if verb == "agent-message-receipts" {
 			if verr := mine("window"); verr != nil {
 				return nil, verr
@@ -583,9 +434,6 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 			return nil, deny("to must be the caller's own window " + shortWindowID(window) + ", or omitted to read the session's ring without marking anything read")
 		}
 	case scopeMail, scopeWrite:
-		// from names a window of the target session. It is filled in only
-		// when that is the caller's own session, where the caller's window
-		// resolves; elsewhere a from the caller passes must still be its own.
 		if declares("from") {
 			if session == own {
 				if verr := mine("from"); verr != nil {
@@ -604,9 +452,6 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 	return out, nil
 }
 
-// forgetLauncher clears the launcher of every session that names s as the
-// session that started it. It runs when s ends, so a later session that
-// takes its name reaches none of them.
 func (d *Daemon) forgetLauncher(s *Session) {
 	for _, o := range d.manager.AllSessions() {
 		wt := o.Worktree()
@@ -619,8 +464,6 @@ func (d *Daemon) forgetLauncher(s *Session) {
 	}
 }
 
-// verbScope is what verb does, for a restricted connection, from its entry in
-// the verb registry. ok is false for a name that is not a verb.
 func verbScope(verb string) (kind scopeKind, ok bool) {
 	e, ok := verbRegistry()[verb]
 	if e.scope == scopeUnset {

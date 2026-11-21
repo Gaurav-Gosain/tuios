@@ -11,10 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// The fixtures carry the record shape of a real Claude Code transcript with
-// invented content. See internal/transcript for the shape they were checked
-// against.
-
 func recLine(t *testing.T, v map[string]any) string {
 	t.Helper()
 	b, err := json.Marshal(v)
@@ -47,8 +43,6 @@ func writeTranscript(t *testing.T, dir, name, body string) string {
 	return p
 }
 
-// fakeWatch stands in for filesystem notification so the join logic is testable
-// without waiting on the kernel.
 type fakeWatch struct {
 	mu   sync.Mutex
 	cbs  map[string]func()
@@ -107,7 +101,6 @@ func TestJoinReadsTheTurnAndPublishesIt(t *testing.T) {
 		t.Fatalf("claim source = %q", s.agentClaimFor(win).source)
 	}
 
-	// The turn ends and the file says so.
 	appendLine(t, path, assistantRec(t, "end_turn", "/p", "2.1.222"))
 	w.fire(path)
 	waitFor(t, "the debounced read to publish done", func() bool {
@@ -212,7 +205,6 @@ func TestAVanishedFileGivesTheClaimBack(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	// One miss is a rotation, not a death, so the claim survives it.
 	s.readAgentTranscript(win)
 	if !s.hasTranscriptJoin(win) {
 		t.Fatal("a single missed read ended the join")
@@ -229,8 +221,6 @@ func TestAVanishedFileGivesTheClaimBack(t *testing.T) {
 	if w.watching(path) {
 		t.Fatal("the watch outlived its file")
 	}
-	// The state is left where it was: it is still the best answer anyone has, it
-	// is just no longer defended.
 	if got := s.GetState().Windows[0].AgentState; got != AgentStateWorking {
 		t.Fatalf("state = %q, want the last read left alone", got)
 	}
@@ -260,7 +250,6 @@ func TestAnExactJoinOutranksASearchedOne(t *testing.T) {
 	if got := s.GetState().Windows[0].AgentState; got != AgentStateDone {
 		t.Fatalf("state = %q, want the exact join's answer", got)
 	}
-	// And the searched one does not come back afterwards.
 	if err := s.JoinAgentTranscript(win, "claude-code", searched, false); err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +316,6 @@ func TestSearchVerifiesAgainstThePane(t *testing.T) {
 	if !ok || filepath.Base(got) != "mine.jsonl" {
 		t.Fatalf("search = %q ok=%v, want mine.jsonl", got, ok)
 	}
-	// A pane whose build cannot be read verifies nothing, so it joins nothing.
 	if _, ok := searchTranscriptIn(dir, tr, "/proj", ""); ok {
 		t.Fatal("joined without being able to check the version")
 	}
@@ -345,8 +333,6 @@ func TestSearchRefusesWhenTwoCandidatesBothVerify(t *testing.T) {
 	dir := t.TempDir()
 	writeTranscript(t, dir, "a.jsonl", assistantRec(t, "tool_use", "/proj", "2.1.222"))
 	writeTranscript(t, dir, "b.jsonl", assistantRec(t, "end_turn", "/proj", "2.1.222"))
-	// b is newer, and that is deliberately not a tie-break: which file was
-	// written most recently is no evidence of which pane is looking at it.
 	if got, ok := searchTranscriptIn(dir, tr, "/proj", "2.1.222"); ok {
 		t.Fatalf("search picked %q instead of refusing", got)
 	}

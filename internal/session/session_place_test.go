@@ -10,11 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
 
-// A session's place is what the rail labels an unnamed session with. These
-// tests pin the three reads it is built from: the OSC 7 payload, the directory
-// label, and the branch under .git, on layouts written by hand so no test needs
-// a git identity to commit with.
-
 func TestParseCwdReportAcceptsLocalPathsOnly(t *testing.T) {
 	cases := []struct {
 		raw  string
@@ -96,7 +91,6 @@ func TestPickWindowCwdTrustsAReadableProcess(t *testing.T) {
 	}
 }
 
-// writeFile creates a file with its parent directories.
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

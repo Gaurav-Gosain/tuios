@@ -6,13 +6,6 @@ import (
 	"testing"
 )
 
-// Wire compatibility of stream-pane input. An I frame is what every client
-// before J frames sends, and its rules must not move: queued in order while
-// the queue has room, then refused as busy, with every frame after it, until
-// the pane has read what waits. A J frame names its offset and is typed only
-// at the offset the stream expects, so a frame a client sent before it went
-// back to resend from a refusal is never typed, even once the queue drained.
-
 func TestInputFrameReadsIAndJ(t *testing.T) {
 	at, data, ok := inputFrame(paneFrameInput, []byte("abc"))
 	if !ok || at != -1 || string(data) != "abc" {
@@ -31,7 +24,6 @@ func TestInputFrameReadsIAndJ(t *testing.T) {
 	}
 }
 
-// typed is what the pane got: the frames popped, in order.
 func typed(q *paneInput) []byte {
 	frames, _ := q.pop()
 	var out []byte
@@ -100,7 +92,7 @@ func TestAStaleJFrameAfterTheQueueDrainedIsRefused(t *testing.T) {
 	if _, _, _, ok := q.push(int64(paneInputBytes), []byte("refused")); ok {
 		t.Fatalf("a J frame past a full queue was taken")
 	}
-	typed(&q) // the pane reads all that waited
+	typed(&q)
 	stale := int64(paneInputBytes) + int64(len("refused"))
 	if accepted, _, _, ok := q.push(stale, []byte("stale")); ok || accepted != int64(paneInputBytes) {
 		t.Errorf("a stale J frame after the queue drained: ok %v accepted %d, want refused with %d", ok, accepted, paneInputBytes)

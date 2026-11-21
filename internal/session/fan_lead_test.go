@@ -37,8 +37,6 @@ func TestFanLeadIsHeldByID(t *testing.T) {
 		t.Fatalf("the lead cannot read its attempt: %v", r["error"])
 	}
 
-	// After a restart without the lead, a new session of the lead's name
-	// reaches nothing: the record names the lead's ID, which it has not.
 	state := d.manager.GetSession(attempt).ResurrectionState()
 	d2, sp2 := startTestDaemon(t)
 	if _, err := d2.restoreSession(state); err != nil {
@@ -49,7 +47,6 @@ func TestFanLeadIsHeldByID(t *testing.T) {
 	setStrict(d2, "read", "fan")
 	wantForbidden(t, "compare-fan from a new session of the lead's name after a restart", callP(dialVerb(t, sp2), t, "compare-fan", map[string]any{"session": attempt, "changes": false}))
 
-	// The lead ends, and another session takes its name.
 	d.setApprovalPeer(nil)
 	if r := callP(admin, t, "kill-session", map[string]any{"session": "lead"}); r["error"] != nil {
 		t.Fatalf("kill-session: %v", r["error"])
@@ -71,13 +68,11 @@ func TestReview978LegacyRecord(t *testing.T) {
 	}
 	d, sp, repo := worktreeFixture(t)
 	admin := dialVerb(t, sp)
-	// A record an older daemon wrote: the lead by name only.
 	mine := fakeFan(t, d, admin, repo, "fan/sub", 1, "repo-fan-x")
 	state := d.manager.GetSession(mine[0]).ResurrectionState()
 	if state.Worktree.LaunchedFromID != "" {
 		t.Fatal("not a legacy record")
 	}
-	// Before any restart, the name alone reaches nothing either.
 	early := makeSessionWithWindow(t, d, "repo-fan-x")
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, early.GetState().Windows[0].ID })
 	setStrict(d, "read", "fan")

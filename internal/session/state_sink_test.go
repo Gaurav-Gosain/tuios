@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// recordStateSink installs a state sink on sess and returns a getter for the
-// snapshots it received, in delivery order.
 func recordStateSink(sess *Session) func() []*SessionState {
 	var mu sync.Mutex
 	var got []*SessionState
@@ -32,8 +30,8 @@ func TestLateSnapshotIsDropped(t *testing.T) {
 	pushes := recordStateSink(sess)
 
 	sess.publishState(&SessionState{Version: 7, CurrentWorkspace: 7, changeSeq: 7})
-	sess.publishState(&SessionState{Version: 5, CurrentWorkspace: 5, changeSeq: 5}) // overtaken
-	sess.publishState(&SessionState{Version: 7, CurrentWorkspace: 9, changeSeq: 7}) // already seen
+	sess.publishState(&SessionState{Version: 5, CurrentWorkspace: 5, changeSeq: 5})
+	sess.publishState(&SessionState{Version: 7, CurrentWorkspace: 9, changeSeq: 7})
 	sess.publishState(&SessionState{Version: 8, CurrentWorkspace: 8, changeSeq: 8})
 
 	got := pushes()

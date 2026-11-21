@@ -7,28 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Task cards: one unit of work each, kept by the daemon in the session it
-// belongs to, so a conductor hands work out from here rather than from a file
-// that dies with its pane.
-//
-// A card has a title, an optional prompt (what the pane that takes it is to
-// do), a stage, and at most one holder: the window id of the pane working on
-// it. claim-task takes a card for a pane, finish-task moves it to done and
-// lets it go, release-task lets it go and keeps its stage, block-task marks it
-// stuck, and set-task-stage moves it by hand. Every change is appended to the
-// card's history with who made it and when.
-//
-// The cards live on SessionState (Tasks, NextTaskID), written only through
-// mutateState, so they are saved with the session and come back after a
-// restart. A holder does not come back: the restore releases every card with
-// a restart entry, since no agent survives a restart (clearLiveAgent). A card
-// is also released when its pane closes or its agent leaves the pane, inside
-// the state change that closed it (releasedTaskEvents), so no claim lands
-// between the pane going and the card being let go.
-//
-// The verbs are in verb_task.go. Times are Unix nanoseconds, as list-queued
-// and the Inbox give them.
-
 // The stages, in the order a card usually moves through them. They are wire
 // values. claim-task moves a card in todo or plan to doing, and finish-task
 // moves it to done; every other move is set-task-stage's.
@@ -59,7 +37,6 @@ const (
 	TaskActionRemoved   = "removed"
 )
 
-// The reasons a card is released without its holder asking.
 const (
 	taskReleasePaneClosed = "pane closed"
 	taskReleaseAgentLeft  = "agent left"
@@ -69,7 +46,6 @@ const (
 // TaskMachineAny is a card's machine when placement picks it.
 const TaskMachineAny = "any"
 
-// taskByDaemon is the by of a change the daemon makes on its own.
 const taskByDaemon = "tuios"
 
 // Error codes of the task verbs.
@@ -81,7 +57,6 @@ const (
 	ErrVerbNoTask = "no_task"
 )
 
-// Bounds on what one session keeps.
 const (
 	taskMaxTitle   = 200
 	taskMaxPrompt  = queueMaxText
@@ -167,10 +142,6 @@ type TaskEvent struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// note appends ev to the card's history, keeping the first entry and the
-// newest after it within taskMaxHistory. It builds a new slice, and Blocked is
-// only ever replaced, so a snapshot shares a card's history and block with the
-// state safely and copies the cards with slices.Clone alone.
 func (tk *TaskState) note(ev TaskEvent) {
 	first, rest := tk.History, []TaskEvent(nil)
 	if n := len(tk.History); n >= taskMaxHistory {
@@ -179,8 +150,6 @@ func (tk *TaskState) note(ev TaskEvent) {
 	tk.History = slices.Concat(first, rest, []TaskEvent{ev})
 }
 
-// workable refuses a card no pane may start on: one held by a pane other
-// than window, one that is done, and one that is blocked.
 func (tk *TaskState) workable(window string) *verbError {
 	switch {
 	case tk.Holder != "" && tk.Holder != window:
@@ -200,17 +169,10 @@ func (tk *TaskState) workable(window string) *verbError {
 	return nil
 }
 
-// taskIndex is the index of the card id in tasks, or -1.
 func taskIndex(tasks []TaskState, id string) int {
 	return slices.IndexFunc(tasks, func(tk TaskState) bool { return tk.ID == id })
 }
 
-// nextFreeTask is the index of the card claim-task next takes: the oldest
-// one no pane holds, not blocked, not done and not ask_first. A card a live
-// fan works on from outside it (fan task=) is skipped too: its attempts hold
-// it, though no one pane does. liveFans names the fans that still have a session. Cards are
-// appended as they are added, so the first free one is the oldest. -1 when
-// there is none.
 func nextFreeTask(st *SessionState, liveFans map[string]bool) int {
 	own := ""
 	if st.Worktree != nil {
@@ -220,22 +182,15 @@ func nextFreeTask(st *SessionState, liveFans map[string]bool) int {
 		if tk.FanID != "" && tk.FanID != own && liveFans[tk.FanID] {
 			return false
 		}
-		// A card added with ask_first waits for someone to start it by its
-		// id, as dispatch leaves it (task_dispatch.go). claim --next takes
-		// the oldest card nobody has to decide on.
 		return tk.Holder == "" && tk.Blocked == nil && tk.Stage != TaskStageDone && !tk.AskFirst
 	})
 }
 
-// newTaskID numbers the session's next card, t1 first. NextTaskID is saved
-// with the cards, so an id is never handed out twice.
 func newTaskID(st *SessionState) string {
 	st.NextTaskID++
 	return "t" + strconv.FormatUint(st.NextTaskID, 10)
 }
 
-// heldTasks maps each window that holds a card to the cards it holds, oldest
-// first.
 func heldTasks(tasks []TaskState) map[string][]TaskState {
 	var out map[string][]TaskState
 	for _, tk := range tasks {
@@ -250,8 +205,6 @@ func heldTasks(tasks []TaskState) map[string][]TaskState {
 	return out
 }
 
-// releaseHolders releases every card whose holder held reports true, and
-// returns the cards released as they are now.
 func releaseHolders(sess *Session, st *SessionState, held func(holder string) bool, reason string, now int64) []TaskState {
 	var out []TaskState
 	for i := range st.Tasks {
@@ -265,12 +218,6 @@ func releaseHolders(sess *Session, st *SessionState, held func(holder string) bo
 	return out
 }
 
-// releasedTaskEvents releases the cards of st held by a pane that events say
-// closed or whose agent reported none, and returns one eventTaskReleased per
-// card for the daemon's sink to publish. It runs inside the state change that
-// raised events, with the state lock held, so a claim cannot land between the
-// pane going and the card being let go. A pane that moved to another session
-// left this one, so its cards are let go as closed.
 func releasedTaskEvents(sess *Session, st *SessionState, events []SessionEvent, now int64) []SessionEvent {
 	if len(st.Tasks) == 0 {
 		return nil

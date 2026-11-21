@@ -10,47 +10,6 @@ import (
 	"strings"
 )
 
-// Selectors: one way to address many panes at once.
-//
-// Every verb addresses a window by id, index, prefix or name, which is right
-// for one pane and wrong for "every codex pane on build" or "every agent of
-// this fan-out that needs me". A selector is a short line of terms read the
-// same way by every verb that takes one:
-//
-//	harness:codex state:idle,done session:api-fan-*
-//
-// Terms are separated by spaces and all of them must match (AND). A term is a
-// key, a colon and one or more values separated by commas, any of which may
-// match (OR). The keys:
-//
-//	harness:ID   the harness id, or a program name a manifest detects (claude)
-//	state:S      the agent state, one of AgentStateNames, or silent: a pane
-//	             whose agent said working and then nothing for silent_after.
-//	             state:working matches a silent pane too, since working is the
-//	             last thing its agent said.
-//	needs:you    a pane a person has to act on (needs_input or errored)
-//	session:G    the session name, a glob
-//	group:G      the worktree fan-out group (the branch stem), a glob
-//	host:G       the machine, "local" for this one, a glob
-//	name:G       the window's name, a glob
-//	cwd:DIR      the working directory is DIR or under it; ~ is the home dir
-//	task:G       a task card the pane holds, by id, a glob (task.go)
-//	stage:S      a task card the pane holds is in stage S; a done card has no holder
-//	parent:ID    the agent pane that started this one (agent_parent.go), by
-//	             window id or a start of it
-//	root:ID      the first agent pane of this one's chain, the same way
-//	role:R       the pane is a child agent delegate started with role R
-//
-// A glob is path.Match syntax: * and ? do not cross a slash, so group:fan/*
-// matches every group under fan/.
-//
-// Reading verbs (list-agents, list-host-agents, list-attention, wait-for)
-// take a selector as a filter. Writing verbs (send-agent-message, ask-agent)
-// take one only with the confirm token the resolved set hashes to, so a
-// selector never turns into a broadcast nobody looked at: the first call
-// without a token sends nothing and answers with the targets and the token.
-// See resolveSelection.
-
 // Selector keys. They are wire values.
 const (
 	SelectorHarness = "harness"
@@ -75,11 +34,8 @@ const (
 // them.
 var SelectorKeys = []string{SelectorHarness, SelectorState, SelectorNeeds, SelectorSession, SelectorGroup, SelectorHost, SelectorName, SelectorCwd, SelectorTask, SelectorStage, SelectorParent, SelectorRoot, SelectorRole}
 
-// selectorMaxLen bounds a selector's text. A selector is typed by a person or
-// written by an agent, and one longer than this is not a selector.
 const selectorMaxLen = 1024
 
-// selectorMaxTerms bounds the terms and the values of one term.
 const selectorMaxTerms = 16
 
 // Selector is a parsed selector. The zero value matches nothing; build one
@@ -89,7 +45,6 @@ type Selector struct {
 	terms []selectorTerm
 }
 
-// selectorTerm is one key and the values any of which may match.
 type selectorTerm struct {
 	key    string
 	values []string
@@ -214,9 +169,6 @@ func (s *Selector) String() string {
 	return s.text
 }
 
-// mapValues rewrites every value of the terms on key. The daemon uses it to
-// turn a program name into the harness id it names, and this machine's own
-// name into local.
 func (s *Selector) mapValues(key string, f func(string) string) {
 	if s == nil {
 		return
@@ -263,15 +215,9 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 	}
 	switch term.key {
 	case SelectorHarness:
-		// A bare word also names the harness it starts: claude is
-		// claude-code and gemini is gemini-cli. The daemon maps a program
-		// name through the manifests first (parseVerbSelector); this is what
-		// a reader without them, the Inbox filter, relies on.
 		id := strings.ToLower(t.Harness)
 		return glob(id) || (id != "" && !strings.ContainsAny(v, "*?[") && strings.HasPrefix(id, v+"-"))
 	case SelectorState:
-		// A silent pane shows unknown, but the last word of its agent was
-		// working, and a lead asking who is busy means it too.
 		return t.State == v || (t.Silent && (v == AgentStateWorking.Name() || v == SelectorStateSilent))
 	case SelectorNeeds:
 		return t.NeedsYou
@@ -298,11 +244,6 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 	case SelectorRole:
 		return v == t.Role
 	case SelectorCwd:
-		// t.Cwd is the folder the pane last reported, which the pane sets
-		// itself with cd or an OSC 7 it prints. A cwd: term only narrows
-		// which panes a caller addresses: every write to a matched pane is
-		// still checked on its own (resolveSelection, then the verb's own
-		// grant check). Never let it decide what a pane may do; use approvalRoot.
 		if t.Cwd == "" {
 			return false
 		}
@@ -315,8 +256,6 @@ func (term selectorTerm) matchOne(v string, t SelectorTarget) bool {
 	return false
 }
 
-// windowIDMatch reports whether v names the window id: the id itself, a start
-// of it (list-agents prints eight characters), or a glob over it.
 func windowIDMatch(v, id string) bool {
 	if id == "" {
 		return false

@@ -11,38 +11,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// The task verbs: add-task, list-tasks, get-task, claim-task, finish-task,
-// set-task-stage, block-task, release-task and remove-task. The store is
-// task.go.
-//
-// list-tasks and get-task read the session (scopeRead). Every other verb
-// writes the cards (scopeTask): a pane needs the task grant, and reaches only
-// its own session. Over a link the listing needs list and a change needs
-// write.
-//
-// Who made a change (by) is decided here, once, from the connection, as the
-// queue decides it (newQueueEntry): human only with a live human_nonce,
-// link:HOST over a link, the pane's window id for a process in a pane,
-// plugin:ID for a native plugin, and shell for anything else.
-//
-// Who may do what: a pane claims only for itself, and finishes, stages,
-// blocks or releases only the card it holds, unless it holds admin. The
-// person, a shell, a link and a plugin name the window on a claim and may act
-// on any card. remove-task from a pane needs admin.
-
-// taskCaller is who calls a task verb.
 type taskCaller struct {
-	by string
-	// window is the caller's pane, empty for a caller in no pane.
+	by     string
 	window string
-	// any is set for a caller that may claim for another pane and act on a
-	// card it does not hold.
-	any bool
-	// admin is set for a pane that holds admin, which remove-task needs.
-	admin bool
+	any    bool
+	admin  bool
 }
 
-// taskCallerOf places the caller on cs for a change to the cards of sess.
 func (d *Daemon) taskCallerOf(cs *connState, verb string, sess *Session, nonce string) (taskCaller, *verbError) {
 	if verr := refuseForwardedPane(cs, verb); verr != nil {
 		return taskCaller{}, verr
@@ -77,8 +52,6 @@ func (d *Daemon) taskCallerOf(cs *connState, verb string, sess *Session, nonce s
 	return taskCaller{by: pa.window, window: pa.window, any: admin, admin: admin}, nil
 }
 
-// mayTouch refuses a change to tk by a caller that does not hold it and may
-// not act on any card.
 func (c taskCaller) mayTouch(verb string, tk *TaskState) *verbError {
 	if c.any || tk.Holder == c.window {
 		return nil
@@ -151,8 +124,6 @@ type TaskFan struct {
 	FanID string `json:"fan_id"`
 }
 
-// taskDetail is get-task's result: the row, the prompt, the history and the
-// attachments.
 type taskDetail struct {
 	TaskRow
 	Prompt      string           `json:"prompt"`
@@ -160,7 +131,6 @@ type taskDetail struct {
 	Attachments []TaskAttachment `json:"attachments"`
 }
 
-// taskRow is tk as list-tasks gives it, its holder read from st.
 func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 	row := TaskRow{
 		ID:      tk.ID,
@@ -185,7 +155,6 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 		if w, ok := findWindowState(st, tk.Holder); ok {
 			row.Holder.Name, row.Holder.Harness, row.Holder.State = windowLabelOf(w), w.AgentHarness, w.AgentState.Name()
 		} else {
-			// A pane of another session (start-agent task_session).
 			row.Holder.Name, row.Holder.Harness = tk.HolderName, tk.HolderHarness
 		}
 	}
@@ -195,13 +164,11 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 	return row
 }
 
-// typed is row as a verb's result of type typ.
 func (row TaskRow) typed(typ string) TaskRow {
 	row.Type = typ
 	return row
 }
 
-// noTask is the refusal for a card id the session does not hold.
 func noTask(sess *Session, id string) *verbError {
 	return hintedVerbError(ErrVerbNoTask, "no task card "+echoName(id)+" in session "+echoName(sess.Name()), &VerbHint{
 		Param:   "id",
@@ -211,17 +178,8 @@ func noTask(sess *Session, id string) *verbError {
 	})
 }
 
-// errTaskRefused ends a task mutation whose refusal is in a *verbError the
-// closure holds.
 var errTaskRefused = errors.New("task change refused")
 
-// changeTask runs fn on the card id of sess inside one mutateState, so two
-// callers cannot both act on the same card at once. fn returns the action to
-// publish, "" for none, or the refusal. event names the task event the action
-// stands for, and is called once the row is worked out, in the same change: the
-// event leaves under the state lock, so events leave in the order of the
-// changes that made them. The card's row after the change is returned with the
-// action and the event published.
 func (d *Daemon) changeTask(sess *Session, id string, fn func(st *SessionState, tk *TaskState, now int64) (string, *verbError), event func(action string) taskEventSpec) (TaskRow, string, taskEventSpec, *verbError) {
 	var (
 		verr   *verbError
@@ -255,29 +213,18 @@ func (d *Daemon) changeTask(sess *Session, id string, fn func(st *SessionState, 
 	return row, action, spec, nil
 }
 
-// taskEventSpec is a task event a change publishes: its type, action, window
-// and reason. The zero value is no event.
 type taskEventSpec struct{ typ, action, window, reason string }
 
-// taskEvent puts a task event for row on the event stream and does nothing
-// else. It is called inside the state change that made the card's row, as that
-// change's last step, so a session's task events leave in the order of its
-// changes. The hub only takes its own lock and does non-blocking sends, so it
-// is safe under the state lock. What dispatch does with the event is
-// afterTaskEvent, after the change.
 func (d *Daemon) taskEvent(sess *Session, typ, action, window, reason string, row TaskRow) {
 	d.events.publish(streamEvent{Type: typ, Session: sess.Name(), Window: window, Action: action, Reason: reason, Task: &row})
 }
 
-// afterTaskSpec runs afterTaskEvent for the event spec of a change that
-// published one.
 func (d *Daemon) afterTaskSpec(sess *Session, spec taskEventSpec, row TaskRow) {
 	if spec.typ != "" {
 		d.afterTaskEvent(sess, spec.action, spec.window, spec.reason, row)
 	}
 }
 
-// taskStageParam checks a stage parameter.
 func taskStageParam(name, stage string) *verbError {
 	if stage == "" || slices.Contains(TaskStages, stage) {
 		return nil
@@ -289,7 +236,6 @@ func taskStageParam(name, stage string) *verbError {
 	})
 }
 
-// addTaskParams are what add-task takes.
 type addTaskParams struct {
 	Session    string `json:"session"`
 	Title      string `json:"title"`
@@ -302,7 +248,6 @@ type addTaskParams struct {
 	Machine    string `json:"machine"`
 }
 
-// verbAddTask answers add-task.
 func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p addTaskParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -384,21 +329,16 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 	return row.typed("task_added"), nil
 }
 
-// listTasksParams are what list-tasks takes.
 type listTasksParams struct {
 	Session     string `json:"session"`
 	Stage       string `json:"stage"`
 	Holder      string `json:"holder"`
 	Open        bool   `json:"open"`
 	AllSessions bool   `json:"all_sessions"`
-	// Project lists the cards of one repository from every session; Hosts
-	// also asks each linked machine for its own (task_project.go).
-	Project string `json:"project"`
-	Hosts   bool   `json:"hosts"`
+	Project     string `json:"project"`
+	Hosts       bool   `json:"hosts"`
 }
 
-// verbListTasks answers list-tasks: the session's cards, oldest first. With
-// all_sessions it lists every session's, in session name order.
 func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p listTasksParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -420,7 +360,6 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 			return nil, invalidParam("project", "project lists the cards of every session of the repository, so it takes no session or holder")
 		}
 		res := map[string]any{"type": "task_list", "project": p.Project, "tasks": d.projectRows(p)}
-		// A call that came over the link lists this machine's cards only.
 		if p.Hosts && (cs == nil || !cs.viaLink) {
 			rows, down := d.hostTaskRows(p)
 			res["tasks"] = append(res["tasks"].([]TaskRow), rows...)
@@ -444,8 +383,6 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 			rows = append(rows, listedTasks(sess, sess.GetState(), p, "")...)
 		}
 		res := map[string]any{"type": "task_list", "all_sessions": true}
-		// With hosts, every linked machine's project cards too. A call
-		// that came over the link lists this machine's cards only.
 		if p.Hosts && (cs == nil || !cs.viaLink) {
 			far, down := d.hostTaskRows(p)
 			for _, r := range far {
@@ -480,7 +417,6 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 	}, nil
 }
 
-// listedTasks is one session's rows of a list-tasks answer.
 func listedTasks(sess *Session, st *SessionState, p listTasksParams, holder string) []TaskRow {
 	rows := []TaskRow{}
 	for i := range st.Tasks {
@@ -499,20 +435,14 @@ func listedTasks(sess *Session, st *SessionState, p listTasksParams, holder stri
 	return rows
 }
 
-// taskIDParams are what get-task, finish-task, release-task and remove-task
-// take.
 type taskIDParams struct {
 	Session    string `json:"session"`
 	ID         string `json:"id"`
 	HumanNonce string `json:"human_nonce"`
-	// Host is the machine that owns the card, for release-task and
-	// finish-task from the pane that holds it there (task_project.go).
-	Host string `json:"host"`
+	Host       string `json:"host"`
 	remoteClaim
 }
 
-// taskCallerFor is taskCallerOf, or the pane of a linked machine a call over
-// the link names with remote_window.
 func (d *Daemon) taskCallerFor(cs *connState, verb string, sess *Session, nonce string, rc remoteClaim) (taskCaller, *verbError) {
 	if rc.RemoteWindow != "" {
 		c, _, verr := remoteCaller(cs, verb, rc)
@@ -521,8 +451,6 @@ func (d *Daemon) taskCallerFor(cs *connState, verb string, sess *Session, nonce 
 	return d.taskCallerOf(cs, verb, sess, nonce)
 }
 
-// sessionForTaskID checks the card id a verb names and resolves the session
-// it is looked up in.
 func (d *Daemon) sessionForTaskID(cs *connState, session, id string) (*Session, *verbError) {
 	if strings.TrimSpace(id) == "" {
 		return nil, invalidParam("id", "id is required: the card, such as t1")
@@ -530,7 +458,6 @@ func (d *Daemon) sessionForTaskID(cs *connState, session, id string) (*Session, 
 	return d.resolveVerbSession(cs, session)
 }
 
-// verbGetTask answers get-task: one card, with its prompt and history.
 func (d *Daemon) verbGetTask(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p taskIDParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -550,22 +477,16 @@ func (d *Daemon) verbGetTask(cs *connState, params json.RawMessage) (any, *verbE
 		Attachments: append([]TaskAttachment{}, tk.Attachments...)}, nil
 }
 
-// claimTaskParams are what claim-task takes.
 type claimTaskParams struct {
 	Session    string `json:"session"`
 	ID         string `json:"id"`
 	Next       bool   `json:"next"`
 	Window     string `json:"window"`
 	HumanNonce string `json:"human_nonce"`
-	// Host is the machine that owns the card: the claim is passed on to it
-	// for the calling pane (task_project.go).
-	Host string `json:"host"`
+	Host       string `json:"host"`
 	remoteClaim
 }
 
-// verbClaimTask answers claim-task: the card id, or with next the oldest card
-// nobody holds, taken for a pane. The pick and the take happen in one
-// mutateState, so two panes claiming at once take two cards.
 func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p claimTaskParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -612,10 +533,6 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 	err := sess.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, name)
 		if err != nil {
-			// Mapped once mutateState returns: mapResolveErr reads the
-			// session's state for its hint, and this function holds the state
-			// lock for writing. Mapped here, the daemon waited on itself and
-			// stopped answering every client (#1477).
 			missing = err
 			return errTaskRefused
 		}
@@ -662,8 +579,6 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 	return row.typed("task_claimed"), nil
 }
 
-// verbFinishTask answers finish-task: the card moves to done and its holder
-// lets it go.
 func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p taskIDParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -680,9 +595,6 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
-	// The pane that holds the card is its agent, done with it: the card
-	// goes on to verify or review (task_verify.go). Where it did the work is
-	// read before the change, since that runs git.
 	var work *TaskWork
 	if caller.window != "" && !d.lifecycleOff.Load() {
 		work = d.workOf(caller.window)
@@ -717,7 +629,6 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 	return row.typed("task_finished"), nil
 }
 
-// setTaskStageParams are what set-task-stage takes.
 type setTaskStageParams struct {
 	Session    string `json:"session"`
 	ID         string `json:"id"`
@@ -725,8 +636,6 @@ type setTaskStageParams struct {
 	HumanNonce string `json:"human_nonce"`
 }
 
-// verbSetTaskStage answers set-task-stage. A move to done is a finish: the
-// holder lets the card go, and task-finished is sent, as finish-task sends it.
 func (d *Daemon) verbSetTaskStage(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p setTaskStageParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -746,9 +655,6 @@ func (d *Daemon) verbSetTaskStage(cs *connState, params json.RawMessage) (any, *
 	if verr != nil {
 		return nil, verr
 	}
-	// With a verify command, a pane moves its card past verify only by
-	// finishing it, and a move to verify runs the command again, on the
-	// work recorded or on the pane that holds the card.
 	var work *TaskWork
 	cmd := ""
 	if tk, ok := sess.taskByID(p.ID); ok && !d.lifecycleOff.Load() {
@@ -794,7 +700,6 @@ func (d *Daemon) verbSetTaskStage(cs *connState, params json.RawMessage) (any, *
 	return row.typed("task_changed"), nil
 }
 
-// blockTaskParams are what block-task takes.
 type blockTaskParams struct {
 	Session    string `json:"session"`
 	ID         string `json:"id"`
@@ -803,9 +708,6 @@ type blockTaskParams struct {
 	HumanNonce string `json:"human_nonce"`
 }
 
-// verbBlockTask answers block-task: the card is marked stuck, with a reason,
-// or with clear the mark is lifted. A block keeps the holder: release-task
-// lets a card go.
 func (d *Daemon) verbBlockTask(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p blockTaskParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -849,8 +751,6 @@ func (d *Daemon) verbBlockTask(cs *connState, params json.RawMessage) (any, *ver
 	return row.typed("task_changed"), nil
 }
 
-// verbReleaseTask answers release-task: the holder lets the card go and it
-// keeps its stage, so another pane can take it.
 func (d *Daemon) verbReleaseTask(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p taskIDParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -886,7 +786,6 @@ func (d *Daemon) verbReleaseTask(cs *connState, params json.RawMessage) (any, *v
 	return row.typed("task_changed"), nil
 }
 
-// verbRemoveTask answers remove-task: the card and its history go.
 func (d *Daemon) verbRemoveTask(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p taskIDParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -938,9 +837,6 @@ func (d *Daemon) verbRemoveTask(cs *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"type": "task_removed", "id": p.ID}, nil
 }
 
-// restoreTasks puts a saved session's cards back after the restore, every
-// holder released, in one change: no agent comes back from a restart, and a
-// holder's pane may not have either.
 func (d *Daemon) restoreTasks(sess *Session, tasks []TaskState, next uint64) {
 	if len(tasks) == 0 && next == 0 {
 		return
@@ -959,14 +855,10 @@ func (d *Daemon) restoreTasks(sess *Session, tasks []TaskState, next uint64) {
 	}
 	d.afterReleased(sess, rows, taskReleaseRestart)
 	if d.dispatch.loaded() {
-		// A session resurrected later; at the start the daemon resumes
-		// them once the boards are read.
 		d.resumeVerifies(sess)
 	}
 }
 
-// releasedRows releases the cards of st whose holder held reports true, and
-// returns their rows.
 func releasedRows(sess *Session, st *SessionState, held func(holder string) bool, reason string) []TaskRow {
 	released := releaseHolders(sess, st, held, reason, time.Now().UnixNano())
 	rows := make([]TaskRow, len(released))
@@ -976,8 +868,6 @@ func releasedRows(sess *Session, st *SessionState, held func(holder string) bool
 	return rows
 }
 
-// afterReleased is what follows the release events of rows, published inside
-// the change that released them: the log line and afterTaskEvent for each.
 func (d *Daemon) afterReleased(sess *Session, rows []TaskRow, reason string) {
 	for _, row := range rows {
 		LogBasic("Released task %s in session %s: %s", row.ID, sess.Name(), reason)
@@ -985,9 +875,6 @@ func (d *Daemon) afterReleased(sess *Session, rows []TaskRow, reason string) {
 	}
 }
 
-// publishReleased says on the event stream that the cards of rows were
-// released for reason. It is called only from the session's event sink, which
-// runs under the state lock of the change that released them.
 func (d *Daemon) publishReleased(sess *Session, rows []TaskRow, reason string) {
 	for _, row := range rows {
 		LogBasic("Released task %s in session %s: %s", row.ID, sess.Name(), reason)

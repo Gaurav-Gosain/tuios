@@ -9,31 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// The delivery queue's verbs: queue-prompt, list-queued and cancel-queued. The
-// queue itself is agent_queue.go.
-//
-// queue-prompt types into a pane, later, so it is scopeWrite and a typing verb
-// (typingVerbs): at queue time the target must hold nothing the caller does
-// not, and must not be on needs_input unless the caller holds respond. The
-// delivery repeats those checks against the caller's grants as they are then,
-// and refuses to type over a prompt whatever the entry. cancel-queued writes
-// the queue, so it is scopeWrite too, and a pane drops only what it queued.
-// list-queued reads. Over a link, queue-prompt and cancel-queued need write
-// and list-queued needs list.
-//
-// Who queued an entry is decided here, once, from the connection, never from
-// a parameter: human only with a live human_nonce (humanNonceFor, which
-// also refuses any process inside a pane), link:HOST for a call over a link,
-// the pane's window id for a process in a pane, and shell for anything else.
-// A call a pane on another machine forwards through its report channel
-// (paneOnly) is none of these: paneAuthority places it nowhere, which would
-// read as shell, so both writing verbs refuse it (refuseForwardedPane).
-
-// refuseForwardedPane refuses a queue write from a hosted pane's report
-// channel. Such a call is a pane by construction, but not one of this
-// daemon's, so it has no grants here to check an entry against, and it must
-// not pass for the person's shell. The queue verbs are not forwarded today
-// (hostedCallVerbs); this holds if they ever are.
 func refuseForwardedPane(cs *connState, verb string) *verbError {
 	if cs == nil || !cs.paneOnly {
 		return nil
@@ -47,28 +22,19 @@ func refuseForwardedPane(cs *connState, verb string) *verbError {
 // as [agents.queue] max allows. Nothing was queued.
 const ErrVerbQueueFull = "queue_full"
 
-// queueMaxText bounds one queued message, in bytes.
 const queueMaxText = 16 << 10
 
-// queuePromptParams are what queue-prompt takes.
 type queuePromptParams struct {
-	Session    string `json:"session"`
-	Window     string `json:"window"`
-	Text       string `json:"text"`
-	HumanNonce string `json:"human_nonce"`
-	From       string `json:"from"`
-	// Parts is the message in ordered parts. When it is given, Text is
-	// ignored: a client sends both so a daemon older than parts types the
-	// text. See queue_parts.go.
-	Parts []queuePart `json:"parts"`
-	// Host is the machine the pane is on, for a pane of a linked machine.
-	// See queue_host.go.
-	Host string `json:"host"`
-	// ClientID names the message on the client's side. See queue_client_id.go.
-	ClientID string `json:"client_id"`
+	Session    string      `json:"session"`
+	Window     string      `json:"window"`
+	Text       string      `json:"text"`
+	HumanNonce string      `json:"human_nonce"`
+	From       string      `json:"from"`
+	Parts      []queuePart `json:"parts"`
+	Host       string      `json:"host"`
+	ClientID   string      `json:"client_id"`
 }
 
-// verbQueuePrompt answers queue-prompt.
 func (d *Daemon) verbQueuePrompt(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p queuePromptParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -125,8 +91,6 @@ func (d *Daemon) verbQueuePrompt(cs *connState, params json.RawMessage) (any, *v
 		repeat bool
 	)
 	if p.ClientID != "" {
-		// After the nonce check above, and per sender and pane, so a caller
-		// learns nothing about another's messages.
 		res, repeat, verr = d.queueDedup.once(newQueueDedupKey(e.origin, target.ID, p.ClientID), queueDedupNow(), func() (queuedResult, *verbError) {
 			return d.queuePrompt(sess, target, e)
 		})
@@ -147,16 +111,11 @@ func (d *Daemon) verbQueuePrompt(cs *connState, params json.RawMessage) (any, *v
 		out["duplicate"] = true
 	}
 	if p.Parts != nil {
-		// Tells the client the parts were read. A daemon older than parts
-		// leaves it out, having queued the text.
 		out["parts"] = len(p.Parts)
 	}
 	return out, nil
 }
 
-// queueTarget resolves the pane a message is queued for: the named window, or
-// the focused one. The person's inbox has no keyboard, and a pane that runs
-// no agent tuios knows of has nobody to take a prompt.
 func queueTarget(sess *Session, state *SessionState, window string) (WindowState, *verbError) {
 	if window == AgentInboxHuman {
 		return WindowState{}, hintedVerbError(ErrVerbNoKeyboard, "human has no pane to type into", &VerbHint{
@@ -188,10 +147,6 @@ func queueTarget(sess *Session, state *SessionState, window string) (WindowState
 	return target, nil
 }
 
-// newQueueEntry builds an entry for text from the caller on cs, deciding who
-// queued it (see the file comment). from is the caller's label for the
-// sender: a window of the session, resolved like ask-agent's, or a free label
-// over a link. A pane may name only itself, and human needs the nonce.
 func (d *Daemon) newQueueEntry(cs *connState, sess *Session, state *SessionState, text, from, nonce string) (*queueEntry, *verbError) {
 	if verr := refuseForwardedPane(cs, "queue-prompt"); verr != nil {
 		return nil, verr
@@ -254,16 +209,12 @@ func (d *Daemon) newQueueEntry(cs *connState, sess *Session, state *SessionState
 	return e, nil
 }
 
-// listQueuedParams are what list-queued takes.
 type listQueuedParams struct {
 	Session string `json:"session"`
 	Window  string `json:"window"`
-	// Host lists a pane's queue on that machine, over the link.
-	Host string `json:"host"`
+	Host    string `json:"host"`
 }
 
-// verbListQueued answers list-queued: one pane's queue, or every queue in the
-// session when window is omitted.
 func (d *Daemon) verbListQueued(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p listQueuedParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -320,25 +271,15 @@ func (d *Daemon) verbListQueued(cs *connState, params json.RawMessage) (any, *ve
 	}, nil
 }
 
-// cancelQueuedParams are what cancel-queued takes.
 type cancelQueuedParams struct {
 	Session    string `json:"session"`
 	Window     string `json:"window"`
 	ID         string `json:"id"`
 	All        bool   `json:"all"`
 	HumanNonce string `json:"human_nonce"`
-	// Host drops from a pane's queue on that machine, over the link.
-	Host string `json:"host"`
+	Host       string `json:"host"`
 }
 
-// verbCancelQueued answers cancel-queued.
-//
-// Who may drop what: the person, with a live human_nonce, any entry. A pane
-// only the entries it queued. A linked machine only the entries it queued:
-// matched by the name its link-peer handshake gave, or, for a machine that
-// gave none, by the connection that queued them. A caller outside every pane
-// without the nonce every entry but the person's, which need the nonce. A
-// pane on another machine, forwarded through its report channel, nothing.
 func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p cancelQueuedParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -371,7 +312,6 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 	}
 	state := sess.GetState()
 
-	// Who the caller is, to match against each entry's origin.
 	var mayDrop func(e *queueEntry) bool
 	switch {
 	case human:
@@ -385,8 +325,6 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 			if e.origin.kind != "link" || e.by == queueByHuman || e.origin.peer != peer {
 				return false
 			}
-			// Every machine that gave no name shares the empty peer, so
-			// for those only the connection that queued it may drop it.
 			return peer != "" || e.origin.conn == conn
 		}
 	default:
@@ -397,8 +335,6 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 		}
 	}
 
-	// The panes to look in: the named one, or, for an id with no window,
-	// every pane of the session.
 	var windows []string
 	if p.Window != "" || p.All {
 		target, verr := resolveQueueWindow(sess, state, p.Window)
@@ -445,10 +381,6 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 			}
 		}
 		if len(gone) > 0 {
-			// A stalled head held the rest; with it gone, the next is
-			// looked at again. It is typed at a rest reached after the
-			// stalled one was typed, since that text may still sit in
-			// the agent's input box.
 			if len(pq.entries) > 0 && !pq.delivering && pq.entries[0].state == queueWaiting {
 				q.armLocked(d, window, pq, q.restFor())
 			}
@@ -492,8 +424,6 @@ func (d *Daemon) verbCancelQueued(cs *connState, params json.RawMessage) (any, *
 	}, nil
 }
 
-// resolveQueueWindow resolves a window of the session, the focused one when
-// window is empty.
 func resolveQueueWindow(sess *Session, state *SessionState, window string) (string, *verbError) {
 	if window == "" {
 		id, err := focusedWindowID(state)

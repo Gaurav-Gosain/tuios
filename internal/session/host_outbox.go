@@ -16,64 +16,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// Mail to a machine whose link is down.
-//
-// send-agent-message to a session on another machine used to fail with
-// host_unreachable whenever that machine's link was down, which on a laptop is
-// every time the lid closed. Now a send can name the host (send-agent-message's
-// host param), and this daemon delivers it over the link, or, when the link is
-// down, keeps it here and delivers it when the link comes back, in the order it
-// was sent. The sender is told queued. Each machine with mail waiting has one
-// Inbox item (kind outbox) that says how many wait and which were refused, and
-// the rail's host row says how many.
-//
-// What is kept and how it is bounded:
-//
-//   - The queue is written to disk, owner only, on every change, so a daemon
-//     restart does not lose it.
-//   - At most outboxMaxPerHost messages wait for one machine and
-//     outboxMaxTotal in all. Past that a send is refused with rate_limited:
-//     nothing is dropped to make room.
-//   - A message is delivered with this daemon's own call on the link, so the
-//     far machine holds it to the link policy it has for this machine, as it
-//     does for any mail from here. A message from human cannot carry a nonce
-//     that far machine would honour, so it arrives there as claimed_human.
-//   - A delivery the far machine answers with an error is not retried: the
-//     answer is final (the session is gone, the policy refuses mail). It is
-//     dropped, and the Inbox item says so until the person dismisses it.
-//     Dismissing the item also discards what is still waiting for that host.
-//   - A caller that arrived over a link may not use it, since that would send
-//     as this machine to a machine the caller cannot reach itself. A pane's
-//     report channel drops the param.
-//
-// When a message is kept and when it goes:
-//
-//   - A send while earlier mail for the host waits, or is being delivered, is
-//     queued behind it rather than sent at once, so it cannot overtake it.
-//   - A send that fails without a final answer (the link is down, the call
-//     timed out, the far daemon had no room for another stream) is queued.
-//   - The queue is delivered when the link comes up, at once after a send was
-//     queued with the link up, and, when a delivery fails without a final
-//     answer while the link stays up, again after outboxRetryMin, doubling to
-//     outboxRetryMax. It is not left for the next time the link comes up.
-
 const (
-	// outboxMaxPerHost bounds the mail waiting for one machine.
-	outboxMaxPerHost = 64
-	// outboxMaxTotal bounds the mail waiting for every machine.
-	outboxMaxTotal = 256
-	// outboxMaxFailures is how many refused deliveries per machine the Inbox
-	// item remembers.
-	outboxMaxFailures = 8
-	// outboxDeliverBudget bounds one delivery.
+	outboxMaxPerHost    = 64
+	outboxMaxTotal      = 256
+	outboxMaxFailures   = 8
 	outboxDeliverBudget = 10 * time.Second
-	// outboxRetryMin and outboxRetryMax bound the wait before a delivery that
-	// failed with the link still up is tried again.
-	outboxRetryMin = time.Second
-	outboxRetryMax = 30 * time.Second
+	outboxRetryMin      = time.Second
+	outboxRetryMax      = 30 * time.Second
 )
 
-// outboxEntry is one message waiting for a machine.
 type outboxEntry struct {
 	ID       uint64          `json:"id"`
 	Host     string          `json:"host"`
@@ -83,7 +34,6 @@ type outboxEntry struct {
 	QueuedAt int64           `json:"queued_at"`
 }
 
-// outboxFailure is one delivery the far machine refused.
 type outboxFailure struct {
 	Session string `json:"session"`
 	To      string `json:"to,omitempty"`
@@ -91,7 +41,6 @@ type outboxFailure struct {
 	At      int64  `json:"at"`
 }
 
-// outboxFile is the on-disk form.
 type outboxFile struct {
 	Version  int                        `json:"version"`
 	NextID   uint64                     `json:"next_id"`
@@ -99,7 +48,6 @@ type outboxFile struct {
 	Failures map[string][]outboxFailure `json:"failures,omitempty"`
 }
 
-// hostOutbox is the daemon's queue of mail for machines whose link is down.
 type hostOutbox struct {
 	d *Daemon
 
@@ -108,15 +56,9 @@ type hostOutbox struct {
 	nextID   uint64
 	entries  []outboxEntry
 	failures map[string][]outboxFailure
-	// flushing marks a host whose queue is being delivered now, so a second
-	// status report does not start a second delivery out of order.
 	flushing map[string]bool
-	// retry is the pending retry of a host whose delivery failed with its link
-	// still up, and backoff is the wait before the next one.
-	retry   map[string]*time.Timer
-	backoff map[string]time.Duration
-	// failCall, set only by tests, runs before every send-agent-message call
-	// on a link. An error it returns is that call's error.
+	retry    map[string]*time.Timer
+	backoff  map[string]time.Duration
 	failCall func(params json.RawMessage) error
 }
 
@@ -130,7 +72,6 @@ func newHostOutbox(d *Daemon) *hostOutbox {
 	}
 }
 
-// call is send-agent-message on host's link, bounded by outboxDeliverBudget.
 func (o *hostOutbox) call(host string, params json.RawMessage) (json.RawMessage, error) {
 	o.mu.Lock()
 	fail := o.failCall
@@ -145,7 +86,6 @@ func (o *hostOutbox) call(host string, params json.RawMessage) (json.RawMessage,
 	return o.d.federation.Call(ctx, host, "send-agent-message", params)
 }
 
-// hostUp reports whether host's link is up now.
 func (o *hostOutbox) hostUp(host string) bool {
 	if o.d.federation == nil {
 		return false
@@ -154,8 +94,6 @@ func (o *hostOutbox) hostUp(host string) bool {
 	return ok && r.Status == federation.StatusUp
 }
 
-// busy reports whether mail for host waits or is being delivered, so a new
-// send must go behind it.
 func (o *hostOutbox) busy(host string) bool {
 	if o == nil {
 		return false
@@ -165,13 +103,10 @@ func (o *hostOutbox) busy(host string) bool {
 	return o.flushing[host] || o.hasLocked(host)
 }
 
-// outboxPath is where the queue is saved, beside the Inbox.
 func outboxPath() string {
 	return filepath.Join(getResurrectionDir(), "outbox", "mail.json")
 }
 
-// load reads the saved queue and opens an Inbox item for every machine it
-// names. A file that cannot be read is set aside rather than trusted.
 func (o *hostOutbox) load(path string) {
 	var f outboxFile
 	if data, err := os.ReadFile(path); err == nil {
@@ -194,7 +129,6 @@ func (o *hostOutbox) load(path string) {
 	}
 }
 
-// hostsLocked is every machine with mail waiting or a refusal to report.
 func (o *hostOutbox) hostsLocked() []string {
 	seen := map[string]bool{}
 	var out []string
@@ -213,7 +147,6 @@ func (o *hostOutbox) hostsLocked() []string {
 	return out
 }
 
-// saveLocked writes the queue. The caller holds mu.
 func (o *hostOutbox) saveLocked() {
 	if o.path == "" {
 		return
@@ -228,7 +161,6 @@ func (o *hostOutbox) saveLocked() {
 	}
 }
 
-// enqueue keeps a message for host. It refuses when the queue is full.
 func (o *hostOutbox) enqueue(host, sessionName, to string, params json.RawMessage) (outboxEntry, int, *verbError) {
 	o.mu.Lock()
 	waiting := 0
@@ -254,15 +186,12 @@ func (o *hostOutbox) enqueue(host, sessionName, to string, params json.RawMessag
 	return e, waiting + 1, nil
 }
 
-// pushHost tells the attached clients the host's row changed, so the rail's
-// count follows the queue.
 func (o *hostOutbox) pushHost(host string) {
 	if o.d.fleet != nil {
 		o.d.fleet.schedulePush(host)
 	}
 }
 
-// count is how many messages wait for host.
 func (o *hostOutbox) count(host string) int {
 	if o == nil {
 		return 0
@@ -278,8 +207,6 @@ func (o *hostOutbox) count(host string) int {
 	return n
 }
 
-// discard drops everything waiting for host, and what it remembered being
-// refused. It is what dismissing the host's outbox item does.
 func (o *hostOutbox) discard(host string) int {
 	o.mu.Lock()
 	kept := o.entries[:0]
@@ -307,9 +234,6 @@ func (o *hostOutbox) discard(host string) int {
 	return dropped
 }
 
-// kick delivers what waits for host, in order, on its own goroutine. It is
-// called when the host's link comes up, after a send was queued while the
-// link looked up, and by the retry timer.
 func (o *hostOutbox) kick(host string) {
 	if o == nil {
 		return
@@ -328,7 +252,6 @@ func (o *hostOutbox) kick(host string) {
 	go o.flush(host)
 }
 
-// hasLocked reports whether mail waits for host. The caller holds mu.
 func (o *hostOutbox) hasLocked(host string) bool {
 	for _, e := range o.entries {
 		if e.Host == host {
@@ -338,10 +261,6 @@ func (o *hostOutbox) hasLocked(host string) bool {
 	return false
 }
 
-// flush delivers host's queue until it is empty or a delivery fails without a
-// final answer. It ends the flushing mark under the same lock that finds the
-// queue empty, so a send that queued behind the delivery is never left with
-// nobody to deliver it.
 func (o *hostOutbox) flush(host string) {
 	defer func() {
 		o.noteAttention(host)
@@ -374,10 +293,6 @@ func (o *hostOutbox) flush(host string) {
 			LogBasic("Queued message %d to %s was refused there: %v", next.ID, host, err)
 			o.remove(next.ID, &outboxFailure{Session: next.Session, To: next.To, Reason: err.Error(), At: time.Now().UnixNano()})
 		default:
-			// No final answer. With the link down, what is left waits for it
-			// to come up, which kicks the queue. With the link still up (a
-			// timeout, no room for another stream), nothing else would, so
-			// try again after a backoff.
 			up := o.hostUp(host)
 			o.mu.Lock()
 			delete(o.flushing, host)
@@ -396,7 +311,6 @@ func (o *hostOutbox) flush(host string) {
 	}
 }
 
-// remove drops a delivered or refused entry, recording the refusal.
 func (o *hostOutbox) remove(id uint64, failed *outboxFailure) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -417,8 +331,6 @@ func (o *hostOutbox) remove(id uint64, failed *outboxFailure) {
 	o.saveLocked()
 }
 
-// waitReason is why the link to host is not up now, in the words the rail
-// uses, or "" when it is up or its state is not known.
 func (o *hostOutbox) waitReason(host string) string {
 	if o.d.federation == nil {
 		return ""
@@ -433,7 +345,6 @@ func (o *hostOutbox) waitReason(host string) string {
 	return r.Reason
 }
 
-// noteAttention opens, updates or closes host's outbox item.
 func (o *hostOutbox) noteAttention(host string) {
 	o.mu.Lock()
 	waiting := 0
@@ -451,10 +362,6 @@ func (o *hostOutbox) noteAttention(host string) {
 	o.d.attention.noteOutbox(host, waiting, fails, since, o.waitReason(host))
 }
 
-// sendAgentMessageToHost is send-agent-message with host: deliver the message
-// to a session on that machine over this machine's link, or keep it here while
-// the link is down. params is the request as it came, and is sent on without
-// host and human_nonce, with from_host set to this machine's name.
 func (d *Daemon) sendAgentMessageToHost(cs *connState, host, sessionName, to, from string, params json.RawMessage) (any, *verbError) {
 	if cs != nil && (cs.viaLink || cs.paneOnly) {
 		return nil, hintedVerbError(ErrVerbForbidden, "send-agent-message with host is for a caller on this machine", &VerbHint{
@@ -488,8 +395,6 @@ func (d *Daemon) sendAgentMessageToHost(cs *connState, host, sessionName, to, fr
 		return nil, newVerbError(ErrVerbInternal, "could not encode the message")
 	}
 
-	// Earlier mail for the host still waits, or is being delivered: this one
-	// goes behind it, or it would arrive first.
 	if d.outbox.busy(host) {
 		return d.queueForHost(host, sessionName, to, out, "earlier mail waits")
 	}
@@ -514,10 +419,6 @@ func (d *Daemon) sendAgentMessageToHost(cs *connState, host, sessionName, to, fr
 	return d.queueForHost(host, sessionName, to, out, err.Error())
 }
 
-// queueForHost keeps a message for host and answers agent_message_queued. When
-// the link is up (the send timed out, or queued behind earlier mail) the queue
-// is kicked now: nothing else would deliver it until the link went down and
-// came back.
 func (d *Daemon) queueForHost(host, sessionName, to string, params []byte, why string) (any, *verbError) {
 	e, waiting, verr := d.outbox.enqueue(host, sessionName, to, params)
 	if verr != nil {
@@ -538,7 +439,6 @@ func (d *Daemon) queueForHost(host, sessionName, to string, params []byte, why s
 	}, nil
 }
 
-// outboxSummary is the Inbox line for a machine's outbox.
 func outboxSummary(host string, waiting int, fails []outboxFailure, why string) string {
 	var s string
 	switch {
@@ -547,8 +447,6 @@ func outboxSummary(host string, waiting int, fails []outboxFailure, why string) 
 	case waiting > 1:
 		s = strconv.Itoa(waiting) + " messages wait for the link to " + host
 	}
-	// Why the link is down, so a link that waits for a sign-in does not read
-	// as a machine that is off.
 	if s != "" && why != "" {
 		s += ". " + why
 	}

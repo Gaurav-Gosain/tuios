@@ -13,30 +13,10 @@ import (
 	"tuios.dev/tml"
 )
 
-// What a plugin shows: dock cells and notices.
-//
-// The daemon holds a plugin's cells, so a hook can set one and exit, and no
-// process stays behind to keep it drawn. Clients get the whole list when it
-// changes and when they attach. With no cell set the map is nil, and nothing
-// here runs: no timer, no goroutine and no message. A cell costs one
-// broadcast and one frame per change, and setting the same text costs
-// neither. The cells go when the plugin stops, and a new daemon starts with
-// none: a plugin sets them again from its startup or its next hook.
-//
-// Both verbs need the ui grant (checkPluginGrants) and a caller placed in a
-// native plugin. A cell must be one the manifest names, which bounds the
-// count. A click on a cell runs an action of that plugin, the same call the
-// palette makes.
-
 const (
-	// maxCellBytes bounds a cell's text. The client cuts it to the cell's
-	// width.
-	maxCellBytes = 512
-	// maxNoticeRunes bounds a notice.
+	maxCellBytes   = 512
 	maxNoticeRunes = 200
-	// pluginUIBurst is how many cell changes and notices one plugin may send
-	// in a second.
-	pluginUIBurst = 8
+	pluginUIBurst  = 8
 )
 
 // PluginCell is one dock cell of a plugin.
@@ -58,7 +38,6 @@ type PluginUIPayload struct {
 	Level  string       `json:"level,omitempty"`
 }
 
-// pluginUICaller finds the plugin behind a call to a plugin's verb.
 func (d *Daemon) pluginUICaller(cs *connState, verb string) (*herdrplugin.Plugin, *verbError) {
 	pa := d.pluginAuthority(cs)
 	if pa == nil || pa.plugin == "" {
@@ -75,7 +54,6 @@ func (d *Daemon) pluginUICaller(cs *connState, verb string) (*herdrplugin.Plugin
 	return e.Plugin, nil
 }
 
-// admitUI reports whether plugin id may change what it shows now.
 func (h *pluginHost) admitUI(id string) *verbError {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -94,7 +72,6 @@ func (h *pluginHost) admitUI(id string) *verbError {
 	return nil
 }
 
-// verbPluginCell sets or clears one dock cell of the calling plugin.
 func (d *Daemon) verbPluginCell(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		ID     string `json:"id"`
@@ -134,7 +111,6 @@ func (d *Daemon) verbPluginCell(cs *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"type": "plugin_cell", "id": p.ID}, nil
 }
 
-// verbPluginNotify shows the person one message, under the plugin's name.
 func (d *Daemon) verbPluginNotify(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Text  string `json:"text"`
@@ -167,8 +143,6 @@ func (d *Daemon) verbPluginNotify(cs *connState, params json.RawMessage) (any, *
 	return map[string]any{"type": "plugin_notified"}, nil
 }
 
-// setCell stores cell, and removes it when its text is empty. It reports a
-// change.
 func (h *pluginHost) setCell(cell PluginCell) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -190,7 +164,6 @@ func (h *pluginHost) setCell(cell PluginCell) bool {
 	return true
 }
 
-// dropCells removes every cell of a plugin that stopped.
 func (h *pluginHost) dropCells(id string) {
 	h.mu.Lock()
 	n := len(h.cells[id])
@@ -201,7 +174,6 @@ func (h *pluginHost) dropCells(id string) {
 	}
 }
 
-// cellList is every cell, in a stable order.
 func (h *pluginHost) cellList() []PluginCell {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -211,15 +183,12 @@ func (h *pluginHost) cellList() []PluginCell {
 			out = append(out, c)
 		}
 	}
-	// sortx, not slices.SortFunc: a plugin changes its cells at most 8 times
-	// a second, and a generic sort of this struct costs about 20 KB of binary.
 	sortx.SortFunc(out, func(a, b PluginCell) int {
 		return cmp.Or(cmp.Compare(a.Plugin, b.Plugin), cmp.Compare(a.ID, b.ID))
 	})
 	return out
 }
 
-// pushPluginCells sends the attached clients the whole list.
 func (d *Daemon) pushPluginCells() {
 	d.broadcastPluginUI(&PluginUIPayload{Cells: d.plugins.cellList()})
 }
@@ -239,7 +208,6 @@ func (d *Daemon) broadcastPluginUI(p *PluginUIPayload) {
 	}
 }
 
-// sendPluginCells sends a client that just attached the cells, if any.
 func (d *Daemon) sendPluginCells(cs *connState) {
 	if d.plugins == nil {
 		return

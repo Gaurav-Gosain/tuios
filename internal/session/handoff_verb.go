@@ -10,10 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// verbDaemonUpgrade starts a live upgrade to another binary. See
-// handoff.go. It answers after the fallible half, so a refusal reaches the
-// caller with every part of the daemon as it was; the exec follows once the
-// answer is written.
 func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Binary string `json:"binary"`
@@ -26,11 +22,6 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 			Detail: "Nothing was changed. Run tuios daemon upgrade on the machine whose daemon it is.",
 		})
 	}
-	// Whatever the caller's grants: the binary named runs as the daemon, which
-	// holds every pane's terminal and the key that signs every pane's token.
-	// A plugin never may. A pane may when the person says yes in a dialog at
-	// an attached client (upgrade_confirm.go).
-	// The CLI prints only the message, so each says what to do as well.
 	notPerson := func(why string) *verbError {
 		return hintedVerbError(ErrVerbForbidden, "daemon-upgrade is for the person, and an upgrade asked for from a pane needs their Yes in a dialog at an attached client. Nothing was changed. "+why+".", &VerbHint{
 			Detail: "The dialog opens on every attached client and shows the binary, its version and the pane that asked. From a terminal outside tuios, tuios daemon upgrade needs no dialog.",
@@ -47,10 +38,6 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 	}
 	req := handoffRequest{binary: p.Binary}
 	if confirm {
-		// The preflight runs the pane's file as the daemon's own child, so it
-		// runs only when a dialog could be shown, and only on the file that was
-		// there when the call came: pinned before the checks, and the one the
-		// preflight ran must be it.
 		pin, err := statFileID(p.Binary)
 		if err != nil {
 			return nil, upgradeRefusal(errfmt.Errorf("%s: %w", p.Binary, err))
@@ -59,8 +46,6 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 			LogBasic("Live upgrade from a pane refused: %s", why)
 			return nil, notPerson(why)
 		}
-		// The dialog shows the binary's path and version, so the preflight
-		// runs before it, and the upgrade then takes only the file it ran.
 		bin, err := preflightBinary(p.Binary, preflightOpts{copy: req.copyRoute})
 		if err != nil {
 			return nil, upgradeRefusal(err)
@@ -81,7 +66,6 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 	if err != nil {
 		return nil, upgradeRefusal(err)
 	}
-	// commit returns only when the exec failed.
 	cs.takeover = func(*bufio.Reader) { LogError("Live upgrade: %v", run.commit()) }
 	return map[string]any{
 		"type":           "daemon_upgrading",
@@ -99,7 +83,6 @@ func (d *Daemon) verbDaemonUpgrade(cs *connState, params json.RawMessage) (any, 
 	}, nil
 }
 
-// upgradeRefusal is the refusal of an upgrade that changed nothing.
 func upgradeRefusal(err error) *verbError {
 	code := ErrVerbUpgradeRefused
 	if errors.Is(err, errHandoffBusy) {

@@ -12,20 +12,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
-// Test-only verbs for the live handoff, registered only when the daemon starts
-// with the knob handoff=1. The end-to-end tests drive the primitives through
-// them before the user-facing command exists, and drive the controls through
-// them after: a hold between writing the manifest and the exec, and a fork in
-// the span where the descriptors are exposed. No build is meant to ship with
-// the knob set, and a daemon without it does not know these verbs.
-
-// handoffTestOn reports whether the handoff knob turns on the verbs, and the
-// other handoff knobs with them.
 func handoffTestOn() bool { return testknob.String("handoff") == "1" }
 
-// registerHandoffTestVerbs adds the verbs, once, when the knob asks. It
-// runs from NewDaemon: the registry is built by an init of its own, which an
-// init here could run before.
 func registerHandoffTestVerbs() {
 	if !handoffTestOn() {
 		return
@@ -112,7 +100,6 @@ func (d *Daemon) verbTestHandoff(cs *connState, params json.RawMessage) (any, *v
 	return map[string]any{"pid": os.Getpid(), "panes": run.panes, "manifest_bytes": run.manifestBytes}, nil
 }
 
-// swapFolders swaps folders a and b with three renames.
 func swapFolders(a, b string) func() {
 	return func() {
 		for _, mv := range [][2]string{{a, a + ".swap"}, {b, a}, {a + ".swap", b}} {
@@ -167,7 +154,6 @@ func (d *Daemon) verbTestQuiesce(cs *connState, params json.RawMessage) (any, *v
 	return map[string]any{"cycles": max(p.Cycles, 1), "read_while_quiesced": read}, nil
 }
 
-// outputSeqNow is the number of bytes the pane has produced.
 func (p *PTY) outputSeqNow() int64 {
 	p.outputMu.RLock()
 	defer p.outputMu.RUnlock()

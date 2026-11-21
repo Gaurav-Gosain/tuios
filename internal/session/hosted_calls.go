@@ -17,114 +17,31 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
-// Reports from a pane on another machine.
-//
-// A hosted pane's process runs on one machine and its window is in a session
-// on another (hosted_pane.go). An agent in it wants to do what an agent in any
-// pane does: report its state from a hook, set its meta, read its mail and
-// send mail. All of that is about the window, which lives on the owning
-// machine, and the link is dialled one way, from the owner, so the process has
-// no socket that reaches the owner.
-//
-// So the calls travel the way everything else on the link does, from a
-// connection the owner opened:
-//
-//  1. The owner sends its window id with open-pane. This machine exports it to
-//     the process as TUIOS_PANE_ID, and the reply carries a calls token that
-//     only the owner sees.
-//  2. The owner opens one more connection, pane-calls, with the pane id and
-//     the token. From then on it is the pane's report channel: this machine
-//     writes a request line on it, the owner runs the call and writes the
-//     answer back, matched by id.
-//  3. The process calls this machine's daemon as usual, with the ordinary
-//     commands. A call of one of hostedCallVerbs that names the pane (window,
-//     to or from set to TUIOS_PANE_ID) is not run here. It is sent down the
-//     channel and its answer is the owner's.
-//
-// What this grants, and how each limit is enforced:
-//
-//   - Only the process in the pane is forwarded for. This machine checks the
-//     caller's pid, as the kernel gave it for the connection: it has to be the
-//     pane's process or a descendant of it, or run on the pane's terminal. A
-//     call from anywhere else that names the pane is refused, so a process
-//     here that learned the id cannot report as the pane.
-//   - Only the verbs in hostedCallVerbs cross, and wait-for only for
-//     agent-message. Everything else a process asks this daemon is answered
-//     here, as it always was.
-//   - The owner does not trust the request. It runs it as the window the pane
-//     is drawn in, whatever the request said: session, window, to and from are
-//     overwritten with that window's own, paths and pids that name things on
-//     the far machine are dropped, and the call runs as a caller inside a pane,
-//     so it can never speak as the person, verified or claimed. A far machine
-//     that writes its own requests on the channel gets exactly what the pane's
-//     process gets, which is what an agent in a pane of the owner's gets for its
-//     own window. One thing it gets less of: a message it sends may attach only
-//     a file in the session's stash, the rule a sender on the link is held to,
-//     because a path it names is a file on the owner's machine that its process
-//     cannot see. The path is refused before it is looked at, so the answer
-//     does not say whether a file exists on the owner.
-//   - A forwarded wait-for runs on the owner for at most hostedWaitMax,
-//     whatever the far side asked, and ends when the channel it came on ends.
-//     The owner does not wait for calls in flight before it opens the next
-//     channel, so a long wait never holds off the pane's reports.
-//   - The channel is opened with the token, which the process never sees, so
-//     the process cannot open one of its own. Lines are bounded both ways and
-//     the calls in flight per pane are capped.
-//
-// Version skew: an owner from before this sends no window id and opens no
-// channel. The process then has no TUIOS_PANE_ID, as before, and a call that
-// names the pane id is answered with protocol_mismatch, which says to update
-// tuios on the owning machine. A far machine from before this checks open-pane
-// against a schema with no window param and refuses the request with
-// invalid_params before it spawns anything. The owner then sends open-pane
-// again on the same stream without the window (openPaneReply), gets no token,
-// and opens no channel.
-
-// hostedCallVerbs are the verbs a hosted pane's process may send to its owner,
-// with the parameter that names the pane.
 var hostedCallVerbs = map[string]string{
-	"set-agent-state":     "window",
-	"set-agent-meta":      "window",
-	"set-agent-session":   "window",
-	"read-agent-messages": "to",
-	"send-agent-message":  "from",
-	"wait-for":            "window",
-	// set-agent-state's activity with no state, about the same pane.
+	"set-agent-state":       "window",
+	"set-agent-meta":        "window",
+	"set-agent-session":     "window",
+	"read-agent-messages":   "to",
+	"send-agent-message":    "from",
+	"wait-for":              "window",
 	"report-agent-activity": "window",
 	"agent-mail-notice":     "window",
-	// An OSC 7501 report from a process with no terminal, about the same pane.
 	"report-program-status": "window",
 }
 
-// hostedCallDropped are parameters removed from a forwarded call before the
-// owner runs it. Each names something on the far machine, a file or a process,
-// which on the owner's machine is a different thing or nothing, or claims to be
-// the person.
 var hostedCallDropped = []string{"transcript_path", "transcript_leaf", "harness_pid", "human_nonce", "from_host", "any_session", "host"}
 
 const (
-	// hostedCallsMaxLine bounds one line on a report channel, either way.
-	hostedCallsMaxLine = 1 << 20
-	// hostedCallsMaxInFlight caps the calls one pane has outstanding.
+	hostedCallsMaxLine     = 1 << 20
 	hostedCallsMaxInFlight = 16
-	// hostedCallBudget bounds a forwarded call that is not a wait.
-	hostedCallBudget = 15 * time.Second
-	// hostedCallsAttachWait is how long a call waits for the owner's channel
-	// when the pane has just opened. A hook fires the moment an agent starts,
-	// which can be before the owner's second connection lands.
-	hostedCallsAttachWait = 5 * time.Second
-	// hostedCallsRetry is how long the owner waits before opening a report
-	// channel again after one dropped with the pane still open.
-	hostedCallsRetry = 2 * time.Second
-	// hostedWaitMax caps a forwarded wait-for.
-	hostedWaitMax = time.Hour
+	hostedCallBudget       = 15 * time.Second
+	hostedCallsAttachWait  = 5 * time.Second
+	hostedCallsRetry       = 2 * time.Second
+	hostedWaitMax          = time.Hour
 )
 
-// hostedWindowIDPattern is what an owner's window id may be. It becomes an
-// environment variable here, so it is a token and nothing else.
 var hostedWindowIDPattern = lazyre.New(`^[A-Za-z0-9._-]{1,64}$`)
 
-// newHostedCallsToken is a fresh secret for one pane's report channel.
 func newHostedCallsToken() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -133,8 +50,6 @@ func newHostedCallsToken() string {
 	return hex.EncodeToString(b[:])
 }
 
-// hostedCalls is the far half: the channel the owner opened for one pane, if
-// any.
 type hostedCalls struct {
 	mu     sync.Mutex
 	ch     *hostedCallChannel
@@ -142,7 +57,6 @@ type hostedCalls struct {
 	closed bool
 }
 
-// readyLocked is closed when the first channel attaches. The caller holds mu.
 func (h *hostedCalls) readyLocked() chan struct{} {
 	if h.ready == nil {
 		h.ready = make(chan struct{})
@@ -150,9 +64,6 @@ func (h *hostedCalls) readyLocked() chan struct{} {
 	return h.ready
 }
 
-// attach makes ch the pane's channel. A channel already attached is closed:
-// only the owner holds the token, so a second channel is the owner coming
-// back, and the old one is dead or about to be.
 func (h *hostedCalls) attach(ch *hostedCallChannel) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -172,7 +83,6 @@ func (h *hostedCalls) attach(ch *hostedCallChannel) bool {
 	return true
 }
 
-// detach forgets ch if it is still the pane's channel.
 func (h *hostedCalls) detach(ch *hostedCallChannel) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -181,7 +91,6 @@ func (h *hostedCalls) detach(ch *hostedCallChannel) {
 	}
 }
 
-// current is the channel, waiting up to wait for the first one to attach.
 func (h *hostedCalls) current(wait time.Duration) *hostedCallChannel {
 	h.mu.Lock()
 	ch, ready := h.ch, h.readyLocked()
@@ -198,7 +107,6 @@ func (h *hostedCalls) current(wait time.Duration) *hostedCallChannel {
 	return h.ch
 }
 
-// close ends the channel for good, with the pane.
 func (h *hostedCalls) close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -209,7 +117,6 @@ func (h *hostedCalls) close() {
 	}
 }
 
-// hostedCallChannel is one open report channel, on this machine's side.
 type hostedCallChannel struct {
 	conn    net.Conn
 	writeMu sync.Mutex
@@ -221,14 +128,12 @@ type hostedCallChannel struct {
 	done     chan struct{}
 }
 
-// hostedCallRequest is one line this machine writes on the channel.
 type hostedCallRequest struct {
 	ID     uint64          `json:"id"`
 	Verb   string          `json:"verb"`
 	Params json.RawMessage `json:"params,omitempty"`
 }
 
-// hostedCallReply is one line the owner writes back.
 type hostedCallReply struct {
 	ID     uint64          `json:"id"`
 	Result json.RawMessage `json:"result,omitempty"`
@@ -239,7 +144,6 @@ func newHostedCallChannel(conn net.Conn) *hostedCallChannel {
 	return &hostedCallChannel{conn: conn, pending: make(map[uint64]chan hostedCallReply), done: make(chan struct{})}
 }
 
-// call sends one request to the owner and waits for its answer.
 func (c *hostedCallChannel) call(ctx context.Context, verb string, params json.RawMessage) (json.RawMessage, *verbError) {
 	c.mu.Lock()
 	if c.inFlight >= hostedCallsMaxInFlight {
@@ -284,7 +188,6 @@ func (c *hostedCallChannel) call(ctx context.Context, verb string, params json.R
 	}
 }
 
-// readLoop delivers the owner's answers until the channel ends.
 func (c *hostedCallChannel) readLoop(br *bufio.Reader) {
 	defer close(c.done)
 	for {
@@ -312,8 +215,6 @@ func hostedChannelLost() *verbError {
 	return newVerbError(ErrVerbHostUnreachable, "the connection to the machine that owns this pane dropped before it answered")
 }
 
-// verbPaneCalls turns this connection into a hosted pane's report channel. Only
-// the owner can open it: the token is in the open-pane reply and nowhere else.
 func (d *Daemon) verbPaneCalls(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Pane  string `json:"pane"`
@@ -338,11 +239,8 @@ func (d *Daemon) verbPaneCalls(cs *connState, params json.RawMessage) (any, *ver
 	return map[string]any{"type": "pane_calls", "pane": p.Pane}, nil
 }
 
-// serveHostedCallChannel holds one report channel open until either end stops.
 func (d *Daemon) serveHostedCallChannel(cs *connState, br *bufio.Reader, hp *hostedPane) {
 	conn := cs.conn
-	// The verb reply went out under a write deadline, and a channel can sit
-	// quiet for as long as the agent does.
 	_ = conn.SetReadDeadline(time.Time{})
 	_ = conn.SetWriteDeadline(time.Time{})
 	ch := newHostedCallChannel(conn)
@@ -366,8 +264,6 @@ func (d *Daemon) serveHostedCallChannel(cs *connState, br *bufio.Reader, hp *hos
 	_ = conn.Close()
 }
 
-// hostedPaneByAddress finds the hosted pane a call names, by the owner's window
-// id or by the pane id.
 func (d *Daemon) hostedPaneByAddress(addr string) *hostedPane {
 	if addr == "" {
 		return nil
@@ -382,10 +278,6 @@ func (d *Daemon) hostedPaneByAddress(addr string) *hostedPane {
 	return nil
 }
 
-// callerInHostedPane reports whether the process on cs runs in the hosted pane:
-// it is the pane's process or a descendant, or its terminal is the pane's. A
-// caller whose pid the platform does not give, or whose record cannot be read,
-// is not.
 func (d *Daemon) callerInHostedPane(cs *connState, hp *hostedPane) bool {
 	if cs == nil || cs.peerPID <= 0 || hp.cmd == nil || hp.cmd.Process == nil {
 		return false
@@ -394,9 +286,6 @@ func (d *Daemon) callerInHostedPane(cs *connState, hp *hostedPane) bool {
 	return in
 }
 
-// forwardHostedCall sends a call that names a hosted pane to the machine that
-// owns it. handled is false for a call that does not name one, which is then
-// run here as it always was.
 func (d *Daemon) forwardHostedCall(cs *connState, verb string, params json.RawMessage) (result any, verr *verbError, handled bool) {
 	field, ok := hostedCallVerbs[verb]
 	if !ok || len(params) == 0 {
@@ -460,13 +349,8 @@ func (d *Daemon) forwardHostedCall(cs *connState, verb string, params json.RawMe
 	return raw, nil, true
 }
 
-// The owner's half.
-
-// errHostedCallsFinal ends the owner's attempts to hold a report channel.
 var errHostedCallsFinal = errors.New("the far machine will not take a report channel for this pane")
 
-// serveHostedCalls holds the report channel of one window whose process is on
-// another machine, for as long as the pane is open.
 func (d *Daemon) serveHostedCalls(s *Session, windowID string, p *remotePane) {
 	if p.callsToken == "" {
 		return
@@ -488,7 +372,6 @@ func (d *Daemon) serveHostedCalls(s *Session, windowID string, p *remotePane) {
 	}
 }
 
-// hostedCallsOnce opens one report channel and serves it until it ends.
 func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) error {
 	ctx, cancel := context.WithTimeout(d.ctx, remotePaneOpenBudget)
 	stream, err := p.fed.OpenConnection(ctx, p.host)
@@ -498,8 +381,6 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 	}
 	stop := context.AfterFunc(d.ctx, func() { _ = stream.Close() })
 	defer stop()
-	// The watcher ends with this call. Without exit it would wait for the pane
-	// to close, and every retry after a channel end would add one more.
 	exit := make(chan struct{})
 	defer close(exit)
 	go func() {
@@ -538,11 +419,6 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 		return resp.Error
 	}
 
-	// The calls in flight are not waited for when the channel ends. Their
-	// answers would go to a dead stream, and waiting would hold off the next
-	// channel, and every report the pane makes, for as long as the longest
-	// wait-for asked. ended tells them the channel is gone, and a wait-for
-	// stops on it.
 	var writeMu sync.Mutex
 	slots := make(chan struct{}, hostedCallsMaxInFlight)
 	ended := make(chan struct{})
@@ -588,11 +464,6 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 	}
 }
 
-// runHostedCall runs one call a pane on another machine sent, as the window the
-// pane is drawn in. Whatever the request said about which session, window,
-// sender or reader it is, the answer is this window's; see the file comment.
-// ended is closed when the report channel the call came on ends, which stops a
-// wait-for; nil means it never ends.
 func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params json.RawMessage, ended <-chan struct{}) (any, *verbError) {
 	field, ok := hostedCallVerbs[verb]
 	if !ok {
@@ -617,9 +488,6 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 	for _, name := range hostedCallDropped {
 		delete(fields, name)
 	}
-	// A selector reaches past the window into every session here. It is
-	// refused rather than dropped, since dropping it would turn a message
-	// meant for many panes into a notice nobody asked for.
 	if _, ok := fields["select"]; ok {
 		return nil, refuseSelectFromHostedPane(&connState{paneOnly: true})
 	}
@@ -632,9 +500,6 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 		fields["timeout"] = mustJSON(clampHostedWait(fields["timeout"]))
 	}
 	if verb == "send-agent-message" {
-		// The sender is the window. A request that named someone else, the
-		// person included, is refused rather than quietly rewritten, so the
-		// caller learns its message did not go out as it asked.
 		var from string
 		_ = jsonx.Unmarshal(fields["from"], &from)
 		if from != "" && from != windowID {
@@ -654,10 +519,6 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 	return entry.handler(d, cs, raw)
 }
 
-// clampHostedWait is the timeout, in milliseconds, a forwarded wait-for runs
-// with here: what the far machine asked, capped at hostedWaitMax. The far side
-// caps its own budget the same way, and this side does not take its word for
-// it. A missing, zero or unreadable timeout keeps wait-for's default.
 func clampHostedWait(raw json.RawMessage) int {
 	var ms int64
 	if len(raw) > 0 && jsonx.Unmarshal(raw, &ms) != nil {
@@ -669,8 +530,6 @@ func clampHostedWait(raw json.RawMessage) int {
 	return int(min(ms, hostedWaitMax.Milliseconds()))
 }
 
-// windowOnHost reports whether the session still has the window, with its
-// process on host.
 func windowOnHost(s *Session, windowID, host string) bool {
 	st := s.GetState()
 	for i := range st.Windows {
@@ -681,7 +540,6 @@ func windowOnHost(s *Session, windowID, host string) bool {
 	return false
 }
 
-// mustJSON marshals a value that cannot fail to marshal.
 func mustJSON(v any) json.RawMessage {
 	raw, err := jsonx.Marshal(v)
 	if err != nil {

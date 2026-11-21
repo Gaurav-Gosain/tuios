@@ -1,17 +1,11 @@
 package session
 
-// WriteMessage carries every gob frame: state syncs, terminal-state snapshots
-// and every control message. The callers hand it the raw unix socket, so each
-// Write it makes is a syscall made under the caller's send lock.
-
 import (
 	"bytes"
 	"encoding/binary"
 	"testing"
 )
 
-// wantControlFrame builds a control frame by hand from the documented layout:
-// a 4-byte big-endian length, the type byte, codec byte 0, then the payload.
 func wantControlFrame(msgType MessageType, payload []byte) []byte {
 	frame := make([]byte, 6, 6+len(payload))
 	binary.BigEndian.PutUint32(frame, uint32(2+len(payload)))
@@ -20,8 +14,6 @@ func wantControlFrame(msgType MessageType, payload []byte) []byte {
 	return append(frame, payload...)
 }
 
-// controlFramePayloads covers an empty payload, a small one and one larger
-// than a socket buffer.
 func controlFramePayloads() [][]byte {
 	large := make([]byte, 512*1024)
 	for i := range large {

@@ -62,13 +62,10 @@ func TestWaitForOutputDoesNotSlowFlood(t *testing.T) {
 		return min(a, b)
 	}
 
-	// Fill the scrollback first, which is what makes one capture expensive.
 	flood(20000)
 	const lines = 500000
 	without := best(lines)
 
-	// A waiter on its own connection that never matches. Only the request is
-	// written: the answer comes when the daemon stops.
 	w := dialVerb(t, sp)
 	w.send(t, `{"id":1,"verb":"wait-for","params":{"condition":"window-output","session":"flood","window":"`+id+`","pattern":"NEVER-MATCHES-[X]YZ","timeout":600000}}`)
 	waitForSubscribers(t, d, 1)
@@ -96,24 +93,14 @@ func TestWaitForOutputDoesNotSlowFlood(t *testing.T) {
 	t.Logf("seq 1 %d: %v without a waiter, %v with one (%.2fx); the waiter took %d captures holding the lock %v in %v",
 		lines, without, with, float64(with)/float64(without), gotCaptures, gotHeld, ran)
 
-	// The gap allows one capture per waitOutputMinGap, and the backstop one
-	// more per waitOutputRecheck. A capture per event took about one per
-	// millisecond.
 	if limit := int(ran/waitOutputMinGap+ran/waitOutputRecheck) + 3; gotCaptures > limit {
 		t.Errorf("the waiter took %d captures in %v, more than the %d its gap allows", gotCaptures, ran, limit)
 	}
-	// A capture per event held the lock for most of the flood. With the gap,
-	// the share is a capture's cost against the gap after it, which stays
-	// under half until one capture takes as long as the gap.
 	if gotHeld > ran/2 {
 		t.Errorf("the waiter held the emulator lock %v of the %v the floods ran", gotHeld, ran)
 	}
 }
 
-// caughtUp reports whether the pane's emulator has applied every byte the
-// pane has read. The read loop queues several megabytes ahead of the
-// emulator, so the shell finishing says nothing about the emulator, and the
-// emulator is what a waiter's captures slow down.
 func caughtUp(p *PTY) bool {
 	p.outputMu.Lock()
 	read := p.outputSeq
@@ -124,7 +111,6 @@ func caughtUp(p *PTY) bool {
 	return applied >= read
 }
 
-// waitForSubscribers waits until the event hub has at least n subscribers.
 func waitForSubscribers(t *testing.T, d *Daemon, n int) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

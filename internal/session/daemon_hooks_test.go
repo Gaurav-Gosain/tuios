@@ -11,14 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// Hooks used to be wired entirely into the client, so a session running
-// detached under the daemon fired none of them: a window could be created, be
-// closed, or finish an agent turn with nobody attached and no command ran.
-// These pin the fix at the level the fix works at, which is the daemon's own
-// event sink.
-
-// hookRecorder collects the firings a daemon's hook table produces, without
-// spawning a shell per event.
 type hookRecorder struct {
 	mu    sync.Mutex
 	fired []hooks.Context
@@ -30,7 +22,6 @@ func (r *hookRecorder) add(_ string, ctx hooks.Context) {
 	r.fired = append(r.fired, ctx)
 }
 
-// of returns the firings for one event, in order.
 func (r *hookRecorder) of(event hooks.Event) []hooks.Context {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -43,8 +34,6 @@ func (r *hookRecorder) of(event hooks.Event) []hooks.Context {
 	return out
 }
 
-// await waits for want firings of an event and returns them. It fails rather
-// than returning short, so a caller never asserts against a half-arrived slice.
 func (r *hookRecorder) await(t *testing.T, event hooks.Event, want int) []hooks.Context {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -60,12 +49,8 @@ func (r *hookRecorder) await(t *testing.T, event hooks.Event, want int) []hooks.
 	}
 }
 
-// settle gives any further firing a chance to arrive before a count is trusted.
-// It is only used where the assertion is that nothing more happens.
 func (r *hookRecorder) settle() { time.Sleep(300 * time.Millisecond) }
 
-// startHookDaemon starts a daemon whose hook table holds one command per named
-// event and reports the firings instead of running a shell.
 func startHookDaemon(t *testing.T, events ...hooks.Event) (*Daemon, string, *hookRecorder) {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
@@ -99,8 +84,6 @@ func startHookDaemon(t *testing.T, events ...hooks.Event) (*Daemon, string, *hoo
 // session is the one a program is watching instead of a person.
 func TestADetachedSessionFiresTheNewWindowHook(t *testing.T) {
 	d, sp, rec := startHookDaemon(t, hooks.AfterNewWindow)
-	// The session's own first window already fires the hook, which is itself the
-	// point. Let it land so the assertion is about the window this test creates.
 	makeSessionWithWindow(t, d, "detached")
 	rec.await(t, hooks.AfterNewWindow, 1)
 	c := dialVerb(t, sp)
@@ -202,8 +185,6 @@ func TestASessionSideHookFiresOncePerEventNotOncePerClient(t *testing.T) {
 	d, sp, rec := startHookDaemon(t, hooks.AfterNewWindow)
 	makeSessionWithWindow(t, d, "crowded")
 
-	// Each client keeps the last state it was sent, which is what it would push
-	// back on its next sync.
 	type peer struct {
 		client *TUIClient
 		mu     sync.Mutex
@@ -240,9 +221,6 @@ func TestASessionSideHookFiresOncePerEventNotOncePerClient(t *testing.T) {
 
 	rec.await(t, hooks.AfterNewWindow, before+1)
 
-	// Every client now pushes back the state it holds. This is the echo that
-	// would fire the hook a second and third time if the events were emitted per
-	// push rather than derived from the difference between two states.
 	waitUntilHookTest(t, "every client to see the new window", func() bool {
 		for _, p := range peers {
 			p.mu.Lock()
@@ -286,9 +264,6 @@ func TestTheAgentStateHookObeysTheAlertPolicy(t *testing.T) {
 		Version:            "test",
 		DisableAutoRestore: true,
 		Hooks:              map[string]any{string(hooks.AfterAgentState): "true"},
-		// No settle window, so the assertion is about the policy and not about a
-		// timer. suppress_focused off, because the pane under test is the
-		// focused one and this is not the test for that rule.
 		AgentAlerts: &config.AgentAlertsConfig{
 			SettleSeconds:   new(0),
 			SuppressFocused: &off,
@@ -307,14 +282,12 @@ func TestTheAgentStateHookObeysTheAlertPolicy(t *testing.T) {
 	makeSessionWithWindow(t, d, "agents")
 	c := dialVerb(t, sp)
 
-	// working is muted by default, so it must not reach the command.
 	result(t, c.call(t, `{"verb":"set-agent-state","params":{"session":"agents","state":"working"}}`))
 	rec.settle()
 	if got := rec.of(hooks.AfterAgentState); len(got) != 0 {
 		t.Fatalf("a muted state fired the hook %d times: %+v", len(got), got)
 	}
 
-	// done alerts by default, so it must.
 	result(t, c.call(t, `{"verb":"set-agent-state","params":{"session":"agents","state":"done","harness":"claude-code"}}`))
 	got := rec.await(t, hooks.AfterAgentState, 1)[0]
 	if got.AgentState != "done" {
@@ -343,7 +316,6 @@ func TestTheClientOnlyEventsAreNotFiredByTheDaemon(t *testing.T) {
 			t.Errorf("%s is fired by the daemon, but it describes one client's terminal", e)
 		}
 	}
-	// And the split is exhaustive: every event belongs to exactly one side.
 	for _, e := range hooks.AllEvents() {
 		inSession := slices.Contains(sessionSide, e)
 		inClient := slices.Contains(clientOnly, e)
@@ -353,7 +325,6 @@ func TestTheClientOnlyEventsAreNotFiredByTheDaemon(t *testing.T) {
 	}
 }
 
-// waitUntilHookTest polls until cond holds or the test fails.
 func waitUntilHookTest(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -392,7 +363,6 @@ func TestApplyUserHooksCarriesBothSpellings(t *testing.T) {
 		t.Error("the alert policy did not reach the daemon config, so the gate falls back to defaults")
 	}
 
-	// And a daemon built from it really holds both.
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true,
 		Hooks: cfg.Hooks, AgentAlerts: cfg.AgentAlerts, AgentHookCommand: cfg.AgentHookCommand})
@@ -403,7 +373,6 @@ func TestApplyUserHooksCarriesBothSpellings(t *testing.T) {
 		t.Errorf("the daemon holds %d hooks, want the table entry and the shorthand", got)
 	}
 
-	// A nil user config is a caller that could not read the file, not a panic.
 	var empty DaemonConfig
 	empty.ApplyUserHooks(nil)
 	if empty.Hooks != nil {

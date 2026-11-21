@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-// pingClient sends a ping and reads until the pong, keeping the workspace of
-// every state sync read on the way. Frames on a connection are handled in
-// order, so the pong says the daemon has handled every frame this client sent
-// before it.
 func pingClient(t *testing.T, c *boundsClient) []int {
 	t.Helper()
 	c.send(t, MsgPing, struct{}{})
@@ -37,8 +33,6 @@ func pingClient(t *testing.T, c *boundsClient) []int {
 	}
 }
 
-// pushWorkspace sends a client push of the session's current state with the
-// workspace changed, as a client that has seen every change would send it.
 func pushWorkspace(t *testing.T, c *boundsClient, sess *Session, ws int) {
 	t.Helper()
 	st := sess.GetState()
@@ -48,8 +42,6 @@ func pushWorkspace(t *testing.T, c *boundsClient, sess *Session, ws int) {
 	c.send(t, MsgUpdateState, st)
 }
 
-// publishMarker makes a daemon-side change that reaches every client behind
-// whatever was already queued for it.
 func publishMarker(t *testing.T, sess *Session) {
 	t.Helper()
 	err := sess.mutateState(func(st *SessionState) error {
@@ -66,8 +58,6 @@ func publishMarker(t *testing.T, sess *Session) {
 	}
 }
 
-// statesUntilMarker reads one client's state syncs until the marker, and
-// returns the workspace of each, the marker's last.
 func statesUntilMarker(t *testing.T, c *boundsClient, before []int) []int {
 	t.Helper()
 	seen := append([]int(nil), before...)
@@ -83,8 +73,6 @@ func statesUntilMarker(t *testing.T, c *boundsClient, before []int) []int {
 	}
 }
 
-// checkNoStepBack fails when a state with another workspace arrived after one
-// with want: the client adopts the state it reads last, so it went back.
 func checkNoStepBack(t *testing.T, who string, seen []int, want int) {
 	t.Helper()
 	got := false
@@ -117,7 +105,6 @@ func TestAttachRepairDoesNotFollowAPeerPush(t *testing.T) {
 	d, socketPath := startTestDaemon(t)
 
 	a, _ := dialTreeOpsClient(t, socketPath, "order")
-	// A's own attach repair, if it has one, is over before the hook is armed.
 	pingClient(t, a)
 	sess := d.manager.GetSession("order")
 	if sess == nil {
@@ -128,8 +115,6 @@ func TestAttachRepairDoesNotFollowAPeerPush(t *testing.T) {
 		t.Fatalf("the session starts on workspace %d, so the push changes nothing", ws)
 	}
 
-	// The hook runs on the daemon's connection goroutine for B. It hands the
-	// push to the test goroutine and waits for it, so t is used there only.
 	var armed atomic.Bool
 	armed.Store(true)
 	repairing := make(chan struct{})
@@ -147,8 +132,6 @@ func TestAttachRepairDoesNotFollowAPeerPush(t *testing.T) {
 	stateResendSnapshotTaken.Store(&hook)
 	t.Cleanup(func() { stateResendSnapshotTaken.Store(nil) })
 
-	// A rename lands between B's attach snapshot and its reply, while B is
-	// not yet in the broadcast set. B misses that state and is repaired.
 	var renamed sync.Once
 	rename := func() {
 		renamed.Do(func() {
@@ -167,11 +150,9 @@ func TestAttachRepairDoesNotFollowAPeerPush(t *testing.T) {
 	}
 
 	pushWorkspace(t, a, sess, want)
-	// The pong says A's push, and its forward to B, have been handled.
 	pingClient(t, a)
 	close(pushed)
 
-	// B's repair is queued before the pong to B, and the marker after it.
 	seen := pingClient(t, b)
 	publishMarker(t, sess)
 	seen = statesUntilMarker(t, b, seen)
@@ -209,7 +190,6 @@ func TestConcurrentPushesForwardInOrder(t *testing.T) {
 		t.Fatalf("the session starts on workspace %d, which the pushes use", ws)
 	}
 
-	// Holds A's forward after its snapshot until B's push is forwarded.
 	var armed atomic.Bool
 	armed.Store(true)
 	holding := make(chan struct{})
@@ -281,11 +261,8 @@ func TestReconcileReplyDoesNotOvertakeAQueuedState(t *testing.T) {
 	if ws := sess.GetState().CurrentWorkspace; ws == mine || ws == peers {
 		t.Fatalf("the session starts on workspace %d, which the pushes use", ws)
 	}
-	// A builds its push now, so a daemon-side change below makes it stale.
 	stale := sess.GetState()
 
-	// Every queued broadcast waits here until released. A pong is written
-	// straight to the socket, so it is not held.
 	release := make(chan struct{})
 	var once sync.Once
 	releaseQueue := func() { once.Do(func() { close(release) }) }
@@ -310,11 +287,9 @@ func TestReconcileReplyDoesNotOvertakeAQueuedState(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("daemon-side change: %v", err)
 	}
-	// B pushes from the current state. Its forward is queued to A.
 	pushWorkspace(t, b, sess, peers)
 	pingClient(t, b)
 
-	// A pushes from before the daemon-side change, so it is reconciled.
 	stale.CurrentWorkspace = mine
 	stale.BaseVersion = stale.Version
 	stale.PushOrigin, stale.PushSeq, stale.PushSeen, stale.SnapshotSeq = "", 0, nil, 0
@@ -364,7 +339,6 @@ func TestReconcileReplySurvivesASuppressedForward(t *testing.T) {
 	}
 	stale := sess.GetState()
 
-	// A daemon-side change makes a push built from stale reconciled.
 	if err := sess.mutateState(func(st *SessionState) error {
 		opts := maps.Clone(st.Options)
 		if opts == nil {
@@ -376,13 +350,11 @@ func TestReconcileReplySurvivesASuppressedForward(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("daemon-side change: %v", err)
 	}
-	// B moves the session, and its forward records what the peers hold.
 	const ws = 3
 	pushWorkspace(t, b, sess, ws)
 	pingClient(t, b)
 	pingClient(t, a)
 
-	// Inside A's push, after its snapshot, B pushes the same state again.
 	var armed atomic.Bool
 	inside := make(chan struct{})
 	release := make(chan struct{})
@@ -403,8 +375,6 @@ func TestReconcileReplySurvivesASuppressedForward(t *testing.T) {
 	t.Cleanup(func() { statePushSnapshotTaken.Store(nil) })
 	armed.Store(true)
 
-	// A's push carries the session's content, built before the daemon-side
-	// change, so it is reconciled to the same state.
 	push := sess.GetState()
 	push.BaseVersion = stale.Version
 	push.PushOrigin, push.PushSeq, push.PushSeen, push.SnapshotSeq = "a", 1, nil, 0
@@ -418,9 +388,6 @@ func TestReconcileReplySurvivesASuppressedForward(t *testing.T) {
 	pingClient(t, b)
 	releaseHook()
 
-	// Every state A was sent for its push is queued before the pong is
-	// written, and the marker after it. The pong is written straight to the
-	// socket, so a state can arrive on either side of it.
 	seen := 0
 	a.send(t, MsgPing, struct{}{})
 	ponged, marked := false, false
@@ -454,8 +421,6 @@ func TestReconcileReplySurvivesASuppressedForward(t *testing.T) {
 	}
 }
 
-// dialTreeOpsClient attaches a raw client that sends tree ops, and returns it
-// with the state the attach handed it.
 func dialTreeOpsClient(t *testing.T, socketPath, session string) (*boundsClient, *SessionState) {
 	t.Helper()
 	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)

@@ -14,17 +14,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// startKeeper starts bin as the keeper of a handoff, holding a copy of every
-// descriptor in hold. argv is the command line it execs if the daemon dies
-// before it is released: the previous binary, adopting the manifest.
-//
-// The keeper is started before any descriptor loses close-on-exec, and it is
-// given only the ones in hold, its socket and the daemon's stderr: a pane's
-// program never sees any of them. It leads a session of its own, so no signal
-// meant for the daemon's group reaches it.
 func startKeeper(bin string, hold []int, argv []string) (*handoffKeeper, error) {
-	// Both ends are close-on-exec before any fork can see them, the way the
-	// net package makes a socket.
 	syscall.ForkLock.RLock()
 	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
 	if err == nil {
@@ -64,11 +54,6 @@ func startKeeper(bin string, hold []int, argv []string) (*handoffKeeper, error) 
 	return &handoffKeeper{pid: pid, conn: os.NewFile(uintptr(pair[0]), "handoff-keeper")}, nil //nolint:gosec // a descriptor number
 }
 
-// keeperStderr is the descriptor the keeper gets as its stderr: the daemon's
-// own, which a background daemon has on daemon.log. The keeper passes it on to
-// the image it execs, so a recovered daemon writes a runtime panic where any
-// other daemon does, and an exec the keeper fails to make is reported there
-// too. A daemon whose stderr is closed gives the keeper null.
 func keeperStderr(null *os.File) uintptr {
 	if _, err := unix.FcntlInt(uintptr(unix.Stderr), unix.F_GETFD, 0); err != nil {
 		return null.Fd()
@@ -93,7 +78,6 @@ func RunHandoffKeeper(hold []int, argv []string) error {
 		return nil
 	}
 	if err != nil && !errors.Is(err, io.EOF) {
-		// A reset is the same news as an end: the other side is gone.
 		debugLog("[DEBUG] Live upgrade keeper: reading the daemon's socket: %v", err)
 	}
 	unix.CloseOnExec(keeperConnFD)

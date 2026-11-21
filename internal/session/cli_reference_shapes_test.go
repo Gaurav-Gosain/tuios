@@ -9,16 +9,8 @@ import (
 	"testing"
 )
 
-// The CLI reference showed list-windows with id and focused_id, and
-// session-info with total_windows and theme, long after the daemon stopped
-// sending them. A script written from the page read null. These tests hold the
-// page's JSON samples to the maps the daemon builds.
-
-// cliEnvelope is what the CLI adds around a verb result when it prints it.
 var cliEnvelope = []string{"message", "success"}
 
-// cliReferenceJSON returns the first ```json block after heading in
-// docs/CLI_REFERENCE.md, decoded.
 func cliReferenceJSON(t *testing.T, heading string) map[string]any {
 	t.Helper()
 	data, err := os.ReadFile("../../docs/CLI_REFERENCE.md")
@@ -47,7 +39,6 @@ func cliReferenceJSON(t *testing.T, heading string) map[string]any {
 	return out
 }
 
-// docKeys returns a map's keys, sorted, with the CLI envelope left out.
 func docKeys(m map[string]any) []string {
 	keys := slices.Sorted(maps.Keys(m))
 	return slices.DeleteFunc(keys, func(k string) bool { return slices.Contains(cliEnvelope, k) })

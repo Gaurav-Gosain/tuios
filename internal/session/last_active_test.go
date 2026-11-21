@@ -23,7 +23,6 @@ func TestTypingKeepsASessionActive(t *testing.T) {
 	sess := makeSessionWithWindow(t, d, "typing")
 	ptyID := sess.ListPTYIDs()[0]
 
-	// A creation time far enough back that a move is unambiguous.
 	before := sess.LastActive()
 	time.Sleep(10 * time.Millisecond)
 
@@ -38,7 +37,6 @@ func TestTypingKeepsASessionActive(t *testing.T) {
 	c.StartReadLoop()
 	_ = sp
 
-	// The attach itself records activity, so the question is asked after it.
 	settled := sess.LastActive()
 	time.Sleep(10 * time.Millisecond)
 

@@ -14,24 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 )
 
-// review-stage: staging and unstaging a pane's changes by file, by hunk and by
-// line, and undoing either.
-//
-// It writes the index of the worktree under the pane, and nothing else: the
-// working tree is never written. It is the person's tool, held like keep-fan:
-// scopeDeny, so a restricted connection is refused and a pane needs the admin
-// grant, and write over a link. A human_nonce, when given, must be live.
-//
-// Every stage and unstage answers with an undo object: the index entries of
-// the paths it touched as they were before, and as they are after. undo takes
-// that object back, refuses with index_changed unless the entries are still
-// as after, and writes the before entries back with git update-index. Its own
-// answer carries the reverse object, so sending that back redoes the call.
-//
-// One call at a time per worktree (reviewStageLock): a stage reads the diff,
-// builds a patch from it and applies it, and a second call between the read
-// and the apply would make the patch stale.
-
 // Error codes review-stage raises, on top of the shared ones.
 const (
 	// ErrVerbHunkChanged reports a hunk or a file that is not in the diff
@@ -45,15 +27,10 @@ const (
 	ErrVerbWholeFileOnly = "whole_file_only"
 )
 
-// reviewStageMaxEntries bounds the entries an undo object carries: a file and
-// the old path of its rename.
 const reviewStageMaxEntries = 2
 
-// reviewStageLocks holds one mutex per worktree root.
 var reviewStageLocks sync.Map
 
-// reviewStageLock locks the worktree at root for one review-stage call, and
-// returns the unlock.
 func reviewStageLock(root string) func() {
 	mu, _ := reviewStageLocks.LoadOrStore(root, &sync.Mutex{})
 	m := mu.(*sync.Mutex)
@@ -61,13 +38,11 @@ func reviewStageLock(root string) func() {
 	return m.Unlock
 }
 
-// reviewUndo is the undo object of a review-stage result.
 type reviewUndo struct {
 	Entries []review.IndexEntry `json:"entries"`
 	After   []review.IndexEntry `json:"after"`
 }
 
-// reviewStageParams are what review-stage takes.
 type reviewStageParams struct {
 	Session    string      `json:"session"`
 	Window     string      `json:"window"`
@@ -80,7 +55,6 @@ type reviewStageParams struct {
 	HumanNonce string      `json:"human_nonce"`
 }
 
-// verbReviewStage answers review-stage.
 func (d *Daemon) verbReviewStage(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p reviewStageParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -126,10 +100,6 @@ func (d *Daemon) verbReviewStage(cs *connState, params json.RawMessage) (any, *v
 		}
 		p.Path = filepath.ToSlash(filepath.Clean(p.Path))
 	}
-	// A nonce no client holds is refused before the pane is looked up, so
-	// a bad nonce does not learn which panes exist. One that is held is
-	// checked against the session the pane is in, as review-note does: a
-	// nonce is the person's word for the session its client is on.
 	if p.HumanNonce != "" && !d.humanNonceHeld(p.HumanNonce, cs) {
 		if _, verr := d.reviewAuthorOf(cs, p.HumanNonce, "", "review-stage"); verr != nil {
 			return nil, verr
@@ -143,8 +113,6 @@ func (d *Daemon) verbReviewStage(cs *connState, params json.RawMessage) (any, *v
 		return nil, verr
 	}
 
-	// The file itself may be gone (a deletion), so its folder is what has
-	// to resolve inside the worktree, symbolic links followed.
 	for _, e := range reviewStagePaths(p) {
 		if dir := path.Dir(e); dir != "." {
 			if _, err := review.InsideRoot(repo.root, dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -184,7 +152,6 @@ func (d *Daemon) verbReviewStage(cs *connState, params json.RawMessage) (any, *v
 	}, nil
 }
 
-// reviewStagePaths are the paths a call names: path, or the undo object's.
 func reviewStagePaths(p reviewStageParams) []string {
 	if p.Undo == nil {
 		return []string{p.Path}
@@ -196,9 +163,6 @@ func reviewStagePaths(p reviewStageParams) []string {
 	return out
 }
 
-// reviewStageChange stages or unstages p.Path, its hunk p.Hunk, or the lines
-// p.Lines of that hunk. An untracked file larger than maxUntracked bytes is
-// not read, so it has no change to stage.
 func reviewStageChange(ctx context.Context, root string, p reviewStageParams, contextLines int, maxUntracked int64) (reviewUndo, *verbError) {
 	unstage := p.Action == "unstage"
 	mode := review.IndexUnstaged
@@ -262,9 +226,6 @@ func reviewStageChange(ctx context.Context, root string, p reviewStageParams, co
 				}
 			}
 		}
-		// A patch cannot remove a file from the index, only empty it. A
-		// selection of every line of a file the index side drops (a
-		// deletion to stage, an addition to unstage) is the whole file.
 		drops := (!unstage && f.Status == review.StatusDeleted) || (unstage && f.Status == review.StatusAdded)
 		if drops && len(f.Hunks) == 1 && reviewSelectsAll(h, sel) {
 			whole = true
@@ -294,8 +255,6 @@ func reviewStageChange(ctx context.Context, root string, p reviewStageParams, co
 	return reviewUndo{Entries: before, After: after}, nil
 }
 
-// reviewSelectsAll reports whether sel holds every added and removed line of
-// h.
 func reviewSelectsAll(h *review.Hunk, sel []int) bool {
 	for _, i := range h.Changes() {
 		if !slices.Contains(sel, i) {
@@ -305,8 +264,6 @@ func reviewSelectsAll(h *review.Hunk, sel []int) bool {
 	return true
 }
 
-// reviewStageUndo writes u.Entries back into the index, when the index still
-// holds u.After for the same paths.
 func reviewStageUndo(ctx context.Context, root string, u reviewUndo) (reviewUndo, *verbError) {
 	if len(u.Entries) > reviewStageMaxEntries || len(u.After) != len(u.Entries) {
 		return reviewUndo{}, invalidParam("undo", "undo is the undo object a review-stage result returned: entries and after, one per path, at most "+strconv.Itoa(reviewStageMaxEntries))
@@ -346,8 +303,6 @@ func reviewStageUndo(ctx context.Context, root string, u reviewUndo) (reviewUndo
 	return reviewUndo{Entries: u.After, After: restored}, nil
 }
 
-// reviewStageGitFailed is the refusal for a git call of review-stage that
-// failed. A conflicted path has its own message.
 func reviewStageGitFailed(err error) *verbError {
 	if c, ok := errors.AsType[*review.ConflictError](err); ok {
 		return hintedVerbError(ErrVerbGitFailed, c.Error(), &VerbHint{

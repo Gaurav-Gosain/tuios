@@ -10,40 +10,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// The checkpoint verbs: list a pane's checkpoints, read what one turn
-// changed, and put the work tree back to a checkpoint. checkpoints.go takes
-// them.
-//
-// list-checkpoints and checkpoint-diff read, and are held like review-diff:
-// scopeRead, and over a link list for the listing and write for the diff,
-// which carries file contents. restore-checkpoint writes files in the pane's
-// work tree, which the pane's agent then reads and runs, so it is scopeWrite
-// and a pane without admin may restore only a pane it could type into
-// (typingRefusal, as review-note holds its target).
-//
-// A restore loses nothing that git can see: it first saves the work tree as a
-// safety checkpoint, so the restore is itself undone by restoring that one.
-// Ignored files are in no checkpoint and are never touched. It refuses a pane
-// whose agent is mid-turn unless force is given, since the agent would go on
-// writing over the restored files.
-
 // ErrVerbNoCheckpoint reports a checkpoint number the pane does not have.
 // Nothing was read or changed.
 const ErrVerbNoCheckpoint = "no_checkpoint"
 
-// checkpointVerbs are the registry entries of the checkpoint verbs.
 func checkpointVerbs() map[string]verbEntry {
 	checkpointFields := "n, ref, commit, tree, head, kind (turn or safety), pane, session, turn, state, label, worktree, at (Unix nanoseconds), and skipped and skipped_count (the untracked files left out as larger than max_untracked_mb, omitted when none)"
 	return map[string]verbEntry{
 		"list-checkpoints": {
-			// From the checkpoint work (verb_checkpoint.go). Listing and reading a
-			// pane's checkpoints are reads of its session. A restore writes the
-			// files the pane's agent works on, which the handler holds to the panes
-			// the caller could type into.
-			scope: scopeRead,
-			// The checkpoints. The listing carries states and the agent's prompts,
-			// which list reaches. The diff carries file contents, and a restore
-			// writes files, so both need write, as review-diff does.
+			scope:       scopeRead,
 			link:        needList,
 			description: "List the checkpoints of a pane: the state of its git work tree, saved each time its agent finished a turn that changed a file, and before each restore. Oldest first. The labels are the agent's prompts, so the result is marked untrusted.",
 			params: []verbParam{
@@ -120,8 +95,6 @@ func checkpointVerbs() map[string]verbEntry {
 	}
 }
 
-// checkpointTarget resolves the pane a checkpoint verb is about and the work
-// tree under it.
 func (d *Daemon) checkpointTarget(cs *connState, sessionName, window string) (*Session, WindowState, reviewRepo, *verbError) {
 	sess, target, verr := d.resolveVerbPane(cs, sessionName, window)
 	if verr != nil {
@@ -139,8 +112,6 @@ func (d *Daemon) checkpointTarget(cs *connState, sessionName, window string) (*S
 	return sess, target, repo, nil
 }
 
-// checkpointGitFailed is the refusal for a git call of a checkpoint verb that
-// failed or ran out of time.
 func checkpointGitFailed(err error, changed bool) *verbError {
 	detail := "Nothing in the work tree was changed."
 	if changed {
@@ -152,7 +123,6 @@ func checkpointGitFailed(err error, changed bool) *verbError {
 	return hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{Detail: detail})
 }
 
-// noCheckpoint is the refusal for a checkpoint the pane does not have.
 func noCheckpoint(sess *Session, target WindowState, n int, list []worktree.Checkpoint) *verbError {
 	avail := make([]string, 0, len(list))
 	for _, cp := range list {
@@ -170,7 +140,6 @@ func noCheckpoint(sess *Session, target WindowState, n int, list []worktree.Chec
 	})
 }
 
-// checkpointsOfPane lists the pane's checkpoints taken in this work tree.
 func checkpointsOfPane(ctx context.Context, repo reviewRepo, window string) ([]worktree.Checkpoint, error) {
 	list, err := worktree.ListCheckpoints(ctx, repo.root, window)
 	if err != nil {
@@ -182,7 +151,6 @@ func checkpointsOfPane(ctx context.Context, repo reviewRepo, window string) ([]w
 	return list, nil
 }
 
-// verbListCheckpoints answers list-checkpoints.
 func (d *Daemon) verbListCheckpoints(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -213,7 +181,6 @@ func (d *Daemon) verbListCheckpoints(cs *connState, params json.RawMessage) (any
 	}, nil
 }
 
-// verbCheckpointDiff answers checkpoint-diff.
 func (d *Daemon) verbCheckpointDiff(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string   `json:"session"`
@@ -292,7 +259,6 @@ func (d *Daemon) verbCheckpointDiff(cs *connState, params json.RawMessage) (any,
 	}, nil
 }
 
-// verbRestoreCheckpoint answers restore-checkpoint.
 func (d *Daemon) verbRestoreCheckpoint(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -357,9 +323,6 @@ func (d *Daemon) verbRestoreCheckpoint(cs *connState, params json.RawMessage) (a
 	var blocked *worktree.OverwriteError
 	switch {
 	case errors.As(err, &blocked):
-		// RestoreTree refused before it touched a file. The safety checkpoint
-		// it was compared against holds nothing new, and a refusal that says
-		// nothing was changed must not leave one behind.
 		if derr := worktree.DeleteCheckpoints(ctx, repo.root, []worktree.Checkpoint{safety}); derr != nil {
 			LogBasic("Could not remove safety checkpoint %d of window %s after a refused restore: %v", safety.N, shortWindowID(target.ID), derr)
 		}
@@ -371,8 +334,6 @@ func (d *Daemon) verbRestoreCheckpoint(cs *connState, params json.RawMessage) (a
 	case err != nil:
 		return nil, checkpointGitFailed(err, true)
 	}
-	// The keep bound is applied after the restore, so the safety checkpoint
-	// is never the one pruned, however small keep is.
 	if keep := d.checkpointKeep(); len(list)+1 > keep {
 		if all, err := worktree.ListCheckpoints(ctx, repo.root, target.ID); err == nil && len(all) > keep {
 			var drop []worktree.Checkpoint

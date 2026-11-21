@@ -27,7 +27,7 @@ func TestRigRefusal(t *testing.T) {
 		name   string
 		socket string
 		env    map[string]string
-		want   string // a word of the refusal, or "" for a rig
+		want   string
 	}{
 		{"throwaway", "/tmp/rig/run/tuios/tuios.sock", rigEnv, ""},
 		{"config unset", "/tmp/rig/run/tuios/tuios.sock", with("XDG_CONFIG_HOME", ""), "XDG_CONFIG_HOME"},

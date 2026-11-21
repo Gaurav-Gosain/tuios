@@ -8,82 +8,41 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
-// The task card lifecycle as one transition function. A card's lifecycle
-// fields (Stage, StageAt, Holder, HeldAt, HolderName, HolderHarness,
-// Dispatched, Blocked, Attempts, Note, Work, Verify and Attachments) are
-// written here and
-// nowhere else: internal/lint TestOnlyTaskMoveWritesACardsLifecycle holds it.
-// A verb keeps its own checks (who may touch the card, the pane refusals, the
-// verify command rules) and asks for a move; Session.moveCard makes it,
-// counts a dispatched card's outcome on its board in the same state change,
-// logs it at debug level, and under the card_check knob checks the card's
-// rules after it (cardRulesBroken).
-
-// cardMoveKind is what a move does.
 type cardMoveKind uint8
 
 const (
-	// moveClaim gives the card to window: todo and plan go to doing.
 	moveClaim cardMoveKind = iota + 1
-	// moveRelease lets the card go. A card blocked on its errored agent
-	// goes back to todo with the block lifted.
 	moveRelease
-	// moveBlock marks the card stuck, keeping its holder.
 	moveBlock
-	// moveUnblock lifts any block.
 	moveUnblock
-	// moveBlockErrored blocks a dispatched card whose agent errored: one
-	// attempt more, the agent's line as the note.
 	moveBlockErrored
-	// moveUnblockErrored lifts only the block moveBlockErrored put.
 	moveUnblockErrored
-	// moveHandIn lets the card go as its agent is done with it, to verify
-	// (with a running record) or review.
 	moveHandIn
-	// moveFinish closes the card: done, no holder, no block.
 	moveFinish
-	// moveStage is a person's move to a stage other than done. A move to
-	// verify that runs the board's command lets the holder go: the card
-	// waits on the command, not on a pane.
 	moveStage
-	// moveAuto is an automatic move (task_auto.go) when it applies.
 	moveAuto
-	// moveVerified lands a verify result on a card still in verify with
-	// the run's token.
 	moveVerified
-	// moveAttach puts attachments on the card, each in the place of one
-	// with its name.
 	moveAttach
-	// moveDetach takes the attachment named reason off the card.
 	moveDetach
 )
 
-// cardMove is one move and what it needs.
 type cardMove struct {
-	kind       cardMoveKind
-	by, reason string
-	// Claim: the pane, whether dispatch made the claim, and the name and
-	// harness of a holder the card's session cannot read (names). refresh
-	// updates dispatched and the names on a claim the same holder makes again.
+	kind              cardMoveKind
+	by, reason        string
 	window            string
 	dispatched, names bool
 	name, harness     string
 	refresh           bool
-	stage             string    // HandIn, Stage, Verified: where the card goes
-	work              *TaskWork // HandIn, Stage
-	verifyRun         bool      // Stage: run the board's verify command
-	auto              taskMove  // Auto
-	token             int64     // Verified
+	stage             string
+	work              *TaskWork
+	verifyRun         bool
+	auto              taskMove
+	token             int64
 	verify            *TaskVerify
-	note              string           // BlockErrored, Verified: the card's note
-	attachments       []TaskAttachment // Attach
+	note              string
+	attachments       []TaskAttachment
 }
 
-// apply makes m on the card at now. It returns the action the history and
-// the event name, "" when nothing changed, the holder the card had before,
-// and the refusal of a claim. Each move that changes the card notes one
-// history entry: the action, m.by, the stage after, the holder (the new one
-// for a claim, none for a verify result, else the one before) and m.reason.
 func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *verbError) {
 	holder = tk.Holder
 	to := tk.Stage
@@ -185,14 +144,11 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 			tk.Attempts++
 			tk.Note = m.note
 		}
-		// A pane that took the card in verify lets it go with the result.
 		letGo()
 		tk.Verify, to = m.verify, m.stage
 		action, evHolder = TaskActionVerified, ""
 
 	case moveAttach:
-		// A new slice: a snapshot shares the old one. An attachment takes
-		// the place of the one with its name.
 		list := slices.Clone(tk.Attachments)
 		for _, a := range m.attachments {
 			list = slices.DeleteFunc(list, func(b TaskAttachment) bool { return b.Name == a.Name })
@@ -219,11 +175,6 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 	return action, holder, nil
 }
 
-// moveCard makes m on tk, a card of s, inside the caller's state change,
-// and does what follows from it in the same change: the outcome of a
-// dispatched card counts on its board, so two cards of one board count in
-// the order their moves land; a debug line names the move; and under
-// the card_check knob the card's rules are checked.
 func (s *Session) moveCard(tk *TaskState, m cardMove, now int64) (action, holder string, verr *verbError) {
 	from := tk.Stage
 	action, holder, verr = tk.apply(m, now)
@@ -246,10 +197,6 @@ func (s *Session) moveCard(tk *TaskState, m cardMove, now int64) (action, holder
 	return action, holder, nil
 }
 
-// dispatchOutcome is how a move ends a dispatched card on its board: counts
-// says it ends it, and finished says well. A finish into verify waits for the
-// verify. A restart, and a block on an errored agent (which may go on),
-// count nothing; the errored card counts when it is let go.
 func dispatchOutcome(m cardMove, action string, tk *TaskState) (finished, counts bool) {
 	if !tk.Dispatched || m.reason == taskReleaseRestart {
 		return false, false
@@ -274,10 +221,8 @@ func (s *Session) SetTaskOutcomeSink(fn func(board string, finished bool)) {
 	s.taskOutcome.Store(&fn)
 }
 
-// cardCheckOn reports whether the card_check knob asks for the checks.
 var cardCheckOn = sync.OnceValue(func() bool { return testknob.String("card_check") != "" })
 
-// cardRulesBroken is every rule of the lifecycle tk breaks after m.
 func cardRulesBroken(tk *TaskState, m cardMove) []string {
 	var out []string
 	if !slices.Contains(TaskStages, tk.Stage) {
@@ -298,21 +243,12 @@ func cardRulesBroken(tk *TaskState, m cardMove) []string {
 	return out
 }
 
-// taskBlockErrored starts the reason of a block dispatch puts on a card
-// whose agent errored.
 const taskBlockErrored = "agent errored"
 
-// blockedOnErrored reports whether the card's block is the one dispatch put
-// on it when its agent errored.
 func (tk *TaskState) blockedOnErrored() bool {
 	return tk.Blocked != nil && tk.Blocked.By == taskByDaemon && strings.HasPrefix(tk.Blocked.Reason, taskBlockErrored)
 }
 
-// pushCopy is the card as a state push sends it: a copy with its prompt and
-// history cleared and, when a verify record is set, a copy of that record with
-// its output tail cleared. It is a copy for a push and moves no card. Verify
-// points into the daemon's state, so the record is copied, never written
-// through; tk and everything it points to stay as they were.
 func (tk TaskState) pushCopy() TaskState {
 	tk.Prompt = ""
 	tk.History = nil

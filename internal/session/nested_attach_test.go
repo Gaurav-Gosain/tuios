@@ -89,9 +89,6 @@ func TestServedAndForcedAttachFromOwnPaneAreAllowed(t *testing.T) {
 	}
 }
 
-// spawnHelperOnOwnTerminal starts the helper from this test process, outside
-// every pane, on a PTY of its own, with no TUIOS_ variables but env. It
-// returns the PTY, whose output is what the helper wrote to its terminal.
 func spawnHelperOnOwnTerminal(t *testing.T, sp, out, mode, args string, env ...string) io.Reader {
 	t.Helper()
 	exe, err := os.Executable()
@@ -135,8 +132,6 @@ func TestTerminalWindowFromPaneIsAllowed(t *testing.T) {
 	sess, _, b := twoWindowSession(t, d, "window")
 	out := filepath.Join(t.TempDir(), "out")
 	helper := helperCommand(t, sp, out, "attach-probe", "window")
-	// util-linux script takes the command after -c; the BSD script on macOS
-	// takes the file first and runs the command without a shell.
 	scriptCmd := "script -qfec " + shellQuote(helper) + " /dev/null"
 	if runtime.GOOS == "darwin" {
 		scriptCmd = "script -q /dev/null sh -c " + shellQuote(helper)
@@ -147,15 +142,8 @@ func TestTerminalWindowFromPaneIsAllowed(t *testing.T) {
 	}
 }
 
-// shellQuote quotes s for sh.
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// probeOutcome waits for a probe client to attach and, when it did, for the
-// watch after the attach to run its course. The daemon either refuses the
-// attach, when the probe was seen first, or takes the client off later, when
-// the probe arrived after it: which one depends on timing, and both are the
-// refusal. It returns the refusal or error, or "" when the client stayed
-// attached.
 func probeOutcome(t *testing.T, out string) string {
 	t.Helper()
 	got := waitHelper(t, out)
@@ -172,11 +160,6 @@ func probeOutcome(t *testing.T, out string) string {
 	return ""
 }
 
-// relayIntoPane copies what src writes into the given pane's output, as ssh
-// or a relay would: the pane runs cat on a fifo, and src is copied into it.
-//
-// It returns once cat is reading, so the relay is in place before the client
-// starts and writes its probe, as it is for a client started through ssh.
 func relayIntoPane(t *testing.T, d *Daemon, sess *Session, pane string) io.Writer {
 	t.Helper()
 	fifo := filepath.Join(t.TempDir(), "relay")
@@ -184,7 +167,6 @@ func relayIntoPane(t *testing.T, d *Daemon, sess *Session, pane string) io.Write
 		t.Fatalf("mkfifo: %v", err)
 	}
 	runInPane(t, d, sess, pane, "cat "+fifo)
-	// Opening for write blocks until cat opens it for read.
 	f, err := os.OpenFile(fifo, os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatalf("open the relay: %v", err)
@@ -222,11 +204,9 @@ func TestProbeRelayedIntoOwnPaneIsRefused(t *testing.T) {
 // goes back to the size of the client that is left.
 func TestLateProbeDetachesTheClient(t *testing.T) {
 	skipWithoutPeerPID(t)
-	// Smallest, so the nested client shrinks the session while it is attached.
 	d, sp := startTestDaemonSized(t, config.WindowSizeSmallest)
 	sess, _, b := twoWindowSession(t, d, "late")
 
-	// A client outside every pane, at 100x30.
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatalf("os.Executable: %v", err)
@@ -243,7 +223,6 @@ func TestLateProbeDetachesTheClient(t *testing.T) {
 		t.Fatalf("the outer client got %q", got)
 	}
 
-	// The nested client attaches at 40x12 while its probe is still held back.
 	relay := relayIntoPane(t, d, sess, b)
 	out := filepath.Join(t.TempDir(), "out")
 	pty := spawnHelperOnOwnTerminal(t, sp, out, "attach-late-probe", "late", helperSizeEnv+"=40x12")
@@ -266,7 +245,6 @@ func TestLateProbeDetachesTheClient(t *testing.T) {
 	}
 	waitSize(40, 12, "with the nested client attached")
 
-	// Now the probe reaches the pane.
 	go func() { _, _ = io.Copy(relay, pty) }()
 	deadline := time.Now().Add(5 * time.Second)
 	var ended []byte
@@ -329,8 +307,6 @@ func TestDetachedPaneProcessWithoutTerminalIsRefused(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	_, _, b := twoWindowSession(t, d, "orphan")
 	out := filepath.Join(t.TempDir(), "out")
-	// sh starts the helper in the background and exits, and setsid leaves it
-	// with no controlling terminal.
 	cmd := exec.Command("/bin/sh", "-c", helperCommand(t, sp, out, "attach", "orphan")+" &")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Env = append(os.Environ(), "TUIOS_PANE_ID="+b, helperDetachEnv+"=1")
@@ -342,8 +318,6 @@ func TestDetachedPaneProcessWithoutTerminalIsRefused(t *testing.T) {
 	}
 }
 
-// addSizedClient registers a TUI client of the given size on a session, for
-// the size calculation alone.
 func addSizedClient(d *Daemon, id, sessionID string, w, h int) *connState {
 	cs := &connState{clientID: id, sessionID: sessionID, isTUIClient: true, width: w, height: h}
 	d.clientsMu.Lock()
@@ -377,7 +351,6 @@ func TestNestedResizeLoopSettles(t *testing.T) {
 	addSizedClient(d, "outer", "s", 120, 40)
 	nested := addSizedClient(d, "nested", "s", 118, 36)
 
-	// Borders take two columns, and the borders and the dock take four rows.
 	const chromeW, chromeH = 2, 4
 	w, h, _ := d.calculateSessionSize("s")
 	settled := false

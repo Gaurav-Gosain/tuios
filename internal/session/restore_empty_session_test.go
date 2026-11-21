@@ -35,12 +35,10 @@ func TestEmptySavedSessionDoesNotResurrect(t *testing.T) {
 		t.Errorf("an empty saved session came back with %d windows; nothing tells it from a real one",
 			len(sess.GetState().Windows))
 	}
-	// A state file that can never restore must not go on being offered.
 	if _, err := os.Stat(testStatePath("hollow")); !os.IsNotExist(err) {
 		t.Errorf("the unrestorable state file for 'hollow' is still on disk (stat err: %v)", err)
 	}
 
-	// The empty one must not have taken the real one down with it.
 	if d.manager.GetSession("work") == nil {
 		t.Error("a real session beside the empty one was not restored")
 	}

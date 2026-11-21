@@ -9,23 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 )
 
-// The first-run approval of a native plugin.
-//
-// A native plugin runs only when this machine holds the person's approval of
-// its trust hash (herdrplugin/approval.go). One that arrives without it, by
-// dotfiles, by plugins link or in a plugin folder, is listed and does not
-// run. The daemon tells each attached client of this machine about it with
-// MsgPluginApprovals, and the client asks the person in a dialog: the
-// plugin, where it comes from, what runs on its own, and its grants in
-// plain words. The answer comes back as plugin.approve on the herdr socket,
-// which only the person may call (herdrPluginTrust), so a pane or a plugin
-// cannot answer for itself. A plugin that asks for admin also needs the
-// person to type admin.
-//
-// The answer names the trust hash the person saw. A plugin that changed
-// after the dialog opened has another hash, and the answer is refused. The
-// dialog then asks again about what the plugin is now.
-
 // PluginApprovalAsk is one native plugin that waits for the person's answer
 // on this machine.
 type PluginApprovalAsk struct {
@@ -49,8 +32,6 @@ type PluginApprovalsPayload struct {
 	Asks []PluginApprovalAsk `json:"asks"`
 }
 
-// pluginAsksOf lists the enabled native plugins that wait for the person.
-// One the person denied waits for nobody: tuios plugins approve allows it.
 func pluginAsksOf(entries []herdrplugin.Entry) []PluginApprovalAsk {
 	var out []PluginApprovalAsk
 	for _, e := range entries {
@@ -59,8 +40,6 @@ func pluginAsksOf(entries []herdrplugin.Entry) []PluginApprovalAsk {
 			continue
 		}
 		if e.Err != nil && e.Err.Code != herdrplugin.ErrPluginNeedsApproval && e.Err.Code != herdrplugin.ErrPluginAdminNotApproved {
-			// A shadowed copy, or one that does not run for another
-			// reason: an answer would not make it run.
 			continue
 		}
 		source := "folder " + p.PluginRoot
@@ -78,13 +57,10 @@ func pluginAsksOf(entries []herdrplugin.Entry) []PluginApprovalAsk {
 	return out
 }
 
-// samePluginAsks reports whether two lists ask the same questions.
 func samePluginAsks(a, b []PluginApprovalAsk) bool {
 	return slices.EqualFunc(a, b, func(x, y PluginApprovalAsk) bool { return x.ID == y.ID && x.Trust == y.Trust })
 }
 
-// notePluginAsks keeps the plugins that wait, and tells the attached clients
-// when the list changed.
 func (d *Daemon) notePluginAsks(asks []PluginApprovalAsk) {
 	d.pluginAsksMu.Lock()
 	if samePluginAsks(d.pluginAsks, asks) {
@@ -109,21 +85,15 @@ func (d *Daemon) notePluginAsks(asks []PluginApprovalAsk) {
 	}
 }
 
-// pluginAsksReader reports whether cs is an attached client of this machine
-// that asks the person about plugins.
 func pluginAsksReader(cs *connState) bool {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	return cs.isTUIClient && cs.attached && cs.pluginAsks && !cs.viaLink && !cs.passive
 }
 
-// sendPluginAsks sends a client that just attached the plugins that wait.
 func (d *Daemon) sendPluginAsks(cs *connState) {
 	d.sendPluginCells(cs)
 	if d.plugins != nil {
-		// A manifest can change on disk with nothing else to tell the
-		// clients, so an attach reads the plugins again. It reads files
-		// only, once per attach.
 		d.notePluginAsks(pluginAsksOf(d.plugins.entries(true)))
 	}
 	d.pluginAsksMu.Lock()
@@ -135,8 +105,6 @@ func (d *Daemon) sendPluginAsks(cs *connState) {
 	_ = d.sendMessage(cs, MsgPluginApprovals, &PluginApprovalsPayload{Asks: asks})
 }
 
-// herdrPluginApprove is plugin.approve: the person's answer for one native
-// plugin at the trust hash they saw.
 func (d *Daemon) herdrPluginApprove(cs *connState, params json.RawMessage) (any, *herdrError) {
 	if herr := d.herdrPluginTrust(cs, "plugin.approve"); herr != nil {
 		return nil, herr

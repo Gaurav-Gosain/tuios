@@ -43,7 +43,6 @@ func TestBufferUploadsHoldBoundedMemory(t *testing.T) {
 		t.Fatalf("the unfinished uploads hold %d bytes, want the first connection's %d alone", got, len(part))
 	}
 
-	// A second id on one connection replaces its first upload.
 	if _, verr := d.uploadPart(conns[0], "v", []byte("yy"), false, capBytes, false); verr != nil {
 		t.Fatalf("a new upload on the same connection was refused: %v", verr)
 	}
@@ -51,7 +50,6 @@ func TestBufferUploadsHoldBoundedMemory(t *testing.T) {
 		t.Fatalf("after a second id the connection holds %d bytes, want 2", got)
 	}
 
-	// Another connection can now upload, and finishing returns the whole.
 	if _, verr := d.uploadPart(conns[1], "w", part[:500], false, capBytes, false); verr != nil {
 		t.Fatalf("an upload under the cap was refused: %v", verr)
 	}
@@ -60,7 +58,6 @@ func TestBufferUploadsHoldBoundedMemory(t *testing.T) {
 		t.Fatalf("the last part returned %d bytes (%v), want 600", len(whole), verr)
 	}
 
-	// A refused part drops only its own upload.
 	if _, verr := d.uploadPart(conns[2], "big", part, false, capBytes, false); verr != nil {
 		t.Fatalf("an upload under the cap was refused: %v", verr)
 	}
@@ -71,7 +68,6 @@ func TestBufferUploadsHoldBoundedMemory(t *testing.T) {
 		t.Fatalf("after a refusal the uploads hold %d bytes, want %d: the refusal dropped another upload", got, 2+len(part))
 	}
 
-	// A closed connection's upload goes at once.
 	d.dropUploads(conns[2])
 	d.dropUploads(conns[0])
 	if got := d.uploadBytes(); got != 0 {
@@ -124,7 +120,6 @@ func TestThePersonsShareSurvivesAFullPanePool(t *testing.T) {
 	d, socketPath := startTestDaemon(t)
 	_, maxBytes := d.bufferStore().Limits()
 
-	// Pane connections fill the panes' upload pool.
 	part := bytes.Repeat([]byte("p"), maxBytes/4)
 	for i := 0; ; i++ {
 		if _, verr := d.uploadPart(&connState{}, "pane", part, false, maxBytes, false); verr != nil {
@@ -137,7 +132,6 @@ func TestThePersonsShareSurvivesAFullPanePool(t *testing.T) {
 			t.Fatalf("the panes' uploads are not bounded")
 		}
 	}
-	// And the panes' line budget is taken whole.
 	panesFull, ok := d.readBudgetFor(&connState{viaLink: true}).acquire(peerBudgetBytes, time.Second)
 	if !ok {
 		t.Fatal("could not take the panes' budget")

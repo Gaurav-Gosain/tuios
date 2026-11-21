@@ -11,21 +11,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// These tests reproduce the reported shape of issue #123: after detach and
-// attach, a full-screen program like top comes back with empty lines
-// interleaved between its output lines.
-//
-// The daemon side is a PTY whose emulator is fed directly (no shell in the
-// middle), so the byte stream, the catch-up ring and the daemon emulator move
-// together exactly as they do under a real PTY. The client side is rebuilt the
-// way restoreTerminalContent rebuilds it: a fresh emulator gets the daemon's
-// snapshot (ApplyTerminalState) and then the stream resumes from the position
-// the snapshot ends at. The client's screen must converge on the daemon's.
-
-// lockedClient wraps a client emulator so the live-stream goroutine that
-// writes it and the test body that reads it cannot race. The race detector
-// is on in the project's CI, and a goroutine writing an emulator the test
-// reads through emulatorText without a lock is exactly the report it makes.
 type lockedClient struct {
 	mu   sync.Mutex
 	term *vt.Emulator
@@ -35,32 +20,24 @@ func newLockedClient(w, h int) *lockedClient {
 	return &lockedClient{term: vt.NewEmulator(w, h)}
 }
 
-// Write applies stream bytes under the lock.
 func (c *lockedClient) Write(data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	_, _ = c.term.Write(data)
 }
 
-// Text renders the visible grid under the lock.
 func (c *lockedClient) Text() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return emulatorText(c.term)
 }
 
-// Close closes the emulator.
 func (c *lockedClient) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	_ = c.term.Close()
 }
 
-// newEmulatedPTY builds a PTY with a live emulator and its vtWriter goroutine,
-// but no real shell: tests feed it bytes directly. The vtWriteChan is small so
-// the emulator can be pushed behind the ring with a test-sized burst; the real
-// daemon's channel is 256 x 16KB chunks, which can hold 4MB of unprocessed
-// output.
 func newEmulatedPTY(t *testing.T, w, h int) *PTY {
 	t.Helper()
 	p := &PTY{
@@ -75,11 +52,6 @@ func newEmulatedPTY(t *testing.T, w, h int) *PTY {
 	return p
 }
 
-// feed writes guest output through the same two paths the read loop uses: the
-// catch-up ring (so a resubscribing client is handed it) and the emulator (so
-// the daemon's screen advances). Like readOutput it blocks on the emulator
-// channel rather than dropping a chunk. It returns the stream position the
-// chunk ends at.
 func (p *PTY) feed(data []byte) int64 {
 	p.outputMu.Lock()
 	seq := p.appendToBuffer(data)
@@ -93,8 +65,6 @@ func (p *PTY) feed(data []byte) int64 {
 	return seq
 }
 
-// fedThrough waits until the daemon emulator has consumed every byte fed so
-// far, i.e. vtSeq catches outputSeq.
 func (p *PTY) fedThrough(t *testing.T, what string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -113,9 +83,6 @@ func (p *PTY) fedThrough(t *testing.T, what string) {
 	t.Fatalf("daemon emulator never consumed the %s", what)
 }
 
-// daemonText renders the daemon emulator's visible grid exactly the way
-// emulatorText renders a client emulator, so the two sides compare cell for
-// cell.
 func (p *PTY) daemonText() string {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
@@ -125,7 +92,6 @@ func (p *PTY) daemonText() string {
 	return terminalText(p.terminal)
 }
 
-// terminalText reads any terminal's visible grid as text, one line per row.
 func terminalText(t vt.Terminal) string {
 	var b strings.Builder
 	for y := range t.Height() {
@@ -142,8 +108,6 @@ func terminalText(t vt.Terminal) string {
 	return b.String()
 }
 
-// topDraw is the initial full-screen draw a program like top makes: enter the
-// alternate screen, clear it, paint three header rows and three process rows.
 const topDraw = "\x1b[?1049h\x1b[H\x1b[2J" +
 	"\x1b[1;1Htop - 12:00:00 up 1 day" +
 	"\x1b[2;1HTasks: 3 total" +
@@ -152,19 +116,12 @@ const topDraw = "\x1b[?1049h\x1b[H\x1b[2J" +
 	"\x1b[5;1H 5678 root     sshd" +
 	"\x1b[6;1H 9012 seba     bash"
 
-// topRepaint repaints the three process rows with fresh PIDs, the way top's
-// periodic update does (cursor to row, erase line, write row).
 func topRepaint(base int) string {
 	return "\x1b[4;1H\x1b[2K" + strconv.Itoa(base) + " seba     top" +
 		"\x1b[5;1H\x1b[2K" + strconv.Itoa(base+1) + " root     sshd" +
 		"\x1b[6;1H\x1b[2K" + strconv.Itoa(base+2) + " seba     bash"
 }
 
-// reattach rebuilds a client emulator from the daemon's snapshot, resumes the
-// stream from the snapshot's position, and keeps applying the live stream to
-// the client emulator, exactly what restoreTerminalContent plus the subscribe
-// handler (WriteOutputAsync) do. It returns the locked client and the
-// subscription channel; the caller owns closing the client and unsubscribing.
 func reattachFrom(p *PTY, clientID string) (*lockedClient, *ptyQueue) {
 	state := p.GetTerminalState(0, 0)
 	if state == nil {
@@ -180,9 +137,6 @@ func reattachFrom(p *PTY, clientID string) (*lockedClient, *ptyQueue) {
 	if len(replay) > 0 {
 		client.Write(replay)
 	}
-	// The live stream: every chunk the daemon broadcasts after the replay is
-	// applied to the client, as the client's output handler does. All writes
-	// go through the lock the test reads under.
 	go func() {
 		for chunk, ok := ch.next(); ok; chunk, ok = ch.next() {
 			if len(chunk.data) > 0 {
@@ -202,8 +156,6 @@ func TestReattachWhileTopRedraws(t *testing.T) {
 	p.feed([]byte(topDraw))
 	p.fedThrough(t, "initial draw")
 
-	// The guest keeps repainting: a few redraws land before the snapshot, and
-	// a few more while the client is being rebuilt.
 	for i := range 3 {
 		p.feed([]byte(topRepaint(1000 + i*10)))
 		time.Sleep(2 * time.Millisecond)
@@ -216,15 +168,12 @@ func TestReattachWhileTopRedraws(t *testing.T) {
 	defer client.Close()
 	defer func() { _ = p.Unsubscribe("repro-moving") }()
 
-	// More repaints after the resume, then let everything settle.
 	for i := range 5 {
 		p.feed([]byte(topRepaint(2000 + i*10)))
 		time.Sleep(2 * time.Millisecond)
 	}
 	p.fedThrough(t, "repaints after resume")
 
-	// The live stream applies asynchronously: wait until the client has caught
-	// up to the daemon's latest repaint before comparing.
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if strings.Contains(client.Text(), "2042 seba     bash") {
@@ -257,8 +206,7 @@ func TestReattachThenQuitAltScreen(t *testing.T) {
 	defer func() { _ = p.Unsubscribe("repro-quit") }()
 	_ = ch
 
-	// The guest quits top: leave the alternate screen.
-	p.feed([]byte("\x1b[?1049l$ ")) // as a shell prompt would after top exits
+	p.feed([]byte("\x1b[?1049l$ "))
 	p.fedThrough(t, "quit alt screen")
 
 	deadline := time.Now().Add(5 * time.Second)
@@ -276,9 +224,6 @@ func TestReattachThenQuitAltScreen(t *testing.T) {
 	}
 }
 
-// normalizeText trims trailing whitespace per line and drops trailing empty
-// lines, so two renderings of the same screen compare equal regardless of how
-// each path pads a blank cell.
 func normalizeText(s string) string {
 	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
 	for i, ln := range lines {

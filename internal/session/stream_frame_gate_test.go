@@ -7,22 +7,14 @@ import (
 	"time"
 )
 
-// The frame gate in streamPTYOutput holds a flooding pane's output until its
-// frame window ends, and must hold nothing else. These tests widen the window
-// to a second so that a held frame and an unheld one are far apart on a loaded
-// machine: a held frame arrives most of a second late, an unheld one at once.
-
 const gateTestInterval = time.Second
 
-// gateFrame is one message the stream wrote, and when the test read it.
 type gateFrame struct {
 	typ  MessageType
 	data []byte
 	at   time.Time
 }
 
-// gateRig is a stream goroutine writing to one end of a pipe for a PTY with no
-// reader of its own, and a reader on the other end collecting frames.
 type gateRig struct {
 	pty    *PTY
 	frames chan gateFrame
@@ -70,8 +62,6 @@ func newGateRig(t *testing.T) *gateRig {
 		defer close(stopped)
 		d.streamPTYOutput(cs, pty, sub)
 	}()
-	// Runs before the cleanup that puts the interval back, and waits for the
-	// stream to return so nothing still reads the interval when it changes.
 	t.Cleanup(func() {
 		cs.drop()
 		_ = client.Close()
@@ -81,7 +71,6 @@ func newGateRig(t *testing.T) *gateRig {
 	return rig
 }
 
-// next returns the next frame, failing the test if none comes in time.
 func (r *gateRig) next(t *testing.T) gateFrame {
 	t.Helper()
 	select {
@@ -93,8 +82,6 @@ func (r *gateRig) next(t *testing.T) gateFrame {
 	}
 }
 
-// flood sends one chunk big enough to fill a frame window, and returns once
-// the client has it.
 func (r *gateRig) flood(t *testing.T) {
 	t.Helper()
 	r.pty.appendAndBroadcast(bytes.Repeat([]byte("x"), 2*streamFloodBytes))

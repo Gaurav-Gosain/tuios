@@ -37,8 +37,6 @@ func TestSubscribeDuringStopRegistersNoGoroutine(t *testing.T) {
 			}()
 			d.startPendingStream(cs)
 
-			// Unblock a streamer that did start, so Stop does not sit out its
-			// five second timeout.
 			time.Sleep(20 * time.Millisecond)
 			_ = peer.Close()
 			<-stopped

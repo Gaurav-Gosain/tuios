@@ -20,47 +20,25 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
-// Kitty images named by a path, from a pane on another machine: the near
-// half. The far half, and the design, are in kitty_link_far.go.
-//
-// The far machine puts a marker in the pane's output where a graphics command
-// named a file. This side passes the marker on (an APC no terminal acts on),
-// fetches the file's bytes on a bulk stream with pane-kitty-medium, and writes
-// them after the marker as a direct transmission, in 4096-character chunks,
-// before any later output of the pane. The emulator, the clients and their
-// terminals see an ordinary t=d upload.
-
-// kittyLinkChunkRaw is the bytes of one t=d chunk: 4096 base64 characters,
-// the most the kitty protocol allows in one.
 const kittyLinkChunkRaw = 3072
 
-// kittyLinkFetchBudget bounds the fetch up to its reply.
 const kittyLinkFetchBudget = 15 * time.Second
 
-// kittyLinkMarkerMax bounds a marker's body.
 const kittyLinkMarkerMax = 1024
 
-// kittyLinkNear finds the markers in a remote pane's output and writes the
-// images in their place.
 type kittyLinkNear struct {
-	// fetch opens the bytes of the image a marker names.
 	fetch func(id string) (io.ReadCloser, int64, error)
 
-	// match is how much of kittyLinkMarkerPrefix ended the last read.
-	match int
-	// inBody is set between the prefix and the marker's ESC \.
+	match  int
 	inBody bool
 	sawEsc bool
 	body   []byte
 
-	// rest is output read past a marker, served after the image.
 	rest []byte
-	// due is a marker whose image is next.
-	due []byte
-	exp *kittyLinkExpansion
+	due  []byte
+	exp  *kittyLinkExpansion
 }
 
-// read is the pane's Read: raw reads the far machine's bytes.
 func (x *kittyLinkNear) read(b []byte, raw func([]byte) (int, error)) (int, error) {
 	for {
 		if x.due != nil {
@@ -107,8 +85,6 @@ func (x *kittyLinkNear) read(b []byte, raw func([]byte) (int, error)) (int, erro
 	}
 }
 
-// scan follows the markers in data. data[:cut] goes to the caller; ready says
-// a marker ended at cut.
 func (x *kittyLinkNear) scan(data []byte) (cut int, ready bool) {
 	p := kittyLinkMarkerPrefix
 	i := 0
@@ -119,8 +95,6 @@ func (x *kittyLinkNear) scan(data []byte) (cut int, ready bool) {
 				if data[i] == '\\' {
 					return i + 1, true
 				}
-				// The ESC that cut the body short may start the next
-				// marker: scan on from it, as one byte of the prefix.
 				x.body = nil
 				x.match = 1
 				continue
@@ -156,8 +130,6 @@ func (x *kittyLinkNear) scan(data []byte) (cut int, ready bool) {
 			x.inBody, x.body = true, nil
 			continue
 		}
-		// A prefix of the marker at the very end continues in the next
-		// read.
 		tail := data[max(i, len(data)-len(p)+1):]
 		for t := bytes.IndexByte(tail, 0x1b); t >= 0; {
 			if bytes.HasPrefix([]byte(p), tail[t:]) {
@@ -175,8 +147,6 @@ func (x *kittyLinkNear) scan(data []byte) (cut int, ready bool) {
 	return len(data), false
 }
 
-// start fetches the image a marker body ("id;keys") names. A marker whose
-// image cannot be fetched writes nothing: the far machine answers the guest.
 func (x *kittyLinkNear) start(body []byte) *kittyLinkExpansion {
 	id, keys, ok := bytes.Cut(body, []byte{';'})
 	if !ok || len(id) == 0 || len(keys) == 0 || x.fetch == nil {
@@ -190,7 +160,6 @@ func (x *kittyLinkNear) start(body []byte) *kittyLinkExpansion {
 	return newKittyLinkExpansion(r, size, string(keys))
 }
 
-// kittyLinkExpansion writes one image as t=d chunks.
 type kittyLinkExpansion struct {
 	r         io.ReadCloser
 	remaining int64
@@ -220,7 +189,6 @@ func (e *kittyLinkExpansion) done() bool { return e.finished && e.off >= len(e.o
 
 func (e *kittyLinkExpansion) close() { _ = e.r.Close() }
 
-// read copies the next chunks into b, reading more of the image as needed.
 func (e *kittyLinkExpansion) read(b []byte) int {
 	if e.off >= len(e.out) && !e.finished {
 		e.fill()
@@ -230,7 +198,6 @@ func (e *kittyLinkExpansion) read(b []byte) int {
 	return n
 }
 
-// fill encodes up to sixteen chunks.
 func (e *kittyLinkExpansion) fill() {
 	e.out, e.off = e.out[:0], 0
 	if e.remaining <= 0 {
@@ -240,9 +207,6 @@ func (e *kittyLinkExpansion) fill() {
 	n := int(min(e.remaining, int64(len(e.raw))))
 	got, err := io.ReadFull(e.r, e.raw[:n])
 	if err != nil || got < n {
-		// The link dropped in the middle. End the upload so the next
-		// output is not read as image data; q=2 leaves the answer to the
-		// far machine, which saw the send fail.
 		if !e.first {
 			e.out = append(e.out, "\x1b_Gm=0,q=2;\x1b\\"...)
 		}
@@ -277,13 +241,10 @@ func (e *kittyLinkExpansion) fill() {
 	}
 }
 
-// bulkOpener is the part of federation.Manager that opens a bulk stream.
 type bulkOpener interface {
 	OpenConnectionAs(ctx context.Context, host string, info federation.StreamOpen) (io.ReadWriteCloser, error)
 }
 
-// fetchKittyMedium opens the bytes of image id of the remote pane p, on a
-// bulk stream when the federation can open one.
 func (p *remotePane) fetchKittyMedium(token, id string) (io.ReadCloser, int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), kittyLinkFetchBudget)
 	defer cancel()
@@ -348,10 +309,6 @@ type readCloser struct {
 	io.Closer
 }
 
-// kittyLinkStallForTest lets the end-to-end tests play an owner that stops
-// reading an image: with the kitty_link_stall knob naming a file that holds a byte count, the fetch of an image larger than that waits
-// while the file exists, a minute at most, before it reads a byte. Ordinary
-// runs never set it.
 func kittyLinkStallForTest(size int64) {
 	path := testknob.String("kitty_link_stall")
 	if path == "" {

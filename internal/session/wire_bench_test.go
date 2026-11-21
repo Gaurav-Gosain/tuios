@@ -9,32 +9,14 @@ import (
 	"tuios.dev/vt/snapshot"
 )
 
-// What a client actually costs the wire.
-//
-// Everything the daemon sends a TUI client is whole-object gob: there is no
-// delta encoding anywhere except the raw PTY byte stream. That makes the size
-// of each object the whole story, so these benchmarks report wire-bytes as the
-// headline number and the encode time as the secondary one.
-//
-// The sizes here are per message. An attach pays TerminalState once per window,
-// so the per-window number is what to multiply by a session's pane count.
-
-// benchWireCols and benchWireRows are the maintainer's real host size, matching
-// the render benchmarks. Cell count is what TerminalState scales with.
 const (
 	benchWireCols = 207
 	benchWireRows = 55
 )
 
-// wirePTY builds a PTY carrying only what GetTerminalState reads: an emulator,
-// and the size it was made at. No shell is forked, because a real one would
-// make the scrollback depth a race rather than a parameter, and depth is the
-// variable these benchmarks exist to sweep.
 func wirePTY(tb testing.TB, cols, rows, scrollback int) *PTY {
 	tb.Helper()
 	em := vt.NewEmulator(cols, rows)
-	// Styled text, one colour run per line: a blank screen would encode to
-	// almost nothing and report a cost no real pane has.
 	for i := range rows + scrollback {
 		line := fmt.Sprintf("line %05d ", i)
 		for len(line) < cols-14 {
@@ -159,7 +141,6 @@ func BenchmarkWireTerminalStateCaughtUp(b *testing.B) {
 // that grows with the session are not averaged into a single misleading number.
 func BenchmarkWireKeystroke(b *testing.B) {
 	b.Run("raw-input", func(b *testing.B) {
-		// Header, the 36-byte PTY UUID the binary framing carries, and the key.
 		const header = 4 + 1 + 1
 		const uuid = 36
 		b.ReportMetric(float64(header+uuid+1), "wire-bytes")

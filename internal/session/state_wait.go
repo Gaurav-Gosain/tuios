@@ -2,11 +2,6 @@ package session
 
 import "time"
 
-// noteStateChangeLocked records a change to the session's state: the
-// resurrection saver writes it, every WaitState wakes to look at it, and the
-// workspace trail notes the workspace on screen. It also counts the change,
-// which is what orders the copies sent to clients (see Session.changeSeq).
-// The caller holds stateMu for writing.
 func (s *Session) noteStateChangeLocked() {
 	s.changeSeq++
 	s.noteWorkspaceLocked()
@@ -15,8 +10,6 @@ func (s *Session) noteStateChangeLocked() {
 	s.wakeStateWaiters()
 }
 
-// wakeStateWaiters wakes every goroutine in WaitState or waitChange. It
-// closes the current channel, and the next waiter makes a new one.
 func (s *Session) wakeStateWaiters() {
 	s.stateWakeMu.Lock()
 	if s.stateWake != nil {
@@ -26,7 +19,6 @@ func (s *Session) wakeStateWaiters() {
 	s.stateWakeMu.Unlock()
 }
 
-// stateWakeChan is the channel the next wakeStateWaiters closes.
 func (s *Session) stateWakeChan() <-chan struct{} {
 	s.stateWakeMu.Lock()
 	defer s.stateWakeMu.Unlock()
@@ -36,15 +28,10 @@ func (s *Session) stateWakeChan() <-chan struct{} {
 	return s.stateWake
 }
 
-// waitChange waits up to limit for cond to hold, looking again each time the
-// session wakes its waiters, and reports whether it held. cond must take no
-// lock that is held while a waiter is woken.
 func (s *Session) waitChange(limit time.Duration, cond func() bool) bool {
 	timer := time.NewTimer(limit)
 	defer timer.Stop()
 	for {
-		// The channel is taken before the look, so a change that lands
-		// between the two still wakes this loop.
 		wake := s.stateWakeChan()
 		if cond() {
 			return true

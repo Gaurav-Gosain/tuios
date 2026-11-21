@@ -6,12 +6,8 @@ import (
 	"time"
 )
 
-// detectionVerbs are the three verbs that report where a pane's agent state
-// came from, each called on one window.
 var detectionVerbs = []string{"get-agent-state", "explain-agent-detect", "list-agents"}
 
-// detectionRow calls one detection verb for a window and returns the part of
-// the answer that describes it: the result itself, or its list-agents row.
 func detectionRow(t *testing.T, sp string, verb, session, windowID string) map[string]any {
 	t.Helper()
 	c := dialVerb(t, sp)
@@ -76,8 +72,6 @@ func TestEvidenceAgeUnderAFakeClock(t *testing.T) {
 		}
 	}
 
-	// A clock behind the stamp, which a merged state from a faster machine can
-	// cause, reads as fresh rather than negative.
 	now.Store(stampedAt - int64(time.Second))
 	if got := detectionRow(t, sp, "get-agent-state", "age", winID)["evidence_age_ms"]; got != float64(0) {
 		t.Errorf("a stamp in the future reads evidence_age_ms %v, want 0", got)
@@ -127,8 +121,6 @@ func TestEvidenceAgeFollowsOutputForAnInferredState(t *testing.T) {
 	if pty == nil {
 		t.Fatal("the window has no pty")
 	}
-	// The pane's real shell prints its prompt once. Wait for that to settle,
-	// or its write lands on top of the output times the test sets below.
 	deadline := time.Now().Add(5 * time.Second)
 	for last := int64(-1); ; {
 		time.Sleep(300 * time.Millisecond)
@@ -159,7 +151,6 @@ func TestEvidenceAgeFollowsOutputForAnInferredState(t *testing.T) {
 		t.Fatalf("detection left source %q, stamp %d; want detect and a stamp", claim.source, stampedAt)
 	}
 
-	// The pane prints every 300 ms for 45 s after the detector saw it.
 	for _, elapsed := range []time.Duration{20 * time.Second, 35 * time.Second, 45 * time.Second} {
 		at := stampedAt + int64(elapsed)
 		pty.lastOutput.Store(at - int64(300*time.Millisecond))
@@ -171,8 +162,6 @@ func TestEvidenceAgeFollowsOutputForAnInferredState(t *testing.T) {
 		}
 	}
 
-	// The agent reports for itself. Its report is the evidence now, and the
-	// pane's output does not refresh it.
 	if _, _, err := sess.ApplyAgentReport(winID, AgentReport{State: AgentStateWorking}); err != nil {
 		t.Fatal(err)
 	}

@@ -19,60 +19,6 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// Where a file read or write that arrives over a link may land.
-//
-// The file verbs act on this machine for whoever calls them. The person's own
-// clients may read and write anywhere the user may. A call that arrived over a
-// link comes from another machine, and the link policy (link_policy.go) only
-// says whether that machine may use the file verbs at all. A sender that lies,
-// or a copy aimed at the wrong folder, must not be able to drop a key into
-// ~/.ssh/authorized_keys or a line into ~/.bashrc: that is how a file copy
-// becomes a login (croc CVE-2023-43619 is that bug). Nor may it read the keys
-// out.
-//
-// So a write over a link (open-file-stream write, file-commit, file-mkdir,
-// file-rename, file-remove, file-abort) is held to three rules:
-//
-//   - It lands inside one of the write roots: the folders files_roots names
-//     for the machine, or the receive folder (config.DefaultFilesRoot) when
-//     files_roots says nothing, plus this daemon's drop folder. The check is
-//     on the real path, after links, and the write itself goes through an
-//     os.Root at that folder, so a link inside the folder cannot carry the
-//     write out of it.
-//   - It does not land in the deny list below, nor does the deny list sit
-//     under it: the folders that hold keys, credentials, shell start files,
-//     login items, and tuios's own config and state. A write to a folder that
-//     holds one of them, such as a rename of ~/.config, is refused too, so a
-//     link cannot carry a denied folder out and back. The check is on the
-//     real path, and it folds case and width the way macOS and Windows disks
-//     do.
-//   - The deny list holds inside every root, so files_roots = ["~"] still
-//     keeps a write out of ~/.ssh.
-//
-// A read over a link (file-read, file-hash, file-walk, open-file-stream read)
-// is held to the read deny list: keys, credentials, shell start files, /proc,
-// the daemon's socket folder and tuios's own state. Every credential carrier of
-// the write deny list is in it (linkDenyCredentialHome). A read elsewhere is allowed, so a copy
-// out works. A read does not go through a root, so on Windows a path must also
-// be a plain drive letter path (plainLinkPath).
-//
-// The deny check reads the real path before the call. A process on this
-// machine that swaps a folder for a link between the check and the write could
-// still steer a write within a root, but such a process already runs as the
-// user and needs no link to do that. The link itself cannot make a link: no
-// verb creates one, a copy skips them, and a rename of a link whose target is
-// denied, or holds a denied folder, is refused. What is left is a link that
-// was already inside a root, pointing at a denied place that is also inside
-// it (files_roots = ["~"]), inside a folder the link renames between another
-// call's check and its open. That needs a root the person widened on purpose,
-// and a link the person made.
-
-// linkDenyCredentialHome is the credential carriers, as paths under the home
-// folder: keys, tokens, the files a shell or a session reads its environment
-// from, and tuios's own config and state. Both deny lists hold all of them,
-// so a file a link may not change because it can hold a secret may not be
-// read either. A shell start file or ~/.gitconfig often exports a token, and
-// ~/.config/git holds the credential store git writes by default.
 var linkDenyCredentialHome = []string{
 	".ssh",
 	".gnupg",
@@ -114,21 +60,14 @@ var linkDenyCredentialHome = []string{
 	".xsession",
 	".xinitrc",
 	".inputrc",
-	// The PowerShell profiles, which are shell start files too.
 	"Documents/PowerShell",
 	"Documents/WindowsPowerShell",
-	// Claude Code's login and the MCP servers it runs.
 	".claude.json",
-	// The sops age keys, which decrypt every file sops encrypted.
 	".config/sops/age",
 	"Library/Application Support/sops/age",
 	"AppData/Roaming/sops/age",
-	// Atuin's sync key, session and history, and the config that names
-	// their paths and the sync server.
 	".local/share/atuin",
 	".config/atuin",
-	// Ollama's signing key, and the API keys of Gemini CLI, its fork Qwen
-	// Code, and Hermes Agent.
 	".ollama/id_ed25519",
 	".gemini/.env",
 	".qwen/.env",
@@ -136,13 +75,6 @@ var linkDenyCredentialHome = []string{
 	"AppData/Local/hermes/.env",
 }
 
-// linkDenyWriteOnlyHome is the rest of the write deny list: login items,
-// which run a program but hold no secret, the folders of tools whose
-// credential file the read deny list names on its own (~/.claude,
-// ~/.codex, ~/.docker, ~/.config/gh), and the config folders of the agent
-// harnesses tuios integrates (internal/integration), which name the hooks,
-// plugins, extensions and MCP servers the tool runs. A link may read the
-// rest of those folders, and may change none of them.
 var linkDenyWriteOnlyHome = []string{
 	".config/autostart",
 	"Library/LaunchAgents",
@@ -151,7 +83,6 @@ var linkDenyWriteOnlyHome = []string{
 	".claude",
 	".codex",
 	".config/gh",
-	// The agent harnesses tuios installs hooks, plugins or extensions into.
 	".gemini",
 	".config/opencode",
 	".config/amp",
@@ -170,18 +101,11 @@ var linkDenyWriteOnlyHome = []string{
 	".omp/agent",
 	".qoder",
 	".qwen",
-	// The Windows start folder.
 	"AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
 }
 
-// linkDenyHome is the write deny list, as paths under the home folder. A write
-// to one of them, to anything under it, or to a folder that holds it, is
-// refused.
 var linkDenyHome = slices.Concat(linkDenyCredentialHome, linkDenyWriteOnlyHome)
 
-// linkDenyAbsolute is the write deny list outside the home folder: the crontab
-// spools. They are outside every root a link may write, so they are refused
-// twice, which is the point.
 var linkDenyAbsolute = []string{
 	"/var/spool/cron",
 	"/var/at/tabs",
@@ -189,24 +113,12 @@ var linkDenyAbsolute = []string{
 	"/proc",
 }
 
-// linkReadDenyAbsolute is the read deny list outside the home folder. /proc
-// holds every process's environment and memory as files a plain read returns:
-// /proc/self/environ and /proc/self/mem are the daemon's own, and the panes'
-// shells are its children.
 var linkReadDenyAbsolute = []string{
 	"/proc",
 }
 
-// linkReadDenyHome is the read deny list, as paths under the home folder. A
-// read of one of these, over a link, is refused, with an exception for the
-// public keys in ~/.ssh. It holds every credential carrier of the write deny
-// list (linkDenyCredentialHome), and the stores, histories and browser
-// profiles below, which a link may not read but which a write needs no rule
-// for.
 var linkReadDenyHome = slices.Concat(linkDenyCredentialHome, linkReadDenyOnlyHome)
 
-// linkReadDenyOnlyHome is the part of the read deny list that is not in the
-// write deny list.
 var linkReadDenyOnlyHome = []string{
 	".docker/config.json",
 	".config/gh/hosts.yml",
@@ -227,7 +139,6 @@ var linkReadDenyOnlyHome = []string{
 	".config/hub",
 	".config/op",
 	".local/share/keyrings",
-	// Shell and program histories: a command line often holds a token.
 	".bash_history",
 	".zsh_history",
 	".zhistory",
@@ -244,7 +155,6 @@ var linkReadDenyOnlyHome = []string{
 	".local/state/nvim/shada",
 	".local/share/zsh/history",
 	".local/state/zsh/history",
-	// Browser profiles: cookies are signed-in sessions.
 	".mozilla",
 	".config/google-chrome",
 	".config/chromium",
@@ -255,13 +165,10 @@ var linkReadDenyOnlyHome = []string{
 	"Library/Application Support/BraveSoftware",
 	"Library/Cookies",
 	"Library/Safari",
-	// Browsers and mail installed as snaps and flatpaks keep their
-	// profiles here: the snap's own home, and a flatpak's whole data.
 	"snap/firefox/common/.mozilla",
 	"snap/chromium/common/chromium",
 	"snap/thunderbird/common/.thunderbird",
 	".var/app",
-	// Mail, chat and editor state: signed-in sessions and tokens.
 	".thunderbird",
 	"Library/Thunderbird",
 	".config/Code",
@@ -276,7 +183,6 @@ var linkReadDenyOnlyHome = []string{
 	".config/Slack",
 	"Library/Application Support/Slack",
 	".local/share/TelegramDesktop",
-	// Crypto wallets.
 	".bitcoin",
 	".electrum",
 	".ethereum",
@@ -290,12 +196,9 @@ var linkReadDenyOnlyHome = []string{
 	"AppData/Roaming/Bitcoin",
 	"AppData/Roaming/Electrum",
 	"AppData/Roaming/Exodus",
-	// Password managers and the tokens of other tools.
 	".config/Bitwarden",
 	".config/1Password",
 	".config/github-copilot",
-	// The logins of agent harnesses, and Cursor's MCP servers, whose env
-	// often holds API keys.
 	".gemini/oauth_creds.json",
 	".gemini/mcp-oauth-tokens.json",
 	".local/share/opencode/auth.json",
@@ -304,14 +207,11 @@ var linkReadDenyOnlyHome = []string{
 	".local/share/kilo/auth.json",
 	".local/share/kilo/mcp-auth.json",
 	".pi/agent/auth.json",
-	// oh-my-pi, a Pi fork, keeps its logins in a SQLite database, and the
-	// write-ahead log beside it holds the newest of them.
 	".omp/agent/agent.db",
 	".omp/agent/agent.db-wal",
 	".local/share/amp/secrets.json",
 	".copilot/config.json",
 	".cursor/mcp.json",
-	// Cloud and tunnel CLI credentials.
 	".oci",
 	".config/doctl",
 	"Library/Application Support/doctl",
@@ -320,32 +220,17 @@ var linkReadDenyOnlyHome = []string{
 	"Library/Application Support/ngrok",
 	"AppData/Local/ngrok",
 	".ngrok2",
-	// Windows credentials and the DPAPI keys that open them.
 	"AppData/Roaming/Microsoft/Credentials",
 	"AppData/Local/Microsoft/Credentials",
 	"AppData/Roaming/Microsoft/Protect",
 }
 
-// fileFS is where the file verbs write. A zero fileFS is the plain file
-// system, for the person's own calls. With root set, every path must be under
-// dir, the real path the root was opened at, and every operation goes
-// through the root.
 type fileFS struct {
 	root *os.Root
 	dir  string
-	// link says the write came from another machine: a linked machine or a
-	// paired device. A file it commits gets the sender's mode the way cp and
-	// scp without -p give it, under this process's umask, and never with
-	// group or world write. See commitMode.
 	link bool
 }
 
-// commitMode is the mode a committed file gets for the sender's perm. The
-// person's own copy, and a pane's, keep the bits as sent, as the docs
-// promise. A copy from another machine is masked by the umask and loses
-// group and world write, so a file another local user could change never
-// arrives that way on a shared machine. The execute bits stay, so a script
-// that arrives still runs.
 func (f fileFS) commitMode(perm uint32) os.FileMode {
 	m := os.FileMode(perm & 0o777)
 	if f.link {
@@ -354,7 +239,6 @@ func (f fileFS) commitMode(perm uint32) os.FileMode {
 	return m
 }
 
-// rel is path relative to the root.
 func (f fileFS) rel(path string) (string, error) {
 	r, ok := pathroot.Within(f.dir, path)
 	if !ok {
@@ -469,8 +353,6 @@ func (f fileFS) MkdirAll(path string, perm os.FileMode) error {
 	return f.root.MkdirAll(r, perm)
 }
 
-// Close releases the root. A file opened through it stays open.
-//
 //go:noinline
 func (f fileFS) Close() {
 	if f.root != nil {
@@ -478,15 +360,8 @@ func (f fileFS) Close() {
 	}
 }
 
-// foldPaths reports whether this system's disks ignore case by default.
 var foldPaths = runtime.GOOS == "darwin" || runtime.GOOS == "windows"
 
-// foldKey is p with each component folded the way a case-insensitive disk
-// compares it: normalised to NFD, then each rune mapped to the smallest in its
-// Unicode simple-fold cycle, and the ignorable code points a disk drops
-// removed. It is used only to compare two paths, never to open one. Without it
-// ".Ssh", ".ſsh" (long s) and a soft hyphen in ".s<ad>sh" each open ".ssh" on
-// APFS while strings.ToLower leaves them apart.
 func foldKey(p string) string {
 	if runtime.GOOS == "windows" {
 		p = trimWindowsNames(p)
@@ -497,9 +372,6 @@ func foldKey(p string) string {
 	for _, r := range p {
 		switch r {
 		case 0x00AD, 0xFEFF, 0x200B, 0x200C, 0x200D:
-			// Soft hyphen, BOM, zero-width space and the zero-width
-			// non-joiner and joiner, as numbers so the source holds no
-			// invisible character: a disk drops them.
 			continue
 		}
 		b.WriteRune(foldRune(r))
@@ -507,9 +379,6 @@ func foldKey(p string) string {
 	return b.String()
 }
 
-// trimWindowsNames is p with the dots and spaces at the end of each name
-// removed. Windows drops them when it opens a path, and so does os.Root, so
-// ".ssh." and ".ssh " open ".ssh".
 func trimWindowsNames(p string) string {
 	parts := strings.Split(p, string(filepath.Separator))
 	for i, part := range parts {
@@ -523,8 +392,6 @@ func trimWindowsNames(p string) string {
 	return strings.Join(parts, string(filepath.Separator))
 }
 
-// foldRune is the smallest rune in r's Unicode simple-fold cycle, so every
-// rune a disk treats as equal maps to one key.
 func foldRune(r rune) rune {
 	m := r
 	for c := unicode.SimpleFold(r); c != r; c = unicode.SimpleFold(c) {
@@ -535,8 +402,6 @@ func foldRune(r rune) rune {
 	return m
 }
 
-// pathUnder reports whether p is dir or inside it, folding case and width
-// where the disk ignores them.
 func pathUnder(p, dir string) bool {
 	if foldPaths {
 		p, dir = foldKey(p), foldKey(dir)
@@ -547,9 +412,6 @@ func pathUnder(p, dir string) bool {
 	return strings.HasPrefix(p, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
 }
 
-// denyUnder is pathUnder for a deny list: it folds case and width on every
-// system. A Linux disk can ignore case too (an ext4 folder with casefold, a
-// vfat or exFAT stick), and a wider deny match only refuses more.
 func denyUnder(p, dir string) bool {
 	p, dir = foldKey(p), foldKey(dir)
 	if p == dir {
@@ -558,10 +420,6 @@ func denyUnder(p, dir string) bool {
 	return strings.HasPrefix(p, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
 }
 
-// realPath is p with every link in the part of it that exists resolved. The
-// part that does not exist yet, such as the folders a mkdir makes, is joined
-// on as given. On macOS a path through /System/Volumes/Data is given by its
-// short name (trimDataVolume).
 func realPath(p string) string {
 	rest := ""
 	cur := p
@@ -582,9 +440,6 @@ func realPath(p string) string {
 	}
 }
 
-// realParent is p with the links in its folder resolved and its last name as
-// given: the place a write to p lands. A rename onto a link replaces the
-// link, so the last name is not followed.
 func realParent(p string) string {
 	dir, base := filepath.Split(p)
 	if base == "" {
@@ -593,9 +448,6 @@ func realParent(p string) string {
 	return filepath.Join(realPath(filepath.Clean(dir)), base)
 }
 
-// linkRootPaths are the real write roots a policy allows, without the drop
-// folder: the real paths of files_roots, or the receive folder when it names
-// none. It is used to compare two policies and to list them for the person.
 func linkRootPaths(policy config.LinkPolicy) []string {
 	raw := policy.FilesRoots
 	if raw == nil {
@@ -606,8 +458,6 @@ func linkRootPaths(policy config.LinkPolicy) []string {
 	return linkPathsOf(raw)
 }
 
-// linkPathsOf is the real paths of roots as a config names them: absolute or
-// starting with ~. Others are left out.
 func linkPathsOf(raw []string) []string {
 	home, _ := os.UserHomeDir()
 	out := make([]string, 0, len(raw))
@@ -630,9 +480,6 @@ func linkPathsOf(raw []string) []string {
 	return out
 }
 
-// linkWriteRoots are the folders a write over a link from the machine with
-// this policy may land in, as real paths: the policy's roots, then the drop
-// folder. home is the real home folder, for the deny list and a message.
 func (d *Daemon) linkWriteRoots(policy config.LinkPolicy) (home string, roots []string) {
 	if h, err := os.UserHomeDir(); err == nil {
 		home = realPath(filepath.Clean(h))
@@ -644,15 +491,10 @@ func (d *Daemon) linkWriteRoots(policy config.LinkPolicy) (home string, roots []
 	return home, roots
 }
 
-// linkPrivate is the daemon's own folders a link must not touch beside the
-// deny lists: sock is the real folder of the daemon's socket, which holds the
-// mail stash, the pid file and the sockets, and drop is the drop folder inside
-// it, which a link may use.
 type linkPrivate struct {
 	sock, drop string
 }
 
-// linkPrivateDirs is the daemon's linkPrivate.
 func (d *Daemon) linkPrivateDirs() linkPrivate {
 	if d == nil || d.manager == nil {
 		return linkPrivate{}
@@ -660,30 +502,20 @@ func (d *Daemon) linkPrivateDirs() linkPrivate {
 	return linkPrivateFor(d.manager.SocketPath())
 }
 
-// linkPrivateFor is the linkPrivate of a daemon listening on socketPath.
 func linkPrivateFor(socketPath string) linkPrivate {
 	if socketPath == "" {
 		return linkPrivate{}
 	}
 	sock := realPath(filepath.Clean(filepath.Dir(socketPath)))
 	lp := linkPrivate{sock: sock, drop: filepath.Join(sock, "drop")}
-	// A named server's socket folder is <default's>/servers/<name>. The
-	// default's folder holds every server's, so it is the one denied, and a
-	// link to one server cannot reach another's sockets or stash.
 	if serverscope.Name() != "" {
 		lp.sock = filepath.Dir(filepath.Dir(sock))
 	}
 	return lp
 }
 
-// denyKeys is a deny list made ready to compare: each entry as named and its
-// real path, folded once (foldKey). Folding every entry again for every path
-// cost a folder copy over a link most of its time: tens of entries, each
-// resolved through its links and folded rune by rune, for each file.
 type denyKeys []denyKey
 
-// denyKey is one folded entry, and the same with a separator at its end,
-// which a path inside it starts with.
 type denyKey struct{ key, dir string }
 
 func newDenyKey(p string) denyKey {
@@ -699,14 +531,10 @@ func makeDenyKeys(list []string) denyKeys {
 	return out
 }
 
-// under reports whether the folded path a is b or inside it.
 func (a denyKey) under(b denyKey) bool {
 	return a.key == b.key || strings.HasPrefix(a.key, b.dir)
 }
 
-// holds reports whether p is at, inside, or an ancestor of an entry. An
-// ancestor is caught so a link cannot rename a folder that holds a denied one
-// out and back.
 func (k denyKeys) holds(p string) bool {
 	fp := newDenyKey(p)
 	for _, c := range k {
@@ -717,15 +545,11 @@ func (k denyKeys) holds(p string) bool {
 	return false
 }
 
-// covers reports whether p is at or inside an entry.
 func (k denyKeys) covers(p string) bool {
 	fp := newDenyKey(p)
 	return slices.ContainsFunc(k, fp.under)
 }
 
-// denyKeysTTL is how long a prepared deny list is used. Its entries change
-// only when the person moves a dotfile link on this machine; a linked machine
-// has no verb that makes a link.
 const denyKeysTTL = 2 * time.Second
 
 var denyKeysCache struct {
@@ -738,8 +562,6 @@ type denyKeysEntry struct {
 	keys denyKeys
 }
 
-// cachedDenyKeys is the prepared deny list for key, built by list when it is
-// not cached or older than denyKeysTTL.
 func cachedDenyKeys(key string, list func() []string) denyKeys {
 	denyKeysCache.Lock()
 	e, ok := denyKeysCache.m[key]
@@ -757,8 +579,6 @@ func cachedDenyKeys(key string, list func() []string) denyKeys {
 	return keys
 }
 
-// linkDenied reports whether the real path p is in, under, or an ancestor of
-// the write deny list.
 func linkDenied(p, home string, lp linkPrivate) bool {
 	withSock := lp.sock != "" && (lp.drop == "" || !denyUnder(p, lp.drop))
 	key := "write\x00" + home + "\x00" + lp.sock + "\x00" + strconv.FormatBool(withSock)
@@ -780,9 +600,6 @@ func linkDenied(p, home string, lp linkPrivate) bool {
 	}).holds(p)
 }
 
-// tuiosOwnDirs is tuios's own folders, wherever the XDG variables put them.
-// The state folders are those of every server, not only the current one's, so
-// a link to one server cannot reach another server's files.
 func tuiosOwnDirs() []string {
 	var list []string
 	for _, dir := range []string{xdg.ConfigHome, serverscope.BaseStateHome(), xdg.DataHome} {
@@ -796,8 +613,6 @@ func tuiosOwnDirs() []string {
 	return list
 }
 
-// linkReadDenied reports whether the real path p is in or under the read deny
-// list. A public key in a denied .ssh folder is allowed.
 func linkReadDenied(p, home string, lp linkPrivate) bool {
 	if home != "" && denyUnder(p, filepath.Join(home, ".ssh")) && strings.HasSuffix(strings.ToLower(p), ".pub") {
 		return false
@@ -822,12 +637,6 @@ func linkReadDenied(p, home string, lp linkPrivate) bool {
 	}).covers(p)
 }
 
-// plainLinkPath reports whether p is a path form the deny lists can judge. On
-// Windows that is a drive letter path with no other colon: a \\?\ or \\.\
-// prefix, a UNC share such as \\localhost\C$, and a stream name such as
-// "id_ed25519::$DATA" each open a file the deny list knows by another name.
-// os.Root refuses those forms for a write, but a read does not go through a
-// root. Every path is plain elsewhere: a colon is a valid name there.
 func plainLinkPath(p string) bool {
 	if runtime.GOOS != "windows" {
 		return true
@@ -839,8 +648,6 @@ func plainLinkPath(p string) bool {
 	return !strings.ContainsAny(p[len(vol):], ":?*")
 }
 
-// checkLinkRead refuses a read of path that arrived over a link and lands in
-// the read deny list. A call that did not come over a link passes.
 func (d *Daemon) checkLinkRead(cs *connState, path string) *verbError {
 	if cs == nil || !cs.viaLink {
 		return nil
@@ -873,13 +680,6 @@ func (d *Daemon) checkLinkRead(cs *connState, path string) *verbError {
 	return nil
 }
 
-// openLinkRead opens a regular file to read it for cs. For a call over a
-// link the path is judged before the open, and the file that was opened is
-// judged again by the path the system has for it now. A check on the path
-// alone races a rename: a folder that holds a link to ~/.ssh can be moved in
-// under the checked name between the check and the open. The file must also
-// have one name only. A hard link to a key in a root reads as the key, and
-// no path check sees it. err is the open's own error, verr a refusal.
 func (d *Daemon) openLinkRead(cs *connState, path string) (f *os.File, fi fs.FileInfo, verr *verbError, err error) {
 	if verr := d.checkLinkRead(cs, path); verr != nil {
 		return nil, nil, verr, nil
@@ -895,8 +695,6 @@ func (d *Daemon) openLinkRead(cs *connState, path string) (f *os.File, fi fs.Fil
 	return f, fi, nil, nil
 }
 
-// checkOpenedForLink judges a file opened for a read over a link: by the
-// path the system has for it now, and by its number of names.
 func (d *Daemon) checkOpenedForLink(cs *connState, f *os.File, path string) *verbError {
 	if real, ok := fdPath(f); ok {
 		if verr := d.checkLinkRead(cs, real); verr != nil {
@@ -915,9 +713,6 @@ func (d *Daemon) checkOpenedForLink(cs *connState, f *os.File, path string) *ver
 	return nil
 }
 
-// linkWalkRoot is the folder a walk over a link lists: the path the system
-// has for the folder once it is open, judged by the read rules, so a rename
-// cannot swap another folder in under the checked name.
 func (d *Daemon) linkWalkRoot(cs *connState, path string) (string, *verbError) {
 	if verr := d.checkLinkRead(cs, path); verr != nil {
 		return "", verr
@@ -940,11 +735,6 @@ func (d *Daemon) linkWalkRoot(cs *connState, path string) (string, *verbError) {
 	return real, nil
 }
 
-// linkWalkDenied is what a walk over a link leaves out: an entry in the read
-// deny list. The walk's root is judged by linkWalkRoot, and without this a
-// walk of the home folder would still name the keys in ~/.ssh. The walk does
-// not follow links and starts at the real path, so each entry is its own real
-// path. Nil for a call that did not come over a link.
 func (d *Daemon) linkWalkDenied(cs *connState) func(string) bool {
 	if cs == nil || !cs.viaLink {
 		return nil
@@ -959,8 +749,6 @@ func (d *Daemon) linkWalkDenied(cs *connState) func(string) bool {
 	}
 }
 
-// linkReadRootsError refuses a read outside files_read_roots and says how to
-// allow it.
 func (d *Daemon) linkReadRootsError(policy config.LinkPolicy, home, path string) *verbError {
 	here := d.hostedPaneHostName()
 	if here == "" {
@@ -984,11 +772,6 @@ func (d *Daemon) linkReadRootsError(policy config.LinkPolicy, home, path string)
 	})
 }
 
-// linkWriteFS is where a file verb on cs may write the given paths. For a
-// call that did not come over a link it is the plain file system. For a link
-// it is an os.Root at the folder that holds every path, and a path outside the
-// roots or in the deny list is refused with the reason. The caller closes the
-// fileFS.
 func (d *Daemon) linkWriteFS(cs *connState, paths ...string) (fileFS, *verbError) {
 	if cs == nil || !cs.viaLink {
 		return fileFS{}, nil
@@ -1027,9 +810,6 @@ func (d *Daemon) linkWriteFS(cs *connState, paths ...string) (fileFS, *verbError
 			})
 		}
 		if drop, err := d.dropRoot(); err == nil && pathUnder(real, realPath(drop)) {
-			// In the drop folder a link writes only inside a drop that
-			// file-drop-dir made: never a file or a folder of its own at
-			// the top, which pruneDrops would not see.
 			if rel, err := filepath.Rel(realPath(drop), real); err != nil || !strings.Contains(rel, string(filepath.Separator)) {
 				LogBasic("Link %s (peer %q) refused a file write to %s: the top of the drop folder", cs.clientID, peer, p)
 				return fileFS{}, hintedVerbError(ErrVerbForbidden, peer+" cannot write "+echoName(tildePath(real, home))+". In the drop folder, files go only into a drop that file-drop-dir makes.", &VerbHint{
@@ -1055,10 +835,6 @@ func (d *Daemon) linkWriteFS(cs *connState, paths ...string) (fileFS, *verbError
 	return fileFS{root: r, dir: chosen, link: true}, nil
 }
 
-// receiveFolder is the folder a copy to this machine lands in when it names
-// no folder: for a link, the first folder of its write roots (files_roots, or
-// the receive folder when files_roots says nothing); for the person, the
-// receive folder, config.DefaultFilesRoot.
 func (d *Daemon) receiveFolder(cs *connState) (string, *verbError) {
 	var roots []string
 	if cs != nil && cs.viaLink {
@@ -1072,10 +848,6 @@ func (d *Daemon) receiveFolder(cs *connState) (string, *verbError) {
 	return roots[0], nil
 }
 
-// linkRootsMessage says where a link may write and how to allow more, in
-// plain words: "arch-btw lets other machines write only to ~/Downloads/tuios.
-// To allow ~/dev, add it to files_roots in [hosts.laptop] in the config on
-// arch-btw." The drop folder is left out: it is for dropped files only.
 func (d *Daemon) linkRootsMessage(home string, roots []string, dir, table string) string {
 	here := d.hostedPaneHostName()
 	if here == "" {
@@ -1097,25 +869,17 @@ func (d *Daemon) linkRootsMessage(home string, roots []string, dir, table string
 	return here + " lets other machines write " + where + ". To allow " + want + ", add it to files_roots in " + table + " in the config on " + here + "."
 }
 
-// confine turns a path a link gave into the real path its write goes to, so
-// the root can name it. A path that is not under a link's roots stays as it
-// is, and the root then refuses it.
 func (f fileFS) confine(p string) string {
 	if f.root == nil {
 		return p
 	}
 	real := realParent(p)
 	if foldPaths && pathUnder(real, f.dir) && !strings.HasPrefix(real, f.dir) {
-		// The same folder written with other case: the root needs its own
-		// spelling for the part above the path.
 		real = f.dir + real[len(f.dir):]
 	}
 	return real
 }
 
-// confineDir is confine for a folder that the operation goes into rather
-// than acts on, so a link at its last name is followed too: an os.Root
-// refuses a link that names an absolute path, even one inside the root.
 func (f fileFS) confineDir(p string) string {
 	if f.root == nil {
 		return p
@@ -1127,7 +891,6 @@ func (f fileFS) confineDir(p string) string {
 	return real
 }
 
-// tildePath writes p under home as ~/..., for a message.
 func tildePath(p, home string) string {
 	if home != "" && pathUnder(p, home) && len(p) >= len(home) {
 		rest := strings.TrimPrefix(p[len(home):], string(filepath.Separator))

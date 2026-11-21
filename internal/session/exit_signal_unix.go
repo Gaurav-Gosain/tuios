@@ -7,7 +7,6 @@ import (
 	"syscall"
 )
 
-// exitSignal is the signal that ended a process, 0 when it exited on its own.
 func exitSignal(ps *os.ProcessState) int {
 	if ws, ok := ps.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
 		return int(ws.Signal())

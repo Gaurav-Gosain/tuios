@@ -9,19 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// A client attaching has no read loop yet. It writes MsgAttach and then reads
-// one message, and whatever arrives is taken for the answer. So nothing may be
-// sent to it until that answer has been written: not a resize, not a join
-// notification, not a routed command.
-//
-// The window is real: handleAttach records the client on the session at the top,
-// because everything that measures the session has to count it from that moment,
-// and writes the reply at the bottom. Between those two the client is a member
-// of the session that has not been told so.
-//
-// This is the test for that rule, and it is written as a race rather than an
-// assertion about ordering, because ordering is what it is about.
-
 // TestAttachIsNeverOutrunByABroadcast attaches clients while a peer is
 // announcing chrome as fast as it can. Every announcement that moves the
 // session's reserve is a broadcast to the whole session, so if the broadcast
@@ -38,9 +25,6 @@ func TestAttachIsNeverOutrunByABroadcast(t *testing.T) {
 	d, _ := startTestDaemon(t)
 	makeSessionWithWindow(t, d, "busy")
 
-	// The peer that keeps the session moving. Its chrome alternates, so every
-	// announcement changes the session's agreed reserve and every change is a
-	// broadcast.
 	peer := attachTestClient(t, "busy")
 
 	stop := make(chan struct{})
@@ -63,8 +47,6 @@ func TestAttachIsNeverOutrunByABroadcast(t *testing.T) {
 		wg.Wait()
 	})
 
-	// Attach and detach in the middle of that. Each attach is a fresh
-	// connection, which is what a second window or a browser tab is.
 	for range 60 {
 		c := NewTUIClient()
 		if err := c.Connect("test", 80, 24); err != nil {
@@ -92,11 +74,9 @@ func TestAttachIsNeverOutrunByABroadcast(t *testing.T) {
 // itself, and it would catch a fix for the ordering that bought it by leaving
 // the joiner uninformed.
 func TestAttachReplyCarriesWhatTheSessionSettledOn(t *testing.T) {
-	// Smallest, so the joiner is the size the session settles on.
 	d, _ := startTestDaemonSized(t, config.WindowSizeSmallest)
 	sess := makeSessionWithWindow(t, d, "settled")
 
-	// One client already here, wider than the joiner and reserving a rail.
 	wide := NewTUIClient()
 	if err := wide.Connect("test", 120, 40); err != nil {
 		t.Fatalf("connect: %v", err)
@@ -114,8 +94,6 @@ func TestAttachReplyCarriesWhatTheSessionSettledOn(t *testing.T) {
 		return sess.LayoutReserve().Left == 24
 	})
 
-	// The joiner is narrower and has no chrome of its own. Its reply must name
-	// the minimum size and the rail it does not draw.
 	joiner := NewTUIClient()
 	if err := joiner.Connect("test", 60, 18); err != nil {
 		t.Fatalf("connect: %v", err)
@@ -134,7 +112,6 @@ func TestAttachReplyCarriesWhatTheSessionSettledOn(t *testing.T) {
 	}
 }
 
-// waitForLayout polls until cond holds, or fails naming what it was waiting for.
 func waitForLayout(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -172,8 +149,6 @@ func TestAClientAttachingIsStillToldItsSessionDied(t *testing.T) {
 
 	for round := range 40 {
 		name := fmt.Sprintf("dying-%d", round)
-		// No window: this is about the handshake, and a real shell per round
-		// costs a process the test has no use for.
 		if _, err := d.manager.CreateSession(name, &SessionConfig{}, 80, 24); err != nil {
 			t.Fatalf("create %s: %v", name, err)
 		}
@@ -185,13 +160,6 @@ func TestAClientAttachingIsStillToldItsSessionDied(t *testing.T) {
 		ended := make(chan string, 4)
 		c.OnSessionEnded(func(n, _ string) { ended <- n })
 
-		// The kill runs against the attach, so it lands somewhere inside the
-		// handshake rather than politely after it.
-		// deleted closes when DeleteSession returns. The client hears of the
-		// death from the delete hook, before the session's final resurrection
-		// save and the removal of its state file, so each round waits for the
-		// whole delete. Otherwise the last round's save can land in the
-		// resurrection directory while the test's cleanup removes it.
 		killed := make(chan struct{})
 		deleted := make(chan struct{})
 		go func() {
@@ -201,8 +169,6 @@ func TestAClientAttachingIsStillToldItsSessionDied(t *testing.T) {
 		}()
 
 		if _, err := c.AttachSession(name, false, 80, 24); err != nil {
-			// Attaching to a session that was already gone is a clean refusal
-			// and not what this is about.
 			<-killed
 			<-deleted
 			_ = c.Close()

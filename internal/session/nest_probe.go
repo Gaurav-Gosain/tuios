@@ -10,27 +10,6 @@ import (
 	"time"
 )
 
-// The nesting probe.
-//
-// The process tests in nested_attach.go place a client that runs in a pane,
-// or under one. They cannot place a client whose output reaches a pane some
-// other way: through ssh to this machine, script run with setsid, or any
-// relay that gives it a terminal of its own and drops the pane's variables.
-// Such a client still shows the session inside itself. Its size shrinks the
-// session to the floor, and it redraws its own pane without end.
-//
-// What such a client cannot hide is its output, because that output is what
-// makes the loop. So a client writes a probe to its terminal before it
-// attaches: an OSC sequence no terminal acts on, carrying a random nonce, and
-// sends the same nonce with the attach. Every pane's output is scanned for
-// probes. When the daemon has seen the client's nonce in a pane, it knows the
-// session that pane belongs to, and it places the client there.
-//
-// A relay that rewrites the screen instead of passing bytes (mosh, tmux) does
-// not carry the probe, and a client behind one is not placed.
-
-// nestProbePrefix starts a probe. 7717 is not an OSC number any terminal
-// assigns a meaning to, so a terminal that is not a pane ignores it.
 const (
 	nestProbePrefix = "\x1b]7717;tuios-nest;"
 	nestProbeEnd    = "\x1b\\"
@@ -38,13 +17,8 @@ const (
 	nestProbeMax    = len(nestProbePrefix) + nestNonceLen + len(nestProbeEnd)
 )
 
-// nestProbeWatch is how long after an attach the daemon keeps watching pane
-// output for the client's probe. The attach does not wait for it. A relay
-// passes the probe on in milliseconds, and ssh over a slow link in the time
-// of one trip, so two seconds covers both with room to spare.
 const nestProbeWatch = 2 * time.Second
 
-// nestSightingTTL is how long a sighting is kept for an attach to claim it.
 const nestSightingTTL = 30 * time.Second
 
 // NestProbeSafe reports whether a terminal with this TERM ignores the probe.
@@ -90,10 +64,6 @@ func (c *TUIClient) SetNestProbe(p NestProbe) {
 	c.nestProbe = p.nonce
 }
 
-// nestSightings records the pane session each probe was seen in, and the
-// watches waiting for a probe that was not seen by the time its client
-// attached. It is global because a PTY does not hold its daemon, and a nonce
-// is random, so two daemons in one process (tests) cannot confuse each other's.
 var nestSightings = struct {
 	sync.Mutex
 	seen    map[string]nestSighting
@@ -105,24 +75,17 @@ type nestSighting struct {
 	at        time.Time
 }
 
-// scanNestProbes records every probe in data against this pane's session.
 func (p *PTY) scanNestProbes(data []byte) {
 	sessionID := p.ownerID()
 	if sessionID == "" {
 		return
 	}
 	if len(p.probeTail) > 0 {
-		// A probe split across the last read and this one. The tail starts
-		// at an ESC, so it is empty unless a probe can still be in it.
 		n := copy(p.probeJoin[:], p.probeTail)
 		n += copy(p.probeJoin[n:], data[:min(len(data), nestProbeMax)])
 		recordNestProbes(p.probeJoin[:n], sessionID)
 	}
 	recordNestProbes(data, sessionID)
-	// Keep the end of the chunk from its last ESC. A probe is recognised by
-	// its prefix and nonce, which hold one ESC, at the start, so a probe cut
-	// by this read starts there. Text with no ESC near its end keeps nothing,
-	// and the join above costs nothing.
 	keep := data[len(data)-min(len(data), nestProbeMax-1):]
 	if i := bytes.LastIndexByte(keep, 0x1b); i >= 0 {
 		p.probeTail = append(p.probeTail[:0], keep[i:]...)
@@ -156,15 +119,11 @@ func recordNestProbes(b []byte, sessionID string) {
 		delete(nestSightings.watches, nonce)
 		nestSightings.Unlock()
 		if watch != nil {
-			// Off the pane's read loop: the watch detaches a client, which
-			// takes locks the read loop must not wait on.
 			go watch(sessionID)
 		}
 	}
 }
 
-// seenNestProbe returns the session ID of the pane the probe nonce was seen
-// in, or "" when it has not been seen.
 func seenNestProbe(nonce string) string {
 	if nonce == "" {
 		return ""
@@ -174,11 +133,6 @@ func seenNestProbe(nonce string) string {
 	return nestSightings.seen[nonce].sessionID
 }
 
-// watchNestProbe calls fn with the pane's session ID if the probe nonce shows
-// up within d. A probe can arrive after its client attached, over a slow ssh
-// link, so the attach is not held up waiting for it: the watch catches it
-// afterwards. A probe seen between the attach's check and this call is
-// answered at once.
 func watchNestProbe(nonce string, d time.Duration, fn func(sessionID string)) {
 	if nonce == "" {
 		return

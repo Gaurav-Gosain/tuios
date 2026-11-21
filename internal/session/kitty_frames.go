@@ -7,58 +7,19 @@ import (
 	"sync/atomic"
 )
 
-// A kitty graphics stream sends each picture whole: a transmission of image i
-// replaces image i, data and all. A client that is behind does not need every
-// frame of such a stream, only the newest, so a frame still waiting on a
-// client's queue when the next frame of the same image arrives is dropped
-// from that client's queue. The slow client skips frames instead of falling
-// further behind, and every other client is unaffected.
-//
-// The pane's output is cut into segments as it is read (gfxScanner.scan): a
-// frame is every byte of one transmission, from the ESC that opens its first
-// command to the ST that closes its last chunk, and everything else is text.
-// Each client gathers a frame's segments until the frame is complete, and only
-// then queues it, as one item. A frame is never cut: it goes out whole or not
-// at all. Text and every other graphics command go out in order, as before.
-//
-// A frame is dropped only when nothing between it and its replacement could
-// depend on it:
-//   - The newer frame names the same image id, which is not zero, on the
-//     same screen. A terminal keeps one image store for the main screen and
-//     one for the alternate screen, so image 1 on one is not image 1 on the
-//     other. Or both frames have no id, and the newer one is drawn over the
-//     older one exactly: see idless.
-//   - No other graphics command came between them. A placement, a delete or
-//     a query may name the image, so any of them keeps every waiting frame.
-//   - The older frame did not move the cursor. An a=T without C=1 or U=1
-//     moves the cursor past the image, and at the bottom row it scrolls the
-//     screen. A cursor move after it does not undo the scroll, so such a
-//     frame is never dropped.
-//   - The older frame did not name a shared memory object or a temporary
-//     file (t=s, t=t). The terminal that reads one deletes it, so a dropped
-//     one would stay on disk.
-
-// queuedFrame is one complete frame on a client's queue. Exactly one side
-// settles it: the stream goroutine takes it, or broadcast drops it for a newer
-// frame. state decides which, so a frame is never half sent.
 type queuedFrame struct {
 	state atomic.Int32
-	// parts are the frame's bytes, in order. Read by the stream goroutine only
-	// after it has taken the frame, and cleared by broadcast only after it has
-	// dropped it.
 	parts [][]byte
 	size  int64
-	// end is the stream position after the frame's last byte.
 	end   int64
 	owner *ptySubscriber
 
-	// Read and written by broadcast only.
 	id      uint32
-	alt     bool   // sent while the pane was on the alternate screen
-	read    uint64 // the read that queued it, from PTY.reads
-	pinned  bool   // something after it depends on it, so it is never dropped
-	key     string // an id-less frame's place and keys; see idless
-	follows bool   // only a cursor move came between it and the frame before
+	alt     bool
+	read    uint64
+	pinned  bool
+	key     string
+	follows bool
 }
 
 const (
@@ -67,8 +28,6 @@ const (
 	frameDropped
 )
 
-// take claims the frame for sending. It returns false when broadcast dropped
-// it first.
 func (f *queuedFrame) take() bool {
 	if !f.state.CompareAndSwap(frameWaiting, frameTaken) {
 		return false
@@ -78,101 +37,69 @@ func (f *queuedFrame) take() bool {
 	return true
 }
 
-// gfxSeg is one run of a pane's output: text, or part of a frame.
 type gfxSeg struct {
 	b   []byte
-	end int64 // stream position after the segment's last byte
+	end int64
 
-	frame bool   // part of a frame
-	first bool   // holds the frame's first byte
-	last  bool   // holds the frame's last byte
-	id    uint32 // the frame's image id
-	alt   bool   // the frame was sent on the alternate screen
-	moves bool   // the frame moves the cursor
-	keep  bool   // the frame is never dropped: it moves the cursor or names a file
-	key   string // see queuedFrame
-	// follows is set on a frame's first segment when only a cursor move came
-	// between it and the end of the frame before it.
+	frame   bool
+	first   bool
+	last    bool
+	id      uint32
+	alt     bool
+	moves   bool
+	keep    bool
+	key     string
 	follows bool
 
-	// pins marks text that holds a graphics command that is not a frame.
 	pins bool
 }
 
-// Scanner states.
 const (
-	gfxGround     = iota
-	gfxHeader     // after ESC _ G, before the ';' or ST that ends the keys
-	gfxPayload    // after the keys, before ST
-	gfxPayloadEsc // an ESC ended the last read inside a payload
+	gfxGround = iota
+	gfxHeader
+	gfxPayload
+	gfxPayloadEsc
 )
 
-// maxGfxHeader bounds the control keys of one command. Real ones are under a
-// hundred bytes. A command whose keys run past this is treated as text.
 const maxGfxHeader = 1024
 
-// gfxScanner cuts a pane's output into segments. It keeps its state across
-// reads, so a command split across reads is still found. Only broadcast uses
-// it, under streamMu.
 type gfxScanner struct {
 	state int
-	// carry is the start of a command whose keys are not complete yet. It
-	// always starts at an ESC, and the next scan starts with it.
 	carry []byte
 
-	// segs is the storage scan hands its segments out in. A caller uses
-	// them before the next scan, so one slice serves every read.
 	segs []gfxSeg
 
-	cmdFrame bool // the command in progress belongs to a frame
-	cmdLast  bool // the command in progress ends its frame
+	cmdFrame bool
+	cmdLast  bool
 
-	inFrame    bool // a frame's command ended with m=1: the next command continues it
-	otherChunk bool // the same, for a transmission that is not a frame
+	inFrame    bool
+	otherChunk bool
 
-	// The spans the scanner closed that the ring may still hold, oldest
-	// first, and the one open now: a frame from its first byte to its last,
-	// or one other graphics command. A client that starts reading inside one
-	// would print the rest of it as text. See spanAt.
 	spans    [][2]int64
 	spanOpen bool
 	spanFrom int64
 
-	// tail is the last bytes before the scan position, so a cursor move just
-	// in front of a frame is found wherever the reads fall. lastFrameEnd is
-	// the stream position after the last frame's last byte.
 	tail         [maxCUP]byte
 	ntail        int
 	lastFrameEnd int64
 
-	// alt is whether the pane is on the alternate screen, from the private
-	// modes 47, 1047 and 1049 the scanner has seen. mode holds a private mode
-	// sequence that a read ended inside: see trackScreen.
 	alt  bool
 	mode []byte
 
-	// frameAlt is alt as it was at the first chunk of the frame in progress,
-	// and frameKey is the key its first chunk got. Every segment of a frame
-	// carries both, whichever read the segment came in.
 	frameAlt bool
 	frameKey string
 
-	// What classify found in the command in progress.
 	frameID        uint32
 	frameMoves     bool
 	frameKeep      bool
 	frameIDless    bool
 	frameContinues bool
-	cmdQuery       bool // a query, which is not graphics output
-	otherQuery     bool // the chunked transmission in progress is a query
+	cmdQuery       bool
+	otherQuery     bool
 }
 
-// maxCUP bounds the cursor move scan looks for in front of a frame.
 const maxCUP = 16
 
-// scan cuts data, which ends at stream position end, into segments. The
-// segments cover every byte except a trailing carry. saw reports a kitty
-// graphics command other than a query in this read.
 func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 	buf := data
 	base := end - int64(len(data))
@@ -187,15 +114,12 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 	}
 
 	if len(s.mode) > 0 {
-		// A private mode sequence the last read ended inside.
 		s.trackScreen(data, 0)
 	}
 
 	segStart := 0
 	cur := gfxSeg{frame: (s.state == gfxPayload || s.state == gfxPayloadEsc) && s.cmdFrame}
 	if cur.frame {
-		// A payload the last read ended inside. Its segments describe the
-		// same frame as the ones before them did.
 		cur.id, cur.alt, cur.moves, cur.keep = s.frameID, s.frameAlt, s.frameMoves, s.frameKeep
 		cur.key = s.frameKey
 	}
@@ -226,8 +150,6 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 
 	cmdStart := 0
 	i := 0
-	// A header that reaches the end of the buffer is carried, so the header
-	// case runs once more with nothing left to read.
 	for i < len(buf) || s.state == gfxHeader {
 		switch s.state {
 		case gfxGround:
@@ -268,10 +190,6 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 			}
 			s.state = gfxPayload
 			if j < 0 || j+i-cmdStart > maxGfxHeader {
-				// Keys this long are not a command anyone sends. Pass it
-				// through as text that keeps every waiting frame. The test is
-				// the same whether or not the keys end in this read, so where
-				// the reads fall does not change the answer.
 				saw = true
 				cur.pins = true
 				s.cmdFrame = false
@@ -353,17 +271,9 @@ func (s *gfxScanner) scan(data []byte, end int64) (segs []gfxSeg, saw bool) {
 	return segs, saw
 }
 
-// maxMode bounds a private mode sequence trackScreen reads.
 const maxMode = 32
 
-// trackScreen reads the escape sequence that starts at buf[at] (an ESC), or
-// for at 0 with s.mode set, the rest of one the last read ended inside. It
-// follows the screen switches: CSI ? 47, 1047 or 1049 with h or l, and RIS
-// (ESC c), which returns to the main screen. Everything else is ignored.
 func (s *gfxScanner) trackScreen(buf []byte, at int) {
-	// The sequence is gathered in an array on the stack. Every escape in a
-	// pane's output comes through here, most of them colours, and a slice
-	// grown per byte allocated once for each.
 	var arr [maxMode]byte
 	seq := append(arr[:0], s.mode...)
 	if len(seq) == 0 {
@@ -391,8 +301,6 @@ func (s *gfxScanner) trackScreen(buf []byte, at int) {
 				return
 			}
 		case c == 'h', c == 'l':
-			// Split by hand: a range over bytes.SplitSeq moves arr to
-			// the heap.
 			params := seq[3:]
 			for len(params) > 0 {
 				param := params
@@ -412,11 +320,9 @@ func (s *gfxScanner) trackScreen(buf []byte, at int) {
 		}
 		seq = append(seq, c)
 	}
-	// The read ended inside the sequence: keep it for the next one.
 	s.mode = append(s.mode, seq...)
 }
 
-// keepTail records the last bytes the scan has passed.
 func (s *gfxScanner) keepTail(b []byte) {
 	if len(b) >= maxCUP {
 		s.ntail = copy(s.tail[:], b[len(b)-maxCUP:])
@@ -427,9 +333,6 @@ func (s *gfxScanner) keepTail(b []byte) {
 	s.ntail = keep + copy(s.tail[keep:], b)
 }
 
-// cupBefore returns the cursor move (CUP, ESC [ row ; col H or f) that ends
-// right where buf[at] starts, and the stream position it starts at. It returns
-// nil when the bytes in front of at are anything else.
 func (s *gfxScanner) cupBefore(buf []byte, at int, base int64) (cup []byte, from int64) {
 	var w []byte
 	if at >= maxCUP {
@@ -454,7 +357,6 @@ func (s *gfxScanner) cupBefore(buf []byte, at int, base int64) (cup []byte, from
 	return cup, base + int64(at) - int64(len(cup))
 }
 
-// classify reads one command's keys and decides whether it belongs to a frame.
 func (s *gfxScanner) classify(keys []byte) {
 	var action, medium, format byte = 't', 'd', 0
 	var id uint64
@@ -501,7 +403,6 @@ func (s *gfxScanner) classify(keys []byte) {
 	s.frameContinues = false
 	switch {
 	case s.inFrame:
-		// The next chunk of the frame in progress. Chunks carry m and q only.
 		s.cmdFrame, s.frameContinues = true, true
 		s.cmdLast = !more
 		s.cmdQuery = false
@@ -518,7 +419,6 @@ func (s *gfxScanner) classify(keys []byte) {
 		s.frameKeep = s.frameMoves || medium == 's' || medium == 't'
 		s.frameIDless = false
 	case action == 'T' && id == 0 && cupOnly && medium == 'd' && format == 24 && !otherKeys:
-		// A frame with no id, as mpv sends: see idless.
 		s.cmdFrame = true
 		s.cmdLast = !more
 		s.cmdQuery = false
@@ -533,40 +433,19 @@ func (s *gfxScanner) classify(keys []byte) {
 	}
 }
 
-// idless reports whether a frame with no image id may replace older, the
-// frame with no id before it on the same client's queue. Such a frame is a
-// new image each time, and the terminal keeps every one of them, so a newer
-// one replaces an older one only where it is drawn exactly over it:
-//   - Only a cursor move came between the two frames, and the same cursor
-//     move came right in front of each. Both are placed at the same cell.
-//   - Their keys are the same byte for byte: the same size and the same cells.
-//   - Both are f=24, which has no alpha, so nothing of the older one shows
-//     through.
-//   - Both keep the cursor where it is (C=1), and send their data in the
-//     escape code (t=d).
-//
-// mpv's --vo=kitty sends every frame this way.
 func idless(f, older *queuedFrame) bool {
 	return f.id == 0 && older.id == 0 && f.key != "" && f.follows && f.key == older.key && f.alt == older.alt
 }
 
-// imageKey names one image: its id, on one screen.
 type imageKey struct {
 	id  uint32
 	alt bool
 }
 
-// maxOpenFrame bounds what one client gathers of a frame that is not complete
-// yet. A larger frame goes out as it arrives and is never dropped. A variable
-// so a test can lower it.
 var maxOpenFrame = maxSubscriberQueue / 2
 
-// maxLatestFrames bounds how many image ids one client remembers a waiting
-// frame for. A stream that uses a new id for every frame never replaces one,
-// and past this the record is cleared rather than grown.
 const maxLatestFrames = 64
 
-// route hands one read's segments to one client. Called by broadcast only.
 func (p *PTY) route(clientID string, sub *ptySubscriber, segs []gfxSeg) {
 	for _, sg := range segs {
 		if sub.gapped.Load() {
@@ -574,13 +453,11 @@ func (p *PTY) route(clientID string, sub *ptySubscriber, segs []gfxSeg) {
 			return
 		}
 		if sg.end <= sub.seen {
-			continue // the catch-up handed this client these bytes already
+			continue
 		}
 		b := sg.b
 		plain := false
 		if start := sg.end - int64(len(b)); start < sub.seen {
-			// Begun in the catch-up: hand over the rest only. A frame that
-			// began there is not this stream's to gather.
 			b = b[sub.seen-start:]
 			if sg.frame {
 				plain = true
@@ -591,13 +468,9 @@ func (p *PTY) route(clientID string, sub *ptySubscriber, segs []gfxSeg) {
 
 		if !sg.frame {
 			if sub.open != nil {
-				// Text inside a chunked transmission. The frame is sent as it
-				// stands, and its other chunks go out as they arrive.
 				p.flushOpen(clientID, sub)
 			}
 			if sub.skipSpan {
-				// The catch-up began inside a graphics command that is not
-				// a frame: skip the rest of it.
 				end, closed := p.gfx.spanEnd(sub.skipFrom)
 				if !closed || end >= sg.end {
 					sub.skipSpan = !closed || end > sg.end
@@ -615,11 +488,9 @@ func (p *PTY) route(clientID string, sub *ptySubscriber, segs []gfxSeg) {
 			p.enqueue(clientID, sub, ptyChunk{data: b}, sg.end)
 			continue
 		}
-		// A frame starts only after any command the catch-up began in ended.
 		sub.skipSpan = false
 
 		if sub.skipFrame {
-			// The rest of a frame whose start this client never got.
 			if sg.first {
 				sub.skipFrame = false
 			} else {
@@ -663,8 +534,6 @@ func (p *PTY) route(clientID string, sub *ptySubscriber, segs []gfxSeg) {
 	}
 }
 
-// flushOpen queues the frame a client is gathering as it stands, kept, and
-// sends the rest of that frame as it arrives.
 func (p *PTY) flushOpen(clientID string, sub *ptySubscriber) {
 	f := sub.open
 	sub.open = nil
@@ -674,9 +543,6 @@ func (p *PTY) flushOpen(clientID string, sub *ptySubscriber) {
 	p.enqueueFrame(clientID, sub, f)
 }
 
-// commitFrame queues a complete frame, and drops the waiting frame it
-// replaces: the one of the same image, or for a frame with no id the one
-// before it that it is drawn exactly over (idless).
 func (p *PTY) commitFrame(clientID string, sub *ptySubscriber, f *queuedFrame) {
 	old := sub.lastFrame
 	if f.id != 0 {
@@ -684,8 +550,6 @@ func (p *PTY) commitFrame(clientID string, sub *ptySubscriber, f *queuedFrame) {
 	} else if old != nil && !idless(f, old) {
 		old = nil
 	}
-	// Only a frame queued by an earlier read: one queued by this read has not
-	// had a chance to be taken, and its client is not behind.
 	if old != nil && !old.pinned && old.read < p.reads && old.state.CompareAndSwap(frameWaiting, frameDropped) {
 		sub.queued.Add(-old.size)
 		sub.framesWaiting.Add(-1)
@@ -707,7 +571,6 @@ func (p *PTY) commitFrame(clientID string, sub *ptySubscriber, f *queuedFrame) {
 	sub.latest[imageKey{f.id, f.alt}] = f
 }
 
-// enqueueFrame puts a frame on a client's queue as one item.
 func (p *PTY) enqueueFrame(clientID string, sub *ptySubscriber, f *queuedFrame) bool {
 	f.read = p.reads
 	if !p.enqueue(clientID, sub, ptyChunk{frame: f}, f.end) {
@@ -717,8 +580,6 @@ func (p *PTY) enqueueFrame(clientID string, sub *ptySubscriber, f *queuedFrame) 
 	return true
 }
 
-// enqueue puts one item on a client's queue, or gaps the stream when the queue
-// is full. It reports whether the item was queued.
 func (p *PTY) enqueue(clientID string, sub *ptySubscriber, c ptyChunk, end int64) bool {
 	n := c.size()
 	if sub.queued.Load()+n > maxSubscriberQueue {
@@ -730,13 +591,9 @@ func (p *PTY) enqueue(clientID string, sub *ptySubscriber, c ptyChunk, end int64
 		}
 		return false
 	}
-	// Counted before the send, so the stream goroutine can never take more
-	// than was counted.
 	sub.queued.Add(n)
 	c.end = end
 	if sub.out.push(c) {
-		// Only an item that was queued counts as reached: a client dropped
-		// here resumes from the gap rather than past it.
 		sub.sent.Store(end)
 		return true
 	}
@@ -750,8 +607,6 @@ func (p *PTY) enqueue(clientID string, sub *ptySubscriber, c ptyChunk, end int64
 	return false
 }
 
-// forgetFrames drops what a client was gathering and every frame it could
-// still replace. Its stream is gapped or rebuilt.
 func (sub *ptySubscriber) forgetFrames() {
 	sub.open = nil
 	sub.passFrame = false
@@ -759,7 +614,6 @@ func (sub *ptySubscriber) forgetFrames() {
 	sub.lastFrame = nil
 }
 
-// pinAll keeps every frame a client has waiting.
 func (sub *ptySubscriber) pinAll() {
 	for _, f := range sub.latest {
 		f.pinned = true
@@ -783,9 +637,6 @@ func (s *gfxScanner) closeSpan(at int64) {
 	s.spans = append(s.spans, [2]int64{s.spanFrom, at})
 }
 
-// pruneSpans forgets the spans that end at or before ringStart, which no
-// catch-up can start inside any more. The ring holds 64 KiB and a span is at
-// least five bytes, so what is left stays bounded.
 func (s *gfxScanner) pruneSpans(ringStart int64) {
 	n := 0
 	for n < len(s.spans) && s.spans[n][1] <= ringStart {
@@ -801,9 +652,6 @@ func (s *gfxScanner) pruneSpans(ringStart int64) {
 	s.spans = s.spans[n:]
 }
 
-// spanAt reports whether stream position pos falls inside a graphics command
-// or frame, so that a stream starting there would begin in the middle of one.
-// end is where that span ends, or -1 when it has not ended yet.
 func (s *gfxScanner) spanAt(pos int64) (inside bool, end int64) {
 	if s.spanOpen && pos > s.spanFrom {
 		return true, -1
@@ -816,8 +664,6 @@ func (s *gfxScanner) spanAt(pos int64) (inside bool, end int64) {
 	return false, 0
 }
 
-// spanEnd returns where the span that starts at from ends, and false while
-// it is still open.
 func (s *gfxScanner) spanEnd(from int64) (end int64, closed bool) {
 	if s.spanOpen && s.spanFrom == from {
 		return 0, false
@@ -827,6 +673,5 @@ func (s *gfxScanner) spanEnd(from int64) (end int64, closed bool) {
 			return v[1], true
 		}
 	}
-	// Pruned: it ended before the ring's start, so long ago.
 	return from, true
 }

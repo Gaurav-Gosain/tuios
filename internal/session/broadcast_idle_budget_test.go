@@ -7,21 +7,11 @@ import (
 	"time"
 )
 
-// The most one daemon-side publish may cost on a session nobody is attached
-// to, for the state of unwatchedSession. Encoding that state for a broadcast
-// nobody receives is about 154 allocations and 137 KB a publish; what is left
-// without it (the live facts, the walk of the clients) is a few allocations
-// and well under a kilobyte. The figures sit far above that remainder, so
-// load and the daemon's own goroutines do not trip them, and far below the
-// encode, so it cannot come back unseen.
 const (
 	unwatchedPublishAllocs = 16
 	unwatchedPublishBytes  = 8 << 10
 )
 
-// unwatchedSession is a session with 100 windows and 50 cards and no pane
-// behind any of them: CreateSession starts no shell, and the windows are
-// only state. Its state sink is the daemon's own.
 func unwatchedSession(t *testing.T, d *Daemon, name string) *Session {
 	t.Helper()
 	sess, err := d.manager.CreateSession(name, &SessionConfig{}, 80, 24)
@@ -141,8 +131,6 @@ func TestBroadcastToAnUnwatchedSessionIsNotEncoded(t *testing.T) {
 		sess := unwatchedSession(t, d, "attaching")
 		const name = "changed while attaching"
 
-		// The hook runs on the daemon's connection goroutine; hookDone orders
-		// what it did before the checks and cleanups below.
 		hookDone := make(chan struct{})
 		var once sync.Once
 		hook := func() {

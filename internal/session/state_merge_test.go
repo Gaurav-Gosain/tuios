@@ -2,8 +2,6 @@ package session
 
 import "testing"
 
-// clientSnapshot is what an attached TUI pushes: whatever it last saw from the
-// daemon, stamped with the version it saw it at.
 func clientSnapshot(sess *Session) *SessionState {
 	state := sess.GetState()
 	state.BaseVersion = state.Version
@@ -34,7 +32,6 @@ func TestStaleClientSyncKeepsDaemonCreatedWindow(t *testing.T) {
 	}
 	defer sess.Stop()
 
-	// The client's view, taken before the daemon does anything.
 	stale := clientSnapshot(sess)
 
 	win, err := sess.AddDaemonWindow("headless", nil)
@@ -70,7 +67,6 @@ func TestStaleClientSyncKeepsDaemonMetadata(t *testing.T) {
 		t.Fatalf("AddDaemonWindow: %v", err)
 	}
 
-	// The client sees the window, then the daemon changes it underneath.
 	stale := clientSnapshot(sess)
 	if err := sess.RenameDaemonWindow(win.ID, "build"); err != nil {
 		t.Fatalf("RenameDaemonWindow: %v", err)
@@ -82,7 +78,6 @@ func TestStaleClientSyncKeepsDaemonMetadata(t *testing.T) {
 		t.Fatalf("SetDaemonWindowMinimized: %v", err)
 	}
 
-	// The stale push carries the client's own geometry, which it does own.
 	stale.Windows[0].X, stale.Windows[0].Y = 7, 9
 
 	if accepted := sess.UpdateState(stale); accepted {
@@ -127,7 +122,6 @@ func TestStaleClientSyncKeepsClientClose(t *testing.T) {
 		t.Fatalf("AddDaemonWindow: %v", err)
 	}
 
-	// The client closes the doomed window: its PTY goes first, then the sync.
 	stale := clientSnapshot(sess)
 	if err := sess.ClosePTY(doomed.PTYID); err != nil {
 		t.Fatalf("ClosePTY: %v", err)
@@ -138,7 +132,6 @@ func TestStaleClientSyncKeepsClientClose(t *testing.T) {
 			stale.Windows = append(stale.Windows, w)
 		}
 	}
-	// Meanwhile the daemon renames the surviving window, making the push stale.
 	if err := sess.RenameDaemonWindow(other.ID, "kept"); err != nil {
 		t.Fatalf("RenameDaemonWindow: %v", err)
 	}
@@ -170,7 +163,6 @@ func TestCurrentClientSyncIsTakenAsSent(t *testing.T) {
 		t.Fatalf("AddDaemonWindow: %v", err)
 	}
 
-	// The client has seen the creation, so its own rename wins.
 	sync := clientSnapshot(sess)
 	sync.Windows[0].CustomName = "client-named"
 	sync.CurrentWorkspace = 4
@@ -259,8 +251,6 @@ func TestClientSyncKeepsDaemonExclusiveFields(t *testing.T) {
 	}
 	sess.SetOption("theme", "nord")
 
-	// Stamp a cwd the way the resurrection capture does, then push a client
-	// snapshot that carries neither options nor cwd.
 	seeded := sess.GetState()
 	seeded.Windows[0].Cwd = "/home/user/project"
 	seeded.ResurrectionVersion = 2
@@ -281,8 +271,6 @@ func TestClientSyncKeepsDaemonExclusiveFields(t *testing.T) {
 	if got.ResurrectionVersion != 2 {
 		t.Errorf("ResurrectionVersion = %d, want 2", got.ResurrectionVersion)
 	}
-	// The stored copy, not a snapshot: a snapshot reports where the shell is
-	// now, over the top of what was stored. See fillLiveFacts.
 	sess.stateMu.RLock()
 	stored := sess.snapshotStateLocked()
 	sess.stateMu.RUnlock()
@@ -317,14 +305,12 @@ func TestStaleClientSyncCannotResurrectAClosedWindow(t *testing.T) {
 		t.Fatalf("AddDaemonWindow: %v", err)
 	}
 
-	// The client's snapshot, taken before the close.
 	stale := clientSnapshot(sess)
 
 	if _, err := sess.CloseDaemonWindow(doomed.ID, "a test"); err != nil {
 		t.Fatalf("CloseDaemonWindow: %v", err)
 	}
 
-	// The keystroke's own state push arrives afterwards, still listing both.
 	sess.UpdateState(stale)
 
 	got := sess.GetState()

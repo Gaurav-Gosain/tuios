@@ -20,7 +20,7 @@ import (
 func TestClientConnectLeavesTheConfigAlone(t *testing.T) {
 	tests := []struct {
 		name   string
-		config string // "" writes no config file
+		config string
 	}{
 		{name: "no config file"},
 		{name: "missing preferred shell", config: "[appearance]\npreferred_shell = \"/no/such/shell\"\n"},
@@ -30,8 +30,6 @@ func TestClientConnectLeavesTheConfigAlone(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			configHome := t.TempDir()
-			// Registered before t.Setenv so it runs after it, as in the config
-			// package tests: the xdg paths are resolved once, at init.
 			t.Cleanup(xdg.Reload)
 			t.Setenv("XDG_CONFIG_HOME", configHome)
 			xdg.Reload()
@@ -45,8 +43,6 @@ func TestClientConnectLeavesTheConfigAlone(t *testing.T) {
 				}
 			}
 
-			// A short runtime dir: a unix socket path has a small length limit
-			// and t.TempDir on macOS is long.
 			runtimeDir, err := os.MkdirTemp("/tmp", "tuios-hello-")
 			if err != nil {
 				t.Fatal(err)
@@ -81,7 +77,6 @@ func TestClientConnectLeavesTheConfigAlone(t *testing.T) {
 					Protocol: ProtocolVersion,
 				})
 				_ = WriteMessage(conn, resp)
-				// Hold the connection until the client closes it.
 				_, _ = io.Copy(io.Discard, conn)
 			}()
 
@@ -111,8 +106,6 @@ func TestClientConnectLeavesTheConfigAlone(t *testing.T) {
 	}
 }
 
-// captureStderr runs fn with os.Stderr pointed at a pipe and returns what fn
-// wrote there.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()

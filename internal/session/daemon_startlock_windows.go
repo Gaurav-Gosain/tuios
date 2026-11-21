@@ -9,9 +9,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// lockFileExclusive takes a non-blocking exclusive byte-range lock on f. Windows
-// releases it when the handle closes, including on an abnormal exit, which gives
-// the same "a dead daemon never holds the lock" guarantee as flock.
 func lockFileExclusive(f *os.File) error {
 	overlapped := new(windows.Overlapped)
 	err := windows.LockFileEx(

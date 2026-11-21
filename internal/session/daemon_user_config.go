@@ -28,17 +28,12 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg := &DaemonConfig{}
 	cfg.setTimings(uc)
 	if uc == nil {
-		// No file was read, which is not the same as a file turning the
-		// risk rules off: the approval table's defaults stand, the shipped
-		// rules among them, so a protocol pane's held call is still marked.
-		// Fail closed.
 		cfg.Approvals = ApprovalPolicyFromConfig(config.ApprovalsConfig{})
 		return cfg
 	}
 	if GetDebugLevel() == DebugOff && uc.Daemon.LogLevel != "" {
 		SetDebugLevel(ParseDebugLevel(uc.Daemon.LogLevel))
 	}
-	// [agents] enabled = false turns every agent feature off.
 	cfg.AgentsOff = !uc.Agents.On()
 	cfg.MachineOfferOff = !uc.Notifications.MachineOfferOn()
 	cfg.AgentBinaries = uc.Daemon.AgentBinaries
@@ -51,90 +46,41 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.KeepAwake = uc.Daemon.KeepAwake
 	cfg.History = ResolveHistoryPolicy(uc.Daemon.PersistScrollback, uc.Daemon.PersistScrollbackLines, uc.Daemon.PersistScrollbackKB)
 	cfg.Hosts = HostsFromConfig(uc)
-	// The same table says what each machine linked to this one may do here.
 	cfg.LinkPolicies = uc.Hosts
-	// The path, not the table, is what lets the daemon follow later edits to
-	// [hosts]. Every real starter goes through here, so every real daemon
-	// watches the file; a daemon built from a hand-made config in a test does
-	// not, and neither does one whose config file could not be loaded at all.
-	// LoadUserConfig writes a default file when there is none, so the machine
-	// that has never saved a setting still arrives here with a path.
 	if path, err := config.GetConfigPath(); err == nil {
 		cfg.ConfigPath = path
 	}
-	// The daemon owns every pane's history, so the depth the user asked for
-	// has to reach it, or the client's emulator honours the setting while the
-	// daemon's keeps ten thousand lines whatever it says.
 	cfg.ScrollbackLines = uc.Appearance.ScrollbackLines
-	// The daemon's emulators are the ones an attach rebuilds a pane from, so
-	// they have to keep the history on clear as the client's do.
 	cfg.ScrollbackDropOnClear = !uc.Appearance.KeepsScrollbackOnClear()
-	// The daemon spawns every pane, so where a new one starts is its decision
-	// to make. Absent from the file means the default, which is to inherit.
 	cfg.NewWindowInheritCwd = newWindowInheritCwd(uc)
-	// The daemon spawns every pane, so the shell the user asked for has to
-	// reach it, not only standalone panes.
 	cfg.PreferredShell = uc.Appearance.PreferredShell
-	// The daemon starts every shell, so it is the side that sets up the
-	// prompt marks.
 	cfg.ShellIntegration = uc.Shell.Integration
 	cfg.ShellLogin = uc.Shell.Login
-	// The daemon owns the window set, so it sees the workspace on screen
-	// lose its last pane, with or without a client attached.
 	cfg.StayOnEmptyWorkspace = !uc.Workspaces.ReturnsWhenEmpty()
-	// The daemon holds the paste buffers every client shares.
 	cfg.PasteBufferLimit, cfg.PasteBufferMaxBytes = uc.PasteBuffers.Resolved()
 	cfg.PasteBuffersOff = cfg.PasteBufferLimit == 0
 	cfg.DragAndDrop = uc.Panes.DragAndDrop
-	// The daemon makes every worktree, whichever client asked for it, so the
-	// path is the same for all of them.
 	cfg.WorktreePath = uc.Worktree.Path
 	cfg.WorktreeSetup, cfg.WorktreeSetupAsync = uc.Worktree.Setup, uc.Worktree.SetupAsync
-	// The daemon runs the hooks for the facts it owns, so a session with
-	// nobody attached still runs them. The client keeps the hooks that need a
-	// terminal.
 	cfg.ApplyUserHooks(uc)
-	// The daemon holds a harness's approval hook for the Inbox, so it is the
-	// side that has to know which harnesses asked for that.
 	cfg.Approvals = ApprovalPolicyFromConfig(uc.Agents.Approvals)
-	// The daemon checks every call from a pane, so it is the side that has
-	// to know what a pane given no grants of its own may do.
 	cfg.Permissions = PanePermissionsFromConfig(uc.Agents.Permissions)
-	// The daemon computes the activity recap, so it reads what a test run
-	// looks like.
 	cfg.RecapTestPatterns = uc.Agents.Recap.Resolved().TestPatterns
-	// The daemon holds every pane's delivery queue, so it bounds them.
 	cfg.QueueMax = uc.Agents.Queue.MaxEntries()
-	// The daemon marks a hooked pane silent, so it reads after how long.
 	cfg.AgentSilentAfter = silentAfterFromConfig(uc.Agents)
-	// The daemon types the wake prompt for mail, so it reads whether to.
 	cfg.MailWakeOff = !uc.Agents.Mail.WakeOn()
-	// The daemon routes a delegated child's question, so it reads where to.
 	cfg.ChildQuestionsToPerson = !uc.Agents.Mail.QuestionsToParentOn()
-	// The daemon moves the task cards, so it reads whether to.
 	cfg.TaskAutoStageOff = !uc.Tasks.AutoStageOn()
 	cfg.TaskLifecycleOff = !uc.Tasks.LifecycleOn()
-	// The daemon answers placement for this machine, so it reads its cap.
 	cfg.MachineCap = uc.Tasks.MachineCap
 	cfg.Tasks = uc.Tasks
-	// The daemon removes the old copies of far files at its start.
 	cfg.OpenedCopyKeep = uc.Files.OpenCopyKeep()
-	// The daemon takes every checkpoint, so it reads whether to.
 	cfg.Checkpoints = uc.Agents.Checkpoints
 	cfg.AgentPresets = uc.Agents.Presets
-	// The daemon starts the agents start-agent names, so it reads whether
-	// to pass them the reply marker guidance.
 	cfg.ReplyMarkers = uc.Agents.ReplyMarkersOn()
-	// The daemon runs the herdr plugins, so it reads which ones.
 	cfg.Plugins = uc.Plugins
-	// The daemon spawns every pane, so it decides which are told about the
-	// herdr protocol socket.
 	cfg.HerdrProtocol = uc.Agents.HerdrProtocol
-	// The daemon starts every protocol pane, so it says which ACP version
-	// the pane asks for.
 	cfg.ACPVersion = uc.Agents.ACPVersionOr()
-	// The daemon runs when nobody is attached, which is when a phone is the
-	// way to reach the person, so it sends the push notifications.
 	cfg.Notify = uc.Notify
 	return cfg
 }
@@ -148,9 +94,6 @@ func HostsFromConfig(cfg *config.UserConfig) []federation.Host {
 	}
 	out := make([]federation.Host, 0, len(cfg.Hosts))
 	for name, h := range cfg.Hosts {
-		// [hosts."*"] and an entry with a policy and no address say what a
-		// machine linking in may do here. Neither is a machine to dial, so
-		// neither is reported as a host with no addr.
 		if name == config.LinkPolicyDefaultName || (strings.TrimSpace(h.Addr) == "" && h.HasLinkPolicy()) {
 			continue
 		}
@@ -166,19 +109,10 @@ func HostsFromConfig(cfg *config.UserConfig) []federation.Host {
 	return out
 }
 
-// newWindowInheritCwd is appearance.new_window_inherit_cwd as the daemon reads
-// it, at start and at reload: absent from the file means the default, which is
-// to inherit.
 func newWindowInheritCwd(uc *config.UserConfig) bool {
 	return uc.Appearance.NewWindowInheritCwd == nil || *uc.Appearance.NewWindowInheritCwd
 }
 
-// setTimings fills the daemon's timings and agent detection from uc
-// with the environment laid over it (config.WithEnv), so a variable such as
-// TUIOS_CLEANUP_SECONDS wins over the file. With a nil uc the environment
-// still applies, over the default config. The values are read once, when
-// the daemon starts. With no file and no variable set, they stay zero, which
-// NewDaemon reads as the defaults.
 func (cfg *DaemonConfig) setTimings(uc *config.UserConfig) {
 	uc = config.WithEnv(uc)
 	if uc == nil {

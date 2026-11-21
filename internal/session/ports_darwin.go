@@ -12,14 +12,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
-// portsSupported says list-ports can read listening sockets here.
 const portsSupported = true
 
-// portsCommandTimeout bounds each of the two programs a reading runs.
 const portsCommandTimeout = time.Second
 
-// paneTrees maps every process under each pane's program to its pane, from
-// one ps listing of every process and its parent.
 func paneTrees(roots map[int]paneProc) map[int]paneProc {
 	ctx, cancel := context.WithTimeout(context.Background(), portsCommandTimeout)
 	defer cancel()
@@ -42,8 +38,6 @@ func paneTrees(roots map[int]paneProc) map[int]paneProc {
 	return walkProcTree(roots, func(pid int) []int { return kids[pid] })
 }
 
-// listeningSockets asks lsof for the listening TCP sockets of the processes
-// in owner, and only those.
 func listeningSockets(owner map[int]paneProc) []listenHit {
 	pids := make([]string, 0, len(owner))
 	for pid := range owner {
@@ -54,14 +48,10 @@ func listeningSockets(owner map[int]paneProc) []listenHit {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), portsCommandTimeout)
 	defer cancel()
-	// lsof exits 1 when it finds nothing, so its output is read either way.
 	out, _ := childproc.CommandContext(ctx, "lsof", "-nP", "-a", "-iTCP", "-sTCP:LISTEN", "-Fpcn", "-p", strings.Join(pids, ",")).Output()
 	return parseLsofListen(string(out))
 }
 
-// parseLsofListen reads lsof -F pcn output: a p line starts a process, a c
-// line names it, and each n line is one socket's address, such as *:8000,
-// 127.0.0.1:8000 or [::1]:8000.
 func parseLsofListen(out string) []listenHit {
 	var hits []listenHit
 	pid, comm := 0, ""

@@ -6,15 +6,6 @@ import (
 	"time"
 )
 
-// Every client of a session is written to on a goroutine of its own, so two
-// announcements settled close together race for the connection and arrive in
-// whichever order the scheduler picks. Each one carries the whole answer (the
-// size and the chrome reserve), so taking the older one last does not lose an
-// update, it reinstates a wrong one, and it stays wrong until something else
-// moves.
-//
-// That is what the generation on the announcement is for.
-
 // TestClientsConvergeOnOneLayoutUnderConcurrentAnnouncements has two clients
 // announcing different chrome at the same time, over and over. Whatever order
 // the broadcasts land in, the two have to end up holding the same answer, and
@@ -35,8 +26,6 @@ func TestClientsConvergeOnOneLayoutUnderConcurrentAnnouncements(t *testing.T) {
 	left := attachTestClient(t, "racing")
 	right := attachTestClient(t, "racing")
 
-	// Both announce at once, with chrome that disagrees, so every round settles
-	// the session twice and the two broadcasts chase each other to both clients.
 	for round := range 40 {
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -53,7 +42,6 @@ func TestClientsConvergeOnOneLayoutUnderConcurrentAnnouncements(t *testing.T) {
 		wg.Wait()
 	}
 
-	// Everything has been sent; let the last broadcasts land.
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if left.SessionLayoutReserve() == right.SessionLayoutReserve() &&

@@ -64,7 +64,6 @@ func TestKeystrokeRoundTripThroughAHost(t *testing.T) {
 			}
 			times = append(times, time.Since(start))
 		}
-		// Median, so a warm-up outlier does not decide the number.
 		for i := 1; i < len(times); i++ {
 			for j := i; j > 0 && times[j] < times[j-1]; j-- {
 				times[j], times[j-1] = times[j-1], times[j]

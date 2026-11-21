@@ -14,66 +14,26 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
 
-// A session's place.
-//
-// With six sessions open the rail read "session-0" to "session-5", which tells
-// a person nothing. The daemon already hears where every pane's shell is: fish
-// and a growing number of prompts report the directory over OSC 7 on every cd,
-// and the spawn directory is known before the shell prints a prompt. This file
-// turns that into two facts per pane, the directory and the git branch it is
-// in, and Info publishes the focused pane's pair so the rail can label an
-// unnamed session by where it is.
-//
-// Both facts are recorded on the cwd change and at no other time. There is no
-// timer and nothing here runs on a frame: a rail that re-read git state on
-// every tick is exactly the idle cost this project measures and refuses. The
-// branch read walks up from the directory looking for .git and reads HEAD, off
-// the emulator goroutine, because a directory on a slow network mount would
-// otherwise stall every byte the pane prints.
-
-// placeRecord is what a PTY knows about where its shell is.
 type placeRecord struct {
-	cwd    atomic.Pointer[string]
-	branch atomic.Pointer[string]
-	// gen counts cwd changes, so a branch read that finishes after a later
-	// change has already landed is dropped rather than stored over it.
-	gen atomic.Uint64
-	// announced says the shell itself reported cwd over OSC 7, rather than
-	// cwd being the spawn directory it was seeded with. A shell that reports
-	// its directory is the best answer there is; one that never has is read
-	// from its process instead. See Session.livePlaces.
+	cwd       atomic.Pointer[string]
+	branch    atomic.Pointer[string]
+	gen       atomic.Uint64
 	announced atomic.Bool
-	// elsewhere names the machine the last OSC 7 report came from, when that
-	// is not this one: the pane is running ssh and the shell on the far end
-	// reported its folder. Empty otherwise. It holds while the program that
-	// made the report holds the terminal; see Session.checkPaneCwd.
-	//
-	// The folder that report named is kept with the machine in one value, so
-	// a reader never pairs one report's machine with another's folder. An ssh
-	// split starts the new pane there; see ssh_follow.go.
 	elsewhere atomic.Pointer[elsewhereReport]
 
-	// onChange, when set, is called after the folder, the branch or the
-	// machine moves. It is set once, before the pane's first output.
 	onChange func()
 }
 
-// changed calls onChange.
 func (r *placeRecord) changed() {
 	if r.onChange != nil {
 		r.onChange()
 	}
 }
 
-// elsewhereReport is an OSC 7 report that named another machine.
 type elsewhereReport struct {
 	host, dir string
 }
 
-// setCwd records a directory the shell reported (an OSC 7 payload or a bare
-// path) and starts one branch read for it. A payload that names another
-// machine is ignored: that is an ssh shell inside the pane, and its directory
-// is not one this daemon can read.
 func (r *placeRecord) setCwd(raw string) {
 	path, ok := parseCwdReport(raw)
 	if !ok {
@@ -82,9 +42,6 @@ func (r *placeRecord) setCwd(raw string) {
 	r.setCwdPath(path)
 }
 
-// announce records what the shell reported over OSC 7, and says whether the
-// pane's place changed. Unlike setCwd it keeps a report that names another
-// machine, as the machine the pane's shell is now on.
 func (r *placeRecord) announce(raw string) bool {
 	path, host, ok := parseCwdAnnouncement(raw)
 	if !ok {
@@ -106,16 +63,11 @@ func (r *placeRecord) announce(raw string) bool {
 	return moved
 }
 
-// Elsewhere is the machine the pane's shell last reported a folder on, when
-// that is not this one.
 func (r *placeRecord) Elsewhere() string {
 	host, _ := r.ElsewhereReport()
 	return host
 }
 
-// ElsewhereReport is the machine and the folder of the last report from
-// another machine, both from the same report. Both are empty when there is
-// none.
 func (r *placeRecord) ElsewhereReport() (host, dir string) {
 	if p := r.elsewhere.Load(); p != nil {
 		return p.host, p.dir
@@ -123,7 +75,6 @@ func (r *placeRecord) ElsewhereReport() (host, dir string) {
 	return "", ""
 }
 
-// setElsewhere records the machine, or clears it, and says whether it changed.
 func (r *placeRecord) setElsewhere(host string) bool {
 	if r.Elsewhere() == host {
 		return false
@@ -137,8 +88,6 @@ func (r *placeRecord) setElsewhere(host string) bool {
 	return true
 }
 
-// announcedCwd is the directory the shell reported, empty when it has never
-// reported one.
 func (r *placeRecord) announcedCwd() string {
 	if !r.announced.Load() {
 		return ""
@@ -146,16 +95,11 @@ func (r *placeRecord) announcedCwd() string {
 	return r.Cwd()
 }
 
-// setCwdPath stores a directory and starts one branch read for it. It says
-// whether the directory changed.
 func (r *placeRecord) setCwdPath(path string) bool {
 	if cur := r.cwd.Load(); cur != nil && *cur == path {
 		return false
 	}
 	r.cwd.Store(&path)
-	// The old branch is wrong the moment the directory changes. Clear it now
-	// rather than let it ride a directory it does not describe while the read
-	// is in flight.
 	empty := ""
 	r.branch.Store(&empty)
 	gen := r.gen.Add(1)
@@ -170,7 +114,6 @@ func (r *placeRecord) setCwdPath(path string) bool {
 	return true
 }
 
-// Cwd is the directory the shell last reported, or empty when it never has.
 func (r *placeRecord) Cwd() string {
 	if p := r.cwd.Load(); p != nil {
 		return *p
@@ -178,8 +121,6 @@ func (r *placeRecord) Cwd() string {
 	return ""
 }
 
-// Branch is the git branch of the reported directory, empty outside a checkout
-// or while the read for the latest directory has not landed yet.
 func (r *placeRecord) Branch() string {
 	if p := r.branch.Load(); p != nil {
 		return *p
@@ -187,15 +128,10 @@ func (r *placeRecord) Branch() string {
 	return ""
 }
 
-// place is the pair the listing carries: the directory as a label, and the
-// branch.
 func (r *placeRecord) place() (dir, branch string) {
 	return dirLabel(r.Cwd(), homeDir()), r.Branch()
 }
 
-// homeDir is the daemon's home directory, read once. It is what "~" stands for
-// in a label, and it is the daemon's home rather than a client's because the
-// directory belongs to a shell this daemon spawned.
 var homeDir = sync.OnceValue(func() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -204,8 +140,6 @@ var homeDir = sync.OnceValue(func() string {
 	return filepath.Clean(home)
 })
 
-// localHostname is this machine's name, read once, for telling a local OSC 7
-// payload from a remote one.
 var localHostname = sync.OnceValue(func() string {
 	h, err := os.Hostname()
 	if err != nil {
@@ -214,30 +148,10 @@ var localHostname = sync.OnceValue(func() string {
 	return strings.ToLower(h)
 })
 
-// localHostNames is every name a shell on this machine may put in an OSC 7
-// report, lower case. A shell does not ask Go for the name, so the name it
-// reports can differ from os.Hostname:
-//
-//   - PowerShell on Windows reports $env:COMPUTERNAME, the NetBIOS name. Go
-//     reads the DNS host name, which can differ and is not cut to 15
-//     characters. Read as another machine, every report from such a shell
-//     was dropped, and a new window did not inherit its folder (#491).
-//   - On macOS, os.Hostname often gives the full name, such as box.lan, and
-//     many prompts report the short name, box (hostname -s).
-//
-// So the set holds the host name and COMPUTERNAME, which is set only on
-// Windows. On macOS alone it also holds the host name's first label. That is
-// the narrow form of the short-name rule: only on darwin, and only a report
-// with no dots matches, since a first label has none. On Linux the host name
-// is usually the short name already, and a short name that matched there
-// could be another machine's.
 var localHostNames = sync.OnceValue(func() map[string]bool {
 	return hostNameSet(localHostname(), os.Getenv("COMPUTERNAME"), runtime.GOOS == "darwin")
 })
 
-// hostNameSet is localHostNames for the given host name and COMPUTERNAME.
-// With shortName set it adds the host name's first label when the name has
-// dots.
 func hostNameSet(hostname, computerName string, shortName bool) map[string]bool {
 	names := map[string]bool{"localhost": true}
 	for _, name := range []string{hostname, computerName} {
@@ -259,10 +173,6 @@ func IsLocalHostName(host string) bool {
 	return host == "" || localHostNames()[host]
 }
 
-// parseCwdReport reads a local absolute path out of what a shell reported. OSC 7
-// carries a file://host/path URI; a bare absolute path is accepted too, which is
-// what the spawn directory and some prompts are. Anything else, including a
-// path on another host, is not a directory here.
 func parseCwdReport(raw string) (string, bool) {
 	path, host, ok := parseCwdAnnouncement(raw)
 	if !ok || host != "" {
@@ -277,22 +187,16 @@ func ParseCwdAnnouncement(raw string) (path, host string, ok bool) {
 	return parseCwdAnnouncement(raw)
 }
 
-// parseCwdAnnouncement reads a report the way parseCwdReport does, and keeps one
-// that names another machine. host is that machine, empty for this one.
 func parseCwdAnnouncement(raw string) (path, host string, ok bool) {
 	return parseCwdFor(raw, runtime.GOOS, IsLocalHostName)
 }
 
-// parseCwdFor is parseCwdAnnouncement for a daemon that runs goos, with
-// isLocal judging the host. It is pure so every OS's rules are tested on any.
 func parseCwdFor(raw, goos string, isLocal func(string) bool) (dir, host string, ok bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", "", false
 	}
 	if !strings.HasPrefix(raw, "file://") {
-		// An OSC 9;9 report quotes its path, as Windows Terminal's
-		// PowerShell snippet does: "C:\Users\x".
 		if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
 			raw = raw[1 : len(raw)-1]
 		}
@@ -304,21 +208,12 @@ func parseCwdFor(raw, goos string, isLocal func(string) bool) (dir, host string,
 		return "", "", false
 	}
 	if !isLocal(h) {
-		// Bounded: it is shown on a rail row, and the pane wrote it. The path
-		// is another machine's, so it is not converted for this one: it stays
-		// in forward slashes, which is what ssh to that machine reads, and
-		// filepath on a Windows daemon would turn /home/u into \home\u.
 		return cleanSlashPath(p), ClampDisplayText(h), true
 	}
-	// A native Windows shell reports /C:/x, and an MSYS2 or Cygwin shell
-	// /c/Users/x. ForOS makes both a Windows path on Windows, and refuses a
-	// drive path everywhere else.
 	dir, ok = winpath.ForOS(p, goos)
 	return dir, "", ok
 }
 
-// cleanSlashPath cleans a forward-slash path from another machine, and keeps
-// the two leading slashes of a UNC path, which path.Clean would fold into one.
 func cleanSlashPath(p string) string {
 	if strings.HasPrefix(p, "//") && !strings.HasPrefix(p, "///") {
 		return "/" + path.Clean(p)
@@ -326,9 +221,6 @@ func cleanSlashPath(p string) string {
 	return path.Clean(p)
 }
 
-// dirLabel is the short form of a directory for a row: its base name, or "~"
-// for the home directory itself. A subdirectory of home keeps its own name,
-// because "~/x" is longer and says the same thing a base name does.
 func dirLabel(cwd, home string) string {
 	if cwd == "" {
 		return ""
@@ -339,7 +231,6 @@ func dirLabel(cwd, home string) string {
 	return filepath.Base(cwd)
 }
 
-// generatedSessionName matches the names GenerateSessionName hands out.
 var generatedSessionName = lazyre.New(`^session-[0-9]+$`)
 
 // IsGeneratedSessionName reports whether a session name is one tuios made up

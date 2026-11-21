@@ -12,67 +12,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/shquote"
 )
 
-// Asking the person a question, and getting the answer back.
-//
-// An agent that needs a decision had two poor options: stop and wait in its own
-// pane, where nobody may be looking, or mail human and poll its inbox. ask-human
-// is one call for both cases. It puts the question in the Inbox as an ask item
-// with the answers it takes, and blocks until the person picks one or the wait
-// runs out:
-//
-//   - When a client the person holds shows the asking pane, that client opens
-//     the Inbox on the question at once, which is the popup: a key picks the
-//     answer. Anywhere else the item waits in the Inbox with the usual alert,
-//     so a question never steals the keyboard from someone typing elsewhere.
-//   - When nobody is attached, the item waits in the Inbox for the next
-//     attach. The Inbox is the one place to look either way.
-//   - When the wait runs out, the call returns status pending and the question
-//     stays. The answer, when it comes, is mailed to the asking pane from
-//     human, marked verified_human, so wait-for agent-message picks it up. A
-//     caller with no pane calls ask-human again with the request id to wait
-//     for it or read it.
-//   - When the caller goes away while it waits, which the daemon learns only
-//     when the reply cannot be written, an answer to a question from a pane
-//     is mailed there the same way (askReply).
-//
-// Who may do what, and how it is enforced:
-//
-//   - Only answer-ask puts an answer in, and it takes the proof reply-approval
-//     takes: the nonce of a client attached right now, from a process outside
-//     every pane (human_sender.go, human_origin.go). An agent cannot answer
-//     its own question or another's. The answer must be one of the options
-//     the question offered, and when the client names the line it showed, the
-//     line must be the question's, so an answer only ever answers what the
-//     person read.
-//   - A caller inside a pane asks only as its own pane: naming another is
-//     forbidden, so no agent can have an answer mailed into another agent's
-//     inbox. It may come back for an answer only to a question its own pane
-//     asked. A caller outside every pane is the user's own script and may name
-//     any pane, or none.
-//   - ask-human is refused over a link. A question is put to the person at
-//     this machine's clients by something on this machine.
-//   - The question and each option must be one line of printable text that
-//     the Inbox shows exactly as written, the check a held approval's line
-//     passes, so nothing is cut, masked or rewritten between the asker and
-//     the person. Questions from outside every pane are capped per session,
-//     and a pane has one open question at a time: a new one supersedes it.
-//
-// What an ask grants the asker is the answer to its own question, which is no
-// more than a message to human and the person's reply already gives it.
-
-// Bounds on a question.
 const (
 	askMaxOptions = 9
 	askMaxOption  = 60
-	// askMaxOutside bounds the open questions with no pane, per session.
 	askMaxOutside = 16
-	// askSettledMax bounds how many ended asks are remembered for a caller
-	// that comes back for the answer.
 	askSettledMax = 256
 )
 
-// defaultAskWait is how long ask-human blocks when the caller names no
-// timeout, and maxAskWait the most it will. The question outlives either.
 var (
 	defaultAskWait = 120 * time.Second
 	maxAskWait     = time.Hour
@@ -90,18 +36,14 @@ const (
 	askEndShutdown            = "shutdown"
 )
 
-// askOutcome is how an ask ended.
 type askOutcome struct {
 	Answer string
 	Index  int
 	By     string
 	Reason string
-	// window is the asking pane, kept so a caller coming back for a settled
-	// answer can be held to its own pane's questions.
 	window string
 }
 
-// askHold is one open question.
 type askHold struct {
 	id       string
 	itemID   string
@@ -109,10 +51,8 @@ type askHold struct {
 	window   string
 	question string
 	options  []string
-	// waiting is true while an ask-human call blocks on this question. An
-	// answer then goes down done; with nobody waiting it is mailed.
-	waiting bool
-	done    chan askOutcome
+	waiting  bool
+	done     chan askOutcome
 }
 
 var (
@@ -120,9 +60,6 @@ var (
 	errAskTooMany = errors.New("too many open questions")
 )
 
-// openAsk puts a question in the Inbox. it carries the item's session, pane,
-// name, harness, workspace, question (Summary) and answers (Options). A pane
-// with an open question has it superseded.
 func (a *attentionStore) openAsk(it AttentionItem, waiting bool) (*askHold, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -173,8 +110,6 @@ func (a *attentionStore) openAsk(it AttentionItem, waiting bool) (*askHold, erro
 	return h, nil
 }
 
-// endAskLocked ends an open question with out, handing it to a waiting call.
-// The caller holds mu and closes or has closed the item.
 func (a *attentionStore) endAskLocked(requestID string, out askOutcome) {
 	h, ok := a.asks[requestID]
 	if !ok {
@@ -199,8 +134,6 @@ func (a *attentionStore) endAskLocked(requestID string, out askOutcome) {
 	}
 }
 
-// askPane is the pane that asked a question, open or settled, and whether
-// the request is known at all.
 func (a *attentionStore) askPane(requestID string) (string, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -213,7 +146,6 @@ func (a *attentionStore) askPane(requestID string) (string, bool) {
 	return "", false
 }
 
-// askSession is the session of an open question, by name.
 func (a *attentionStore) askSession(requestID string) (string, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -223,8 +155,6 @@ func (a *attentionStore) askSession(requestID string) (string, bool) {
 	return "", false
 }
 
-// joinAsk is a caller coming back for a question: it waits on it when it is
-// still open, or gets how it ended.
 func (a *attentionStore) joinAsk(requestID string) (*askHold, askOutcome, bool, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -241,9 +171,6 @@ func (a *attentionStore) joinAsk(requestID string) (*askHold, askOutcome, bool, 
 	return nil, askOutcome{}, false, errNoHold
 }
 
-// leaveAsk is a waiting call giving up. It reports the outcome when the
-// question ended while the call was on its way out, so an answer that raced
-// the timeout is returned rather than lost.
 func (a *attentionStore) leaveAsk(h *askHold) (askOutcome, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -259,10 +186,6 @@ func (a *attentionStore) leaveAsk(h *askHold) (askOutcome, bool) {
 	}
 }
 
-// answerAsk puts the person's answer in. The first answer wins: a later one
-// gets how the question ended, with applied false. mail reports that nobody
-// was waiting and the question came from a pane, so the answer is to be
-// mailed there.
 func (a *attentionStore) answerAsk(requestID, answer, by, shown string) (out askOutcome, h askHold, applied, mail bool, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -290,14 +213,10 @@ func (a *attentionStore) answerAsk(requestID, answer, by, shown string) (out ask
 	return out, h, true, mail, nil
 }
 
-// askLineShown reports whether s is one line the Inbox shows exactly as
-// written, at most limit bytes.
 func askLineShown(s string, limit int) bool {
 	return len(s) <= limit && approvalLineShown(s)
 }
 
-// askLinePrintable reports whether s is one line of printable text, at any
-// length: what a question over the limit is when only its length is wrong.
 func askLinePrintable(s string) bool {
 	if !utf8.ValidString(s) {
 		return false
@@ -310,18 +229,15 @@ func askLinePrintable(s string) bool {
 	return true
 }
 
-// askResult is ask-human's answer.
 func askResult(requestID string, out askOutcome) map[string]any {
 	status := out.Reason
 	if status == "" {
 		status = AskPending
 	}
 	res := map[string]any{
-		"type":       "human_answer",
-		"request_id": requestID,
-		"status":     status,
-		// Set only when the person answered through a client whose attach
-		// the daemon checked, which is the only way an ask is answered.
+		"type":           "human_answer",
+		"request_id":     requestID,
+		"status":         status,
 		"verified_human": status == AskAnswered,
 	}
 	if status == AskAnswered {
@@ -332,8 +248,6 @@ func askResult(requestID string, out askOutcome) map[string]any {
 	return res
 }
 
-// verbAskHuman puts a question to the person and waits for the answer. See
-// the file comment for who may ask and how it ends.
 func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string   `json:"session"`
@@ -370,8 +284,6 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 	}
 
 	if len(p.Question) > attentionMaxSummary && askLinePrintable(p.Question) {
-		// The common miss: the details went into the question. Say where
-		// they go instead, with a command, rather than point at list-verbs.
 		mail := "tuios send-agent-message -w human \"<the details>\""
 		if sess, verr := d.resolveVerbSession(cs, p.Session); verr == nil {
 			mail = "tuios send-agent-message -s " + shquote.Word(sess.Name()) + " -w human \"<the details>\""
@@ -437,8 +349,6 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 	return d.awaitAsk(cs, hold, timeout, fromPane), nil
 }
 
-// rejoinAsk is ask-human with a request id: wait on the question again, or
-// read how it ended.
 func (d *Daemon) rejoinAsk(cs *connState, requestID string, fromPane bool, own string, wait bool, timeout time.Duration) (any, *verbError) {
 	window, known := d.attention.askPane(requestID)
 	if !known {
@@ -469,17 +379,10 @@ func (d *Daemon) rejoinAsk(cs *connState, requestID string, fromPane bool, own s
 	return d.awaitAsk(cs, hold, timeout, fromPane), nil
 }
 
-// awaitAsk blocks on an open question until it ends or timeout passes. A
-// caller inside the asking pane is an agent blocked on the person, so the
-// pane shows the question as its state until the call returns
-// (ask_human_state.go).
 func (d *Daemon) awaitAsk(cs *connState, hold *askHold, timeout time.Duration, fromPane bool) map[string]any {
 	if fromPane && hold.window != "" {
 		if sess, _ := d.manager.ResolveSession(hold.session); sess != nil {
 			sess.showAsk(hold.window, hold.id, hold.question)
-			// The pane may have moved to another session while it waited, and
-			// the question moved with it, so the end looks in every session. A
-			// session that does not show this request ignores the call.
 			defer func() {
 				for _, s := range d.manager.AllSessions() {
 					s.endAskShow(hold.window, hold.id)
@@ -505,14 +408,6 @@ func (d *Daemon) awaitAsk(cs *connState, hold *askHold, timeout time.Duration, f
 	return askResult(hold.id, askOutcome{})
 }
 
-// askReply is the reply to a waiting call whose question ended with out.
-//
-// The call cannot tell whether its caller is still there: the connection is
-// read only between calls, so a caller killed while it waited, for example by
-// a tool that stops a command after two minutes, is noticed only when its
-// reply is written. When the person answered a question from a pane and that
-// write fails, the answer is mailed to the pane instead, the way an answer
-// nobody waits for is, so it is never lost with the caller.
 func (d *Daemon) askReply(cs *connState, hold *askHold, out askOutcome) map[string]any {
 	if out.Reason == AskAnswered && hold.window != "" && cs != nil {
 		h := askHold{id: hold.id, session: hold.session, window: hold.window, question: hold.question}
@@ -524,19 +419,13 @@ func (d *Daemon) askReply(cs *connState, hold *askHold, out askOutcome) map[stri
 	return askResult(hold.id, out)
 }
 
-// verbAnswerAsk answers a question for the person.
 func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		RequestID  string `json:"request_id"`
-		Answer     string `json:"answer"`
-		HumanNonce string `json:"human_nonce"`
-		// Question is the line the answer was picked from. When it is set
-		// and the question says something else, nothing is answered.
-		Question string `json:"question"`
-		// UpgradeDialog says the answer is a key pressed in a client's upgrade
-		// dialog. Only that dialog sends it, and the GUI bridge drops it from
-		// what a renderer sends.
-		UpgradeDialog bool `json:"upgrade_dialog"`
+		RequestID     string `json:"request_id"`
+		Answer        string `json:"answer"`
+		HumanNonce    string `json:"human_nonce"`
+		Question      string `json:"question"`
+		UpgradeDialog bool   `json:"upgrade_dialog"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -555,17 +444,11 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 	}
 	if d.attention.askIsUpgrade(p.RequestID) {
 		if cs != nil && cs.viaLink {
-			// A key on another machine is not a key at this one, whoever the
-			// hub says pressed it.
 			return nil, hintedVerbError(ErrVerbNotHuman, "a live upgrade is confirmed only at a client attached on this machine", &VerbHint{
 				Detail: "Nothing was answered. Answer it in the dialog of a client attached to this machine.",
 			})
 		}
 		if !p.UpgradeDialog {
-			// The nonce proves a client, not a key: a renderer behind the GUI
-			// bridge holds one, and a client that predates the dialog shows
-			// the ask as an ordinary question. Only the dialog takes nothing
-			// but a key the person pressed.
 			return nil, hintedVerbError(ErrVerbNotHuman, "a live upgrade is confirmed only by a key pressed in the upgrade dialog", &VerbHint{
 				Param:  "upgrade_dialog",
 				Detail: "Nothing was answered. Answer it in the dialog that a tuios client attached to this machine shows.",
@@ -609,10 +492,6 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 	return res, nil
 }
 
-// mailAskAnswer hands an answer nobody was waiting for to the asking pane, as
-// a message from human. It is verified_human: the daemon checked the attach
-// the answer came from before it got here, the check a reply from the mail
-// overlay passes.
 func (d *Daemon) mailAskAnswer(h askHold, out askOutcome) {
 	sess, _ := d.manager.ResolveSession(h.session)
 	if sess == nil {

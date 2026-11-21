@@ -6,23 +6,11 @@ import (
 	"time"
 )
 
-// The daemon's idle budget: a daemon whose panes sit at a prompt arms no
-// timer. Each background loop that polled on a ticker sleeps on a latch
-// instead (idle_wakes.go), and this test counts their timer fires over an idle
-// window once the daemon has settled. Before, the agent monitor woke every
-// detection interval and each session's saver every 2 seconds, for ever.
-//
-// It also checks the other half: activity in a pane wakes the loops again.
-// See docs/perf.md, "2026-10 the daemon at idle".
-
-// idleCounters are the timer fires the budget counts.
 type idleCounters struct {
 	name string
 	n    *atomic.Int64
 }
 
-// waitIdleSettled waits until no counter moves for settle, and fails when
-// that has not happened within limit.
 func waitIdleSettled(t *testing.T, counters []idleCounters, settle, limit time.Duration) {
 	t.Helper()
 	snap := func() []int64 {
@@ -64,8 +52,6 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 	const stall = 600 * time.Millisecond
 	d, _ := startTestDaemonWith(t, &DaemonConfig{
 		AgentDetectInterval: interval, AgentStallTimeout: stall,
-		// One second, so the cleanup loop runs, runs once more and sleeps
-		// inside the settle wait.
 		CleanupEvery: time.Second,
 	})
 	sess, err := d.manager.CreateSession("idle", &SessionConfig{}, 80, 24)
@@ -84,9 +70,6 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 		{"session saver", &sess.saverWakes},
 	}
 
-	// The shell prints its prompt and the window's creation is saved, which
-	// takes up to resurrectionDirtyInterval. Then the daemon has nothing to
-	// do.
 	waitIdleSettled(t, counters, resurrectionDirtyInterval+5*interval, 20*time.Second)
 	before := make([]int64, len(counters))
 	for i, c := range counters {
@@ -99,9 +82,6 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 		}
 	}
 
-	// A pane that reports working is demoted when it has been quiet for the
-	// stall timeout. The stall monitor sleeps until then, and once the pane is
-	// no longer working it sleeps for good.
 	stallBefore := d.wakes.stallTicks.Load()
 	if err := sess.SetDaemonWindowAgentState(win.ID, AgentStateWorking, ""); err != nil {
 		t.Fatalf("set working: %v", err)
@@ -114,13 +94,10 @@ func TestDaemonIdleArmsNoTimers(t *testing.T) {
 		time.Sleep(interval / 2)
 	}
 	waitIdleSettled(t, counters, 10*interval, 10*time.Second)
-	// One fire at the deadline. A second is allowed for a screen look that
-	// kept the pane working once.
 	if n := d.wakes.stallTicks.Load() - stallBefore; n < 1 || n > 2 {
 		t.Errorf("the stall monitor fired %d times to demote one pane, want 1 or 2", n)
 	}
 
-	// Typing into the pane wakes the agent monitor and the cleanup loop again.
 	pty := sess.GetPTY(win.PTYID)
 	if pty == nil {
 		t.Fatal("the window has no PTY")

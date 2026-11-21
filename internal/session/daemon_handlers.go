@@ -28,19 +28,13 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.holdOptions = payload.HoldOptions
 	cs.machine, cs.kind = helloMachine(payload.Machine), helloKind(payload.ClientKind)
 	cs.mu.Unlock()
-	// The layout tree ops, scratch workspaces, window_size and ViewChrome
-	// fields of the hello are not read: every TUI client this build serves
-	// (v0.12 and later) sets them.
 
-	// Refuse a client this daemon cannot serve before it can attach to anything.
 	if protocolMismatch(payload.Protocol) {
 		LogBasic("Client %s refused: speaks protocol %d, this daemon serves %d..%d",
 			cs.clientID, peerProtocol(payload.Protocol), MinProtocolVersion, ProtocolVersion)
 		return d.replyError(cs, msg, ErrCodeInvalidMessage, clientProtocolRefusal(d.version, &payload))
 	}
 
-	// Store client's graphics capabilities for PTY pixel size reporting. The
-	// cell size is read under cs.mu by sessionCellSize, so it is written there.
 	cs.mu.Lock()
 	cs.pixelWidth = payload.PixelWidth
 	cs.pixelHeight = payload.PixelHeight
@@ -65,53 +59,31 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	}
 
 	return d.sendMessage(cs, MsgWelcome, &WelcomePayload{
-		Version:      d.version,
-		SessionNames: names,
-		Protocol:     ProtocolVersion,
-		ClientFocus:  true,
-		// See client_graphics.go.
-		ClientGraphics: true,
-		// See layout_tree.go.
+		Version:               d.version,
+		SessionNames:          names,
+		Protocol:              ProtocolVersion,
+		ClientFocus:           true,
+		ClientGraphics:        true,
 		LayoutTreeOps:         true,
 		TypeAtPrompt:          true,
 		KittyAnimationRefusal: true,
-		// See master_layout.go.
-		MasterLayoutOps: true,
-		// See window_size.go.
-		WindowSize: true,
-		// See daemon_dirwatch.go.
-		DirWatch: true,
-		// See sidebar_visibility.go.
-		SidebarOps: true,
-		// See theme_event.go.
-		ThemeEvents: true,
-		// See Message.ReqID.
-		RequestIDs: true,
-		// See ExecuteCommandPayload.FocusIfShown.
-		EmptyWorkspacePanes: true,
-		// See session_used.go.
-		SessionUsed: true,
-		// See detach_client.go.
-		DetachOthers: true,
-		// See daemon_listing_push.go.
-		ListingPush: true,
-		// See pane_marks.go.
-		PaneMarks: true,
-		// See tml_surface.go, "Surfaces over a link".
-		TMLLink: !legacyTMLLink(),
+		MasterLayoutOps:       true,
+		WindowSize:            true,
+		DirWatch:              true,
+		SidebarOps:            true,
+		ThemeEvents:           true,
+		RequestIDs:            true,
+		EmptyWorkspacePanes:   true,
+		SessionUsed:           true,
+		DetachOthers:          true,
+		ListingPush:           true,
+		PaneMarks:             true,
+		TMLLink:               !legacyTMLLink(),
 	})
 }
 
-// attachSnapshotTaken runs in handleAttach between the state snapshot and the
-// reply that carries it. It is unset outside tests, which use it to land a
-// state change in that window on purpose. It is atomic because the test sets
-// it while the daemon's connection goroutines read it.
 var attachSnapshotTaken atomic.Pointer[func()]
 
-// attachReplied runs in handleAttach just after the reply is written, before
-// the checks that repair what the reply missed. It is unset outside tests,
-// which use it to land a state change after the client has joined the
-// broadcast set, and atomic for the reason attachSnapshotTaken is.
 var attachReplied atomic.Pointer[func()]
 
 func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
@@ -131,13 +103,8 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	var created bool
 	var err error
 
-	// Where this client's output lands: see nested_attach.go. A forced attach
-	// is placed too, so a chain through it is still seen, but not refused.
 	inside, insideWhy := d.placeClient(cs, &payload)
 	if inside != nil && payload.SessionName == "" && !payload.AllowNested {
-		// Which session an unnamed attach lands on is the daemon's choice, and
-		// from a pane it is usually the pane's own. Asking for a name is
-		// clearer than refusing only some of the time.
 		return d.refuseNestedAttach(cs, msg, inside, nil, insideWhy)
 	}
 
@@ -148,9 +115,6 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	} else {
 		session = d.manager.GetSession(payload.SessionName)
 		if session == nil {
-			// An attach by an old name is refused rather than followed: a
-			// person who types it has an old name in mind and should learn
-			// the new one.
 			if renamed, ok := d.manager.ResolveSession(payload.SessionName); ok && renamed != nil {
 				return d.replyError(cs, msg, ErrCodeSessionNotFound, RenamedSessionMessage(payload.SessionName, renamed.Name()))
 			}
@@ -161,41 +125,16 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	if err != nil {
 		return errfmt.Errorf("failed to get/create session: %w", err)
 	}
-	// Only a session this attach made takes the directory: an attach to one
-	// that exists must not move where its windows start.
 	if created && payload.Cwd != "" && checkWindowCwd(payload.Cwd) == nil {
 		session.SetStartDir(absStartDir(payload.Cwd))
 	}
-	// Refused when the target is the client's own session, or is shown,
-	// through a chain of clients, inside it.
 	if inside != nil && !payload.AllowNested && d.shownInside(inside.ID, session.ID, cs.clientID) {
 		return d.refuseNestedAttach(cs, msg, inside, session, insideWhy)
 	}
 
-	// Record what the attaching client's host terminal can display so shells
-	// started from now on advertise a matching terminal identity (see
-	// guestenv.TermProgram). Without this the daemon's own environment decides,
-	// and image tools inside a window fall back to block art.
 	session.SetGraphicsCapabilities(cs.kittyGraphics, cs.sixelGraphics)
 	d.manager.noteHostGraphics(cs.kittyGraphics, cs.sixelGraphics)
 
-	// Record the new client's dimensions from the attach payload. Previously
-	// these were zeroed out on the theory that 80x24 might be a bubbletea
-	// placeholder; but leaving them at 0 excludes the client from
-	// calculateSessionSize until NotifyTerminalSize arrives, which causes
-	// web clients to be stuck at stale session dimensions from a previously-
-	// attached native client. Trust the attach payload: web/native attach
-	// callers already pass the real client viewport.
-	// TUI clients are the ones that can receive and execute remote commands.
-	// Set under cs.mu, then release before calling helpers that take
-	// clientsMu then cs.mu (avoids a re-entrant cs.mu lock).
-	// A fresh nonce per attach, so one handed out for an earlier session on
-	// this connection does not vouch for mail in the new one.
-	//
-	// A client that may not act as the person gets none: one inside a pane
-	// of this daemon, or one that came over a link its hub did not vouch
-	// for. Its reply from human is then stored as a claim, or refused. See
-	// human_origin.go.
 	humanNonce := ""
 	if d.mayActAsHuman(cs) {
 		var err error
@@ -203,27 +142,17 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 			return errfmt.Errorf("failed to issue the attach nonce: %w", err)
 		}
 	}
-	// Attaches to one session are serialised from here through the reply, so
-	// the sweep below sees every earlier attach either finished or not begun,
-	// and attachSeq orders them the way they took the lock. See
-	// detach_client.go.
 	session.attachMu.Lock()
-	// Released after the reply below, or here when anything in between
-	// panics: the connection's recover would otherwise leave the session
-	// locked, and every later attach to it would hang.
 	attachLocked := true
 	defer func() {
 		if attachLocked {
 			session.attachMu.Unlock()
 		}
 	}()
-	// Asked before cs.mu is taken: the latest state has a lock of its own.
 	returnInput := d.latestReturnInput(session.ID, cs.clientID)
 	cs.mu.Lock()
 	previousSession := cs.sessionID
 	cs.sessionID = session.ID
-	// A re-attach to the same session is not fully attached again until its
-	// new reply goes. See detach_client.go.
 	cs.repliedSession = ""
 	cs.sessionName = session.Name()
 	cs.width = payload.Width
@@ -234,101 +163,43 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.viewOnly = payload.ViewOnly
 	cs.upgradeDialog = payload.UpgradeDialog
 	cs.passive = payload.Passive
-	// A client that comes back to a session it was the latest client of, and
-	// that kept its size for it, takes back the input it had when it left: it
-	// is still the latest there, so the session stays its size rather than
-	// going to a client that typed before it. The time is the one recorded at
-	// the leave, since an attach elsewhere on the way cleared the client's
-	// own. Any other attach starts with none, so the key that switched a
-	// client into a session someone else holds does not count as input there.
-	// See window_size.go.
 	cs.lastActivity = returnInput
 	cs.humanNonce = humanNonce
 	cs.missedStateSync = false
 	cs.mu.Unlock()
 	d.events.publish(streamEvent{Type: EventClientSessionChanged, ClientID: cs.clientID, PID: cs.peerPID, Session: session.Name(), Attached: ptr(true)})
-	// tuios attach -d, or single_client: the other clients leave before this
-	// one is counted, so the session takes this client's size alone. See
-	// detach_client.go.
-	// The victims are marked here and told once the lock is free.
 	var victims []*connState
 	if d.exclusiveAttach(&payload) {
 		storeMax(&session.exclusiveSeq, cs.attachSeq)
 		victims = d.markOthers(session, cs, cs.attachSeq)
 	}
-	// The newest client's agent socket, when ssh_agent is follow. A client
-	// that moved here without a detach no longer counts where it was.
 	if previousSession != "" && previousSession != session.ID {
 		d.agentForget(previousSession, cs.clientID)
 		d.displayForget(previousSession, cs.clientID)
 	}
 	d.agentNoteUse(cs, session.ID)
 	d.displayNoteUse(cs, session.ID)
-	// A client can now see a pull request's state, so an open one is polled
-	// again. With none recorded this is a scan of the sessions and no more.
 	d.kickPRPoll()
 
-	// Before the reply, so a pane that probes the moment this client can see
-	// it is already answered for this client's machine.
 	d.refreshLinkedViewer(session.ID)
 
 	clientCount := d.getSessionClientCount(session.ID)
 	log.Printf("Client %s attached to session %s (TUI client, %d clients total, size=%dx%d)",
 		cs.clientID, session.Name(), clientCount, payload.Width, payload.Height)
 
-	// Tell the clients already here that somebody joined.
 	if clientCount > 1 {
 		d.notifyClientJoined(session.ID, cs)
 	}
 
-	// What the session measures, now that this client is one of the things
-	// measuring it: the effective size and the chrome reserve, settled and
-	// recorded in one place under one lock, and announced to everyone already
-	// attached. The joining client is left out of that announcement and told by
-	// the reply below instead, because it has no read loop yet and would read an
-	// unsolicited message as its own answer.
-	//
-	// Both of these used to be computed here by hand and recorded either side
-	// of the join notification, on the reasoning that the broadcast has to
-	// compare against the old recorded value to know there is anything to
-	// announce. That is true, and it is why the comparison and the record now
-	// live together in one function rather than being spread across a caller
-	// another goroutine can interleave with.
 	effectiveWidth, effectiveHeight, effectiveReserve := d.recalculateAndBroadcastSize(session.ID, cs.clientID)
 	if effectiveWidth == 0 || effectiveHeight == 0 {
-		// No known sizes yet: fall back to this client's payload.
 		effectiveWidth = payload.Width
 		effectiveHeight = payload.Height
 		session.Resize(effectiveWidth, effectiveHeight)
 	}
 
-	// A client is now looking at the session, so the restored mark has served its
-	// purpose. Cleared before the snapshot below so the attaching client is never
-	// handed a mark that the next state push would take straight back off.
 	session.ClearRestored()
 
-	// Get session state to return.
-	//
-	// The dimensions on it are the session's effective size, always. A client
-	// reads them as "the minimum over everyone attached" (that is what
-	// RestoreFromState does with them), so anything else here is a lie that the
-	// attaching client renders at.
-	//
-	// It used to be stamped only when the effective size differed from what
-	// this client asked for, which left exactly one case wrong and it is the
-	// common one: a client attaching at the smallest size in the session
-	// matches the effective size, skipped the stamp, and was handed whatever
-	// dimensions the last client to sync happened to be. A local client joining
-	// a browser session therefore came up rendering at the browser's width.
-	//
-	// The record of the last state forwarded to peers is dropped first. A sync
-	// that repeats that record is not forwarded, on the grounds that every peer
-	// already holds it, and this client does not: it holds the snapshot below.
-	// Dropped before the snapshot, every state that changes after the snapshot
-	// is broadcast, and so either reaches this client or marks it as missed.
-	// Whether the session's clients send their trees as ops, with this client
-	// counted. Settled before the snapshot, so the reply says what is in force.
-	// A client that moved here without a detach no longer counts where it was.
 	d.recountTUIClients(session.ID)
 	if previousSession != "" && previousSession != session.ID {
 		d.recountTUIClients(previousSession)
@@ -346,13 +217,8 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		debugLog("[DEBUG]   Window %d: ID=%s, PTYID=%s", i, shortID(w.ID), shortID(w.PTYID))
 	}
 
-	// Give the panes the session's cell, so graphics tools like kitty icat
-	// read the right pixel size. It is one client's cell, which this client
-	// may or may not be: see sessionCellSize.
 	d.syncSessionCell(session.ID)
 
-	// The reply, and with it this client's admission to the session's
-	// broadcasts. See sendAttachReply for why those are one step.
 	sizedBy := session.SizedBy()
 	err = d.sendAttachReply(cs, msg, &AttachedPayload{
 		SessionName:   session.Name(),
@@ -378,42 +244,20 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	if err != nil {
 		return err
 	}
-	// A newer exclusive attach that landed once the lock was free has
-	// already taken this client off. This catches one that a sweep could not
-	// reach, and does nothing when the client is gone already.
 	d.ejectIfSuperseded(cs, session)
-	// A verb can be waiting for a client to show this session.
 	session.wakeStateWaiters()
 	if hook := attachReplied.Load(); hook != nil {
 		(*hook)()
 	}
-	// The surfaces open in the session, behind the reply that carries the
-	// windows they are drawn in. See tml_surface.go.
 	d.sendTMLSurfaces(cs, session.ID)
-	// The native plugins that wait for the person. See plugin_approval.go.
 	d.sendPluginAsks(cs)
-	// The open prompt. See prompt.go.
 	d.sendPrompt(cs)
-	// The options set while no client was attached. On its own goroutine:
-	// each waits for the client's answer, which this connection's read loop
-	// delivers once this handler returns. The goroutine runs on every attach,
-	// because only a check under the route order sees a value a set-option
-	// is about to leave waiting. See option_pending.go.
 	go d.applyWaitingOptions(session)
 
-	// A probe that has not reached a pane yet may still: see nest_probe.go.
 	if inside == nil && !cs.viaLink {
 		d.watchNestedAfterAttach(cs, session.ID, payload.NestProbe, payload.AllowNested)
 	}
 
-	// The hardest thing that can have happened while the reply was being put
-	// together is the session going away underneath it. A client registers on
-	// the session at the top of this function and joins the broadcast set with
-	// the reply at the bottom, so a delete landing between those two reaches
-	// neither: the broadcast skips a client that is still attaching, and the
-	// client is left holding a session that no longer exists with nothing ever
-	// coming to tell it. Checked here, after the reply, where the answer cannot
-	// change again without the broadcast catching it.
 	if d.manager.GetSessionByID(session.ID) == nil {
 		LogBasic("Session %s was terminated while %s was attaching; telling it directly",
 			session.Name(), cs.clientID)
@@ -424,28 +268,6 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		return nil
 	}
 
-	// Anything else that moved while the reply was being put together did not
-	// reach this client, because it was not in the broadcast set for that part
-	// of it. Compare what the reply promised against what the session holds
-	// now, and repair it directly. This runs after the reply, so it cannot race
-	// it, which is the whole reason the repair is here rather than left to a
-	// broadcast.
-	//
-	// The state is the same case. A state push from another client that lands
-	// between the snapshot above and the reply is applied, and its broadcast
-	// skips this client because it is not in the broadcast set yet. The reply
-	// then carries the older state and nothing ever sends the newer one: the
-	// broadcast is not repeated for a state already sent. A client joining a
-	// session whose first client had just pushed its pane geometry kept its own
-	// geometry for good, and the two ran the same PTYs at different sizes.
-	//
-	// The test is whether a state broadcast skipped this client, not whether
-	// the state moved. A change made after the reply reached this client by
-	// its own broadcast, and sending it again gave the client the same state
-	// twice. See connState.missedStateSync. The repair is queued behind the
-	// broadcasts already on their way to this client, and in order with the
-	// ones still to come, so it can neither overtake them nor fall behind
-	// one. See Session.resendState.
 	cs.mu.Lock()
 	missed := cs.missedStateSync
 	cs.missedStateSync = false
@@ -485,21 +307,13 @@ func (d *Daemon) handleDetach(cs *connState, msg *Message) error {
 	return d.sendMessage(cs, MsgDetached, nil)
 }
 
-// detachClient takes the client on cs off its session: its subscriptions, its
-// size and its place in the session's broadcasts. It reports false when the
-// client was not attached.
 func (d *Daemon) detachClient(cs *connState) bool {
 	return d.detachClientFrom(cs, "")
 }
 
-// detachClientFrom is detachClient for a client fully attached to the session
-// with the given id, "" for any session. The check and the detach are made
-// under one hold of cs.mu.
 func (d *Daemon) detachClientFrom(cs *connState, want string) bool {
 	clientID := cs.clientID
 
-	// Snapshot the subscriptions and session, then clear the fields, all under
-	// cs.mu. Unsubscribe and notify after releasing the lock.
 	cs.mu.Lock()
 	sessionID := cs.sessionID
 	sessionName := cs.sessionName
@@ -530,14 +344,6 @@ func (d *Daemon) detachClientFrom(cs *connState, want string) bool {
 		Attached: ptr(false),
 	})
 
-	// Unsubscribe from all PTYs and forget where each stream got to. A resume
-	// position is a claim that the client still holds the pane it drew, and a
-	// detach is the client letting the whole session's panes go: the one path
-	// that detaches and attaches again on this connection is a session switch,
-	// which closes every window and builds the next session's panes on new
-	// emulators. Keeping the positions there told the daemon those empty
-	// emulators were already caught up, so a pane came back with the screen its
-	// snapshot restored and none of the history behind it.
 	if session := d.manager.GetSessionByID(sessionID); session != nil {
 		for _, ptyID := range subs {
 			if pty := session.GetPTY(ptyID); pty != nil {
@@ -546,14 +352,10 @@ func (d *Daemon) detachClientFrom(cs *connState, want string) bool {
 		}
 	}
 	cs.mu.Lock()
-	// Cleared whole rather than per subscription: the loop above has already
-	// released every subscription this connection held, and a detach is the
-	// client letting all of them go, so nothing may be left claiming a position.
 	cs.ptyResume = make(map[string]int64)
 	cs.mu.Unlock()
 	d.forgetPushes(cs, sessionID)
 
-	// Notify other clients that this client left
 	d.notifyClientLeft(sessionID, clientID, input)
 	return true
 }
@@ -583,17 +385,10 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 		}
 		return errfmt.Errorf("failed to create session: %w", err)
 	}
-	// Checked after the create, as the attach does: the client checked the
-	// directory already, and one that has gone since leaves the shell in the
-	// daemon's directory rather than failing the create.
 	if payload.Cwd != "" && checkWindowCwd(payload.Cwd) == nil {
 		sess.SetStartDir(absStartDir(payload.Cwd))
 	}
 
-	// A detached session has no client to create its first window, so spawn one
-	// daemon-side. This makes the session immediately usable by control verbs
-	// and gives a later 'tuios attach' a window to restore. Non-detach creation
-	// keeps its historical behavior of an empty session the TUI populates.
 	if payload.Detach && !payload.Global {
 		sessionID := sess.ID
 		onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
@@ -638,14 +433,10 @@ func (d *Daemon) handleResurrect(cs *connState, msg *Message) error {
 	if payload.SessionName == "" {
 		return d.replyError(cs, msg, ErrCodeInvalidMessage, "session name required")
 	}
-	// The name is also the name of the state file, and the link policy lets
-	// a machine on another host send this message, so the name is checked
-	// before it becomes a path.
 	if err := ValidateSessionName(payload.SessionName); err != nil {
 		return d.replyError(cs, msg, ErrCodeInvalidMessage, err.Error())
 	}
 
-	// Already live (e.g. auto-restored on start): nothing to do, report success.
 	if d.manager.GetSession(payload.SessionName) != nil {
 		return d.handleList(cs, msg)
 	}
@@ -673,9 +464,6 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 		return nil
 	}
 
-	// MsgInput is always the binary format (36-byte PTY ID + data); the gob
-	// InputPayload fallback misparsed any gob payload of 36 bytes or more as
-	// a PTY id, and no current client sends one.
 	ptyID, data, err := ParseBinaryPTYMessage(msg.Payload)
 	if err != nil {
 		debugLog("[DEBUG] handleInput: failed to parse payload: %v", err)
@@ -693,18 +481,7 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 				_ = d.replyError(cs, msg, ErrCodeBusy, "refused: "+err.Error()+". Try again.")
 				return nil
 			}
-			// A key from a client ends the pane's done and error OSC 7501
-			// records: the person has come back to it.
 			pty.noteProgramStatusInput(data)
-			// Someone is typing in this session, which is the plainest thing
-			// "last active" can mean. It used to be recorded only as a side
-			// effect of the state sync a client sent after every keypress, so
-			// it was right by accident and would have gone stale the moment
-			// those redundant syncs stopped being sent.
-			//
-			// It is activity, not the person's use: a routed send-keys, a
-			// tape and a focus report reach the pane this way too. The
-			// person's use comes as MsgSessionUsed. See session_used.go.
 			session.TouchActive()
 			cs.lastInput.Store(time.Now().UnixNano())
 			pty.noteHumanKey(data)
@@ -731,19 +508,14 @@ func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 		return nil
 	}
 
-	// Update client dimensions for multi-client size calculation
 	if payload.PTYID == "" {
-		// This is a client resize, not a PTY-specific resize.
-		// width/height are guarded by cs.mu (read under it in sessionSizedClients).
 		cs.mu.Lock()
 		cs.width = payload.Width
 		cs.height = payload.Height
 		cs.reserve = payload.Reserve
 		cs.mu.Unlock()
-		// Recalculate effective session size
 		d.recalculateAndBroadcastSize(cs.sessionID, "")
 	} else {
-		// PTY-specific resize
 		if pty := session.GetPTY(payload.PTYID); pty != nil {
 			_ = pty.Resize(payload.Width, payload.Height)
 			if w, h, ok := d.sessionCellSize(cs.sessionID); ok {
@@ -784,9 +556,6 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 		height = 24
 	}
 
-	// Exit callback to notify subscribed clients when the PTY process exits.
-	// Passed into CreatePTY so it is set before the monitor goroutine starts,
-	// avoiding a data race and a lost notification for shells that exit at once.
 	sessionID := cs.sessionID
 	onExit := func(ptyID string) {
 		d.notifyPTYClosed(sessionID, ptyID)
@@ -799,7 +568,6 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 		return d.replyError(cs, msg, ErrCodeInternal, fmt.Sprintf("failed to create PTY: %v", err))
 	}
 
-	// The session's cell, which is one client's: see sessionCellSize.
 	if w, h, ok := d.sessionCellSize(cs.sessionID); ok {
 		if err := pty.UpdatePixelDimensions(w, h); err != nil {
 			debugLog("[DEBUG] handleCreatePTY: failed to set pixel size: %v", err)
@@ -828,7 +596,6 @@ func (d *Daemon) handleClosePTY(cs *connState, msg *Message) error {
 		return errfmt.Errorf("invalid close PTY payload: %w", err)
 	}
 
-	// Unsubscribe first
 	cs.mu.Lock()
 	delete(cs.ptySubscriptions, payload.PTYID)
 	cs.mu.Unlock()
@@ -840,8 +607,6 @@ func (d *Daemon) handleClosePTY(cs *connState, msg *Message) error {
 	return d.sendMessage(cs, MsgPTYClosed, &ClosePTYPayload{PTYID: payload.PTYID})
 }
 
-// forgetPushes drops a leaving connection's entry from its session's push
-// table. See SessionState.PushSeen.
 func (d *Daemon) forgetPushes(cs *connState, sessionID string) {
 	cs.mu.Lock()
 	origin := cs.pushOrigin
@@ -850,24 +615,14 @@ func (d *Daemon) forgetPushes(cs *connState, sessionID string) {
 	if session := d.manager.GetSessionByID(sessionID); session != nil {
 		session.ForgetPush(origin)
 	}
-	// A client that leaves may have been the one holding the animation off.
 	d.recountTUIClients(sessionID)
 }
 
-// recountTUIClients counts the TUI clients attached to the session, and
-// settles from them whether the session's hosts make kitty frame edits: only
-// while every attached TUI client's host does, and never with none attached.
-// It also settles which image protocols the session advertises. A client
-// still attaching is counted: it is about to be handed a snapshot that has to
-// say what is in force. It runs on every attach, detach and disconnect, so a client that
-// leaves hands the answer back to the ones that stay. See SetKittyAnimation.
 func (d *Daemon) recountTUIClients(sessionID string) {
 	session := d.manager.GetSessionByID(sessionID)
 	if session == nil {
 		return
 	}
-	// Held from the count to the change, so a detach and an attach that
-	// count at the same time apply their answers in the order they counted.
 	session.recountMu.Lock()
 	defer session.recountMu.Unlock()
 	animate, tuiClients := true, 0
@@ -891,10 +646,6 @@ func (d *Daemon) recountTUIClients(sessionID string) {
 	}
 	d.clientsMu.RUnlock()
 	session.SetKittyAnimation(animate && tuiClients > 0)
-	// With nobody attached the last answer stands: a program started in a
-	// detached session is drawing for whoever attaches next, most likely the
-	// terminal that was just there. The kitty graphics query follows the same
-	// rule, so a guest learns the same thing from either protocol.
 	if tuiClients > 0 {
 		session.SetSixelAdvertised(images)
 		session.SetKittyAdvertised(kittyImages)
@@ -905,14 +656,8 @@ func (d *Daemon) recountTUIClients(sessionID string) {
 	session.noteTUIClients(tuiClients)
 }
 
-// treeOpsCounted runs in recountTUIClients between the count and the change. It
-// is unset outside tests, which use it to widen that window on purpose.
 var treeOpsCounted atomic.Pointer[func()]
 
-// notePushOrigin records the name cs gives its pushes and layout ops. The
-// count itself is recorded by the session with the change it makes (see
-// notePushLocked), or by NotePush for a push that is refused. See
-// SessionState.PushSeen.
 func (d *Daemon) notePushOrigin(cs *connState, session *Session, origin string) {
 	if origin == "" || len(origin) > maxPushOriginLen {
 		return
@@ -921,9 +666,6 @@ func (d *Daemon) notePushOrigin(cs *connState, session *Session, origin string) 
 	prev := cs.pushOrigin
 	cs.pushOrigin = origin
 	cs.mu.Unlock()
-	// One entry per connection: a client names its pushes afresh only on
-	// attach, and a connection that kept changing the name must not grow
-	// the table every state carries.
 	if prev != "" && prev != origin {
 		session.ForgetPush(prev)
 	}
@@ -943,42 +685,23 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	if err := msg.ParsePayload(&state); err != nil {
 		return errfmt.Errorf("invalid state payload: %w", err)
 	}
-	// Counted before anything can refuse or rewrite the push: the client
-	// counts every push it sends, and PushSeen has to agree with it. See
-	// SessionState.PushSeen. A name longer than any client makes is not one,
-	// and is not let into a table every state carries.
 	d.notePushOrigin(cs, session, state.PushOrigin)
-	// Before anything that walks the layout trees by recursion (the merge,
-	// the fingerprint, the save, the rebroadcast) sees them. See
-	// wire_bounds.go.
 	if err := validateSessionState(&state); err != nil {
 		LogError("Refused a state update from %s: %v", cs.clientID, err)
-		// Counted all the same: the client counts every push it sends.
 		session.NotePush(state.PushOrigin, state.PushSeq)
 		return d.replyError(cs, msg, ErrCodeInvalidMessage, "state update refused: "+err.Error())
 	}
 	clampPushedText(&state)
-	// Rectangles tiled in a box the session has moved on from are kept out.
-	// See layout_gen.go.
 	if session.keepRectsOfStaleLayout(&state) {
 		LogBasic("Kept the session's rectangles over a push from %s tiled in an older layout", cs.clientID)
 	}
 
-	// A client running inside a pane is an agent's view, not the person's,
-	// so its focus does not mark a finished turn seen. See human_origin.go.
-	// Read before the merge, which may keep another state's fields: the pair
-	// is this client's own, and it is what the panes' emulators answer OSC 11
-	// and OSC 10 with. See report_colors.go.
 	reportBg, reportFg, reportPal := state.PaneReportBg, state.PaneReportFg, state.PaneReportPalette
 	accepted, behind, pushSeq := session.updateStateFrom(&state, d.mayActAsHuman(cs))
 	if d.ownsReportColors(cs, session.ID) {
 		session.applyReportColors(reportBg, reportFg, reportPal)
 	}
 
-	// The merged state is a full copy of the session's, retitled from every
-	// live emulator. It is read only by the reconcile reply and the peer
-	// broadcast below, so a sync from the one attached client that the daemon
-	// accepted as it stands, which is nearly every sync, does not build it.
 	var merged *SessionState
 	mergedState := func() *SessionState {
 		if merged == nil {
@@ -987,38 +710,8 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 		return merged
 	}
 
-	// A sync built before a daemon-side mutation was reconciled against it, so
-	// what is canonical now is not what this client pushed. Send the merged state
-	// back: without it the client keeps rendering its stale view and pushes it
-	// again on the next sync.
-	//
-	// A push that was accepted but built before a tree op it had not seen is
-	// answered the same way. The op's own broadcast reached this client before
-	// the push landed, so the client dropped it as older than the push, and
-	// nothing else would ever tell it about that tree.
 	reconciled := !accepted || behind
 
-	// Broadcast state change to other clients in the session. Peers get the
-	// merged state, not the raw push, so every client converges on the same view.
-	//
-	// A merge that landed on the state already broadcast is not sent again. The
-	// push side is unconditional by design (a client syncs after every
-	// keystroke and every click so nothing it does can be lost), so almost all
-	// of them say what the last one said, and each one costs every peer a full
-	// state application and a redraw. A peer already holds this state: it was
-	// either sent it, or handed it in its attach reply, which is this same
-	// snapshot. An attach drops the record, so a state from before a client
-	// joined is never taken as one it holds. Nothing else rides on the
-	// message, so there is nothing for a suppressed one to have delivered.
-	//
-	// The reconcile reply is deliberately outside that check: it goes to the
-	// sender, whose state is by definition not the merged one.
-	//
-	// The reply and the forward are ordered with every other state delivery,
-	// under the session's pushMu, and both go through the client's broadcast
-	// queue. The reply used to be written straight to the socket, so it could
-	// overtake an older state already queued to the same client, which then
-	// adopted the older state last. See Session.deliverPush.
 	clientCount := d.getSessionClientCount(cs.sessionID)
 	if !reconciled && clientCount <= 1 {
 		return nil
@@ -1027,8 +720,6 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	if hook := statePushSnapshotTaken.Load(); hook != nil {
 		(*hook)()
 	}
-	// The messages are encoded here, outside the session's pushMu, which is
-	// then held only to queue them.
 	prepare := func(state *SessionState, withPeers bool) pushSends {
 		var sends pushSends
 		if reconciled {
@@ -1082,47 +773,24 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	cs.mu.Lock()
 	if _, already := cs.ptySubscriptions[payload.PTYID]; already {
 		cs.mu.Unlock()
-		// Already streaming; a second streamPTYOutput would compete for the
-		// same output channel and interleave halves of the output.
 		debugLog("[DEBUG] PTY %s already subscribed for client %s", payload.PTYID, cs.clientID)
 		return nil
 	}
-	// Claimed now, filled in with the subscriber below.
 	cs.ptySubscriptions[payload.PTYID] = nil
-	// A client that restored a snapshot names the position that snapshot ends
-	// at, and that beats anything recorded here: the recorded position is where
-	// this connection's stream last got to, which is older than the snapshot and
-	// would replay output the snapshot already shows.
 	resume := cs.ptyResume[payload.PTYID]
 	if payload.FromSeq > 0 {
 		resume = payload.FromSeq
 	}
-	// A read-only viewer and a client on another machine never hold a pane
-	// that streams graphics. See holdForSlowSubscribers.
 	paces := !cs.viewOnly && !cs.viaLink
 	cs.mu.Unlock()
 
 	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
-	// Registered here rather than inside the goroutine, so that anything this
-	// connection asks for next is answered to a subscriber that already exists.
-	// A resize sent straight after a subscribe used to be broadcast to nobody,
-	// and the pane it belonged to kept the size it had before, on a client that
-	// was by then waiting to be told.
-	// A client that restored a snapshot before subscribing holds an
-	// authoritative copy of the pane's state at resume, so a rolled catch-up
-	// must replay the tail on top of it rather than clear it (issue #123).
 	sub := pty.subscribeSub(cs.clientID, resume, payload.FromSnapshot)
 	cs.mu.Lock()
-	// Only this connection's own goroutine claims or releases an entry, and a
-	// stream goroutine clears only an entry naming its own subscriber, so the
-	// claim is still here. Checked anyway rather than adding back an entry
-	// something else has let go.
 	if s, claimed := cs.ptySubscriptions[payload.PTYID]; claimed && s == nil {
 		cs.ptySubscriptions[payload.PTYID] = sub
 	}
 	cs.mu.Unlock()
-	// A client looks at the pane now. Its next output and bell are reported
-	// again to the clients that do not. See pane_marks.go.
 	pty.rearmPaneMarks()
 	if !paces {
 		pty.SetPacing(cs.clientID, false)
@@ -1151,22 +819,16 @@ func (d *Daemon) handleUnsubscribePTY(cs *connState, msg *Message) error {
 
 	debugLog("[DEBUG] Unsubscribing from PTY %s", payload.PTYID)
 
-	// Remove from subscriptions
 	cs.mu.Lock()
 	delete(cs.ptySubscriptions, payload.PTYID)
 	cs.mu.Unlock()
 
-	// Unsubscribe from the PTY output channel, keeping where the stream had got
-	// to: this is a pane going out of view, not a client leaving, and it will be
-	// back the moment its workspace is current again.
 	pty := session.GetPTY(payload.PTYID)
 	if pty != nil {
 		resume := pty.Unsubscribe(cs.clientID)
 		cs.mu.Lock()
 		cs.ptyResume[payload.PTYID] = resume
 		cs.mu.Unlock()
-		// The client stopped looking at the pane, so its next output and bell
-		// are news to it. See pane_marks.go.
 		pty.rearmPaneMarks()
 		debugLog("[DEBUG] Successfully unsubscribed client %s from PTY %s at %d", cs.clientID, shortID(payload.PTYID), resume)
 	}
@@ -1194,8 +856,6 @@ func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 		return d.replyError(cs, msg, ErrCodePTYNotFound, fmt.Sprintf("PTY %s not found", payload.PTYID))
 	}
 
-	// Both request fields were parsed and then ignored, so every state request
-	// carried a thousand scrollback rows whether or not the caller wanted any.
 	maxScrollback := -1
 	if payload.IncludeScrollback {
 		maxScrollback = payload.MaxScrollbackLines

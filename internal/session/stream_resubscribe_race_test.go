@@ -35,7 +35,6 @@ func TestStaleStreamLeavesTheNewSubscriptionAlone(t *testing.T) {
 		outputBuffer: make([]byte, 64*1024),
 	}
 
-	// The first subscription, as handleSubscribePTY makes it.
 	old := pty.subscribeSub(cs.clientID, 0, false)
 	cs.ptySubscriptions[pty.ID] = old
 	oldDone := make(chan struct{})
@@ -44,8 +43,6 @@ func TestStaleStreamLeavesTheNewSubscriptionAlone(t *testing.T) {
 		d.streamPTYOutput(cs, pty, old)
 	}()
 
-	// Output the old goroutine takes and then blocks writing, because nothing
-	// reads the pipe yet.
 	pty.appendAndBroadcast([]byte("before the hide"))
 	deadline := time.Now().Add(5 * time.Second)
 	for old.out.len() > 0 || old.queued.Load() > 0 {
@@ -55,13 +52,11 @@ func TestStaleStreamLeavesTheNewSubscriptionAlone(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// Hide: what handleUnsubscribePTY does.
 	cs.mu.Lock()
 	delete(cs.ptySubscriptions, pty.ID)
 	cs.mu.Unlock()
 	resume := pty.Unsubscribe(cs.clientID)
 
-	// Show again, while the old goroutine is still in its write.
 	cs.mu.Lock()
 	cs.ptySubscriptions[pty.ID] = nil
 	cs.mu.Unlock()
@@ -81,8 +76,6 @@ func TestStaleStreamLeavesTheNewSubscriptionAlone(t *testing.T) {
 		<-nextDone
 	})
 
-	// Unblock the old goroutine: it finishes its write, finds its channel
-	// closed and runs its cleanup.
 	received := make(chan []byte, 16)
 	go func() {
 		for {
@@ -112,7 +105,6 @@ func TestStaleStreamLeavesTheNewSubscriptionAlone(t *testing.T) {
 		t.Fatal("the old stream's cleanup removed the new connState entry")
 	}
 
-	// And the new stream still delivers.
 	pty.appendAndBroadcast([]byte("after the show"))
 	var got []byte
 	timeout := time.After(5 * time.Second)

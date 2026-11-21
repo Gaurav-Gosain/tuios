@@ -9,24 +9,17 @@ import (
 	"testing"
 )
 
-// pushBudget is the most a state push or an attach reply may weigh for the
-// thousand cards below once their prompts, histories and verify output stay
-// behind. The cards without those come to about 175 KB.
 const pushBudget = 256 << 10
 
-// The bodies every card of pushCards carries.
 var (
 	pushPrompt = pushFill("Reproduce the flake, find the race and fix it. ", 16<<10)
 	pushTail   = pushFill("--- FAIL: TestReconnect (0.31s) not ok yet\n", 2<<10)
 )
 
-// pushFill repeats s to exactly n bytes.
 func pushFill(s string, n int) string {
 	return strings.Repeat(s, n/len(s)+1)[:n]
 }
 
-// pushCards is a state with n cards as an agent board holds them after a
-// failed verify: a 16 KiB prompt, 13 history entries and a 2 KiB verify tail.
 func pushCards(n int) *SessionState {
 	const at = int64(1_762_000_000)
 	st := &SessionState{Name: "board"}

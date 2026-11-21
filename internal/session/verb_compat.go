@@ -13,13 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// This file is the hello handshake of the JSON verb protocol: the client
-// opens with it, and the daemon answers with its protocol and version, or
-// refuses a client outside the range it serves with protocol_mismatch. Every
-// daemon this build talks to (v0.12 and later) answers it. A daemon that
-// closes the connection instead, or answers unknown_verb, is older than that
-// and is reported as a ProtocolMismatchError with the command that fixes it.
-
 // DaemonHandshake is what a daemon reports about itself during the hello
 // exchange.
 type DaemonHandshake struct {
@@ -80,8 +73,6 @@ func (e *ProtocolMismatchError) Error() string {
 		fmt.Fprintf(&b, ", protocol %d against %d", e.DaemonProtocol, e.ClientProtocol)
 	}
 
-	// Which side to move is the one thing the user cannot work out for
-	// themselves, so say it rather than always blaming the daemon.
 	if e.DaemonProtocol > e.ClientProtocol && e.ClientProtocol > 0 {
 		b.WriteString(".\nMost likely cause: the daemon is newer than this binary, so an older tuios is on the path.")
 		b.WriteString("\nFix: upgrade tuios, or run 'tuios kill-server' and start again with the version you want.")
@@ -100,12 +91,7 @@ func (e *ProtocolMismatchError) Error() string {
 
 func (e *ProtocolMismatchError) Unwrap() error { return e.Cause }
 
-// handshake performs the hello exchange on a freshly dialed verb connection.
-// It returns a *ProtocolMismatchError for a daemon it cannot talk to.
 func (c *VerbClient) handshake(clientVersion string) (*DaemonHandshake, error) {
-	// The caller's terminal, as the binary protocol's hello sends it, so a
-	// session this connection creates (new-session, switch-session's create)
-	// gets it rather than the daemon's fallback.
 	termType, colorTerm := helloTerm()
 	params := map[string]any{
 		"client":     "tuios",
@@ -126,24 +112,18 @@ func (c *VerbClient) handshake(clientVersion string) (*DaemonHandshake, error) {
 	if callErr, ok := errors.AsType[*VerbCallError](err); ok {
 		switch callErr.Code {
 		case ErrVerbUnknownVerb, ErrVerbProtocolMismatch:
-			// The daemon refused the hello, or is from before it. Either
-			// way it cannot serve this client, so report what it said.
 			return nil, &ProtocolMismatchError{
 				ClientVersion:  clientVersion,
 				ClientProtocol: VerbProtocolVersion,
 				Cause:          err,
 			}
 		}
-		// Any other error envelope means the daemon is speaking the protocol
-		// fine and simply disliked this call; that is not a mismatch.
 		return nil, err
 	}
 
 	if !isConnectionGone(err) {
 		return nil, err
 	}
-	// The connection died without a response line: a daemon from before the
-	// JSON protocol.
 	return nil, &ProtocolMismatchError{
 		ClientVersion:  clientVersion,
 		ClientProtocol: VerbProtocolVersion,
@@ -152,9 +132,6 @@ func (c *VerbClient) handshake(clientVersion string) (*DaemonHandshake, error) {
 	}
 }
 
-// isConnectionGone reports whether err means the peer hung up or reset the
-// connection rather than answering. Those are the shapes a pre-JSON daemon
-// produces when it chokes on a request line.
 func isConnectionGone(err error) bool {
 	if err == nil {
 		return false
@@ -164,8 +141,6 @@ func isConnectionGone(err error) bool {
 		errors.Is(err, syscall.EPIPE) {
 		return true
 	}
-	// Fall back to the message for platforms and wrappers that do not expose a
-	// comparable sentinel.
 	msg := err.Error()
 	return strings.Contains(msg, "EOF") ||
 		strings.Contains(msg, "connection reset") ||

@@ -17,8 +17,6 @@ func TestSetOptionStillTakesTheBareSpelling(t *testing.T) {
 	c := dialVerb(t, sp)
 
 	res := result(t, c.call(t, `{"verb":"set-option","params":{"session":"bare","key":"border_style","value":"double"}}`))
-	// Normalised on the way in, so one option never becomes two entries that can
-	// disagree.
 	if res["key"] != "appearance.border_style" {
 		t.Errorf("key = %v, want the full path", res["key"])
 	}
@@ -57,7 +55,6 @@ func TestSetOptionValidatesBothHalves(t *testing.T) {
 		if code := errCode(t, resp); code != ErrVerbInvalidParams {
 			t.Fatalf("code = %q, want %q", code, ErrVerbInvalidParams)
 		}
-		// The refusal has to say what would have worked.
 		hint := resp["error"].(map[string]any)["hint"].(map[string]any)
 		accepted, _ := hint["accepted"].([]any)
 		if len(accepted) == 0 {
@@ -77,8 +74,6 @@ func TestSetOptionValidatesBothHalves(t *testing.T) {
 		if res["applied"] != false {
 			t.Errorf("applied = %v, want false with no client attached", res["applied"])
 		}
-		// applied false used to mean both "nobody attached" and "that key means
-		// nothing", which a caller could not tell apart and so could not act on.
 		reason, _ := res["reason"].(string)
 		if !strings.Contains(reason, "attach") {
 			t.Errorf("reason = %q, want it to say nobody is attached", reason)
@@ -118,17 +113,11 @@ func TestGetOptionAnswersWithTheValueInEffect(t *testing.T) {
 		t.Errorf("value, source = %v, %v, want theme, config from config.toml", res["value"], res["source"])
 	}
 
-	// A legacy key the parse folds into a new path is config.toml's too: the
-	// client draws by it although no file names the new path.
 	res = get("appearance.motion")
 	if res["value"] != "none" || res["source"] != "config" {
 		t.Errorf("value, source = %v, %v, want none, config from animations_enabled = false", res["value"], res["source"])
 	}
 
-	// A machine linked to this one reads no config file: config.toml holds
-	// command strings that can carry tokens, and get-option needs only the
-	// list capability on a link. It gets the session's override, then the
-	// default, as it did before the file was read.
 	link := dialLink(t, sp)
 	for _, key := range []string{"appearance.background", "notifications.agent.command"} {
 		res = result(t, link.call(t, `{"verb":"get-option","params":{"session":"read","key":"`+key+`"}}`))

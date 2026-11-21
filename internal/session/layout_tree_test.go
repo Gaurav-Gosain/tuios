@@ -2,8 +2,6 @@ package session
 
 import "testing"
 
-// The BSP tree as an op: see layout_tree.go.
-
 func bspLeaf(n int) *SerializedBSPNode { return &SerializedBSPNode{WindowID: n} }
 
 func bspSplit(kind int, ratio float64, l, r *SerializedBSPNode) *SerializedBSPNode {
@@ -14,7 +12,6 @@ func bspTree(root *SerializedBSPNode) *SerializedBSPTree {
 	return &SerializedBSPTree{Root: root, DefaultRatio: 0.5}
 }
 
-// treeSession is a session with two daemon windows, a and b.
 func treeSession(t *testing.T) (*Session, string, string) {
 	t.Helper()
 	sess, err := NewSession("tree", &SessionConfig{Shell: "/bin/sh"}, 80, 24)
@@ -33,13 +30,11 @@ func treeSession(t *testing.T) (*Session, string, string) {
 	return sess, a.ID, b.ID
 }
 
-// sessionTreeKey is the session's tree for ws with the leaves named by window.
 func sessionTreeKey(sess *Session, ws int) string {
 	st := sess.GetState()
 	return TreeKey(st.WorkspaceTrees[ws], SessionTreeNames(st))
 }
 
-// opKey is an op's tree with the leaves named by window.
 func opKey(p *LayoutTreePayload) string {
 	return TreeKey(p.Tree, func(n int) string { return p.Leaves[n] })
 }
@@ -207,7 +202,7 @@ func TestPushAfterATreeOpIsCurrent(t *testing.T) {
 		t.Fatalf("the window move was undone: %+v", w)
 	}
 
-	peer := clientSnapshot(sess) // built before the next op
+	peer := clientSnapshot(sess)
 	op.Tree = bspTree(bspSplit(2, 0.6, bspLeaf(1), bspLeaf(2)))
 	op.PushOrigin = "one"
 	applyTree(t, sess, op)
@@ -276,7 +271,6 @@ func TestClosedWindowLeavesTheSessionsTree(t *testing.T) {
 		t.Fatalf("session tree after the close = %q, want only %s", got, b)
 	}
 
-	// A leaf for a window the session does not hold is left out of an op too.
 	stale := &LayoutTreePayload{PushOrigin: "one", Workspace: 1,
 		Tree: bspTree(bspSplit(2, 0.4, bspLeaf(1), bspLeaf(2))), Leaves: map[int]string{1: a, 2: b}}
 	applyTree(t, sess, stale)

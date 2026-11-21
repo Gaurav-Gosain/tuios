@@ -18,8 +18,6 @@ func TestSessionResizeLeavesPaneWinsize(t *testing.T) {
 		t.Fatalf("CreatePTY failed: %v", err)
 	}
 
-	// The effective session size changes: a client resized its terminal, or a
-	// second client attached. Both routes land here.
 	sess.Resize(130, 40)
 
 	if w, h := sess.Size(); w != 130 || h != 40 {
@@ -29,7 +27,6 @@ func TestSessionResizeLeavesPaneWinsize(t *testing.T) {
 		t.Errorf("pane winsize = %dx%d after session resize, want the announced 65x38", w, h)
 	}
 
-	// A per-pane announcement still lands, and is the only thing that does.
 	if err := pty.Resize(80, 20); err != nil {
 		t.Fatalf("pty.Resize failed: %v", err)
 	}
@@ -69,7 +66,6 @@ func TestResizeToTheSameSizeIsANoOp(t *testing.T) {
 	marks := len(pty.resizeMarks)
 	pty.outputMu.Unlock()
 
-	// The same size again, twice, from what would be two other clients.
 	for range 2 {
 		if err := pty.Resize(80, 20); err != nil {
 			t.Fatalf("repeat resize: %v", err)
@@ -87,7 +83,6 @@ func TestResizeToTheSameSizeIsANoOp(t *testing.T) {
 		t.Errorf("pane winsize = %dx%d after the repeats, want 80x20", w, h)
 	}
 
-	// A real change still lands.
 	if err := pty.Resize(80, 21); err != nil {
 		t.Fatalf("changed resize: %v", err)
 	}

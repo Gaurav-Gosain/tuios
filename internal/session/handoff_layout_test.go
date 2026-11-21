@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// handoffLayout is the recorded shape of the handoff manifest's records at
-// HandoffVersion. See TestHandoffLayoutMovesWithTheVersion.
 const handoffLayout = "3:8d61608eb766d3b4"
 
 // TestHandoffLayoutMovesWithTheVersion fails when a record of the handoff
@@ -40,8 +38,6 @@ func TestHandoffLayoutMovesWithTheVersion(t *testing.T) {
 	}
 }
 
-// describeHandoffType writes the fields of a handoff type, and of the handoff
-// types it holds, one per line.
 func describeHandoffType(b *strings.Builder, t reflect.Type, seen map[reflect.Type]bool) {
 	for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Map {
 		t = t.Elem()

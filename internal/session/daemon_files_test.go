@@ -7,11 +7,6 @@ import (
 	"testing"
 )
 
-// The rail's file section reads a directory on the machine the pane is on,
-// which is the daemon's machine and not necessarily the client's. These cover
-// the daemon's half: the listing, its order, its cap, and the sentence a failure
-// turns into.
-
 func mkdirAll(t *testing.T, path string) {
 	t.Helper()
 	if err := os.MkdirAll(path, 0o755); err != nil {

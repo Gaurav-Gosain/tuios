@@ -9,36 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// The BSP tree as an op.
-//
-// A client that reshapes a workspace's tree (a split, a close, a drag of a
-// divider, a rotate, a swap) sends the tree for that workspace as
-// MsgLayoutTree, the daemon applies it under mutateState, Version advances, and
-// every client (the sender included) is sent the result. The client applies its
-// own change to its local tree at once, so a drag never waits for the round
-// trip. The whole-state push carries no trees: a push never advances Version,
-// so a tree inside one leaves every peer guessing whether it is news or an
-// echo of its own, and a client could adopt an echo of its own older tree over
-// the one it had just built.
-//
-// The op is the whole tree of one workspace rather than an edit, because every
-// tree mutation in the client already ends in a tree, and there are a dozen of
-// them. Two ops on one workspace are settled by the order they reach the
-// daemon: the later one stands. An op that names none of the session's windows
-// is also refused: it is another session's tree, sent by a client that shows
-// the wrong session, and it would delete this workspace's tree. The daemon
-// sends every applied op to every client, the sender included, and a client
-// drops any state built before its own last op landed (see PushSeen), so every
-// client ends on the tree of whichever op landed last. Refusing an op built on
-// an older tree than another client's would make a drag lose every step after
-// the first conflict, because each step carries the same old base.
-//
-// Leaves are named by window ID on the wire. The integers in a tree are each
-// client's own (GetWindowIntID hands them out locally), so an op carries the
-// window ID for every leaf, and the daemon renumbers the leaves into its own
-// WindowToBSPID. A client reading a tree from the session translates the
-// session's integers back to window IDs and then to its own integers.
-
 // LayoutTreePayload is the body of MsgLayoutTree: one workspace's BSP tree as a
 // client has just shaped it.
 type LayoutTreePayload struct {
@@ -66,22 +36,12 @@ type LayoutTreePayload struct {
 	BaseVersion int `json:"base_version,omitempty"`
 }
 
-// errLayoutTreeSame refuses an op that would not change the tree, so it does
-// not advance Version and wake every client for nothing.
 var errLayoutTreeSame = errors.New("layout tree op changes nothing")
 
-// errLayoutTreeStale refuses a placed tree built before another client's
-// change to the same workspace. See LayoutTreePayload.BaseVersion.
 var errLayoutTreeStale = errors.New("layout tree op predates a peer's tree")
 
-// errLayoutTreeForeign refuses an op whose tree names none of the session's
-// windows. See layoutTreeForeignLocked.
 var errLayoutTreeForeign = errors.New("layout tree op names none of the session's windows")
 
-// layoutTreeForeignLocked reports whether p is a tree of another session: it
-// carries a tree and at least one leaf name, the session holds a window, and
-// no leaf names a window the session holds. It allocates nothing and stops at
-// the first held window. The caller holds stateMu.
 func layoutTreeForeignLocked(state *SessionState, p *LayoutTreePayload) bool {
 	if p.Tree == nil || len(p.Leaves) == 0 || len(state.Windows) == 0 {
 		return false
@@ -106,7 +66,6 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 		return false, nil
 	}
 	snap, err := s.mutateStateLocked(func(state *SessionState) error {
-		// Counted with the change it makes. See notePushLocked.
 		s.notePushLocked(p.PushOrigin, p.PushSeq)
 		if p.Workspace < 0 || (p.Workspace > state.workspaceBound() && !IsScratchWorkspace(p.Workspace)) {
 			return errfmt.Errorf("workspace %d is out of range", p.Workspace)
@@ -115,18 +74,12 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 			return errLayoutTreeStale
 		}
 		if layoutTreeForeignLocked(state, p) {
-			// A client showing another session sends a tree op on every
-			// keystroke; the line is written for the first and not again
-			// while that origin keeps slipping. It shares refusedOrigin with
-			// the refused state push.
 			if p.PushOrigin == "" || s.refusedOrigin != p.PushOrigin {
 				s.refusedOrigin = p.PushOrigin
 				LogError("Refused a layout tree for %s: it names none of the session's windows", s.Name())
 			}
 			return errLayoutTreeForeign
 		}
-		// The op is not another session's tree, so a later slip from this
-		// client is logged again.
 		if s.refusedOrigin == p.PushOrigin {
 			s.refusedOrigin = ""
 		}
@@ -135,8 +88,6 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 			return errLayoutTreeSame
 		}
 		state.WorkspaceTrees, state.WindowToBSPID, state.NextBSPWindowID = trees, ids, next
-		// mutateStateLocked advances Version by one once this returns, so the
-		// op's version is the next one.
 		s.noteTreeOpLocked(state.Version+1, p.PushOrigin, p.Workspace)
 		return nil
 	})
@@ -150,11 +101,6 @@ func (s *Session) ApplyLayoutTree(p *LayoutTreePayload) (bool, error) {
 	return true, nil
 }
 
-// placeTree returns the state's trees, window numbering and allocator with ws
-// holding tree, renumbered from the client's leaf numbers into the session's.
-// It writes nothing it was given: the snapshot aliases the trees and the
-// numbering (see snapshotStateLocked), so the maps are cloned before a write.
-// changed is false when the result is the tree the workspace already holds.
 func placeTree(state *SessionState, ws int, tree *SerializedBSPTree, leaves map[int]string) (map[int]*SerializedBSPTree, map[string]int, int, bool) {
 	live := make(map[string]bool, len(state.Windows))
 	for i := range state.Windows {
@@ -203,17 +149,6 @@ func placeTree(state *SessionState, ws int, tree *SerializedBSPTree, leaves map[
 	return trees, ids, next, true
 }
 
-// pruneDeadLeaves takes every leaf out of the state's trees whose window is not
-// in the state. It runs after every daemon-side mutation. A window the daemon
-// closed would otherwise stay in the session's tree until some client sent an
-// op for that workspace, and a client attaching in between would read a tree
-// it cannot lay out and rebuild the workspace from scratch. A client push is
-// not pruned: a client that sends ops removes the leaf with an op of its own,
-// and one too old to send them has its trees taken as sent, as before.
-//
-// A leaf the numbering does not name is taken out too, since no client can say
-// which window it is. The trees are replaced, never written through, for the
-// reason placeTree gives.
 func pruneDeadLeaves(state *SessionState) {
 	if len(state.WorkspaceTrees) == 0 {
 		return
@@ -246,7 +181,6 @@ func pruneDeadLeaves(state *SessionState) {
 	}
 }
 
-// treeKeeps reports whether keep accepts every leaf under n unchanged.
 func treeKeeps(n *SerializedBSPNode, keep func(int) (int, bool)) bool {
 	if n == nil {
 		return true
@@ -336,7 +270,6 @@ func writeTreeKey(b *strings.Builder, n *SerializedBSPNode, name func(int) strin
 	b.WriteByte(')')
 }
 
-// sessionLeafNames names the session's leaf numbers by window ID.
 func sessionLeafNames(ids map[string]int) func(int) string {
 	owner := make(map[int]string, len(ids))
 	for id, n := range ids {
@@ -350,37 +283,21 @@ func SessionTreeNames(state *SessionState) func(int) string {
 	return sessionLeafNames(state.WindowToBSPID)
 }
 
-// noteTreeOpLocked records that the mutation which will carry version was a
-// tree op. A tree op changes the trees and nothing else, and a push from a
-// client that sends ops carries no trees, so a push built before a tree op
-// has missed nothing it could undo. See missedMutationLocked. ws is the
-// workspace whose tree the op changed, treeOpAnyWorkspace for an op that
-// bears on every tree, or treeOpNoWorkspace for one that changes none. The
-// caller holds stateMu.
 func (s *Session) noteTreeOpLocked(version int, origin string, ws int) {
 	s.treeOps[version%len(s.treeOps)] = treeOpRecord{version, origin, ws}
 }
 
 const (
-	// treeOpAnyWorkspace marks a tree op that bears on the tree of every
-	// workspace.
 	treeOpAnyWorkspace = -1
-	// treeOpNoWorkspace marks an op recorded with the tree ops that changes
-	// no tree.
-	treeOpNoWorkspace = -2
+	treeOpNoWorkspace  = -2
 )
 
-// treeOpRecord is one entry of Session.treeOps.
 type treeOpRecord struct {
 	version int
 	origin  string
 	ws      int
 }
 
-// peerTreeChangedLocked reports whether an op from a client other than
-// origin changed the tree of ws after base. Versions further back than the
-// record reaches read as changed, which is the safe answer: the sender is
-// sent the state and works the tree out again. The caller holds stateMu.
 func (s *Session) peerTreeChangedLocked(origin string, ws, base, current int) bool {
 	if base >= current {
 		return false
@@ -400,16 +317,11 @@ func (s *Session) peerTreeChangedLocked(origin string, ws, base, current int) bo
 	return false
 }
 
-// treeOpAt reports whether the mutation at version was a tree op, and who
-// sent it.
 func (s *Session) treeOpAt(version int) (string, bool) {
 	r := s.treeOps[version%len(s.treeOps)]
 	return r.origin, r.version == version
 }
 
-// missedPeerTreeLocked reports whether a push from origin built at base
-// predates a tree op another client sent. A tree op from origin itself does
-// not count: its tree is the one the client holds. The caller holds stateMu.
 func (s *Session) missedPeerTreeLocked(origin string, base, current int) bool {
 	if base >= current || current-base > len(s.treeOps) {
 		return false
@@ -422,19 +334,6 @@ func (s *Session) missedPeerTreeLocked(origin string, base, current int) bool {
 	return false
 }
 
-// missedMutationLocked reports whether a push built at base predates a
-// mutation other than a tree op. That is what stale means: the client has not
-// seen something the daemon did that its push could undo.
-//
-// Tree ops do not count, whoever sent them. Counting them made every push
-// built before a peer's resize stale, and the reconcile then took Minimized,
-// Workspace and CustomName from the daemon, which undid a minimise, a move or
-// a rename the pushing client had just made. A push from a client too old to
-// send ops does carry trees, and it is taken as sent whether or not it is
-// stale, so skipping tree ops changes nothing for it.
-//
-// Versions further back than the record reaches read as missed, which is the
-// safe answer. The caller holds stateMu.
 func (s *Session) missedMutationLocked(base, current int) bool {
 	if base >= current {
 		return false
@@ -450,11 +349,6 @@ func (s *Session) missedMutationLocked(base, current int) bool {
 	return false
 }
 
-// handleLayoutTree applies a client's tree op. An op that is applied reaches
-// every client, its sender included, through the state sink. One that changes
-// nothing, or that is malformed, or that is refused, is answered to its sender
-// alone with the state that stands, so the sender still hears that its op
-// landed and never keeps showing a tree the session did not take.
 func (d *Daemon) handleLayoutTree(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
 		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
@@ -482,7 +376,6 @@ func (d *Daemon) handleLayoutTree(cs *connState, msg *Message) error {
 	}
 	if err != nil {
 		LogError("Refused a layout tree from %s: %v", cs.clientID, err)
-		// A refused op still counts: the client counted it when it sent it.
 		session.NotePush(p.PushOrigin, p.PushSeq)
 	}
 	if applied {

@@ -111,6 +111,5 @@ func TestSubscribeResumeParamErrors(t *testing.T) {
 	if code := errCode(t, c.call(t, ahead)); code != ErrVerbInvalidParams {
 		t.Fatalf("after_seq ahead: code = %q, want %q", code, ErrVerbInvalidParams)
 	}
-	// Neither refusal may leave the connection subscribed.
 	result(t, c.call(t, `{"id":3,"verb":"subscribe","params":{"types":["bell"]}}`))
 }

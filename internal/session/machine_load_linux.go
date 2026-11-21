@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// readMachineLoad reads the one-minute load and the memory in use from /proc.
 func readMachineLoad() (load1, memPct float64, ok bool) {
 	b, err := os.ReadFile("/proc/loadavg")
 	if err != nil {

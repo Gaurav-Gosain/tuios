@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// selectFixture is two sessions with agents of two harnesses in them: api has
-// a codex pane and a claude pane and is a fan-out group, web has one codex
-// pane and a plain shell.
 type selectFixture struct {
 	d                   *Daemon
 	c                   *verbConn
@@ -40,7 +37,6 @@ func newSelectFixture(t *testing.T) *selectFixture {
 	return f
 }
 
-// confirmHint returns the confirm_required hint of a refused write.
 func confirmHint(t *testing.T, resp map[string]any) (string, []string) {
 	t.Helper()
 	if code := errCode(t, resp); code != ErrVerbConfirmRequired {
@@ -58,7 +54,6 @@ func confirmHint(t *testing.T, resp map[string]any) (string, []string) {
 	return token, labels
 }
 
-// unreadFor is how many unread messages wait in one pane's inbox.
 func unreadFor(t *testing.T, c *verbConn, session, window string) int {
 	t.Helper()
 	res := result(t, callVerb(t, c, "read-agent-messages", map[string]any{"session": session, "to": window, "unread": true, "peek": true}))
@@ -83,7 +78,6 @@ func TestSendBySelectorSendsNothingUntilConfirmed(t *testing.T) {
 		}
 	}
 
-	// The token list-agents gives for the same selector is the same token.
 	listed := result(t, callVerb(t, f.c, "list-agents", map[string]any{"select": "harness:codex"}))
 	if listed["confirm"] != token {
 		t.Errorf("list-agents token %v differs from the refusal's %v", listed["confirm"], token)
@@ -97,15 +91,12 @@ func TestSendBySelectorSendsNothingUntilConfirmed(t *testing.T) {
 	if n := unreadFor(t, f.c, "api-fan-retry", f.apiCodex); n != 1 {
 		t.Errorf("api's codex pane has %d unread, want 1", n)
 	}
-	// The sender is in api, and the message to web still names it.
 	read := result(t, callVerb(t, f.c, "read-agent-messages", map[string]any{"session": "web", "to": f.webCodex, "peek": true}))
 	msg := read["messages"].([]any)[0].(map[string]any)
 	if msg["from"] != f.apiClaude {
 		t.Errorf("the message to web is from %v, want the sender's pane %s", msg["from"], f.apiClaude)
 	}
 
-	// A pane joining the set changes the token, and the old one is refused
-	// with the new set.
 	if _, _, err := f.web.ApplyAgentReport(f.webShell, AgentReport{State: AgentStateIdle, Harness: "codex"}); err != nil {
 		t.Fatal(err)
 	}
@@ -124,8 +115,6 @@ func TestSendBySelectorRefusesMixedAddressing(t *testing.T) {
 		{"to": f.apiCodex},
 		{"session": "web"},
 		{"reply_to": 1},
-		// host sends to one session on another machine; a selector names
-		// its own hosts with a host: term.
 		{"host": "build"},
 	} {
 		params := map[string]any{"select": "harness:codex", "text": "x"}
@@ -162,8 +151,6 @@ func TestSelectorIsRefusedFromAHostedPane(t *testing.T) {
 // is refused in its own row, with nothing typed, and the pane at rest answers.
 func TestAskBySelectorRefusesABlockedPaneAndAsksTheRest(t *testing.T) {
 	f := newSelectFixture(t)
-	// web's shell is the pane that answers: a shell prints what it is asked
-	// to echo. api's codex pane is blocked on an approval.
 	if _, _, err := f.web.ApplyAgentReport(f.webShell, AgentReport{State: AgentStateIdle, Harness: "aider"}); err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +209,6 @@ func TestWaitForSelectEveryWaitsForTheWholeSet(t *testing.T) {
 		t.Errorf("every wait: %v, want both panes of the group", res)
 	}
 
-	// Without every, the first pane at rest is enough.
 	res = result(t, f.c.call(t, `{"id":2,"verb":"wait-for","params":{"condition":"agent-state","select":"harness:codex session:web","until":"idle","timeout":1000}}`))
 	if res["window"] != f.webCodex {
 		t.Errorf("any wait matched %v, want web's codex pane", res["window"])

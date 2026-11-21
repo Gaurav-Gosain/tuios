@@ -16,42 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// Task dispatch: agents that pick work.
-//
-// Each board has a dispatch mode. A board is a project's cards (the card's
-// project URL) or a session's own cards ("session:NAME"). Manual, the
-// default, starts nothing. Pull offers an agent that finishes its card the
-// next open card of its board: the oldest card in todo, plan or doing (one
-// let go mid-work) that no pane holds, that is not blocked, not marked ask_first, and names no harness or
-// the agent's own. The card is claimed for the agent's pane in one state
-// change of its session, so two agents that finish at once never take one
-// card, and the agent hears of it as mail from tuios, which the hook notice
-// or the mail wake tells it about. Dispatch types nothing into a pane, and it
-// never offers a card to a pane that waits on the person, so a card can never
-// read as the answer to an approval.
-//
-// An agent finishes its card with finish-task (tuios task done), set-task-stage
-// done, or, on a pull board, by going to done while it holds the card: the
-// daemon then finishes the card for it.
-//
-// The safety switches stop dispatch, and only a person (or a shell outside
-// every pane, a plugin, or a pane holding admin) starts it again:
-//   - Pause stops all dispatch at once. Anyone may pause.
-//   - Quiet hours ("22:00-07:00", local time) hold every offer while they run.
-//   - A board stops after dispatchMaxFailures dispatched cards in a row end
-//     without being finished: let go (pane closed, agent left, released),
-//     blocked, or put back because the agent errored.
-//   - All dispatch stops when an agent reports a usage limit: the state
-//     limit_reached (set-agent-state errored with kind usage_limit lands as
-//     it), or an errored message that says so.
-//
-// v1 limits: the agent and the card are on this daemon and in one session. A
-// card is let go by its own session when its pane closes, so a pane never
-// holds a card of another session.
-//
-// The modes and switches are saved in tasks/dispatch.json, so they survive a
-// restart.
-
 // The dispatch modes of a board.
 const (
 	DispatchManual = "manual"
@@ -62,7 +26,6 @@ const (
 // DispatchModes are the modes set-task-dispatch takes.
 var DispatchModes = []string{DispatchManual, DispatchPull, DispatchAuto}
 
-// The actions set-task-dispatch takes.
 const (
 	dispatchActionMode   = "mode"
 	dispatchActionPause  = "pause"
@@ -73,14 +36,10 @@ const (
 	dispatchActionVerify = "verify"
 )
 
-// dispatchActions are the actions set-task-dispatch takes.
 var dispatchActions = []string{dispatchActionMode, dispatchActionPause, dispatchActionResume, dispatchActionQuiet, dispatchActionPreset, dispatchActionCap, dispatchActionVerify}
 
-// taskByDispatch is the by of a claim dispatch makes.
 const taskByDispatch = "dispatch"
 
-// dispatchMaxFailures is how many dispatched cards in a row may end without
-// being finished before the board stops.
 const dispatchMaxFailures = 3
 
 // AgentKindUsageLimit is the kind of an errored report that says the agent
@@ -92,31 +51,22 @@ const AgentKindUsageLimit = "usage_limit"
 // the whole status, and Reason why dispatch stopped on its own.
 const EventTaskDispatch = "task-dispatch"
 
-// The reasons dispatch stops on its own.
 const (
 	dispatchStopFailures = "3 failures in a row"
 	dispatchStopLimit    = "usage limit"
 )
 
-// sessionBoardPrefix starts the board key of a session's own cards.
 const sessionBoardPrefix = "session:"
 
-// dispatchBoard is one board's dispatch settings.
 type dispatchBoard struct {
-	Mode     string `json:"mode,omitempty"`
-	Failures int    `json:"failures,omitempty"`
-	Stopped  string `json:"stopped,omitempty"`
-	// Preset is what auto starts each card's agent with.
-	Preset *DispatchPreset `json:"preset,omitempty"`
-	// Verify is the shell line the daemon runs in a card's worktree when
-	// its agent is done with it, and VerifyTimeout its limit in seconds,
-	// 0 for the default (task_verify.go). Only the person sets them.
-	Verify        string `json:"verify,omitempty"`
-	VerifyTimeout int    `json:"verify_timeout,omitempty"`
+	Mode          string          `json:"mode,omitempty"`
+	Failures      int             `json:"failures,omitempty"`
+	Stopped       string          `json:"stopped,omitempty"`
+	Preset        *DispatchPreset `json:"preset,omitempty"`
+	Verify        string          `json:"verify,omitempty"`
+	VerifyTimeout int             `json:"verify_timeout,omitempty"`
 }
 
-// keep reports whether the board holds a setting, so a board back to
-// manual with none is dropped from the file.
 func (b *dispatchBoard) keep() bool {
 	return (b.Mode != "" && b.Mode != DispatchManual) || b.Failures > 0 || b.Stopped != "" || b.Preset != nil || b.Verify != ""
 }
@@ -135,28 +85,22 @@ type DispatchPreset struct {
 	Machine string `json:"machine,omitempty"`
 }
 
-// dispatchFile is the saved form of the dispatch settings.
 type dispatchFile struct {
-	Version  int                       `json:"version"`
-	Paused   bool                      `json:"paused,omitempty"`
-	PausedBy string                    `json:"paused_by,omitempty"`
-	PausedAt int64                     `json:"paused_at,omitempty"`
-	Stopped  string                    `json:"stopped,omitempty"`
-	Quiet    string                    `json:"quiet,omitempty"`
-	Boards   map[string]*dispatchBoard `json:"boards,omitempty"`
-	// Cap and MachineCap bound the agents auto runs at once, in total and
-	// on one machine. 0 is the default.
-	Cap        int `json:"cap,omitempty"`
-	MachineCap int `json:"machine_cap,omitempty"`
+	Version    int                       `json:"version"`
+	Paused     bool                      `json:"paused,omitempty"`
+	PausedBy   string                    `json:"paused_by,omitempty"`
+	PausedAt   int64                     `json:"paused_at,omitempty"`
+	Stopped    string                    `json:"stopped,omitempty"`
+	Quiet      string                    `json:"quiet,omitempty"`
+	Boards     map[string]*dispatchBoard `json:"boards,omitempty"`
+	Cap        int                       `json:"cap,omitempty"`
+	MachineCap int                       `json:"machine_cap,omitempty"`
 }
 
-// dispatchStore holds the dispatch settings. The daemon keeps one.
 type dispatchStore struct {
-	mu   sync.Mutex
-	path string
-	f    dispatchFile
-	// pullQuiet runs offerPull when the quiet hours end. It is armed only
-	// while quiet hours hold an offer of a pull board.
+	mu        sync.Mutex
+	path      string
+	f         dispatchFile
 	pullQuiet *time.Timer
 }
 
@@ -203,24 +147,20 @@ type DispatchBoardRow struct {
 	VerifyTimeout int    `json:"verify_timeout,omitempty"`
 }
 
-// The default caps of auto.
 const (
 	dispatchDefaultCap        = 3
 	dispatchDefaultMachineCap = 2
 	dispatchCapMax            = 64
 )
 
-// caps is the total and per-machine cap. mu is held.
 func (ds *dispatchStore) capsLocked() (int, int) {
 	return cmp.Or(ds.f.Cap, dispatchDefaultCap), cmp.Or(ds.f.MachineCap, dispatchDefaultMachineCap)
 }
 
-// dispatchPath is where the settings are saved.
 func dispatchPath() string {
 	return filepath.Join(getResurrectionDir(), "tasks", "dispatch.json")
 }
 
-// dispatchBoardKey is the board of a card of project in sessionName.
 func dispatchBoardKey(sessionName, project string) string {
 	if project != "" {
 		return project
@@ -228,8 +168,6 @@ func dispatchBoardKey(sessionName, project string) string {
 	return sessionBoardPrefix + sessionName
 }
 
-// load reads the saved settings. A missing or broken file leaves every board
-// manual and dispatch running.
 func (ds *dispatchStore) load(path string) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -246,7 +184,6 @@ func (ds *dispatchStore) load(path string) {
 	ds.f = f
 }
 
-// saveLocked writes the settings. It holds mu.
 func (ds *dispatchStore) saveLocked() {
 	if ds.path == "" {
 		return
@@ -261,7 +198,6 @@ func (ds *dispatchStore) saveLocked() {
 	}
 }
 
-// boardLocked is the board key's settings, made when make is set. It holds mu.
 func (ds *dispatchStore) boardLocked(key string, make bool) *dispatchBoard {
 	if b := ds.f.Boards[key]; b != nil || !make {
 		return b
@@ -274,7 +210,6 @@ func (ds *dispatchStore) boardLocked(key string, make bool) *dispatchBoard {
 	return b
 }
 
-// rowOf is board key's row.
 func rowOf(key string, b *dispatchBoard) DispatchBoardRow {
 	row := DispatchBoardRow{Board: key, Mode: DispatchManual}
 	if s, ok := strings.CutPrefix(key, sessionBoardPrefix); ok {
@@ -295,8 +230,6 @@ func rowOf(key string, b *dispatchBoard) DispatchBoardRow {
 	return row
 }
 
-// status is the settings as get-task-dispatch gives them, with board's row
-// when board is not empty.
 func (ds *dispatchStore) status(board string, now time.Time) DispatchStatus {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -321,11 +254,8 @@ func (ds *dispatchStore) status(board string, now time.Time) DispatchStatus {
 	return st
 }
 
-// dispatchQuietHours is why blocked holds an offer in the quiet hours.
 const dispatchQuietHours = "quiet hours"
 
-// blocked says why dispatch in mode makes no offer on board now, "" when
-// it may.
 func (ds *dispatchStore) blocked(board, mode string, now time.Time) string {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -345,7 +275,6 @@ func (ds *dispatchStore) blocked(board, mode string, now time.Time) string {
 	return ""
 }
 
-// isMode reports whether board is in one of modes.
 func (ds *dispatchStore) isMode(board string, modes ...string) bool {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -353,9 +282,6 @@ func (ds *dispatchStore) isMode(board string, modes ...string) bool {
 	return b != nil && slices.Contains(modes, b.Mode)
 }
 
-// noteOutcome records how a dispatched card of board ended: finished resets
-// the count, anything else adds one. It returns true when this stopped the
-// board.
 func (ds *dispatchStore) noteOutcome(board string, finished bool) bool {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -380,8 +306,6 @@ func (ds *dispatchStore) noteOutcome(board string, finished bool) bool {
 	return stopped
 }
 
-// stopAll stops all dispatch for reason. It returns false when it was
-// stopped already.
 func (ds *dispatchStore) stopAll(reason string) bool {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -393,8 +317,6 @@ func (ds *dispatchStore) stopAll(reason string) bool {
 	return true
 }
 
-// anyMode reports whether a board is in one of modes, so an event that
-// could start dispatch costs nothing on a daemon with none.
 func (ds *dispatchStore) anyMode(modes ...string) bool {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -406,7 +328,6 @@ func (ds *dispatchStore) anyMode(modes ...string) bool {
 	return false
 }
 
-// parseQuietHours checks a quiet hours span, "HH:MM-HH:MM".
 func parseQuietHours(s string) (from, to int, ok bool) {
 	a, b, ok := strings.Cut(s, "-")
 	if !ok {
@@ -417,7 +338,6 @@ func parseQuietHours(s string) (from, to int, ok bool) {
 	return from, to, ok1 && ok2 && from != to
 }
 
-// parseClock is "HH:MM" as minutes after midnight.
 func parseClock(s string) (int, bool) {
 	h, m, ok := strings.Cut(strings.TrimSpace(s), ":")
 	if !ok || len(h) == 0 || len(h) > 2 || len(m) != 2 {
@@ -431,8 +351,6 @@ func parseClock(s string) (int, bool) {
 	return hh*60 + mm, true
 }
 
-// inQuietHours reports whether now is inside span. A span that ends before
-// it starts runs across midnight.
 func inQuietHours(span string, now time.Time) bool {
 	from, to, ok := parseQuietHours(span)
 	if !ok {
@@ -445,26 +363,19 @@ func inQuietHours(span string, now time.Time) bool {
 	return m >= from || m < to
 }
 
-// publishDispatch sends the task-dispatch event with the status now.
 func (d *Daemon) publishDispatch(action, reason string) {
 	st := d.dispatch.status("", time.Now())
 	d.autoStatus(&st)
 	d.events.publish(streamEvent{Type: EventTaskDispatch, Action: action, Reason: reason, Dispatch: &st})
 }
 
-// afterTaskEvent is what dispatch does with a task event: after a finish it
-// offers the pane that held the card its next one. A dispatched card's
-// outcome counted in the move itself (task_move.go). It runs off the caller's goroutine, since a
-// release is published from the session's event sink under the state lock.
 func (d *Daemon) afterTaskEvent(sess *Session, action, window, reason string, row TaskRow) {
 	d.kickAuto()
 	if row.Stage != TaskStageVerify {
-		// A card moved out of verify ends the verify that ran on it.
 		d.verifies.stop(verifyKey(row.Session, row.ID), 0)
 	}
 	switch action {
 	case TaskActionAdded, TaskActionReleased, TaskActionStaged, TaskActionUnblocked:
-		// A card that came free is offered to an agent at rest.
 		if row.Holder == nil && row.Blocked == nil && pullable(row.Stage) && d.dispatch.anyMode(DispatchPull) {
 			go d.offerPull()
 		}
@@ -474,16 +385,6 @@ func (d *Daemon) afterTaskEvent(sess *Session, action, window, reason string, ro
 	}
 }
 
-// noteDispatchAgentState is what dispatch does with an agent state change of
-// window: errored blocks a card dispatch gave it (blockErrored), working
-// lifts that block, and a usage limit stops all dispatch. It runs off the
-// sink.
-//
-// Done is not read here. Every turn end reports done (the Claude Code Stop
-// hook, Codex's turn notice, the transcript's turn end), also a turn that
-// ends on a question or part way, so done does not say the card is done. A
-// card leaves doing only by an act that names it: tuios task done, a stage
-// move, a release, or its verify result.
 func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
 	if state != AgentStateErrored.Name() && state != AgentStateLimitReached.Name() && state != AgentStateWorking.Name() {
 		return
@@ -497,8 +398,6 @@ func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
 			return
 		}
 		if state == AgentStateWorking.Name() {
-			// The agent goes on after an error: its card is no longer
-			// blocked on it.
 			for _, cs := range d.cardSessions(sess, window) {
 				d.unblockErrored(cs, window)
 			}
@@ -517,9 +416,6 @@ func (d *Daemon) noteDispatchAgentState(sess *Session, window, state string) {
 	}()
 }
 
-// usageLimited reports whether w's state says the agent hit a usage limit:
-// limit_reached, or an errored state whose message says so (a harness whose
-// hook maps a limit to an error).
 func usageLimited(w WindowState) bool {
 	if w.AgentState == AgentStateLimitReached {
 		return true
@@ -531,14 +427,6 @@ func usageLimited(w WindowState) bool {
 	return strings.Contains(msg, "usage limit") || strings.Contains(msg, "rate limit")
 }
 
-// blockErrored marks blocked the cards dispatch gave window, after its agent
-// errored: one attempt more, with the agent's last line as the note and in
-// the block. The pane keeps them. An error is often passing and the agent
-// lives on, so a card put back now would start a second agent on the same
-// work beside it. The card goes back to todo once the pane lets it go (its
-// agent leaves, the pane closes, a person releases it; release), and the
-// block lifts if the agent works again (unblockErrored). The block counts
-// one failure on the board.
 func (d *Daemon) blockErrored(sess *Session, window, last string) {
 	line := cutUTF8(firstNonEmpty(printableClaim(last, taskMaxReason), taskBlockErrored), taskMaxReason)
 	reason := cutUTF8(taskBlockErrored+": "+line, taskMaxReason)
@@ -568,9 +456,7 @@ func (d *Daemon) blockErrored(sess *Session, window, last string) {
 	}
 }
 
-// unblockErrored lifts the block blockErrored put on the cards window holds.
 func (d *Daemon) unblockErrored(sess *Session, window string) {
-	// Every turn starts working: most find nothing, under a read lock.
 	if !sess.anyTask(func(tk *TaskState) bool { return tk.Holder == window && tk.blockedOnErrored() }) {
 		return
 	}
@@ -599,11 +485,6 @@ func (d *Daemon) unblockErrored(sess *Session, window string) {
 	}
 }
 
-// pullNext offers window the next card of board, when the board is in pull
-// mode and nothing holds dispatch. The claim and every check of the pane are
-// made in one state change of the session. notOwn leaves out a card window
-// let go last: an offer the pane did not ask for by a finish never hands it
-// back the card it gave up.
 func (d *Daemon) pullNext(sess *Session, window, board, project string, notOwn bool) {
 	if why := d.dispatch.blocked(board, DispatchPull, time.Now()); why != "" {
 		if d.dispatch.isMode(board, DispatchPull) {
@@ -624,14 +505,11 @@ func (d *Daemon) pullNext(sess *Session, window, board, project string, notOwn b
 		if !ok || w.AgentState == AgentStateNone || w.AgentState == AgentStateNeedsInput {
 			return errNoTaskMove
 		}
-		// The switches are read again under the state lock, so a pause
-		// that landed after the first look still holds this claim.
 		if d.dispatch.blocked(board, DispatchPull, time.Now()) != "" {
 			return errNoTaskMove
 		}
 		for _, tk := range st.Tasks {
 			if tk.Holder == window && tk.Stage != TaskStageDone {
-				// It still holds work.
 				return errNoTaskMove
 			}
 		}
@@ -659,23 +537,15 @@ func (d *Daemon) pullNext(sess *Session, window, board, project string, notOwn b
 	d.mailDispatched(sess, window, label, row, prompt, "")
 }
 
-// pullable reports whether pull offers a free card in stage.
 func pullable(stage string) bool {
 	return stage == TaskStageTodo || stage == TaskStagePlan || stage == TaskStageDoing
 }
 
-// releasedBy reports whether the last change to tk was window letting it
-// go: pull does not offer a pane the card it just gave up.
 func releasedBy(tk TaskState, window string) bool {
 	n := len(tk.History)
 	return n > 0 && tk.History[n-1].Action == TaskActionReleased && tk.History[n-1].Holder == window
 }
 
-// offerPull offers a card of each pull board to each agent at rest that
-// holds none, as a finish would. It runs when a switch that holds offers
-// lifts or a board is set to pull (set-task-dispatch), when quiet hours
-// end, and when a card comes free (added, let go, moved back, unblocked):
-// otherwise only a finish asks for an offer.
 func (d *Daemon) offerPull() {
 	if !d.dispatch.anyMode(DispatchPull) {
 		return
@@ -686,7 +556,6 @@ func (d *Daemon) offerPull() {
 		if st == nil {
 			continue
 		}
-		// The boards with a free card in this session, by board key.
 		boards := map[string]string{}
 		for _, tk := range st.Tasks {
 			if tk.Holder == "" {
@@ -709,8 +578,6 @@ func (d *Daemon) offerPull() {
 	}
 }
 
-// armPullQuiet runs offerPull once the quiet hours end, unless that is armed
-// already. A span changed meanwhile is read again then.
 func (d *Daemon) armPullQuiet() {
 	wait := d.dispatch.untilQuietEnds(time.Now())
 	ds := &d.dispatch
@@ -727,9 +594,6 @@ func (d *Daemon) armPullQuiet() {
 	})
 }
 
-// mailHeldCard tells win, which start-agent opened and which now holds the
-// card row, about the card as mail from tuios: the prompt is read from the
-// card's owner, here or on host over the link.
 func (d *Daemon) mailHeldCard(sess *Session, win WindowState, row TaskRow, host string) {
 	prompt, where := "", ""
 	if host == "" {
@@ -758,12 +622,7 @@ func (d *Daemon) mailHeldCard(sess *Session, win WindowState, row TaskRow, host 
 	d.mailDispatched(sess, win.ID, windowLabelOf(win), row, prompt, where)
 }
 
-// mailDispatched tells window, as mail from tuios, which card it now holds.
-// where is the -s flag that names the card's session, when it is not the
-// pane's own.
 func (d *Daemon) mailDispatched(sess *Session, window, label string, row TaskRow, prompt, where string) {
-	// The card's prompt is the agent's next instruction. See
-	// invisible.StripHidden.
 	prompt, _ = invisible.StripHidden(prompt)
 	text := "You now hold task card " + row.ID + ": " + row.Title + "\n\n"
 	if strings.TrimSpace(prompt) != "" {

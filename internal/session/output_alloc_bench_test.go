@@ -37,8 +37,6 @@ func BenchmarkPTYOutputScan(b *testing.B) {
 			}
 		})
 	}
-	// Coloured output, as a compiler, ls or grep prints it: a colour every
-	// few words.
 	b.Run("chunk-1024-colour", func(b *testing.B) {
 		p := benchPTY(0)
 		p.sessionID = "bench-session"
@@ -82,7 +80,6 @@ func BenchmarkReadFramePayload(b *testing.B) {
 	}
 }
 
-// repeatReader serves the same frame for ever.
 type repeatReader struct {
 	frame []byte
 	r     bytes.Reader
@@ -102,9 +99,6 @@ func (r *repeatReader) Read(p []byte) (int, error) {
 func TestOutputScanAllocatesNothing(t *testing.T) {
 	p := benchPTY(0)
 	p.sessionID = "budget-session"
-	// Colours, and an OSC cut at the end, so the probe scan keeps a tail and
-	// the join runs. A chunk that ends inside a graphics command's
-	// introducer still copies, because its segments outlive the scan.
 	data := []byte("y\ny\n\x1b[31mred\x1b[0m y\n\x1b]0;a window ti")
 	var seq int64
 	scan := func() {

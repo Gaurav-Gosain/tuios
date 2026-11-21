@@ -17,73 +17,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Following the attached client's display.
-//
-// A daemon that a host link started over ssh has no WAYLAND_DISPLAY or
-// DISPLAY, so its panes have none either. When the person later attaches
-// from the desktop of that machine, wl-copy, wl-paste, xclip and a coding
-// agent's image paste fail in every pane. With [daemon] display = "follow",
-// the default, the daemon gives its panes the display of the local client
-// that attached to the session or used it last. It is modelled on the ssh
-// agent follow (ssh_agent_follow.go):
-//
-//   - It does nothing when the daemon has a WAYLAND_DISPLAY or a DISPLAY of
-//     its own. A daemon started from the desktop keeps what it has, and its
-//     panes see exactly what they saw before the option existed.
-//   - A client sends WAYLAND_DISPLAY, XDG_RUNTIME_DIR, DISPLAY and XAUTHORITY
-//     in its hello (ClientDisplay). Only tuios attach and tuios new send them.
-//   - Each session has one link, wayland-<id>.sock beside the daemon socket,
-//     that points at the Wayland socket of the newest client that has one.
-//     Every pane of the session gets WAYLAND_DISPLAY set to the link's
-//     absolute path, which libwayland accepts as is, also a pane started or
-//     restored before any client attached: the link appears under it when a
-//     client comes. The one exception is a session whose clients have an X11
-//     display and no Wayland socket: a link that points at nothing would make
-//     a toolkit try Wayland first, so those panes get DISPLAY alone.
-//   - A client with no Wayland socket never moves or removes the link while
-//     a client with one is still there. Before, two such clients that took
-//     turns at the keyboard made the link flap every second. The link moves when a client comes or goes, so a pane
-//     started under one desktop client still reaches the compositor after
-//     that client detaches and another attaches.
-//   - DISPLAY is a name, :N, and cannot be a link. A new pane gets the
-//     newest client's DISPLAY and XAUTHORITY as they are. A shell that
-//     already runs keeps its values, and tuios display-env prints the current
-//     ones for eval in that shell or a shell rc.
-//   - When the client leaves, the session falls back to the client before
-//     it. With no client left the link is removed. The daemon has no display
-//     of its own to fall back to: if it had one, the follow would be off.
-//   - Links are swept at start and stop, and when the option is turned off.
-//
-// Which clients count. Every rule below fails closed:
-//
-//   - A client on this daemon's own socket only. A connection over a host
-//     link is never followed: its values name a display on another machine.
-//   - A client of this daemon's uid, by the kernel's peer credentials. A
-//     platform that does not give the uid follows no one.
-//   - A client that may act as the person (human_origin.go). A client inside
-//     a pane is an agent or a script, not the desktop.
-//   - tuios's SSH server and tuios-web serve their clients from a TUIClient
-//     that sends no display, so a remote viewer never moves anything.
-//
-// Which values count:
-//
-//   - WAYLAND_DISPLAY is an absolute path, or a plain name such as wayland-1
-//     with no slash. A name is looked up in the client's XDG_RUNTIME_DIR, then
-//     the daemon's, then /run/user/<uid>, so a client started with
-//     XDG_RUNTIME_DIR unset still counts. The path is resolved once
-//     (filepath.EvalSymlinks) and must pass ownedSocket: a Unix socket this
-//     user owns, in folders no other user can write to unless sticky.
-//   - DISPLAY is :N or :N.S, a display on this machine. Its socket,
-//     /tmp/.X11-unix/XN, must be a Unix socket owned by this user or root
-//     (Xwayland or Xorg), in folders no other user can write to unless
-//     sticky. A forwarded display such as localhost:10.0 does not count.
-//   - XAUTHORITY is an absolute path that resolves to a regular file this
-//     user owns, in folders no other user can write to unless sticky.
-//   - No value may hold a control character.
-//
-// A client whose values all fail sends nothing that counts and moves
-// nothing. The refusal is logged once per connection.
-
 // ClientDisplay is the display environment a local client runs in, sent in
 // its hello. Every field is the variable as the client has it, unchecked: the
 // daemon checks them. See display_follow.go.
@@ -104,49 +37,36 @@ func ClientDisplayFromEnv() ClientDisplay {
 	}
 }
 
-// empty reports whether the client has no display at all.
 func (c ClientDisplay) empty() bool {
 	return c.WaylandDisplay == "" && c.Display == ""
 }
 
-// shownDisplay is what passed the checks: the resolved Wayland socket, the X11
-// display name and the resolved X authority file. Any of them may be empty,
-// but not both wayland and x11.
 type shownDisplay struct {
 	wayland string
 	x11     string
 	xauth   string
 }
 
-// displayCandidate is one client's display for one session.
 type displayCandidate struct {
 	clientID string
 	shown    shownDisplay
 }
 
-// displayFollow holds, for each session, the clients whose display the panes
-// can be given, newest first, and where each Wayland link points now.
 type displayFollow struct {
 	mu        sync.Mutex
 	bySession map[string][]displayCandidate
 	target    map[string]string
-	// stopped is set when the daemon stops: no link is made after it.
-	stopped bool
+	stopped   bool
 }
 
-// daemonHasDisplay reports whether the daemon's own environment names a
-// display. The follow is off for such a daemon.
 func daemonHasDisplay() bool {
 	return os.Getenv("WAYLAND_DISPLAY") != "" || os.Getenv("DISPLAY") != ""
 }
 
-// x11DisplayPattern is a display on this machine: :N or :N.S.
 var x11DisplayPattern = lazyre.New(`^:([0-9]{1,5})(\.[0-9]{1,3})?$`)
 
-// x11SocketDir is where an X server on this machine listens.
 const x11SocketDir = "/tmp/.X11-unix"
 
-// resolveWayland finds the client's Wayland socket and checks it.
 func resolveWayland(c ClientDisplay) (string, bool) {
 	name := c.WaylandDisplay
 	if name == "" || hasControl(name) {
@@ -172,8 +92,6 @@ func resolveWayland(c ClientDisplay) (string, bool) {
 	return "", false
 }
 
-// x11SocketOK reports whether the X11 display name names a server on this
-// machine whose socket this user or root owns, in safe folders.
 func x11SocketOK(display string) bool {
 	m := x11DisplayPattern().FindStringSubmatch(display)
 	if m == nil {
@@ -191,7 +109,6 @@ func x11SocketOK(display string) bool {
 	return safeFolders(filepath.Dir(path), me)
 }
 
-// safeFolders reports whether dir and every folder above it pass safeFolder.
 func safeFolders(dir string, me int) bool {
 	for dir = filepath.Clean(dir); ; dir = filepath.Dir(dir) {
 		if !safeFolder(dir, me) {
@@ -203,8 +120,6 @@ func safeFolders(dir string, me int) bool {
 	}
 }
 
-// resolveXAuthority resolves the client's X authority file and checks it: a
-// regular file this user owns, in safe folders.
 func resolveXAuthority(path string) (string, bool) {
 	if path == "" || !filepath.IsAbs(path) || hasControl(path) {
 		return "", false
@@ -227,8 +142,6 @@ func resolveXAuthority(path string) (string, bool) {
 	return resolved, true
 }
 
-// checkDisplay keeps the parts of c that pass the checks. ok is false when
-// neither a Wayland socket nor an X11 display is left.
 func checkDisplay(c ClientDisplay) (shownDisplay, bool) {
 	var s shownDisplay
 	if w, ok := resolveWayland(c); ok {
@@ -243,7 +156,6 @@ func checkDisplay(c ClientDisplay) (shownDisplay, bool) {
 	return s, s.wayland != "" || s.x11 != ""
 }
 
-// stillShown reports whether a display that passed the checks still does.
 func stillShown(s shownDisplay) bool {
 	return (s.wayland != "" && stillOwnedSocket(s.wayland)) || (s.x11 != "" && x11SocketOK(s.x11))
 }
@@ -254,9 +166,6 @@ func DisplayLinkPath(socketPath, sessionID string) string {
 	return filepath.Join(filepath.Dir(socketPath), displayLinkPrefix(socketPath)+sessionID+".sock")
 }
 
-// displayLinkPrefix is how the Wayland links of the daemon on socketPath
-// start: wayland- for the default socket, and named after the socket for a
-// daemon on another socket in the same folder.
 func displayLinkPrefix(socketPath string) string {
 	base := filepath.Base(socketPath)
 	if base == "tuios.sock" {
@@ -265,8 +174,6 @@ func displayLinkPrefix(socketPath string) string {
 	return strings.TrimSuffix(base, ".sock") + "-wayland-"
 }
 
-// isOwnDisplayLink reports whether name, a file in the socket folder, is one
-// of this daemon's Wayland links: the prefix, a whole session id, .sock.
 func isOwnDisplayLink(socketPath, name string) bool {
 	rest, ok := strings.CutPrefix(name, displayLinkPrefix(socketPath))
 	if !ok {
@@ -279,15 +186,10 @@ func isOwnDisplayLink(socketPath, name string) bool {
 	return isSessionID(rest)
 }
 
-// sweepDisplayLinks removes every Wayland link of this daemon in the socket
-// folder. Only symlinks are removed.
 func (d *Daemon) sweepDisplayLinks() {
 	d.sweepOwnLinks(isOwnDisplayLink)
 }
 
-// sweepOwnLinks removes every symlink in the socket folder that own says is
-// this daemon's. The display and ssh agent links share the folder and the
-// rule; only the names differ.
 func (d *Daemon) sweepOwnLinks(own func(socketPath, name string) bool) {
 	sock := d.manager.SocketPath()
 	entries, err := os.ReadDir(filepath.Dir(sock))
@@ -302,24 +204,16 @@ func (d *Daemon) sweepOwnLinks(own func(socketPath, name string) bool) {
 	}
 }
 
-// isSessionID reports whether s is a whole session id, the part of a link
-// name between its prefix and .sock.
 func isSessionID(s string) bool {
 	_, err := uuid.Parse(s)
 	return err == nil && len(s) == 36
 }
 
-// startDisplayFollow sweeps the links an earlier daemon left and warns when a
-// link path is too long to connect to. It runs once, before any session is
-// restored.
 func (d *Daemon) startDisplayFollow() {
 	d.sweepDisplayLinks()
 	d.initDisplayFollow()
 }
 
-// initDisplayFollow is startDisplayFollow without the sweep, for a daemon
-// image adopting its predecessor's panes, whose WAYLAND_DISPLAY names the
-// links.
 func (d *Daemon) initDisplayFollow() {
 	if !d.displayFollowing() {
 		return
@@ -329,8 +223,6 @@ func (d *Daemon) initDisplayFollow() {
 	}
 }
 
-// stopDisplayFollow runs at the end of shutdown: no link is made after it,
-// and every link is removed.
 func (d *Daemon) stopDisplayFollow() {
 	d.display.mu.Lock()
 	d.display.stopped = true
@@ -340,8 +232,6 @@ func (d *Daemon) stopDisplayFollow() {
 	d.sweepDisplayLinks()
 }
 
-// displayFollowing reports whether the follow is on: [daemon] display is
-// follow and the daemon has no display of its own.
 func (d *Daemon) displayFollowing() bool { return d.manager.displayFollow.Load() }
 
 // SetDisplay applies [daemon] display. Turning it off removes every link and
@@ -358,8 +248,6 @@ func (d *Daemon) SetDisplay(mode string) {
 	}
 }
 
-// displayOf is the display the client on cs sent, and whether the client may
-// be followed at all: a local, same-uid client that may act as the person.
 func (d *Daemon) displayOf(cs *connState) (ClientDisplay, bool) {
 	cs.mu.Lock()
 	viaLink, hello := cs.viaLink, cs.hello
@@ -376,9 +264,6 @@ func (d *Daemon) displayOf(cs *connState) (ClientDisplay, bool) {
 	return hello.Display, true
 }
 
-// displayNoteUse records that the client on cs attached to or used the
-// session with the given id, and gives the session the client's display when
-// it counts.
 func (d *Daemon) displayNoteUse(cs *connState, sessionID string) {
 	if sessionID == "" || !d.displayFollowing() {
 		return
@@ -415,8 +300,6 @@ func (d *Daemon) displayNoteUse(cs *connState, sessionID string) {
 	d.relinkDisplayLocked(sessionID)
 }
 
-// displayForget drops the client from the session's candidates and moves the
-// link to the client before it.
 func (d *Daemon) displayForget(sessionID, clientID string) {
 	f := &d.display
 	f.mu.Lock()
@@ -434,7 +317,6 @@ func (d *Daemon) displayForget(sessionID, clientID string) {
 	d.relinkDisplayLocked(sessionID)
 }
 
-// displayForgetSession removes the session's link when the session ends.
 func (d *Daemon) displayForgetSession(sessionID string) {
 	f := &d.display
 	f.mu.Lock()
@@ -446,9 +328,6 @@ func (d *Daemon) displayForgetSession(sessionID string) {
 	delete(f.bySession, sessionID)
 }
 
-// relinkDisplayLocked drops the newest candidates whose display no longer
-// passes the checks, then points the session's link at the newest one's
-// Wayland socket, or removes the link when it has none. f.mu is held.
 func (d *Daemon) relinkDisplayLocked(sessionID string) {
 	f := &d.display
 	if f.stopped {
@@ -461,8 +340,6 @@ func (d *Daemon) relinkDisplayLocked(sessionID string) {
 		f.bySession[sessionID] = list
 	}
 	link := DisplayLinkPath(d.manager.SocketPath(), sessionID)
-	// The newest client with a Wayland socket, not the newest client: one
-	// with X11 alone does not take the link from it.
 	want, by := "", ""
 	if i := slices.IndexFunc(list, func(c displayCandidate) bool { return c.shown.wayland != "" }); i >= 0 {
 		want, by = list[i].shown.wayland, list[i].clientID
@@ -491,12 +368,6 @@ func (d *Daemon) relinkDisplayLocked(sessionID string) {
 	LogBasic("Pointed the Wayland link of session %s at the socket of client %s", shortID(sessionID), by)
 }
 
-// displayVars is the session's display as pane variables: WAYLAND_DISPLAY
-// naming the link, and DISPLAY and XAUTHORITY of the newest client with an
-// X11 display. The link is named also before it points anywhere, so a pane
-// restored before any client attached reaches the display once one does. It
-// is left out when the session's clients have X11 and no Wayland socket. Nil
-// when the follow is off.
 func (d *Daemon) displayVars(sessionID string) []string {
 	if sessionID == "" || !d.displayFollowing() {
 		return nil
@@ -520,7 +391,6 @@ func (d *Daemon) displayVars(sessionID string) []string {
 	return env
 }
 
-// displayEnv is what a new pane of the session is given. See displayVars.
 func (m *Manager) displayEnv(sessionID string) []string {
 	if src := m.displaySource.Load(); src != nil {
 		return (*src)(sessionID)
@@ -528,10 +398,8 @@ func (m *Manager) displayEnv(sessionID string) []string {
 	return nil
 }
 
-// displayVarNames are the variables the display follow sets.
 var displayVarNames = []string{"WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY"}
 
-// verbDisplayEnv reports the display a new pane of the session gets now.
 func (d *Daemon) verbDisplayEnv(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`

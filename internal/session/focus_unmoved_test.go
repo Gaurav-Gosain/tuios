@@ -45,7 +45,6 @@ func TestAPushThatDidNotMoveTheFocusKeepsThePeersMove(t *testing.T) {
 		t.Errorf("after b's push that did not move the focus, the session has %s at %d, want a's move: w-bravo at 51", f, x)
 	}
 
-	// The positive half: b moving the focus itself is taken as sent.
 	moved := state("b", "w-alpha", 0)
 	if !sess.UpdateState(moved) {
 		t.Error("a push that moved the focus was not accepted")

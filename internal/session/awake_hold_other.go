@@ -4,7 +4,6 @@ package session
 
 import "errors"
 
-// awakeHolder has no way to hold this system awake.
 type awakeHolder struct{}
 
 func awakeMethod() string { return "none" }

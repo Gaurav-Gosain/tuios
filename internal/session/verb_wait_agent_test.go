@@ -25,8 +25,6 @@ func TestSubscribeReceivesAgentStateEvent(t *testing.T) {
 		t.Fatalf("agent-state event names no window: %v", ev)
 	}
 
-	// The same state again is not a change and must not emit; the next event on
-	// the stream has to be the next actual transition.
 	if err := sess.SetDaemonWindowAgentState("Window", AgentStateWorking, ""); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}

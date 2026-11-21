@@ -30,14 +30,11 @@ func TestUnhookedAgentLifecycleAnswersBlockedOrThinking(t *testing.T) {
 	look := func(id string) bool { return sess.scanScreenForAgent(id, reg) }
 	const stall = 30 * time.Second
 
-	// 1. The agent starts. The detector sees it and says working.
 	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("start: detection changed %d windows, want 1", n)
 	}
 	assertAttention(t, sess, winID, AgentStateWorking, false)
 
-	// 2. It paints a permission prompt and goes silent. The screen tier reads
-	// the prompt: the pane needs a person.
 	paintPane(t, sess.GetPTY(ptyID), claudePermissionPrompt)
 	if !look(ptyID) {
 		t.Fatal("prompt: the screen tier did not match the permission prompt")
@@ -47,10 +44,6 @@ func TestUnhookedAgentLifecycleAnswersBlockedOrThinking(t *testing.T) {
 		t.Error("prompt: the blocked state carries no reason")
 	}
 
-	// 3. The person answers. The agent paints over the prompt and works. The
-	// pane must stop saying it needs a person, at once, on the look the repaint
-	// runs: a person told "blocked" about a pane that is thinking is the exact
-	// mistake this feature exists to prevent.
 	paintPane(t, sess.GetPTY(ptyID), "Running tests...\r\n")
 	if look(ptyID) {
 		t.Fatal("answered: a screen with no prompt on it still matched a rule")
@@ -60,9 +53,6 @@ func TestUnhookedAgentLifecycleAnswersBlockedOrThinking(t *testing.T) {
 		t.Fatalf("answered: claim source = %q, want the detector's claim back", src)
 	}
 
-	// 4. It finishes its turn and sits at its own prompt, silent. No rule knows
-	// that screen. The silence timer must not call it idle, because idle says
-	// nothing needs you and nothing here knows that: it says unknown.
 	paintPane(t, sess.GetPTY(ptyID), "> \r\n")
 	backdateAgentClaim(t, sess, winID, stall+time.Second)
 	if n := sess.applyStallHeuristic(time.Now(), stall, func(string) int64 { return 0 }, look); n != 1 {
@@ -73,14 +63,11 @@ func TestUnhookedAgentLifecycleAnswersBlockedOrThinking(t *testing.T) {
 		t.Fatalf("silence: claim source = %q, want stall", src)
 	}
 
-	// 5. The person types a new prompt and the agent works again. Output from
-	// the agent's own process takes the pane back from the silence timer.
 	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
 		t.Fatal("resume: output from the agent did not move the pane back to working")
 	}
 	assertAttention(t, sess, winID, AgentStateWorking, false)
 
-	// 6. The agent exits and the shell prompt returns. The pane is no agent.
 	if !sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail) {
 		t.Fatal("exit: the shell's output did not clear the pane")
 	}
@@ -109,7 +96,6 @@ func TestDetectorDoesNotDropAnAgentOnOneMissedRead(t *testing.T) {
 	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
 	}
-	// The agent opens an editor: one tick, then several more, all miss.
 	for i := 1; i < agentDetectMissLimit; i++ {
 		if n := sess.applyAgentDetection(editor, agent.identifyDetail); n != 0 {
 			t.Fatalf("miss %d: detection changed %d windows, want the claim kept", i, n)
@@ -118,14 +104,12 @@ func TestDetectorDoesNotDropAnAgentOnOneMissedRead(t *testing.T) {
 			t.Fatalf("miss %d: state = %q, want working kept", i, got)
 		}
 	}
-	// The agent comes back: the count resets.
 	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 0 {
 		t.Fatalf("return: detection changed %d windows, want 0", n)
 	}
 	if misses := sess.agentClaimFor(winID).misses; misses != 0 {
 		t.Fatalf("return: misses = %d, want 0", misses)
 	}
-	// The editor stays for the full limit: the agent is gone for good.
 	for range agentDetectMissLimit - 1 {
 		sess.applyAgentDetection(editor, agent.identifyDetail)
 	}
@@ -137,7 +121,6 @@ func TestDetectorDoesNotDropAnAgentOnOneMissedRead(t *testing.T) {
 	}
 	assertAttention(t, sess, winID, AgentStateNone, false)
 
-	// The shell coming back clears at once, with no count.
 	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("second promotion changed %d windows, want 1", n)
 	}
@@ -180,8 +163,6 @@ func TestOutputProbeClearsOnlyWhenTheShellIsBack(t *testing.T) {
 	assertAttention(t, sess, winID, AgentStateNone, false)
 }
 
-// assertAttention checks a window's state and the one-bit answer derived from
-// it, since the bit is what a consumer reads.
 func assertAttention(t *testing.T, sess *Session, winID string, want AgentState, needsYou bool) {
 	t.Helper()
 	got := agentStateOf(t, sess, winID)
@@ -220,7 +201,6 @@ func TestAReportNamingItsHarnessIsCertain(t *testing.T) {
 		t.Fatalf("detector claim identity = %q (%s), want manifest (strong)", claim.identity, claim.identity.confidence())
 	}
 
-	// A hook reporting a state alone does not change what named the harness.
 	if _, _, err := sess.ApplyAgentReport(winID, AgentReport{State: AgentStateWorking}); err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +208,6 @@ func TestAReportNamingItsHarnessIsCertain(t *testing.T) {
 		t.Fatalf("after a report with no harness, identity = %q, want manifest kept", claim.identity)
 	}
 
-	// The hook naming its harness is the harness speaking for itself.
 	if _, _, err := sess.ApplyAgentReport(winID, AgentReport{State: AgentStateNeedsInput, Harness: "claude-code"}); err != nil {
 		t.Fatal(err)
 	}

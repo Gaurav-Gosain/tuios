@@ -4,7 +4,6 @@ import (
 	"fmt"
 )
 
-// benchState builds a session state with n windows spread over workspaces.
 func benchState(n int) *SessionState {
 	st := &SessionState{
 		Name:             "bench",

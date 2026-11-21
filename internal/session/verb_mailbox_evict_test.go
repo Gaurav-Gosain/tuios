@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// held reports whether the session's ring still holds the message with id.
 func held(bus *agentBus, session string, id uint64) bool {
 	bus.mu.Lock()
 	defer bus.mu.Unlock()
@@ -36,8 +35,6 @@ func TestFullRingDropsReadEntriesBeforeUnreadMail(t *testing.T) {
 		t.Errorf("alice's inbox reports %d unread messages dropped, want 0: the one dropped was read", res.EvictedUnread)
 	}
 
-	// The positive half: with nothing left but unread mail, the oldest unread
-	// message goes, the caps hold, and alice is told.
 	for range agentMailboxMaxMessages {
 		bus.send("s", AgentMessage{Kind: agentMsgDirect, To: "alice", Text: "more"})
 	}

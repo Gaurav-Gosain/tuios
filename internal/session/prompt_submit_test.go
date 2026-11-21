@@ -11,9 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// recordingPane is a promptPane that keeps every write, in order, with the time
-// it arrived. echo, when set, makes it look like an application that prints
-// something in answer to each write.
 type recordingPane struct {
 	mu        sync.Mutex
 	writes    []string

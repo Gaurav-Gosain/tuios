@@ -5,34 +5,10 @@ import (
 	"strconv"
 )
 
-// Going back from a workspace that lost its last pane.
-//
-// A workspace someone opened for a job, such as the panes of tuios xpanes,
-// empties when the job ends. Staying on it would leave every client on the
-// splash screen with the work the person came from one workspace away, so the
-// session shows the workspace they came from.
-//
-// It is the daemon's to do because the daemon owns the window set and the
-// workspace on screen: a pane exits, -ss closes one, close-workspace closes
-// them all, with or without a client attached, and every close lands in
-// CloseDaemonWindow. The workspace on screen is session state, so every
-// attached client follows the switch, as it follows any other.
-//
-// Moving a pane to another workspace is not a close and does not come here:
-// a move that follows the pane already switches, and one that does not
-// leaves the person where they asked to be.
-
-// optionReturnWhenEmpty is the option path. set-config records it on the
-// session, and that value wins over the daemon's config for that session.
 const optionReturnWhenEmpty = "workspaces.return_when_empty"
 
-// workspaceTrailMax bounds the trail. A chain of empty workspaces longer than
-// this falls back to the lowest workspace with panes.
 const workspaceTrailMax = 16
 
-// noteWorkspaceLocked puts the workspace on screen at the end of the trail.
-// The caller holds stateMu. A scratch workspace is never the session's
-// current one, and is left out in case one is.
 func (s *Session) noteWorkspaceLocked() {
 	if s.state == nil {
 		return
@@ -67,9 +43,6 @@ func (s *Session) SetReturnTo(workspace, origin int) {
 	s.returnTo[workspace] = origin
 }
 
-// returnsWhenEmptyLocked reports whether this session goes back from an
-// emptied workspace: the session's own option when set-config set one, else
-// the daemon's config. The caller holds stateMu.
 func (s *Session) returnsWhenEmptyLocked(state *SessionState) bool {
 	if v, ok := state.Options[optionReturnWhenEmpty]; ok {
 		if on, err := strconv.ParseBool(v); err == nil {
@@ -82,8 +55,6 @@ func (s *Session) returnsWhenEmptyLocked(state *SessionState) bool {
 	return true
 }
 
-// hasPanes reports whether a workspace holds a pane. A scratch pane does not
-// count: it is shown over a workspace, and is not one of its panes.
 func hasPanes(state *SessionState, ws int) bool {
 	for i := range state.Windows {
 		if w := &state.Windows[i]; w.Workspace == ws && !w.Scratch {
@@ -93,22 +64,12 @@ func hasPanes(state *SessionState, ws int) bool {
 	return false
 }
 
-// returnFromEmptyLocked runs after a close took a pane off emptied. When
-// emptied is the workspace on screen and has no pane left, it shows another
-// one: the workspace recorded by SetReturnTo, else the most recent one on the
-// trail that has panes, else the lowest workspace with panes. When no
-// workspace has a pane, the session stays, and clients show the splash
-// screen. The caller holds stateMu, inside mutateState.
 func (s *Session) returnFromEmptyLocked(state *SessionState, emptied int) {
 	if IsScratchWorkspace(emptied) || hasPanes(state, emptied) {
 		return
 	}
-	// The record is for the job that filled the workspace, and that job is
-	// over, wherever the session is.
 	origin := s.returnTo[emptied]
 	delete(s.returnTo, emptied)
-	// The emptied workspace leaves the trail, so the next empty one in a
-	// chain goes back past it.
 	s.workspaceTrail = slices.DeleteFunc(s.workspaceTrail, func(w int) bool { return w == emptied })
 	if emptied != state.CurrentWorkspace || !s.returnsWhenEmptyLocked(state) {
 		return

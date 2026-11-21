@@ -15,21 +15,9 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// The daemon keeps two records of the same lines. The ring buffer answers
-// `tuios logs` and dies with the process. The file outlives it, which is the
-// only reason a crash leaves anything to read at all.
-//
-// Both are fed from logRaw in debug.go, so a line cannot reach one and miss the
-// other. Nothing here runs on a client's render or tick path: the sink is
-// opened by the daemon process and every write is a daemon-side event.
-
 const (
-	// daemonLogName is the file the daemon appends to under the state directory.
 	daemonLogName = "tuios/daemon.log"
 
-	// daemonLogMaxBytes caps the file. At the cap the daemon renames it over
-	// daemon.log.old and starts a new one, so it keeps between one and two caps
-	// of history and never grows without bound.
 	daemonLogMaxBytes = 5 << 20
 )
 
@@ -44,27 +32,13 @@ var (
 // configured. It follows the same state-directory convention as the session
 // resurrection files and the render trace.
 func DefaultDaemonLogPath() string {
-	// The environment is read first, as the render trace does, because xdg
-	// resolves its directories once at package init and a test that redirects
-	// the state directory later would otherwise be ignored. A named server's
-	// state home is set on xdg, not in the environment, so it reads xdg.
 	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" && serverscope.Name() == "" {
 		return filepath.Join(dir, daemonLogName)
 	}
 	return filepath.Join(xdg.StateHome, daemonLogName)
 }
 
-// ringWriter is the standard library logger's output inside the daemon. Every
-// log.Printf in the daemon process becomes a ring entry, so the ~112 call sites
-// that write nowhere in a background daemon today become visible in
-// `tuios logs` without one of them changing.
-//
-// The lines are recorded at "warn": they are unclassified by construction, they
-// are not protocol events, and dropping them below the always-on tier would put
-// a daemon panic back where it started.
 type ringWriter struct {
-	// echo is stderr in a foreground daemon and nil in a background one, whose
-	// stderr the parent points at the log file instead.
 	echo io.Writer
 }
 
@@ -85,9 +59,6 @@ func (w *ringWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// daemonLoggingInstalled keeps the install to the first caller. The daemon
-// process installs it from its entry point, before the daemon is constructed,
-// and Run calls it again so that a Run reached any other way is still covered.
 var daemonLoggingInstalled atomic.Bool
 
 // InstallDaemonLogging points the standard library logger at the log ring and
@@ -109,15 +80,10 @@ func InstallDaemonLogging(foreground bool, path string) {
 		echo = os.Stderr
 	}
 
-	// The ring and the file both carry their own timestamp, so the standard
-	// logger must not prepend a second one.
 	log.SetFlags(0)
 	log.SetPrefix("")
 	log.SetOutput(&ringWriter{echo: echo})
 
-	// A background daemon's stderr belongs to the parent that spawned it, which
-	// points it at this same file. Writing the protocol logger there too would
-	// double every line, so it goes nowhere and the file sink is the record.
 	if foreground {
 		SetDebugOutput(os.Stderr)
 	} else {
@@ -127,8 +93,6 @@ func InstallDaemonLogging(foreground bool, path string) {
 	openDaemonLogFile(path)
 }
 
-// openDaemonLogFile opens the log file and writes its header. A failure is not
-// fatal: the daemon runs, and the ring buffer still answers `tuios logs`.
 func openDaemonLogFile(path string) {
 	if path == "" {
 		path = DefaultDaemonLogPath()
@@ -155,9 +119,6 @@ func openDaemonLogFile(path string) {
 	writeDaemonLogHeaderLocked()
 }
 
-// writeDaemonLogHeaderLocked marks the start of a run and states what the file
-// can contain. The privacy rule is a property of the level, so the reader is
-// told the rule rather than the current level alone.
 func writeDaemonLogHeaderLocked() {
 	if daemonLogFH == nil {
 		return
@@ -173,12 +134,6 @@ func writeDaemonLogHeaderLocked() {
 	}
 }
 
-// writeDaemonLogFile appends one entry when the file is open.
-//
-// Errors and basic events are always written, whatever the configured level:
-// the file exists so that a daemon that died leaves a reason behind, and a
-// reason that depended on someone having raised the level first is no reason at
-// all. Anything above the basic tier follows daemon.log_level.
 func writeDaemonLogFile(level string, message string) {
 	daemonLogMu.Lock()
 	defer daemonLogMu.Unlock()
@@ -198,15 +153,10 @@ func writeDaemonLogFile(level string, message string) {
 	}
 }
 
-// alwaysFile reports whether a level is written to the file whatever the
-// configured level is. Errors and basic events are the always-on tier.
 func alwaysFile(level DebugLevel) bool {
 	return level <= DebugBasic
 }
 
-// rotateDaemonLogLocked moves the full file to daemon.log.old and starts a new
-// one. One generation is kept. A rotation that cannot rename gives up and keeps
-// appending, because a daemon must not stop over its own log.
 func rotateDaemonLogLocked() {
 	if daemonLogFH == nil {
 		return

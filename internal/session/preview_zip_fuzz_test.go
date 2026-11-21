@@ -52,29 +52,22 @@ func FuzzPreviewZip(f *testing.F) {
 	end := len(one) - previewZipEndLen
 	dirSize, dirOff := le.Uint32(one[end+12:]), le.Uint32(one[end+16:])
 
-	// An empty zip.
 	f.Add(build(nil, func(*zip.Writer) {}))
-	// One file.
 	f.Add(one)
-	// A folder and a file in it.
 	f.Add(build(nil, func(w *zip.Writer) {
 		if _, err := w.Create("docs/"); err != nil {
 			f.Fatal(err)
 		}
 		file(w, "docs/notes.md", "# notes\n")
 	}))
-	// A 5000 byte name with a three byte rune across the cut.
 	long := strings.Repeat("a", previewArchiveName-len("...")-1) + "世"
 	long += strings.Repeat("b", 5000-len(long))
 	f.Add(build(nil, func(w *zip.Writer) { file(w, long, "x") }))
-	// One entry past the cap.
 	f.Add(build(nil, func(w *zip.Writer) {
 		for i := range previewArchiveItems + 1 {
 			file(w, "e"+strings.Repeat("0", i%7)+string(rune('a'+i%26)), "")
 		}
 	}))
-	// The one-file zip with a zip64 end record and its locator, the plain end
-	// record saying to look there.
 	z64 := append([]byte(nil), one[:end]...)
 	at := uint64(len(z64))
 	z64 = le.AppendUint32(z64, 0x06064b50)
@@ -99,28 +92,21 @@ func FuzzPreviewZip(f *testing.F) {
 	z64 = le.AppendUint32(z64, 0xffffffff)
 	z64 = le.AppendUint16(z64, 0)
 	f.Add(z64)
-	// A self-extracting archive: a script before the zip, whose offsets do not
-	// count it.
 	f.Add(build([]byte("#!/bin/sh\necho self-extracting\nexit 0\n"), func(w *zip.Writer) { file(w, "payload.bin", "data") }))
-	// The one-file zip cut inside its central directory.
 	f.Add(one[:dirOff+10])
-	// An end record that claims one more entry than the directory holds.
 	more := append([]byte(nil), one...)
 	le.PutUint16(more[end+8:], le.Uint16(more[end+8:])+1)
 	le.PutUint16(more[end+10:], le.Uint16(more[end+10:])+1)
 	f.Add(more)
-	// An end record that understates the directory size, so only a header at the plain offset finds the directory.
 	short := append([]byte(nil), one...)
 	le.PutUint32(short[end+12:], dirSize-1)
 	f.Add(short)
-	// A 2 KB comment, which puts the end record beyond the last 1 KB.
 	f.Add(build(nil, func(w *zip.Writer) {
 		if err := w.SetComment(strings.Repeat("c", 2048)); err != nil {
 			f.Fatal(err)
 		}
 		file(w, "readme.txt", "hello\n")
 	}))
-	// The one-file zip with its size maxed out and the real size in a zip64 extra field.
 	hdr := one[dirOff : dirOff+dirSize]
 	n, e := 46+int(le.Uint16(hdr[28:])), int(le.Uint16(hdr[30:]))
 	big := append([]byte(nil), one[:dirOff]...)
@@ -135,7 +121,6 @@ func FuzzPreviewZip(f *testing.F) {
 	le.PutUint32(big[len(big)-previewZipEndLen+12:], dirSize+12)
 	f.Add(big)
 
-	// One file per worker, rewritten for each input.
 	in, err := os.Create(filepath.Join(f.TempDir(), "in.zip"))
 	if err != nil {
 		f.Fatal(err)

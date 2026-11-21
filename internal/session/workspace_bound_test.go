@@ -23,8 +23,6 @@ func TestWorkspaceBoundFollowsTheSession(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sess := newTestSession(t)
 			if tc.declare > 0 {
-				// This is how the count arrives in practice: a client reports it
-				// with the rest of its state.
 				st := sess.GetState()
 				st.NumWorkspaces = tc.declare
 				sess.UpdateState(st)

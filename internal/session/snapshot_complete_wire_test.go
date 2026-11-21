@@ -9,35 +9,7 @@ import (
 	"tuios.dev/vt"
 )
 
-// The state a snapshot has to carry for a pane to come back exactly, beyond
-// what the cells, the cursor and the modes say: the tab stops, the titles and
-// the title stack, the colours the guest set, the ANSI modes, and the input
-// the daemon's parser is part way through when the snapshot is taken. A client
-// restored without one of them looks right until the guest sends the sequence
-// that reads it.
-//
-// Ways this can go wrong, each a group of cases below:
-//   - the tab stops are dropped, so a tab after the snapshot lands on the
-//     default stops; or a cleared table comes back as the default; or the
-//     table is restored before the resize that resets it;
-//   - the title stack is dropped, so a program that quits after the snapshot
-//     pops nothing and the pane keeps the program's title; or the icon name
-//     goes, or an entry that saved only one of the two comes back with both;
-//   - a colour the guest set with OSC 4 is dropped, so what it prints in that
-//     slot after the snapshot is painted in the default colour; or a slot it
-//     reset is carried as set; or the OSC 10, 11 and 12 defaults are dropped,
-//     so a query after the snapshot is answered differently;
-//   - insert mode or newline mode is dropped, so what the guest prints or
-//     feeds after the snapshot lands somewhere else;
-//   - the snapshot is taken in the middle of an escape sequence or a UTF-8
-//     character, and the rest of it arrives on the stream and prints as
-//     text; or the replay paints bytes from before the sequence twice, or
-//     carries out a control inside it twice;
-//   - a client emulator that was itself left in the middle of a sequence by
-//     the stream it was on keeps that sequence, and the restore lands in it;
-//   - each of the above survives one wire form and not the other.
 var snapshotStateCases = []seamCase{
-	// Tab stops.
 	{"tabs-set", "\x1b[3g\x1b[1;4H\x1bH\x1b[1;11H\x1bH\x1b[1;30H\x1bH\x1b[2;1H", "\tA\tB\tC"},
 	{"tabs-cleared", "\x1b[3g\x1b[2;1H", "\tZ"},
 	{"tabs-one-cleared", "\x1b[1;9H\x1b[0g\x1b[2;1H", "\tA\tB"},
@@ -45,7 +17,6 @@ var snapshotStateCases = []seamCase{
 	{"tabs-reset", "\x1b[3g\x1b[?5W\x1b[2;1H", "\tA"},
 	{"tabs-backward", "\x1b[3g\x1b[1;6H\x1bH\x1b[1;20H", "\x1b[ZB"},
 
-	// Titles.
 	{"title", "\x1b]2;hello\x07", ""},
 	{"title-and-icon", "\x1b]0;both\x07\x1b]1;icon\x07", ""},
 	{"title-stack-pop", "\x1b]2;shell\x07\x1b[22;0t\x1b]2;vim\x07", "\x1b[23;0t"},
@@ -53,14 +24,12 @@ var snapshotStateCases = []seamCase{
 	{"title-stack-icon-only", "\x1b]0;both\x07\x1b[22;1t\x1b]0;other\x07", "\x1b[23;1t"},
 	{"title-stack-title-only", "\x1b]0;both\x07\x1b[22;2t\x1b]0;other\x07", "\x1b[23;0t"},
 
-	// Colours.
 	{"palette-slot", "\x1b]4;1;rgb:ff/00/00\x07", "\x1b[31mred\x1b[m"},
 	{"palette-slot-256", "\x1b]4;200;#00ff00\x07", "\x1b[38;5;200mg\x1b[m"},
 	{"palette-slot-reset", "\x1b]4;1;#ff0000\x07\x1b]104;1\x07", "\x1b[31mred\x1b[m"},
 	{"default-colours", "\x1b]10;#112233\x07\x1b]11;#445566\x07\x1b]12;#778899\x07", ""},
 	{"default-colours-reset", "\x1b]10;#112233\x07\x1b]11;#445566\x07\x1b]110\x07", ""},
 
-	// ANSI modes.
 	{"insert-mode", "abcdef\x1b[1;1H\x1b[4h", "XY"},
 	{"insert-mode-off", "\x1b[4h\x1b[4l\x1b[1;1Habc\x1b[1;1H", "X"},
 	{"newline-mode", "\x1b[20h", "a\nb\nc"},
@@ -71,8 +40,6 @@ func TestWireCarriesTheSnapshotState(t *testing.T) {
 	runSnapshotStateCases(t, snapshotStateCases, newPure, newPure)
 }
 
-// runSnapshotStateCases is runSeamCases, comparing what the cells cannot show
-// as well.
 func runSnapshotStateCases(t *testing.T, cases []seamCase, newDaemon, newClient func() vt.Terminal) {
 	for _, form := range wireForms {
 		for _, c := range cases {
@@ -96,14 +63,11 @@ func runSnapshotStateCases(t *testing.T, cases []seamCase, newDaemon, newClient 
 	}
 }
 
-// cutStreams are output a snapshot can be taken in the middle of. Each is cut
-// at every byte.
 var cutStreams = []struct {
 	name, out string
 }{
 	{"csi-sgr", "ab\x1b[1;31mred\x1b[0m"},
 	{"csi-private", "\x1b[?25l\x1b[?2004hx"},
-	// A control inside a CSI is carried out where it is, and the CSI goes on.
 	{"csi-with-a-control", "x\x1b[2\n;3Hy"},
 	{"osc-title", "\x1b]2;a title\x07after"},
 	{"osc-title-st", "\x1b]2;st title\x1b\\after"},
@@ -117,23 +81,13 @@ var cutStreams = []struct {
 	{"can", "\x1b[1\x18x"},
 }
 
-// sameBackendCutStreams are output the two backends read differently, so
-// they are cut only between two emulators of the same backend. Each ends with
-// a tab or a print that shows a tab stop, a title or REP's character the
-// snapshot got wrong.
 var sameBackendCutStreams = []struct {
 	name, out string
 }{
-	// The pure parser takes an ESC right after a DCS introducer as payload
-	// (a passthrough, as tmux and screen send), so what follows it is DCS
-	// payload and is not carried out. libghostty ends the DCS there.
 	{"dcs-passthrough-erase", "abc\x1bP\x1b[2J\x1b\\x"},
 	{"dcs-passthrough-tab-clear", "\x1bP\x1b[3g\x1b\\\tx"},
 	{"c1-dcs-passthrough", "ab\x90\x1b[3g\x9c\tx"},
-	// An 8-bit CSI after an ESC starts a new sequence there.
 	{"esc-then-c1-csi", "1\x1b\x9b(\t2mX"},
-	// A control or an intermediate inside an escape sequence: the sequence
-	// goes on, and the CSI after it is a CSI.
 	{"esc-intermediate-lf-charset", "ab\x1b(\n0qq\x1b(Bx"},
 	{"esc-sp-then-tab-clear", "\x1b \x1b[3g\tx"},
 	{"esc-paren-then-tab-clear", "\x1b(\x1b[3g\tx"},
@@ -141,28 +95,17 @@ var sameBackendCutStreams = []struct {
 	{"dcs-body-esc-sp", "\x1bPb]b  0\x1b \x1bPx\x1b\\y\x1b[3g\tz"},
 	{"esc-bs-dcs", "J\x1b\bP\b x\x1b\\\x1b[3g\tz"},
 	{"esc-bs-csi", "\x1b\b[3g\tx"},
-	// HTS after a cut UTF-8 character, which the library ends with U+FFFD.
 	{"hts-after-a-cut-character", "\x1b[3g\x1b[1;5H\xc3\x1bH\r\tx"},
-	// DECCOLM with mode 40 set puts the default tab stops back.
 	{"deccolm-with-mode-40", "\x1b[3g\x1b[?40h\x1b[?3h\tx"},
-	// A byte of a UTF-8 character inside a CSI: libghostty reads it as an
-	// 8-bit control, so the 0x88 in U+2208 is HTS there.
 	{"utf8-inside-a-csi", "\x1b[3g\x1b[1;5H\x1b[\xe2\x88\x88\r\tx"},
-	// A CSI the library reads to its end and does not carry out, and one
-	// CAN ends.
 	{"csi-prefix-after-a-parameter", "\x1b[3?g\tx"},
 	{"csi-cancelled", "\x1b[3\x18g\tx"},
-	// SOS and APC payload that holds an 8-bit control's value.
 	{"sos-holding-0x88", "\x1b[3g\x1b[1;5H\x1bXa\xe2\x88\x88\x1b\\\r\tx"},
 	{"apc-holding-0x88", "\x1b[3g\x1b[1;5H\x1b_a\xe2\x88\x88\x1b\\\r\tx"},
-	// A character set the library does not have.
 	{"unknown-charset", "\x1b(0\x1b(]qq"},
-	// REP after a U+FFFD the library printed, and after a DEL it printed.
 	{"rep-after-a-cut-character", "a\xc3\x1b[2bx"},
 	{"rep-after-a-stray-byte", "a\x88\x1b[2bx"},
 	{"rep-after-del", "a\x7f\x1b[2bx"},
-	// A CSI an OSC that tuios keeps from the library ends: the library has
-	// to see the CSI end.
 	{"csi-ended-by-a-kept-osc", "\x1bPK\x1b[\x1b]4;1;#ff0000Z\b\x1b\\0 q2X"},
 }
 
@@ -215,7 +158,6 @@ func runClientsOwnCut(t *testing.T, newDaemon, newClient func() vt.Terminal) {
 	for _, form := range wireForms {
 		for _, s := range cutStreams {
 			for left := 1; left < len(s.out); left++ {
-				// The snapshot is taken a few bytes after the client left.
 				cut := min(left+3, len(s.out)-1)
 				t.Run(fmt.Sprintf("%s/%s/%d-%d", form.name, s.name, left, cut), func(t *testing.T) {
 					daemon := newDaemon()
@@ -286,8 +228,6 @@ func runClientsOwnInsertMode(t *testing.T, newDaemon, newClient func() vt.Termin
 	defer closeEmulator(client)
 
 	mustFeed(t, client, history.String()+"\x1b[4h\x1b[20h")
-	// The bottom row starts with a blank and goes on, so the restore can
-	// print REP's character in its first column and erase it again.
 	mustFeed(t, daemon, history.String()+fmt.Sprintf("\x1b[%d;2Hxyz\x1b[1;1H", fidelityRows))
 	state := TerminalStateOf(daemon, daemon.Width(), daemon.Height(), 100, 0)
 	ApplyTerminalState(client, throughWire(t, state, true))
@@ -386,8 +326,6 @@ func mustFeed(t *testing.T, term vt.Terminal, s string) {
 	}
 }
 
-// compareSnapshotState compares what compareEmulators cannot read off the
-// cells.
 func compareSnapshotState(t *testing.T, want, got vt.Terminal, when string) {
 	t.Helper()
 	if g, w := got.TabStops(), want.TabStops(); !slices.Equal(g, w) {
@@ -416,11 +354,6 @@ func compareSnapshotState(t *testing.T, want, got vt.Terminal, when string) {
 			t.Errorf("ANSI mode %d %s: client %v, daemon %v", m, when, gm[m], wm[m])
 		}
 	}
-	// The two backends spell some unfinished input differently: the pure
-	// parser has already dispatched an OSC at the ESC that may start its ST,
-	// where the libghostty scanner still holds it. Each spelling replays to
-	// the same state, which the comparisons above check, so the bytes are
-	// compared only between two emulators of one backend.
 	if fmt.Sprintf("%T", got) != fmt.Sprintf("%T", want) {
 		return
 	}
@@ -472,7 +405,6 @@ func TestSnapshotVTCarriesTheTabsModesAndACut(t *testing.T) {
 	}
 	for _, s := range cutStreams {
 		if s.name == "osc-palette" {
-			// The palette is not in a SNAP frame; see snapshotVT.
 			continue
 		}
 		for cut := 1; cut < len(s.out); cut++ {

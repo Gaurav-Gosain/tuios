@@ -11,29 +11,11 @@ import (
 	"tuios.dev/shot"
 )
 
-// The screenshot verb renders a window to a styled image and writes it.
-//
-// It runs in the daemon, for the reason capture-pane does: the daemon owns the
-// pane's emulator and its scrollback, so `tuios screenshot -w build` answers
-// on a detached session, from a script, with nobody attached. The window
-// chrome in the picture is drawn by the renderer rather than scraped off a
-// client's border, which looks better and removes the client dependency
-// entirely.
-//
-// It always writes a file and returns the path. There is no bytes-in-the-
-// envelope route: the protocol is line-delimited JSON, a scrollback PNG is
-// megabytes, and a second delivery path is a second set of bugs. The CLI
-// reaches the daemon over a unix socket, so the file it names is on the
-// machine the caller is sitting at; the result says so in `host` regardless,
-// so a script never has to assume it.
-
-// screenshotHosts names the machine a written file landed on.
 const (
 	screenshotHostDaemon = "daemon"
 	screenshotHostClient = "client"
 )
 
-// verbScreenshot renders one window and writes the file.
 func (d *Daemon) verbScreenshot(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session    string `json:"session"`
@@ -49,9 +31,6 @@ func (d *Daemon) verbScreenshot(cs *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	// out names any path on this machine, and the verb is in the list class.
-	// A linked machine gets the picture under screenshot.directory, the one
-	// place the person chose for them.
 	if p.Out != "" && cs != nil && cs.viaLink {
 		return nil, hintedVerbError(ErrVerbForbidden, "screenshot: a linked machine cannot choose where the file is written", &VerbHint{
 			Param:  "out",
@@ -89,29 +68,23 @@ func (d *Daemon) verbScreenshot(cs *connState, params json.RawMessage) (any, *ve
 
 	d.recordScreenshot(cs, path, string(settings.Format))
 	return map[string]any{
-		"type":   "screenshot",
-		"path":   path,
-		"host":   screenshotHostDaemon,
-		"format": string(settings.Format),
-		"cols":   grid.Cols,
-		"rows":   grid.Rows,
-		"bytes":  len(data),
-		// Always present, empty when there is nothing to say, so a caller can
-		// read it without checking whether the key exists.
+		"type":     "screenshot",
+		"path":     path,
+		"host":     screenshotHostDaemon,
+		"format":   string(settings.Format),
+		"cols":     grid.Cols,
+		"rows":     grid.Rows,
+		"bytes":    len(data),
 		"warnings": warningsOrEmpty(warnings),
 	}, nil
 }
 
-// paneShotOptions are what a picture of a pane may change from the
-// [screenshot] settings.
 type paneShotOptions struct {
 	format, theme, frame string
 	cursor, scrollback   bool
 	lines                int
 }
 
-// paneShot is a picture of a pane: the bytes, the settings it was made with,
-// the grid's size and what the settings could not do.
 type paneShot struct {
 	data     []byte
 	settings capture.Settings
@@ -119,8 +92,6 @@ type paneShot struct {
 	warnings []string
 }
 
-// renderPaneShot draws the pane window of sess as a picture, in memory. The
-// screenshot verb writes it to a file, and attach-task puts it on a card.
 func (d *Daemon) renderPaneShot(cs *connState, sess *Session, window string, o paneShotOptions) (paneShot, *verbError) {
 	var out paneShot
 	pty, err := d.resolvePTYForTarget(sess, window)
@@ -142,15 +113,11 @@ func (d *Daemon) renderPaneShot(cs *connState, sess *Session, window string, o p
 	if warn != "" {
 		warnings = append(warnings, warn)
 	}
-	// The pane as the session draws it: a painted pane background is the
-	// ground its default cells sit on.
 	palette = capture.WithPaneBackground(palette, settings.PaneBackground, settings.ThemeID)
 
-	// lines bounds the history above the screen. Without scrollback there is
-	// no history in the picture at all, which is what a plain capture means.
 	rows := 0
 	if o.scrollback {
-		rows = -1 // everything the pane holds
+		rows = -1
 		if o.lines > 0 {
 			rows = o.lines
 		}
@@ -180,9 +147,6 @@ func warningsOrEmpty(w []string) []string {
 	return w
 }
 
-// screenshotSettings resolves the [screenshot] section for a session. The
-// session's overrides win, then config.toml, then the defaults: the order the
-// client draws by. See sessionOptions.
 func (d *Daemon) screenshotSettings(cs *connState, sess *Session, themeOverride string) (capture.Settings, []string) {
 	opts := d.optionsFor(cs, sess)
 	cfg := config.ScreenshotConfig{
@@ -215,24 +179,18 @@ func (d *Daemon) screenshotSettings(cs *connState, sess *Session, themeOverride 
 	if themeID == "" {
 		themeID = opts.get(optionTheme)
 	}
-	// No theme follows Omarchy where it is installed, as the client does.
 	themeID = followOmarchy(themeID)
 	if themeID == theme.NoneID {
 		themeID = ""
 	}
 	glyphs := opts.get("appearance.glyphs")
 	s := capture.SettingsFrom(cfg, themeID, glyphs)
-	// The pane's own option wins, and unset follows the default for every
-	// surface, the same precedence the client paints by.
 	s.PaneBackground = config.ResolveBackground(
 		opts.get("appearance.pane_background"),
 		opts.get("appearance.background"))
 	return s, nil
 }
 
-// screenshotTitle renders the title bar text from the window's own name
-// through the configured template, so the picture carries the same title the
-// window carries on screen.
 func (d *Daemon) screenshotTitle(cs *connState, sess *Session, target, format string) string {
 	if sess == nil || format == "" {
 		return ""
@@ -241,8 +199,6 @@ func (d *Daemon) screenshotTitle(cs *connState, sess *Session, target, format st
 	if state == nil {
 		return ""
 	}
-	// An empty target means the focused window, the same as it does for the
-	// PTY lookup. Without this the default capture would come out untitled.
 	if target == "" {
 		id, err := focusedWindowID(state)
 		if err != nil {
@@ -259,9 +215,6 @@ func (d *Daemon) screenshotTitle(cs *connState, sess *Session, target, format st
 	if title == "" {
 		title = w.Title
 	}
-	// The window title format is the session's own option, read the way the
-	// rest of the screenshot's settings are, not the process's global: the
-	// daemon never fills that one.
 	titles := config.Settings{WindowTitleFormat: d.optionsFor(cs, sess).get("appearance.window_title_format")}
 	return titles.FormatScreenshotTitle(format, title, idx+1, w.Cwd)
 }

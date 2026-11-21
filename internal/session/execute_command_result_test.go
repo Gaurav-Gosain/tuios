@@ -24,8 +24,6 @@ func TestARoutedCommandsResultReachesTheRequester(t *testing.T) {
 	d, _ := startTestDaemon(t)
 	makeSessionWithWindow(t, d, "routed")
 
-	// The attached client answers the moment the command lands, the way a
-	// ToggleTiling is answered once the retile has run.
 	tui := attachTestClient(t, "routed")
 	tui.OnRemoteCommand(func(payload *RemoteCommandPayload) error {
 		return tui.SendCommandResult(payload.RequestID, true, "ran "+payload.TapeCommand)
@@ -48,9 +46,6 @@ func TestARoutedCommandsResultReachesTheRequester(t *testing.T) {
 		if err := cli.send(msg); err != nil {
 			t.Fatalf("round %d: send: %v", round, err)
 		}
-		// The CLI's own deadline is thirty seconds. A result the client gave
-		// at once is on the wire within milliseconds; five seconds is the
-		// budget for the machine, not for the daemon.
 		_ = cli.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		resp, err := ReadMessage(cli.conn)
 		_ = cli.Close()

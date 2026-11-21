@@ -6,19 +6,6 @@ import (
 	"strings"
 )
 
-// new-session creates a session from the control surface.
-//
-// Every other verb addresses a session that already exists, so without this
-// one an external program could drive a workspace but never set one up short
-// of shelling out to `tuios new --detach`. It creates the session the way the
-// detached CLI path does, in the daemon, with no client anywhere, and it
-// creates the first window in the same call because a session with no windows
-// is a session nothing else can be done to.
-
-// defaultVerbSessionWidth and defaultVerbSessionHeight are the nominal size a
-// session gets when the caller names none. They match what `tuios new --detach`
-// sends. Nothing is drawn at this size: an attached client replaces it with its
-// own viewport, and a detached session only needs a size its PTYs can start at.
 const (
 	defaultVerbSessionWidth  = 80
 	defaultVerbSessionHeight = 24
@@ -26,16 +13,15 @@ const (
 
 func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Name       string   `json:"name"`
-		Width      int      `json:"width"`
-		Height     int      `json:"height"`
-		Window     *bool    `json:"window"`
-		WindowName string   `json:"window_name"`
-		Cwd        string   `json:"cwd"`
-		Command    []string `json:"command"`
-		Space      string   `json:"space"`
-		// Env is set in the first window's process.
-		Env map[string]string `json:"env"`
+		Name       string            `json:"name"`
+		Width      int               `json:"width"`
+		Height     int               `json:"height"`
+		Window     *bool             `json:"window"`
+		WindowName string            `json:"window_name"`
+		Cwd        string            `json:"cwd"`
+		Command    []string          `json:"command"`
+		Space      string            `json:"space"`
+		Env        map[string]string `json:"env"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -60,14 +46,8 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 		height = defaultVerbSessionHeight
 	}
 
-	// Creating the first window is the default, because a session with none is
-	// one no other verb can address. Passing false is how a caller that means to
-	// place every window itself gets an empty session to place them in.
 	makeWindow := p.Window == nil || *p.Window
 
-	// The directory and the argv are checked before the session exists, so a
-	// caller that mistyped a path does not get a session it then has to clean
-	// up. new-window refuses the same two mistakes for the same reason.
 	if verr := checkWindowCwd(p.Cwd); verr != nil {
 		return nil, verr
 	}
@@ -84,9 +64,6 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 		}
 	}
 
-	// A name already taken is its own answer, not a bad parameter: the caller
-	// asked for something reasonable and the daemon already holds it. Retrying
-	// with a different name is the whole remedy, so the code says so.
 	if name != "" && d.manager.GetSession(name) != nil {
 		return nil, hintedVerbError(ErrVerbSessionExists, "session "+name+" already exists", &VerbHint{
 			Param:     "name",
@@ -97,7 +74,6 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 		})
 	}
 
-	// A pane without admin starts a session only inside its own folder.
 	if _, _, verr := d.childWindowBound(cs, "new-session", p.Cwd); verr != nil {
 		return nil, verr
 	}
@@ -105,8 +81,6 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 	cfg.Space = space
 	sess, err := d.manager.CreateSession(name, cfg, width, height)
 	if err != nil {
-		// The name check above is racy by nature, so the manager's own refusal
-		// is mapped to the same code rather than reported as an internal fault.
 		if strings.Contains(err.Error(), "already exists") {
 			return nil, hintedVerbError(ErrVerbSessionExists, err.Error(), &VerbHint{
 				Param:     "name",
@@ -118,8 +92,6 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 		return nil, newVerbError(ErrVerbInternal, "could not create the session: "+err.Error())
 	}
 
-	// The directory is the session's, not only its first window's: a window
-	// opened in it later with nothing to inherit starts there too.
 	if p.Cwd != "" {
 		sess.SetStartDir(absStartDir(p.Cwd))
 	}
@@ -154,9 +126,6 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 		return nil, bverr
 	}
 	if err != nil {
-		// The session is left standing rather than rolled back. It exists, it is
-		// listed, and a caller that wants it gone kills it; deleting it here
-		// would destroy a session the daemon already announced as created.
 		return nil, newVerbError(ErrVerbInternal,
 			"the session was created but its first window could not start: "+err.Error())
 	}
@@ -172,9 +141,6 @@ func (d *Daemon) verbNewSession(cs *connState, params json.RawMessage) (any, *ve
 	return out, nil
 }
 
-// checkWindowCwd refuses a directory a shell cannot start in. A PTY falls back
-// to the daemon's own directory, which means a mistyped path gives a working
-// shell in the wrong place and no way to tell from the response.
 func checkWindowCwd(cwd string) *verbError {
 	if cwd == "" {
 		return nil
@@ -189,9 +155,6 @@ func checkWindowCwd(cwd string) *verbError {
 	return nil
 }
 
-// callerSessionConfig is the config for a session a verb makes: the caller's
-// terminal from its hello, as an attach or tuios new gets it. With none, the
-// session gets the daemon's fallback.
 func callerSessionConfig(cs *connState) *SessionConfig {
 	cfg := &SessionConfig{}
 	if cs != nil {

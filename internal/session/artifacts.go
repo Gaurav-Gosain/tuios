@@ -10,57 +10,37 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// Artifacts: what a pane has shown the person, kept per pane so the agents
-// view can list it beside the agent and show it again. A TML surface the pane
-// opened is one, open or closed; a screenshot the pane took is another.
-//
-// The log lives in daemon memory only. It is bounded per pane and in the
-// number of panes it remembers, so an agent that opens surfaces in a loop
-// costs a fixed amount. A daemon restart forgets it, as it forgets the
-// surfaces themselves. A client reads it with artifact-list, so a client that
-// attaches again sees the same list.
-
 // The kinds of artifact.
 const (
 	ArtifactTML        = "tml"
 	ArtifactScreenshot = "screenshot"
 )
 
-// Bounds of the log: the newest artifacts of each pane, and the panes it
-// remembers, the pane that showed something least recently forgotten first.
 const (
 	artifactsPerPane = 20
 	artifactPanes    = 128
 )
 
-// artifactRec is one artifact as the daemon keeps it.
 type artifactRec struct {
 	id, kind, title string
 	at              time.Time
 	window          string
-	// For a TML surface: the surface id is the record's id. doc and state
-	// are the tree and the state when it closed; an open surface is read
-	// live from the TML host instead.
-	target   string
-	open     bool
-	reason   string
-	value    any
-	hasValue bool
-	doc      json.RawMessage
-	state    json.RawMessage
-	// For a screenshot: the file and its format.
-	path, format string
+	target          string
+	open            bool
+	reason          string
+	value           any
+	hasValue        bool
+	doc             json.RawMessage
+	state           json.RawMessage
+	path, format    string
 }
 
-// artifactLog is the daemon's log. The zero value is ready.
 type artifactLog struct {
 	mu       sync.Mutex
 	byWindow map[string][]*artifactRec
-	// touched is when each pane last showed something, for the pane bound.
-	touched map[string]time.Time
+	touched  map[string]time.Time
 }
 
-// add records rec for its pane, newest last, and keeps the bounds.
 func (l *artifactLog) add(rec *artifactRec) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -85,7 +65,6 @@ func (l *artifactLog) add(rec *artifactRec) {
 	}
 }
 
-// update runs fn on the record with id in window's log, if it is still kept.
 func (l *artifactLog) update(window, id string, fn func(*artifactRec)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -97,9 +76,6 @@ func (l *artifactLog) update(window, id string, fn func(*artifactRec)) {
 	}
 }
 
-// recordTMLOpened logs a surface a pane of this daemon opened. A surface the
-// person opened from outside the panes, or a linked machine, belongs to no
-// agent and is not logged.
 func (d *Daemon) recordTMLOpened(s *tmlSurface, target string) {
 	if s.caller == "" || d.sessionHoldingWindow(s.caller) == nil {
 		return
@@ -108,9 +84,6 @@ func (d *Daemon) recordTMLOpened(s *tmlSurface, target string) {
 		target: target, open: true})
 }
 
-// recordTMLClosed keeps a closed surface's last tree and state in its record,
-// so the agents view can show what the person saw and answered. The caller
-// holds the TML host's lock.
 func (d *Daemon) recordTMLClosed(s *tmlSurface) {
 	if s.caller == "" {
 		return
@@ -122,7 +95,6 @@ func (d *Daemon) recordTMLClosed(s *tmlSurface) {
 	})
 }
 
-// recordScreenshot logs a screenshot a pane took.
 func (d *Daemon) recordScreenshot(cs *connState, path, format string) {
 	ref := d.callerPaneRef(cs)
 	if ref == nil {
@@ -132,7 +104,6 @@ func (d *Daemon) recordScreenshot(cs *connState, path, format string) {
 		at: time.Now(), window: ref.Window, path: path, format: format})
 }
 
-// verbArtifactList lists what one pane has shown, newest first.
 func (d *Daemon) verbArtifactList(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Window string `json:"window"`
@@ -165,7 +136,6 @@ func (d *Daemon) verbArtifactList(cs *connState, params json.RawMessage) (any, *
 			item["surface"], item["target"], item["open"] = r.id, r.target, r.open
 			doc, state := r.doc, r.state
 			if r.open {
-				// An open surface is read as it is now.
 				d.tml.mu.Lock()
 				if s := d.tml.surfaces[r.id]; s != nil && !s.closed {
 					doc = s.docJSON

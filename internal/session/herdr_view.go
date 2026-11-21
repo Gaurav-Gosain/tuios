@@ -14,12 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// herdr's records of tuios's objects: the shapes of herdr's
-// src/api/schema/{workspaces,tabs,panes,agents,session}.rs at the version in
-// herdrTargetVersion, built from tuios's session state. See herdr_api.go for
-// the mapping.
-
-// herdrWorkspace is herdr's WorkspaceInfo.
 type herdrWorkspace struct {
 	WorkspaceID string                  `json:"workspace_id"`
 	Number      int                     `json:"number"`
@@ -33,7 +27,6 @@ type herdrWorkspace struct {
 	Worktree    *herdrWorkspaceWorktree `json:"worktree,omitempty"`
 }
 
-// herdrWorkspaceWorktree is herdr's WorkspaceWorktreeInfo.
 type herdrWorkspaceWorktree struct {
 	RepoKey          string `json:"repo_key"`
 	RepoName         string `json:"repo_name"`
@@ -42,7 +35,6 @@ type herdrWorkspaceWorktree struct {
 	IsLinkedWorktree bool   `json:"is_linked_worktree"`
 }
 
-// herdrTab is herdr's TabInfo.
 type herdrTab struct {
 	TabID       string `json:"tab_id"`
 	WorkspaceID string `json:"workspace_id"`
@@ -53,7 +45,6 @@ type herdrTab struct {
 	AgentStatus string `json:"agent_status"`
 }
 
-// herdrPaneInfo is herdr's PaneInfo.
 type herdrPaneInfo struct {
 	PaneID        string             `json:"pane_id"`
 	TerminalID    string             `json:"terminal_id"`
@@ -73,7 +64,6 @@ type herdrPaneInfo struct {
 	Revision      uint64             `json:"revision"`
 }
 
-// herdrAgentSession is herdr's AgentSessionInfo.
 type herdrAgentSession struct {
 	Source string `json:"source"`
 	Agent  string `json:"agent"`
@@ -81,16 +71,12 @@ type herdrAgentSession struct {
 	Value  string `json:"value"`
 }
 
-// herdrScroll is herdr's PaneScrollInfo. tuios's panes are always read at
-// the bottom through the socket, so offset_from_bottom is 0.
 type herdrScroll struct {
 	OffsetFromBottom    uint64 `json:"offset_from_bottom"`
 	MaxOffsetFromBottom uint64 `json:"max_offset_from_bottom"`
 	ViewportRows        uint64 `json:"viewport_rows"`
 }
 
-// herdrAgentInfo is herdr's AgentInfo, the snapshot's record of each pane
-// that holds an agent.
 type herdrAgentInfo struct {
 	TerminalID    string             `json:"terminal_id"`
 	Name          string             `json:"name,omitempty"`
@@ -110,7 +96,6 @@ type herdrAgentInfo struct {
 	Revision      uint64             `json:"revision"`
 }
 
-// herdrRect is herdr's PaneLayoutRect.
 type herdrRect struct {
 	X      int `json:"x"`
 	Y      int `json:"y"`
@@ -118,16 +103,12 @@ type herdrRect struct {
 	Height int `json:"height"`
 }
 
-// herdrLayoutPane is herdr's PaneLayoutPane.
 type herdrLayoutPane struct {
 	PaneID  string    `json:"pane_id"`
 	Focused bool      `json:"focused"`
 	Rect    herdrRect `json:"rect"`
 }
 
-// herdrLayout is herdr's PaneLayoutSnapshot. tuios keeps a tiling tree or
-// free-floating windows, not herdr's split tree, so splits is always empty
-// and each pane carries its own rectangle.
 type herdrLayout struct {
 	WorkspaceID   string            `json:"workspace_id"`
 	TabID         string            `json:"tab_id"`
@@ -138,7 +119,6 @@ type herdrLayout struct {
 	Splits        []struct{}        `json:"splits"`
 }
 
-// herdrSnapshot is herdr's SessionSnapshot.
 type herdrSnapshot struct {
 	Version            string           `json:"version"`
 	Protocol           int              `json:"protocol"`
@@ -152,20 +132,6 @@ type herdrSnapshot struct {
 	Agents             []herdrAgentInfo `json:"agents"`
 }
 
-// herdrStatus is herdr's AgentStatus for a tuios agent state. unread says
-// the pane finished a turn nobody has looked at (Session.finishedUnread).
-//
-//	working            working
-//	needs_input        blocked
-//	idle, done unread  done
-//	idle, done seen    idle
-//	errored            done: the agent stopped, and the person should look
-//	unknown, none      unknown
-//
-// herdr has no done state of its own: its done is an idle pane not yet seen,
-// and the pane turns idle once someone looks at it (pane_agent_status in
-// herdr's src/app/api_helpers.rs). tuios keeps done for good and tracks the
-// looking apart, so the two are put back together here.
 func herdrStatus(s AgentState, unread bool) string {
 	switch s {
 	case AgentStateWorking:
@@ -183,9 +149,6 @@ func herdrStatus(s AgentState, unread bool) string {
 	return "unknown"
 }
 
-// herdrStatusRank orders statuses for a tab's or a workspace's summary the
-// way herdr does (src/workspace/aggregate.rs): blocked, then a finished turn
-// nobody has seen, then working, then idle, then unknown.
 func herdrStatusRank(status string) int {
 	switch status {
 	case "blocked":
@@ -200,10 +163,6 @@ func herdrStatusRank(status string) int {
 	return 0
 }
 
-// herdrAgentLabel is herdr's name for a tuios harness id. herdr names most
-// harnesses the way tuios does. The few it names otherwise are mapped, so a
-// client that keys prompt rules on herdr's names (Collie keys on claude)
-// finds them.
 func herdrAgentLabel(harness string) string {
 	switch harness {
 	case "claude-code":
@@ -220,10 +179,6 @@ func herdrAgentLabel(harness string) string {
 	return harness
 }
 
-// herdrView is one read of the daemon for the herdr socket: every session
-// the caller may read, in herdr's shapes. It is built once per request from
-// one state snapshot per session, so a session.snapshot costs one GetState
-// per session and one cheap PTY read per pane.
 type herdrView struct {
 	workspaces []herdrWorkspace
 	tabs       []herdrTab
@@ -234,8 +189,6 @@ type herdrView struct {
 	focusedWorkspace, focusedTab, focusedPane string
 }
 
-// herdrOrderedSessions is every session in the order tuios lists them:
-// oldest first, then by name. It reads no session state.
 func (d *Daemon) herdrOrderedSessions() []*Session {
 	sessions := d.manager.AllSessions()
 	slices.SortFunc(sessions, func(a, b *Session) int {
@@ -244,10 +197,6 @@ func (d *Daemon) herdrOrderedSessions() []*Session {
 	return sessions
 }
 
-// herdrSessions is every session, in the order tuios lists them, that the
-// caller on cs may read. A caller outside every pane, and a pane holding
-// admin, reads them all. Any other pane reads what list-windows would let it
-// read: the grants check runs as for that verb, once per session.
 func (d *Daemon) herdrSessions(cs *connState) []*Session {
 	var out []*Session
 	checkAll := true
@@ -256,8 +205,6 @@ func (d *Daemon) herdrSessions(cs *connState) []*Session {
 			if _, _, verr := d.admitVerb(cs, "list-windows", herdrSessionParams(sess)); verr != nil {
 				continue
 			}
-			// A caller held to nothing new, or holding admin, reads every
-			// session: the rest need no check of their own.
 			if pa := cs.paneView.Load(); pa == nil || pa.grants.Has(GrantAdmin) {
 				checkAll = false
 			}
@@ -267,14 +214,11 @@ func (d *Daemon) herdrSessions(cs *connState) []*Session {
 	return out
 }
 
-// herdrSessionParams names a session for a verb call.
 func herdrSessionParams(sess *Session) json.RawMessage {
 	raw, _ := jsonx.Marshal(map[string]string{"session": sess.Name()})
 	return raw
 }
 
-// herdrFocusedSession is the session herdr would call the active workspace:
-// the one an attached client showed last, else the one used last.
 func (d *Daemon) herdrFocusedSession(sessions []*Session) *Session {
 	var attached []*Session
 	for _, s := range sessions {
@@ -288,24 +232,14 @@ func (d *Daemon) herdrFocusedSession(sessions []*Session) *Session {
 	return mostRecentSession(sessions, false)
 }
 
-// herdrListedWorkspace reports whether workspace ws of a session is one of
-// its herdr tabs. herdr lists only the tabs that exist, and tuios's
-// workspaces are fixed slots, so a slot is a tab when it holds a window, has
-// a name, or is the one showing.
 func herdrListedWorkspace(st *SessionState, ws int) bool {
 	return ws == st.CurrentWorkspace || st.WorkspaceNames[ws] != "" || herdrCount(st, ws) > 0
 }
 
-// herdrScratch reports whether a window is a pane of a scratch group: marked
-// scratch, or on a scratch workspace. herdr has nothing like one, so it is
-// not a pane to a herdr client: not in the snapshot, the lists or the
-// events, and not found by its id.
 func herdrScratch(w *WindowState) bool {
 	return w.Scratch || IsScratchWorkspace(w.Workspace)
 }
 
-// herdrCount is how many windows other than scratch terminals workspace ws
-// holds.
 func herdrCount(st *SessionState, ws int) int {
 	n := 0
 	for i := range st.Windows {
@@ -316,8 +250,6 @@ func herdrCount(st *SessionState, ws int) int {
 	return n
 }
 
-// herdrWorkspaceOrder is a session's workspaces in display order, which is
-// the order of their numbers.
 func herdrWorkspaceOrder(st *SessionState) []int {
 	order := make([]int, 0, st.workspaceBound())
 	for ws := 1; ws <= st.workspaceBound(); ws++ {
@@ -326,7 +258,6 @@ func herdrWorkspaceOrder(st *SessionState) []int {
 	return order
 }
 
-// buildHerdrView reads the sessions into herdr's records.
 func (d *Daemon) buildHerdrView(cs *connState) *herdrView {
 	sessions := d.herdrSessions(cs)
 	v := &herdrView{
@@ -340,22 +271,16 @@ func (d *Daemon) buildHerdrView(cs *connState) *herdrView {
 	return v
 }
 
-// herdrWorkspaceLabel is the label a session shows as a herdr workspace:
-// its display name, or its name when it has none.
 func herdrWorkspaceLabel(sess *Session, st *SessionState) string {
 	return cmp.Or(st.DisplayName, sess.Name())
 }
 
-// addHerdrSession adds one session, as a herdr workspace numbered number, and
-// its tabs, panes and agents.
 func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, number int, active bool) {
 	wsID := herdrWorkspaceID(sess.ID)
 	label := herdrWorkspaceLabel(sess, st)
 	tabs := herdrOrderedTabs(st)
 	activeTab := herdrTabID(sess.ID, st.WorkspaceTabKey(max(st.CurrentWorkspace, 1)))
 	if IsScratchWorkspace(st.CurrentWorkspace) && len(tabs) > 0 {
-		// A scratch workspace is showing, and it is not a tab. The tab the
-		// person comes back to is the first one.
 		activeTab = herdrTabID(sess.ID, st.WorkspaceTabKey(tabs[0]))
 	}
 	w := herdrWorkspace{
@@ -393,9 +318,6 @@ func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, 
 	}
 
 	if w.Worktree == nil {
-		// herdr says which repository a workspace sits in whenever it sits
-		// in one, its main checkout included. The session's directory is
-		// its focused pane's, else its first pane's.
 		dir := ""
 		for _, p := range v.panes[first:] {
 			if dir == "" || p.Focused {
@@ -417,7 +339,6 @@ func (d *Daemon) addHerdrSession(v *herdrView, sess *Session, st *SessionState, 
 	v.workspaces = append(v.workspaces, w)
 }
 
-// herdrOrderedTabs is a session's listed workspaces in display order.
 func herdrOrderedTabs(st *SessionState) []int {
 	var out []int
 	for _, ws := range herdrWorkspaceOrder(st) {
@@ -428,8 +349,6 @@ func herdrOrderedTabs(st *SessionState) []int {
 	return out
 }
 
-// herdrTabLabel is the label of workspace ws named name: an unnamed
-// workspace's label is its workspace number, which is what the dock shows.
 func herdrTabLabel(name string, ws int) string {
 	if name == "" {
 		return strconv.Itoa(ws)
@@ -437,10 +356,6 @@ func herdrTabLabel(name string, ws int) string {
 	return name
 }
 
-// herdrTabRecord is herdr's TabInfo for workspace ws, the n-th listed tab.
-// herdr's number is the tab's own and stays through a move, so it is the
-// workspace's tab key, which the id is made from too (see
-// SessionState.WorkspaceTabKey). Its label is herdrTabLabel's.
 func herdrTabRecord(sess *Session, st *SessionState, ws, _ int, active bool, panes []herdrPaneInfo) herdrTab {
 	label := herdrTabLabel(st.WorkspaceNames[ws], ws)
 	t := herdrTab{
@@ -456,7 +371,6 @@ func herdrTabRecord(sess *Session, st *SessionState, ws, _ int, active bool, pan
 	return t
 }
 
-// herdrPaneRecord is herdr's PaneInfo for one window.
 func (d *Daemon) herdrPaneRecord(sess *Session, st *SessionState, win *WindowState, active bool) herdrPaneInfo {
 	p := herdrPaneInfo{
 		PaneID:        herdrPaneID(sess.ID, win.ID),
@@ -497,8 +411,6 @@ func (d *Daemon) herdrPaneRecord(sess *Session, st *SessionState, win *WindowSta
 	}
 	if pty := sess.GetPTY(win.PTYID); pty != nil {
 		if p.Cwd == "" {
-			// The session reads directories on a timer, and a pane made a
-			// moment ago is not read yet. herdr always says where a pane is.
 			if cwd, ok := pty.ProcessCwd(); ok {
 				p.Cwd, p.ForegroundCwd = cwd, cwd
 			}
@@ -510,7 +422,6 @@ func (d *Daemon) herdrPaneRecord(sess *Session, st *SessionState, win *WindowSta
 	return p
 }
 
-// herdrAgentFromPane is herdr's AgentInfo for a pane that holds an agent.
 func herdrAgentFromPane(p herdrPaneInfo, win *WindowState) herdrAgentInfo {
 	return herdrAgentInfo{
 		TerminalID: p.TerminalID, Name: p.Label, Agent: p.Agent, Title: p.Title, TerminalTitle: p.TerminalTitle,
@@ -521,8 +432,6 @@ func herdrAgentFromPane(p herdrPaneInfo, win *WindowState) herdrAgentInfo {
 	}
 }
 
-// herdrLayoutOf is herdr's PaneLayoutSnapshot for one workspace: each
-// visible pane's rectangle in the session's area.
 func herdrLayoutOf(sess *Session, st *SessionState, ws int, panes []herdrPaneInfo) herdrLayout {
 	l := herdrLayout{
 		WorkspaceID: herdrWorkspaceID(sess.ID), TabID: herdrTabID(sess.ID, st.WorkspaceTabKey(ws)),
@@ -560,10 +469,6 @@ func herdrLayoutOf(sess *Session, st *SessionState, ws int, panes []herdrPaneInf
 	return l
 }
 
-// herdrFacts is what a pane record says about the terminal: the bytes the
-// pane has produced, as herdr's revision, which changes whenever the pane
-// prints; the scrollback rows above the screen; and the screen's rows. Each
-// is one read under its own lock, so a snapshot stays cheap.
 func (p *PTY) herdrFacts() (revision uint64, scrollback, rows int) {
 	p.outputMu.RLock()
 	revision = uint64(max(p.outputSeq, 0))
@@ -577,8 +482,6 @@ func (p *PTY) herdrFacts() (revision uint64, scrollback, rows int) {
 	return revision, scrollback, rows
 }
 
-// herdrCheckoutOf is herdr's record of the git checkout dir is in, nil for
-// none. It only reads files, as the rail's git line does.
 func herdrCheckoutOf(dir string) *herdrWorkspaceWorktree {
 	if dir == "" {
 		return nil

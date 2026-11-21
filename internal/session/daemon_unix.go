@@ -9,9 +9,6 @@ import (
 	"syscall"
 )
 
-// handleSignals handles Unix signals for daemon shutdown. SIGHUP is caught so
-// it does not kill the daemon, and otherwise ignored: config changes are
-// picked up by the file watcher.
 func (d *Daemon) handleSignals() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
@@ -55,7 +52,6 @@ func GetDaemonPID() int {
 		return 0
 	}
 
-	// On Unix, Signal(0) checks if process exists
 	if err := process.Signal(syscall.Signal(0)); err != nil {
 		return 0
 	}

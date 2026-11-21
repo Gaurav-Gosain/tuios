@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// attachPromptTUI attaches a TUI client that shows prompts, the way the
-// tuios TUI does, and returns it with the prompt pushes it reads.
 func attachPromptTUI(t *testing.T, socketPath, session string, keys bool) (*TUIClient, <-chan PromptPayload) {
 	t.Helper()
 	conn, err := net.DialTimeout("unix", socketPath, 3*time.Second)
@@ -19,8 +17,6 @@ func attachPromptTUI(t *testing.T, socketPath, session string, keys bool) (*TUIC
 	}
 	c := NewTUIClient()
 	c.conn = conn
-	// The upgrade dialog's mark is what says the client takes the person's
-	// keys. gui-bridge does not set it.
 	c.UpgradeDialog = keys
 	pushes := make(chan PromptPayload, 16)
 	c.OnPrompt(func(p PromptPayload) { pushes <- p })
@@ -32,13 +28,10 @@ func attachPromptTUI(t *testing.T, socketPath, session string, keys bool) (*TUIC
 	if _, err := c.AttachSession(session, false, 80, 24); err != nil {
 		t.Fatalf("attach: %v", err)
 	}
-	// Pushes are demuxed by the read loop, which the attach does not start.
 	c.StartReadLoop()
 	return c, pushes
 }
 
-// promptAsync starts a prompt call on its own connection and returns a
-// channel with its response.
 func promptAsync(t *testing.T, sp string, params map[string]any) <-chan map[string]any {
 	t.Helper()
 	c := dialVerb(t, sp)
@@ -59,7 +52,6 @@ func promptAsync(t *testing.T, sp string, params map[string]any) <-chan map[stri
 	return out
 }
 
-// nextPush waits for a client's next prompt push.
 func nextPush(t *testing.T, pushes <-chan PromptPayload, what string) PromptPayload {
 	t.Helper()
 	select {
@@ -71,7 +63,6 @@ func nextPush(t *testing.T, pushes <-chan PromptPayload, what string) PromptPayl
 	return PromptPayload{}
 }
 
-// promptDone waits for a prompt call's result.
 func promptDone(t *testing.T, done <-chan map[string]any) map[string]any {
 	t.Helper()
 	select {
@@ -150,7 +141,6 @@ func TestPromptPickRoundTrip(t *testing.T) {
 	if cl := nextPush(t, otherPushes, "close"); cl.Prompt != nil || cl.Closed != id || cl.Reason != PromptAnswered {
 		t.Fatalf("the second client got %+v, want the close with reason answered", cl)
 	}
-	// The first answer stands: the prompt is gone.
 	if code := errCode(t, answerPromptCall(t, c, map[string]any{"request_id": id, "human_nonce": nonce, "ids": []string{"stg"}})); code != ErrVerbInvalidParams {
 		t.Fatalf("a second answer: code %q, want %q", code, ErrVerbInvalidParams)
 	}
@@ -234,7 +224,6 @@ func TestPromptEndsWithAReason(t *testing.T) {
 	if cl := nextPush(t, pushes, "close after the timeout"); cl.Reason != PromptTimeout {
 		t.Fatalf("close push %+v, want reason timeout", cl)
 	}
-	// The next prompt is not busy: the one that timed out is gone.
 	done = promptAsync(t, sp, input)
 	p = nextPush(t, pushes, "open after the timeout")
 	result(t, answerPromptCall(t, c, map[string]any{"request_id": p.Prompt.ID, "human_nonce": tui.HumanNonce(), "value": "x"}))
@@ -253,8 +242,6 @@ func TestPromptOpenReachesAnAttachingClientOnce(t *testing.T) {
 	twoWindowSession(t, d, "work")
 	c := dialVerb(t, sp)
 
-	// The attach handler waits after its reply, with the client admitted to
-	// the pushes, until the prompt below has reached the client.
 	release := make(chan struct{})
 	var once sync.Once
 	hook := func() {
@@ -277,8 +264,6 @@ func TestPromptOpenReachesAnAttachingClientOnce(t *testing.T) {
 	if p.Prompt == nil {
 		t.Fatalf("push %+v, want the open prompt", p)
 	}
-	// The attach goes on and sends the client what is open now. The daemon
-	// reads this client's next request once the attach handler returns.
 	letGo()
 	if _, err := tui.RefreshSessionList(); err != nil {
 		t.Fatalf("session list: %v", err)
@@ -290,7 +275,6 @@ func TestPromptOpenReachesAnAttachingClientOnce(t *testing.T) {
 	if cl := nextPush(t, pushes, "close"); cl.Prompt != nil || cl.Closed != p.Prompt.ID || cl.Reason != PromptCancelled {
 		t.Fatalf("push %+v, want the close with reason cancelled", cl)
 	}
-	// Nothing follows the close: the next push opens the next prompt.
 	done = promptAsync(t, sp, map[string]any{"kind": "input", "title": "Again?", "timeout": 20000})
 	o := nextPush(t, pushes, "open of the next prompt")
 	if o.Prompt == nil || o.Prompt.Title != "Again?" {

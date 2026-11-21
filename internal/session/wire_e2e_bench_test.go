@@ -1,15 +1,5 @@
 package session
 
-// End-to-end cost of the wire: a real daemon on a real unix socket, a real
-// TUIClient attached to it, and a real shell in a PTY. Everything between the
-// PTY read and the client's output handler is measured, which is the whole of
-// what this package owns on the output path. The client's emulator is left out
-// on purpose: the handler counts bytes, so the number is the wire's and not the
-// renderer's.
-//
-// The per-message benchmarks in wire_bench_test.go price the encoders; this
-// prices the plumbing they sit in, which is where the syscalls are.
-
 import (
 	"bufio"
 	"bytes"
@@ -23,8 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// countingConn counts the reads and writes made on a connection, which on an
-// unbuffered unix socket is the syscall count.
 type countingConn struct {
 	net.Conn
 	reads, writes atomic.Int64
@@ -43,7 +31,6 @@ func (c *countingConn) Write(p []byte) (int, error) {
 	return c.Conn.Write(p)
 }
 
-// e2eRig is one daemon, one attached client and one pane running /bin/sh.
 type e2eRig struct {
 	d      *Daemon
 	c      *TUIClient
@@ -52,8 +39,6 @@ type e2eRig struct {
 	output chan []byte
 }
 
-// newE2ERig starts the daemon and attaches a client with a subscribed pane.
-// The pane's handler forwards every batch it is handed to rig.output.
 func newE2ERig(tb testing.TB) *e2eRig {
 	tb.Helper()
 	tb.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(tb))
@@ -71,9 +56,6 @@ func newE2ERig(tb testing.TB) *e2eRig {
 		tb.Fatalf("connect: %v", err)
 	}
 	tb.Cleanup(func() { _ = c.Close() })
-	// Count at the socket. The reader is rebuilt over the counter, which is
-	// safe only while it holds nothing, and at this point the daemon has
-	// sent exactly the welcome the connect consumed.
 	if n := c.br.Buffered(); n != 0 {
 		tb.Fatalf("%d bytes buffered after connect; the counter would skip them", n)
 	}
@@ -101,12 +83,10 @@ func newE2ERig(tb testing.TB) *e2eRig {
 	}); err != nil {
 		tb.Fatalf("subscribe: %v", err)
 	}
-	// Let the shell print its prompt and settle before anything is measured.
 	rig.drain(300 * time.Millisecond)
 	return rig
 }
 
-// drain discards output until the pane has been quiet for the given time.
 func (r *e2eRig) drain(quiet time.Duration) {
 	for {
 		select {
@@ -117,10 +97,6 @@ func (r *e2eRig) drain(quiet time.Duration) {
 	}
 }
 
-// run types a command and waits until marker appears in the output, returning
-// how many bytes arrived and in how many batches. The shell echoes the command
-// itself, so a caller spells the marker as two quoted halves that the shell
-// joins: the echo then never contains it and only the output does.
 func (r *e2eRig) run(tb testing.TB, cmd, marker string, timeout time.Duration) (bytesIn, batches int) {
 	tb.Helper()
 	if err := r.c.WritePTY(r.ptyID, []byte(cmd+"\n")); err != nil {
@@ -197,8 +173,6 @@ func BenchmarkE2EBackgroundFlood(b *testing.B) {
 		defer pty.outputMu.RUnlock()
 		return pty.outputSeq
 	}
-	// The shell's prompt is the pane's first output. Its mark arrives before
-	// anything is measured.
 	deadline := time.Now().Add(10 * time.Second)
 	for marks.Load() == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
@@ -227,7 +201,6 @@ func BenchmarkE2EBackgroundFlood(b *testing.B) {
 		}
 	}
 	b.StopTimer()
-	// A mark sent late would land here.
 	time.Sleep(100 * time.Millisecond)
 	if n := marks.Load(); n != 1 {
 		b.Fatalf("a pane out of view raised %d marks over %d floods, want 1", n, b.N)
@@ -242,8 +215,6 @@ func BenchmarkE2EBackgroundFlood(b *testing.B) {
 // render. It reports the syscalls each side spent on it.
 func BenchmarkE2EKeystroke(b *testing.B) {
 	rig := newE2ERig(b)
-	// Keep the shell's line buffer from growing: a line is cleared every 64
-	// keys with ctrl-u, which itself echoes and is waited for like any key.
 	b.ResetTimer()
 	r0, w0 := rig.conn.reads.Load(), rig.conn.writes.Load()
 	i := 0
@@ -299,14 +270,9 @@ func TestIdleConnectionMakesNoReads(t *testing.T) {
 		t.Skip("spawns a shell")
 	}
 	rig := newE2ERig(t)
-	// The shell has started once it runs a command. Its prompt follows the
-	// output, and the drain takes it.
 	rig.run(t, "printf 'rea''dy\\n'", "ready", 10*time.Second)
 	rig.drain(500 * time.Millisecond)
 
-	// A loaded runner can deliver a late frame, or run a timer of its own,
-	// inside any one window. A polling loop reads in every window, so the
-	// test passes on the first quiet window and fails only when none is.
 	const idle = 1500 * time.Millisecond
 	const windows = 4
 	var reads, sys int64
@@ -320,8 +286,6 @@ func TestIdleConnectionMakesNoReads(t *testing.T) {
 			s1, _ := processReadSyscalls()
 			sys = s1 - s0
 		}
-		// A few reads are the runtime's own and the shell's; a 100 ms poll
-		// on either loop is fifteen or more.
 		if reads == 0 && sys < 10 {
 			break
 		}
@@ -332,14 +296,9 @@ func TestIdleConnectionMakesNoReads(t *testing.T) {
 	if sys >= 10 {
 		t.Errorf("the process made %d read syscalls in %v while idle, in each of %d windows; a read loop is polling", sys, idle, windows)
 	}
-	// Silence is only the right answer from a connection that is still
-	// there. A loop that timed out and gave up is silent too, and the
-	// numbers above cannot tell the two apart.
 	rig.run(t, "printf 'ali''ve\\n'", "alive", 5*time.Second)
 }
 
-// processReadSyscalls reads the process's read syscall count from
-// /proc/self/io. The second result is false where that file does not exist.
 func processReadSyscalls() (int64, bool) {
 	data, err := os.ReadFile("/proc/self/io")
 	if err != nil {
@@ -384,8 +343,6 @@ func TestClientReadsAFrameInOneSyscall(t *testing.T) {
 		}
 	}
 	reads := rig.conn.reads.Load() - r0
-	// One read per frame, with room for a frame the kernel split in two.
-	// Three per frame is the shape being kept out.
 	if reads > int64(batches)*2 {
 		t.Errorf("%d frames took %d reads; a frame should take one", batches, reads)
 	}

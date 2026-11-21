@@ -80,8 +80,6 @@ func TestProtocolHeadingsNameRealVerbs(t *testing.T) {
 	}
 }
 
-// renderProtocolVerbsDoc writes the verb reference from the registry, one
-// section per verb in the order list-verbs uses.
 func renderProtocolVerbsDoc() string {
 	var b strings.Builder
 	w := func(parts ...string) {
@@ -143,7 +141,6 @@ func renderProtocolVerbsDoc() string {
 	return b.String()
 }
 
-// paramText is a param's description with its accepted values after it.
 func paramText(p verbParam) string {
 	s := cell(p.Description)
 	if len(p.Accepted) > 0 {
@@ -159,7 +156,6 @@ func paramText(p verbParam) string {
 	return s
 }
 
-// codeList writes values as code spans: `a`, `b` or `c`.
 func codeList(vals []string, last string) string {
 	quoted := make([]string, len(vals))
 	for i, v := range vals {
@@ -171,8 +167,6 @@ func codeList(vals []string, last string) string {
 	return strings.Join(quoted[:len(quoted)-1], ", ") + " " + last + " " + quoted[len(quoted)-1]
 }
 
-// oneLine joins a description onto one line.
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
-// cell makes s safe inside a table cell.
 func cell(s string) string { return strings.ReplaceAll(oneLine(s), "|", "\\|") }

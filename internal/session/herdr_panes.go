@@ -10,24 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
-// herdr's pane navigation, zoom, process and agent start methods, and
-// workspace.focus: the shapes of herdr's src/api/schema/panes.rs and
-// agents.rs at herdrTargetVersion. Tools built for herdr call them through
-// herdr's CLI: terminal-browser and terminal-code split, swap and find a
-// neighbour, the Vim navigation plugins step across panes, and the Telegram
-// bridges start agents and show a workspace.
-//
-// A neighbour is the pane focus moves to in tuios (layout.Neighbour), found
-// in the layout of the pane's tab that pane.layout reports. A session with no
-// client attached has no layout, its panes all hold the whole screen, and so
-// no pane has a neighbour.
-//
-// As for the rest of the API, each method is held to the caller's grants
-// before it changes anything: a read needs read, and a focus, swap or zoom
-// needs admin, as focus-window, set-layout and run-command do. agent.start
-// needs what start-agent needs and types with send-text.
-
-// herdrProcessInfo is herdr's PaneProcessInfo.
 type herdrProcessInfo struct {
 	PaneID              string             `json:"pane_id"`
 	ShellPID            int                `json:"shell_pid,omitzero"`
@@ -35,7 +17,6 @@ type herdrProcessInfo struct {
 	ForegroundProcesses []herdrProcessItem `json:"foreground_processes,omitempty"`
 }
 
-// herdrProcessItem is herdr's PaneProcessInfoProcess.
 type herdrProcessItem struct {
 	PID     int      `json:"pid"`
 	Name    string   `json:"name"`
@@ -45,7 +26,6 @@ type herdrProcessItem struct {
 	Cwd     string   `json:"cwd,omitempty"`
 }
 
-// herdrNeighbor is herdr's PaneNeighborResult.
 type herdrNeighbor struct {
 	PaneID         string      `json:"pane_id"`
 	Direction      string      `json:"direction"`
@@ -53,8 +33,6 @@ type herdrNeighbor struct {
 	Layout         herdrLayout `json:"layout"`
 }
 
-// herdrEdges is herdr's PaneEdgesResult: true on a side where the pane is at
-// the edge of its tab.
 type herdrEdges struct {
 	PaneID string      `json:"pane_id"`
 	Left   bool        `json:"left"`
@@ -64,7 +42,6 @@ type herdrEdges struct {
 	Layout herdrLayout `json:"layout"`
 }
 
-// herdrFocusMove is herdr's PaneFocusDirectionResult.
 type herdrFocusMove struct {
 	Changed       bool        `json:"changed"`
 	Reason        string      `json:"reason,omitempty"`
@@ -73,7 +50,6 @@ type herdrFocusMove struct {
 	Layout        herdrLayout `json:"layout"`
 }
 
-// herdrSwap is herdr's PaneSwapResult.
 type herdrSwap struct {
 	Changed       bool        `json:"changed"`
 	Reason        string      `json:"reason,omitempty"`
@@ -83,7 +59,6 @@ type herdrSwap struct {
 	Layout        herdrLayout `json:"layout"`
 }
 
-// herdrZoom is herdr's PaneZoomResult.
 type herdrZoom struct {
 	Changed       bool        `json:"changed"`
 	ZoomChanged   bool        `json:"zoom_changed"`
@@ -95,7 +70,6 @@ type herdrZoom struct {
 	Layout        herdrLayout `json:"layout"`
 }
 
-// herdrSite is a pane with the layout of its tab.
 type herdrSite struct {
 	sess   *Session
 	win    WindowState
@@ -103,8 +77,6 @@ type herdrSite struct {
 	layout herdrLayout
 }
 
-// herdrSiteOf finds the pane id names, or with none the focused pane, and
-// the layout of its tab. The caller must be allowed to read the session.
 func (d *Daemon) herdrSiteOf(cs *connState, id string) (*herdrSite, *herdrError) {
 	if id == "" {
 		if id = d.buildHerdrView(cs).focusedPane; id == "" {
@@ -123,8 +95,6 @@ func (d *Daemon) herdrSiteOf(cs *connState, id string) (*herdrSite, *herdrError)
 	return nil, herdrErr("pane_layout_unavailable", "pane layout unavailable")
 }
 
-// neighbour is the pane focus moves to from the site's pane toward side, ""
-// for none: the one tuios's own directional focus picks.
 func (s *herdrSite) neighbour(side string) string {
 	sd, ok := tlayout.ParseSide(side)
 	if !ok {
@@ -150,7 +120,6 @@ func (s *herdrSite) neighbour(side string) string {
 	return ""
 }
 
-// herdrDirection checks a pane direction, in serde's words.
 func herdrDirection(dir string) *herdrError {
 	if _, ok := tlayout.ParseSide(dir); ok {
 		return nil
@@ -158,7 +127,6 @@ func herdrDirection(dir string) *herdrError {
 	return herdrErr("invalid_request", "invalid request: unknown variant `"+echoName(dir)+"`, expected one of `left`, `right`, `up`, `down`")
 }
 
-// herdrAdmit holds the caller to what verb needs on the session.
 func (d *Daemon) herdrAdmit(cs *connState, verb string, sess *Session) *herdrError {
 	if _, _, verr := d.admitVerb(cs, verb, herdrSessionParams(sess)); verr != nil {
 		return herdrFromVerb(verr, "forbidden")
@@ -176,11 +144,6 @@ func (d *Daemon) herdrPaneProcessInfo(cs *connState, in *herdrIn) (*herdrResult,
 		return nil, herdrErr("pane_not_found", "pane not found")
 	}
 	info := &herdrProcessInfo{PaneID: site.pane.PaneID, ShellPID: pty.ShellPID()}
-	// A command line and a directory can carry what never shows on the
-	// screen: a token passed as an argument, a private path. The read grant
-	// shows the screen, so it gets the pids and names. The arguments and the
-	// directories go to the person, to the pane itself, and to a pane that
-	// may type into this one (write on its session, or admin).
 	full := true
 	if pa := d.paneAuthority(cs); pa != nil && pa.window != site.win.ID {
 		full = (pa.grants.Has(GrantAdmin) || pa.grants.Has(GrantWrite)) && d.paneWriteReach(pa, site.sess.Name()) == ""
@@ -273,10 +236,6 @@ func (d *Daemon) herdrPaneFocusDirection(cs *connState, in *herdrIn) (*herdrResu
 	return &herdrResult{Type: "pane_focus_direction", Focus: res}, nil
 }
 
-// herdrPaneSwap swaps a pane with its neighbour, or two named panes of one
-// tab, as swap-window does, and leaves the focus on the source, as herdr
-// does. A swap that cannot happen answers with a reason and changes
-// nothing, as in herdr.
 func (d *Daemon) herdrPaneSwap(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	directional := in.Direction != ""
 	if directional == (in.SourcePaneID != "" || in.TargetPaneID != "") {
@@ -338,7 +297,6 @@ func (d *Daemon) herdrPaneSwap(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		if verr := d.swapPanes(site.sess, src, dst); verr != nil {
 			return nil, herdrFromVerb(verr, "pane_swap_failed")
 		}
-		// herdr leaves the focus on the source pane.
 		if site.sess.GetState().FocusedWindowID != src.ID {
 			_ = site.sess.FocusDaemonWindow(src.ID)
 		}
@@ -351,8 +309,6 @@ func (d *Daemon) herdrPaneSwap(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	return &herdrResult{Type: "pane_swap", Swap: res}, nil
 }
 
-// herdrRouteClient sends one command to the client attached to sess and
-// waits for it to be done. See routeTape.
 func (d *Daemon) herdrRouteClient(sess *Session, command, fail string, args ...string) *herdrError {
 	if verr := d.routeTape(sess, command, "", args); verr != nil {
 		return herdrFromVerb(verr, fail)
@@ -360,9 +316,6 @@ func (d *Daemon) herdrRouteClient(sess *Session, command, fail string, args ...s
 	return nil
 }
 
-// herdrPaneZoom zooms a pane, the way herdr zooms a tab: the pane is focused,
-// and a tab is zoomed on its focused pane or not at all. The daemon focuses
-// the pane and sets the zoom, as zoom-window does.
 func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	mode := in.Mode
 	switch mode {
@@ -412,9 +365,6 @@ func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdr
 		}
 		res.ZoomChanged = true
 	}
-	// The client pushes its state before it answers, but a push from an
-	// earlier change can still be on its way. The answer waits, bounded, for
-	// the state that shows the zoom where it was asked for.
 	done := func(st *SessionState) bool {
 		z := herdrZoomedIn(st, site.win.Workspace)
 		return st.FocusedWindowID == site.win.ID && (want && z == site.win.ID || !want && z == "")
@@ -428,7 +378,6 @@ func (d *Daemon) herdrPaneZoom(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	return &herdrResult{Type: "pane_zoom", Zoom: res}, nil
 }
 
-// herdrZoomedIn is the window zoomed on workspace ws, "" for none.
 func herdrZoomedIn(st *SessionState, ws int) string {
 	for i := range st.Windows {
 		if w := &st.Windows[i]; w.Workspace == ws && w.Zoomed && !herdrScratch(w) {
@@ -438,11 +387,6 @@ func herdrZoomedIn(st *SessionState, ws int) string {
 	return ""
 }
 
-// herdrWorkspaceFocus shows a session on the client the caller is shown
-// on: the client of the caller's own session for a caller in a pane, else
-// the client of the session herdr calls the active workspace. The client
-// switches to the session, as it does when the person picks it in
-// go-to.
 func (d *Daemon) herdrWorkspaceFocus(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	sess, ierr := d.herdrFindSession(in.WorkspaceID)
 	if ierr != nil {
@@ -461,12 +405,6 @@ func (d *Daemon) herdrWorkspaceFocus(cs *connState, in *herdrIn) (*herdrResult, 
 	return d.herdrWorkspaceInfo(cs, in.WorkspaceID)
 }
 
-// herdrShowSession has an attached client show sess, as herdr's active
-// workspace follows workspace.focus and pane.focus. The client moved is the
-// one that shows the caller's own session, else the one that shows the
-// active workspace, and it switches the way go-to does. It
-// reports whether a client shows sess afterwards: false when none is
-// attached to move.
 func (d *Daemon) herdrShowSession(cs *connState, sess *Session, fail string) (bool, *herdrError) {
 	if d.findTUIClient(sess.ID) != nil {
 		return true, nil
@@ -484,12 +422,10 @@ func (d *Daemon) herdrShowSession(cs *connState, sess *Session, fail string) (bo
 	if herr := d.herdrRouteClient(from, "switch_session", fail, sess.Name()); herr != nil {
 		return false, herr
 	}
-	// The client answers before it switches, so wait for the switch to show.
 	sess.waitChange(routedVerbTimeout, func() bool { return d.findTUIClient(sess.ID) != nil })
 	return true, nil
 }
 
-// herdrAgentNameOK is herdr's rule for an agent name.
 func herdrAgentNameOK(name string) bool {
 	if name == "" || len(name) > 32 || name[0] < 'a' || name[0] > 'z' {
 		return false
@@ -502,11 +438,6 @@ func herdrAgentNameOK(name string) bool {
 	return true
 }
 
-// herdrAgentStart starts an agent in a pane that sits at its shell prompt,
-// as herdr's agent.start does: the pane takes the agent's name, and the
-// agent's command is typed at the prompt. tuios then finds the agent by its
-// process, as for one a person starts. The caller needs what start-agent
-// needs in the session, and the typing is held to send-text's checks.
 func (d *Daemon) herdrAgentStart(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	if !herdrAgentNameOK(in.Name) {
 		return nil, herdrErr("invalid_agent_name", "agent name must start with a lowercase letter and contain only lowercase letters, digits, '-' or '_' (1-32 characters)")
@@ -551,8 +482,6 @@ func (d *Daemon) herdrAgentStart(cs *connState, in *herdrIn) (*herdrResult, *her
 	if pty == nil || pty.IsExited() {
 		return nil, herdrErr("agent_pane_unavailable", "agent target pane "+paneID+" has no live terminal")
 	}
-	// A pane whose foreground the kernel does not report is refused too:
-	// typing an agent's command into an unknown program is not safe.
 	if (win.AgentHarness != "" && win.AgentState != AgentStateNone) || !shellAtPrompt(pty) {
 		return nil, herdrErr("agent_pane_busy", "agent target pane "+paneID+" is not an available shell")
 	}
@@ -566,9 +495,6 @@ func (d *Daemon) herdrAgentStart(cs *connState, in *herdrIn) (*herdrResult, *her
 		}
 		quoted[i] = q
 	}
-	// The name goes first, so the pane is found by it as soon as the agent
-	// is. It is a rename, so it runs as the caller through set-window and
-	// needs what pane.rename needs. A refused typing takes it back off.
 	name := func(n string) *verbError {
 		_, verr := d.callVerb(cs, "set-window", herdrArgs{Session: sess.Name(), Window: win.ID, Name: &n})
 		return verr
@@ -592,8 +518,6 @@ func (d *Daemon) herdrAgentStart(cs *connState, in *herdrIn) (*herdrResult, *her
 	return &herdrResult{Type: "agent_started", Agent: &info, Argv: argv}, nil
 }
 
-// herdrPaneShell is the name of the shell a pane runs: its process name,
-// without the "-" of a login shell. "" when it cannot be read.
 func herdrPaneShell(pid int) string {
 	if pid <= 0 {
 		return ""
@@ -606,21 +530,12 @@ func herdrPaneShell(pid int) string {
 	return strings.TrimPrefix(name, "-")
 }
 
-// herdrPlainWord reports whether s needs no quoting in any shell tuios
-// types into: letters, digits and -_./:+@, and not a leading = (zsh
-// expands =cmd to the path of cmd). A % is quoted, as fish expands %self.
 func herdrPlainWord(s string) bool {
 	return s != "" && s[0] != '=' && !strings.ContainsFunc(s, func(r rune) bool {
 		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_./:=+@,", r))
 	})
 }
 
-// herdrShellQuote quotes one word for the shell named, so the shell reads it
-// back as the same single word. A POSIX shell (sh, bash, zsh and the rest)
-// takes everything inside single quotes as it is, and a quote is closed,
-// escaped and opened again. fish reads a backslash and a quote as escapes inside single
-// quotes, so both are escaped. Any other shell gets plain words only: ok is
-// false for a word that would need quoting there.
 func herdrShellQuote(shell, s string) (string, bool) {
 	if herdrPlainWord(s) {
 		return s, true

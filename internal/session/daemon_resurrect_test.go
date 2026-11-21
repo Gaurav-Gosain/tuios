@@ -60,7 +60,6 @@ func TestResurrectionStateCapturesCwd(t *testing.T) {
 	if state.Windows[0].Cwd == "" {
 		t.Error("ResurrectionState did not capture the shell cwd")
 	}
-	// The shell inherits the test process cwd.
 	if wd, err := os.Getwd(); err == nil && state.Windows[0].Cwd != wd {
 		t.Errorf("captured cwd = %q, want %q", state.Windows[0].Cwd, wd)
 	}

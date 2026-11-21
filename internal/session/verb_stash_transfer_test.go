@@ -8,11 +8,6 @@ import (
 	"testing"
 )
 
-// A file crossing the socket as bytes: what a stash put from another machine
-// sends, and what a get hands back. The store is the same one a local put
-// fills, so a file that arrived as bytes is attachable, listed, deduped and
-// evicted like any other, and a get serves only what the store holds.
-
 func TestStashGetServesOnlyStashedFiles(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	sess := makeSessionWithWindow(t, d, "work")
@@ -32,14 +27,12 @@ func TestStashGetServesOnlyStashedFiles(t *testing.T) {
 		t.Fatalf("ASSERTION: stash-get did not hand back the bytes: %q", got)
 	}
 
-	// A file that is not in the stash is not served, however real it is.
 	secret := filepath.Join(t.TempDir(), "id_ed25519")
 	if err := os.WriteFile(secret, []byte("private"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	resp := c.call(t, fmt.Sprintf(`{"id":2,"verb":"stash-get","params":{"session":"work","path":%q}}`, secret))
 	mustRefuse(t, resp, ErrVerbInvalidParams, "stash-get served a file outside the stash")
-	// Nor is a stashed file of another session's.
 	other := makeSessionWithWindow(t, d, "other")
 	put2, err := d.stash.put(other.ID, src, nil)
 	if err != nil {

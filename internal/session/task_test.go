@@ -5,12 +5,6 @@ import (
 	"testing"
 )
 
-// The task cards' grants and their one race. The rest of the behaviour is
-// proved end to end in e2e/tui/tasks_test.go. See task.go.
-
-// panePlacer places each connection in the pane next names when the
-// connection makes its first call, and keeps it there. A test sets next before
-// the first call on each new connection.
 type panePlacer struct {
 	mu   sync.Mutex
 	next string
@@ -32,7 +26,6 @@ func placeConnections(d *Daemon) *panePlacer {
 	return p
 }
 
-// paneConn dials a connection that the placer puts in window.
 func (p *panePlacer) paneConn(t *testing.T, sp, window string) *verbConn {
 	t.Helper()
 	c := dialVerb(t, sp)
@@ -78,7 +71,6 @@ func TestTaskClaimNextFromTwoPanesAtOnce(t *testing.T) {
 		res := result(t, resp)
 		ids[res["id"].(string)] = true
 		if res["id"] == "t1" {
-			// The pane that did not take t1.
 			other = []string{b, a}[i]
 		}
 	}

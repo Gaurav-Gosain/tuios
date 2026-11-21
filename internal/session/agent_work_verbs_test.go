@@ -10,15 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// These tests pin the foundation of the agent review, triage, queue and
-// approval work: what each new verb may be called by, over which link
-// capability, and the wire fields it adds. The tables are the security model's
-// first line, so each entry is written out here rather than read back from the
-// table it checks.
-
-// agentWorkVerbTable is what each new verb needs: its restricted-connection
-// and pane-grant class, its link capabilities, and whether it types into a
-// pane.
 var agentWorkVerbTable = []struct {
 	verb   string
 	scope  scopeKind
@@ -82,7 +73,6 @@ func TestMarkAttentionIsThePersonsOnly(t *testing.T) {
 		mustRefuse(t, callP(c, t, "mark-attention", map[string]any{"id": "1", "action": "snooze", "for_ms": 1000, "human_nonce": nonce}),
 			ErrVerbNotHuman, "mark-attention with nonce "+nonce)
 	}
-	// The person passes the proof and reaches the item, which is not there.
 	tui := attachTUI(t, sp, "other")
 	mustRefuse(t, callP(c, t, "mark-attention", map[string]any{"id": "1", "action": "snooze", "for_ms": 1000, "human_nonce": tui.HumanNonce()}),
 		ErrVerbInvalidParams, "mark-attention from the person on an id that names nothing")
@@ -95,15 +85,12 @@ func TestMarkAttentionIsThePersonsOnly(t *testing.T) {
 // for verify-fan, types only into panes that hold nothing it does not, and
 // cannot keep a fan or touch the Inbox.
 func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
-	// The panes start outside any repository, so the review verbs answer
-	// not_repo past the grant check without reading one.
 	t.Chdir(t.TempDir())
 	d, sp, a1, a2, b1 := scopeFixture(t)
 	setStrict(d)
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
 
-	// Its own session: the grant check passes and the handler answers.
 	for verb, params := range map[string]map[string]any{
 		"review-diff": {"window": a2},
 		"review-note": {"action": "list", "window": a2},
@@ -111,20 +98,13 @@ func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
 	} {
 		wantReached(t, verb+" in the pane's own session", callP(c, t, verb, params))
 	}
-	// agent-activity is built: the grant check passes and it answers.
 	result(t, callP(c, t, "agent-activity", map[string]any{"window": a2}))
-	// The queue's verbs are built: they pass the grant check and answer.
 	result(t, callP(c, t, "list-queued", map[string]any{"window": a2}))
 	result(t, callP(c, t, "cancel-queued", map[string]any{"window": a2, "all": true}))
 	mustRefuse(t, callP(c, t, "queue-prompt", map[string]any{"window": a2, "text": "hi"}), ErrVerbInvalidParams, "queue-prompt in the pane's own session, for a pane with no agent")
-	// The built fan verbs pass the grant check and reach their handler, which
-	// answers for a session that is not a fan.
 	wantReached(t, "compare-fan in the pane's own session", callP(c, t, "compare-fan", map[string]any{}))
 	wantReached(t, "verify-fan in the pane's own session", callP(c, t, "verify-fan", map[string]any{"command": "true"}))
-	// get-approval is built: in its own session the grant check passes and
-	// the handler finds no such hold.
 	mustRefuse(t, callP(c, t, "get-approval", map[string]any{"request_id": "9f86d081884c7d65"}), ErrVerbInvalidParams, "get-approval in the pane's own session")
-	// Another session is out of reach for every one of them.
 	for verb, params := range map[string]map[string]any{
 		"review-diff":    {"session": "b", "window": b1},
 		"compare-fan":    {"session": "b"},
@@ -139,11 +119,9 @@ func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
 	} {
 		wantForbidden(t, verb+" in another session", callP(c, t, verb, params))
 	}
-	// The person's and admin's verbs.
 	wantForbidden(t, "keep-fan", callP(c, t, "keep-fan", map[string]any{"session": "a"}))
 	wantForbidden(t, "mark-attention", callP(c, t, "mark-attention", map[string]any{"id": "1", "action": "wake", "human_nonce": "x"}))
 
-	// read alone: no writes, no launch.
 	setStrict(d, "read")
 	for verb, params := range map[string]map[string]any{
 		"review-note":   {"action": "list", "window": a2},
@@ -168,14 +146,10 @@ func TestQueuedTypingIsHeldToTheTarget(t *testing.T) {
 
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	c := dialVerb(t, sp)
-	// a2 is on the open default, so it holds admin.
 	wantForbidden(t, "queue-prompt into an admin sibling", callP(c, t, "queue-prompt", map[string]any{"window": a2, "text": "hi"}))
 	wantForbidden(t, "send-review into an admin sibling", callP(c, t, "send-review", map[string]any{"window": a2}))
-	// Its own pane is its own to type into. It runs no agent, so the handler
-	// refuses what the grant check let through.
 	mustRefuse(t, callP(c, t, "queue-prompt", map[string]any{"window": a1, "text": "hi"}), ErrVerbInvalidParams, "queue-prompt into itself")
 
-	// A sibling that holds no more, on a prompt: respond is needed.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a2, "grants": []string{"read"}}))
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
@@ -244,7 +218,6 @@ func TestAgentWorkVerbsAreHeldToTheLinkPolicy(t *testing.T) {
 	mustRefuse(t, callP(opener, t, "verify-fan", map[string]any{"session": "work", "command": "true"}),
 		ErrVerbForbidden, "verify-fan from a machine that may open but not write")
 
-	// The default grants write and not respond.
 	anon := dialLink(t, sp)
 	wantReached(t, "review-diff with the default policy", callP(anon, t, "review-diff", map[string]any{"session": "work", "window": a}))
 	mustRefuse(t, callP(anon, t, "mark-attention", map[string]any{"id": "1", "action": "wake", "human_nonce": "x"}),
@@ -262,8 +235,6 @@ func TestNewParamsOfOlderVerbsDoNothingUntilBuilt(t *testing.T) {
 	c := dialVerb(t, sp)
 	tui := attachTUI(t, sp, "other")
 
-	// The risk, plan and deny reason fields are built and tested in
-	// approval_risk_test.go. The kind is still checked here.
 	setAgentState(t, c, "work", a, "needs_input", "approval", testHeldLine)
 	mustRefuse(t, callP(c, t, "request-approval", map[string]any{"session": "work", "window": a, "harness": "claude", "summary": testHeldLine, "kind": "poem"}),
 		ErrVerbInvalidParams, "an unknown kind")
@@ -271,7 +242,6 @@ func TestNewParamsOfOlderVerbsDoNothingUntilBuilt(t *testing.T) {
 		t.Fatalf("a refused request held something: %v", items)
 	}
 
-	// A reply without the new fields is answered as before.
 	pending, _ := requestApproval(t, sp, "work", a, "once", "deny")
 	id := heldItem(t, c, a)["request_id"].(string)
 	res := result(t, reply(c, t, id, ApprovalOnce, tui.HumanNonce()))
@@ -280,8 +250,6 @@ func TestNewParamsOfOlderVerbsDoNothingUntilBuilt(t *testing.T) {
 	}
 	awaitResult(t, pending)
 
-	// activity rides a state report, so the state still applies; its shape is
-	// still checked.
 	res = result(t, callP(c, t, "set-agent-state", map[string]any{"session": "work", "window": b, "state": "working",
 		"activity": map[string]any{"event": "tool", "tool": "Bash", "target": "go test ./..."}}))
 	if res["applied"] != true {
@@ -293,14 +261,12 @@ func TestNewParamsOfOlderVerbsDoNothingUntilBuilt(t *testing.T) {
 		t.Errorf("a refused report moved the pane to %s", w.AgentState.Name())
 	}
 
-	// Nothing is snoozed, so include_snoozed lists what the list lists.
 	plain, _ := listAttention(t, c, "")
 	with, _ := listAttention(t, c, `{"include_snoozed":true}`)
 	if len(plain) != len(with) {
 		t.Errorf("include_snoozed listed %d items, the plain list %d", len(with), len(plain))
 	}
 
-	// get-agent-state and list-agents say how much is queued.
 	got := result(t, callP(c, t, "get-agent-state", map[string]any{"session": "work", "window": b}))
 	if got["queued"] != float64(0) {
 		t.Errorf("get-agent-state queued = %v, want 0", got["queued"])
@@ -329,7 +295,6 @@ func TestAttentionItemWireIsAdditive(t *testing.T) {
 	if !attentionSame(in, out) || out.PlanSHA != "ab12" || out.SnoozedUntil != -1 {
 		t.Errorf("round trip lost a field: %+v", out)
 	}
-	// An older reader, which knows none of them, still decodes the item.
 	var old struct {
 		ID   string `json:"id"`
 		Kind string `json:"kind"`
@@ -374,8 +339,6 @@ func TestTheQueueCountIsTheDaemons(t *testing.T) {
 	if w.AgentQueued != 0 {
 		t.Errorf("a restored pane still counts %d queued", w.AgentQueued)
 	}
-	// It reaches a client listing another session, and a change to it is a
-	// change the listing compares.
 	if windowSummariesAgree(WindowSummary{ID: "a", AgentQueued: 1}, WindowSummary{ID: "a"}) {
 		t.Error("two summaries that differ in the queue agree")
 	}

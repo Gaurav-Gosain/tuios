@@ -16,11 +16,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// These run on whichever emulator the build links: the pure one by default and
-// libghostty under -tags ghostty, which CI runs over this package. So each
-// round trip is proven on both backends, save and restore alike.
-
-// rowText is one row of cells as text, trailing blanks trimmed.
 func rowText(line uv.Line) string {
 	var b strings.Builder
 	for _, c := range line {
@@ -46,7 +41,6 @@ func screenRow(t vt.Terminal, y int) uv.Line {
 	return line
 }
 
-// allRows is every history row and then every screen row, as text.
 func allRows(t vt.Terminal) []string {
 	var out []string
 	for i := range t.ScrollbackLen() {
@@ -58,8 +52,6 @@ func allRows(t vt.Terminal) []string {
 	return out
 }
 
-// throughDisk saves the emulator's history as a pane's file would hold it and
-// reads it back.
 func throughDisk(t *testing.T, term vt.Terminal, lines int) *savedHistory {
 	t.Helper()
 	at := time.Date(2026, 9, 30, 14, 2, 0, 0, time.Local)
@@ -91,7 +83,6 @@ func TestHistoryRoundTripKeepsTextStylesWideRunesAndWraps(t *testing.T) {
 	}
 	in.WriteString("\x1b[1;31mBOLDRED\x1b[0m \x1b[48;2;10;20;30mTRUEBG\x1b[0m\r\n")
 	in.WriteString("wide 日本語 end\r\n")
-	// 100 letters in an 80-column pane: the emulator wraps it, a soft wrap.
 	in.WriteString(strings.Repeat("w", 100))
 	in.WriteString("\r\n")
 	in.WriteString("$ ")
@@ -103,7 +94,6 @@ func TestHistoryRoundTripKeepsTextStylesWideRunesAndWraps(t *testing.T) {
 	dst := newRestoredEmulator(80, 8, 1000, "/tmp/x", &restoreSpec{history: h, savedCwd: "/tmp/x"})
 	rows := allRows(dst)
 
-	// Every line, in order, then the prompt it was sitting at, then the divider.
 	prev := -1
 	for i := 1; i <= 30; i++ {
 		at := indexOf(rows, fmt.Sprintf("line-%02d", i))
@@ -127,12 +117,10 @@ func TestHistoryRoundTripKeepsTextStylesWideRunesAndWraps(t *testing.T) {
 	if want := "-- tuios: restored from Sep 30 14:02, fresh shell in /tmp/x --"; rows[divider] != want {
 		t.Errorf("divider %q, want %q", rows[divider], want)
 	}
-	// The cursor waits under the divider, where the new shell prints.
 	if y := dst.CursorPosition().Y + dst.ScrollbackLen(); y != divider+1 {
 		t.Errorf("cursor on row %d, want %d (under the divider)", y, divider+1)
 	}
 
-	// Styles, from the history or the screen, wherever the row landed.
 	cellAt := func(row, x int) *uv.Cell {
 		if row < dst.ScrollbackLen() {
 			line := dst.ScrollbackLine(row)
@@ -165,7 +153,6 @@ func TestHistoryRoundTripKeepsTextStylesWideRunesAndWraps(t *testing.T) {
 		t.Errorf("wide rune cell %+v, want 日 of width 2", c)
 	}
 
-	// The wrapped line still says it carries on, so a later resize reflows it.
 	wrapped := indexOf(rows, strings.Repeat("w", 80))
 	if wrapped < 0 || rows[wrapped+1] != strings.Repeat("w", 20) {
 		t.Fatalf("wrapped line missing; rows:\n%s", strings.Join(rows, "\n"))
@@ -198,7 +185,7 @@ func TestHistoryRestoreAtAnotherWidth(t *testing.T) {
 		t.Errorf("lines lost; rows:\n%s", strings.Join(rows, "\n"))
 	}
 	if indexOf(rows, strings.Repeat("r", 30)) >= 0 {
-		return // reflowed
+		return
 	}
 	half := indexOf(rows, strings.Repeat("r", 20))
 	if half < 0 || rows[half+1] != strings.Repeat("r", 10) {
@@ -251,14 +238,11 @@ func TestHistoryLinesBound(t *testing.T) {
 		t.Fatalf("saved %d history rows, want 50", got)
 	}
 	rows := allRows(newRestoredEmulator(40, 5, 1000, "", &restoreSpec{history: h}))
-	// 50 history rows and the 5-row screen: n247 to n300.
 	if indexOf(rows, "n246") >= 0 || indexOf(rows, "n247") < 0 || indexOf(rows, "n300") < 0 {
 		t.Errorf("wrong rows kept:\n%s", strings.Join(rows, "\n"))
 	}
 }
 
-// historyTestSession is a session with fake panes: an emulator each and no
-// process, which is all saveHistory reads.
 func historyTestSession(t *testing.T, name string, pol HistoryPolicy, panes map[string]string) (*Session, *SessionState) {
 	t.Helper()
 	s := &Session{ptys: map[string]*PTY{}, config: &SessionConfig{history: &pol}}
@@ -307,7 +291,6 @@ func TestHistoryFilesArePrivateAndPrunedWithThePane(t *testing.T) {
 		t.Errorf("history dir: %v, %v, want mode 0700", fi, err)
 	}
 
-	// Pane b closes: its file goes on the next save.
 	state.Windows = state.Windows[:0]
 	state.Windows = append(state.Windows, WindowState{ID: "win-a", PTYID: "pty-win-a"})
 	s.saveHistory(state, true)
@@ -318,7 +301,6 @@ func TestHistoryFilesArePrivateAndPrunedWithThePane(t *testing.T) {
 		t.Errorf("an open pane's history went: %v", err)
 	}
 
-	// A rename takes the history along; a kill removes it.
 	moveHistory("priv", "priv2")
 	if _, err := os.Stat(testHistoryPath("priv2", "win-a")); err != nil {
 		t.Errorf("the history did not follow the rename: %v", err)
@@ -340,19 +322,16 @@ func TestHistorySaveIsThrottledAndSkipsIdlePanes(t *testing.T) {
 		t.Fatalf("first save: %v", err)
 	}
 
-	// New output inside the interval: not written yet.
 	writePane(s.ptys["pty-win"], "two\r\n")
 	s.saveHistory(state, false)
 	if now, _ := os.ReadFile(path); !bytes.Equal(now, first) {
 		t.Error("a pane was rewritten inside the save interval")
 	}
-	// The final save writes it whatever the interval.
 	s.saveHistory(state, true)
 	second, _ := os.ReadFile(path)
 	if bytes.Equal(second, first) {
 		t.Fatal("the forced save did not write the new output")
 	}
-	// Nothing new: not even a forced save rewrites it.
 	_ = os.Remove(path)
 	s.saveHistory(state, true)
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -362,10 +341,9 @@ func TestHistorySaveIsThrottledAndSkipsIdlePanes(t *testing.T) {
 
 func TestHistoryPaneAndSessionByteBounds(t *testing.T) {
 	defer useResurrectionDir(t.TempDir())()
-	// Output that does not compress to nothing, so the bound bites.
 	big := manyLines("row", 4000)
 
-	pol := ResolveHistoryPolicy(nil, 5000, 16) // 16 KiB a pane
+	pol := ResolveHistoryPolicy(nil, 5000, 16)
 	s, state := historyTestSession(t, "bound", pol, map[string]string{"win": big})
 	s.saveHistory(state, true)
 	fi, err := os.Stat(testHistoryPath("bound", "win"))
@@ -380,12 +358,10 @@ func TestHistoryPaneAndSessionByteBounds(t *testing.T) {
 		t.Fatal("the bounded file does not load")
 	}
 	rows := allRows(newRestoredEmulator(40, 6, 5000, "", &restoreSpec{history: h}))
-	// The newest rows are the ones kept.
 	if indexOf(rows, strings.TrimRight(fmt.Sprintf("row-%05d %s", 3999, strings.Repeat("x", 3999%31)), " ")) < 0 {
 		t.Errorf("the newest row was not kept")
 	}
 
-	// The session bound: a second pane gets what is left, and no more.
 	prev := historySessionBytes
 	historySessionBytes = fi.Size() + 4<<10
 	defer func() { historySessionBytes = prev }()
@@ -548,7 +524,7 @@ func TestHistoryTruncatedFileIsCorrupt(t *testing.T) {
 		t.Error("a file cut 4 bytes short decoded as valid")
 	}
 	bad := bytes.Clone(data)
-	bad[len(bad)-6] ^= 0xff // the checksum
+	bad[len(bad)-6] ^= 0xff
 	if _, err := decodeHistory(bytes.NewReader(bad)); err == nil {
 		t.Error("a file with a wrong checksum decoded as valid")
 	}
@@ -581,8 +557,6 @@ func TestHistoryWriteIgnoresWhatIsAlreadyThere(t *testing.T) {
 	if err := os.Chmod(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A leftover temporary file with a wide mode, and a planted symlink at
-	// the name a fixed temporary file would take.
 	if err := os.WriteFile(path+".tmp", []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -611,7 +585,6 @@ func TestHistoryWriteIgnoresWhatIsAlreadyThere(t *testing.T) {
 		t.Errorf("session history dir is %v, want 0700", di.Mode().Perm())
 	}
 
-	// And a leftover 0644 file at the old fixed name does not lend its mode.
 	_ = os.Remove(path + ".tmp")
 	if err := os.WriteFile(path+".tmp", []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
@@ -664,8 +637,6 @@ func TestKillSessionDoesNotSaveHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	sess.UpdateState(&SessionState{Name: "doomed", Windows: []WindowState{{ID: "win-1", PTYID: pty.ID}}})
-	// Saved once, so the periodic saver waits out the hour, and then given
-	// output the forced save on a stop would write.
 	sess.persistMu.Lock()
 	sess.saveHistory(sess.ResurrectionState(), true)
 	sess.persistMu.Unlock()
@@ -746,7 +717,6 @@ func TestHistoryOtherVersionIsSkippedNotDeleted(t *testing.T) {
 	}
 }
 
-// packedScrollbackRows is how many history rows a packed state holds.
 func packedScrollbackRows(t *testing.T, st *TerminalState) int {
 	t.Helper()
 	cp := *st
@@ -756,8 +726,6 @@ func packedScrollbackRows(t *testing.T, st *TerminalState) int {
 	return len(cp.Scrollback)
 }
 
-// testStatePath, testHistoryDir and testHistoryPath are the path helpers for
-// names a test chose, which are always valid.
 func testStatePath(name string) string { return mustPath(getResurrectionPath(name)) }
 
 func testHistoryDir(name string) string { return mustPath(historyDir(name)) }

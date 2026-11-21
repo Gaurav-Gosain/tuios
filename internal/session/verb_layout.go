@@ -16,43 +16,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// This file holds the verbs that arrange a session: where a window is, which
-// one has the focus, which workspace is showing, and how the panes are laid
-// out. Every one of them was reachable only by sending the keybinding that
-// triggers it, which meant a caller had to know the user's keymap, had to have
-// a client attached for the keys to land anywhere, and got back nothing but
-// "ok" whether or not the arrangement changed.
-//
-// The split between what runs here and what is routed to an attached client is
-// not arbitrary. The daemon owns the window set, so which workspace a window is
-// on and which window has the focus are its facts and it answers them itself,
-// attached or not. Geometry is the client's: only a renderer knows the viewport,
-// so anything that needs to measure it (a direction, a tiling scheme, a split
-// ratio) is routed, and says needs_client when nobody is there to measure.
-
-// focusRelatives are the positional focus moves that need no viewport, so the
-// daemon can serve them on a detached session.
 var focusRelatives = []string{"next", "prev"}
 
-// focusDirections are the spatial focus moves. They need a renderer, because
-// "the pane to the left" is a question about geometry the daemon does not have.
 var focusDirections = []string{"left", "right", "up", "down"}
 
-// splitDirections are the two ways a pane can be divided. They are the axis of
-// the cut, which is the vocabulary the tiling code and the keybindings both
-// already use; left/right/up/down name a neighbour, which is focus-window's
-// question, not this one.
 var splitDirections = []string{"horizontal", "vertical"}
 
-// splitSides are the sides of the split pane the new pane can take. A side
-// is a direction and a placement in one: left and right cut the vertical
-// axis, up and down the horizontal one.
 var splitSides = []string{"left", "right", "up", "down"}
 
-// verbFocusWindow moves the focus, by target, by position, or by direction.
-//
-// One verb rather than three because the caller's question is always "focus
-// this" and only the way it names the pane changes.
 func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string `json:"session"`
@@ -87,11 +58,6 @@ func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *v
 		if err := sess.FocusDaemonWindow(p.Window); err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
-		// A focus names a pane to look at, so a minimized one is restored
-		// (issue 1731), the way set-window --restore does it: on the
-		// daemon's state, which every client adopts. The client's own
-		// restore, from revealFocus, lands in a push older than this change
-		// and loses to it, so the daemon cannot leave it to the client.
 		sess.RestoreFocusedDaemonWindow()
 		d.revealFocus(sess)
 
@@ -114,8 +80,6 @@ func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *v
 		if !slices.Contains(focusDirections, p.Direction) {
 			return nil, invalidParam("direction", "unknown direction "+echoName(p.Direction), focusDirections...)
 		}
-		// A direction is a question about the viewport, so it only has an answer
-		// where there is one.
 		if verr := d.routeTape(sess, "tape_command", "FocusDirection", []string{p.Direction}); verr != nil {
 			return nil, verr
 		}
@@ -124,14 +88,6 @@ func (d *Daemon) verbFocusWindow(cs *connState, params json.RawMessage) (any, *v
 	return focusResult(sess), nil
 }
 
-// revealFocus asks the attached client to focus the pane the session's focus
-// is on, so the client shows it as a pane the user asked for: in the
-// scrolling layout that is the whole column, as after a focus key. The state
-// push alone reaches the client as a focus moved for some other reason, and
-// a column partly on screen then stays cut off at the edge.
-//
-// It is best effort. The focus is already the session's, and a session with
-// no client attached has no screen to show it on.
 func (d *Daemon) revealFocus(sess *Session) {
 	st := sess.GetState()
 	if st == nil || st.FocusedWindowID == "" || d.findTUIClient(sess.ID) == nil {
@@ -140,9 +96,6 @@ func (d *Daemon) revealFocus(sess *Session) {
 	_ = d.routeTape(sess, "tape_command", "FocusWindow", []string{st.FocusedWindowID})
 }
 
-// focusResult reports where the focus ended up. Naming the pane rather than
-// acknowledging the call is what lets a caller confirm a relative or directional
-// move did what it meant, since neither says in advance which pane it lands on.
 func focusResult(sess *Session) map[string]any {
 	state := sess.GetState()
 	out := map[string]any{
@@ -156,13 +109,6 @@ func focusResult(sess *Session) map[string]any {
 	return out
 }
 
-// verbMoveWindow moves a window to another workspace, optionally following it.
-// With to_session it moves the window to another session.
-//
-// The tape command behind this only ever moved the focused window, so moving a
-// named one meant focusing it first, which is a visible change to the session
-// the caller did not ask for and cannot undo without knowing what was focused
-// before.
 func (d *Daemon) verbMoveWindow(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string `json:"session"`
@@ -212,8 +158,6 @@ func (d *Daemon) verbMoveWindow(cs *connState, params json.RawMessage) (any, *ve
 		}
 		target = id
 	}
-	// Resolve to an id first so the result can name the window that moved even
-	// when the caller addressed it by index or by a prefix.
 	state := sess.GetState()
 	idx, err := findWindowStateIndex(state.Windows, target)
 	if err != nil {
@@ -241,8 +185,6 @@ func (d *Daemon) verbMoveWindow(cs *connState, params json.RawMessage) (any, *ve
 	}, nil
 }
 
-// moveWindowAcross is move-window with to_session: the window leaves sess and
-// joins the session toName names, with its process still running.
 func (d *Daemon) moveWindowAcross(cs *connState, sess *Session, target, toName string, workspace int, follow bool) (any, *verbError) {
 	dst := d.findTargetSession(cs, toName)
 	if dst == nil {
@@ -311,10 +253,6 @@ func (d *Daemon) moveWindowAcross(cs *connState, sess *Session, target, toName s
 	}, nil
 }
 
-// moveErr classifies a workspace mutation failure. An out-of-range workspace is
-// a bad parameter with a knowable bound, not an unresolvable target, and a
-// caller has to be able to tell those apart to know whether retrying with a
-// different number could work.
 func moveErr(err error, sess *Session, ws int) *verbError {
 	if strings.Contains(err.Error(), "out of range") {
 		return hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
@@ -326,11 +264,6 @@ func moveErr(err error, sess *Session, ws int) *verbError {
 	return mapResolveErr(err, sess)
 }
 
-// verbSelectWorkspace shows a workspace.
-//
-// Named select- rather than set- because the two set-workspace verbs that
-// already exist change a workspace's label and its order, and this changes
-// neither: it changes which one you are looking at.
 func (d *Daemon) verbSelectWorkspace(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string `json:"session"`
@@ -366,12 +299,6 @@ func (d *Daemon) verbSelectWorkspace(cs *connState, params json.RawMessage) (any
 	}, nil
 }
 
-// verbSetWindow changes a window's own properties: what it is called and whether
-// it is minimized.
-//
-// One verb with optional fields rather than rename-window plus minimize-window
-// plus restore-window, which would be three verbs that differ by a word and
-// three round trips to apply together.
 func (d *Daemon) verbSetWindow(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string  `json:"session"`
@@ -416,8 +343,6 @@ func (d *Daemon) verbSetWindow(cs *connState, params json.RawMessage) (any, *ver
 		}
 	}
 
-	// Report the window as it now stands rather than echoing the request, so a
-	// caller that cleared a name sees what it fell back to.
 	state = sess.GetState()
 	idx, err = findWindowStateIndex(state.Windows, windowID)
 	if err != nil {
@@ -428,12 +353,6 @@ func (d *Daemon) verbSetWindow(cs *connState, params json.RawMessage) (any, *ver
 	return out, nil
 }
 
-// verbListWorkspaces reports every workspace with what is on it.
-//
-// The facts were spread across two verbs and neither answered the question: a
-// caller wanting to know where to put a pane had to read the workspace count and
-// the names from session-info, the per-workspace tallies from list-windows, and
-// join them itself.
 func (d *Daemon) verbListWorkspaces(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -459,8 +378,6 @@ func (d *Daemon) verbListWorkspaces(cs *connState, params json.RawMessage) (any,
 		if state.WorkspaceFocus != nil {
 			entry["focused_window_id"] = state.WorkspaceFocus[ws]
 		}
-		// The windows focused there, newest first, so a caller can name the
-		// one before the current (tmux's last-pane).
 		if history := state.FocusHistory[ws]; len(history) > 0 {
 			entry["focus_history"] = history
 		}
@@ -475,7 +392,6 @@ func (d *Daemon) verbListWorkspaces(cs *connState, params json.RawMessage) (any,
 	}, nil
 }
 
-// countOnWorkspace counts the windows sitting on one workspace.
 func countOnWorkspace(state *SessionState, ws int) int {
 	n := 0
 	for i := range state.Windows {
@@ -486,18 +402,12 @@ func countOnWorkspace(state *SessionState, ws int) int {
 	return n
 }
 
-// verbSetLayout turns tiling on or off and evens out the splits.
-//
-// Both are routed. Tiling is a geometry the renderer computes, and a daemon
-// that recorded the flag without one would report a layout the session is not
-// actually in, which is worse than refusing.
 func (d *Daemon) verbSetLayout(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session  string `json:"session"`
-		Tiling   *bool  `json:"tiling"`
-		Equalize bool   `json:"equalize"`
-		Rotate   bool   `json:"rotate"`
-		// The master-stack shape of the current workspace.
+		Session        string `json:"session"`
+		Tiling         *bool  `json:"tiling"`
+		Equalize       bool   `json:"equalize"`
+		Rotate         bool   `json:"rotate"`
 		MasterPosition string `json:"master_position"`
 		MasterCount    int    `json:"master_count"`
 	}
@@ -518,9 +428,6 @@ func (d *Daemon) verbSetLayout(cs *connState, params json.RawMessage) (any, *ver
 		return nil, verr
 	}
 
-	// Tiling first: evening out or rotating splits means nothing until the panes
-	// are tiled, so the other order would work on a layout that is about to be
-	// replaced.
 	if p.Tiling != nil {
 		cmd := "DisableTiling"
 		if *p.Tiling {
@@ -554,7 +461,6 @@ func (d *Daemon) verbSetLayout(cs *connState, params json.RawMessage) (any, *ver
 	return layoutResult(sess), nil
 }
 
-// layoutResult reports the arrangement as it now stands.
 func layoutResult(sess *Session) map[string]any {
 	state := sess.GetState()
 	mode := "floating"
@@ -565,9 +471,6 @@ func layoutResult(sess *Session) map[string]any {
 	if layoutMode == "" {
 		layoutMode = "unknown"
 	}
-	// The daemon holds a shape only for a workspace somebody changed. The
-	// others use the attached client's configured one, which the daemon does
-	// not know.
 	masterPosition, masterCount := "default", 0
 	if ml, ok := state.WorkspaceMasterLayout[state.CurrentWorkspace]; ok {
 		masterPosition, masterCount = ml.Position, ml.Count
@@ -582,13 +485,6 @@ func layoutResult(sess *Session) map[string]any {
 	}
 }
 
-// verbSplitWindow divides a pane, putting a new one beside it.
-//
-// The new pane is a window like any new-window makes, and takes new-window's
-// params: a command, a directory, the focus. The daemon puts it in the split
-// tree beside the pane in the same change that adds it, so the split works
-// with no client attached, and a client that is attached lays the panes out
-// from the tree like any other change to it.
 func (d *Daemon) verbSplitWindow(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		newWindowParams
@@ -622,15 +518,11 @@ func (d *Daemon) verbSplitWindow(cs *connState, params json.RawMessage) (any, *v
 	return d.openWindow(cs, &p.newWindowParams, ask)
 }
 
-// splitAsk is what split-window asks of new-window: the pane to cut, the side
-// the new pane takes, and its share (0 for the tree's default).
 type splitAsk struct {
 	window, side string
 	share        float64
 }
 
-// splitTarget resolves the pane a split cuts, and puts the new window on its
-// workspace. cols and rows are the size the new pane's terminal starts at.
 func (d *Daemon) splitTarget(cs *connState, sess *Session, p *newWindowParams, ask *splitAsk) (*SplitPlacement, int, int, *verbError) {
 	w, verr := d.layoutWindow(cs, sess, ask.window)
 	if verr != nil {
@@ -660,11 +552,6 @@ func (d *Daemon) splitTarget(cs *connState, sess *Session, p *newWindowParams, a
 	return &SplitPlacement{Target: w.ID, Side: side, Share: ask.share, Place: !d.hasTUIClient(sess)}, cols, rows, nil
 }
 
-// splitDone finishes split-window's answer. With a client attached it waits,
-// bounded, until the state holds the client's layout of the split (see
-// splitShown): a caller that reads the layout straight after the answer
-// (herdr's pane swap) otherwise reads the old one. A client that leaves
-// mid-wait will report nothing more, so the wait ends with it.
 func (d *Daemon) splitDone(sess *Session, out map[string]any, placed *SplitPlacement, created string, ask *splitAsk) {
 	out["type"] = "window_split"
 	out["direction"] = splitAxis(ask.side)
@@ -681,12 +568,6 @@ func (d *Daemon) splitDone(sess *Session, out map[string]any, placed *SplitPlace
 	}
 }
 
-// splitShown reports whether the state holds a client's layout of the split
-// that cut created from from. A created pane that is gone already (its
-// program exited) has no layout to wait for. On a workspace with a zoomed
-// pane the client draws that pane over the whole region, so no two panes sit
-// side by side: there the client's placement of the created pane, with the
-// zoom kept, is the layout. Elsewhere the two panes sit side by side.
 func splitShown(st *SessionState, from, created string) bool {
 	b, ok := findWindowState(st, created)
 	if !ok {
@@ -698,7 +579,6 @@ func splitShown(st *SessionState, from, created string) bool {
 	return splitSettled(st, from, created)
 }
 
-// workspaceZoomed reports whether a pane of workspace ws is zoomed.
 func workspaceZoomed(st *SessionState, ws int) bool {
 	for i := range st.Windows {
 		if w := &st.Windows[i]; w.Workspace == ws && w.Zoomed {
@@ -708,10 +588,6 @@ func workspaceZoomed(st *SessionState, ws int) bool {
 	return false
 }
 
-// layoutWindow is the pane a layout verb acts on: the one named, else the
-// caller's own pane when the caller runs in a pane of sess, else the focused
-// one. An agent that splits or zooms without naming a pane means its own, not
-// whichever pane the person has in front of them.
 func (d *Daemon) layoutWindow(cs *connState, sess *Session, target string) (WindowState, *verbError) {
 	st := sess.GetState()
 	if target == "" {
@@ -732,10 +608,6 @@ func (d *Daemon) layoutWindow(cs *connState, sess *Session, target string) (Wind
 	return st.Windows[i], nil
 }
 
-// daemonArranges reports whether the daemon edits the layout of ws itself.
-// It does for a session no client shows, and for a tiled workspace in the
-// split layout. Another layout (master-stack, scrolling) lays panes out by
-// order, not by the tree, so an attached client does that edit.
 func (d *Daemon) daemonArranges(sess *Session, ws int) bool {
 	if !d.hasTUIClient(sess) {
 		return true
@@ -748,32 +620,23 @@ func (d *Daemon) daemonArranges(sess *Session, ws int) bool {
 	return st.AutoTiling && (mode == "" || mode == "bsp")
 }
 
-// errFloating refuses a layout edit in a session that floats its panes.
 func errFloating(param string) *verbError {
 	return invalidParam(param, "the session floats its panes, so there is no layout to change. split-window turns tiling on")
 }
 
-// errLayoutUnchanged is an edit that found nothing to change. The state is
-// left alone, so no client is woken for it.
 var errLayoutUnchanged = errors.New("layout unchanged")
 
-// settleRects waits, bounded, for an attached client to lay out the panes
-// again after a layout edit: until moved reports that the client's rectangles
-// show it.
 func (d *Daemon) settleRects(sess *Session, moved func(st *SessionState) bool) {
 	if d.hasTUIClient(sess) {
 		sess.WaitState(2*time.Second, moved)
 	}
 }
 
-// rectOf is the rectangle of window id in st, and whether it is there.
 func rectOf(st *SessionState, id string) (layout.Rect, bool) {
 	w, ok := findWindowState(st, id)
 	return layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}, ok
 }
 
-// layoutParams are the params of zoom-window, swap-window and
-// resize-window.
 type layoutParams struct {
 	Session   string `json:"session"`
 	Window    string `json:"window"`
@@ -795,8 +658,6 @@ func (d *Daemon) verbResizeWindow(cs *connState, params json.RawMessage) (any, *
 	return d.layoutVerb(cs, params, 'r')
 }
 
-// layoutVerb is zoom-window (z), swap-window (s) and resize-window (r). Each
-// acts on the pane layoutWindow names.
 func (d *Daemon) layoutVerb(cs *connState, params json.RawMessage, verb byte) (any, *verbError) {
 	var p layoutParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -841,9 +702,6 @@ func (d *Daemon) layoutVerb(cs *connState, params json.RawMessage, verb byte) (a
 	return out, verr
 }
 
-// zoomPane sets the zoom of w's workspace: on w, or off. A zoomed workspace
-// shows one pane, so zooming a pane on the workspace the session shows
-// focuses it, and the person never types into a pane they cannot see.
 func (d *Daemon) zoomPane(sess *Session, w WindowState, on bool) (bool, *verbError) {
 	if w.Minimized || w.Popup {
 		return false, invalidParam("window", "a minimized pane or a popup cannot be zoomed")
@@ -860,7 +718,6 @@ func (d *Daemon) zoomPane(sess *Session, w WindowState, on bool) (bool, *verbErr
 		if !changed {
 			return 0, errLayoutUnchanged
 		}
-		// mutateState advances the Version once this edit returns.
 		sess.zoomOpAt = state.Version + 1
 		if on && w.Workspace == state.CurrentWorkspace && state.FocusedWindowID != w.ID {
 			sess.markFocusIntentLocked()
@@ -881,8 +738,6 @@ func (d *Daemon) zoomPane(sess *Session, w WindowState, on bool) (bool, *verbErr
 	return changed, nil
 }
 
-// swapPanes swaps a and b in the split tree. Two panes of one workspace in
-// another layout are swapped by the attached client, which orders them.
 func (d *Daemon) swapPanes(sess *Session, a, b WindowState) *verbError {
 	if a.ID == b.ID {
 		return invalidParam("with", "name another pane to swap with")
@@ -915,8 +770,6 @@ func (d *Daemon) swapPanes(sess *Session, a, b WindowState) *verbError {
 	return nil
 }
 
-// resizePane moves a border of w by amount, a share of the layout. In
-// another layout than the split one the attached client moves it.
 func (d *Daemon) resizePane(sess *Session, w WindowState, dir string, amount float64) (bool, *verbError) {
 	if !d.daemonArranges(sess, w.Workspace) {
 		data, verr := d.routeData(sess, "resize_window", []string{w.ID, dir, strconv.FormatFloat(amount, 'f', -1, 64)})
@@ -946,8 +799,6 @@ func (d *Daemon) resizePane(sess *Session, w WindowState, dir string, amount flo
 	return true, nil
 }
 
-// movePaneBeside is move-window with beside: the pane leaves its place and
-// splits the pane beside names, toward side, on that pane's workspace.
 func (d *Daemon) movePaneBeside(cs *connState, sess *Session, window, beside, sideName string, ratio int) (any, *verbError) {
 	side, ok := layout.ParseSide(cmp.Or(sideName, "right"))
 	if !ok {
@@ -974,8 +825,6 @@ func (d *Daemon) movePaneBeside(cs *connState, sess *Session, window, beside, si
 	case !sess.GetState().AutoTiling:
 		return nil, errFloating("beside")
 	}
-	// Across workspaces the window moves first. The tree of its new
-	// workspace then holds it, and the edit below puts it beside dst.
 	if src.Workspace != dst.Workspace {
 		if err := sess.MoveDaemonWindowToWorkspace(src.ID, dst.Workspace); err != nil {
 			return nil, mapResolveErr(err, sess)
@@ -997,7 +846,6 @@ func (d *Daemon) movePaneBeside(cs *connState, sess *Session, window, beside, si
 	return map[string]any{"type": "window_moved", "window_id": src.ID, "from_workspace": src.Workspace, "workspace": dst.Workspace, "beside": dst.ID, "changed": changed}, nil
 }
 
-// splitAxis is the axis a split cut: a side names its axis too.
 func splitAxis(cut string) string {
 	switch cut {
 	case "left", "right":
@@ -1008,14 +856,6 @@ func splitAxis(cut string) string {
 	return cut
 }
 
-// verbRunCommand runs one tape command, which is the vocabulary the keybindings
-// are written in.
-//
-// It is the escape hatch, and it is here so the JSON protocol is never a subset
-// of what the CLI can do: a binding that has no verb of its own is still
-// reachable by the name the keymap gives it. Prefer a verb where one exists,
-// because a verb reports what it changed and this reports only that the command
-// ran.
 func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string   `json:"session"`
@@ -1028,17 +868,11 @@ func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *ve
 	if p.Command == "" {
 		return nil, invalidParam("command", `command is required, e.g. "SwitchWorkspace"`)
 	}
-	// The keymap's name for an action reaches the same command as the tape's
-	// name, and a name that is neither is an error here rather than a success
-	// the client reports for running nothing. See resolveCommandName.
 	canonical, args, ok := resolveCommandName(p.Command, p.Args)
 	if !ok {
 		return nil, invalidParam("command", unknownCommandMessage(p.Command))
 	}
 	p.Command, p.Args = canonical, args
-	// The client runs the command in whatever pane is focused, as the
-	// person. A pane without respond may not type or press keys that way:
-	// see refuseTapeTyping, which the client protocol's run-command has too.
 	if why := d.refuseTapeTyping(cs, &ExecuteCommandPayload{CommandType: p.Command}); why != "" {
 		return nil, hintedVerbError(ErrVerbForbidden, "run-command "+p.Command+" is refused for this pane: "+why, &VerbHint{
 			Verb:    "send-keys",
@@ -1054,9 +888,6 @@ func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *ve
 		return nil, newVerbError(ErrVerbForbidden, "run-command "+p.Command+" is refused for this pane: "+why)
 	}
 
-	// The daemon-owned commands run here whether or not a client is attached, the
-	// same rule the CLI path follows, so the two cannot disagree about what a
-	// detached session can do.
 	if daemonOwnedCommands[p.Command] || !d.hasTUIClient(sess) {
 		onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
 		data, err := d.executeDaemonCommand(sess, p.Command, p.Args, onExit)
@@ -1074,10 +905,6 @@ func (d *Daemon) verbRunCommand(cs *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"type": "command_result", "command": p.Command, "routed": true}, nil
 }
 
-// routeTape sends one command to the session's attached client and waits for
-// its result, reporting needs_client when nobody is attached. commandType is
-// the routed command's type: "tape_command" with command the tape command's
-// name, or another type the client runs from args alone.
 func (d *Daemon) routeTape(sess *Session, commandType, command string, args []string) *verbError {
 	tui := d.findTUIClient(sess.ID)
 	if tui == nil {
@@ -1110,7 +937,6 @@ func (d *Daemon) routeTape(sess *Session, commandType, command string, args []st
 	return nil
 }
 
-// routeData is routeTape for a command whose answer carries data.
 func (d *Daemon) routeData(sess *Session, command string, args []string) (map[string]any, *verbError) {
 	tui := d.findTUIClient(sess.ID)
 	if tui == nil {
@@ -1126,12 +952,8 @@ func (d *Daemon) routeData(sess *Session, command string, args []string) (map[st
 	return res.Data, nil
 }
 
-// hasTUIClient reports whether a renderer is attached to the session.
 func (d *Daemon) hasTUIClient(sess *Session) bool { return d.findTUIClient(sess.ID) != nil }
 
-// splitSettled reports whether the state shows the new pane and the pane it
-// was cut from side by side: both with a size, and overlapping by no more
-// than the one shared border cell a layout with shared borders gives them.
 func splitSettled(st *SessionState, from, created string) bool {
 	var a, b *WindowState
 	for i := range st.Windows {

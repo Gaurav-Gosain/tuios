@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// ringSize is the catch-up ring's bound: the length of the ring every pane
-// held from the moment it was made, and the length a growing ring stops at.
 const ringSize = 64 * 1024
 
 // TestAnIdlePaneHoldsNoCatchUpRing is a perf budget. A pane that prints only
@@ -99,19 +97,13 @@ func TestAGrowingRingHoldsWhatTheFixedRingHolds(t *testing.T) {
 	}
 }
 
-// ringOp is one step a pair is driven by: a resize, or an append of n bytes.
 type ringOp struct {
 	resize bool
 	n      int
 }
 
-// shortMarkLimit is a stream position the growing ring is still well below
-// 64 KiB at, so a resize placed before it is placed on a short ring.
 const shortMarkLimit = 16 * 1024
 
-// logUniformRingPlan draws chunks of log-uniform size from 1 B to 80 KiB,
-// with resizes between them, until the stream is far past the ring. A plan
-// that places fewer than two resizes before shortMarkLimit is drawn again.
 func logUniformRingPlan(rng *rand.Rand) []ringOp {
 	for {
 		target := 96*1024 + rng.IntN(320*1024)
@@ -134,9 +126,6 @@ func logUniformRingPlan(rng *rand.Rand) []ringOp {
 	}
 }
 
-// growthWalkRingPlan appends small chunks until the stream is far past the
-// ring, so the growing ring crosses 1, 2, 4, 8, 16, 32 and 64 KiB in turn.
-// Resizes come at random, and always once past 1 KiB and once past 8 KiB.
 func growthWalkRingPlan(rng *rand.Rand) []ringOp {
 	target := 160*1024 + rng.IntN(64*1024)
 	var plan []ringOp
@@ -156,7 +145,6 @@ func growthWalkRingPlan(rng *rand.Rand) []ringOp {
 	return plan
 }
 
-// newRingPTY is a PTY with the fields Resize touches and the given ring.
 func newRingPTY(buf []byte) *PTY {
 	return &PTY{
 		ID:           "ptytest-00000009",
@@ -167,7 +155,6 @@ func newRingPTY(buf []byte) *PTY {
 	}
 }
 
-// appendRing appends under the locks every append in the daemon holds.
 func appendRing(p *PTY, data []byte) int64 {
 	p.streamMu.Lock()
 	defer p.streamMu.Unlock()
@@ -176,8 +163,6 @@ func appendRing(p *PTY, data []byte) int64 {
 	return p.appendToBuffer(data)
 }
 
-// resizeRing resizes p and takes the resize back off its emulator queue, so a
-// long plan never fills it.
 func resizeRing(p *PTY, width, height int) error {
 	if err := p.Resize(width, height); err != nil {
 		return err
@@ -191,8 +176,6 @@ func resizeRing(p *PTY, width, height int) error {
 	}
 }
 
-// ringDifferential drives a fixed ring and a growing ring by plan and
-// compares them after every step.
 func ringDifferential(rng *rand.Rand, plan []ringOp) error {
 	fixed := newRingPTY(make([]byte, ringSize))
 	grow := newRingPTY(nil)

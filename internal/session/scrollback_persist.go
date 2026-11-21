@@ -1,34 +1,5 @@
 package session
 
-// Persisted scrollback: a pane's history survives the daemon.
-//
-// Resurrection brings a session's layout back with a fresh shell in each pane,
-// and before this the pane came back empty. Now each pane's history is saved
-// next to the session's state file, and a restore lays it back into the new
-// pane's emulator above a dim divider, with the new shell's prompt under it.
-//
-// What is saved is the emulator's own picture, not the bytes the program
-// wrote: a TerminalState in its packed form (vt/snapshot/pack.go), the same
-// structure a client rehydrates from. It carries every cell with its style,
-// wide runes and the soft-wrap flags, it is written and read by both emulator
-// backends through the code the wire already tests (terminalStateOf and
-// ApplyTerminalState), and it is bounded by rows rather than by how chatty the
-// program was. Raw bytes would have needed a replay through a parser, a guess
-// at where a cut stream is safe to start, and would have carried every mode a
-// full-screen program set.
-//
-// One file per pane, gzip over gob, in <state dir>/scrollback/<session>/,
-// directory 0700 and files 0600, because history holds whatever was printed,
-// secrets included. gzip is in the standard library; zstd would have added a
-// dependency to a binary with a size budget, for a file written at most every
-// scrollbackSaveInterval.
-//
-// When: a pane is saved by the session's periodic saver, only when its
-// emulator consumed output since its last save, and at most once per
-// scrollbackSaveInterval; and on a clean stop, whatever the interval. So an
-// idle pane is never rewritten and a pane flooding output costs one capture
-// and one compressed write per interval, not one per tick.
-
 import (
 	"bytes"
 	"compress/gzip"
@@ -62,30 +33,14 @@ const (
 	DefaultHistoryKB = 2048
 	historyDirName   = "scrollback"
 	historyExt       = ".hist.gz"
-	// historyVersion names the file's layout: the savedHistory record and
-	// the packed cell format inside it. It is snapshot.PackedFormatVersion times a
-	// hundred plus the record's own number, so a change to the packed format
-	// (vt/snapshot/pack.go) changes it without anyone remembering to. A file at
-	// another version is skipped and left alone, since a build that writes
-	// that version may run here again.
-	historyVersion = snapshot.PackedFormatVersion*100 + 1
+	historyVersion   = snapshot.PackedFormatVersion*100 + 1
 
-	// maxHistoryDim and maxHistoryCells bound the screen a history file may
-	// describe. A restore builds an emulator of that size at daemon start,
-	// before any client is connected, so the size is input to check, not a
-	// fact: the same bound a pane spawned for another machine is held to,
-	// and an area no real terminal reaches.
 	maxHistoryDim   = hostedPaneMaxDim
 	maxHistoryCells = 1 << 20
 )
 
-// historySessionBytes is the most one session's saved history may take on disk
-// in all. A pane that would take it past this saves fewer rows. A variable so
-// a test can lower it.
 var historySessionBytes int64 = 16 << 20
 
-// scrollbackSaveInterval is the least time between two saves of one pane's
-// history. A variable so a test can shorten it.
 var scrollbackSaveInterval = 30 * time.Second
 
 // HistoryPolicy is what the daemon does with pane history across a restart:
@@ -117,51 +72,33 @@ func ResolveHistoryPolicy(enabled *bool, lines, kb int) HistoryPolicy {
 	return p
 }
 
-// savedHistory is one pane's history file.
 type savedHistory struct {
 	Version int
 	SavedAt time.Time
-	// State is the pane's main screen and history, packed. Modes, the pen and
-	// everything else a running program set are left out: the history comes
-	// back as something to read, under a new shell that sets its own.
-	State *TerminalState
+	State   *TerminalState
 }
 
-// restoreSpec marks a pane being made for a restored window. A nil one is a
-// pane made for a new window.
 type restoreSpec struct {
-	// history is the pane's saved history, nil when it has none.
-	history *savedHistory
-	// savedCwd is the folder the pane was saved in, "" when none was saved.
+	history  *savedHistory
 	savedCwd string
 }
 
-// historyMark is what a session remembers about the last save of one pane.
 type historyMark struct {
-	ptyID string
-	seq   int64
-	at    time.Time
-	// savedAt, when set, is the time the next save records instead of now.
-	// A restored pane holds the time of the save it was restored from until
-	// its first save, so a second restart right after the first still says
-	// when its history was written, not when the restore saved it again.
+	ptyID   string
+	seq     int64
+	at      time.Time
 	savedAt time.Time
 }
 
-// historySaver is a session's record of its panes' saves. Guarded by mu; a
-// session's saves run one at a time under persistMu anyway, and mu is for the
-// test and the rename that read it from elsewhere.
 type historySaver struct {
 	mu    sync.Mutex
-	marks map[string]historyMark // by window id
+	marks map[string]historyMark
 }
 
 func historyRoot() string {
 	return filepath.Join(getResurrectionDir(), historyDirName)
 }
 
-// historyDir is where one session's pane files live. A name that would leave
-// the history folder is an error, as for getResurrectionPath.
 func historyDir(sessionName string) (string, error) {
 	return stateJoin(historyRoot(), sessionName, "")
 }
@@ -174,9 +111,6 @@ func historyPath(sessionName, windowID string) (string, error) {
 	return stateJoin(dir, windowID, historyExt)
 }
 
-// validHistoryWindowID keeps a window id from naming a path outside the
-// session's directory. Window ids are UUIDs a client made up, so this is a
-// check on input, not a formality.
 func validHistoryWindowID(id string) bool {
 	return id != "" && id != "." && id != ".." && !strings.ContainsAny(id, `/\`) &&
 		!strings.ContainsFunc(id, func(r rune) bool { return r < 0x20 || r == 0x7f })
@@ -198,11 +132,6 @@ func RemoveAllHistory() {
 	_ = os.RemoveAll(historyRoot())
 }
 
-// cleanOrphanHistory deletes the history of every session that has no state
-// file. That history can never be restored: the state was archived as
-// corrupt, or a daemon from before pane history killed or renamed the session
-// and never knew to take its history along. Called at daemon start, before
-// any session is live.
 func cleanOrphanHistory() {
 	entries, err := os.ReadDir(historyRoot())
 	if err != nil {
@@ -220,18 +149,12 @@ func cleanOrphanHistory() {
 	}
 }
 
-// dropHistoryWhenOff deletes the history saved while daemon.persist_scrollback
-// was on, once it is set to false, so turning it off also takes the saved text
-// off the disk. A daemon that read no config saves nothing and deletes
-// nothing. Called once at start, before the restore.
 func (d *Daemon) dropHistoryWhenOff() {
 	if d.manager.HistoryPolicy().TurnedOff {
 		RemoveAllHistory()
 	}
 }
 
-// moveHistory moves a session's saved history to its new name. Best effort:
-// a failure loses the history, never the session.
 func moveHistory(oldName, newName string) {
 	from, err := historyDir(oldName)
 	if err != nil {
@@ -250,9 +173,6 @@ func moveHistory(oldName, newName string) {
 	}
 }
 
-// saveHistory writes the history of each of the session's panes that needs
-// it, and removes the files of panes the session no longer has. force skips
-// the interval, for the last save before a stop. Called under persistMu.
 func (s *Session) saveHistory(state *SessionState, force bool) {
 	pol := s.historyPolicy()
 	if !pol.Enabled || state == nil || state.Name != s.Name() || s.discardHistory.Load() {
@@ -273,7 +193,7 @@ func (s *Session) saveHistory(state *SessionState, force bool) {
 		mark, seen := s.history.mark(w.ID)
 		if seen && mark.ptyID == pty.ID {
 			if pty.consumedSeq() == mark.seq {
-				continue // nothing new since the last save
+				continue
 			}
 			if !force && now.Sub(mark.at) < scrollbackSaveInterval {
 				continue
@@ -294,11 +214,6 @@ func (s *Session) saveHistory(state *SessionState, force bool) {
 	s.history.prune(keep)
 }
 
-// historyWanted reports whether a window's history is worth saving: every pane
-// a restore brings back. A popup is dropped by the restore, every scratch
-// pane comes back with its own history, and a pane whose process ran on
-// another machine comes back as a local shell, while the history belongs to
-// the machine that ran it.
 func historyWanted(w WindowState) bool {
 	if w.Popup && !w.Scratch {
 		return false
@@ -306,14 +221,6 @@ func historyWanted(w WindowState) bool {
 	return w.Host == ""
 }
 
-// saveOnePane captures one pane and writes its file, and returns the stream
-// position the capture was taken at. The pane's lock is held only while its
-// rows are read; packing, encoding and compression happen after. The file is
-// kept within the pane's bound and the session's: a capture that compresses
-// too big is packed again from fewer of the rows already read, and one that
-// still does not fit is not written.
-//
-// savedAt is the time the file records, which the divider shows on restore.
 func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol HistoryPolicy, savedAt time.Time) (int64, error) {
 	budget := min(pol.Bytes, historySessionBytes-otherHistoryBytes(sessionName, windowID))
 	rows, seq := pty.captureHistory(pol.Lines)
@@ -335,8 +242,6 @@ func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol Histor
 			data = nil
 			break
 		}
-		// Scale the rows to the budget with a margin, since compression is not
-		// linear in the rows kept.
 		lines = int(float64(lines) * float64(budget) / float64(len(data)) * 0.8)
 		data = nil
 	}
@@ -355,14 +260,8 @@ func (s *Session) saveOnePane(sessionName, windowID string, pty *PTY, pol Histor
 	return seq, writePrivateFile(path, data)
 }
 
-// historyWriteHook, when set, is told of every history file about to be
-// written. Test-only.
 var historyWriteHook func(sessionName, windowID string)
 
-// writePrivateFile writes data to path through atomicfile, with the directory
-// 0700 and the file 0600. A directory that already existed with a wider mode
-// is narrowed. It does not fsync: history is written often, and losing the
-// last write to a power cut costs a few lines of scrollback.
 func writePrivateFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -375,8 +274,6 @@ func writePrivateFile(path string, data []byte) error {
 	return atomicfile.Write(path, data, 0o600, false)
 }
 
-// otherHistoryBytes is what the session's files other than this pane's take on
-// disk.
 func otherHistoryBytes(sessionName, windowID string) int64 {
 	dir, err := historyDir(sessionName)
 	if err != nil {
@@ -398,8 +295,6 @@ func otherHistoryBytes(sessionName, windowID string) int64 {
 	return n
 }
 
-// pruneHistory removes the files of panes the session no longer has, and any
-// temporary file a crash left behind.
 func pruneHistory(sessionName string, keep map[string]bool) {
 	dir, err := historyDir(sessionName)
 	if err != nil {
@@ -445,16 +340,12 @@ func (h *historySaver) prune(keep map[string]bool) {
 	}
 }
 
-// consumedSeq is the stream position the pane's emulator has consumed.
 func (p *PTY) consumedSeq() int64 {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
 	return p.vtSeq
 }
 
-// captureHistory reads the pane's history for saving, with at most lines
-// history rows, and the stream position it was read at. This is all that
-// holds the emulator's lock; see snapshot.History.State for the rest.
 func (p *PTY) captureHistory(lines int) (*snapshot.History, int64) {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
@@ -479,11 +370,8 @@ func encodeHistory(h *savedHistory) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// maxHistoryFile bounds what a history file may inflate to when it is read,
-// so a damaged or planted file cannot take the daemon's memory at start.
 const maxHistoryFile = 256 << 20
 
-// errHistoryVersion is a history file of a layout this build does not read.
 type errHistoryVersion struct{ v int }
 
 func (e errHistoryVersion) Error() string {
@@ -501,9 +389,6 @@ func decodeHistory(r io.Reader) (*savedHistory, error) {
 	if err := gob.NewDecoder(lr).Decode(&h); err != nil {
 		return nil, err
 	}
-	// gzip checks its checksum and length only at the end of the stream, and
-	// gob stops reading once it has its value, so a file cut short decoded
-	// as whole. Reading to the end is what makes the check happen.
 	if _, err := io.Copy(io.Discard, lr); err != nil {
 		return nil, err
 	}
@@ -517,9 +402,6 @@ func decodeHistory(r io.Reader) (*savedHistory, error) {
 	return &h, nil
 }
 
-// loadHistory reads a session's saved pane histories, by window id. A file
-// that does not read is removed and skipped: it is history, and a restore
-// never waits on it or fails for it.
 func loadHistory(sessionName string) map[string]*savedHistory {
 	dir, err := historyDir(sessionName)
 	if err != nil {
@@ -543,8 +425,6 @@ func loadHistory(sessionName string) map[string]*savedHistory {
 		h, err := decodeHistory(f)
 		_ = f.Close()
 		if _, ok := errors.AsType[errHistoryVersion](err); ok {
-			// Another build's file, whole as far as this one can tell. It is
-			// skipped rather than deleted: that build may run here again.
 			log.Printf("Skipping saved history %s: %v", path, err)
 			continue
 		}
@@ -558,10 +438,6 @@ func loadHistory(sessionName string) map[string]*savedHistory {
 	return out
 }
 
-// restoredBanner is the dim notice a restored pane shows: the divider under
-// its history, or the banner alone when it has none. It names the folder the
-// new shell started in, cwd, and the saved folder when the shell could not
-// start there.
 func restoredBanner(cwd string, r *restoreSpec) string {
 	var msg string
 	if r.history != nil {
@@ -579,16 +455,12 @@ func restoredBanner(cwd string, r *restoreSpec) string {
 	return "\x1b[2m" + msg + "\x1b[0m\r\n"
 }
 
-// restoreHistory lays a saved history into a new pane's emulator. See
-// snapshot.ApplyHistory.
 func restoreHistory(t vt.Terminal, h *savedHistory) {
 	if err := snapshot.ApplyHistory(t, h.State); err != nil {
 		debugLog("[DEBUG] saved history does not unpack: %v", err)
 	}
 }
 
-// newRestoredEmulator builds the emulator for a restored pane of width x
-// height: the saved history, when there is one, and the banner.
 func newRestoredEmulator(width, height, scrollback int, cwd string, r *restoreSpec) vt.Terminal {
 	h := r.history
 	if h == nil {

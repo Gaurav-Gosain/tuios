@@ -10,16 +10,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// fakeDaemon answers exactly one binary handshake with the welcome it is given,
-// which is how a daemon of another vintage is put in front of a client without
-// building that vintage.
 func fakeDaemon(t *testing.T, welcome *WelcomePayload) (hello chan *HelloPayload) {
 	t.Helper()
 	return fakeDaemonReplying(t, MsgWelcome, welcome)
 }
 
-// fakeDaemonReplying is fakeDaemon with the reply's type byte chosen, for the
-// daemons whose numbering differs from this build's.
 func fakeDaemonReplying(t *testing.T, replyType MessageType, welcome *WelcomePayload) (hello chan *HelloPayload) {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
@@ -55,8 +50,6 @@ func fakeDaemonReplying(t *testing.T, replyType MessageType, welcome *WelcomePay
 			return
 		}
 		_ = WriteMessage(conn, reply)
-		// Hold the connection open so a client that accepts the handshake is
-		// not failed by an EOF it never asked about.
 		time.Sleep(2 * time.Second)
 	}()
 	return hello
@@ -95,8 +88,6 @@ func TestClientRefusesADaemonSpeakingAnotherProtocol(t *testing.T) {
 		}
 	}
 
-	// The precondition: the client announced its own version, or the daemon had
-	// nothing to compare and the check is not a check.
 	select {
 	case h := <-seen:
 		if h.Protocol != ProtocolVersion {

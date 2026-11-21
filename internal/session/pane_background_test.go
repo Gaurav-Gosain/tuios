@@ -17,14 +17,12 @@ func TestDaemonScreenshotUsesThePaneBackground(t *testing.T) {
 		name    string
 		set     bool
 		value   string
-		all     string // appearance.background, when set
+		all     string
 		painted bool
 	}{
 		{name: "unset", painted: false},
 		{name: "off", set: true, value: "off", painted: false},
 		{name: "colour", set: true, value: "#123456", painted: true},
-		// The default for every surface reaches a pane that is not set on
-		// its own, and a pane's own off keeps it bare.
 		{name: "unset follows all", all: "#123456", painted: true},
 		{name: "own off overrides all", set: true, value: "off", all: "#123456", painted: false},
 	}

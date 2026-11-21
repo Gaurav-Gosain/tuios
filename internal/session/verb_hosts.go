@@ -14,20 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// The federation control plane's three read verbs.
-//
-// Every one of them asks a remote daemon for a listing and never tells it to do
-// anything. There is no verb here that creates, kills, resizes, writes or
-// attaches. Acting on another machine goes through open-host-connection
-// (verb_host_connection.go), which relays the client's own connection and
-// decodes none of it.
-//
-// The aggregation rule these three share: hosts that answer are listed, hosts
-// that do not are listed with their status and reason, and one dead host never
-// fails the call. That is section 7's failure model expressed as a result
-// shape, and it is why the result is a list of per-host envelopes rather than a
-// flat list that would have nowhere to put a failure.
-
 // ErrVerbHostUnreachable reports a host that is configured and not answering.
 // It is final: the caller reports it, and it does not retry into another name.
 const ErrVerbHostUnreachable = "host_unreachable"
@@ -40,17 +26,10 @@ const ErrVerbPaneEnded = "pane_ended"
 // Also final, and its message names every configured host.
 const ErrVerbUnknownHost = "unknown_host"
 
-// federationVerbBudget bounds how long a host verb may take in total. It is
-// under the CLI's own 30 second read deadline with room to spare, and the work
-// under it is already bounded per host, so this is a backstop rather than the
-// mechanism.
 const federationVerbBudget = 15 * time.Second
 
-// hostAskBudget bounds how long the hosts listing waits for the hosts with no
-// daemon to answer again. A slow one is listed as it was.
 const hostAskBudget = 2 * time.Second
 
-// hostSessionsEntry is one host's slice of an aggregated session listing.
 type hostSessionsEntry struct {
 	Host   string             `json:"host"`
 	Status federation.Status  `json:"status"`
@@ -62,62 +41,26 @@ type hostSessionsEntry struct {
 	hostFreshness
 }
 
-// hostFreshness says how current a host's rows are. It is on the entries of
-// both host listings.
 type hostFreshness struct {
-	// Stale is set when the host did not answer and the rows are the last
-	// ones it gave, from FetchedAt (unix seconds). A host that never answered
-	// has no rows and no stale mark.
-	Stale     bool  `json:"stale,omitempty"`
-	FetchedAt int64 `json:"fetched_at,omitempty"`
-	// Events is how this daemon follows the host: live, polling, or empty
-	// while the link is not up. See list-hosts.
-	Events string `json:"events,omitempty"`
+	Stale     bool   `json:"stale,omitempty"`
+	FetchedAt int64  `json:"fetched_at,omitempty"`
+	Events    string `json:"events,omitempty"`
 }
 
-// remoteSessionRow is a session on another machine, as that machine described
-// it. Only the fields a listing shows are decoded: a remote daemon is untrusted
-// and newer than this one as often as not, so its extra fields are dropped here
-// rather than carried into anything.
 type remoteSessionRow struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name,omitempty"`
-	WindowCount int    `json:"window_count"`
-	Attached    bool   `json:"attached,omitempty"`
-	Restored    bool   `json:"restored,omitempty"`
-	// Global marks a session meant to hold panes from more than one machine.
-	// It is carried across the link so every machine files the session the
-	// same way: a global session is in the rail's global group whichever
-	// machine you are looking from, rather than being a global session here
-	// and an ordinary session on the machine next to it.
-	Global bool `json:"global,omitempty"`
-	// Space is the space the session is filed under on its own machine, so
-	// ls --all-hosts can group a host's sessions the way ls does there. A
-	// daemon from before spaces sends none, and its sessions list ungrouped.
-	Space      string `json:"space,omitempty"`
-	LastActive int64  `json:"last_active,omitempty"`
-	Created    int64  `json:"created,omitempty"`
-	// AgentState is the most urgent agent state among the session's panes, by
-	// the rail's own ranking, empty when nothing in it is running an agent.
-	//
-	// It is rolled up here rather than sent pane by pane because a session row
-	// is one row: the rail asks "does anything in there want a person", and a
-	// listing that carried every pane's state would be answering a question
-	// nobody on this side asked. The unread bit is deliberately not carried.
-	// Whether a finished agent has been looked at is a fact about a viewer, not
-	// about the session, and this client has not looked at another machine's
-	// panes, so they roll up as unseen, which is what they are.
-	AgentState string `json:"agent_state,omitempty"`
-	// Agents are the session's agent panes, one row each, for the agents
-	// view, which draws every agent on every machine as a row of its own. It
-	// is built here from the host's window summaries, never decoded from the
-	// host: whatever a host sends under this name is replaced.
-	Agents []remoteAgentPane `json:"agents,omitempty"`
+	Name        string            `json:"name"`
+	DisplayName string            `json:"display_name,omitempty"`
+	WindowCount int               `json:"window_count"`
+	Attached    bool              `json:"attached,omitempty"`
+	Restored    bool              `json:"restored,omitempty"`
+	Global      bool              `json:"global,omitempty"`
+	Space       string            `json:"space,omitempty"`
+	LastActive  int64             `json:"last_active,omitempty"`
+	Created     int64             `json:"created,omitempty"`
+	AgentState  string            `json:"agent_state,omitempty"`
+	Agents      []remoteAgentPane `json:"agents,omitempty"`
 }
 
-// remoteAgentPane is one agent pane of a session on another machine: what its
-// row in the agents view says. The host is untrusted, so every field is
-// bounded (see agentPanes).
 type remoteAgentPane struct {
 	ID        string           `json:"id"`
 	Title     string           `json:"title,omitempty"`
@@ -128,13 +71,9 @@ type remoteAgentPane struct {
 	Kind      string           `json:"kind,omitempty"`
 	Meta      []AgentMetaToken `json:"meta,omitempty"`
 	Subagents int              `json:"subagents,omitempty"`
-	// Settled is the host's settle of the agent, so the agents view here
-	// draws it on the Settled shelf too.
-	Settled bool `json:"settled,omitempty"`
+	Settled   bool             `json:"settled,omitempty"`
 }
 
-// Bounds of a host's agent panes as a listing passes them on: about 600 bytes
-// a pane at most, 32 panes a session and 256 a host.
 const (
 	remoteAgentPanesMax = 32
 	remoteAgentHostMax  = 256
@@ -143,9 +82,6 @@ const (
 	remoteAgentIDMax    = 64
 )
 
-// plausibleWindowID reports whether id can be a window ID: letters, digits
-// and hyphens, at most remoteAgentIDMax bytes. A host chooses the IDs of its
-// panes, and the agents view draws one when a pane has no title.
 func plausibleWindowID(id string) bool {
 	if id == "" || len(id) > remoteAgentIDMax {
 		return false
@@ -158,7 +94,6 @@ func plausibleWindowID(id string) bool {
 	return true
 }
 
-// agentPanes are the agent panes among a host's window summaries, bounded.
 func agentPanes(windows []WindowSummary) []remoteAgentPane {
 	var out []remoteAgentPane
 	clip := func(s string) string {
@@ -188,21 +123,11 @@ func agentPanes(windows []WindowSummary) []remoteAgentPane {
 	return out
 }
 
-// remoteSessionListRow is a row as a host sends it. It carries the window
-// summaries the rollup reads and this daemon does not pass on: the embedded
-// row is what crosses to the client.
 type remoteSessionListRow struct {
 	remoteSessionRow
 	Windows []WindowSummary `json:"windows"`
 }
 
-// rollUpAgentState is the most urgent state among a session's panes, by the
-// same ranking the rail draws with, so a row on another machine wears the
-// glyph a row on this one would.
-//
-// Every pane is ranked as unseen. The unread bit belongs to a viewer, and the
-// daemon answering has no idea what the person reading the listing has looked
-// at.
 func rollUpAgentState(windows []WindowSummary) string {
 	best, state := 0, ""
 	for _, w := range windows {
@@ -213,25 +138,17 @@ func rollUpAgentState(windows []WindowSummary) string {
 	return state
 }
 
-// hostAgentsEntry is one host's slice of an aggregated agent listing.
 type hostAgentsEntry struct {
-	Host   string            `json:"host"`
-	Status federation.Status `json:"status"`
-	Reason string            `json:"reason,omitempty"`
-	Error  string            `json:"error,omitempty"`
-	Code   string            `json:"code,omitempty"`
-	// Session names the one session a host answered about. Every session is
-	// listed and each row names its own, so this is set only when the host
-	// has exactly one session with rows in the answer: a reader that takes it
-	// as the host's one session is never told a wrong one.
-	Session string           `json:"session,omitempty"`
-	Agents  []remoteAgentRow `json:"agents,omitempty"`
+	Host    string            `json:"host"`
+	Status  federation.Status `json:"status"`
+	Reason  string            `json:"reason,omitempty"`
+	Error   string            `json:"error,omitempty"`
+	Code    string            `json:"code,omitempty"`
+	Session string            `json:"session,omitempty"`
+	Agents  []remoteAgentRow  `json:"agents,omitempty"`
 	hostFreshness
 }
 
-// remoteAgentRow is one agent pane on another machine. Only these fields are
-// decoded from the host's answer: the host is untrusted, and a field this
-// build does not carry is dropped rather than passed on.
 type remoteAgentRow struct {
 	Session        string `json:"session,omitempty"`
 	WindowID       string `json:"window_id"`
@@ -247,14 +164,10 @@ type remoteAgentRow struct {
 	BlockedBy      string `json:"blocked_by,omitempty"`
 	CompletionSeq  uint64 `json:"completion_seq,omitempty"`
 	FinishedUnread bool   `json:"finished_unread,omitempty"`
-	// Group is the fan-out group of the pane's session. A host from before
-	// selectors sends none, so a group: term matches none of its rows.
-	Group string `json:"group,omitempty"`
-	// Queued is how many messages wait in the pane's delivery queue there.
-	Queued int `json:"queued,omitempty"`
+	Group          string `json:"group,omitempty"`
+	Queued         int    `json:"queued,omitempty"`
 }
 
-// selectorTarget is what a selector reads from a row of host.
 func (r remoteAgentRow) selectorTarget(host string) SelectorTarget {
 	state := AgentState(r.State)
 	return SelectorTarget{
@@ -269,7 +182,6 @@ func (r remoteAgentRow) selectorTarget(host string) SelectorTarget {
 	}
 }
 
-// filterHostAgents keeps the rows of every entry that sel matches.
 func filterHostAgents(entries []hostAgentsEntry, sel *Selector) {
 	if sel == nil {
 		return
@@ -286,17 +198,7 @@ func filterHostAgents(entries []hostAgentsEntry, sel *Selector) {
 	}
 }
 
-// verbListHosts reports every configured host with its status and versions.
-//
-// This is `tuios hosts`. It answers the question the design document says a
-// listing has to answer on its own: why is this host not usable, and is it the
-// machine, the daemon, or the version.
 func (d *Daemon) verbListHosts(cs *connState, _ json.RawMessage) (any, *verbError) {
-	// events_push says this daemon pushes every change to a host it streams:
-	// host-changed on subscribe, and MsgHostsChanged to attached clients. A
-	// client that sees it polls only the hosts whose events are not live.
-	// load is this machine's own, so a client draws its machine from the
-	// daemon on every system, as it draws the hosts.
 	out := map[string]any{"type": "host_list", "events_push": true, "load": machineLoad(d.manager.ListSessions())}
 	if problems := d.configProblems(); len(problems) > 0 {
 		out["config_problems"] = problems
@@ -309,8 +211,6 @@ func (d *Daemon) verbListHosts(cs *connState, _ json.RawMessage) (any, *verbErro
 
 	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
 	defer cancel()
-	// A host with no daemon is asked again over the ssh its link holds, so
-	// a daemon started there since shows now. It costs no login.
 	askCtx, cancelAsk := context.WithTimeout(ctx, hostAskBudget)
 	d.federation.AskWaiting(askCtx)
 	cancelAsk()
@@ -319,8 +219,6 @@ func (d *Daemon) verbListHosts(cs *connState, _ json.RawMessage) (any, *verbErro
 		reports[i].Events, reports[i].EventsNote = d.fleet.mode(reports[i].Host)
 		reports[i].Queued = d.outbox.count(reports[i].Host)
 		if cs != nil && cs.viaLink {
-			// The sign-in page logs this machine's person in to a host. It is
-			// for them, not for the machine at the other end of a link.
 			reports[i].ApprovalURL = ""
 			reports[i].ApprovalRefused = false
 			reports[i].Reason = linkSafeReason(reports[i].Status, reports[i].Reason)
@@ -331,9 +229,6 @@ func (d *Daemon) verbListHosts(cs *connState, _ json.RawMessage) (any, *verbErro
 	return out, nil
 }
 
-// linkSafeReason is a host's reason as a link caller gets it. The reason of a
-// host that waits for a Tailscale sign-in names the sign-in page, which is
-// for the person on this machine and not for another machine.
 func linkSafeReason(status federation.Status, reason string) string {
 	if status == federation.StatusApproval {
 		return federation.SignInSentence
@@ -341,8 +236,6 @@ func linkSafeReason(status federation.Status, reason string) string {
 	return reason
 }
 
-// verbRetryHost makes one host's link dial again now. See
-// federation.Manager.Retry.
 func (d *Daemon) verbRetryHost(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Host string `json:"host"`
@@ -370,11 +263,6 @@ func (d *Daemon) verbRetryHost(_ *connState, params json.RawMessage) (any, *verb
 	return out, nil
 }
 
-// verbListHostSessions is the aggregated `tuios ls --all-hosts`.
-//
-// Local always comes first and is never fetched over a link; it is this
-// daemon's own listing. Remote hosts follow in the table's sorted order,
-// answering or not.
 func (d *Daemon) verbListHostSessions(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Host string `json:"host"`
@@ -417,9 +305,6 @@ func (d *Daemon) verbListHostSessions(cs *connState, params json.RawMessage) (an
 		}
 		if err != nil {
 			e.Error, e.Code = hostListingErrorText(err, "session list")
-			// A host that did not answer keeps the rows it last gave, marked
-			// stale with when they were taken, so a listing still says what
-			// was waiting there rather than going blank.
 			if cached, at := d.fleet.cachedSessions(a.Host); !at.IsZero() {
 				e.Result, e.Stale, e.FetchedAt = sessionRowsOut(cached), true, at.Unix()
 			}
@@ -432,10 +317,8 @@ func (d *Daemon) verbListHostSessions(cs *connState, params json.RawMessage) (an
 	return map[string]any{"type": "host_session_list", "hosts": entries}, nil
 }
 
-// errHostAnswerUnreadable is a host's answer this build cannot decode.
 var errHostAnswerUnreadable = errors.New("the host sent a listing this build cannot read")
 
-// decodeHostSessions reads a host's list-sessions answer.
 func decodeHostSessions(raw json.RawMessage) ([]remoteSessionListRow, error) {
 	var decoded struct {
 		Sessions []remoteSessionListRow `json:"sessions"`
@@ -446,9 +329,6 @@ func decodeHostSessions(raw json.RawMessage) ([]remoteSessionListRow, error) {
 	return decoded.Sessions, nil
 }
 
-// sessionRowsOut is a host's rows as a listing sends them, each rolled up to
-// its most urgent agent state, with at most remoteAgentHostMax agent panes
-// over all of them.
 func sessionRowsOut(in []remoteSessionListRow) []remoteSessionRow {
 	rows := make([]remoteSessionRow, 0, len(in))
 	left := remoteAgentHostMax
@@ -465,7 +345,6 @@ func sessionRowsOut(in []remoteSessionListRow) []remoteSessionRow {
 	return rows
 }
 
-// fetchHostSessions asks one host for its sessions.
 func (d *Daemon) fetchHostSessions(ctx context.Context, host string) ([]remoteSessionListRow, error) {
 	raw, err := d.federation.Call(ctx, host, "list-sessions", nil)
 	if err != nil {
@@ -474,11 +353,6 @@ func (d *Daemon) fetchHostSessions(ctx context.Context, host string) ([]remoteSe
 	return decodeHostSessions(raw)
 }
 
-// fetchHostAgents asks one host for the agent panes of every session it holds.
-//
-// A host from before list-agents took all_sessions refuses the param, and is
-// asked the old way instead: its sessions, then each session's agents. That is
-// one round trip per session, which is slower and answers the same question.
 func (d *Daemon) fetchHostAgents(ctx context.Context, host string, all bool) ([]remoteAgentRow, error) {
 	raw, err := d.federation.Call(ctx, host, "list-agents", map[string]any{"all": all, "all_sessions": true})
 	if err == nil {
@@ -497,7 +371,6 @@ func (d *Daemon) fetchHostAgents(ctx context.Context, host string, all bool) ([]
 		raw, err := d.federation.Call(ctx, host, "list-agents", map[string]any{"all": all, "session": s.Name})
 		if err != nil {
 			if errors.As(err, &rerr) && rerr.Code == ErrVerbSessionNotFound {
-				// The session ended between the two calls.
 				continue
 			}
 			return nil, err
@@ -514,10 +387,6 @@ func (d *Daemon) fetchHostAgents(ctx context.Context, host string, all bool) ([]
 	return out, nil
 }
 
-// decodeHostAgents reads a host's list-agents answer. A row from a host that
-// does not name its session is given the session the answer names, and a
-// queue count is held to 0..config.MaxQueueMax, since no queue of this build
-// can hold more and the host is not trusted to say otherwise.
 func decodeHostAgents(raw json.RawMessage, session string) ([]remoteAgentRow, error) {
 	var decoded struct {
 		Session string           `json:"session"`
@@ -536,8 +405,6 @@ func decodeHostAgents(raw json.RawMessage, session string) ([]remoteAgentRow, er
 	return decoded.Agents, nil
 }
 
-// soleSession is the session every row is in, or empty when they are in
-// several or there are none. It fills the entry's old session field.
 func soleSession(rows []remoteAgentRow) string {
 	if len(rows) == 0 {
 		return ""
@@ -551,8 +418,6 @@ func soleSession(rows []remoteAgentRow) string {
 	return s
 }
 
-// verbListHostAgents is the aggregated `tuios list-agents --all-hosts`. Every
-// session on every host is listed, and each row names its session.
 func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Host   string `json:"host"`
@@ -569,10 +434,6 @@ func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any,
 			return nil, verr
 		}
 	}
-	// The selector is applied here, to every host's rows alike, rather than
-	// sent on: a host from before selectors would refuse the param, and the
-	// host term is about which machine a row came from, which only this side
-	// knows.
 	answer := func(entries []hostAgentsEntry) (any, *verbError) {
 		filterHostAgents(entries, sel)
 		out := map[string]any{"type": "host_agent_list", "hosts": entries}
@@ -585,9 +446,6 @@ func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any,
 	entries := make([]hostAgentsEntry, 0, 4)
 	if p.Host == "" || p.Host == federation.LocalHostName {
 		e := hostAgentsEntry{Host: federation.LocalHostName, Status: federation.StatusUp}
-		// Rebuilt rather than forwarded: this verb's params carry a host field
-		// list-agents does not declare, and the local half must be called with
-		// exactly the parameters list-agents takes.
 		localParams, _ := jsonx.Marshal(map[string]any{"all": p.All, "all_sessions": true})
 		result, verr := d.verbListAgents(cs, localParams)
 		switch {
@@ -612,17 +470,12 @@ func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any,
 
 	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
 	defer cancel()
-	// The reports wait, within the budget, for a host whose first dial has
-	// not settled, so a listing right after the daemon starts says up or down
-	// rather than connecting.
 	var reports []federation.HostReport
 	for _, r := range d.federation.Reports(ctx) {
 		if p.Host == "" || r.Host == p.Host {
 			reports = append(reports, r)
 		}
 	}
-	// Every host is asked at once, so one slow machine costs the listing its
-	// own row and nothing more.
 	remote := make([]hostAgentsEntry, len(reports))
 	var wg sync.WaitGroup
 	for i, r := range reports {
@@ -635,8 +488,6 @@ func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any,
 	return answer(entries)
 }
 
-// hostAgentsEntryFor is one host's entry of list-host-agents: its rows when it
-// answers, else the rows it last gave, marked stale.
 func (d *Daemon) hostAgentsEntryFor(ctx context.Context, r federation.HostReport, all bool) hostAgentsEntry {
 	host := r.Host
 	e := hostAgentsEntry{Host: host, Status: r.Status, Reason: r.Reason}
@@ -662,8 +513,6 @@ func (d *Daemon) hostAgentsEntryFor(ctx context.Context, r federation.HostReport
 	return e
 }
 
-// hostListingErrorText is federationErrorText for a listing, which can also
-// fail because the host's answer could not be read.
 func hostListingErrorText(err error, what string) (string, string) {
 	if errors.Is(err, errHostAnswerUnreadable) {
 		return "The host sent a " + what + " this build cannot read.", ErrVerbInternal
@@ -671,8 +520,6 @@ func hostListingErrorText(err error, what string) (string, string) {
 	return federationErrorText(err)
 }
 
-// checkHostParam refuses a named host that is not configured, before anything
-// is dialed. An empty name means every host and is always allowed.
 func (d *Daemon) checkHostParam(name string) *verbError {
 	if name == "" {
 		return nil
@@ -697,7 +544,6 @@ func (d *Daemon) checkHostParam(name string) *verbError {
 	return nil
 }
 
-// federationAnswers runs one read verb against one host or every host.
 func (d *Daemon) federationAnswers(ctx context.Context, host, verb string, params any) []federation.Answer {
 	if d.federation == nil {
 		return nil
@@ -716,8 +562,6 @@ func (d *Daemon) federationAnswers(ctx context.Context, host, verb string, param
 	return []federation.Answer{a}
 }
 
-// federationErrorText turns a link failure into the sentence a user reads and
-// the stable code a machine reads.
 func federationErrorText(err error) (string, string) {
 	if err == nil {
 		return "", ""
@@ -725,13 +569,9 @@ func federationErrorText(err error) (string, string) {
 	if errors.Is(err, federation.ErrUnknownHost) {
 		return err.Error(), ErrVerbUnknownHost
 	}
-	// Every other failure across a link is the host not answering, whatever the
-	// underlying cause was. The cause is still carried, in the report's detail.
 	return err.Error(), ErrVerbHostUnreachable
 }
 
-// localSessionRows narrows this daemon's own listing to the fields a federated
-// listing shows, so the local row and a remote row are the same shape.
 func localSessionRows(infos []SessionInfo) []remoteSessionRow {
 	out := make([]remoteSessionRow, 0, len(infos))
 	for _, s := range infos {
@@ -751,9 +591,6 @@ func localSessionRows(infos []SessionInfo) []remoteSessionRow {
 	return out
 }
 
-// localAgentRows narrows the local list-agents result the same way. It goes
-// through JSON rather than reaching into the handler's map so the local rows
-// and the remote rows are decoded by one piece of code.
 func localAgentRows(result any) []remoteAgentRow {
 	raw, err := jsonx.Marshal(result)
 	if err != nil {

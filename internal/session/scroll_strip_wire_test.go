@@ -35,8 +35,6 @@ func TestScrollStripSurvivesTheWireAtHome(t *testing.T) {
 		}
 	}
 
-	// The other half: a peer that really has said nothing still decodes as nil,
-	// so "keep the strip you have" stays reachable.
 	data, err := encodePayload(&SessionState{Name: "wire"})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
@@ -60,7 +58,6 @@ func TestScrollStripSurvivesTheWireAtHome(t *testing.T) {
 func TestReconcileStaleTakesTheStripWithTheWorkspace(t *testing.T) {
 	live := func(string) bool { return true }
 
-	// Same workspace: the client's own scroll stands.
 	incoming := &SessionState{CurrentWorkspace: 1, ScrollStrip: &ScrollStripState{ViewportX: 40}}
 	canonical := &SessionState{CurrentWorkspace: 1, ScrollStrip: &ScrollStripState{ViewportX: 0}}
 	reconcileStale(incoming, canonical, live)
@@ -68,7 +65,6 @@ func TestReconcileStaleTakesTheStripWithTheWorkspace(t *testing.T) {
 		t.Errorf("a scroll on the workspace being shown was overwritten: %+v", incoming.ScrollStrip)
 	}
 
-	// Another workspace: the daemon's travels with the workspace it belongs to.
 	incoming = &SessionState{CurrentWorkspace: 1, ScrollStrip: &ScrollStripState{ViewportX: 40}}
 	canonical = &SessionState{CurrentWorkspace: 2, ScrollStrip: &ScrollStripState{ViewportX: 7}}
 	reconcileStale(incoming, canonical, live)
@@ -93,8 +89,6 @@ func TestFingerprintSeesTheStrip(t *testing.T) {
 	if StateFingerprint(at(0)) == StateFingerprint(&SessionState{Name: "fp"}) {
 		t.Error("a strip at home fingerprints as a peer that has not said")
 	}
-	// Two states built separately, so the comparison catches a fingerprint
-	// that depends on map order or on the pointer rather than the content.
 	first, second := StateFingerprint(at(40)), StateFingerprint(at(40))
 	if first != second {
 		t.Error("the same strip fingerprints differently")

@@ -178,7 +178,6 @@ func TestNewWindowWaitsForTheClientToPlaceIt(t *testing.T) {
 		t.Error("awaitPlacement reported a window nobody placed as placed")
 	}
 
-	// A client places it a moment later, as an attached one does.
 	go func() {
 		time.Sleep(50 * time.Millisecond)
 		_ = sess.mutateState(func(state *SessionState) error {

@@ -7,32 +7,10 @@ import (
 	"time"
 )
 
-// A popup the caller waits on.
-//
-// popup with wait keeps the call open until the popup's command exits and
-// returns its exit status, so a script can use a popup the way it uses a
-// command: run a picker, get the answer. capture_stdout sends the command's
-// standard output to a pipe the daemon owns instead of the pane, and returns
-// it. A picker such as fzf or gum draws on the terminal and prints only the
-// choice to stdout, so the choice comes back and the drawing stays on the
-// screen.
-//
-// Nothing here grants anything new. The caller picked the command, the popup
-// runs it with the caller's rights, and what comes back is what that command
-// printed. The pipe is the daemon's: it is handed to the popup's process
-// alone and read only by the call that asked for it.
-
-// popupCaptureMax bounds the captured output. A picker's answer is a line; the
-// bound is there for the command that prints a file.
 const popupCaptureMax = 1 << 20
 
-// popupDrainWait is how long the capture keeps reading after the command
-// exits. A child that inherited the pipe can hold it open after its parent is
-// gone, and the call must not wait on it.
 const popupDrainWait = time.Second
 
-// popupCapture reads a popup's standard output from the daemon's end of the
-// pipe, keeping at most popupCaptureMax bytes.
 type popupCapture struct {
 	r         *os.File
 	mu        sync.Mutex
@@ -47,9 +25,6 @@ func newPopupCapture(r *os.File) *popupCapture {
 	return c
 }
 
-// read drains the pipe until every writer has closed it. It keeps reading
-// past the bound and past a call that stopped waiting, so the command never
-// blocks or dies on a full or closed pipe.
 func (c *popupCapture) read() {
 	defer close(c.done)
 	defer func() { _ = c.r.Close() }()
@@ -71,8 +46,6 @@ func (c *popupCapture) read() {
 	}
 }
 
-// finish waits a moment for the rest of the output and returns what was read.
-// A child still holding the pipe keeps the reader draining after this returns.
 func (c *popupCapture) finish() (string, bool) {
 	select {
 	case <-c.done:
@@ -83,24 +56,13 @@ func (c *popupCapture) finish() (string, bool) {
 	return c.buf.String(), c.truncated
 }
 
-// popupExit keeps the exit status of a popup's command. The daemon closes a
-// popup when its command exits (see verbPopup), and the close removes the PTY
-// that holds the status. A caller that waits can come to the PTY after that,
-// so the exit callback keeps the status here first.
-//
-// new-window with wait keeps its status here for the same reason: an attached
-// client closes a command window when its command exits.
 type popupExit struct {
-	once sync.Once
-	done chan struct{}
-	code int
-	// signal is the signal that ended the process, 0 for none. Written
-	// before done is closed, so read it only through exitSignal.
+	once   sync.Once
+	done   chan struct{}
+	code   int
 	signal int
 }
 
-// exitSignal returns the signal that ended the process, or 0 when none was
-// kept yet. The receive from done orders the read after the write.
 func (e *popupExit) exitSignal() int {
 	select {
 	case <-e.done:
@@ -114,7 +76,6 @@ func newPopupExit() *popupExit {
 	return &popupExit{done: make(chan struct{})}
 }
 
-// record keeps the first status it is given.
 func (e *popupExit) record(code int) {
 	e.once.Do(func() {
 		e.code = code
@@ -122,7 +83,6 @@ func (e *popupExit) record(code int) {
 	})
 }
 
-// recordPTY keeps the status of a PTY whose process has exited.
 func (e *popupExit) recordPTY(pty *PTY) {
 	code, ok := pty.ExitStatus()
 	if !ok {
@@ -135,17 +95,8 @@ func (e *popupExit) recordPTY(pty *PTY) {
 	})
 }
 
-// popupBeforeWaitHook, when set, runs before a popup with wait starts to wait
-// for its command. Test-only: it lets a test close the popup first.
 var popupBeforeWaitHook func(sess *Session, win WindowState)
 
-// waitPopupExit blocks until the popup's process exits, the timeout passes (a
-// zero timeout waits for as long as the popup is open), or the daemon stops.
-// It reports the exit status and whether the process exited.
-//
-// kept is the status the exit callback kept, or nil. It is read when the PTY
-// is gone already, which is what a popup whose command exited at once and was
-// closed by the daemon looks like.
 func (d *Daemon) waitPopupExit(sess *Session, win WindowState, timeout time.Duration, kept *popupExit) (int, bool) {
 	var deadline <-chan time.Time
 	if timeout > 0 {

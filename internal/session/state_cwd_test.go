@@ -4,12 +4,6 @@ import (
 	"testing"
 )
 
-// The file section on the rail asks one question: where is the focused pane. It
-// used to get an answer only from a shell that announced one over OSC 7, or
-// from reading the pane's process on the machine the pane runs on. Neither is
-// available to a client that attached a session on another machine, so a remote
-// pane had no directory at all and the section drew nothing.
-
 // TestTheDirectoryReadIsThrottled guards the cost. GetState is on the render
 // path, and reading a process directory is a syscall per window, so a second
 // call inside the interval must reuse the first one's answer rather than going

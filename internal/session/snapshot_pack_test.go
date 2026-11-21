@@ -10,10 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// throughWire takes a snapshot the way the socket does: gob out, gob back,
-// packed first when asked. Every fidelity test that reads a snapshot goes
-// through here in both forms, so the packed form is proved by the same
-// comparisons as the cell form.
 func throughWire(tb testing.TB, state *TerminalState, packed bool) *TerminalState {
 	tb.Helper()
 	if packed {
@@ -33,9 +29,6 @@ func throughWire(tb testing.TB, state *TerminalState, packed bool) *TerminalStat
 	return payload.State
 }
 
-// packedGrid is a screen with every shape a cell can take: a wide rune and
-// its continuation at the end of a row, a grapheme cluster, styled runs,
-// links, an empty tail and a row that is nothing but blanks.
 func packedGrid() [][]CellState {
 	red := StyleState{FgColor: "a1", Attrs: 1}
 	link := StyleState{LinkURL: "https://example.test", LinkParams: "id=1"}
@@ -55,8 +48,6 @@ func TestPackedRowsRoundTrip(t *testing.T) {
 	st := &TerminalState{Width: 4, Height: len(want), Screen: packedGrid(), Scrollback: packedGrid()}
 	got := throughWire(t, st, true)
 	if got.Packed() {
-		// The client keeps the wire form packed; a reader that wants the
-		// cells unpacks.
 		if err := got.Unpack(); err != nil {
 			t.Fatalf("unpack: %v", err)
 		}
@@ -112,8 +103,6 @@ func TestSnapshotIsPackedOnlyOnRequest(t *testing.T) {
 	rig.run(t, "printf 'pac''ked\\n'", "packed", 5*time.Second)
 	rig.drain(200 * time.Millisecond)
 
-	// The client asks for the packed form and keeps it packed: the one
-	// reader of its cells, ApplyTerminalState, reads that form directly.
 	st, err := rig.c.GetTerminalState(rig.ptyID, 0, 0)
 	if err != nil {
 		t.Fatalf("GetTerminalState: %v", err)
@@ -134,8 +123,6 @@ func TestSnapshotIsPackedOnlyOnRequest(t *testing.T) {
 		t.Fatalf("the snapshot did not carry the pane's text")
 	}
 
-	// On the wire, the same request is answered packed, and a request
-	// without the field, which is what an older client sends, is not.
 	for _, tc := range []struct {
 		name   string
 		packed bool
@@ -179,11 +166,6 @@ func screenText(st *TerminalState) string {
 	return b.String()
 }
 
-// The shapes this package had before the packed form. gob matches struct
-// fields by name and ignores the ones the reader does not have, which is the
-// whole of why the new field is safe on both sides of a version skew. Kept
-// here so that is tested and not argued: a rename or a retype of a field one
-// of these names breaks this test rather than a user's session.
 type oldGetTerminalStateRequest struct {
 	PTYID              string
 	IncludeScrollback  bool
@@ -216,7 +198,6 @@ type oldTerminalStateReply struct {
 // them before it reads them, and unpacking is a
 // no-op, so the pane comes back.
 func TestOlderPeerReadsTheWire(t *testing.T) {
-	// Newer client, older daemon: the request still reads.
 	asked, err := encodePayload(&GetTerminalStatePayload{
 		PTYID: "p", IncludeScrollback: true, MaxScrollbackLines: 7, HaveScrollback: 3, Packed: true,
 	})
@@ -231,7 +212,6 @@ func TestOlderPeerReadsTheWire(t *testing.T) {
 		t.Errorf("the older daemon read the request as %+v; every field it knows must survive", old)
 	}
 
-	// Older daemon, newer client: the answer still reads, as cells.
 	rows := packedGrid()
 	sent, err := encodePayload(&oldTerminalStateReply{
 		PTYID: "p", State: &oldTerminalState{Width: 4, Height: len(rows), Screen: rows},
@@ -246,8 +226,6 @@ func TestOlderPeerReadsTheWire(t *testing.T) {
 	if got.State.Packed() {
 		t.Fatalf("an answer carrying cells was read as packed (styles=%d)", len(got.State.Styles))
 	}
-	// The client applies such an answer by packing it first. The receipt
-	// check has nothing to check on it.
 	if err := got.State.CheckPacked(); err != nil {
 		t.Fatalf("the receipt check failed an answer that carried cells: %v", err)
 	}
@@ -285,9 +263,6 @@ func TestTerminalStateKeepsItsGobName(t *testing.T) {
 	if err := gob.NewEncoder(&b).Encode(struct{ V any }{TerminalState{Width: 1}}); err != nil {
 		t.Fatal(err)
 	}
-	// gob writes the name as a length and the bytes, so the length byte
-	// makes the match exact: a longer name, such as one with a suffix, has
-	// another length.
 	const old = "github.com/Gaurav-Gosain/tuios/internal/session.TerminalState"
 	want := append([]byte{byte(len(old))}, old...)
 	if !bytes.Contains(b.Bytes(), want) {

@@ -15,14 +15,6 @@ import (
 	"time"
 )
 
-// Reports from a pane on another machine (P18), proved with two real daemons
-// on the real proxy and a real process in the pane: the process is this test
-// binary, started as the pane's command, calling the far daemon's socket the
-// way the tuios CLI does.
-
-// hostedHelperCall is one call the helper process makes. $PANE in params is
-// replaced by TUIOS_PANE_ID. expect, when set, is a string the answer has to
-// hold for the helper to print HAS.
 type hostedHelperCall struct {
 	Verb   string          `json:"verb"`
 	Params json.RawMessage `json:"params"`
@@ -77,8 +69,6 @@ func TestHostedPaneHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-// hostedHelperWindow opens a window on build in a hub session whose process is
-// the helper making calls.
 func hostedHelperWindow(t *testing.T, hub *Daemon, far *farSide, sessionName string, calls []hostedHelperCall) (*Session, WindowState, *PTY) {
 	t.Helper()
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
@@ -120,9 +110,6 @@ func hostedHelperWindow(t *testing.T, hub *Daemon, far *farSide, sessionName str
 func TestAPaneOnAnotherMachineReadsAndSendsItsOwnMail(t *testing.T) {
 	hub, far := startHubAndFar(t)
 	waitForHostUp(t, hub, "build")
-	// The pane's inbox has to hold the message before the helper reads it,
-	// and the window id is not known until the window exists. So the helper
-	// waits for mail first.
 	sess, win, pty := hostedHelperWindow(t, hub, far, "global", []hostedHelperCall{
 		{Verb: "wait-for", Params: json.RawMessage(`{"condition":"agent-message","window":"$PANE","timeout":20000}`)},
 		{Verb: "read-agent-messages", Params: json.RawMessage(`{"to":"$PANE"}`), Expect: "please rebase"},
@@ -140,8 +127,6 @@ func TestAPaneOnAnotherMachineReadsAndSendsItsOwnMail(t *testing.T) {
 			t.Errorf("the pane printed %q, want %s", text, want)
 		}
 	}
-	// A message from human names no pane, so it is not forwarded at all: it
-	// is answered on the machine the process is on, where it fails.
 	if strings.Contains(text, "R3:OK") {
 		t.Errorf("a message the pane sent as human went through: %q", text)
 	}
@@ -178,7 +163,6 @@ func TestAProcessOutsideAHostedPaneCannotReportAsIt(t *testing.T) {
 	sess, win, pty := hostedHelperWindow(t, hub, far, "global", nil)
 	waitForPaneText(t, pty, "DONE", paneBudget)
 
-	// This test process is the daemons' own, and it is in no pane.
 	farC := dialVerb(t, far.socket)
 	resp := farC.call(t, fmt.Sprintf(`{"id":1,"verb":"set-agent-state","params":{"window":%q,"state":"errored"}}`, win.ID))
 	errObj, _ := resp["error"].(map[string]any)
@@ -206,7 +190,6 @@ func TestTheOwnerRunsAHostedCallAsItsOwnWindow(t *testing.T) {
 	if _, err := sess.AddDaemonWindow("mine", nil); err != nil {
 		t.Fatalf("window: %v", err)
 	}
-	// Mark the window as on build, which is what runHostedCall requires.
 	var mine string
 	_ = sess.mutateState(func(st *SessionState) error {
 		mine = st.Windows[0].ID
@@ -282,7 +265,6 @@ func TestAHostedPaneAttachesOnlyStashedFiles(t *testing.T) {
 		t.Error("a refused message was stored")
 	}
 
-	// A file the session stashed is what a hosted pane may attach.
 	src := filepath.Join(t.TempDir(), "report.txt")
 	writeBytes(t, src, 64, 7)
 	c := dialVerb(t, sp)

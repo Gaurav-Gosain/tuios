@@ -10,12 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
-// The Linux half of the foreground-process resolver: everything here is procfs.
-// See agent_detect.go for what the three readings are for, and
-// agent_detect_darwin.go for the same four answers from sysctl.
-
-// readForegroundPGID reads field 8 (tpgid) of /proc/<pid>/stat, the foreground
-// process group id of the process's controlling terminal.
 func readForegroundPGID(pid int) (int, bool) {
 	stat, ok := procinfo.Stat(pid)
 	if !ok {
@@ -24,21 +18,12 @@ func readForegroundPGID(pid int) (int, bool) {
 	return procinfo.StatField(stat, 8)
 }
 
-// readPGRP reads the process group of a pid (field 5), or 0 when it cannot be
-// read.
 func readPGRP(pid int) int {
 	stat, _ := procinfo.Stat(pid)
 	pgrp, _ := procinfo.StatField(stat, 5)
 	return pgrp
 }
 
-// readChildren lists the children of a pid across all of its threads, from
-// /proc/<pid>/task/<tid>/children. A child is listed under the thread that
-// forked it, and a Go or Rust launcher forks from whichever thread was running,
-// so reading only the main thread's list would miss the program a launcher
-// started. A kernel built without CONFIG_PROC_CHILDREN has no such file, and the
-// answer is then no children, which leaves detection reading the leader alone
-// as it always did.
 func readChildren(pid int) []int {
 	dir := "/proc/" + strconv.Itoa(pid) + "/task"
 	tids, err := os.ReadDir(dir)
@@ -63,18 +48,8 @@ func readChildren(pid int) []int {
 	return out
 }
 
-// maxThreadsListed bounds how many of a wrapper's threads are read for
-// children. Every wrapper that matters has a handful; the bound is against a
-// process with hundreds, which is not a wrapper.
 const maxThreadsListed = 64
 
-// foregroundGroup walks the descendants of leader that share its process group,
-// depth first, reading at most limit processes no deeper than depth. Each
-// yielded process carries its depth below the leader.
-//
-// The group is the honest boundary. A descendant in another process group is a
-// background job or a daemon the wrapper started, and neither is what the pane
-// is running in the foreground.
 func foregroundGroup(leader, limit, depth int) func(yield func(foregroundInfo) bool) {
 	return func(yield func(foregroundInfo) bool) {
 		read := 0
@@ -110,9 +85,6 @@ func foregroundGroup(leader, limit, depth int) func(yield func(foregroundInfo) b
 	}
 }
 
-// readProcessInfo reads the three descriptions of a process from its procfs
-// entry. Reading them from the same entry means a pid reused between the reads
-// yields at worst a stale-but-consistent name for one tick.
 func readProcessInfo(pid int) foregroundInfo {
 	if pid <= 0 {
 		return foregroundInfo{}
@@ -124,7 +96,6 @@ func readProcessInfo(pid int) foregroundInfo {
 	}
 }
 
-// readComm returns the trimmed contents of /proc/<pid>/comm, or "" on error.
 func readComm(pid int) string {
 	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/comm")
 	if err != nil {
@@ -133,8 +104,6 @@ func readComm(pid int) string {
 	return strings.TrimSpace(string(data))
 }
 
-// readCmdline returns the NUL-separated arguments of /proc/<pid>/cmdline as a
-// slice, or nil on error or for a kernel thread (empty cmdline).
 func readCmdline(pid int) []string {
 	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
 	if err != nil || len(data) == 0 {
@@ -150,9 +119,6 @@ func readCmdline(pid int) []string {
 	return out
 }
 
-// readExe resolves /proc/<pid>/exe, the real binary behind a process whatever it
-// renamed itself to, or "" when it cannot be read. A deleted binary resolves to a
-// path with a " (deleted)" suffix, which is stripped so the name still matches.
 func readExe(pid int) string {
 	target, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
 	if err != nil {

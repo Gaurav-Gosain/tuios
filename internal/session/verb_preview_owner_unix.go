@@ -9,7 +9,6 @@ import (
 	"syscall"
 )
 
-// previewFileOwner is the names of a file's owner and group, or their numbers.
 func previewFileOwner(fi os.FileInfo) (owner, group string) {
 	st, ok := fi.Sys().(*syscall.Stat_t)
 	if !ok {

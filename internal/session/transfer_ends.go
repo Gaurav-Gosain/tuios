@@ -19,36 +19,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The two ends of a copy: this machine's disk, read directly, or a host's,
-// through its daemon over the link with the file verbs.
-
-// fileEnd is a machine's disk.
 type fileEnd struct {
 	d    *Daemon
 	host string
-	// wire, when set, counts the bytes this end's streams carry over the
-	// link.
 	wire *atomic.Int64
-	// ack, when set, is told the bytes this end, as the writing side, says
-	// it holds: what reached this machine's disk, or what the far daemon
-	// reports it wrote. The copy's rate is taken from it.
-	ack func(int64)
-	// gate, for this machine's disk, is the linked machine the job runs
-	// for: each read and write is checked as that machine's file verbs
-	// would be, and each write goes through an os.Root at its root. Nil is
-	// the person's own job, which reads and writes like the person.
+	ack  func(int64)
 	gate *connState
-	// acc is the gate and, for a copy a pane started with the files grant,
-	// the pane's folder, which every read and write here is held to.
-	acc access
+	acc  access
 }
 
-// callError turns a refusal of the link checks into the error a job ends on.
 func callError(verr *verbError) error {
 	return &VerbCallError{Code: verr.Code, Message: verr.Message}
 }
 
-// readable checks a read of path on this machine against the gate.
 func (e fileEnd) readable(path string) error {
 	if e.acc == (access{}) {
 		return nil
@@ -59,9 +42,6 @@ func (e fileEnd) readable(path string) error {
 	return nil
 }
 
-// writeFS is where a write of paths on this machine goes: the plain file
-// system for the person's job, an os.Root under the gate's policy for a
-// linked machine's. The caller closes it.
 func (e fileEnd) writeFS(paths ...string) (fileFS, error) {
 	if e.acc == (access{}) {
 		return fileFS{}, nil
@@ -78,13 +58,11 @@ type statResult struct {
 	isDir  bool
 	size   int64
 	perm   uint32
-	// mtime is the modification time in Unix ms.
-	mtime int64
+	mtime  int64
 }
 
 func (e fileEnd) local() bool { return e.host == "" }
 
-// name is the machine, for a message.
 func (e fileEnd) name() string {
 	if e.local() {
 		return "this machine"
@@ -121,20 +99,12 @@ func (e fileEnd) stat(ctx context.Context, path string) (statResult, error) {
 	return statResult{exists: r.Exists, isDir: r.Info.isDirLike(), size: r.Size, perm: r.Info.Perm, mtime: r.Info.MTime}, nil
 }
 
-// How a copy's target stands to its source on one machine. See pathRelation.
 const (
 	relApart  = "apart"
 	relSame   = "same"
 	relInside = "inside"
 )
 
-// pathRelation says how target stands to src on this machine: one file with
-// it (relSame), a path inside the folder src (relInside), or neither
-// (relApart). It asks the file system with os.SameFile rather than comparing
-// the strings, so a symbolic link, a hard link, a bind mount, or a name in
-// another case on a case-insensitive disk is seen through (#2136). Both paths
-// are absolute and clean. A target that is not there yet is checked by the
-// folders above it.
 func pathRelation(src, target string) (string, error) {
 	si, err := os.Stat(src)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -150,7 +120,6 @@ func pathRelation(src, target string) (string, error) {
 			}
 			return relInside, nil
 		}
-		// Only a folder holds other paths.
 		parent := filepath.Dir(p)
 		if !si.IsDir() || parent == p {
 			return relApart, nil
@@ -159,9 +128,6 @@ func pathRelation(src, target string) (string, error) {
 	}
 }
 
-// relation is pathRelation, asked of the machine that holds both paths: this
-// one, or the host over the link. known is false when the host runs a tuios
-// too old to answer.
 func (e fileEnd) relation(ctx context.Context, src, target string) (rel string, known bool, err error) {
 	if e.local() {
 		s, verr := expandPath(src)
@@ -213,8 +179,6 @@ func (e fileEnd) partSize(ctx context.Context, path, id string) (int64, error) {
 	return r.Size, err
 }
 
-// hash is the sha256 of a range of the file at path, to its end when length
-// is negative.
 func (e fileEnd) hash(ctx context.Context, path string, off, length int64) (string, error) {
 	if e.local() {
 		if e.acc == (access{}) {
@@ -243,8 +207,6 @@ func (e fileEnd) hash(ctx context.Context, path string, off, length int64) (stri
 	return r.SHA256, err
 }
 
-// partHash is the sha256 of a range of the part a copy with part id id
-// writes for path.
 func (e fileEnd) partHash(ctx context.Context, path, id string, off, length int64) (string, error) {
 	if e.local() {
 		fsys, err := e.writeFS(partPath(path, id))
@@ -263,25 +225,17 @@ func (e fileEnd) partHash(ctx context.Context, path, id string, off, length int6
 	return r.SHA256, err
 }
 
-// readStream is a file's bytes from an offset, as one end reads them.
 type readStream struct {
-	// r is the bytes: the file itself on this machine, or the stream from
-	// the far daemon, uncompressed.
-	r io.Reader
-	// size and mtime are the file's as the reading side opened it.
+	r           io.Reader
 	size, mtime int64
 	compressed  bool
-	// trailer reads the sha256 the reading side took, after the last byte:
-	// "" from this machine, whose bytes this daemon hashes itself.
-	trailer func() (string, error)
-	close   func() error
+	trailer     func() (string, error)
+	close       func() error
 }
 
 func (s *readStream) Read(p []byte) (int, error) { return s.r.Read(p) }
 func (s *readStream) Close() error               { return s.close() }
 
-// openRead opens the file at path to read from off. compress asks the far
-// side to compress the bytes when a sample says it is worth it.
 func (e fileEnd) openRead(ctx context.Context, path string, off int64, compress bool) (*readStream, error) {
 	if e.local() {
 		f, fi, verr, err := e.d.accOpenRead(e.acc, path)
@@ -357,9 +311,6 @@ func (e fileEnd) openRead(ctx context.Context, path string, off int64, compress 
 	return s, nil
 }
 
-// openWrite opens the part of a copy to path at off for length bytes, which
-// the caller sends as one flate stream when compress is set. finish ends the
-// write and reports whether every byte landed.
 func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int64, compress bool) (io.WriteCloser, func() error, error) {
 	if e.local() {
 		fsys, err := e.writeFS(path, partPath(path, id))
@@ -407,9 +358,6 @@ func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int
 		return nil, nil, err
 	}
 	c.count(e.wire)
-	// progress asks the far daemon to say how many bytes it has written
-	// while they land. A daemon from before it ignores the key and sends
-	// only the last line.
 	params := map[string]any{"path": path, "mode": "write", "offset": off, "length": length, "part_id": id, "progress": true}
 	if compress {
 		params["compress"] = true
@@ -445,10 +393,6 @@ func (e fileEnd) openWrite(ctx context.Context, path, id string, off, length int
 	return c, finish, nil
 }
 
-// readWriteReplies reads what the far daemon writes back on a write stream:
-// a line {"written": N} each time more of the bytes landed, when the stream
-// asked for progress, then the last line, which has part_size, and which it
-// returns. ack, when set, is told each step of written.
 func readWriteReplies(br *bufio.Reader, ack func(int64)) ([]byte, error) {
 	var told int64
 	for {
@@ -474,8 +418,6 @@ func readWriteReplies(br *bufio.Reader, ack func(int64)) ([]byte, error) {
 	}
 }
 
-// partWriter is a part file of this machine that gives back the room its
-// write claimed (claimLinkWrite) when it closes.
 type partWriter struct {
 	*os.File
 	release func()
@@ -496,12 +438,6 @@ func (w *partWriter) Close() error {
 	return err
 }
 
-// writeReplyError reads the line the far side writes after the bytes of an
-// open-file-stream write, and returns nil when the part holds want bytes. A
-// code the far side gives, such as disk_full or no_permission, is its word
-// about its own disk: it comes back as a VerbCallError, which classify ends
-// the job on, not as a plain error, which classify would retry for ever as an
-// unreachable host.
 func writeReplyError(line []byte, host string, want int64) error {
 	var out struct {
 		PartSize int64  `json:"part_size"`
@@ -523,9 +459,6 @@ func writeReplyError(line []byte, host string, want int64) error {
 	return nil
 }
 
-// commit checks the part against sum and puts it in place. known is the
-// part's hash as this daemon took it while writing, for a part on this
-// machine.
 func (e fileEnd) commit(ctx context.Context, path, id, sum, conflict string, perm uint32, mtime int64, label, known string) (string, bool, error) {
 	if e.local() {
 		fsys, err := e.writeFS(path, partPath(path, id))
@@ -617,8 +550,6 @@ func (e fileEnd) remove(ctx context.Context, path string, recursive bool) error 
 	return e.call(ctx, "file-remove", map[string]any{"path": path, "recursive": recursive}, nil)
 }
 
-// walk lists a folder for a copy. A host streams the entries one line each,
-// so a folder of up to fileWalkMax entries is no one answer.
 func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 	if e.local() {
 		root, verr := e.d.accWalkRoot(e.acc, path)
@@ -653,7 +584,6 @@ func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 		return walkResult{}, err
 	}
 	if !reply.Stream {
-		// A daemon that answers the whole walk in its reply.
 		if len(reply.Skipped) > fileWalkSkippedMax {
 			reply.Skipped = reply.Skipped[:fileWalkSkippedMax]
 		}
@@ -705,8 +635,6 @@ func (e fileEnd) walk(ctx context.Context, path string) (walkResult, error) {
 	}
 }
 
-// receiveDir makes this end's receive folder, where a copy that names no
-// folder lands, and returns it.
 func (e fileEnd) receiveDir(ctx context.Context) (string, error) {
 	if e.local() {
 		dir, verr := e.d.receiveFolder(e.gate)
@@ -721,11 +649,8 @@ func (e fileEnd) receiveDir(ctx context.Context) (string, error) {
 	var r struct {
 		Path string `json:"path"`
 	}
-	// A far daemon from before the receive folder makes ~, its home, which
-	// is where such a daemon let a copy write.
 	err := e.call(ctx, "file-mkdir", map[string]any{"path": "~", "receive": true}, &r)
 	if ve, ok := errors.AsType[*VerbCallError](err); ok && ve.Code == ErrVerbInvalidParams {
-		// A far daemon that checks its parameters and has no receive.
 		err = e.call(ctx, "file-mkdir", map[string]any{"path": "~"}, &r)
 	}
 	if err != nil {
@@ -737,16 +662,11 @@ func (e fileEnd) receiveDir(ctx context.Context) (string, error) {
 	return r.Path, nil
 }
 
-// fileCheckBatch bounds the files one file-check asks about, and
-// fileCheckHashBytes the bytes one file-check hashes.
 const (
 	fileCheckBatch     = 2000
 	fileCheckHashBytes = 512 << 20
 )
 
-// check asks about many files under root at once: whether each is there, its
-// kind, size and time, and with hash its sha256. It asks in batches, so a
-// folder of any size is a few round trips.
 func (e fileEnd) check(ctx context.Context, root string, rels []string, hash bool) ([]FileCheck, error) {
 	if e.local() {
 		return e.d.checkFiles(ctx, e.acc, root, rels, hash)
@@ -769,7 +689,6 @@ func (e fileEnd) check(ctx context.Context, root string, rels []string, hash boo
 	return out, nil
 }
 
-// freeName is the first free "name 2", "name 3" ... for a path on this end.
 func (e fileEnd) freeName(ctx context.Context, path string) (string, error) {
 	if e.local() {
 		fsys, err := e.writeFS(path)
@@ -815,12 +734,10 @@ func (e fileEnd) callTimeout(ctx context.Context, verb string, params any, out a
 	return nil
 }
 
-// hostFiles is one verb connection to a host's daemon over the link.
 type hostFiles struct {
-	rw io.ReadWriteCloser
-	br *bufio.Reader
-	id int
-	// wire counts the bytes both ways, when set.
+	rw   io.ReadWriteCloser
+	br   *bufio.Reader
+	id   int
 	wire *atomic.Int64
 }
 
@@ -833,7 +750,6 @@ func (c *hostFiles) Write(p []byte) (int, error) {
 }
 func (c *hostFiles) Close() error { return c.rw.Close() }
 
-// count makes the connection count its bytes into wire from now on.
 func (c *hostFiles) count(wire *atomic.Int64) {
 	if wire == nil {
 		return
@@ -842,7 +758,6 @@ func (c *hostFiles) count(wire *atomic.Int64) {
 	c.br.Reset(&countingReader{r: c.rw, n: wire})
 }
 
-// countingReader counts what it reads.
 type countingReader struct {
 	r io.Reader
 	n *atomic.Int64
@@ -854,8 +769,6 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// dialHostFiles opens a connection to host's daemon for the file verbs. A bulk
-// connection carries file bytes after its first reply.
 func (d *Daemon) dialHostFiles(ctx context.Context, host string, bulk bool) (*hostFiles, error) {
 	if d.federation == nil {
 		return nil, &VerbCallError{Code: ErrVerbUnknownHost, Message: "no hosts are configured"}
@@ -873,7 +786,6 @@ func (d *Daemon) dialHostFiles(ctx context.Context, host string, bulk bool) (*ho
 	return &hostFiles{rw: rw, br: bufio.NewReaderSize(rw, 256<<10)}, nil
 }
 
-// call sends one verb and reads its one reply line.
 func (c *hostFiles) call(ctx context.Context, verb string, params any, timeout time.Duration) (json.RawMessage, error) {
 	c.id++
 	req := map[string]any{"id": c.id, "verb": verb, "params": params}
@@ -926,7 +838,6 @@ func (c *hostFiles) call(ctx context.Context, verb string, params any, timeout t
 	return resp.Result, nil
 }
 
-// readBoundedLine reads one line of at most limit bytes.
 func readBoundedLine(br *bufio.Reader, limit int) ([]byte, error) {
 	var buf []byte
 	for {

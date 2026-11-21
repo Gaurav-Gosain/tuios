@@ -29,17 +29,11 @@ func TestALinkMayNotReadToolCredentialStores(t *testing.T) {
 	resetDenyKeysCache(t)
 	realHome := realPath(home)
 
-	// What a link checks for each path below.
 	const (
-		// readRefused: linkReadDenied holds for the path and for a file under it.
 		readRefused = 1 << iota
-		// readServed: linkReadDenied does not hold for the path.
 		readServed
-		// writeRefused: linkDenied holds for the path.
 		writeRefused
-		// writeRefusedBelow: linkDenied holds for the path and for a file under it.
 		writeRefusedBelow
-		// writeAllowed: linkDenied does not hold for the path.
 		writeAllowed
 	)
 
@@ -58,11 +52,8 @@ func TestALinkMayNotReadToolCredentialStores(t *testing.T) {
 	for _, c := range []struct {
 		rel   string
 		check int
-		// link is a file read over the link socket: refused when the path
-		// is readRefused, served otherwise.
-		link string
+		link  string
 	}{
-		// Keys and tokens a link may neither read nor replace.
 		{".config/sops/age", cred, ""},
 		{"Library/Application Support/sops/age", cred, ""},
 		{"AppData/Roaming/sops/age", cred, ""},
@@ -75,7 +66,6 @@ func TestALinkMayNotReadToolCredentialStores(t *testing.T) {
 		{"AppData/Local/hermes/.env", cred, ""},
 		{".claude.json", cred, ""},
 
-		// Stores a link may not read.
 		{".gemini/oauth_creds.json", readRefused, ".gemini/oauth_creds.json"},
 		{".gemini/mcp-oauth-tokens.json", readRefused, ""},
 		{".local/share/opencode/auth.json", readRefused, ""},
@@ -103,7 +93,6 @@ func TestALinkMayNotReadToolCredentialStores(t *testing.T) {
 		{".local/share/zsh/history", readRefused, ""},
 		{".local/state/zsh/history", readRefused, ""},
 
-		// Configs that name commands a tool runs, which a link may not write.
 		{".cursor/mcp.json", readRefused | writeRefused, ".cursor/mcp.json"},
 		{".cursor/hooks.json", writeRefused, ""},
 		{".gemini/settings.json", writeRefused, ""},
@@ -124,7 +113,6 @@ func TestALinkMayNotReadToolCredentialStores(t *testing.T) {
 		{".qoder/settings.json", writeRefused, ""},
 		{".qwen/settings.json", writeRefused, ""},
 
-		// Ordinary files beside them stay readable.
 		{".gemini/GEMINI.md", readServed, ".gemini/GEMINI.md"},
 		{".cursor/settings.json", readServed, ""},
 		{".local/share/opencode/storage/x", readServed, ""},

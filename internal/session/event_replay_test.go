@@ -8,15 +8,12 @@ import (
 	"time"
 )
 
-// publishBells publishes n bell events, which the replay ring keeps.
 func publishBells(h *eventHub, n int) {
 	for range n {
 		h.publish(streamEvent{Type: EventBell, Session: "work"})
 	}
 }
 
-// prefaceSeqs returns the seqs of the replayed events in a preface and the
-// reason of its gap marker, "" when there is none.
 func prefaceSeqs(t *testing.T, sub *eventSub) (seqs []uint64, gapReason string) {
 	t.Helper()
 	for i, ev := range sub.preface {
@@ -65,10 +62,10 @@ func TestEventHubResumeReplaysExactlyMissed(t *testing.T) {
 // filter, the same as live delivery does.
 func TestEventHubResumeFiltersReplay(t *testing.T) {
 	h := newEventHub()
-	h.publish(streamEvent{Type: EventBell, Session: "work"})       // 1
-	h.publish(streamEvent{Type: EventBell, Session: "other"})      // 2
-	h.publish(streamEvent{Type: EventAgentState, Session: "work"}) // 3
-	h.publish(streamEvent{Type: EventBell, Session: "work"})       // 4
+	h.publish(streamEvent{Type: EventBell, Session: "work"})
+	h.publish(streamEvent{Type: EventBell, Session: "other"})
+	h.publish(streamEvent{Type: EventAgentState, Session: "work"})
+	h.publish(streamEvent{Type: EventBell, Session: "work"})
 
 	filter := eventFilter{session: "work", types: map[string]bool{EventBell: true}}
 	sub, _, err := h.subscribeFrom(filter, 16, &resumePoint{afterSeq: 0, bootID: h.bootID})
@@ -109,7 +106,6 @@ func TestEventHubRingIsBounded(t *testing.T) {
 		t.Fatalf("replayed seqs = %v, want [7 8 9 10]", seqs)
 	}
 
-	// Resuming from exactly the newest evicted seq misses nothing.
 	sub2, _, err := h.subscribeFrom(eventFilter{}, 16, &resumePoint{afterSeq: 6, bootID: h.bootID})
 	if err != nil {
 		t.Fatalf("subscribeFrom: %v", err)
@@ -166,10 +162,10 @@ func TestEventHubResumeAheadIsRefused(t *testing.T) {
 // that does not admit them replays exactly.
 func TestEventHubOutputNotRetained(t *testing.T) {
 	h := newEventHubSize(4)
-	h.publish(streamEvent{Type: EventBell})   // 1
-	h.publish(streamEvent{Type: EventOutput}) // 2
-	h.publish(streamEvent{Type: EventOutput}) // 3
-	h.publish(streamEvent{Type: EventBell})   // 4
+	h.publish(streamEvent{Type: EventBell})
+	h.publish(streamEvent{Type: EventOutput})
+	h.publish(streamEvent{Type: EventOutput})
+	h.publish(streamEvent{Type: EventBell})
 
 	if h.ringLen != 2 {
 		t.Fatalf("ring holds %d events, want 2 (output is not kept)", h.ringLen)
@@ -187,7 +183,6 @@ func TestEventHubOutputNotRetained(t *testing.T) {
 		t.Fatalf("bell resume = %v gap %q, want [1 4] and no gap", seqs, gap)
 	}
 
-	// A resume past the last output event has missed no output.
 	late, _, _ := h.subscribeFrom(eventFilter{}, 16, &resumePoint{afterSeq: 3, bootID: h.bootID})
 	defer h.unsubscribe(late)
 	if seqs, gap := prefaceSeqs(t, late); gap != "" || fmt.Sprint(seqs) != "[4]" {
@@ -243,8 +238,8 @@ func TestEventHubResumeNoDuplicatesUnderLoad(t *testing.T) {
 // gap the subscriber takes the resume as exact and keeps a stale layout.
 func TestEventHubLayoutChangedNotRetained(t *testing.T) {
 	h := newEventHubSize(4)
-	h.publish(streamEvent{Type: EventLayoutChanged, Workspace: 1}) // 1
-	h.publish(streamEvent{Type: EventBell})                        // 2
+	h.publish(streamEvent{Type: EventLayoutChanged, Workspace: 1})
+	h.publish(streamEvent{Type: EventBell})
 
 	layout, _, _ := h.subscribeFrom(eventFilter{types: map[string]bool{EventLayoutChanged: true}}, 16, &resumePoint{afterSeq: 0, bootID: h.bootID})
 	defer h.unsubscribe(layout)

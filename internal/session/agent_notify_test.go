@@ -33,7 +33,6 @@ func TestNotifyCallbackParksTheNotification(t *testing.T) {
 			}
 		})
 	}
-	// Progress is OSC 9 too, and must not read as a notification.
 	feedVT(t, pty, "\x1b]9;4;1;50\x07")
 	if _, ok := pty.takeAgentNotify(); ok {
 		t.Fatal("an OSC 9;4 progress report was parked as a notification")
@@ -94,7 +93,6 @@ func TestNotificationDrivesAgentState(t *testing.T) {
 	})
 }
 
-// codexWorkingScreen is a Codex turn in progress, as the working rule reads it.
 const codexWorkingScreen = "\xe2\x80\xa2 Working (12s \xe2\x80\xa2 esc to interrupt)\r\n\r\n" +
 	"\xe2\x80\xba Summarize recent commits\r\n\r\n" +
 	"  ? for shortcuts        98% context left\r\n"
@@ -107,17 +105,11 @@ func TestNotificationClaimGoesStale(t *testing.T) {
 	reg := bundledRegistry(t)
 	sess, winID, ptyID := agentPaneWithHarness(t, "codex", AgentStateWorking)
 	pty := sess.GetPTY(ptyID)
-	// The pane runs a real shell. Its prompt stamps lastOutput whenever it
-	// arrives, and a prompt that lands after the backdating below makes the
-	// pane look as if it wrote again, which is the case this test checks
-	// second. Wait for the shell to go quiet first.
 	waitPaneQuiet(t, pty)
 	feedVT(t, pty, clearScreen+codexWorkingScreen)
 	pty.lastOutput.Store(time.Now().Add(-time.Second).UnixNano())
 	sess.applyAgentNotify(ptyID, paneNotification{body: "Approval requested: go test"}, reg)
 
-	// A look before the pane writes again describes the screen the
-	// notification was sent over, and must not undo it.
 	sess.scanPaneForAgent(ptyID, reg)
 	if got := agentStateOf(t, sess, winID); got != AgentStateNeedsInput {
 		t.Fatalf("state = %q before the pane wrote again, want needs_input", got)
@@ -186,7 +178,6 @@ func TestNotificationReachesTheDaemon(t *testing.T) {
 	}
 }
 
-// windowStateOf returns a copy of a window's state.
 func windowStateOf(t *testing.T, sess *Session, windowID string) WindowState {
 	t.Helper()
 	for _, w := range sess.GetState().Windows {
@@ -198,9 +189,6 @@ func windowStateOf(t *testing.T, sess *Session, windowID string) WindowState {
 	return WindowState{}
 }
 
-// waitPaneQuiet waits until the pane's shell has written nothing for 300 ms,
-// so a test that sets lastOutput by hand is not overtaken by the shell's own
-// startup output.
 func waitPaneQuiet(t *testing.T, p *PTY) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

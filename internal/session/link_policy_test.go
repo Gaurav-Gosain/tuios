@@ -21,8 +21,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// What a machine linked to this one may do here. See link_policy.go.
-
 // TestEveryVerbHasALinkPolicy: a verb entry that names no link policy is
 // refused over every link, which is the safe default and also a silent one.
 // This makes adding a verb a decision about what a linked machine may do with
@@ -75,7 +73,6 @@ func TestAPolicyOnlyHostIsNotDialled(t *testing.T) {
 	}
 }
 
-// linkPeer runs the handshake on a link connection, as the proxy does.
 func linkPeer(t *testing.T, c *verbConn, peer string) map[string]any {
 	t.Helper()
 	raw, _ := json.Marshal(map[string]any{"peer": peer})
@@ -99,7 +96,6 @@ func TestTheDefaultLinkPolicyRefusesRespondAndAllowsTheRest(t *testing.T) {
 	if !strings.Contains(detail, `"respond"`) || !strings.Contains(detail, `[hosts."*"]`) {
 		t.Errorf("the refusal does not name the capability and the table that grants it: %q", detail)
 	}
-	// The same verb on the machine's own socket is not a link call.
 	local := dialVerb(t, sp)
 	if code := errCode(t, local.call(t, `{"id":4,"verb":"dismiss-attention","params":{"id":"nothing"}}`)); code == ErrVerbForbidden {
 		t.Errorf("a local caller was refused by the link policy")
@@ -128,7 +124,6 @@ func TestALinkIsHeldToItsPeersPolicy(t *testing.T) {
 	mustRefuse(t, desk.call(t, `{"id":2,"verb":"new-window","params":{"session":"work"}}`),
 		ErrVerbForbidden, `new-window from desk, which [hosts."*"] does not let open`)
 
-	// A link that gave no name is held to [hosts."*"] too.
 	anon := dialLink(t, sp)
 	mustRefuse(t, anon.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"work","text":"hi"}}`),
 		ErrVerbForbidden, `mail from a link with no name, which [hosts."*"] does not allow`)
@@ -143,7 +138,6 @@ func TestAPolicyChangeAppliesToALinkAlreadyOpen(t *testing.T) {
 	result(t, link.call(t, `{"id":1,"verb":"list-sessions"}`))
 	d.SetLinkPolicies(map[string]config.HostConfig{"*": {Allow: []string{}}})
 	mustRefuse(t, link.call(t, `{"id":2,"verb":"list-sessions"}`), ErrVerbForbidden, "list after the policy took list away")
-	// hello and list-verbs need nothing, so a caller can still learn why.
 	result(t, link.call(t, `{"id":3,"verb":"hello"}`))
 }
 
@@ -298,8 +292,6 @@ func TestAHubIsHeldToThePolicyTheFarMachineHasForIt(t *testing.T) {
 	}
 }
 
-// startHubAndPolicyFar is startHubAndLinkedFar with the far proxy running
-// DialForLink, as tuios stdio-proxy does, pinned to pinned when it is set.
 func startHubAndPolicyFar(t *testing.T, pinned string) (*Daemon, *farSide) {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
@@ -328,8 +320,6 @@ func startHubAndPolicyFar(t *testing.T, pinned string) (*Daemon, *farSide) {
 	return hub, far
 }
 
-// proxyDialer is the hub's transport to the far side with the real proxy and
-// DialForLink on the other end.
 func (f *farSide) proxyDialer(pinned string) federation.Dialer {
 	return func(_ context.Context, _ federation.Host) (federation.Transport, error) {
 		hubR, remoteW, err := os.Pipe()
@@ -387,7 +377,6 @@ func TestTheIntegratedVerbsAreHeldToTheLinkPolicy(t *testing.T) {
 	mustRefuse(t, opener.call(t, `{"id":1,"verb":"bundle-worktree","params":{"session":"work"}}`),
 		ErrVerbForbidden, "bundle-worktree from a machine that may open but not write")
 
-	// The call site inside the handlers agrees with the table.
 	cs := &connState{viaLink: true, linkPeer: "opener", linkPeerSet: true}
 	if verr := d.checkLinkPolicy(cs, linkCapSpawn, "fan"); verr != nil {
 		t.Errorf("a clone from a machine that may open was refused: %v", verr.Message)
@@ -400,8 +389,6 @@ func TestTheIntegratedVerbsAreHeldToTheLinkPolicy(t *testing.T) {
 	}
 }
 
-// linkBinary sends one binary message on a link connection and returns the
-// connection, for a test that reads what comes back.
 func linkBinary(t *testing.T, sp string, typ MessageType, payload any) net.Conn {
 	t.Helper()
 	conn, err := net.DialTimeout("unix", LinkSocketPath(sp), 3*time.Second)
@@ -453,7 +440,6 @@ func TestAResurrectOnALinkStaysInTheStateFolder(t *testing.T) {
 		filepath.Join(rel, "victim"),
 		filepath.Join(rel, "planted"),
 		"x/../" + filepath.Join(rel, "victim"),
-		// On Windows "..." is the state folder itself.
 		"...",
 	} {
 		conn := linkBinary(t, sp, MsgResurrect, &ResurrectPayload{SessionName: name})
@@ -473,9 +459,6 @@ func TestAResurrectOnALinkStaysInTheStateFolder(t *testing.T) {
 	if d.manager.GetSession("planted") != nil {
 		t.Errorf("ASSERTION: a link restored a session from a file outside the state folder")
 	}
-	// Names Windows folds onto another file: all dots, a dot at the end, a
-	// device. They are refused on every system, so a name moves between
-	// machines. The controls are names that only look close.
 	for _, name := range []string{"...", "foo.", "con", "NUL.txt", "com1", "Lpt9"} {
 		if ValidateSessionName(name) == nil {
 			t.Errorf("ASSERTION: the session name %q is allowed", name)
@@ -509,9 +492,6 @@ func TestAWatchOnALinkKeepsToTheReadRules(t *testing.T) {
 	}
 	changed := func(dir string) bool {
 		conn := linkBinary(t, sp, MsgWatchDir, &WatchDirPayload{Dir: dir})
-		// The watch starts off the connection's goroutine. A change made
-		// before it is up is not seen, so changes are made until one is or
-		// the time is up.
 		deadline := time.Now().Add(3 * time.Second)
 		for i := 0; time.Now().Before(deadline); i++ {
 			if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%d", i)), []byte("x"), 0o600); err != nil {
@@ -599,8 +579,6 @@ func TestALinkReadsNoCredentialCarrier(t *testing.T) {
 	if !slices.Contains(names, "notes.txt") {
 		t.Errorf("a walk of the home folder over a link left out an ordinary file: %v", names)
 	}
-	// .ssh, .gitconfig, .bashrc, .config/git and .config/environment.d: a
-	// denied folder counts once, and nothing is named.
 	if n, _ := walk["denied"].(float64); n != 5 {
 		t.Errorf("ASSERTION: the walk counts %v entries left out, want 5", walk["denied"])
 	}
@@ -663,7 +641,6 @@ func TestALowClassLinkReadsAndWritesNoFile(t *testing.T) {
 			t.Errorf("ASSERTION: a refused put left %v entries in the stash", n)
 		}
 
-		// The CLI sends the bytes, and an empty file as empty content.
 		sent := result(t, callP(phone, t, "stash-put", map[string]any{"session": "work", "path": "laptop:/tmp/notes.txt", "content": base64.StdEncoding.EncodeToString([]byte("notes\n"))}))
 		if b, _ := sent["bytes"].(float64); b != 6 {
 			t.Errorf("a content put over a link stored %v bytes, want 6", sent["bytes"])
@@ -672,7 +649,6 @@ func TestALowClassLinkReadsAndWritesNoFile(t *testing.T) {
 		if b, _ := empty["bytes"].(float64); b != 0 {
 			t.Errorf("ASSERTION: an empty file sent over a link stored %v bytes, want 0: the path was read", empty["bytes"])
 		}
-		// On this machine a path put still copies the file.
 		mine := result(t, callP(local, t, "stash-put", map[string]any{"session": "work", "path": key}))
 		if b, _ := mine["bytes"].(float64); int(b) != len(secret) {
 			t.Errorf("a local path put stored %v bytes, want %d", mine["bytes"], len(secret))

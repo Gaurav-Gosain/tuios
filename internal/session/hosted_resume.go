@@ -5,56 +5,11 @@ import (
 	"time"
 )
 
-// A hosted pane that outlives a dropped link.
-//
-// A connection over ssh drops whenever the network under it does: a laptop
-// lid, a Wi-Fi hand-off, a VPN reconnecting. A pane this machine runs for
-// another machine that ended with its connection would kill an agent in the
-// pane mid-turn each time.
-//
-// So the owner asks for a resumable pane (open-pane's resumable), and this
-// machine grants the grace its link policy names for the owner (hosted_grace,
-// ten minutes by default, "0" for none). The process's output goes through a
-// pump that outlives any one connection: it keeps the last 64 KB in a ring
-// with a running byte count and writes each chunk to the connection attached
-// now, if there is one. When the connection drops, the pane waits, still
-// running and still read, for the grace. The owner reattaches with open-pane's
-// resume, naming the pane, the resume token and how many bytes it received;
-// the pump replays what was missed from the ring, or the whole ring with gap
-// set when more was missed than it holds, and goes on from there.
-//
-// What is enforced:
-//
-//   - A reattach needs the resume token, which is in the open-pane reply only,
-//     compared in constant time. A pane with no grace has no token and cannot
-//     be reattached.
-//   - The grace is this machine's decision, from its own policy for the owner,
-//     never the owner's; the owner only asks for one. At most 24 hours.
-//   - A pane nobody reattaches ends when its grace runs out, and the daemon
-//     logs it. A pane whose process exits while detached ends at once.
-//   - close-pane ends a pane at once. The owner sends it when the window is
-//     closed on purpose, so a deliberate close does not leave a process
-//     waiting out its grace.
-//   - The pump never blocks on a detached pane: output is kept in the ring
-//     and the oldest is dropped, so a process that writes while nobody
-//     listens keeps running rather than stalling on a full pty.
-
-// hostedRingSize is how much of a hosted pane's output is kept for a reattach.
-// It matches the ring a daemon keeps per pane for a resubscribing client.
 const hostedRingSize = 64 * 1024
 
-// start runs the output pump and the reaper, once, on the first attach.
 func (hp *hostedPane) start() {
 	hp.startOnce.Do(func() {
 		go func() {
-			// Reap the process. Nothing else on this machine waits for a
-			// hosted pane's command: the local path waits in monitorExit,
-			// which belongs to a PTY this daemon owns, and a hosted pane has
-			// no PTY here. An unwaited child is a zombie for as long as the
-			// daemon runs.
-			//
-			// It doubles as the backstop for the pty going quiet: whichever of
-			// the two notices first ends the pane, and close is idempotent.
 			if hp.cmd != nil {
 				_ = hp.cmd.Wait()
 			}
@@ -64,15 +19,11 @@ func (hp *hostedPane) start() {
 	})
 }
 
-// pump reads the process's output until the pty closes, which is what the
-// process exiting looks like from here, and then ends the pane.
 func (hp *hostedPane) pump() {
 	buf := make([]byte, 32*1024)
 	out := hp.deliver
 	var filter *kittyLinkFilter
 	if hp.kittyLink != nil {
-		// Graphics commands that name a file are read here and sent to the
-		// owner as bytes. See kitty_link_far.go.
 		filter = &kittyLinkFilter{deliver: hp.deliver, handle: hp.kittyFileCommand, refuse: hp.kittyRefuseParts}
 		out = filter.feed
 	}
@@ -91,7 +42,6 @@ func (hp *hostedPane) pump() {
 	}
 }
 
-// deliver keeps a chunk in the ring and writes it to the attached connection.
 func (hp *hostedPane) deliver(chunk []byte) {
 	hp.out.Lock()
 	hp.ring = append(hp.ring, chunk...)
@@ -112,8 +62,6 @@ func (hp *hostedPane) deliver(chunk []byte) {
 	}
 }
 
-// replayFromLocked is what an owner that has received from bytes is missing, and
-// whether that is more than the ring holds. The caller holds out.
 func (hp *hostedPane) replayFromLocked(from int64) ([]byte, bool) {
 	start := hp.outSeq - int64(len(hp.ring))
 	if from < start || from > hp.outSeq {
@@ -122,8 +70,6 @@ func (hp *hostedPane) replayFromLocked(from int64) ([]byte, bool) {
 	return hp.ring[from-start:], false
 }
 
-// resumeGap reports whether an owner that has received offset bytes has missed
-// more than the ring holds.
 func (hp *hostedPane) resumeGap(offset int64) bool {
 	hp.out.Lock()
 	defer hp.out.Unlock()
@@ -131,9 +77,6 @@ func (hp *hostedPane) resumeGap(offset int64) bool {
 	return gap
 }
 
-// attach makes c the pane's connection: a connection still attached is closed,
-// a pending end is called off, what the owner missed is written, and the pump
-// writes to c from the next byte. It reports false for a pane that has ended.
 func (hp *hostedPane) attach(c net.Conn, from int64) bool {
 	hp.connMu.Lock()
 	if hp.closed {
@@ -148,8 +91,6 @@ func (hp *hostedPane) attach(c net.Conn, from int64) bool {
 	}
 	hp.connMu.Unlock()
 	if old != nil {
-		// The old connection is dead or about to be: only the owner holds
-		// the token, so a second attach is the owner coming back.
 		_ = old.Close()
 	}
 
@@ -166,8 +107,6 @@ func (hp *hostedPane) attach(c net.Conn, from int64) bool {
 	ok := !hp.closed
 	if ok {
 		hp.conn = c
-		// The old connection's relay may have started the grace while this
-		// attach was replaying; the pane has an owner again.
 		if hp.orphan != nil {
 			hp.orphan.Stop()
 			hp.orphan = nil
@@ -182,13 +121,10 @@ func (hp *hostedPane) attach(c net.Conn, from int64) bool {
 	return true
 }
 
-// detach forgets c if it is still the pane's connection, and then ends the
-// pane or starts its grace.
 func (hp *hostedPane) detach(c net.Conn) {
 	_ = c.Close()
 	hp.connMu.Lock()
 	if hp.conn != c && hp.conn != nil {
-		// Replaced by a reattach already.
 		hp.connMu.Unlock()
 		return
 	}
@@ -218,15 +154,12 @@ func (hp *hostedPane) detach(c net.Conn) {
 	hp.connMu.Unlock()
 }
 
-// ended reports whether the pane has closed. A closing pane can still be in
-// the registry for a moment, and a reattach must not be told it succeeded.
 func (hp *hostedPane) ended() bool {
 	hp.connMu.Lock()
 	defer hp.connMu.Unlock()
 	return hp.closed
 }
 
-// end closes the pane at the owner's request.
 func (hp *hostedPane) end() {
 	hp.connMu.Lock()
 	hp.ending = true

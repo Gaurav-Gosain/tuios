@@ -26,23 +26,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// The file verbs: what an explorer needs from the machine the files are on.
-//
-// read-dir is the rail's listing and stays as it is: names and a folder flag,
-// for a section a few cells wide. The explorer needs what a file manager
-// shows, so these verbs are a family of their own, each named file-*, and each
-// acts on this machine only. A client reaches another machine's files by
-// running the same verbs there, through open-host-connection, so the far
-// machine's link policy decides what the hub may do (link_policy.go): reading
-// a listing is list, and reading or changing a file's bytes is write.
-//
-// open-file-stream moves bytes. After its reply the connection carries raw
-// file bytes, in one direction, with the count given up front, so neither end
-// needs framing of its own. A write lands in a part file beside the
-// destination, owner only; file-commit checks the part's hash and renames it
-// into place. That is the stage, hash and rename every transfer goes through,
-// and a part left behind by a dropped link is where the next try resumes.
-
 // Error codes of the file verbs.
 const (
 	// ErrVerbNoFile is a path that does not exist.
@@ -63,16 +46,10 @@ const (
 	ErrVerbDiskFull = "disk_full"
 )
 
-// partSuffix names the file a copy writes into before it is checked. A copy
-// that gives its part id writes ".NAME.tuios-part-ID", so two copies to one
-// path each write a part of their own. A caller that gives none gets
-// ".NAME.tuios-part", as before part ids.
 const partSuffix = ".tuios-part"
 
-// partIDMax bounds a part id. It names a file, so it is short hex.
 const partIDMax = 32
 
-// checkPartID refuses a part id that is not short hex.
 func checkPartID(id string) *verbError {
 	if len(id) > partIDMax {
 		return invalidParam("part_id", "a part id is at most 32 hex digits")
@@ -85,21 +62,16 @@ func checkPartID(id string) *verbError {
 	return nil
 }
 
-// isPartName reports whether a file name is a copy's part file.
 func isPartName(name string) bool {
 	return strings.HasPrefix(name, ".") && (strings.HasSuffix(name, partSuffix) || strings.Contains(name, partSuffix+"-"))
 }
 
-// fileListMax bounds one page of a listing, and fileScanMax how many names a
-// listing reads from one directory before it says the folder is too large to
-// sort.
 const (
 	fileListDefault = 500
 	fileListMax     = 5000
 	fileScanMax     = 50000
 )
 
-// fileReadMax bounds one file-read, which carries the bytes base64 in a line.
 const fileReadMax = 4 << 20
 
 // FileInfo is one file as the file verbs describe it.
@@ -134,8 +106,6 @@ func kindOf(m fs.FileMode) string {
 	}
 }
 
-// describe fills a FileInfo from an lstat, following a link one step for its
-// target's kind.
 func describe(path string, fi fs.FileInfo) FileInfo {
 	out := FileInfo{
 		Name:   fi.Name(),
@@ -161,9 +131,6 @@ func describe(path string, fi fs.FileInfo) FileInfo {
 	return out
 }
 
-// expandPath turns ~ and an empty path into this machine's home, and makes the
-// path absolute and clean. Every file verb takes paths through it, so "~/src"
-// means the same folder whichever machine is asked.
 func expandPath(p string) (string, *verbError) {
 	if p == "" || p == "~" {
 		home, err := os.UserHomeDir()
@@ -188,20 +155,12 @@ func expandPath(p string) (string, *verbError) {
 	return filepath.Clean(p), nil
 }
 
-// errNotRegular is a path that is a pipe, a device or a socket where a file's
-// bytes were asked for.
 var errNotRegular = errors.New("not a regular file")
 
-// openRegular opens a file to read its bytes, and refuses anything that is
-// not a regular file. The open does not wait: opening a named pipe for
-// reading blocks until something writes to it, and a device such as
-// /dev/zero never ends, so either would hold the verb, and a hash of it a
-// CPU, for as long as the daemon runs.
 func openRegular(path string) (*os.File, fs.FileInfo, error) {
 	return openRegularIn(fileFS{}, path)
 }
 
-// openRegularIn is openRegular through fsys.
 func openRegularIn(fsys fileFS, path string) (*os.File, fs.FileInfo, error) {
 	f, err := fsys.OpenFile(path, os.O_RDONLY|oNonBlock, 0)
 	if err != nil {
@@ -222,7 +181,6 @@ func openRegularIn(fsys fileFS, path string) (*os.File, fs.FileInfo, error) {
 	return f, fi, nil
 }
 
-// fileError turns a file system error into the verb error a person can act on.
 func fileError(what, path string, err error) *verbError {
 	switch {
 	case errors.Is(err, errNotRegular):
@@ -246,14 +204,6 @@ func fileError(what, path string, err error) *verbError {
 	}
 }
 
-// openPart opens the part file of a copy to write it, owner only. It never
-// follows a link: in a folder that others can write to, a link put where the
-// part goes would turn the copy into a write to the link's target. A part
-// that is not a regular file is refused for the same reason.
-//
-// O_NOFOLLOW is not enough on its own: an os.Root follows a relative link
-// inside the root whatever the flags say. So the file that was opened must
-// also be the file that is at the part's name now, and a regular one.
 func openPart(fsys fileFS, part string) (*os.File, error) {
 	notRegular := &fs.PathError{Op: "write", Path: part, Err: errNotRegular}
 	f, err := fsys.OpenFile(part, os.O_CREATE|os.O_WRONLY|oNoFollow|oNonBlock, 0o600)
@@ -276,9 +226,6 @@ func openPart(fsys fileFS, part string) (*os.File, error) {
 		_ = f.Close()
 		return nil, notRegular
 	}
-	// A part with a second name is a hard link: its truncate and write, and
-	// the mode and time commitPart sets, would land in the other file too,
-	// such as a ~/.bashrc linked into the receive folder.
 	if n, err := fileLinks(f); err != nil || n > 1 {
 		_ = f.Close()
 		return nil, &fs.PathError{Op: "write", Path: part, Err: errHardLinked}
@@ -286,11 +233,8 @@ func openPart(fsys fileFS, part string) (*os.File, error) {
 	return f, nil
 }
 
-// errHardLinked is a file with more than one name where a copy writes.
 var errHardLinked = errors.New("the file has other names (hard links), so tuios does not write it")
 
-// partPath is the part file a copy to dst writes into: hidden, beside it, and
-// named by the copy's part id when it has one.
 func partPath(dst, id string) string {
 	name := "." + filepath.Base(dst) + partSuffix
 	if id != "" {
@@ -299,7 +243,6 @@ func partPath(dst, id string) string {
 	return filepath.Join(filepath.Dir(dst), name)
 }
 
-// verbFileStat describes one path.
 func (d *Daemon) verbFileStat(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path       string `json:"path"`
@@ -317,15 +260,11 @@ func (d *Daemon) verbFileStat(cs *connState, params json.RawMessage) (any, *verb
 	if verr != nil {
 		return nil, verr
 	}
-	// What a path is, or that it is there, is read like its bytes: a link
-	// may not look inside the folders it may not read.
 	if verr := d.checkLinkRead(cs, path); verr != nil {
 		return nil, verr
 	}
 	out := map[string]any{"path": path}
 	if p.RelationTo != "" {
-		// A copy between two paths of this machine asks here, where both
-		// are, whether they are one file. Only this machine can tell.
 		src, verr := expandPath(p.RelationTo)
 		if verr != nil {
 			return nil, verr
@@ -359,8 +298,6 @@ func (d *Daemon) verbFileStat(cs *connState, params json.RawMessage) (any, *verb
 	return out, nil
 }
 
-// verbFileList lists a folder a page at a time: folders first, then names in
-// natural order, with the details a file manager shows.
 func (d *Daemon) verbFileList(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Dir    string `json:"dir"`
@@ -403,7 +340,6 @@ func (d *Daemon) verbFileList(cs *connState, params json.RawMessage) (any, *verb
 		if !showHidden && strings.HasPrefix(name, ".") {
 			continue
 		}
-		// A part file is a copy in flight, not a file of the folder's own.
 		if isPartName(name) {
 			continue
 		}
@@ -414,9 +350,6 @@ func (d *Daemon) verbFileList(cs *connState, params json.RawMessage) (any, *verb
 		}
 		entries = append(entries, describe(full, fi))
 	}
-	// Names in one folder are unique, so the sort need not be stable, and an
-	// unstable one is several times faster on a large folder. It runs once per
-	// file-list call, so it sorts through the shared sortx copy.
 	sortx.SortFunc(entries, func(a, b FileInfo) int {
 		da, db := a.isDirLike(), b.isDirLike()
 		switch {
@@ -456,10 +389,6 @@ func (f FileInfo) isDirLike() bool {
 	return f.Kind == "dir" || (f.Kind == "symlink" && f.LinkKind == "dir")
 }
 
-// naturalLess orders names as a person reads them: case is ignored, and a run
-// of digits compares as a number, so "file2" comes before "file10". It reads
-// the names in place: a listing sorts tens of thousands of them, and a copy of
-// each name as runes per comparison was most of a large folder's listing time.
 func naturalLess(a, b string) bool {
 	i, j := 0, 0
 	for i < len(a) && j < len(b) {
@@ -506,7 +435,6 @@ func naturalLess(a, b string) bool {
 	return a < b
 }
 
-// verbFileRead returns a range of a file's bytes.
 func (d *Daemon) verbFileRead(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path   string `json:"path"`
@@ -549,7 +477,6 @@ func (d *Daemon) verbFileRead(cs *connState, params json.RawMessage) (any, *verb
 	}, nil
 }
 
-// verbFileMkdir makes a folder and its parents.
 func (d *Daemon) verbFileMkdir(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path    string `json:"path"`
@@ -559,16 +486,10 @@ func (d *Daemon) verbFileMkdir(cs *connState, params json.RawMessage) (any, *ver
 		return nil, verr
 	}
 	if p.Receive {
-		// The receive folder: where the caller may write here when it
-		// names no folder. A daemon from before receive makes path, which
-		// a caller sets to ~.
 		dir, verr := d.receiveFolder(cs)
 		if verr != nil {
 			return nil, verr
 		}
-		// A receive folder that is there is not made again: it may be the
-		// home folder itself (files_roots = ["~"]), which a link may write
-		// under but not change.
 		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
 			return map[string]any{"path": dir}, nil
 		}
@@ -578,10 +499,6 @@ func (d *Daemon) verbFileMkdir(cs *connState, params json.RawMessage) (any, *ver
 	if verr != nil {
 		return nil, verr
 	}
-	// A folder that is there is not made again, and nothing is written: a
-	// copy into the home folder itself (files_roots = ["~"]) asks for it,
-	// and a link may write under the home folder but not change it. That it
-	// is there is read like a stat.
 	if verr := d.checkLinkRead(cs, path); verr == nil {
 		if fi, err := os.Stat(path); err == nil && fi.IsDir() {
 			return map[string]any{"path": path}, nil
@@ -601,8 +518,6 @@ func (d *Daemon) verbFileMkdir(cs *connState, params json.RawMessage) (any, *ver
 	return map[string]any{"path": path}, nil
 }
 
-// verbFileRename moves a path on this machine. It never replaces a file that
-// is there unless told to.
 func (d *Daemon) verbFileRename(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		From    string `json:"from"`
@@ -627,9 +542,6 @@ func (d *Daemon) verbFileRename(cs *connState, params json.RawMessage) (any, *ve
 		return nil, invalidParam("to", "a folder cannot move into itself")
 	}
 	if cs != nil && cs.viaLink && (isPartName(filepath.Base(from)) || isPartName(filepath.Base(to))) {
-		// A part is the copy's own. A rename onto a part name could put a
-		// file the copy did not make, such as a hard link, where the copy
-		// writes, and one off it could move a copy's bytes in place unchecked.
 		return nil, newVerbError(ErrVerbForbidden, "move: "+echoName(filepath.Base(from))+" or "+echoName(filepath.Base(to))+" is a copy's part file, which a linked machine does not move")
 	}
 	fsys, verr := d.linkWriteFS(cs, from, to)
@@ -648,7 +560,6 @@ func (d *Daemon) verbFileRename(cs *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"from": from, "to": to}, nil
 }
 
-// verbFileRemove deletes a path. A folder with files in it needs recursive.
 func (d *Daemon) verbFileRemove(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path      string `json:"path"`
@@ -681,15 +592,10 @@ func (d *Daemon) verbFileRemove(cs *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"path": path}, nil
 }
 
-// hashRange is the sha256 of length bytes of the file at offset, or of
-// everything from offset when length is negative. It stops when ctx ends: a
-// hash of a large file runs for minutes, and a copy that was cancelled or
-// lost its link must not leave one reading the disk.
 func hashRange(ctx context.Context, path string, offset, length int64) (string, int64, error) {
 	return hashRangeIn(ctx, fileFS{}, path, offset, length)
 }
 
-// hashRangeIn is hashRange through fsys.
 func hashRangeIn(ctx context.Context, fsys fileFS, path string, offset, length int64) (string, int64, error) {
 	f, _, err := openRegularIn(fsys, path)
 	if err != nil {
@@ -699,7 +605,6 @@ func hashRangeIn(ctx context.Context, fsys fileFS, path string, offset, length i
 	return hashOpen(ctx, f, offset, length)
 }
 
-// hashOpen is hashRange of a file that is open already.
 func hashOpen(ctx context.Context, f *os.File, offset, length int64) (string, int64, error) {
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return "", 0, err
@@ -716,7 +621,6 @@ func hashOpen(ctx context.Context, f *os.File, offset, length int64) (string, in
 	return hex.EncodeToString(h.Sum(nil)), n, nil
 }
 
-// ctxReader is a reader that stops when its context ends.
 type ctxReader struct {
 	ctx context.Context
 	r   io.Reader
@@ -729,8 +633,6 @@ func (c ctxReader) Read(p []byte) (int, error) {
 	return c.r.Read(p)
 }
 
-// verbFileHash hashes a file, or a range of it, or of the part a copy to it
-// is writing.
 func (d *Daemon) verbFileHash(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path   string `json:"path"`
@@ -775,20 +677,6 @@ func (d *Daemon) verbFileHash(cs *connState, params json.RawMessage) (any, *verb
 	return map[string]any{"path": path, "sha256": sum, "bytes": n}, nil
 }
 
-// verbOpenFileStream turns the connection into a byte stream of one file.
-//
-// mode read: the reply says the size, then the connection carries the bytes
-// from offset to that size and closes. With compress "auto" this daemon reads
-// a sample of the file, and when it compresses well the bytes go as one
-// flate stream and the reply says compressed. mode write: the part file is
-// cut to offset (which must not be past the part's end), the reply says where
-// it starts, then the connection carries length bytes into it, as one flate
-// stream when compress is set. When they are all written and synced the
-// daemon writes one JSON line with the part's size and closes. Either side
-// ending early leaves the part as it is, which is what a resume starts from.
-//
-// A write from offset 0 is hashed as it lands, so file-commit does not read
-// the part again (partSums).
 func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path     string          `json:"path"`
@@ -798,9 +686,7 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 		PartID   string          `json:"part_id"`
 		Compress json.RawMessage `json:"compress"`
 		Sum      bool            `json:"sum"`
-		// Progress asks a write to say how many bytes it has written while
-		// they land, so the sender's rate is what this side took.
-		Progress bool `json:"progress"`
+		Progress bool            `json:"progress"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -863,8 +749,6 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 				n, err = io.CopyBuffer(bw, body, make([]byte, 256<<10))
 			}
 			if err == nil && p.Sum {
-				// The hash of what was read and sent, and whether the file
-				// is still the one the reply described.
 				t := map[string]any{"sha256": hex.EncodeToString(h.Sum(nil))}
 				if now, serr := f.Stat(); n < size-p.Offset || serr != nil || now.Size() != size || !now.ModTime().Equal(fi.ModTime()) {
 					t = map[string]any{"error": echoName(path) + " changed while it was copied. Copy it again when it is not being written."}
@@ -887,8 +771,6 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 		if compress == "auto" {
 			return nil, invalidParam("compress", "a write says whether its bytes are compressed: true or false")
 		}
-		// The destination is checked with the part, so a copy that file-commit
-		// would refuse is refused before its bytes move.
 		fsys, verr := d.linkWriteFS(cs, path, partPath(path, p.PartID))
 		if verr != nil {
 			return nil, verr
@@ -902,8 +784,6 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 			return nil, fileError("write", dir, err)
 		}
 		part := partPath(path, p.PartID)
-		// The room is claimed before the part is made, so a write that
-		// does not fit leaves nothing behind.
 		confined := fsys.confine(part)
 		release, verr := d.claimLinkWrite(cs, fsys.confine(path), confined, p.Offset, p.Length)
 		if verr != nil {
@@ -991,14 +871,8 @@ func (d *Daemon) verbOpenFileStream(cs *connState, params json.RawMessage) (any,
 	}
 }
 
-// writeProgressEvery is how often a write stream that asked for progress is
-// told how many bytes have landed.
 const writeProgressEvery = 250 * time.Millisecond
 
-// writeProgress tells the sender of a write stream, every
-// writeProgressEvery, how many of its bytes have been written to the part:
-// one line {"written": N}. It writes only when the count moved, and stops at
-// the first write that fails, which leaves the stream to end as it would.
 type writeProgress struct {
 	written atomic.Int64
 	done    chan struct{}
@@ -1033,7 +907,6 @@ func startWriteProgress(conn net.Conn) *writeProgress {
 	return p
 }
 
-// landedWriter counts into n the bytes its writer took.
 type landedWriter struct {
 	w io.Writer
 	n *atomic.Int64
@@ -1045,8 +918,6 @@ func (l *landedWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// stop ends the progress lines before the last reply is written, so the two
-// never interleave. A nil p is a stream that did not ask for progress.
 func (p *writeProgress) stop() {
 	if p == nil {
 		return
@@ -1055,31 +926,14 @@ func (p *writeProgress) stop() {
 	<-p.ended
 }
 
-// commitOpts are the rest of what commitPart takes.
 type commitOpts struct {
-	// known is the part's sha256 as the writer computed it while the bytes
-	// went in, so the part is not read again. Empty reads it.
-	known string
-	// label names the copy keep-both makes: "name (LABEL).ext". Empty
-	// numbers it: "name 2.ext".
-	label string
-	// noDirSync leaves the folder's sync to the caller, which syncs each
-	// folder once after many files.
+	known     string
+	label     string
 	noDirSync bool
 }
 
-// commitPart checks a finished part against the sender's hash and renames it
-// into place. conflict says what to do when path exists: replace it, keep both
-// (the new file gets a free name, see freeNameIn), skip (the part is removed
-// and the file there stays), or fail. perm, when not zero, is the original's
-// permission bits: the part is owner only while it is written, and the
-// finished file gets the original's. mtime, when not zero, is the original's
-// modification time in Unix ms, which the finished file gets too. skipped
-// reports a copy that conflict skip left out.
 func commitPart(ctx context.Context, fsys fileFS, path, partID, want, conflict string, perm uint32, mtime int64, o commitOpts) (final, sum string, skipped bool, verr *verbError) {
 	part := partPath(path, partID)
-	// The part is checked and moved by its name, so it must still be the
-	// regular file the copy wrote, not a link put there since.
 	if fi, err := fsys.Lstat(part); err != nil {
 		return "", "", false, fileError("check", part, err)
 	} else if !fi.Mode().IsRegular() {
@@ -1137,7 +991,6 @@ func commitPart(ctx context.Context, fsys fileFS, path, partID, want, conflict s
 	return final, got, false, nil
 }
 
-// syncDir writes a folder's entries to the disk, so a rename in it lasts.
 func syncDir(fsys fileFS, dir string) {
 	if f, err := fsys.OpenFile(dir, os.O_RDONLY, 0); err == nil {
 		_ = f.Sync()
@@ -1145,10 +998,8 @@ func syncDir(fsys fileFS, dir string) {
 	}
 }
 
-// keepLabelMax bounds a keep-both label.
 const keepLabelMax = 64
 
-// checkKeepLabel refuses a label that could not be part of one file name.
 func checkKeepLabel(label string) *verbError {
 	if len(label) > keepLabelMax {
 		return invalidParam("label", "a label is at most 64 bytes")
@@ -1161,9 +1012,6 @@ func checkKeepLabel(label string) *verbError {
 	return nil
 }
 
-// freeNameIn is the name keep-both gives a copy of path in fsys: with a
-// label, "name (LABEL).ext", then "name (LABEL) 2.ext"; without one,
-// "name 2.ext", then "name 3.ext". It is the first such name that is free.
 func freeNameIn(fsys fileFS, path, label string) string {
 	dir, base := filepath.Split(path)
 	ext := filepath.Ext(base)
@@ -1189,7 +1037,6 @@ func freeNameIn(fsys fileFS, path, label string) string {
 	}
 }
 
-// verbFileCommit finishes a copy written with open-file-stream.
 func (d *Daemon) verbFileCommit(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path     string `json:"path"`
@@ -1239,7 +1086,6 @@ func (d *Daemon) verbFileCommit(cs *connState, params json.RawMessage) (any, *ve
 	return out, nil
 }
 
-// verbFileAbort removes the part a copy left, for a copy that was cancelled.
 func (d *Daemon) verbFileAbort(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path   string `json:"path"`
@@ -1269,17 +1115,12 @@ func (d *Daemon) verbFileAbort(cs *connState, params json.RawMessage) (any, *ver
 	return map[string]any{"path": path}, nil
 }
 
-// fileWalkMax bounds the entries one folder copy carries. A walk on another
-// machine streams its entries one line each (file-walk with stream), so the
-// bound is the memory of the copy, not the size of one answer.
 const fileWalkMax = 1_000_000
 
 // FileWalkReplyMax bounds the entries of a walk answered in one JSON reply,
 // which a reader takes as one line.
 const FileWalkReplyMax = 20000
 
-// fileWalkSkippedMax bounds the skipped items a walk names. It counts all of
-// them.
 const fileWalkSkippedMax = 200
 
 // WalkEntry is one file of a folder being copied, relative to the folder.
@@ -1300,21 +1141,14 @@ type SkippedItem struct {
 	Kind string `json:"kind"`
 }
 
-// walkResult is a folder as a copy sees it.
 type walkResult struct {
-	entries []WalkEntry
-	total   int64
-	skipped []SkippedItem
-	// skippedCount counts every skipped item, also those past
-	// fileWalkSkippedMax.
+	entries      []WalkEntry
+	total        int64
+	skipped      []SkippedItem
 	skippedCount int
-	// denied counts the entries a walk over a link left out because they
-	// are in the read deny list. A denied folder counts once. They are not
-	// named.
-	denied int
+	denied       int
 }
 
-// skippedKind names what a mode is, for a skipped item.
 func skippedKind(m fs.FileMode) string {
 	switch {
 	case m&fs.ModeSymlink != 0:
@@ -1329,12 +1163,6 @@ func skippedKind(m fs.FileMode) string {
 	return "other"
 }
 
-// walkTree lists every file and folder under root, folders first in each
-// folder, so a copy can make them in order. Links are not followed: a link,
-// a pipe, a socket and a device are not copied, and the walk names them, so
-// the person learns what stayed behind. A part file of a copy in flight is
-// neither copied nor named. An entry denied reports true for is neither
-// copied nor named either, and out.denied counts it; nil denies nothing.
 func walkTree(root string, limit int, denied func(string) bool) (walkResult, error) {
 	var out walkResult
 	err := walkTreeTo(root, limit, countDenied(denied, &out.denied), func(e WalkEntry) error {
@@ -1350,7 +1178,6 @@ func walkTree(root string, limit int, denied func(string) bool) (walkResult, err
 	return out, err
 }
 
-// countDenied is denied, counting each entry it denies in n. Nil stays nil.
 func countDenied(denied func(string) bool, n *int) func(string) bool {
 	if denied == nil {
 		return nil
@@ -1364,8 +1191,6 @@ func countDenied(denied func(string) bool, n *int) func(string) bool {
 	}
 }
 
-// walkTreeTo is walkTree that hands each entry to emit as it is found, and
-// each skipped item to skip.
 func walkTreeTo(root string, limit int, denied func(string) bool, emit func(WalkEntry) error, skip func(SkippedItem)) error {
 	n := 0
 	return filepath.WalkDir(root, func(p string, de fs.DirEntry, err error) error {
@@ -1376,8 +1201,6 @@ func walkTreeTo(root string, limit int, denied func(string) bool, emit func(Walk
 			return nil
 		}
 		if denied != nil && denied(p) {
-			// Not named at all: the name of a key is already more than a
-			// link may learn. A denied folder is not entered.
 			if de.IsDir() {
 				return filepath.SkipDir
 			}
@@ -1409,7 +1232,6 @@ func walkTreeTo(root string, limit int, denied func(string) bool, emit func(Walk
 	})
 }
 
-// walkTooLarge is a folder with more entries than a walk carries.
 type walkTooLarge struct{ limit int }
 
 func (e walkTooLarge) Error() string {
@@ -1423,10 +1245,6 @@ func isWalkTooLarge(err error) bool {
 	return errors.As(err, &w)
 }
 
-// verbFileWalk lists every file under a folder, for a folder copy. With
-// stream, the reply is the folder alone, and then the connection carries one
-// JSON line per entry and a last line with the totals, so a folder of a
-// million files is not one answer.
 func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path   string `json:"path"`
@@ -1495,7 +1313,6 @@ func (d *Daemon) verbFileWalk(cs *connState, params json.RawMessage) (any, *verb
 	return map[string]any{"path": path, "entries": w.entries, "bytes": w.total, "skipped": skipped, "skipped_count": w.skippedCount, "denied": w.denied}, nil
 }
 
-// fileVerbs is the file verb family.
 func fileVerbs() map[string]verbEntry {
 	pathParam := func(what string) verbParam {
 		return verbParam{Name: "path", Type: "string", Required: true, Description: what + " An absolute path, or one that starts with ~."}
@@ -1504,14 +1321,7 @@ func fileVerbs() map[string]verbEntry {
 	infoReturn := verbParam{Name: "info", Type: "object", Description: "name, path, kind (file, dir, symlink, other), link_kind and link for a link, size, mtime (Unix ms), mode (drwxr-xr-x), perm (the permission bits as a number), hidden."}
 	return map[string]verbEntry{
 		"file-stat": {
-			// The file verbs, transfers and drops are the person's explorer, not a
-			// restricted caller's. A pane's own shell already reaches its files.
-			scope: scopeDeny,
-			// The file verbs. A listing is a listing. Reading a file's bytes out and
-			// changing a file are files, a capability apart from write, so a person
-			// can stop one machine's copies without stopping its typing. Every write
-			// that arrives over a link is also confined to the home folder and kept
-			// out of the deny list (verb_files_confine.go). See verb_files.go.
+			scope:       scopeDeny,
 			link:        needList,
 			description: "Describe one path on this machine. With part, describe the part file a copy to the path is writing.",
 			params: []verbParam{

@@ -4,11 +4,6 @@ import (
 	"testing"
 )
 
-// The restored mark is the only thing at session level that distinguishes a
-// session the daemon rebuilt from saved state from one that has been alive for
-// days. These tests pin the two halves of its life: it is set by a restore and
-// only by a restore, and the first attach takes it off for good.
-
 // TestClearingTheRestoredMarkDoesNotPushState pins the reason the clear is not
 // published. It runs inside the attach handler, after the connection's session
 // is recorded, so a push would reach the attaching client on the same socket
@@ -68,7 +63,6 @@ func TestRestoredMarkClearsOnFirstAttachAndDoesNotComeBack(t *testing.T) {
 		t.Error("the restored mark survived the first attach; it would sit on the row forever")
 	}
 
-	// A client pushing a state that claims the mark must not raise it again.
 	pushed := sess.GetState()
 	pushed.Restored = true
 	sess.UpdateState(pushed)

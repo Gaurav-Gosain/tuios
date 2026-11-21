@@ -11,38 +11,22 @@ import (
 
 var itoa = strconv.Itoa
 
-// The daemon's half of selectors: parsing one against this machine, resolving
-// it to panes, and the confirm step every write addressed by one goes through.
-// The syntax and the matcher are in selector.go.
-
-// selectWriteMax bounds how many panes one write addressed by selector may
-// reach. A selector that matches more is almost always a mistake, and the
-// remedy is a narrower one, which the refusal says.
 const selectWriteMax = 32
 
-// selectAskMax bounds a broadcast ask. Every ask types into a pane and waits
-// for it, so this is the fan-out bound rather than the message one.
 const selectAskMax = fanMaxCount
 
-// selectedPane is one pane a selector resolved to on this machine.
 type selectedPane struct {
 	sess   *Session
 	window WindowState
 	group  string
 }
 
-// key names the pane for the confirm token. Window ids are uuids, unique on
-// the daemon, and the host keeps a local key apart from a far one.
 func (p selectedPane) key() string { return localAttentionHost + "/" + p.window.ID }
 
-// label is how a refusal lists the pane: session/name and the short id.
 func (p selectedPane) label() string {
 	return p.sess.Name() + "/" + windowLabelOf(p.window) + " (" + shortWindowID(p.window.ID) + ")"
 }
 
-// parseVerbSelector parses a selector parameter for this daemon: a leading ~
-// in a cwd term is this machine's home, a program name in a harness term is the
-// harness it names, and this machine's own name in a host term is local.
 func (d *Daemon) parseVerbSelector(text string) (*Selector, *verbError) {
 	home, _ := os.UserHomeDir()
 	sel, err := ParseSelector(text, home)
@@ -75,8 +59,6 @@ func (d *Daemon) parseVerbSelector(text string) (*Selector, *verbError) {
 	return sel, nil
 }
 
-// paneSelectorTarget is what a selector reads from one pane of this machine.
-// cards are the cards the pane holds, from heldTasks.
 func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string, cards []TaskState) SelectorTarget {
 	var tasks, stages []string
 	for _, tk := range cards {
@@ -109,10 +91,6 @@ func (d *Daemon) paneSelectorTarget(sess *Session, w WindowState, group string, 
 	}
 }
 
-// selectPanes resolves a selector to the panes of this machine it matches, in
-// session name order and window order inside a session. Only agent panes are
-// considered unless all is set, because a selector addresses agents: a shell
-// in the same session is not something to ask or message.
 func (d *Daemon) selectPanes(sel *Selector, all bool) []selectedPane {
 	sessions := d.manager.AllSessions()
 	slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name(), b.Name()) })
@@ -137,7 +115,6 @@ func (d *Daemon) selectPanes(sel *Selector, all bool) []selectedPane {
 	return out
 }
 
-// selectionKeys is the keys of a set of panes, for SelectionToken.
 func selectionKeys(panes []selectedPane) []string {
 	keys := make([]string, 0, len(panes))
 	for _, p := range panes {
@@ -146,9 +123,6 @@ func selectionKeys(panes []selectedPane) []string {
 	return keys
 }
 
-// refuseSelectFromHostedPane is the refusal a pane on another machine gets for
-// naming a selector. Its calls are pinned to the window it is drawn in, and a
-// selector would reach past it into every session here.
 func refuseSelectFromHostedPane(cs *connState) *verbError {
 	if cs == nil || !cs.paneOnly {
 		return nil
@@ -159,11 +133,6 @@ func refuseSelectFromHostedPane(cs *connState) *verbError {
 	})
 }
 
-// resolveSelection is the confirm step of a write addressed by selector. It
-// resolves the selector to agent panes and returns them only when confirm is
-// the token of exactly that set. Otherwise nothing is written, and the error
-// lists the set and carries its token, so the caller looks before it writes
-// and the write goes to what it looked at.
 func (d *Daemon) resolveSelection(cs *connState, text, confirm string, max int) ([]selectedPane, *verbError) {
 	if verr := refuseSelectFromHostedPane(cs); verr != nil {
 		return nil, verr

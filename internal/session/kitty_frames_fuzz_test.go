@@ -45,11 +45,8 @@ func FuzzGfxScanner(f *testing.F) {
 	f.Add([]byte("\x1b_Ga=T,i=3;CC\x1b\\\x1b_Ga=T,i=3;DD\x1b\\"), uint64(0xffffffff))
 	f.Add([]byte("\x1b_Ga=T,f=100,m=1;AA\x1b\\\x1b_Gm=0;BB\x1b\\\x1b_Xnot graphics\x1b\\\x1b"), uint64(2))
 	f.Add(append([]byte("\x1b_G"), bytes.Repeat([]byte("k=1,"), 400)...), uint64(5))
-	// A frame on each screen, the switches split across reads.
 	f.Add([]byte(frame(1, "AAAA", 1)+"\x1b[?1049h"+frame(1, "BBBB", 2)+"\x1b[?1;1049l\x1bc\x1b[?47h"+frame(1, "CCCC", 1)), uint64(0x3121))
 
-	// An id-less frame, as mpv sends it, in three chunks, with the reads
-	// cutting its payloads: every segment of it carries the same key.
 	f.Add([]byte("\x1b[3;5H\x1b_Ga=T,f=24,s=2,v=2,C=1,m=1;AAAAAAAA\x1b\\\x1b_Gm=1;BBBBBBBB\x1b\\\x1b_Gm=0;CCCC\x1b\\"), uint64(0x9a9a9a9a))
 
 	f.Fuzz(func(t *testing.T, stream []byte, splits uint64) {
@@ -65,9 +62,6 @@ func FuzzGfxScanner(f *testing.F) {
 	})
 }
 
-// scanAll scans stream in pieces of the lengths in cuts, cycling, or whole
-// when cuts is empty. It checks failures 1, 2, 4 and 5 and returns a
-// description of every frame byte, for comparing two ways of reading.
 func scanAll(t *testing.T, stream []byte, cuts []int) string {
 	t.Helper()
 	var s gfxScanner
@@ -90,7 +84,6 @@ func scanAll(t *testing.T, stream []byte, cuts []int) string {
 				t.Fatalf("a frame segment at %d says first=%v while a frame open=%v", end, sg.first, inFrame)
 			}
 			inFrame = !sg.last
-			// The key goes in as a hash: it holds raw bytes, "]" among them.
 			fmt.Fprintf(&desc, "[%d-%d id=%d alt=%v moves=%v keep=%v key=%d first=%v last=%v]",
 				end-int64(len(sg.b)), end, sg.id, sg.alt, sg.moves, sg.keep, keyHash(sg.key), sg.first, sg.last)
 		}
@@ -112,13 +105,9 @@ func scanAll(t *testing.T, stream []byte, cuts []int) string {
 	if !bytes.Equal(got, stream) {
 		t.Fatalf("the segments do not add up to the input\n got %q\nwant %q", got, stream)
 	}
-	// Frame segments are cut at read boundaries, so join the adjacent ones
-	// before comparing.
 	return joinRuns(desc.String())
 }
 
-// joinRuns merges frame segment descriptions that continue one another, so
-// two scans that cut the same frame at different reads describe it the same.
 func joinRuns(d string) string {
 	type run struct {
 		from, to           int64
@@ -137,9 +126,6 @@ func joinRuns(d string) string {
 			&r.from, &r.to, &r.id, &r.alt, &r.moves, &r.keep, &r.key, &r.first, &r.last); err != nil {
 			panic(err)
 		}
-		// Only segments that describe the frame the same way join. A read
-		// that cut a frame and gave the second half other attributes must
-		// not compare equal to a read that did not cut it.
 		if n := len(runs); n > 0 && runs[n-1].to == r.from && !runs[n-1].last && !r.first &&
 			runs[n-1].id == r.id && runs[n-1].alt == r.alt && runs[n-1].moves == r.moves &&
 			runs[n-1].keep == r.keep && runs[n-1].key == r.key {
@@ -151,7 +137,6 @@ func joinRuns(d string) string {
 	return fmt.Sprint(runs)
 }
 
-// keyHash stands for an id-less frame's key in a segment description.
 func keyHash(key string) uint64 {
 	h := uint64(14695981039346656037)
 	for i := 0; i < len(key); i++ {

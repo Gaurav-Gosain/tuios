@@ -18,47 +18,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Review: the diff of what an agent changed, the notes the person leaves on
-// it, and sending those notes to the agent.
-//
-// review-diff reads, and is held like every read: a pane without the admin
-// grant reaches its own session and its fan group (scopeRead), and a link needs
-// write, because the answer carries file contents that list must not reach
-// (the reasoning bundle-worktree follows). review-note writes the daemon's note
-// store and send-review types into the pane through the delivery queue, so
-// both are scopeWrite, and send-review is a typing verb (typingVerbs), which
-// holds the target to panes that hold nothing the caller does not. A note or a
-// message is the person's only with a live human nonce.
-//
-// Where each piece is enforced:
-//
-//   - The session reach of all three is checkScope and checkGrants on the
-//     named session, before the handler runs. review-diff's against names a
-//     second session, which is held to the same reach here
-//     (callerReachesSession) and must be a sibling of the same fan.
-//   - send-review's target is held by holdTypingTarget at the call, and the
-//     delivery queue checks the caller's grants against it again when it
-//     types (queueOriginRefusal), and refuses a pane on needs_input then.
-//   - Who wrote a note, and who sent a message, is the daemon's reading of the
-//     connection (reviewAuthor), never a parameter: human only with a live
-//     human_nonce (humanNonceFor, which refuses any process in a pane).
-//   - A note is typed into its pane when it is sent, whoever sends it, so a
-//     pane without admin may add or edit a note only on a pane it could type
-//     into itself (reviewNoteTargetRefusal, the typingRefusal rule). When the
-//     notes are sent, each one's author is held to that rule again as its
-//     grants are now (reviewNoteAuthorRefusal), and a note whose author may
-//     no longer type there, or whose pane is gone, is withheld: not typed and
-//     not marked sent. The person's nonce never carries a pane's words.
-//   - The message labels every note written by someone other than its sender
-//     with its author (review.Compose), so a pane's note sent by the person
-//     never reads as the person's.
-//   - A note is changed or removed only by whoever may speak for its author:
-//     the person any note, a pane its own, a linked machine its own, and a
-//     caller outside every pane every note but the person's.
-//   - The git calls read. The working state is written as a tree through a
-//     temporary index (review.Build), so the worktree's index and files are
-//     never changed. Every call is bounded by reviewTimeout.
-
 // Error codes the review verbs raise, on top of the shared ones.
 const (
 	// ErrVerbNotRepo reports a pane or session with no git repository under
@@ -69,28 +28,17 @@ const (
 	ErrVerbNoNotes = "no_notes"
 )
 
-// reviewTimeout bounds every git call one review verb makes, together.
 const reviewTimeout = 10 * time.Second
 
-// reviewMaxPaths bounds the paths filter of review-diff.
 const reviewMaxPaths = 256
 
-// reviewRepo is the repository under a pane.
 type reviewRepo struct {
-	// root is the worktree's own root, symbolic links resolved: the key of
-	// its notes and where git runs.
-	root string
-	// repoRoot is the main checkout of the repository.
+	root     string
 	repoRoot string
-	// recorded is the base the worktree was made from, when tuios made it.
 	recorded string
-	// info is the session's worktree record, nil for a plain repository.
-	info *WorktreeInfo
+	info     *WorktreeInfo
 }
 
-// reviewTarget resolves the pane a review verb is about, the focused one when
-// window is empty, and the repository under it: the session's worktree when
-// the pane is in it, else the repository holding the pane's directory.
 func (d *Daemon) reviewTarget(cs *connState, sessionName, window string) (*Session, WindowState, reviewRepo, *verbError) {
 	sess, target, verr := d.resolveVerbPane(cs, sessionName, window)
 	if verr != nil {
@@ -103,8 +51,6 @@ func (d *Daemon) reviewTarget(cs *connState, sessionName, window string) (*Sessi
 	return sess, target, repo, nil
 }
 
-// resolveVerbPane resolves a session and a window in it, the focused one when
-// window is empty.
 func (d *Daemon) resolveVerbPane(cs *connState, sessionName, window string) (*Session, WindowState, *verbError) {
 	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
@@ -125,14 +71,6 @@ func (d *Daemon) resolveVerbPane(cs *connState, sessionName, window string) (*Se
 	return sess, state.Windows[idx], nil
 }
 
-// paneRepo is the repository under a pane: the session's worktree when the
-// pane is in it, else the repository holding the pane's directory. A pane on
-// another machine has its repository there, and is refused.
-//
-// The pane's directory is its shell's, as the kernel holds it. Where that
-// cannot be read, as on native Windows, it is the folder the window started
-// in. It is never the pane's OSC 7 report: any program in the pane can print
-// one, and the daemon runs git here on every checkpoint.
 func (d *Daemon) paneRepo(sess *Session, target WindowState) (reviewRepo, *verbError) {
 	if target.Host != "" {
 		return reviewRepo{}, hintedVerbError(ErrVerbNotRepo, "window "+shortWindowID(target.ID)+" runs on "+echoName(target.Host)+", and its repository is there, not here", &VerbHint{
@@ -149,8 +87,6 @@ func (d *Daemon) paneRepo(sess *Session, target WindowState) (reviewRepo, *verbE
 	if wt := sess.worktreeListing(); wt != nil && !wt.Gone && (cwd == "" || within(canonRoot(wt.Path), canonRoot(cwd))) {
 		recorded := wt.Base
 		if recorded == "" && wt.Managed {
-			// A worktree tuios made from HEAD left the main checkout's
-			// branch, which is its base, as compare-fan counts it.
 			if b, err := worktree.CurrentBranch(wt.RepoRoot); err == nil && b != "" && b != wt.Branch {
 				recorded = b
 			}
@@ -165,7 +101,6 @@ func (d *Daemon) paneRepo(sess *Session, target WindowState) (reviewRepo, *verbE
 			}
 			return reviewRepo{root: canonRoot(root), repoRoot: repoRoot}, nil
 		}
-		// A jj workspace with no ".git" of its own.
 		if r := gitstate.Find(cwd); r.JJ {
 			return reviewRepo{root: canonRoot(r.Root), repoRoot: r.Main}, nil
 		}
@@ -176,13 +111,11 @@ func (d *Daemon) paneRepo(sess *Session, target WindowState) (reviewRepo, *verbE
 	})
 }
 
-// within reports whether dir is root or under it.
 func within(root, dir string) bool {
 	rel, err := filepath.Rel(root, dir)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// reviewParams are what review-diff takes.
 type reviewParams struct {
 	Session     string   `json:"session"`
 	Window      string   `json:"window"`
@@ -195,7 +128,6 @@ type reviewParams struct {
 	Highlight   bool     `json:"highlight"`
 }
 
-// verbReviewDiff answers review-diff.
 func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p reviewParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -272,8 +204,6 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 		return nil, reviewGitFailed(err)
 	}
 
-	// The notes sit on the diff against the base. An index diff is a part of
-	// it, so it neither moves them nor names their base.
 	if againstName == "" && p.Index == "" {
 		d.reanchorReviewNotes(ctx, repo, target.ID, diff, p.Paths)
 		d.reviewNotes.setBase(repo.root, target.ID, diff.Base)
@@ -311,8 +241,6 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 	return out, nil
 }
 
-// reviewGitFailed is the refusal for a git call that failed or ran out of
-// time.
 func reviewGitFailed(err error) *verbError {
 	detail := "Nothing in the repository was changed."
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -321,8 +249,6 @@ func reviewGitFailed(err error) *verbError {
 	return hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{Detail: detail})
 }
 
-// reviewSibling resolves against: a session of the same fan as the reviewed
-// one, that the caller could name itself.
 func (d *Daemon) reviewSibling(cs *connState, sess *Session, repo reviewRepo, name string) (*Session, *verbError) {
 	if repo.info == nil || repo.info.Group == "" {
 		return nil, hintedVerbError(ErrVerbInvalidParams, "session "+sess.Name()+" is not part of a fan, so it has no attempt to compare against", &VerbHint{
@@ -353,10 +279,6 @@ func (d *Daemon) reviewSibling(cs *connState, sess *Session, repo reviewRepo, na
 	return sib, nil
 }
 
-// reanchorReviewNotes finds each note of the pane again in the diff just
-// read, and records where it sits now or that it is outdated. Only notes on
-// the paths the diff covered are looked at. A note on the old side is looked
-// for in the diff's base; a note on a whole hunk among the file's hunks.
 func (d *Daemon) reanchorReviewNotes(ctx context.Context, repo reviewRepo, window string, diff *review.Diff, paths []string) {
 	notes, _ := d.reviewNotes.list(repo.root, window)
 	if len(notes) == 0 {
@@ -423,8 +345,6 @@ func (d *Daemon) reanchorReviewNotes(ctx context.Context, repo reviewRepo, windo
 			}
 			if err := newErr[n.Path]; err != nil {
 				if !errors.Is(err, os.ErrNotExist) {
-					// Too big, or not a file: where the note sits is not
-					// known, so it is left as it was.
 					continue
 				}
 				n.Outdated = true
@@ -443,15 +363,10 @@ func (d *Daemon) reanchorReviewNotes(ctx context.Context, repo reviewRepo, windo
 	d.reviewNotes.applyAnchors(repo.root, window, moved)
 }
 
-// reviewAuthor is who the caller on cs is, as a note or a message records
-// it: human with a live nonce, link:HOST over a link, the pane's window id
-// for a process in a pane, shell otherwise. A nonce that does not verify is
-// refused rather than dropped, so the caller learns it did not count.
 type reviewAuthor struct {
 	by    string
 	human bool
-	// pane is the caller's window, for a process in a pane.
-	pane string
+	pane  string
 }
 
 func (d *Daemon) reviewAuthorOf(cs *connState, nonce, sessionID, verb string) (reviewAuthor, *verbError) {
@@ -477,9 +392,6 @@ func (d *Daemon) reviewAuthorOf(cs *connState, nonce, sessionID, verb string) (r
 	return reviewAuthor{by: queueByShell}, nil
 }
 
-// mayTouch reports whether the author may change or remove note n: the person
-// any note, a caller outside every pane every note but the person's, and a
-// pane or a linked machine only the notes it wrote.
 func (a reviewAuthor) mayTouch(n review.Note) bool {
 	switch {
 	case a.human:
@@ -491,7 +403,6 @@ func (a reviewAuthor) mayTouch(n review.Note) bool {
 	}
 }
 
-// reviewNoteParams are what review-note takes.
 type reviewNoteParams struct {
 	Action     string `json:"action"`
 	Session    string `json:"session"`
@@ -506,7 +417,6 @@ type reviewNoteParams struct {
 	HumanNonce string `json:"human_nonce"`
 }
 
-// verbReviewNote answers review-note.
 func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p reviewNoteParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -590,8 +500,6 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 	case "clear":
 		removed, _, refused := d.reviewNotes.remove(repo.root, target.ID, "", author.mayTouch)
 		out["removed"] = removed
-		// The notes clear matched and left alone, because this caller may
-		// not speak for their author. Always present on clear, 0 for none.
 		out["kept"] = refused
 	}
 	notes, _ := d.reviewNotes.list(repo.root, target.ID)
@@ -599,7 +507,6 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 	return out, nil
 }
 
-// newReviewNote builds the note review-note add asked for.
 func (d *Daemon) newReviewNote(repo reviewRepo, p reviewNoteParams, text string, author reviewAuthor) (review.Note, *verbError) {
 	if err := review.ValidPath(p.Path); err != nil {
 		return review.Note{}, invalidParam("path", "path is required, relative to the repository root: "+err.Error())
@@ -630,8 +537,6 @@ func (d *Daemon) newReviewNote(repo reviewRepo, p reviewNoteParams, text string,
 	n.Line = p.Line
 	n.Quote = review.CleanQuote(p.Quote)
 	if n.Quote == "" && side == review.SideNew {
-		// The line as it is now, so the note can be found again when the
-		// diff moves.
 		if lines, err := review.FileLines(repo.root, n.Path); err == nil && p.Line <= len(lines) {
 			n.Quote = review.CleanQuote(lines[p.Line-1])
 		}
@@ -653,7 +558,6 @@ func reviewNoteRefusedError(action, id string) *verbError {
 	})
 }
 
-// sendReviewParams are what send-review takes.
 type sendReviewParams struct {
 	Session    string   `json:"session"`
 	Window     string   `json:"window"`
@@ -662,8 +566,6 @@ type sendReviewParams struct {
 	HumanNonce string   `json:"human_nonce"`
 }
 
-// verbSendReview answers send-review: the pane's unsent notes, or the ones
-// named, composed into one message and handed to the delivery queue.
 func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p sendReviewParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -698,8 +600,6 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 			}
 		}
 	}
-	// A note is typed with the sender's authority, so each author is held to
-	// what it may type into this pane now. The rest are withheld.
 	var withheld []string
 	withheldWhy := ""
 	allowed := picked[:0:0]
@@ -728,8 +628,6 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 		})
 	}
 
-	// The entry decides who the message is from, the way queue-prompt
-	// decides it: from the connection, the nonce checked.
 	e, verr := d.newQueueEntry(cs, sess, state, "", "", p.HumanNonce)
 	if verr != nil {
 		return nil, verr
@@ -783,12 +681,6 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 	return out, nil
 }
 
-// reviewNoteTargetRefusal holds a pane without admin that adds or edits a note
-// to the panes it could type into itself. A note is typed into its pane when
-// it is sent, possibly by the person, so without this a pane with write could
-// have its words typed into a pane holding more than it does. The pane is not
-// held to the needs_input rule here: nothing is typed now, and the queue never
-// types over a prompt.
 func (d *Daemon) reviewNoteTargetRefusal(cs *connState, target WindowState) *verbError {
 	pa := d.paneAuthority(cs)
 	if pa == nil || pa.hosted || pa.grants.Has(GrantAdmin) {
@@ -800,13 +692,6 @@ func (d *Daemon) reviewNoteTargetRefusal(cs *connState, target WindowState) *ver
 	return nil
 }
 
-// reviewNoteAuthorRefusal says why a note written by by may not be typed into
-// target now, or "" when it may. The person and a caller outside every pane
-// are held to nothing. A linked machine is held to its link policy as it is
-// now. A pane is held to its grants as they are now, the way the delivery
-// queue holds the pane that queued an entry: its write reach and the
-// typingRefusal rule. A pane that is gone can no longer be held to anything,
-// so its notes are refused.
 func (d *Daemon) reviewNoteAuthorRefusal(by string, sess *Session, target WindowState) string {
 	switch {
 	case by == queueByHuman || by == queueByShell:
@@ -848,8 +733,6 @@ func (d *Daemon) reviewNoteAuthorRefusal(by string, sess *Session, target Window
 	return ""
 }
 
-// reviewAuthorName names the author of a note in a message: a pane by its
-// window's label, else review.AuthorName.
 func (d *Daemon) reviewAuthorName(by string) string {
 	switch {
 	case by == queueByHuman || by == queueByShell || strings.HasPrefix(by, queueByLinkPrefix):
@@ -869,8 +752,6 @@ func (d *Daemon) reviewAuthorName(by string) string {
 	return "pane " + shortWindowID(by)
 }
 
-// reviewSender names who a message of notes is from, as its header says it.
-// "the person" needs the verified nonce the entry was built on.
 func (d *Daemon) reviewSender(e *queueEntry) string {
 	switch e.origin.kind {
 	case queueByHuman:

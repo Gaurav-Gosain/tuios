@@ -25,8 +25,6 @@ func TestSessionFileJoin(t *testing.T) {
 	}
 	d, sp := startTestDaemon(t)
 	c := dialVerb(t, sp)
-	// Each report goes to a pane of its own: a pane holds to the first
-	// session id reported for it.
 	n := 0
 	pane := func() (string, func() string) {
 		n++
@@ -45,7 +43,6 @@ func TestSessionFileJoin(t *testing.T) {
 		return map[string]any{"session": name, "window": "0", "state": "working", "harness": "amp", "agent_session_id": sid}
 	}
 
-	// herdr reports through the verb with no connection.
 	name, joined := pane()
 	raw, _ := json.Marshal(report(name, id))
 	if _, verr := d.verbSetAgentState(nil, raw); verr != nil {
@@ -64,8 +61,6 @@ func TestSessionFileJoin(t *testing.T) {
 			t.Fatalf("session id %q joined %s", sid, got)
 		}
 	}
-	// A pane that holds another session refuses the report, and a refused
-	// report joins nothing.
 	name, joined = pane()
 	result(t, callVerb(t, c, "set-agent-state", report(name, "T-other")))
 	if res := result(t, callVerb(t, c, "set-agent-state", report(name, id))); res["applied"] == true {

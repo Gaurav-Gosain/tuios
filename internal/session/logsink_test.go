@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// withLogFile points the file sink at a fresh file for one test and restores
-// whatever was installed before.
 func withLogFile(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "daemon.log")
@@ -18,7 +16,6 @@ func withLogFile(t *testing.T) string {
 	return path
 }
 
-// readLog returns the sink file's contents.
 func readLog(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path)
@@ -109,8 +106,6 @@ func TestFileSinkRotatesAtTheCap(t *testing.T) {
 	restoreLevel(t, DebugOff)
 	path := withLogFile(t)
 
-	// The cap is pinned here rather than read from the constant, so raising the
-	// constant is a failure rather than a longer test.
 	const wantCap = 5 << 20
 	if daemonLogMaxBytes != wantCap {
 		t.Fatalf("the cap is %d bytes, want %d (5 MiB)", daemonLogMaxBytes, wantCap)
@@ -156,10 +151,6 @@ func TestFileSinkSilentWithoutADaemon(t *testing.T) {
 	}
 }
 
-// ringEntriesWith is the ring's entries whose message holds text. The ring is
-// the process's own, so a daemon another test left stopping can add a line
-// of its own between the clear and the read; counting every entry failed
-// then (a "[recv] Resize" line from a shutting-down daemon).
 func ringEntriesWith(text string) []LogEntry {
 	var out []LogEntry
 	for _, e := range GetLogEntries(0) {
@@ -170,8 +161,6 @@ func ringEntriesWith(text string) []LogEntry {
 	return out
 }
 
-// restoreStdlibLogger puts the process-wide standard logger back after a test
-// has pointed it at a ring writer.
 func restoreStdlibLogger(t *testing.T) {
 	t.Helper()
 	flags, prefix := log.Flags(), log.Prefix()
@@ -182,7 +171,6 @@ func restoreStdlibLogger(t *testing.T) {
 	})
 }
 
-// restoreLevel sets the debug level for one test and puts the old one back.
 func restoreLevel(t *testing.T, level DebugLevel) {
 	t.Helper()
 	previous := GetDebugLevel()

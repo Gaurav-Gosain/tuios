@@ -14,12 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Every test here works on a repository testutil.GitRepo made under the test's
-// own temporary directory, with tuios's worktree directory pointed at another.
-// Nothing here touches any other repository.
-
-// worktreeFixture is a daemon, its socket, and a throwaway repository, with
-// tuios's worktree directory redirected under the test.
 func worktreeFixture(t *testing.T) (*Daemon, string, string) {
 	t.Helper()
 	repo := testutil.GitRepo(t)
@@ -33,7 +27,6 @@ func jsonParams(v map[string]any) string {
 	return string(b)
 }
 
-// newWorktreeCall makes a worktree session and returns its result.
 func newWorktreeCall(t *testing.T, c *verbConn, repo, branch string, extra map[string]any) map[string]any {
 	t.Helper()
 	params := map[string]any{"repo": repo, "branch": branch}
@@ -41,10 +34,6 @@ func newWorktreeCall(t *testing.T, c *verbConn, repo, branch string, extra map[s
 	return result(t, c.call(t, `{"id":1,"verb":"new-worktree","params":`+jsonParams(params)+`}`))
 }
 
-// fakeClaudeOnPath puts a script named claude on PATH that echoes what it reads, so
-// the fan verb can start a harness the registry recognises without the real
-// one being installed. The script's process name is claude, which is what the
-// claude-code manifest detects.
 func fakeClaudeOnPath(t *testing.T) {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "bin")
@@ -118,7 +107,6 @@ func TestADetectedRecordFollowsTheDirectoryAndAManagedOneStays(t *testing.T) {
 	if plain.Worktree() == nil {
 		t.Fatal("the detected session has no record")
 	}
-	// The shell moved out of the worktree: the record goes with it.
 	plain.refreshWorktree(t.TempDir())
 	if plain.Worktree() != nil {
 		t.Error("a detected record survived the directory leaving the worktree")
@@ -155,8 +143,6 @@ func TestARemovedWorktreeDirectoryIsListedGoneAndTheSessionIsKept(t *testing.T) 
 	if d.manager.GetSession("repo-doomed") == nil {
 		t.Fatal("the session was killed because its directory went away")
 	}
-	// Removing it now skips git, kills the session, and says what git still
-	// holds rather than pruning it.
 	removed := result(t, c.call(t, `{"id":3,"verb":"remove-worktree","params":{"session":"repo-doomed"}}`))
 	if removed["gone"] != true || removed["session_killed"] != true {
 		t.Errorf("remove of a gone worktree = %v, want gone and session_killed", removed)
@@ -180,13 +166,9 @@ func TestRemoveWorktreeRefusesANestedRepository(t *testing.T) {
 	c := dialVerb(t, sp)
 	res := newWorktreeCall(t, c, repo, "nested", nil)
 	path := res["path"].(string)
-	// An ignored directory holding a clone with an unpushed commit. git
-	// status --ignored=matching reports it as one entry, and the removal
-	// would delete it without a word.
 	os.WriteFile(filepath.Join(repo, ".git", "info", "exclude"), []byte(".wt/\n"), 0o644)
 	nested := filepath.Join(path, ".wt", "clone")
 	testutil.Git(t, path, "clone", "-q", repo, nested)
-	// A commit nothing pushes: exactly the history a removal would strand.
 	os.WriteFile(filepath.Join(nested, "a"), []byte("unsaved\n"), 0o644)
 	testutil.Git(t, nested, "add", "a")
 	testutil.Git(t, nested, "commit", "-qm", "unpushed")
@@ -205,7 +187,6 @@ func TestRemoveWorktreeRefusesANestedRepository(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("the refusal removed the worktree: %v", err)
 	}
-	// force goes ahead and takes the nested repository with it.
 	result(t, c.call(t, `{"id":3,"verb":"remove-worktree","params":{"session":"repo-nested","force":true,"keep_session":true}}`))
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Errorf("force left the worktree: %v", err)
@@ -238,8 +219,6 @@ func TestRemoveWorktreeWithForceDiscardsAndKeepsTheBranch(t *testing.T) {
 func TestRemoveWorktreeRefusesASessionThatIsNotOne(t *testing.T) {
 	d, sp, _ := worktreeFixture(t)
 	c := dialVerb(t, sp)
-	// The window starts in a plain directory on purpose: the daemon's own
-	// directory may be a worktree, as it is when this test runs in one.
 	result(t, c.call(t, `{"id":1,"verb":"new-session","params":{"name":"plain","cwd":"`+t.TempDir()+`"}}`))
 	resp := c.call(t, `{"id":2,"verb":"remove-worktree","params":{"session":"plain"}}`)
 	if code := errCode(t, resp); code != ErrVerbNotWorktree {
@@ -321,7 +300,6 @@ func TestFanStemReadsLikeThePrompt(t *testing.T) {
 	}
 }
 
-// waitPromptStatus polls a session's record until the prompt reaches status.
 func waitPromptStatus(t *testing.T, sess *Session, status string) *WorktreeInfo {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

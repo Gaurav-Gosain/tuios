@@ -9,35 +9,16 @@ import (
 	"tuios.dev/vt"
 )
 
-// The wire's fidelity, asked about directly.
-//
-// TestRehydrationMatrix in internal/app compares the two sides by reading the
-// daemon's through this wire, so it can only ever see what the wire can say. A
-// snapshot that restores a pane's characters while losing what colour they were
-// passes every case in it and is obviously wrong on screen, which is the shape
-// of the bugs it was still leaving behind.
-//
-// This test asks the question the other way round: feed a guest's output to one
-// emulator, take it through TerminalStateOf and ApplyTerminalState into a
-// second, and compare the two emulators to each other. Anything the wire cannot
-// carry shows up here as a difference between the two, with no wire in the
-// middle of the comparison to hide it.
-
 const (
 	fidelityCols = 40
 	fidelityRows = 8
 )
 
-// wireShapes are guests the wire has to be able to describe. Each is the bytes
-// a program would produce; what matters is the state the emulator is left in.
 var wireShapes = []struct {
 	name string
 	out  string
 }{
 	{
-		// The 16-colour palette, which is what ls, grep and a shell prompt use.
-		// These follow the user's terminal theme, so flattening them to the RGB
-		// they happen to resolve to is visible as a colour change.
 		name: "ansi-palette",
 		out: "\x1b[31mred\x1b[32mgreen\x1b[33myellow\x1b[m plain\r\n" +
 			"\x1b[91mbright\x1b[97mwhite\x1b[m\r\n" +
@@ -52,16 +33,11 @@ var wireShapes = []struct {
 		out:  "\x1b[38;2;12;34;56mrgb\x1b[48;2;200;100;50m on-rgb\x1b[m\r\n",
 	},
 	{
-		// Every attribute bit at once, and then each on its own, because they
-		// share one byte and a mask that drops a bit drops it everywhere.
 		name: "attributes",
 		out: "\x1b[1mbold\x1b[2mfaint\x1b[3mitalic\x1b[m\r\n" +
 			"\x1b[5mblink\x1b[7mreverse\x1b[8mconceal\x1b[9mstruck\x1b[m\r\n",
 	},
 	{
-		// Curly and coloured underlines are how a compiler's output and an
-		// editor's diagnostics mark a span. Collapsing them to a plain
-		// underline loses which kind of thing was being marked.
 		name: "underline-styles",
 		out: "\x1b[4:1msingle\x1b[4:2mdouble\x1b[4:3mcurly\x1b[m\r\n" +
 			"\x1b[4:4mdotted\x1b[4:5mdashed\x1b[m\r\n" +
@@ -72,15 +48,10 @@ var wireShapes = []struct {
 		out:  "plain \x1b]8;;https://example.com\x07linked\x1b]8;;\x07 plain\r\n",
 	},
 	{
-		// A guest that set a rendition and left it in force. Everything written
-		// next is painted with it, including output that arrives after a client
-		// has rehydrated, so the pen has to survive the snapshot too.
 		name: "pen-left-set",
 		out:  "\x1b[1;38;5;208;48;2;20;20;20;4:3mstill in force",
 	},
 	{
-		// A status line held out of the scrolling region, which is what a
-		// full-screen program does when it keeps a header or footer fixed.
 		name: "scroll-region",
 		out:  "\x1b[HHEADER\r\n\x1b[3;7r\x1b[3;1Hbody one\r\nbody two\r\n",
 	},
@@ -89,17 +60,10 @@ var wireShapes = []struct {
 		out:  "\x1b[2;6r\x1b[?6h\x1b[1;1Hinside the margins\r\n",
 	},
 	{
-		// ESC ( 0 selects the DEC line-drawing set once, and every box character
-		// after it is an ASCII letter mapped through that selection. A client
-		// that comes back with G0 at ASCII draws qqqq where the guest drew a
-		// horizontal rule.
 		name: "line-drawing-charset",
 		out:  "\x1b(0lqqqk\r\nx   x\r\nmqqqj\r\n",
 	},
 	{
-		// The shape a shell or an editor asks for once and never repeats. It is
-		// long out of the output buffer's reach by the time anyone reattaches,
-		// so a snapshot that does not carry it hands every pane a block.
 		name: "cursor-shape",
 		out:  "\x1b[6 q$ ",
 	},
@@ -108,16 +72,11 @@ var wireShapes = []struct {
 		out:  "\x1b[35m日本語\x1b[m ascii\r\n",
 	},
 	{
-		// A full-screen program mid-draw: in the alternate screen, with the
-		// shell's screen still underneath it. Quitting the program reveals that
-		// screen, so it is state the client needs even while it is not visible.
 		name: "alt-screen-over-shell",
 		out: "$ ls\r\n\x1b[34mdir\x1b[m  file\r\n$ vim\r\n" +
 			"\x1b[?1049h\x1b[H\x1b[2J\x1b[7m~ EDITOR \x1b[m\r\nline of text\r\n\x1b[?25l",
 	},
 	{
-		// Long enough to push lines into the scrollback, coloured so the
-		// scrollback carries style and not only characters.
 		name: "coloured-scrollback",
 		out:  colouredLines(30),
 	},
@@ -152,9 +111,6 @@ func TestWireCarriesTheWholeCell(t *testing.T) {
 	}
 }
 
-// wireForms is the two shapes a snapshot's cells take on the wire. The tests
-// that compare emulators across the wire run under both, since a client may
-// be answered by a daemon of either age.
 var wireForms = []struct {
 	name   string
 	packed bool
@@ -173,7 +129,6 @@ func TestWireLeavesTheAlternateScreen(t *testing.T) {
 	client := vt.NewEmulator(fidelityCols, fidelityRows)
 	defer func() { _ = client.Close() }()
 
-	// Both sides watch a program run in the alternate screen.
 	if _, err := daemon.Write([]byte("$ prompt\r\n\x1b[?1049h\x1b[H\x1b[2JEDITOR")); err != nil {
 		t.Fatalf("feed the daemon emulator: %v", err)
 	}
@@ -182,16 +137,11 @@ func TestWireLeavesTheAlternateScreen(t *testing.T) {
 		t.Fatal("the client never entered the alternate screen, so the case is not set up")
 	}
 
-	// The guest quits while this client is not subscribed, and the client is
-	// handed the snapshot that follows.
 	if _, err := daemon.Write([]byte("\x1b[?1049l")); err != nil {
 		t.Fatalf("leave the alternate screen: %v", err)
 	}
 	ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 0, 0))
 
-	// The mode map and the buffer pointer are separate, and the modes came back
-	// saying the alternate screen is off. Asked of the pointer, which is what
-	// decides where the next byte lands and which scrollback it scrolls into.
 	if client.ActiveScreenIsAlt() {
 		t.Fatal("the client is still writing into the alternate buffer while its modes say it left: the shell's screen was blitted into the buffer nobody is looking at, and everything the pane prints next scrolls into a scrollback that is switched off")
 	}
@@ -215,8 +165,6 @@ func TestWireFillsAClientOfADifferentSize(t *testing.T) {
 			daemon := vt.NewEmulator(fidelityCols, fidelityRows)
 			defer func() { _ = daemon.Close() }()
 
-			// A full-screen program using every row it has, with its status
-			// line on the last one.
 			var b strings.Builder
 			b.WriteString("\x1b[?1049h\x1b[H\x1b[2J")
 			for row := 1; row < fidelityRows; row++ {
@@ -240,7 +188,6 @@ func TestWireFillsAClientOfADifferentSize(t *testing.T) {
 	}
 }
 
-// compareEmulators reports every way the two copies of a pane differ.
 func compareEmulators(t *testing.T, want, got vt.Terminal) {
 	t.Helper()
 
@@ -279,10 +226,6 @@ func compareEmulators(t *testing.T, want, got vt.Terminal) {
 			if w != g {
 				diffs = append(diffs, fmt.Sprintf("  screen (%d,%d)\n    daemon %s\n    client %s", x, y, w, g))
 			}
-			// The screen under a full-screen program, which quitting it
-			// reveals. Asked about only while the alternate screen is active,
-			// because that is the only time the wire carries it: entering the
-			// alternate screen clears it, so what it held before is never seen.
 			if !want.IsAltScreen() {
 				continue
 			}
@@ -323,10 +266,6 @@ func lineCellSig(line uv.Line, x int) string {
 	return cellSig(&line[x])
 }
 
-// cellSig describes a cell whole. Colours carry their concrete type because a
-// palette entry and the RGB it resolves to look the same to RGBA() and different
-// on screen: the first follows the user's terminal theme and the second does
-// not.
 func cellSig(c *uv.Cell) string {
 	if c == nil {
 		return "<nil>"

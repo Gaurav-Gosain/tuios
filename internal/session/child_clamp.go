@@ -9,35 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
-// A child is never wider than its parent.
-//
-// A pane that starts another pane is its parent, whatever verb it uses:
-// start-agent, fan, new-window, new-session, new-worktree, a popup, a plugin
-// pane. Two things are held to the parent:
-//
-//   - Grants. launchGrants already gives a pane only what its caller holds.
-//     The one gap was a parent holding admin that names no grants: the child
-//     got the default of [agents.permissions], and under strict that list can
-//     hold respond, which admin does not imply. childDefaultGrants closes it.
-//   - The harness permission mode. An agent started with
-//     --dangerously-skip-permissions by an agent in plan mode would do,
-//     unasked, what its parent has to ask the person for. clampChildMode
-//     reads the parent agent from the caller's process ancestry and the
-//     child's mode from the argv it is about to exec, both ranked by
-//     harness.PermissionOf, and refuses a child that asks for more. A child
-//     that names no mode while its harness default is wider than the parent
-//     is started in the widest mode the harness has that is not wider, with
-//     the flag added (harness.PermissionArgs); when the harness has none, the
-//     child is refused.
-//
-// The person, outside every pane, is held to neither. Neither is a caller
-// over a link, which the link policy holds, nor a native plugin, whose pane
-// grants are cut to the plugin's own.
-
-// clampDefaultGrants is what a pane started by pa that names no grants holds:
-// nil for the default when pa holds all of it, else the default cut to what
-// pa holds. Only a pane holding admin gets here; launchGrants gives a pane
-// without admin its own grants.
 func (d *Daemon) clampDefaultGrants(pa *paneAuth) *Grants {
 	def := d.manager.grants.defaults()
 	if pa == nil || pa.grants.Covers(def) {
@@ -47,7 +18,6 @@ func (d *Daemon) clampDefaultGrants(pa *paneAuth) *Grants {
 	return &g
 }
 
-// childDefaultGrants is clampDefaultGrants for the caller on cs.
 func (d *Daemon) childDefaultGrants(cs *connState) *Grants {
 	if cs == nil || cs.viaLink || cs.paneOnly {
 		return nil
@@ -55,25 +25,16 @@ func (d *Daemon) childDefaultGrants(cs *connState) *Grants {
 	return d.clampDefaultGrants(d.paneAuthority(cs))
 }
 
-// callerAgentProc is the agent process that made a call: the nearest process
-// in the caller's ancestry that a harness manifest names.
 type callerAgentProc struct {
 	harness string
 	argv    []string
 	pid     int
 }
 
-// env reads a variable from the agent's environment.
 func (p callerAgentProc) env(name string) (string, bool) {
 	return procinfo.EnvVar(p.pid, name)
 }
 
-// callerAgent finds the agent behind the caller on cs, walking up from the
-// caller's own process: an agent calls tuios from a tool's shell, an MCP
-// server it started, or the socket itself. The walk stops at this daemon,
-// whose own ancestry is not the caller's, and at the first process a manifest
-// names, which is the agent the call came from. It reports false on a
-// platform whose process table cannot be read.
 func (d *Daemon) callerAgent(cs *connState) (callerAgentProc, bool) {
 	if cs == nil || cs.peerPID <= 1 || d.agentMatcher.registry == nil {
 		return callerAgentProc{}, false
@@ -93,8 +54,6 @@ func (d *Daemon) callerAgent(cs *connState) (callerAgentProc, bool) {
 	return callerAgentProc{}, false
 }
 
-// childHarness names the harness argv starts, "" for none. A shell line
-// (sh -c '...') is not read: what it runs is the shell's to decide.
 func (d *Daemon) childHarness(argv []string) string {
 	if len(argv) == 0 || d.agentMatcher.registry == nil {
 		return ""
@@ -107,12 +66,6 @@ func (d *Daemon) childHarness(argv []string) string {
 	return id
 }
 
-// clampChildMode holds the permission mode of the agent argv starts to the
-// mode of the agent that asks for it. hid is the child's harness, "" to read
-// it from argv. env is the KEY=VALUE list the child gets on top of the
-// daemon's. It returns the argv to exec: argv itself, or argv with the mode
-// flag added that steps the child down. A protocol pane is only checked: its
-// mode is set over the protocol, so a flag added there means nothing.
 func (d *Daemon) clampChildMode(cs *connState, verb, hid string, argv, env []string, protocol bool) ([]string, *verbError) {
 	if len(argv) == 0 {
 		return argv, nil
@@ -133,13 +86,10 @@ func (d *Daemon) clampChildMode(cs *connState, verb, hid string, argv, env []str
 	}
 	pp, ranked := harness.PermissionOf(parent.harness, parent.argv, parent.env)
 	if !ranked {
-		// The parent is an agent whose modes tuios does not rank.
 		return argv, nil
 	}
 	limit := pp.Level
 	if !pp.Known {
-		// A mode tuios does not know may be anything: hold the child to the
-		// narrowest.
 		limit = harness.PermissionReadOnly
 	}
 	cp, _ := harness.PermissionOf(hid, argv, envLookup(env))
@@ -170,8 +120,6 @@ func (d *Daemon) clampChildMode(cs *connState, verb, hid string, argv, env []str
 	return out, nil
 }
 
-// modeArgsAt is where mode flags go in argv: after the program, or after the
-// script an interpreter runs.
 func modeArgsAt(argv []string) int {
 	if !harness.IsInterpreter(harness.BaseName(argv[0])) {
 		return 1
@@ -184,7 +132,6 @@ func modeArgsAt(argv []string) int {
 	return 1
 }
 
-// childModeRefusal is the refusal for a child wider than its parent.
 func childModeRefusal(verb, why string) *verbError {
 	return hintedVerbError(ErrVerbForbidden, verb+" is refused: "+why, &VerbHint{
 		Detail: "Nothing was started. A child agent never gets a wider permission mode than its parent. " +
@@ -193,7 +140,6 @@ func childModeRefusal(verb, why string) *verbError {
 	})
 }
 
-// envLookup reads a KEY=VALUE list.
 func envLookup(env []string) func(string) (string, bool) {
 	return func(name string) (string, bool) {
 		for _, kv := range env {

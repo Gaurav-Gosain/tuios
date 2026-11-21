@@ -6,18 +6,9 @@ import (
 	"time"
 )
 
-// What the daemon holds only in memory, carried across a live handoff so the
-// processes that kept running see one daemon: the key every pane's
-// TUIOS_PANE_TOKEN is signed with, the event stream's boot id, numbering and
-// replay ring, and the agents' mailboxes.
-
-// handoffEvents is an eventHub's state.
 type handoffEvents struct {
-	BootID string `json:"boot_id"`
-	Seq    uint64 `json:"seq"`
-	// Ring is the replay ring, oldest first. RelayedSeqs are the seqs of
-	// its events relayed from a linked host: the flag is unexported, so the
-	// ring's JSON leaves it out.
+	BootID            string        `json:"boot_id"`
+	Seq               uint64        `json:"seq"`
 	Ring              []streamEvent `json:"ring,omitempty"`
 	RelayedSeqs       []uint64      `json:"relayed_seqs,omitempty"`
 	EvictedSeq        uint64        `json:"evicted_seq,omitempty"`
@@ -31,19 +22,14 @@ type handoffEvents struct {
 	LastTMLSurfaceSeq uint64        `json:"last_tml_surface_seq,omitempty"`
 }
 
-// handoffMailbox is one session's agent mailbox.
 type handoffMailbox struct {
-	Msgs          []*AgentMessage   `json:"msgs,omitempty"`
-	Bytes         int               `json:"bytes,omitempty"`
-	Evicted       uint64            `json:"evicted,omitempty"`
-	EvictedUnread map[string]uint64 `json:"evicted_unread,omitempty"`
-	// EvictedUnreadGone is the count of the panes that closed.
-	EvictedUnreadGone uint64 `json:"evicted_unread_gone,omitempty"`
+	Msgs              []*AgentMessage   `json:"msgs,omitempty"`
+	Bytes             int               `json:"bytes,omitempty"`
+	Evicted           uint64            `json:"evicted,omitempty"`
+	EvictedUnread     map[string]uint64 `json:"evicted_unread,omitempty"`
+	EvictedUnreadGone uint64            `json:"evicted_unread_gone,omitempty"`
 }
 
-// handoffNotice is one pane's unread mail notice mark, with its lease, so
-// the new image neither announces the mail again nor refuses the commit of a
-// hook that took its notice from the old one.
 type handoffNotice struct {
 	ID         uint64    `json:"id,omitempty"`
 	Session    string    `json:"session,omitempty"`
@@ -52,8 +38,6 @@ type handoffNotice struct {
 	LeaseUntil time.Time `json:"lease_until,omitzero"`
 }
 
-// handoffMail is the agentBus's state. The send buckets and the open asks
-// are not carried: an ask in flight ends with the old image's connections.
 type handoffMail struct {
 	NextID   uint64                    `json:"next_id"`
 	Boxes    map[string]handoffMailbox `json:"boxes,omitempty"`
@@ -61,7 +45,6 @@ type handoffMail struct {
 	LeaseSeq uint64                    `json:"lease_seq,omitempty"`
 }
 
-// handoffState is the hub's state.
 func (h *eventHub) handoffState() handoffEvents {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -82,8 +65,6 @@ func (h *eventHub) handoffState() handoffEvents {
 	return ev
 }
 
-// restore makes a hub with no subscribers continue the carried one: the same
-// boot id, and numbering and replay that go on from where it stopped.
 func (h *eventHub) restore(ev handoffEvents) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -97,8 +78,6 @@ func (h *eventHub) restore(ev handoffEvents) {
 	h.lastTMLSeq, h.lastTMLSurfaceSeq = ev.LastTMLSeq, ev.LastTMLSurfaceSeq
 	ring := ev.Ring
 	if len(ring) > len(h.ring) {
-		// A smaller ring than the old image's: the oldest go, as they would
-		// have there.
 		h.evictedSeq = ring[len(ring)-len(h.ring)-1].Seq
 		ring = ring[len(ring)-len(h.ring):]
 	}
@@ -108,7 +87,6 @@ func (h *eventHub) restore(ev handoffEvents) {
 	}
 }
 
-// handoffState is the bus's mailboxes.
 func (b *agentBus) handoffState() handoffMail {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -131,7 +109,6 @@ func (b *agentBus) handoffState() handoffMail {
 	return m
 }
 
-// restore puts carried mailboxes into an empty bus.
 func (b *agentBus) restore(m handoffMail) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

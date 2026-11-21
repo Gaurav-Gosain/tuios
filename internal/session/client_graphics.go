@@ -15,9 +15,6 @@ type ClientGraphicsPayload struct {
 	SymbolImages bool `json:"symbol_images,omitempty"`
 }
 
-// handleClientGraphics records a client's graphics after the hello and
-// recounts what the session's panes are told. An SSH client sends it when its
-// terminal's DA1 answer arrives, which is after it attached.
 func (d *Daemon) handleClientGraphics(cs *connState, msg *Message) error {
 	var p ClientGraphicsPayload
 	if err := msg.ParsePayload(&p); err != nil {

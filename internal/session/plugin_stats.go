@@ -8,23 +8,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// pluginStat is one row of plugin.stats: what a plugin costs now and since
-// the daemon started, so a slow or heavy plugin can be seen.
 type pluginStat struct {
-	PluginID string `json:"plugin_id"`
-	Enabled  bool   `json:"enabled"`
-	// Processes counts the processes in the plugin's process sessions now,
-	// the reapers included.
-	Processes int `json:"processes"`
-	// RSS adds up their resident memory in bytes. Known is false where the
-	// kernel does not say, as on macOS.
-	RSS      int64 `json:"rss_bytes"`
-	RSSKnown bool  `json:"rss_known"`
+	PluginID  string `json:"plugin_id"`
+	Enabled   bool   `json:"enabled"`
+	Processes int    `json:"processes"`
+	RSS       int64  `json:"rss_bytes"`
+	RSSKnown  bool   `json:"rss_known"`
 	herdrplugin.RunStats
 }
 
-// herdrPluginStats is plugin.stats. It reads the process table once per
-// call, so it costs nothing until someone asks.
 func (d *Daemon) herdrPluginStats(_ *connState, _ json.RawMessage) (any, *herdrError) {
 	runs, sessions := d.plugins.runner.Stats()
 	var out []pluginStat

@@ -2,42 +2,18 @@ package session
 
 import "slices"
 
-// How each herdr socket method is held to what its caller may do.
-//
-// The JSON verbs are classified by the scope and link policy on their verb entry, and a
-// verb missing there is refused. The herdr socket gets the same rule here:
-// every method it answers names its check, a method with none is refused
-// before its handler runs, and TestHerdrMethodsNameTheirCheck fails until a
-// new method is added. The checks of the classes marked "in the handler" run
-// there; this table records that they exist. The herdr socket is local only,
-// so no class has to think about a link.
-
-// herdrCheck is the check one herdr method gets.
 type herdrCheck uint8
 
 const (
-	// herdrUnclassified is a method missing from the table: refused.
 	herdrUnclassified herdrCheck = iota
-	// herdrOpen touches nothing: a pong, or a no-op answer.
 	herdrOpen
-	// herdrRead reads records of this tuios that belong to no session:
-	// installed plugins, their actions, the agent manifests. A pane or a
-	// plugin needs the read grant. Checked here.
 	herdrRead
-	// herdrVerbs works through admitVerb or callVerb, which hold the caller
-	// to its pane or plugin grants as the matching tuios verb does.
 	herdrVerbs
-	// herdrTrust changes which plugins run: only the person
-	// (herdrPluginTrust, in the handler).
 	herdrTrust
-	// herdrAdmin runs a plugin command or reads its log: a pane or a plugin
-	// needs admin (herdrPluginMayRun and the log check, in the handler).
 	herdrAdmin
-	// herdrReport reports for the caller's own pane (herdr_compat.go).
 	herdrReport
 )
 
-// herdrChecks classifies every method the herdr socket answers.
 var herdrChecks = map[string]herdrCheck{
 	"ping":                         herdrOpen,
 	"session.snapshot":             herdrVerbs,
@@ -123,8 +99,6 @@ var herdrChecks = map[string]herdrCheck{
 	"pane.clear_agent_authority": herdrReport,
 }
 
-// herdrAllowed refuses a method that is not classified, and a read method
-// for a pane or plugin without the read grant.
 func (d *Daemon) herdrAllowed(cs *connState, method string) *herdrError {
 	switch herdrChecks[method] {
 	case herdrUnclassified:
@@ -137,7 +111,6 @@ func (d *Daemon) herdrAllowed(cs *connState, method string) *herdrError {
 	return nil
 }
 
-// herdrAnswered lists every method the herdr socket answers, for the test.
 func herdrAnswered() []string {
 	var out []string
 	for m := range herdrMethods() {

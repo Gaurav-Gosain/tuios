@@ -7,25 +7,6 @@ import (
 	"sync"
 )
 
-// TUIOS_SOCKET is set in every pane to the socket of the daemon that runs it.
-// It reports; it does not select. The daemon a command reaches is chosen by
-// the server name (--server, TUIOS_SERVER) and XDG_RUNTIME_DIR (LOCALAPPDATA
-// on Windows), as GetSocketPath says.
-//
-// It cannot become the selector. Every process started from a pane inherits
-// it, so a script run from a pane that isolates itself with its own
-// XDG_RUNTIME_DIR, which is how the test suites and the demo recorder keep
-// away from the person's daemon, would be sent straight back to that daemon.
-//
-// What it can do is stop the mistake the name invites. Someone who sets it to
-// a path where no daemon listens wants a daemon of their own there, and would
-// otherwise get the one XDG_RUNTIME_DIR names, which is usually the person's:
-// an agent created a session in the person's daemon exactly that way. So when
-// it names a socket other than the one a command would reach, and nothing
-// listens on it, the command refuses and says what to set instead. When it
-// names the same socket, or another live daemon's (the isolated script above),
-// nothing changes.
-
 // SocketEnv is the variable a pane is given its daemon's socket in.
 const SocketEnv = "TUIOS_SOCKET"
 
@@ -35,8 +16,6 @@ type SocketEnvError struct{ msg string }
 
 func (e *SocketEnvError) Error() string { return e.msg }
 
-// socketEnvCheck caches the check for one pair of TUIOS_SOCKET and resolved
-// path, since GetSocketPath is called often and the check may dial.
 var socketEnvCheck struct {
 	sync.Mutex
 	env, path string
@@ -55,8 +34,6 @@ func CheckSocketEnv() error {
 	return checkSocketEnv(path)
 }
 
-// checkSocketEnv refuses when TUIOS_SOCKET names a socket other than path and
-// no daemon listens on it.
 func checkSocketEnv(path string) error {
 	env := os.Getenv(SocketEnv)
 	if env == "" || filepath.Clean(env) == filepath.Clean(path) {

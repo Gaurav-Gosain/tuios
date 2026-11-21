@@ -13,39 +13,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// open-host-connection: a connection to the daemon on another machine.
-//
-// This is the one primitive under everything that is not a listing. A client
-// that wants to attach a session on host "build", or run a verb there, asks
-// this daemon for a connection to build's daemon and then speaks build's
-// daemon's own protocol on it, binary or JSON, exactly as it would on build's
-// socket. The daemon in the middle relays bytes and reads none of them.
-//
-// That shape is chosen over forwarding verbs one by one for three reasons.
-// Attaching is a stream and not a request, so a per-verb forwarder would have
-// to grow a second channel for it anyway. The remote daemon's own protocol
-// already carries version negotiation and its own errors, so nothing here has
-// to know which verbs the far side has. And the untrusted fence stays where it
-// already is: in the one process that decodes the far side's bytes, which is
-// the client that asked, never this daemon.
-//
-// What this daemon does guarantee: the far side gets no channel into this
-// daemon (the link refuses inbound streams), a stream nobody drains is dropped
-// without costing the link, and a frame is never larger than the link's cap.
-
 // ErrVerbHostRefused reports a host whose link is up and cannot take another
 // connection. Its remedy is to close one, which is why it does not share a
 // code with host_unreachable, whose remedy is to fix the link.
 const ErrVerbHostRefused = "host_refused"
 
-// verbOpenHostConnection opens the connection and hands the client's
-// connection to the relay once the reply has been written.
 func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Host string `json:"host"`
-		// SSHAuthSock is the client's agent socket. The client's hello goes
-		// to the host, not here, so this is how this daemon's link follows a
-		// person who attached a session on a host. See ssh_agent_follow.go.
+		Host        string `json:"host"`
 		SSHAuthSock string `json:"ssh_auth_sock"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -61,18 +36,11 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 		return nil, verr
 	}
 
-	// This host's agent link follows the clients attached to a session on
-	// it, and nobody else. See ssh_agent_follow.go.
 	hostKey := hostAgentKey(p.Host)
 	d.agentNote(cs, p.SSHAuthSock, hostKey)
 
 	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
 	defer cancel()
-	// The one thing this daemon says about the connection it relays: whether
-	// the process asking for it may act as the person. The far daemon reads
-	// the relayed bytes and not this daemon's view of who sent them, so this
-	// is the only way a check made here reaches it. It rides in the stream's
-	// open frame, which the caller cannot write. See human_origin.go.
 	conn, err := d.federation.OpenConnectionAs(ctx, p.Host, federation.StreamOpen{Human: d.mayActAsHuman(cs) && !d.rig})
 	if err != nil {
 		return nil, hostConnectionError(p.Host, err)
@@ -88,8 +56,6 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 
 	LogBasic("Client %s connected through to host %s", cs.clientID, p.Host)
 	cs.takeover = func(br *bufio.Reader) {
-		// agentNote checks for a closed connection itself, so a note from
-		// the relay's timer after the close does nothing.
 		d.relayHostConnection(cs, br, conn, func() { d.agentNote(cs, p.SSHAuthSock, hostKey) })
 		LogBasic("Client %s left host %s", cs.clientID, p.Host)
 	}
@@ -101,8 +67,6 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 	}, nil
 }
 
-// hostConnectionError turns a link failure into the error a caller reads,
-// naming the machine and what to do about it.
 func hostConnectionError(host string, err error) *verbError {
 	if refused, ok := errors.AsType[*federation.RefusedError](err); ok {
 		return hintedVerbError(ErrVerbHostRefused, refused.Error(), &VerbHint{
@@ -122,60 +86,18 @@ func hostConnectionError(host string, err error) *verbError {
 	return hintedVerbError(code, message, hint)
 }
 
-// relayHostConnection copies bytes between the client's connection and the
-// stream to the remote daemon until either side ends, then ends the other.
-//
-// The client's end going away closes the stream, which the far side's proxy
-// turns into the remote daemon seeing its client disconnect: the session there
-// keeps running, as it would for any client that left. The stream going away,
-// which is the link dropping, closes the client's connection: the client sees
-// a disconnect and says which machine it lost.
-//
-// Nothing in here decodes a byte. The bounds on what crosses are the link's
-// own, a megabyte per frame and a dropped stream for a reader that stalls, and
-// the client's, which caps a message at what it caps a local daemon's at.
-//
-// onInput runs when the client sends what the person types (keys, a paste,
-// the mouse), at most once a second: that is the person using the host, and
-// the host's agent link follows them. A client also sends on its own, such as
-// a state push or a resize when the far session changes, and that is not the
-// person. See usedReader.
 func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.ReadWriteCloser, onInput func()) {
 	conn := cs.conn
-	// Both deadlines are cleared, and the write one is the whole reason this
-	// feature was unusable.
-	//
-	// The JSON loop wrote the reply that opened this relay under a ten second
-	// write deadline (writeVerbResponse). A deadline on a net.Conn is an
-	// absolute time and not a per-write budget, so it stayed armed at that
-	// instant plus ten seconds, and every byte the relay wrote afterwards was
-	// racing it. About eleven seconds into an attached session the far pane
-	// printed something, that write failed with "i/o timeout", the relay
-	// ended, and the client reported a lost link and put the person back on
-	// this machine. It did the same thing eleven seconds after the next
-	// attach, and after the one after that.
-	//
-	// So the link was not what kept dropping. Nothing crossed a network in the
-	// reproduction at all. A pane can be silent for hours and a relay can
-	// write to a busy client for hours, and neither is a failure, so the relay
-	// runs with no deadline in either direction.
 	_ = conn.SetReadDeadline(time.Time{})
 	_ = conn.SetWriteDeadline(time.Time{})
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		// Client to remote. br holds nothing past the request line, because
-		// the client sends nothing until the reply has arrived, and it is
-		// used rather than the bare connection so a byte it did buffer is not
-		// lost.
 		_, _ = io.Copy(remote, &usedReader{r: br, every: time.Second, used: onInput})
 		_ = remote.Close()
 	}()
 	go func() {
-		// The daemon stopping or the connection being dropped ends the relay
-		// from the outside; without this the copy would wait for a byte that
-		// no longer has anywhere to go.
 		select {
 		case <-d.ctx.Done():
 		case <-cs.done:
@@ -186,31 +108,15 @@ func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.
 		_ = conn.Close()
 	}()
 	_, cerr := io.Copy(conn, remote)
-	// Which of the two ends gave up decides what a person should do about it,
-	// so each is logged. A stalled stream is this client not reading; anything
-	// else is the link.
 	if errors.Is(cerr, federation.ErrStreamStalled) {
 		LogBasic("Client %s stopped reading its connection to a host for too long and the stream was dropped. The link is still up.", cs.clientID)
 	} else if cerr != nil {
 		LogBasic("Client %s lost its connection to a host: %v", cs.clientID, cerr)
 	}
-	// Nothing more can cross once the remote end is gone, so the client's
-	// connection is closed whole rather than half: a client that only ever
-	// reads sees the end at once.
 	_ = conn.Close()
 	<-done
 }
 
-// usedReader calls used when a frame of the person's input is read through
-// it, at most once per every. Input inside the window is not dropped: one more
-// call is made when the window ends, so the last keystroke always counts. A
-// nil used is never called.
-//
-// It reads the frame headers of the binary protocol and nothing else: a frame
-// of MsgInput is the person, any other frame is the client's own. Counting
-// every byte moved a host's link to a client that only pushed its state or
-// sent its size again, after another client had attached and taken the link. A stream that
-// speaks the JSON protocol counts every read, as before.
 type usedReader struct {
 	r       io.Reader
 	every   time.Duration
@@ -218,9 +124,6 @@ type usedReader struct {
 	last    time.Time
 	pending atomic.Bool
 
-	// The scan of the stream's frames: whether the first byte was read and
-	// said JSON, the header read so far, and the bytes of the current
-	// frame's body still to pass.
 	started, json bool
 	head          [6]byte
 	have          int
@@ -244,10 +147,6 @@ func (u *usedReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
-// scan walks the frames that p continues and reports whether one of them is
-// the person's input. Wire format: [4 bytes BE length][1 byte type][1 byte
-// codec][body], the length counting the type, the codec and the body. A
-// binary stream cannot start with '{': its first frame would be 2 GB long.
 func (u *usedReader) scan(p []byte) bool {
 	if !u.started {
 		u.started = true

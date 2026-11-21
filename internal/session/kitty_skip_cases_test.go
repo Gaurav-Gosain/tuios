@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-// Cases the property test (FuzzFrameSkipping) cannot reach: shared memory
-// objects on disk, catch-ups from the ring, and a stall long enough to fill a
-// client's queue.
-
 // TestSkippedFrameNeverLeaksSharedMemory: a stream that sends each frame as a
 // new shared memory object (t=s) under one image id. The terminal that reads
 // an object deletes it, so a frame dropped for a slow client would leave its
@@ -57,7 +53,6 @@ func TestSkippedFrameNeverLeaksSharedMemory(t *testing.T) {
 				}
 				return
 			}
-			// Act as the terminal: delete each object the client was sent.
 			for _, m := range nameRE.FindAllSubmatch(got, -1) {
 				name, err := base64.StdEncoding.DecodeString(string(m[1]))
 				if err != nil {
@@ -78,8 +73,6 @@ func TestSkippedFrameNeverLeaksSharedMemory(t *testing.T) {
 	}
 }
 
-// mpvFrame is one frame as mpv's --vo=kitty sends it: a cursor move, then an
-// image with no id in 4 KiB chunks. keys replaces mpv's keys when not empty.
 func mpvFrame(n int, cup, keys string) []byte {
 	if keys == "" {
 		keys = "a=T,f=24,s=100,v=100,C=1,q=2"
@@ -199,7 +192,6 @@ func TestCatchUpSkipsTheRestOfACommand(t *testing.T) {
 	}
 }
 
-// screenOf is the text a client shows for out.
 func screenOf(out []byte) string {
 	s := replayClient(out)
 	return s[:strings.Index(s, "\ncursor ")]
@@ -245,8 +237,6 @@ func TestSkippedFrameKeepsTheOtherScreensImage(t *testing.T) {
 				b.WriteString("\x1b[?1049l")
 			}
 			stream := b.Bytes()
-			// Reads of 8 bytes, so the screen switch is split across them, and a
-			// client that takes nothing until the end.
 			p := queuePTY()
 			fastCh := p.Subscribe("fast", 0)
 			slowCh := p.Subscribe("slow", 0)

@@ -13,61 +13,25 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// How much a linked machine may write here.
-//
-// The write roots say where a link may write (verb_files_confine.go). These
-// limits say how much. A machine with the files capability must not be able
-// to fill a disk: the drop folder is often on tmpfs, in memory, and a full
-// home disk stops every program the person runs.
-//
-//   - The drop folder holds at most dropKeepBytes. A write into it is checked
-//     against what the folder holds, plus what other writes into it have
-//     claimed, before any byte moves. A link writes only inside a drop that
-//     file-drop-dir made, never in the drop folder itself, so pruneDrops, which
-//     removes whole drops, can always make room.
-//   - Every other write must leave files_min_free on its disk.
-//   - A linked machine has at most linkWriteStreamsMax write streams and
-//     linkPartsMax part files open here at once.
-//   - A linked machine makes at most files_max_entries new files and folders
-//     in config.FilesEntryWindow. The reserve counts bytes, and an empty file
-//     costs none, so without this a machine could use up the disk's inodes
-//     while the reserve holds. A new part is a new file, so a write that
-//     starts one is charged; a folder is charged for each level it makes.
-
 const (
-	// linkWriteStreamsMax bounds the open-file-stream writes one linked
-	// machine has open at once. A copy uses one at a time per file.
 	linkWriteStreamsMax = 8
-	// linkPartsMax bounds the part files one linked machine has here that
-	// are not committed or aborted yet.
-	linkPartsMax = 64
+	linkPartsMax        = 64
 )
 
-// linkFileUsage is what each linked machine has open here, by peer name.
 type linkFileUsage struct {
-	mu      sync.Mutex
-	streams map[string]int
-	parts   map[string]map[string]bool
-	// dropClaimed is the bytes the open writes into the drop folder may
-	// still add.
+	mu          sync.Mutex
+	streams     map[string]int
+	parts       map[string]map[string]bool
 	dropClaimed int64
-	// fsClaimed is the same for each other filesystem, by fsKey: the free
-	// space a disk reports does not yet count the writes that are open on it.
-	fsClaimed map[string]int64
-	// entries is the new files and folders each machine made here lately,
-	// by peer name, for files_max_entries.
-	entries map[string]*entryUse
+	fsClaimed   map[string]int64
+	entries     map[string]*entryUse
 }
 
-// entryUse is a machine's count of new files and folders. used goes down
-// evenly, by the bound in each config.FilesEntryWindow, from at.
 type entryUse struct {
 	used float64
 	at   time.Time
 }
 
-// takeEntries charges n new entries to peer, under limit per window. It
-// reports false, and charges nothing, when they do not fit. u.mu is held.
 func (u *linkFileUsage) takeEntries(peer string, n int, limit int64, now time.Time) bool {
 	if limit <= 0 || n <= 0 {
 		return true
@@ -89,16 +53,12 @@ func (u *linkFileUsage) takeEntries(peer string, n int, limit int64, now time.Ti
 	return true
 }
 
-// tooManyEntries is the refusal of a file or folder past files_max_entries.
-// It is busy, so a copy waits and tries again.
 func tooManyEntries(policy config.LinkPolicy) *verbError {
 	return hintedVerbError(ErrVerbBusy, peerName(policy.Peer)+" made too many new files and folders on "+thisMachineName()+". It may make "+strconv.FormatInt(policy.FilesMaxEntries, 10)+" in ten minutes (files_max_entries). Nothing was written.", &VerbHint{
 		Detail: "Wait a few minutes, then try again. To allow more, raise files_max_entries in the config of " + thisMachineName() + ".",
 	})
 }
 
-// claimLinkDirs charges the folders a MkdirAll of dir in fsys would make for
-// cs against files_max_entries. A call that did not come over a link passes.
 func (d *Daemon) claimLinkDirs(cs *connState, fsys fileFS, dir string) *verbError {
 	if cs == nil || !cs.viaLink {
 		return nil
@@ -106,8 +66,6 @@ func (d *Daemon) claimLinkDirs(cs *connState, fsys fileFS, dir string) *verbErro
 	return d.claimLinkEntries(cs, missingDirs(fsys, dir))
 }
 
-// claimLinkEntries charges n new files or folders that cs makes here against
-// files_max_entries. A call that did not come over a link passes.
 func (d *Daemon) claimLinkEntries(cs *connState, n int) *verbError {
 	if cs == nil || !cs.viaLink || n <= 0 {
 		return nil
@@ -123,8 +81,6 @@ func (d *Daemon) claimLinkEntries(cs *connState, n int) *verbError {
 	return nil
 }
 
-// missingDirs is how many folders a MkdirAll of dir would make: the levels
-// from dir up to the first one that is there.
 func missingDirs(fsys fileFS, dir string) int {
 	n := 0
 	for {
@@ -140,7 +96,6 @@ func missingDirs(fsys fileFS, dir string) int {
 	}
 }
 
-// linkPeerKey names the machine on cs for the limits.
 func linkPeerKey(cs *connState) string {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -150,7 +105,6 @@ func linkPeerKey(cs *connState) string {
 	return cs.linkPeer
 }
 
-// partDone forgets a part that was committed or aborted.
 func (u *linkFileUsage) partDone(cs *connState, part string) {
 	if cs == nil || !cs.viaLink {
 		return
@@ -161,7 +115,6 @@ func (u *linkFileUsage) partDone(cs *connState, part string) {
 	u.mu.Unlock()
 }
 
-// dirBytes is the bytes the regular files under dir hold.
 func dirBytes(dir string) int64 {
 	var n int64
 	_ = filepath.WalkDir(dir, func(_ string, de fs.DirEntry, err error) error {
@@ -175,17 +128,10 @@ func dirBytes(dir string) int64 {
 	return n
 }
 
-// claimLinkWrite checks a write of length bytes from offset into the part
-// part, for the final path path, against the limits, and claims its room. It
-// returns release, which the caller runs when the stream ends. A call that
-// did not come over a link passes with a release that does nothing.
 func (d *Daemon) claimLinkWrite(cs *connState, path, part string, offset, length int64) (release func(), verr *verbError) {
 	return d.claimLinkWriteIn(cs, path, part, offset, length, true)
 }
 
-// claimLinkStream counts one write stream of cs against linkWriteStreamsMax:
-// a tree stream, whose files claim their room and parts without a stream
-// each (claimLinkWriteIn with stream false).
 func (d *Daemon) claimLinkStream(cs *connState) (release func(), verr *verbError) {
 	none := func() {}
 	if cs == nil || !cs.viaLink {
@@ -212,8 +158,6 @@ func (d *Daemon) claimLinkStream(cs *connState) (release func(), verr *verbError
 	}, nil
 }
 
-// claimLinkWriteIn is claimLinkWrite; stream says whether the write counts
-// as a stream of its own.
 func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, length int64, stream bool) (release func(), verr *verbError) {
 	none := func() {}
 	if cs == nil || !cs.viaLink {
@@ -269,8 +213,6 @@ func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, leng
 		}
 	}
 
-	// A part that is not there yet is a new file, which counts against
-	// files_max_entries; the commit renames it and makes no other.
 	if !partExists && !u.parts[peer][part] && !u.takeEntries(peer, 1, policy.FilesMaxEntries, time.Now()) {
 		return none, tooManyEntries(policy)
 	}
@@ -306,10 +248,6 @@ func (d *Daemon) claimLinkWriteIn(cs *connState, path, part string, offset, leng
 	}, nil
 }
 
-// thisMachineName is how this daemon names its own machine in a refusal that
-// travels to another one, such as the hub, where "this machine" would be read
-// as the reader's. It is the machine's name, or "this machine" when it has
-// none.
 func thisMachineName() string {
 	if n := config.ThisMachine(); n != "" {
 		return n
@@ -317,7 +255,6 @@ func thisMachineName() string {
 	return "this machine"
 }
 
-// peerName is a linked machine's name for a message.
 func peerName(peer string) string {
 	if peer == "" {
 		return "the linked machine"

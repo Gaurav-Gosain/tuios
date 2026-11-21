@@ -24,14 +24,9 @@ func GetSocketPath() (string, error) {
 	return path, nil
 }
 
-// defaultSocketPath is the daemon socket the environment's directories name.
-// On Windows, we use Unix sockets in the user's local app data directory.
-// Windows 10 build 17063+ supports AF_UNIX sockets.
 func defaultSocketPath() (string, error) {
-	// Use LOCALAPPDATA for user-specific data
 	localAppData := os.Getenv("LOCALAPPDATA")
 	if localAppData == "" {
-		// Fallback to user profile
 		userProfile := os.Getenv("USERPROFILE")
 		if userProfile == "" {
 			return "", errfmt.Errorf("cannot determine user directory: LOCALAPPDATA and USERPROFILE not set")

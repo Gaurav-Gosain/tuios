@@ -4,15 +4,6 @@ import (
 	"testing"
 )
 
-// agent-hook-event has two callers that write its params differently, and
-// both are installed on machines now. The hook line tuios integration
-// installs (v0.13.0 on) is shell printf, which cannot quote JSON, so it puts
-// the payload in as JSON under payload_json and says forwarder. A caller that
-// can quote, such as tuios call, sends the payload as a string under payload.
-// A daemon that refuses either shape makes every hook event of that caller
-// pay a refused call and a start of tuios agent-hook, with no error anyone
-// sees. The lines below are what each caller writes, byte for byte.
-
 func TestAgentHookEventTakesBothParamShapes(t *testing.T) {
 	const payload = `{"hook_event_name":"Stop","session_id":"conv-1"}`
 	cases := []struct {
@@ -45,7 +36,6 @@ func TestAgentHookEventTakesBothParamShapes(t *testing.T) {
 		})
 	}
 
-	// Both at once is ambiguous and is refused, so neither silently wins.
 	both := `{"harness":"claude-code","payload":"{}","payload_json":{}}`
 	if _, verr := decodeHookCall([]byte(both), "hook"); verr == nil || verr.Code != ErrVerbInvalidParams {
 		t.Fatalf("payload and payload_json together: %v, want invalid_params", verr)
