@@ -259,24 +259,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		fx.ShowNotification(searchPrompt(backward), "info", 0) // Persistent until search complete
 		return
 	case "n", "N":
-		// n repeats the last search in its own direction, N in the opposite
-		// one: after ?, n goes up and N goes down, as in vim and tmux.
-		if len(cm.SearchMatches) == 0 {
-			break
-		}
-		backward := cm.SearchBackward
-		if keyStr == "N" {
-			backward = !backward
-		}
-		wrapped := false
-		for range count {
-			if stepMatch(cm, grid, backward) {
-				wrapped = true
-			}
-		}
-		if wrapped {
-			fx.ShowNotification(searchWrapMessage(backward), "info", s.NotificationDuration)
-		}
+		repeatSearch(keyStr == "N", count, cm, grid, fx, s)
 	case "ctrl+l":
 		// Clear search highlighting (like vim's :noh)
 		cm.Search.Set("")
@@ -317,7 +300,9 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	searchPrefix := searchPrompt(cm.SearchBackward)
 	switch key.Code {
 	case tea.KeyEnter, tea.KeyKpEnter:
-		cm.State = terminal.CopyModeNormal
+		// The prompt goes back to the selection it opened from, whose end
+		// is now at the match.
+		cm.State = cm.SearchReturn
 		matchInfo := ""
 		if len(cm.SearchMatches) > 0 {
 			matchInfo = fmt.Sprintf(" (%s matches)", terminal.SearchMatchCount(len(cm.SearchMatches), s.SearchMaxMatches))
@@ -326,21 +311,55 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	case tea.KeyEscape:
 		// Esc gives up the search: the cursor goes back to where the prompt
 		// opened, as it does in vim.
-		cm.State = terminal.CopyModeNormal
+		cm.State = cm.SearchReturn
 		cm.Search.Set("")
 		cm.SearchMatches = nil
 		restoreSearchOrigin(cm, grid)
+		if cm.State.InVisual() {
+			updateVisualEnd(cm, grid)
+		}
 		fx.ShowNotification("", "info", 0)
 	default:
 		changed, consumed := cm.Search.Edit(msg.String(), key.Text, textedit.LineOpts{AllowClear: true})
 		if changed {
 			executeSearch(cm, grid, s.SearchMaxMatches)
+			if cm.SearchReturn.InVisual() {
+				updateVisualEnd(cm, grid)
+			}
 		}
 		if changed || consumed {
 			fx.ShowNotification(searchPrefix+searchLineText(&cm.Search), "info", 0)
 		}
 	}
 	fx.InvalidateCache()
+}
+
+// repeatSearch is n, or N when reverse is set: the next match of the last
+// search, count times. n goes in the search's own direction and N in the
+// opposite one: after ?, n goes up and N goes down, as in vim and tmux. In a
+// selection the selection's end follows the cursor to the match. It reports
+// whether it showed the wrap message.
+func repeatSearch(reverse bool, count int, cm *terminal.CopyMode, grid terminal.CopyGrid, fx *copyModeEffects, s *config.Settings) bool {
+	if len(cm.SearchMatches) == 0 {
+		return false
+	}
+	backward := cm.SearchBackward
+	if reverse {
+		backward = !backward
+	}
+	wrapped := false
+	for range count {
+		if stepMatch(cm, grid, backward) {
+			wrapped = true
+		}
+	}
+	if cm.State.InVisual() {
+		updateVisualEnd(cm, grid)
+	}
+	if wrapped {
+		fx.ShowNotification(searchWrapMessage(backward), "info", s.NotificationDuration)
+	}
+	return wrapped
 }
 
 // searchLineText is the search text as the prompt shows it: with a thin bar
@@ -388,9 +407,12 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		count = 1
 	}
 
+	// keepNote keeps a notification the key showed, such as the search
+	// prompt, which the clear below would otherwise take away.
+	keepNote := false
 	defer func() {
 		cm.PendingCount = 0
-		if fx != nil {
+		if fx != nil && !keepNote {
 			fx.ShowNotification("", "info", 0)
 		}
 	}()
@@ -417,6 +439,18 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 	case "f", "F", "t", "T":
 		armCharSearch(cm, keyStr, count, fx)
 		return
+
+	// / and ? search from the selection's cursor. Each match moves the
+	// cursor and the selection's end with it, and enter keeps the
+	// selection, as tmux does.
+	case "/", "?":
+		backward := keyStr == "?"
+		cm.BeginSearch(backward, grid.ScrollbackLen())
+		fx.ShowNotification(searchPrompt(backward), "info", 0)
+		keepNote = true
+		return
+	case "n", "N":
+		keepNote = repeatSearch(keyStr == "N", count, cm, grid, fx, s)
 
 	// 0 is the line start when no count is pending. See handleNormalInput.
 	case "0":

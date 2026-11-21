@@ -372,6 +372,17 @@ func jumpToMatch(cm *terminal.CopyMode, grid terminal.CopyGrid, matchIdx int) {
 	match := cm.SearchMatches[matchIdx]
 	scrollbackLen := grid.ScrollbackLen()
 
+	// In a selection a match already on screen moves the cursor only, so
+	// the start of the selection does not scroll away.
+	if cm.SelectionState().InVisual() {
+		top := scrollbackLen - cm.ScrollOffset
+		if row := match.Line - top; row >= 0 && row < grid.ContentHeight() {
+			cm.CursorY = row
+			cm.CursorX = match.StartX
+			return
+		}
+	}
+
 	if match.Line < scrollbackLen {
 		cm.ScrollOffset = scrollbackLen - match.Line
 		grid.SetScrollOffset(cm.ScrollOffset) // Sync for rendering

@@ -194,8 +194,21 @@ func TestCopyModeEndRebinds(t *testing.T) {
 	alive(t, term, "after the rebound line end")
 }
 
+// paneRowWith is the last row that shows text in a pane, not in the dock's
+// search note, such as "?ROW05 (1 matches)": the row holds text and no ?.
+func paneRowWith(sc tuitest.Screen, text string) int {
+	_, rows := sc.Size()
+	for r := rows - 1; r >= 0; r-- {
+		if line := sc.Line(r); strings.Contains(line, text) && !strings.Contains(line, "?") {
+			return r
+		}
+	}
+	return -1
+}
+
 // o in a v or V selection moves the copy cursor to the other end (#1226), as
-// other-end does in tmux and o in vim.
+// other-end does in tmux and o in vim. / and ? in a selection move its end to
+// the match, and n and N move it on (#2302).
 //
 // How these could pass wrongly, written down first:
 //   - o could do nothing and the copy still match. The issue's case, 0 v l l
@@ -288,6 +301,61 @@ func TestCopyModeVisualOtherEnd(t *testing.T) {
 	}
 	if got := rawWrite(t, term, out, from, "V 45j o j y"); got != strings.Join(want, "\n") {
 		t.Fatalf("V 45j o j y copied %q, want ROW06 to ROW50", got)
+	}
+
+	// / and ? in a selection search from its cursor, and each match moves
+	// the selection's end, as in tmux (#2302). Enter keeps the selection, n
+	// moves its end on, and esc puts the end back.
+	toRow := func(name string) {
+		t.Helper()
+		if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+			t.Fatalf("send prefix+[: %v", err)
+		}
+		waitCopyCursor(t, term, "prefix+[")
+		if err := term.SendKeys("?"+name, tuitest.Enter); err != nil {
+			t.Fatalf("search: %v", err)
+		}
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			r, _, ok := copyCursorCell(s)
+			return ok && strings.Contains(s.Line(r), name)
+		}, uiTimeout); err != nil {
+			t.Fatalf("the search did not land on %s\n%s", name, term.Snapshot())
+		}
+	}
+	searches := []struct {
+		start string
+		keys  []any
+		want  string
+	}{
+		// Down from ROW05, in the scrollback: / finds ROW06, n n go on to
+		// ROW08.
+		{"ROW05", []any{"V", "/ROW0", tuitest.Enter, "n", "n", "y"}, "ROW05\nROW06\nROW07\nROW08"},
+		// Up from ROW30: the selection runs back to the R of ROW28.
+		{"ROW30", []any{"v", "?ROW28", tuitest.Enter, "y"}, "ROW28\nROW29\nR"},
+		// esc gives up the search and puts the end back on the second W.
+		{"ROW40", []any{"v", "l", "l", "/ROW4", tuitest.Esc, "y"}, "ROW"},
+	}
+	for i, tc := range searches {
+		toRow(tc.start)
+		from := len(clipboardWrites(out))
+		for _, k := range tc.keys {
+			sendEach(t, term, k)
+			if i == 0 && k == "/ROW0" {
+				// The prompt is open over the selection: it stays drawn,
+				// to the match the cursor is on, and the view does not
+				// scroll the selection's start away.
+				if err := term.WaitFor(func(s tuitest.Screen) bool {
+					r, _, ok := copyCursorCell(s)
+					return ok && strings.Contains(s.Line(r), "ROW06") && paneRowWith(s, "ROW05") >= 0
+				}, uiTimeout); err != nil {
+					t.Fatalf("the prompt did not move the cursor to ROW06 with ROW05 on screen\n%s", term.Snapshot())
+				}
+				copiesFrame(t, term, "search-in-selection")
+			}
+		}
+		if got := rawWrite(t, term, out, from, tc.start+" "+fmt.Sprint(tc.keys...)); got != tc.want {
+			t.Fatalf("from %s, %q copied %q, want %q", tc.start, tc.keys, got, tc.want)
+		}
 	}
 	alive(t, term, "after o in copy mode")
 }

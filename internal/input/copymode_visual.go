@@ -42,7 +42,9 @@ func enterVisualBlock(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 func updateVisualEnd(cm *terminal.CopyMode, grid terminal.CopyGrid) {
 	absY := getAbsoluteY(cm, grid)
 
-	switch cm.State {
+	// SelectionState, so the end also follows the cursor while the search
+	// prompt is open over the selection.
+	switch cm.SelectionState() {
 	case terminal.CopyModeVisualChar, terminal.CopyModeVisualBlock:
 		cm.VisualEnd = terminal.Position{X: cm.CursorX, Y: absY}
 	case terminal.CopyModeVisualLine:

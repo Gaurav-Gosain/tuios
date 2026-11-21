@@ -701,7 +701,7 @@ func copyModeKeys(enter ...string) []HelpBinding {
 	}
 	return append(out, []HelpBinding{
 		{Keys: []string{"f, F, t, T"}, Description: "Jump to a character on the line", Category: "Copy Mode"},
-		{Keys: []string{"/, ?"}, Description: "Search forward/backward", Category: "Copy Mode"},
+		{Keys: []string{"/, ?"}, Description: "Search forward/backward. In a selection, the match moves its end", Category: "Copy Mode"},
 		{Keys: []string{"n, N"}, Description: "Repeat search/reverse", Category: "Copy Mode"},
 		{Keys: []string{"ctrl+l"}, Description: "Clear the search highlights", Category: "Copy Mode"},
 		{Keys: []string{"v, V"}, Description: "Visual char/line", Category: "Copy Mode"},
