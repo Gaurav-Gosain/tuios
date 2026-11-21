@@ -247,21 +247,21 @@ type AttentionItem struct {
 	// nanoseconds. Both are empty for an item of this machine.
 	Stale  bool  `json:"stale,omitempty"`
 	SeenAt int64 `json:"seen_at,omitempty"`
+	// MarkedUnread is set on a finished item the person reopened with mark
+	// unread after looking at the pane.
+	MarkedUnread bool `json:"marked_unread,omitempty"`
+	// DenyMessage is set when the harness takes a reason with a deny, so the
+	// Inbox can offer to type one.
+	DenyMessage bool `json:"deny_message,omitempty"`
 
 	// SnoozedUntil is when a snoozed item opens again, in unix nanoseconds,
 	// set on an item listed with include_snoozed. -1 means it waits until its
 	// fact changes. Zero on an item that is not snoozed.
 	SnoozedUntil int64 `json:"snoozed_until,omitempty"`
-	// MarkedUnread is set on a finished item the person reopened with mark
-	// unread after looking at the pane.
-	MarkedUnread bool `json:"marked_unread,omitempty"`
 	// Risk names the risk rules an approval's command matched, set on an
 	// approval or plan item whose request did. An allow from the Inbox then
 	// needs risk_ack naming exactly these. See internal/risk.
 	Risk []string `json:"risk,omitempty"`
-	// DenyMessage is set when the harness takes a reason with a deny, so the
-	// Inbox can offer to type one.
-	DenyMessage bool `json:"deny_message,omitempty"`
 	// PlanLines and PlanSHA describe a plan item's text, which is served by
 	// get-approval rather than carried here: how many lines it has, and the
 	// digest an answer names so it applies only to the plan that was shown.
