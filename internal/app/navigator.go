@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -428,6 +429,20 @@ func (m *OS) navigatorCurrentSession() navSession {
 			Subagents:  w.AgentSubagents,
 		})
 		s.Panes[len(s.Panes)-1].setText(navScreenText(w, navTextLines))
+	}
+	if strip := m.scrollStripRanks(); len(strip) > 0 {
+		stripRank := func(p navPane) int {
+			if r, ok := strip[p.ID]; ok {
+				return r
+			}
+			return len(strip)
+		}
+		sort.SliceStable(s.Panes, func(a, b int) bool {
+			if s.Panes[a].Workspace != s.Panes[b].Workspace {
+				return s.Panes[a].Workspace < s.Panes[b].Workspace
+			}
+			return stripRank(s.Panes[a]) < stripRank(s.Panes[b])
+		})
 	}
 	s.Count = len(s.Panes)
 	return s
