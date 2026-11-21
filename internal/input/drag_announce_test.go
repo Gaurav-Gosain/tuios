@@ -8,23 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// A drag is a gesture, and the sizes it passes through on the way are not sizes
-// the guest was ever meant to live at. A borderless pane gives its shared-border
-// allowance up on the first motion so it can draw its own frame, and the retile
-// on the drop gives it back. In a tiled layout the pane usually lands in a slot
-// the same size as the one it left, so both of those were avoidable, and each of
-// them reaches the shell as a SIGWINCH it answers by repainting its prompt.
-//
-// These count the sizes the guest was handed, not the size it ends up with. The
-// drop puts the size back, so a check made after the gesture reads the right
-// number for the wrong reason.
-//
-// They drive OS.Update rather than the handlers directly, because the hold is
-// armed by the press in Update: a test that called handleMouseClick would enter
-// the code below the arming and prove nothing about whether anything arms it.
-
-// countSizes records every size a pane is handed from now on. The layout is
-// announced once first, which is the state a session is in before a gesture.
 func countSizes(win *terminal.Window) *[][2]int {
 	win.Resize(win.Width, win.Height)
 	var got [][2]int
@@ -51,7 +34,6 @@ func TestDraggingTheDividerTellsTheGuestOnce(t *testing.T) {
 	left.Resize(left.Width, left.Height)
 	told := countSizes(right)
 
-	// The separator cell between the two tiles, dragged eight columns left.
 	dividerX := left.X + left.Width
 	rowY := right.Y + right.Height/2
 	o.Update(clickMsg(dividerX, rowY))

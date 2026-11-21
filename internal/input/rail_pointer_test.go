@@ -33,7 +33,6 @@ func TestRailMotionResetsPointerShape(t *testing.T) {
 func TestPaneMotionStillShapesThePointer(t *testing.T) {
 	o := hoverOS(t)
 
-	// The editor pane's top border row: the geometry pass offers grab there.
 	handleMouseMotion(tea.MouseMotionMsg{X: 40, Y: 1}, o)
 
 	if got := o.CurrentPointer(); got != app.PointerGrab {

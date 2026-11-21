@@ -31,8 +31,6 @@ import (
 //     dispatch: the "remote, explicit copy mode" row fails saying nothing
 //     reached the guest, because copy mode swallowed the j.
 
-// scrolledPane is a window with history, scrolled back ten lines the way the
-// wheel leaves it, in front of a PTY that records what reaches it.
 func scrolledPane(t *testing.T, explicit bool) (*terminal.Window, *capturePty) {
 	t.Helper()
 	em := vt.NewEmulator(80, 24)

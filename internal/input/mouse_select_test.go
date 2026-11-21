@@ -12,9 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// selectPane builds a focused, floating pane at the origin with one line of
-// text on screen. Screen cell (x, y) inside the content is at (x+1, y+1),
-// because a floating window spends one cell per border edge.
 func selectPane(t *testing.T, line string) (*app.OS, *terminal.Window) {
 	t.Helper()
 	em := vt.NewEmulator(40, 20)
@@ -34,24 +31,19 @@ func selectPane(t *testing.T, line string) (*app.OS, *terminal.Window) {
 	return o, win
 }
 
-// press sends a left button press at a content cell.
 func pressAt(o *app.OS, x, y int) {
 	handleMouseClick(tea.MouseClickMsg{Button: tea.MouseLeft, X: x + 1, Y: y + 1}, o)
 }
 
-// dragTo sends a motion with the button held to a content cell.
 func dragTo(o *app.OS, x, y int) {
 	handleMouseMotion(tea.MouseMotionMsg{Button: tea.MouseLeft, X: x + 1, Y: y + 1}, o)
 }
 
-// release lets the button up at a content cell and returns the command the
-// handler produced, which is the clipboard write when one happened.
 func release(o *app.OS, x, y int) tea.Cmd {
 	_, cmd := handleMouseRelease(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: x + 1, Y: y + 1}, o)
 	return cmd
 }
 
-// selectedText reads back what the pane's visual selection covers.
 func selectedText(win *terminal.Window) string {
 	if win.CopyMode == nil {
 		return ""
@@ -161,8 +153,6 @@ func TestMultiClickCountingWrapsAndTimesOut(t *testing.T) {
 		t.Errorf("a click %v after the last counted as %d, want 1", 2*testClickInterval, got)
 	}
 
-	// A cell of pointer drift between clicks is a double-click, not two
-	// singles: one cell is a handful of pixels.
 	win.ClickCount = 0
 	win.LastClickTime = time.Time{}
 	if got := registerClick(win, 4, 0, testClickInterval); got != 1 {
@@ -265,5 +255,4 @@ func TestTypingClearsAMouseSelection(t *testing.T) {
 	}
 }
 
-// testClickInterval is the default mouse.double_click_ms.
 const testClickInterval = time.Duration(config.MouseDoubleClickDefault) * time.Millisecond

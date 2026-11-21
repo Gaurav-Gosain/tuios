@@ -8,85 +8,53 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// handleMouseClick handles mouse click events
 func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	mouse := msg.Mouse()
 	X := mouse.X
 	Y := mouse.Y
 
-	// A click supersedes a copy sweep still running, for the reason a key
-	// press does: it is an acknowledgement of a copy, and clicking elsewhere
-	// says the user has moved on. See CancelCopyFlash.
 	o.CancelCopyFlash()
 
-	// A press of any button while a pane is held by the pointer cancels the
-	// move or resize: the pane goes back where it came from and the press does
-	// nothing else. The first button is still down, and its release then finds
-	// no gesture to finish. See app.OS.CancelPointerGesture.
 	if o.CancelPointerGesture() {
 		return o, nil
 	}
 
-	// An open context menu is modal to the mouse: it either runs the row that
-	// was clicked or, for a click anywhere else, closes without running
-	// anything. Either way the click stops here, so it cannot also focus a pane
-	// or start a drag underneath the menu.
 	if o.ContextMenuActive() {
 		if action, consumed := o.ContextMenuClick(X, Y); consumed {
 			return runContextMenuAction(action, o)
 		}
 	}
 
-	// A click on a choice of the first start's welcome question answers it.
 	if msg.Button == tea.MouseLeft {
 		if i := o.WelcomeChoiceAt(X, Y); i >= 0 {
 			return o, o.ChooseWelcome(i)
 		}
 	}
 
-	// The path picker is modal to the mouse the same way: a press on a row
-	// types that path, and a press anywhere else closes it. Either way the
-	// press stops here.
 	if o.PathPickerClick(X, Y) {
 		return o, nil
 	}
 
-	// Ctrl or shift + right-click opens the context menu on a pane, on the press
-	// itself. This is the only way in over a pane whose app requested mouse
-	// tracking, where the right button belongs to that app; elsewhere a plain
-	// right-click reaches the menu too, decided on release once it is clear the
-	// gesture was not a resize drag (handleMouseRelease).
 	if msg.Button == tea.MouseRight && msg.Mod&(tea.ModShift|tea.ModCtrl) != 0 && !o.QuickLookContains(X, Y) {
 		o.OpenContextMenu(X, Y)
 		return o, nil
 	}
 
-	// A rename in flight is modal to the mouse: a click on the dialog does
-	// nothing, a click anywhere else cancels. Ahead of the overlays because the
-	// dialog is anchored to its target rather than stacked with them.
 	if o.RenameMouseClick(X, Y) {
 		return o, nil
 	}
 
-	// Quick look keeps a press on its panel, and closes for a press anywhere
-	// else, which then goes on to what it was aimed at. A press on its text
-	// may start a selection, or in copy mode moves the cursor.
 	if o.QuickLookMouseClick(X, Y) {
 		quickLookCopyPress(msg, o)
 		return o, nil
 	}
 
-	// A press in the agents view's thread may start a selection. A plain
-	// click is not taken, and goes on to the view below. See cockpit_mouse.go.
 	if o.ShowInbox {
 		if taken, cmd := cockpitMousePress(msg, o); taken {
 			return o, cmd
 		}
 	}
 
-	// Floating overlay panels (help, settings, palette, theme picker) consume
-	// clicks before they can reach the window layer: select a tab/row/control,
-	// grab the title bar or right-drag to move, or click away to dismiss.
 	if o.OverlayActive() {
 		o.NoteClickShift(msg.Mod&tea.ModShift != 0)
 		if handled, cmd := o.OverlayMouseClick(X, Y, msg.Button == tea.MouseRight); handled {
@@ -94,8 +62,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Rail panes keep their ordinary title bars. A title click focuses that
-	// exact pane; its controls must never fall through to the center session.
 	if edge, w := o.SidebarSessionTitlePaneAt(X, Y); w != nil {
 		if msg.Button == tea.MouseRight {
 			o.OpenSettingsAt("Sidebar")
@@ -123,9 +89,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// The pane displayed in a rail gets normal terminal mouse input when its
-	// guest asked for tracking. A click also gives it keyboard focus without
-	// switching the center client's daemon session.
 	if msg.Button != tea.MouseRight {
 		if edge, ok := o.SidebarSessionAt(X, Y); ok {
 			o.FocusSidebarSession(edge)
@@ -141,54 +104,26 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// The sidebar is a reserved-region panel like the dock: a click anywhere in
-	// its band is the sidebar's (focus a window, switch or expand a session, or,
-	// on right-click, open the context menu), never the pane it sits in front of.
 	o.NoteSidebarPressCopy(msg.Mod&(tea.ModCtrl|tea.ModShift) != 0)
 	if o.SidebarActive() && o.SidebarClick(X, Y, msg.Button == tea.MouseRight) {
-		// Two rows of the rail's file view answer with a command rather than
-		// with a state change: copying a path is a clipboard write. SidebarClick
-		// reports only whether it consumed the press, so the command is parked
-		// on the model and picked up here.
 		return o, o.TakeSidebarCmd()
 	}
 
-	// A click on an offer to open a copy of a far file takes it and leaves
-	// the rail as it was: the person pressed o there a moment ago and goes on
-	// in the rail.
 	if o.SidebarFocused && o.FarOpenOfferAt(X, Y) && o.NotificationClick(X, Y) {
 		return o, o.TakeSidebarCmd()
 	}
 
-	// A click outside the rail is intent to leave it: the pane the user clicked
-	// wins over keyboard rail focus. Rail focus is cleared here so the click below
-	// focuses the pane normally.
-	// The same click ends an unfold of the rail's rows at rest that a click
-	// made while the rail did not have the keyboard.
 	if o.SidebarFocused {
 		o.ExitSidebarFocus()
 	} else {
 		o.RefoldAgentsAfterClickAway()
 	}
 
-	// Check if click is in the dock area (always reserved).
-	//
-	// The top test is exclusive for the same reason the bottom one is: a dock of
-	// DockHeight rows at the top occupies rows 0 to DockHeight-1, so an inclusive
-	// test claims one row too many, and that row is the first row of the topmost
-	// window. With a top dock and any minimized window, an ordinary click on that
-	// row was being swallowed as a dock click.
 	if o.InDockBand(Y) {
-		// A plain right-click on the dock opens its menu (the dock item's menu
-		// when one is under the pointer). The dock has no drag gesture on the
-		// right button, so the menu can open on the press itself.
 		if msg.Button == tea.MouseRight {
 			o.OpenContextMenu(X, Y)
 			return o, nil
 		}
-		// The session controls are the bar's outermost block and are tested
-		// first. Leaving happens on the click; closing only ever raises its
-		// confirmation, whatever the session is holding.
 		switch o.DockSessionActionAt(X, Y) {
 		case app.DockSessionLeave:
 			if m, cmd, detached := detachSession(o); detached {
@@ -204,21 +139,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.OpenAgentsFromDock()
 			return o, nil
 		}
-		// The message block owns its own columns at the bar's right-hand end,
-		// ahead of the dock items: its body jumps to the pane the message came
-		// from, its right-hand end dismisses.
 		if o.NotificationClick(X, Y) {
 			return o, o.TakeSidebarCmd()
 		}
-		// The spotlight chip turns the beam off. It is the way out a person
-		// who does not know the key can see.
 		if msg.Button == tea.MouseLeft && o.SpotlightChipAt(X, Y) {
 			save, _ := o.TurnOffSpotlight()
 			return o, save
 		}
-		// A button of the button row runs its action through the dispatcher,
-		// as its key would. The more button opens a menu of the buttons that
-		// did not fit.
 		if i := o.DockButtonAt(X, Y); i >= 0 {
 			if msg.Button == tea.MouseLeft {
 				if action := o.PressDockButton(i, X, Y); action != "" {
@@ -228,12 +155,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 			return o, nil
 		}
-		// A custom component's cell runs its on-click command, the way a hook
-		// runs. It is tested here, after the blocks that own their columns
-		// unconditionally and before the ones whose columns move with the
-		// layout, because a component sits between them on the bar.
 		if name := o.DockCustomComponentAt(X, Y); name != "" {
-			// The copies' cell opens the Copies panel.
 			if name == config.DockComponentTransfers {
 				if msg.Button == tea.MouseLeft {
 					return o, o.OpenTransfers()
@@ -244,21 +166,9 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				return o, nil
 			}
 		}
-		// The strip's overflow arrows sit in the strip's own columns and are
-		// tested before its pills, so a gutter is an arrow and never the pill
-		// that was under it before the strip started scrolling.
 		if o.ScrollDockWorkspacesAt(X, Y) {
 			return o, nil
 		}
-		// The workspace strip owns its columns in the left region, ahead of the
-		// dock items: the two never overlap, but the strip is tested first so a
-		// tab stays a tab whatever the item layout does.
-		//
-		// A press on a pill only arms the gesture. The switch it might be is
-		// delivered on a release that never left the pill, because switching
-		// retiles the panes and moves the strip, so a press that switched would
-		// pull the pill out from under a drag that had just started. The "+" is
-		// not a workspace and cannot be dragged, so it takes its press directly.
 		if o.BeginDockWorkspaceDrag(X, Y) {
 			return o, nil
 		}
@@ -266,14 +176,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.SwitchToWorkspace(ws)
 			return o, nil
 		}
-		// The marker standing for the entries that did not fit opens the panel
-		// that lists them, so a pane the bar had no room for is still reachable
-		// by mouse.
 		if o.DockOverflowAt(X, Y) {
 			o.OpenAggregateView()
 			return o, nil
 		}
-		// Handle dock click only if there are minimized windows
 		if o.HasMinimizedWindows() {
 			dockIndex := o.DockItemAt(X, Y)
 			if dockIndex != -1 {
@@ -286,22 +192,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Fast hit testing: find which window was clicked without expensive canvas generation
 	clickedWindowIndex := findClickedWindow(X, Y, o)
 
-	// While the scratch terminal is shown, a press is either on it or a
-	// request to leave it. See scratchPress.
 	if next, cmd, done := scratchPress(msg, o, clickedWindowIndex, X, Y); done {
 		return next, cmd
 	}
 
-	// The picture-in-picture view is drawn over the tiles and under every
-	// floating pane. A press on it that no floating pane covers is the view's:
-	// the left button jumps to the pane it shows, and no press reaches the
-	// tile underneath.
 	if pipOwns(X, Y, o) {
-		// The release that ends this press is the view's too. See
-		// handleMouseRelease.
 		o.PiPPressed = true
 		if msg.Button == tea.MouseLeft && o.JumpToPiP() {
 			o.SyncStateToDaemon()
@@ -309,24 +206,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// A middle press over pane content can be a terminal-mode binding. It is
-	// looked up before guest mouse forwarding, so the shipped paste gesture also
-	// works over a program that tracks the mouse; removing or changing the
-	// binding hands the press back to that program.
 	if next, cmd, handled := handleTerminalMouseBinding(msg, o, clickedWindowIndex); handled {
 		return next, cmd
 	}
 
-	// Ctrl + left press on a window: multi-select on a click, or grab the pane
-	// for moving on a drag. On the content it arms the click-vs-drag decision
-	// (committed past the threshold in handleMouseMotion, then moved through the
-	// same path as a title-bar drag); a sub-threshold release falls through to
-	// the ctrl+click multi-select. On the border or title bar, where a drag
-	// already means resize or a title-bar move, it stays the immediate toggle.
-	// ctrl+shift+left-click toggles multi-select. Plain ctrl+left instead grabs the
-	// window: on content it arms a move-drag (committed past the threshold in
-	// handleMouseMotion), off the content it just focuses. Keeping multi-select on
-	// its own chord stops a ctrl-click from selecting when the intent was to grab.
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft &&
 		msg.Mod&(tea.ModCtrl|tea.ModShift) == tea.ModCtrl|tea.ModShift {
 		o.ToggleMultifocus(clickedWindowIndex)
@@ -338,9 +221,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.CtrlDragPending = true
 			o.CtrlDragIndex = clickedWindowIndex
 			o.DragStartX, o.DragStartY = X, Y
-			// A press on a link may be a ctrl+click that opens it. The
-			// release decides: below the drag threshold it opens the link,
-			// past it the pane moves. See linkClickAllows.
 			o.CtrlClickLink = ""
 			if linkClickAllows(o, tea.ModCtrl) {
 				if link, ok := o.LinkAt(X, Y); ok {
@@ -353,21 +233,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Alt + left press grabs the pane for moving, the gesture nearly every
-	// desktop window manager binds and so the one a newcomer's hands try first.
-	// It sits beside ctrl+drag rather than replacing it: ctrl+drag is in the help
-	// and in people's fingers, and a move gesture costs nothing to have twice.
-	//
-	// It grabs at once instead of arming a threshold the way ctrl+drag does,
-	// because ctrl+left already means multi-select and alt+left means nothing
-	// else, so there is no click-versus-drag question to answer. Grabbing at once
-	// also sets Dragging on the press, which is what keeps the motion filter in
-	// cmd/tuios from dropping the very motion that would move the pane.
-	//
-	// Placed above the guest forwarding below, exactly as ctrl+drag is, so the
-	// gesture works over a pane whose app asked for mouse tracking. That does
-	// take alt-drag away from such an app, which is what alt_drag = false hands
-	// back.
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft &&
 		msg.Mod&tea.ModAlt != 0 && msg.Mod&(tea.ModCtrl|tea.ModShift) == 0 &&
 		o.Settings.AltDrag && !o.Windows[clickedWindowIndex].Zoomed {
@@ -376,11 +241,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// Scrollbar click: left press on cells the bar was drawn on. The bar floats
-	// in the pane's last content column and only while the pane is scrolled
-	// back, so the grab is gated on the rect the renderer recorded. Otherwise a
-	// click on the rightmost content cell of a pane with history would
-	// jump-scroll instead of reaching the guest.
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft {
 		win := o.Windows[clickedWindowIndex]
 		if rect, drawn := o.ScrollbarHit(win); drawn && rect.Contains(X, Y) {
@@ -395,18 +255,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Left press on a pane border starts an additive resize: a tiled pane's
-	// shared divider or a floating pane's own edge. It never grabs content, the
-	// sidebar band, or the dock, and leaves the ctrl/shift+right menu and the
-	// plain-right-press resize untouched.
 	if msg.Button == tea.MouseLeft && msg.Mod == 0 && armBorderResize(X, Y, o) {
 		return o, nil
 	}
 
-	// Terminal mode, plain right-click: a context menu only when there is an
-	// active text selection to act on (copy, paste, clear). Without one the
-	// click belongs to the pane, so it falls through to the forwarding below
-	// and mouse-mode apps still get it.
 	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode &&
 		msg.Button == tea.MouseRight && msg.Mod == 0 {
 		if o.Windows[clickedWindowIndex].HasSelection() {
@@ -415,20 +267,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Shift and the left button on a link acts on it.
-	//
-	// Shift is the xterm "this click is the terminal's" modifier, so most
-	// outer terminals keep shift+click for their own selection while tuios
-	// tracks the mouse, and the click never arrives here. Ctrl+click (the
-	// ctrl branch above, on release) is the gesture that reaches tuios in
-	// most terminals. Shift+click stays for the terminals that pass it on.
-	// It sits above the forwarding below because holding a modifier is the
-	// user saying the click is tuios's, not the program's.
-	//
-	// A plain click is deliberately not this. A left press on a pane is already
-	// how you focus it, start typing in it, and select text in it, and a browser
-	// opening on top of any of those three would be a gesture nobody asked for
-	// landing on text that merely looks like an address.
 	if msg.Button == tea.MouseLeft && msg.Mod == tea.ModShift && linkClickAllows(o, tea.ModShift) {
 		if link, ok := o.LinkAt(X, Y); ok {
 			if clickedWindowIndex != -1 {
@@ -438,22 +276,15 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Forward mouse events to terminal if in terminal mode and window has mouse tracking
 	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode {
 		clickedWindow := o.Windows[clickedWindowIndex]
-		// The first click on a TML window that does not have the focus
-		// only focuses it. A popup a pane opened under the pointer must not
-		// take the click the person meant for what was there before.
 		if o.DrawsTML(clickedWindow) && o.FocusedWindow != clickedWindowIndex {
 			o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 			return o, nil
 		}
-		// Forward mouse only when app explicitly requested mouse tracking (DECSET 1000-1003)
 		if paneTakesMouse(o, clickedWindow) {
 			termX, termY, inContent := clickedWindow.ScreenToTerminal(X, Y)
-			// Check if click is within terminal content area
 			if inContent {
-				// Focus the window first so subsequent events work
 				o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 
 				adjustedMouse := uv.MouseClickEvent{
@@ -462,10 +293,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					Button: uv.MouseButton(mouse.Button),
 					Mod:    uv.KeyMod(mouse.Mod),
 				}
-				// Send to the terminal (uses PTY for daemon windows)
 				sendMouseToWindow(o, clickedWindow, adjustedMouse)
-				// A left press in a pane whose program offers drags arms the
-				// drag gesture; the press itself still went to the program.
 				if mouse.Button == tea.MouseLeft {
 					o.DnDNotePress(clickedWindow, X, Y, termX, termY)
 				}
@@ -473,18 +301,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 	}
-	// Terminal mode, plain right-click that was neither a selection menu nor
-	// forwarded to a mouse-mode app.
-	//
-	// By default the unmodified right button belongs to the pane and this is
-	// consumed: a pointer reaches the menu with ctrl or shift held. A touch
-	// client has no such modifier, so a long press opens the menu there
-	// regardless. appearance.right_click_opens_menu turns the plain click into
-	// the menu for a pointer too, which is how someone puts the menu's Paste row
-	// one click away without selecting anything first. A pane whose app tracks
-	// the mouse never gets here (the forwarding above returns first), so that
-	// app keeps the right button either way. Consumed either way as well, so it
-	// cannot fall through and start a window resize underneath the user's shell.
 	if clickedWindowIndex != -1 && o.Mode == app.TerminalMode &&
 		msg.Button == tea.MouseRight && msg.Mod == 0 {
 		if o.TouchClient || o.Settings.RightClickOpensMenu {
@@ -494,30 +310,18 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if clickedWindowIndex == -1 {
-		// A plain right-click on empty desktop opens the desktop menu; there is
-		// no desktop drag on the right button, so it opens on the press itself.
 		if msg.Button == tea.MouseRight && msg.Mod == 0 && o.Mode == app.WindowManagementMode {
 			o.OpenContextMenu(X, Y)
 		}
-		// Consume the event even if no window is hit to prevent leaking
 		return o, nil
 	}
 
 	clickedWindow := o.Windows[clickedWindowIndex]
 
-	// Window controls come first, before mode switching or focus changes.
-	//
-	// The cells are whichever ones the renderer recorded as it drew the pill:
-	// the styles differ in glyph, width and order, the pill goes to whichever
-	// end appearance.window_button_position names, and the corner glyph it
-	// stops short of is itself configurable. Offsets measured from the window
-	// rectangle drift off the drawn pill.
 	if mouse.Button == tea.MouseLeft {
 		if action, ok := o.WindowButtonIn(clickedWindow.ID, X, Y); ok {
 			switch action {
 			case app.WindowButtonClose:
-				// appearance.confirm_close holds for the close control as
-				// for the keys: the same dialog, the same rule.
 				if o.CloseNeedsConfirm(clickedWindowIndex) {
 					o.OpenSessionCloseForWindow(clickedWindowIndex)
 				} else {
@@ -529,10 +333,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				o.FocusWindow(clickedWindowIndex)
 				o.ToggleFloating()
 			case app.WindowButtonZoom:
-				// On a tiled pane the control is the zoom. A full-screen snap
-				// there would fight the tiler, which owns the rectangle and
-				// would take it back on the next retile; zoom is the thing that
-				// holds, and it is what the control is drawn for.
 				if o.AutoTiling && !clickedWindow.IsFloating {
 					o.FocusWindow(clickedWindowIndex)
 					o.ToggleZoom()
@@ -547,32 +347,13 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Text selection with the mouse, AFTER the button checks.
-	//
-	// A left press inside a pane's content selects text, in terminal mode as
-	// well as in copy mode. It used to only select in copy mode: in terminal
-	// mode the same press grabbed the window, dragged it, and dropped the user
-	// into window management mode, so click-dragging over output moved the pane
-	// instead of selecting the line. The title bar and the borders are still
-	// the window's drag handle, and window management mode still drags from
-	// anywhere, so nothing lost a way to move a window.
-	//
-	// Panes running an application with mouse tracking never reach here; their
-	// press was forwarded to the application further up, exactly as the wheel is.
 	if mouse.Button == tea.MouseLeft && (clickedWindow.InCopyMode() || o.Mode == app.TerminalMode) {
 		terminalX, terminalY, inContent := clickedWindow.ScreenToTerminal(X, Y)
 		if inContent {
 			o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 			if !clickedWindow.InCopyMode() {
-				// Selection reads through copy mode's machinery, so a
-				// selection in terminal mode has to turn it on. Implicitly:
-				// nothing is announced and the dock does not change.
 				clickedWindow.EnterCopyModeImplicit()
 			}
-			// Any press retires a clipboard write that has not landed yet:
-			// this press may be the third of a triple-click, in which case
-			// the word the double-click was about to copy is not what the
-			// user is selecting.
 			o.CancelPendingCopy()
 			o.SelectionDragged = false
 			beginMouseSelection(clickedWindow.CopyMode, clickedWindow, X, Y,
@@ -582,18 +363,8 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.InteractionMode = true
 			return o, nil
 		}
-		// A press outside the content area falls through to normal window
-		// interaction: that is the title bar, and it should still drag.
 	}
 
-	// Focus the clicked window and bring to front Z-index
-	// This happens AFTER button and copy mode checks
-	//
-	// A right press starts a resize, which borrows window-management mode. The
-	// borrow is taken here rather than beside the resize flags below, which run
-	// after the flip: by then there is no terminal mode left for
-	// BeginPointerGesture to notice, and a resize begun while typing gave back
-	// window management instead of the shell.
 	if mouse.Button == tea.MouseRight {
 		o.BeginPointerGesture()
 	}
@@ -602,23 +373,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SetBorrowedMode(app.WindowManagementMode)
 	}
 
-	// A left press on the content area in window-management mode arms
-	// click-to-type: released without a drag it enters terminal mode
-	// (handleMouseRelease), so clicking a pane is enough to start typing.
-	// Title bar and border presses never arm it, so they stay pure drag
-	// handles, and the press itself still sets up the drag below.
-	//
-	// How many clicks that takes, or whether a click changes mode at all, is
-	// appearance.click_to_type. Only the arming moves: the drag threshold, the
-	// release and the mode switch itself are the same for every policy, so a
-	// click that does not arm is an ordinary window-management click.
-	//
-	// "double" reads its second click from the counter word and line selection
-	// already keep, so a double click means one thing everywhere. Arming spends
-	// the count, leaving the first press in the terminal mode it opened to
-	// start a fresh selection instead of landing as a third click on a line.
-	// The clicks that changed mode select nothing themselves: entering a mode
-	// is not a request to put a word on the clipboard.
 	if mouse.Button == tea.MouseLeft && o.Mode == app.WindowManagementMode &&
 		o.Settings.ClickToType != config.ClickToTypeOff {
 		if termX, termY, inContent := clickedWindow.ScreenToTerminal(X, Y); inContent {
@@ -637,23 +391,15 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// A plain right press arms the click-vs-drag decision: the resize state set
-	// up below makes a drag resize, and the release opens the context menu
-	// instead when the pointer never moved past the threshold
-	// (handleMouseRelease). Armed before the zoom check so a zoomed pane,
-	// which cannot be resized, still gets its menu on the click.
 	if mouse.Button == tea.MouseRight && msg.Mod == 0 {
 		o.RightClickPending = true
 		o.RightPressX, o.RightPressY = X, Y
 	}
 
-	// Zoomed windows are immune to drag/resize: skip interaction state setup.
-	// The click still focuses the window (already done above) but no drag/resize starts.
 	if clickedWindow.Zoomed {
 		return o, nil
 	}
 
-	// Set interaction mode to prevent expensive rendering during drag/resize
 	o.InteractionMode = true
 
 	o.DragOffsetX = X - clickedWindow.X
@@ -661,14 +407,11 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	switch mouse.Button {
 	case tea.MouseRight:
-		// Already in interaction mode and past the mode borrow above, now set
-		// resize-specific flags.
 		o.Resizing = true
 		o.DraggedWindowIndex = clickedWindowIndex
 		o.Windows[clickedWindowIndex].IsBeingManipulated = true
 		o.ResizeStartX = mouse.X
 		o.ResizeStartY = mouse.Y
-		// Save state for resize calculations (avoid mutex copying)
 		o.PreResizeState = terminal.Window{
 			Width:  clickedWindow.Width,
 			Height: clickedWindow.Height,
@@ -708,14 +451,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// beginWindowDrag puts a window into the move gesture the title-bar drag uses:
-// it focuses and grabs the pane at (x, y) and, in tiling mode, records the slot
-// to swap back into. Untiling a borderless pane for free rendering waits for
-// the first motion; see untilePaneForDrag. The title-bar press and a
-// committed ctrl-drag both route through here, so the two share one movement
-// path (motion in handleMouseMotion, drop in handleMouseRelease). Motion moves
-// the focused window, so the grab focuses it; the mode switch keeps a drag from
-// forwarding motion to a mouse-mode app underneath.
 func beginWindowDrag(o *app.OS, idx, x, y int) {
 	win := o.Windows[idx]
 	o.FocusWindowFromClick(idx, x, y)
@@ -731,10 +466,6 @@ func beginWindowDrag(o *app.OS, idx, x, y int) {
 	o.DragOffsetY = y - win.Y
 	win.IsBeingManipulated = true
 	o.ClearDropZone()
-	// In tiling mode, complete pending animations to avoid state conflicts,
-	// then record the slot for the swap-on-release. The scrolling strip
-	// included: its pane follows the pointer like any other tiled pane now, and
-	// a slide still in flight would stamp its own rectangle over the drag.
 	if o.AutoTiling {
 		o.CompleteAllAnimations()
 		o.TiledX = win.X
@@ -744,20 +475,6 @@ func beginWindowDrag(o *app.OS, idx, x, y int) {
 	}
 }
 
-// untilePaneForDrag drops a borderless pane's shared-border allowance so the
-// drag can draw it as a free-floating window with its own border.
-//
-// It is deliberately not part of beginWindowDrag, which runs on the press. A
-// press is not yet a drag: with shared borders on, dropping the allowance
-// shrinks the pane by the two cells the border now costs, and that is a real
-// resize the guest is told about. A click that only picks a pane then cost the
-// shell a SIGWINCH on the press and a second one on the retile at release, and
-// a shell repaints its prompt on each, so focusing a pane with the mouse left a
-// new prompt line behind it every time. The gesture that needs the allowance
-// gone is the one that moves the pane, so the motion path asks for it.
-//
-// Safe to call on every motion event: a pane that has already given the
-// allowance up is left alone.
 func untilePaneForDrag(win *terminal.Window) {
 	if !win.Tiled {
 		return
@@ -766,16 +483,11 @@ func untilePaneForDrag(win *terminal.Window) {
 	win.Resize(win.Width, win.Height)
 }
 
-// finalizeCtrlDrag drops a committed ctrl-drag at (x, y) by running the normal
-// left-button release path, so the tiling swap and floating snap behave exactly
-// as a title-bar drag's release does.
 func finalizeCtrlDrag(o *app.OS, x, y int) (*app.OS, tea.Cmd) {
 	o.CtrlDragging = false
 	return handleMouseRelease(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft}, o)
 }
 
-// linkClickAllows reports whether appearance.link_click lets a left click
-// with this modifier open a link.
 func linkClickAllows(o *app.OS, mod tea.KeyMod) bool {
 	switch o.Settings.LinkClick {
 	case config.LinkClickOff:

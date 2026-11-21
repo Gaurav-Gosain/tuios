@@ -10,27 +10,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The prefix chords used to be two hand-written switch statements over literal
-// key strings, one for terminal mode and one for window-management mode, which
-// meant the six prefix sections of config.toml (prefix_mode, window_prefix,
-// minimize_prefix, workspace_prefix, debug_prefix, tape_prefix) and the
-// terminal_mode section were parsed, validated, written into every user's
-// config, and then never consulted. Rebinding a prefix key did nothing.
-//
-// Everything below is registered in the same dispatcher as the
-// window-management actions and reached through the registry lookups, so a
-// rebind in config.toml is the binding. The handlers cover both modes; where
-// the two switches used to differ (cache invalidation, leaving terminal mode
-// when the last window closes) the handler branches on o.Mode instead of
-// existing twice.
-
-// registerPrefixHandlers registers the handlers for every action reachable
-// through a prefix chord.
 func (d *ActionDispatcher) registerPrefixHandlers() {
-	// Every sub-menu's cancel key: prefix_cancel, prefix_cancel and
-	// the rest are aliases of it.
 	d.Register("prefix_cancel", handlePrefixCancel)
-	// Main prefix (leader, ...)
 	d.Register("prefix_rename_window", handlePrefixRenameWindow)
 	d.Register("prefix_keybinds", handlePrefixKeybinds)
 	d.Register("prefix_next_window", handlePrefixNextWindow)
@@ -77,8 +58,6 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register(config.ActionCopyModeSearchForward, handleCopyModeSearchForward)
 	d.Register(config.ActionCopyModeSearchBackward, handleCopyModeSearchBackward)
 
-	// Sub-prefixes: each keeps the prefix active so the which-key overlay stays
-	// up for the second key.
 	d.Register("prefix_workspace", makeSubPrefixHandler(app.SubMenuWorkspace))
 	d.Register("prefix_minimize", makeSubPrefixHandler(app.SubMenuMinimize))
 	d.Register("prefix_window", makeSubPrefixHandler(app.SubMenuTiling))
@@ -87,19 +66,16 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_layout", makeSubPrefixHandler(app.SubMenuLayout))
 	d.Register("prefix_tuios", makeSubPrefixHandler(app.SubMenuTuios))
 
-	// Window prefix (leader, t, ...)
 	d.Register("window_prefix_rename", handleWindowPrefixRename)
 	d.Register("window_prefix_float", handleToggleFloating)
 	d.registerPrefixTreeHandlers()
 
-	// Minimize prefix (leader, m, ...)
 	d.Register("minimize_prefix_focused", handleMinimizeFocused)
 	for i := 1; i <= 9; i++ {
 		d.Register("minimize_prefix_restore_"+string(rune('0'+i)), makeRestoreMinimizedByPositionHandler(i))
 	}
 	d.Register("minimize_prefix_focus_only", handleFocusOnly)
 
-	// Workspace prefix (leader, w, ...)
 	for i := 1; i <= 9; i++ {
 		d.Register("workspace_prefix_switch_"+string(rune('0'+i)), makeSwitchWorkspaceHandler(i))
 		d.Register("workspace_prefix_move_"+string(rune('0'+i)), makeMoveAndFollowHandler(i))
@@ -107,25 +83,18 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("workspace_prefix_rename", handleWorkspaceRename)
 	d.Register("workspace_pill_switch", handleWorkspacePillSwitch)
 
-	// Debug prefix (leader, D, ...)
 	d.Register("debug_prefix_logs", handleDebugLogs)
 	d.Register("debug_prefix_cache", handleDebugCache)
 	d.Register("debug_prefix_showkeys", handleDebugShowkeys)
 	d.Register("debug_prefix_animations", handleDebugAnimations)
 
-	// Tape prefix (leader, T, ...)
 	d.Register("tape_prefix_review", handleTapeReview)
 	d.Register("tape_prefix_record", handleTapeRecord)
 	d.Register("tape_prefix_stop", handleTapeStop)
 
-	// Layout prefix (leader, L, ...). Load and save used to be a hand-written
-	// switch in handleTerminalLayoutPrefix while every other key in the section
-	// went through the dispatcher. Two routes for one table is what let the
-	// section drift; now there is one.
 	d.Register("layout_prefix_load", handleLayoutPrefixLoad)
 	d.Register("layout_prefix_save", handleLayoutPrefixSave)
 
-	// Terminal mode direct binds (no prefix)
 	d.Register("terminal_next_window", handleTerminalNextWindow)
 	d.Register("terminal_prev_window", handleTerminalPrevWindow)
 	d.Register("terminal_exit_mode", handleTerminalExitMode)
@@ -133,22 +102,6 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("terminal_focus_right", handleTerminalFocusDirection("right"))
 }
 
-// handleTerminalFocusDirection moves focus to the neighbouring pane in one
-// direction. It runs the same geometry the FocusDirection tape command does
-// rather than a second rule: the nearest pane whose facing edge lies that way
-// and whose span overlaps this one's, ties going to the earlier pane. At the
-// edge of the layout there is no such pane and focus stays put, unless
-// appearance.focus_wrap is on: then a tiled layout wraps to the pane on the
-// far side (see findWindowInDirection).
-//
-// The scrolling layout is one strip of columns, and left and right step along
-// it with its own navigation, which returns to the window a column was last on.
-// Up and down move inside a column of stacked windows, which is plain geometry.
-// Every branch moves focus one pane in the direction pressed, which is the
-// whole of what the key claims to do.
-//
-// The window-mode focus_up and focus_down actions (j and k by default) run
-// this same handler.
 func handleTerminalFocusDirection(dir string) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		prev := o.FocusTerminalDirection(dir)
@@ -156,18 +109,12 @@ func handleTerminalFocusDirection(dir string) ActionHandler {
 	}
 }
 
-// refreshFocusedWindow invalidates the focused window's render cache. Every
-// focus change needs it in terminal mode, where the newly focused pane is drawn
-// with the cursor and must not come from the cache.
 func refreshFocusedWindow(o *app.OS) {
 	if focused := o.GetFocusedWindow(); focused != nil {
 		focused.InvalidateCache()
 	}
 }
 
-// makeSubPrefixHandler builds a handler that enters a sub-prefix. The prefix
-// stays active so the next key is routed to the sub-prefix rather than to the
-// terminal, and the timer restarts so the chord gets a fresh timeout.
 func makeSubPrefixHandler(sub app.SubMenu) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.OpenSubMenu(sub)
@@ -175,15 +122,10 @@ func makeSubPrefixHandler(sub app.SubMenu) ActionHandler {
 	}
 }
 
-// handlePrefixCancel dismisses a prefix without doing anything else. The prefix
-// flags are already cleared by the routing layer before dispatch.
 func handlePrefixCancel(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleCloseWindow closes the pane that has focus: the session pane in the
-// rail when it has focus, else the focused window. A scratch pane closes by
-// hand. Terminal mode ends when no window is left to type into.
 func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarSessionFocused() {
 		if w := o.SidebarSessionWindow(); w != nil {
@@ -199,8 +141,6 @@ func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CloseWindowByHand(o.FocusedWindow)
 		return o, nil
 	}
-	// appearance.confirm_close: the close waits for the answer in the
-	// one-pane close dialog, which closes the pane the same way.
 	if o.CloseNeedsConfirm(o.FocusedWindow) {
 		o.OpenSessionCloseForWindow(o.FocusedWindow)
 		return o, nil
@@ -210,20 +150,11 @@ func handleCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(o.Windows) > 0 {
 		refreshFocusedWindow(o)
 	} else if o.Mode == app.TerminalMode {
-		// Nothing left to type into.
 		o.ChooseMode(app.WindowManagementMode, app.ModeCauseNoPane)
 	}
 	return o, nil
 }
 
-// startRename puts the focused window into rename mode. Renaming is a
-// window-management activity, so terminal mode is left first; the caller in
-// window-management mode is already there.
-//
-// Hidden titles are no longer a reason to refuse. The editor is a centred
-// dialog with its own frame, so it has somewhere to draw whatever the title bar
-// is doing; the old guard dated from when rename edited the bar in place, and it
-// left the only rename key silently dead for anyone running without titles.
 func startRename(o *app.OS) {
 	if len(o.Windows) == 0 || o.FocusedWindow < 0 {
 		return
@@ -241,8 +172,6 @@ func handlePrefixRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleWindowPrefixRename doubles as the cache-stats reset while that overlay
-// is up, matching the standalone rename_window binding.
 func handleWindowPrefixRename(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.ShowCacheStats {
 		app.GetGlobalStyleCache().ResetStats()
@@ -252,18 +181,12 @@ func handleWindowPrefixRename(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 	return handlePrefixRenameWindow(msg, o)
 }
 
-// handleWorkspaceRename opens the one rename editor on a workspace. It is
-// reached from the chord and from a dock pill's menu, and the target follows
-// from which: the pill the menu was opened on, or the workspace in view.
-// Renaming is a window-management activity, like renaming a pane.
 func handleWorkspaceRename(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ChooseMode(app.WindowManagementMode, app.ModeCauseAction)
 	o.BeginRenameCurrentWorkspace()
 	return o, nil
 }
 
-// handleWorkspacePillSwitch switches to the workspace whose pill menu is
-// dispatching, which is what the pill's own left click already does.
 func handleWorkspacePillSwitch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if ws := o.TakeMenuWorkspace(); ws > 0 {
 		o.SwitchToWorkspace(ws)
@@ -302,9 +225,6 @@ func handlePrefixPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return afterFocusCommand(o, prev, focusEnterCycle)
 }
 
-// makePrefixSelectHandler focuses the num-th window of the current workspace.
-// 0 selects the tenth, matching the tmux-style numbering where the row of digit
-// keys wraps around.
 func makePrefixSelectHandler(num int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		prev := o.FocusedWindow
@@ -313,8 +233,6 @@ func makePrefixSelectHandler(num int) ActionHandler {
 			if win.Workspace != o.CurrentWorkspace {
 				continue
 			}
-			// In tiling mode minimized windows are not on screen, so they do not
-			// take up a number.
 			if o.AutoTiling && win.Minimized {
 				continue
 			}
@@ -348,12 +266,9 @@ func handlePrefixFullscreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Over the agents view, copy mode runs on the thread.
 	if o.ShowInbox && o.CockpitCopyStart() {
 		return o, nil
 	}
-	// Multi copy mode when the focused pane is in a multifocus set of two or
-	// more panes; plain copy mode otherwise. See EnterCopyModeFocused.
 	o.EnterCopyModeFocused()
 	return o, nil
 }
@@ -363,20 +278,14 @@ func handlePrefixScrollback(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleClearScrollback clears the focused pane's scrollback.
 func handleClearScrollback(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.ClearScrollback()
 }
 
-// handleEditScrollback opens the focused pane's scrollback in the editor.
 func handleEditScrollback(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.EditScrollbackInEditor()
 }
 
-// handlePrefixScreenshot opens capture mode from the leader. The entry is
-// treated as mouse-less: the leader was reached from the keyboard, so the hint
-// strip offers tab and enter rather than a drag nobody asked for. Moving the
-// pointer switches it over.
 func handlePrefixScreenshot(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.BeginCapture(false)
 	return o, nil
@@ -408,8 +317,6 @@ func handlePrefixJumpNotif(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.TakeSidebarCmd()
 }
 
-// handlePrefixLastMessage opens the newest message the dock showed in the
-// message view.
 func handlePrefixLastMessage(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if !o.OpenLastMessage() {
 		o.ShowNotification("There is no message to show", "info", o.Settings.NotificationDuration)
@@ -417,9 +324,6 @@ func handlePrefixLastMessage(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handlePrefixMail opens the Inbox on its mail filter. It used to open the
-// mailbox directly; the mailbox is one key (m) from there, and mail waiting for
-// the person is what the chord was for.
 func handlePrefixMail(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenInbox(session.AttentionMail)
 	return o, nil
@@ -430,8 +334,6 @@ func handlePrefixInbox(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleNewAgent opens the agents view with its New agent sheet up, the form
-// with every field start-agent takes.
 func handleNewAgent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenInbox("")
 	if !o.ShowInbox {
@@ -440,7 +342,6 @@ func handleNewAgent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.CockpitNewAgent()
 }
 
-// handlePrefixAgentsSettings opens the settings page on its Agents tab.
 func handlePrefixAgentsSettings(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenAgentsSettings()
 	return o, nil
@@ -450,10 +351,6 @@ func handlePrefixNextAttention(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	return o, o.JumpToNextAttention()
 }
 
-// handlePrefixReview and handlePrefixNextFinished are what the dispatcher runs
-// when something other than the prefix key names the action (a menu row, a
-// tape). The prefix key itself goes through runPrefixWork, which can tell an
-// action that did nothing from one that ran.
 func handlePrefixReview(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	cmd, _ := o.ReviewFocusedPane()
 	return o, cmd
@@ -478,10 +375,6 @@ func handlePrefixWorkspaceSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.C
 	return o, nil
 }
 
-// leaveTerminalMode returns to window-management mode and says so. No-op when
-// already there.
-//
-// With window mode off it only says, once, that window mode is off.
 func leaveTerminalMode(o *app.OS) {
 	if o.Mode != app.TerminalMode {
 		return
@@ -499,15 +392,10 @@ func handlePrefixDetach(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if m, cmd, detached := detachSession(o); detached {
 		return m, cmd
 	}
-	// Outside a daemon session there is nothing to detach from, so the closest
-	// useful thing is to step back out to window-management mode.
 	leaveTerminalMode(o)
 	return o, nil
 }
 
-// handlePrefixCloseSession is the keyboard twin of the dock's recessed control.
-// It raises the same confirmation rather than closing outright, so the two
-// devices cannot disagree about how much warning the action carries.
 func handlePrefixCloseSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.OpenSessionClose()
 }
@@ -521,10 +409,6 @@ func handlePrefixQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return requestQuit(o)
 }
 
-// ============================================================================
-// Minimize prefix
-// ============================================================================
-
 func handleMinimizeFocused(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		o.MinimizeWindow(o.FocusedWindow)
@@ -532,15 +416,11 @@ func handleMinimizeFocused(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleFocusOnly minimizes the other panes on the workspace, or brings back
-// the ones the last press hid. See app.ToggleFocusOnly.
 func handleFocusOnly(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ToggleFocusOnly()
 	return o, nil
 }
 
-// makeRestoreMinimizedByPositionHandler restores the position-th minimized
-// window (1-based) of the current workspace.
 func makeRestoreMinimizedByPositionHandler(position int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		minimized := o.MinimizedInOrder()
@@ -555,11 +435,6 @@ func makeRestoreMinimizedByPositionHandler(position int) ActionHandler {
 	}
 }
 
-// ============================================================================
-// Debug prefix
-// ============================================================================
-
-// toggleNotify flips a bool and announces the new state as "<label>: ON/OFF".
 func toggleNotify(o *app.OS, label string, on bool) {
 	state := "OFF"
 	if on {
@@ -596,13 +471,6 @@ func handleDebugAnimations(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// ============================================================================
-// Tape prefix
-// ============================================================================
-
-// handleTapeReview opens the project-tape review/trust dialog for the tape in
-// the focused window's current directory. It is the deliberate action that lets
-// the user read a detected tape and choose to run or trust it.
 func handleTapeReview(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenTapeReview()
 	return o, nil
@@ -614,7 +482,7 @@ func handleTapeRecord(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	o.TapeManagerStartRecording()
-	o.ShowTapeManager = true // Show the UI for naming
+	o.ShowTapeManager = true
 	return o, nil
 }
 
@@ -627,12 +495,6 @@ func handleTapeStop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// ============================================================================
-// Terminal mode direct binds
-// ============================================================================
-
-// handleTerminalNextWindow moves focus forward. In the scrolling layout the
-// windows form a strip rather than a cycle, so focus moves along it instead.
 func handleTerminalNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	prev := o.FocusedWindow
 	if o.AutoTiling && o.UseScrollingLayout {
@@ -660,13 +522,10 @@ func handleTerminalExitMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleToggleScratch shows the scratch terminal in a popup, or hides it. See
-// internal/app/scratch.go.
 func handleToggleScratch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.ToggleScratch()
 }
 
-// handleToggleCalm turns calm mode on and off. See app/calm.go.
 func handleToggleCalm(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.ToggleCalm()
 }

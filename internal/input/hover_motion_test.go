@@ -13,19 +13,10 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// hoverOS builds a model with the rail on the left, its footer controls
-// available, and two panes beside it. Hover is a colour change and nothing
-// else, so the assertions below read colours out of the composed frame.
 func hoverOS(t *testing.T) *app.OS {
 	t.Helper()
 	app.SetInputHandler(HandleInput)
 
-	// NewOS below reads and the drag tests write the sidebar state file, so the
-	// state home has to be scratch: a dragged rail width persisted by one run
-	// moved the rail's edge for the next (`go test -count=2` failed on exactly
-	// that), and it also wrote into the developer's real state dir. Cleanup is
-	// registered before t.Setenv so the reload back runs after the env is
-	// restored (cleanups are LIFO).
 	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	xdg.Reload()
@@ -46,7 +37,6 @@ func hoverOS(t *testing.T) *app.OS {
 	}
 	m.CurrentWorkspace, m.FocusedWindow = 1, 0
 
-	// The footer's new-session control only exists when sessions can be made.
 	client := session.NewTUIClient()
 	client.UpdateSessionCache([]session.SessionInfo{{Name: "local"}})
 	m.DaemonClient = client
@@ -54,12 +44,6 @@ func hoverOS(t *testing.T) *app.OS {
 	return m
 }
 
-// frameLines composes a frame the way the program does and splits it into rows.
-//
-// Motion draws at most once per frame period, and a move the budget held back
-// is drawn by the maintenance tick it arms. These tests send events faster than
-// that, so that tick is delivered here first, as the program would deliver it
-// before the next frame.
 func frameLines(m *app.OS) []string {
 	if m.PointerMotionPending() {
 		_, _ = m.Update(app.TickerMsg(time.Now()))
@@ -67,8 +51,6 @@ func frameLines(m *app.OS) []string {
 	return strings.Split(m.View().Content, "\n")
 }
 
-// railCell locates a label inside the rail's column band and returns the cell to
-// point at. Searching the whole row would find a pane's title bar instead.
 func railCell(t *testing.T, lines []string, label string) (x, y int) {
 	t.Helper()
 	for i, line := range lines {
@@ -82,7 +64,6 @@ func railCell(t *testing.T, lines []string, label string) (x, y int) {
 	return 0, 0
 }
 
-// stripSGR drops escape sequences so a rendered row can be searched by text.
 func stripSGR(s string) string {
 	var b strings.Builder
 	esc := false
@@ -102,7 +83,6 @@ func stripSGR(s string) string {
 	return b.String()
 }
 
-// motion delivers one motion event through the real Update path.
 func motion(m *app.OS, x, y int) *app.OS {
 	next, _ := m.Update(tea.MouseMotionMsg{X: x, Y: y})
 	return next.(*app.OS)
@@ -122,12 +102,11 @@ func TestFocusFollowsMouseInTerminalMode(t *testing.T) {
 		t.Fatal("terminal mode does not ask the host for button-free motion, so focus can never follow")
 	}
 
-	m = motion(m, 80, 5) // inside the second pane
+	m = motion(m, 80, 5)
 	if m.FocusedWindow != 1 {
 		t.Errorf("focus did not follow the pointer in terminal mode (focused=%d)", m.FocusedWindow)
 	}
 
-	// The rail is chrome, so pointing at it must not hand a pane focus.
 	m = motion(m, 3, 5)
 	if m.FocusedWindow != 1 {
 		t.Errorf("the rail stole pane focus (focused=%d)", m.FocusedWindow)

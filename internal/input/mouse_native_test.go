@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// twoPaneOS builds an OS with two visible floating panes side by side.
 func twoPaneOS(t *testing.T) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -144,7 +143,7 @@ func TestFocusFollowsMouse(t *testing.T) {
 		})
 		o := twoPaneOS(t)
 		o.FocusedWindow = 1
-		o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 3, Y: 10}, o) // in the band, over pane a
+		o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 3, Y: 10}, o)
 		if o.FocusedWindow != 1 {
 			t.Errorf("motion over the sidebar band changed focus to %d", o.FocusedWindow)
 		}
@@ -154,7 +153,7 @@ func TestFocusFollowsMouse(t *testing.T) {
 		setFFM(t, true)
 		o := twoPaneOS(t)
 		o.FocusedWindow = 1
-		o.Windows[0].Height = o.Height // pane a extends under the dock band
+		o.Windows[0].Height = o.Height
 		o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 10, Y: o.Height - 1}, o)
 		if o.FocusedWindow != 1 {
 			t.Errorf("motion over the dock band changed focus to %d", o.FocusedWindow)
@@ -175,7 +174,6 @@ func TestFocusFollowsMouse(t *testing.T) {
 	t.Run("on: no focus change during a drag", func(t *testing.T) {
 		setFFM(t, true)
 		o := twoPaneOS(t)
-		// Grab pane a's title bar and drag across pane b.
 		o, _ = handleMouseClick(tea.MouseClickMsg{X: 10, Y: 0, Button: tea.MouseLeft}, o)
 		if o.FocusedWindow != 0 || !o.Dragging {
 			t.Fatalf("drag setup failed: focused=%d dragging=%v", o.FocusedWindow, o.Dragging)
@@ -187,9 +185,6 @@ func TestFocusFollowsMouse(t *testing.T) {
 		_, _ = handleMouseRelease(tea.MouseReleaseMsg{X: 60, Y: 10, Button: tea.MouseLeft}, o)
 	})
 
-	// appearance.focus_follows_mouse_pause: each step is one motion report
-	// over pane b, and want is the focus after it. A release is only seen on
-	// the next motion, so the step after a held one is what proves it resumes.
 	type step struct {
 		mod  tea.KeyMod
 		want int
@@ -221,7 +216,6 @@ func TestFocusFollowsMouse(t *testing.T) {
 		t.Run("pause: "+row.name, func(t *testing.T) {
 			setFFM(t, true)
 			o := twoPaneOS(t)
-			// Through the config, the way the file and the settings page set it.
 			o.UserConfig.Appearance.FocusFollowsMousePause = row.key
 			config.ApplyAppearanceConfig(o.UserConfig, &o.Settings)
 			o.Settings.FocusFollowsMouse = true

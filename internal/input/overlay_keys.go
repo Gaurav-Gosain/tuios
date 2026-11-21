@@ -7,18 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// The key handlers below are shared by terminal mode and window-management
-// mode, so the help overlay closes on the same keys whichever mode opened it.
-// Each mode calls them at its own point in its routing order.
-
-// routeSettingsOverlayKey sends the key to the settings overlay, or to one of
-// the pickers and editors that open over it, or to the layout or machine
-// picker, when one of them is open. It reports whether an overlay took the key.
-//
-// Both modes check these overlays first and in this order. The overlays after
-// them (palette, launcher, go-to, mail) are checked in a
-// different order in each mode, and several panels can be open at once, so
-// those stay in the mode handlers.
 func routeSettingsOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 	var out *app.OS
 	var cmd tea.Cmd
@@ -38,15 +26,12 @@ func routeSettingsOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, 
 	case o.ShowDockEditor:
 		out, cmd = handleDockEditorInput(msg, o)
 	case o.ShowKeybindManager:
-		// Opens over settings, like the theme picker.
 		out, cmd = handleKeybindManagerInput(msg, o)
 	case o.ShowSettings:
 		out, cmd = handleSettingsInput(msg, o)
 	case o.ShowLayoutPicker:
 		out, cmd = handleLayoutPickerInput(msg, o)
 	case o.ShowHostPicker:
-		// A letter typed into the machine picker is a search and must not
-		// reach the shell or a binding.
 		out, cmd = handleHostPickerInput(msg, o)
 	default:
 		return o, nil, false
@@ -54,8 +39,6 @@ func routeSettingsOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, 
 	return out, cmd, true
 }
 
-// closeHelp closes the help overlay and resets its view, so it opens on the
-// auto-selected category with no search next time.
 func closeHelp(o *app.OS) {
 	o.ShowHelp = false
 	o.HelpScrollOffset = 0
@@ -64,15 +47,6 @@ func closeHelp(o *app.OS) {
 	o.HelpSearchMode = false
 }
 
-// handleHelpOverlayKey handles a key while the help overlay is open. Help is
-// modal: a key it does not use is swallowed rather than passed on to a binding
-// or the pane behind it.
-//
-// The close rule, which is what the footer hints advertise:
-//   - esc leaves search when searching, and closes help otherwise.
-//   - ? closes help, searching or not.
-//   - q closes help when not searching, and is typed into the query when
-//     searching, so a search can contain it.
 func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
 	if !o.HelpSearchMode {
@@ -98,7 +72,6 @@ func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			return o, nil
 		}
 	case "up":
-		// Scroll by 2 rows at a time (1 entry + 1 gap row).
 		if o.HelpScrollOffset > 0 {
 			o.HelpScrollOffset -= 2
 			if o.HelpScrollOffset < 0 {
@@ -110,16 +83,16 @@ func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.HelpScrollOffset += 2
 		return o, nil
 	case "left":
-		o.HelpScrollOffset = 0 // Reset scroll when changing categories
+		o.HelpScrollOffset = 0
 		return handleLeftKey(msg, o)
 	case "right":
-		o.HelpScrollOffset = 0 // Reset scroll when changing categories
+		o.HelpScrollOffset = 0
 		return handleRightKey(msg, o)
 	case "/":
 		o.HelpSearchMode = !o.HelpSearchMode
-		o.HelpScrollOffset = 0 // Reset scroll when toggling search
+		o.HelpScrollOffset = 0
 		if !o.HelpSearchMode {
-			o.SetHelpSearchQuery("") // Clear query when exiting search
+			o.SetHelpSearchQuery("")
 		}
 		return o, nil
 	}
@@ -127,7 +100,7 @@ func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.HelpSearchMode {
 		if changed, consumed := o.HelpSearchKey(msg.String(), msg.Text); consumed {
 			if changed {
-				o.HelpScrollOffset = 0 // Reset scroll when query changes
+				o.HelpScrollOffset = 0
 			}
 			return o, nil
 		}
@@ -136,9 +109,6 @@ func handleHelpOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleCacheStatsKey handles a key while the style cache statistics overlay is
-// open: q, esc or c close it, r resets the counters, and every other key is
-// swallowed.
 func handleCacheStatsKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	switch commandKey(msg) {
 	case "q", "esc", "c":
@@ -150,11 +120,6 @@ func handleCacheStatsKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// routeOverlayKey gives a key to the top open overlay that takes keys, in
-// the order the overlays are stacked, which is the order the mouse uses. Both
-// modes route through it, so two open panels take keys in one order: the one
-// on top first. A panel that does not take this key, such as the log viewer
-// under a leader chord, passes it to the one below.
 func routeOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 	if !o.AnyOverlayOpen() {
 		return o, nil, false
@@ -168,9 +133,6 @@ func routeOverlayKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 	return o, nil, false
 }
 
-// overlayKey runs the key handler of overlay kind, and reports false for a
-// kind that takes no keys here or does not take this one. The settings
-// panel and the pickers over it share one handler, which knows their order.
 func overlayKey(kind string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 	var out *app.OS
 	var cmd tea.Cmd
@@ -187,10 +149,6 @@ func overlayKey(kind string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, 
 	case "agentmail":
 		out, cmd = handleAgentMailInput(msg, o)
 	case "inbox":
-		// The leader and the chord after it are the prefix table's, over
-		// the view as over a pane. Window mode reads them before it gets
-		// here; terminal mode reads them after the panels, so the view lets
-		// them go on.
 		if o.PrefixActive || isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 			return o, nil, false
 		}

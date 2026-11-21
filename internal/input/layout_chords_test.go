@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// ctrlOn is a Ctrl chord as a terminal reports it with alternate keys: the
-// key typed, and the US key at its position. On Dvorak b sits on US n, c on
-// i, x on b, u on f, j on c. On QWERTZ ü sits on US [.
 func ctrlOn(typed, us rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: typed, BaseCode: us, Mod: tea.ModCtrl}
 }

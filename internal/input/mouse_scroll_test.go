@@ -12,9 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// scrollPane builds a pane whose emulator has far more history than fits on
-// screen, sized like a real window rather than the minimum, so the midpoint the
-// old wheel path walked the cursor to is many rows away from the bottom.
 func scrollPane(t *testing.T) (*app.OS, *terminal.Window) {
 	t.Helper()
 	em := vt.NewEmulator(40, 20)
@@ -27,12 +24,10 @@ func scrollPane(t *testing.T) (*app.OS, *terminal.Window) {
 	}
 	win := &terminal.Window{Terminal: em, Width: 42, Height: 22}
 	o := &app.OS{
-		Settings:      config.Global,
-		Mode:          app.TerminalMode,
-		FocusedWindow: 0,
-		Windows:       []*terminal.Window{win},
-		// Shift+Up/Down are terminal_mode binds now rather than literals, so the
-		// pane needs a registry to resolve them.
+		Settings:        config.Global,
+		Mode:            app.TerminalMode,
+		FocusedWindow:   0,
+		Windows:         []*terminal.Window{win},
 		KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig()),
 	}
 	return o, win
@@ -93,7 +88,7 @@ func TestEscapeAfterAWheelScrollIsNotForwarded(t *testing.T) {
 // and leaves it alone: it announces itself in the dock, and q and Esc exit.
 func TestWheelDoesNotDropAnExplicitCopyModeSession(t *testing.T) {
 	o, win := scrollPane(t)
-	win.EnterCopyMode() // explicit: what the prefix binding and the palette do
+	win.EnterCopyMode()
 
 	wheel(o, tea.MouseWheelUp, 3)
 	wheel(o, tea.MouseWheelDown, 10)
@@ -200,8 +195,6 @@ func TestWindowModeWheelIsSilentAndYieldsToBindings(t *testing.T) {
 		t.Fatalf("the wheel raised %q in window management mode", o.Notifications[0].Message)
 	}
 
-	// toggle_help rather than new_window: both prove the key reached the
-	// dispatcher, and this one does not need a full OS to open a pane on.
 	HandleWindowManagementModeKey(tea.KeyPressMsg{Code: '?', Text: "?"}, o)
 	if !o.ShowHelp {
 		t.Error("a window-manager binding was swallowed by the scrolled view")

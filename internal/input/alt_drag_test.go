@@ -25,7 +25,6 @@ func altRightClickMsg(x, y int) tea.MouseClickMsg {
 	return tea.MouseClickMsg{Button: tea.MouseRight, X: x, Y: y, Mod: tea.ModAlt}
 }
 
-// withAltDrag sets the gesture on or off for a test and restores it after.
 func withAltDrag(t *testing.T, on bool) {
 	t.Helper()
 	prev := config.Global.AltDrag
@@ -120,7 +119,6 @@ func TestAltDragEndsCleanlyWhenInterrupted(t *testing.T) {
 
 		handleMouseClick(altClickMsg(cx, cy), o)
 		handleMouseMotion(altMotionMsg(cx+10, cy), o)
-		// The release lands on a branch that returns before the normal drop.
 		o.ShowHelp = true
 		handleMouseRelease(altReleaseMsg(cx+10, cy), o)
 
@@ -132,9 +130,6 @@ func TestAltDragEndsCleanlyWhenInterrupted(t *testing.T) {
 		}
 	})
 
-	// The gesture keeps no state of its own: it holds Dragging and the mode
-	// borrow, which are exactly what the existing sweeps key on. That is what
-	// lets a lost release end it without a new mechanism beside the old ones.
 	t.Run("a release that never arrives", func(t *testing.T) {
 		o, wa, wb := twoPaneBSP(t)
 		left, _ := leftPaneOf(wa, wb)
@@ -212,12 +207,9 @@ func TestAltDragDisabledReachesTheGuestUnchanged(t *testing.T) {
 	cfg := config.DefaultConfig()
 	o, pty := osWithFocusedPane(t, cfg, app.TerminalMode)
 	win := o.Windows[0]
-	// Mouse bytes for a local pane go into the emulator rather than the pty, so
-	// the pane is put in daemon mode with its write routed to the recording pty.
 	win.DaemonMode = true
 	win.DaemonWriteFunc = func(b []byte) error { _, err := pty.Write(b); return err }
-	// Ask for mouse tracking (DECSET 1002) the way a guest does.
-	win.Terminal.Write([]byte("\x1b[?1002h\x1b[?1006h")) // button tracking, SGR encoding
+	win.Terminal.Write([]byte("\x1b[?1002h\x1b[?1006h"))
 	if !win.Terminal.HasMouseMode() {
 		t.Fatal("the fixture pane did not take mouse tracking")
 	}
@@ -231,8 +223,6 @@ func TestAltDragDisabledReachesTheGuestUnchanged(t *testing.T) {
 	if len(pty.got) == 0 {
 		t.Fatal("alt+left was not forwarded to the guest that asked for the mouse")
 	}
-	// The modifier reaches the guest unchanged: SGR encodes alt as the +8 bit, so
-	// a left press arrives as button 8 rather than button 0.
 	if got := string(pty.got); !strings.HasPrefix(got, "\x1b[<8;") {
 		t.Errorf("guest received %q, want an SGR left press carrying the alt bit", got)
 	}
@@ -246,11 +236,9 @@ func TestAltDragEnabledIsTakenFromTheGuest(t *testing.T) {
 
 	o, pty := osWithFocusedPane(t, config.DefaultConfig(), app.TerminalMode)
 	win := o.Windows[0]
-	// Mouse bytes for a local pane go into the emulator rather than the pty, so
-	// the pane is put in daemon mode with its write routed to the recording pty.
 	win.DaemonMode = true
 	win.DaemonWriteFunc = func(b []byte) error { _, err := pty.Write(b); return err }
-	win.Terminal.Write([]byte("\x1b[?1002h\x1b[?1006h")) // button tracking, SGR encoding
+	win.Terminal.Write([]byte("\x1b[?1002h\x1b[?1006h"))
 
 	cx, cy := contentCell(win)
 	handleMouseClick(altClickMsg(cx, cy), o)

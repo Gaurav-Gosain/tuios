@@ -25,9 +25,6 @@ func TestLogViewerScrollReachesTheNewestEntries(t *testing.T) {
 				for i := range total {
 					o.Log("INFO", "line %d", i)
 				}
-				// Open through handleToggleLogs, the keybinding's own path: it
-				// logs "Log viewer opened" first, and that line moves the bottom
-				// the toggle then lands the view on.
 				o, _ = handleToggleLogs(tea.KeyPressMsg{}, o)
 				if total == 0 {
 					return
@@ -36,7 +33,7 @@ func TestLogViewerScrollReachesTheNewestEntries(t *testing.T) {
 				if o.LogViewerCursor() != newest {
 					t.Fatalf("opening left the cursor on %d, want the newest %d", o.LogViewerCursor(), newest)
 				}
-				o.View() // the renderer clamps the scroll to the rows it draws
+				o.View()
 				if o.LogViewerScroll() > o.LogViewerCursor() {
 					t.Fatalf("the newest entry %d is above the first drawn row %d", o.LogViewerCursor(), o.LogViewerScroll())
 				}

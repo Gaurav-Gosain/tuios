@@ -12,8 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// windowWithScrollback builds a window whose emulator has more history than
-// fits on screen, without spawning a PTY.
 func windowWithScrollback(t *testing.T) *terminal.Window {
 	t.Helper()
 	em := vt.NewEmulator(20, 5)
@@ -120,7 +118,6 @@ func TestTheHorizontalWheelNeedsTheSameModifierAsTheVertical(t *testing.T) {
 		return o
 	}
 
-	// Right from home has room whenever the strip is wider than the view.
 	if sl := newFleet(t).GetOrCreateScrollingLayout(); sl == nil {
 		t.Fatal("no scrolling layout")
 	}
@@ -146,7 +143,6 @@ func TestTheHorizontalWheelNeedsTheSameModifierAsTheVertical(t *testing.T) {
 			if !tc.moves {
 				return
 			}
-			// And back again, which only has room because we just moved.
 			_, _ = handleMouseWheel(tea.MouseWheelMsg{Button: tea.MouseWheelLeft, Mod: tc.mod}, o)
 			if back := o.GetOrCreateScrollingLayout().ViewportX; back != before {
 				t.Fatalf("wheel left with mod %v did not undo it: %d -> %d, want %d", tc.mod, after, back, before)
@@ -155,9 +151,6 @@ func TestTheHorizontalWheelNeedsTheSameModifierAsTheVertical(t *testing.T) {
 	}
 }
 
-// railWheelOS builds a full OS with the rail on and draws one frame, which is
-// what places the rail's sections and records the bands the wheel is routed
-// against.
 func railWheelOS(t *testing.T) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -182,10 +175,6 @@ func railWheelOS(t *testing.T) *app.OS {
 	return o
 }
 
-// railScrolls sweeps one wheel button down every row of the rail and reports
-// whether any section's offset moved. Sweeping rather than aiming at one band
-// keeps the test off the unexported placement table, and the files section is
-// covered by the same sweep as the rest.
 func railScrolls(o *app.OS, button tea.MouseButton) bool {
 	clear(o.SidebarScroll[:])
 	for y := range o.Height {
@@ -210,7 +199,7 @@ func TestSidewaysDriftDoesNotScrollTheRail(t *testing.T) {
 		want   bool
 	}{
 		{"down", tea.MouseWheelDown, true},
-		{"up", tea.MouseWheelUp, false}, // already at the top, so nothing moves
+		{"up", tea.MouseWheelUp, false},
 		{"left", tea.MouseWheelLeft, false},
 		{"right", tea.MouseWheelRight, false},
 	} {
@@ -254,11 +243,6 @@ func TestSidewaysDriftDoesNotFightTheStrip(t *testing.T) {
 	}
 	o.TileAllWindows()
 
-	// Six events down the strip with two drift events through them, and the
-	// drift on one side at a time: a left and a right in the same gesture cancel
-	// out, so a test that mixed them would pass against the old code too. The
-	// strip is long enough that none of this clamps, or the drift would be
-	// hidden by the end of the layout rather than dropped.
 	for _, drift := range []tea.MouseButton{tea.MouseWheelLeft, tea.MouseWheelRight} {
 		o.GetOrCreateScrollingLayout().ViewportX = 0
 		gesture := []tea.MouseButton{

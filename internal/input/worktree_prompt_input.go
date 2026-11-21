@@ -5,11 +5,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// handleWorktreePromptInput drives the rail's worktree dialog.
-//
-// It is the file name prompt's keyboard with none of the confirmations: two
-// text fields tab cycles, enter creates, esc cancels. There is no yes or no
-// to pick, so the keys are the fields' keys and nothing else.
 func handleWorktreePromptInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	switch msg.String() {
 	case "esc":

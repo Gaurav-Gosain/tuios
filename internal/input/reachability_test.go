@@ -22,40 +22,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// This file answers one question the rest of the package cannot: does pressing
-// the key a binding ships with reach the action the binding names?
-//
-// Every other test here enters below the router. It arms a state, calls the
-// handler for that state, and checks what the handler did. That proves the
-// handler works. It says nothing about whether any key reaches the handler, so
-// a feature can be registered, bound, documented and completely dead with the
-// package green. That has happened, more than once.
-//
-// So this table starts where the user does: HandleKeyPress, with the keys the
-// default config binds. It asserts one thing and refuses to assert more, on
-// purpose. It does not check what an action does. It checks that the action
-// ran, through OS.NoteAction, the record every dispatch already keeps for a
-// crash report. What an action does belongs to the tests that own it.
-
-// bindingSection is one keybinding table plus the way the app makes it live: a
-// mode, an optional leader chord, and a fixture with the state the section
-// needs. Everything else about it comes from the default config.
 type bindingSection struct {
-	name string
-	// binds is the section's table, read from the default config.
-	binds map[string][]string
-	// gate is the prefix_mode action whose key opens this section. "" when the
-	// section answers without a chord.
-	gate string
-	// leader says whether the leader key comes first.
+	name   string
+	binds  map[string][]string
+	gate   string
 	leader bool
-	// modes are the modes the app makes this section live in.
-	modes []app.Mode
-	// newOS builds a fixture with the state the section needs.
-	newOS func(*testing.T) *app.OS
+	modes  []app.Mode
+	newOS  func(*testing.T) *app.OS
 }
 
-// reachOS is the plain fixture: the default config, a viewport and one pane.
 func reachOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := osWithBindings(t, func(*config.KeybindingsConfig) {})
@@ -69,8 +44,6 @@ func reachOS(t *testing.T) *app.OS {
 	return o
 }
 
-// reachScriptOS is reachOS with a tape playing, which is the only state the
-// script section answers in.
 func reachScriptOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := reachOS(t)
@@ -78,8 +51,6 @@ func reachScriptOS(t *testing.T) *app.OS {
 	return o
 }
 
-// reachFilesOS gives the rail the keyboard with the cursor on a file row, which
-// is the only state the files section answers in.
 func reachFilesOS(t *testing.T) *app.OS {
 	t.Helper()
 	dir := t.TempDir()
@@ -89,26 +60,15 @@ func reachFilesOS(t *testing.T) *app.OS {
 	return filesRailOS(t, dir, "report.txt")
 }
 
-// reachSections builds the table from the default config. Nothing here names a
-// key or an action: a binding added to any of these sections is covered the
-// moment it is added, and a binding removed stops being asserted. The only
-// hand-written facts are the mode and the chord each section is reached
-// through, which is what this file exists to pin.
 func reachSections(t *testing.T) []bindingSection {
 	t.Helper()
 	k := config.DefaultConfig().Keybindings
 	bothModes := []app.Mode{app.WindowManagementMode, app.TerminalMode}
 	windowMode := []app.Mode{app.WindowManagementMode}
 
-	// The main sections are flattened into one lookup and answered in window
-	// mode, with no chord in front of them.
 	main := func(name string, binds map[string][]string) bindingSection {
 		return bindingSection{name: name, binds: binds, modes: windowMode, newOS: reachOS}
 	}
-	// A sub-prefix section is reached by the leader key and then the key bound
-	// to the prefix_mode action that opens it. Both modes: the routing is
-	// written twice, once in HandleKeyPress and once in HandleTerminalModeKey,
-	// and a cut in either one is a dead chord for half the app.
 	sub := func(name, gate string, binds map[string][]string) bindingSection {
 		return bindingSection{name: name, binds: binds, gate: gate, leader: true, modes: bothModes, newOS: reachOS}
 	}
@@ -129,49 +89,28 @@ func reachSections(t *testing.T) []bindingSection {
 		sub("debug_prefix", "prefix_debug", k.DebugPrefix),
 		sub("tape_prefix", "prefix_tape", k.TapePrefix),
 		sub("layout_prefix", "prefix_layout", k.LayoutPrefix),
-		// Empty under the tuios keys; a preset fills it.
 		sub("tuios_prefix", "prefix_tuios", k.TuiosPrefix),
 
-		// The terminal-mode section is the binds that answer while typing into a
-		// shell. The two scroll pairs and the host paste are answered
-		// inside HandleTerminalModeKey rather than by the dispatcher, so they
-		// are only live there.
 		{name: "terminal_mode", binds: k.TerminalMode, modes: []app.Mode{app.TerminalMode}, newOS: reachOS},
-		// The global scope answers in both modes, which is the whole reason it
-		// is a section of its own.
 		{name: "global", binds: k.Global, modes: bothModes, newOS: reachOS},
-		// The script scope is live only while a tape plays back.
 		{name: "script", binds: k.Script, modes: bothModes, newOS: reachScriptOS},
-		// The rail owns the keyboard in either mode while it has focus.
 		{name: "sidebar", binds: k.Sidebar, modes: bothModes, newOS: func(t *testing.T) *app.OS {
 			t.Helper()
 			return railOS(t)
 		}},
-		// The files section is read first, and only while the cursor is on a row
-		// of the listing.
 		{name: "sidebar_files", binds: k.SidebarFiles, modes: windowMode, newOS: reachFilesOS},
-		// The agent rows' keys are read first too, and only while the cursor is
-		// on an agent row.
 		{name: "sidebar_agents", binds: k.SidebarAgents, modes: windowMode, newOS: reachAgentsOS},
-		// The file preview's keys are read first while it is open, and the keys
-		// inside the file while the keyboard is there.
 		{name: "quick_look", binds: k.QuickLook, modes: windowMode, newOS: reachQuickLookOS},
 		{name: "quick_look_inside", binds: k.QuickLookInside, modes: windowMode, newOS: reachQuickLookInsideOS},
-		// The Inbox, the prompt open over it and the mailbox own the keyboard
-		// while they are up, in either mode.
 		{name: "inbox", binds: k.Inbox, modes: bothModes, newOS: reachInboxOS},
 		{name: "inbox_peek", binds: k.InboxPeek, modes: bothModes, newOS: reachInboxPeekOS},
 		{name: "mail", binds: k.Mail, modes: bothModes, newOS: reachMailOS},
-		// The Copies panel owns the keyboard while it is up, in either mode.
 		{name: "transfers", binds: k.Transfers, modes: bothModes, newOS: reachTransfersOS},
-		// Copy mode owns the keyboard in either mode while a pane is in it.
 		{name: "copy_mode", binds: k.CopyMode, modes: bothModes, newOS: reachCopyModeOS},
-		// The review overlay owns the keyboard in either mode while it is open.
 		{name: "review", binds: k.Review, modes: bothModes, newOS: reachReviewOS},
 	}
 }
 
-// reachReviewOS is a client with the review overlay open on a diff.
 func reachQuickLookOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := reachFilesOS(t)
@@ -202,8 +141,6 @@ func reachReviewOS(t *testing.T) *app.OS {
 	return o
 }
 
-// reachCopyModeOS is a client whose focused pane is in copy mode, which is the
-// only state the copy_mode section answers in.
 func reachCopyModeOS(t *testing.T) *app.OS {
 	t.Helper()
 	o, _ := osWithFocusedPane(t, config.DefaultConfig(), app.WindowManagementMode)
@@ -215,7 +152,6 @@ func reachCopyModeOS(t *testing.T) *app.OS {
 	return o
 }
 
-// reachInboxOS is a client with the Inbox open on an approval and a question.
 func reachInboxOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := inboxInputOS(t)
@@ -223,8 +159,6 @@ func reachInboxOS(t *testing.T) *app.OS {
 	return o
 }
 
-// reachInboxPeekOS is reachInboxOS with the approval's prompt open over the
-// list.
 func reachInboxPeekOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := inboxInputOS(t)
@@ -243,7 +177,6 @@ func reachInboxPeekOS(t *testing.T) *app.OS {
 	return o
 }
 
-// reachTransfersOS is a client with the Copies panel open.
 func reachTransfersOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := reachOS(t)
@@ -251,7 +184,6 @@ func reachTransfersOS(t *testing.T) *app.OS {
 	return o
 }
 
-// reachMailOS is a client with the mailbox open on one thread.
 func reachMailOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := mailThreadOS(t)
@@ -300,20 +232,10 @@ func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
 	}
 }
 
-// pendingActions are the actions bound ahead of their work: the review,
-// triage, reply and approval keys, whose handlers answer "not handled" until
-// the unit named here lands, so pressing the key does what an unbound key did
-// and records no action. TestPendingActionsStillDoNothing holds the list in
-// both directions: an action here that starts to run fails it, and moves out
-// of this list into the table above.
 var pendingActions = map[string]string{
-	config.ActionInboxDenyReason: "safer approvals",
-	config.ActionInboxDetailDown: "safer approvals",
-	config.ActionInboxDetailUp:   "safer approvals",
-	// Built, and handled only once an agent has been seen, so for a person
-	// who runs none the key after the prefix still reaches the pane. These
-	// fixtures have seen none; the E2E test TestNextFinishedWalksUnseenTurns
-	// presses it with one.
+	config.ActionInboxDenyReason:    "safer approvals",
+	config.ActionInboxDetailDown:    "safer approvals",
+	config.ActionInboxDetailUp:      "safer approvals",
 	config.ActionPrefixNextFinished: "Inbox lifecycle, before any agent",
 }
 
@@ -356,8 +278,6 @@ func TestPendingActionsStillDoNothing(t *testing.T) {
 						if o.PrefixRepeatLive() {
 							t.Errorf("%s left the repeat window open although it did nothing", describeChord(k, sec, key))
 						}
-						// A second press, where a repeat would land, is typed
-						// too rather than swallowed.
 						o = pressKey(t, o, key)
 						if string(typed) != key+key {
 							t.Errorf("a second %s after %s typed %q into the pane, want %q", key, describeChord(k, sec, key), typed, key+key)
@@ -369,8 +289,6 @@ func TestPendingActionsStillDoNothing(t *testing.T) {
 							t.Fatalf("%s ran on %s: it is built now, so take it out of pendingActions", action, key)
 						}
 					}
-					// On an agent row the rail's own binding for the key runs,
-					// as it did before the agent rows had keys of their own.
 					if sec.name == "sidebar_agents" {
 						if rail := o.KeybindRegistry.Action(config.TableSidebar, key); rail != "" && (len(got) == before || got[len(got)-1] != rail) {
 							t.Errorf("%s on an agent row did not fall through to the rail's %s (actions run: %v)", key, rail, got[before:])
@@ -393,19 +311,12 @@ func TestPendingActionsStillDoNothing(t *testing.T) {
 	}
 }
 
-// reachAgentsOS gives the rail the keyboard with the cursor on an agent row,
-// which is the only state the agent rows' keys answer in.
 func reachAgentsOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := railOS(t)
 	o.Windows[0].AgentState = "done"
 	o.Windows[0].AgentHarness = "claude-code"
-	// A message waits in its queue, so x on the row drops it rather than
-	// falling through to the rail's menu, which it does on a row with none.
 	o.Windows[0].AgentQueued = 1
-	// One running subagent and the heading drawn over it, so space on the
-	// row opens or shuts its subagent rows. Without a subagent there is no
-	// heading and space falls through to the rail.
 	o.Windows[0].AgentSubagents = 1
 	o.Windows[0].AgentSubagentList = []sessiontree.Subagent{{
 		ID: "sa-1", Type: "Explore", Description: "Look around", State: "running",
@@ -426,20 +337,10 @@ func reachAgentsOS(t *testing.T) *app.OS {
 	return nil
 }
 
-// notTerminalSections are the config sections the terminal client never reads,
-// with the program that does. No key in them can reach this package.
 var notTerminalSections = map[string]string{
-	"gui": "the native GUI, through the GUI bridge's keybinds event",
-	// The list keys move a cursor in whichever overlay is up; they run no
-	// action NoteAction could record. TestListKeysFromConfigMoveTheCommandPalette
-	// presses them through the real entry point.
+	"gui":   "the native GUI, through the GUI bridge's keybinds event",
 	"lists": "every list overlay, through listKey",
-	// Declared by the user and absent from the default config, so there is no
-	// key to press from here. TestDeclaredMenusNest presses them through the
-	// real entry point.
 	"menus": "user-declared prefix menus, none ship",
-	// Declared by the user, like the menus. TestKeyModeStaysOnStacksAndLeavesOnEsc
-	// (e2e) presses their keys through the real entry point.
 	"modes": "user-declared key modes, none ship",
 }
 
@@ -474,27 +375,16 @@ func TestReachabilityTableCoversEveryBindingSection(t *testing.T) {
 	}
 }
 
-// actionsWithNoDefaultBinding is every action the dispatcher registers that the
-// default config binds no key to, and the surface that reaches it instead.
-//
-// The list is asserted in both directions, so it cannot grow in silence. An
-// action registered with no key and no note here fails; an action here that
-// later gets a default key fails too, and moves into the table above.
 var actionsWithNoDefaultBinding = map[string]string{
-	// Context menu rows. The menu hands them to the same dispatcher.
-	"clear_selection": "context menu row",
-	// Turns off a user-declared key mode. esc does the same while a mode is
-	// on, and no mode ships, so it has no default key.
-	"leave_mode":        "esc in a key mode, or a key the user binds",
-	"kill_session":      "context menu row",
-	"kill_session_next": "context menu row",
-	"kill_session_quit": "context menu row",
-	"restart_daemon":    "command palette row, rail machine menu row, settings row, version notice",
-	// The profile: the palette rows, beside the Settings row Simple controls.
-	"use_simple_controls":   "command palette row",
-	"use_keyboard_controls": "command palette row",
-	"paste_clipboard":       "context menu row",
-	// The menu of a right click on a selection in the agents view's thread.
+	"clear_selection":         "context menu row",
+	"leave_mode":              "esc in a key mode, or a key the user binds",
+	"kill_session":            "context menu row",
+	"kill_session_next":       "context menu row",
+	"kill_session_quit":       "context menu row",
+	"restart_daemon":          "command palette row, rail machine menu row, settings row, version notice",
+	"use_simple_controls":     "command palette row",
+	"use_keyboard_controls":   "command palette row",
+	"paste_clipboard":         "context menu row",
 	"selection_copy":          "agents view selection menu row",
 	"selection_copy_markdown": "agents view selection menu row",
 	"selection_search":        "agents view selection menu row",
@@ -509,20 +399,14 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"settings_sidebar":        "rail mouse row",
 	"rename_workspace":        "user binding",
 
-	// ssh-aware splits. The palette lists each one, and a user binds a key
-	// or sets appearance.new_window_follow_ssh to make the ordinary keys follow.
 	"split_ssh_horizontal": "palette row and user binding",
 	"split_ssh_vertical":   "palette row and user binding",
 	"new_window_ssh":       "palette row and user binding",
 
-	// Debug and tape surfaces reached from their own prefix, whose actions are
-	// separate names. These are the bodies both share.
 	"toggle_logs":        "shared body, reached as debug_prefix_logs",
 	"toggle_cache_stats": "shared body, reached as debug_prefix_cache",
 	"stop_recording":     "shared body, reached as tape_prefix_stop",
 
-	// Sizes the layout chord does not ship a key for. 50 to 90 are bound; the
-	// small half is there for a user who wants it.
 	"resize_width_10":  "user binding",
 	"resize_width_20":  "user binding",
 	"resize_width_30":  "user binding",
@@ -532,8 +416,6 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"resize_height_30": "user binding",
 	"resize_height_40": "user binding",
 
-	// tmux-style actions: marking and joining panes, resizing by a step,
-	// workspace moves, the mouse and the config reload. None ships a key.
 	"mark_pane":            "user binding",
 	"join_marked_left":     "user binding",
 	"join_marked_right":    "user binding",
@@ -559,38 +441,23 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"toggle_mouse":         "user binding",
 	"cycle_layout":         "user binding",
 
-	// Multifocus toggles. The palette has a row for each, and a user binds
-	// them where they want them.
-	"toggle_multifocus_active": "palette row, user binding",
-	"toggle_multifocus_all":    "palette row, user binding",
-	"close_workspace":          "palette row, workspace tab menu, user binding",
-	// tmux's "copy-mode \; send-keys ?" as one action. The palette reaches
-	// them too.
+	"toggle_multifocus_active":  "palette row, user binding",
+	"toggle_multifocus_all":     "palette row, user binding",
+	"close_workspace":           "palette row, workspace tab menu, user binding",
 	"copy_mode_search_forward":  "user binding and palette row",
 	"copy_mode_search_backward": "user binding and palette row",
-	// cmd+k in other terminals, which the host terminal usually keeps for
-	// itself, so it ships unbound.
-	"clear_scrollback": "user binding and palette row",
-	// Hints on every pane at once. The plain hints key does the same with
-	// hints.all_panes on.
-	"hints_all_panes": "user binding and palette row",
-	// "," is open_settings, so this half of the master resize ships unbound.
+	"clear_scrollback":          "user binding and palette row",
+	"hints_all_panes":           "user binding and palette row",
 	"resize_master_shrink_left": "user binding",
 
-	// The scrolling layout's own verbs. No default key, no menu row.
 	"scroll_focus_left":  "user binding",
 	"scroll_focus_right": "user binding",
 	"scroll_move_left":   "user binding",
 	"scroll_move_right":  "user binding",
-	// Workspace cycling. The numbered keys and the switcher cover the default
-	// surface; a user who wants h/l cycle binds these.
-	"next_workspace": "palette row, user binding",
-	"prev_workspace": "palette row, user binding",
-	// Machine cycling. The rail and the switcher cover it by default.
-	"next_host": "palette row, user binding",
-	"prev_host": "palette row, user binding",
-	// Session jumping ships unbound for the same reason; the switcher and the
-	// rail cover it by default, and opt+N is a user binding.
+	"next_workspace":     "palette row, user binding",
+	"prev_workspace":     "palette row, user binding",
+	"next_host":          "palette row, user binding",
+	"prev_host":          "palette row, user binding",
 	"switch_session_1":   "user binding",
 	"switch_session_2":   "user binding",
 	"switch_session_3":   "user binding",
@@ -605,28 +472,20 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"scroll_expel":       "user binding",
 	"scroll_maximize":    "user binding",
 
-	// BSP has one split it does not ship a key for.
 	"smart_split": "user binding",
 
-	// The tiling scheme actions. No key is clearly free, so all five
-	// ship unbound; the palette reaches every one, and cycle_tiling_scheme is
-	// the row most users want.
 	"cycle_tiling_scheme":            "palette row, user binding",
 	"set_tiling_scheme_spiral":       "palette row, user binding",
 	"set_tiling_scheme_longest_side": "palette row, user binding",
 	"set_tiling_scheme_alternate":    "palette row, user binding",
 	"set_tiling_scheme_smart_split":  "palette row, user binding",
 
-	// One master position each. cycle_master_position has the key in
-	// the layout prefix; these let a user bind one side directly.
 	"set_master_position_left":   "palette row, user binding",
 	"set_master_position_right":  "palette row, user binding",
 	"set_master_position_top":    "palette row, user binding",
 	"set_master_position_bottom": "palette row, user binding",
 	"set_master_position_center": "palette row, user binding",
 
-	// Command palette rows that became actions (R2-4). The palette runs them
-	// by name; a person may bind one.
 	"new_window_on_host":         "palette row, user binding",
 	"toggle_shared_borders":      "palette row, user binding",
 	"next_saved_layout":          "palette row, user binding",
@@ -649,7 +508,6 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"dispatch_resume":            "palette row, user binding",
 	"multi_copy_mode":            "palette row, user binding",
 
-	// Two of the three screenshot verbs. The picker is the one with a key.
 	"screenshot":        "run-command verb, user binding",
 	"screenshot_screen": "run-command verb, user binding",
 }
@@ -684,17 +542,12 @@ func TestEveryRegisteredActionIsBoundOrListed(t *testing.T) {
 	}
 }
 
-// pressKey sends one binding spelling through the real entry point.
 func pressKey(t *testing.T, o *app.OS, spec string) *app.OS {
 	t.Helper()
 	next, _ := HandleKeyPress(keyEventFor(t, spec), o)
 	return next
 }
 
-// pressBinding sends either a keyboard binding or the terminal-mode middle
-// button binding through the real input entry point. Mouse presses are bindings
-// too, but they are not KeyPressMsg values and pretending otherwise would let
-// a listed mouse default stay disconnected from its handler.
 func pressBinding(t *testing.T, o *app.OS, spec string) *app.OS {
 	t.Helper()
 	base := spec
@@ -724,10 +577,6 @@ func pressBinding(t *testing.T, o *app.OS, spec string) *app.OS {
 	return got
 }
 
-// keyEventFor builds the key event a terminal sends for a binding spelling, and
-// proves it: the event has to spell the binding back. A spelling this cannot
-// build fails the test instead of being skipped, because a row the table cannot
-// press is a row the table is not covering.
 func keyEventFor(t *testing.T, spec string) tea.KeyPressMsg {
 	t.Helper()
 	var mod tea.KeyMod
@@ -754,23 +603,14 @@ func keyEventFor(t *testing.T, spec string) tea.KeyPressMsg {
 		}
 		msg.Code = runes[0]
 		if mod == 0 {
-			// An unmodified printable key arrives with the text it produced,
-			// which is the spelling a binding on "|" or "R" matches.
 			msg.Text = base
 		}
 	}
-	// No key event spells itself "opt+1": Option reaches a terminal as Alt, so
-	// the event an Option press produces spells itself "alt+1". Compare the
-	// binding against the spelling an event can actually have.
 	canon := spec
 	for _, name := range []string{"opt+", "option+"} {
 		canon = strings.ReplaceAll(canon, name, "alt+")
 	}
 	if msg.String() != canon && msg.Keystroke() != canon {
-		// Either the binding is spelled a way no key event spells itself, in
-		// which case the binding is dead and the config is what to fix, or this
-		// builder is missing a key name. Both are failures, and neither may be
-		// skipped: a row the table cannot press is a row it is not covering.
 		t.Fatalf("no key event spells %q (the nearest event spells itself %q): "+
 			"either the binding is dead, or namedBindingKeys is missing a key",
 			canon, msg.Keystroke())
@@ -779,11 +619,8 @@ func keyEventFor(t *testing.T, spec string) tea.KeyPressMsg {
 }
 
 var bindingMods = map[string]tea.KeyMod{
-	"ctrl": tea.ModCtrl,
-	"alt":  tea.ModAlt,
-	// The macOS defaults spell the Option key "opt+". It is the Alt modifier
-	// on the wire, which is why the normalizer expands opt+1 into alt+1, and
-	// config.validModifiers accepts both spellings on darwin.
+	"ctrl":   tea.ModCtrl,
+	"alt":    tea.ModAlt,
 	"opt":    tea.ModAlt,
 	"option": tea.ModAlt,
 	"shift":  tea.ModShift,
@@ -822,8 +659,6 @@ var namedBindingKeys = map[string]rune{
 	"f12":       tea.KeyF12,
 }
 
-// gateKey is the key that opens a sub-prefix, read from the prefix_mode table
-// so a rebind of the chord moves the whole section with it.
 func gateKey(t *testing.T, k config.KeybindingsConfig, gate string) string {
 	t.Helper()
 	keys := k.PrefixMode[gate]
@@ -886,8 +721,6 @@ func TestTheDispatcherHandlesEveryAction(t *testing.T) {
 // sections count as handled through the reachability table, whose test
 // presses every key of them and sees its action run.
 func TestEveryDescribedActionIsHandled(t *testing.T) {
-	// copy_mode_first_nonblank has no default key, so the copy_mode section
-	// below does not name it; runCopyModeAction runs it through its constant.
 	handled := map[string]bool{app.HoldModeAction: true, config.ActionCopyModeFirstNonBlank: true}
 	k := config.DefaultConfig().Keybindings
 	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode, k.Transfers, k.Lists, k.Review} {
@@ -928,9 +761,6 @@ func TestEveryDescribedActionIsHandled(t *testing.T) {
 	}
 }
 
-// dispatchActions lists every action of the table the dispatcher runs, each
-// member of a numbered family on its own. TestTheDispatcherHandlesEveryAction
-// holds the dispatcher to having a handler for each.
 func dispatchActions() []string {
 	var names []string
 	for _, spec := range config.Actions() {

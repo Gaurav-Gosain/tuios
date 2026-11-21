@@ -9,16 +9,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// withAutoEnterTerminalOnFocus sets the policy on one session. The setting is
-// per client, so it needs no restore: the next test builds its own OS.
 func withAutoEnterTerminalOnFocus(o *app.OS, mode config.AutoEnterTerminalPolicy) *app.OS {
 	o.Settings.AutoEnterTerminalOnFocus = mode
 	return o
 }
 
-// twoPaneWM is two tiled panes in window-management mode, with the real
-// keybind registry, so Tab / 1-9 / Alt+arrows travel the same HandleKeyPress
-// path cmd/tuios registers.
 func twoPaneWM(t *testing.T) *app.OS {
 	t.Helper()
 	o := osWithBindings(t, func(*config.KeybindingsConfig) {})

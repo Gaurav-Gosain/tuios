@@ -9,25 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Multi copy mode key handling: one key, every pane of the mode. See
-// internal/app/multicopy.go for what the mode is.
-//
-// Each pane runs the ordinary copy-mode handler against its own cursor and
-// buffer, under its own lock, one pane at a time, so the motions, counts,
-// search and visual selection are exactly single-pane copy mode's, repeated.
-// Only the keys that make sense once for the whole set are handled here: the
-// yank, the save, and the format cycle.
-//
-// One pane leads: the focused one, unless the last search found nothing in it,
-// in which case the first pane that did find something. The lead's state
-// decides what a key means (leave copy mode, or only leave visual mode), and
-// its messages are the ones the dock shows. Without a lead, 32 panes would
-// post 32 copies of "VISUAL".
-
-// Keys a parked pane still takes while the lead is in normal mode: starting a
-// new search, stepping through matches it does not have, clearing the search,
-// and leaving. Anything else would move or select in a pane the search did not
-// pick, which is the one thing parking exists to prevent.
 var parkedCopyKeys = map[string]bool{
 	"/": true, "?": true, "n": true, "N": true, "ctrl+l": true,
 	"q": true, "esc": true, "i": true, "ctrl+c": true,
@@ -46,15 +27,9 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 	k := commandKey(msg)
 	allParked := o.MultiCopyAllParked()
 
-	// The keys that act once for the whole set. A search being typed and a
-	// pending f/t character take every key as text, so they are left alone. A
-	// count typed before them means nothing to them and is dropped in every
-	// pane: "1y" is a yank of every selection, not a count handed to one pane.
 	if leadState != terminal.CopyModeSearch && !waitingForChar(lcm) {
 		inVisual := leadState.InVisual()
 		pipe, isPipe := copyPipeKey(msg, o, lcm)
-		// copy_mode_exit from a selection is y on the whole set, then a
-		// leave, as it is in one pane.
 		exitYank := inVisual && copyModeAction(msg, o) == config.ActionCopyModeExit
 		wholeSet := isPipe || exitYank || k == "tab" || k == "y" || k == "Y" || (k == "c" && inVisual)
 		if wholeSet {
@@ -66,8 +41,6 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 		}
 		switch {
 		case isPipe:
-			// One pipe for the whole set: the command gets the text y would
-			// copy, in the current format.
 			panes, skipped, selected := collectMultiCopy(o, windows)
 			if len(panes) == 0 {
 				o.ShowNotification(fmt.Sprintf("No pane has a selection. Press v or V to select, then press %s.", pipe.Key), "warning", o.Settings.NotificationDuration)
@@ -110,8 +83,6 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 		if !w.InCopyMode() {
 			continue
 		}
-		// A parked pane takes only the parked keys. When the search matched no
-		// pane at all, that holds for the lead too: nothing may move or select.
 		if o.MultiCopyParked(w.ID) && (w != lead || allParked) {
 			takes := leadState == terminal.CopyModeSearch ||
 				(leadState == terminal.CopyModeNormal && (parkedCopyKeys[k] || copyModeAction(msg, o) == config.ActionCopyModeExit))
@@ -125,8 +96,6 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 			leadFx = fx
 			continue
 		}
-		// Another pane's messages and mode switches are the lead's to make;
-		// only its redraw is its own.
 		if fx.invalidate {
 			w.InvalidateCache()
 		}
@@ -136,8 +105,6 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 	}
 
 	if leadFx.exitCopyMode {
-		// Leaving copy mode leaves it in every pane. The lead's effects still
-		// run for the message and a switch into terminal mode.
 		o.ExitMultiCopyMode()
 		leadFx.exitCopyMode = false
 		return leadFx.apply(o, lead)
@@ -145,8 +112,6 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 
 	o.SetMultiCopyParked(multiCopySearchMisses(windows))
 
-	// A search just finished: say how many panes it found something in, which
-	// is the number a person searching 32 panes at once needs.
 	if leadState == terminal.CopyModeSearch && lead.CopyMode.State == terminal.CopyModeNormal && lead.CopyMode.SearchQuery() != "" {
 		matched, total := o.MultiCopyMatched()
 		leadFx.notifications = nil
@@ -156,7 +121,6 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 	return leadFx.apply(o, lead)
 }
 
-// multiCopySearchMisses is the panes a search is active in and found nothing.
 func multiCopySearchMisses(windows []*terminal.Window) map[string]bool {
 	var miss map[string]bool
 	for _, w := range windows {
@@ -172,8 +136,6 @@ func multiCopySearchMisses(windows []*terminal.Window) map[string]bool {
 	return miss
 }
 
-// collectMultiCopy reads the highlighted text of every pane that has a
-// selection, in the mode's order. Panes without one are counted, not read.
 func collectMultiCopy(o *app.OS, windows []*terminal.Window) (panes []app.MultiCopyPane, skipped int, selected []*terminal.Window) {
 	for _, w := range windows {
 		if !w.HasSelection() || o.MultiCopyParked(w.ID) {
@@ -192,7 +154,6 @@ func collectMultiCopy(o *app.OS, windows []*terminal.Window) (panes []app.MultiC
 	return panes, skipped, selected
 }
 
-// handleMultiCopySaveKey edits the save prompt's path.
 func handleMultiCopySaveKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	s := o.MultiCopy.Save
 	key := msg.Key()
@@ -213,13 +174,11 @@ func handleMultiCopySaveKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case key.Code == tea.KeyEscape:
 		o.CancelMultiCopySave()
 	case commandKey(msg) == "ctrl+c":
-		// Ctrl+C leaves copy mode from every state, this prompt too.
 		o.ExitMultiCopyMode()
 		o.ShowNotification("Left copy mode", "info", o.Settings.NotificationDuration)
 	case key.Code == tea.KeyTab:
 		o.CycleMultiCopyFormat()
 	default:
-		// The path is a field like every other: caret, word keys, ctrl+u.
 		o.MultiCopySaveKey(msg.String(), key.Text)
 	}
 	return o, nil

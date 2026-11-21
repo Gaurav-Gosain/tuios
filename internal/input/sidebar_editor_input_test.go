@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// wmPress runs one key through window mode, the way a real keystroke arrives.
 func wmPress(o *app.OS, key string) (*app.OS, tea.Cmd) {
 	return HandleWindowManagementModeKey(press(key), o)
 }
@@ -36,7 +35,6 @@ func TestSectionEditorTakesKeysBeforeTheRailDoes(t *testing.T) {
 		t.Errorf("j did not reach the editor; the selection is still %d", first)
 	}
 
-	// And esc closes it rather than leaving window mode.
 	o, _ = wmPress(o, "esc")
 	if o.ShowSectionEditor {
 		t.Error("esc did not reach the editor")

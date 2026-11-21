@@ -10,22 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// paneKeyBytes encodes a key press for one pane from that pane's own kitty
-// keyboard flags, and reports whether the bytes already hold its release.
-//
-// Each pane reads keys in the mode it asked for, so the focused pane and every
-// multifocus peer get their own encoding: a shell peer gets CR for Enter while
-// a kitty-protocol pane beside it gets CSI u.
-//
-// A pane that asked for event types gets a release for every press. The
-// release is sent with the press when none will follow it:
-//   - for the focused pane, when the host is not reporting releases (a host
-//     without the protocol, or the moment after the pane takes the keyboard,
-//     before the host has switched to the flags tuios asked for on its behalf)
-//   - for a multifocus peer always, since releases go to the focused pane only
-//
-// Without it a compositor in the pane held the key down, and its client
-// repeated it until the next key came.
 func paneKeyBytes(host tea.KeyPressMsg, w *terminal.Window, o *app.OS, focused bool) (raw []byte, released bool) {
 	flags, modifyOtherKeys := 0, 0
 	if w.Terminal != nil {
@@ -40,8 +24,6 @@ func paneKeyBytes(host tea.KeyPressMsg, w *terminal.Window, o *app.OS, focused b
 		return nil, false
 	}
 	if len(raw) == 0 {
-		// Only the legacy encoding reads the cursor key mode, and on the
-		// ghostty backend reading it takes the emulator's lock.
 		appCursorKeys := w.Terminal != nil && w.Terminal.ApplicationCursorKeys()
 		raw = getRawKeyBytesWithMode(host, appCursorKeys)
 	}
@@ -53,21 +35,11 @@ func paneKeyBytes(host tea.KeyPressMsg, w *terminal.Window, o *app.OS, focused b
 	}
 	release := vt.EncodeKeyReleaseCSIu(key, flags)
 	if release == "" {
-		// kitty sends no release for this key in this mode (Enter, Tab and
-		// Backspace without report-all-keys): none is owed.
 		return raw, false
 	}
 	return append(raw, release...), true
 }
 
-// legacyDropsKey reports whether a pane that reads legacy keys must get
-// nothing for this key: a character key held with Super or Hyper.
-//
-// The legacy encoding can say Shift, Alt and Ctrl only. With Super or Hyper
-// masked off, Cmd+K became a bare k, and an unbound Cmd chord typed its letter
-// into the shell. A pane that wants these keys asks for the kitty protocol
-// or modifyOtherKeys, which encode them before this is asked.
-// Named keys (arrows, Enter, Tab) keep their legacy bytes.
 func legacyDropsKey(k tea.KeyPressMsg) bool {
 	if k.Mod&(tea.ModSuper|tea.ModHyper) == 0 {
 		return false

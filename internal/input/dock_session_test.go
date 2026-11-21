@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// dockSessionOS builds a full OS and draws one frame, which is what puts the
-// dock's session controls on screen and records where they landed.
 func dockSessionOS(t *testing.T, daemon bool) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -34,9 +32,6 @@ func dockSessionOS(t *testing.T, daemon bool) *app.OS {
 	return o
 }
 
-// dockSessionColumn scans the dock row for a column routing to the given
-// control, or -1. It reads the rects the renderer recorded, which the app
-// package's own test already ties to the cells that were drawn.
 func dockSessionColumn(o *app.OS, want app.DockSessionAction) int {
 	y := o.Height - 1
 	for x := range o.Width {
@@ -68,7 +63,6 @@ func TestDockCloseAlwaysConfirms(t *testing.T) {
 			t.Errorf("daemon %v: clicking close asked to quit outright", daemon)
 		}
 
-		// Esc backs out and leaves the session alone.
 		o, _ = HandleKeyPress(press("esc"), o)
 		if o.ShowSessionClose || o.QuitRequested {
 			t.Errorf("daemon %v: esc did not cancel cleanly", daemon)
@@ -87,7 +81,6 @@ func TestDockLeaveControlFollowsTheRunPath(t *testing.T) {
 	}
 }
 
-// clickAt is a plain left press at a cell.
 func clickAt(x, y int) tea.MouseClickMsg {
 	return tea.MouseClickMsg{Button: tea.MouseLeft, X: x, Y: y}
 }

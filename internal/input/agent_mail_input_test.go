@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// mailThreadOS is a two-pane window-mode model attached to a daemon session
-// holding one message from pane a to the person.
 func mailThreadOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := twoPaneWM(t)

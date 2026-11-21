@@ -11,13 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The host is held in all-motion tracking so hover and focus-follows-mouse work,
-// which means every handler that means "drag" now receives motion with no button
-// held too. These tests pin the two halves of that: a gesture only moves while a
-// button is down, and the hover affordances still move without one.
-
-// pressed, dragged and released drive the real Update path with a button state, the
-// way motion() does without one.
 func pressed(m *app.OS, x, y int) *app.OS {
 	next, _ := m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
 	return next.(*app.OS)
@@ -33,7 +26,6 @@ func released(m *app.OS, x, y int) *app.OS {
 	return next.(*app.OS)
 }
 
-// pickerOS opens the accent picker on the first pane.
 func pickerOS(t *testing.T) *app.OS {
 	t.Helper()
 	m := hoverOS(t)
@@ -41,14 +33,6 @@ func pickerOS(t *testing.T) *app.OS {
 	return m
 }
 
-// cursorCells returns the screen positions of the picker's swatch cursors in
-// the composed frame, topmost first: the slot row's when it has one, then the
-// hue strip's, then the grid's. Working off the drawn glyph rather than the
-// picker's own rects is deliberate, since the claim under test is about where
-// the mark the user is looking at ends up.
-//
-// The channel sliders wear the same mark on a track rather than on a swatch, so
-// a mark with track glyph beside it is a thumb and not a cursor.
 func cursorCells(t *testing.T, m *app.OS) [][2]int {
 	t.Helper()
 	onTrack := func(plain []rune, x int) bool {
@@ -71,8 +55,6 @@ func cursorCells(t *testing.T, m *app.OS) [][2]int {
 	return out
 }
 
-// gridCell places the picker cursor on (col, row) and returns where its mark is
-// drawn on screen.
 func gridCell(t *testing.T, m *app.OS, col, row int) (x, y int) {
 	t.Helper()
 	m.AccentPickerCell(col, row)
@@ -81,7 +63,6 @@ func gridCell(t *testing.T, m *app.OS, col, row int) (x, y int) {
 		t.Fatalf("the picker drew %d cursor marks, want the hue strip's and the grid's:\n%s",
 			len(marks), strings.Join(frameLines(m), "\n"))
 	}
-	// The grid sits under the strip, so its mark is the lower one.
 	return marks[len(marks)-1][0], marks[len(marks)-1][1]
 }
 
@@ -130,7 +111,6 @@ func TestAccentGridFollowsAHeldDrag(t *testing.T) {
 			m.AccentPicker.Col, m.AccentPicker.Row)
 	}
 
-	// Released, the colour is locked: crossing the dialog again changes nothing.
 	m = motion(m, ax, ay)
 	if m.AccentPicker.Cur != locked {
 		t.Errorf("the colour did not lock on release: %v -> %v", locked, m.AccentPicker.Cur)
@@ -145,16 +125,11 @@ func TestAccentGridFollowsAHeldDrag(t *testing.T) {
 // code path as the grid and fails the same way.
 func TestAccentHueStripIgnoresButtonFreeMotion(t *testing.T) {
 	m := pickerOS(t)
-	// Start at the left-hand end of the strip, so the drag below has strip to
-	// travel over whatever hue the pane happened to be wearing and however many
-	// cells the layout gives the strip.
 	m.AccentPickerHueCell(0)
 	marks := cursorCells(t, m)
 	if len(marks) < 2 {
 		t.Fatalf("the picker drew %d cursor marks", len(marks))
 	}
-	// The strip sits directly above the grid, whose mark is the lowest, so it is
-	// the one before it however many rows are drawn over them.
 	hx, hy := marks[len(marks)-2][0], marks[len(marks)-2][1]
 
 	hue := m.AccentPicker.Hue
@@ -194,7 +169,6 @@ func TestScrollbarThumbNeedsAHeldButton(t *testing.T) {
 	o = dragged(o, rect.X, bottom)
 	moved := app.ScrollbarThumbRow(win, &o.Settings)
 
-	// The release never arrives; what comes back is motion reporting no button.
 	o = motion(o, rect.X, top)
 	if got := app.ScrollbarThumbRow(win, &o.Settings); got != moved {
 		t.Errorf("button-free motion dragged the thumb from row %d to %d", moved, got)
@@ -203,8 +177,6 @@ func TestScrollbarThumbNeedsAHeldButton(t *testing.T) {
 		t.Error("the scrollbar drag outlived the button that started it")
 	}
 
-	// And hover is reachable again: it is no longer swallowed by a drag that
-	// never ended.
 	o = motion(o, rect.X, bottom)
 	if got := app.ScrollbarThumbRow(win, &o.Settings); got != moved {
 		t.Errorf("a second button-free motion moved the thumb to %d, want %d", got, moved)
@@ -242,7 +214,6 @@ func TestOverlayPanelNeedsAHeldButton(t *testing.T) {
 	}
 	px, py := m.OverlayHits[0].OriginX+2, m.OverlayHits[0].OriginY+1
 
-	// A right press anywhere on the panel grabs it.
 	next, _ := m.Update(tea.MouseClickMsg{X: px, Y: py, Button: tea.MouseRight})
 	m = next.(*app.OS)
 	if !m.OverlayDragActive() {
@@ -323,7 +294,6 @@ func TestCtrlDragNeedsAHeldButton(t *testing.T) {
 		t.Errorf("button-free motion moved the pane from x=%d to x=%d", before, left.X)
 	}
 
-	// Held, the same motion does commit and move it.
 	next, _ = o.Update(tea.MouseClickMsg{X: cx, Y: cy, Button: tea.MouseLeft, Mod: tea.ModCtrl})
 	o = next.(*app.OS)
 	next, _ = o.Update(tea.MouseMotionMsg{X: cx + 20, Y: cy + 5, Button: tea.MouseLeft, Mod: tea.ModCtrl})

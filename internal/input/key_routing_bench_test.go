@@ -12,8 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// sinkPty is a PTY that accepts every write and keeps nothing, so a benchmark
-// measures the routing and not the growth of a capture buffer.
 type sinkPty struct{ n int }
 
 func (p *sinkPty) Write(b []byte) (int, error) { p.n += len(b); return len(b), nil }
@@ -25,8 +23,6 @@ func (p *sinkPty) Size() (int, int, error)     { return 80, 24, nil }
 func (p *sinkPty) Name() string                { return "sink-pty" }
 func (p *sinkPty) Start(_ *exec.Cmd) error     { return nil }
 
-// benchOS is a client with one focused local pane, the state a person typing
-// into a shell is in.
 func benchOS(b *testing.B, mode app.Mode) (*app.OS, *sinkPty) {
 	b.Helper()
 	cfg := config.DefaultConfig()
@@ -91,7 +87,6 @@ func BenchmarkKeyWindowModeTab(b *testing.B) {
 func BenchmarkKeyPrefixChord(b *testing.B) {
 	o, _ := benchOS(b, app.TerminalMode)
 	leader := tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}
-	// prefix_next_window is bound in the prefix section by default.
 	next := tea.KeyPressMsg{Code: 'n', Text: "n"}
 	b.ReportAllocs()
 	for b.Loop() {
@@ -187,8 +182,6 @@ func BenchmarkMouseSweepSettings(b *testing.B) {
 	o.OpenSettings()
 	last := o.View().Content
 
-	// Each composed frame moves the highlight to a new row, so a frame that
-	// differs from the last one is a frame that was composed.
 	frames := 0
 	b.ReportAllocs()
 	b.ResetTimer()

@@ -9,16 +9,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// handleFocusSidebar enters the rail's keyboard scope. Bound to "s" in window
-// mode and reached from anywhere via the ctrl+b o prefix.
 func handleFocusSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.EnterSidebarFocus()
 	return o, nil
 }
 
-// handleToggleFocusSidebar sends the keyboard to the rail, or back to the panes
-// if the rail already has it. One key that goes both ways, so exploring costs
-// the same chord twice rather than a chord and an esc.
 func handleToggleFocusSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarFocused {
 		o.ExitSidebarFocus()
@@ -53,30 +48,20 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		quickLookPromptKey(msg, o)
 		return o, nil
 	}
-	// Copy mode over the preview takes every key, as it does over a pane.
 	if cm, grid := o.QuickLookCopy(); cm != nil {
 		if !cm.Implicit {
 			return handleQuickLookCopyKey(msg, o, cm, grid)
 		}
-		// A selection the mouse made ends on the next key, which then acts
-		// as usual. esc only ends it.
 		o.QuickLookCopyEnd()
 		if msg.String() == "esc" {
 			return o, nil
 		}
 	}
-	// Quick look first. Its key opens the preview on a row of the listing and
-	// closes it from any row, and esc closes it before esc leaves the rail.
-	// Every other key goes on to the rail, so the preview takes nothing from
-	// it: j and k still move the cursor, and the preview follows them (see
-	// QuickLookSync, run after every input).
 	if act := tableAction(o, msg, o.KeybindRegistry, config.TableSidebarFiles); act == sidebarActFileQuickLook &&
 		(o.QuickLookOpen() || o.SidebarCursorOnListing()) {
 		noteRailAction(o, act)
 		return o, o.SidebarQuickLook()
 	}
-	// Inside the file the scope takes every key, so a key that deletes on the
-	// list cannot reach the rail from here.
 	if o.QuickLookInside() {
 		act := tableAction(o, msg, o.KeybindRegistry, config.TableQuickLookInside)
 		if act != "" {
@@ -102,8 +87,6 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.QuickLookFullSize()
 			handled = true
 		case "filmstrip":
-			// Taken on any file: j and k walk the list with the preview open, and the
-			// same key must not open a window on the next row.
 			o.QuickLookFilmstrip()
 			handled = true
 		case "next_view":
@@ -116,11 +99,6 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// The files section's own keys are consulted first, and only while the
-	// cursor is on a row of the listing. Three of them share a key with a rail
-	// binding that already exists (r renames, x kills, a was free), so the row
-	// under the cursor is what decides which of the two answers. On every other
-	// row the lookup finds nothing and the rail's own binding runs, unchanged.
 	if o.SidebarCursorOnFile() {
 		if act := tableAction(o, msg, o.KeybindRegistry, config.TableSidebarFiles); act != "" {
 			noteRailAction(o, act)
@@ -131,10 +109,6 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// The agent rows' own keys, the same way: consulted only while the cursor
-	// is on an agent row, and a key whose action did nothing falls through to
-	// the rail's binding for it, so r and x keep renaming and opening the menu
-	// until reply and cancel are built.
 	if o.SidebarCursorOnAgent() {
 		if act := tableAction(o, msg, o.KeybindRegistry, config.TableSidebarAgents); act != "" {
 			if cmd, handled := o.SidebarAgentAction(act); handled {
@@ -146,22 +120,10 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	action := tableAction(o, msg, o.KeybindRegistry, config.TableSidebar)
 	if action == "" {
-		// A global bind, on a key the rail does not bind itself.
-		//
-		// The global section is the one that acts in window mode and terminal
-		// mode alike, and the rail is a third scope that was swallowing all of
-		// it: ctrl+p did nothing from the rail, even though "/" opens the same
-		// palette, because the rail returns before the mode handlers that run
-		// these. The rail's own bindings are looked up first, so j and k still
-		// move the cursor whatever a user has put in the global section.
 		if m, cmd, ok := handleGlobalBinds(msg, o); ok {
 			return m, cmd
 		}
 
-		// The chords that walk workspaces, sessions and agent panes from a
-		// shell walk them from the rail too, by the same rule: only a
-		// reserved chord, and only a terminal-safe action. The rail is where
-		// a person reads the order they walk, and it was swallowing them.
 		if isReservedTerminalChord(msg) {
 			if act := lookupAction(o, msg, o.KeybindRegistry.GetAction); config.TerminalSafeAction(act) {
 				if m, cmd, ok := dispatchAction(act, msg, o); ok {
@@ -170,29 +132,17 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 
-		// A terminal focus key pointing back at the panes leaves the rail, so
-		// the key that walked into it from the outermost pane walks back out.
 		focus := tableAction(o, msg, o.KeybindRegistry, config.TableTerminalMode)
 		if dir, ok := terminalFocusDirection(focus); ok && o.LeaveRailToward(dir) {
 			return o, nil
 		}
 
-		// esc leaves the rail when nothing else claims it. The scope swallows
-		// unbound keys, so a config that resolves no rail action (one written
-		// before this section existed, or a rebound exit) would otherwise trap
-		// the keyboard here with no way back to the panes.
-		//
-		// Checked after the lookup, not before it, so a user who puts esc on a
-		// rail action of their own is not silently overridden. Checking first
-		// would be the same fault as hardcoding the key: the config would say
-		// one thing and the program do another, with nothing to tell them apart.
 		if key == "esc" {
 			o.ExitSidebarFocus()
 		}
-		return o, nil // consumed either way: the rail owns the keyboard
+		return o, nil
 	}
 
-	// Workspace/session jumps share a numeric suffix.
 	if after, ok := strings.CutPrefix(action, sidebarActJumpPrefix); ok {
 		if n, err := strconv.Atoi(after); err == nil {
 			noteRailAction(o, action)
@@ -201,12 +151,6 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// handled says whether the switch below has a branch for the action. The
-	// rail is the one keyboard scope that does not go through Dispatch, so the
-	// recording Dispatch does has to happen here instead, and it has to be
-	// recorded only when a branch actually ran. An action the switch has no
-	// branch for is a rail key that resolves and then does nothing, which is
-	// the fault the recording exists to expose. See NoteAction.
 	handled := true
 
 	switch action {
@@ -224,7 +168,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarCursorCollapse()
 	case sidebarActActivate:
 		if o.SidebarActivateCursor() {
-			o.ExitSidebarFocus() // activating a window is a request for that pane
+			o.ExitSidebarFocus()
 		}
 	case sidebarActReorderDown:
 		o.SidebarReorderCursor(1)
@@ -235,10 +179,6 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case sidebarActSwitchEdge:
 		o.FocusOtherSidebar()
 	case sidebarActPalette:
-		// The rail lists what exists; the palette finds it by name across every
-		// session and filters it by who needs a human. Rail focus is kept, so
-		// closing the palette comes back to the row the cursor was on; a row that
-		// actually relocates the user drops it on the way out.
 		noteRailAction(o, action)
 		return o, o.OpenCommandPalette()
 	case sidebarActFileSearch:
@@ -249,14 +189,9 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case sidebarActAgentSort:
 		o.SidebarCycleAgentsSort()
 	case sidebarActMail:
-		// The mailbox, narrowed to the pane under the cursor when there is one.
-		// Rail focus is kept, like the palette, so closing it comes back here.
 		noteRailAction(o, action)
 		return o, o.SidebarOpenMail()
 	case sidebarActNarrow:
-		// On the divider the two width keys move the split instead: narrow
-		// gives lines back to the sections above, widen gives them to the
-		// pinned block.
 		if o.SidebarCursorOnDivider() {
 			o.SidebarSplitStep(-1)
 		} else {
@@ -269,7 +204,7 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.SidebarSetCollapsed(false)
 		}
 	case sidebarActKill:
-		o.SidebarOpenCursorMenu(true) // the cursor row's menu, opened on its destructive row
+		o.SidebarOpenCursorMenu(true)
 	case sidebarActMenu:
 		o.SidebarOpenCursorMenu(false)
 	case sidebarActHelp:
@@ -281,11 +216,8 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case sidebarActNewSession:
 		o.SidebarNewSessionHere()
 	case sidebarActNewWindow:
-		// The keyboard reach for the terminals header's "+". It makes the pane in
-		// the attached session, which is the only one that section ever lists
-		// while the rail holds the keyboard.
 		o.SidebarNewWindow("")
-		o.ExitSidebarFocus() // the new pane is what was asked for
+		o.ExitSidebarFocus()
 	case sidebarActExit:
 		o.ExitSidebarFocus()
 	default:
@@ -294,15 +226,9 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if handled {
 		noteRailAction(o, action)
 	}
-	// Two rows of the rail's file view answer with a command rather than with a
-	// state change: copying a path is a clipboard write. The switch above cannot
-	// return one, so it parks it on the model and it is picked up here, the same
-	// way the click handler picks it up.
 	return o, o.TakeSidebarCmd()
 }
 
-// noteRailAction records a rail action the way Dispatch records the others,
-// and tells the browser build's tour about it, as Dispatch does.
 func noteRailAction(o *app.OS, action string) {
 	if action == actionMenuOpened {
 		return
@@ -313,9 +239,6 @@ func noteRailAction(o *app.OS, action string) {
 	}
 }
 
-// makeSidebarReorderHandler is the reorder action as the dispatcher takes it:
-// one handler per direction, both calling the same rail method the key calls.
-// A machine header's context menu is the caller that needs it; see machineMenu.
 func makeSidebarReorderHandler(delta int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarReorderCursor(delta)
@@ -323,20 +246,12 @@ func makeSidebarReorderHandler(delta int) ActionHandler {
 	}
 }
 
-// makeSidebarFileHandler wraps a file action for the ActionDispatcher, which is
-// how the files context menu reaches it. The key path calls
-// handleSidebarFileAction directly; both end in the same body.
 func makeSidebarFileHandler(action string) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, handleSidebarFileAction(action, o)
 	}
 }
 
-// handleSidebarFileAction runs one of the files section's actions.
-//
-// Not one of them touches the disk here. Create, rename and delete open a
-// dialog; copy and cut write down a path; paste and open answer with the command
-// that does the work off the loop.
 func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 	switch action {
 	case sidebarActFileOpen:
@@ -371,7 +286,6 @@ func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 	return nil
 }
 
-// quickLookInsideAction runs an action of the preview's inside table.
 func quickLookInsideAction(o *app.OS, act string) tea.Cmd {
 	switch act {
 	case "line_down":
@@ -418,8 +332,6 @@ func quickLookInsideAction(o *app.OS, act string) tea.Cmd {
 	return nil
 }
 
-// quickLookPromptKey types a key into the preview's prompt: the search or
-// the line number.
 func quickLookPromptKey(msg tea.KeyPressMsg, o *app.OS) {
 	key := msg.String()
 	switch {
@@ -428,21 +340,12 @@ func quickLookPromptKey(msg tea.KeyPressMsg, o *app.OS) {
 	case key == "enter":
 		o.QuickLookPromptEnter()
 	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper) != 0:
-		// A chord types nothing here; only its key name can mean
-		// something (a word key, the caret).
 		o.QuickLookPromptKey(key, "")
 	default:
-		// The prompt is a field like every other: caret, word keys,
-		// ctrl+u.
 		o.QuickLookPromptKey(key, msg.Text)
 	}
 }
 
-// handleFreeQuickLookKey routes a key while quick look shows a path a click or
-// a hint opened, with no rail row under it (see app.OS.OpenQuickLookPath). The
-// keyboard is inside the file: the inside table's keys act on it, and esc,
-// tab or the quick look key closes it. Every other key is swallowed, so a key
-// meant for the preview cannot reach the agents view or the pane under it.
 func handleFreeQuickLookKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.QuickLookPromptOpen() {
 		quickLookPromptKey(msg, o)
@@ -452,8 +355,6 @@ func handleFreeQuickLookKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if !cm.Implicit {
 			return handleQuickLookCopyKey(msg, o, cm, grid)
 		}
-		// A selection the mouse made ends on the next key, which then acts
-		// as usual. esc only ends it.
 		o.QuickLookCopyEnd()
 		if msg.String() == "esc" {
 			return o, nil
@@ -469,7 +370,6 @@ func handleFreeQuickLookKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	if !o.QuickLookInside() {
-		// A folder or a file with nothing to move through: full size only.
 		if tableAction(o, msg, o.KeybindRegistry, config.TableQuickLook) == "full_size" {
 			o.QuickLookFullSize()
 		}

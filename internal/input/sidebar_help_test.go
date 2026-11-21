@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// railOS builds an OS with the rail focused and one pane, routed through the
-// real registry so the help the test reads is the help a user would get.
 func railOS(t *testing.T) *app.OS {
 	t.Helper()
 	withSidebarGlobals(t, "left")
@@ -23,7 +21,6 @@ func railOS(t *testing.T) *app.OS {
 	return o
 }
 
-// railHelpCategory is the help section the rail's key opens on.
 func railHelpCategory(t *testing.T, o *app.OS) app.HelpCategory {
 	t.Helper()
 	cats := app.GetHelpCategories(o.KeybindRegistry, &o.Settings)
@@ -75,8 +72,6 @@ func TestRailHelpListsWhatTheRailBinds(t *testing.T) {
 		}
 	}
 
-	// help itself must be among them, or the key that opened this panel is the
-	// one thing the panel does not mention.
 	if !listed[sidebarActHelp] {
 		t.Error("the rail's help section does not list its own help key")
 	}
@@ -123,7 +118,6 @@ func TestRailHelpKeyResolvesInAConfigPredatingIt(t *testing.T) {
 	if !o.ShowHelp {
 		t.Fatal("? was dead in a config written before the rail bound it")
 	}
-	// The user's own two keys survive the fill.
 	if got := cfg.Keybindings.Sidebar[sidebarActCursorDown]; !slices.Equal(got, []string{"j"}) {
 		t.Errorf("cursor_down = %v, the user's config said [j]", got)
 	}

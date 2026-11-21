@@ -19,18 +19,10 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	var result tea.Model
 	var cmd tea.Cmd
 
-	// Whatever this message did (a click that moved focus, a key that
-	// minimised a pane or switched workspace), multi copy mode is brought in
-	// line with it afterwards. See SettleMultiCopy.
 	defer o.SettleMultiCopy()
 
-	// A mouse event over the panes of a view of a larger session is handled
-	// in the session's layout frame. See app.MapPointer.
 	msg = o.MapPointer(msg)
 	defer o.SetPointerInLayout(false)
-	// A mouse event on the dots a smaller session leaves acts on nothing. A
-	// release still ends the announcement hold its press armed, as every
-	// release does below.
 	if o.PointerSwallowed() {
 		if _, ok := msg.(tea.MouseReleaseMsg); ok {
 			o.ReleaseGestureAnnouncements()
@@ -42,16 +34,10 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		result, cmd = HandleKeyPress(msg, o)
 	case tea.KeyReleaseMsg:
-		// Releases only arrive once the host has been asked for event types, and
-		// tuios itself does one thing with one: end a hold. No binding acts on a
-		// release, because acting on a release as well as a press would run every
-		// binding twice. What is left goes to a pane that asked for releases.
 		if o.ReleaseHoldKey(readKey(tea.KeyPressMsg(msg.Key()))) {
 			result, cmd = o, nil
 			break
 		}
-		// Hints mode owns the keyboard, releases included: the release of a
-		// label letter is not the pane's to see.
 		if o.HintsOpen() || o.PaneLabelsOpen() {
 			return o, nil
 		}
@@ -65,19 +51,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		if _, inside := o.SidebarSessionAt(msg.X, msg.Y); !inside {
 			o.BlurSidebarSession()
 		}
-		// A click ends hints mode. The labels name the screen as it was when
-		// they were drawn, and a click is about to change it.
 		o.CloseHints()
-		// And the pane labels: a click picks a pane itself.
 		o.ClosePaneLabels()
-		// Capture mode is a gesture over the whole screen, the review
-		// included, so it is asked first.
 		if o.CaptureActive() {
 			result, cmd = handleCaptureMouseClick(msg, o)
 			break
 		}
-		// The review covers the screen: a click must not land on a pane or
-		// a panel under it.
 		if o.ReviewOpen() {
 			return o, nil
 		}
@@ -87,12 +66,10 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			result, cmd = handleMouseClick(msg, o)
 		}
 	case tea.MouseMotionMsg:
-		// The labels cover the pane, so motion over it is not the pane's.
 		if o.HintsOpen() || o.PaneLabelsOpen() {
 			return o, nil
 		}
 		if o.CaptureActive() {
-			// Motion never syncs to the daemon, the same as the browser's.
 			return handleCaptureMouseMotion(msg, o)
 		}
 		if o.ReviewOpen() {
@@ -100,16 +77,11 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		}
 		if o.ShowScrollbackBrowser {
 			result, cmd = handleScrollbackBrowserMouseMotion(msg, o)
-			// Don't sync motion events
 			return result, cmd
 		}
-		// Motion does not sync, since it is too frequent. A hover that moved
-		// the focus (focus_follows_mouse) is the exception: the daemon must
-		// know, or its next state push gives the old pane the focus back.
 		if quickLookCopyMotion(msg, o) {
 			return o, nil
 		}
-		// A selection in the agents view's thread follows the pointer.
 		if o.ShowInbox {
 			if taken, cmd := cockpitMouseMotion(msg, o); taken {
 				return o, cmd
@@ -120,8 +92,6 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		if moved != nil && moved.IsDaemonSession && moved.FocusedWindow != prev {
 			moved.SyncStateToDaemon()
 		}
-		// A pointer that stopped on a path may have asked whether the file
-		// is there. See app/path_links.go.
 		if moved != nil {
 			cmd = tea.Batch(cmd, moved.TakePathStatCmd())
 		}
@@ -134,15 +104,8 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		} else {
 			result, cmd = handleMouseRelease(msg, o)
 		}
-		// The button is up, so the announcement hold the press armed is over
-		// whichever of the three handled it. The window handler has already
-		// ended it after laying the drop out; this is for the other two, which
-		// move no pane and would otherwise leave the hold to the maintenance
-		// tick.
 		o.ReleaseGestureAnnouncements()
 	case tea.MouseWheelMsg:
-		// A wheel scrolls the pane out from under the labels, so it ends
-		// hints mode and then scrolls as usual. The pane labels the same.
 		o.CloseHints()
 		o.ClosePaneLabels()
 		if o.ReviewOpen() {
@@ -162,8 +125,6 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			result, cmd = handleMouseWheel(msg, o)
 		}
 	case app.StripTouchMsg:
-		// A finger's drag on tuios-web moves the strip out from under the
-		// labels, as a wheel does.
 		o.CloseHints()
 		o.ClosePaneLabels()
 		if o.ReviewOpen() || o.ScreenshotPreviewOpen() || o.ShowScrollbackBrowser {
@@ -171,14 +132,6 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		}
 		result, cmd = handleStripTouch(msg, o)
 	case tea.PasteMsg:
-		// Incoming bracketed paste from the outer terminal (ESC[200~ ... ESC[201~).
-		// This is passthrough input, not a clipboard operation: the outer terminal
-		// pasted on the user's behalf, or an IME such as fcitx5 wrapped a commit in
-		// paste markers. Forward it to the focused window's PTY without touching the
-		// stored clipboard and without a "Pasted" notification (matching tmux/VTM).
-		// A draft takes it first, the mailbox's before the Inbox reply's as
-		// for keys: an empty paste or a path can attach an image, which is
-		// read off the update loop.
 		if o.ShowAgentMail && o.AgentMail.Composing {
 			return o, o.AgentMailPaste(msg.Content)
 		}
@@ -202,15 +155,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		}
 		if o.Mode == app.TerminalMode {
 			o.NotePaneKey()
-			// An empty paste carries nothing. Some terminals send one when
-			// the clipboard holds only an image, so tuios looks for one.
-			// See app.PasteImageOnEmptyPaste.
 			if msg.Content == "" {
 				return o, o.PasteImageOnEmptyPaste()
 			}
-			// Files dropped on a pane whose program runs on another machine
-			// arrive as a paste of their paths. tuios asks whether to send
-			// them there. See app.DropPaste.
 			if cmd := o.DropPaste(msg.Content); cmd != nil {
 				return o, cmd
 			}
@@ -218,20 +165,10 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		}
 		return o, nil
 	case tea.ClipboardMsg:
-		// Handle OSC 52 clipboard read response (from tea.ReadClipboard).
-		// The terminal answered, so the pending query's timeout is disarmed
-		// whatever mode this client is in.
 		o.NotePasteArrived()
-		// A reply that answers no query of tuios is dropped: a pane can make
-		// the host terminal send one, and it must not be typed for it. This
-		// comes before any overlay can take the text.
 		if !o.ClaimPasteReply(msg.Content) {
 			return o, nil
 		}
-		// An overlay takes the paste the same way it takes a terminal paste.
-		// Only handle paste in terminal mode. The reply editor's ctrl+v
-		// answer may be the path of an image file, read off the loop; an
-		// empty answer is nothing, since the clipboard was asked already.
 		if o.ShowAgentMail && o.AgentMail.Composing {
 			if msg.Content == "" {
 				return o, nil
@@ -262,27 +199,16 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		return o, nil
 	}
 
-	// The Inbox reads a plan's text when one comes under the cursor, which
-	// any input can do. It costs a comparison when nothing needs reading.
 	if o.ShowInbox {
 		cmd = tea.Batch(cmd, o.InboxApprovalFetch(), o.InboxQuestionFetch(), o.InboxRecapFetch(), o.InboxAgentsTick(), o.InboxThreadFetch(), o.ReplyHistoryFetch(), o.CockpitImagePicture(), o.CockpitSideFetch())
 	} else if o.ShowAgentMail {
-		// A mail draft reads its pane's history as the Inbox reply does.
 		cmd = tea.Batch(cmd, o.ReplyHistoryFetch())
 	}
-	// Focus landing on a pane that finished turns while the person was
-	// away has the dock say what it did. A nil check when it did not.
 	cmd = tea.Batch(cmd, o.AgentRecapFetch())
-	// Quick look follows the rail's cursor, and closes when the rail lets go
-	// of the keyboard. A bool check while it is closed.
 	cmd = tea.Batch(cmd, o.QuickLookSync())
-	// A pointer over a path may have asked whether the file is there.
 	cmd = tea.Batch(cmd, o.TakePathStatCmd())
-	// A click or a key may have allowed a pane's clipboard write.
 	cmd = tea.Batch(cmd, o.ClipboardApprovalCmd())
 
-	// Sync state to daemon after any input that might have changed state
-	// This ensures state persists across reconnects without explicit save
 	if o.IsDaemonSession {
 		o.SyncStateToDaemon()
 	}
@@ -290,29 +216,16 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	return result, cmd
 }
 
-// pasteTakenByOverlay routes a paste to the overlay that owns input, if one
-// does, and reports whether the paste must go no further. It serves both the
-// terminal's bracketed paste (tea.PasteMsg) and the paste key's clipboard read
-// (tea.ClipboardMsg), so neither path can reach a pane the other protects.
 func pasteTakenByOverlay(o *app.OS, content string) (tea.Cmd, bool) {
-	// A TML surface the person is in, in the agents view, takes a paste
-	// into its focused text field.
 	if o.ShowInbox && o.CockpitArtifactFocused() {
 		return o.CockpitArtifactPaste(content), true
 	}
-	// While the Inbox's reply editor is open the paste is the reply's text,
-	// line breaks and all. A long paste is held as one block.
-	// The reply editor is handled by the two callers, before this.
 	if o.InboxReplyOpen() {
 		return nil, true
 	}
-	// The mail editor takes a paste as the reply does. Its image work is
-	// done by the two callers.
 	if o.ShowAgentMail && o.AgentMail.Composing {
 		return nil, true
 	}
-	// The Inbox's one-line editors take a paste on one line. Before they
-	// were composers, a paste here reached the pane under the Inbox.
 	switch {
 	case o.ShowInbox && o.InboxReasonOpen():
 		o.InboxReasonPaste(content)
@@ -327,27 +240,16 @@ func pasteTakenByOverlay(o *app.OS, content string) (tea.Cmd, bool) {
 		o.InboxSelectType(content)
 		return nil, true
 	}
-	// The multi copy save prompt takes a paste as its path, with line
-	// breaks and control characters removed. It must never reach a shell:
-	// a pasted path ending in a newline would run as a command.
 	if o.MultiCopy != nil && o.MultiCopy.Save != nil {
 		o.MultiCopySaveType(content)
 		return nil, true
 	}
-	// Every other one-line field takes a paste as typed text on one line.
 	if paste := textFieldPaste(o); paste != nil {
 		return paste(pasteLine(content)), true
 	}
-	// Anything else in front of the panes drops it: hints, the pane labels,
-	// the navigator's list, the message view, a dialog or a list. None of
-	// them would let a typed key through either, and a paste into a shell
-	// nobody can see is worse than none.
 	return nil, o.HintsOpen() || o.PaneLabelsOpen() || o.OverlayOwnsKeyboard()
 }
 
-// shouldShowQuitDialog checks if there are any terminals with active foreground processes
-// to show quit confirmation for. Returns true if any window has a foreground process
-// (besides the shell itself), or if we're unable to detect (falls back to true).
 func shouldShowQuitDialog(o *app.OS) bool {
 	if o.Settings.AlwaysConfirmQuit {
 		return true
@@ -360,31 +262,11 @@ func shouldShowQuitDialog(o *app.OS) bool {
 	return false
 }
 
-// quitSession ends the session and the client. In a daemon session that means
-// killing the session, not just detaching from it: quitting is the user saying
-// the session is over, and leaving it running would strand it with no way back
-// except an explicit attach.
-//
-// It was written out at six call sites (the three quit keybindings, and the yes
-// button of the confirmation dialog reached by key, by enter and by mouse), each
-// of which could drift from the others about whether to kill the session or run
-// Cleanup. There is one of them now.
-//
-// The kill-and-clean sequence itself lives on OS.QuitSession, which also records
-// that the quit was deliberate. That matters because killing the session makes
-// the daemon announce the session ending and the connection dropping back to us,
-// and either can land before the program finishes quitting; without the recorded
-// intent Update reports the user's own quit as an unexpected termination.
 func quitSession(o *app.OS) (*app.OS, tea.Cmd) {
 	o.QuitSession()
 	return o, o.QuitCmd()
 }
 
-// requestQuit is what a quit keybinding does. In a daemon session it always
-// opens the quit menu: quitting there used to silently and permanently kill
-// the session, and detach was never surfaced, so the menu is what makes the
-// safe option the default. Standalone it keeps the old shape: menu only when a
-// window is running something the user would lose, instant quit otherwise.
 func requestQuit(o *app.OS) (*app.OS, tea.Cmd) {
 	if o.IsDaemonSession || shouldShowQuitDialog(o) {
 		o.OpenQuitMenu()
@@ -393,10 +275,6 @@ func requestQuit(o *app.OS) (*app.OS, tea.Cmd) {
 	return quitSession(o)
 }
 
-// detachSession leaves the session running and quits this client (see
-// OS.DetachClient, the one detach implementation). Outside a daemon session
-// there is nothing to detach from, and the caller decides what that means
-// instead.
 func detachSession(o *app.OS) (*app.OS, tea.Cmd, bool) {
 	cmd := o.DetachClient()
 	if cmd == nil {
@@ -407,83 +285,40 @@ func detachSession(o *app.OS) (*app.OS, tea.Cmd, bool) {
 
 // HandleKeyPress handles all keyboard input and routes to mode-specific handlers
 func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Keep the key as the host sent it for the pane, and read it the rest of
-	// the way by the key the layout produced (see readKey).
 	o.NoteHostKey(msg)
 	msg = readKey(msg)
 
-	// Capture the keypress for the showkeys overlay when it is enabled. This is
-	// the earliest shared point in the input path, before any mode routing or
-	// handler can consume the key, so the overlay reflects keys in both
-	// window-management and terminal mode. It only observes; it never consumes.
 	if o.ShowKeys {
 		o.CaptureKeyEvent(msg)
 	}
 
-	// Hold-to-window-mode. The trigger is consumed here, before any mode routing,
-	// so holding it cannot type anything into a pane; every other key struck
-	// while it is held loses the trigger's own modifier, so holding Option and
-	// tapping n runs the window-mode action bound to n.
-	// Lock mode gives the hold key to the pane like every other key, and so
-	// does a client with window mode off, which has no window mode to hold.
 	if !o.Locked() && !o.WindowModeOff() && o.PressHoldKey(msg) {
 		return o, nil
 	}
 	msg = o.StripHoldModifier(msg)
 
-	// esc puts down a files row held by the pointer. Nothing is dropped.
 	if o.FileDragActive() && msg.String() == "esc" {
 		o.CancelFileDrag()
 		return o, nil
 	}
 
-	// A modifier pressed on its own arrives as a key while tuios asks for every
-	// key as an escape code. Holding Shift for the key after the leader must
-	// not end the prefix, so it goes nowhere while tuios reads keys itself. The
-	// host can also still be in that mode for a moment after a pane has the
-	// keyboard back, so a pane only gets one when it asked for every key.
 	if isModifierKeyPress(msg) &&
 		(o.KeysGoToBindings() || o.PaneKeyboardFlags()&ansi.KittyReportAllKeysAsEscapeCodes == 0) {
 		return o, nil
 	}
 
-	// A chord that only resolved because tuios recognised the character macOS
-	// composed out of it is proof the Option key is not being sent as Alt. With
-	// option_glyphs = "type" the user composes on purpose, with
-	// keyboard_layout = "other" the US table is off, and a bare character is
-	// text unless the config or the Mac's layout says US: the
-	// character went to the pane, and there is nothing to say. The chords come
-	// first, so the config is asked only for a composed character.
 	if chords := composedChords(msg, o.HostBaseCode(msg)); len(chords) > 0 &&
 		chords[len(chords)-1] != msg.Keystroke() &&
 		optionGlyphsApply(msg, o.Settings.KeyboardLayout, o.Settings.OptionGlyphs) {
 		o.NoteComposedOptionChord(chords[len(chords)-1])
 	}
-	// The other way a macOS terminal loses an Option chord, and the one that
-	// used to pass in silence: Option+Left and Option+Right arriving as the
-	// readline word motions.
 	if got, arrow, ok := macRewrittenAltArrow(msg); ok {
 		o.NoteRewrittenAltArrow(got, arrow)
 	}
 
-	// esc takes a message off the dock, in every mode, without consuming the key.
-	//
-	// Not consuming it is the whole design. esc means something to the shell,
-	// to vim, to copy mode and to every overlay below, and a message is not
-	// worth stealing it from any of them; dismissing is non-destructive, so
-	// doing it as a side effect of an esc the user pressed for another reason
-	// costs them nothing. What it buys is an exit for a sticky error, which
-	// otherwise waits forever, and a way out of any message the user has read
-	// and does not want to sit through.
-	//
-	// It runs before the overlay routing below so it works while help, the
-	// palette or the quit dialog is up, since those are exactly the moments a
-	// message is in the way.
 	var escCmd tea.Cmd
 	if msg.String() == "esc" {
 		o.DismissNotifications()
-		// esc also stops a rail click that waits for another machine, and
-		// says so. The key still goes on.
 		escCmd = o.CancelHostOpen()
 	}
 	if escCmd != nil {
@@ -493,13 +328,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return routeAfterEsc(msg, o)
 }
 
-// routeAfterEsc is the rest of HandleKeyPress, after esc dismissed the
-// dock's message.
 func routeAfterEsc(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// Capture mode is a gesture over the whole screen and owns every key while
-	// it is up, in either mode: a keystroke meant for the selection must not
-	// reach a shell underneath. The preview panel that follows it owns the
-	// keyboard the same way, for the same reason.
 	if o.CaptureActive() {
 		return HandleCaptureKey(msg, o)
 	}
@@ -507,97 +336,58 @@ func routeAfterEsc(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleScreenshotPreviewKey(msg, o)
 	}
 
-	// The screenshot chord works over any overlay, which would otherwise take
-	// the leader. See overlay_screenshot.go.
 	if m, cmd, ok := routeOverlayScreenshot(msg, o); ok {
 		return m, cmd
 	}
 	return routeKey(msg, o)
 }
 
-// routeKey sends a key to whatever owns the keyboard: an overlay, the rail, or
-// the mode. It is the part of HandleKeyPress after the gestures that own the
-// whole screen, and the screenshot chord replays a held leader through it.
 func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// The upgrade dialog outranks everything: it asks whether a binary may
-	// run as the daemon, and no key meant for anything else may answer it.
-	// See app/upgrade_confirm.go.
 	if o.UpgradeConfirmOpen() {
 		return o, o.UpgradeConfirmKey(msg.String())
 	}
-	// The task capture sheet owns every key while it is up. See
-	// app/task_capture.go.
 	if o.TaskCaptureOpen() {
 		return o, o.TaskCaptureKey(msg)
 	}
-	// The add-a-machine sheet owns every key while it is up. See
-	// app/machine_sheet.go.
 	if o.MachineSheetOpen() {
 		if cmd, ok := pasteKeyIntoTextField(msg, o); ok {
 			return o, cmd
 		}
 		return o, o.MachineSheetKey(msg)
 	}
-	// The paste key, while a one-line field owns the keyboard, pastes into
-	// the field. See paste_text.go.
 	if cmd, ok := pasteKeyIntoTextField(msg, o); ok {
 		return o, cmd
 	}
-	// A prompt in the palette owns every key while it is up: the person
-	// answers it or cancels it. See app/prompt.go.
 	if o.PromptOpen() {
 		cmd, _ := o.ListPickerKey(msg.String(), msg)
 		return o, cmd
 	}
-	// The close confirmation outranks even the quit menu: it is the last thing
-	// between a keystroke and a session that cannot be brought back, so nothing
-	// underneath may answer for it.
 	if o.ShowSessionClose {
 		return handleSessionCloseInput(msg, o)
 	}
-	// The restart dialog owns the keyboard the same way: while a restart
-	// runs, no key may reach a pane the daemon is about to take away.
 	if o.DaemonRestartOpen() {
 		return handleDaemonRestartInput(msg, o)
 	}
 
-	// Hints mode owns the keyboard while it is open: a letter is part of a
-	// label, and nothing typed while the labels are up may reach the pane or
-	// a binding. See hints_input.go.
 	if o.HintsOpen() {
 		return handleHintsKey(msg, o)
 	}
-	// The pane labels own the keyboard the same way. See pane_labels_input.go.
 	if o.PaneLabelsOpen() {
 		return handlePaneLabelsKey(msg, o)
 	}
 
-	// Handle the quit menu (highest priority, works in any mode)
 	if o.ShowQuitMenu {
 		return handleQuitMenuKey(msg, o)
 	}
 
-	// An open context menu owns the keyboard until it is dismissed. It is
-	// checked before the mode split so it is navigable from terminal mode too:
-	// the menu can be opened there, and arrow keys meant for it must not be
-	// forwarded to the shell underneath.
 	if o.ContextMenuActive() {
 		return handleContextMenuKey(msg, o)
 	}
 
-	// The path picker owns the keyboard the same way, from either mode: it
-	// opens from terminal mode, and a key meant for its filter must not reach
-	// the shell it is about to type into. See path_picker_input.go.
 	if o.PathPickerOpen() {
 		return handlePathPickerKey(msg, o)
 	}
 
-	// The review overlay covers the screen and owns every key while it is up,
-	// in either mode. It is opened from the Inbox and the rail, so it is
-	// checked ahead of both. See review_input.go.
-	// A menu opened over an overlay (open_menu in [keybindings.inbox], the
-	// rail, the review and the rest) takes the next key before that overlay
-	// does, which would otherwise read it first. See menus.go.
 	if o.Menu != "" && o.MenuState().Origin.Set {
 		return HandleMenuCommand(msg, o)
 	}
@@ -605,53 +395,28 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleReviewInput(msg, o)
 	}
 
-	// The accent picker and an in-flight rename are both opened from the rail,
-	// which owns the keyboard while focused, so they are checked ahead of it: an
-	// editor and a picker own every key while they are up, wherever they came
-	// from.
 	if o.ShowAccentPicker {
 		return handleAccentPickerInput(msg, o)
 	}
 	if o.Renaming() {
 		return handleRenameMode(msg, o)
 	}
-	// A file dialog is the same case again: opened from the rail, and it owns
-	// every key while it is up. It is checked ahead of the rail so the key that
-	// opened it cannot answer it, and so a rail binding cannot fire behind a
-	// confirmation that is asking about a delete.
 	if o.FilePromptOpen() {
 		return handleFilePromptInput(msg, o)
 	}
-	// The worktree dialog is the file dialog's case again: opened from the
-	// rail, owning every key while it is up, checked ahead of the rail so the
-	// key that opened it cannot answer it. See worktree_prompt_input.go.
 	if o.WorktreePromptOpen() {
 		return handleWorktreePromptInput(msg, o)
 	}
-	// The plugin approval dialog opens by itself and owns every key while
-	// it is up, so no key meant for a pane answers it. See
-	// app/plugin_approval.go.
 	if o.PluginApprovalOpen() {
 		return o, o.PluginApprovalKey(msg.String(), msg.Text)
 	}
-	// The integration question owns every key the same way, so the key
-	// that opened it, pressed again from habit, cannot answer it. See
-	// app/integration_confirm.go.
 	if o.IntegrationAskOpen() {
 		return o, o.IntegrationAskKey(msg.String())
 	}
 
-	// A copy's question and the Copies panel, the same way: the rail and
-	// the dock open them, and their keys must reach them. The question is
-	// over the panel, so it is first. A panel opened over the Copies panel,
-	// such as Settings, is in front of it and takes its keys in the mode
-	// handlers below.
 	if o.CopyDialogOpen() {
 		return handleCopyDialogInput(msg, o)
 	}
-	// Quick look on a path a click or a hint opened has no rail row under it,
-	// so the rail does not route its keys. It takes every key but the leader
-	// while it is up. See handleFreeQuickLookKey.
 	if o.QuickLookFree() && !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		return handleFreeQuickLookKey(msg, o)
 	}
@@ -659,29 +424,6 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleTransfersInput(msg, o)
 	}
 
-	// The sidebar rail owns the keyboard while focused, in both terminal and
-	// window mode (it is reachable from either via ctrl+b o), so pane and window
-	// bindings never fire underneath it. Checked after the modal overlays above,
-	// which outrank it, and before the mode split, which it supersedes.
-	//
-	// The leader is one exception, and a pending chord with it. The rail
-	// swallows what it does not bind, so holding the leader here would strand
-	// every prefix command behind an esc, and ctrl+b e (which toggles the rail's
-	// focus) could never toggle it back off. Both are left to fall through to the
-	// mode handlers below, which already route the whole chord; PrefixActive
-	// stays set for sub-prefixes too, so ctrl+b w 2 works from the rail as well.
-	//
-	// An open panel is the other: the help, the palette, the navigator, the
-	// Inbox, settings and every other overlay. The rail or a prefix chord opens
-	// it over the rail, and the rail swallows what it does not bind, so left in
-	// front it would keep the panel's keys and move its own cursor behind the
-	// panel. The panel takes the keys in the mode handlers below, and the rail
-	// has them again when it closes, since its focus is left as it was.
-	//
-	// In nest mode the rail pane gets every key, the leader too, all but the
-	// exit key. It is handled here, ahead of the terminal handler, whose copy
-	// mode check belongs to the centre pane and would take the rail pane's
-	// keys. See app/nest_mode.go.
 	if o.SidebarSessionFocused() && !o.AnyOverlayOpen() && o.Nested() {
 		if isNestExitKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 			o.LeaveNest()
@@ -690,8 +432,6 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		typeIntoRailPane(msg, o)
 		return o, nil
 	}
-	// The rail pane gives the keyboard back on a leader chord, which then
-	// runs as it would have: the focus keys are how a person leaves it.
 	if o.RailPaneFocused() && !o.AnyOverlayOpen() && !o.PrefixActive && isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
 		o.BlurSidebarSession()
 	}
@@ -700,10 +440,7 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.BlurSidebarSession()
 			return o, nil
 		}
-		// Keep leader chords and workspace navigation in the window manager.
-		// Every other key belongs to the pane actually visible in the rail.
 		key := withoutChordText(msg).String()
-		// Lock mode gives the workspace chords to the pane, so to this one.
 		workspaceChord := !o.Locked() && strings.HasPrefix(key, "alt+") && len(key) == len("alt+1") && key[len(key)-1] >= '1' && key[len(key)-1] <= '9'
 		if !o.PrefixActive && !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !workspaceChord {
 			typeIntoRailPane(msg, o)
@@ -714,25 +451,13 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleSidebarKey(msg, o)
 	}
 
-	// Terminal-mode keystrokes are recorded at the point they are actually
-	// forwarded to the PTY (see recordTerminalKey in HandleTerminalModeKey), not
-	// here: recording before prefix/overlay routing captured prefix chords,
-	// copy-mode keys, palette queries, and transition-suppressed fragments that
-	// never reach the shell, so tapes replayed garbage. WM-mode actions are
-	// recorded at dispatch time.
-
-	// Handle the project-tape review/trust dialog (modal, highest priority after
-	// quit): it must swallow keys so a keystroke meant for the dialog never leaks
-	// to the shell or a window-manager binding.
 	if o.ShowTapeReview {
 		if o.HandleTapeReviewInput(commandKey(msg)) {
 			return o, nil
 		}
 	}
 
-	// Handle tape manager overlay (high priority, intercepts keys when shown)
 	if o.ShowTapeManager {
-		// A name being typed takes the character typed.
 		key := commandKey(msg)
 		if o.TapeManager != nil && o.TapeManager.Mode == app.TapeManagerNaming {
 			key = msg.String()
@@ -740,46 +465,23 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.HandleTapeManagerInput(key) {
 			return o, nil
 		}
-		// Key not handled by tape manager, fall through
 	}
 
-	// Script pause/resume while a script is actively playing. Its own config
-	// section rather than the global one: script playback is its own keyboard
-	// context, so sharing ctrl+p with the palette is not a conflict, and once a
-	// script finishes ScriptMode is left (see maybeExitFinishedScript) and the
-	// palette has the key back.
 	if o.ScriptMode &&
 		sectionAction(msg, o, config.TableScript) == "script_pause" {
-		// Recorded here for the same reason the global binds record theirs: this
-		// route does not go through Dispatch, and an unrecorded route is one the
-		// reachability table cannot see. See NoteAction.
 		o.NoteAction("script_pause")
 		o.ScriptPaused = !o.ScriptPaused
 		return o, nil
 	}
 
-	// Any key supersedes a copy sweep still running. It is an acknowledgement
-	// of a copy, and once a key has been pressed the user is no longer
-	// looking at what was copied: the light would otherwise carry on painting
-	// a region whose text has moved underneath it.
 	o.CancelCopyFlash()
 
-	// A repeatable prefix command pressed again inside its window, in either
-	// mode. It runs here, before the modes, because the window belongs to the
-	// command rather than to the mode the client happens to be in.
-	//
-	// It is after every overlay above: a key while the palette or the help
-	// panel is open belongs to the panel, whatever was pressed before it.
-	// Lock mode holds a menu open instead, so no window is armed while it is on;
-	// one left over from window mode must not take a locked key either.
 	if !o.PrefixActive && !o.Locked() {
 		if m, cmd, ok := tryPrefixRepeat(msg, o); ok {
 			return m, cmd
 		}
 	}
 
-	// The key modes that are on read the key before the mode does, in
-	// either mode. See key_modes.go.
 	if m, cmd, ok := routeKeyMode(msg, o); ok {
 		return m, cmd
 	}
@@ -788,9 +490,6 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleTerminalModeKey(msg, o)
 	}
 
-	// Check for prefix key activation in window management mode. A leader
-	// the prefix_mode table binds, pressed after the leader, runs that
-	// binding through HandlePrefixCommand below.
 	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !leaderBoundInPrefix(msg, o) {
 		return handlePrefixKey(msg, o)
 	}
@@ -806,21 +505,14 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return HandleWindowManagementModeKey(msg, o)
 }
 
-// handleRenameMode handles keyboard input while the rename editor is open, for
-// every kind of target it can point at. The editor is deliberately the same one
-// in all three cases.
 func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		// CommitRename is the one rename. A window name is applied here; a
-		// session or workspace name is daemon-owned and comes back as a command,
-		// because the verb call must not run on this goroutine.
 		return o, o.CommitRename()
 	case "esc":
 		o.EndRename()
 		return o, nil
 	case "ctrl+c":
-		// Shell-like: ctrl+c drops the line, and on an empty line it leaves.
 		if o.RenameText() == "" {
 			o.EndRename()
 		} else {
@@ -828,9 +520,6 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-	// Every other key is the editor's: the caret, the word keys, ctrl+u, and
-	// the text the key press carries, so an accented or wide rune arrives
-	// whole instead of as stray bytes.
 	if cmd, ok := o.RenameClipboard(msg.String()); ok {
 		return o, cmd
 	}
@@ -838,34 +527,15 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// isLeaderKey reports whether a key press is the configured leader. The leader
-// is matched through the same normalizer as the binding tables, so a leader
-// spelled opt+f12 fires on the alt+f12 the terminal sends.
-//
-// The key produced is matched first. Dvorak's Ctrl+X sits where US has Ctrl+B,
-// and reading it by position took an editor's C-x for the leader. The US key
-// at the same position only counts for a non-Latin key (see usesBaseLayout),
-// so Ctrl+и on a Ukrainian layout is still Ctrl+B.
-//
-// A leader spelled with Option (opt+1, alt+a) also fires on the character
-// Option composes for it, by the rules the binding tables follow (see
-// composedChords and optionGlyphsApply). The input path has already taken the
-// base-layout key off msg, so base hands it back; zero when there is none.
 func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings, base rune) bool {
 	return isConfiguredKey(msg, s, base, func(key string) bool { return config.IsLeaderPress(key, s.LeaderKey) })
 }
 
-// isNestExitKey reports whether msg is keybindings.nest_exit_key, matched the
-// way the leader is, so an alt+x exit key still ends nest mode on a non-US
-// layout or with Option composing on macOS.
 func isNestExitKey(msg tea.KeyPressMsg, s *config.Settings, base rune) bool {
 	exit := s.GetNestExitKey()
 	return isConfiguredKey(msg, s, base, func(key string) bool { return config.IsKeyPress(key, exit) })
 }
 
-// isConfiguredKey is isLeaderKey's matching for any one key from the config:
-// the key produced, then the base-layout key, then the characters Option
-// composes. is reports whether a canonical key string is that key.
 func isConfiguredKey(msg tea.KeyPressMsg, s *config.Settings, base rune, is func(string) bool) bool {
 	if is(producedKey(msg).String()) {
 		return true
@@ -882,25 +552,13 @@ func isConfiguredKey(msg tea.KeyPressMsg, s *config.Settings, base rune, is func
 	return false
 }
 
-// leaderBoundInPrefix reports whether the leader, pressed with the prefix
-// already active, has a binding of its own in the prefix_mode table. That
-// binding wins over what the leader pressed two times does by default
-// (leader_twice), so leader_key = "ctrl+j" with focus_down on
-// "ctrl+j" focuses down on ctrl+j ctrl+j (issue #866). No default and no
-// preset binds the leader there, so the binding is always the user's, and
-// without one the leader pressed two times keeps its leader_twice meaning.
 func leaderBoundInPrefix(msg tea.KeyPressMsg, o *app.OS) bool {
 	return o.PrefixActive && o.KeybindRegistry != nil &&
 		tableAction(o, msg, o.KeybindRegistry, config.TablePrefixMode) != ""
 }
 
-// handlePrefixKey handles Ctrl+B prefix key activation
 func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// If prefix is already active, deactivate it (double leader key cancels),
-	// or go back to the last workspace when leader_twice says so.
 	if o.PrefixActive {
-		// The leader twice closes the leader and any menu it opened: a
-		// sub-menu left open would take the next key.
 		o.SetMenuState(app.MenuState{})
 		if o.KeybindRegistry != nil && o.KeybindRegistry.LeaderTwiceGoesBack() {
 			o.LastWorkspace()
@@ -911,8 +569,6 @@ func handlePrefixKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleLogViewerKey handles keyboard input when the log viewer overlay is active.
-// This is shared between terminal mode and window management mode.
 func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := commandKey(msg)
 
@@ -929,9 +585,6 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "ctrl+d":
 		o.LogViewerMove(o.LogViewerPage())
 		return o, nil
-	// The two copy controls the viewer's hints have always advertised. They
-	// were drawn and never handled, so both fell through to the return below
-	// and the viewer kept two promises it could not keep.
 	case "A":
 		return o, o.CopyLogs()
 	case "E":
@@ -939,19 +592,13 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	listKey(o, key, true, o.LogViewerPage(), o.LogViewerMove)
 
-	// Ignore other keys when log viewer is active
 	return o, nil
 }
 
-// viewerTakesKey reports whether an open message view or log viewer takes a
-// key. The leader and the chord after it are let through, so a prefix command
-// works over the viewer the way it does over the rail.
 func viewerTakesKey(msg tea.KeyPressMsg, o *app.OS) bool {
 	return !isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && !o.PrefixActive && o.SubMenu == app.SubMenuNone && o.Menu == ""
 }
 
-// handleMessageViewKey handles a key while the message view is open. Every key
-// stops here, the way it does in the log viewer.
 func handleMessageViewKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := commandKey(msg)
 	switch key {

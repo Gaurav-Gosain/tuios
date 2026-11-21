@@ -10,11 +10,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// repeatOS is a client with the prefix repeat window on.
 func repeatOS(t *testing.T) *app.OS {
 	t.Helper()
 	m := app.NewOS(app.OSOptions{UserConfig: config.DefaultConfig()})
-	// NewOS does not build one, and every lookup here goes through it.
 	m.KeybindRegistry = config.NewKeybindRegistry(config.DefaultConfig())
 	m.Settings.PrefixRepeatTime = config.PrefixRepeatTimeDefault
 	return m
@@ -32,8 +30,6 @@ func TestARepeatableCommandLeavesThePrefixArmed(t *testing.T) {
 	m := repeatOS(t)
 	m.PrefixActive = true
 
-	// The prefix binding for walking right. Taken from the registry rather
-	// than assumed, so a rebind does not quietly make this test vacuous.
 	key, ok := prefixKeyFor(t, m, "terminal_focus_right")
 	if !ok {
 		t.Fatal("ASSERTION: nothing walks right from the prefix, so this proves nothing")
@@ -72,7 +68,6 @@ func TestTheWindowClosesOnAKeyThatIsNotTheCommand(t *testing.T) {
 		t.Fatal("ASSERTION: the window is not open, so there is nothing to close")
 	}
 
-	// A plain letter, which is not a repeatable prefix command.
 	if _, _, ok := tryPrefixRepeat(tea.KeyPressMsg{Code: 'z', Text: "z"}, m); ok {
 		t.Error("a letter was taken as a repeat of the last prefix command")
 	}
@@ -106,7 +101,6 @@ func TestTurningItOffArmsNothing(t *testing.T) {
 	}
 }
 
-// prefixKeyFor is the key bound to a prefix action in this client's registry.
 func prefixKeyFor(t *testing.T, m *app.OS, action string) (tea.KeyPressMsg, bool) {
 	t.Helper()
 	if m.KeybindRegistry == nil {
@@ -126,7 +120,6 @@ func prefixKeyFor(t *testing.T, m *app.OS, action string) (tea.KeyPressMsg, bool
 	return tea.KeyPressMsg{}, false
 }
 
-// keyByName builds a named key press.
 func keyByName(name string) tea.KeyPressMsg {
 	switch name {
 	case "left":
@@ -222,8 +215,6 @@ func TestEveryPresetActionIsRegistered(t *testing.T) {
 			"window_prefix": kb.WindowPrefix, "workspace_prefix": kb.WorkspacePrefix,
 		} {
 			for action, keys := range m {
-				// Only what the preset changed: a few tuios terminal-mode
-				// keys are read by the input path, not the dispatcher.
 				if slices.Equal(keys, defaults[section][action]) {
 					continue
 				}

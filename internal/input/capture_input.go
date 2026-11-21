@@ -6,14 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// Capture mode and preview-panel input.
-//
-// Capture mode is a gesture mode in the scrollback browser's mould: one
-// boolean checked ahead of the mode split, so it owns the keyboard and the
-// mouse while it is up, and one teardown that runs whether the gesture ended
-// or was lost. It runs no timer of its own; every transition is an event that
-// already woke the loop.
-
 // HandleCaptureKey answers every key while capture mode is up. Nothing falls
 // through: a mode that owns the screen owns the keyboard.
 func HandleCaptureKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -85,8 +77,6 @@ func HandleScreenshotPreviewKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	return o, nil
 }
 
-// handleCaptureMouseClick starts a region drag and remembers which window is
-// under the press, so a click that never moves captures that window.
 func handleCaptureMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	mouse := msg.Mouse()
 	if mouse.Button == tea.MouseRight {
@@ -97,22 +87,16 @@ func handleCaptureMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd
 	return o, nil
 }
 
-// handleCaptureMouseMotion tracks the drag, or the hover when no button is
-// down. A hover lifts the window under the pointer so "click captures this" is
-// visible before the click.
 func handleCaptureMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	mouse := msg.Mouse()
 	o.UpdateCapturePointer(mouse.X, mouse.Y, mouse.Button != tea.MouseNone)
 	return o, nil
 }
 
-// handleCaptureMouseRelease finishes the gesture: a drag that covered more
-// than a couple of cells is a region, anything smaller is a click on a window.
 func handleCaptureMouseRelease(o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.FinishCaptureDrag()
 }
 
-// handleScreenshotPreviewWheel scrolls the preview body under the pointer.
 func handleScreenshotPreviewWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	mouse := msg.Mouse()
 	switch mouse.Button {

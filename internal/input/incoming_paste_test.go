@@ -12,17 +12,12 @@ import (
 	"tuios.dev/vt"
 )
 
-// pasteHarness builds a focused pane in terminal mode whose PTY writes are
-// captured instead of touching a real kernel PTY. The window runs in daemon
-// mode so SendInput routes through DaemonWriteFunc, which is the path a real
-// daemon session uses. sent accumulates everything delivered to the PTY.
 func pasteHarness(t *testing.T, bracketed bool) (*app.OS, *strings.Builder) {
 	t.Helper()
 
 	em := vt.NewEmulator(40, 20)
 	t.Cleanup(func() { _ = em.Close() })
 	if bracketed {
-		// ?2004h: the inner app turns on bracketed paste mode.
 		if _, err := em.Write([]byte("\x1b[?2004h")); err != nil {
 			t.Fatalf("enable bracketed paste: %v", err)
 		}

@@ -6,7 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// declaredMenu is the menu called name in the running config.
 func declaredMenu(o *app.OS, name string) (config.MenuConfig, bool) {
 	if o.KeybindRegistry == nil || o.KeybindRegistry.GetConfig() == nil {
 		return config.MenuConfig{}, false
@@ -14,10 +13,6 @@ func declaredMenu(o *app.OS, name string) (config.MenuConfig, bool) {
 	return o.KeybindRegistry.GetConfig().Keybindings.Menu(name)
 }
 
-// handleOpenMenu builds the handler of an open_menu:NAME action. Like every
-// sub-prefix gate it keeps the prefix active, so the next key goes to the
-// menu rather than the pane. A name no [keybindings.menus.NAME] table
-// declares opens nothing; validation warns about it.
 func handleOpenMenu(action string) ActionHandler {
 	name, _ := config.MenuNameOf(action)
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -60,7 +55,6 @@ func HandleMenuCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if menu.Sticky && m.Menu == "" && !m.PrefixActive {
 			m.HoldMenu(name)
 		} else {
-			// Lock mode holds a menu open after a repeatable action too.
 			k.ran(m, action)
 		}
 		return m, cmd
@@ -77,16 +71,6 @@ func HandleMenuCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleOverlayMenuKey is HandleMenuCommand for a menu opened over an
-// overlay (issue #1590). The menu is closed when this runs. A key that opens
-// another declared menu opens it over the same overlay. Any other action the
-// menu binds is handed back to the overlay: its key handler runs once with
-// the key, and its tableAction returns that action in place of the key's own
-// (keychords.go). The hand-back is cleared after that one call whatever it
-// did, also when the overlay closed or never read its table, so it can never
-// answer a later key. A sticky menu opens again after, while the overlay is
-// still up. esc, ctrl+c and a key the menu does not bind close it and do
-// nothing else.
 func handleOverlayMenuKey(msg tea.KeyPressMsg, o *app.OS, name string, menu config.MenuConfig, origin app.MenuOrigin, action string) (*app.OS, tea.Cmd) {
 	if next, ok := config.MenuNameOf(action); ok {
 		if _, declared := declaredMenu(o, next); declared {
@@ -107,8 +91,6 @@ func handleOverlayMenuKey(msg tea.KeyPressMsg, o *app.OS, name string, menu conf
 	return m, cmd
 }
 
-// overlayOpen reports whether the overlay that table belongs to is still up,
-// for a sticky menu over it. A table this does not know counts as up.
 func overlayOpen(o *app.OS, table config.Table) bool {
 	switch table {
 	case config.TableInbox, config.TableInboxPeek:

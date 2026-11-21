@@ -10,10 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// releaseToPane runs a key release through the real input coordinator against
-// a focused window whose emulator has been fed flagsSeq, and returns the bytes
-// that reached the pane. daemon picks the DaemonWriteFunc transport over a
-// local PTY; the encoding decision is shared and must not drift between them.
 func releaseToPane(t *testing.T, flagsSeq string, mode app.Mode, daemon bool, msg tea.KeyReleaseMsg) string {
 	t.Helper()
 	em := vt.NewEmulator(80, 24)
@@ -30,11 +26,7 @@ func releaseToPane(t *testing.T, flagsSeq string, mode app.Mode, daemon bool, ms
 	} else {
 		win.Pty = pty
 	}
-	// The host answered the flag query with event types in effect, so the
-	// release comes from it rather than with the press.
 	o := &app.OS{Settings: config.Global, Mode: mode, FocusedWindow: 0, Windows: []*terminal.Window{win}, KeyboardFlags: hostReportsEvents}
-	// The press comes first, as it does from a keyboard. Only what the release
-	// sends is returned.
 	HandleInput(tea.KeyPressMsg(msg.Key()), o)
 	got, pty.got = nil, nil
 	HandleInput(msg, o)
@@ -44,13 +36,8 @@ func releaseToPane(t *testing.T, flagsSeq string, mode app.Mode, daemon bool, ms
 	return string(pty.got)
 }
 
-// hostReportsEvents is a host that answered the flag query with disambiguate,
-// event types, alternate keys, all keys and associated text in effect: it
-// sends every release itself.
 const hostReportsEvents = 31
 
-// pushEventTypes is what a compositor in a pane pushes: disambiguation, event
-// types and all-keys-as-escape-codes (CSI >11u). wlterm pushes exactly this.
 const pushEventTypes = "\x1b[>11u"
 
 // TestForwardKeyReleaseToPane pins the bytes a key release produces for a pane
@@ -69,24 +56,14 @@ func TestForwardKeyReleaseToPane(t *testing.T) {
 		{"letter", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: 'a', Text: "a"}, "\x1b[97;1:3u"},
 		{"letter, daemon", pushEventTypes, app.TerminalMode, true, tea.KeyReleaseMsg{Code: 'a', Text: "a"}, "\x1b[97;1:3u"},
 		{"ctrl+letter", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: 'a', Mod: tea.ModCtrl}, "\x1b[97;5:3u"},
-		// tuios kept the leader's press, so the pane never saw b go down and
-		// must not see it come up.
 		{"leader", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: 'b', Mod: tea.ModCtrl}, ""},
-		// A modifier is a key of its own only to a pane that asked for every
-		// key. CSI >3u asked for releases but not that.
 		{"shift, events only", "\x1b[>3u", app.TerminalMode, false, tea.KeyReleaseMsg{Code: tea.KeyLeftShift}, ""},
 		{"shift, all keys", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: tea.KeyLeftShift}, "\x1b[57441;1:3u"},
 		{"enter", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: tea.KeyEnter}, "\x1b[13;1:3u"},
 		{"up arrow", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: tea.KeyUp}, "\x1b[1;1:3A"},
 		{"delete", pushEventTypes, app.TerminalMode, false, tea.KeyReleaseMsg{Code: tea.KeyDelete}, "\x1b[3;1:3~"},
-		// A pane that only asked for disambiguation gets no releases: the flag it
-		// pushed says nothing about them, and sending them anyway would double
-		// every keystroke it reads.
 		{"disambiguate only", "\x1b[>1u", app.TerminalMode, false, tea.KeyReleaseMsg{Code: 'a', Text: "a"}, ""},
 		{"no kitty keyboard", "", app.TerminalMode, false, tea.KeyReleaseMsg{Code: 'a', Text: "a"}, ""},
-		// Window management owns the keyboard, so the press never reached the
-		// pane; delivering the release alone would report a key coming up that
-		// the pane was never told went down.
 		{"window mode", pushEventTypes, app.WindowManagementMode, false, tea.KeyReleaseMsg{Code: 'a', Text: "a"}, ""},
 	}
 

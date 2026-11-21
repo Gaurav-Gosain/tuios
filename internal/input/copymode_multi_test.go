@@ -14,12 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Multi copy mode: one copy-mode key drives every pane of the multifocus set.
-// These tests build real emulator windows with different output in each, so
-// the motions, searches and selections walk real cells, and read back what
-// each pane's cursor and selection did and what the yank produced.
-
-// multiPaneWindow is a daemon window holding the given lines, in no mode.
 func multiPaneWindow(t *testing.T, id, title string, lines ...string) *terminal.Window {
 	t.Helper()
 	ptyDataChan := make(chan struct{}, 1)
@@ -44,11 +38,6 @@ func multiPaneWindow(t *testing.T, id, title string, lines ...string) *terminal.
 	return win
 }
 
-// multiCopyOS is a client with three panes in the multifocus set, holding the
-// output three servers would print, and a fourth pane outside the set. The
-// first pane is focused. The native clipboard is off (a remote client), so a
-// yank's command yields only the OSC 52 write and never touches the machine
-// running the tests.
 func multiCopyOS(t *testing.T) (*app.OS, []*terminal.Window) {
 	t.Helper()
 	a := multiPaneWindow(t, "mc-a", "root@node-01",
@@ -65,7 +54,6 @@ func multiCopyOS(t *testing.T) (*app.OS, []*terminal.Window) {
 	return o, []*terminal.Window{a, b, c, d}
 }
 
-// multiKey builds the key a terminal sends for a copy-mode key.
 func multiKey(s string) tea.KeyPressMsg {
 	switch s {
 	case "esc":
@@ -81,8 +69,6 @@ func multiKey(s string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: r, Text: s}
 }
 
-// mcPress sends keys through the real copy-mode entry point and returns the
-// last command.
 func mcPress(o *app.OS, keys ...string) tea.Cmd {
 	var cmd tea.Cmd
 	for _, k := range keys {
@@ -96,8 +82,6 @@ func mcPress(o *app.OS, keys ...string) tea.Cmd {
 	return cmd
 }
 
-// typeSearch types a search the way a person does: the slash, the query one
-// key at a time, and enter.
 func typeSearch(o *app.OS, query string) {
 	mcPress(o, "/")
 	for _, r := range query {
@@ -106,9 +90,6 @@ func typeSearch(o *app.OS, query string) {
 	mcPress(o, "enter")
 }
 
-// clipboardOf runs a yank's command and returns what it put on the
-// clipboard. The command is the OSC 52 write, a bubbletea message whose value
-// is the text.
 func clipboardOf(t *testing.T, cmd tea.Cmd) string {
 	t.Helper()
 	if cmd == nil {
@@ -153,7 +134,6 @@ func TestCopyModeKeyWithoutMultifocusStaysSinglePane(t *testing.T) {
 	if !w[0].CopyModeVisible() || w[1].InCopyMode() || w[2].InCopyMode() {
 		t.Fatal("copy mode without multifocus did not stay on the focused pane")
 	}
-	// Focused outside the set: also single.
 	o.MultifocusSet = map[string]bool{w[1].ID: true, w[2].ID: true}
 	w[0].ExitCopyMode()
 	o.EnterCopyModeFocused()
@@ -166,8 +146,6 @@ func TestMultiCopyMotionsMoveEveryPaneInLockstep(t *testing.T) {
 	o, w := multiCopyOS(t)
 	o.EnterCopyModeFocused()
 	mcPress(o, "g", "g", "j", "w", "l")
-	// Every pane walked its own cells: the same keys give each the position a
-	// single-pane copy mode would reach on that pane.
 	for _, p := range w[:3] {
 		ref := multiPaneWindow(t, p.ID+"-ref", "ref", paneLines(p)...)
 		ref.EnterCopyMode()
@@ -184,7 +162,6 @@ func TestMultiCopyMotionsMoveEveryPaneInLockstep(t *testing.T) {
 	}
 }
 
-// paneLines reads a pane's screen back as text lines, trailing blanks off.
 func paneLines(w *terminal.Window) []string {
 	var out []string
 	for y := range w.Terminal.Height() {
@@ -219,7 +196,6 @@ func TestMultiCopySearchJumpsEachPaneAndParksMisses(t *testing.T) {
 		t.Errorf("matched %d of %d panes, want 2 of 3", matched, total)
 	}
 
-	// V selects in the matched panes only, and motions leave the parked one.
 	mcPress(o, "V", "j")
 	if !w[0].HasSelection() || !w[1].HasSelection() {
 		t.Error("V did not select in every matched pane")
@@ -228,7 +204,6 @@ func TestMultiCopySearchJumpsEachPaneAndParksMisses(t *testing.T) {
 		t.Error("the parked pane took the selection or the motion")
 	}
 
-	// esc leaves visual mode only, in every pane, parked ones included.
 	mcPress(o, "esc")
 	for _, p := range w[:3] {
 		if !p.InCopyMode() || p.HasSelection() {
@@ -237,7 +212,6 @@ func TestMultiCopySearchJumpsEachPaneAndParksMisses(t *testing.T) {
 		}
 	}
 
-	// A search that finds something everywhere unparks every pane.
 	typeSearch(o, "done")
 	if matched, total := o.MultiCopyMatched(); matched != 3 || total != 3 {
 		t.Errorf("after a search every pane matches, %d of %d are matched", matched, total)
@@ -322,7 +296,6 @@ func TestMultiCopyYankSkipsPanesWithoutSelection(t *testing.T) {
 		t.Errorf("a yank with no selection anywhere wrote %q", clipboardOf(t, cmd))
 	}
 	mcPress(o, "g", "g", "V")
-	// Take pane b out of visual mode by hand: it has no selection now.
 	w[1].CopyMode.State = terminal.CopyModeNormal
 	got := clipboardOf(t, mcPress(o, "y"))
 	if want := "boot ok\nboot ok\n"; got != want {
@@ -344,12 +317,10 @@ func TestMultiCopySaveToFile(t *testing.T) {
 	if !strings.HasPrefix(s.Path.String(), "~/tuios-copy-") || !strings.HasSuffix(s.Path.String(), ".txt") {
 		t.Errorf("default path %q, want ~/tuios-copy-<time>.txt", s.Path.String())
 	}
-	// tab changes the format and the extension with it.
 	mcPress(o, "tab")
 	if !strings.HasSuffix(s.Path.String(), ".md") {
 		t.Errorf("after tab the path is %q, want the .md extension", s.Path.String())
 	}
-	// Type a path of our own.
 	for range len(s.Path.String()) {
 		mcPress(o, "backspace")
 	}
@@ -371,7 +342,6 @@ func TestMultiCopySaveToFile(t *testing.T) {
 		t.Errorf("saved file mode %v, want 0600", info.Mode().Perm())
 	}
 
-	// The same path again: the file is kept and the prompt says why.
 	mcPress(o, "V", "Y")
 	for range len(o.MultiCopy.Save.Path.String()) {
 		mcPress(o, "backspace")

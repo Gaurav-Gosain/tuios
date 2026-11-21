@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// railFromMode enters the rail the way a user does, through the leader chord, so
-// the entry travels the same routing the bubbletea Update loop uses. It leaves
-// the second of two panes focused.
 func railFromMode(t *testing.T, mode app.Mode) *app.OS {
 	t.Helper()
 	withSidebarGlobals(t, "left")
@@ -40,8 +37,6 @@ func TestEscFromRailReturnsToTheModeAndPaneItCameFrom(t *testing.T) {
 		t.Run(map[app.Mode]string{app.TerminalMode: "terminal", app.WindowManagementMode: "window"}[mode], func(t *testing.T) {
 			o := railFromMode(t, mode)
 
-			// Stand in for the rail moving the user off their pane while it holds
-			// the keyboard: a peek, a jump, a section walk.
 			o.FocusWindow(0)
 			o.Mode = app.WindowManagementMode
 

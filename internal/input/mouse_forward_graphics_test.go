@@ -22,8 +22,6 @@ import (
 // sequences have scrolled out of the daemon's bounded buffer by the time a
 // client reattaches.
 func TestMouseForwardedToMouseModeGraphicsPane(t *testing.T) {
-	// Screen cell (5,3); content offset is 1 (border), so pane cell is (4,2) ->
-	// pixel centre (4*10+5, 2*20+10) = (45, 50) -> SGR 1-based 46;51.
 	wheel := tea.MouseWheelMsg(tea.Mouse{X: 5, Y: 3, Button: tea.MouseWheelUp})
 	const wheelReport = "\x1b[<64;46;51M"
 
@@ -37,7 +35,6 @@ func TestMouseForwardedToMouseModeGraphicsPane(t *testing.T) {
 		{"wheel", false, 1, wheel, wheelReport},
 		{"wheel amplified by scroll lines", false, 3, wheel, strings.Repeat(wheelReport, 3)},
 		{"wheel after daemon mode restore", true, 1, wheel, wheelReport},
-		// Button 35 is the SGR "motion, no button" code.
 		{"motion", false, 1, tea.MouseMotionMsg(tea.Mouse{X: 5, Y: 3, Button: tea.MouseNone}), "\x1b[<35;46;51M"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

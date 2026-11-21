@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// railWithSidebarBinds is railOS with the sidebar section replaced, so a test
-// can ask what a user's own rail bindings do.
 func railWithSidebarBinds(t *testing.T, sidebar map[string][]string) *app.OS {
 	t.Helper()
 	withSidebarGlobals(t, "left")

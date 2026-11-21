@@ -1,9 +1,3 @@
-// Key mapping definitions and ANSI escape sequence builders. This file handles:
-// - Converting Bubble Tea KeyPressMsg to raw terminal bytes
-// - ANSI/VT escape sequence generation for terminal compatibility
-// - Function key support with modifier combinations
-// - macOS Option key character mappings
-
 package input
 
 import (
@@ -16,42 +10,23 @@ import (
 	"tuios.dev/vt"
 )
 
-// runtimeIsDarwin reports whether the process is running on macOS.
-// The macOS Option-key character tables (config.MacOSOptionChord) must only be consulted on darwin: their glyphs (¡ ™ £ ¢ ∞ § ¶ • ª, ⇥ ⇤) are
-// ordinary typed characters on many non-US layouts (e.g. £ is Shift+3 on UK),
-// so treating them as workspace/window shortcuts on other platforms hijacks
-// real input before it reaches the shell.
 func runtimeIsDarwin() bool {
 	return darwinHost
 }
 
-// darwinHost is the answer runtimeIsDarwin gives. A variable so a test can put
-// the macOS-only paths under test on the machine that runs CI.
-// It is runtime.GOOS and nothing else from the environment, so a GOOS or
-// OSTYPE exported for some other reason cannot turn on the macOS key handling.
-// The end-to-end suite alone asks for it with the knob platform=darwin.
 var darwinHost = runtime.GOOS == "darwin" || config.E2EPlatformDarwin()
 
-// Ctrl key combinations mapping
-// Maps the character code to its control code equivalent
 var ctrlKeyMap = map[rune]byte{
-	'@':  0x00, // Ctrl+@
-	'[':  0x1B, // Ctrl+[ (ESC)
-	'\\': 0x1C, // Ctrl+\
-	']':  0x1D, // Ctrl+]
-	'^':  0x1E, // Ctrl+^
-	'_':  0x1F, // Ctrl+_
-	'/':  0x1F, // Ctrl+/ (same as Ctrl+_)
-	'?':  0x7F, // Ctrl+? (DEL)
+	'@':  0x00,
+	'[':  0x1B,
+	'\\': 0x1C,
+	']':  0x1D,
+	'^':  0x1E,
+	'_':  0x1F,
+	'/':  0x1F,
+	'?':  0x7F,
 }
 
-// Special key codes (non-modifiers)
-// Note: the cursor keys (Up, Down, Left, Right, Home, End) are handled
-// separately in getRawKeyBytesWithMode to support DECCKM (application cursor
-// keys) mode switching between CSI and SS3 sequences. Home and End matter as
-// much as the arrows do: zsh's terminfo says khome=\EOH and kend=\EOF while
-// zle holds DECCKM on, so the CSI form reaches no binding and the caret does
-// not move.
 var specialKeyMap = map[rune][]byte{
 	tea.KeyEnter:     {'\r'},
 	tea.KeyTab:       {'\t'},
@@ -64,7 +39,6 @@ var specialKeyMap = map[rune][]byte{
 	tea.KeyPgDown:    {0x1b, '[', '6', '~'},
 }
 
-// Function keys F1-F12
 var functionKeyMap = map[rune][]byte{
 	tea.KeyF1:  {0x1b, 'O', 'P'},
 	tea.KeyF2:  {0x1b, 'O', 'Q'},
@@ -80,47 +54,35 @@ var functionKeyMap = map[rune][]byte{
 	tea.KeyF12: {0x1b, '[', '2', '4', '~'},
 }
 
-// getRawKeyBytesWithMode converts a Bubble Tea KeyPressMsg to raw bytes for PTY forwarding.
-// The applicationCursorKeys parameter indicates whether DECCKM mode is enabled,
-// which determines whether arrow keys send SS3 (ESC O) or CSI (ESC [) sequences.
 func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []byte {
 	key := legacyKey(msg.Key())
 
-	// Mask off any non-modifier bits (Bubble Tea v2 may set additional flags like 128)
-	// Only consider actual modifier keys: Shift=1, Alt=2, Ctrl=4
 	modMask := tea.ModShift | tea.ModAlt | tea.ModCtrl
 	actualMod := key.Mod & modMask
 
 	if actualMod != 0 {
-		// Handle Shift+Tab (backtab): sends CSI Z
 		if actualMod&tea.ModShift != 0 && key.Code == tea.KeyTab {
 			return []byte{0x1b, '[', 'Z'}
 		}
 
-		// A Ctrl chord on a non-Latin layout (Ctrl+с on a Ukrainian one) has
-		// no control code of its own. Terminals use the base-layout key for
-		// it, so Ctrl+с is still Ctrl+C to the shell.
 		if actualMod&tea.ModCtrl != 0 && key.Code >= 0x80 && key.BaseCode > 0x20 && key.BaseCode < 0x7f {
 			key.Code = key.BaseCode
 		}
 
-		// Handle Ctrl+letter combinations (standard control codes)
 		if actualMod&tea.ModCtrl != 0 {
-			// Special Ctrl key combinations
 			switch key.Code {
 			case tea.KeySpace:
-				return []byte{0x00} // Ctrl+Space = NUL
+				return []byte{0x00}
 			case tea.KeyBackspace:
-				return []byte{0x08} // Ctrl+H
+				return []byte{0x08}
 			case tea.KeyTab:
-				return []byte{0x09} // Ctrl+I
+				return []byte{0x09}
 			case tea.KeyEnter:
-				return []byte{0x0A} // Ctrl+J
+				return []byte{0x0A}
 			case tea.KeyEscape:
-				return []byte{0x1B} // Ctrl+[
+				return []byte{0x1B}
 			}
 
-			// For Ctrl+letter, convert to control codes (1-26)
 			if key.Code >= 'a' && key.Code <= 'z' {
 				return []byte{byte(key.Code - 'a' + 1)}
 			}
@@ -147,18 +109,11 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 			}
 		}
 
-		// Handle other modifier combinations (function keys, etc.)
-		// Pass the masked modifier to handleModifierKeysWithMod
 		if modSeq := handleModifierKeysWithMod(key, actualMod); len(modSeq) > 0 {
 			return modSeq
 		}
 	}
 
-	// Handle cursor keys with DECCKM (application cursor keys) mode support
-	// When applicationCursorKeys is true, send SS3 sequences (ESC O x) instead of CSI sequences (ESC [ x).
-	// Home and End follow the arrows: xterm sends ESC O H / ESC O F under
-	// DECCKM, and terminfo (xterm, xterm-kitty, screen, tmux) records exactly
-	// that as khome/kend, so a shell that enabled the mode binds the SS3 form.
 	switch key.Code {
 	case tea.KeyUp:
 		if applicationCursorKeys {
@@ -197,7 +152,6 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 		return []byte{0x1b, '[', 'E'}
 	}
 
-	// Handle special keys (no modifiers) using lookup table
 	if seq, ok := specialKeyMap[key.Code]; ok {
 		return seq
 	}
@@ -206,7 +160,6 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 		return seq
 	}
 
-	// For printable characters, use Key.Text if available (handles Unicode, shifted keys)
 	if key.Text != "" {
 		return []byte(key.Text)
 	}
@@ -218,8 +171,6 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 	return []byte{}
 }
 
-// handleModifierKeysWithMod handles keys with complex modifier combinations
-// The mod parameter should already be masked to only include actual modifier bits
 func handleModifierKeysWithMod(key tea.Key, mod tea.KeyMod) []byte {
 	if fnSeq := getFunctionKeySequence(key.Code, getModParam(mod)); fnSeq != nil {
 		return fnSeq
@@ -228,16 +179,13 @@ func handleModifierKeysWithMod(key tea.Key, mod tea.KeyMod) []byte {
 	if cursorSeq := getCursorSequence(key.Code); cursorSeq != nil {
 		modParam := getModParam(mod)
 		if modParam > 1 {
-			// Insert modifier parameter: ESC[1;{mod}{letter}
 			result := make([]byte, 0, 8)
 			result = append(result, 0x1b, '[', '1', ';', byte('0'+modParam))
-			result = append(result, cursorSeq[len(cursorSeq)-1]) // Last character (A,B,C,D,H,F,E)
+			result = append(result, cursorSeq[len(cursorSeq)-1])
 			return result
 		}
 	}
 
-	// Insert, Delete, PgUp and PgDn carry the modifier as a second parameter
-	// (Ctrl+Delete is ESC[3;5~).
 	if num, ok := tildeKeyNumbers[key.Code]; ok {
 		if modParam := getModParam(mod); modParam > 1 {
 			return buildCSISequence(num, modParam)
@@ -254,20 +202,11 @@ var tildeKeyNumbers = map[rune]int{
 	tea.KeyPgDown: 6,
 }
 
-// legacyKey folds the keys that have no legacy encoding of their own onto the
-// key a legacy terminal sends for them. The host reports the keypad, and F13
-// and up, as distinct keys (the kitty protocol does, and so does SS3 under
-// DECKPAM), but a pane without the kitty protocol can only be told what an
-// xterm would have said: a keypad digit is the digit, keypad Enter is CR,
-// keypad navigation with NumLock off is the navigation key. Left unfolded,
-// these had no bytes at all and the keypress vanished.
 func legacyKey(key tea.Key) tea.Key {
 	if code, ok := keypadLegacyCodes[key.Code]; ok {
 		key.Code = code
 		return key
 	}
-	// xterm's terminfo spells F13-F24 as Shift+F1-F12, F25-F36 as Ctrl,
-	// F37-F48 as Ctrl+Shift, F49-F60 as Alt and F61-F63 as Alt+Shift.
 	if key.Code >= tea.KeyF13 && key.Code <= tea.KeyF63 {
 		n := key.Code - tea.KeyF1
 		key.Code = tea.KeyF1 + n%12
@@ -283,10 +222,6 @@ func legacyKey(key tea.Key) tea.Key {
 	return key
 }
 
-// keypadLegacyCodes maps each keypad key to the key it stands for. Keypad
-// Enter becomes CR rather than DECKPAM's ESC O M: kitty and Ghostty send CR,
-// xterm-kitty's terminfo defines no kent at all, and zsh binds no ESC O M out
-// of the box, so CR is the spelling every shell in a pane already reads.
 var keypadLegacyCodes = map[rune]rune{
 	tea.KeyKp0: '0', tea.KeyKp1: '1', tea.KeyKp2: '2', tea.KeyKp3: '3', tea.KeyKp4: '4',
 	tea.KeyKp5: '5', tea.KeyKp6: '6', tea.KeyKp7: '7', tea.KeyKp8: '8', tea.KeyKp9: '9',
@@ -306,10 +241,7 @@ var keypadLegacyCodes = map[rune]rune{
 	tea.KeyKpBegin:  tea.KeyBegin,
 }
 
-// getModParam calculates modifier parameter for CSI sequences
 func getModParam(mod tea.KeyMod) int {
-	// Mask off any non-modifier bits (Bubble Tea v2 may set additional flags like 128)
-	// Only consider actual modifier keys: Shift=1, Alt=2, Ctrl=4
 	modMask := tea.ModShift | tea.ModAlt | tea.ModCtrl
 	mod &= modMask
 
@@ -326,7 +258,6 @@ func getModParam(mod tea.KeyMod) int {
 	return modParam
 }
 
-// getCursorSequence returns ANSI escape sequence for cursor movement keys
 func getCursorSequence(code rune) []byte {
 	switch code {
 	case tea.KeyUp:
@@ -347,7 +278,6 @@ func getCursorSequence(code rune) []byte {
 	return nil
 }
 
-// getFunctionKeySequence returns ANSI sequence for function keys with optional modifiers
 func getFunctionKeySequence(code rune, modParam int) []byte {
 	var baseSeq []byte
 
@@ -380,18 +310,15 @@ func getFunctionKeySequence(code rune, modParam int) []byte {
 		return nil
 	}
 
-	// F1-F4 with modifiers need different handling
 	if modParam > 1 && baseSeq != nil {
-		// Convert to CSI format: ESC[1;{mod}{P,Q,R,S}
 		result := []byte{0x1b, '[', '1', ';', byte('0' + modParam)}
-		result = append(result, baseSeq[len(baseSeq)-1]) // Last char (P,Q,R,S)
+		result = append(result, baseSeq[len(baseSeq)-1])
 		return result
 	}
 
 	return baseSeq
 }
 
-// buildCSISequence builds a CSI sequence like ESC[{num};{mod}~ or ESC[{num}~
 func buildCSISequence(num, modParam int) []byte {
 	seq := []byte{0x1b, '['}
 
@@ -409,8 +336,6 @@ func buildCSISequence(num, modParam int) []byte {
 	return seq
 }
 
-// vtKeyFromBubbletea converts a bubbletea KeyPressMsg to a VT emulator
-// KeyPressEvent for use with the kitty keyboard protocol's SendKey path.
 func vtKeyFromBubbletea(msg tea.KeyPressMsg) vt.KeyPressEvent {
 	key := msg.Key()
 	return vt.KeyPressEvent{
@@ -423,11 +348,6 @@ func vtKeyFromBubbletea(msg tea.KeyPressMsg) vt.KeyPressEvent {
 	}
 }
 
-// paneMsg is the key press as a pane is sent it: msg with the base-layout key
-// the host sent put back. readKey takes it off for tuios's own reading, but
-// both encoders need it: for alternate keys, for the control code of a Ctrl
-// chord on a letter outside ASCII, and for shiftedCode to tell a real shifted
-// key from the decoder's copy of the base key.
 func paneMsg(msg tea.KeyPressMsg, o *app.OS) tea.KeyPressMsg {
 	if msg.BaseCode == 0 {
 		msg.BaseCode = o.HostBaseCode(msg)
@@ -435,13 +355,6 @@ func paneMsg(msg tea.KeyPressMsg, o *app.OS) tea.KeyPressMsg {
 	return msg
 }
 
-// shiftedCode is the key's shifted code as the host reported it. The decoder
-// that parses CSI code:shifted:base u also writes the base key into the shifted
-// field, so a key that carries a base-layout key has the base key there. The
-// real shifted key is then rebuilt when Shift was held: the capital of a
-// letter, whatever else was held (Ctrl+Shift+ш carries no text), or else the
-// one character the key typed. A shifted symbol under Ctrl or Alt has no text
-// to rebuild it from, so it goes without.
 func shiftedCode(key tea.Key) rune {
 	if key.BaseCode == 0 || key.ShiftedCode != key.BaseCode {
 		return key.ShiftedCode

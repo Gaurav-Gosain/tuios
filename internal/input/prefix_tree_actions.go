@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
-// registerPrefixTreeHandlers registers the actions tuios had no equivalent of
-// for a tmux-shaped keymap. None has a default key; each is an ordinary action
-// a user can bind in any section.
 func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 	d.Register("mark_pane", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.MarkPane()
@@ -27,7 +24,6 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 		})
 	}
 
-	// Resize: tmux's resize-pane -L/-R/-U/-D 5 and 20.
 	for _, step := range []int{5, 20} {
 		for name, dx := range map[string][2]int{
 			"left": {-step, 0}, "right": {step, 0}, "up": {0, -step}, "down": {0, step},
@@ -36,7 +32,6 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 		}
 	}
 
-	// Workspaces as tmux windows.
 	d.Register("new_workspace", handleNewWorkspace)
 	d.Register("last_workspace", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.LastWorkspace()
@@ -50,16 +45,10 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 		o.LastSession()
 		return o, nil
 	})
-	// The leader itself, to the pane: what pressing it twice does in terminal
-	// mode, as a key of its own, for screen's C-a a and a nested tmux.
 	d.Register("send_prefix", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		forwardKeyToFocusedWindow(o.LeaderKeyPress(), o)
 		return o, nil
 	})
-	// Nest mode: every key to the pane, the leader too, until
-	// keybindings.nest_exit_key. tmux-matryoshka's prefix Enter, for a tmux
-	// or a tuios in the pane with the same leader. Unlike the actions above,
-	// it has a default key: the leader, then enter. See app/nest_mode.go.
 	d.Register("nest", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.EnterNest() {
 			o.ShowNotification("Nest mode is on. Press "+config.KeyLabel(o.Settings.GetNestExitKey())+" to leave it.", "info", o.Settings.NotificationDuration)
@@ -83,7 +72,6 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 		})
 	}
 
-	// Tools.
 	d.Register("reload_config", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.ReloadConfigAsked()
 	})
@@ -97,8 +85,6 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 	})
 }
 
-// makeResizeStepHandler resizes the focused tiled pane by dx columns and dy
-// rows, growing for a positive step and shrinking for a negative one.
 func makeResizeStepHandler(dx, dy int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if !o.AutoTiling {
@@ -114,10 +100,6 @@ func makeResizeStepHandler(dx, dy int) ActionHandler {
 	}
 }
 
-// handleNewWorkspace goes to the first workspace with no pane, the one the
-// dock's + button goes to, and opens one there: tmux's new-window. With
-// workspaces.new_window_when_empty on, the switch has asked for that pane
-// already.
 func handleNewWorkspace(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	ws := o.NewWorkspaceTarget()
 	if ws == 0 {
@@ -125,9 +107,6 @@ func handleNewWorkspace(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	o.SwitchToWorkspace(ws)
-	// The switch can land short of ws: from an empty workspace past the last
-	// one in use, that empty workspace is the new one and the switch stays on
-	// it. The pane opens wherever it landed, as long as that is empty.
 	if o.GetWorkspaceWindowCount(o.CurrentWorkspace) > 0 || (o.UserConfig != nil && o.UserConfig.Workspaces.NewWindowWhenEmpty) {
 		return o, nil
 	}

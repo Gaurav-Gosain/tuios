@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// typeInto plays a string into the open rename editor one keypress at a time,
-// the way a keyboard delivers it: a space arrives under its key name with a
-// space in Text, everything else as the rune it produced.
 func typeInto(o *app.OS, s string) *app.OS {
 	for _, r := range s {
 		msg := tea.KeyPressMsg{Code: r, Text: string(r)}
@@ -63,13 +60,11 @@ func TestRenameRefusesUnprintable(t *testing.T) {
 		}
 	}
 
-	// A control character mixed into otherwise good text is stripped, not taken.
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'x', Text: "a\x00b"}, o)
 	if o.RenameText() != "ab" {
 		t.Fatalf("buffer = %q, want the control character dropped", o.RenameText())
 	}
 
-	// With Nerd Fonts on, the font draws the icon, so the name takes it.
 	overlay.SetNerdFonts(true)
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'x', Text: "\ue0a0"}, o)
 	if o.RenameText() != "ab\ue0a0" {
@@ -95,7 +90,6 @@ func TestSessionSearchCanSpellASpacedName(t *testing.T) {
 		t.Fatalf("search query = %q, want %q", o.GotoPickerQuery(), "payments api")
 	}
 
-	// And a multi-byte one, backspaced back off a rune at a time.
 	o.SetGotoPickerQuery("")
 	for _, r := range "café" {
 		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: r, Text: string(r)}, o)
@@ -128,7 +122,6 @@ func TestRenameBackspaceCountsRunes(t *testing.T) {
 		t.Fatalf("backspace broke the encoding: %q", o.RenameText())
 	}
 
-	// Backspacing an empty buffer is a no-op, not a slice out of range.
 	for range 5 {
 		o, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyBackspace}, o)
 	}

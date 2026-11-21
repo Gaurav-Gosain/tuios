@@ -10,7 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// withClickToType sets the policy for a test and restores it after.
 func withClickToType(t *testing.T, mode string) {
 	t.Helper()
 	prev := config.Global.ClickToType
@@ -18,18 +17,11 @@ func withClickToType(t *testing.T, mode string) {
 	t.Cleanup(func() { config.Global.ClickToType = prev })
 }
 
-// clickPane presses and releases the left button on a cell through HandleInput,
-// the entry point cmd/tuios registers with SetInputHandler. The policy lives on
-// the press and resolves on the release, and both have to travel the real
-// routing: a handler called directly would prove nothing about whether a click
-// reaches it.
 func clickPane(o *app.OS, x, y int) {
 	HandleInput(tea.MouseClickMsg{Button: tea.MouseLeft, X: x, Y: y}, o)
 	HandleInput(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: x, Y: y}, o)
 }
 
-// agePane pushes a pane's last click far enough into the past that the next one
-// starts a new gesture, without sleeping for it.
 func agePane(win *terminal.Window) {
 	win.LastClickTime = time.Now().Add(-2 * testClickInterval)
 }
@@ -72,8 +64,6 @@ func TestClickToTypeOffOnlyFocuses(t *testing.T) {
 		t.Errorf("mode = %v, want window management: the click was not a request to type", o.Mode)
 	}
 
-	// Clicking again changes nothing, so the policy cannot be walked past by
-	// repeating the gesture.
 	clickPane(o, cx, cy)
 	if o.Mode != app.WindowManagementMode {
 		t.Errorf("mode = %v after a second click, want window management", o.Mode)
@@ -134,8 +124,6 @@ func TestClickToTypeDoubleSelectsNothing(t *testing.T) {
 		t.Error("the double click that changed mode also started a selection")
 	}
 
-	// The first click in the mode it opened, at the same cell and inside the
-	// multi-click window: it must read as one click, not three.
 	HandleInput(tea.MouseClickMsg{Button: tea.MouseLeft, X: cx, Y: cy}, o)
 	if right.ClickCount != 1 {
 		t.Errorf("click count = %d for the first click in terminal mode, want 1", right.ClickCount)
@@ -183,18 +171,13 @@ func TestClickToTypeLeavesTheDockAlone(t *testing.T) {
 	}
 }
 
-// mouseModePane is a focused pane running an application that asked for the
-// mouse, with its writes recorded, so a test can see exactly what the guest was
-// sent.
 func mouseModePane(t *testing.T, mode app.Mode) (*app.OS, *terminal.Window, *capturePty) {
 	t.Helper()
 	o, pty := osWithFocusedPane(t, config.DefaultConfig(), mode)
 	win := o.Windows[0]
-	// Mouse bytes for a local pane go into the emulator rather than the pty, so
-	// the pane is put in daemon mode with its write routed to the recording pty.
 	win.DaemonMode = true
 	win.DaemonWriteFunc = func(b []byte) error { _, err := pty.Write(b); return err }
-	win.Terminal.Write([]byte("\x1b[?1002h\x1b[?1006h")) // button tracking, SGR encoding
+	win.Terminal.Write([]byte("\x1b[?1002h\x1b[?1006h"))
 	if !win.Terminal.HasMouseMode() {
 		t.Fatal("the fixture pane did not take mouse tracking")
 	}

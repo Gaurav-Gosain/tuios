@@ -21,9 +21,8 @@ func TestRailKillKeyOnATerminalRowShowsThatPanesMenu(t *testing.T) {
 	o.SessionName = "main"
 	o.IsDaemonSession = true
 	o.EnterSidebarFocus()
-	_ = o.View() // the rail publishes its rows as it draws
+	_ = o.View()
 
-	// Park the cursor on the "right" pane's terminal row.
 	if !railCursorToWindow(t, o, "b") {
 		t.Fatal("the rail drew no terminal row for the right pane")
 	}
@@ -62,7 +61,6 @@ func TestRailKillKeyOnASessionRowStillShowsTheSessionMenu(t *testing.T) {
 	}
 }
 
-// railCursorToWindow parks the rail cursor on a pane's terminal row.
 func railCursorToWindow(t *testing.T, o *app.OS, windowID string) bool {
 	t.Helper()
 	for i, r := range o.SidebarNav {

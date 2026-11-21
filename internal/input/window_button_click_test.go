@@ -8,18 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The window controls are pressable only on the cells the renderer recorded as
-// it drew them, and appearance.window_button_position moves where that is. What
-// these pin is that the move carries all the way through: on either end, every
-// cell a control was drawn on runs that control's action and no other's, and
-// the corner glyphs the pill sits next to still run nothing.
-//
-// Driven through handleMouseClick rather than the hit test alone, because the
-// bug this class of test exists for was the handler and the renderer disagreeing
-// about a column.
-
-// floatingPane composes a frame holding one floating pane, so all three
-// controls are drawn: a tiled pane has no zoom.
 func floatingPane(t *testing.T) (*OS2, *terminal.Window) {
 	t.Helper()
 	const cols, rows = 120, 40
@@ -65,9 +53,6 @@ func floatingPane(t *testing.T) (*OS2, *terminal.Window) {
 	return o, win
 }
 
-// controlCells asks the frame which control it recorded on each cell of a
-// window's title row. It reads the hit test rather than recomputing the layout,
-// so it cannot agree with a renderer that got the columns wrong.
 func controlCells(o *OS2, win *terminal.Window) map[int]app.WindowButtonAction {
 	cells := map[int]app.WindowButtonAction{}
 	for x := win.X; x < win.X+win.Width; x++ {
@@ -78,14 +63,10 @@ func controlCells(o *OS2, win *terminal.Window) map[int]app.WindowButtonAction {
 	return cells
 }
 
-// pressOutcome is what one press did to the pane, in the three ways the three
-// controls differ.
 type pressOutcome struct {
 	closed, minimized, moved bool
 }
 
-// pressControl composes a fresh frame, presses one cell of its title row, and
-// reports what that did. Fresh each time because closing a pane is not undoable.
 func pressControl(t *testing.T, x int) pressOutcome {
 	t.Helper()
 	o, win := floatingPane(t)
@@ -101,9 +82,6 @@ func pressControl(t *testing.T, x int) pressOutcome {
 }
 
 func TestWindowControlsRunTheirOwnActionAtEitherEnd(t *testing.T) {
-	// Snapping animates, and an animation would leave the pane mid-flight with
-	// its geometry unchanged. With animations off the snap lands on the press,
-	// which is what makes zoom tellable from the other two.
 	prevAnim := config.Global.Motion
 	config.Global.Motion = config.MotionNone
 	t.Cleanup(func() { config.Global.Motion = prevAnim })

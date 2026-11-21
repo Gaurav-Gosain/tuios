@@ -6,9 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// dispatchAction runs the handler for action, if there is one. The third result
-// reports whether anything ran, so callers can fall back (forward the key to the
-// PTY, or ignore it) when the key is not bound.
 func dispatchAction(action string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 	if action == "" {
 		return o, nil, false
@@ -21,10 +18,6 @@ func dispatchAction(action string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	return m, cmd, true
 }
 
-// runPrefix closes the open sub-prefix and dispatches the key through its
-// section. An unbound key is simply dropped, which is what dismissing a prefix
-// chord should do. In lock mode a repeatable action keeps the sub-prefix open
-// until esc (see lock_mode.go).
 func runPrefix(msg tea.KeyPressMsg, o *app.OS, table config.Table) (*app.OS, tea.Cmd) {
 	k := startMenuKey(o)
 	if o.KeybindRegistry == nil || k.leaves(msg) {
@@ -67,7 +60,6 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 				return o, cmd
 			}
-			// Not built yet: the key is treated as unbound below.
 			o.ClearPrefixRepeat()
 			action = ""
 		}
@@ -79,19 +71,11 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// ctrl+c cancels a prefix everywhere: the way out when a chord was started by
-	// accident. Checked after the prefix lookup above, so a ctrl+c the user bound
-	// to a prefix action still runs; what cannot be taken away is the escape.
 	if msg.String() == "ctrl+c" {
 		return o, nil
 	}
 
 	if o.Mode == app.TerminalMode {
-		// The leader asked the host for every key as an escape code. A
-		// non-ASCII key that still came as bare text beat that switch, so its
-		// base-layout key is missing and the key it was meant as is unknown.
-		// It was typed after the leader, so it is dropped, not typed into the
-		// pane, and the prefix stays pending so the key can be typed again.
 		if o.AllKeysPending() && isLayoutTextWithoutBase(msg) {
 			o.KeepLeaderPending()
 			return o, nil
@@ -101,10 +85,6 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// runPrefixWork runs one of the review and triage prefix actions, which say
-// whether they did anything. Only one that did is recorded as run, the way
-// the Inbox's own work keys are, so until its work lands the key is exactly
-// the unbound key it was before: forwarded to the pane in terminal mode.
 func runPrefixWork(action string, o *app.OS) (tea.Cmd, bool) {
 	cmd, handled := o.PrefixWorkAction(action)
 	if handled {
@@ -148,18 +128,11 @@ func HandleTuiosPrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 	return runPrefix(msg, o, config.TableTuiosPrefix)
 }
 
-// handleTerminalModeBinds dispatches the direct (prefix-less) binds from the
-// [keybindings.terminal_mode] section, plus the handful of main-section actions
-// that must keep working while typing into a shell. It reports whether the key
-// was consumed.
 func handleTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) bool {
 	_, ok := runTerminalModeBinds(msg, o)
 	return ok
 }
 
-// runTerminalModeBinds is handleTerminalModeBinds with the action's command,
-// which the caller has to return: move_workspace_left/right do their work in
-// it, and dropping it left the move in flight forever (#1217).
 func runTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 	if o.KeybindRegistry == nil {
 		return nil, false
@@ -172,11 +145,6 @@ func runTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 		return cmd, true
 	}
 
-	// Workspace switching is bound in the main section and has to work from
-	// terminal mode too, but that section also binds plain letters that belong
-	// to the shell. Only reserved chords (a real Alt/Ctrl modifier, or a macOS
-	// Option glyph, which arrives with no modifier at all) are eligible, so
-	// rebinding a workspace onto a bare letter cannot start swallowing input.
 	if !isReservedTerminalChord(msg) {
 		return nil, false
 	}
@@ -188,12 +156,6 @@ func runTerminalModeBinds(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 	return cmd, ok
 }
 
-// terminalFocusDirection is the direction a pane focus action moves, and
-// whether action is one. The four actions do not share a name pattern: up and
-// down are focus_up and focus_down since one name per action, and their older
-// names terminal_focus_up and terminal_focus_down are aliases. Cutting a prefix
-// off the name gave "focus_up" as the direction, which matched no reply from
-// the Neovim navigator, so up and down did nothing in a Neovim pane (#2158).
 func terminalFocusDirection(action string) (string, bool) {
 	switch config.CanonicalAction(action) {
 	case "terminal_focus_left":
@@ -213,29 +175,20 @@ func isTerminalFocusAction(action string) bool {
 	return ok
 }
 
-// isReservedTerminalChord reports whether a key press is a chord the shell will
-// never want as literal input.
 func isReservedTerminalChord(msg tea.KeyPressMsg) bool {
 	if msg.Mod&(tea.ModAlt|tea.ModCtrl) != 0 {
 		return true
 	}
-	// macOS delivers Option chords as their composed glyph with no modifier
-	// set. Those glyphs are ordinary typed characters on other layouts, so this
-	// only applies on darwin (macOptionChord enforces that).
 	_, ok := macOptionChord(msg)
 	return ok
 }
 
-// forwardKeyToFocusedWindow sends a key to the focused window's PTY, using CSI u
-// encoding when the client has the kitty keyboard protocol enabled.
 func forwardKeyToFocusedWindow(msg tea.KeyPressMsg, o *app.OS) {
 	focused := o.GetFocusedWindow()
 	if focused == nil {
 		return
 	}
 
-	// The pane gets the key as the host sent it, on either encoding, with its
-	// release when the host will send none (see paneKeyBytes).
 	rawInput, released := paneKeyBytes(paneMsg(msg, o), focused, o, true)
 	if len(rawInput) > 0 {
 		if !released {
@@ -245,9 +198,6 @@ func forwardKeyToFocusedWindow(msg tea.KeyPressMsg, o *app.OS) {
 	}
 }
 
-// subMenuKeys is the key handler of each leader sub-menu. Window mode and
-// terminal mode both route through routeMenuKey, so a sub-menu takes the same
-// keys in either.
 var subMenuKeys = map[app.SubMenu]func(tea.KeyPressMsg, *app.OS) (*app.OS, tea.Cmd){
 	app.SubMenuWorkspace: HandleWorkspacePrefixCommand,
 	app.SubMenuMinimize:  HandleMinimizePrefixCommand,
@@ -258,9 +208,6 @@ var subMenuKeys = map[app.SubMenu]func(tea.KeyPressMsg, *app.OS) (*app.OS, tea.C
 	app.SubMenuLayout:    handleTerminalLayoutPrefix,
 }
 
-// routeMenuKey gives a key to the open leader sub-menu, or to the open
-// declared menu. ok is false when neither is open. At most one of them is
-// open at a time (see app.MenuState).
 func routeMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 	if handle, ok := subMenuKeys[o.SubMenu]; ok {
 		out, cmd := handle(msg, o)

@@ -25,7 +25,6 @@ func TestLegacyKeyEncoding(t *testing.T) {
 		{"mod shift+ctrl", modParam(tea.ModShift | tea.ModCtrl), []byte("6")},
 		{"mod alt+ctrl", modParam(tea.ModAlt | tea.ModCtrl), []byte("7")},
 		{"mod shift+alt+ctrl", modParam(tea.ModShift | tea.ModAlt | tea.ModCtrl), []byte("8")},
-		// High bits are masked off.
 		{"mod with extra bits", modParam(tea.ModShift | tea.KeyMod(128)), []byte("2")},
 
 		{"up", getCursorSequence(tea.KeyUp), []byte("\x1b[A")},
@@ -100,13 +99,8 @@ func TestKeysWithoutALegacyEncodingReachThePane(t *testing.T) {
 		{"keypad enter, DECKPAM", "\x1bOM", "\r", "\r"},
 		{"ctrl+keypad enter", "\x1b[57414;5u", "\n", "\n"},
 		{"keypad 1, kitty", "\x1b[57400u", "1", "1"},
-		// NumLock on rides along as a lock bit (129 = 1 + 128). The kitty
-		// encoder hands this key to the legacy one under disambiguate, so the
-		// lock bit must not turn it into something other than the digit.
 		{"keypad 1, kitty, numlock on", "\x1b[57400;129u", "1", "1"},
 		{"keypad plus, kitty, numlock on", "\x1b[57413;129u", "+", "+"},
-		// Text keys the kitty encoder hands back under disambiguate when the
-		// host was asked for report-all-keys: the legacy side sends the text.
 		{"a, kitty, numlock on", "\x1b[97;129u", "a", "a"},
 		{"a, kitty, capslock on", "\x1b[97;65u", "A", "A"},
 		{"e acute, kitty", "\x1b[233u", "é", "é"},

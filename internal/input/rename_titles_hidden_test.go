@@ -9,12 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Rename is a centred dialog that draws its own frame, so hidden titles must
-// not veto it. These pin the three ways in against the rendered frame, since
-// "the state says Renaming" is not the same claim as "the user can see an
-// editor".
-
-// hiddenTitlesOS is a two-pane client drawn with no window titles at all.
 func hiddenTitlesOS(t *testing.T) *app.OS {
 	t.Helper()
 	prev := config.Global.WindowTitlePosition
@@ -23,7 +17,6 @@ func hiddenTitlesOS(t *testing.T) *app.OS {
 	return twoPaneOS(t)
 }
 
-// renameDialogOnScreen reports whether the frame is actually showing an editor.
 func renameDialogOnScreen(o *app.OS) bool {
 	return strings.Contains(o.View().Content, o.RenameDialogTitle())
 }
@@ -46,8 +39,6 @@ func TestPrefixRenameOpensWithTitlesHidden(t *testing.T) {
 }
 
 func TestDirectRenameKeyOpensWithTitlesHidden(t *testing.T) {
-	// The rail is off as well, since it was the only reason the direct key
-	// still worked with titles hidden.
 	prev := config.Global.SidebarEnabled
 	config.Global.SidebarEnabled = false
 	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
@@ -64,7 +55,6 @@ func TestDirectRenameKeyOpensWithTitlesHidden(t *testing.T) {
 		t.Error("the editor is open but the frame draws no dialog")
 	}
 
-	// The dialog owns the keyboard from here, whatever the title bar is doing.
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'z', Text: "z"}, o)
 	if !strings.HasSuffix(o.RenameText(), "z") {
 		t.Errorf("rename buffer = %q, want the typed key appended", o.RenameText())
@@ -85,7 +75,6 @@ func TestPaletteRenameOpensWithTitlesHidden(t *testing.T) {
 	}
 }
 
-// runPaletteCommandForTest runs a command-palette row by name.
 func runPaletteCommandForTest(t *testing.T, o *app.OS, name string) *app.OS {
 	t.Helper()
 	for _, c := range app.GetCommandPaletteItems() {

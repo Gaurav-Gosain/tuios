@@ -9,9 +9,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// decodeKey decodes a single key event from raw terminal bytes exactly as
-// bubbletea does, so these cases exercise the real decoder rather than a
-// hand-built KeyPressMsg.
 func decodeKey(t *testing.T, raw []byte) tea.KeyPressMsg {
 	t.Helper()
 	var dec uv.EventDecoder
@@ -46,10 +43,6 @@ func TestGlobalBindsAcrossEncodings(t *testing.T) {
 		{"ctrl+p kitty associated text", []byte("\x1b[112;5;112u"), palette},
 		{"ctrl+p kitty alternate/base keys", []byte("\x1b[112::80;5u"), palette},
 		{"ctrl+p modifyOtherKeys level 2", []byte("\x1b[27;5;112~"), palette},
-		// Lock modifiers ride along in the Kitty modifier field and stay on the
-		// decoded event. Num Lock (mod 133) is the boot default on most desktop
-		// keyboards, so this is the owner's real-world failure: an exact
-		// Mod == ModCtrl check missed it and the palette never opened.
 		{"ctrl+p kitty capslock", []byte("\x1b[112;69u"), palette},
 		{"ctrl+p kitty numlock", []byte("\x1b[112;133u"), palette},
 
@@ -58,7 +51,6 @@ func TestGlobalBindsAcrossEncodings(t *testing.T) {
 		{"alt+space kitty associated text", []byte("\x1b[32;3;32u"), launcher},
 		{"alt+space kitty numlock", []byte("\x1b[32;131u"), launcher},
 
-		// Ordinary typing into the shell must not be swallowed.
 		{"bare p", []byte("p"), ""},
 		{"alt+p", []byte("\x1bp"), ""},
 		{"bare P", []byte("P"), ""},
@@ -104,7 +96,6 @@ func TestGlobalBindUnbound(t *testing.T) {
 	}
 }
 
-// osWithGlobalBinds returns an OS whose registry has the given global section.
 func osWithGlobalBinds(t *testing.T, binds map[string][]string) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -112,20 +103,12 @@ func osWithGlobalBinds(t *testing.T, binds map[string][]string) *app.OS {
 	return &app.OS{Settings: config.Global, KeybindRegistry: config.NewKeybindRegistry(cfg)}
 }
 
-// ctrlPEncodings is every way a terminal might send Ctrl+P. The stringified key
-// differs across them: associated-text reporting gives "p" and alternate-key
-// reporting gives "ctrl+P", which the old msg.String() == "ctrl+p" comparison
-// missed.
 var ctrlPEncodings = map[string][]byte{
 	"legacy control byte":       {0x10},
 	"kitty disambiguate":        []byte("\x1b[112;5u"),
 	"kitty associated text":     []byte("\x1b[112;5;112u"),
 	"kitty alternate/base keys": []byte("\x1b[112::80;5u"),
 	"modifyOtherKeys level 2":   []byte("\x1b[27;5;112~"),
-	// Lock modifiers ride along in the Kitty modifier field and stay on the
-	// decoded event. Num Lock (mod 133) is the boot default on most desktop
-	// keyboards, so this case is the owner's real-world failure: an exact
-	// Mod == ModCtrl check missed it and the palette never opened.
-	"kitty ctrl+capslock": []byte("\x1b[112;69u"),
-	"kitty ctrl+numlock":  []byte("\x1b[112;133u"),
+	"kitty ctrl+capslock":       []byte("\x1b[112;69u"),
+	"kitty ctrl+numlock":        []byte("\x1b[112;133u"),
 }

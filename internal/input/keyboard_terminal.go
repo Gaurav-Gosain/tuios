@@ -9,37 +9,16 @@ import (
 
 // HandleTerminalModeKey handles keyboard input in terminal mode
 func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// There used to be a guard here that dropped every unmodified printable
-	// key for 150 ms after entering terminal mode, against mouse-sequence
-	// fragments that a host mouse-mode switch (all-motion in window mode,
-	// cell-motion in terminal mode) could split across reads. The client no
-	// longer switches the host's mouse mode: the view holds it in all-motion
-	// tracking for the whole session, so there is no transition to guard and
-	// the guard only ate the first keystrokes of anyone who typed the moment
-	// they entered the mode. The time of entry is no longer recorded either,
-	// because nothing read it.
 	focusedWindow := o.GetFocusedWindow()
 
-	// The open panels, top first, take priority in terminal mode: a letter
-	// typed into one must not reach the shell.
 	if out, cmd, ok := routeOverlayKey(msg, o); ok {
 		return out, cmd
 	}
 
-	// Handle cache stats viewer (takes priority in terminal mode)
 	if o.ShowCacheStats {
 		return handleCacheStatsKey(msg, o)
 	}
 
-	// The configured line/page scroll actions are handled BEFORE the copy mode
-	// check so subsequent presses also scroll instead of being consumed by the
-	// copy mode key handler. They enter copy mode the same silent way the wheel
-	// does.
-	//
-	// Only a pane on the main screen with no mouse mode scrolls, as with the
-	// wheel and as in kitty. A full-screen program (nvim, less, htop, a
-	// compositor) gets the key itself: it has no scrollback to show, and
-	// Shift+Up is a key it uses. A pane already in copy mode keeps scrolling.
 	if focusedWindow != nil && keyScrollsPane(focusedWindow) && !o.Locked() {
 		action := sectionAction(msg, o, config.TableTerminalMode)
 		if handleTerminalScrollBinding(action, o, focusedWindow) {
@@ -47,15 +26,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// A scroll gesture leaves the pane in an implicit copy mode, because that is
-	// the only thing that renders scrollback. Typing means the reading is over:
-	// snap back to live output and let the key through to the shell, which is
-	// what a terminal with no modes does. Esc is the one key not forwarded; it
-	// is the reflex for "get me out of this", and a bare Esc into a shell in vi
-	// mode or a readline meta prefix is not a no-op.
-	//
-	// A key from a remote sender is not the person reading, so it does none of
-	// this. See remoteKeyBypassesCopyMode.
 	if focusedWindow != nil && focusedWindow.InImplicitCopyMode() && !remoteKeyBypassesCopyMode(o) {
 		focusedWindow.ExitCopyMode()
 		if msg.String() == "esc" {
@@ -63,8 +33,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// A multi copy mode whose focused pane has left it has nothing driving
-	// the other panes: end it before the key is routed.
 	o.SettleMultiCopy()
 
 	if focusedWindow.InCopyMode() && !remoteKeyBypassesCopyMode(o) {
@@ -75,14 +43,8 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandleScrollbackBrowserKey(msg, o)
 	}
 
-	// Nest mode gives the pane every key, the leader too, all but its exit
-	// key, which ends the mode and goes nowhere. It is after the overlays and
-	// copy mode, which keep their keys as they do under lock, and before the
-	// leader. See app/nest_mode.go.
 	if o.Nested() {
 		if isNestExitKey(msg, &o.Settings, o.HostBaseCode(msg)) {
-			// Recorded as a key, so a tape that turned nest mode on also
-			// turns it off when it is played.
 			recordTerminalKey(o, msg)
 			o.LeaveNest()
 			return o, nil
@@ -90,22 +52,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return typeIntoPane(msg, o, false)
 	}
 
-	// Check for prefix key in terminal mode. A leader the prefix_mode table
-	// binds, pressed after the leader, is that binding's and goes to
-	// HandlePrefixCommand below. A menu lock mode holds open is
-	// the exception: there the leader always opens a fresh leader menu.
 	if isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) && (o.LockHeld || !leaderBoundInPrefix(msg, o)) {
 		leaderWhileHeld(o)
-		// Leader twice sends the leader itself to the pane, as tmux does with
-		// prefix prefix. It is encoded like any forwarded key: CSI u for a
-		// kitty pane, legacy bytes otherwise. A leader with no legacy encoding
-		// is dropped rather than replaced with some other key.
 		if o.PrefixActive {
-			// The leader twice closes the leader and any menu it opened: a
-			// sub-menu left open would take the next key.
 			o.SetMenuState(app.MenuState{})
 			if o.KeybindRegistry != nil && o.KeybindRegistry.LeaderTwiceGoesBack() {
-				// screen's C-a C-a. send_prefix still sends the leader.
 				o.LastWorkspace()
 				return o, nil
 			}
@@ -124,53 +75,27 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return HandlePrefixCommand(msg, o)
 	}
 
-	// Lock mode: no menu is open and the key is not the leader, so it goes to
-	// the pane, whatever tuios binds it to. Nothing below may see it.
 	if o.Locked() {
 		o.LockHeld = false
 		return typeIntoPane(msg, o, false)
 	}
 
-	// Direct terminal-mode binds and workspace switching, resolved through the
-	// keybind registry so a rebind in config.toml takes effect. These must be
-	// checked before the PTY forwarding below so their keys are not typed into
-	// the shell.
 	if cmd, ok := runTerminalModeBinds(msg, o); ok {
 		return o, cmd
 	}
-	// The key's terminal-mode action, looked up once for the checks below.
-	// It depends on the key and the registry alone.
 	terminalAction := sectionAction(msg, o, config.TableTerminalMode)
 	nvimNavigation := false
 	if dir, ok := terminalFocusDirection(terminalAction); ok {
 		nvimNavigation = o.NvimNavigationForwarding(dir)
 	}
 
-	// alt+left/right used to navigate the scrolling layout's columns from here,
-	// hardcoded. They are terminal_focus_left/right now, which reach the same
-	// navigation through the registry, so the keys are rebindable and the block
-	// above no longer shadows them.
-
-	// The global scope (palette, launcher), intercepted before terminal
-	// forwarding so its keys are not typed into the shell.
 	if m, cmd, ok := handleGlobalBinds(msg, o); ok {
 		return m, cmd
 	}
 
-	// Handle paste shortcuts: intercept and request clipboard via OSC 52.
-	// Plain ctrl+v is deliberately not bound to terminal_paste_host so it falls
-	// through to the passthrough block and reaches the child PTY as 0x16 (needed
-	// for vim visual-block, etc.), matching the tmux/zellij convention.
 	if terminalAction == terminalPasteHost {
-		// Recorded here for the same reason the scroll binds above are. See
-		// NoteAction.
 		o.NoteAction(terminalPasteHost)
 		if focusedWindow != nil {
-			// Ask the terminal for its clipboard via OSC 52. The reply arrives
-			// as a tea.ClipboardMsg, handled in handler.go, and a terminal that
-			// never replies is reported instead. See app.RequestHostPaste.
-			// An image on the clipboard is pasted as a file path first. See
-			// app.RequestPaste.
 			return o, o.RequestPaste()
 		}
 		return o, nil
@@ -178,46 +103,30 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return typeIntoPane(msg, o, nvimNavigation)
 }
 
-// typeIntoPane sends a key to the pane the user types into: a rail session
-// pane that has the keyboard, or else the focused pane and the multifocus
-// set's panes, unless the key is a focus move nvim navigation forwards. With
-// no pane focused it goes back to window mode.
 func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS, tea.Cmd) {
 	if typeIntoRailPane(msg, o) {
 		return o, nil
 	}
 	focusedWindow := o.GetFocusedWindow()
-	// A TML window takes the key itself: its surface is drawn by this
-	// client, and its PTY only holds the place. See app/tml.go.
 	if o.DrawsTML(focusedWindow) {
 		recordTerminalKey(o, msg)
 		o.NotePaneKey()
 		return o, o.TMLKey(focusedWindow, msg.String())
 	}
 	if focusedWindow != nil {
-		// The pane gets the key as the host sent it, on either encoding.
 		host := paneMsg(msg, o)
 		rawInput, releasedNow := paneKeyBytes(host, focusedWindow, o, true)
 
 		if len(rawInput) > 0 {
-			// Record the keystroke for tape capture here, at the point where it
-			// is actually forwarded to the PTY. Recording earlier (before prefix,
-			// overlay, and copy-mode routing) captured keys that never reach the
-			// shell, so tapes replayed prefix chords and stray characters.
 			recordTerminalKey(o, msg)
 			o.NotePaneKey()
 			if !releasedNow {
 				o.NotePaneKeyDown(msg.Code, focusedWindow.ID)
 			}
 			if err := focusedWindow.SendInput(rawInput); err != nil {
-				// Terminal unavailable, switch back to window mode
 				o.ChooseMode(app.WindowManagementMode, app.ModeCauseNoPane)
 				focusedWindow.InvalidateCache()
 			}
-			// Forward keystrokes to the multifocus set's panes on screen.
-			// See MultifocusPeers: slice order keeps the send order stable
-			// across swaps and state sync.
-			// Each peer gets the key encoded for its own keyboard mode.
 			if !nvimNavigation {
 				for _, w := range o.MultifocusPeers() {
 					if peer, _ := paneKeyBytes(host, w, o, false); len(peer) > 0 {
@@ -227,15 +136,11 @@ func typeIntoPane(msg tea.KeyPressMsg, o *app.OS, nvimNavigation bool) (*app.OS,
 			}
 		}
 	} else {
-		// No focused window, switch back to window mode
 		o.ChooseMode(app.WindowManagementMode, app.ModeCauseNoPane)
 	}
 	return o, nil
 }
 
-// typeIntoRailPane sends a key to the rail session pane that has the
-// keyboard. It reports whether a rail session had the keyboard, in which case
-// the key is the rail's and goes nowhere else.
 func typeIntoRailPane(msg tea.KeyPressMsg, o *app.OS) bool {
 	if !o.SidebarSessionFocused() {
 		return false
@@ -249,12 +154,6 @@ func typeIntoRailPane(msg tea.KeyPressMsg, o *app.OS) bool {
 	return true
 }
 
-// recordTerminalKey records a keystroke that is being forwarded to the focused
-// window's PTY into the active tape recording. Printable single-byte ASCII is
-// accumulated as a Type command; everything else is recorded as a KeyCombo.
-// Workspace switches, mode switches, and overlay/prefix keys return before the
-// PTY-forward path, so they are never recorded here (workspace switches are
-// captured separately by SwitchToWorkspace).
 func recordTerminalKey(o *app.OS, msg tea.KeyPressMsg) {
 	if o.TapeRecorder == nil || !o.TapeRecorder.IsRecording() || o.ShowTapeManager {
 		return
@@ -267,33 +166,19 @@ func recordTerminalKey(o *app.OS, msg tea.KeyPressMsg) {
 	}
 }
 
-// handleTerminalLayoutPrefix handles layout prefix commands (leader, L, ...),
-// resolved through the [keybindings.layout_prefix] section like every other
-// sub-prefix.
-//
-// Every key in the section goes through the dispatcher, load and save included.
-// They used to be two cases of a hand-written switch here while the rest fell
-// through to dispatchAction. A section with two routes drifts: an action added
-// to the table stayed invisible until someone added a case, and the key it was
-// bound to silently dismissed the chord instead. One route, one table.
 func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return runPrefix(msg, o, config.TableLayoutPrefix)
 }
 
-// handleLayoutPrefixLoad opens the layout picker on the saved layouts.
 func handleLayoutPrefixLoad(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.OpenLayoutPicker()
 }
 
-// handleLayoutPrefixSave opens the layout picker to name and save the layout.
 func handleLayoutPrefixSave(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenLayoutSave()
 	return o, nil
 }
 
-// keyScrollsPane reports whether a terminal-mode line or page scroll action
-// acts on w, or its key goes to the program in it. It acts on a pane in copy
-// mode, and on a pane on the main screen that has no mouse mode on.
 func keyScrollsPane(w *terminal.Window) bool {
 	if w.InCopyMode() {
 		return true

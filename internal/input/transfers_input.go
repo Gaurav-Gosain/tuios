@@ -7,13 +7,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// handlePrefixTransfers opens the Copies panel: the copies between machines.
 func handlePrefixTransfers(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.OpenTransfers()
 }
 
-// handleTransfersInput handles keys while the Copies panel is up. The keys
-// are the transfers section of the keybinds, so each can be bound again.
 func handleTransfersInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	action := tableAction(o, msg, overlayKeys(o), config.TableTransfers)
 	var cmd tea.Cmd
@@ -41,8 +38,6 @@ func handleTransfersInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, cmd
 }
 
-// handleCopyDialogInput handles keys while a copy's question is up. It owns
-// every key: the key that opened it cannot answer it.
 func handleCopyDialogInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.CopyDialogKey(msg.String(), msg.Text)
 }

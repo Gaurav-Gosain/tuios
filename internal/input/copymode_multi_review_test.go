@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Multi copy mode's edges, each one a way the first build got it wrong.
-
 // A count typed before y is dropped in every pane; the yank still takes every
 // selection. It used to reach only the focused pane, as a count.
 //
@@ -30,7 +28,6 @@ func TestMultiCopyCountBeforeYankTakesEverySelection(t *testing.T) {
 			t.Errorf("pane %s kept the count %d", p.ID, p.CopyMode.PendingCount)
 		}
 	}
-	// The same for tab and Y.
 	mcPress(o, "V", "2", "tab")
 	if o.MultiCopy.Format != config.MultiCopyFormatMarkdown {
 		t.Errorf("2 then tab did not change the format")
@@ -73,7 +70,6 @@ func TestMultiCopyDropsPanesThatLeaveTheScreen(t *testing.T) {
 	typeSearch(o, "lldp")
 	mcPress(o, "V")
 	w[1].Minimized = true
-	// Any input settles it, a mouse event as well as a key.
 	HandleInput(tea.MouseMotionMsg{X: 1, Y: 1}, o)
 	if w[1].InCopyMode() || o.MultiCopy.Has(w[1].ID) {
 		t.Fatal("a minimised pane is still in multi copy mode")
@@ -113,7 +109,6 @@ func TestMultiCopySearchWithNoMatchMovesNothing(t *testing.T) {
 	if w[0].CopyMode.CursorY != before.CursorY {
 		t.Errorf("the focused pane moved from row %d to %d", before.CursorY, w[0].CopyMode.CursorY)
 	}
-	// A new search is still allowed, and one that matches unparks.
 	typeSearch(o, "lldp")
 	if matched, _ := o.MultiCopyMatched(); matched != 2 {
 		t.Errorf("after a matching search %d panes matched, want 2", matched)

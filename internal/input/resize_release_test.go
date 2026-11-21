@@ -10,9 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// floatingResizeOS builds one focused floating pane whose guest has asked for
-// mouse tracking, in terminal mode: the arrangement where a border drag has to
-// share the pointer with the app underneath it.
 func floatingResizeOS(t *testing.T) (*app.OS, *terminal.Window) {
 	t.Helper()
 	em := vt.NewEmulator(80, 24)
@@ -20,7 +17,6 @@ func floatingResizeOS(t *testing.T) (*app.OS, *terminal.Window) {
 	if _, err := em.Write([]byte("\x1b[?1000h")); err != nil {
 		t.Fatalf("enabling mouse mode: %v", err)
 	}
-	// Anything forwarded to the guest has to go somewhere or the write blocks.
 	go func() {
 		buf := make([]byte, 256)
 		for {
@@ -45,8 +41,6 @@ func floatingResizeOS(t *testing.T) (*app.OS, *terminal.Window) {
 	return o, win
 }
 
-// armBottomBorderResize presses the pane's bottom edge and drags it up two
-// rows, leaving a border resize in progress with a PTY resize deferred.
 func armBottomBorderResize(t *testing.T, o *app.OS, win *terminal.Window) {
 	t.Helper()
 	borderY := win.Y + win.Height - 1
@@ -58,10 +52,6 @@ func armBottomBorderResize(t *testing.T, o *app.OS, win *terminal.Window) {
 	handleMouseMotion(tea.MouseMotionMsg{Button: tea.MouseLeft, X: midX, Y: borderY - 2}, o)
 }
 
-// assertGestureEnded is the whole contract: nothing about the gesture outlives
-// the button. InteractionMode is left out because a finished resize holds it
-// 150ms on purpose, so the guest's prompt redraws before content polling
-// resumes; the paths that end a stray gesture clear it at once and say so.
 func assertGestureEnded(t *testing.T, o *app.OS, win *terminal.Window) {
 	t.Helper()
 	if o.Resizing {
@@ -90,8 +80,6 @@ func TestReleaseEndsResizeWhoeverClaimsIt(t *testing.T) {
 		name    string
 		interru func(o *app.OS, win *terminal.Window)
 	}{
-		// The guest asked for mouse tracking, so the release is forwarded to it
-		// and never reaches the cleanup.
 		{"mouse-tracking guest", func(*app.OS, *terminal.Window) {}},
 		{"overlay grabbed the pointer", func(o *app.OS, _ *terminal.Window) {
 			o.OverlayDrag.Active = true
@@ -155,8 +143,6 @@ func TestResizeBorrowsWindowMode(t *testing.T) {
 		}
 	})
 
-	// A gesture whose release is lost gives the mode back too, or the user is
-	// stranded in window management having done nothing to ask for it.
 	t.Run("release lost", func(t *testing.T) {
 		o, win := floatingResizeOS(t)
 		armBottomBorderResize(t, o, win)
@@ -167,7 +153,6 @@ func TestResizeBorrowsWindowMode(t *testing.T) {
 		}
 	})
 
-	// Started in window management, it stays there: there is nothing to give back.
 	t.Run("started in window mode", func(t *testing.T) {
 		o, win := floatingResizeOS(t)
 		o.Mode = app.WindowManagementMode

@@ -11,8 +11,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// hintsFixture is one focused pane in terminal mode whose input is captured,
-// with body printed in it, and hints mode ready to open.
 type hintsFixture struct {
 	o    *app.OS
 	win  *terminal.Window
@@ -23,8 +21,6 @@ func newHintsFixture(t *testing.T, body, alphabet string) hintsFixture {
 	t.Helper()
 	em := vt.NewEmulator(80, 24)
 	t.Cleanup(func() { _ = em.Close() })
-	// The pane asks for key releases, so a release that is not dropped
-	// reaches it.
 	_, _ = em.Write([]byte(pushEventTypes + body))
 	sent := &[]byte{}
 	win := &terminal.Window{ID: "hints-0001", Terminal: em, X: 0, Y: 0, Width: 82, Height: 26}
@@ -53,13 +49,12 @@ func (f hintsFixture) open(t *testing.T) {
 func TestHintsKeepInputFromThePane(t *testing.T) {
 	f := newHintsFixture(t, "commit deadbee42\r\n", "")
 
-	// A key pressed before hints opened, released while they are open.
 	HandleInput(tea.KeyPressMsg{Code: 'x', Text: "x"}, f.o)
 	f.open(t)
 
 	HandleInput(tea.KeyReleaseMsg{Code: 'x', Text: "x"}, f.o)
 	HandleInput(tea.PasteMsg{Content: "PASTED"}, f.o)
-	HandleInput(tea.KeyPressMsg{Code: 'a', Text: "as"}, f.o) // an input method's commit
+	HandleInput(tea.KeyPressMsg{Code: 'a', Text: "as"}, f.o)
 	HandleInput(tea.MouseMotionMsg{X: 5, Y: 5}, f.o)
 
 	if got := string(*f.sent); got != "" {
@@ -135,7 +130,6 @@ func TestHintsCapsLockIsNotShift(t *testing.T) {
 		t.Errorf("Caps Lock typed the match into the pane: %q", got)
 	}
 
-	// The positive half: Shift types it.
 	f.open(t)
 	HandleInput(tea.KeyPressMsg{Code: 'a', Text: "A", Mod: tea.ModShift}, f.o)
 	if got := string(*f.sent); !strings.Contains(got, "deadbee42") {

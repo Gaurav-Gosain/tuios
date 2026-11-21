@@ -11,9 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// pasteLine is a paste as one line of a one-line field: every run of white
-// space, line breaks included, becomes one space, and control characters are
-// dropped, so a pasted escape sequence cannot reach the field as one.
 func pasteLine(content string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
@@ -23,15 +20,6 @@ func pasteLine(content string) string {
 	}, strings.Join(strings.Fields(content), " "))
 }
 
-// textFieldPaste returns how the one-line field that owns the keyboard takes a
-// paste, or nil when no such field owns it. It serves the terminal's
-// bracketed paste, the clipboard read the paste key asks for, and the paste
-// key itself (see pasteKeyIntoTextField), so a field that takes typing takes
-// a paste the same way.
-//
-// The cases follow routeKey's order: whatever would get a typed key gets the
-// paste. An owner that takes no text answers nil, and the caller drops the
-// paste rather than let it reach the pane under it.
 func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 	switch {
 	case o.ShowSessionClose, o.DaemonRestartOpen(), o.HintsOpen(), o.PaneLabelsOpen(),
@@ -111,8 +99,6 @@ func textFieldPaste(o *app.OS) func(string) tea.Cmd {
 	return copyModeSearchPaste(o)
 }
 
-// settingsFieldPaste is textFieldPaste for Settings and the pickers over it,
-// in routeSettingsOverlayKey's order. ok is false when none of them is open.
 func settingsFieldPaste(o *app.OS) (paste func(string) tea.Cmd, ok bool) {
 	switch {
 	case o.ThemeEditorOpen():
@@ -138,7 +124,6 @@ func settingsFieldPaste(o *app.OS) (paste func(string) tea.Cmd, ok bool) {
 	case o.ShowSettings:
 		switch {
 		case o.SettingsEditActive():
-			// A number field drops a paste that is not a number.
 			return typed(o.SettingsEditAppend), true
 		case o.SettingsSearchOpen():
 			return typed(o.SettingsSearchPaste), true
@@ -155,8 +140,6 @@ func settingsFieldPaste(o *app.OS) (paste func(string) tea.Cmd, ok bool) {
 	return nil, false
 }
 
-// listPickerPaste types a paste into the filter of the list picker the
-// keyboard is on.
 func listPickerPaste(o *app.OS) func(string) tea.Cmd {
 	return func(s string) tea.Cmd {
 		cmd, _ := o.ListPickerPaste(s)
@@ -164,8 +147,6 @@ func listPickerPaste(o *app.OS) func(string) tea.Cmd {
 	}
 }
 
-// scrollbackSearchPaste is the scrollback browser's search line, in either of
-// its two places, or nil when neither is open.
 func scrollbackSearchPaste(o *app.OS) func(string) tea.Cmd {
 	browser := o.ScrollbackBrowser
 	switch {
@@ -183,10 +164,6 @@ func scrollbackSearchPaste(o *app.OS) func(string) tea.Cmd {
 	return nil
 }
 
-// copyModeSearchPaste is the focused pane's copy-mode search prompt, or nil
-// when it is not open. The paste is typed through the prompt's own key
-// handler as one key carrying the text: that handler reads the key's code, not
-// its name, so no pasted word can stand for enter or esc there.
 func copyModeSearchPaste(o *app.OS) func(string) tea.Cmd {
 	w := o.GetFocusedWindow()
 	if w == nil || w.CopyMode == nil || !w.CopyMode.Active || w.CopyMode.State != terminal.CopyModeSearch || o.MultiCopy.Has(w.ID) {
@@ -200,11 +177,6 @@ func copyModeSearchPaste(o *app.OS) func(string) tea.Cmd {
 	}
 }
 
-// pasteKeyIntoTextField answers the paste key while a one-line field owns the
-// keyboard: ctrl+v, as in the Inbox's editors, or a key bound to
-// terminal_paste_host. It asks for the clipboard, and the answer arrives as a
-// paste the field takes. A key from send-keys or a tape is not the person at
-// the keyboard and may not read their clipboard, so it is left to the field.
 func pasteKeyIntoTextField(msg tea.KeyPressMsg, o *app.OS) (tea.Cmd, bool) {
 	if o.ProcessingRemoteKeys {
 		return nil, false

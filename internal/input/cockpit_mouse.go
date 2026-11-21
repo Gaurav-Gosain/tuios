@@ -11,19 +11,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// autoScrollTickCmd is the next tick of a drag held past an edge.
 func autoScrollTickCmd() tea.Cmd {
 	return tea.Tick(50*time.Millisecond, func(time.Time) tea.Msg { return app.AutoScrollTickMsg{} })
 }
 
-// The mouse over the agents view's thread: a drag selects, a double click
-// selects a word, a triple click a line, and shift+click moves the end of the
-// selection. In copy mode a click moves the cursor. See app/cockpit_mouse.go.
-
-// cockpitMousePress handles a left press in the thread. It reports whether
-// the press is taken; a plain click outside copy mode is not, so the view's
-// own click still runs, and only a move with the button down turns it into a
-// selection.
 func cockpitMousePress(msg tea.MouseClickMsg, o *app.OS) (bool, tea.Cmd) {
 	x, y := msg.Mouse().X, msg.Mouse().Y
 	o.CockpitLinkCancel()
@@ -38,13 +29,10 @@ func cockpitMousePress(msg tea.MouseClickMsg, o *app.OS) (bool, tea.Cmd) {
 	shift := msg.Mod&tea.ModShift != 0
 	on := o.CockpitCopyOn()
 	if on && o.CockpitCopyImplicit() && clicks == 1 && !shift {
-		// A plain click ends a selection the mouse made, and is the view's
-		// click like any other.
 		o.CockpitCopyEnd()
 		on = false
 	}
 	if !on && clicks == 1 {
-		// Shift with nothing selected, or a plain click: the view's own.
 		g.Armed = !shift
 		return false, nil
 	}
@@ -63,9 +51,6 @@ func cockpitMousePress(msg tea.MouseClickMsg, o *app.OS) (bool, tea.Cmd) {
 	return true, nil
 }
 
-// cockpitMouseMotion moves a selection while the button is held after a
-// press in the thread. The first move of a plain click starts it at the
-// press. It reports whether the motion was taken.
 func cockpitMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (bool, tea.Cmd) {
 	g := o.CockpitMouse()
 	if !g.Armed || msg.Button != tea.MouseLeft {
@@ -95,16 +80,11 @@ func cockpitMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (bool, tea.Cmd) {
 	start := dir != 0 && g.Dir == 0
 	g.Dir = dir
 	if start {
-		// Held past the edge, the view keeps scrolling on a tick until the
-		// pointer comes back or the button goes up (app.cockpitAutoScroll).
 		return true, autoScrollTickCmd()
 	}
 	return true, nil
 }
 
-// cockpitMouseRelease ends a gesture in the thread: a drag or a double or
-// triple click copies what it selected. It reports whether the release was
-// the gesture's.
 func cockpitMouseRelease(o *app.OS) (bool, tea.Cmd) {
 	g := o.CockpitMouse()
 	if !g.Armed {
@@ -117,11 +97,6 @@ func cockpitMouseRelease(o *app.OS) (bool, tea.Cmd) {
 	return true, o.CockpitCopyFinish(g.Clicks)
 }
 
-// quickLookCopyPress handles a left press on quick look's text. Outside copy
-// mode a plain press waits for the pointer to move, and a double or triple
-// click selects. In copy mode the cursor goes to the cell, and shift moves
-// the selection's end. A plain press ends a selection the mouse made. It
-// reports whether the press was on the text.
 func quickLookCopyPress(msg tea.MouseClickMsg, o *app.OS) bool {
 	x, y := msg.Mouse().X, msg.Mouse().Y
 	g := o.QuickLookMouse()
@@ -142,8 +117,6 @@ func quickLookCopyPress(msg tea.MouseClickMsg, o *app.OS) bool {
 		cm = nil
 	}
 	if cm == nil && clicks == 1 {
-		// A plain press, or shift with nothing selected: the first move
-		// starts the selection here.
 		g.Armed = !shift
 		return true
 	}
@@ -164,7 +137,6 @@ func quickLookCopyPress(msg tea.MouseClickMsg, o *app.OS) bool {
 	return true
 }
 
-// quickLookCopyMotion moves the selection while the button is held.
 func quickLookCopyMotion(msg tea.MouseMotionMsg, o *app.OS) bool {
 	g := o.QuickLookMouse()
 	if g == nil || !g.Armed || msg.Button != tea.MouseLeft {
@@ -176,7 +148,6 @@ func quickLookCopyMotion(msg tea.MouseMotionMsg, o *app.OS) bool {
 	}
 	cm, grid := o.QuickLookCopy()
 	if cm == nil {
-		// The first move of a plain press starts the selection at the press.
 		var ok bool
 		if cm, grid, ok = o.QuickLookMouseCopy(); !ok {
 			g.Armed = false
@@ -195,8 +166,6 @@ func quickLookCopyMotion(msg tea.MouseMotionMsg, o *app.OS) bool {
 	return true
 }
 
-// quickLookCopyRelease ends the gesture, and copies what a drag or a double
-// or triple click selected.
 func quickLookCopyRelease(o *app.OS) (bool, tea.Cmd) {
 	g := o.QuickLookMouse()
 	if g == nil || !g.Armed {
@@ -217,7 +186,6 @@ func quickLookCopyRelease(o *app.OS) (bool, tea.Cmd) {
 	return true, o.QuickLookCopyFinish(text)
 }
 
-// handleSelectionCopy copies the thread's selection, the menu's Copy.
 func handleSelectionCopy(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	text, _, _, ok := o.CockpitThreadSelection()
 	if !ok {
@@ -226,8 +194,6 @@ func handleSelectionCopy(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, tea.Batch(o.CopyToClipboard(text), o.SaveToPasteBuffers(text))
 }
 
-// handleSelectionCopyMarkdown copies the entries under the selection as
-// Markdown, as Y does in copy mode.
 func handleSelectionCopyMarkdown(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	_, y0, y1, ok := o.CockpitThreadSelection()
 	if !ok {
@@ -241,8 +207,6 @@ func handleSelectionCopyMarkdown(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 	return o, o.CopyToClipboard(text)
 }
 
-// handleSelectionSearch searches the thread for the selection's first line,
-// in copy mode, which then stays on so n and N step through the matches.
 func handleSelectionSearch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	text, _, _, ok := o.CockpitThreadSelection()
 	cm, grid := o.CockpitCopy()
