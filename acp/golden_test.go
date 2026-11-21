@@ -15,16 +15,8 @@ import (
 	"time"
 )
 
-// The wire compatibility tests. Each one drives the client through an
-// exchange with a scripted agent, in one protocol version, and compares what
-// the client sent, the updates it delivered and what its calls returned with
-// a golden file under testdata/golden. The golden files are the record of
-// the wire shapes each version uses: a change that alters one fails here and
-// shows the diff. go test -run TestGolden -update writes them again.
-
 var update = flag.Bool("update", false, "write the golden files again")
 
-// rec records one exchange.
 type rec struct {
 	mu      sync.Mutex
 	sent    []string
@@ -48,8 +40,6 @@ func (r *rec) result(format string, a ...any) {
 	r.mu.Unlock()
 }
 
-// expect reads the next message the client sent on p, records it and checks
-// its method.
 func (r *rec) expect(p *peer, method string) map[string]any {
 	p.t.Helper()
 	raw, m := p.nextRaw()
@@ -79,7 +69,6 @@ func (r *rec) text() string {
 	return b.String()
 }
 
-// golden compares r with testdata/golden/name.txt.
 func golden(t *testing.T, name string, r *rec) {
 	t.Helper()
 	path := filepath.Join("testdata", "golden", name+".txt")
@@ -102,7 +91,6 @@ func golden(t *testing.T, name string, r *rec) {
 	}
 }
 
-// dialer is a transport whose every Dial is a fresh scripted agent.
 type dialer struct {
 	t     *testing.T
 	peers chan *peer
@@ -124,7 +112,6 @@ func (d *dialer) Dial(context.Context) (io.ReadWriteCloser, error) {
 	return peerConn{r, w, p}, nil
 }
 
-// next is the agent of the next Dial.
 func (d *dialer) next() *peer {
 	d.t.Helper()
 	select {
@@ -140,7 +127,6 @@ func note(p *peer, session string, u map[string]any) {
 	p.send(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": session, "update": u}})
 }
 
-// connect runs Connect in the background and returns its result channel.
 type connected struct {
 	c   *Client
 	err error
@@ -198,8 +184,6 @@ func promptAsync(s *Session, text string) chan prompted {
 	return ch
 }
 
-// opencodeInit is what opencode 2.2.7 answers to an initialize asking for
-// version 2, as it was read on 2026-11-13: version 1, in the version 1 shape.
 var opencodeInit = map[string]any{
 	"protocolVersion": 1,
 	"agentCapabilities": map[string]any{
@@ -256,7 +240,6 @@ func TestGoldenV1Turn(t *testing.T) {
 	note(p, "s1", map[string]any{"sessionUpdate": "usage_update", "used": 10, "size": 100, "cost": nil})
 	note(p, "s1", map[string]any{"sessionUpdate": "current_mode_update", "currentModeId": "code"})
 	note(p, "s1", map[string]any{"sessionUpdate": "available_commands_update", "availableCommands": []any{map[string]any{"name": "init", "description": "Set up", "input": map[string]any{"hint": "path"}}}})
-	// A version 2 kind on a version 1 connection is not a version 1 update.
 	note(p, "s1", map[string]any{"sessionUpdate": "state_update", "state": "idle", "stopReason": "end_turn"})
 	p.send(map[string]any{"jsonrpc": "2.0", "id": 900, "method": "session/request_permission", "params": map[string]any{
 		"sessionId": "s1", "toolCall": map[string]any{"toolCallId": "c2", "title": "rm -rf build", "kind": "execute"},
@@ -343,14 +326,10 @@ func TestGoldenV2Turn(t *testing.T) {
 	note(p, "s2", map[string]any{"sessionUpdate": "session_info_update", "title": "Fixing", "updatedAt": nil})
 	note(p, "s2", map[string]any{"sessionUpdate": "_example.com/widget", "x": 1})
 	note(p, "s2", map[string]any{"sessionUpdate": "subagent_update", "y": 2})
-	// v1's tool_call and plan are not version 2 kinds: they are kept as
-	// unknown, not read in the version 1 shape.
 	note(p, "s2", map[string]any{"sessionUpdate": "tool_call", "toolCallId": "old"})
 	note(p, "s2", map[string]any{"sessionUpdate": "state_update", "state": "idle", "stopReason": "end_turn"})
 	got := wait(t, turn)
 	r.result("turn=%+v err=%v", got.end, got.err)
-	// The test waits for Close. A Close still running when the test returns
-	// sees the cleanup close the connection, and reports after the end.
 	closed := make(chan error, 1)
 	go func() { closed <- s.Close(context.Background()) }()
 	p.respond(r.expect(p, "session/close"), map[string]any{})
@@ -392,7 +371,6 @@ func TestGoldenV2Permission(t *testing.T) {
 	r.mu.Lock()
 	r.sent = append(r.sent, raw)
 	r.mu.Unlock()
-	// An unknown subject still asks.
 	p.send(map[string]any{"jsonrpc": "2.0", "id": 8, "method": "session/request_permission", "params": map[string]any{
 		"sessionId": "s2", "title": "Use the widget?", "subject": map[string]any{"type": "_example.com/widget"},
 		"options": []any{map[string]any{"optionId": "n", "name": "No", "kind": "reject_once"}},
@@ -401,7 +379,6 @@ func TestGoldenV2Permission(t *testing.T) {
 	r.mu.Lock()
 	r.sent = append(r.sent, raw)
 	r.mu.Unlock()
-	// What this client does not offer.
 	p.send(map[string]any{"jsonrpc": "2.0", "id": 9, "method": "elicitation/create", "params": map[string]any{"sessionId": "s2", "mode": "form", "message": "Name?"}})
 	raw, _ = p.nextRaw()
 	r.mu.Lock()
@@ -431,7 +408,6 @@ func TestGoldenV2CancelAndStaleIdle(t *testing.T) {
 
 	turn := promptAsync(s, "long job")
 	pm := r.expect(p, "session/prompt")
-	// A repeat of the state before the prompt: idle, with an old reason.
 	note(p, "s3", map[string]any{"sessionUpdate": "state_update", "state": "idle", "stopReason": "cancelled"})
 	select {
 	case got := <-turn:
@@ -449,7 +425,6 @@ func TestGoldenV2CancelAndStaleIdle(t *testing.T) {
 
 	turn = promptAsync(s, "again")
 	pm = r.expect(p, "session/prompt")
-	// The idle comes before the answer: it still ends the turn.
 	note(p, "s3", map[string]any{"sessionUpdate": "state_update", "state": "running"})
 	note(p, "s3", map[string]any{"sessionUpdate": "state_update", "state": "requires_action"})
 	note(p, "s3", map[string]any{"sessionUpdate": "state_update", "state": "idle", "stopReason": "error", "error": map[string]any{"code": -32603, "message": "model overloaded"}})
@@ -457,7 +432,6 @@ func TestGoldenV2CancelAndStaleIdle(t *testing.T) {
 	got = wait(t, turn)
 	r.result("turn=%+v error=%+v err=%v", got.end, got.end.Error, got.err)
 
-	// An idle with no reason, or one that is not a string, still ends it.
 	turn = promptAsync(s, "third")
 	pm = r.expect(p, "session/prompt")
 	p.respond(pm, map[string]any{"messageId": "u3"})
@@ -466,15 +440,12 @@ func TestGoldenV2CancelAndStaleIdle(t *testing.T) {
 	got = wait(t, turn)
 	r.result("turn=%+v err=%v", got.end, got.err)
 
-	// A prompt the agent does not take is an error, not a turn.
 	turn = promptAsync(s, "fourth")
 	pm = r.expect(p, "session/prompt")
 	p.send(map[string]any{"jsonrpc": "2.0", "id": pm["id"], "error": map[string]any{"code": -32800, "message": "cancelled before insertion"}})
 	got = wait(t, turn)
 	r.result("turn=%+v err=%v", got.end, got.err)
 
-	// A version 2 agent that answers the prompt the version 1 way ends the
-	// turn there.
 	turn = promptAsync(s, "fifth")
 	p.respond(r.expect(p, "session/prompt"), map[string]any{"stopReason": "end_turn"})
 	got = wait(t, turn)
