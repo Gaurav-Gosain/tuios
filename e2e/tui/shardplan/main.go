@@ -9,16 +9,16 @@
 // seconds of the others.
 //
 // A shard is one runner, and its lanes run side by side on it. The tests in
-// alone.txt run after the lanes of their shard are done, one at a time, with
-// nothing beside them.
+// alone.txt go to one more shard of their own, which runs them one at a time
+// with nothing beside them.
 //
 // Usage:
 //
 //	go test -list '^Test' ./... | shardplan -shards 9 -shard 3
 //	    prints the tests of shard 3, one per line.
 //	go test -list '^Test' ./... | shardplan -shards 4 -lanes 4 -shard 3 -lane 2
-//	    prints the tests of lane 2 of shard 3. Lane 0 is the tests that run
-//	    alone after the lanes.
+//	    prints the tests of lane 2 of shard 3. Shard 5, lane 0, is the tests
+//	    that run alone.
 //	go test -list '^Test' ./... | shardplan -shards 9 -max 11m
 //	    prints the estimated time of each shard and fails if one is over.
 //	testselect ... | shardplan -shards 9 -shard 3 -fill 8m
@@ -57,7 +57,7 @@ func main() {
 	shards := flag.Int("shards", 0, "number of shards")
 	lanes := flag.Int("lanes", 1, "number of lanes in each shard")
 	shard := flag.Int("shard", 0, "print the tests of this shard (1-based)")
-	lane := flag.Int("lane", -1, "with -shard: print the tests of this lane (1-based), or with 0 the tests that run alone")
+	lane := flag.Int("lane", -1, "with -shard: print the tests of this lane (1-based), or with 0 the tests that run alone (shard -shards plus 1)")
 	limit := flag.Duration("max", 0, "fail if a shard's estimated time is over this")
 	fill := flag.Duration("fill", 0, "use only as many shards as the tests need at about this much each")
 	update := flag.Bool("update", false, "rewrite the durations file from the go test -v logs given as arguments")
@@ -69,8 +69,8 @@ func main() {
 		}
 		return
 	}
-	if *shards < 1 || *lanes < 1 || (*shard == 0) == (*limit == 0) || *shard > *shards {
-		fail(fmt.Errorf("give -shards and one of -shard (1 to %d) or -max", *shards))
+	if *shards < 1 || *lanes < 1 || (*shard == 0) == (*limit == 0) || *shard > *shards+1 {
+		fail(fmt.Errorf("give -shards and one of -shard (1 to %d) or -max", *shards+1))
 	}
 	if *shard > 0 && (*lane > *lanes || (*lane < 0 && *lanes > 1)) {
 		fail(fmt.Errorf("give -lane 0 to %d with -shard when -lanes is over 1", *lanes))
@@ -102,18 +102,27 @@ func main() {
 	plan := pack(names, known, groups, alone, used, *lanes)
 
 	if *shard > 0 {
-		if *shard > used {
+		// The shard after the last holds the tests that run alone, whatever
+		// the fill.
+		if *shard == *shards+1 {
+			*shard = used + 1
+		} else if *shard > used {
 			return
 		}
 		s := plan[*shard-1]
 		var out []string
 		switch {
 		case *lane > 0:
-			out = s.lanes[*lane-1].names
+			if *lane <= len(s.lanes) {
+				out = s.lanes[*lane-1].names
+			}
 		case *lane == 0:
 			out = s.alone.names
-		default: // one lane: the lane, then the tests that run alone
-			out = append(slices.Clone(s.lanes[0].names), s.alone.names...)
+		default: // one lane: the lane, or the tests that run alone
+			if len(s.lanes) > 0 {
+				out = s.lanes[0].names
+			}
+			out = append(slices.Clone(out), s.alone.names...)
 		}
 		for _, name := range out {
 			fmt.Println(name)
@@ -133,11 +142,14 @@ func main() {
 		for _, l := range s.lanes {
 			n += len(l.names)
 		}
-		alone := ""
-		if len(s.alone.names) > 0 {
-			alone = fmt.Sprintf(" (alone: %d, %s)", len(s.alone.names), secs(s.alone.load))
+		if len(s.lanes) == 0 {
+			if n == 0 {
+				continue
+			}
+			fmt.Printf("shard %d of %d: %3d tests alone, one at a time, about %s%s\n", i+1, *shards+1, n, secs(s.load()), mark)
+			continue
 		}
-		fmt.Printf("shard %d of %d: %3d tests, about %s%s%s\n", i+1, *shards, n, secs(s.load()), alone, mark)
+		fmt.Printf("shard %d of %d: %3d tests, about %s%s\n", i+1, *shards, n, secs(s.load()), mark)
 	}
 	missing := 0
 	for _, name := range names {
@@ -157,11 +169,11 @@ func main() {
 
 // shardsNeeded is how many shards hold the tests at about fill in each lane,
 // at least one and at most shards. A selection of a few tests then starts a
-// few runners, not all of them. A test that runs alone holds every lane of
-// its shard.
+// few runners, not all of them. The tests that run alone have a shard of
+// their own and do not count.
 func shardsNeeded(names []string, known map[string]float64, groups [][]string, alone map[string]bool, fill time.Duration, shards, lanes int) int {
 	s := pack(names, known, groups, alone, 1, 1)[0]
-	total := s.lanes[0].load/float64(lanes) + s.alone.load
+	total := s.lanes[0].load / float64(lanes)
 	n := int(math.Ceil(total / fill.Seconds()))
 	return max(1, min(n, shards))
 }
@@ -171,8 +183,8 @@ type laneLoad struct {
 	load  float64
 }
 
-// shardLoad is the lanes of one shard, and the tests that run alone after
-// them.
+// shardLoad is the lanes of one shard, or, in the shard after the last, the
+// tests that run alone.
 type shardLoad struct {
 	lanes []laneLoad
 	alone laneLoad
@@ -187,12 +199,11 @@ func (s shardLoad) load() float64 {
 	return longest + s.alone.load
 }
 
-// pack assigns the longest test first to the lane that ends first so far. A
-// lane ends after the tests that run alone in its shard, so a test alone
-// goes to the shard that ends first and delays each of its lanes. A group
-// from together.txt counts as one test as long as its members together, and
-// runs alone when one of them does. The order is fixed by time and then name,
-// so the plan depends only on its inputs.
+// pack assigns the longest test first to the lane with the least time so far,
+// over shards shards. A test that runs alone goes to the shard after them,
+// which has no lanes. A group from together.txt counts as one test as long as
+// its members together, and runs alone when one of them does. The order is
+// fixed by time and then name, so the plan depends only on its inputs.
 func pack(names []string, known map[string]float64, groups [][]string, alone map[string]bool, shards, lanes int) []shardLoad {
 	fallback := 1.0
 	if len(known) > 0 {
@@ -247,26 +258,21 @@ func pack(names []string, known map[string]float64, groups [][]string, alone map
 		return cmp.Or(cmp.Compare(b.load, a.load), cmp.Compare(a.names[0], b.names[0]))
 	})
 
-	plan := make([]shardLoad, shards)
-	for i := range plan {
+	plan := make([]shardLoad, shards+1)
+	for i := range shards {
 		plan[i].lanes = make([]laneLoad, lanes)
 	}
+	apart := &plan[shards].alone
 	for _, u := range units {
 		if u.alone {
-			first := 0
-			for i := range plan {
-				if plan[i].load() < plan[first].load() {
-					first = i
-				}
-			}
-			plan[first].alone.names = append(plan[first].alone.names, u.names...)
-			plan[first].alone.load += u.load
+			apart.names = append(apart.names, u.names...)
+			apart.load += u.load
 			continue
 		}
 		fs, fl := 0, 0
-		for i := range plan {
+		for i := range shards {
 			for j := range plan[i].lanes {
-				if plan[i].lanes[j].load+plan[i].alone.load < plan[fs].lanes[fl].load+plan[fs].alone.load {
+				if plan[i].lanes[j].load < plan[fs].lanes[fl].load {
 					fs, fl = i, j
 				}
 			}
