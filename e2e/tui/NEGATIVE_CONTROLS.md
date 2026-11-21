@@ -18593,6 +18593,9 @@ TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
 ## worktree new from a pane
 
 `TestWorktreeNewFromAPaneSwitchesTheClient` types `tuios worktree new` without `--detach` into the pane of an attached client. The client must switch to the new session, and only one session may count as attached.
+## clear keeps the scrollback
+
+`TestClearKeepsScrollback` prints 200 rows in a daemon pane, then writes the bytes clear prints: ED 2, then ED 3. With the default, copy mode at the top and the daemon's capture must still show row-1. With `appearance.scrollback_keep_on_clear = false`, the history must go.
 
 Run on 2026-11-21 on Linux, real backend, against main at 6419a7d9f.
 
@@ -18658,4 +18661,9 @@ The cells "Under `own`" and "Under `read_only`" are prose and are not checked.
 
 ```sh
 go test -count=1 -run '^TestRestrictedTableNamesEveryVerbItAllows$' ./internal/session/
+| Main | `TestClearKeepsScrollback/keep` | "the capture of e2e-clear-keep never matched": the history was gone | **caught** |
+| Main | `TestClearKeepsScrollback/drop` | passes: main always drops the history | not a control |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^(TestClearKeepsScrollback|TestClearScrollback)$' .
 ```
