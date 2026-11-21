@@ -226,16 +226,20 @@ func TestAskpassGitTerminalPromptZeroFailsFast(t *testing.T) {
 
 // TestAskpassAgentInTheForegroundJobAsksInTheInbox is an agent that runs its
 // commands in its own foreground job, without a session of their own: here
-// sh -c runs ssh-keygen, and sh leads the job. The askpass program does not
-// read the terminal, which the agent owns, and asks in the Inbox. The person
-// answers in the dialog, and the key unlocks.
+// sh -c runs ssh-keygen in a pane that tuios knows runs an agent. The
+// terminal is the agent's, so the askpass program does not read it, and the
+// prompt goes to the Inbox. The person answers in the dialog, and the key
+// unlocks.
 //
-// Negative control: with askpassJobTyped counting every job leader, the
+// Negative control: with the daemon answering terminal for every pane, the
 // prompt goes to the terminal and no dialog opens.
 func TestAskpassAgentInTheForegroundJobAsksInTheInbox(t *testing.T) {
 	askpassCleanEnv(t)
 	key, pub := askpassKey(t)
 	term, base := attachClientBase(t)
+	if b, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "e2e-ctrlp", "-w", "0", "--harness", "claude-code"); err != nil {
+		t.Fatalf("set-agent-state: %v\n%s", err, b)
+	}
 	out := filepath.Join(t.TempDir(), "pub.txt")
 	line := "sh -c 'ssh-keygen -y -f " + key + " > " + out + "; echo SH=$?'\n"
 	if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
@@ -254,6 +258,54 @@ func TestAskpassAgentInTheForegroundJobAsksInTheInbox(t *testing.T) {
 		return strings.Contains(s.Text(), "SH=0")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ssh-keygen did not unlock the key: %v\n%s", err, term.Snapshot())
+	}
+	if got, _ := os.ReadFile(out); !strings.HasPrefix(strings.TrimSpace(string(got)), pub) {
+		t.Fatalf("ssh-keygen printed %q, want %q", got, pub)
+	}
+}
+
+// TestAskpassMakeInAShellPaneAsksInThePane is a person's command that reaches
+// ssh through another program: make runs ssh-keygen. The pane runs no agent,
+// so the foreground job is the person's, whatever wraps ssh, and the prompt
+// shows in the pane. No dialog opens.
+//
+// Negative control: with the daemon sending every prompt to the Inbox, the
+// dialog opens and the test fails.
+func TestAskpassMakeInAShellPaneAsksInThePane(t *testing.T) {
+	makeBin, err := exec.LookPath("make")
+	if err != nil {
+		t.Skip("make is not installed")
+	}
+	askpassCleanEnv(t)
+	key, pub := askpassKey(t)
+	term, base := attachClientBase(t)
+	dir := t.TempDir()
+	out := filepath.Join(dir, "pub.txt")
+	mk := filepath.Join(dir, "Makefile")
+	if err := os.WriteFile(mk, []byte("all:\n\tssh-keygen -y -f "+key+" > "+out+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	line := makeBin + " -s -f " + mk + "; echo MK=$?\n"
+	if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, b)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "Enter passphrase for")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the passphrase prompt never showed in the pane: %v\n%s", err, term.Snapshot())
+	}
+	stayTrue(t, "no secret dialog opens for make in a shell pane", time.Second, func() (bool, string) {
+		snap := term.Snapshot()
+		return !strings.Contains(snap, "Unlock a key"), snap
+	})
+	enterTerminalMode(t, term)
+	if err := term.SendKeys(askpassCanary + "\r"); err != nil {
+		t.Fatalf("type the passphrase: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "MK=0")
+	}, uiTimeout); err != nil {
+		t.Fatalf("make did not unlock the key with the passphrase typed in the pane: %v\n%s", err, term.Snapshot())
 	}
 	if got, _ := os.ReadFile(out); !strings.HasPrefix(strings.TrimSpace(string(got)), pub) {
 		t.Fatalf("ssh-keygen printed %q, want %q", got, pub)

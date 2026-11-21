@@ -117,6 +117,15 @@ func (d *Daemon) verbAskpass(cs *connState, params json.RawMessage) (any, *verbE
 	var p struct {
 		Prompt  string `json:"prompt"`
 		Timeout int    `json:"timeout"`
+		// Terminal says the askpass program can ask on the pane's terminal,
+		// where the asking program is the foreground job. In a pane that
+		// runs no agent a person typed it, so the call answers terminal and
+		// asks nothing.
+		Terminal bool `json:"terminal"`
+		// NoInbox says the prompt must not wait for the person
+		// (GIT_TERMINAL_PROMPT=0): the call answers no_inbox where it would
+		// put the prompt in the Inbox.
+		NoInbox bool `json:"no_inbox"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -134,8 +143,17 @@ func (d *Daemon) verbAskpass(cs *connState, params json.RawMessage) (any, *verbE
 	_, own := d.peerPane(cs)
 	read := askpass.Read(p.Prompt)
 	item := AttentionItem{Summary: attentionText(read.Text, attentionMaxSummary), Secret: &SecretAsk{Kind: read.Kind, Prompt: read.Text}}
-	if own == "" || !d.placeOnPane(own, &item) {
+	w, placed := d.placeOnPane(own, &item)
+	if own == "" || !placed {
 		return nil, askpassRefused("askpass is for a program inside a pane of this daemon")
+	}
+	switch {
+	case p.Terminal && !isAgentWindow(w):
+		// A plain shell pane: a person typed the command, whatever wraps
+		// ssh, and answers on the terminal.
+		return map[string]any{"type": "askpass", "status": "terminal"}, nil
+	case p.NoInbox:
+		return map[string]any{"type": "askpass", "status": "no_inbox"}, nil
 	}
 	// The caller is the askpass program. The program that asks is the one
 	// that started it. The dialog shows its command line, and never says

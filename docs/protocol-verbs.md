@@ -667,11 +667,13 @@ Ask the person for a secret on behalf of a program in the caller's pane, such as
 |---|---|---|---|---|
 | `prompt` | string |  |  | The program's prompt as it wrote it, such as Enter passphrase for key '/home/u/.ssh/id_ed25519':. Printable text, at most 1024 bytes. |
 | `timeout` | int |  | `300000` | Milliseconds to wait for the answer, at most one hour. The prompt closes when the wait ends. |
+| `terminal` | bool |  |  | The program can ask on the pane's terminal, where the asking program is the foreground job. In a pane that runs no agent, the call answers status terminal and asks nothing. |
+| `no_inbox` | bool |  |  | The prompt must not wait for the person, as with GIT_TERMINAL_PROMPT=0. Where the prompt would go to the Inbox, the call answers status no_inbox. |
 
 | Result field | Type | Description |
 |---|---|---|
 | `request_id` | string | The prompt's id. |
-| `status` | string | answered, cancelled (the person cancelled, or the program went away), timeout, dismissed, window_closed, session_closed or shutdown. |
+| `status` | string | answered, cancelled (the person cancelled, or the program went away), timeout, dismissed, window_closed, session_closed or shutdown. terminal or no_inbox with nothing asked: see terminal and no_inbox. |
 | `secret` | string | The answer, base64, when answered. |
 
 ```json

@@ -51,48 +51,67 @@ func runAsAskpass(args []string) int {
 	// stops on its own once the key is touched, and "confirm" is a yes or no
 	// question answered by the exit status.
 	kind := os.Getenv("SSH_ASKPASS_PROMPT")
-	if tty, ok := foregroundTerminal(); ok {
+	// A tool that sets GIT_TERMINAL_PROMPT=0, as go mod download does, wants
+	// a prompt with nobody at the terminal to fail at once. git runs
+	// SSH_ASKPASS before it looks at the variable, so this program does. A
+	// person at the terminal of a plain shell pane is still asked there, as
+	// ssh would.
+	noInbox := os.Getenv("GIT_TERMINAL_PROMPT") == "0"
+	tty, onTerminal := foregroundTerminal()
+	if onTerminal {
 		defer func() { _ = tty.Close() }()
-		return askpassOnTerminal(tty, prompt, kind)
 	}
 	why := ""
 	switch {
+	case onTerminal && (kind == "none" || kind == "confirm"):
+		// Neither goes to the Inbox, so there is nothing to ask the daemon.
+		return askpassOnTerminal(tty, prompt, kind)
 	case kind == "none":
 		return 0
 	case kind == "confirm":
 		why = "the Inbox cannot ask a yes or no question yet"
-	case os.Getenv("GIT_TERMINAL_PROMPT") == "0":
-		// A tool that sets it, as go mod download does, wants a prompt with
-		// nobody at the terminal to fail at once. git runs SSH_ASKPASS
-		// before it looks at the variable, so this program does. A person
-		// at the terminal is still asked there, as ssh would.
+	case noInbox && !onTerminal:
 		why = "GIT_TERMINAL_PROMPT=0 is set"
 	default:
-		secret, err := askpassDaemon(prompt)
-		if err == nil {
+		// The daemon knows the pane. In a pane that runs no agent, a
+		// foreground job is the person's, whatever wraps ssh, so it says to
+		// ask on the terminal. In an agent's pane the terminal is the
+		// agent's, and the prompt goes to the Inbox.
+		secret, status, err := askpassDaemon(prompt, onTerminal, noInbox)
+		switch {
+		case err == nil && status == "answered":
 			return askpassPrint(secret)
+		case onTerminal && (err != nil || status == "terminal"):
+			return askpassOnTerminal(tty, prompt, kind)
+		case err != nil:
+			why = err.Error()
+		case status == "no_inbox":
+			why = "GIT_TERMINAL_PROMPT=0 is set"
+		default:
+			why = "the prompt ended with no answer: " + strings.ReplaceAll(status, "_", " ")
 		}
-		why = err.Error()
 	}
 	fmt.Fprintln(os.Stderr, "tuios: nothing was asked or sent, because "+why+". Run the command in a terminal to answer it there.")
 	return 1
 }
 
 // askpassDaemon asks the daemon for the answer to prompt: it goes in the
-// Inbox, and the person answers in the secret dialog.
-func askpassDaemon(prompt string) ([]byte, error) {
+// Inbox, and the person answers in the secret dialog. It returns the
+// answer and the daemon's status: answered, terminal (ask on the terminal
+// instead), no_inbox, or how the prompt ended.
+func askpassDaemon(prompt string, terminal, noInbox bool) ([]byte, string, error) {
 	sock := os.Getenv("TUIOS_SOCKET")
 	if sock == "" {
-		return nil, errors.New("no tuios daemon runs this pane")
+		return nil, "", errors.New("no tuios daemon runs this pane")
 	}
 	client, err := session.DialVerbClientAt(sock, "")
 	if err != nil {
-		return nil, errfmt.Errorf("the tuios daemon does not answer (%w)", err)
+		return nil, "", errfmt.Errorf("the tuios daemon does not answer (%w)", err)
 	}
 	defer func() { _ = client.Close() }()
-	raw, err := client.CallWithTimeout("askpass", map[string]any{"prompt": prompt}, askpassWait)
+	raw, err := client.CallWithTimeout("askpass", map[string]any{"prompt": prompt, "terminal": terminal, "no_inbox": noInbox}, askpassWait)
 	if err != nil {
-		return nil, errfmt.Errorf("the prompt could not be shown (%w)", err)
+		return nil, "", errfmt.Errorf("the prompt could not be shown (%w)", err)
 	}
 	var res struct {
 		Status string `json:"status"`
@@ -102,9 +121,9 @@ func askpassDaemon(prompt string) ([]byte, error) {
 	clear(raw)
 	if err != nil || res.Status != "answered" {
 		clear(res.Secret)
-		return nil, errors.New("the prompt ended with no answer: " + strings.ReplaceAll(res.Status, "_", " "))
+		return nil, res.Status, err
 	}
-	return res.Secret, nil
+	return res.Secret, res.Status, nil
 }
 
 // askpassPrint writes the answer for the program that asks, and zeroes it.
@@ -112,6 +131,7 @@ func askpassPrint(answer []byte) int {
 	out := append(answer, '\n')
 	_, err := os.Stdout.Write(out)
 	clear(out)
+	clear(answer)
 	if err != nil {
 		return 1
 	}
