@@ -9,12 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Mode switches and stacking order, driven through the real binary. Each test
-// here failed on the tree before its fix; NEGATIVE_CONTROLS.md records the
-// controls.
-
-// fillPaneWith types a command into the focused pane that paints every row of
-// it with one letter, so a later frame can say which pane is on top of a cell.
 func fillPaneWith(t *testing.T, term *tuitest.Terminal, letter string) {
 	t.Helper()
 	line := strings.Repeat(letter, 100)
@@ -45,8 +39,6 @@ func cellAt(s tuitest.Screen, col, row int) rune {
 	return ' '
 }
 
-// insideContent reports whether a cell is inside a pane's content, away from
-// its border and from the last rows where the shell prompt sits.
 func insideContent(r winRect, x, y int) bool {
 	return x > r.X && x < r.X+r.Width-1 && y > r.Y && y < r.Y+r.Height-3
 }
@@ -55,8 +47,6 @@ func covers(r winRect, x, y int) bool {
 	return x >= r.X && x < r.X+r.Width && y >= r.Y && y < r.Y+r.Height
 }
 
-// runPaletteRow opens the command palette, filters to one row, runs it and
-// waits for the text it announces.
 func runPaletteRow(t *testing.T, term *tuitest.Terminal, query, row, announces string) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('p')); err != nil {
@@ -87,17 +77,12 @@ func runPaletteRow(t *testing.T, term *tuitest.Terminal, query, row, announces s
 func TestClickingAPaneKeepsTheOthersInOrder(t *testing.T) {
 	term, base := start(t, startOpts{cols: 120, rows: 40, args: []string{"new", "zorder"}})
 	waitBoot(t, term)
-	// Floating, which the session no longer is by default: the whole test is
-	// about the stacking order of panes that overlap, and tiled panes do not.
 	disableTiling(t, term)
 	for _, letter := range []string{"A", "B", "C"} {
 		newWindow(t, term)
 		fillPaneWith(t, term, letter)
 	}
 	rects := waitForSettledGeometry(t, base, 3)
-	// The three panes open on one centred box. C, on top, goes down and to the
-	// right; B, now on top of the box, goes left and down. Both drags raise the
-	// pane they grab, so the stack ends A, C, B from the bottom.
 	c := rects[2]
 	mouseDrag(t, term, c.X+8, c.Y, c.X+18, c.Y+10, tuitest.MouseLeft, 0)
 	mouseDrag(t, term, c.X+8, c.Y, c.X-22, c.Y+3, tuitest.MouseLeft, 0)
@@ -133,9 +118,6 @@ func TestClickingAPaneKeepsTheOthersInOrder(t *testing.T) {
 	}
 }
 
-// scrollingStrip starts a session under the scrolling layout with enough
-// columns that the strip is longer than the screen and the focus is on its
-// last column, so the first columns sit off the left edge.
 func scrollingStrip(t *testing.T, panes int) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -213,7 +195,6 @@ func TestAFloatingPaneStaysUnderTheWhichKeyOverlay(t *testing.T) {
 	runPaletteRow(t, term, "toggle floating", "Toggle floating", "Window: floating")
 	rects := waitForSettledGeometry(t, base, 5)
 	p := rects[4]
-	// Into the bottom-right corner, where the which-key overlay opens.
 	mouseDrag(t, term, p.X+8, p.Y, 119-p.Width+8, 37-p.Height, tuitest.MouseLeft, 0)
 	rects = waitForSettledGeometry(t, base, 5)
 	p = rects[4]
@@ -223,15 +204,9 @@ func TestAFloatingPaneStaysUnderTheWhichKeyOverlay(t *testing.T) {
 	if err := term.WaitForText("Toggle tiling", uiTimeout); err != nil {
 		t.Fatalf("the which-key overlay never opened: %v\n%s", err, term.Snapshot())
 	}
-	// "Toggle tiling" is half way down the overlay, so seeing it says the frame
-	// has started to arrive, not that it has finished. On macOS the rows below
-	// it were read before they were written, and the float showed through a
-	// frame that had not yet covered it. The frame is let settle first.
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled after the which-key overlay opened: %v\n%s", err, term.Snapshot())
 	}
-	// The overlay is taller than the float, so its rows run through the
-	// float's box. None of those rows may still show the float's paint.
 	s := term.Screen()
 	for y := p.Y + 1; y < p.Y+p.Height-1; y++ {
 		if strings.Contains(s.Line(y), "FFFF") {
@@ -240,9 +215,6 @@ func TestAFloatingPaneStaysUnderTheWhichKeyOverlay(t *testing.T) {
 	}
 }
 
-// sharedBorderSession is two panes tiled with shared borders on, so each pane
-// gives up its own border and the frame shows one divider between them. That
-// is the state a tiling switch has to undo, and the one the other doors forgot.
 func sharedBorderSession(t *testing.T, name string) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -258,7 +230,6 @@ func sharedBorderSession(t *testing.T, name string) (*tuitest.Terminal, string) 
 	return term, base
 }
 
-// waitPaneCorners waits for the frame to show n panes drawing their own box.
 func waitPaneCorners(t *testing.T, term *tuitest.Terminal, n int, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -322,7 +293,6 @@ func TestAPeerSeesTilingTurnOff(t *testing.T) {
 	}
 	waitPaneCorners(t, term, 2, "the client that turned tiling off")
 	waitPaneCorners(t, peer, 2, "the peer")
-	// And it stays that way: a later push must not put the flags back.
 	time.Sleep(time.Second)
 	if n := len(paneStarts(peer.Screen())); n != 2 {
 		t.Errorf("the peer went back to %d pane corners\n%s", n, peer.Snapshot())
@@ -359,7 +329,6 @@ func TestAPeerSeesTilingTurnOn(t *testing.T) {
 	}
 	waitPaneCorners(t, term, 0, "the client that turned tiling on")
 	waitPaneCorners(t, peer, 0, "the peer")
-	// And it stays that way through the pushes that follow.
 	time.Sleep(time.Second)
 	if n := len(paneStarts(peer.Screen())); n != 0 {
 		t.Errorf("the peer went back to %d pane corners\n%s", n, peer.Snapshot())

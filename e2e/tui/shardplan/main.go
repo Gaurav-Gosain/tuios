@@ -102,8 +102,6 @@ func main() {
 	plan := pack(names, known, groups, alone, used, *lanes)
 
 	if *shard > 0 {
-		// The shard after the last holds the tests that run alone, whatever
-		// the fill.
 		if *shard == *shards+1 {
 			*shard = used + 1
 		} else if *shard > used {
@@ -118,7 +116,7 @@ func main() {
 			}
 		case *lane == 0:
 			out = s.alone.names
-		default: // one lane: the lane, or the tests that run alone
+		default:
 			if len(s.lanes) > 0 {
 				out = s.lanes[0].names
 			}
@@ -167,10 +165,6 @@ func main() {
 	}
 }
 
-// shardsNeeded is how many shards hold the tests at about fill in each lane,
-// at least one and at most shards. A selection of a few tests then starts a
-// few runners, not all of them. The tests that run alone have a shard of
-// their own and do not count.
 func shardsNeeded(names []string, known map[string]float64, groups [][]string, alone map[string]bool, fill time.Duration, shards, lanes int) int {
 	s := pack(names, known, groups, alone, 1, 1)[0]
 	total := s.lanes[0].load / float64(lanes)
@@ -183,14 +177,11 @@ type laneLoad struct {
 	load  float64
 }
 
-// shardLoad is the lanes of one shard, or, in the shard after the last, the
-// tests that run alone.
 type shardLoad struct {
 	lanes []laneLoad
 	alone laneLoad
 }
 
-// load is the time of the shard: its longest lane, then the tests alone.
 func (s shardLoad) load() float64 {
 	longest := 0.0
 	for _, l := range s.lanes {
@@ -199,17 +190,9 @@ func (s shardLoad) load() float64 {
 	return longest + s.alone.load
 }
 
-// pack assigns the longest test first to the lane with the least time so far,
-// over shards shards. A test that runs alone goes to the shard after them,
-// which has no lanes. A group from together.txt counts as one test as long as
-// its members together, and runs alone when one of them does. The order is
-// fixed by time and then name, so the plan depends only on its inputs.
 func pack(names []string, known map[string]float64, groups [][]string, alone map[string]bool, shards, lanes int) []shardLoad {
 	fallback := 1.0
 	if len(known) > 0 {
-		// Sum in name order. A sum over the map in its random order differs
-		// in the last bits from run to run, which moves tests between shards,
-		// and each lane computes its plan in a run of its own.
 		sum := 0.0
 		for _, name := range slices.Sorted(maps.Keys(known)) {
 			sum += known[name]
@@ -223,7 +206,6 @@ func pack(names []string, known map[string]float64, groups [][]string, alone map
 		return fallback
 	}
 
-	// A unit is one test, or the members of a group that are among names.
 	type unit struct {
 		names []string
 		load  float64
@@ -289,8 +271,6 @@ func pack(names []string, known map[string]float64, groups [][]string, alone map
 	return plan
 }
 
-// readAlone reads alone.txt: test names apart by spaces or lines, and #
-// comments. A missing file means none.
 func readAlone(path string) (map[string]bool, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -309,8 +289,6 @@ func readAlone(path string) (map[string]bool, error) {
 	return alone, nil
 }
 
-// readGroups reads together.txt: one group per line, the test names apart by
-// spaces, and # comments. A missing file means no groups.
 func readGroups(path string) ([][]string, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -362,9 +340,6 @@ func readDurations(path string) (map[string]float64, error) {
 	return known, nil
 }
 
-// result matches a top-level test result. A subtest's line is indented, so
-// the "--- " has to open the line or follow the timestamp gh run view --log
-// puts in front of it.
 var result = regexp.MustCompile(`(?:^|\dZ )--- (?:PASS|FAIL|SKIP): (Test\w+) \(([0-9.]+)s\)`)
 
 const header = `# Measured run time in seconds of each end-to-end test on a GitHub runner,

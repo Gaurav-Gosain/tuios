@@ -35,7 +35,6 @@ func TestTMLSurfaceEventFollowsEachChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tml show: %v\n%s", err, out)
 	}
-	// It prints the surface id and the window id.
 	last := strings.TrimSpace(out[strings.LastIndex(strings.TrimSpace(out), "\n")+1:])
 	surface := strings.Fields(last)[0]
 

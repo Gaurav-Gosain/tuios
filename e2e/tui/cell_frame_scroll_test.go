@@ -13,24 +13,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// #2157: a guest that scrolls the way Neovim does, in a lone pane. Each guest
-// frame is one synchronized update (DEC 2026) that sets a scroll region,
-// scrolls it up a line, writes the new bottom line, and writes a status line
-// below the region. Every frame the host presents must be one whole guest
-// frame: the region holds consecutive lines and the status names the first.
-//
-// On a client that writes cells, a lone pane is drawn from its emulator
-// (pane_cells.go). A frame drawn while the guest's output held the pane's lock
-// went the usual way instead, and that way served the text it last drew, from
-// before the pane took the cell path: the shell prompt, under a scrolled
-// Neovim. The string path read the emulator half way through an update when
-// the update opened between its check and its lock.
-
 const (
 	scrollRegion = 20
-	// scrollRounds bursts of scrollBurst frames each. A burst this long is
-	// still being read into the pane's emulator when the client draws, so
-	// some frames find the pane's lock taken, as a held j in Neovim does.
 	scrollRounds = 10
 	scrollBurst  = 1500
 )
@@ -44,7 +28,6 @@ var (
 	scrollStatusRE = regexp.MustCompile(`STEP (\d{6})`)
 )
 
-// scrollGuestFirst draws lines 0 to scrollRegion-1 and the status STEP 0.
 func scrollGuestFirst() string {
 	var b strings.Builder
 	b.WriteString("\x1b[?2026h\x1b[2J")
@@ -56,8 +39,6 @@ func scrollGuestFirst() string {
 	return b.String()
 }
 
-// scrollGuestFrame is the guest's frame k, lines k to k+scrollRegion-1,
-// drawn from frame k-1 by a scroll.
 func scrollGuestFrame(k int) string {
 	var b strings.Builder
 	b.WriteString("\x1b[?2026h")
@@ -70,8 +51,6 @@ func scrollGuestFrame(k int) string {
 	return b.String()
 }
 
-// scrollFrameProblem says what is wrong with the pane on one presented
-// screen, or returns "" when the screen shows one whole guest frame.
 func scrollFrameProblem(s tuitest.Screen) string {
 	_, rows := s.Size()
 	var nums []int
@@ -208,7 +187,6 @@ func TestHeldPaneIsNotTheOverlayAboveIt(t *testing.T) {
 	}
 	w := openFifo(t, pipe)
 	t.Cleanup(func() { _ = w.Close() })
-	// The pane's content is 98 by 26 cells at this size.
 	const paneCols, paneRows = 98, 26
 	fill := strings.Repeat("A", paneCols)
 	var frame strings.Builder
@@ -227,8 +205,6 @@ func TestHeldPaneIsNotTheOverlayAboveIt(t *testing.T) {
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatal(err)
 	}
-	// The update stays open while the picker opens and closes, well inside
-	// the second the emulator honours it.
 	if _, err := w.WriteString("\x1b[?2026h"); err != nil {
 		t.Fatal(err)
 	}

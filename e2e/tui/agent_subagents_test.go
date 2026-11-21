@@ -13,11 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// subagentHook runs the real Claude Code hook for a pane in dir, with
-// --explain, and returns the line it explained its decision with. It is an
-// error when the hook fails or prints anything on stdout, which Claude Code
-// would read as an answer. It touches nothing of the test's, so several may
-// run at once, as Claude Code runs the hooks of subagents started together.
 func subagentHook(base, dir, session, payload string) (string, error) {
 	cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", session, "--window", "0", "--timeout", "10s", "--explain")
 	cmd.Dir = dir
@@ -36,7 +31,6 @@ func subagentHook(base, dir, session, payload string) (string, error) {
 	return explained, nil
 }
 
-// subagentCountOf reads get-agent-state's subagents figure for a pane.
 func subagentCountOf(t *testing.T, base, session string) int {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "get-agent-state", "--json", "-s", session, "-w", "0")
@@ -86,8 +80,6 @@ func TestSubagentCountOnARestingRow(t *testing.T) {
 	log := &stateLog{name: "subagents-resting-row"}
 	defer log.save(t)
 	base := t.TempDir()
-	// The count alone on the row, which is what this test holds; the rows
-	// under it are TestSubagentRowsOnTheRail's.
 	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nagent_rest_fold = \"1s\"\nsubagent_rows = \"count\"\n")
 	killDaemon(t, base)
 	for _, name := range []string{"e2e-home", "e2e-lead", "e2e-ra", "e2e-rb", "e2e-rc"} {
@@ -111,8 +103,6 @@ func TestSubagentCountOnARestingRow(t *testing.T) {
 		return st
 	}
 
-	// The lead finishes a turn that handed the review out; three other
-	// agents sit at rest long enough to fold.
 	hook("e2e-lead", `{"hook_event_name":"SessionStart","session_id":"lead-1","source":"startup"}`)
 	hook("e2e-lead", `{"hook_event_name":"UserPromptSubmit","session_id":"lead-1","prompt":"review the api in parallel"}`)
 	hook("e2e-lead", `{"hook_event_name":"Stop","session_id":"lead-1","last_assistant_message":"Handed the review to three agents."}`)
@@ -128,7 +118,6 @@ func TestSubagentCountOnARestingRow(t *testing.T) {
 	waitText(t, term, "the finished lead and the folded rows", "Handed the", "+3 at rest")
 	step("lead done, three at rest", "e2e-lead")
 
-	// Three subagents start at once.
 	starts := []string{
 		`{"hook_event_name":"SubagentStart","session_id":"lead-1","agent_id":"a3f09c2e71d4b5a68","agent_type":"Explore"}`,
 		`{"hook_event_name":"SubagentStart","session_id":"lead-1","agent_id":"a71d4b5a683f09c2e","agent_type":"general-purpose"}`,
@@ -160,26 +149,18 @@ func TestSubagentCountOnARestingRow(t *testing.T) {
 		t.Fatalf("get-agent-state says %d subagents, want 3", n)
 	}
 
-	// With the context warning in front of it, the line has no room for the
-	// harness as well, and the harness gives way to the count.
 	if out, err := tuiosCLI(t, base, "set-agent-meta", "-s", "e2e-lead", "-w", "0", "--source", "statusline", "context=91%"); err != nil {
 		t.Fatalf("set-agent-meta: %v\n%s", err, out)
 	}
 	waitText(t, term, "the count beside the context warning", "ctx 91% · 3 subagents")
 	saveFrame(t, term, "subagents-with-context-warning")
 
-	// A stop for an id the pane never started is nothing. The hook has
-	// returned once the daemon answered, so one read is enough.
 	hook("e2e-lead", `{"hook_event_name":"SubagentStop","session_id":"lead-1","agent_id":"a0000000000000000","agent_type":"Explore"}`)
 	if m := agentMeta(t, base, "-s", "e2e-lead", "-w", "0"); m["subagents"] != "3 subagents" {
 		t.Fatalf("a stop for an unknown subagent moved the count: %v", m)
 	}
 	step("stop for an unknown id", "e2e-lead")
 
-	// A subagent of another conversation, such as one a `claude -p` the lead
-	// left running in the background starts, is not the pane's, although the
-	// pane is at rest and a state report from that conversation would take it
-	// over.
 	hook("e2e-lead", `{"hook_event_name":"SubagentStart","session_id":"nested-1","agent_id":"a5a683f09c2e71d4b","agent_type":"Explore"}`)
 	if m := agentMeta(t, base, "-s", "e2e-lead", "-w", "0"); m["subagents"] != "3 subagents" {
 		t.Fatalf("another conversation's subagent was counted on the pane: %v", m)
@@ -193,7 +174,6 @@ func TestSubagentCountOnARestingRow(t *testing.T) {
 		t.Fatalf("a subagent stopping moved the lead's state: %+v, want done with its message", st)
 	}
 
-	// A row at rest with a subagent at work comes out of the fold.
 	hook("e2e-ra", `{"hook_event_name":"SubagentStart","session_id":"e2e-ra","agent_id":"ab1c2d3e4f5a6b7c8","agent_type":"Explore"}`)
 	waitMeta(t, base, map[string]string{"subagents": "1 subagent"}, "-s", "e2e-ra", "-w", "0")
 	waitText(t, term, "the resting row with a subagent out of the fold", "1 subagent", "+2 at rest")
@@ -228,7 +208,6 @@ func TestSubagentCountOnARestingRow(t *testing.T) {
 	}
 	log.add("agent-log e2e-lead:\n%s", out)
 
-	// A resumed session starts with none, and an ended one keeps none.
 	hook("e2e-lead", `{"hook_event_name":"SessionStart","session_id":"lead-1","source":"resume"}`)
 	waitMeta(t, base, map[string]string{"subagents": ""}, "-s", "e2e-lead", "-w", "0")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "2 subagents") }, uiTimeout); err != nil {
@@ -310,7 +289,6 @@ func TestSubagentApprovalClearsWhenTheSubagentGoesOn(t *testing.T) {
 	hook(fmt.Sprintf(startSubs, subB))
 	expect("two subagents at work", "working")
 
-	// The request, then the notification.
 	hook(fmt.Sprintf(ask, subA))
 	hook(notify)
 	expect("subagent A asks, request first", "needs_input")
@@ -319,20 +297,17 @@ func TestSubagentApprovalClearsWhenTheSubagentGoesOn(t *testing.T) {
 	hook(fmt.Sprintf(ran, subA))
 	expect("subagent A ran the tool it asked for", "working")
 
-	// The notification, then the request.
 	hook(notify)
 	hook(fmt.Sprintf(ask, subA))
 	expect("subagent A asks, notification first", "needs_input")
 	hook(fmt.Sprintf(ran, subA))
 	expect("subagent A ran the tool it asked for", "working")
 
-	// A denial ends the prompt too.
 	hook(fmt.Sprintf(ask, subB))
 	expect("subagent B asks", "needs_input")
 	hook(fmt.Sprintf(denied, subB))
 	expect("subagent B was denied", "working")
 
-	// The main agent's own prompt is not the subagent's to clear.
 	hook(mainAsk)
 	hook(notify)
 	expect("the main agent asks", "needs_input")

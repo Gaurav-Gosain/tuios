@@ -6,16 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The pointer gestures borrow window management and hand back the mode they
-// began in. These are the guards for the gesture and ctrl-drag leases
-// (mode.go): each begins in terminal mode, ends the gesture, and asks the
-// shell to answer.
-//
-// Negative control (NEGATIVE_CONTROLS.md, "Pointer gestures as mode
-// leases"): EndPointerGesture and EndCtrlDrag made to do nothing.
-
-// dividerPanes is two tiled panes with a shared divider at column 80, in
-// terminal mode at a shell prompt.
 func dividerPanes(t *testing.T, config string) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()

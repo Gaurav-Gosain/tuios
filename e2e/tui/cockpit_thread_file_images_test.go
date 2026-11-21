@@ -44,7 +44,6 @@ func TestCockpitThreadPastedImageFile(t *testing.T) {
 			t.Fatalf("create session %s: %v\n%s", s, err, out)
 		}
 	}
-	// A 160x90 picture, so the card draws it over several rows.
 	pic := image.NewRGBA(image.Rect(0, 0, 160, 90))
 	for y := range 90 {
 		for x := range 160 {
@@ -62,8 +61,6 @@ func TestCockpitThreadPastedImageFile(t *testing.T) {
 	}
 	real := filepath.Join(paste, "tuios-paste-20261108-101500-aaaa.png")
 	fake := filepath.Join(paste, "tuios-paste-20261108-101600-bbbb.png")
-	// outside has the paste name, in another folder: the paste folder of
-	// another daemon, say.
 	outside := filepath.Join(filepath.Dir(paste), "other", "tuios-paste-20261108-101800-dddd.png")
 	if err := os.MkdirAll(filepath.Dir(outside), 0o700); err != nil {
 		t.Fatal(err)
@@ -127,7 +124,6 @@ func TestCockpitThreadPastedImageFile(t *testing.T) {
 		t.Fatalf("open the agents view: %v", err)
 	}
 	waitText(t, term, "the thread", "Answer 4.")
-	// The cards are read after the thread draws: wait until no card reads.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "click to view") && !strings.Contains(s.Text(), "Reading the image")
 	}, uiTimeout); err != nil {
@@ -135,7 +131,6 @@ func TestCockpitThreadPastedImageFile(t *testing.T) {
 		t.Fatalf("ASSERTION: no image card for the pasted file: %v\n%s", err, term.Snapshot())
 	}
 	_ = term.WaitStable(uiTimeout)
-	// The picture is placed on the card's rows, under its head line.
 	headRow, headCol := findText(t, term, "PNG image  160×90")
 	if err := term.WaitFor(func(tuitest.Screen) bool {
 		return strings.Contains(host.String(), fmt.Sprintf("\x1b[%d;%dH\x1b_Ga=p,i=", headRow+2, headCol+1))
@@ -144,8 +139,6 @@ func TestCockpitThreadPastedImageFile(t *testing.T) {
 	}
 	s := term.Screen()
 	saveCockpitFrames(t, term, "cockpit-paste-file", hostPictures(t, []byte(host.String()))...)
-	// cardsBetween counts the image cards from the row of one prompt to the
-	// next.
 	rows := []int{rowWith(s, "Prompt 1:"), rowWith(s, "Prompt 2:"), rowWith(s, "Prompt 3:"), rowWith(s, "Prompt 4:"), rowWith(s, "Answer 4.")}
 	for i, r := range rows {
 		if r < 0 {

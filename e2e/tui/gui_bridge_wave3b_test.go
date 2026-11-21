@@ -14,15 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The GUI bridge's wave 3b (plan 8.4): the palette and launcher events, the
-// in-place session switch and the restore of a saved session, the options
-// and the theme kept in the config file, the typing group, stacks, the
-// scrolling strip, picture in picture, saved layouts, the scratch box and the
-// window kind. Each test runs a real bridge against a real daemon, as
-// tuios-gpui does; the stack and the window kind are also checked on a real
-// terminal client's screen.
-
-// wireWave3bEvent is an event of the kinds this file reads.
 type wireWave3bEvent struct {
 	Type    string `json:"type"`
 	Palette []struct {
@@ -55,7 +46,6 @@ type wireWave3bEvent struct {
 	} `json:"fleet"`
 }
 
-// waitWave3b waits for a kept event that satisfies ok, newest first.
 func (b *guiBridge) waitWave3b(ok func(*wireWave3bEvent) bool, what string) *wireWave3bEvent {
 	b.t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -78,15 +68,12 @@ func (b *guiBridge) waitWave3b(ok func(*wireWave3bEvent) bool, what string) *wir
 	}
 }
 
-// eventCount is how many events the reader kept, to wait for a new one.
 func (b *guiBridge) eventCount() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return len(b.events)
 }
 
-// waitWave3bAfter waits for an event that satisfies ok among those that came
-// after the first n.
 func (b *guiBridge) waitWave3bAfter(n int, ok func(*wireWave3bEvent) bool, what string) *wireWave3bEvent {
 	b.t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -109,7 +96,6 @@ func (b *guiBridge) waitWave3bAfter(n int, ok func(*wireWave3bEvent) bool, what 
 	}
 }
 
-// snapCount is how many SNAP frames came for a PTY.
 func (b *guiBridge) snapCount(pty string) int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -191,8 +177,6 @@ func TestGUIBridgeRestoreSavedSession(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new-window", "-s", "keep", "two", "--no-focus"); err != nil {
 		t.Fatalf("add a pane: %v\n%s", err, out)
 	}
-	// A stop saves every session; a daemon started with --no-restore holds
-	// none of them until one is restored.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v\n%s", err, out)
 	}
@@ -206,7 +190,6 @@ func TestGUIBridgeRestoreSavedSession(t *testing.T) {
 		t.Fatalf("start the daemon: %v", err)
 	}
 	t.Cleanup(func() {
-		// Stopped by its own PID, never by name.
 		_ = daemon.Process.Kill()
 		_ = daemon.Wait()
 	})
@@ -337,8 +320,6 @@ func TestGUIBridgeStack(t *testing.T) {
 		c, a := s.window(ids[2]), s.window(ids[1])
 		return c != nil && a != nil && c.Minimized && c.Stack != "" && c.Stack == a.Stack && leaf(s.tree(), ids[2]) == nil
 	}, "charlie a title row in bravo's stack")
-	// The open pane gives a row for the title row below it. Its tile is the
-	// leaf's, so its box is the leaf's less that row.
 	n := leaf(st.tree(), ids[1])
 	if n == nil {
 		t.Fatalf("bravo has no leaf")
@@ -348,8 +329,6 @@ func TestGUIBridgeStack(t *testing.T) {
 		t.Errorf("bravo's box is y=%d h=%d in a leaf of y=%d h=%d; want the leaf less one row", a.Y, a.H, n.Rect.Y, n.Rect.H)
 	}
 	_ = bh
-	// The terminal client keeps a row for its dock, so its rows are its own;
-	// the title row is in bravo's columns, under bravo's own last row.
 	term := attachIn(t, base, "gb", startOpts{cols: 160, rows: 50})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		col, row, ok := tuitest.Find(s, "▸ charlie")
@@ -473,7 +452,6 @@ func TestGUIBridgeWindowKind(t *testing.T) {
 	if err := term.WaitForText("view pane  tuios://review/abc", shellTimeout); err != nil {
 		t.Fatalf("the terminal client does not show the placeholder: %v\n%s", err, term.Snapshot())
 	}
-	// A restart restores the window as what it was.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v\n%s", err, out)
 	}

@@ -1,13 +1,5 @@
 package tuie2e
 
-// End-to-end DOOM-fire throughput: a pane cats a full-screen truecolor
-// repaint stream as fast as tuios will drain it, and the wall clock from
-// start to the completion marker is the whole pipeline's consumption rate:
-// PTY read, emulator parse, damage, render. Run against a pure-Go and a
-// ghostty-tagged binary to compare backends end to end:
-//
-//	TUIOS_E2E=1 TUIOS_PERF=1 go test -run TestPerfDoomFireStream -v ./...
-
 import (
 	"fmt"
 	"math/rand"
@@ -66,9 +58,6 @@ func TestPerfDoomFireStream(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	// The shell must build the marker. A literal marker in the typed
-	// command matches its own echo, and the wait then ends before cat
-	// starts: this test reported 12,350 fps that way.
 	marker := "DOOMFIREDONE"
 	cmd := fmt.Sprintf("cat %s; printf '\\nDOOMFIRE%%s\\n' DONE", path)
 	begin := time.Now()
@@ -106,8 +95,6 @@ func TestPerfDoomFireGame(t *testing.T) {
 	})
 	waitBoot(t, term)
 	newWindow(t, term)
-	// Fullscreen the pane: the game needs at least 120x22 and a floating
-	// window is smaller than that.
 	if err := term.SendKeys("f"); err != nil {
 		t.Fatalf("fullscreen: %v", err)
 	}
@@ -116,15 +103,12 @@ func TestPerfDoomFireGame(t *testing.T) {
 	if err := term.SendKeys(game, tuitest.Enter); err != nil {
 		t.Fatalf("start game: %v", err)
 	}
-	// The game opens on a capability screen and waits for return.
 	if err := term.WaitForText("Press return to continue", shellTimeout); err != nil {
 		t.Fatalf("game intro never appeared: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("enter game: %v", err)
 	}
-	// Let the flame run, then quit: the game prints its fps summary on
-	// exit.
 	time.Sleep(8 * time.Second)
 	if err := term.SendKeys("q"); err != nil {
 		t.Fatalf("stop game: %v", err)

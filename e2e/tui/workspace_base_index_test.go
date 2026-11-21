@@ -32,8 +32,6 @@ func TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers(t *testing.T) {
 		{"zero-based", "[workspaces]\nbase_index = 0\n", "0·EDIT", "1·REVW", '1', '0', 1},
 		{"custom-default", "[keybindings.workspaces]\nswitch_workspace_1 = ['alt+0']\n", "1·EDIT", "2·REVW", '2', '0', 1},
 		{"custom-one-based", "[workspaces]\nbase_index = 1\n[keybindings.workspaces]\nswitch_workspace_1 = ['alt+0']\n", "1·EDIT", "2·REVW", '2', '0', 1},
-		// A user key that is also another action's default resolves the same way
-		// at both bases: the default keeps it, and keybinds doctor reports it.
 		{"one-based-collision", "[keybindings.workspaces]\nswitch_workspace_9 = ['alt+1']\n", "1·EDIT", "2·REVW", '2', '1', 1},
 		{"zero-based-collision", "[workspaces]\nbase_index = 0\n[keybindings.workspaces]\nswitch_workspace_9 = ['alt+0']\n", "0·EDIT", "1·REVW", '1', '0', 1},
 		{"custom-zero-explicit", "[workspaces]\nbase_index = 0\n[keybindings.workspaces]\nswitch_workspace_1 = ['alt+1']\nswitch_workspace_2 = ['alt+0']\n", "0·EDIT", "1·REVW", '0', '1', 1},
@@ -41,14 +39,11 @@ func TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			const sess = "bz"
 			base := t.TempDir()
-			// renumberConfig sets dock_workspace_tab_format = '{index}·{name}', which
-			// puts the displayed number on each pill beside a stable, unique name.
 			writeConfig(t, base, tc.config+renumberConfig)
 			killDaemon(t, base)
 			if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
 				t.Fatalf("create session: %v: %s", err, out)
 			}
-			// The fresh session already holds one pane on workspace 1. Add one on 2.
 			if out, err := tuiosCLI(t, base, "new-window", "REVWPANE", "-s", sess, "--workspace", "2", "--no-focus"); err != nil {
 				t.Fatalf("new-window on 2: %v: %s", err, out)
 			}
@@ -59,7 +54,6 @@ func TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers(t *testing.T) {
 			}
 
 			term := attachIn(t, base, sess, startOpts{})
-			// Slot 1 shows 0 and slot 2 shows 1, not 1 and 2.
 			waitPills(t, term, tc.first, tc.second)
 			if tc.name == "zero-based" {
 				waitPills(t, term, "0:1")
@@ -68,7 +62,6 @@ func TestWorkspaceBaseIndexZeroShiftsKeysAndNumbers(t *testing.T) {
 				savePNG(t, term.Screen(), hostPalette(t, ""), artifactDir(t), "workspace-0")
 			}
 
-			// secondKey must leave slot 1 for slot 2; firstKey must then reach firstSlot.
 			if err := term.SendKeys(tuitest.Alt(tc.secondKey)); err != nil {
 				t.Fatalf("press alt+%c: %v", tc.secondKey, err)
 			}

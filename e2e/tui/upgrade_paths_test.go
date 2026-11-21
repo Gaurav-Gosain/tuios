@@ -20,7 +20,6 @@ import (
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Live handoff").
 
-// serverHello is the named server's pid, image and version.
 func serverHello(t *testing.T, base, server string) daemonImage {
 	t.Helper()
 	out, err := serverCLI(t, base, server, "call", "hello", "{}")
@@ -35,7 +34,6 @@ func serverHello(t *testing.T, base, server string) daemonImage {
 	return img
 }
 
-// serverPanePIDs is each window's process on the named server, by window id.
 func serverPanePIDs(t *testing.T, base, server, session string) map[string]int {
 	t.Helper()
 	out, err := serverCLI(t, base, server, "list-windows", "-s", session, "--json")
@@ -58,8 +56,6 @@ func serverPanePIDs(t *testing.T, base, server, session string) map[string]int {
 	return pids
 }
 
-// runBinaryIn runs bin with base's isolation and env, the way a person on
-// that machine runs the tuios on their PATH.
 func runBinaryIn(t *testing.T, base, bin string, env []string, args ...string) (string, error) {
 	t.Helper()
 	pinPreV080Looks(t, base)
@@ -74,7 +70,6 @@ func runBinaryIn(t *testing.T, base, bin string, env []string, args ...string) (
 	return string(out), err
 }
 
-// installCopy copies src to dst, executable.
 func installCopy(t *testing.T, src, dst string) {
 	t.Helper()
 	data, err := os.ReadFile(src)
@@ -89,7 +84,6 @@ func installCopy(t *testing.T, src, dst string) {
 	}
 }
 
-// changedPIDs lists the windows of before whose pid changed or went.
 func changedPIDs(before, after map[string]int) []string {
 	var changed []string
 	for id, pid := range before {
@@ -258,8 +252,6 @@ func TestInstallScriptUpgradesTheDaemonLive(t *testing.T) {
 	}
 	img, panes := helloImage(t, base), panePIDs(t, base, "work")
 
-	// The build cache and module cache are the real ones: HOME is the
-	// isolation root's, and a cold cache would rebuild every dependency.
 	var goEnv []string
 	for _, key := range []string{"GOCACHE", "GOMODCACHE", "GOPATH"} {
 		v, err := exec.Command("go", "env", key).Output()
@@ -511,8 +503,6 @@ func TestOrRestartNeverRunsABinaryOthersCanWrite(t *testing.T) {
 	}
 }
 
-// writeTuiosScript writes an executable sh script named tuios, owned by this
-// user and writable by no one else, so the owner and mode check passes it.
 func writeTuiosScript(t *testing.T, body string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "tuios")
@@ -525,8 +515,6 @@ func writeTuiosScript(t *testing.T, body string) string {
 	return p
 }
 
-// orRestartJSON runs `tuios daemon upgrade --or-restart --json --binary bin`
-// against base and returns its JSON outcome and everything it printed.
 func orRestartJSON(t *testing.T, base, bin string) (map[string]any, string, error) {
 	t.Helper()
 	out, err := handoffCLI(t, base, 150*time.Second, "daemon", "upgrade", "--or-restart", "--json", "--binary", bin)

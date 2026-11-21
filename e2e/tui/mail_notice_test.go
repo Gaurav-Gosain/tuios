@@ -11,9 +11,6 @@ import (
 	"time"
 )
 
-// runHookAsPane runs the real hook for harness with payload the way a
-// harness in the pane runs it: the pane comes from TUIOS_PANE_ID and
-// TUIOS_SESSION, not from --window. It returns what the hook printed.
 func runHookAsPane(t *testing.T, base, harness, session, window, payload string) string {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, "agent-hook", harness, "--timeout", "10s")
@@ -101,8 +98,6 @@ func TestHookTellsTheAgentAboutItsMailOnce(t *testing.T) {
 		t.Helper()
 		sendTo(rcpt, text)
 	}
-	// additional reads a PostToolUse output, which must be the JSON the
-	// harness reads, or nothing.
 	additional := func(out string) string {
 		t.Helper()
 		if strings.TrimSpace(out) == "" {
@@ -151,21 +146,15 @@ func TestHookTellsTheAgentAboutItsMailOnce(t *testing.T) {
 		t.Fatalf("the second message was announced again: %q", c)
 	}
 
-	// A compaction: Claude Code reports no state for it, and the agent
-	// still hears where it is and what mail waits.
 	compact := hook("claude-code", `{"hook_event_name":"SessionStart","session_id":"m1","source":"compact"}`)
 	if !strings.Contains(compact, "You run in tuios pane") || !strings.Contains(compact, "You have 2 unread tuios messages") {
 		t.Fatalf("a compact SessionStart printed %q, want the hint and the notice", compact)
 	}
 
-	// A compact SessionStart from another conversation in the pane, such as
-	// a nested Claude Code, reports nothing and must not get the pane's
-	// notice: it meets the guard a report from it would.
 	if out := hook("claude-code", `{"hook_event_name":"SessionStart","session_id":"intruder","source":"compact"}`); strings.Contains(out, "unread") {
 		t.Fatalf("a compact SessionStart of another conversation got the pane's notice: %q", out)
 	}
 
-	// Codex, in a pane of its own, reads the same events the same way.
 	hookIn(cxrcpt, "codex", `{"hook_event_name":"SessionStart","session_id":"c1","source":"startup"}`)
 	sendTo(cxrcpt, "third "+body)
 	cx := additional(hookIn(cxrcpt, "codex", `{"hook_event_name":"PostToolUse","session_id":"c1","tool_name":"shell","tool_input":{"command":"ls"}}`))
@@ -176,8 +165,6 @@ func TestHookTellsTheAgentAboutItsMailOnce(t *testing.T) {
 		t.Fatalf("Codex UserPromptSubmit repeated the notice: %q", out)
 	}
 
-	// A hook whose output never reaches the harness must not use up the
-	// notice. Its stdout is a pipe nobody reads, closed before it runs.
 	send("fourth " + body)
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -200,7 +187,6 @@ func TestHookTellsTheAgentAboutItsMailOnce(t *testing.T) {
 		t.Fatalf("after a hook lost its output, the next PostToolUse added %q, want the notice for 3 messages", c)
 	}
 
-	// Reading the mail ends the notices.
 	if out, err := tuiosCLI(t, base, "read-agent-messages", "-s", session, "-w", rcpt, "--unread"); err != nil {
 		t.Fatalf("read-agent-messages: %v\n%s", err, out)
 	}

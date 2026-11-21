@@ -24,8 +24,6 @@ func TestWhichKeyOnATinyClient(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", "e2e-tiny", "--detach"); err != nil {
 		t.Fatalf("create the session: %v: %s", err, out)
 	}
-	// A client does not start below 40x12, but one that is running shrinks
-	// with its window: a browser tab narrowed, a pane made small.
 	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-tiny"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("the client never attached: %v\n%s", err, term.Snapshot())
@@ -42,9 +40,6 @@ func TestWhichKeyOnATinyClient(t *testing.T) {
 		if err := term.SendKeys(tuitest.Ctrl('b')); err != nil {
 			t.Fatalf("press the leader at %dx%d: %v", sz.w, sz.h, err)
 		}
-		// The menu opens at once, and a crash shows its overlay on the next
-		// frame, cut to the width ("tuios hit a b…" at 20 columns). Watching
-		// for a while proves the overlay never came.
 		deadline := time.Now().Add(1500 * time.Millisecond)
 		for time.Now().Before(deadline) {
 			if text := term.Snapshot(); strings.Contains(text, "tuios hit a") {
@@ -52,15 +47,12 @@ func TestWhichKeyOnATinyClient(t *testing.T) {
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
-		// The menu is up: its title, and the count of what did not fit.
 		if text := term.Snapshot(); !strings.Contains(text, "prefix") || !strings.Contains(text, "more") {
 			t.Fatalf("the leader menu is not on the screen at %dx%d:\n%s", sz.w, sz.h, text)
 		}
 		if err := term.SendKeys(tuitest.Esc); err != nil {
 			t.Fatalf("close the menu: %v", err)
 		}
-		// The next leader must not follow the lone esc at once, or it reads
-		// as alt and the leader.
 		waitGone(t, term, "the leader menu after esc", "prefix")
 	}
 	logs, _ := filepath.Glob(filepath.Join(base, "*", "tuios", "crash-*.log"))

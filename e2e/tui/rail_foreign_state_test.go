@@ -8,10 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// railRowMarked reports whether the rail's sessions section shows session
-// with the mark of an agent that needs the person. The row is read inside the
-// rail's band, right of its divider, so the dock's own "need you in <name>"
-// cannot satisfy it.
 func railRowMarked(s tuitest.Screen, session string) bool {
 	_, rows := s.Size()
 	for y := range rows {

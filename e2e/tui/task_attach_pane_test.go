@@ -43,8 +43,6 @@ func TestTaskAttachTakesAPaneAndReadsAPullRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", fakes+string(os.PathListSeparator)+os.Getenv("PATH"))
-	// The open default gives every pane admin; the refusal needs a pane
-	// with the task grant alone.
 	writeConfig(t, base, "[agents.permissions]\nmode = \"strict\"\ngrants = [\"task\"]\n")
 	const sess = "e2e-attach-pane"
 	mustCLI(t, base, "new", sess, "--detach")
@@ -90,8 +88,6 @@ func TestTaskAttachTakesAPaneAndReadsAPullRequest(t *testing.T) {
 		t.Errorf("ASSERTION: the capture attached does not hold the line the pane printed:\n%s", data)
 	}
 
-	// A pane with the task grant alone holds the card, and may not have the
-	// daemon take a pane for it.
 	worker := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "worker", "--no-focus", "--print-id"))
 	out := filepath.Join(base, "worker.out")
 	script := tuiosBin + " task claim t1 >/dev/null 2>&1; " + tuiosBin + " task attach t1 --screenshot --name worker.png -w " + build +

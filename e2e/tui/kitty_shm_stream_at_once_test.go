@@ -54,7 +54,6 @@ func TestKittySharedMemoryStreamIsWrittenAtOnce(t *testing.T) {
 	if len(deletes) > 0 {
 		t.Fatalf("the image was taken down %d times mid-stream: %q", len(deletes), deletes[0])
 	}
-	// 180 frames are due. Some slack for a loaded machine.
 	if counts["a=T"] < 120 {
 		t.Fatalf("only %d frames went out at once as a=T; the rest waited for the render loop: %v",
 			counts["a=T"], counts)
@@ -62,6 +61,5 @@ func TestKittySharedMemoryStreamIsWrittenAtOnce(t *testing.T) {
 	if counts["a=t"] > 0 {
 		t.Fatalf("%d frames still went out as a transmit to be placed later: %v", counts["a=t"], counts)
 	}
-	// Every frame still describes the whole image in the pane's whole cells.
 	assertWholeImage(t, term, stream, cols, rows, xpx, ypx)
 }

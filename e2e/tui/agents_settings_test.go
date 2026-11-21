@@ -13,56 +13,23 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The settings page's Agents tab and the integration notice, on a real daemon
-// and a real client, with a temporary home holding a Claude Code integration
-// written by an older tuios and a stand-in claude on PATH.
-//
-// How these could pass wrongly, written down first:
-//   - A tab that drew "out of date" for every harness would pass the first
-//     check. So the same frame must show a harness that has never run here as
-//     not installed, and the check reads the Claude Code row itself.
-//   - An update that only redrew the row would pass a screen check. So the
-//     file on disk is read for the new version marker, and the CLI's own
-//     status is read too.
-//   - An uninstall that left the entries would pass the row's "not installed"
-//     if the row read something else. The file is read for the hook command.
-//   - The notice test could pass with no notice at all if the detector never
-//     recognised the stand-in. Its positive half waits for the toast, and the
-//     daemon's listing is read for the harness on both panes before the
-//     "not again" half counts.
-//   - A page that only opened from one place would hide a dead entry. The
-//     prefix key opens it in one test and the palette in the other.
-
-// fakeClaude is a stand-in for Claude Code: the detector takes it for one by
-// its process name, claude. It draws a line and waits on its terminal.
 const fakeClaude = `#!/bin/sh
 printf 'fake claude ready>\n'
 while read -r line; do :; done
 `
 
-// agentsPageFixture writes a home with an out of date Claude Code integration
-// and a stand-in claude on PATH, the config, and a detached session "agents".
-// It returns the isolation root and the integration's settings file.
 func agentsPageFixture(t *testing.T, off bool) (string, string) {
 	t.Helper()
 	return agentsFixtureWith(t, agentsFixture{off: off, aged: true})
 }
 
-// agentsFixture says how agentsFixtureWith sets the integration up.
 type agentsFixture struct {
-	// off writes [agents] enabled = false.
-	off bool
-	// command is the --command the integration is installed with, "" for
-	// the default.
+	off     bool
 	command string
-	// aged marks the install as one the previous version wrote.
-	aged bool
-	// none leaves the integration out: Claude Code runs here, with nothing
-	// installed.
-	none bool
+	aged    bool
+	none    bool
 }
 
-// agentsFixtureWith is agentsPageFixture with the install chosen.
 func agentsFixtureWith(t *testing.T, o agentsFixture) (string, string) {
 	t.Helper()
 	off := o.off
@@ -76,8 +43,6 @@ func agentsFixtureWith(t *testing.T, o agentsFixture) (string, string) {
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fakeClaude), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The system directories and nothing else of the person's own, so the
-	// harnesses on the machine running the suite stay out of the page.
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+agentFreePath("/usr/bin", "/bin"))
 
 	cfg := configPathIn(base)
@@ -92,8 +57,6 @@ func agentsFixtureWith(t *testing.T, o agentsFixture) (string, string) {
 		t.Fatal(err)
 	}
 
-	// The integration as this tuios writes it, then marked as one an older
-	// tuios wrote: the marker's version is what status compares.
 	home := xdgDir(base, "HOME")
 	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o700); err != nil {
 		t.Fatal(err)
@@ -117,9 +80,6 @@ func agentsFixtureWith(t *testing.T, o agentsFixture) (string, string) {
 		t.Fatal(err)
 	}
 	cur := claudeIntegrationStatus(t, base, o.command)
-	// The install must have landed in the test's own home. A directory
-	// override left in the environment would have sent it to the
-	// developer's real config, which the tests then rewrite and remove.
 	if cur.Path != settings {
 		t.Fatalf("the integration is at %s, not in the test's home %s", cur.Path, settings)
 	}
@@ -145,7 +105,6 @@ func agentsFixtureWith(t *testing.T, o agentsFixture) (string, string) {
 	return base, settings
 }
 
-// claudeStatus is what tuios integration status says about Claude Code.
 type claudeStatus struct {
 	Path         string `json:"path"`
 	Installed    bool   `json:"installed"`
@@ -156,14 +115,11 @@ type claudeStatus struct {
 	OtherProgram bool   `json:"other_program"`
 }
 
-// claudeIntegrationVersion reads Claude Code's integration through the CLI.
 func claudeIntegrationVersion(t *testing.T, base string) claudeStatus {
 	t.Helper()
 	return claudeIntegrationStatus(t, base, "")
 }
 
-// claudeIntegrationStatus reads it as current for command, the CLI's
-// --command, "" for its default.
 func claudeIntegrationStatus(t *testing.T, base, command string) claudeStatus {
 	t.Helper()
 	args := []string{"integration", "status", "claude-code", "--json"}
@@ -181,7 +137,6 @@ func claudeIntegrationStatus(t *testing.T, base, command string) claudeStatus {
 	return sts[0]
 }
 
-// agentsRow is the Agents tab's line for label, "" when the panel draws none.
 func agentsRow(s tuitest.Screen, label string) string {
 	row := findRow(s, label)
 	if row < 0 {
@@ -190,7 +145,6 @@ func agentsRow(s tuitest.Screen, label string) string {
 	return s.Line(row)
 }
 
-// waitAgentsRow waits for the row label to carry every one of want.
 func waitAgentsRow(t *testing.T, term *tuitest.Terminal, label, why string, want ...string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -209,7 +163,6 @@ func waitAgentsRow(t *testing.T, term *tuitest.Terminal, label, why string, want
 	}
 }
 
-// clickAgentsRow clicks the middle of the row labelled label.
 func clickAgentsRow(t *testing.T, term *tuitest.Terminal, label string) {
 	t.Helper()
 	s := term.Screen()
@@ -221,7 +174,6 @@ func clickAgentsRow(t *testing.T, term *tuitest.Terminal, label string) {
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
 }
 
-// openAgentsTab opens the page with the prefix key and waits for the rows.
 func openAgentsTab(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), "A"); err != nil {
@@ -241,13 +193,10 @@ func TestAgentsSettingsUpdatesAndUninstalls(t *testing.T) {
 
 	openAgentsTab(t, term)
 	waitAgentsRow(t, term, "Claude Code", "the tab does not say the integration is out of date", "out of date", "on PATH")
-	// The positive half of "out of date": a harness that has never run here
-	// reads as not installed, in the same frame.
 	waitAgentsRow(t, term, "Codex", "the tab does not say Codex is not installed", "not installed", "not on PATH")
 	dir := artifactDir(t)
 	railShot(t, term, "agents-settings-out-of-date")
 
-	// A click opens the row's actions. Each names the file it changes.
 	clickAgentsRow(t, term, "Claude Code")
 	waitAgentsRow(t, term, "Update Claude Code", "a click on the row opened no update action", "settings.json")
 	waitAgentsRow(t, term, "Uninstall Claude Code", "a click on the row opened no uninstall action", "settings.json")
@@ -256,7 +205,6 @@ func TestAgentsSettingsUpdatesAndUninstalls(t *testing.T) {
 	}
 	railShot(t, term, "agents-settings-actions")
 
-	// Esc leaves the actions for the list, and changes nothing.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
@@ -265,8 +213,6 @@ func TestAgentsSettingsUpdatesAndUninstalls(t *testing.T) {
 		t.Fatalf("ASSERTION: going back changed the integration: %+v", st)
 	}
 
-	// Update: the click opens the actions with the cursor on Update, and
-	// enter is the confirmation.
 	clickAgentsRow(t, term, "Claude Code")
 	waitAgentsRow(t, term, "› Update Claude Code", "the cursor is not on the update action")
 	if err := term.SendKeys(tuitest.Enter); err != nil {
@@ -288,7 +234,6 @@ func TestAgentsSettingsUpdatesAndUninstalls(t *testing.T) {
 		t.Fatalf("ASSERTION: the CLI does not read the updated integration as current: %+v", st)
 	}
 
-	// Uninstall: the row now opens on Uninstall, as there is nothing to update.
 	clickAgentsRow(t, term, "Claude Code")
 	waitAgentsRow(t, term, "› Uninstall Claude Code", "the cursor is not on the uninstall action")
 	if strings.Contains(term.Screen().Text(), "Update Claude Code") {
@@ -315,7 +260,6 @@ func TestAgentsSettingsUpdatesAndUninstalls(t *testing.T) {
 	alive(t, term, "after the uninstall")
 }
 
-// paneHarness is the harness the daemon holds for each pane, by window id.
 func paneHarness(t *testing.T, base, session string) map[string]string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-agents", "-s", session, "--json")
@@ -338,7 +282,6 @@ func paneHarness(t *testing.T, base, session string) map[string]string {
 	return got
 }
 
-// waitClaudePanes waits for n panes the daemon takes for Claude Code.
 func waitClaudePanes(t *testing.T, base string, n int) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -359,7 +302,6 @@ func waitClaudePanes(t *testing.T, base string, n int) {
 	}
 }
 
-// integrationNotice is the toast for the aged Claude Code integration.
 const integrationNotice = "Claude Code integration is out of date."
 
 // TestAgentsIntegrationNoticeOncePerRun starts the stand-in claude in a pane
@@ -382,13 +324,10 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 		t.Fatalf("no toast for the out of date integration: %v\n%s", err, term.Snapshot())
 	}
 	if !strings.Contains(term.Screen().Text(), integrationNotice+" ctrl+b j updates it") {
-		// The dock may cut a long message. The full text is in the log.
 		t.Logf("the toast is cut on screen:\n%s", term.Snapshot())
 	}
 	railShot(t, term, "agents-notice")
 
-	// The doctor's footer names the same pane. It used to say every pane had
-	// its integration whenever one was installed at all, current or not.
 	out, err := tuiosCLI(t, base, "doctor", "agents")
 	if err != nil {
 		t.Fatalf("doctor agents: %v\n%s", err, out)
@@ -401,9 +340,6 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Dismiss it the one way that lasts: a click on the dismiss end of the
-	// toast while it is drawn. Esc clears the dock for this run only; see
-	// TestAgentsNoticeOutlastsAnEsc.
 	clickNoticeDismiss(t, term, integrationNotice)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), integrationNotice) }, uiTimeout); err != nil {
 		t.Fatalf("the click did not dismiss the toast: %v\n%s", err, term.Snapshot())
@@ -413,13 +349,7 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 		t.Fatalf("ASSERTION: the dismissal was never stored:\n%s", data)
 	}
 
-	// The dismissal is kept: a second client attaching to the same session,
-	// a fresh process with nothing noticed yet, shows no toast for the same
-	// out of date integration.
 	second := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
-	// The mode notice the attach raises sits on top of the dock for its six
-	// seconds, and a toast raised meanwhile waits under it, then shows until
-	// its own eight seconds are up. Twelve seconds of watching covers both.
 	deadline := time.Now().Add(12 * time.Second)
 	for time.Now().Before(deadline) {
 		if strings.Contains(second.Screen().Text(), integrationNotice) {
@@ -445,7 +375,6 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	// The palette entry opens the tab the toast names.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "P"); err != nil {
 		t.Fatal(err)
 	}
@@ -466,17 +395,13 @@ func TestAgentsIntegrationNoticeOncePerRun(t *testing.T) {
 	installFromTheNotice(t)
 }
 
-// noticeNotInstalled is the toast for a Claude Code with no integration.
 const noticeNotInstalled = "Claude Code integration is not installed."
 
-// The question the toast opens, and the file it names.
 const (
 	installQuestion = "Install the Claude Code integration?"
 	installEffect   = "This adds hooks to ~/.claude/settings.json."
 )
 
-// waitInstallNotice waits for the toast on term and checks that the key
-// follows the state. The dock may cut the verb and the file, never the key.
 func waitInstallNotice(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.WaitForText(noticeNotInstalled, uiTimeout); err != nil {
@@ -487,7 +412,6 @@ func waitInstallNotice(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// noHooksIn fails when the file holds tuios's hooks.
 func noHooksIn(t *testing.T, settings, why string) {
 	t.Helper()
 	data, err := os.ReadFile(settings)
@@ -499,19 +423,6 @@ func noHooksIn(t *testing.T, settings, why string) {
 	}
 }
 
-// installFromTheNotice is the last part of
-// TestAgentsIntegrationNoticeOncePerRun: a home where Claude Code runs with no
-// integration. The toast names the key and the file.
-//
-// The key is the jump key people press from habit, so it only opens a
-// question. The first client presses ctrl+b j and enter in one write, as a
-// habit would: the enter was on its way before the question was drawn, so it
-// must answer nothing. Esc then closes the question and the file stays as it
-// was. A second client gets the toast again, a click on its text opens the
-// same question, and a click on Install installs the integration, as the
-// Agents tab does. The file on disk is read for the hooks and the CLI's status
-// for the version, so a toast that only said "installed" cannot pass. A
-// second claude pane then gets no toast, because nothing is left to install.
 func installFromTheNotice(t *testing.T) {
 	base, settings := agentsFixtureWith(t, agentsFixture{none: true})
 	if st := claudeIntegrationVersion(t, base); st.Installed {
@@ -526,7 +437,6 @@ func installFromTheNotice(t *testing.T) {
 	waitInstallNotice(t, first)
 	railShot(t, first, "agents-notice-install")
 
-	// The key and an enter right behind it.
 	if err := first.SendKeys(tuitest.Ctrl('b'), "j", tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
@@ -555,8 +465,6 @@ func installFromTheNotice(t *testing.T) {
 		t.Logf("close the first client: %v", err)
 	}
 
-	// A new client shows the toast again. A click on its text, which the
-	// dock may cut, opens the same question.
 	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
 	waitInstallNotice(t, term)
 	s := term.Screen()
@@ -565,10 +473,8 @@ func installFromTheNotice(t *testing.T) {
 	if err := term.WaitForText(installEffect, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the click on the toast opened no question: %v\n%s", err, term.Snapshot())
 	}
-	// The question takes no answer for half a second after it opens.
 	time.Sleep(time.Second)
 	noHooksIn(t, settings, "the click on the toast wrote the file before the question was answered")
-	// The Install row is the first line under the file that says Install.
 	s = term.Screen()
 	row = -1
 	for r := findRow(s, installEffect) + 1; r > 0 && r < 40; r++ {
@@ -600,7 +506,6 @@ func installFromTheNotice(t *testing.T) {
 		t.Fatalf("ASSERTION: the CLI does not read the installed integration as current: %+v", st)
 	}
 
-	// A second Claude Code pane: nothing is left to install.
 	if out, err := tuiosCLI(t, base, "new-window", "-s", "agents"); err != nil {
 		t.Fatalf("new window: %v\n%s", err, out)
 	}
@@ -638,9 +543,6 @@ func TestAgentsSettingsHiddenWithAgentsOff(t *testing.T) {
 	if err := term.WaitForText("Agent features", uiTimeout); err != nil {
 		t.Fatalf("the settings page did not open: %v\n%s", err, term.Snapshot())
 	}
-	// The Agents tab sits between Hosts and Tape, the last tab. Back from the
-	// first tab wraps to Tape, and one more back is Hosts when there is no
-	// Agents tab.
 	if err := term.SendKeys("[", "["); err != nil {
 		t.Fatal(err)
 	}
@@ -659,8 +561,6 @@ func TestAgentsSettingsTabBeforeTape(t *testing.T) {
 	requireReal(t, "real ssh or sshd")
 	base, _ := agentsPageFixture(t, false)
 	term := attachIn(t, base, "agents", startOpts{cols: 120, rows: 40, shippedLooks: true})
-	// The prefix menu lists the key. This is the positive half of the SSH
-	// test, which reads the same menu without it.
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('b')); err != nil {
 		t.Fatal(err)
@@ -755,9 +655,6 @@ func TestAgentsSettingsKeepsTheCommandPath(t *testing.T) {
 	})
 }
 
-// sshTUI starts tuios ssh for the isolation root on a free port, with no
-// authentication on the loopback address, and returns a terminal running an
-// ssh client attached through it to the session "agents".
 func sshTUI(t *testing.T, base string) *tuitest.Terminal {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -840,10 +737,6 @@ func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatal(err)
 	}
-	// The menu's Agents section is there, since the installed integration
-	// counts as an agent seen, so the missing line is the one key's absence.
-	// The client finds the integration in a scan it starts at Init, which
-	// can land after the menu first draws, so the section is waited for.
 	if err := term.WaitForText("Oldest waiting", uiTimeout); err != nil {
 		t.Fatalf("the prefix menu over ssh has no Agents section to read: %v\n%s", err, term.Snapshot())
 	}
@@ -861,9 +754,6 @@ func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	// A key the menu does not bind can leave it open. Esc closes it, and the
-	// leader goes only once it is gone: a key sent at once after a lone esc
-	// reads as alt and that key.
 	if strings.Contains(term.Screen().Text(), "Toggle tiling") {
 		if err := term.SendKeys(tuitest.Esc); err != nil {
 			t.Fatal(err)
@@ -909,15 +799,10 @@ func TestAgentsSettingsAbsentOverSSH(t *testing.T) {
 	}
 }
 
-// sidebarStatePath is the rail's state file of the isolation root, where a
-// dismissed notice is stored.
 func sidebarStatePath(base string) string {
 	return filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sidebar.json")
 }
 
-// waitDismissalStored waits for the state file to hold a dismissed notice,
-// and reports whether it did. With want false it watches for the same time
-// and reports whether none appeared.
 func waitDismissalStored(base string, want bool) bool {
 	deadline := time.Now().Add(uiTimeout)
 	if !want {
@@ -937,9 +822,6 @@ func waitDismissalStored(base string, want bool) bool {
 	return !want
 }
 
-// clickNoticeDismiss clicks the dismiss end of the dock message that shows
-// text: the columns after its "more" word, where the counter and the bare
-// bar columns are.
 func clickNoticeDismiss(t *testing.T, term *tuitest.Terminal, text string) {
 	t.Helper()
 	if err := term.WaitForText(text, uiTimeout); err != nil {
@@ -976,7 +858,6 @@ func TestAgentsNoticeOutlastsAnEsc(t *testing.T) {
 	if err := term.WaitForText(integrationNotice, uiTimeout); err != nil {
 		t.Fatalf("no toast for the out of date integration: %v\n%s", err, term.Snapshot())
 	}
-	// Esc in terminal mode goes to the agent, and clears the dock.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}

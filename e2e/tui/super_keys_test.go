@@ -8,20 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// kittyHyperK is hyper+k in the kitty keyboard protocol: modifier 17 is
-// 1 + hyper 16.
 const kittyHyperK = "\x1b[107;17u"
-
-// How TestSuperKeysTypeNothingInAPlainPane could pass wrongly, written down
-// first:
-//   - The key could be dropped for every pane, also for one that asked for
-//     kitty keys and reads super+k itself. The second pane turns the protocol
-//     on and must get CSI 107 ; 9 u.
-//   - The k could arrive late, after the B, and the line still read AB at a
-//     glance. The test reads the output line exactly.
-//   - Hyper is the other modifier a legacy pane cannot see. It is sent too.
-//   - The bound super+k (clear_scrollback in the docs) is not part of this:
-//     a binding takes the key before a pane does, see TestClearScrollback.
 
 // TestSuperKeysTypeNothingInAPlainPane sends super+k and hyper+k, as a kitty
 // host sends Cmd+K, to a shell that did not ask for kitty keys. The legacy
@@ -56,7 +43,6 @@ func TestSuperKeysTypeNothingInAPlainPane(t *testing.T) {
 		t.Fatalf("ASSERTION: super+k or hyper+k typed a k into a plain shell\n%s", term.Snapshot())
 	}
 
-	// A pane that asked for kitty keys gets super+k as kitty sends it.
 	if err := term.Type(`printf '\033[>1u'; cat -v` + "\r"); err != nil {
 		t.Fatalf("start cat: %v", err)
 	}
@@ -73,8 +59,6 @@ func TestSuperKeysTypeNothingInAPlainPane(t *testing.T) {
 	saveCockpitFrames(t, term, "super-keys-kitty")
 }
 
-// paneLineIs reports whether a line of the screen, inside the pane's border,
-// is exactly want.
 func paneLineIs(s tuitest.Screen, want string) bool {
 	_, rows := s.Size()
 	for r := range rows {

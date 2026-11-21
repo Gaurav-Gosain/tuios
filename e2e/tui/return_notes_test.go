@@ -10,13 +10,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// Return notes: one line on a session or a pane that says what comes next,
-// set by tuios note, shown when a person comes back, and kept across a
-// daemon restart.
-
-// noteLine is the screen line that holds every marker, or "" when none does.
-// A rail row and a go-to row each sit on one line, so a marker pair on one
-// line ties a note to the session it is drawn for.
 func noteLine(s tuitest.Screen, markers ...string) string {
 	for line := range strings.SplitSeq(s.Text(), "\n") {
 		if screenHas1(line, markers...) {
@@ -26,7 +19,6 @@ func noteLine(s tuitest.Screen, markers ...string) string {
 	return ""
 }
 
-// screenHas1 reports whether line holds every marker.
 func screenHas1(line string, markers ...string) bool {
 	for _, m := range markers {
 		if !strings.Contains(line, m) {
@@ -36,7 +28,6 @@ func screenHas1(line string, markers ...string) bool {
 	return true
 }
 
-// noteGet runs tuios note get and returns what it printed.
 func noteGet(t *testing.T, base string, args ...string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, append([]string{"note", "get", "-s", "e2e-note"}, args...)...)
@@ -46,7 +37,6 @@ func noteGet(t *testing.T, base string, args ...string) string {
 	return strings.TrimRight(out, "\n")
 }
 
-// notePNG saves the screen as a picture for the pull request.
 func notePNG(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), name)
@@ -96,7 +86,6 @@ func TestReturnNotesComeBackWithTheSession(t *testing.T) {
 		t.Fatalf("report worker: %v: %s", err, out)
 	}
 
-	// The CLI cleans a note to one line and caps it.
 	if out, err := tuiosCLI(t, base, "note", "set", "-s", "e2e-note", "one\nline\ttwo"); err != nil {
 		t.Fatalf("note set: %v: %s", err, out)
 	}
@@ -145,14 +134,12 @@ func TestReturnNotesComeBackWithTheSession(t *testing.T) {
 		t.Fatalf("ASSERTION: ls --json does not carry the note:\n%s", lsOut)
 	}
 
-	// Attach: the dock says the note.
 	term := startIn(t, base, startOpts{cols: 120, rows: 36, args: []string{"attach", "e2e-note"}})
 	if err := term.WaitForText(notice, bootTimeout); err != nil {
 		t.Fatalf("ASSERTION: the dock did not show %q on attach: %v\n%s", notice, err, term.Snapshot())
 	}
 	notePNG(t, term, "attach-notice")
 
-	// The rail, read once the notice is gone.
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), notice) }, 20*time.Second); err != nil {
 		t.Fatalf("the notice never left the dock: %v\n%s", err, term.Snapshot())
 	}
@@ -165,7 +152,6 @@ func TestReturnNotesComeBackWithTheSession(t *testing.T) {
 	}
 	notePNG(t, term, "rail")
 
-	// Go-to on the sessions (ctrl+b S).
 	sendKeys(t, term, tuitest.Ctrl('b'), "S")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return noteLine(s, "e2e-note", note) != "" }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the go-to row of e2e-note does not show its note: %v\n%s", err, term.Snapshot())
@@ -173,7 +159,6 @@ func TestReturnNotesComeBackWithTheSession(t *testing.T) {
 	notePNG(t, term, "switcher")
 	sendKeys(t, term, tuitest.Esc)
 
-	// The Inbox focus shows the pane's note, not the session's.
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	if err := term.WaitForText(paneNote, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the Inbox focus does not show the pane's note: %v\n%s", err, term.Snapshot())
@@ -181,7 +166,6 @@ func TestReturnNotesComeBackWithTheSession(t *testing.T) {
 	notePNG(t, term, "inbox")
 	sendKeys(t, term, tuitest.Esc)
 
-	// A restart: kill-server saves every session on the way out.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}
@@ -208,7 +192,6 @@ func TestReturnNotesComeBackWithTheSession(t *testing.T) {
 		t.Fatalf("ASSERTION: after a restart the rail row does not show the note: %v\n%s", err, term.Snapshot())
 	}
 
-	// A clear takes the note off the rail.
 	if out, err := tuiosCLI(t, base, "note", "clear", "-s", "e2e-note"); err != nil || !strings.Contains(out, "Removed the note of session e2e-note") {
 		t.Fatalf("note clear: %v: %s", err, out)
 	}
@@ -222,7 +205,6 @@ func TestReturnNotesComeBackWithTheSession(t *testing.T) {
 	}
 	notePNG(t, term, "cleared")
 
-	// A note set while attached shows on the rail, and not in the dock.
 	if out, err := tuiosCLI(t, base, "note", "set", "-s", "e2e-note", "next: ship it"); err != nil {
 		t.Fatalf("note set: %v: %s", err, out)
 	}

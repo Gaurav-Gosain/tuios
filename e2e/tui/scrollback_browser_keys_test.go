@@ -59,12 +59,6 @@ func TestScrollbackBrowserTakesCopyModeKeys(t *testing.T) {
 	sendKeys(t, term, tuitest.Ctrl('n'))
 	waitLine("ctrl+n, bound to copy_mode_down", 2)
 
-	// settled reads the cursor line once every key sent before it has run:
-	// the search prompt it opens is drawn only after them, and esc closes it
-	// again.
-	//
-	// The prompt is "/" on the browser's title row, two spaces after what is
-	// there, followed by its caret, a reverse-video cell with no glyph.
 	searchOpen := func(s tuitest.Screen) bool {
 		_, rows := s.Size()
 		for r := range rows {
@@ -88,21 +82,17 @@ func TestScrollbackBrowserTakesCopyModeKeys(t *testing.T) {
 		return n
 	}
 
-	// j is unbound now: j j ctrl+n from line 2 ends on line 3, not 5.
 	sendKeys(t, term, "j", "j", tuitest.Ctrl('n'))
 	if n := settled("j j ctrl+n"); n != 3 {
 		t.Fatalf("j j ctrl+n from line 2 ends on line %d, want 3: j must not move once copy_mode_down is rebound\n%s", n, term.Snapshot())
 	}
 
-	// g k g in one burst, inside gg's window. The second g starts a new gg,
-	// so the cursor stays where k left it, on line 2, not the top.
 	sendKeys(t, term, "g", "k", "g")
 	if n := settled("g k g"); n != 2 {
 		t.Fatalf("g k g from line 3 ends on line %d, want 2: a pending g is for the very next key only\n%s", n, term.Snapshot())
 	}
 	saveArtifact(t, term, art, "browser-after-gkg")
 
-	// gg itself still goes to the top.
 	sendKeys(t, term, "g", "g")
 	waitLine("gg", 1)
 	alive(t, term, "after the scrollback browser keys")

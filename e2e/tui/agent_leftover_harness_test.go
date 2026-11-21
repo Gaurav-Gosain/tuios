@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// listedAgents is the window ids list-agents reports for session, without
-// --all, so only the panes it takes for agents.
 func listedAgents(t *testing.T, base, session string) ([]string, string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-agents", "-s", session, "--json")

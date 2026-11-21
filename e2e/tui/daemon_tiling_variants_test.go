@@ -63,7 +63,6 @@ func TestDaemonVariantC_Verb(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", "vc", "--detach"); err != nil {
 		t.Fatalf("create detached: %v: %s", err, out)
 	}
-	// Detached session starts with one window; add two more via the daemon verb.
 	for i := 2; i <= 3; i++ {
 		if out, err := tuiosCLI(t, base, "run-command", "--session", "vc", "NewWindow"); err != nil {
 			t.Fatalf("NewWindow #%d failed: %v\n%s", i, err, out)
@@ -106,8 +105,6 @@ func TestDaemonVariantD_Interactive(t *testing.T) {
 		t.Fatalf("client never saw 3 windows: %v\n%s", err, c.Snapshot())
 	}
 
-	// Interactive tiling toggle: the client boots into terminal mode when a
-	// window exists, so return to window-management mode first.
 	if err := c.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("to window mode: %v", err)
 	}

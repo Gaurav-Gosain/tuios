@@ -56,7 +56,6 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 		return out
 	}
 	var log strings.Builder
-	// Each job is a sleep of its own length, which is its marker.
 	seed := 600000 + os.Getpid()%100000*10
 	marker := func(n int) string { return strconv.Itoa(seed + n) }
 
@@ -66,19 +65,14 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 		line, marker string
 		survives     bool
 	}
-	// Each line takes the marker and the pid file, in that order.
 	jobsFrom := func(first int) map[string]job {
 		jobs := map[string]job{
-			"background": {"sleep %s & echo $! > %s", marker(first), false},
-			"stopped":    {"sleep %s & echo $! > %s", marker(first + 1), false},
-			// Its parent, a subshell, exits at once, so only the session it
-			// stays in ties it to the pane.
+			"background":            {"sleep %s & echo $! > %s", marker(first), false},
+			"stopped":               {"sleep %s & echo $! > %s", marker(first + 1), false},
 			"orphan in the session": {"(sleep %s & echo $! > %s)", marker(first + 2), false},
 			"nohup":                 {"nohup sleep %s > /dev/null 2>&1 & echo $! > %s", marker(first + 3), true},
 		}
 		if perl != "" {
-			// setsid fails in a process group leader, which a job is, so the
-			// job forks and the child leaves. The parent stays, waiting.
 			jobs["left the session"] = job{perl + " -MPOSIX -e 'if (my $c = fork) { waitpid($c, 0); exit }" +
 				" POSIX::setsid() or die; open(F, \">\", $ARGV[1]); print F $$; close F; sleep $ARGV[0]' %s %s &",
 				marker(first + 4), true}
@@ -86,8 +80,6 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 		return jobs
 	}
 
-	// startJobs starts the jobs in window win of session sess and returns
-	// their pids by name, once each one runs.
 	startJobs := func(sess, win string, jobs map[string]job) map[string]int {
 		t.Helper()
 		var script strings.Builder
@@ -101,7 +93,6 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 		if err := os.WriteFile(src, []byte(script.String()), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		// Sourced, so the interactive shell itself starts the jobs.
 		cli("send-keys", "-s", sess, "-w", win, "--raw", ". "+src)
 		cli("send-keys", "-s", sess, "-w", win, "Enter")
 		pids := map[string]int{}
@@ -120,8 +111,6 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			}
 		}
-		// No job may outlive the test, the ones that survive on purpose
-		// included.
 		for _, pid := range pids {
 			cmd := commandOf(pid)
 			t.Cleanup(func() {
@@ -130,8 +119,6 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 				}
 			})
 		}
-		// Stopped from here once it runs: a SIGSTOP sent by the shell right
-		// after the fork can land before the job runs sleep.
 		if err := syscall.Kill(pids["stopped"], syscall.SIGSTOP); err != nil {
 			t.Fatal(err)
 		}
@@ -139,8 +126,6 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 		return pids
 	}
 
-	// check waits for the jobs that must end to end, then checks that the
-	// others still run.
 	check := func(what string, jobs map[string]job, pids map[string]int) {
 		t.Helper()
 		deadline := time.Now().Add(10 * time.Second)
@@ -158,8 +143,6 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 				fmt.Fprintf(&log, "%s: %q (pid %d) ended\n", what, name, pids[name])
 			}
 		}
-		// The hangup has had its effect on the jobs that take it; a moment
-		// more for any late signal.
 		time.Sleep(time.Second)
 		for name, j := range jobs {
 			if !j.survives {
@@ -174,14 +157,12 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 		}
 	}
 
-	// A process outside every pane. The fix must not reach it.
 	outsider := exec.Command("sleep", marker(9))
 	if err := outsider.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = outsider.Process.Kill(); _ = outsider.Wait() })
 
-	// close-window.
 	cli("new", "jobs", "--detach")
 	first := focusedWindowID(t, base, "jobs")
 	cli("new-window", "doomed", "-s", "jobs")
@@ -191,14 +172,12 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 	cli("close-window", doomed, "-s", "jobs")
 	check("close-window", jobs, pids)
 
-	// kill-session.
 	cli("new", "victim", "--detach")
 	jobs = jobsFrom(20)
 	pids = startJobs("victim", focusedWindowID(t, base, "victim"), jobs)
 	cli("kill-session", "victim")
 	check("kill-session", jobs, pids)
 
-	// kill-server, which closes every pane as the daemon stops.
 	jobs = jobsFrom(30)
 	pids = startJobs("jobs", first, jobs)
 	cli("kill-server")
@@ -218,8 +197,6 @@ func TestPaneCloseEndsItsJobs(t *testing.T) {
 	t.Logf("steps:\n%s(saved to %s)", log.String(), path)
 }
 
-// commandOf is the command line of pid, as ps prints it, or "" when no such
-// process runs. A zombie has no command line worth the name and reads as "".
 func commandOf(pid int) string {
 	if pid <= 0 || syscall.Kill(pid, 0) != nil {
 		return ""
@@ -236,7 +213,6 @@ func commandOf(pid int) string {
 	return strings.TrimSpace(cmd)
 }
 
-// runsWith reports whether pid runs and its command line holds marker.
 func runsWith(pid int, marker string) bool {
 	return marker != "" && strings.Contains(commandOf(pid), marker)
 }

@@ -15,9 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// mailAgentScript is a stand-in agent: it reports idle, then prints each line
-// typed into it as GOT[...], reporting working while it does. The terminal
-// does not echo, so a line typed once shows once.
 const mailAgentScript = `T="$1"
 stty -echo
 "$T" set-agent-state idle -w "$TUIOS_PANE_ID" >/dev/null
@@ -30,8 +27,6 @@ while IFS= read -r l; do
 done
 `
 
-// startMailAgent opens a window named name in session and runs the stand-in
-// agent in it. It returns the window id once the agent reports idle.
 func startMailAgent(t *testing.T, base, session, name string) string {
 	t.Helper()
 	script := filepath.Join(base, "fake-agent.sh")
@@ -50,17 +45,12 @@ func startMailAgent(t *testing.T, base, session, name string) string {
 	return id
 }
 
-// gotLines counts the lines the stand-in agent says it was typed.
 func gotLines(t *testing.T, base, session, window string) (int, string) {
 	t.Helper()
-	// A typed line is wider than the pane, so the capture's line breaks
-	// are taken out before anything looks for it.
 	out := strings.ReplaceAll(capture(t, base, session, window), "\n", "")
 	return strings.Count(out, "GOT["), out
 }
 
-// mailWakeWait is longer than the wake's grace (5 s) and the queue's rest
-// (1 s) together, with room for a loaded machine.
 const mailWakeWait = 9 * time.Second
 
 // TestMailWakesAnIdleAgentOnce sends a burst of mail to an agent at rest and
@@ -133,15 +123,12 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 		if strings.Contains(out, "marker") {
 			t.Fatalf("%s: text from the mail was typed into the agent:\n%s", step, out)
 		}
-		// The sender's name is text a sender chose too: a pane's title.
 		if strings.Contains(out, `"review"`) {
 			t.Fatalf("%s: the sender's name was typed into the agent:\n%s", step, out)
 		}
 		return n, out
 	}
 
-	// The hooked agent is mid-turn and hears of its mail from its hook, so
-	// it must not be woken for it when it comes to rest.
 	runHookAsPane(t, base, "claude-code", session, hooked, `{"hook_event_name":"UserPromptSubmit","session_id":"h1","prompt":"work"}`)
 
 	send(idle, 3)
@@ -173,7 +160,6 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	// Room for a second wake to show, if there were one.
 	time.Sleep(mailWakeWait)
 	if n, out := check(idle, "idle agent, later"); n != 1 {
 		t.Fatalf("the burst of three messages typed %d lines, want 1:\n%s", n, out)
@@ -188,7 +174,6 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 		t.Fatalf("the blocked agent left needs_input on its own: %+v", st)
 	}
 
-	// The positive half: the same pane gets its line once it is at rest.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", session, "-w", blocked, "idle"); err != nil {
 		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
 	}
@@ -238,8 +223,6 @@ func TestMailWakeTurnsOff(t *testing.T) {
 		t.Fatalf("with wake = false a line was typed:\n%s", out)
 	}
 
-	// A process in a pane can write the file, so the file alone does not
-	// turn the wake back on: mail sent after the change still types nothing.
 	if err := os.WriteFile(cfg, []byte("[agents.mail]\nwake = true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -252,8 +235,6 @@ func TestMailWakeTurnsOff(t *testing.T) {
 		t.Fatalf("wake = true written to the file turned the wake on without the person:\n%s", out)
 	}
 
-	// The person applies the file from outside tuios, and the next mail
-	// wakes the agent.
 	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
 		t.Fatalf("tuios config apply: %v\n%s", err, out)
 	}
@@ -374,13 +355,6 @@ func TestMailWakeTakesNoAuthorityFromAPaneOnAnotherMachine(t *testing.T) {
 	alive(t, term, "after mail from a hosted pane")
 }
 
-// delegateChildScript is the child agent of the delegate tests. It reports
-// idle, then for each line typed into it reports working and, after DELAY
-// seconds (default 3), prints ANSWER-7f3[line] and reports done. With GATE
-// set it also waits for that file first, so several children finish
-// together. A line with ASK in it is a question instead: it prints the
-// question and reports needs_input of kind question. A line with APPROVE in
-// it is an approval of a shell command.
 const delegateChildScript = `T="$1"
 stty -echo
 echo CHILD-READY
@@ -406,7 +380,6 @@ while IFS= read -r l; do
 done
 `
 
-// delegateRow is the part of a list-agents row the delegate tests read.
 type delegateRow struct {
 	Window     string `json:"window_id"`
 	Name       string `json:"name"`
@@ -421,7 +394,6 @@ type delegateRow struct {
 	} `json:"delegation"`
 }
 
-// delegateRows lists the agent panes of every session, by window id.
 func delegateRows(t *testing.T, base string) map[string]delegateRow {
 	t.Helper()
 	res := mustCall(t, base, "list-agents", map[string]any{"all_sessions": true})
@@ -437,15 +409,12 @@ func delegateRows(t *testing.T, base string) map[string]delegateRow {
 	return out
 }
 
-// delegateMail is one message of the parent's inbox, as the delegate tests
-// read it.
 type delegateMail struct {
 	From    string `json:"from"`
 	Subject string `json:"subject"`
 	Text    string `json:"text"`
 }
 
-// parentMail reads every message to window in session, marking nothing.
 func parentMail(t *testing.T, base, session, window string) []delegateMail {
 	t.Helper()
 	res := mustCall(t, base, "read-agent-messages", map[string]any{"session": session, "to": window, "peek": true, "limit": 100})
@@ -457,7 +426,6 @@ func parentMail(t *testing.T, base, session, window string) []delegateMail {
 	return msgs
 }
 
-// delegateResult is the part of a delegate --json answer the tests read.
 type delegateResult struct {
 	Window    string `json:"window_id"`
 	Session   string `json:"session"`
@@ -478,8 +446,6 @@ type delegateResult struct {
 	} `json:"question"`
 }
 
-// runDelegate runs tuios delegate --json and decodes its answer. It fails the
-// test when the command fails.
 func runDelegate(t *testing.T, base string, args ...string) (delegateResult, string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, append([]string{"delegate", "--json"}, args...)...)
@@ -547,7 +513,6 @@ func TestDelegateMailsTheAnswerAndWakesTheParentOnce(t *testing.T) {
 	}
 	waitCapture(t, base, session, res.Window, "ANSWER-7f3[find marker-q41]")
 
-	// The answer is mailed once, from the child.
 	deadline := time.Now().Add(uiTimeout)
 	var msgs []delegateMail
 	for {
@@ -565,7 +530,6 @@ func TestDelegateMailsTheAnswerAndWakesTheParentOnce(t *testing.T) {
 		t.Fatalf("ASSERTION: the answer mail is wrong: %+v", m)
 	}
 
-	// The parent is woken once, with no text of the child.
 	deadline = time.Now().Add(mailWakeWait + uiTimeout)
 	for {
 		n, got := gotLines(t, base, session, parent)
@@ -649,14 +613,12 @@ func TestDelegateWaitReturnsTheOutcome(t *testing.T) {
 		t.Logf("artifact: %s", path)
 	}()
 
-	// No parent and no wait: refused, nothing starts.
 	out, err := tuiosCLI(t, base, "delegate", "-s", session, "--agent", agent, "nobody gets this")
 	fmt.Fprintf(&log, "-- no parent, no wait:\n%s\n", out)
 	if err == nil || !strings.Contains(out, "needs an agent to send the answer to") {
 		t.Fatalf("ASSERTION: a delegate with no one to mail was not refused: %v\n%s", err, out)
 	}
 
-	// Done.
 	started := time.Now()
 	res, out := runDelegate(t, base, "-s", session, "--agent", agent, "--wait", "60s", "--name", "waiter", "quick marker-w9")
 	fmt.Fprintf(&log, "-- wait for done, %v:\n%s\n", time.Since(started).Round(time.Millisecond), out)
@@ -672,7 +634,6 @@ func TestDelegateWaitReturnsTheOutcome(t *testing.T) {
 		t.Fatalf("ASSERTION: the text output does not show the answer:\n%s", text)
 	}
 
-	// A question.
 	res, out = runDelegate(t, base, "-s", session, "--agent", agent, "--wait", "60s", "--name", "asker", "ASK me")
 	fmt.Fprintf(&log, "-- wait for a question:\n%s\n", out)
 	if res.Outcome != "question" || res.Question == nil || res.Question.Kind != "question" || !strings.Contains(res.Question.Message+strings.Join(res.Question.Lines, "\n"), "Which file should I read?") {
@@ -682,7 +643,6 @@ func TestDelegateWaitReturnsTheOutcome(t *testing.T) {
 		t.Fatalf("ASSERTION: the asking child's record is wrong: %+v", row.Delegation)
 	}
 
-	// A timeout, for a parent: the child goes on, and its answer is mailed.
 	parent := startMailAgent(t, base, session, "parent")
 	res, out = runDelegate(t, base, "--parent", parent, "--agent", agent, "--env", "DELAY=6", "--wait", "1s", "--name", "slow", "slow marker-s3")
 	fmt.Fprintf(&log, "-- wait that times out:\n%s\n", out)
@@ -742,7 +702,6 @@ func TestDelegateWorktreeAndClamp(t *testing.T) {
 	}
 	waitCapture(t, base, res.Session, res.Window, "ANSWER-7f3[wt marker-t5]")
 
-	// A parent in plan mode asks for a child in bypass mode.
 	outDir := t.TempDir()
 	parentBin := filepath.Join(t.TempDir(), "parent-bin")
 	if err := os.MkdirAll(parentBin, 0o755); err != nil {
@@ -783,7 +742,6 @@ func TestDelegateWorktreeAndClamp(t *testing.T) {
 	}
 }
 
-// routeItem is the part of a list-attention item the routing test reads.
 type routeItem struct {
 	ID              string   `json:"id"`
 	Kind            string   `json:"kind"`
@@ -794,20 +752,17 @@ type routeItem struct {
 	WithParentUntil int64    `json:"with_parent_until"`
 }
 
-// PaneRef is a pane as list-attention names a child's parent and root.
 type PaneRef struct {
 	Session string `json:"session"`
 	Window  string `json:"window"`
 }
 
-// routeList is list-attention as the routing test reads it.
 type routeList struct {
 	Items      []routeItem    `json:"items"`
 	Counts     map[string]int `json:"counts"`
 	WithParent int            `json:"with_parent"`
 }
 
-// attentionList reads list-attention.
 func attentionList(t *testing.T, base string) routeList {
 	t.Helper()
 	raw, _ := json.Marshal(mustCall(t, base, "list-attention", map[string]any{}))
@@ -818,7 +773,6 @@ func attentionList(t *testing.T, base string) routeList {
 	return l
 }
 
-// itemOf is the item of kind for window, nil when none is open.
 func (l routeList) itemOf(window, kind string) *routeItem {
 	for i := range l.Items {
 		if l.Items[i].Window == window && l.Items[i].Kind == kind {
@@ -828,8 +782,6 @@ func (l routeList) itemOf(window, kind string) *routeItem {
 	return nil
 }
 
-// childHold is the test's wait before a child's question is the person's, in
-// place of ten minutes (knob child_hold_ms).
 const childHold = 20 * time.Second
 
 // TestDelegatedChildrenRouteTheirAttention delegates two tasks from a
@@ -912,8 +864,6 @@ func TestDelegatedChildrenRouteTheirAttention(t *testing.T) {
 		t.Fatalf("ASSERTION: the command line does not show the held question apart:\n%s", text)
 	}
 
-	// The parent gets the question by mail, once, and nothing for the
-	// approval.
 	time.Sleep(time.Second)
 	msgs := parentMail(t, base, session, parent)
 	fmt.Fprintf(&log, "-- the parent's mail: %+v\n", msgs)
@@ -921,8 +871,6 @@ func TestDelegatedChildrenRouteTheirAttention(t *testing.T) {
 		t.Fatalf("ASSERTION: the parent's mail is not the one question: %+v", msgs)
 	}
 
-	// The agents view lists the held question with the working agents, and
-	// the parent's row counts what waits for the person in its chain.
 	term := startIn(t, base, startOpts{args: []string{"attach", session}, cols: 160, rows: 40, shippedLooks: true})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
@@ -941,7 +889,6 @@ func TestDelegatedChildrenRouteTheirAttention(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "child-question-held")
 
-	// An agent pane may not answer the child's approval, whatever it holds.
 	if out, err := tuiosCLI(t, base, "new-window", "helper", "-s", session, "--no-focus"); err != nil {
 		t.Fatalf("open the helper pane: %v\n%s", err, out)
 	}
@@ -974,8 +921,6 @@ func TestDelegatedChildrenRouteTheirAttention(t *testing.T) {
 		t.Fatalf("ASSERTION: the child's approval closed after the helper's calls")
 	}
 
-	// Well after the ask, the question is still the parent's. After the hold
-	// it is the person's.
 	if time.Since(asked) < childHold/2 {
 		if q := attentionList(t, base).itemOf(reader.Window, "question"); q == nil || q.WithParentUntil == 0 {
 			t.Fatalf("ASSERTION: the question was released early: %+v", q)
@@ -999,8 +944,6 @@ func TestDelegatedChildrenRouteTheirAttention(t *testing.T) {
 	if l.Counts["question"] != 1 || l.WithParent != 0 {
 		t.Fatalf("ASSERTION: the released question is not counted: %+v", l)
 	}
-	// The row moves to Needs you once the view's short hold on a moving row
-	// is over.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		work := rowWith(s, "Working")
 		return containsAll(s.Text(), "2 needs you", "Asks", "Which file", "2 waiting in children") && !strings.Contains(s.Text(), "With the parent agent:") &&

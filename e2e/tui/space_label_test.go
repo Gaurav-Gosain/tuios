@@ -10,21 +10,10 @@ import (
 	"testing"
 )
 
-// Spaces as a label: SessionState.Space, set by tuios new --space and tuios
-// set-session-space (the new-session and set-session-space verbs), kept
-// across a daemon restart, and grouped by tuios ls.
-
-// globalSpaceRefusal is session.GlobalSpaceRefusal. tuios new --global
-// --space and set-session-space on a global session both say it.
 const globalSpaceRefusal = "a global session cannot be in a space"
 
-// ansiEscape matches the styling ls puts on a heading, so the text can be
-// read line by line.
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;:]*[A-Za-z]`)
 
-// sessionSpaces is every live session and the space ls --json files it under,
-// "" for none. It also checks that the listing is still a flat array of
-// session rows, which every script reading it expects.
 func sessionSpaces(t *testing.T, base string) map[string]string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "ls", "--json")
@@ -45,8 +34,6 @@ func sessionSpaces(t *testing.T, base string) map[string]string {
 	return got
 }
 
-// wantSessionSpaces fails unless the live sessions and their spaces are
-// exactly want.
 func wantSessionSpaces(t *testing.T, base, when string, want map[string]string) {
 	t.Helper()
 	got := sessionSpaces(t, base)
@@ -60,7 +47,6 @@ func wantSessionSpaces(t *testing.T, base, when string, want map[string]string) 
 	}
 }
 
-// newInSpace makes a detached session filed under space with tuios new.
 func newInSpace(t *testing.T, base, name, space string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "new", name, "--detach", "--space", space)
@@ -114,20 +100,11 @@ func TestNewSpaceFilesTheSession(t *testing.T) {
 	}
 	wantSessionSpaces(t, base, "after the refused creates", map[string]string{"e2e-api": "payments", "e2e-loose": ""})
 
-	// An attached tuios new from a caller with no terminal fails before it
-	// makes anything, as plain tuios new does. tuiosCLI runs without a tty.
 	if out, err := tuiosCLI(t, base, "new", "e2e-notty", "--space", "payments"); err == nil {
 		t.Fatalf("ASSERTION: an attached tuios new --space with no terminal succeeded: %s", out)
 	}
 	wantSessionSpaces(t, base, "after an attached tuios new --space with no terminal", map[string]string{"e2e-api": "payments", "e2e-loose": ""})
 
-	// An attached tuios new makes the session empty and the client opens its
-	// first window, as the option says. --space keeps that.
-	//
-	// --space makes the session over the verb connection, not the path plain
-	// tuios new takes, so its pane must still get the caller's terminal. The
-	// caller's TERM is not a fallback the daemon has, so a match is the
-	// caller's value.
 	writeConfig(t, base, "[startup]\nopen_default_window = true\n")
 	term := startIn(t, base, startOpts{
 		args: []string{"new", "e2e-live", "--space", "payments"},
@@ -202,7 +179,6 @@ func TestSetSessionSpaceSetsAndClears(t *testing.T) {
 	}
 	wantSessionSpaces(t, base, "after clearing the space", map[string]string{"e2e-work": "", "e2e-other": "search"})
 
-	// The verb's own clearing forms: an empty space, and space left out.
 	if out, err := tuiosCLI(t, base, "set-session-space", "-s", "e2e-work", "billing"); err != nil {
 		t.Fatalf("set-session-space -s e2e-work billing: %v: %s", err, out)
 	}
@@ -261,8 +237,6 @@ func TestAGlobalSessionIsInNoSpace(t *testing.T) {
 	}
 	wantSessionSpaces(t, base, "after the refusals", map[string]string{"e2e-g": "", "e2e-a": "s"})
 
-	// Taking a global session out of any space asks for nothing it cannot
-	// be, so it is not refused.
 	if out, err := tuiosCLI(t, base, "set-session-space", "-s", "e2e-g"); err != nil {
 		t.Fatalf("ASSERTION: set-session-space with no space on the global session: %v: %s", err, out)
 	}
@@ -302,11 +276,9 @@ func TestSpaceSurvivesTheDaemon(t *testing.T) {
 	want := map[string]string{"e2e-spaced": "payments", "e2e-made": "ledger", "e2e-loose": ""}
 	wantSessionSpaces(t, base, "before a restart", want)
 
-	// kill-server is synchronous and saves every session on the way out.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}
-	// Starting any session starts a daemon, and a daemon restores on start.
 	if out, err := tuiosCLI(t, base, "new", "e2e-trigger", "--detach"); err != nil {
 		t.Fatalf("start a fresh daemon: %v: %s", err, out)
 	}
@@ -368,7 +340,6 @@ func TestLsGroupsSessionsBySpace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(artifactDir(t), "ls-grouped.txt"), []byte(out), 0o644); err != nil {
 		t.Logf("could not save the listing: %v", err)
 	}
-	// Blocks: alpha, zeta, the sessions in no space, and the count line.
 	blocks := lsBlocks(out)
 	if len(blocks) != 4 {
 		t.Fatalf("ASSERTION: ls is not three tables and the count, it has %d blocks:\n%s", len(blocks), out)
@@ -458,13 +429,10 @@ func TestLsWithoutSpacesIsUnchanged(t *testing.T) {
 	}
 }
 
-// lsBlocks splits tuios ls output, styling stripped, into its blank-line
-// separated blocks.
 func lsBlocks(out string) []string {
 	return strings.Split(strings.TrimSpace(ansiEscape.ReplaceAllString(out, "")), "\n\n")
 }
 
-// tuiosCLIWith is tuiosCLI with another tuios binary.
 func tuiosCLIWith(t *testing.T, bin, base string, args ...string) (string, error) {
 	t.Helper()
 	return tuiosCLIBinEnv(t, bin, base, nil, args...)

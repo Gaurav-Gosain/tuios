@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// taskListing is tuios task ls --json as the test reads it.
 type taskListing struct {
 	Tasks []struct {
 		ID     string `json:"id"`
@@ -62,7 +61,6 @@ func TestTaskCardsAreClaimedOnceAndSurviveARestart(t *testing.T) {
 		id := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, name, "--no-focus", "--print-id"))
 		out := filepath.Join(base, name+".out")
 		panes[id] = out
-		// Each pane waits for the gate, then claims for itself.
 		script := "while [ ! -e " + gate + " ]; do sleep 0.05; done; " +
 			bin + " task claim --next > " + out + ".tmp 2>&1; echo EXIT=$? >> " + out + ".tmp; mv " + out + ".tmp " + out + "\n"
 		mustCLI(t, base, "send-text", "-s", sess, "-w", id, script)
@@ -131,8 +129,6 @@ func TestTaskCardsAreClaimedOnceAndSurviveARestart(t *testing.T) {
 	}
 }
 
-// waitForTaskText polls tuios task get until the card's text has every want,
-// and returns it.
 func waitForTaskText(t *testing.T, base, session, id string, want ...string) string {
 	t.Helper()
 	return waitTextOf(t, fmt.Sprintf("%s never read %q", id, want), uiTimeout, func() string {
@@ -140,7 +136,6 @@ func waitForTaskText(t *testing.T, base, session, id string, want ...string) str
 	}, func(got string) bool { return containsAll(got, want...) })
 }
 
-// agentWindows is list-agents --json's windows, by id.
 func agentWindows(t *testing.T, base string, args ...string) []string {
 	t.Helper()
 	out := mustCLI(t, base, append([]string{"list-agents", "--json"}, args...)...)
@@ -189,10 +184,6 @@ func TestTaskCardsAreReleasedWithTheirPane(t *testing.T) {
 	closer := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "closer", "--no-focus", "--print-id"))
 	agent := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent", "--no-focus", "--print-id"))
 
-	// A claim for a pane the session does not have is refused at once, with
-	// the window hint, and the daemon still answers the next request (#1477).
-	// The bounded calls are the point: the bug made the claim, and every call
-	// after it, wait for good.
 	missing, err := cliWithin(t, base, nil, "task", "claim", "-s", sess, "t1", "-w", "closr")
 	if err == nil || !strings.Contains(missing, `no window found matching "closr"`) || !strings.Contains(missing, "closer") {
 		t.Fatalf("ASSERTION: task claim -w closr = %v, want a prompt refusal that names closer:\n%s", err, missing)
@@ -211,7 +202,6 @@ func TestTaskCardsAreReleasedWithTheirPane(t *testing.T) {
 			t.Fatalf("ASSERTION: %s is not held by %s before the pane goes: %+v", before.Tasks[i].ID, want, before.Tasks[i])
 		}
 	}
-	// The selector names the pane by any card it holds, not only its newest.
 	for _, id := range []string{"t1", "t2"} {
 		if got := agentWindows(t, base, "-s", sess, "--all", "--select", "task:"+id); len(got) != 1 || got[0] != closer {
 			t.Fatalf("ASSERTION: list-agents --select task:%s = %v, want the one pane %s", id, got, closer)
@@ -229,7 +219,6 @@ func TestTaskCardsAreReleasedWithTheirPane(t *testing.T) {
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", agent, "none")
 	fmt.Fprintf(&report, "t3 after the agent left:\n%s\n", waitForTaskText(t, base, sess, "t3", "released", "agent left"))
 
-	// A client pushes its own picture of the session, which carries no cards.
 	term := attachIn(t, base, sess, startOpts{})
 	newWindow(t, term)
 	waitWindowCount(t, term, 3, "the attached client's new window")

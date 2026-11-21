@@ -9,15 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The fleet end to end: what waits on another machine reaches this machine's
-// Inbox and dock without a poll, and an agent in a pane whose process runs on
-// another machine reports its state with the ordinary command.
-//
-// build is a second daemon with its own runtime directory, reached over the
-// real subprocess transport through the ssh stand-in, as in the other
-// federation tests.
-
-// waitForAttention polls this machine's list-attention until it holds want.
 func waitForAttention(t *testing.T, base string, env []string, want ...string) string {
 	t.Helper()
 	return waitTextOf(t, fmt.Sprintf("list-attention never held %q", want), uiTimeout*3, func() string {
@@ -72,7 +63,6 @@ func TestAnAgentOnAnotherMachineReachesThisInbox(t *testing.T) {
 	}
 	saveFrame(t, term, "fleet-inbox")
 
-	// The agent on build moves on, and the item leaves this Inbox too.
 	if out, err := tuiosCLI(t, remote, "set-agent-state", "-s", "far", "working"); err != nil {
 		t.Fatalf("set-agent-state working on build: %v\n%s", err, out)
 	}

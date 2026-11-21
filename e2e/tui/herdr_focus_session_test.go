@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// waitShown waits until the attached client shows session.
 func waitShown(t *testing.T, base, session, why string) {
 	t.Helper()
 	var shown []string
@@ -21,7 +20,6 @@ func waitShown(t *testing.T, base, session, why string) {
 	t.Fatalf("%s: the client shows %v, want %s", why, shown, session)
 }
 
-// focusedWindowOf is a session's focused window id.
 func focusedWindowOf(t *testing.T, base, session string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "-s", session)
@@ -85,7 +83,6 @@ func TestHerdrFocusShowsThePanesSession(t *testing.T) {
 	}
 	waitShown(t, base, crushSession, "before any focus")
 
-	// A pane in the session the client shows: focused, and the client stays.
 	focused := herdrCall(t, base, "pane.focus", map[string]any{"pane_id": near})["pane"].(map[string]any)
 	if focused["focused"] != true {
 		t.Fatalf("pane.focus on a pane in the shown session: the reply says focused %v", focused["focused"])
@@ -95,8 +92,6 @@ func TestHerdrFocusShowsThePanesSession(t *testing.T) {
 	}
 	waitShown(t, base, crushSession, "pane.focus on a pane in the shown session")
 
-	// A pane in another session: the client moves there, showing the pane,
-	// and the stream says the active workspace, tab and pane changed.
 	conn, err := net.Dial("unix", herdrSocket(base))
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +145,6 @@ func TestHerdrFocusShowsThePanesSession(t *testing.T) {
 	}
 	saveFrame(t, term, "herdr-focus-other-session")
 
-	// agent.focus takes the same path back.
 	herdrCall(t, base, "agent.focus", map[string]any{"target": agent})
 	waitShown(t, base, crushSession, "agent.focus on an agent in the first session")
 	if got := focusedWindowOf(t, base, crushSession); got != home["agent"] {

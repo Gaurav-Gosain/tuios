@@ -11,9 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// quickLookReadmeOpen opens the repository's own README.md in quick look at
-// full size, with the assets it names beside it, in a client started with
-// env. out takes what the client writes.
 func quickLookReadmeOpen(t *testing.T, env []string, out *lockedBuffer) *tuitest.Terminal {
 	t.Helper()
 	term, dir := quickLookListed(t, append([]string{"TUIOS_KITTY_GRAPHICS=0"}, env...), out)
@@ -39,7 +36,6 @@ func quickLookReadmeOpen(t *testing.T, env []string, out *lockedBuffer) *tuitest
 	return term
 }
 
-// quickLookPageTo presses J until want is on screen.
 func quickLookPageTo(t *testing.T, term *tuitest.Terminal, want string) {
 	t.Helper()
 	for range 60 {
@@ -74,8 +70,6 @@ func TestQuickLookReadsTheReadme(t *testing.T) {
 	quickLookPageTo(t, term, "Panes and the rail")
 	saveCockpitFrames(t, term, "readme-features")
 	railLists(t, term, "ASSERTION: a shot on the web is one short line", []string{"[Image: tuios with four tiled panes"}, []string{"test output and a build", "tuios.dev/shots", "](https", "\\["})
-	// The contributors picture is an SVG beside the file: one line of its
-	// words, not a picture that could not be read.
 	quickLookPageTo(t, term, "spelled out in")
 	railLists(t, term, "ASSERTION: an SVG is one short line", []string{"[Image: The word TUIOS spelled out in"}, []string{"not a picture", "could not be read"})
 	if osc66Text.MatchString(out.String()) {
@@ -84,12 +78,8 @@ func TestQuickLookReadsTheReadme(t *testing.T) {
 	alive(t, term, "after the README")
 }
 
-// osc66Text is an OSC 66 that sizes text. The startup probe's own, a single
-// space, is not one.
 var osc66Text = regexp.MustCompile("\x1b\\]66;[^;\x07]*;[^ \x07]")
 
-// quickLookPictureDoc has a <picture> whose dark source is beside it and whose
-// light source is not, and a small WebP image, which quick look does not draw.
 const quickLookPictureDoc = `# Pictures
 
 <picture>
@@ -103,7 +93,6 @@ const quickLookPictureDoc = `# Pictures
 The end.
 `
 
-// quickLookDotWebP is a 1 by 1 lossless WebP.
 const quickLookDotWebP = "UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA=="
 
 // TestQuickLookPicksThePictureForItsGround opens a document with a <picture>

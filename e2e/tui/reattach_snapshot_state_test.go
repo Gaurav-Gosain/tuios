@@ -59,12 +59,6 @@ func TestReattachCarriesSnapshotState(t *testing.T) {
 			t.Fatalf("mkfifo: %v", err)
 		}
 	}
-	// Tab stops at columns 4, 13 and 22, the shell's title saved and the
-	// program's set, slot 1 of the palette made pure red, then half of an
-	// OSC 8. After the first stop, the rest of the OSC 8, a row of tabs, red
-	// text, insert mode on and half of a UTF-8 character. After the second,
-	// the rest of the character, a row the insert mode pushes along, and
-	// the title popped.
 	script := strings.Join([]string{
 		`#!/bin/sh`,
 		`printf '\033]2;SHELLTITLE-5521\007\033[22;0t\033]2;PROGTITLE-5521\007'`,
@@ -125,14 +119,11 @@ func TestReattachCarriesSnapshotState(t *testing.T) {
 	if err := first.WaitForText("STOP1", shellTimeout); err != nil {
 		t.Fatalf("the script never reached its first stop: %v\n%s", err, first.Snapshot())
 	}
-	// The title has to be on screen before the reattach, or the pop after it
-	// proves nothing.
 	if err := witness.WaitForText("PROGTITLE-5521", uiTimeout); err != nil {
 		t.Fatalf("the program's title is not drawn, so the title stack cannot be checked: %v\n%s", err, witness.Snapshot())
 	}
 	time.Sleep(300 * time.Millisecond)
 
-	// First stop: inside the OSC 8.
 	detach(first, "the first client")
 	second := attach("the second client")
 	if err := second.WaitForText("STOP1", uiTimeout); err != nil {
@@ -153,16 +144,12 @@ func TestReattachCarriesSnapshotState(t *testing.T) {
 	art := artifactDir(t)
 	saveArtifact(t, witness, art, "witness-stop2")
 	saveArtifact(t, second, art, "reattached-at-stop1")
-	// The second client attached at the first stop, so it read the end of
-	// the OSC 8, the tabs and the red text off the stream after its
-	// snapshot. It is checked now, before it detaches.
 	checkFirstStop(t, "the witness", witness.Screen())
 	checkFirstStop(t, "the client reattached at the first stop", second.Screen())
 	for _, marker := range []string{"LINKTEXT", "TA", "REDTEXT"} {
 		diffPainted(t, "the row with "+marker, paintedLine(t, witness, marker), paintedLine(t, second, marker))
 	}
 
-	// Second stop: inside the UTF-8 character, with insert mode on.
 	detach(second, "the second client")
 	third := attach("the third client")
 	if err := third.WaitForText("STOP2", uiTimeout); err != nil {
@@ -174,9 +161,6 @@ func TestReattachCarriesSnapshotState(t *testing.T) {
 			t.Fatalf("the script never finished: %v\n%s", err, term.Snapshot())
 		}
 	}
-	// The window title is drawn a frame or two after the pop. The witness
-	// has to show the shell's title, or the pop proves nothing; the
-	// reattached client is given the same time and is judged below.
 	if err := witness.WaitForText("SHELLTITLE-5521", uiTimeout); err != nil {
 		t.Fatalf("the witness never showed the title the pop put back: %v\n%s", err, witness.Snapshot())
 	}
@@ -189,8 +173,6 @@ func TestReattachCarriesSnapshotState(t *testing.T) {
 	saveArtifact(t, witness, art, "witness")
 	saveArtifact(t, third, art, "reattached-at-stop2")
 
-	// The witness first: it read the stream uncut, so if it is wrong the
-	// script is, and nothing below says anything about the reattach.
 	checkSecondStop(t, "the witness", witness.Screen())
 	checkSecondStop(t, "the client reattached at the second stop", third.Screen())
 	for _, marker := range []string{"END8", "INS"} {
@@ -198,7 +180,6 @@ func TestReattachCarriesSnapshotState(t *testing.T) {
 	}
 }
 
-// screenRow finds the row of s that holds marker.
 func screenRow(t *testing.T, who string, s tuitest.Screen, marker string) (string, int) {
 	t.Helper()
 	_, rows := s.Size()
@@ -211,8 +192,6 @@ func screenRow(t *testing.T, who string, s tuitest.Screen, marker string) (strin
 	return "", -1
 }
 
-// checkFirstStop asserts what the script prints after its first stop, on a
-// client that read it right: the end of the OSC 8, the tabs and the red.
 func checkFirstStop(t *testing.T, who string, s tuitest.Screen) {
 	t.Helper()
 	text := s.Text()
@@ -236,11 +215,6 @@ func checkFirstStop(t *testing.T, who string, s tuitest.Screen) {
 	}
 
 	if _, y := row("REDTEXT"); y >= 0 {
-		// The cells are walked rather than the row's text indexed, because
-		// the text counts bytes and the border runes before it take three.
-		// The client draws a truecolour cell in the 256-colour cube when the
-		// host has no more, where pure red is 196. The palette's own red,
-		// which a client without the guest's palette entry paints, is 1.
 		rgb := tuitest.Color{Kind: tuitest.ColorRGB, R: 0xff}
 		cube := tuitest.Color{Kind: tuitest.ColorIndexed, Index: 196}
 		cols, _ := s.Size()
@@ -261,9 +235,6 @@ func checkFirstStop(t *testing.T, who string, s tuitest.Screen) {
 	}
 }
 
-// checkSecondStop asserts what the script prints after its second stop: the
-// end of the UTF-8 character, the row insert mode pushes along, and the title
-// put back.
 func checkSecondStop(t *testing.T, who string, s tuitest.Screen) {
 	t.Helper()
 	text := s.Text()

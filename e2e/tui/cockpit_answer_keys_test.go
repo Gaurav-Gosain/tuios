@@ -9,13 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// An answer key in the agents view never does nothing in silence. A key the
-// card refuses says why on the card, next to its buttons, and enter on a held
-// approval in another session hands it back to its pane.
-
-// cockpitHeldClient starts a daemon with approvals on, an approval held in
-// session api by payload, and a client attached to session home with the
-// agents view open on the card.
 func cockpitHeldClient(t *testing.T, payload, ready string) (string, *tuitest.Terminal) {
 	t.Helper()
 	base := t.TempDir()
@@ -85,7 +78,6 @@ func TestCockpitAnswerKeysNeverFailInSilence(t *testing.T) {
 		t.Fatalf("esc did not drop the ask: %v\n%s", err, term.Snapshot())
 	}
 
-	// enter goes to the pane, in session api, and hands the prompt back.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("enter: %v", err)
 	}

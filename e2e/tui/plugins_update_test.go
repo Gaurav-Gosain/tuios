@@ -13,12 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tuios plugins update, offline, against a bare repository over file://. The
-// plugin is in the folder plug, so a commit outside it is not an update. Its
-// action prints the file out.
-//
-// The negative controls are in NEGATIVE_CONTROLS.md, "tuios plugins update".
-
 const updateManifest = `id = "e2e.up"
 name = "Update probe"
 version = "1.0.0"
@@ -80,12 +74,10 @@ func TestPluginsUpdate(t *testing.T) {
 	}
 	say("one")
 
-	// Nothing new.
 	if out, err := update("--yes"); err != nil || !strings.Contains(out, id+" is up to date") {
 		t.Fatalf("update with nothing new: %v\n%s", err, out)
 	}
 
-	// A commit outside the plugin's folder is not an update.
 	if err := os.WriteFile(filepath.Join(work, "NOTES"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -96,13 +88,10 @@ func TestPluginsUpdate(t *testing.T) {
 		t.Fatalf("update after a commit outside the folder: %v\n%s", err, out)
 	}
 
-	// install from the same source and ref names update.
 	if out, err := tuiosCLI(t, base, "plugins", "install", url+"@"+branch, "--subdir", "plug", "--yes"); err == nil || !strings.Contains(out, "tuios plugins update "+id) {
-		// The tree is the same, but the commit moved.
 		t.Errorf("install of an installed plugin: %v, want the update command\n%s", err, out)
 	}
 
-	// New code, with a subject that holds an escape. --check changes nothing.
 	second := commit("second \x1b[31mred", map[string]string{"out": "two\n"})
 	push(branch)
 	before := pin()
@@ -128,8 +117,6 @@ func TestPluginsUpdate(t *testing.T) {
 	}
 	say("two")
 
-	// A change in what runs: --yes is not enough, and with no terminal
-	// nothing changes. In a terminal the lines show, and yes moves the pin.
 	third := commit("third", map[string]string{
 		"herdr-plugin.toml": strings.ReplaceAll(updateManifest, `["cat", "out"]`, `["sh", "-c", "cat out; echo extra"]`),
 	})
@@ -159,8 +146,6 @@ func TestPluginsUpdate(t *testing.T) {
 	}
 	waitFile(t, lockPath, func(s string) bool { return strings.Contains(s, third) }, "the pin of the approved update")
 
-	// A force-push asks again, also with --yes, though the manifest is the
-	// one approved.
 	testutil.Git(t, work, "reset", "-q", "--hard", third+"~1")
 	rewritten := commit("rewritten", map[string]string{
 		"herdr-plugin.toml": strings.ReplaceAll(updateManifest, `["cat", "out"]`, `["sh", "-c", "cat out; echo extra"]`),
@@ -179,7 +164,6 @@ func TestPluginsUpdate(t *testing.T) {
 		t.Fatalf("uninstall: %v\n%s", err, out)
 	}
 
-	// A moved tag asks again, also when the new commit is a descendant.
 	if out, err := tuiosCLI(t, base, "plugins", "install", url+"@v1", "--subdir", "plug", "--yes"); err != nil {
 		t.Fatalf("install of the tag: %v\n%s", err, out)
 	}
@@ -193,8 +177,6 @@ func TestPluginsUpdate(t *testing.T) {
 		t.Fatalf("update of a moved tag under --yes: %v\n%s", err, out)
 	}
 
-	// A tag that is gone, with a branch of its name on a descendant that
-	// keeps the approved manifest, asks again too.
 	testutil.Git(t, work, "reset", "-q", "--hard", first)
 	replaced := commit("replaced", map[string]string{"out": "replaced\n"})
 	testutil.Git(t, work, "tag", "-d", "v1")
@@ -203,7 +185,6 @@ func TestPluginsUpdate(t *testing.T) {
 		t.Fatalf("update of a tag replaced by a branch under --yes: %v\n%s", err, out)
 	}
 
-	// A moved tag installed by its full name asks again too.
 	if out, err := tuiosCLI(t, base, "plugins", "uninstall", id, "--yes"); err != nil {
 		t.Fatalf("uninstall: %v\n%s", err, out)
 	}
@@ -223,7 +204,6 @@ func TestPluginsUpdate(t *testing.T) {
 		t.Fatalf("update of a moved tag by its full name under --yes: %v\n%s", err, out)
 	}
 
-	// Offline: exit 3, and the pin stays.
 	if err := os.Rename(bare, bare+".gone"); err != nil {
 		t.Fatal(err)
 	}

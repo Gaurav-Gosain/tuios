@@ -13,53 +13,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// No test runs a real agent CLI.
-//
-// The daemon runs a harness's program on its own: the New agent sheet's
-// signed-in check runs `claude auth status`, and detection and start-agent
-// run what a manifest names. The suite inherits the developer's PATH, so a
-// test reached their real Claude Code, which wrote ~/.claude.json under the
-// test's HOME, sometimes after the test had ended.
-//
-// So the suite runs with:
-//
-//   - A stub, first on PATH, for every program the bundled manifests name
-//     (each command, argv0 and comm) that the developer's PATH has. A name
-//     with no real program gets no stub, so the harnesses a test sees as
-//     installed are the same as before, and the same as on a CI runner with
-//     no agent CLIs. A stub writes its name and argv to
-//     $HOME/.tuios-e2e-agent-stub.log, the test's HOME, answers --version
-//     and a signed-in check as signed out, and for anything else says that a
-//     test reached an agent CLI and exits 97.
-//   - The guard: a PATH folder that holds a real agent program is replaced by
-//     a folder of links to everything else in it, so no PATH order reaches
-//     the real one. The run stops before any test when a name still
-//     resolves to anything but its stub. A test that sets PATH itself is
-//     refused when that PATH names a folder with a real agent program in it
-//     (agentPathGuard).
-//
-// A test that wants an agent writes its own stand-in first on PATH, as the
-// ship and readiness tests do, and that one wins over the stub.
-
-// agentStubDir holds the stubs; realAgentDirs are the PATH folders that held
-// a real agent program, by their cleaned path.
 var (
-	agentStubDir  string
-	realAgentDirs = map[string]bool{}
-	// agentShadows maps a folder that holds a real agent program to its
-	// shadow, the folder of links to everything else in it. agentShadowRoot
-	// is where a shadow made later goes, and agentNames are the programs a
-	// shadow leaves out. agentShadowMu guards all three after the start.
+	agentStubDir    string
+	realAgentDirs   = map[string]bool{}
 	agentShadows    = map[string]string{}
 	agentShadowRoot string
 	agentNames      []string
 	agentShadowMu   sync.Mutex
 )
 
-// agentStubExit is how a stub exits when a test runs it as an agent.
 const agentStubExit = 97
 
-// agentProgramNames are the programs the bundled manifests name.
 func agentProgramNames() ([]string, error) {
 	reg, errs := harness.Load()
 	if len(errs) > 0 {
@@ -89,7 +53,6 @@ func agentProgramNames() ([]string, error) {
 	return names, nil
 }
 
-// agentStubScript is the stub for name.
 func agentStubScript(name string) string {
 	return "#!/bin/sh\n" +
 		"log=\"${HOME:-/tmp}/.tuios-e2e-agent-stub.log\"\n" +
@@ -102,8 +65,6 @@ func agentStubScript(name string) string {
 		fmt.Sprintf("exit %d\n", agentStubExit)
 }
 
-// installAgentStubs writes the stubs, puts them first on PATH and shadows
-// every PATH folder that holds a real agent program. It returns a cleanup.
 func installAgentStubs() (func(), error) {
 	names, err := agentProgramNames()
 	if err != nil {
@@ -179,13 +140,6 @@ func installAgentStubs() (func(), error) {
 	return cleanup, nil
 }
 
-// agentFreePath is a PATH of dirs with no agent program on it, the way a CI
-// runner's is: a folder that holds a real agent CLI is replaced by its shadow,
-// and the stubs are left out, so no harness looks installed. A test that wants
-// "no agent on the PATH" builds its PATH with it instead of naming /usr/bin and
-// /bin, which on some machines hold one (crush is in /usr/bin on Arch), and
-// which agentPathGuard refuses. A folder the suite did not shadow at the start,
-// such as /bin when only /usr/bin was on PATH, is checked and shadowed here.
 func agentFreePath(dirs ...string) string {
 	agentShadowMu.Lock()
 	defer agentShadowMu.Unlock()
@@ -219,8 +173,6 @@ func agentFreePath(dirs ...string) string {
 	return strings.Join(out, string(os.PathListSeparator))
 }
 
-// agentPathGuard fails the test when kv sets a PATH that names a folder
-// holding a real agent program.
 func agentPathGuard(t *testing.T, kv string) {
 	t.Helper()
 	value, ok := strings.CutPrefix(kv, "PATH=")
@@ -234,7 +186,6 @@ func agentPathGuard(t *testing.T, kv string) {
 	}
 }
 
-// agentStubCalls are the stub calls a test's HOME logged, one line each.
 func agentStubCalls(base string) []string {
 	data, err := os.ReadFile(filepath.Join(xdgDir(base, "HOME"), ".tuios-e2e-agent-stub.log"))
 	if err != nil {

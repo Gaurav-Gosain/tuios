@@ -13,12 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The small client's view of a larger session (internal/app/pane_view.go),
-// for the things drawn or picked at a pane's position: capture mode, copy
-// mode and its search prompt, and a program that hides its cursor. Then the
-// daemon's side: the activity frame's size limit, the attach notice, and the
-// clients that do not count toward the size.
-
 // TestWindowSizeCaptureInView picks a pane with capture mode in the small
 // client and checks the pane under the pointer is the one captured.
 //
@@ -26,8 +20,6 @@ import (
 // layout positions, the click on the right pane hits the left pane's
 // rectangle, and the capture holds the left pane's L line.
 func TestWindowSizeCaptureInView(t *testing.T) {
-	// Both clients read the directory from the file, so whichever one the
-	// capture runs in writes there.
 	cfg := "[screenshot]\nformat = \"txt\"\ndirectory = \"{BASE}/shots\"\n"
 	_, small, base := windowSizePair(t, "largest", cfg, nil)
 	dir := shotDir(t, base)
@@ -75,8 +67,6 @@ func TestWindowSizeCopyModeInView(t *testing.T) {
 	if err := small.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("send leader+[: %v", err)
 	}
-	// Copy mode starts on the shell's cursor, at the end of the L line, so
-	// the view is where it was.
 	time.Sleep(time.Second)
 	if err := small.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "RIGHTSIDE") && strings.Contains(s.Text(), "←")
@@ -85,7 +75,6 @@ func TestWindowSizeCopyModeInView(t *testing.T) {
 	}
 	saveArtifact(t, small, artifactDir(t), "copy-mode-right")
 
-	// 0 takes the copy cursor to the start of the line, and the view with it.
 	if err := small.SendKeys("0"); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +84,6 @@ func TestWindowSizeCopyModeInView(t *testing.T) {
 		t.Fatalf("the view did not follow the copy cursor home\n%s", small.Snapshot())
 	}
 
-	// The search prompt is drawn inside the view, on its last pane row.
 	if err := small.SendKeys("/", "LLL"); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +109,6 @@ func TestWindowSizeHiddenCursorInView(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", wsSession, left); err != nil {
 		t.Fatalf("focus-window: %v\n%s", err, out)
 	}
-	// %s keeps the typed line from matching the marker.
 	cmd := `printf '\033[2J\033[?25l\033[40;3HINPUT%sBOX' ''; sleep 600` + "\n"
 	if out, err := tuiosCLI(t, base, "send-text", "-s", wsSession, "-w", left, cmd); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)
@@ -169,8 +156,6 @@ func TestWindowSizeActivityFrameLimit(t *testing.T) {
 	if _, err := conn.Write(frame); err != nil {
 		t.Fatalf("write the frame: %v", err)
 	}
-	// The answer is one frame: length, type, codec, then the gob payload,
-	// whose strings are plain bytes.
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	head := make([]byte, 6)
 	if _, err := io.ReadFull(conn, head); err != nil {

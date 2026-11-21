@@ -33,7 +33,6 @@ import (
 // holdLocked in deliverQueued always reporting nothing held, the second
 // message is typed into the draft and the test fails on that.
 func TestQueuedMessageIsTypedWhenTheAgentRests(t *testing.T) {
-	// The draft's move to Needs you takes ten minutes in use.
 	setKnobs(t, "draft_surface_ms=9000")
 	term, base := attachClientBase(t)
 	const marker = "queued-reply-7f3a"
@@ -81,9 +80,6 @@ func TestQueuedMessageIsTypedWhenTheAgentRests(t *testing.T) {
 	queueWaitsForTheDraft(t, term, base)
 }
 
-// draftBoxScript is the stand-in agent: a box drawn the way Claude Code draws
-// its input box, between two rules, that shows what is typed into it. Enter
-// moves the line above the box as "sent: ...", and Ctrl+U clears the box.
 const draftBoxScript = `stty -icanon -echo min 1 2>/dev/null
 draft=""
 sent=""
@@ -104,8 +100,6 @@ while IFS= read -r -n1 -d '' c; do
 done
 `
 
-// queueWaitsForTheDraft is the draft half of
-// TestQueuedMessageIsTypedWhenTheAgentRests.
 func queueWaitsForTheDraft(t *testing.T, term *tuitest.Terminal, base string) {
 	const marker, draft = "queued-after-draft-5c1e", "half a thought"
 	cli := func(what string, args ...string) string {
@@ -124,7 +118,6 @@ func queueWaitsForTheDraft(t *testing.T, term *tuitest.Terminal, base string) {
 	if err := term.WaitForText("fakebox ready", uiTimeout); err != nil {
 		t.Fatalf("the stand-in agent never drew its box: %v\n%s", err, term.Snapshot())
 	}
-	// A turn ends: the agent is at rest, with its box empty.
 	cli("set working", "set-agent-state", "-s", "e2e-ctrlp", "working", "--harness", "claude-code")
 	cli("set idle", "set-agent-state", "-s", "e2e-ctrlp", "idle", "--harness", "claude-code")
 
@@ -150,7 +143,6 @@ func queueWaitsForTheDraft(t *testing.T, term *tuitest.Terminal, base string) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}
-	// The row reads "Waits:" and the reason, on one line or two by the layout.
 	const waits = "your draft is in the prompt box"
 	showsWait := func(s tuitest.Screen) bool {
 		text := s.Text()
@@ -166,7 +158,6 @@ func queueWaitsForTheDraft(t *testing.T, term *tuitest.Terminal, base string) {
 		t.Fatalf("ASSERTION: the queued message was typed into the person's draft\n%s", term.Snapshot())
 	}
 
-	// Held long enough, the row moves to Needs you.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return showsWait(s) && strings.Contains(s.Text(), "1 needs you")
 	}, 20*time.Second); err != nil {
@@ -184,7 +175,6 @@ func queueWaitsForTheDraft(t *testing.T, term *tuitest.Terminal, base string) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), waits) }, uiTimeout); err != nil {
 		t.Fatalf("the agents view never closed: %v\n%s", err, term.Snapshot())
 	}
-	// The person clears the box. The message waits for three quiet seconds.
 	cleared := time.Now()
 	if err := term.SendKeys(tuitest.Ctrl('u')); err != nil {
 		t.Fatal(err)
@@ -200,7 +190,6 @@ func queueWaitsForTheDraft(t *testing.T, term *tuitest.Terminal, base string) {
 	}
 	saveArtifact(t, term, dir, "agent-queue-draft-typed")
 	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "agent-queue-draft-typed")
-	// The agent takes it, which is what the prompt gate waits for.
 	cli("set working", "set-agent-state", "-s", "e2e-ctrlp", "working", "--harness", "claude-code")
 	deadline = time.Now().Add(uiTimeout)
 	for {
@@ -251,7 +240,6 @@ func TestNarrowRailKeepsTheAgentNameBesideAQueue(t *testing.T) {
 		}
 		return b.String()
 	}
-	// The row under the agents section's header, which is the agent's.
 	agentRow := func(s tuitest.Screen) string {
 		for y := range rows - 1 {
 			if strings.HasPrefix(strings.TrimSpace(strings.Trim(railText(s, y), "│ ")), "agents") {
@@ -320,7 +308,6 @@ func TestQueuedMessageWithAClientIDIsQueuedOnce(t *testing.T) {
 	}
 	working()
 
-	// From this machine's shell.
 	const marker = "client-id-once-c41d"
 	const id = "phone-msg-1"
 	shellSend := func() map[string]any {
@@ -372,7 +359,6 @@ func TestQueuedMessageWithAClientIDIsQueuedOnce(t *testing.T) {
 	}
 	working()
 
-	// The same id from other senders is another message.
 	linkSend := func(c *linkStream, text, msgID, nonce string) map[string]any {
 		t.Helper()
 		params := map[string]any{"session": session, "text": text, "client_id": msgID}
@@ -395,7 +381,6 @@ func TestQueuedMessageWithAClientIDIsQueuedOnce(t *testing.T) {
 		t.Fatalf("the same id from a second linked machine is called a duplicate: %v", res)
 	}
 
-	// The phone again, on a new connection, now with a nonce: the same sender.
 	again := startLinkAs(t, base, "phone").open(t, true)
 	pres, verr := again.call(t, "attach-presence", nil)
 	if verr != nil {
@@ -406,7 +391,6 @@ func TestQueuedMessageWithAClientIDIsQueuedOnce(t *testing.T) {
 		t.Fatalf("the phone's send with a nonce = %v, want a duplicate of %v", res, fromPhone)
 	}
 
-	// Through an outage of hours the id still holds, and past 7 days it is gone.
 	moveClock(2)
 	if res := shellSend(); res["duplicate"] != true {
 		t.Fatalf("two hours later the send queued again: %v", res)
@@ -420,11 +404,6 @@ func TestQueuedMessageWithAClientIDIsQueuedOnce(t *testing.T) {
 		t.Fatalf("eight days later the send is still a duplicate: %v", res)
 	}
 
-	// That send took one place in the bound. The bound holds 256 and these
-	// three ids come first: the phone's, the viewer's and the shell's. With
-	// 254 more, 257 ids push out one, the phone's. An old slot left behind for
-	// the shell's id would be first in line, and pushing it out would delete
-	// the entry just made.
 	for i := range 254 {
 		res := linkSend(again, "another message", fmt.Sprintf("other-%d", i), nonce)
 		if _, verr := again.call(t, "cancel-queued", map[string]any{"session": session, "id": res["id"], "human_nonce": nonce}); verr != nil {

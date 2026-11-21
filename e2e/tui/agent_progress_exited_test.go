@@ -10,14 +10,6 @@ import (
 	"time"
 )
 
-// progressAgentScript is the stand-in claude's side. It reads its scenario a
-// line at a time: a hook payload goes to the real Claude Code hook, "osc X"
-// writes the progress sequence ESC ] 9 ; 4 ; X BEL as the agent itself, and
-// "title X" sets the window title to X, and "wait LABEL" prints FAKE-AT LABEL
-// and waits for a line from the test. A sequence is followed by a line of
-// output a moment later: the daemon reads a parked sequence on the output
-// event after the one that carried it, when the emulator may not have parsed
-// it yet.
 const progressAgentScript = `#!/bin/sh
 scenario=$1
 log=$2
@@ -34,11 +26,6 @@ done 3<"$scenario"
 printf 'FAKE-DONE\n'
 `
 
-// The programs that are not agents. mise draws a progress bar with OSC 9;4
-// the way mise, brew and cargo do: a determinate bar, a while, the bar
-// cleared. spin animates a braille spinner in the window title, which is the
-// shape of Claude Code's own working title. Each sequence is followed by a
-// line a moment later, for the reason progressAgentScript gives.
 const (
 	progressBarScript = `#!/bin/sh
 printf 'MISE-START\n'
@@ -62,7 +49,6 @@ printf 'SPIN-DONE\n'
 `
 )
 
-// progressReading is one get-agent-state read, kept for the saved trace.
 type progressReading struct {
 	At      string `json:"at"`
 	Step    string `json:"step"`
@@ -125,17 +111,11 @@ func TestAgentSignalsOnAnExitedAgentsPane(t *testing.T) {
 		cc("", `"hook_event_name":"SessionEnd","reason":"prompt_input_exit"`),
 	}
 	for _, tc := range []struct {
-		name string
-		// exit is how an agent leaves the pane first: "hook" or "osc", "" for
-		// a pane no agent ran in.
-		exit string
-		// program is the program that is not an agent run next, "mise" or
-		// "spin"; "" runs a second agent instead, with agent as its scenario,
-		// and what it sends has to be read.
+		name    string
+		exit    string
 		program string
 		agent   []string
-		// want is the state the second agent's sequence has to leave.
-		want string
+		want    string
 	}{
 		{name: "hook-exit", exit: "hook", program: "mise"},
 		{name: "osc-tier-exit-bar", exit: "osc", program: "mise"},
@@ -245,7 +225,6 @@ func TestAgentSignalsOnAnExitedAgentsPane(t *testing.T) {
 			if tc.exit != "" {
 				send("echo SHELL-BACK\n", "check the shell has the pane")
 				waitCapture(t, base, session, "0", "SHELL-BACK")
-				// Two detector passes with the pane at its shell.
 				time.Sleep(2 * time.Second)
 				if r := read("agent gone"); r.State != "none" || r.Harness != "" {
 					t.Fatalf("after its agent left, the pane is %s (source %s, harness %q), want none and no harness", r.State, r.Source, r.Harness)
@@ -288,7 +267,6 @@ func TestAgentSignalsOnAnExitedAgentsPane(t *testing.T) {
 	}
 }
 
-// captureOf is the pane's text, "" when it cannot be read.
 func captureOf(t *testing.T, base, session string) string {
 	t.Helper()
 	out, _ := tuiosCLI(t, base, "capture-pane", "-s", session, "-w", "0")

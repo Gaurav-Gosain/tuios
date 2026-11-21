@@ -10,12 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Link rules turn plain text into a link whose target is built from the
-// match ([[links.rules]], issue #1583). These tests print a ticket ID in a
-// pane and drive the click the way the outer terminal reports it, then read
-// what tuios did: the argument the recording opener was started with, and the
-// OSC 8 sequences in the frame sent to the outer terminal.
-
 const (
 	ruleTicket  = "PROJ-1234"
 	ruleTarget  = "https://jira.example.com/browse/PROJ-1234"
@@ -23,8 +17,6 @@ const (
 	ruleSkipped = "SKIP-5"
 )
 
-// linkRulesConfig has the ticket rule, and a rule whose target a click would
-// refuse, which must never become a link.
 const linkRulesConfig = `
 [[links.rules]]
 regex = '\b(PROJ-[1-9][0-9]*)\b'
@@ -35,8 +27,6 @@ regex = '\bSKIP-[0-9]+\b'
 url = "javascript:alert('$0')"
 `
 
-// linkRulesSetup starts tuios with the recording opener and the rules, prints
-// the fixture, and goes back to window management.
 func linkRulesSetup(t *testing.T) (*tuitest.Terminal, *lockedBuffer, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -45,8 +35,6 @@ func linkRulesSetup(t *testing.T) (*tuitest.Terminal, *lockedBuffer, string) {
 	if err := os.WriteFile(opener, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" >> '"+record+"'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The fixture is printed from a file, so the IDs are on screen once, in
-	// the output, and never in a typed command line.
 	script := filepath.Join(base, "tickets.sh")
 	body := "#!/bin/sh\n" +
 		fmt.Sprintf("printf 'T: ticket %s done\\n'\n", ruleTicket) +
@@ -87,13 +75,10 @@ func TestCtrlClickOpensATicketIDThroughALinkRule(t *testing.T) {
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	waitOpened(t, record, []string{ruleTarget}, "ctrl+click on a ticket ID")
 
-	// A real URL wins over a rule that matches inside it.
 	col, row = mustFind(t, term, "PROJ-77")
 	mouseClick(t, term, col+1, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	waitOpened(t, record, []string{ruleTarget, ruleInURL}, "ctrl+click on an ID inside a URL")
 
-	// A rule whose target is not openable makes no link. The ticket clicked
-	// after it is the barrier that proves this click was handled first.
 	col, row = mustFind(t, term, ruleSkipped)
 	mouseClick(t, term, col+1, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	col, row = mustFind(t, term, ruleTicket)
@@ -103,9 +88,6 @@ func TestCtrlClickOpensATicketIDThroughALinkRule(t *testing.T) {
 		t.Errorf("a link opened a pane; there are %d panes, want 1:\n%s", n, term.Snapshot())
 	}
 
-	// The frame carries the ticket as OSC 8 with the built target, so the
-	// outer terminal's own link handling opens the same address, and the
-	// refused rule is not in it.
 	stream := out.String()
 	ticket := regexp.MustCompile(`\x1b\]8;id=tuios-[0-9a-z]+;` + regexp.QuoteMeta(ruleTarget) + `(\x07|\x1b\\)` + ruleTicket)
 	if !ticket.MatchString(stream) {

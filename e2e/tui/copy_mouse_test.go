@@ -11,9 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// cockpitCopyTerm starts the agents view on the thread of
-// TestCockpitThreadCopyMode (copyTranscript), with every card open, and
-// returns the terminal and the host stream the clipboard is read from.
 func cockpitCopyTerm(t *testing.T) (*tuitest.Terminal, *lockedBuffer) {
 	t.Helper()
 	base := t.TempDir()
@@ -85,7 +82,6 @@ func cockpitCopyTerm(t *testing.T) (*tuitest.Terminal, *lockedBuffer) {
 func TestCockpitThreadMouseSelects(t *testing.T) {
 	term, out := cockpitCopyTerm(t)
 
-	// A drag from the prompt card into the code block, across two cards.
 	s := term.Screen()
 	r0 := threadRowWith(s, "Why does the retry loop stop")
 	r1 := threadRowWith(s, "func retry(n int)")
@@ -103,8 +99,6 @@ func TestCockpitThreadMouseSelects(t *testing.T) {
 		t.Fatalf("ASSERTION: the drag copied\n%q\nwant the prompt, the paragraph as one line and the code's first words, with no card edge", got)
 	}
 
-	// A right click on the selection offers Copy as Markdown: the prompt
-	// as a quote, and the answer as written.
 	mouseClick(t, term, c0+4, r0, tuitest.MouseRight, 0)
 	if err := term.WaitForText("Copy as Markdown", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: a right click on the selection opened no menu: %v\n%s", err, term.Snapshot())
@@ -117,7 +111,6 @@ func TestCockpitThreadMouseSelects(t *testing.T) {
 		t.Fatalf("ASSERTION: Copy as Markdown copied\n%q", got)
 	}
 
-	// A double click on a path takes the path whole.
 	pc, pr := mustFind(t, term, "retry.go and")
 	from = len(clipboardWrites(out))
 	mouseClick(t, term, pc+2, pr, tuitest.MouseLeft, 0)
@@ -127,7 +120,6 @@ func TestCockpitThreadMouseSelects(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "cockpit-mouse-word")
 
-	// A triple click takes the line.
 	lc, lr := mustFind(t, term, "Fixed: the backoff stops")
 	from = len(clipboardWrites(out))
 	for range 3 {
@@ -137,10 +129,8 @@ func TestCockpitThreadMouseSelects(t *testing.T) {
 		t.Fatalf("ASSERTION: the triple click copied %q", got)
 	}
 
-	// A plain click ends the selection; a key goes to the view.
 	mouseClick(t, term, lc+3, lr, tuitest.MouseLeft, 0)
 
-	// Copy mode by its key: a click moves the cursor, v e y copies the word.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +144,6 @@ func TestCockpitThreadMouseSelects(t *testing.T) {
 	if got := rawWrite(t, term, out, from, "ASSERTION: a click in copy mode"); got != "backoff" {
 		t.Fatalf("ASSERTION: a click in copy mode put the cursor elsewhere: v e y copied %q, want %q", got, "backoff")
 	}
-	// The wheel scrolls and copy mode stays: y still copies.
 	wheelAt(t, term, wc, wr, tuitest.MouseWheelUp, 1)
 	from = len(clipboardWrites(out))
 	sendEach(t, term, "v", "y")
@@ -177,7 +166,6 @@ func TestCopyModeClickMovesTheCursor(t *testing.T) {
 	out := &lockedBuffer{}
 	term, dir := quickLookListed(t, []string{"TUIOS_KITTY_GRAPHICS=0"}, out)
 
-	// The pane: copy mode, a click on gamma, v e y.
 	enterTerminalMode(t, term)
 	runInShell(t, term, "printf 'one %s three\\n' two", "one two three", uiTimeout)
 	leaveTerminalMode(t, term)
@@ -220,7 +208,6 @@ func TestCopyModeClickMovesTheCursor(t *testing.T) {
 		t.Fatalf("ASSERTION: a click in quick look's copy mode: v e y copied %q, want %q", got, "gamma")
 	}
 
-	// A drag over "second line" selects it, and the release copies.
 	sc, sr, ok := findOnGrid(term.Screen(), "second line here")
 	if !ok {
 		t.Fatalf("the second line is not in the preview\n%s", term.Snapshot())
@@ -230,7 +217,6 @@ func TestCopyModeClickMovesTheCursor(t *testing.T) {
 	if got := rawWrite(t, term, out, from, "ASSERTION: a drag in quick look's copy mode"); got != "second line" {
 		t.Fatalf("ASSERTION: a drag in quick look's copy mode copied %q, want %q", got, "second line")
 	}
-	// The wheel keeps copy mode.
 	wheelAt(t, term, sc, sr, tuitest.MouseWheelDown, 1)
 	railLists(t, term, "ASSERTION: the wheel ended quick look's copy mode", []string{"y yank"}, nil)
 	alive(t, term, "after the copy mode clicks")

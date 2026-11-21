@@ -16,14 +16,10 @@ func parseAt(root, rev, p string) (*token.FileSet, *ast.File, error) {
 		return nil, nil, err
 	}
 	fset := token.NewFileSet()
-	// The comments are parsed so a doc comment counts as part of its
-	// declaration (see testFileChange).
 	f, err := parser.ParseFile(fset, p, src, parser.ParseComments|parser.SkipObjectResolution)
 	return fset, f, err
 }
 
-// funcKey names a function the same way in both versions of a file: the
-// receiver's type, if any, and the name.
 func funcKey(fn *ast.FuncDecl) string {
 	if fn.Recv == nil || len(fn.Recv.List) == 0 {
 		return fn.Name.Name
@@ -49,11 +45,6 @@ func funcKey(fn *ast.FuncDecl) string {
 	return "?." + fn.Name.Name
 }
 
-// testFileChange judges a change to a test file of the suite. It returns the
-// tests to run, or nil when every test has to run: the change sets up the
-// whole package (TestMain, an init function, a blank declaration, or a blank
-// or dot import). A changed helper selects the tests whose code names it,
-// in any file of the suite, through sg.
 func testFileChange(root, base, head string, c change, sg *suiteGraph) ([]string, string) {
 	switch c.status {
 	case 'D':
@@ -93,9 +84,6 @@ func testFileChange(root, base, head string, c change, sg *suiteGraph) ([]string
 		}
 		to := from + length - 1
 		for _, d := range f.Decls {
-			// The doc comment counts as part of the declaration: a change
-			// there changes no code, and treating it as code only runs more.
-			// A //go:embed line is in the doc of its declaration.
 			start := fset.Position(d.Pos()).Line
 			if fn, ok := d.(*ast.FuncDecl); ok && fn.Doc != nil {
 				start = fset.Position(fn.Doc.Pos()).Line
@@ -134,8 +122,6 @@ func testFileChange(root, base, head string, c change, sg *suiteGraph) ([]string
 			}
 		}
 	}
-	// The lines above the package clause hold the build constraints, which
-	// decide whether the file is in the suite at all.
 	oldPkg := oldSet.Position(oldFile.Package).Line
 	newPkg := newSet.Position(newFile.Package).Line
 	for _, h := range hs {
@@ -146,8 +132,6 @@ func testFileChange(root, base, head string, c change, sg *suiteGraph) ([]string
 	for _, h := range hs {
 		touch(oldSet, oldFile, h.oldStart, h.oldLen, "old")
 		touch(newSet, newFile, h.newStart, h.newLen, "new")
-		// An insertion between declarations touches no line of either; the
-		// declaration it adds is on the new side, which the call above sees.
 	}
 	if helpers["init"] || helpers["TestMain"] || helpers["_"] {
 		return nil, "changes package set-up"
@@ -168,8 +152,6 @@ func testFileChange(root, base, head string, c change, sg *suiteGraph) ([]string
 		}
 		why = append(why, fmt.Sprintf("changes the imports all %d tests in the file share", len(all)))
 	}
-	// Never nil: nil asks for every test. A change between declarations,
-	// such as a comment, selects none.
 	out := append([]string{}, slices.Sorted(maps.Keys(tests))...)
 	if len(why) == 0 {
 		if len(out) == 0 {
@@ -181,8 +163,6 @@ func testFileChange(root, base, head string, c change, sg *suiteGraph) ([]string
 	return out, strings.Join(why, "; ")
 }
 
-// globalImports is the blank and dot imports of a file, which change what
-// the whole package sees.
 func globalImports(f *ast.File) string {
 	var out []string
 	for _, imp := range f.Imports {
@@ -194,7 +174,6 @@ func globalImports(f *ast.File) string {
 	return strings.Join(out, "\n")
 }
 
-// listNames joins names for a reason line, at most eight of them.
 func listNames(names []string) string {
 	if len(names) > 8 {
 		return strings.Join(names[:8], ", ") + fmt.Sprintf(" and %d more", len(names)-8)

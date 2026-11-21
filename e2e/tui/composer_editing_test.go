@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Keys with modifiers, as xterm sends them: CSI 1 ; mod final, where mod is 1
-// plus shift 1, alt 2 and ctrl 4.
 const (
 	shiftLeft    tuitest.Key = "\x1b[1;2D"
 	shiftHome    tuitest.Key = "\x1b[1;2H"
@@ -73,8 +71,6 @@ func TestComposerEditsLikeATextField(t *testing.T) {
 		}
 		time.Sleep(mouseGap)
 	}
-	// The screen's text drops a line's trailing spaces, so a draft that
-	// ends in one is checked by what comes before it.
 	draft := func(what, want string, gone ...string) {
 		t.Helper()
 		waitText(t, term, what, want)
@@ -93,18 +89,15 @@ func TestComposerEditsLikeATextField(t *testing.T) {
 	send("type the draft", "alpha beta gamma")
 	draft("the typed draft", "alpha beta gamma")
 
-	// A click on the b of beta, then a key: the X goes right before it.
 	row, col = findText(t, term, "alpha beta gamma")
 	mouseClick(t, term, col+6, row, tuitest.MouseLeft, 0)
 	send("type at the click", "X")
 	draft("a key after a click", "alpha Xbeta gamma")
 
-	// A click past the line's end, then a key: it goes at the end.
 	mouseClick(t, term, col+60, row, tuitest.MouseLeft, 0)
 	send("type at the end", "!")
 	draft("a key after a click past the end", "alpha Xbeta gamma!")
 
-	// A click on the header above the editor leaves the cursor where it was.
 	hr, hc := findText(t, term, "Reply to docs-cli")
 	mouseClick(t, term, hc+2, hr, tuitest.MouseLeft, 0)
 	send("type after a click on the header", "?")
@@ -112,7 +105,6 @@ func TestComposerEditsLikeATextField(t *testing.T) {
 	send("drop the marks", tuitest.Backspace, tuitest.Backspace)
 	draft("the draft without the marks", "alpha Xbeta gamma", "gamma!")
 
-	// A double click selects gamma; typing replaces it.
 	mouseClick(t, term, col+14, row, tuitest.MouseLeft, 0)
 	mouseClick(t, term, col+14, row, tuitest.MouseLeft, 0)
 	_ = term.WaitStable(uiTimeout)
@@ -120,17 +112,14 @@ func TestComposerEditsLikeATextField(t *testing.T) {
 	send("type over the word", "delta")
 	draft("typing over a double click", "alpha Xbeta delta", "gamma")
 
-	// One undo brings the word back whole.
 	send("undo", tuitest.Ctrl('z'))
 	draft("undo of a replace", "alpha Xbeta gamma", "delta")
 
-	// Shift with a word jump selects the word before the cursor.
 	send("go to the end", tuitest.End)
 	send("select a word back", altShiftLeft)
 	send("delete the selection", tuitest.Backspace)
 	draft("backspace over a selection", "› alpha Xbeta", "gamma")
 
-	// A drag over Xbeta selects it, and ctrl+c copies it without a change.
 	mouseDrag(t, term, col+6, row, col+11, row, tuitest.MouseLeft, 0)
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "composer-drag-selected-160x45")
@@ -138,14 +127,10 @@ func TestComposerEditsLikeATextField(t *testing.T) {
 	waitBuffer(t, base, "the copied selection", "Xbeta")
 	draft("the draft after a copy", "alpha Xbeta")
 
-	// shift+left after the drag shrinks the selection by one; typing
-	// replaces what is left.
 	send("shrink the selection", shiftLeft)
 	send("type over it", "Y")
 	draft("typing over a shrunk selection", "› alpha Ya", "Xbet")
 
-	// shift+home selects to the line's start; a triple click selects the
-	// whole line, and ctrl+x cuts it.
 	send("select to the start", shiftHome)
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "composer-shift-home-160x45")
@@ -157,7 +142,6 @@ func TestComposerEditsLikeATextField(t *testing.T) {
 	waitText(t, term, "the empty editor after the cut", "Type your reply.")
 }
 
-// waitBuffer waits for the newest paste buffer to hold want.
 func waitBuffer(t *testing.T, base, what, want string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)

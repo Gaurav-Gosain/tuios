@@ -27,8 +27,6 @@ func TestTmuxShimOpensATeammatePane(t *testing.T) {
 
 	out := filepath.Join(base, "shim-out")
 	script := filepath.Join(base, "teams.sh")
-	// A stand-in for the teammate: a program named claude, which the agent
-	// detector knows, that stays up.
 	bin := filepath.Join(base, "bin")
 	mustMkdir(bin)
 	teammateBin := filepath.Join(bin, "claude")
@@ -48,7 +46,6 @@ func TestTmuxShimOpensATeammatePane(t *testing.T) {
 	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The quotes keep the typed line itself from matching the marker.
 	line := tuiosBin + " tmux-shim -- sh " + script + ` || echo SHIM_"FAILED"` + "\n"
 	if o, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, o)
@@ -87,8 +84,6 @@ func TestTmuxShimOpensATeammatePane(t *testing.T) {
 		t.Fatalf("the respawned teammate command never drew in its pane: %v\n%s", err, term.Snapshot())
 	}
 
-	// The teammate is found as an agent behind the pane holder, so it shows
-	// on the rail like any agent pane.
 	deadline := time.Now().Add(shellTimeout)
 	var agents string
 	for time.Now().Before(deadline) {

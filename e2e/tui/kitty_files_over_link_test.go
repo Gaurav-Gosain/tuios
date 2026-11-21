@@ -58,8 +58,6 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_SIXEL_GRAPHICS=0"}
 	live := buildKittyLive(t)
 
-	// The far machine's own folders: a picture folder outside every
-	// temporary folder, and a key the link's read rules keep.
 	farHome := xdgDir(remote, "HOME")
 	pics := filepath.Join(farHome, "pictures")
 	if err := os.MkdirAll(pics, 0o700); err != nil {
@@ -73,8 +71,6 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The far daemon runs before the link reaches it, as it does on a
-	// machine where tuios is in use.
 	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
 		t.Fatalf("start the far daemon: %v\n%s", err, out)
 	}
@@ -91,12 +87,6 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 	waitWindowCount(t, term, 1, "opening the window on build")
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo FAR-$((20+22))", "FAR-42", shellTimeout)
-	// kittylive's and kitten icat's t=t files go in a temporary folder of
-	// the far machine. kitty accepts $TMPDIR only when it is not a parent of
-	// the home, and the far home here is under the test's own $TMPDIR, so
-	// /tmp it is. On Linux icat's probe picks memory first and never needs
-	// the folder. On macOS it has no memory mode, and with the refused
-	// folder it falls back to stream.
 	tmp, err := os.MkdirTemp("", "kittylive-")
 	if err != nil {
 		t.Fatal(err)
@@ -132,10 +122,6 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		png := junk[4000 : len(junk)-4000]
 		teal := bytes.Repeat([]byte{42, 161, 152, 255}, 64*32)
 		wantUploads := map[string][]byte{"t=f": green, "t=f with O= and S=": png}
-		// tuios reads a shared memory object only from /dev/shm, and the far
-		// side answers ENOTSUPPORTED elsewhere. macOS has no /dev/shm, and Go
-		// has no shm_open there without cgo, so kittylive sends no t=s
-		// command off Linux.
 		if runtime.GOOS == "linux" {
 			wantUploads["t=s"] = teal
 		}
@@ -150,14 +136,11 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 				pngs++
 			}
 		}
-		// direct-png, file, file-offset and tempfile.
 		if pngs < 4 {
 			t.Errorf("the host received %d PNG uploads, want at least 4 (t=d, t=f, t=f with O=, t=t)", pngs)
 		}
 	})
 
-	// The real kitten icat, when it is installed: its own probe picks file
-	// or memory mode, and each mode is also forced.
 	t.Run("icat", func(t *testing.T) {
 		kitten, err := exec.LookPath("kitten")
 		if err != nil {
@@ -170,8 +153,6 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		if snap := term.Snapshot(); !strings.Contains(snap, "MODE-MEMORY") && !strings.Contains(snap, "MODE-FILE") {
 			t.Errorf("icat did not pick file or memory transfer for a pane on another machine:\n%s", snap)
 		}
-		// Memory mode is a POSIX shared memory object, which the far side
-		// reads only on Linux (see the media run).
 		modes := []string{"file", "memory"}
 		if runtime.GOOS != "linux" {
 			modes = modes[:1]
@@ -200,11 +181,6 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		}
 	})
 
-	// A marker prefix that the far pane prints in two parts, slower than
-	// the far side waits for the rest, and then a real image. The parts
-	// used to reach this side as they were, and the scan here, inside what
-	// it took for a marker, lost the ESC of the real one: the image never
-	// came and the pane waited 30 s.
 	t.Run("split-marker", func(t *testing.T) {
 		green, err := os.ReadFile(filepath.Join(pics, "green.png"))
 		if err != nil {
@@ -212,8 +188,6 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		}
 		clearPane(t, term)
 		host.mark("split")
-		// The real command comes right after the split prefix, with no
-		// other escape between them, which is the case the scan lost.
 		cmd := `printf '\033_tuios-kitty-'; sleep 0.3; printf 'medium;x\033_Ga=t,i=3,f=100,t=f,q=2;%s\033\\' "$(printf %s ` +
 			filepath.Join(pics, "green.png") + ` | base64 | tr -d '\n')"`
 		started := time.Now()
@@ -237,10 +211,6 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		}
 	})
 
-	// A program prints a lone ESC, pauses past the far side's hold, and then
-	// a file command after it. The ESC went to this side alone and the
-	// command was dropped, so the ESC joined the next byte the far side sent:
-	// ESC D, which moves the cursor down and eats the D.
 	t.Run("lone-esc", func(t *testing.T) {
 		clearPane(t, term)
 		host.mark("lone")
@@ -262,14 +232,10 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		host.mark("refused")
 		clearPane(t, term)
 		typeLine(t, term, live+" -refuse -dir "+pics+" -deny "+key)
-		// Seven refusals, and on Linux three shared memory objects that
-		// must survive.
 		want := "ALL 7 PASS"
 		if runtime.GOOS == "linux" {
 			want = "ALL 10 PASS"
 		}
-		// The host checks below run even when a reply is wrong, so a path
-		// that reached the host is reported whatever the guest was told.
 		expectLive(t, term, want)
 		saveArtifact(t, term, artifactDir(t), "refused")
 		stream := host.bytes()
@@ -280,14 +246,9 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 		if containsUpload(uploads, []byte("not a real key\n")) {
 			t.Errorf("the key crossed the link")
 		}
-		// A refusal must be the far machine's, before a byte moves: the
-		// owner's emulator also answers an error (EBADPNG) for bytes that
-		// are not an image, which would pass the reply check alone.
 		if passwd, err := os.ReadFile("/etc/passwd"); err == nil && containsUpload(uploads, passwd) {
 			t.Errorf("a file of another user (/etc/passwd) crossed the link")
 		}
-		// A refused path is not handed on either: the host terminal shares
-		// this machine here and would read it.
 		if len(paths) > 0 {
 			t.Errorf("the host was handed paths %q", paths)
 		}
@@ -295,8 +256,6 @@ func TestKittyFilesFromAPaneOnAHost(t *testing.T) {
 	alive(t, term, "after images from a pane on a host")
 }
 
-// waitLive waits for kittylive's last line and fails with the screen when it
-// says FAIL.
 func waitLive(t *testing.T, term *tuitest.Terminal, want string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -310,8 +269,6 @@ func waitLive(t *testing.T, term *tuitest.Terminal, want string) {
 	}
 }
 
-// runTagged types cmd and waits for it to exit 0, by a mark that names tag,
-// so a run after another one does not match the first one's mark.
 func runTagged(t *testing.T, term *tuitest.Terminal, tag, cmd string) {
 	t.Helper()
 	typeLine(t, term, cmd+`; echo "DONE""-`+tag+`-RC=$?"`)
@@ -320,7 +277,6 @@ func runTagged(t *testing.T, term *tuitest.Terminal, tag, cmd string) {
 	}
 }
 
-// clearPane clears the pane and waits until the last check's lines are gone.
 func clearPane(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	typeLine(t, term, "clear")
@@ -332,7 +288,6 @@ func clearPane(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// expectLive is waitLive that reports a FAIL and goes on.
 func expectLive(t *testing.T, term *tuitest.Terminal, want string) {
 	t.Helper()
 	_ = term.WaitFor(func(s tuitest.Screen) bool {
@@ -344,7 +299,6 @@ func expectLive(t *testing.T, term *tuitest.Terminal, want string) {
 	}
 }
 
-// buildKittyLive compiles the check into the test's temporary directory.
 func buildKittyLive(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "kittylive")
@@ -355,8 +309,6 @@ func buildKittyLive(t *testing.T) string {
 	return bin
 }
 
-// linkTransmits returns the paths of the file medium commands in stream and
-// the decoded bytes of every direct upload, chunks joined.
 func linkTransmits(t *testing.T, stream []byte) (paths []string, uploads [][]byte) {
 	t.Helper()
 	var run []byte
@@ -500,7 +452,6 @@ func TestKittyFilesStalledOwnerHoldsOnlyItsPane(t *testing.T) {
 		if r, _ := res["reply"].(string); strings.HasSuffix(r, ";OK") {
 			t.Errorf("a large image the owner never read was answered OK")
 		}
-		// The reply goes into the pane's input: no socket, no path.
 		if r, _ := res["reply"].(string); strings.Contains(r, "/") {
 			t.Errorf("the reply %q names a path", r)
 		}
@@ -570,8 +521,6 @@ func TestKittyStreamHoldsOnlyItsPane(t *testing.T) {
 	if err := os.WriteFile(stop, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Two senders, so this side falls behind the link on every run, not
-	// only on a slow one.
 	var senders []string
 	for _, name := range []string{"images1", "images2"} {
 		out := filepath.Join(pics, name+".json")
@@ -581,9 +530,6 @@ func TestKittyStreamHoldsOnlyItsPane(t *testing.T) {
 		}
 		senders = append(senders, out)
 	}
-	// A pane that prints ten times a second, so the host terminal has
-	// something to draw for as long as the link carries it. It opens last
-	// and takes the focus, so it is on top and every line it prints is drawn.
 	if o, err := tuiosCLIEnv(t, base, env, "new-window", "tick", "-s", "home", "--host", "build", "--",
 		"sh", "-c", "while :; do date +%s.%N; sleep 0.1; done"); err != nil {
 		t.Fatalf("open the ticker: %v\n%s", err, o)
@@ -598,8 +544,6 @@ func TestKittyStreamHoldsOnlyItsPane(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ASSERTION: new-window on the machine failed after %v while a pane there streamed images: %v\n%s", openTook, err, o)
 	}
-	// Listings of the machine, one after another for ten seconds. Each
-	// crosses the link's control stream.
 	var listMax time.Duration
 	lists := 0
 	for until := time.Now().Add(10 * time.Second); time.Now().Before(until); lists++ {
@@ -656,8 +600,6 @@ func TestKittyStreamHoldsOnlyItsPane(t *testing.T) {
 	alive(t, term, "after a pane streamed images")
 }
 
-// gapSink is a host terminal that answers the kitty probe, keeps nothing,
-// and measures the longest wait between two writes while it is measuring.
 type gapSink struct {
 	probe chan struct{}
 
@@ -690,8 +632,6 @@ func (g *gapSink) start() {
 	g.mu.Unlock()
 }
 
-// stop ends the measurement and returns the longest gap, the time since the
-// last write included.
 func (g *gapSink) stop() time.Duration {
 	g.mu.Lock()
 	defer g.mu.Unlock()

@@ -8,19 +8,6 @@ import (
 	"time"
 )
 
-// The manifest engine end to end, through the binary a person runs: a harness
-// manifest dropped in the user manifest directory, a fake agent on PATH that
-// the manifest recognises, and fan typing a prompt into it. The manifest
-// proves the agent idle with a rule reading only the last line of the screen,
-// and says the agent submits on a line feed. The fake agent reads its input
-// byte by byte with the terminal's CR to LF translation off, so the bytes it
-// prints are the bytes tuios wrote.
-//
-// Negative control: against a binary without the engine, the loader refuses
-// the manifest's bottom_non_empty_lines region, fan refuses the agent name, and
-// the fan step fails. A binary with the region but without the [input] block
-// submits with a carriage return, so the pane shows B:0d and never B:0a.
-
 const fakeAgentManifest = `schema_version = 1
 id = "tuiosfakeagent"
 [detect]
@@ -39,8 +26,6 @@ submit = "lf"
 source = "e2e"
 `
 
-// fakeAgentScript turns bracketed paste on, draws its prompt, and prints every
-// byte it reads as B:<hex>.
 const fakeAgentScript = `#!/bin/sh
 stty -icanon -icrnl -echo min 1
 printf '\033[?2004h'
@@ -95,7 +80,6 @@ func TestUserManifestInputReachesTheAgent(t *testing.T) {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	// Give the rest of the bytes a moment to be printed.
 	time.Sleep(time.Second)
 	pane, _ = tuiosCLI(t, base, "capture-pane", "-s", "repo-try-input")
 	for _, want := range []string{"B:1b", "B:68", "B:69", "B:0a"} {

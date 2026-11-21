@@ -15,7 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tmlDaemonPID finds the daemon of the isolation root base.
 func tmlDaemonPID(t *testing.T, base string) int {
 	t.Helper()
 	ents, _ := os.ReadDir("/proc")
@@ -37,9 +36,6 @@ func tmlDaemonPID(t *testing.T, base string) int {
 	return 0
 }
 
-// tmlHWM is the most resident memory a process has held, in kB. The peak,
-// not the resident set now: the garbage collector gives back what a burst
-// held, and the burst is what the test bounds.
 func tmlHWM(pid int) int64 {
 	st, _ := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
 	for l := range strings.SplitSeq(string(st), "\n") {

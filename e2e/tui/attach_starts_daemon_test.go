@@ -14,23 +14,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// This file covers the state a user reaches by closing their laptop lid: every
-// session saved on disk, no daemon listening. Attach used to refuse there and
-// name 'tuios new', which makes a different session than the ones being asked
-// for. The daemon restores everything it finds when it starts, so the sessions
-// were one process away the whole time.
-
-// lsRow is a row of 'tuios ls --json', including the flag that only appears
-// when no daemon is holding the session.
 type lsRow struct {
 	Name     string `json:"name"`
 	Attached bool   `json:"attached"`
 	Saved    bool   `json:"saved"`
 }
 
-// listSessionRows runs 'tuios ls --json' and returns the rows with the exit
-// status, which is the whole point of the command for a script: 0 means a
-// daemon answered, noDaemonExit means the rows came off the disk instead.
 func listSessionRows(t *testing.T, base string) ([]lsRow, int) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "ls", "--json")
@@ -41,8 +30,6 @@ func listSessionRows(t *testing.T, base string) ([]lsRow, int) {
 	return rows, exitCode(t, err)
 }
 
-// waitForRows polls the listing until it satisfies want, and returns the last
-// one it read either way, so a failure prints what was actually there.
 func waitForRows(t *testing.T, base string, want func([]lsRow) bool) []lsRow {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -55,7 +42,6 @@ func waitForRows(t *testing.T, base string, want func([]lsRow) bool) []lsRow {
 	}
 }
 
-// noDaemonExit is the status 'tuios ls' reports when no daemon answered.
 const noDaemonExit = 3
 
 func exitCode(t *testing.T, err error) int {
@@ -79,13 +65,10 @@ func TestAttachStartsTheDaemonAndBringsSessionsBack(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", "e2e-autostart", "--detach"); err != nil {
 		t.Fatalf("create detached session: %v: %s", err, out)
 	}
-	// kill-server is synchronous and saves every session on the way out.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}
 
-	// The listing has to show what is actually there, or attach opening a
-	// session the user was just told did not exist is incomprehensible.
 	rows, code := listSessionRows(t, base)
 	if code != noDaemonExit {
 		t.Errorf("'ls' exited %d with no daemon, want %d so a script can tell that from an empty daemon", code, noDaemonExit)
@@ -99,15 +82,11 @@ func TestAttachStartsTheDaemonAndBringsSessionsBack(t *testing.T) {
 		t.Fatalf("attach never brought the saved session up: %v\n%s", err, client.Snapshot())
 	}
 
-	// It said what it was bringing back, before the TUI took the screen.
 	logBytes, _ := os.ReadFile(logPath)
 	if !strings.Contains(string(logBytes), "e2e-autostart") {
 		t.Errorf("attach did not name the session it restored; PTY log:\n%s", string(logBytes))
 	}
 
-	// And it opened that session rather than starting a fresh one beside it.
-	// Polled, because the daemon records the client a moment after the first
-	// frame is on screen.
 	rows = waitForRows(t, base, func(rows []lsRow) bool {
 		return len(rows) == 1 && rows[0].Name == "e2e-autostart" && rows[0].Attached
 	})
@@ -131,8 +110,6 @@ func TestAttachWithNothingSavedOpensANewSession(t *testing.T) {
 	}
 
 	client, logPath := startInLogged(t, base, startOpts{args: []string{"attach"}})
-	// A new session has no windows yet, so the welcome screen is what "it
-	// opened one" looks like.
 	waitBoot(t, client)
 
 	logBytes, _ := os.ReadFile(logPath)

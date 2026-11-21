@@ -11,42 +11,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The report: on the scrolling layout, zoom a column and move the focus to the
-// next or previous one. While the strip scrolls, a gap of empty ground shows
-// between the columns.
-//
-// The zoom follows the focus, so the column that had it narrows and the column
-// that takes it widens. The strip resized both columns at once and slid only
-// their positions, so for the whole slide the narrowed column ended well short
-// of where its neighbour started.
-//
-// Every frame drawn during each move is read. The row the panes' top borders
-// are on is a solid line of border, title dots and corners from one edge of the
-// screen to the other while the strip is whole: the panes are laid edge to edge
-// with no gap configured. Blank cells on that row other than a title's spaces,
-// or a row that ends before the right edge, are ground showing where a pane
-// should be.
-//
-// How this could pass wrongly, written down first:
-//   - The slide could be coalesced into one frame, so there is no in-between
-//     frame to check. Six of the moves must each draw at least three distinct
-//     frames.
-//   - The zoom could silently fail to come on, which leaves no width change to
-//     animate. A pane nearly the width of the screen is required after the
-//     zoom and after the moves.
-//   - The row read could be the wrong one, where blank cells are normal. The
-//     settled frame before any move must pass the same check, and does only on
-//     the border row.
-//
-// Negative control: see NEGATIVE_CONTROLS.md, "Scrolling zoom gap".
-
 const (
 	zoomGapCols = 120
 	zoomGapRows = 30
 )
 
-// zoomGapClient brings up four named panes on the scrolling layout, focused on
-// the last column, in window-management mode.
 func zoomGapClient(t *testing.T, daemon bool, zoomSize int, animations bool) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -63,8 +32,6 @@ func zoomGapClient(t *testing.T, daemon bool, zoomSize int, animations bool) *tu
 		term = startIn(t, base, o)
 		waitBoot(t, term)
 	}
-	// A detached daemon session starts with one pane; the standalone TUI
-	// starts with none.
 	for i, name := range []string{"ALPHA", "BRAVO", "CHARLIE", "DELTA"} {
 		if i > 0 || countWindows(term.Screen()) == 0 {
 			newWindow(t, term)
@@ -78,15 +45,6 @@ func zoomGapClient(t *testing.T, daemon bool, zoomSize int, animations bool) *tu
 	return term
 }
 
-// stripGap reports where the pane border row shows ground, or "" when it does
-// not. Row 0 is the top border of every column: the dock is at the bottom.
-//
-// The only blank cells a whole strip has on that row are the single spaces in
-// a title's " ● ● ● ", and a pane drawn over another (the zoomed pane sliding
-// back to its column) can cover the dots and leave a space on its own. So one
-// blank cell is ground only where a pane's corner starts right after it,
-// which a title space never does. Two blank cells side by side are always
-// ground. The snapshot drops a blank last cell, so the row may be one short.
 func stripGap(frame string) string {
 	row := []rune(strings.SplitN(frame, "\n", 2)[0])
 	if len(row) < zoomGapCols-1 {
@@ -106,8 +64,6 @@ func stripGap(frame string) string {
 	return ""
 }
 
-// moveFrames sends keys and returns every distinct frame from the press until
-// the screen has held still for 400ms.
 func moveFrames(t *testing.T, term *tuitest.Terminal, keys ...any) []string {
 	t.Helper()
 	if err := term.SendKeys(keys...); err != nil {
@@ -136,8 +92,6 @@ func framesUntilStill(t *testing.T, term *tuitest.Terminal) []string {
 	return nil
 }
 
-// checkFrames fails on the first frame that shows ground, and keeps every
-// frame of the move in dir either way.
 func checkFrames(t *testing.T, dir, move string, frames []string) {
 	t.Helper()
 	for i, f := range frames {
@@ -151,9 +105,6 @@ func checkFrames(t *testing.T, dir, move string, frames []string) {
 	}
 }
 
-// zoomedPaneShown reports whether the settled frame shows a zoomed pane: a top
-// border, corner to corner, at least 100 of the 120 columns wide. A column
-// that is not zoomed is 55 percent of the screen.
 func zoomedPaneShown(frame string) bool {
 	row := []rune(strings.SplitN(frame, "\n", 2)[0])
 	for i, r := range row {
@@ -172,8 +123,6 @@ func zoomedPaneShown(frame string) bool {
 	return false
 }
 
-// requireZoom checks the zoom by its geometry. The dock's ZOOM notice is no
-// use for this: it expires after a few seconds.
 func requireZoom(t *testing.T, term *tuitest.Terminal, on bool, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -212,8 +161,6 @@ func TestScrollingZoomMoveShowsNoGap(t *testing.T) {
 			checkFrames(t, dir, "zoom", moveFrames(t, term, "z"))
 			requireZoom(t, term, true, "after z")
 
-			// From the last column to the first and back, one step at a
-			// time, and one step past each end.
 			left, right := tuitest.Alt(tuitest.Left), tuitest.Alt(tuitest.Right)
 			moves := []struct {
 				name string
@@ -235,11 +182,9 @@ func TestScrollingZoomMoveShowsNoGap(t *testing.T) {
 				t.Fatalf("only %d of the six real moves drew an in-between frame; nothing was checked mid-slide", slid)
 			}
 
-			// The zoom taken off while the strip is still sliding.
 			checkFrames(t, dir, "unzoom-mid-slide", moveFrames(t, term, left, "z"))
 			requireZoom(t, term, false, "after z during the slide")
 
-			// The wheel while zoomed moves the strip at once, with no slide.
 			checkFrames(t, dir, "rezoom", moveFrames(t, term, "z"))
 			requireZoom(t, term, true, "after zooming again")
 			for _, button := range []tuitest.MouseButton{tuitest.MouseWheelUp, tuitest.MouseWheelDown} {

@@ -15,10 +15,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// subagentRowsScenario is what the fake claude replays for the rail: four
-// background subagents with a tool call each and a Stop that leaves the main
-// agent done, then two of them ending (one done, one stopped), then the
-// other two done.
 func subagentRowsScenario() string {
 	type launch struct{ id, call, desc, typ, tool, input string }
 	launches := []launch{
@@ -59,8 +55,6 @@ func subagentRowsScenario() string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-// railOf is the rail's part of each screen line: the text before the rail's
-// right border.
 func railOf(s tuitest.Screen) []string {
 	_, rows := s.Size()
 	out := make([]string, 0, rows)
@@ -74,26 +68,17 @@ func railOf(s tuitest.Screen) []string {
 	return out
 }
 
-// subagentRail is what the agents section of one frame shows.
 type subagentRail struct {
-	// parents are the agent rows on screen, by name.
-	parents []string
-	// kids are the subagents' rows, by the start of their description.
-	kids []string
-	// notes is how many subagent rows have a second line under them.
-	notes int
-	// more is the "+N more" or "N subagents" row, empty when there is none.
-	more string
-	// overflow says the section hid rows behind "…+N".
+	parents  []string
+	kids     []string
+	notes    int
+	more     string
 	overflow bool
 	lines    []string
 }
 
-// subagentDescs are the scenario's descriptions, as far as a 24 column rail
-// draws them.
 var subagentDescs = []string{"Research", "Audit", "Write", "Check"}
 
-// readSubagentRail parses the agents section of a frame.
 func readSubagentRail(s tuitest.Screen) subagentRail {
 	var r subagentRail
 	lines := railOf(s)
@@ -135,8 +120,6 @@ func readSubagentRail(s tuitest.Screen) subagentRail {
 	return r
 }
 
-// step names the collapse step a frame shows, with total and running the
-// subagents the lead has, or "" for a frame without both agent rows.
 func (r subagentRail) step(total, running int) string {
 	if len(r.parents) != 2 {
 		return ""
@@ -182,12 +165,9 @@ func (r subagentRail) step(total, running int) string {
 func TestSubagentRowsOnTheRail(t *testing.T) {
 	log := &stateLog{name: "subagent-rows"}
 	defer log.save(t)
-	// Long enough that the finished rows stay through a whole shrink.
 	t.Setenv("TUIOS_SUBAGENT_FADE_SECONDS", "25")
 	frames := os.Getenv("TUIOS_E2E_FRAMES")
 	base := t.TempDir()
-	// The looks as they ship, so the config can be rewritten mid-test without
-	// the suite's pins going missing under a live client.
 	useShippedLooks(base)
 	rail := "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 24\n"
 	writeConfig(t, base, rail)
@@ -203,8 +183,6 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 		}
 	}
 	dir := workDirIn(t, base)
-	// The second agent sits idle, so it sorts with the lead, after it: a
-	// collapse that took a parent's line for a child row would push it off.
 	for _, payload := range []string{
 		`{"hook_event_name":"SessionStart","session_id":"solo-1","source":"startup"}`,
 	} {
@@ -247,8 +225,6 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 		return s.Subagents == 4 && s.byID(saCI).Now == "Bash: gh run list" && s.byID(saTmux).Now == "Bash: go test ./..."
 	})
 
-	// The lead's row and its title bar wear the waiting mark, and every
-	// subagent has a tall row.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r := readSubagentRail(s)
 		return r.step(4, 4) == "all-tall"
@@ -279,11 +255,7 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "subagent-rows-all-tall")
 	}
 
-	// Each collapse step, from a tall terminal down to a short one.
 	seen := map[string]bool{}
-	// listed is how many subagents the daemon lists for the lead now, so a
-	// frame drawn after the finished ones faded is not read as one that left
-	// them out.
 	listed := func() int { return len(readSubagents(t, base, "e2e-sub").List) }
 	shrink := func(total, running int, phase string) {
 		t.Helper()
@@ -332,11 +304,6 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 		}
 	}
 	shrink(4, 4, "running")
-	// The shipped layout gives the agents section a share of the rail, and a
-	// share in rows is twice the lines once the rows are tall, so a section
-	// that holds every row short holds them tall too. With the agents section
-	// alone it takes what is left, which holds every row short before it
-	// holds them tall.
 	writeConfig(t, base, rail+"sections = \"agents\"\n")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(strings.Join(railOf(s), "\n"), "sessions") && len(readSubagentRail(s).parents) == 2
@@ -352,8 +319,6 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 		}
 	}
 
-	// Two end: one done, one stopped. Their rows stay, muted, until the fade,
-	// and a short section leaves them out first.
 	step()
 	waitCapture(t, base, "e2e-sub", "0", "FAKE-AT two-ended")
 	waitSubagents(t, base, "e2e-sub", log, "two ended", func(s subagentsOf) bool {
@@ -372,10 +337,6 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 	saveFrame(t, term, "subagent-rows-faded")
 	log.add("the finished rows faded")
 
-	// ASCII and 16 colours: the marks still differ by shape.
-	// A C locale is what turns ASCII on when nobody chose a glyph set, and
-	// TERM=xterm without COLORTERM is a 16 colour terminal. Started without
-	// attachIn's window count, which reads the dock of one client alone.
 	plain := startIn(t, base, startOpts{cols: cols, rows: tallRows, args: []string{"attach", "e2e-sub"},
 		env: []string{"TERM=xterm", "COLORTERM=", "LANG=C", "LC_ALL=C", "LC_CTYPE=C"}})
 	if err := plain.WaitFor(func(s tuitest.Screen) bool {
@@ -390,7 +351,6 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 		savePNG(t, plain.Screen(), shot.XTermPalette(), frames, "subagent-rows-ascii-16")
 	}
 
-	// The count alone, as the rail drew it before.
 	writeConfig(t, base, rail+"subagent_rows = \"count\"\n")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r := readSubagentRail(s)
@@ -401,7 +361,6 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 	saveFrame(t, term, "subagent-rows-count")
 	writeConfig(t, base, rail)
 
-	// The last two end, and the lead is done with nothing at work.
 	step()
 	waitCapture(t, base, "e2e-sub", "0", "FAKE-AT finished")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -434,10 +393,6 @@ func TestSubagentRowsOnTheRail(t *testing.T) {
 func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 	base := t.TempDir()
 	useShippedLooks(base)
-	// The fake children report working and then print nothing. The stall
-	// heuristic would show them idle 30 seconds later, and the cockpit's
-	// pills are read about that long after the children start, so the
-	// heuristic is off: the states read are the ones the children reported.
 	writeConfig(t, base, "[daemon]\nagent_stall_seconds = -1\n\n[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 50\n")
 	killDaemon(t, base)
 	const sess = "e2e-nest"
@@ -450,9 +405,6 @@ func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 		t.Fatalf("start the root agent: %v\n%s", err, out)
 	}
 	frames := os.Getenv("TUIOS_E2E_FRAMES")
-	// rowAt is the rail row a name is on in the agents section, under its
-	// header, and the column its name starts at. A folded headline's line
-	// of names is no row.
 	rowAt := func(s tuitest.Screen, name string) (int, int) {
 		rail := railOf(s)
 		top := -1
@@ -488,9 +440,6 @@ func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 	h1, _ := rowAt(s, "1 agent · 1 idle")
 	y0, x0 := rowAt(s, "gen0")
 	ys, xs := rowAt(s, "sib1")
-	// A row is one or two lines, as the section has room: the step is
-	// what one row takes. gen2's family is one block: its headline, then
-	// gen1 with its own headline and gen0, and sib1 before or after them.
 	step := h2 - y2
 	block := []int{h2, y1, h1, y0, ys}
 	slices.Sort(block)
@@ -503,7 +452,6 @@ func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 			y2, x2, h2, y1, x1, h1, y0, x0, ys, xs, strings.Join(railOf(s), "\n"))
 	}
 
-	// A lead with four children in mixed states.
 	family := writeFamilyAgent(t, base)
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "lead", "--", "sh", family, "lead"); err != nil {
 		t.Fatalf("start the lead: %v\n%s", err, out)
@@ -530,8 +478,6 @@ func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 	if frames != "" {
 		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "agent-kin-rows")
 	}
-	// A click on the headline folds the children's rows away. The headline
-	// stays, and still counts them.
 	hy, hx := rowAt(term.Screen(), headline)
 	mouseClick(t, term, hx+2, hy, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -561,11 +507,9 @@ func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 		t.Fatalf("ASSERTION: a second click did not open the children again: %v\n%s", err, term.Snapshot())
 	}
 
-	// The lead's thread: a Task card and the card that started the four.
 	joinLeadTranscript(t, base, sess)
 	cockpitPills(t, term, "agent-kin", frames)
 
-	// 16 colours: the headline and the pills still read.
 	plain := startIn(t, base, startOpts{cols: 150, rows: 46, args: []string{"attach", sess},
 		env: []string{"TERM=xterm", "COLORTERM="}})
 	if err := plain.WaitFor(func(s tuitest.Screen) bool {
@@ -581,9 +525,6 @@ func TestChildAgentRowsNestUnderTheirParent(t *testing.T) {
 	cockpitPills(t, plain, "agent-kin-16", frames)
 }
 
-// writeFamilyAgent writes a fake agent. Run as "lead", it reports itself
-// idle and starts four children named kid-a to kid-d, two working, one
-// done and one waiting for the person. Run as "kid STATE", it reports STATE.
 func writeFamilyAgent(t *testing.T, base string) string {
 	t.Helper()
 	agent := filepath.Join(base, "family.sh")
@@ -604,9 +545,6 @@ func writeFamilyAgent(t *testing.T, base string) string {
 	return agent
 }
 
-// joinLeadTranscript writes a Claude Code transcript for the lead and joins
-// it to the lead's pane: a prompt, a Task call that ran a subagent, a shell
-// command that started kid-a to kid-d, and the answer.
 func joinLeadTranscript(t *testing.T, base, sess string) {
 	t.Helper()
 	rec := func(typ, at, content string) string {
@@ -642,12 +580,8 @@ func joinLeadTranscript(t *testing.T, base, sess string) {
 	}
 }
 
-// cockpitPills opens the cockpit on the lead's thread and checks the pills:
-// the Task card's pill, a pill per child under the card that started them,
-// "." selecting one, and enter opening that child's thread.
 func cockpitPills(t *testing.T, term *tuitest.Terminal, name, frames string) {
 	t.Helper()
-	// A click on the rail gave it the keyboard: esc hands it back.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
@@ -666,8 +600,6 @@ func cockpitPills(t *testing.T, term *tuitest.Terminal, name, frames string) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		// A pill reads its name and then its state, which no other line
-		// of the cockpit does.
 		return containsAll(text, answer, "Survey the token code done", "kid-a working", "kid-b working", "kid-c done", "kid-d needs you")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the lead's thread has no child pills: %v\n%s", err, term.Snapshot())

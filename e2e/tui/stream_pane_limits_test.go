@@ -31,14 +31,10 @@ import (
 //     read grant is taken away keeps its stream, and
 //     TestStreamPaneFromAPane fails at "the stream outlived the read grant".
 
-// limitsConfig gives the phone every capability and the reader only list.
 const limitsConfig = "[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 60\n\n" +
 	"[hosts.phone]\nallow = [\"list\", \"mail\", \"open\", \"write\", \"respond\"]\n\n" +
 	"[hosts.reader]\nallow = [\"list\"]\n"
 
-// limitsDaemon starts a daemon with limitsConfig and the session the
-// stream_pane helpers read, with two panes. It returns base and the two
-// window ids.
 func limitsDaemon(t *testing.T) (string, *phoneLink, *linkStream, string, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -69,14 +65,12 @@ func limitsDaemon(t *testing.T) (string, *phoneLink, *linkStream, string, string
 	return base, link, ctl, wins[0].(map[string]any)["window_id"].(string), wins[1].(map[string]any)["window_id"].(string)
 }
 
-// frameWithin reads one pane frame, or reports a timeout.
 func (s *linkStream) frameWithin(wait time.Duration) (byte, []byte, error) {
 	s.timeout = wait
 	defer func() { s.timeout = 0 }()
 	return s.tryFrame()
 }
 
-// nextOf reads frames until one of type typ and returns its payload.
 func (s *linkStream) nextOf(t *testing.T, typ byte, wait time.Duration) []byte {
 	t.Helper()
 	deadline := time.Now().Add(wait)
@@ -93,7 +87,6 @@ func (s *linkStream) nextOf(t *testing.T, typ byte, wait time.Duration) []byte {
 	return nil
 }
 
-// frameCode is the code of an E frame.
 func frameCode(t *testing.T, payload []byte) string {
 	t.Helper()
 	var e struct {
@@ -140,8 +133,6 @@ func TestStreamPaneHeldToTheLinkPolicy(t *testing.T) {
 	}
 	rs.close()
 
-	// A presence for a peer with list only: the nonce is made, and the
-	// verbs that use it still need their own capability.
 	rc := reader.open(t, true)
 	if _, verr := rc.call(t, "attach-presence", nil); verr != nil {
 		t.Fatalf("attach-presence with list: %v", verr)
@@ -151,8 +142,6 @@ func TestStreamPaneHeldToTheLinkPolicy(t *testing.T) {
 	}
 	rc.close()
 
-	// The nonce of a presence on a vouched stream does not answer from a
-	// stream the hub did not vouch for, on the same link and process.
 	pres, verr := ctl.call(t, "attach-presence", nil)
 	if verr != nil {
 		t.Fatalf("attach-presence: %v", verr)
@@ -201,8 +190,6 @@ func TestStreamPaneClientFrameMemory(t *testing.T) {
 	for _, s := range opened {
 		s.write(t, body)
 	}
-	// Every byte has gone through the proxy once a verb on the control
-	// stream answers after them.
 	time.Sleep(2 * time.Second)
 	if _, verr := ctl.call(t, "session-info", map[string]any{"session": streamSession}); verr != nil {
 		t.Fatalf("session-info: %v", verr)
@@ -214,16 +201,11 @@ func TestStreamPaneClientFrameMemory(t *testing.T) {
 		t.Fatalf("the daemon grew by %d MiB for %d streams that each announced a 1 MiB frame and never finished it", grew, streams)
 	}
 
-	// The bound is on one frame, not on input: a frame at the limit is
-	// typed, and a longer paste goes as more frames.
 	s := link.open(t, true)
 	if _, verr := s.call(t, "stream-pane", map[string]any{"session": streamSession, "window": w1}); verr != nil {
 		t.Fatalf("stream-pane: %v", verr)
 	}
 	s.nextOf(t, 'S', uiTimeout)
-	// A program reads the frame in raw mode and counts it. A shell line
-	// would not do: a shell without line editing (dash on Linux CI) reads
-	// in canonical mode, where the terminal keeps only 4095 bytes of a line.
 	spType(t, ctl, w1, "stty raw -echo; head -c 65536 | wc -c | sed 's/^ */LIMIT-/'; stty sane\n")
 	time.Sleep(500 * time.Millisecond)
 	s.send(t, 'I', []byte(strings.Repeat("x", 64<<10)))
@@ -322,9 +304,6 @@ func TestStreamPaneEndsWithItsWindow(t *testing.T) {
 	}
 }
 
-// paneClient is a stream-pane client that runs inside a pane, as an agent
-// would. It logs what it got, one line each, to the file named by its
-// second argument.
 const paneClient = `import json, os, socket, struct, sys
 win, path = sys.argv[1], sys.argv[2]
 log = open(path, "w", buffering=1)
@@ -413,7 +392,6 @@ func TestStreamPaneFromAPane(t *testing.T) {
 		t.Fatalf("a pane without the write grant leased its sibling from %s to %s", w2Size, got)
 	}
 
-	// The grant goes, and the stream with it.
 	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", streamSession, "-w", w1, "--grants", "none"); err != nil {
 		t.Fatalf("set-pane-grants: %v\n%s", err, out)
 	}
@@ -455,8 +433,6 @@ func TestStreamPaneLeaseOutlivesADroppedLink(t *testing.T) {
 		t.Fatalf("the leased pane is %s, want 6x30", got)
 	}
 
-	// The link drops: the proxy's stdin ends, as when ssh goes, and no close
-	// frame comes for the stream.
 	_ = viewer.in.Close()
 	if err := viewer.cmd.Wait(); err != nil {
 		t.Logf("stdio-proxy exited: %v", err)
@@ -487,7 +463,6 @@ func TestStreamPaneLeaseOutlivesADroppedLink(t *testing.T) {
 func TestStreamPaneLeaseOnTheDesktop(t *testing.T) {
 	base, link, ctl, w1, _ := limitsDaemon(t)
 	term := attachIn(t, base, streamSession, startOpts{})
-	// Tiled, so both panes show side by side.
 	enableTiling(t, term)
 
 	ps := link.open(t, true)
@@ -509,8 +484,6 @@ func TestStreamPaneLeaseOnTheDesktop(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "RELEASED-END") }, uiTimeout); err != nil {
 		t.Fatalf("the desktop never drew the released pane: %v\n%s", err, term.Snapshot())
 	}
-	// The lease ends a moment after the stream closes, so the size is read
-	// again until it changes.
 	tries := 0
 	waitUntil(t, "the pane leaves the leased size after the stream closed", uiTimeout, func() (bool, string) {
 		prefix := "BACK-"

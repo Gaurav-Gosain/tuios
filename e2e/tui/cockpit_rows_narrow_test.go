@@ -9,8 +9,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// screenLineWith is the first line of s that holds every marker, "" when no
-// line does.
 func screenLineWith(s tuitest.Screen, markers ...string) string {
 	for line := range strings.SplitSeq(s.Text(), "\n") {
 		ok := true
@@ -35,8 +33,6 @@ func screenLineWith(s tuitest.Screen, markers ...string) string {
 // api", with no "Allow Bash"; a Working row says "cache-2 claude cache" and
 // not what it edits; and j stops at the last row shown.
 func TestCockpitRowsKeepWhatTheyDoAt80Columns(t *testing.T) {
-	// The fleet opens at a size that shows its four groups, then the client
-	// goes to 80x24.
 	term, base, _, _ := startCockpitFleetWith(t, 120, 40, nil, "")
 	if err := term.Resize(80, 24); err != nil {
 		t.Fatal(err)
@@ -68,9 +64,6 @@ func TestCockpitRowsKeepWhatTheyDoAt80Columns(t *testing.T) {
 		t.Errorf("ASSERTION: a Working row does not say what it does on its line:\n%s", term.Snapshot())
 	}
 
-	// The list folds Working after eight rows. j walks down it; past the
-	// last Working row shown it opens the rest of the group, the last extra
-	// agent among them.
 	opened := false
 	for range 30 {
 		sendKeys(t, term, "j")

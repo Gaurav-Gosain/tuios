@@ -26,7 +26,6 @@ func TestRunTempLeak(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "f"), make([]byte, 2048), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// A small file shows its first lines in the report.
 	f, err := os.CreateTemp("", "leaked-file-")
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +47,6 @@ func TestRunTempGuard(t *testing.T) {
 	if runTempRoot == "" {
 		t.Fatal("the run has no temp folder, so the guard checks nothing")
 	}
-	// A folder of this run that the child must not blame or remove.
 	other, err := os.MkdirTemp("", "another-runs-folder")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +65,6 @@ func TestRunTempGuard(t *testing.T) {
 		}
 		return string(out), code
 	}
-	// The child names its folder in its report; that one is cleaned up, never a glob.
 	cleanStuck := func(report string) {
 		m := regexp.MustCompile(`/tmp/tuios-e2e-run-\d+`).FindString(report)
 		if m == "" {

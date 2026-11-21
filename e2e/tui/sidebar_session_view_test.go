@@ -62,9 +62,6 @@ session = "side-left"
 	}, uiTimeout); err != nil {
 		t.Fatalf("three session viewports did not render independently: %v\n%s", err, term.Snapshot())
 	}
-	// A click grants the left session's pane the keyboard without changing the
-	// center attachment. The marker is absent from the typed command, so the
-	// assertion needs a real shell response and not terminal echo.
 	mousePress(t, term, 15, 5, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, 15, 5, tuitest.MouseLeft, 0)
 	runInShell(t, term, `printf '%s\n' LEFT""INPUT`, "LEFTINPUT", uiTimeout)
@@ -73,8 +70,6 @@ session = "side-left"
 	}
 	t.Logf("left, center, and right session panes with routed input:\n%s", term.Snapshot())
 
-	// A normal new-pane shortcut while the left rail has the keyboard must
-	// create a pane in its assigned session, not in the center session.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "c"); err != nil {
 		t.Fatal(err)
 	}
@@ -91,8 +86,6 @@ session = "side-left"
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// A normal additional pane joins the left rail's vertical stack, rather
-	// than appearing in the center or replacing the other visible panes.
 	if out, err := tuiosCLI(t, base, "new-window", "next", "-s", "side-left"); err != nil {
 		t.Fatalf("open second pane in left session: %v\n%s", err, out)
 	}
@@ -144,8 +137,6 @@ session = "side-left"
 	if out, err := tuiosCLI(t, base, "capture-pane", "-s", "center"); err != nil || strings.Contains(out, "PREVFOCUS") {
 		t.Fatalf("rail pane shortcut changed center session: %v\n%s", err, out)
 	}
-	// Clicking the ordinary title bar focuses that exact pane, not the next
-	// pane or an ordinary session-list row.
 	mousePress(t, term, 15, 0, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, 15, 0, tuitest.MouseLeft, 0)
 	deadline = time.Now().Add(uiTimeout)
@@ -160,8 +151,6 @@ session = "side-left"
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// The session assignments belong to distinct left/right Settings rows; a
-	// shell-section editor cannot manage them and must not appear here.
 	mousePress(t, term, 116, 12, tuitest.MouseRight, 0)
 	mouseRelease(t, term, 116, 12, tuitest.MouseRight, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -172,8 +161,6 @@ session = "side-left"
 		t.Fatalf("Settings did not offer separate left/right session controls: %v\n%s", err, term.Snapshot())
 	}
 	t.Logf("session-first sidebar settings:\n%s", term.Snapshot())
-	// Changing only the left assignment in Settings must replace its live view
-	// without touching the right rail or the center attachment.
 	if err := term.SendKeys(tuitest.Down, tuitest.Down, tuitest.Enter, tuitest.Ctrl('u'), "side-left-alt", tuitest.Enter); err != nil {
 		t.Fatalf("edit left session assignment: %v", err)
 	}

@@ -18,8 +18,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// byteCounter tallies bytes written to it. tuitest mirrors PTY traffic from its
-// own reader goroutine, so the tally is atomic.
 type byteCounter struct{ n atomic.Int64 }
 
 func (b *byteCounter) Write(p []byte) (int, error) {
@@ -27,15 +25,12 @@ func (b *byteCounter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// wireRecorder counts the bytes written to it and keeps the first
-// wireRecorderKeep of them, for a test that looks for one sequence.
 type wireRecorder struct {
 	byteCounter
 	mu  sync.Mutex
 	buf []byte
 }
 
-// wireRecorderKeep is how much of the stream a wireRecorder keeps.
 const wireRecorderKeep = 4 << 20
 
 func (w *wireRecorder) Write(p []byte) (int, error) {
@@ -47,40 +42,22 @@ func (w *wireRecorder) Write(p []byte) (int, error) {
 	return w.byteCounter.Write(p)
 }
 
-// contains reports whether the kept stream holds s.
 func (w *wireRecorder) contains(s string) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return bytes.Contains(w.buf, []byte(s))
 }
 
-// idleWireBudget bounds the bytes tuios may write during a 10s idle window. A
-// held frame-skip writes nothing; the budget tolerates a stray settling frame
-// or two but is far below what a leaking 10Hz render of changing content costs.
 const idleWireBudget = 2048
 
-// idleWindow is how long TestIdleCostStaysLow leaves the client alone.
 const idleWindow = 10 * time.Second
 
-// idleBudget is what one idle window of TestIdleCostStaysLow may cost. Each
-// count is the difference between the client's counters at the two ends of the
-// window.
 type idleBudget struct {
-	// wire is the most bytes written to the terminal, and minWire the
-	// fewest: a clock that ticks must reach the screen.
 	wire, minWire int64
-	// ticks is the maintenance ticks handled, and work those that ran the
-	// full scans.
-	ticks, work uint64
-	// tickerWakes is how often a frame woke Bubble Tea's frame ticker to the
-	// frame rate.
-	tickerWakes uint64
-	// ctxsw is the client's voluntary context switches, all threads, on
-	// Linux only.
-	ctxsw int64
-	// noSettle starts the window without waitIdleSettled, for a setup that
-	// times an event to land inside the window.
-	noSettle bool
+	ticks, work   uint64
+	tickerWakes   uint64
+	ctxsw         int64
+	noSettle      bool
 }
 
 // TestIdleCostStaysLow is the idle-cost regression guard for the whole program:
@@ -98,60 +75,39 @@ func TestIdleCostStaysLow(t *testing.T) {
 	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	t.Run("clock off", func(t *testing.T) {
 		runIdleWindow(t, "[appearance.selection]\nosc52_write = \"on\"\n", idleBudget{
-			wire: idleWireBudget,
-			// The tick is armed only for a job that is due, and none is.
+			wire:  idleWireBudget,
 			ticks: 2, work: 1,
 			tickerWakes: 1,
 			ctxsw:       400,
 		}, nil, clipboardAtIdle)
 	})
 	t.Run("clock on", func(t *testing.T) {
-		// With seconds, so the window holds ten clock frames. The default
-		// layout has no seconds and draws once a minute.
 		runIdleWindow(t, "[appearance]\nshow_clock = true\nclock_format = \"15:04:05\"\n", idleBudget{
-			// Ten clock frames, and they must go out.
 			wire: 4 * idleWireBudget, minWire: 100,
 			ticks: 2, work: 1,
-			// Was 10, one per clock frame.
 			tickerWakes: 1,
 			ctxsw:       400,
 		}, nil, nil)
 	})
 	t.Run("one late output", func(t *testing.T) {
-		// A pane writes once, inside the window, while the client is idle.
-		// The frame for it wakes the frame ticker in View, after Update has
-		// armed the next tick, so the tick that stops the ticker again is
-		// armed for the flush that follows. Without it the ticker ran at the
-		// frame rate until the next message, which here never comes.
 		runIdleWindow(t, "", idleBudget{
-			// The output is timed to land inside the window.
 			noSettle: true,
 			wire:     idleWireBudget,
-			// The idle switch after the output's frame.
-			ticks: 2, work: 1,
-			// The output's frame.
+			ticks:    2, work: 1,
 			tickerWakes: 1,
-			// About 300 with the ticker stopped again after the frame, and
-			// about 2700 with it left running.
-			ctxsw: 800,
+			ctxsw:       800,
 		}, writeLate, sawLateOutput)
 	})
 	t.Run("tml surface", func(t *testing.T) {
-		// A TML surface in a pane arms no timer and draws nothing while
-		// nothing changes it: the pane serves its cached content.
 		runIdleWindowOpts(t, "", startOpts{daemonDefault: true}, idleBudget{
 			wire:        idleWireBudget,
 			ticks:       2,
 			work:        1,
 			tickerWakes: 1,
-			// About 70 measured.
-			ctxsw: 400,
+			ctxsw:       400,
 		}, tmlPaneAtIdle, nil)
 	})
 	t.Run("tml surface after motion", func(t *testing.T) {
-		// A surface whose enter effects played and whose toast went at the
-		// end of its ttl: the frame timer ran while they played, and the
-		// window holds no timer at all.
 		runIdleWindowOpts(t, "[startup]\ndaemon = true\n\n[appearance]\nmotion = \"full\"\n", startOpts{daemonDefault: true}, idleBudget{
 			wire:        idleWireBudget,
 			ticks:       2,
@@ -161,34 +117,22 @@ func TestIdleCostStaysLow(t *testing.T) {
 		}, tmlMotionSettled, nil)
 	})
 	t.Run("minimized tml surface", func(t *testing.T) {
-		// A minimized TML pane whose owner patches it twice a second takes
-		// the patches and composes no frame: nothing on the screen changed.
-		// Before, each of the 20 patches composed a whole frame: 20 ticks,
-		// 20 ticker wakes and about 4000 context switches.
 		runIdleWindowOpts(t, "", startOpts{daemonDefault: true}, idleBudget{
 			wire:  idleWireBudget,
 			ticks: 2, work: 1,
 			tickerWakes: 1,
-			// About 400 measured, for the 20 patches.
-			ctxsw: 1200,
+			ctxsw:       1200,
 		}, minimizedTMLPatched, nil)
 	})
 	t.Run("agent title on a hidden workspace", func(t *testing.T) {
-		// An agent on a workspace this client does not watch has a title newer
-		// than the one the client froze at. The rail follows the daemon's
-		// listing, and the difference between the two is not work to do.
 		runIdleWindowOpts(t, idleAgentTitleConfig, startOpts{daemonDefault: true}, idleBudget{
-			wire: idleWireBudget,
-			// Two or three measured. The setup's agent report leaves a due time.
+			wire:  idleWireBudget,
 			ticks: 5, work: 1,
 			tickerWakes: 1,
 			ctxsw:       600,
 		}, hiddenAgentTitled, nil)
 	})
 	t.Run("agent spinner in a watched pane", func(t *testing.T) {
-		// The client reads each title, and neither the title bar nor the rail
-		// row changes for a spinner frame. About 800 context switches measured,
-		// the same on a build without the agent's title on the row.
 		runIdleWindowOpts(t, idleAgentTitleConfig, startOpts{daemonDefault: true}, idleBudget{
 			wire:  idleWireBudget,
 			ticks: 2, work: 1,
@@ -197,23 +141,15 @@ func TestIdleCostStaysLow(t *testing.T) {
 		}, watchedAgentSpinning, nil)
 	})
 	t.Run("git section", func(t *testing.T) {
-		// The rail's git section reads the focused pane's repository every
-		// 2 s, and each reading composes a frame equal to the last one. That
-		// frame must not wake the frame ticker: it has nothing to write.
 		runIdleWindowOpts(t, idleGitConfig, startOpts{daemonDefault: true}, idleBudget{
-			wire: idleWireBudget,
-			// One tick for each reading's due time, about five.
+			wire:  idleWireBudget,
 			ticks: 8, work: 1,
-			// Five, one per reading, when an equal frame woke it.
 			tickerWakes: 1,
-			// 260 to 300, and 1186 with an equal frame waking the ticker.
-			ctxsw: 600,
+			ctxsw:       600,
 		}, gitRepoPane, nil)
 	})
 }
 
-// idleGitConfig is the rail with its git section, in a daemon session: a
-// standalone client draws no git section.
 const idleGitConfig = `[startup]
 daemon = true
 
@@ -224,8 +160,6 @@ width = 28
 sections = "sessions,git"
 `
 
-// gitRepoPane puts the focused pane in a new repository and waits for the
-// rail's git section to show it.
 func gitRepoPane(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
 	dir := filepath.Join(base, "repo")
@@ -245,7 +179,6 @@ func gitRepoPane(t *testing.T, term *tuitest.Terminal, base string) {
 	}
 }
 
-// idleAgentTitleConfig is the rail in a daemon session with a quick detector.
 const idleAgentTitleConfig = `[startup]
 daemon = true
 
@@ -258,8 +191,6 @@ position = "left"
 width = 34
 `
 
-// hiddenAgentTitled opens an agent on workspace 2, which this client does not
-// watch, and gives it a title after the client has stopped watching it.
 func hiddenAgentTitled(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
 	rig, session, window := agentPane(t, base, "", "--workspace", "2", "--no-focus")
@@ -267,17 +198,12 @@ func hiddenAgentTitled(t *testing.T, term *tuitest.Terminal, base string) {
 	waitAgentRow(t, term, "hidden-agent-name")
 }
 
-// watchedAgentSpinning runs an agent whose title's spinner moves through the idle
-// window, in a new focused pane.
 func watchedAgentSpinning(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
 	agentPane(t, base, "spin")
 	waitAgentRow(t, term, "spinning-agent")
 }
 
-// agentPane opens a pane with args to new-window and starts a stand-in agent in
-// it. A script of "spin" runs the spinner. Any other runs the agent that takes
-// titles from its input.
 func agentPane(t *testing.T, base, script string, args ...string) (titleAgentRig, string, string) {
 	t.Helper()
 	rig := newTitleAgentRig(t, base, "claude")
@@ -305,8 +231,6 @@ func agentPane(t *testing.T, base, script string, args ...string) (titleAgentRig
 	return rig, made.Session, window
 }
 
-// waitAgentRow waits for the rail to show name and for the setup's messages to
-// go, so the idle window measures only the agent.
 func waitAgentRow(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -317,7 +241,6 @@ func waitAgentRow(t *testing.T, term *tuitest.Terminal, name string) {
 	}
 }
 
-// tmlPaneAtIdle opens the TML test document as a pane and waits for it.
 func tmlPaneAtIdle(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
 	doc := writeTMLDoc(t, base, "run.tml", tmlRunDoc)
@@ -327,8 +250,6 @@ func tmlPaneAtIdle(t *testing.T, term *tuitest.Terminal, base string) {
 	if err := term.WaitForText("Failures", uiTimeout); err != nil {
 		t.Fatalf("the surface never drew: %v\n%s", err, term.Snapshot())
 	}
-	// The window messages of the setup burn for six seconds, and they are
-	// not the surface's cost.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "Window created") && !strings.Contains(s.Text(), "Session size")
 	}, 3*uiTimeout); err != nil {
@@ -336,8 +257,6 @@ func tmlPaneAtIdle(t *testing.T, term *tuitest.Terminal, base string) {
 	}
 }
 
-// tmlMotionDoc fades its cards in, one after the other, and shows a toast
-// that goes after a second.
 const tmlMotionDoc = `<tml version="1" title="Motion">
   <col pad="1" gap="1" stagger="80ms">
     <card title="Motion ready" enter="fade"><text>first</text></card>
@@ -346,8 +265,6 @@ const tmlMotionDoc = `<tml version="1" title="Motion">
   </col>
 </tml>`
 
-// tmlMotionSettled opens tmlMotionDoc as a pane and waits until the toast
-// has gone: the frame timer ran the effects and the ttl in the real client.
 func tmlMotionSettled(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
 	doc := writeTMLDoc(t, base, "motion.tml", tmlMotionDoc)
@@ -369,8 +286,6 @@ func tmlMotionSettled(t *testing.T, term *tuitest.Terminal, base string) {
 	}
 }
 
-// minimizedTMLPatched opens the TML test document as a pane, minimizes it,
-// and patches it twice a second until the test ends.
 func minimizedTMLPatched(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
 	tmlPaneAtIdle(t, term, base)
@@ -403,16 +318,8 @@ func minimizedTMLPatched(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Cleanup(func() { close(done); <-stopped })
 }
 
-// lateOutputAfter is how long after writeLate returns its pane writes
-
-// lateOutputAfter is how long after writeLate returns its pane writes: past
-// the settle and the second runIdleWindow waits, so inside the idle window.
 const lateOutputAfter = 4 * time.Second
 
-// writeLate has the focused pane write one word lateOutputAfter from now, and
-// nothing after it: the shell keeps sleeping, so no prompt follows. The pane
-// waits for a file rather than for a time, so the mode switches and the
-// message they show have run out before the window starts.
 func writeLate(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
 	gate := filepath.Join(base, "late-output")
@@ -428,8 +335,6 @@ func writeLate(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Cleanup(func() { timer.Stop() })
 }
 
-// sawLateOutput checks that writeLate's word reached the screen, then ends
-// the pane's sleep so the client quits without asking.
 func sawLateOutput(t *testing.T, term *tuitest.Terminal, _ *wireRecorder) {
 	t.Helper()
 	if err := term.WaitForText("LATEOUT", uiTimeout); err != nil {
@@ -443,16 +348,10 @@ func sawLateOutput(t *testing.T, term *tuitest.Terminal, _ *wireRecorder) {
 	leaveTerminalMode(t, term)
 }
 
-// runIdleWindow starts a client with config (none when empty), opens three
-// idle shells, and holds one idle window to budget. setup, when set, runs
-// once the shells are open, with the client's base directory. after, when set,
-// runs on the idle client once the window is over.
 func runIdleWindow(t *testing.T, config string, budget idleBudget, setup func(*testing.T, *tuitest.Terminal, string), after func(*testing.T, *tuitest.Terminal, *wireRecorder)) {
 	runIdleWindowOpts(t, config, startOpts{}, budget, setup, after)
 }
 
-// runIdleWindowOpts is runIdleWindow with start options: daemonDefault for a
-// client attached to a daemon, which the rail's git section needs.
 func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudget, setup func(*testing.T, *tuitest.Terminal, string), after func(*testing.T, *tuitest.Terminal, *wireRecorder)) {
 	base := t.TempDir()
 	if config != "" {
@@ -475,7 +374,6 @@ func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudg
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("screen never settled before idle: %v\n%s", err, term.Snapshot())
 	}
-	// Past idleTickerAfter, so the frame ticker has gone idle.
 	time.Sleep(time.Second)
 
 	pid := term.Pid()
@@ -530,8 +428,6 @@ func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudg
 		after(t, term, wire)
 	}
 
-	// Standalone with only idle shells quits at once on leader-q. A daemon
-	// client detaches on leader-d.
 	quit := "q"
 	if o.daemonDefault {
 		quit = "d"
@@ -542,26 +438,15 @@ func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudg
 	waitExit(t, term, "idle test quit")
 }
 
-// clipboardAtIdle has a pane on a hidden workspace set the clipboard while
-// the client is idle, and the OSC 52 write must reach the terminal at once.
-//
-// Bubble Tea writes a clipboard set from the frame ticker, and an idle client
-// stops that ticker. A hidden pane's output composes no frame and so wakes
-// nothing, which leaves the write to the flush Update asks for after every
-// message while the ticker is stopped (flushWhileIdle). Without it the write
-// waits for the next key.
 func clipboardAtIdle(t *testing.T, term *tuitest.Terminal, wire *wireRecorder) {
 	t.Helper()
 	const (
-		delay = 3 * time.Second
-		// "idle-clip" in base64.
+		delay   = 3 * time.Second
 		payload = "aWRsZS1jbGlw"
 	)
 	enterTerminalMode(t, term)
 	typeLine(t, term, fmt.Sprintf(`sleep %d; printf '\033]52;c;%s\007'`, int(delay.Seconds()), payload))
 	typed := time.Now()
-	// Workspace 2 has no panes: the one that writes is hidden, and its
-	// output draws nothing.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "2"); err != nil {
 		t.Fatalf("switch to workspace 2: %v", err)
 	}
@@ -571,9 +456,6 @@ func clipboardAtIdle(t *testing.T, term *tuitest.Terminal, wire *wireRecorder) {
 	if wire.contains(payload) {
 		t.Fatal("the clipboard write went out before the pane made it")
 	}
-	// The write is due delay after the command was typed. A ticker at
-	// IdleFPS would carry it within 100 ms. Nothing else happens on screen,
-	// so a stopped ticker with no flush carries it never.
 	deadline := typed.Add(delay + time.Second)
 	for !wire.contains(payload) {
 		if time.Now().After(deadline) {
@@ -585,25 +467,11 @@ func clipboardAtIdle(t *testing.T, term *tuitest.Terminal, wire *wireRecorder) {
 	t.Logf("the clipboard write reached the terminal %v after the command was typed", time.Since(typed).Round(time.Millisecond))
 }
 
-// idleSettleQuiet is how long the client's tick counters must stay flat
-// before the idle window opens, and idleSettleMax the longest
-// waitIdleSettled waits for that. The quiet time is longer than the daemon's
-// listingPushGap (3 s): an agent's state reaches the client in pushes up to
-// that far apart, and a shorter quiet time opens the window between two.
 const (
 	idleSettleQuiet = 4 * time.Second
 	idleSettleMax   = 15 * time.Second
 )
 
-// waitIdleSettled waits until no maintenance tick has run the full scans for
-// idleSettleQuiet. Ticks that skip them may go on: the git section arms one
-// for each reading. A setup leaves work behind it: a message burning out, the
-// daemon's listing moving after an agent report, a title the rail adopts. On
-// an idle machine that is over before the window opens. On a loaded CI runner
-// it runs a second or two late and one of those ticks lands in the window,
-// which then counts setup work as idle cost. A client that ticks without end,
-// the regression the window is there to catch, never goes quiet: after
-// idleSettleMax the window opens anyway and counts it.
 func waitIdleSettled(t *testing.T, pid int, statsPath string) {
 	t.Helper()
 	began := time.Now()
@@ -624,16 +492,11 @@ func waitIdleSettled(t *testing.T, pid int, statsPath string) {
 	t.Logf("the client went quiet %v after setup", time.Since(began).Round(100*time.Millisecond)-idleSettleQuiet)
 }
 
-// idleSample is a client's counters at one moment.
 type idleSample struct {
-	// stats is the line DumpTickStats writes, by name.
 	stats map[string]uint64
-	// ctxsw is the context switches of all its threads, -1 without /proc.
 	ctxsw int64
 }
 
-// sampleIdle asks the client for its tick counters with SIGUSR1, waits for
-// the file, and reads the client's context switches next to it.
 func sampleIdle(t *testing.T, pid int, statsPath string) idleSample {
 	t.Helper()
 	_ = os.Remove(statsPath)
@@ -657,7 +520,6 @@ func sampleIdle(t *testing.T, pid int, statsPath string) idleSample {
 	return s
 }
 
-// parseTickStats reads a "name=N name=N" line.
 func parseTickStats(line string) map[string]uint64 {
 	out := map[string]uint64{}
 	for field := range strings.FieldsSeq(line) {
@@ -671,10 +533,6 @@ func parseTickStats(line string) map[string]uint64 {
 	return out
 }
 
-// procCtxSwitches sums the voluntary context switches of every thread of pid,
-// -1 where there is no /proc. A voluntary switch is a thread that went to
-// sleep, which at idle is a wakeup that came before it. The involuntary ones
-// count how busy the machine is, not the client.
 func procCtxSwitches(pid int) int64 {
 	dir := filepath.Join("/proc", strconv.Itoa(pid), "task")
 	tasks, err := os.ReadDir(dir)
@@ -685,7 +543,7 @@ func procCtxSwitches(pid int) int64 {
 	for _, task := range tasks {
 		data, err := os.ReadFile(filepath.Join(dir, task.Name(), "status"))
 		if err != nil {
-			continue // the thread ended between the two reads
+			continue
 		}
 		for line := range strings.SplitSeq(string(data), "\n") {
 			if rest, ok := strings.CutPrefix(line, "voluntary_ctxt_switches:"); ok {
@@ -697,7 +555,6 @@ func procCtxSwitches(pid int) int64 {
 	return n
 }
 
-// readTickStats parses the "ticks=N work=N render=N" line DumpTickStats writes.
 func readTickStats(t *testing.T, path string) (ticks, work, render uint64) {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -793,9 +650,6 @@ func TestAgentsViewOpenAddsNoIdleCost(t *testing.T) {
 	if closed.ctxsw >= 0 && open.ctxsw > closed.ctxsw*3/2+200 {
 		over = append(over, fmt.Sprintf("made %d context switches, %d with it closed", open.ctxsw, closed.ctxsw))
 	}
-	// Open, it holds the idle budget on its own: no maintenance tick, no
-	// frame, no tick of its own inside the window, and no frame of it drawn
-	// afresh.
 	if open.ticks > 2 || open.tickerWakes > 1 || open.wire > idleWireBudget {
 		over = append(over, fmt.Sprintf("open: %d ticks, %d ticker wakes, %d bytes", open.ticks, open.tickerWakes, open.wire))
 	}
@@ -806,8 +660,6 @@ func TestAgentsViewOpenAddsNoIdleCost(t *testing.T) {
 		t.Fatalf("the open agents view costs more at idle than the closed one:\n  %s\n%s", strings.Join(over, "\n  "), term.Snapshot())
 	}
 
-	// An agent that changes group is held in its old one a moment. Once the
-	// hold settles, the open view is back to no wakeups at all.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-w", reply.Windows[0].ID, "--harness", "claude-code"); err != nil {
 		t.Fatalf("report agent 0 working: %v\n%s", err, out)
 	}

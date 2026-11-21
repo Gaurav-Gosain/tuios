@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// sentRow is the line read-agent-messages --sent prints for message id, or
-// "" when it prints none.
 func sentRow(out, id string) string {
 	for line := range strings.SplitSeq(out, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#"+id+" ") {
@@ -22,8 +20,6 @@ func sentRow(out, id string) string {
 
 var sentIDRe = regexp.MustCompile(`message (\d+) (delivered|queued)`)
 
-// sendAndID sends text from one window to another and returns the message
-// id the send printed, and the whole output.
 func sendAndID(t *testing.T, base string, env []string, args ...string) (string, string) {
 	t.Helper()
 	out, err := tuiosCLIEnv(t, base, env, append([]string{"send-agent-message"}, args...)...)
@@ -111,13 +107,10 @@ func TestASenderSeesWhenItsMailIsRead(t *testing.T) {
 	if !strings.Contains(row, "lead") {
 		t.Fatalf("ASSERTION: --sent does not name the session the message went to:\n%s", out)
 	}
-	// --sent itself marked nothing.
 	if out := sent("3-sent-again"); !strings.Contains(sentRow(out, id), "unread") {
 		t.Fatalf("ASSERTION: reading --sent marked the mail read:\n%s", out)
 	}
 
-	// Only the recipient pane marks its own mail seen, so the peek runs in it,
-	// as the agent there would run it.
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "lead", "-w", lead,
 		tuiosBin+" read-agent-messages -w \"$TUIOS_PANE_ID\" --peek\n"); err != nil {
 		t.Fatalf("peek in the lead pane: %v\n%s", err, out)
@@ -143,7 +136,6 @@ func TestASenderSeesWhenItsMailIsRead(t *testing.T) {
 		t.Fatalf("ASSERTION: after the recipient read it, --sent does not say read and when:\n%s", out)
 	}
 
-	// The thread view says the same, for the sender reading the conversation.
 	thread, err := tuiosCLI(t, base, "read-agent-messages", "-s", "lead", "--thread", id)
 	if err != nil {
 		t.Fatalf("read --thread: %v\n%s", err, thread)
@@ -192,7 +184,6 @@ func TestASenderSeesWhenItsMailIsReadOnAnotherMachine(t *testing.T) {
 
 	id, out := sendAndID(t, base, env, "-s", "build:far", "-w", far, "--from", here, "deployed to staging")
 	save("1-send", out)
-	// A pane on build writes to the same inbox.
 	if out, err := tuiosCLI(t, remote, "new-window", "-s", "far", "notes", "--no-focus"); err != nil {
 		t.Fatalf("new-window on build: %v\n%s", err, out)
 	}

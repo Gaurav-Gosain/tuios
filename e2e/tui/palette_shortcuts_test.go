@@ -8,14 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// paletteRowShortcut returns the shortcut the palette shows on the row named
-// name, and whether the row is on screen. A palette row is the name, the
-// shortcut (when there is one) and then the category, left to right.
-//
-// Only the lines under the search line's rule are rows. The search line above
-// the rule holds the typed name too, and its caret is a reverse-video cell
-// with no glyph of its own, so nothing on that line tells it apart from a row.
-// The panel's frame (│) is not part of any field.
 func paletteRowShortcut(s tuitest.Screen, name, category string) (string, bool) {
 	lines := strings.Split(s.Text(), "\n")
 	rule := -1
@@ -23,8 +15,6 @@ func paletteRowShortcut(s tuitest.Screen, name, category string) (string, bool) 
 		if !strings.Contains(line, name) {
 			continue
 		}
-		// The first line with the name is the search line; its rule is the
-		// next line drawn as a rule.
 		for j := i + 1; j < len(lines); j++ {
 			if strings.Contains(lines[j], "──────────") {
 				rule = j
@@ -74,9 +64,6 @@ func TestPaletteShortcutsFollowKeybinds(t *testing.T) {
 	waitBoot(t, term)
 	dir := artifactDir(t)
 
-	// expect opens the palette, looks for the row, and closes it again until
-	// the row shows want. A saved config reaches the client after the
-	// watcher's debounce, and the palette reads the keys when it opens.
 	expect := func(step, want string) {
 		t.Helper()
 		deadline := time.Now().Add(configWatchTimeout)

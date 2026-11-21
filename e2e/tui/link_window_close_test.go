@@ -10,16 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A tuios://window/<id>/close link is an order to close a pane, printed by
-// whatever program felt like printing one, with visible text the same program
-// also chose. The confirmation is what stands between the two: the dialog
-// names the pane the address really names, and the pane dies only when the
-// destructive row runs. These tests drive the click as the outer terminal
-// would report it and read the pane list the daemon holds, the same way a
-// script would see the aftermath.
-
-// victimShortID trims the full id new-window --print-id prints down to the
-// 8-character short form a link may carry.
 func victimShortID(t *testing.T, full string) string {
 	t.Helper()
 	id := strings.TrimSpace(full)
@@ -29,7 +19,6 @@ func victimShortID(t *testing.T, full string) string {
 	return id[:8]
 }
 
-// sessionWindowIDs lists the session's window ids the way a script sees them.
 func sessionWindowIDs(t *testing.T, base, session string) []string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", session, "--json")
@@ -51,9 +40,6 @@ func sessionWindowIDs(t *testing.T, base, session string) []string {
 	return ids
 }
 
-// waitVictimGone polls the screen until the victim pane's border title is
-// gone. The daemon's list-windows does not report the windows of a session a
-// client is attached to, so the screen is the observable.
 func waitVictimGone(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -66,9 +52,6 @@ func waitVictimGone(t *testing.T, term *tuitest.Terminal) {
 	t.Fatalf("the pane survived the confirmed close:\n%s", term.Snapshot())
 }
 
-// findRowLast returns the screen cell of the last line containing want,
-// scanning from the bottom. The close dialog's question repeats the
-// destructive row's label, and the row is the one further down.
 func findRowLast(t *testing.T, term *tuitest.Terminal, want string) (int, int) {
 	t.Helper()
 	s := term.Screen()
@@ -112,15 +95,11 @@ func TestCtrlClickCloseLinkConfirms(t *testing.T) {
 		t.Fatalf("the close link raised no confirmation:\n%s", term.Snapshot())
 	}
 
-	// A click anywhere outside the panel dismisses it, and the pane stays.
 	mouseClick(t, term, 5, 3, tuitest.MouseLeft, 0)
 	if !strings.Contains(term.Snapshot(), "victim-pane") {
 		t.Error("cancel closed the pane")
 	}
 
-	// A click that names the pane again, confirmed by clicking the dialog's
-	// destructive row: a click on a row runs it. Enter alone runs the row the
-	// cursor is on, and the dialog opens on Cancel.
 	mouseClick(t, term, col+10, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	if err := term.WaitForText("Close pane", uiTimeout); err != nil {
 		t.Fatalf("the second close link raised no confirmation:\n%s", term.Snapshot())

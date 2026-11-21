@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// listHooksHas reports whether tuios list-hooks --json names command.
 func listHooksHas(t *testing.T, base, command string) (bool, string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-hooks", "--json")
@@ -35,7 +34,6 @@ func TestConfigApplyReloadsHooks(t *testing.T) {
 	hook := "echo hooked-$TUIOS_WINDOW_NAME >> " + mark
 	saveConfigLikeAnEditor(t, base, "[hooks]\nafter-new-window = \""+hook+"\"\n")
 
-	// The file change alone arms nothing.
 	time.Sleep(2 * time.Second)
 	if has, out := listHooksHas(t, base, "hooked-"); has {
 		t.Fatalf("ASSERTION: a file change armed a new hook with no config apply\n%s", out)
@@ -66,7 +64,6 @@ func TestConfigApplyReloadsHooks(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// A file change that removes the hook applies without config apply.
 	saveConfigLikeAnEditor(t, base, "")
 	deadline = time.Now().Add(uiTimeout)
 	for {

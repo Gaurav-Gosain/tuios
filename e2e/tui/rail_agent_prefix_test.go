@@ -67,8 +67,6 @@ func narrowRailAgentRows(t *testing.T, tokens string, state bool) {
 	if out, err := tuiosCLI(t, base, "set-window", "-s", "rail", "--name", long); err != nil {
 		t.Fatalf("name the first pane: %v\n%s", err, out)
 	}
-	// Enough agents that each row has one line, which is the line the
-	// harness and the state share with the name.
 	names := []string{long, short, "db", "api", "ci", "docs"}
 	for _, name := range names[1:] {
 		if out, err := tuiosCLI(t, base, "new-window", name, "-s", "rail", "--no-focus"); err != nil {
@@ -123,7 +121,6 @@ func narrowRailAgentRows(t *testing.T, tokens string, state bool) {
 	if row := rowOf(s, "claude/"+short); state && !strings.Contains(row, "claude/"+short+" · working") {
 		t.Errorf("ASSERTION: the short agent should keep its harness and its state: %q", row)
 	}
-	// The name keeps at least its first eight cells.
 	row := rowOf(s, long[:8])
 	if row == "" {
 		t.Fatalf("ASSERTION: the long agent has no row with the start of its name; agent rows: %q\n%s", agentRows(s), term.Snapshot())
@@ -165,9 +162,6 @@ func TestNarrowRailKeepsTheAgentNameBeforeItsHarness(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "set-window", "-s", "rail", "--name", long); err != nil {
 		t.Fatalf("name the first pane: %v\n%s", err, out)
 	}
-	// Enough agents that the section has no room for a second line per row,
-	// which is where the harness goes when it can. A one-line row is the one
-	// that puts the harness in front of the name.
 	names := []string{long, tooLong, short, "web", "api", "ci"}
 	for _, name := range names[1:] {
 		if out, err := tuiosCLI(t, base, "new-window", name, "-s", "rail", "--no-focus"); err != nil {
@@ -188,7 +182,6 @@ func TestNarrowRailKeepsTheAgentNameBeforeItsHarness(t *testing.T) {
 		}
 		return b.String()
 	}
-	// The rows under the agents section's header, up to the next blank row.
 	agentRows := func(s tuitest.Screen) []string {
 		var out []string
 		for y := range rows - 1 {
@@ -227,18 +220,12 @@ func TestNarrowRailKeepsTheAgentNameBeforeItsHarness(t *testing.T) {
 	if strings.Contains(row, "claude/") {
 		t.Errorf("ASSERTION: the row kept a prefix beside a name it had no room for: %q", row)
 	}
-	// A name too long for the row on its own is the one that is cut, and it
-	// is cut with no prefix in front of it.
 	cut := rowOf(s, tooLong[:8])
 	if cut == "" || strings.Contains(cut, "claude/") {
 		t.Errorf("ASSERTION: the name too long to fit alone should fill the row, cut, with no prefix: %q", cut)
 	}
 }
 
-// titleAgentScript is a stand-in agent that sets the window title to each line
-// it reads, followed by a line of output a moment later: a client reads a title
-// on the output that carries it, and the daemon on the output after it. It clears
-// the screen first, so a frame shows no path from the command line.
 const titleAgentScript = `#!/bin/sh
 stty -echo
 printf '\033[2J\033[H'
@@ -250,13 +237,6 @@ while IFS= read -r line; do
 done
 `
 
-// spinningTitleScript is a stand-in agent at work: the title's spinner moves
-// every 0.3 s, and the name after it stays. It writes the title and nothing
-// else, which is how a real agent's title moves during a long turn.
-//
-// Four frames of 0.25 s made a cycle of 1 s, and the daemon looks at the
-// listing every 3 s, so each look saw the same frame and a listing that sends
-// every frame looked quiet. A cycle of 1.2 s puts a new frame in each look.
 const spinningTitleScript = `#!/bin/sh
 stty -echo
 printf '\033[2J\033[H'
@@ -269,15 +249,10 @@ while :; do
 done
 `
 
-// titleAgentRig is a folder of stand-in harnesses, one program for each name,
-// and the scripts they run. A pane starts one by its full path, so the test works
-// on a daemon that started before the rig was built.
 type titleAgentRig struct {
 	base, script, spinner string
 }
 
-// newTitleAgentRig builds the stand-in harnesses. The foreground-process
-// detector names each one by its program name, the way it names the real ones.
 func newTitleAgentRig(t *testing.T, base string, programs ...string) titleAgentRig {
 	t.Helper()
 	bin := filepath.Join(base, "bin")
@@ -288,9 +263,6 @@ func newTitleAgentRig(t *testing.T, base string, programs ...string) titleAgentR
 	if out, err := exec.Command("go", "build", "-o", fake, "./testdata/fakeclaude").CombinedOutput(); err != nil {
 		t.Fatalf("build fakeclaude: %v\n%s", err, out)
 	}
-	// Some manifests want more than the name: the executable's own path has to
-	// look like the program's install, and a symlink's process reads as its
-	// target. A hard link at that path gives the process that executable.
 	exeAt := map[string]string{
 		"pi":    "node-install/node",
 		"letta": "node-install/node",
@@ -322,8 +294,6 @@ func newTitleAgentRig(t *testing.T, base string, programs ...string) titleAgentR
 	return rig
 }
 
-// run starts program with the script in the window and waits until the
-// detector has named the harness.
 func (r titleAgentRig) run(t *testing.T, session, window, program, script, harnessID string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, r.base, "send-text", "-s", session, "-w", window, filepath.Join(r.base, "bin", program)+" "+script+"\n"); err != nil {
@@ -343,7 +313,6 @@ func (r titleAgentRig) run(t *testing.T, session, window, program, script, harne
 	}
 }
 
-// title has the stand-in in the window set its title.
 func (r titleAgentRig) title(t *testing.T, session, window, title string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, r.base, "send-text", "-s", session, "-w", window, title+"\n"); err != nil {
@@ -441,8 +410,6 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 		}
 	}
 	rowsOf := func() []string { return railAgentRows(term.Screen(), railCol) }
-	// A row's first line ends in its name, after its state mark. The second line
-	// names the harness on every row, so a Contains check on "pi" says nothing.
 	hasName := func(want string) func(tuitest.Screen) bool {
 		return func(s tuitest.Screen) bool {
 			for _, row := range railAgentRows(s, railCol) {
@@ -454,17 +421,12 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 		}
 	}
 
-	// Each program starts with an anchor, so that its first title has to change
-	// something the test can see.
 	for i, p := range programs {
 		rig.run(t, session, ids[i], p.program, rig.script, p.harness)
-		// No title yet: the pane still has the one tuios gave it, "Terminal <id>".
 		if err := term.WaitFor(hasName(p.program), uiTimeout); err != nil {
 			t.Fatalf("%s: an agent with no title has no row with the program's name: %v\nrows: %q", p.program, err, rowsOf())
 		}
 		if p.harness == "gemini-cli" {
-			// Gemini CLI writes only status there, so no title can be an anchor.
-			// The state its title rule gives proves the title was read.
 			for _, step := range p.steps {
 				rig.title(t, session, ids[i], step.title)
 			}
@@ -506,7 +468,6 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 	}
 	saveArtifact(t, term, artifactDir(t), "rail-every-harness")
 
-	// A spinner frame does not move the row.
 	rig.title(t, session, ids[0], "⠋ bob-dol-discover")
 	if err := term.WaitFor(hasRow("bob-dol-discover"), uiTimeout); err != nil {
 		t.Fatalf("the named agent never reached the rail: %v\nrows: %q", err, rowsOf())
@@ -519,8 +480,6 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 		}
 		return ""
 	}
-	// The state mark at the front may move, because the spinner is what the title
-	// rules read. The name after it must not.
 	name := func() string {
 		row := rowWith("bob-dol-discover")
 		return row[strings.Index(row, "bob-dol-discover"):]
@@ -538,7 +497,6 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 		}
 	}
 
-	// A custom name still comes first, and a later title does not take it back.
 	if out, err := tuiosCLI(t, base, "set-window", "-s", session, "-w", ids[0], "--name", "my-own-name"); err != nil {
 		t.Fatalf("name the pane: %v\n%s", err, out)
 	}
@@ -552,8 +510,6 @@ func TestRailNamesAnAgentByItsTitle(t *testing.T) {
 	}
 }
 
-// titleStep is one title a harness writes, and the name the rail has to show
-// for it. An empty want is the program's own name.
 type titleStep struct{ title, want string }
 
 // TestRailRepeatedLabelStaysWithItsPane closes the first of several agents that
@@ -594,9 +550,6 @@ func TestRailRepeatedLabelStaysWithItsPane(t *testing.T) {
 	term := attachIn(t, base, session, startOpts{cols: cols, rows: rows, shippedLooks: true})
 	railCol := cols - width
 	rowsOf := func(s tuitest.Screen) []string { return railAgentRows(s, railCol) }
-	// suffixOf is the start of a window id a row shows after "claude ": four
-	// hex digits, or more when two unnamed agents' ids start the same way,
-	// as the rail grows it (sessiontree.shortRowID).
 	suffixOf := func(row string) string {
 		_, after, ok := strings.Cut(row, "claude ")
 		if !ok {
@@ -632,12 +585,10 @@ func TestRailRepeatedLabelStaysWithItsPane(t *testing.T) {
 	dir := artifactDir(t)
 	railShot(t, term, "rail-repeated-before-close")
 
-	// What the row shows is enough to address the pane, as the docs say.
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", session, "--json", suffixOf(rowOf(term.Screen(), ids[3]))); err != nil || !strings.Contains(out, ids[3]) {
 		t.Fatalf("focus-window with the suffix from the row: %v\n%s", err, out)
 	}
 
-	// Two panes take a name, and the name is what the frame for the issue shows.
 	rig.title(t, session, ids[1], "✳ bob-dol-discover")
 	rig.title(t, session, ids[2], "◐ cody-1")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -649,7 +600,6 @@ func TestRailRepeatedLabelStaysWithItsPane(t *testing.T) {
 	}
 	railShot(t, term, "rail-named-agents")
 
-	// The window that goes is the first on the rail.
 	if out, err := tuiosCLI(t, base, "close-window", "-s", session, ids[0]); err != nil {
 		t.Fatalf("close the first pane: %v\n%s", err, out)
 	}
@@ -661,8 +611,6 @@ func TestRailRepeatedLabelStaysWithItsPane(t *testing.T) {
 	}
 	railShot(t, term, "rail-repeated-after-close")
 
-	// ids[5] is on workspace 2, and this client does not watch it. Its title
-	// reaches the rail through the daemon's listing.
 	rig.title(t, session, ids[5], "✳ on-another-workspace")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(strings.Join(rowsOf(s), "\n"), "on-another-workspace")
@@ -671,8 +619,6 @@ func TestRailRepeatedLabelStaysWithItsPane(t *testing.T) {
 	}
 	saveArtifact(t, term, dir, "rail-unwatched-title")
 
-	// A title gave these two a name, so a position is enough. ids[0] has closed,
-	// so ids[3] and ids[4] are the third and fourth panes.
 	rig.title(t, session, ids[3], "✳ twin")
 	rig.title(t, session, ids[4], "◐ twin")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -682,9 +628,6 @@ func TestRailRepeatedLabelStaysWithItsPane(t *testing.T) {
 		t.Fatalf("two agents with one name do not show their positions: %v\nrows: %q", err, rowsOf(term.Screen()))
 	}
 
-	// Two shells in one folder keep plain numbers. A new shell's title is unique,
-	// so each one writes the title of a shell in that folder. They are the sixth
-	// and seventh of the panes left.
 	known := map[string]bool{}
 	for _, id := range windowIDs(t, base, session) {
 		known[id] = true

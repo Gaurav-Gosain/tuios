@@ -8,26 +8,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Copy mode entry and directional search against the real binary
-// (discussion #233).
-//
-// How these could pass wrongly, written down first:
-//   - The copy cursor could be found on a cell that only looks like it. The
-//     cursor is configured magenta, a colour nothing else on screen uses, and
-//     exactly one such cell must exist.
-//   - The prompt row could be the middle row by chance. The pane is filled
-//     with output first, so the prompt is on the pane's last row, far from the
-//     middle.
-//   - A search could match the command line rather than the output. The
-//     commands spell the word with a quote gap, so only the output holds it.
-
-// copyColorOpts runs tuios with truecolor, so the magenta ground reaches the
-// screen as itself and not as the nearest palette colour.
 var copyColorOpts = startOpts{env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}}
 
 const copyCursorConfig = "[appearance.selection]\ncursor_bg = \"#ff00ff\"\n"
 
-// copyCursorCell is the one cell drawn with the magenta copy cursor ground.
 func copyCursorCell(s tuitest.Screen) (row, col int, ok bool) {
 	cols, rows := s.Size()
 	found := 0
@@ -43,7 +27,6 @@ func copyCursorCell(s tuitest.Screen) (row, col int, ok bool) {
 	return row, col, found == 1
 }
 
-// lastRowWith is the last screen row whose text contains s, or -1.
 func lastRowWith(sc tuitest.Screen, s string) int {
 	_, rows := sc.Size()
 	for r := rows - 1; r >= 0; r-- {
@@ -117,8 +100,6 @@ func TestCopyModeSearchBackwardBinding(t *testing.T) {
 	if err := term.SendKeys("needle"); err != nil {
 		t.Fatalf("type query: %v", err)
 	}
-	// Backward from the prompt, the nearest match is the second of two.
-	// The prompt draws a cursor cell between the query and the count.
 	err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "?needle") && strings.Contains(s.Text(), "[2/2]")
 	}, uiTimeout)
@@ -137,7 +118,6 @@ func TestCopyModeSearchBackwardBinding(t *testing.T) {
 		t.Fatalf("the search did not land on needle-two (row %d)\n%s", two, term.Snapshot())
 	}
 
-	// n follows the search up to the first match.
 	one := lastRowWith(term.Screen(), "needle-one")
 	if err := term.SendKeys("n"); err != nil {
 		t.Fatalf("send n: %v", err)
@@ -151,8 +131,6 @@ func TestCopyModeSearchBackwardBinding(t *testing.T) {
 	}
 }
 
-// colOfText is the column on row where text starts, one ASCII character a
-// cell, or -1.
 func colOfText(s tuitest.Screen, row int, text string) int {
 	cols, _ := s.Size()
 	for c := 0; c+len(text) <= cols; c++ {
@@ -199,8 +177,6 @@ func TestCopyModeSearchColumnInScrollback(t *testing.T) {
 		if err := term.SendKeys(tuitest.Ctrl('b'), "g"); err != nil {
 			t.Fatalf("send prefix+g: %v", err)
 		}
-		// The prompt opens on the prompt row, the pane's last, at the cursor,
-		// and covers the copy cursor there.
 		err := term.WaitFor(func(s tuitest.Screen) bool {
 			r := lastRowWith(s, "filled")
 			return r >= 0 && strings.Contains(s.Line(r+1), "$ ?")
@@ -246,9 +222,6 @@ func TestCopyModeSearchColumnInScrollback(t *testing.T) {
 	}
 }
 
-// copyModeLeaveConfig binds alt+h and alt+l to the terminal-mode focus keys,
-// as tmux users do with M-h and M-l (discussion #281). ctrl+u and ctrl+c also
-// focus the left pane, and copy mode reads both itself.
 const copyModeLeaveConfig = copyCursorConfig + `
 [keybindings.terminal_mode]
 terminal_focus_left = ["alt+h", "ctrl+u", "ctrl+c"]
@@ -304,7 +277,6 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 	runInShell(t, term, `printf 'right-%s\n' pane`, "right-pane", shellTimeout)
 	time.Sleep(300 * time.Millisecond)
 
-	// alt+h from copy mode focuses the left pane, which takes typing.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("send prefix+[: %v", err)
 	}
@@ -318,7 +290,6 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 	runInShell(t, term, `echo `+splitMarker("LEFTTYPED"), "LEFTTYPED", shellTimeout)
 	saveFrame(t, term, "copy-mode-focus-left")
 
-	// alt+l goes back. The right pane is still in copy mode, where it was.
 	if err := term.SendKeys(tuitest.Alt('l')); err != nil {
 		t.Fatalf("send alt+l: %v", err)
 	}
@@ -329,8 +300,6 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 		t.Fatalf("the copy cursor is at %d,%d, want %d,%d where the pane left it\n%s", r, c, row, col, term.Snapshot())
 	}
 
-	// ctrl+u is bound to a focus key, and copy mode reads it, so it moves the
-	// copy cursor and the focus stays.
 	if err := term.SendKeys(tuitest.Ctrl('u')); err != nil {
 		t.Fatalf("send ctrl+u: %v", err)
 	}
@@ -344,7 +313,6 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 		t.Fatalf("ctrl+u in copy mode moved focus to %s, want it to stay on %s\n%s", got, right, term.Snapshot())
 	}
 
-	// ctrl+b is page up, and the next key is a copy-mode key. No prefix opens.
 	if err := term.SendKeys(tuitest.Ctrl('d')); err != nil {
 		t.Fatalf("send ctrl+d: %v", err)
 	}
@@ -372,13 +340,11 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 		t.Fatalf("ctrl+b and left moved focus to %s, want it to stay on %s\n%s", got, right, term.Snapshot())
 	}
 
-	// ctrl+c from normal mode leaves copy mode.
 	if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
 		t.Fatalf("send ctrl+c: %v", err)
 	}
 	waitNoCopyCursor(t, term, "ctrl+c in normal mode")
 
-	// ctrl+c from a selection leaves copy mode and copies nothing.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("send prefix+[: %v", err)
 	}
@@ -412,7 +378,6 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 		waitCopyCursor(t, term, what)
 	}
 
-	// ctrl+c from the search prompt leaves copy mode.
 	enterCopy("prefix+[ for the search prompt")
 	if err := term.SendKeys("/zqzq"); err != nil {
 		t.Fatalf("type a search: %v", err)
@@ -425,7 +390,6 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 	}
 	waitNoCopyCursor(t, term, "ctrl+c at the search prompt")
 
-	// ctrl+c from a pending f leaves copy mode.
 	enterCopy("prefix+[ for f")
 	if err := term.SendKeys("f"); err != nil {
 		t.Fatalf("send f: %v", err)
@@ -437,7 +401,6 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 	waitNoCopyCursor(t, term, "ctrl+c after f")
 	runInShell(t, term, `echo `+splitMarker("AFTERPENDING"), "AFTERPENDING", shellTimeout)
 
-	// Multi copy mode, both panes. Each ctrl+c leaves it in both.
 	leaveTerminalMode(t, term)
 	togglePaletteMultifocus(t, term)
 	if err := term.SendKeys(tuitest.Tab); err != nil {
@@ -493,7 +456,6 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 	}
 	leaveMulti("at the multi search prompt")
 
-	// A search that no pane matched parks every pane, and they still leave.
 	enterMulti("a search with no match")
 	if err := term.SendKeys("/zqzq", tuitest.Enter); err != nil {
 		t.Fatalf("search: %v", err)
@@ -503,8 +465,6 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 	}
 	leaveMulti("with every pane parked")
 
-	// The save prompt takes a bound focus key as text, so focus stays, and
-	// ctrl+c leaves from there too.
 	enterMulti("the save prompt")
 	if err := term.SendKeys("V"); err != nil {
 		t.Fatalf("send V: %v", err)
@@ -531,7 +491,6 @@ func TestCopyModeCtrlCAndFocusKeys(t *testing.T) {
 	alive(t, term, "after ctrl+c")
 }
 
-// waitNoCopyCursor waits until no copy cursor is drawn.
 func waitNoCopyCursor(t *testing.T, term *tuitest.Terminal, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {

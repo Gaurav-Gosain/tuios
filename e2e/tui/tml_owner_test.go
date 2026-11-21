@@ -14,8 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tmlOwnerDoc is a surface whose owner is a shell script: r emits rerun with
-// the run count, and the script answers with a patch.
 const tmlOwnerDoc = `<tml version="1" title="Owner">
   <state>{"runs": 1, "note": "waiting"}</state>
   <col pad="1" gap="1">
@@ -29,7 +27,6 @@ const tmlOwnerDoc = `<tml version="1" title="Owner">
 </tml>
 `
 
-// tmlReplacedDoc replaces tmlOwnerDoc and keeps its state.
 const tmlReplacedDoc = `<tml version="1" title="Owner">
   <state>{"runs": 0, "note": "replaced"}</state>
   <col pad="1" gap="1">
@@ -39,9 +36,6 @@ const tmlReplacedDoc = `<tml version="1" title="Owner">
 </tml>
 `
 
-// tmlOwnerScript is the owner: it opens the surface with --events, keeps
-// every line it reads, and answers each rerun with a patch that counts the
-// run. It writes the surface id to a file for the test.
 const tmlOwnerScript = `#!/bin/sh
 "$TUIOS" tml show "$DOC" --events -s e2e-tmlown | while IFS= read -r line; do
   printf '%s\n' "$line" >> "$DIR/events.log"
@@ -55,8 +49,6 @@ done
 echo exited > "$DIR/owner-done"
 `
 
-// startShBackground runs a shell script against the suite's daemon, with
-// TUIOS naming the binary under test.
 func startShBackground(t *testing.T, base, script string, env ...string) <-chan askRun {
 	t.Helper()
 	pinPreV080Looks(t, base)
@@ -73,8 +65,6 @@ func startShBackground(t *testing.T, base, script string, env ...string) <-chan 
 	}
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
-	// The script's pipeline has children that hold the output pipe, so the
-	// whole group is killed, and Wait gives up on the pipe soon after.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = 2 * time.Second
 	if err := cmd.Start(); err != nil {
@@ -122,8 +112,6 @@ func TestTMLOwnerScriptAnswersEvents(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the owner's surface never drew: %v\n%s", err, term.Snapshot())
 	}
-	// The surface can draw before the script has read its tml_opened line
-	// and written the id, so the test waits for the file.
 	var idBytes []byte
 	idWait := time.Now()
 	for deadline := time.Now().Add(uiTimeout); ; {
@@ -153,8 +141,6 @@ func TestTMLOwnerScriptAnswersEvents(t *testing.T) {
 	}
 	saveTMLFrame(t, term, "2-owner-patched")
 
-	// A patch whose test reads a value the state no longer has is refused,
-	// and the answer says to read the state again.
 	out, err := tuiosCLI(t, base, "tml", "patch", id, `[{"op":"test","path":"/runs","value":1},{"op":"replace","path":"/runs","value":9}]`)
 	if err == nil || !strings.Contains(out, "Read the state again") {
 		t.Fatalf("a stale patch was not refused with a hint: %v\n%s", err, out)
@@ -164,7 +150,6 @@ func TestTMLOwnerScriptAnswersEvents(t *testing.T) {
 		t.Fatalf("tml get does not show runs 2: %v\n%s", err, got)
 	}
 
-	// A replace with --keep-state draws the new tree with the state as it is.
 	replaced := writeTMLDoc(t, base, "replaced.tml", tmlReplacedDoc)
 	if out, err := tuiosCLI(t, base, "tml", "replace", id, replaced, "--keep-state"); err != nil {
 		t.Fatalf("tml replace: %v\n%s", err, out)

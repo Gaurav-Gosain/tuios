@@ -70,8 +70,6 @@ func TestReviewJJStack(t *testing.T) {
 		t.Errorf("ASSERTION: review against a remote bookmark: %v:\n%s", err, out)
 	}
 
-	// jj has no staging area, and git's index there is jj's export: the
-	// index modes refuse and say why, and the plain review still works.
 	for _, mode := range []string{"unstaged", "staged"} {
 		out, err = tuiosCLI(t, base, "call", "review-diff", `{"session":"jjrev","index":"`+mode+`"}`)
 		if err == nil || !strings.Contains(out, "no staging area") {

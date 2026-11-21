@@ -9,21 +9,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// paneSize matches the marker the pane's own shell computes from its terminal
-// size: "SZ<tag>-<rows>-<cols>".
 var paneSize = regexp.MustCompile(`SZ([AB])-(\d+)-(\d+)`)
 
-// reportedPaneSize asks the focused pane's shell how big its terminal is and
-// returns the answer.
-//
-// The shell computes it from the kernel's window size for its own PTY, so this
-// is the one number the bug is about: what the program running in the pane
-// thinks it has to draw into. It cannot be satisfied by an echo of the
-// keystrokes, because the digits are not in what is typed.
 func reportedPaneSize(t *testing.T, term *tuitest.Terminal, tag string) (rows, cols int) {
 	t.Helper()
-	// The marker is assembled by the shell rather than typed, so the command
-	// line itself never matches paneSize and cannot be mistaken for the answer.
 	cmd := `stty size | while read r c; do echo "SZ` + tag + `-$r-$c"; done`
 	if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
 		t.Fatalf("ask pane %s for its size: %v", tag, err)
@@ -68,8 +57,6 @@ func TestNewWindowOnNewWorkspaceGetsPaneSize(t *testing.T) {
 	term, _ := start(t, startOpts{cols: cols, rows: rows})
 	waitBoot(t, term)
 
-	// Tiling on, so a lone window fills its workspace and the expected size is
-	// unambiguous.
 	enableTiling(t, term)
 
 	newWindow(t, term)
@@ -78,8 +65,6 @@ func TestNewWindowOnNewWorkspaceGetsPaneSize(t *testing.T) {
 	t.Logf("workspace 1 pane: %dx%d", cols1, rows1)
 	leaveTerminalMode(t, term)
 
-	// A workspace with nothing on it: what the dock's "+" opens, and what the
-	// report was about.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "3"); err != nil {
 		t.Fatalf("switch to workspace 3: %v", err)
 	}
@@ -100,10 +85,6 @@ func TestNewWindowOnNewWorkspaceGetsPaneSize(t *testing.T) {
 			cols2, rows2, cols1, rows1, term.Snapshot())
 	}
 
-	// A pane that fills the workspace must not be running a shell sized like the
-	// small box a new window is first placed in. Stated as a fraction of the
-	// terminal rather than an exact number, so the dock and margins can change
-	// size without this needing an edit.
 	if cols2*4 < cols*3 || rows2*4 < rows*3 {
 		t.Fatalf("the full-workspace pane runs a %dx%d shell in a %dx%d terminal: "+
 			"a full-screen program would paint only its top-left corner\n%s",

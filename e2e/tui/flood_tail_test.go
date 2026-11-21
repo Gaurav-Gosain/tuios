@@ -15,37 +15,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tuios keeps painting for seconds after a flooding program has exited. This
-// measures that tail on a real client.
-//
-// The flood has to be one that costs the client something to show. A stream of
-// numbered lines does not: the daemon's own emulator paces the guest, the
-// client keeps up with it byte for byte, and when the writer dies the pane
-// stops in the same instant. Measured that way the tail is zero and there is
-// nothing to fix, which is the wrong answer.
-//
-// A DOOM fire is the flood that was reported, and what makes it different is
-// that every frame repaints every cell with its own colour. Those bytes are
-// cheap to produce and expensive to parse and to draw, so the client falls
-// behind and the queue between them fills with frames nobody will ever see.
-//
-// Each frame carries its own number, so the highest number on screen says which
-// frame the client is showing. The gap between the number at the writer's death
-// and the number it settles on is the backlog, in frames, that the client
-// painted for nobody.
-
-// floodTailEnv is extra environment for the client under measurement, so the
-// same test can be pointed at a more expensive compose path for comparison.
 var floodTailEnv = strings.Fields(os.Getenv("TUIOS_TAIL_ENV"))
 
-// firePalette is the colour ramp of a fire demo: a black floor, then reds,
-// oranges and yellows up to white.
 var firePalette = []int{0, 52, 88, 124, 160, 196, 202, 208, 214, 220, 226, 231}
 
-// fireFileBytes caps the fixture on disk. Big enough to keep a client busy for
-// several seconds, small enough that a failed run leaves nothing that matters
-// behind. TUIOS_TAIL_MIB raises it for a longer flood, which is how the tail
-// was shown to scale with the backlog rather than with the clock.
 var fireFileBytes = func() int {
 	if mib, err := strconv.Atoi(os.Getenv("TUIOS_TAIL_MIB")); err == nil && mib > 0 {
 		return mib << 20
@@ -53,9 +26,6 @@ var fireFileBytes = func() int {
 	return 48 << 20
 }()
 
-// writeFireFile generates full-screen fire frames into a file until it reaches
-// fireFileBytes, and returns how many frames it wrote. Each frame stamps its
-// own number on the bottom row.
 func writeFireFile(t *testing.T, path string, cols, rows int) int {
 	t.Helper()
 	f, err := os.Create(path)
@@ -96,12 +66,8 @@ func writeFireFile(t *testing.T, path string, cols, rows int) int {
 	return frames
 }
 
-// The pane draws its content inside a border, so the frame number is not alone
-// on its line.
 var fireFrameRe = regexp.MustCompile(`FIREFRAME (\d{7})`)
 
-// shownFrame returns the highest fire frame number visible in the pane, which
-// is how far through the flood the client has painted.
 func shownFrame(s tuitest.Screen) int {
 	best := 0
 	for _, m := range fireFrameRe.FindAllStringSubmatch(s.Text(), -1) {
@@ -112,8 +78,6 @@ func shownFrame(s tuitest.Screen) int {
 	return best
 }
 
-// waitForStamp polls for the flood script's exit stamp and returns when it
-// lands, which is the moment the writer died.
 func waitForStamp(t *testing.T, path string, timeout time.Duration) time.Time {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -127,25 +91,18 @@ func waitForStamp(t *testing.T, path string, timeout time.Duration) time.Time {
 	return time.Time{}
 }
 
-// floodTailResult is one measurement of the tail.
 type floodTailResult struct {
 	tail             time.Duration
 	atDeath, settled int
 	total            int
 }
 
-// measureFloodTail runs a fire flood in a pane, waits for the writer to die,
-// and then times how long the pane goes on painting.
 func measureFloodTail(t *testing.T, extraEnv ...string) floodTailResult {
 	t.Helper()
 	dir := t.TempDir()
 	fire := filepath.Join(dir, "fire.bin")
 	stamp := filepath.Join(dir, "exit_at")
 
-	// A client attached to a daemon, not the standalone TUI. It is the whole
-	// point: plain tuios runs the emulator in the same process as the renderer
-	// and there is no queue between them to fall behind in, so measured that
-	// way the tail is a couple of frames and the question looks answered.
 	base := t.TempDir()
 	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "e2e-flood-tail", "--detach"); err != nil {
@@ -153,9 +110,6 @@ func measureFloodTail(t *testing.T, extraEnv ...string) floodTailResult {
 	}
 	term := attachIn(t, base, "e2e-flood-tail", startOpts{cols: 160, rows: 45, env: extraEnv})
 
-	// The reported tail was a fullscreen pane, which is not a detail: the
-	// client's cost per frame scales with the cells in it, and a pane a quarter
-	// of the screen keeps up with a flood that buries a pane filling it.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "z"); err != nil {
 		t.Fatalf("zoom the pane: %v", err)
 	}
@@ -167,8 +121,6 @@ func measureFloodTail(t *testing.T, extraEnv ...string) floodTailResult {
 		t.Fatalf("pane is %dx%d, too small to flood", cols, rows)
 	}
 	frames := writeFireFile(t, fire, cols, rows)
-	// The fixture is tens of megabytes and the tail is the only thing wanted
-	// from it, so it goes as soon as the measurement is over.
 	defer func() { _ = os.Remove(fire) }()
 	t.Logf("pane %dx%d, %d fire frames in %d MiB", cols, rows, frames, fireFileBytes>>20)
 

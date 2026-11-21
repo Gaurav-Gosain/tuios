@@ -10,13 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// quickLookCutOpen writes zzcut.log into its own listing of the quick look
-// fixture, opens it with space and goes inside with tab. A .log does not wrap
-// when it opens. Its line 1 is a Latin letter with U+16FF0 a hundred times,
-// then ten digits: each pair is one cell on screen and three where a line is
-// cut, so a prefix of the line is far narrower than its bytes suggest. Lines
-// 2 to 100 are short, so the gutter takes 3 digits and the code column is 81
-// cells.
 func quickLookCutOpen(t *testing.T) *tuitest.Terminal {
 	t.Helper()
 	var text strings.Builder
@@ -50,8 +43,6 @@ func quickLookCutOpen(t *testing.T) *tuitest.Terminal {
 // the row's end, so the test looks for it anywhere on the row, not in the
 // last cell.
 func TestQuickLookCutKeepsTheEllipsis(t *testing.T) {
-	// rowText is the text of a quick look row with its blanks at the
-	// end dropped. The second cell of a wide character adds nothing.
 	rowText := func(row []tuitest.Cell) string {
 		var b strings.Builder
 		for _, c := range row {
@@ -66,7 +57,6 @@ func TestQuickLookCutKeepsTheEllipsis(t *testing.T) {
 		t.Fatalf("lines 1 to 3 are not on screen: %v\n%s", err, term.Snapshot())
 	}
 	sendKeys(t, term, "w")
-	// Wrap off: lines 1 and 2 take one row each, and line 4 is on screen.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return len(quickLookLineRows(s, 1)) == 1 && len(quickLookLineRows(s, 2)) == 1 && len(quickLookLineRows(s, 4)) == 1
 	}, uiTimeout); err != nil {

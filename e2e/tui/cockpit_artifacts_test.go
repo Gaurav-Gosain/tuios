@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// cockpitFormDoc is the question an agent puts to the person: choices that
-// set the state, and a button that closes the surface with them.
 const cockpitFormDoc = `<tml version="1" title="Release check">
   <state>{"target": "none", "smoke": "off"}</state>
   <col pad="1" gap="1">
@@ -27,7 +25,6 @@ const cockpitFormDoc = `<tml version="1" title="Release check">
 </tml>
 `
 
-// cockpitOtherDoc is a second agent's question, for the chip.
 const cockpitOtherDoc = `<tml version="1" title="Pick a base">
   <col pad="1"><text>Rebase on main?</text><button key="y" on-press="close('yes')">Yes</button></col>
 </tml>
@@ -83,8 +80,6 @@ func TestCockpitArtifacts(t *testing.T) {
 	waitText(t, term, "the floating form", "Ship v0.11.0? Target: none", "dock")
 	saveTMLFrame(t, term, "1-popup-floating")
 
-	// The view opens on the form: the agent is selected and the form has
-	// the keys.
 	windowManagementMode(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
@@ -96,8 +91,6 @@ func TestCockpitArtifacts(t *testing.T) {
 	waitText(t, term, "the choices made in the view", picked)
 	saveTMLFrame(t, term, "2-form-in-cockpit")
 
-	// A second agent's popup, while the view is open on the first: a chip on
-	// its row.
 	other := writeTMLDoc(t, base, "other.tml", cockpitOtherDoc)
 	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", "reviewer",
 		fmt.Sprintf("%s tml show %s > /dev/null 2>&1\n", tuiosBin, other)); err != nil {
@@ -110,21 +103,17 @@ func TestCockpitArtifacts(t *testing.T) {
 	if strings.Contains(term.Screen().Text(), "Rebase on main?") {
 		t.Fatalf("ASSERTION: the second agent's popup shows over the view\n%s", term.Snapshot())
 	}
-	// The popup waits for the person, so its agent moves to Needs you.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		chip, needs, working := lineWith(s, "new artifact"), lineWith(s, "Needs you  1"), lineWith(s, "Working  2")
 		return needs >= 0 && chip > needs && chip < working
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the agent with the new popup is not in Needs you: %v\n%s", err, term.Snapshot())
 	}
-	// The row says why it needs the person: a form, not its working state.
 	if row := lineWith(term.Screen(), "new artifact"); row < 0 || !strings.Contains(term.Screen().Line(row+1), "Form waiting") {
 		t.Fatalf("ASSERTION: the row in Needs you does not say a form waits\n%s", term.Snapshot())
 	}
 	saveTMLFrame(t, term, "3-chip")
 
-	// The chip opens the second agent's question in the view, and the
-	// person answers it there.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
@@ -136,8 +125,6 @@ func TestCockpitArtifacts(t *testing.T) {
 	}
 	waitText(t, term, "the second question answered", "You answered")
 
-	// Back to the first agent, then out of the view: its form floats again
-	// with the choices, in front.
 	cockpitClick(t, term, "planner")
 	waitText(t, term, "the first form selected again", picked, "or a click to use it")
 	if err := term.SendKeys(tuitest.Esc); err != nil {
@@ -150,8 +137,6 @@ func TestCockpitArtifacts(t *testing.T) {
 	}
 	saveTMLFrame(t, term, "4-floating-again")
 
-	// Dock it as a pane, then float it again: the choices stay, on the
-	// daemon and on the screen.
 	for i, docked := range []bool{true, false} {
 		if err := term.SendKeys(tuitest.Ctrl('b'), "t", "f"); err != nil {
 			t.Fatal(err)
@@ -175,16 +160,12 @@ func TestCockpitArtifacts(t *testing.T) {
 		saveTMLFrame(t, term, name)
 	}
 
-	// A second client at 16 colours shows the form in its view too.
 	small := startIn(t, base, startOpts{args: []string{"attach", sess}, cols: 160, rows: 45, shippedLooks: true, env: []string{"TERM=xterm", "COLORTERM="}})
 	waitText(t, small, "the second client", picked)
-	// The leader works in either mode, and the focused popup is the
-	// surface, which would take a mode key as its own.
 	if err := small.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}
 	waitText(t, small, "the form in the 16-colour view", "You are in this surface.", picked)
-	// The form is seen now, so its agent goes back to Working.
 	if err := small.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Needs you") }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the seen form keeps its agent in Needs you: %v\n%s", err, small.Snapshot())
 	}
@@ -193,7 +174,6 @@ func TestCockpitArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Submit from the view: the agent gets the choices.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +201,6 @@ func TestCockpitArtifacts(t *testing.T) {
 	alive(t, term, "after the artifacts")
 }
 
-// lineWith is the first screen row that holds want, -1 when none does.
 func lineWith(s tuitest.Screen, want string) int {
 	_, rows := s.Size()
 	for y := range rows {
@@ -232,8 +211,6 @@ func lineWith(s tuitest.Screen, want string) int {
 	return -1
 }
 
-// chipAfter reports whether the chip follows name on the line, with no
-// other agent's name between them.
 func chipAfter(line, name, other string) bool {
 	at, chip := strings.Index(line, name), strings.Index(line, "new artifact")
 	if at < 0 || chip < at {
@@ -242,7 +219,6 @@ func chipAfter(line, name, other string) bool {
 	return !strings.Contains(line[at:chip], other)
 }
 
-// cockpitClick clicks the first place text is drawn.
 func cockpitClick(t *testing.T, term *tuitest.Terminal, text string) {
 	t.Helper()
 	col, row := tmlLocate(t, term, text)

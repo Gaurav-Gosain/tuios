@@ -11,16 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The host terminal's cursor shape is not part of the grid, so no screen
-// assertion can reach it. What the host is told is DECSCUSR on the wire, and the
-// shape it is showing at any moment is the last DECSCUSR it was sent. These
-// tests read that off the recorded PTY stream, which is the same thing the
-// user's eye reports.
-//
-// DECSCUSR is CSI Ps SP q: 0/1 blinking block, 2 steady block, 3 blinking
-// underline, 4 steady underline, 5 blinking bar, 6 steady bar. Only the shape is
-// asserted; whether tuios also asks for blinking is a separate question from the
-// reported bug, which is a bar turning into a block.
 var decscusrRE = regexp.MustCompile(`\x1b\[([0-9]{0,2}) q`)
 
 type cursorShape string
@@ -51,8 +41,6 @@ func shapeOfDECSCUSR(param string) cursorShape {
 	}
 }
 
-// hostCursorShape is the shape the host is currently showing: the last DECSCUSR
-// anywhere in the stream so far.
 func hostCursorShape(stream []byte) cursorShape {
 	m := decscusrRE.FindAllSubmatch(stream, -1)
 	if len(m) == 0 {
@@ -61,10 +49,6 @@ func hostCursorShape(stream []byte) cursorShape {
 	return shapeOfDECSCUSR(string(m[len(m)-1][1]))
 }
 
-// cursorTrail renders the DECSCUSR the host was sent, attributed to the phase it
-// arrived in, so a failure says which pane or which transition stomped the shape
-// rather than only that it is wrong now. A pane writing its cursor on a timer
-// produces hundreds of identical lines, so runs are collapsed to one.
 func cursorTrail(stream []byte) string {
 	var b strings.Builder
 	emit := func(name string, chunk []byte) {
@@ -99,10 +83,6 @@ func cursorTrail(stream []byte) string {
 	return b.String()
 }
 
-// waitCursorShape blocks until the host is showing want, and fails with the
-// whole trail if it never does. Polling rather than sampling once keeps the
-// assertion honest in both directions: a correct binary has a bounded window to
-// land the sequence in, and one that never sends it still fails.
 func waitCursorShape(t *testing.T, stream *hostStream, want cursorShape, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -117,14 +97,10 @@ func waitCursorShape(t *testing.T, stream *hostStream, want cursorShape, what st
 		what, got, want, cursorTrail(stream.bytes()))
 }
 
-// decscusrCount is how many cursor shapes the host was sent in the given slice
-// of the stream.
 func decscusrCount(stream []byte) int {
 	return len(decscusrRE.FindAllIndex(stream, -1))
 }
 
-// barPane puts the focused pane's shell into a steady bar cursor, the shape fish
-// and vim's insert mode ask for and the one the report says is lost.
 func barPane(t *testing.T, term *tuitest.Terminal, marker string) {
 	t.Helper()
 	runInShell(t, term, `printf '\033[6 q'; echo `+splitMarker(marker), marker, shellTimeout)
@@ -146,8 +122,6 @@ func TestCursorShapeSurvivesNeighbourAndSwitches(t *testing.T) {
 	term, _ := start(t, startOpts{cols: 120, rows: 40, out: stream})
 	waitBoot(t, term)
 
-	// The neighbour: a background job in its own pane that keeps asking for a
-	// block cursor, the way a shell repainting its prompt does.
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 	runInShell(t, term,
@@ -155,7 +129,6 @@ func TestCursorShapeSurvivesNeighbourAndSwitches(t *testing.T) {
 		"STOMPER", shellTimeout)
 	leaveTerminalMode(t, term)
 
-	// The pane under test, focused, asking for a bar.
 	newWindow(t, term)
 	enableTiling(t, term)
 	waitWindowCount(t, term, 2, "two tiled panes")
@@ -165,15 +138,10 @@ func TestCursorShapeSurvivesNeighbourAndSwitches(t *testing.T) {
 	waitCursorShape(t, stream, shapeBar, "right after the pane asked for a bar")
 
 	stream.mark("neighbour")
-	// Long enough for the neighbour to write several times.
 	before := decscusrCount(stream.bytes())
 	time.Sleep(time.Second)
 	waitCursorShape(t, stream, shapeBar, "while the neighbouring pane is writing")
 
-	// Holding the shape by sending it on every frame would be correct on screen
-	// and wrong on the wire: this pane repaints for each of the neighbour's
-	// writes, and tuios counts bytes per frame. The shape has not changed, so
-	// the host should hear nothing about it.
 	if n := decscusrCount(stream.bytes()) - before; n > 2 {
 		t.Errorf("the host was sent %d cursor shapes in a second of a neighbour writing, want at most 2:\n%s",
 			n, cursorTrail(stream.bytes()))
@@ -187,13 +155,6 @@ func TestCursorShapeSurvivesNeighbourAndSwitches(t *testing.T) {
 
 	stream.mark("workspace-switch")
 	leaveTerminalMode(t, term)
-	// alt+N, which is what switch_workspace_N is bound to. This used to send a
-	// bare "2" and a bare "1", which have never switched a workspace: the
-	// digits were snap_corner_N, and makeSnapCornerHandler returns early while
-	// tiling is on, which this test turns on. So the step did nothing at all
-	// and the shape survived a switch that never happened. The digits select a
-	// window now, which moved focus to the neighbour and made the silence
-	// audible.
 	if err := term.SendKeys(tuitest.Alt("2")); err != nil {
 		t.Fatalf("switch to workspace 2: %v", err)
 	}
@@ -252,19 +213,12 @@ func TestCursorShapeSurvivesReattach(t *testing.T) {
 	if err := second.WaitForText("BARBEFORE", shellTimeout); err != nil {
 		t.Fatalf("pane content did not survive the detach: %v\n%s", err, second.Snapshot())
 	}
-	// The guest emits nothing further, so the shape can only come from what the
-	// daemon told this client about the pane.
 	waitCursorShape(t, secondStream, shapeBar, "after the reattach")
 	alive(t, second, "after reattach")
 }
 
-// cursorColourRE is the cursor colour the host is told: OSC 12 with a colour,
-// or OSC 112, which hands the cursor back to the host's own colour.
 var cursorColourRE = regexp.MustCompile(`\x1b\](?:12;([^\x07\x1b]*)|(112))(?:\x07|\x1b\\)`)
 
-// hostCursorColour is the colour the host cursor has now: the last OSC 12 or
-// OSC 112 in the stream. "reset" is OSC 112, and "" is that the host was never
-// told anything, which leaves its own colour as well.
 func hostCursorColour(stream []byte) string {
 	m := cursorColourRE.FindAllSubmatch(stream, -1)
 	if len(m) == 0 {
@@ -277,7 +231,6 @@ func hostCursorColour(stream []byte) string {
 	return strings.ToLower(string(last[1]))
 }
 
-// waitCursorColour blocks until the host cursor has the colour want.
 func waitCursorColour(t *testing.T, stream *hostStream, want, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -314,7 +267,6 @@ func TestCursorColourFollowsFocusedPane(t *testing.T) {
 	runInShell(t, term, `printf '\033]12;#ff00ff\007'; echo `+splitMarker("COLOURSET"), "COLOURSET", shellTimeout)
 	waitCursorColour(t, stream, "#ff00ff", "after the focused pane set its cursor colour")
 
-	// A second pane that set no colour. The focus moves to it.
 	leaveTerminalMode(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
@@ -335,9 +287,6 @@ func TestCursorColourFollowsFocusedPane(t *testing.T) {
 	alive(t, term, "after the cursor colour checks")
 }
 
-// textCell is the screen cell where text starts, found on the grid the host
-// terminal shows. Columns are cells, so a border drawn with box glyphs or a
-// wide rune before the text does not move the answer.
 func textCell(s tuitest.Screen, text string) (col, row int, ok bool) {
 	cols, rows := s.Size()
 	for r := range rows {
@@ -360,17 +309,11 @@ func textCell(s tuitest.Screen, text string) (col, row int, ok bool) {
 	return 0, 0, false
 }
 
-// waitHostCursor blocks until the host terminal's own cursor, as the PTY
-// stream left it, is at (col, row) with the given visibility. An input
-// method opens its candidate window at that cursor, hidden or not, so this is
-// where a Chinese or Japanese IME would put it.
 func waitHostCursor(t *testing.T, term *tuitest.Terminal, col, row int, visible bool, what string) {
 	t.Helper()
 	waitHostCursorWithin(t, term, col, row, visible, uiTimeout, what)
 }
 
-// waitHostCursorWithin is waitHostCursor with its own deadline, for a state
-// that only holds for a while.
 func waitHostCursorWithin(t *testing.T, term *tuitest.Terminal, col, row int, visible bool, within time.Duration, what string) {
 	t.Helper()
 	deadline := time.Now().Add(within)
@@ -434,13 +377,7 @@ func TestHiddenCursorParksAtGuestCursor(t *testing.T) {
 	if word < 60 {
 		t.Fatalf("the word is at column %d, want it in the right pane\n%s", word, term.Snapshot())
 	}
-	// The guest cursor is on an empty cell 4 rows down and 18 columns right
-	// of the word, a cell no frame writes to, so the host cursor cannot be
-	// there by chance.
 	col, row := word+18, top+4
-	// Within the 5 seconds before the guest shows its cursor. Later, the
-	// guest hides it again on the same cell, and a build that parks nothing
-	// leaves the host cursor there by chance.
 	waitHostCursorWithin(t, term, col, row, false, 4*time.Second, "with the guest cursor hidden")
 	saveFrame(t, term, "ime-cursor-hidden")
 	waitHostCursor(t, term, col, row, true, "after the guest showed its cursor again")

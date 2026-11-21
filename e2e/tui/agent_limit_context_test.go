@@ -11,13 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A lead that runs workers needs two things the screen of each worker shows
-// and tuios did not: that a worker stopped on its usage limit, and how full
-// each worker's context is. These tests run the real hook, the real status
-// line wrapper and a real transcript join against a real daemon and client,
-// and keep the rail and the agents view as frames.
-
-// limitRow is the part of a list-agents row these tests read.
 type limitRow struct {
 	WindowID    string `json:"window_id"`
 	State       string `json:"state"`
@@ -33,7 +26,6 @@ type limitRow struct {
 	} `json:"context"`
 }
 
-// firstWindowID is the id of the session's first window.
 func firstWindowID(t *testing.T, base, session string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "-s", session)
@@ -51,8 +43,6 @@ func firstWindowID(t *testing.T, base, session string) string {
 	return res.Windows[0].ID
 }
 
-// listAgentRow is the list-agents --json row of window in session, or its
-// first row for an empty window.
 func listAgentRow(t *testing.T, base, session, window string) limitRow {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-agents", "--json", "-s", session)
@@ -74,8 +64,6 @@ func listAgentRow(t *testing.T, base, session, window string) limitRow {
 	return limitRow{}
 }
 
-// runHookFile runs the real Claude Code hook in the pane's shell with the
-// payload in a file, the way Claude Code runs it, and waits for it to end.
 func runHookFile(t *testing.T, base, session, payload, marker string) {
 	t.Helper()
 	file := filepath.Join(base, marker+".json")
@@ -125,8 +113,6 @@ func TestLimitReachedReadsAsItsOwnState(t *testing.T) {
 	waitForAll(t, term, uiTimeout, "the rail row says limit reached", "limit reached")
 	saveFrame(t, term, "limit-reached-rail")
 
-	// The leader works from terminal mode; a toast can take the place of
-	// the mode's own before a wait for it reads it.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the agents view: %v", err)
 	}
@@ -136,14 +122,12 @@ func TestLimitReachedReadsAsItsOwnState(t *testing.T) {
 		t.Fatalf("close the agents view: %v", err)
 	}
 
-	// Control: the service being busy is not the person's limit.
 	runHookFile(t, base, session, `{"hook_event_name":"StopFailure","session_id":"lim-1","error":"overloaded","last_assistant_message":"API Error: Overloaded"}`, "OVERLOADED-HOOK-DONE")
 	st = waitAgentState(t, base, session, "0", "errored", "", log, "StopFailure overloaded")
 	if st.Message != "stopped on overloaded" {
 		t.Fatalf("ASSERTION: an overloaded stop says %q, want the error it named", st.Message)
 	}
 
-	// The older report of a limit is the same state.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", session, "errored", "--kind", "usage_limit", "-m", "usage limit reached"); err != nil {
 		t.Fatalf("set-agent-state errored --kind usage_limit: %v\n%s", err, out)
 	}
@@ -151,12 +135,6 @@ func TestLimitReachedReadsAsItsOwnState(t *testing.T) {
 	alive(t, term, "after the limit reports")
 }
 
-// limitAgentScript is a stand-in for Claude Code with no hooks installed, run
-// through fakeclaude so the pane's program is claude and only its screen
-// says what it does. It draws its input box at rest, then on the first line
-// typed the limit line above the box, then on the second line a later answer
-// under the limit line, as after the reset. $1 is the file it writes when it
-// has drawn the last screen.
 const limitAgentScript = `R=$(stty size | cut -d' ' -f1)
 RULE="────────────────────────────────────────────"
 box() {
@@ -289,8 +267,6 @@ func TestContextSizeReachesListAgentsAndTheAgentsView(t *testing.T) {
 	if out, err := hook.CombinedOutput(); err != nil {
 		t.Fatalf("agent-hook SessionStart: %v\n%s", err, out)
 	}
-	// The join reads the file it is given; a record appended after shows
-	// the reader follows the file.
 	appendLines(t, path, record("c2", 12, 612000))
 	art := &stateLog{name: "context-size"}
 	defer art.save(t)
@@ -304,8 +280,6 @@ func TestContextSizeReachesListAgentsAndTheAgentsView(t *testing.T) {
 	}
 	art.add("transcript only: %s", contextText(row))
 
-	// The status line states the window. Its own percent says 79; the
-	// tokens over the window are 85 percent, which is near.
 	status := `{"session_id":"ctx-1","model":{"display_name":"Opus"},"context_window":{"used_percentage":79,"context_window_size":1000000,"current_usage":{"input_tokens":12,"cache_creation_input_tokens":0,"cache_read_input_tokens":851000,"output_tokens":40}}}`
 	file := filepath.Join(base, "status.json")
 	if err := os.WriteFile(file, []byte(status), 0o600); err != nil {
@@ -325,14 +299,10 @@ func TestContextSizeReachesListAgentsAndTheAgentsView(t *testing.T) {
 	}
 	art.add("with the status line: %s", contextText(row))
 
-	// The leader works from terminal mode; a toast can take the place of
-	// the mode's own before a wait for it reads it.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the agents view: %v", err)
 	}
 	waitForAll(t, term, uiTimeout, "the agents view's context column", "ctx 851k/1M near")
-	// On the row as well as in the focus header: the row is the column a
-	// lead scans.
 	if row := fleetRowWith(term.Screen(), "claude"); row < 0 || !strings.Contains(string([]rune(term.Screen().Line(row))[:50]), "851k/1M near") {
 		t.Fatalf("ASSERTION: the agent's row has no context column\n%s", term.Snapshot())
 	}
@@ -340,7 +310,6 @@ func TestContextSizeReachesListAgentsAndTheAgentsView(t *testing.T) {
 	alive(t, term, "after the context size")
 }
 
-// contextText is a list-agents row's context, for a failure message.
 func contextText(r limitRow) string {
 	if r.Context == nil {
 		return "null"

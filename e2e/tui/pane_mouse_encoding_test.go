@@ -60,8 +60,6 @@ func TestPaneMouseReportEncoding(t *testing.T) {
 
 			dir := t.TempDir()
 			art := artifactDir(t)
-			// The pane is at least 232 columns wide, so pane columns 6, 101
-			// and 231 (one-based) are all inside it.
 			cols := []int{5, 100, 230}
 
 			for _, step := range []struct {
@@ -87,8 +85,6 @@ func TestPaneMouseReportEncoding(t *testing.T) {
 			} {
 				out := filepath.Join(dir, step.name)
 				script := filepath.Join(dir, step.name+".sh")
-				// Raw mode so the reports reach the file unchanged. With min 0
-				// time 40, cat ends after four seconds of silence.
 				body := "stty raw -echo min 0 time 40\n" +
 					"printf '" + step.modes + "'\n" +
 					"printf 'MOUSE%sREADY\\r\\n' " + step.name + "\n" +
@@ -133,8 +129,6 @@ var (
 	sgrReport   = regexp.MustCompile(`^\x1b\[<0;6;(\d+)M`)
 )
 
-// reportRow reads the zero-based pane row out of the first report, the press
-// at pane column 6. The test clicks one row, so every report carries it.
 func reportRow(encoding string, raw []byte) (int, bool) {
 	switch encoding {
 	case "urxvt", "sgr":

@@ -32,8 +32,6 @@ import (
 // TestTwoClientsResizeWhilePeerSplits passes on main; it pins the new-pane
 // race, which the op has to keep working.
 
-// treeOpsSession is a detached session with two tiled panes and two clients of
-// the same size attached to it.
 func treeOpsSession(t *testing.T, name string) (string, *tuitest.Terminal, *tuitest.Terminal) {
 	t.Helper()
 	base := t.TempDir()
@@ -51,8 +49,6 @@ func treeOpsSession(t *testing.T, name string) (string, *tuitest.Terminal, *tuit
 	return base, a, b
 }
 
-// pushedGeometry makes term push its layout and returns what the daemon holds
-// once it has settled.
 func pushedGeometry(t *testing.T, base, name string, term *tuitest.Terminal, n int) []winRect {
 	t.Helper()
 	for range 2 {
@@ -64,9 +60,6 @@ func pushedGeometry(t *testing.T, base, name string, term *tuitest.Terminal, n i
 	return waitForSettledGeometryIn(t, base, name, n)
 }
 
-// borderSignature is where the pane borders are on a client's screen: the
-// columns of every box-drawing cell, row by row, above the dock. Two clients of
-// one size holding one layout draw the same borders.
 func borderSignature(s tuitest.Screen) string {
 	cols, rows := s.Size()
 	var b strings.Builder
@@ -81,10 +74,6 @@ func borderSignature(s tuitest.Screen) string {
 	return b.String()
 }
 
-// requireSameScreens fails when the two clients draw their borders in
-// different places once both have settled. It pushes nothing, so it sees a
-// disagreement a push would paper over: a client adopts the tree a peer pushes,
-// so pushing to find out is also the thing that ends the disagreement.
 func requireSameScreens(t *testing.T, a, b *tuitest.Terminal, what string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -102,8 +91,6 @@ func requireSameScreens(t *testing.T, a, b *tuitest.Terminal, what string) {
 	t.Fatalf("%s: the two clients draw different layouts:\n%s\n%s", what, a.Snapshot(), b.Snapshot())
 }
 
-// requireOneLayout fails when the two clients show or push different
-// rectangles.
 func requireOneLayout(t *testing.T, base, name string, a, b *tuitest.Terminal, n int, what string) []winRect {
 	t.Helper()
 	requireSameScreens(t, a, b, what)
@@ -113,15 +100,12 @@ func requireOneLayout(t *testing.T, base, name string, a, b *tuitest.Terminal, n
 		t.Fatalf("%s: the two clients hold different layouts:\n first  %v\n second %v\n%s\n%s",
 			what, ga, gb, a.Snapshot(), b.Snapshot())
 	}
-	// And the first client again: a pair that agrees only because the second
-	// client's push was the last word is not a pair that agrees.
 	if again := pushedGeometry(t, base, name, a, n); !sameGeometry(ga, again) {
 		t.Fatalf("%s: the layout moved when the first client pushed again:\n before %v\n after  %v", what, ga, again)
 	}
 	return ga
 }
 
-// together sends one key to each client at the same moment.
 func together(t *testing.T, a *tuitest.Terminal, ka string, b *tuitest.Terminal, kb string) {
 	t.Helper()
 	var wg sync.WaitGroup

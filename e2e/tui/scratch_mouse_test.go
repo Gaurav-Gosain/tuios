@@ -10,19 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The scratch terminal over a tiled layout, driven with the mouse, on the
-// shipped looks (sidebar, dock on top, shared borders).
-//
-// The report: in tiled mode with the popup shown, a mouse drag shrank the
-// popup to a small box, left the tile in half the screen, and moved the rail's
-// focus mark to a pane that did not get the keys. The frame draws a floating
-// pane above the tiles, but the hit test compared the raw Z, which a daemon-
-// made popup does not raise above the tiles. So a press on the popup landed on
-// the tile under it, and the drag and resize code then acted on panes the user
-// was not pointing at.
-
-// scratchOverTiles starts work with n tiled panes and the scratch terminal
-// shown over them, in window mode.
 func scratchOverTiles(t *testing.T, n int) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -36,8 +23,6 @@ func scratchOverTiles(t *testing.T, n int) (*tuitest.Terminal, string) {
 	return term, base
 }
 
-// scratchBox is where the popup's top and bottom borders are drawn: the row
-// and column of the top-left corner and the row of the bottom border.
 func scratchBox(s tuitest.Screen) (top, left, bottom int) {
 	_, rows := s.Size()
 	top, left, bottom = -1, -1, -1
@@ -69,8 +54,6 @@ func scratchBox(s tuitest.Screen) (top, left, bottom int) {
 	return top, left, bottom
 }
 
-// tileRows is the pane region's border rows with every pane's content left
-// out: the rows that change when the tiling changes.
 func tileRows(s tuitest.Screen) string {
 	_, rows := s.Size()
 	var b strings.Builder
@@ -84,7 +67,6 @@ func tileRows(s tuitest.Screen) string {
 	return b.String()
 }
 
-// sidebarLists reports whether the rail, right of column 136, shows text.
 func sidebarLists(s tuitest.Screen, text string) bool {
 	_, rows := s.Size()
 	for r := range rows {
@@ -114,8 +96,6 @@ func TestScratchMouseKeepsTheLayout(t *testing.T) {
 				t.Errorf("the rail lists the shown scratch terminal\n%s", term.Snapshot())
 			}
 
-			// A right drag and a left drag inside the popup, and a left drag
-			// on its left edge. None of them may move or size anything.
 			for _, d := range []struct {
 				x0, y0, x1, y1 int
 				b              tuitest.MouseButton
@@ -137,7 +117,6 @@ func TestScratchMouseKeepsTheLayout(t *testing.T) {
 			}
 			t.Logf("the popup after the drags:\n%s", term.Snapshot())
 
-			// A click outside the popup, on the tile below it, hides it.
 			mouseClick(t, term, 5, 42, tuitest.MouseLeft, 0)
 			waitGone(t, term, "a click outside the popup", "TILED-42")
 			waitScratch(t, term, base, true, false, "after the click outside")
@@ -175,8 +154,6 @@ func TestScratchStaysShownUnderHover(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 	}
 	time.Sleep(700 * time.Millisecond)
-	// The screen, not the daemon's list: the hover hid the popup on this
-	// client before any state went out.
 	if !strings.Contains(term.Screen().Text(), "HOVER-42") {
 		t.Fatalf("a hover hid the scratch terminal\n%s", term.Snapshot())
 	}
@@ -188,8 +165,6 @@ func TestScratchStaysShownUnderHover(t *testing.T) {
 	t.Logf("the scratch terminal after the hover:\n%s", term.Snapshot())
 }
 
-// floatRect is one row of list-windows --json for session work: where the
-// daemon says a pane is.
 type floatRect struct {
 	ID       string `json:"window_id"`
 	X        int    `json:"x"`
@@ -203,8 +178,6 @@ func (r floatRect) String() string {
 	return fmt.Sprintf("x=%d y=%d w=%d h=%d", r.X, r.Y, r.W, r.H)
 }
 
-// floatAndTile is the floating pane and the one tiled pane of session work,
-// read once the daemon has a state with exactly one of each.
 func floatAndTile(t *testing.T, base, what string) (float, tile floatRect) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -258,9 +231,6 @@ func TestFloatMouseResizeKeepsTheTiles(t *testing.T) {
 	t.Logf("after the float: float %v, tile %v", float, tile)
 	saveFrame(t, term, "float-resize-0-floated")
 
-	// Two drags, each from inside the float toward its middle: first from the
-	// bottom-right quarter, which shrinks the far edges, then from the
-	// top-left quarter, which shrinks the near ones.
 	for i, d := range []struct {
 		name    string
 		topLeft bool
@@ -292,8 +262,6 @@ func TestFloatMouseResizeKeepsTheTiles(t *testing.T) {
 		}
 	}
 
-	// A left drag on the float's bottom edge, a line the tiled pane also ends
-	// on when the float is in the slot it was tiled in.
 	before := float
 	col, row := before.X+before.W/2, before.Y+before.H-1
 	mouseDrag(t, term, col, row, col, row-5, tuitest.MouseLeft, 0)
@@ -310,8 +278,6 @@ func TestFloatMouseResizeKeepsTheTiles(t *testing.T) {
 			tile, gotTile, term.Snapshot())
 	}
 
-	// A second client moves the focus to the tiled pane while the float is
-	// mid-resize. The rest of the gesture still belongs to the float.
 	peer := attachIn(t, base, "work", startOpts{cols: 160, rows: 45})
 	time.Sleep(time.Second)
 	before = float
@@ -361,10 +327,6 @@ func TestFloatEdgeResizeKeepsTheTile(t *testing.T) {
 		{name: "shipped looks", shipped: true},
 		{name: "own borders", config: "[appearance]\nshared_borders = false\ndockbar_position = \"top\"\n"},
 	}
-	// down is how far the float moves before the resize. bottom picks a left
-	// drag on the bottom border, 5 rows up, instead of an alt+right drag from
-	// the top-left quarter, 15 rows down. The top border is the title bar, a
-	// move handle, so the top edge has only the alt+right drag.
 	cases := []struct {
 		name   string
 		down   int

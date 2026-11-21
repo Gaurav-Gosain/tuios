@@ -40,7 +40,6 @@ func TestCheckpointUndoesATurn(t *testing.T) {
 	repo := testutil.GitRepo(t)
 	tr := newCheckpointTranscript(t, base, repo)
 
-	// A staged change of the person's own, which must stay staged.
 	if err := os.WriteFile(filepath.Join(repo, "README"), []byte("hello\nstaged by the person\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +52,6 @@ func TestCheckpointUndoesATurn(t *testing.T) {
 	}
 	notes := filepath.Join(repo, "notes.txt")
 
-	// Turn 1 writes a file, turn 2 edits it.
 	turn := func(n int, content string) {
 		t.Helper()
 		tr.ok("set-agent-state", "-s", "agent", "working")
@@ -88,8 +86,6 @@ func TestCheckpointUndoesATurn(t *testing.T) {
 		}
 	}
 
-	// Restore turn 1: the file is back as turn 1 left it, and checkpoint 3
-	// holds what was there before.
 	out = tr.ok("checkpoint", "restore", "-s", "agent", "1")
 	if !strings.Contains(out, "Restored checkpoint 1") || !strings.Contains(out, "Checkpoint 3 holds the work tree as it was before") {
 		t.Errorf("checkpoint restore 1 printed:\n%s", out)
@@ -105,13 +101,11 @@ func TestCheckpointUndoesATurn(t *testing.T) {
 		t.Errorf("the restore changed the person's git state.\nbefore:\n%s\nafter:\n%s", before, after)
 	}
 
-	// The restore is undone by restoring the safety checkpoint.
 	tr.ok("checkpoint", "restore", "-s", "agent", "3")
 	if got := readFile(t, notes); got != "first\nsecond\n" {
 		t.Fatalf("after restoring the safety checkpoint, notes.txt = %q, want %q", got, "first\nsecond\n")
 	}
 
-	// A restore while the agent works is refused and changes nothing.
 	tr.ok("set-agent-state", "-s", "agent", "working")
 	if out, err := tr.run("checkpoint", "restore", "-s", "agent", "1"); err == nil || !strings.Contains(out, "working") {
 		t.Errorf("a restore while the agent works = %v: %s, want a refusal", err, out)
@@ -182,8 +176,6 @@ func TestCheckpointRestoreKeepsIgnoredFiles(t *testing.T) {
 	if err == nil || !strings.Contains(out, ".env") {
 		t.Errorf("checkpoint restore 1 over an ignored .env = %v:\n%s\nwant a refusal that names .env", err, out)
 	}
-	// The refusal says nothing was changed, so it must leave no safety
-	// checkpoint behind either.
 	if list := tr.list(); len(list) != 2 {
 		t.Errorf("after the refused restore, checkpoint list = %+v, want only turn checkpoints 1 and 2", list)
 	}
@@ -321,8 +313,6 @@ func TestCheckpointsGoWithTheirWorktree(t *testing.T) {
 	}
 }
 
-// gitState is what the person's git use depends on: where HEAD points and
-// at what, the branches, the index entries and the stash.
 func gitState(t *testing.T, repo string) string {
 	t.Helper()
 	return strings.Join([]string{
@@ -343,7 +333,6 @@ func readFile(t *testing.T, path string) string {
 	return string(data)
 }
 
-// checkpointEntry is one checkpoint as list-checkpoints returns it.
 type checkpointEntry struct {
 	N     int    `json:"n"`
 	Kind  string `json:"kind"`
@@ -351,8 +340,6 @@ type checkpointEntry struct {
 	Tree  string `json:"tree"`
 }
 
-// checkpointTranscript runs the tuios calls of the checkpoint test and keeps
-// them, with their output, for transcript.txt.
 type checkpointTranscript struct {
 	t    *testing.T
 	base string
@@ -395,8 +382,6 @@ func (tr *checkpointTranscript) ok(args ...string) string {
 	return out
 }
 
-// list reads list-checkpoints for the agent session's pane, without
-// recording it: the waits call it many times.
 func (tr *checkpointTranscript) list() []checkpointEntry {
 	tr.t.Helper()
 	out, err := tuiosCLIIn(tr.t, tr.base, tr.repo, "checkpoint", "list", "-s", "agent", "--json")
@@ -412,8 +397,6 @@ func (tr *checkpointTranscript) list() []checkpointEntry {
 	return res.Checkpoints
 }
 
-// waitCheckpoints waits until the pane has n checkpoints. They are taken off
-// the daemon's event path, so they land a moment after the state report.
 func (tr *checkpointTranscript) waitCheckpoints(n int) {
 	tr.t.Helper()
 	deadline := time.Now().Add(20 * time.Second)

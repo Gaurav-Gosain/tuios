@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// inkDistance is how far a pixel is from the background, summed over the
-// three channels.
 func inkDistance(c, bg color.Color) int {
 	r1, g1, b1, _ := c.RGBA()
 	r2, g2, b2, _ := bg.RGBA()
@@ -84,8 +82,6 @@ func TestScreenshotDrawsAStraightBorderWithoutNotches(t *testing.T) {
 	}
 	bounds := img.Bounds()
 	bg := img.At(bounds.Max.X-1, bounds.Max.Y-1)
-	// The glyph is in the first column, so the stroke is in the first few
-	// percent of the picture's width.
 	best, bestInk := -1, 0
 	for x := bounds.Min.X; x < bounds.Min.X+bounds.Dx()/20; x++ {
 		ink := 0
@@ -110,12 +106,9 @@ func TestScreenshotDrawsAStraightBorderWithoutNotches(t *testing.T) {
 			break
 		}
 	}
-	// Six cells of a picture no more than sixty rows tall.
 	if top < 0 || bottom-top < 6*bounds.Dy()/60 {
 		t.Fatalf("the stroke at x=%d runs from %d to %d, too short for six cells; see %s", best, top, bottom, out)
 	}
-	// A quarter of a cell, which is never under a sixtieth of the picture
-	// over four.
 	quarter := bounds.Dy() / 240
 	full := 0
 	for y := top; y <= bottom; y++ {
@@ -193,7 +186,6 @@ func TestScreenshotDrawsAHorizontalRuleWithoutNubs(t *testing.T) {
 	b := img.Bounds()
 	bg := img.At(b.Max.X-1, b.Max.Y-1)
 
-	// The rule is on the first line, so it is in the top of the picture.
 	row, rowInk := -1, 0
 	for y := b.Min.Y; y < b.Min.Y+b.Dy()/4; y++ {
 		ink := 0
@@ -218,7 +210,6 @@ func TestScreenshotDrawsAHorizontalRuleWithoutNubs(t *testing.T) {
 			break
 		}
 	}
-	// Six cells of a picture no more than two hundred and forty columns wide.
 	if x0 < 0 || x1-x0 < 6*b.Dx()/240 {
 		t.Fatalf("the rule at y=%d runs from %d to %d, too short for six cells; see %s", row, x0, x1, out)
 	}

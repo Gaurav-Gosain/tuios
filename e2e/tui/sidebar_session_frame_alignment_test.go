@@ -52,8 +52,6 @@ session = "side-right"
 		if len(row) < 120 {
 			return false
 		}
-		// Both normal rail frames start on the first row, not below an
-		// extra session-label row.
 		return row[0] == '╭' && row[84] == '╭' &&
 			!strings.Contains(string(row), "side-left") && !strings.Contains(string(row), "side-right")
 	}, uiTimeout); err != nil {

@@ -179,7 +179,6 @@ func TestNotificationLogHiddenOffKeepsTheLogClean(t *testing.T) {
 // it fails.
 func TestNotificationLevelShowsWhyAKeyDidNothing(t *testing.T) {
 	term, base, _, _ := startCockpitFleet(t, 200, 55, nil)
-	// Set after the start: the fleet's start waits on an info message.
 	if out, err := tuiosCLI(t, base, "set-config", "notifications.level", "warning"); err != nil {
 		t.Fatalf("set-config notifications.level: %v\n%s", err, out)
 	}

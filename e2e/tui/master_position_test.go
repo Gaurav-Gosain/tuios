@@ -12,18 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The master-stack layout with the master on any side, more than one master,
-// and the keys and commands that change them (issue #321).
-//
-// Every test here runs against a daemon and reads the pane rectangles back
-// with list-windows, in the order the session holds the windows. The first
-// window is the one the session opened, so it is the master until a swap moves
-// another pane into its place. Each test saves the frames it checks under
-// artifactDir.
-
-// masterSession makes a detached session in master-stack mode with appearance
-// written into the config, attaches a client and opens windows until there are
-// n. It returns the client.
 func masterSession(t *testing.T, base, name, appearance string, n int) *tuitest.Terminal {
 	t.Helper()
 	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\nlayout = \"master-stack\"\n"+
@@ -42,8 +30,6 @@ func masterSession(t *testing.T, base, name, appearance string, n int) *tuitest.
 	return term
 }
 
-// waitForShape polls the session's rectangles until check accepts them, and
-// fails with the last answer when it never does.
 func waitForShape(t *testing.T, base, session string, n int, what string, check func([]winRect) error) []winRect {
 	t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -68,15 +54,11 @@ func describeRects(rects []winRect) string {
 	return b.String()
 }
 
-// The relations between two rectangles. A shared border can make neighbours
-// overlap by one cell, so "left of" allows that much.
 func leftOf(a, b winRect) bool  { return a.X+a.Width <= b.X+1 }
 func above(a, b winRect) bool   { return a.Y+a.Height <= b.Y+1 }
 func sameCol(a, b winRect) bool { return a.X == b.X && a.Width == b.Width }
 func sameRow(a, b winRect) bool { return a.Y == b.Y && a.Height == b.Height }
 
-// fullHeight and fullWidth say whether a pane spans the box all the panes
-// share, measured from the panes themselves.
 func fullHeight(r winRect, rects []winRect) bool {
 	top, bottom := r.Y, r.Y+r.Height
 	for _, o := range rects {
@@ -93,8 +75,6 @@ func fullWidth(r winRect, rects []winRect) bool {
 	return r.X == left && r.X+r.Width == right
 }
 
-// masterShape checks that rects are master-stack panes with masters masters
-// at position, the stack dealt the way the layout deals it.
 func masterShape(position string, masters int) func([]winRect) error {
 	return func(rects []winRect) error {
 		m, stack := rects[:masters], rects[masters:]
@@ -144,7 +124,6 @@ func masterShape(position string, masters int) func([]winRect) error {
 			}
 		}
 		if position == "center" {
-			// The stack on each side is one column, filled top to bottom.
 			for i := 2; i < len(stack); i++ {
 				if !sameCol(stack[i], stack[i-2]) || !above(stack[i-2], stack[i]) {
 					return fmt.Errorf("stack pane %d is not under stack pane %d", i, i-2)
@@ -213,7 +192,6 @@ func TestMasterLayoutIsTheSessions(t *testing.T) {
 	waitForShape(t, base, "ms", 5, "after set-layout --master-position center", masterShape("center", 1))
 
 	second := attachIn(t, base, "ms", startOpts{cols: 120, rows: 40})
-	// Long enough for the second client to lay the panes out and push them.
 	time.Sleep(2 * time.Second)
 	rects := waitForShape(t, base, "ms", 5, "with a second client attached", masterShape("center", 1))
 	dir := artifactDir(t)
@@ -227,10 +205,6 @@ func TestMasterLayoutIsTheSessions(t *testing.T) {
 	rects = waitForShape(t, base, "ms", 5, "after set-layout --masters 2", masterShape("center", 2))
 	time.Sleep(time.Second)
 	rects = waitForShape(t, base, "ms", 5, "two masters, a moment later", masterShape("center", 2))
-	// Each client lays the panes out itself on a retile, with the shape it
-	// holds. The geometry above can be one client's alone, so a retile from
-	// each client, by a swap with the master, shows that both hold the
-	// session's shape. Only one of them sent the change.
 	for i, term := range []*tuitest.Terminal{first, second} {
 		sendKeys(t, term, tuitest.Ctrl('b'), "L", tuitest.Enter)
 		time.Sleep(time.Second)
@@ -264,7 +238,6 @@ func TestMasterKeys(t *testing.T) {
 	rects := waitForShape(t, base, "mk", 3, "the default", masterShape("left", 1))
 	master := rects[0].ID
 
-	// The newest window has the focus. Enter makes it the master.
 	sendKeys(t, term, tuitest.Ctrl('b'), "L", tuitest.Enter)
 	rects = waitForShape(t, base, "mk", 3, "after Ctrl+B L Enter", func(rects []winRect) error {
 		if rects[0].ID == master {
@@ -346,8 +319,6 @@ func TestMasterDividerDragInTheCenter(t *testing.T) {
 	before := waitForShape(t, base, "md", 3, "the master in the center", masterShape("center", 1))
 	master, right := before[0], before[1]
 
-	// The right border of the master, a row into the panes, dragged ten
-	// columns into the right-hand pane.
 	edge := master.X + master.Width - 1
 	row := master.Y + master.Height/2
 	mouseDrag(t, term, edge, row, edge+10, row, tuitest.MouseLeft, 0)
@@ -383,7 +354,6 @@ func TestMasterLayoutSurvivesADaemonRestart(t *testing.T) {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}
 	waitExit(t, first, "after kill-server")
-	// Starting any session starts a daemon, and a daemon restores on start.
 	if out, err := tuiosCLI(t, base, "new", "mrs-trigger", "--detach"); err != nil {
 		t.Fatalf("start a fresh daemon: %v: %s", err, out)
 	}
@@ -421,8 +391,6 @@ func TestFirstClientSettlesTheMasterLayout(t *testing.T) {
 	saveArtifact(t, second, artifactDir(t), "second-client-left")
 }
 
-// writeConfigIn is writeConfig for a config home of its own, which a second
-// client started with XDG_CONFIG_HOME pointing there reads.
 func writeConfigIn(t *testing.T, home, body string) {
 	t.Helper()
 	dir := filepath.Join(home, "tuios")

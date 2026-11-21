@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-// fakeLaunchClaude is a program called claude for the launch test. "claude
-// auth status --json" answers signed in when the marker file exists, signed
-// out (with a failing exit) when it does not, and hangs when the hang file
-// exists. Any other call writes its argv, one word a line, to the argv file,
-// reports the pane idle and waits.
 const fakeLaunchClaude = `#!/bin/sh
 if [ "$1" = auth ]; then
   if [ -f "__HANG__" ]; then sleep 30; fi
@@ -63,8 +58,6 @@ func TestStartAgentLaunchChoiceAndReadiness(t *testing.T) {
 		t.Fatalf("create session: %v\n%s", err, out)
 	}
 	dir := t.TempDir()
-	// bin makes a PATH folder holding the fake claude. signed and hang make
-	// its auth check answer signed in or hang.
 	bin := func(name string, signed, hang bool) (path, argv string) {
 		t.Helper()
 		folder := filepath.Join(dir, name)
@@ -188,5 +181,4 @@ func TestStartAgentLaunchChoiceAndReadiness(t *testing.T) {
 	t.Logf("artifact %s", art)
 }
 
-// must is the first of two results.
 func must(path, _ string) string { return path }

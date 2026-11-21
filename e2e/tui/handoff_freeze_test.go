@@ -22,10 +22,6 @@ import (
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Live handoff").
 
-// freezeProbeScript runs in the pane under test. It turns on in-band resize
-// reports (mode 2048) and colour scheme reports (mode 2031), and prints what
-// the program hears: every reply on its input through cat -v, and on SIGWINCH
-// or SIGUSR1 the size the kernel gives it.
 const freezeProbeScript = `stty -icanon -echo min 1; ` +
 	`trap 'echo; echo "size $(stty size)"' WINCH USR1; ` +
 	`printf '\033[?2048h\033[?2031h'; echo ready; ` +
@@ -37,8 +33,6 @@ var (
 	kernelSize   = regexp.MustCompile(`^size (\d+) (\d+)$`)
 )
 
-// paneHeard is what the probe printed: each in-band size report as
-// "rows x cols", each scheme report, and each kernel size it read.
 type paneHeard struct {
 	Reports []string `json:"reports"`
 	Schemes []string `json:"schemes"`
@@ -66,8 +60,6 @@ func readPaneHeard(t *testing.T, base, sess, window string) paneHeard {
 	return h
 }
 
-// askKernelSize has the probe print the size the kernel gives it, and returns
-// it as "rows x cols".
 func askKernelSize(t *testing.T, base, sess, window string, pid int) string {
 	t.Helper()
 	before := len(readPaneHeard(t, base, sess, window).Kernel)
@@ -85,14 +77,12 @@ func askKernelSize(t *testing.T, base, sess, window string, pid int) string {
 	return ""
 }
 
-// streamedSize is the size the daemon gives the pane, as "rows x cols".
 func streamedSize(t *testing.T, base, sess, window string) string {
 	t.Helper()
 	reply, _ := paneSnapshot(t, base, sess, window, nil)
 	return fmt.Sprintf("%dx%d", reply.Rows, reply.Cols)
 }
 
-// waitPaneHeard waits until what the probe heard satisfies ok.
 func waitPaneHeard(t *testing.T, base, sess, window, what string, ok func(paneHeard) bool) paneHeard {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -107,9 +97,6 @@ func waitPaneHeard(t *testing.T, base, sess, window, what string, ok func(paneHe
 	return h
 }
 
-// dialEarly opens a connection to the daemon now, which a handoff's paused
-// listener does not hold back: the old image serves it until it closes its
-// clients at the exec.
 func dialEarly(t *testing.T, base string) *session.VerbClient {
 	t.Helper()
 	c, err := session.DialVerbClientAt(frameSocket(base), "e2e")
@@ -120,7 +107,6 @@ func dialEarly(t *testing.T, base string) *session.VerbClient {
 	return c
 }
 
-// answeredBy is the instance of the image that serves c.
 func answeredBy(t *testing.T, c *session.VerbClient) string {
 	t.Helper()
 	raw, err := c.Call("hello", map[string]any{})
@@ -232,8 +218,6 @@ func TestSelfExecFreezesPaneDuringHandoff(t *testing.T) {
 	}
 }
 
-// replaceWithNonTuios puts a script that is not a tuios at path, by a rename
-// over it as an installer replaces a binary, so path names another file.
 func replaceWithNonTuios(t *testing.T, path string) {
 	t.Helper()
 	tmp := path + ".new"

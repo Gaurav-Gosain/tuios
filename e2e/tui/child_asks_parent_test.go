@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// childAsksQuestion is a Claude Code stand-in that asks its parent a question
-// on Claude Code's form over the input box, after the detector has named it,
-// and prints the one key it is answered with.
 const childAsksQuestion = `sleep 3
 printf '%s\n' \
  '─────────────────────────────────────────' \
@@ -30,7 +27,6 @@ echo "GOT-$c"
 exec sleep 600
 `
 
-// childAsksApproval is a Claude Code stand-in that stops on a tool approval.
 const childAsksApproval = `sleep 3
 printf '%s\n' \
  ' Bash command' \
@@ -93,8 +89,6 @@ func TestAWorkersQuestionReachesItsLead(t *testing.T) {
 		t.Helper()
 		mustCLI(t, base, "send-text", "-s", sess, "-w", lead, line+"\n")
 	}
-	// The lead is an agent pane, as a lead is: start-agent links a child only
-	// to a pane that runs an agent.
 	typeInLead("tuios set-agent-state idle --harness claude-code -m lead")
 	waitUntil(t, "the lead pane reads as an agent", 20*time.Second, func() (bool, string) {
 		out, _ := tuiosCLI(t, base, "get-agent-state", "-s", sess, "-w", lead)

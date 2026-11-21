@@ -8,10 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// clickTypesAt types typed into the editor on screen, clicks at cells after
-// the start of the typed text, types "X" there, and waits for want. A click
-// that missed the editor leaves the X at the end of the text, and want then
-// never shows.
 func clickTypesAt(t *testing.T, term *tuitest.Terminal, what, typed string, cells int, want string) {
 	t.Helper()
 	if err := term.SendKeys(typed); err != nil {
@@ -55,7 +51,6 @@ func TestDraftMouseInEveryEditor(t *testing.T) {
 	waitText(t, term, "the held approval", "1 needs you", "go test")
 	time.Sleep(answerSettle)
 
-	// The reason for a rejection.
 	if err := term.SendKeys("R"); err != nil {
 		t.Fatal(err)
 	}
@@ -68,8 +63,6 @@ func TestDraftMouseInEveryEditor(t *testing.T) {
 	}
 	waitGone(t, term, "the reason line after esc", "Reason:")
 
-	// The New agent sheet's task: a click, then a double click that
-	// selects a word for typing to replace.
 	if err := term.SendKeys("n"); err != nil {
 		t.Fatal(err)
 	}
@@ -91,12 +84,8 @@ func TestDraftMouseInEveryEditor(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitGone(t, term, "the New agent sheet after esc", "What should the agent do?")
-	// Nothing on screen changes with this esc, so it goes as its own press,
-	// apart from the leader after it, as a person types it. Sent at once, the
-	// two read as alt and the leader.
 	sendKeys(t, term, tuitest.Esc)
 
-	// The task capture sheet floats over the screen.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "+"); err != nil {
 		t.Fatal(err)
 	}

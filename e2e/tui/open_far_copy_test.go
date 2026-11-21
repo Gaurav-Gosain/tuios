@@ -35,15 +35,10 @@ import (
 //
 // NEGATIVE CONTROL: see NEGATIVE_CONTROLS.md, "o opens a copy of a far file".
 
-// farCopyBig is the size of the file over the ask limit the fixture sets.
 const farCopyBig = 2 << 20
 
-// farCopyCrafted is a far name that a client that joined it as a path on
-// Windows would read as two folders up.
 const farCopyCrafted = `..\..\x.txt`
 
-// farCopyFixture writes the far files the steps open, and sets the ask limit
-// to 1 MiB.
 func farCopyFixture(t *testing.T, base, top string) {
 	t.Helper()
 	for name, body := range map[string]string{
@@ -57,7 +52,6 @@ func farCopyFixture(t *testing.T, base, top string) {
 	if err := os.WriteFile(filepath.Join(top, "zbig.bin"), make([]byte, farCopyBig), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// A link in the far folder to a file outside it.
 	outside := filepath.Join(filepath.Dir(top), "outside-secret.txt")
 	if err := os.WriteFile(outside, []byte("secret\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -76,12 +70,7 @@ func farCopyFixture(t *testing.T, base, top string) {
 	}
 }
 
-// farCopyPath is where the copy of build's path lands: the cache, the host,
-// a hash of the host and the far path, and the name.
 func farCopyPath(base, farPath, name string) string {
-	// The pane names its folder by its real path (on macOS the temp folder
-	// is /private/var, which /var links to), and the copy is keyed by the
-	// path the listing shows.
 	if real, err := filepath.EvalSymlinks(farPath); err == nil {
 		farPath = real
 	}
@@ -89,12 +78,10 @@ func farCopyPath(base, farPath, name string) string {
 	return filepath.Join(farCopyRoot(base), "build", hex.EncodeToString(sum[:8]), name)
 }
 
-// farCopyRoot is the folder every copy is under.
 func farCopyRoot(base string) string {
 	return filepath.Join(xdgDir(base, "XDG_CACHE_HOME"), "tuios", "opened")
 }
 
-// farCopies counts the daemon's copies of name.
 func farCopies(t *testing.T, base string, env []string, name string) int {
 	t.Helper()
 	out, err := tuiosCLIEnv(t, base, env, "transfers", "--json")
@@ -119,7 +106,6 @@ func farCopies(t *testing.T, base string, env []string, name string) int {
 	return n
 }
 
-// takeOffer clicks the dock message that holds text.
 func takeOffer(t *testing.T, term *tuitest.Terminal, text string) {
 	t.Helper()
 	waitForAll(t, term, uiTimeout, "the offer", text)
@@ -130,7 +116,6 @@ func takeOffer(t *testing.T, term *tuitest.Terminal, text string) {
 	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
 }
 
-// sameCopyBytes fails unless the copy holds the far file's bytes.
 func sameCopyBytes(t *testing.T, copyPath, farPath, what string) {
 	t.Helper()
 	got, err := os.ReadFile(copyPath)
@@ -146,8 +131,6 @@ func sameCopyBytes(t *testing.T, copyPath, farPath, what string) {
 	}
 }
 
-// openFarCopies is the steps: open a far file, open it again, open it after
-// it changed, a folder, a file over the ask limit, and a crafted name.
 func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []string, top, record string) {
 	t.Helper()
 	art := artifactDir(t)
@@ -163,8 +146,6 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 		sendKeys(t, term, "o")
 	}
 
-	// The offer from the start of the test was left in the dock: not now.
-	// notes.md, opened the first time: the copy is made, then opened.
 	notes := filepath.Join(top, "notes.md")
 	notesCopy := farCopyPath(base, notes, "notes.md")
 	open("notes.md")
@@ -179,8 +160,6 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 		t.Fatalf("the first open made %d copies of notes.md, want 1", n)
 	}
 
-	// Again, with the far file as it was: the copy here opens, and nothing
-	// is copied. The jump key takes the offer this time.
 	open("notes.md")
 	waitForAll(t, term, uiTimeout, "the second offer", "notes.md is on build. Click to open a copy here.")
 	sendKeys(t, term, tuitest.Ctrl('b'), "j")
@@ -190,7 +169,6 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 		t.Fatalf("the second open of an unchanged file made a copy: %d copies of notes.md, want 1", n)
 	}
 
-	// The far file changes: the next open copies it again.
 	if err := os.WriteFile(notes, []byte("# notes\none\ntwo, from build\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -207,8 +185,6 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 		t.Fatalf("the open after a far change made %d copies of notes.md in all, want 2", n)
 	}
 
-	// A folder, from the row's menu: the copy holds the folder's files and
-	// not the link that names a file outside it.
 	inner := filepath.Join(top, "inner")
 	innerCopy := farCopyPath(base, inner, "inner")
 	col, row, ok := findOnGrid(term.Screen(), "inner/")
@@ -230,8 +206,6 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 	}
 	railLists(t, term, "the rail left the far folder", []string{"notes.md", "zbig.bin"}, nil)
 
-	// A file over the ask limit: the first yes shows the size and asks
-	// again, and only the second copies it.
 	big := filepath.Join(top, "zbig.bin")
 	bigCopy := farCopyPath(base, big, "zbig.bin")
 	open("zbig.bin")
@@ -248,7 +222,6 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 	waitOpenRecord(t, term, record, want, "the open of a file over the ask limit")
 	sameCopyBytes(t, bigCopy, big, "the copy of a file over the ask limit")
 
-	// A crafted name lands in the copy's own folder, as one name.
 	crafted := filepath.Join(top, farCopyCrafted)
 	craftedCopy := farCopyPath(base, crafted, ".._.._x.txt")
 	open(farCopyCrafted)
@@ -262,7 +235,6 @@ func openFarCopies(t *testing.T, term *tuitest.Terminal, base string, env []stri
 	}
 	copiesFrame(t, term, "open-far-copy-crafted")
 
-	// clear-opened deletes them all.
 	out, err := tuiosCLIEnv(t, base, env, "transfers", "clear-opened")
 	if err != nil || !strings.Contains(out, "Deleted 4 copies of far files") {
 		t.Fatalf("tuios transfers clear-opened: %v\n%s", err, out)

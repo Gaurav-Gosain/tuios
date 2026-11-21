@@ -54,10 +54,6 @@ func TestPaneKittyFlagsPerScreen(t *testing.T) {
 			} {
 				out := filepath.Join(dir, step.name)
 				script := filepath.Join(dir, step.name+".sh")
-				// Raw mode so the key reaches the file unchanged. With min 0
-				// time 40, cat ends after four seconds of silence. The flags
-				// are pushed on the main screen in both steps and popped
-				// there at the end.
 				body := "stty raw -echo min 0 time 40\n" +
 					"printf '\\033[>1u" + step.enter + "'\n" +
 					"printf 'KITTY%sREADY\\r\\n' " + step.name + "\n" +

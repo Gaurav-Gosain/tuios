@@ -106,8 +106,6 @@ func TestAttachedNewGivesItsPaneTheCallersTerm(t *testing.T) {
 	}
 }
 
-// askPaneTerm has the shell of session's pane print its TERM and COLORTERM,
-// and returns the pane's text and the printed line.
 func askPaneTerm(t *testing.T, base string, env []string, session string) (pane, got string) {
 	t.Helper()
 	if out, err := tuiosCLIEnv(t, base, env, "send-keys", "-s", session, "-l",
@@ -117,9 +115,6 @@ func askPaneTerm(t *testing.T, base string, env []string, session string) (pane,
 	return readPaneTerm(t, base, env, session)
 }
 
-// readPaneTerm waits for the line a shell printed with TERM= and END, and
-// returns the pane's text and the line without END. The shell's echo of the
-// command holds %s, so it is skipped.
 func readPaneTerm(t *testing.T, base string, env []string, session string) (pane, got string) {
 	t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -173,8 +168,6 @@ func TestStartAgentGivesItsSessionTheCallersTerm(t *testing.T) {
 	killDaemon(t, base)
 	callerEnv := []string{"TERM=screen-256color", "COLORTERM=truecolor"}
 
-	// A program no harness manifest knows is ready once it reports a state,
-	// so the agent prints its terminal and then says it is idle.
 	agent := filepath.Join(t.TempDir(), "termagent")
 	script := "#!/bin/sh\nprintf 'TERM=%s COLORTERM=%s END\\n' \"$TERM\" \"$COLORTERM\"\n'" + tuiosBin + "' set-agent-state idle >/dev/null 2>&1\nexec sleep 600\n"
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {

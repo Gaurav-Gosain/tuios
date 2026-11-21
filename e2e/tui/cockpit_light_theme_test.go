@@ -8,10 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// cellLight reports whether the cell's ground is light: a colour the cell
-// sets whose luminance is over half, or the terminal's own ground, which the
-// harness's terminal draws light under a light theme only through a set
-// colour.
 func cellLight(c tuitest.Cell) (bool, string) {
 	switch c.Bg.Kind {
 	case tuitest.ColorRGB:
@@ -50,7 +46,6 @@ func TestCockpitFollowsALightTheme(t *testing.T) {
 				_, base, _, _ := startCockpitFleetWith(t, 120, 40, d.env, look.conf)
 				opts := startOpts{args: []string{"attach", "home"}, cols: 120, rows: 40, shippedLooks: true, env: d.env}
 				if look.name == "host" {
-					// A light terminal that answers OSC 11 with its ground.
 					opts.wrap = []string{host, "run", "-bg", "#fdf6e3", "-fg", "#2a2a2a", "--"}
 				}
 				term := startIn(t, base, opts)
@@ -66,9 +61,6 @@ func TestCockpitFollowsALightTheme(t *testing.T) {
 	}
 }
 
-// checkCockpitLight checks that the agents view's grounds are light beside
-// three words it draws: the list's group heading, the focus's tab and the
-// card's question. It saves the frame as name.
 func checkCockpitLight(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	_ = term.WaitStable(uiTimeout)

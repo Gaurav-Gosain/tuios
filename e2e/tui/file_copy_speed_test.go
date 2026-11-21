@@ -13,21 +13,6 @@ import (
 	"time"
 )
 
-// A folder of many small files over a link with a long round trip.
-//
-// A file sent by itself costs several round trips: its part, the stream that
-// reads it, the stream that writes it, its end and its commit. On a link of
-// 50 ms that is about a third of a second a file, so 2,000 small files wait
-// for over ten minutes and move their bytes in a second. The tree stream
-// sends every small file of a folder in one stream each way. This test copies
-// such a folder to build over a link whose far side answers 50 ms late, and
-// holds the copy to a time a per-file copy cannot meet.
-//
-// TUIOS_E2E_SMALL_FILES sets the number of files (2,000 by default),
-// TUIOS_E2E_SMALL_DELAY the delay in ms (50), and TUIOS_E2E_SMALL_BUDGET the
-// budget in seconds, so the same test measures an older binary
-// (TUIOS_E2E_BIN) with a budget it can meet.
-
 // TestAFolderOfSmallFilesCopiesFastOverASlowLink copies a folder of small
 // files to build through transfer-start, over a link with a 50 ms delay, and
 // checks every file byte for byte, with its mode and time, on build.
@@ -54,8 +39,6 @@ func TestAFolderOfSmallFilesCopiesFastOverASlowLink(t *testing.T) {
 	src := filepath.Join(base, "tree")
 	bytes := makeSmallTree(t, src, n, 7)
 	if os.Getenv("TUIOS_E2E_SMALL_NOEMPTY") != "" {
-		// The engine before 2026-10 cannot copy an empty file in a folder,
-		// so a measurement of it gives each a byte.
 		filled := 0
 		_ = filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 			if err == nil && d.Type().IsRegular() {
@@ -199,7 +182,6 @@ func TestACopysRateIsWhatTheFarSideTook(t *testing.T) {
 		landed int64
 	}
 	var landed []point
-	// landedSince is the bytes per second build wrote from at to now.
 	landedSince := func(at time.Time) float64 {
 		last := landed[len(landed)-1]
 		first := landed[0]
@@ -230,7 +212,6 @@ func TestACopysRateIsWhatTheFarSideTook(t *testing.T) {
 		if row.State == "done" || row.State == "failed" || row.State == "cancelled" {
 			return true, ""
 		}
-		// The rate covers the last five seconds, or the copy so far.
 		if row.Rate > 0 && time.Since(start) > time.Second {
 			got := landedSince(time.Now().Add(-5 * time.Second))
 			shown, truth = append(shown, row.Rate), append(truth, got)
@@ -266,8 +247,6 @@ func TestACopysRateIsWhatTheFarSideTook(t *testing.T) {
 	}
 }
 
-// textFile writes size bytes of words, which compress about as source code
-// does.
 func textFile(t *testing.T, rng *mrand.Rand, path string, size int) {
 	t.Helper()
 	words := []string{"func", "return", "err", "nil", "copy", "file", "bytes", "link", "the", "if", "for", "range", "string", "int64", "context"}
@@ -285,8 +264,6 @@ func textFile(t *testing.T, rng *mrand.Rand, path string, size int) {
 	}
 }
 
-// treeBytes is the bytes of every regular file under root, part files
-// included.
 func treeBytes(root string) int64 {
 	var n int64
 	_ = filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {

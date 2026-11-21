@@ -10,30 +10,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Paste buffers (issue #514): each copy-mode yank is kept as a paste buffer in
-// the daemon, prefix ] pastes the newest, prefix # lists them to pick one, and
-// the CLI and the tmux shim read and write the same buffers.
-//
-// How these could pass wrongly, written down first:
-//   - A pasted line could match text already on screen. The yanked words are
-//     printed with a split in the typed command, and every paste is checked as
-//     a whole output line that only running the pasted command prints.
-//   - A buffer list could come from the client rather than the daemon. The
-//     list is read with the CLI, from outside the client.
-//   - The chooser could paste the newest buffer whatever the selection. It
-//     pastes the older one, which ] does not.
-//   - A bracketed paste check could pass on text the pane echoes anyway. The
-//     same paste goes once with bracketed paste off, where no marks may show,
-//     and once with it on, where they must.
-//   - A grant check could pass because the call failed for another reason.
-//     Each refusal is matched on the grant it names, and each refused call
-//     has a positive half that is served once the grant is given.
-
-// pbSession is the session the paste buffer tests attach to.
 const pbSession = "e2e-pb"
 
-// startPasteBufferClient starts a daemon session under base with the copy
-// cursor config and attaches a client to it, in terminal mode.
 func startPasteBufferClient(t *testing.T, base, extraConfig string) *tuitest.Terminal {
 	t.Helper()
 	killDaemon(t, base)
@@ -48,7 +26,6 @@ func startPasteBufferClient(t *testing.T, base, extraConfig string) *tuitest.Ter
 	return term
 }
 
-// pbListing is the JSON of tuios list-buffers.
 type pbListing struct {
 	Buffers []struct {
 		Name   string `json:"name"`
@@ -59,7 +36,6 @@ type pbListing struct {
 	MaxBytes int `json:"max_bytes"`
 }
 
-// listBuffers reads the daemon's buffers with the CLI.
 func listBuffers(t *testing.T, base string) pbListing {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-buffers", "--json")
@@ -73,7 +49,6 @@ func listBuffers(t *testing.T, base string) pbListing {
 	return l
 }
 
-// yankLine finds text with a copy-mode search and yanks its line.
 func yankLine(t *testing.T, term *tuitest.Terminal, search string) {
 	t.Helper()
 	if err := term.SendKeys(search, tuitest.Enter); err != nil {
@@ -91,9 +66,6 @@ func yankLine(t *testing.T, term *tuitest.Terminal, search string) {
 	}
 }
 
-// screenHasLine reports whether a row of the screen shows want as output: on
-// a row with no echo before it, so the typed command line does not count.
-// The row also holds the pane's borders, so it is not compared whole.
 func screenHasLine(s tuitest.Screen, want string) bool {
 	_, rows := s.Size()
 	for r := range rows {
@@ -105,8 +77,6 @@ func screenHasLine(s tuitest.Screen, want string) bool {
 	return false
 }
 
-// waitBufferCount waits for the daemon to hold n buffers, since a yank's
-// buffer is saved off the client's update loop.
 func waitBufferCount(t *testing.T, base string, n int, what string) pbListing {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -142,7 +112,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 	runInShell(t, term, `printf 'pb''alpha42\npb''bravo42\n'`, "pbbravo42", shellTimeout)
 	time.Sleep(300 * time.Millisecond)
 
-	// Two yanks in copy mode.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("send prefix+[: %v", err)
 	}
@@ -159,8 +128,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 		t.Fatalf("q did not leave copy mode\n%s", term.Snapshot())
 	}
 
-	// The daemon holds both, newest first: the CLI reads them from outside
-	// the client.
 	l := waitBufferCount(t, base, 2, "after two yanks")
 	if l.Buffers[0].Sample != "pbbravo42" || l.Buffers[1].Sample != "pbalpha42" {
 		t.Fatalf("the buffers are %+v, want pbbravo42 then pbalpha42", l.Buffers)
@@ -172,7 +139,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 		t.Fatalf("show-buffer printed %q (%v), want pbbravo42 with no line feed", out, err)
 	}
 
-	// prefix ] pastes the newest into the pane.
 	if err := term.SendKeys("echo PASTED-"); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +155,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 		t.Fatalf("prefix ] did not paste the newest buffer: %v\n%s", err, term.Snapshot())
 	}
 
-	// prefix # lists them, and the older one is pasted from the list.
 	if err := term.SendKeys("echo CHOSEN-"); err != nil {
 		t.Fatal(err)
 	}
@@ -206,11 +171,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 	if err := term.SendKeys("j"); err != nil {
 		t.Fatal(err)
 	}
-	// The client reads the chosen buffer from the daemon after the chooser
-	// closes. An Enter typed right after the chooser's Enter must still come
-	// after the paste, as in tmux (#1016). The daemon is stopped across both
-	// keys, so the read is slow on every run: a client that sends the second
-	// Enter on ahead runs "echo CHOSEN-" alone.
 	daemon := daemonPID(t, base)
 	if err := syscall.Kill(daemon, syscall.SIGSTOP); err != nil {
 		t.Fatalf("stop the daemon: %v", err)
@@ -239,7 +199,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 	}
 	saveFrame(t, term, "paste-buffers-pasted")
 
-	// The tmux shim reads and writes the same buffers.
 	if out, err := tuiosCLI(t, base, "set-buffer", "-b", "clibuf", "fromcli-xyz"); err != nil {
 		t.Fatalf("set-buffer: %v\n%s", err, out)
 	}
@@ -256,8 +215,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// paste-buffer from the CLI: no marks while the pane's program has
-	// bracketed paste off, the marks once it turns it on.
 	runInShell(t, term, `printf '\033[?2004l'; echo CAT""OFF; cat -v`, "CATOFF", shellTimeout)
 	if out, err := tuiosCLI(t, base, "paste-buffer", "-s", pbSession, "-b", "clibuf"); err != nil {
 		t.Fatalf("paste-buffer: %v\n%s", err, out)
@@ -288,7 +245,6 @@ func TestPasteBuffersKeepYanksAndPasteThem(t *testing.T) {
 	}
 	saveFrame(t, term, "paste-buffers-bracketed")
 
-	// -d deleted it, and delete-buffer deletes the next.
 	for _, b := range listBuffers(t, base).Buffers {
 		if b.Name == "clibuf" {
 			t.Fatalf("paste-buffer -d left clibuf in place")
@@ -334,21 +290,16 @@ func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 	}
 	bin := tuiosBin
 
-	// The pane's own buffer, which it may reach when its grants allow.
 	grant("read,write")
 	runInShell(t, term, "clear; "+bin+" set-buffer hunter2; echo OWN\"\"_SET=$?", "OWN_SET=0", shellTimeout)
 
-	// No grants: reading is refused, and names the read grant.
 	grant("none")
 	runInShell(t, term, "clear; "+bin+" show-buffer; echo NONE_SHOW=$?", "NONE_SHOW=1", shellTimeout)
 	if !strings.Contains(term.Screen().Text(), "read grant") {
 		t.Fatalf("the refusal does not name the read grant\n%s", term.Snapshot())
 	}
 
-	// read: reading is served, writing is refused.
 	grant("read")
-	// Only the part of the refusal that names the grant reaches the pane:
-	// the whole message is long enough to scroll HUNTER2 off a small pane.
 	runInShell(t, term, "clear; "+bin+" show-buffer | tr a-z A-Z; echo; e=$(mktemp); "+bin+" set-buffer x 2>\"$e\"; s=$?; grep -o 'needs the [a-z]* grant' \"$e\"; rm -f \"$e\"; echo READ_SET=$s", "READ_SET=1", shellTimeout)
 	text := term.Screen().Text()
 	if !strings.Contains(text, "HUNTER2") {
@@ -358,8 +309,6 @@ func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 		t.Fatalf("the set-buffer refusal does not name the write grant\n%s", term.Snapshot())
 	}
 
-	// write alone: setting is served, reading and pasting are refused. The
-	// refusal is cut to its grant again, or it scrolls WRITE_SET off.
 	grant("write")
 	runInShell(t, term, "clear; "+bin+" set-buffer mine-x; echo WRITE_SET=$?; e=$(mktemp); "+bin+" paste-buffer 2>\"$e\"; s=$?; grep -o 'needs the [a-z]* grant' \"$e\"; rm -f \"$e\"; echo WRITE_PASTE=$s", "WRITE_PASTE=1", shellTimeout)
 	text = term.Screen().Text()
@@ -370,7 +319,6 @@ func TestPasteBufferVerbsFollowPaneGrants(t *testing.T) {
 		t.Fatalf("a pane without read pasted the buffer\n%s", term.Snapshot())
 	}
 
-	// read and write: the paste is served.
 	grant("read,write")
 	runInShell(t, term, "clear; "+bin+" set-buffer 'echo PASTE'\"\"'_OK'; "+bin+" paste-buffer; echo", "PASTE_OK", shellTimeout)
 	saveFrame(t, term, "paste-buffers-grants")

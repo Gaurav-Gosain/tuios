@@ -8,19 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The Inbox of a client attached through a host (#2093).
-//
-// A client attached with tuios attach --host alpha shows alpha's session,
-// and its attach nonce is alpha's daemon's. Its agents view lists alpha's
-// Inbox, and the person's acts on it (dismiss, answer) go to alpha's daemon
-// through the link, under alpha's link policy for this machine.
-
-// respondPolicy is alpha's link policy for every machine: the default, with
-// respond, which answering and dismissing need.
 const respondPolicy = "[hosts.\"*\"]\nallow = [\"list\", \"mail\", \"open\", \"write\", \"respond\", \"files\", \"transcripts\"]\n"
 
-// farErrored names alpha's window far-fix and puts it on errored, which
-// opens an Inbox item on alpha.
 func farErrored(t *testing.T, f *globalFleet, message string) {
 	t.Helper()
 	for _, args := range [][]string{
@@ -33,8 +22,6 @@ func farErrored(t *testing.T, f *globalFleet, message string) {
 	}
 }
 
-// alphaInboxHas reports whether alpha's own Inbox lists an item whose
-// summary holds text.
 func alphaInboxHas(t *testing.T, f *globalFleet, text string) (bool, string) {
 	t.Helper()
 	out, err := cliWithin(t, f.alpha, f.env, "list-attention", "--json")
@@ -57,8 +44,6 @@ func alphaInboxHas(t *testing.T, f *globalFleet, text string) (bool, string) {
 	return false, out
 }
 
-// attachAgentsViewOnAlpha attaches a client to alpha's session far through
-// the link and opens the agents view.
 func attachAgentsViewOnAlpha(t *testing.T, f *globalFleet) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, f.here, startOpts{args: []string{"attach", "--host", "alpha", "far"}, cols: 160, rows: 44,
@@ -100,8 +85,6 @@ func TestInboxActsOnTheAttachedHost(t *testing.T) {
 		has, out := alphaInboxHas(t, f, "build failed on alpha")
 		return !has, out + "\n" + term.Snapshot()
 	})
-	// The agent's row stays, as the agent does: its item leaves the
-	// group of what needs the person.
 	waitText(t, term, "the dismissed item leaves the agents view", "0 needs you")
 	saveCockpitFrames(t, term, "attached-inbox-dismissed")
 
@@ -109,9 +92,6 @@ func TestInboxActsOnTheAttachedHost(t *testing.T) {
 		"Ship it to staging?", "-o", "yes", "-o", "no")
 	waitText(t, term, "alpha's question in the agents view", "Ship it to staging?")
 	saveCockpitFrames(t, term, "attached-inbox-asked")
-	// A digit answers only once the question has been on screen for a
-	// moment; one pressed sooner is refused and says so. So the probe
-	// presses 1 until ask-human on alpha returns.
 	var run askRun
 	waitUntil(t, "ask-human on alpha returns the answer given in the agents view", uiTimeout, func() (bool, string) {
 		select {

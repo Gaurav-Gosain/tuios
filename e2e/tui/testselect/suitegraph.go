@@ -12,27 +12,17 @@ import (
 	"strings"
 )
 
-// suiteGraph is which top-level declarations of the suite's own package name
-// which others, read from the test files at the head. The suite's code is not
-// in the coverage run (go test instruments no _test.go file), so a change to a
-// helper, or a name of another package that a helper uses, reaches the tests
-// whose code names it, directly or through other helpers.
-//
-// Names are matched by identifier alone: a local variable or a field of the
-// same name counts as a use. That only selects more.
 type suiteGraph struct {
-	tests map[string]bool            // the Test functions
-	users map[string]map[string]bool // declaration to the declarations that name it
+	tests map[string]bool
+	users map[string]map[string]bool
 }
 
-// loadSuiteGraph parses e2e/tui/*_test.go under root.
 func loadSuiteGraph(root string) (*suiteGraph, error) {
 	files, err := filepath.Glob(filepath.Join(root, "e2e/tui/*_test.go"))
 	if err != nil {
 		return nil, err
 	}
 	g := &suiteGraph{tests: map[string]bool{}, users: map[string]map[string]bool{}}
-	// Each declaration's name, with the identifiers its code names.
 	uses := map[string]map[string]bool{}
 	add := func(decl string, n ast.Node) {
 		set := uses[decl]
@@ -65,8 +55,6 @@ func loadSuiteGraph(root string) (*suiteGraph, error) {
 		for _, d := range file.Decls {
 			switch x := d.(type) {
 			case *ast.FuncDecl:
-				// A method is named by its own name, as x.name; the receiver
-				// type's methods are reached through that.
 				decl := x.Name.Name
 				if name, ok := testName(x); ok {
 					g.tests[name] = true
@@ -114,8 +102,6 @@ func loadSuiteGraph(root string) (*suiteGraph, error) {
 	return g, nil
 }
 
-// testsUsing returns the tests whose code names one of decls, directly or
-// through the suite's other declarations, the tests among decls included.
 func (g *suiteGraph) testsUsing(decls []string) []string {
 	seen := map[string]bool{}
 	work := slices.Clone(decls)
@@ -138,9 +124,6 @@ func (g *suiteGraph) testsUsing(decls []string) []string {
 	return out
 }
 
-// suiteFile reports whether p, relative to the repository root, is a test
-// file of the suite's own package.
-// suiteSources reads e2e/tui/*_test.go under root, by file name.
 func suiteSources(root string) (map[string][]byte, error) {
 	files, err := filepath.Glob(filepath.Join(root, "e2e/tui/*_test.go"))
 	if err != nil {
@@ -157,11 +140,6 @@ func suiteSources(root string) (map[string][]byte, error) {
 	return srcs, nil
 }
 
-// readers returns the tests of the suite's files that name the file p, a
-// path from the repository root, by its base name in a string literal, such
-// as filepath.Join(root, "scripts", "install.sh") or "../../scripts/goflags.sh".
-// Such a test may run or read p, though no package of the binary builds it.
-// A file that names it for another reason only adds its tests.
 func readers(srcs map[string][]byte, p string) []string {
 	base := path.Base(p)
 	var tests []string
@@ -171,8 +149,6 @@ func readers(srcs map[string][]byte, p string) []string {
 		}
 		f, err := parser.ParseFile(token.NewFileSet(), file, src, parser.SkipObjectResolution)
 		if err != nil {
-			// go test -list fails on such a file before the selection
-			// runs, so the run never gets here with one.
 			continue
 		}
 		tests = append(tests, testsIn(f)...)

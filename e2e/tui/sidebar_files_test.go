@@ -24,19 +24,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The rail's files section, on the host's own grid.
-//
-// Everything else that covers the section renders the rail in process and reads
-// the strings back. This drives it the way a person does: a real shell reports a
-// real directory, a real click puts the section on the rail, and the names are
-// read off the terminal the client drew into. Model state and pixels disagreeing
-// is the failure this codebase keeps hitting, and a rail that lays out correctly
-// in a unit test and lands in the wrong columns on screen would pass every other
-// test the section has.
-
-// fileViewFixture builds a directory whose listing has a knowable shape: two
-// folders and one file, named so that folders-first and plain alphabetical
-// disagree.
 func fileViewFixture(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -66,19 +53,10 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "opening a shell for the listing")
 
-	// The pane says where it is, the way a shell with OSC 7 does. The harness
-	// shell has no such integration of its own, so the escape is printed
-	// outright: it is the same sequence and the same handler either way, and a
-	// test that depended on which shell the machine has would be testing that.
 	enterTerminalMode(t, term)
-	// The marker is a short constant rather than the path. A temp directory is
-	// long enough to wrap across two pane lines, and WaitForText looks for its
-	// text on one: waiting for the path made the test's own name a thing that
-	// could break it.
 	runInShell(t, term, "cd "+dir+" && printf 'in-the-%s\\n' dir", "in-the-dir", uiTimeout)
 	runInShell(t, term,
 		`printf '\033]7;file://%s\033\\%s\n' "$PWD" mar""ked`, "marked", uiTimeout)
-	// A clear screen, so the frames show no scratch path in the pane.
 	runInShell(t, term, "clear; printf 'rea%s\\n' dy", "ready", uiTimeout)
 	leaveTerminalMode(t, term)
 
@@ -87,15 +65,6 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 		t.Fatalf("the rail never came up: %v\n%s", err, term.Snapshot())
 	}
 
-	// No gesture opens it. The section is part of the rail's shipped layout and
-	// it follows the focused pane, so the listing arrives on its own once the
-	// shell has said where it is. That is the change this branch made, and
-	// waiting for it rather than clicking for it is what checks it.
-
-	// The listing sits beside the rail's other sections rather than replacing
-	// them, which is the design decision this branch changed: both halves are
-	// checked, so a listing that took the rail over fails as loudly as one that
-	// never appears.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		txt := s.Text()
 		return strings.Contains(txt, "alpha/") && strings.Contains(txt, sidebarHeader)
@@ -110,28 +79,20 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 			t.Errorf("the listing does not show %q:\n%s", want, term.Snapshot())
 		}
 	}
-	// A folder wears a trailing slash and a file does not, which is the whole
-	// of `ls -F`'s distinction and is what the row says with no icon at all.
 	if strings.Contains(txt, "brief.txt/") {
 		t.Errorf("a file was drawn as a folder:\n%s", term.Snapshot())
 	}
-	// Folders first, so alpha and zulu are both above brief.txt.
 	if _, zRow, ok := findOnGrid(snap, "zulu/"); ok {
 		if _, bRow, ok := findOnGrid(snap, "brief.txt"); ok && zRow > bRow {
 			t.Errorf("zulu/ is on row %d, below brief.txt on row %d", zRow, bRow)
 		}
 	}
 
-	// Clicking a folder walks the listing into it, and nothing is typed at the
-	// pane: the shell is still where it was.
 	aCol, aRow, ok := findOnGrid(snap, "alpha/")
 	if !ok {
 		t.Fatalf("no row to click:\n%s", term.Snapshot())
 	}
 	mouseClick(t, term, aCol, aRow, tuitest.MouseLeft, 0)
-	// alpha holds nothing, so the listing is the way back out and the word for
-	// having nothing in it. Both are the proof that the click moved the view
-	// rather than that it did nothing at all.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		txt := s.Text()
 		return strings.Contains(txt, "empty") && strings.Contains(txt, "/alpha")
@@ -142,7 +103,6 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 		t.Errorf("clicking a folder typed a cd at the pane:\n%s", term.Snapshot())
 	}
 
-	// The listing is not the pane's folder now, so the back row is on top.
 	const backRow = "back to pane folder"
 	if err := term.WaitForText(backRow, uiTimeout); err != nil {
 		copiesFrame(t, term, "rail-files-back-missing")
@@ -159,8 +119,6 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 	}
 	copiesFrame(t, term, "rail-files-back-done")
 
-	// The footer control is the switch, and it is the way off as well as on: a
-	// section the user cannot take off the rail is one they are stuck with.
 	col, row, ok := findFooterFiles(term.Screen())
 	if !ok {
 		t.Fatalf("the rail drew no files control:\n%s", term.Snapshot())
@@ -176,9 +134,6 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 	alive(t, term, "after browsing the rail's files section")
 }
 
-// findFooterFiles locates the footer's "files" control, which is the last row
-// of the rail. The word also names the section's own header, so a plain search
-// for it finds the header first and clicks a path instead of a control.
 func findFooterFiles(s tuitest.Screen) (int, int, bool) {
 	lines := strings.Split(s.Text(), "\n")
 	for row, line := range slices.Backward(lines) {
@@ -262,7 +217,6 @@ func TestSidebarFileEditor(t *testing.T) {
 			col, row, _ := findOnGrid(term.Screen(), "alpha/")
 			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 			waitForAll(t, term, uiTimeout, "folder navigation", "binary.bin", "note $(touch")
-			// ctrl+click puts the cursor on the row without quick look.
 			col, row, _ = findOnGrid(term.Screen(), "binary.bin")
 			mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 			clickNoteGone(t, term)
@@ -272,7 +226,6 @@ func TestSidebarFileEditor(t *testing.T) {
 			if err := term.WaitForText("Copied the path.", uiTimeout); err != nil {
 				t.Fatalf("Enter changed its navigation action: %v\n%s", err, term.Snapshot())
 			}
-			// CSI-u carries Shift+Enter distinctly from plain Enter.
 			if err := term.SendKeys("\x1b[13;2u"); err != nil {
 				t.Fatal(err)
 			}
@@ -389,13 +342,10 @@ func TestRailFilesSectionFollowsTheDisk(t *testing.T) {
 			leaveTerminalMode(t, term)
 			toggleSidebarViaPalette(t, term)
 
-			// The positive half: the rail lists the folder, so every wait below
-			// reads a listing that exists.
 			waitForAll(t, term, uiTimeout, "the first listing", "gone.txt", "kept.txt", "brief.txt")
 			dirArt := artifactDir(t)
 			saveArtifact(t, term, dirArt, "before")
 
-			// Deleted from the pane, the way the issue reports it.
 			enterTerminalMode(t, term)
 			runInShell(t, term, "rm g\"\"one.txt && printf 'remo%s\\n' ved", "removed", uiTimeout)
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -407,7 +357,6 @@ func TestRailFilesSectionFollowsTheDisk(t *testing.T) {
 			}
 			saveArtifact(t, term, dirArt, "after-pane-delete")
 
-			// Changed by another program, with nothing typed at the pane.
 			if err := os.WriteFile(filepath.Join(dir, "outside.txt"), nil, 0o644); err != nil {
 				t.Fatal(err)
 			}
@@ -428,11 +377,6 @@ func TestRailFilesSectionFollowsTheDisk(t *testing.T) {
 	}
 }
 
-// longListingFixture is fileViewFixture with forty files after the folders and
-// one more after those, so the listing is longer than the files section, and
-// a folder tree inside alpha for the tree style: alpha holds inner/ and
-// a1.txt, inner holds l2/ and deep.txt, and l2/l3/l4 holds leaf.txt, five
-// levels down.
 func longListingFixture(t *testing.T) string {
 	t.Helper()
 	dir := fileViewFixture(t)
@@ -451,8 +395,6 @@ func longListingFixture(t *testing.T) string {
 	return dir
 }
 
-// cursorToFirstName walks the rail's cursor down until Y copies a path, which
-// is the first name of the files listing: alpha. Y does nothing off a name.
 func cursorToFirstName(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, dir string) {
 	t.Helper()
 	from := len(clipboardWrites(out))
@@ -467,8 +409,6 @@ func cursorToFirstName(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, 
 	t.Fatalf("Y on the rows of the listing wrote nothing to the clipboard\n%s", term.Snapshot())
 }
 
-// copiedRowIs presses Y and checks that the cursor's row is want, by the path
-// Y copies, and that the row is drawn, by its name on the screen.
 func copiedRowIs(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, want string) {
 	t.Helper()
 	from := len(clipboardWrites(out))
@@ -525,17 +465,12 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 			cursorToFirstName(t, term, out, dir)
 			copiesFrame(t, term, "rail-files-"+style+"-top")
 
-			// G: the last name of the listing, which the section does not draw
-			// until it scrolls.
 			sendKeys(t, term, "G")
 			copiedRowIs(t, term, out, filepath.Join(dir, "zz-last.txt"))
 			copiesFrame(t, term, "rail-files-"+style+"-end")
 
-			// g goes to the first row, "..", and a walk of j sends every key
-			// at once, past the fold.
 			sendKeys(t, term, "g", "j")
 			copiedRowIs(t, term, out, filepath.Join(dir, "alpha"))
-			// alpha, zulu, brief.txt, then the forty files.
 			for range 42 {
 				sendKeys(t, term, "j")
 			}
@@ -546,19 +481,16 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 				return
 			}
 
-			// The tree. l on alpha opens it in place, under its row.
 			sendKeys(t, term, "g", "j")
 			copiedRowIs(t, term, out, filepath.Join(dir, "alpha"))
 			sendKeys(t, term, "l")
 			waitForAll(t, term, uiTimeout, "alpha open", "inner/", "a1.txt")
-			// l on an open folder goes to its first name, and l opens that.
 			sendKeys(t, term, "l", "l")
 			waitForAll(t, term, uiTimeout, "inner open", "deep.txt")
 			snap := term.Screen().Text()
 			if !strings.Contains(snap, "│ └") || !strings.Contains(snap, "\uf47c") || !strings.Contains(snap, "\uf460") {
 				t.Errorf("ASSERTION: the open folders draw no indent guides or open mark:\n%s", term.Snapshot())
 			}
-			// Five levels down: l goes into each folder and opens it.
 			for _, next := range []string{"l3/", "l4/", "leaf.txt"} {
 				sendKeys(t, term, "l", "l")
 				waitForAll(t, term, uiTimeout, "the next level", next)
@@ -566,8 +498,6 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 			sendKeys(t, term, "l")
 			copiedRowIs(t, term, out, filepath.Join(dir, "alpha", "inner", "l2", "l3", "l4", "leaf.txt"))
 			copiesFrame(t, term, "rail-files-tree-deep")
-			// Back up and shut them: h on a name goes to its folder, h on an
-			// open folder closes it.
 			sendKeys(t, term, "h", "h", "h", "h", "h", "h")
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return !strings.Contains(s.Text(), "l3/")
@@ -579,15 +509,11 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 			copiedRowIs(t, term, out, filepath.Join(dir, "alpha", "inner", "deep.txt"))
 			copiesFrame(t, term, "rail-files-tree-open")
 
-			// A file made in an open folder shows with no key pressed.
 			if err := os.WriteFile(filepath.Join(dir, "alpha", "inner", "made-outside.txt"), nil, 0o644); err != nil {
 				t.Fatal(err)
 			}
 			waitForAll(t, term, uiTimeout, "the change in an open folder", "made-outside.txt")
 
-			// inner deleted and made again under the same path, faster than the
-			// rail reads alpha: it stays open, its old watch is gone with the
-			// old folder, and a file made in the new one must still show.
 			inner := filepath.Join(dir, "alpha", "inner")
 			if err := os.RemoveAll(inner); err != nil {
 				t.Fatal(err)
@@ -607,13 +533,9 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 			if err := term.WaitForText("after-replace.txt", uiTimeout); err != nil {
 				t.Fatalf("ASSERTION: a file made in the new inner never showed: %v\n%s", err, term.Snapshot())
 			}
-			// The cursor was on deep.txt, which is gone. It is on the nearest
-			// row above it now, inner, and not on the rail's first row.
 			copiedRowIs(t, term, out, inner)
 			copiesFrame(t, term, "rail-files-tree-replaced")
 
-			// h on an open folder closes it, and h on a closed one goes up to
-			// its folder.
 			sendKeys(t, term, "h")
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return !strings.Contains(s.Text(), "after-replace.txt") && strings.Contains(s.Text(), "inner/")
@@ -623,9 +545,6 @@ func TestRailFilesSectionScrollsWithTheCursor(t *testing.T) {
 			sendKeys(t, term, "h")
 			copiedRowIs(t, term, out, filepath.Join(dir, "alpha"))
 
-			// A click on a folder closes it, and a second one opens it again,
-			// with inner still closed. folder_click is "both": a tree folder
-			// only opens, and the root stays where it is.
 			col, row, ok := findOnGrid(term.Screen(), "alpha/")
 			if !ok {
 				t.Fatalf("no alpha row:\n%s", term.Snapshot())
@@ -749,8 +668,6 @@ func pathPickerStaysInANarrowPane(t *testing.T, term *tuitest.Terminal, dir stri
 	}
 	runInShell(t, term, "cd "+dir+" && clear && echo nar\"\"row", "narrow", uiTimeout)
 
-	// The pane's content starts where the shell printed narrow, and its
-	// right border is the first border cell after it on that row.
 	scr := term.Screen()
 	left, row, ok := findOnGrid(scr, "narrow")
 	if !ok {
@@ -760,11 +677,7 @@ func pathPickerStaysInANarrowPane(t *testing.T, term *tuitest.Terminal, dir stri
 	if right < 0 {
 		t.Fatalf("the pane has no right border on row %d:\n%s", row, term.Snapshot())
 	}
-	// The prompt is two cells, so this puts the cursor four cells from the
-	// border, where a box anchored at the cursor would run past it.
 	sendKeys(t, term, strings.Repeat("x", max(right-left-6, 1)), tuitest.Alt(";"))
-	// The box's top border is the only "╭─ " on the screen: a pane's border
-	// starts with its buttons, and the rail lists the same names as the box.
 	if err := term.WaitForText("╭─ ", uiTimeout); err != nil {
 		t.Fatalf("alt+; did not open the picker in the narrow pane: %v\n%s", err, term.Snapshot())
 	}
@@ -784,8 +697,6 @@ func pathPickerStaysInANarrowPane(t *testing.T, term *tuitest.Terminal, dir stri
 	}
 }
 
-// pathPickerCorner is the cell of the picker box's top-left corner: a "╭"
-// followed by "─" and a space, or (-1, -1).
 func pathPickerCorner(s tuitest.Screen) (int, int) {
 	cols, rows := s.Size()
 	for r := range rows {
@@ -798,8 +709,6 @@ func pathPickerCorner(s tuitest.Screen) (int, int) {
 	return -1, -1
 }
 
-// gridCellAfter is the first column right of col on row whose cell is want,
-// or -1.
 func gridCellAfter(s tuitest.Screen, row, col int, want string) int {
 	cols, _ := s.Size()
 	for c := col + 1; c < cols; c++ {
@@ -810,8 +719,6 @@ func gridCellAfter(s tuitest.Screen, row, col int, want string) int {
 	return -1
 }
 
-// gridCellBefore is the last column left of col on row whose cell is want,
-// or -1.
 func gridCellBefore(s tuitest.Screen, row, col int, want string) int {
 	for c := col - 1; c >= 0; c-- {
 		if s.Cell(c, row).Content == want {
@@ -821,29 +728,15 @@ func gridCellBefore(s tuitest.Screen, row, col int, want string) int {
 	return -1
 }
 
-// dropShell is a shell the drag test runs in the pane, and the text a drop of
-// each fixture name must put on its command line.
 type dropShell struct {
-	// name is the program, as the label names it and as PATH finds it.
-	name string
-	// start runs the shell with no user config, and ready is a command whose
-	// output says it is reading input. Both are empty for the pane's own sh.
+	name                    string
 	start, ready, readyMark string
-	// printf is the command the drops are appended to. It prints each
-	// argument on a line of its own, in brackets.
-	printf string
-	// quote is the quoted form of a path, as written out by hand for this
-	// shell. It is not the code under test.
-	quote func(path string) string
+	printf                  string
+	quote                   func(path string) string
 }
 
 func posixQuote(p string) string { return "'" + strings.ReplaceAll(p, "'", `'\''`) + "'" }
 
-// runsAs is the program a pane runs when it starts shell: on macOS /bin/sh
-// is a shim that runs bash, so a pane started as sh runs bash, and the rail
-// names bash. The name is the kernel's accounting name of the shell, which
-// the rail reads too (ucomm; on macOS comm is argv[0], sh); the second command
-// keeps sh from running ps in its own place.
 func runsAs(t *testing.T, shell string) string {
 	t.Helper()
 	if shell != "sh" {
@@ -863,14 +756,10 @@ func dropShells() []dropShell {
 			printf: `printf '[%s]\n' `, quote: posixQuote},
 		{name: "zsh", start: "PS1='Z$ ' zsh -f", ready: `echo READY""zsh`, readyMark: "READYzsh",
 			printf: `printf '[%s]\n' `, quote: posixQuote},
-		// fish reads \' and \\ inside single quotes as escapes, so the POSIX
-		// form of a name with a backslash would lose it.
 		{name: "fish", start: "fish --no-config", ready: `echo READY""fish`, readyMark: "READYfish",
 			printf: `printf '[%s]\n' `, quote: func(p string) string {
 				return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(p) + "'"
 			}},
-		// nu's single quotes are raw. A name with a quote goes in double
-		// quotes, where \ and " are escaped. ^printf is the external printf.
 		{name: "nu", start: "nu --no-config-file", ready: `echo ("READY" + "nu")`, readyMark: "READYnu",
 			printf: `^printf '[%s]\n' `, quote: func(p string) string {
 				if !strings.Contains(p, "'") {
@@ -906,9 +795,6 @@ func dropShells() []dropShell {
 // dialect, the fish round fails on the first drop, it's a file.txt, whose
 // POSIX form is not the fish form. See NEGATIVE_CONTROLS.md.
 func TestRailFileDragIntoPane(t *testing.T) {
-	// A short folder, so a command line with four paths fits on one row. It
-	// is made under /tmp, not $TMPDIR: on macOS TMPDIR is a long folder under
-	// /private/var/folders, and the line wraps.
 	dir, err := os.MkdirTemp("/tmp", "dnd")
 	if err != nil {
 		t.Fatal(err)
@@ -926,8 +812,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "a b"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The rows dragged, in order, and the path each one pastes. A folder's
-	// path ends in a slash.
 	rows := append(slices.Clone(names), "a b/")
 	paths := make([]string, len(rows))
 	for i, r := range rows {
@@ -936,11 +820,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 			paths[i] += "/"
 		}
 	}
-	// A stand-in for ssh: a program called ssh that holds the terminal. It is
-	// this test binary, copied as ssh, reading its input as ssh does. A
-	// script does not do: on macOS /bin/sh runs bash, and the process is
-	// named bash. A copy of cat does not do either: a multi-call coreutils,
-	// as Ubuntu 26.04 ships, refuses to run under another name.
 	fakeBin := filepath.Dir(standInAs(t, "ssh"))
 
 	const cols, rowsN = 260, 44
@@ -949,12 +828,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "opening a shell for the listing")
 	enterTerminalMode(t, term)
-	// clearPane clears the screen in the shell. Each call waits for a
-	// marker of its own. A marker an earlier clear left on screen ends the
-	// wait at once, and the keys typed next reach the shell while clear
-	// still runs. When sh is dash, as on Debian and Ubuntu, there is no line
-	// editor: the terminal echoes those keys, clear erases them from the
-	// screen, and the command line on screen never matches.
 	clears := 0
 	clearPane := func(t *testing.T) {
 		t.Helper()
@@ -974,8 +847,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 		savePNG(t, term.Screen(), shot.XTermPalette(), art, name)
 	}
 
-	// Where each row is on the rail, read once while the pane shows none of
-	// the names, and a cell well inside the pane.
 	at := map[string][2]int{}
 	for _, r := range rows {
 		c, rr, ok := findOnGrid(term.Screen(), r)
@@ -991,8 +862,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 	}
 	paneRow := rowsN / 2
 
-	// drag carries one row onto the pane, waits for the label to name the
-	// program in it, and releases. shot names a frame taken mid-drag.
 	drag := func(row, program, shot string) {
 		t.Helper()
 		from := at[row]
@@ -1014,13 +883,11 @@ func TestRailFileDragIntoPane(t *testing.T) {
 			checkDragLooks(t, term, at, row)
 		}
 		mouseRelease(t, term, paneCol, paneRow, tuitest.MouseLeft, 0)
-		// The row is put down with the drop.
 		if err := term.WaitFor(func(s tuitest.Screen) bool { return !dragRingUp(s) }, uiTimeout); err != nil {
 			t.Fatalf("the target frame stayed up after the drop:\n%s", term.Snapshot())
 		}
 	}
 
-	// On CI a missing fish or zsh fails the test instead of skipping its round.
 	requireOnCI(t, "fish", "zsh")
 	for i, sh := range dropShells() {
 		if sh.start != "" {
@@ -1038,7 +905,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 				runInShell(t, term, sh.ready, sh.readyMark, 3*uiTimeout)
 			}
 			if sh.start == "" {
-				// sh may have no line editor, and then ctrl+l is a character.
 				clearPane(t)
 			} else {
 				if err := term.SendKeys(tuitest.Ctrl('l')); err != nil {
@@ -1062,7 +928,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 				}
 			}
 			frame("dropped-" + sh.name)
-			// The drop kept terminal mode, so Enter goes to the shell.
 			if err := term.SendKeys(tuitest.Enter); err != nil {
 				t.Fatal(err)
 			}
@@ -1085,7 +950,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 				t.Fatalf("a dropped name ran as a command in %s: %v", sh.name, err)
 			}
 
-			// The path picker types a name by the same quoting rules.
 			if sh.start == "" {
 				clearPane(t)
 			} else {
@@ -1119,7 +983,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 		})
 	}
 
-	// I on a row is the same drop, from the keyboard, on the focused pane.
 	t.Run("key", func(t *testing.T) {
 		enterTerminalMode(t, term)
 		clearPane(t)
@@ -1128,8 +991,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 		}
 		leaveTerminalMode(t, term)
 		sendKeys(t, term, "s")
-		// A click on the row puts the rail's cursor there, as it did before
-		// rows could be dragged.
 		from := at["$(touch pwned)"]
 		mouseClick(t, term, from[0], from[1], tuitest.MouseLeft, 0)
 		sendKeys(t, term, "I")
@@ -1151,8 +1012,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 		leaveTerminalMode(t, term)
 	})
 
-	// A pane running ssh reads its input on another machine. The drop is
-	// refused with the reason, and nothing is typed.
 	t.Run("ssh refused", func(t *testing.T) {
 		enterTerminalMode(t, term)
 		runInShell(t, term, "clear; PATH="+fakeBin+":$PATH; echo SSH\"\"ON; "+standInEnv+"=read ssh", "SSHON", uiTimeout)
@@ -1178,7 +1037,6 @@ func TestRailFileDragIntoPane(t *testing.T) {
 		leaveTerminalMode(t, term)
 	})
 
-	// esc puts the row down: the release over the pane pastes nothing.
 	t.Run("esc", func(t *testing.T) {
 		enterTerminalMode(t, term)
 		runInShell(t, term, "clear; echo ESC\"\"TEST", "ESCTEST", uiTimeout)
@@ -1254,8 +1112,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 		t.Fatal(err)
 	}
 	type fixture struct{ name, filter string }
-	// The names fish reads wrong in POSIX quotes, in this order: fish reads
-	// the POSIX form of the last one, 'ww\', as an open quote.
 	misread := []fixture{{`zz\'; echo hi > MARKER; echo \'`, "zz"}, {`yy\\z`, "yy"}, {`ww\`, "ww"}}
 	kept := []fixture{{"qq Bob's notes.txt", "Bob"}, {`qq a\b c.txt`, "c.txt"}}
 	for _, f := range append(slices.Clone(misread), kept...) {
@@ -1286,9 +1142,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 	}
 
 	const printf = `printf '<%s>\n' `
-	// lineAfterPrintf is what follows the printf on the last row of s
-	// holding it, up to the pane's border: the command line being typed, not
-	// the rail beside it, which lists the names.
 	lineAfterPrintf := func(s tuitest.Screen) string {
 		_, rows := s.Size()
 		for r := rows - 1; r >= 0; r-- {
@@ -1299,8 +1152,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 		}
 		return ""
 	}
-	// printed is the last row of s holding prefix, from prefix up to the
-	// pane's border: what the shell printed for a name, or "".
 	printed := func(s tuitest.Screen, prefix string) string {
 		_, rows := s.Size()
 		for r := rows - 1; r >= 0; r-- {
@@ -1311,7 +1162,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 		}
 		return ""
 	}
-	// boxText is the text inside the picker's box, or "" when it is shut.
 	boxText := func(s tuitest.Screen) string {
 		c, r := pathPickerCorner(s)
 		if c < 0 {
@@ -1331,8 +1181,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 		}
 		return b.String()
 	}
-	// filter types the fixture's filter and waits for the box to list it
-	// and no other fixture.
 	filter := func(f fixture) func() {
 		return func() {
 			sendKeys(t, term, f.filter)
@@ -1349,8 +1197,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 			}
 		}
 	}
-	// pick returns a paste that types the printf, opens the picker, lets
-	// choose pick a row, and accepts it.
 	pick := func(choose func()) func() {
 		return func() {
 			t.Helper()
@@ -1365,8 +1211,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 			}
 		}
 	}
-	// noMarker reports whether MARKER is absent, and removes it so the next
-	// line starts without it.
 	noMarker := func() bool {
 		t.Helper()
 		_, err := os.Stat(marker)
@@ -1378,10 +1222,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 		}
 		return os.IsNotExist(err)
 	}
-	// readBack runs one command line: paste puts the name after the printf,
-	// the line must then be exactly text when text is not empty, Enter runs
-	// it, and the shell must print want with no MARKER left after a fresh
-	// prompt. What went wrong is one error line.
 	readBack := func(shell string, f fixture, paste func(), text, want string, prompt func()) {
 		t.Helper()
 		paste()
@@ -1414,7 +1254,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 		t.Logf("%s read back %s", shell, want)
 	}
 
-	// sh is named, so the three names paste with POSIX quotes there.
 	lines := 0
 	shPrompt := func() {
 		t.Helper()
@@ -1428,17 +1267,12 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 	}
 	frame("sh-read-back")
 
-	// fish behind a tmux of its own: its own server, no user config.
 	server := "tuios-e2e-pickquote-" + strconv.Itoa(os.Getpid())
 	t.Cleanup(func() { _ = exec.Command(tmux, "-L", server, "kill-server").Run() })
 	sendKeys(t, term, tmux+" -L "+server+" -f /dev/null new-session 'fish --no-config'", tuitest.Enter)
 	if err := term.WaitForText("0:fish", 3*uiTimeout); err != nil {
 		t.Fatalf("setup: fish behind tmux did not start: %v\n%s", err, term.Snapshot())
 	}
-	// ready shows a fresh prompt: a probe with a new number each time, a sum
-	// the shell computes. The probe is typed again after ctrl+c, because
-	// tmux drops the keys it reads before the terminal has answered its
-	// questions.
 	probe := 1
 	ready := func(command string, tries int) {
 		t.Helper()
@@ -1456,7 +1290,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 			sendKeys(t, term, tuitest.Ctrl('c'))
 		}
 	}
-	// fish has no $((...)), so its sum is math's.
 	const fishProbe = "echo READY-(math 40+%d)"
 	fishPrompt := func() { t.Helper(); ready(fishProbe, 2) }
 	ready(fishProbe, 3)
@@ -1464,7 +1297,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 	for _, f := range kept {
 		text := ""
 		if f.name == `qq a\b c.txt` {
-			// Only the names fish reads wrong change form.
 			text = posixQuote(f.name)
 		}
 		readBack("fish behind tmux", f, pick(filter(f)), text, "<"+f.name+">", fishPrompt)
@@ -1486,7 +1318,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 	}
 	frame("fish-read-back")
 
-	// A drag from the rail onto the pane goes through the same quoting.
 	dragged := misread[0]
 	drag := func() {
 		t.Helper()
@@ -1513,7 +1344,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 		for i := 1; i <= 6; i++ {
 			mouseMotion(t, term, col+(paneCol-col)*i/6, row+(paneRow-row)*i/6, tuitest.MouseLeft, 0)
 		}
-		// The label names the program in the pane; text may follow it.
 		if err := term.WaitForText("(tmux", uiTimeout); err != nil {
 			mouseRelease(t, term, paneCol, paneRow, tuitest.MouseLeft, 0)
 			t.Fatalf("the label never named tmux while dragging %q onto the pane: %v\n%s", dragged.name, err, term.Snapshot())
@@ -1523,7 +1353,6 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 	readBack("fish behind tmux, dragged", dragged, drag, "", "<"+filepath.Join(dir, dragged.name)+">", fishPrompt)
 	frame("dragged")
 
-	// bash, a POSIX shell, behind the same tmux in a window of its own.
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Log("bash is not installed; its block is skipped")
 	} else {
@@ -1540,14 +1369,11 @@ func TestPastedPathReadsBackBehindTmux(t *testing.T) {
 	alive(t, term, "after typing names behind tmux")
 }
 
-// dragRingUp reports whether a drop target's frame is on screen: the heavy
-// corner the frame is drawn with, which no pane border uses.
 func dragRingUp(s tuitest.Screen) bool {
 	_, _, ok := dragRingCorner(s)
 	return ok
 }
 
-// dragRingCorner is the cell of the target frame's top-left corner.
 func dragRingCorner(s tuitest.Screen) (int, int, bool) {
 	cols, rows := s.Size()
 	for r := range rows {
@@ -1560,9 +1386,6 @@ func dragRingCorner(s tuitest.Screen) (int, int, bool) {
 	return 0, 0, false
 }
 
-// checkDragLooks holds the mid-drag frame to what a person must see: a heavy
-// frame on the target pane, and the carried row drawn apart from the other
-// rows of the listing.
 func checkDragLooks(t *testing.T, term *tuitest.Terminal, at map[string][2]int, held string) {
 	t.Helper()
 	s := term.Screen()
@@ -1633,11 +1456,6 @@ func TestRailFileDragAt16Colours(t *testing.T) {
 	alive(t, term, "after a drag at 16 colours")
 }
 
-// quickLookFixture is a folder with one file of each kind quick look draws:
-// code, Markdown, a picture, a file that is not text, and a text longer than
-// the preview keeps. The names sort in the order the test walks them. Behind
-// them are a picture larger than the panel, enough small ones to pass what
-// tuios leaves on a host, and a PDF, for TestRailQuickLookKittyPicture.
 func quickLookFixture(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -1664,8 +1482,6 @@ func quickLookFixture(t *testing.T) string {
 		"tall.png":  string(gradientPNG(t, 800, 1100)),
 		"zpage.pdf": string(minimalPDF()),
 	}
-	// Longer than one window, so moving through it reads more of the file. The
-	// row in the text and its line number must agree.
 	var log strings.Builder
 	for i := range quickLookLogLines {
 		fmt.Fprintf(&log, "row %d %s\n", i+1, strings.Repeat("x", 190))
@@ -1682,15 +1498,10 @@ func quickLookFixture(t *testing.T) string {
 	return dir
 }
 
-// quickLookLogLines is the lines of the fixture's log, about 1.2 MB.
 const quickLookLogLines = 6000
 
-// quickLookWalked is how many small pictures the fixture holds: more than the
-// previews leave on a host.
 const quickLookWalked = 10
 
-// quickLookShows waits for every marker in want to be on screen and none in
-// not, and saves the frame under name.
 func quickLookShows(t *testing.T, term *tuitest.Terminal, name, why string, want, not []string) {
 	t.Helper()
 	railLists(t, term, why, want, not)
@@ -1717,36 +1528,24 @@ func quickLookShows(t *testing.T, term *tuitest.Terminal, name, why string, want
 // NEGATIVE CONTROL: with quickLookFetch returning nil for a file, the
 // preview stays on "Reading" and the wait for main.go's content times out.
 func TestRailQuickLook(t *testing.T) {
-	// Block glyphs at truecolor: the tier a host without kitty graphics
-	// gets, and the one a frame of the grid can show.
-	// TestRailQuickLookKittyPicture covers the other tier.
 	term, _ := quickLookListed(t,
 		[]string{"TUIOS_KITTY_GRAPHICS=0", "TERM=xterm-256color", "COLORTERM=truecolor"}, nil)
 
-	// The files menu's Preview from a pane, before the rail ever had the
-	// keyboard. The cursor has no file row to come back to, so this is the
-	// case where the preview used to close in the frame it opened.
 	enterTerminalMode(t, term)
-	// clear keeps the fixture's path out of the frame.
 	runInShell(t, term, "clear; echo ready-$((40+5))", "ready-45", uiTimeout)
 	quickLookMenuPreview(t, term, "main.go")
 	quickLookShows(t, term, "quick-look-menu-from-pane", "Preview from a pane did not show the row the menu was opened on",
 		[]string{"main.go ", "package main", "8 lines"}, []string{"Copy path"})
-	// The rail has the keyboard and its cursor is on the row: j goes on from it.
 	sendKeys(t, term, "j")
 	quickLookShows(t, term, "quick-look-menu-from-pane-follow", "after Preview from a pane, j did not move the preview",
 		[]string{"notes.md ", "Quick look notes"}, []string{"package main"})
-	// esc closes it and gives the keyboard back: the next keys reach the shell,
-	// with no key to enter terminal mode again.
 	sendKeys(t, term, tuitest.Esc)
 	railLists(t, term, "esc did not close the preview", nil, []string{"Quick look notes"})
 	runInShell(t, term, "echo back-$((40+4))", "back-44", uiTimeout)
 	leaveTerminalMode(t, term)
 	quickLookFocusRail(t, term, "main.go")
 
-	// Code: highlighted, with line numbers.
 	sendKeys(t, term, " ")
-	// space opens the preview and does nothing else: no path is copied.
 	quickLookShows(t, term, "quick-look-go", "space did not show main.go",
 		[]string{"main.go ", "package main", "fmt.Println", "8 lines"}, []string{"Copied the path."})
 	s := term.Screen()
@@ -1758,27 +1557,22 @@ func TestRailQuickLook(t *testing.T) {
 		t.Errorf("ASSERTION: the keyword and the name are the same colour %+v: the code is not highlighted", kw)
 	}
 
-	// j: the next file, Markdown, laid out.
 	sendKeys(t, term, "j")
 	quickLookShows(t, term, "quick-look-md", "j did not move the preview to notes.md",
 		[]string{"notes.md ", "Quick look notes", "Markdown", "first point"},
 		[]string{"# Quick look", "**bold**", "package main"})
 
-	// j: the picture, as block glyphs on this terminal.
 	sendKeys(t, term, "j")
 	quickLookShows(t, term, "quick-look-png", "j did not move the preview to pic.png",
 		[]string{"pic.png ", "Image", "64 x 32"}, []string{"Quick look notes"})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return pictureColours(s) >= 8 }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the picture was not drawn as glyphs in colour (%d colours): %v\n%s", pictureColours(term.Screen()), err, term.Snapshot())
 	}
-	// Half blocks only: a finer set picks a shape per cell and draws the
-	// smooth gradient as a checker.
 	if q := quadrantCells(term.Screen()); q > 0 {
 		t.Errorf("ASSERTION: the picture has %d quadrant glyphs; the preview draws half blocks", q)
 	}
 	copiesFrame(t, term, "quick-look-png")
 
-	// k three times: past notes.md and main.go to the file that is not text.
 	sendKeys(t, term, "k", "k", "k")
 	quickLookShows(t, term, "quick-look-binary", "the preview of a binary file",
 		[]string{"blob.bin ", "00000000  00 01 02 03"}, []string{"64 x 32"})
@@ -1786,7 +1580,6 @@ func TestRailQuickLook(t *testing.T) {
 	quickLookShows(t, term, "quick-look-long", "the preview of a long file",
 		[]string{"big.txt ", "6000 lines", "row 1"}, nil)
 
-	// space closes; space opens again; esc closes and keeps the rail.
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not close the preview", nil, []string{"6000 lines"})
 	sendKeys(t, term, " ")
@@ -1796,26 +1589,19 @@ func TestRailQuickLook(t *testing.T) {
 	sendKeys(t, term, " ")
 	railLists(t, term, "after esc the rail lost the keyboard", []string{"6000 lines"}, nil)
 
-	// The files menu's Preview row shows the row the menu was opened on, and
-	// the cursor moves there from big.txt.
 	sendKeys(t, term, tuitest.Esc)
 	railLists(t, term, "esc did not close the preview", nil, []string{"6000 lines"})
 	quickLookMenuPreview(t, term, "main.go")
 	quickLookShows(t, term, "quick-look-menu-preview", "Preview did not show the row the menu was opened on",
 		[]string{"main.go ", "package main", "8 lines"}, []string{"6000 lines", "Preview"})
-	// Back on the keyboard, the preview follows the cursor from that row.
 	sendKeys(t, term, "j")
 	quickLookShows(t, term, "quick-look-menu-follow", "after Preview, j did not move the preview",
 		[]string{"notes.md ", "Quick look notes"}, []string{"package main"})
-	// The rail had the keyboard before Preview, so esc leaves it there.
 	sendKeys(t, term, tuitest.Esc)
 	railLists(t, term, "esc did not close the preview", nil, []string{"Quick look notes"})
 	sendKeys(t, term, " ")
 	railLists(t, term, "after Preview and esc the rail lost the keyboard", []string{"Quick look notes"}, nil)
 
-	// A click on a file opens quick look. Shift+click copies the path and opens
-	// nothing. A press that moves past the drag threshold is a drag, even when
-	// it ends in the rail, and its release opens nothing.
 	sendKeys(t, term, tuitest.Esc)
 	railLists(t, term, "esc did not close the preview", nil, []string{"Quick look notes"})
 	mcol, mrow, ok := findOnGrid(term.Screen(), "main.go")
@@ -1835,11 +1621,8 @@ func TestRailQuickLook(t *testing.T) {
 	clickNoteGone(t, term)
 	railLists(t, term, "shift+click on notes.md opened quick look", nil, []string{"Quick look notes"})
 	mousePress(t, term, mcol, mrow, tuitest.MouseLeft, 0)
-	// Six rows down: past the drag threshold of five cells, still in the rail.
 	mouseMotion(t, term, mcol, mrow+6, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, mcol, mrow+6, tuitest.MouseLeft, 0)
-	// space toggles the preview on the cursor's row. It opens one only when
-	// the drag opened none, and keys are read in order.
 	sendKeys(t, term, " ")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		txt := s.Text()
@@ -1849,8 +1632,6 @@ func TestRailQuickLook(t *testing.T) {
 		t.Fatalf("ASSERTION: a drag in the rail opened quick look, so space closed it: %v\n%s", err, term.Snapshot())
 	}
 
-	// The preview takes no key from the pane: once the rail lets go, keys
-	// reach the shell, and the preview is gone.
 	sendKeys(t, term, tuitest.Esc, tuitest.Esc)
 	railLists(t, term, "leaving the rail did not close the preview", nil, []string{"Quick look notes"})
 	enterTerminalMode(t, term)
@@ -1871,8 +1652,6 @@ func TestQuickLookMovesOnAResize(t *testing.T) {
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show main.go", []string{"main.go ", "package main", "8 lines"}, nil)
 
-	// panel is the panel's left column and width, read off its top frame,
-	// which holds the title.
 	panel := func(s tuitest.Screen) (x, w int, ok bool) {
 		const title = " main.go "
 		cols, rows := s.Size()
@@ -1893,8 +1672,6 @@ func TestQuickLookMovesOnAResize(t *testing.T) {
 		}
 		return 0, 0, false
 	}
-	// await waits for the panel to be on screen with cond true of it, and
-	// returns its place.
 	await := func(why string, cond func(x, w int) bool) (int, int) {
 		t.Helper()
 		var x, w int
@@ -1931,8 +1708,6 @@ func TestQuickLookMovesOnAResize(t *testing.T) {
 	}
 }
 
-// quickLookStart lists the quick look fixture in the rail, gives the rail
-// the keyboard and puts its cursor on the row named first.
 func quickLookStart(t *testing.T, first string, env []string, out *lockedBuffer) (*tuitest.Terminal, string) {
 	t.Helper()
 	term, dir := quickLookListed(t, env, out)
@@ -1940,7 +1715,6 @@ func quickLookStart(t *testing.T, first string, env []string, out *lockedBuffer)
 	return term, dir
 }
 
-// quickLookMenuPreview right-clicks the row named name and picks Preview.
 func quickLookMenuPreview(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	col, row, ok := findOnGrid(term.Screen(), name)
@@ -1957,16 +1731,12 @@ func quickLookMenuPreview(t *testing.T, term *tuitest.Terminal, name string) {
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 }
 
-// quickLookListed lists the quick look fixture in the rail and leaves the
-// keyboard with the panes, in window mode. The rail has not had it yet.
 func quickLookListed(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Terminal, string) {
 	t.Helper()
 	term, dir, _ := quickLookListedBase(t, env, out)
 	return term, dir
 }
 
-// quickLookListedBase is quickLookListed that also returns the client's config
-// base, for a test that installs a plugin.
 func quickLookListedBase(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Terminal, string, string) {
 	t.Helper()
 	opts := startOpts{cols: 140, rows: 40, env: env}
@@ -1976,8 +1746,6 @@ func quickLookListedBase(t *testing.T, env []string, out *lockedBuffer) (*tuites
 	return quickLookListedIn(t, "", opts)
 }
 
-// quickLookListedIn is quickLookListedBase with a config and a client of its
-// own size.
 func quickLookListedIn(t *testing.T, cfg string, opts startOpts) (*tuitest.Terminal, string, string) {
 	t.Helper()
 	dir := quickLookFixture(t)
@@ -1997,8 +1765,6 @@ func quickLookListedIn(t *testing.T, cfg string, opts startOpts) (*tuitest.Termi
 	return term, dir, base
 }
 
-// quickLookFocusRail gives the rail the keyboard and puts its cursor on the
-// row named first.
 func quickLookFocusRail(t *testing.T, term *tuitest.Terminal, first string) {
 	t.Helper()
 	sendKeys(t, term, "s")
@@ -2010,15 +1776,10 @@ func quickLookFocusRail(t *testing.T, term *tuitest.Terminal, first string) {
 	clickNoteGone(t, term)
 }
 
-// kittyPlaceRe is a kitty placement of a picture the previews uploaded.
 var kittyPlaceRe = regexp.MustCompile(`\x1b_Ga=p,i=(\d+),p=\d+,c=(\d+),r=(\d+),`)
 
-// quickLookRowLine is a row of the fixture's log with its line number.
 var quickLookRowLine = regexp.MustCompile(`(\d+)\s+row (\d+) x`)
 
-// quickLookTopRow waits for the log's rows to be on screen, each with its own
-// line number, and returns the first. A window joined in the wrong place, or
-// a line number that lost count, gives a row and a number that differ.
 func quickLookTopRow(t *testing.T, term *tuitest.Terminal, why string, ok func(row int) bool) int {
 	t.Helper()
 	top := 0
@@ -2041,8 +1802,6 @@ func quickLookTopRow(t *testing.T, term *tuitest.Terminal, why string, ok func(r
 	return top
 }
 
-// quickLookLitCells counts the cells of text on screen drawn on another ground
-// than the cells beside them.
 func quickLookLitCells(s tuitest.Screen, text string) int {
 	col, row, ok := findOnGrid(s, text)
 	if !ok {
@@ -2101,7 +1860,6 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	quickLookTopRow(t, term, "the log's first page", func(r int) bool { return r == 1 })
 	copiesFrame(t, term, "quick-look-log-start")
 
-	// J: half a page, with the list where it was.
 	sendKeys(t, term, "J")
 	half := quickLookTopRow(t, term, "J did not move half a page", func(r int) bool { return r > 1 })
 	if half < 5 {
@@ -2110,8 +1868,6 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	sendKeys(t, term, "K")
 	quickLookTopRow(t, term, "K did not come back", func(r int) bool { return r == 1 })
 
-	// Past what the preview holds, so the first window is let go. 5000 rows are
-	// about 1 MB. Each row stays beside its own number.
 	presses := 5000 / (half - 1)
 	sendKeys(t, term, strings.Repeat("J", presses))
 	far := quickLookTopRow(t, term, "J did not read on past the first window", func(r int) bool { return r == 1+presses*(half-1) })
@@ -2120,7 +1876,6 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	quickLookTopRow(t, term, "K did not read back to the start", func(r int) bool { return r == 1 })
 	t.Logf("%d presses reached row %d and came back", presses, far)
 
-	// Inside: plain keys act on the file, and d does not reach the rail.
 	sendKeys(t, term, tuitest.Tab)
 	railLists(t, term, "tab did not go inside", []string{"Inside the file", "back to files"}, nil)
 	sendKeys(t, term, "j")
@@ -2133,15 +1888,12 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	railLists(t, term, "d inside opened something", []string{"Inside the file"}, []string{"Delete"})
 	copiesFrame(t, term, "quick-look-log-inside")
 
-	// The end of the file, with no line number it cannot know, and back.
 	sendKeys(t, term, "G")
 	railLists(t, term, "G did not show the end of the file", []string{fmt.Sprintf("row %d x", quickLookLogLines), "Line about"}, nil)
 	copiesFrame(t, term, "quick-look-log-end")
 	sendKeys(t, term, "g")
 	quickLookTopRow(t, term, "g did not show the start of the file", func(r int) bool { return r == 1 })
 
-	// Search: first in the held text, then on through the file. The match a
-	// window read found comes with it, and N comes back.
 	sendKeys(t, term, "/", "row 5000 x", tuitest.Enter)
 	railLists(t, term, "the search did not find a row far down the file", []string{"row 5000 x", "n next"}, nil)
 	copiesFrame(t, term, "quick-look-log-search")
@@ -2150,7 +1902,6 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	}
 	sendKeys(t, term, "n")
 	railLists(t, term, "n past the last match did not say so", []string{"No more matches."}, nil)
-	// N goes back past what is held, through the machine's backward search.
 	sendKeys(t, term, "/", "row 7 x", tuitest.Enter)
 	railLists(t, term, "a search with no match ahead did not say so", []string{"/ row 7 x", "No more matches."}, nil)
 	sendKeys(t, term, "N")
@@ -2159,14 +1910,12 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	railLists(t, term, "a search that finds nothing did not say so", []string{"No more matches."}, nil)
 	sendKeys(t, term, tuitest.Esc)
 
-	// Go to a line: the count gives an exact number, and the rows agree with it.
 	sendKeys(t, term, tuitest.Tab, ":", "4321", tuitest.Enter)
 	quickLookTopRow(t, term, "go to a line did not show that line", func(r int) bool { return r == 4321 })
 	sendKeys(t, term, ":", "99999", tuitest.Enter)
 	railLists(t, term, "a line past the end did not say how many there are", []string{"The file has 6000 lines."}, []string{"NOT IN THE FILE"})
 	copiesFrame(t, term, "quick-look-log-goto")
 
-	// Wrap: a row of the log takes more than one row of the panel.
 	sendKeys(t, term, "g")
 	quickLookTopRow(t, term, "g did not go back", func(r int) bool { return r == 1 })
 	sendKeys(t, term, "w")
@@ -2180,7 +1929,6 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	copiesFrame(t, term, "quick-look-log-wrap")
 	sendKeys(t, term, "w")
 
-	// Back on the list: esc leaves the preview open, and j moves the list.
 	sendKeys(t, term, tuitest.Esc)
 	railLists(t, term, "esc did not come back to the list", []string{"go inside", "zzlong.log "}, []string{"Inside the file"})
 	sendKeys(t, term, "k")
@@ -2188,7 +1936,6 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	sendKeys(t, term, "j")
 	railLists(t, term, "j on the list did not come back", []string{"zzlong.log ", "go inside"}, nil)
 
-	// The wheel over the panel moves the file, with no key first.
 	col, row, ok := findOnGrid(term.Screen(), "row 3 x")
 	if !ok {
 		t.Fatalf("no row 3:\n%s", term.Snapshot())
@@ -2196,7 +1943,6 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	wheelAt(t, term, col, row, tuitest.MouseWheelDown, 2)
 	quickLookTopRow(t, term, "the wheel did not move the file", func(r int) bool { return r == 7 })
 
-	// f fills the area of the panes.
 	titleRow := func(s tuitest.Screen) int { _, r, _ := findOnGrid(s, " zzlong.log "); return r }
 	before := titleRow(term.Screen())
 	sendKeys(t, term, "f")
@@ -2223,9 +1969,6 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 func TestQuickLookEndShowsALongLastLine(t *testing.T) {
 	term := quickLookWrapStart(t)
 
-	// The short rows first, then the long line on a new open. w holds for the
-	// rest of an open, and only closing it gives the next file its own default
-	// (wrap, for a .txt), so the wrap-off half comes last.
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show zzzmany.txt", []string{"zzzmany.txt ", "row 001"}, nil)
 	sendKeys(t, term, tuitest.Tab)
@@ -2243,18 +1986,14 @@ func TestQuickLookEndShowsALongLastLine(t *testing.T) {
 	sendKeys(t, term, tuitest.Tab)
 	railLists(t, term, "tab did not go inside with wrap on", []string{"Inside the file", "cut lines"}, nil)
 
-	// The last line is 4, its first characters W00000.
 	sendKeys(t, term, "G")
 	quickLookShows(t, term, "quick-look-wrap-long-end", "G did not show the long last line",
 		[]string{"4  W00000"}, []string{"alpha one"})
 	sendKeys(t, term, "j")
 	railLists(t, term, "j past the end did not keep the long last line", []string{"4  W00000"}, []string{"alpha one"})
-	// k waits for the picture to hold the line before the last, so it needs the
-	// redraw bubbletea does after the j above, which moves nothing.
 	sendKeys(t, term, "k")
 	railLists(t, term, "k from the end did not show the line before the last", []string{"charlie three"}, []string{"bravo two"})
 
-	// Wrap off: the four lines fit, the long one cut.
 	cut := func(why string) {
 		t.Helper()
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -2276,10 +2015,6 @@ func TestQuickLookEndShowsALongLastLine(t *testing.T) {
 	alive(t, term, "after the end of a long last line")
 }
 
-// quickLookOnHost waits for the stream after mark to hold want, then for the
-// host to show one picture that place accepts, and returns it. A nil place
-// accepts any. hostPictures replays the stream by the rules a real kitty keeps:
-// see the ED 2 case there.
 func quickLookOnHost(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, mark int, want, why string, place func(shot.Image) bool) shot.Image {
 	t.Helper()
 	var pics []shot.Image
@@ -2332,7 +2067,6 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		for _, m := range kittyPlaceRe.FindAllStringSubmatch(out.String(), -1) {
 			cols, _ := strconv.Atoi(m[2])
 			rows, _ := strconv.Atoi(m[3])
-			// 64 x 32 pixels: a few cells at any cell size, never the panel.
 			if cols > 0 && cols <= 16 && rows > 0 && rows <= 8 {
 				id = m[1]
 			}
@@ -2343,10 +2077,7 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// Its own pixels fill the same box at either width, and the panel moves.
 	before := quickLookOnHost(t, term, out, 0, "", "pic.png before a resize", nil)
-	// kitty with its cursor hidden shows a picture only after one more write, so
-	// tuios sends an empty one. Real kitty's pixels are in NEGATIVE_CONTROLS.md.
 	if err := term.WaitFor(func(tuitest.Screen) bool {
 		s := out.String()
 		place := strings.LastIndex(s, "a=p,")
@@ -2367,7 +2098,6 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		t.Error("ASSERTION: a resize sent an ED 2 to a host with kitty graphics: that takes every picture off it")
 	}
 
-	// Another panel over the picture takes it down, and closing it puts it back.
 	sendKeys(t, term, tuitest.Ctrl('p'))
 	waitScreen(t, term, "the palette never opened over the preview", paletteTitle)
 	if err := term.WaitFor(func(tuitest.Screen) bool { return len(hostPictures(t, []byte(out.String()))) == 0 }, uiTimeout); err != nil {
@@ -2377,8 +2107,6 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 	sendKeys(t, term, tuitest.Esc)
 	quickLookOnHost(t, term, out, mark, "a=p,", "closing the palette did not bring pic.png back", nil)
 
-	// Larger than the panel: its box follows the height, and an earlier size
-	// comes back from what is already prepared.
 	sendKeys(t, term, "j")
 	railLists(t, term, "j did not move the preview to tall.png", []string{"tall.png ", "800 x 1100"}, nil)
 	short := quickLookOnHost(t, term, out, 0, "", "tall.png", func(p shot.Image) bool { return p.Cols > 16 })
@@ -2392,8 +2120,6 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		return p.Rows == short.Rows
 	})
 
-	// A drag of the window's edge: the picture waits for it to settle, and is
-	// not sent to the host at every step.
 	mark = len(out.String())
 	const steps = 30
 	for i := range steps {
@@ -2409,8 +2135,6 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 	_ = resize(140, 40)
 	waitScreen(t, term, "the preview after the burst", "tall.png ", "800 x 1100")
 
-	// A walk past what tuios leaves on the host. The host never holds more than
-	// the bound, and pic.png, freed on the way, shows again on the way back.
 	for i := range quickLookWalked {
 		mark = len(out.String())
 		sendKeys(t, term, "j")
@@ -2432,7 +2156,6 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		return p.Cols == before.Cols && p.Rows == before.Rows
 	})
 
-	// The report: a page of a PDF stays through a resize. It needs the reader.
 	if _, err := exec.LookPath("pdftoppm"); err != nil {
 		t.Log("no pdftoppm here: the PDF step is skipped")
 	} else {
@@ -2442,9 +2165,6 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		railLists(t, term, "j did not move the preview to zpage.pdf", []string{"zpage.pdf ", "PDF"}, nil)
 		page := quickLookOnHost(t, term, out, 0, "", "zpage.pdf", func(p shot.Image) bool { return p.Cols > 16 })
 		mark = resize(160, 40)
-		// The panel is centred on the screen and grows with it, so its left
-		// edge can stay where it was. The page is placed again at the new
-		// size, which moves it or widens it.
 		wider := quickLookOnHost(t, term, out, mark, erase, "a wider terminal took the PDF page off the host", func(p shot.Image) bool {
 			return p.Col != page.Col || p.Cols != page.Cols
 		})
@@ -2464,10 +2184,6 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 	alive(t, term, "after the kitty picture")
 }
 
-// quickLookWrapStart lists two texts in the rail, with the keyboard on the
-// second: zzwide.txt, three short lines and a last line of about 20 KB, taller
-// than the panel when it wraps, and zzzmany.txt, 80 short rows, more than the
-// panel holds.
 func quickLookWrapStart(t *testing.T) *tuitest.Terminal {
 	t.Helper()
 	term, dir := quickLookListed(t, []string{"TUIOS_KITTY_GRAPHICS=0"}, nil)
@@ -2489,7 +2205,6 @@ func quickLookWrapStart(t *testing.T) *tuitest.Terminal {
 	return term
 }
 
-// quickLookPDFStart lists a PDF of six pages in the rail, with the keyboard on it.
 func quickLookPDFStart(t *testing.T, env []string, out *lockedBuffer) (*tuitest.Terminal, string) {
 	t.Helper()
 	term, dir := quickLookListed(t, env, out)
@@ -2502,8 +2217,6 @@ func quickLookPDFStart(t *testing.T, env []string, out *lockedBuffer) (*tuitest.
 	return term, path
 }
 
-// quickLookPDFPage waits for a page of pagedPDF: its number in the panel, and its
-// own colour in the picture on the host.
 func quickLookPDFPage(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, page, pages int, why string) {
 	t.Helper()
 	railLists(t, term, why, []string{fmt.Sprintf("Page %d of %d", page, pages)}, []string{"Reading"})
@@ -2556,7 +2269,6 @@ func TestQuickLookTurnsPDFPages(t *testing.T) {
 	wheelAt(t, term, col+20, row+10, tuitest.MouseWheelUp, 1)
 	shows(1, "the wheel did not turn the page back")
 
-	// A click on the bar goes to the page under it, and the preview stays open.
 	col, row, ok = findOnGrid(term.Screen(), "Page 1  ")
 	if !ok {
 		t.Fatalf("no bar:\n%s", term.Snapshot())
@@ -2564,7 +2276,6 @@ func TestQuickLookTurnsPDFPages(t *testing.T) {
 	mouseClick(t, term, col+50, row, tuitest.MouseLeft, 0)
 	railLists(t, term, "a click on the bar did not turn the page", []string{"zzbook.pdf "}, []string{"Page 1 of 6"})
 
-	// Inside: plain keys turn pages, and : goes to one.
 	sendKeys(t, term, tuitest.Tab, "G")
 	shows(6, "G did not go to the last page")
 	sendKeys(t, term, "j")
@@ -2579,14 +2290,11 @@ func TestQuickLookTurnsPDFPages(t *testing.T) {
 	railLists(t, term, "a page past the end did not say how many there are", []string{"The file has 6 pages.", "Page 4 of 6"}, nil)
 	saveCockpitFrames(t, term, "quick-look-pdf-past-end", hostPictures(t, []byte(out.String()))...)
 
-	// The page next to the one shown is read ahead, so it shows with the file empty.
-	// Closing lets go of the pages, so only the one read ahead now is held.
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not close the preview", nil, []string{"Page 4 of 6"})
 	sendKeys(t, term, " ")
 	shows(1, "the preview did not open on the first page again")
-	time.Sleep(2 * time.Second) // nothing on the screen says the read ahead ended
-	// Empty, not removed: a removed file takes its row and the preview with it.
+	time.Sleep(2 * time.Second)
 	if err := os.Truncate(path, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -2597,7 +2305,6 @@ func TestQuickLookTurnsPDFPages(t *testing.T) {
 	sendKeys(t, term, "K")
 	shows(2, "a page that cannot be read stopped the keys")
 
-	// A read that fails before any tool runs is still a page, and K still works.
 	if os.Geteuid() != 0 {
 		if err := os.Chmod(path, 0); err != nil {
 			t.Fatal(err)
@@ -2626,12 +2333,8 @@ func TestQuickLookPDFWordsAt16Colours(t *testing.T) {
 	saveCockpitFrames(t, term, "quick-look-pdf-words-16")
 }
 
-// quickLookFilmSeconds is the length of quickLookFilmStart's film.
 const quickLookFilmSeconds = 20
 
-// quickLookFilmStart lists a film in the rail, with the keyboard on it. Its colour
-// follows the time, so a test can tell which frame it was sent, and every frame is a
-// key frame, so the frame is the one asked for.
 func quickLookFilmStart(t *testing.T, env []string, out *lockedBuffer) *tuitest.Terminal {
 	t.Helper()
 	term, dir := quickLookListed(t, env, out)
@@ -2641,7 +2344,6 @@ func quickLookFilmStart(t *testing.T, env []string, out *lockedBuffer) *tuitest.
 	return term
 }
 
-// quickLookMakeFilm writes the film. See quickLookFilmStart.
 func quickLookMakeFilm(t *testing.T, path string) {
 	t.Helper()
 	ff, err := exec.LookPath("ffmpeg")
@@ -2657,7 +2359,6 @@ func quickLookMakeFilm(t *testing.T, path string) {
 	}
 }
 
-// quickLookFilmPicture is the main frame on the host: the largest picture.
 func quickLookFilmPicture(pics []shot.Image) (shot.Image, bool) {
 	var best shot.Image
 	for _, p := range pics {
@@ -2668,8 +2369,6 @@ func quickLookFilmPicture(pics []shot.Image) (shot.Image, bool) {
 	return best, best.Pixels != nil
 }
 
-// quickLookFilmAt waits for a position: the clock in the bar, and the frame of that
-// second on the host.
 func quickLookFilmAt(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, seconds int, why string) {
 	t.Helper()
 	railLists(t, term, why, []string{fmt.Sprintf("0:%02d  ", seconds)}, []string{"Reading"})
@@ -2682,7 +2381,6 @@ func quickLookFilmAt(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, se
 		}
 		b := p.Pixels.Bounds()
 		r, _, _, _ := p.Pixels.At(b.Min.X+b.Dx()/2, b.Min.Y+b.Dy()/2).RGBA()
-		// The red channel rises with Cr, so the frame says its own time.
 		got = float64(r >> 8)
 		return got >= 0 && quickLookFilmSecond(got) >= float64(seconds)-0.7 && quickLookFilmSecond(got) <= float64(seconds)+1.7
 	}, uiTimeout); err != nil {
@@ -2690,8 +2388,6 @@ func quickLookFilmAt(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, se
 	}
 }
 
-// quickLookFilmSecond turns a frame's red channel into its time: Y 60, Cb 255, and Cr
-// from 107 to 235 over the film, through BT.601. Video range stops Cr at 240.
 func quickLookFilmSecond(red float64) float64 {
 	cr := (red-(60-16)*1.164)/1.596 + 128
 	return (cr - 107) * quickLookFilmSeconds / 128
@@ -2727,7 +2423,6 @@ func TestQuickLookMovesInAFilm(t *testing.T) {
 	wheelAt(t, term, col+20, row+10, tuitest.MouseWheelUp, 5)
 	at(1, "the wheel did not move back")
 
-	// A click on the bar, then a drag. The drag goes on outside the track.
 	col, row, ok = findOnGrid(term.Screen(), "0:01  ")
 	if !ok {
 		t.Fatalf("no bar:\n%s", term.Snapshot())
@@ -2740,14 +2435,12 @@ func TestQuickLookMovesInAFilm(t *testing.T) {
 	railLists(t, term, "a drag on the bar did not seek", []string{"zzfilm.mp4 "}, []string{pressed, "Reading"})
 	held := clock.FindString(term.Snapshot())
 	mouseRelease(t, term, col+70, row, tuitest.MouseLeft, 0)
-	// A later drag that did not start on the bar leaves the position alone.
 	mousePress(t, term, col+10, row-5, tuitest.MouseLeft, 0)
 	mouseMotion(t, term, col+20, row-5, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, col+20, row-5, tuitest.MouseLeft, 0)
 	time.Sleep(300 * time.Millisecond)
 	railLists(t, term, "a drag after the release went on seeking", []string{"zzfilm.mp4 ", held}, []string{"Reading"})
 
-	// Inside: plain keys move in seconds.
 	sendKeys(t, term, tuitest.Tab, "g")
 	railLists(t, term, "tab did not go inside", []string{"Inside the file", "j k 1 second"}, nil)
 	at(0, "g did not go to the start")
@@ -2762,7 +2455,6 @@ func TestQuickLookMovesInAFilm(t *testing.T) {
 	sendKeys(t, term, "G")
 	at(19, "G did not go to the end")
 
-	// The filmstrip: seven small frames, across the film, and they go when asked.
 	sendKeys(t, term, "t")
 	var pics []shot.Image
 	if err := term.WaitFor(func(tuitest.Screen) bool {
@@ -2792,7 +2484,6 @@ func TestQuickLookMovesInAFilm(t *testing.T) {
 	alive(t, term, "after moving in a film")
 }
 
-// quickLookStripOnHost is the main frame and the seven small ones.
 const quickLookStripOnHost = 8
 
 // TestQuickLookFilmAtEachDepth is a film on hosts with no kitty graphics. At 256
@@ -2805,7 +2496,7 @@ func TestQuickLookFilmAtEachDepth(t *testing.T) {
 		railLists(t, term, "the film did not show", []string{"zzfilm.mp4 ", "0:01  "}, []string{"cannot draw"})
 		sendKeys(t, term, "J", "t")
 		railLists(t, term, "J did not move", []string{"0:02  "}, []string{"Reading"})
-		time.Sleep(3 * time.Second) // nothing on the screen says the filmstrip ended
+		time.Sleep(3 * time.Second)
 		saveCockpitFrames(t, term, "quick-look-film-256")
 	})
 	t.Run("16", func(t *testing.T) {
@@ -2818,7 +2509,6 @@ func TestQuickLookFilmAtEachDepth(t *testing.T) {
 	})
 }
 
-// quickLookSpinGIF is a GIF of n frames, each a flat colour of its own.
 func quickLookSpinGIF(t *testing.T, n int) []byte {
 	t.Helper()
 	all := &gif.GIF{}
@@ -2905,7 +2595,6 @@ func TestQuickLookShowsEachKindOfFile(t *testing.T) {
 	if !hok || !cok || hc != cc {
 		t.Errorf("ASSERTION: the column is not lined up: region at %d, its cell at %d\n%s", hc, cc, term.Snapshot())
 	}
-	// A number ends where its header ends.
 	sc, _, sok := findOnGrid(term.Screen(), "score")
 	nc, _, nok := findOnGrid(term.Screen(), "0.5")
 	if !sok || !nok || sc+5 != nc+3 {
@@ -3033,13 +2722,9 @@ func TestQuickLookReadsRichMarkdown(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(plug, "bin", "sketch"), []byte("#!/bin/sh\ncat >/dev/null\necho '"+fakeCells+"'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The folder holds its program, so the build step does not run: it
-	// builds from the sketch module of the repository, which a copy lacks.
 	if out, err := tuiosCLI(t, base, "plugins", "install", plug, "--yes", "--no-build"); err != nil {
 		t.Fatalf("install the plugin: %v\n%s", err, out)
 	}
-	// The install writes config.toml, and the reload puts the rail back as the
-	// file has it, so the rail is opened again.
 	waitFor(t, term, "the reload to hide the rail", func(s tuitest.Screen) bool {
 		_, _, ok := findOnGrid(s, "main.go")
 		return !ok
@@ -3080,9 +2765,6 @@ The secret body.
 	railLists(t, term, "the document did not read as Markdown",
 		[]string{"Rich title", "bold", "Warning", "Mind the step.", "[1]", "1. The note text.", "More words", "Image: a logo", "picture / text", "show the source"},
 		[]string{"<h2", "<b>", "</", "[!WARNING]", "[^one]", "[site]", "hidden", "The secret body.", "```", "flowchart", "-->", "PLUGIN-DREW", "Start", "Stop"})
-	// On a host with kitty graphics the diagram is a picture on the rows
-	// under its header. A click on "text" in the header draws it as text, as
-	// in the thread.
 	row := rowWith(term.Screen(), "picture / text")
 	waitPlaced(t, term, host, func(p hostPlace) bool { return p.row == row+1 && p.rows > 0 })
 	saveCockpitFrames(t, term, "quick-look-rich-markdown", hostPictures(t, []byte(host.String()))...)
@@ -3091,7 +2773,6 @@ The secret body.
 	railLists(t, term, "ASSERTION: a click on text draws the diagram as text", []string{"Start", "Stop", "picture / text"}, []string{"flowchart"})
 	saveCockpitFrames(t, term, "quick-look-rich-markdown-text")
 	pause(t, "a click, not a double click", time.Second)
-	// A click on the diagram's header shows its source, as in the thread.
 	row = rowWith(term.Screen(), "show the source")
 	if row < 0 {
 		t.Fatalf("ASSERTION: the diagram has no header that offers its source\n%s", term.Snapshot())
@@ -3104,17 +2785,11 @@ The secret body.
 	alive(t, term, "after rich Markdown")
 }
 
-// Kitty commands for the pictures the previews send: an upload, a free (the
-// uppercase delete, which drops the image data) and an unplace (the lowercase
-// one, which keeps it).
 var (
 	kittyUploadRe = regexp.MustCompile(`\x1b_Ga=t,(?:[^;,]*,)*?i=(\d+)[,;]`)
 	kittyFreeRe   = regexp.MustCompile(`\x1b_Ga=d,d=I,i=(\d+)[,;]`)
 )
 
-// previewIDs is every id in the stream matched by re, within the range of
-// ids tuios gives its preview pictures, in order of first use, with the
-// number of times each was matched.
 func previewIDs(re *regexp.Regexp, stream string) ([]uint64, map[uint64]int) {
 	var order []uint64
 	n := map[uint64]int{}
@@ -3144,7 +2819,6 @@ func TestQuickLookFreesThePicturesItLeaves(t *testing.T) {
 	const pictures, kept = 80, 64
 	out := &lockedBuffer{}
 	term, dir := quickLookListed(t, nil, out)
-	// '-' sorts before 'i': the pictures list between notes.md and pic.png.
 	for i := range pictures {
 		img := image.NewRGBA(image.Rect(0, 0, 24, 12))
 		c := color.RGBA{uint8(i * 3), uint8(255 - i*3), uint8(i * 7), 255}
@@ -3164,7 +2838,6 @@ func TestQuickLookFreesThePicturesItLeaves(t *testing.T) {
 	waitForAll(t, term, uiTimeout, "the pictures in the listing", "p-00.png")
 	quickLookFocusRail(t, term, "p-00.png")
 
-	// One row at a time, each step waiting for the new picture's placement.
 	shown := make([]uint64, 0, pictures)
 	off := 0
 	for i := range pictures {
@@ -3195,8 +2868,6 @@ func TestQuickLookFreesThePicturesItLeaves(t *testing.T) {
 	}
 	railLists(t, term, "the walk did not end on p-79.png", []string{"p-79.png", "24 x 12"}, []string{"64 x 32"})
 
-	// The frees for the last pictures forgotten go out with the frame that
-	// shows the next picture; give that frame a moment to land.
 	var stream string
 	var sent, freed []uint64
 	var frees map[uint64]int
@@ -3223,7 +2894,6 @@ func TestQuickLookFreesThePicturesItLeaves(t *testing.T) {
 		t.Errorf("ASSERTION: %d pictures are still in the terminal after quick look showed %d, want at most %d", live, pictures, kept)
 	}
 
-	// The picture on screen is not freed, and its last placement stands.
 	cur := strconv.FormatUint(shown[len(shown)-1], 10)
 	place := strings.LastIndex(stream, "\x1b_Ga=p,i="+cur+",")
 	unplace := strings.LastIndex(stream, "\x1b_Ga=d,d=i,i="+cur+",")
@@ -3236,7 +2906,6 @@ func TestQuickLookFreesThePicturesItLeaves(t *testing.T) {
 		t.Logf("the picture on screen (id %s) is placed and not freed", cur)
 	}
 
-	// Each freed picture is freed once.
 	again := 0
 	for _, id := range freed {
 		if frees[id] > 1 {
@@ -3250,8 +2919,6 @@ func TestQuickLookFreesThePicturesItLeaves(t *testing.T) {
 	alive(t, term, "after the walk")
 }
 
-// hostHeldPictures is how many pictures a host holds after stream, placed or
-// not, by the rules hostPictures keeps.
 func hostHeldPictures(stream string) int {
 	held := map[uint32]bool{}
 	for _, m := range placedAPC.FindAllStringSubmatch(stream, -1) {
@@ -3270,9 +2937,6 @@ func hostHeldPictures(stream string) int {
 	return len(held)
 }
 
-// clickNoteGone waits out the note a ctrl+click on a file row leaves: the
-// click copies the row's path. The frames start clean, and a note seen after
-// that comes from the key under test, not from the click.
 func clickNoteGone(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.WaitForText("Copied the path.", uiTimeout); err != nil {
@@ -3281,7 +2945,6 @@ func clickNoteGone(t *testing.T, term *tuitest.Terminal) {
 	railLists(t, term, "the note of the click stayed", nil, []string{"Copied the path."})
 }
 
-// quadrantCells counts the quadrant glyphs on screen (U+2596..U+259F).
 func quadrantCells(s tuitest.Screen) int {
 	n := 0
 	cols, rows := s.Size()
@@ -3295,7 +2958,6 @@ func quadrantCells(s tuitest.Screen) int {
 	return n
 }
 
-// pictureColours counts the colours of the block glyph cells on screen.
 func pictureColours(s tuitest.Screen) int {
 	seen := map[tuitest.Color]bool{}
 	cols, rows := s.Size()
@@ -3323,7 +2985,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "alpha", "needle.txt"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// More files than the share holds, so the listing ends in a count.
 	for i := range 30 {
 		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("extra%02d.txt", i)), nil, 0o644); err != nil {
 			t.Fatal(err)
@@ -3332,10 +2993,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	cfg := strings.Replace(railConfig(28), "[appearance.sidebar]\n",
 		"[appearance.sidebar]\nsections = \""+layout+"\"\n", 1)
 	term, base := railClient(t, "e2e", cfg, startOpts{cols: 120, rows: 40})
-	// An agent pane for the agents section, and plain panes for the terminals
-	// section, because the rail lists an agent pane only under agents. Seven plain
-	// panes make terminals compete with files for lines, which is when the share
-	// shows.
 	renameWindow(t, term, "WAITING")
 	if out, err := tuiosCLI(t, base, "set-agent-state", "needs_input", "-s", "e2e", "-w", "WAITING"); err != nil {
 		t.Fatalf("set-agent-state: %v\n%s", err, out)
@@ -3348,7 +3005,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
 	leaveTerminalMode(t, term)
 
-	// The section is shut, and the footer control is the only "files" on the rail.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return railRowOf(s, "agents") >= 0 && railRowOf(s, "alpha/") < 0
 	}, uiTimeout); err != nil {
@@ -3368,10 +3024,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 		terminals, listing, agents := railRowOf(s, "terminals"), railRowOf(s, "alpha/"), railRowOf(s, "agents")
 		return terminals >= 0 && terminals < listing && listing < agents
 	}
-	// The header is left out: a section the switch opened carries a close
-	// control there, which a section the layout names does not, and the path
-	// beside it is cut to the room that leaves. Both are checked on their own
-	// below.
 	railText := func(s tuitest.Screen) string {
 		_, rows := s.Size()
 		header := filesHeaderRow(s)
@@ -3392,9 +3044,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	}
 	railShot(t, term, "files-open")
 	const withFiles = "sessions:25,terminals,files:25,agents:34"
-	// The switch saves config.toml, as the section editor does. The file is
-	// read and not get-config: the set-config calls below make a session
-	// override, which get-config reports first.
 	sectionsAre := func(want, why string) {
 		t.Helper()
 		waitFileHas(t, configPathIn(base), why, uiTimeout, func(s string) bool {
@@ -3408,9 +3057,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	}
 	sectionsAre(withFiles, "the click on files did not save the layout with files")
 
-	// On a rail short enough that the sections compete for lines, the opened
-	// section draws what the same section draws when the layout names it. That
-	// holds its place and its share to the default layout.
 	if err := term.Resize(120, 20); err != nil {
 		t.Fatalf("resize: %v", err)
 	}
@@ -3431,8 +3077,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 			t.Fatalf("set-config %s: %v\n%s", sections, err, out)
 		}
 	}
-	// A layout that looks different first, so the match below is a new frame and
-	// not the frame already on screen.
 	setLayout("sessions:25,agents:34")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, "terminals") < 0 }, uiTimeout); err != nil {
 		t.Fatalf("the rail never took the layout with no terminals: %v\n%s", err, term.Snapshot())
@@ -3447,8 +3091,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	if err := term.Resize(120, 40); err != nil {
 		t.Fatalf("resize: %v", err)
 	}
-	// extra05 only fits on the tall rail, so the footer below is read from the
-	// frame drawn at this height.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return placed(s) && railRowOf(s, "extra05") >= 0
 	}, uiTimeout); err != nil {
@@ -3461,7 +3103,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	}
 	sectionsAre(layout, "the second click did not save the layout without files")
 
-	// File search reaches the section the same way.
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "f"); err != nil {
 		t.Fatal(err)
@@ -3492,7 +3133,6 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// With no terminals in the layout, the section goes after sessions.
 	if out, err := tuiosCLI(t, base, "set-config", "appearance.sidebar.sections", "sessions:25,agents:34", "-s", "e2e"); err != nil {
 		t.Fatalf("set-config: %v\n%s", err, out)
 	}
@@ -3506,21 +3146,9 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	alive(t, term, "after opening the files section on demand")
 }
 
-// quickLookWrapOpen writes name into its own listing of the quick look fixture,
-// opens it with space and goes inside with tab. It returns the file's lines.
-//
-// zzwrap.txt wraps when it opens. Its line 1 is wide characters, 2 cells each.
-// Its line 2 is a Latin letter with a halfwidth sound mark, one cell to the
-// panel, sixty times, then ASCII to 200 cells. Its line 3 is ASCII alone. Lines
-// 4 to 102 are short, so the gutter takes 3 digits.
-//
-// zzwrap.go does not wrap when it opens. Its line 2 wraps at least twice with w,
-// and its return is on a later row.
 func quickLookWrapOpen(t *testing.T, name string) (*tuitest.Terminal, []string) {
 	t.Helper()
 	var text strings.Builder
-	// 321 characters, 642 cells: at the code column of 81 cells that is 8 rows
-	// by cells, but 9 rows of whole characters, 40 to a row.
 	text.WriteString(strings.Repeat("〇一二三四五六七八九", 32))
 	text.WriteString("〇\n")
 	text.WriteString(strings.Repeat("qﾟ", 60))
@@ -3554,16 +3182,11 @@ func quickLookWrapOpen(t *testing.T, name string) (*tuitest.Terminal, []string) 
 	return term, strings.Split(strings.TrimSuffix(files[name], "\n"), "\n")
 }
 
-// quickLookLineRows returns the code cells of line n's rows in the quick look
-// panel: the screen rows from the row whose gutter shows n to the row before the
-// next numbered row, each cut to the code column. It is nil until line n and
-// the number after it are on screen.
 func quickLookLineRows(s tuitest.Screen, n int) [][]tuitest.Cell {
 	cols, rows := s.Size()
 	num := strconv.Itoa(n) + "  "
 	for r := range rows {
 		for b := range cols {
-			// The panel's left frame, blanks, the number and two blanks.
 			if s.Cell(b, r).Content != "│" {
 				continue
 			}
@@ -3575,8 +3198,6 @@ func quickLookLineRows(s tuitest.Screen, n int) [][]tuitest.Cell {
 				continue
 			}
 			x := d + len(num)
-			// The code column ends two cells before the right frame: a blank
-			// and the scroll bar's column sit between them.
 			top := r
 			for top > 0 && s.Cell(b, top).Content != "╭" {
 				top--
@@ -3637,8 +3258,6 @@ func TestQuickLookWrapsWideCharactersWhole(t *testing.T) {
 		if len(counts) == 0 || len(ellipses) > 0 || strings.Join(shown, "") != lines[0] {
 			return false
 		}
-		// Every row but the last is full: the same count of wide characters,
-		// as many as the code column holds. A row cut short holds fewer.
 		for _, n := range counts[:len(counts)-1] {
 			if n != counts[0] {
 				return false
@@ -3662,7 +3281,6 @@ func TestQuickLookWrapsWideCharactersWhole(t *testing.T) {
 			len(counts), counts, ellipses, missing, len(want), err, term.Snapshot())
 	}
 
-	// Wrap off: the line is cut at the edge, and the lines after it show.
 	sendKeys(t, term, "w")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		rows := quickLookLineRows(s, 1)
@@ -3713,9 +3331,6 @@ func TestQuickLookWrapsSoundMarksWhole(t *testing.T) {
 			case last == "…":
 				ellipses = append(ellipses, i)
 			}
-			// Row 0 is the sixty letters with their marks and 21 ASCII, 81
-			// cells; row 1 is 81 ASCII. Each fills the code column to its
-			// last cell.
 			if i < len(rows)-1 && len(row) > 0 && strings.TrimSpace(row[len(row)-1].Content) == "" {
 				short = append(short, i)
 			}
@@ -3726,7 +3341,6 @@ func TestQuickLookWrapsSoundMarksWhole(t *testing.T) {
 			got.Len(), want.Len(), got.String(), ellipses, empty, short, err, term.Snapshot())
 	}
 
-	// The ASCII line wraps whole.
 	var line3 string
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		var b strings.Builder
@@ -3751,8 +3365,6 @@ func TestQuickLookWrapsSoundMarksWhole(t *testing.T) {
 // keyword's colour must differ from the plain identifier s's.
 func TestQuickLookWrapKeepsColours(t *testing.T) {
 	term, _ := quickLookWrapOpen(t, "zzwrap.go")
-	// at is the cells of word on the rows, after the rows before from: its row
-	// and its first cell, or -1.
 	at := func(rows [][]tuitest.Cell, from int, word string) (int, int) {
 		for i := from; i < len(rows); i++ {
 			for c := 0; c+len(word) <= len(rows[i]); c++ {
@@ -3767,7 +3379,6 @@ func TestQuickLookWrapKeepsColours(t *testing.T) {
 		}
 		return -1, -1
 	}
-	// The highlight is there before w: line 1's return is not drawn plain.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		one, two := quickLookLineRows(s, 1), quickLookLineRows(s, 2)
 		kr, kc := at(one, 0, "return")
@@ -3839,7 +3450,6 @@ func TestQuickLookCopyModeSelectsAndCopies(t *testing.T) {
 	if got := rawWrite(t, term, out, from, "w v e y"); got != "beta" {
 		t.Fatalf("w v e y copied %q, want %q", got, "beta")
 	}
-	// A yank keeps copy mode, as over a pane, and q leaves it.
 	sendKeys(t, term, "q")
 	railLists(t, term, "q did not end copy mode", []string{"Inside the file", "select"}, nil)
 

@@ -8,14 +8,12 @@ import (
 	"tuios.dev/shot"
 )
 
-// simpleShot saves the frame as text and as a PNG drawn by tuios.dev/shot.
 func simpleShot(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	saveFrame(t, term, name)
 	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), name)
 }
 
-// paneCount counts the panes on screen by their top-left corners.
 func paneCount(s tuitest.Screen) int {
 	return strings.Count(s.Text(), "╭")
 }
@@ -33,7 +31,6 @@ func TestSimpleProfile(t *testing.T) {
 	term := startIn(t, base, startOpts{})
 	waitBoot(t, term)
 
-	// The button row, on the last row of the screen.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		_, rows := s.Size()
 		return screenHas(tuitest.Screen(s), "Menu", "New", "Split", "Settings") && strings.Contains(s.Line(rows-1), "Settings")
@@ -45,7 +42,6 @@ func TestSimpleProfile(t *testing.T) {
 		t.Fatalf("the New button opened no pane: %v\n%s", err, term.Snapshot())
 	}
 
-	// Typing reaches the shell at once: there is no mode to enter.
 	if err := term.SendKeys("echo SIMPLE$((40+2))\r"); err != nil {
 		t.Fatalf("type: %v", err)
 	}
@@ -54,7 +50,6 @@ func TestSimpleProfile(t *testing.T) {
 	}
 	simpleShot(t, term, "simple-typing")
 
-	// The Menu button opens the short menu, and a row runs its action.
 	clickDockWord(t, term, "Menu")
 	waitMenu(t, term, "the Menu button", "New terminal", "All commands", "Help")
 	simpleShot(t, term, "simple-menu")
@@ -71,7 +66,6 @@ func TestSimpleProfile(t *testing.T) {
 		t.Fatalf("New terminal in the menu opened no pane: %v\n%s", err, term.Snapshot())
 	}
 
-	// A workspace is a tab.
 	r, l := dockRowWith(t, term, "Menu")
 	_ = l
 	mouseClick(t, term, 3, r, tuitest.MouseRight, 0)

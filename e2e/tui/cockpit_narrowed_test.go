@@ -59,7 +59,6 @@ func TestCockpitNarrowedListSaysSoAndEscShowsAll(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "cockpit-esc-shows-all")
 
-	// A selector, then an empty search, shows every agent again.
 	search("name:docs-cli")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return fleetRowWith(s, "scratch") < 0 && screenHas(s, "1 of 12 agents")

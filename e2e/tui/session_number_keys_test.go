@@ -10,9 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// workspaceNameIn is the name the daemon holds for workspace ws of session
-// sess, read through list-workspaces so the test sees daemon state and not the
-// client's copy.
 func workspaceNameIn(t *testing.T, base, sess string, ws int) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-workspaces", "--json", "--session", sess)
@@ -69,8 +66,6 @@ rename_workspace = ["f6"]
 	windowManagementMode(t, term)
 	enterTerminalMode(t, term)
 
-	// switch_session_N is terminal-safe, like next_session, so the chord works
-	// while a shell has the keys.
 	if err := term.SendKeys(tuitest.Alt('C')); err != nil {
 		t.Fatalf("send switch_session_3: %v", err)
 	}
@@ -87,7 +82,7 @@ rename_workspace = ["f6"]
 	}
 
 	windowManagementMode(t, term)
-	if err := term.SendKeys("\x1b[17~"); err != nil { // F6
+	if err := term.SendKeys("\x1b[17~"); err != nil {
 		t.Fatalf("send rename_workspace: %v", err)
 	}
 	if err := term.WaitForText("rename workspace 1", uiTimeout); err != nil {
@@ -140,8 +135,6 @@ switch_session_5 = ["alt+shift+e"]
 	repo := testutil.GitRepo(t)
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
 
-	// Each plain session starts outside any repository: this suite can run
-	// inside a git worktree of tuios, and a session made there would group too.
 	plain := t.TempDir()
 	for _, args := range [][]string{
 		{"new", "loose", "--detach"},
@@ -164,8 +157,6 @@ switch_session_5 = ["alt+shift+e"]
 	windowManagementMode(t, term)
 	enterTerminalMode(t, term)
 
-	// The rail draws the space first, then the rest with the repository's
-	// sessions together. The number on each row counts down that order.
 	rows := []string{"1 filed", "2 loose", "3 ", "4 ", "5 notes"}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return railRowsIncreasing(spaceRailRows(s, rows...)) &&

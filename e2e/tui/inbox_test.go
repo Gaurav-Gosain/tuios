@@ -28,7 +28,6 @@ func TestInboxBringsAnotherSessionsAgentToYou(t *testing.T) {
 		t.Fatalf("set-agent-state in the other session: %v\n%s", err, out)
 	}
 
-	// The dock names the session, because the pane is not on screen.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "e2e-fan:") && strings.Contains(text, "needs approval")
@@ -37,13 +36,11 @@ func TestInboxBringsAnotherSessionsAgentToYou(t *testing.T) {
 	}
 	saveFrame(t, term, "inbox-dock")
 
-	// The command line sees the same queue.
 	out, err := tuiosCLI(t, base, "list-attention")
 	if err != nil || !strings.Contains(out, "Approvals") || !strings.Contains(out, "approve Bash: go test ./...") {
 		t.Fatalf("list-attention does not list the approval: %v\n%s", err, out)
 	}
 
-	// The leader chord opens the Inbox, grouped in words.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
@@ -56,7 +53,6 @@ func TestInboxBringsAnotherSessionsAgentToYou(t *testing.T) {
 	}
 	saveFrame(t, term, "inbox-open")
 
-	// Enter goes there: the client switches to the other session.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("go to the item: %v", err)
 	}
@@ -82,7 +78,6 @@ func TestInboxBringsAnotherSessionsAgentToYou(t *testing.T) {
 	}
 	saveFrame(t, term, "inbox-jumped")
 
-	// The agent moves on, and the item goes by itself.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-fan", "working"); err != nil {
 		t.Fatalf("set-agent-state working: %v\n%s", err, out)
 	}

@@ -47,7 +47,7 @@ func TestCockpitPeekClosesOnAClick(t *testing.T) {
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	waitText(t, term, "two agents asking", "2 needs you")
 	time.Sleep(answerSettle)
-	const peek = "1-3 choose" // the peek's key line
+	const peek = "1-3 choose"
 	sendKeys(t, term, "j")
 	_ = term.WaitStable(2 * time.Second)
 	sendKeys(t, term, " ")

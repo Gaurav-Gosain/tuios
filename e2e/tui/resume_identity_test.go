@@ -47,7 +47,6 @@ func TestRestoredShellKeepsTerminalIdentity(t *testing.T) {
 	const name = "e2e-resumeident"
 	mustCLI(t, base, "new", name, "--detach")
 	term := attachIn(t, base, name, startOpts{cols: 120, rows: 30, env: []string{"TUIOS_KITTY_GRAPHICS=1"}})
-	// The attach is what records the host's graphics on the session.
 	enterTerminalMode(t, term)
 	_ = term.Close()
 

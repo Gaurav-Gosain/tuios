@@ -12,43 +12,13 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// hostOpen and hostShut are the fold marks a machine's header wears on the
-// rail, open and folded, in the glyph set the harness's terminal draws.
 const (
 	hostOpen = "▾"
 	hostShut = "▸"
 )
 
-// hostPollActive mirrors hostRefreshActive in internal/app: the cadence the
-// rail polls the daemon for hosts at while it is on screen. A test that waits
-// out a poll waits this long.
 const hostPollActive = 5 * time.Second
 
-// This is federation stage 1 driven the way a user reaches it: a real config
-// file with a [hosts] table, a real daemon, a real ssh subprocess, the real
-// stdio proxy, and the real rail.
-//
-// The ssh stand-in below is why this can run at all. It drops ssh's options and
-// the address and runs the command locally, so the link goes out through the
-// same subprocess transport, the same framing and the same proxy that a real
-// ssh would carry, and reaches this test's own daemon instead of a machine
-// somewhere. Nothing here reads the developer's ssh config, known_hosts or
-// agent, and no network connection is made.
-//
-// The link loops back to this test's own daemon. A daemon refuses a link
-// socket connection from a process it started (see linkFromPane in
-// internal/session), and a real loopback link is started by sshd, not by the
-// daemon. So the stand-in does not run the command itself: it relays its
-// stdio to startSSHRelay in the test process, which runs the command there.
-// Only the link's command goes there: an interactive session (--ssh) needs
-// the terminal and dials the daemon's own socket, so it runs as before.
-//
-// The command runs through `sh -c` on the joined words, which is what sshd
-// does on the far side: the command reaches a shell as one string and the
-// shell re-parses it. That is what lets the link's own probe for the tuios
-// binary, which is a quoted shell script, run here the way it runs over ssh.
-
-// writeFakeSSH puts an ssh stand-in in dir and returns its path.
 func writeFakeSSH(t *testing.T, dir string) string {
 	t.Helper()
 	path := filepath.Join(dir, "fake-ssh")
@@ -62,13 +32,10 @@ func writeFakeSSH(t *testing.T, dir string) string {
 		"    *) break ;;\n" +
 		"  esac\n" +
 		"done\n" +
-		"shift\n" + // the address
-		// The command runs under startSSHRelay, outside the daemon, the way
-		// sshd runs it outside the daemon on a real machine.
+		"shift\n" +
 		"case \"$*\" in\n" +
 		"  *stdio-proxy*) TUIOS_E2E_RELAY_CMD=\"$*\" exec env " + relaySockEnv + "=" + startSSHRelay(t) + " " + testBinary(t) + " -test.run='^$' ;;\n" +
 		"esac\n" +
-		// An interactive session (--ssh) needs the terminal, so it runs here.
 		"exec /bin/sh -c \"$*\"\n"
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatalf("write the ssh stand-in: %v", err)
@@ -76,8 +43,6 @@ func writeFakeSSH(t *testing.T, dir string) string {
 	return path
 }
 
-// writeHostsConfig writes a config file naming one reachable host and one that
-// cannot be reached.
 func writeHostsConfig(t *testing.T, base, tuiosPath string) {
 	t.Helper()
 	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
@@ -111,17 +76,12 @@ func TestSidebarGroupsSessionsByHost(t *testing.T) {
 
 	toggleSidebarViaPalette(t, term)
 
-	// The host that answers gets a group header. The wait is what makes this a
-	// test of the link rather than of the config: the row only appears after
-	// the daemon has run ssh, spoken the framing to the proxy, and had a
-	// listing come back.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), hostOpen+" build")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the rail never showed the host group: %v\n%s", err, term.Snapshot())
 	}
 
-	// The host that cannot be reached keeps its row and says so.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, hostOpen+" offline") && strings.Contains(text, "offline")
@@ -151,7 +111,6 @@ func TestDraggingAMachineHeaderReordersTheRail(t *testing.T) {
 	waitBoot(t, term)
 	toggleSidebarViaPalette(t, term)
 
-	// The daemon sorts its table, so build comes before offline.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		b, o := railRowOf(s, hostOpen+" build"), railRowOf(s, hostOpen+" offline")
 		return b >= 0 && o >= 0 && b < o
@@ -174,13 +133,10 @@ func TestDraggingAMachineHeaderReordersTheRail(t *testing.T) {
 	t.Logf("after the drag:\n%s", term.Snapshot())
 	saveFrame(t, term, "rail-machine-order-after")
 
-	// This machine is not dragged: it stays at the top of the section.
 	if l, o := railRowOf(term.Screen(), hostOpen+" local"), railRowOf(term.Screen(), hostOpen+" offline"); l < 0 || l > o {
 		t.Errorf("ASSERTION: the drag moved this machine out of the first slot (local=%d offline=%d):\n%s", l, o, term.Snapshot())
 	}
 
-	// The order holds across a host poll, which is the whole complaint: the
-	// rail must not rebuild itself back into the daemon's order.
 	time.Sleep(2 * hostPollActive)
 	if b, o := railRowOf(term.Screen(), hostOpen+" build"), railRowOf(term.Screen(), hostOpen+" offline"); o > b {
 		t.Errorf("ASSERTION: a host poll put the machines back in the daemon's order (build=%d offline=%d):\n%s", b, o, term.Snapshot())
@@ -202,18 +158,11 @@ func TestRailShowsAHostAddedWhileAttached(t *testing.T) {
 	base := t.TempDir()
 	ssh := writeFakeSSH(t, base)
 	env := []string{"TUIOS_SSH=" + ssh}
-	// The rail comes on from the file rather than the palette: `hosts add`
-	// below rewrites the file from its own load of it, and the reload that
-	// follows applies whatever the file says about the rail.
 	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\n")
 
 	term := startIn(t, base, startOpts{args: []string{"new", "fed-live"}, env: env})
 	waitBoot(t, term)
 	railShows(t, term, "sessions")
-	// The first poll is one local verb call. It has answered, and stopped the
-	// polling, long before this returns; the wait is what keeps the add from
-	// racing it, since an add that lands before the first answer would be
-	// found by that answer and prove nothing.
 	time.Sleep(2 * time.Second)
 	if strings.Contains(term.Screen().Text(), hostOpen+" local") {
 		t.Fatalf("the rail shows a machine group with no hosts configured:\n%s", term.Snapshot())
@@ -260,12 +209,9 @@ func TestHostsCommandReportsALinkEndToEnd(t *testing.T) {
 	if !strings.Contains(out, "unreachable") {
 		t.Errorf("the unreachable host is not reported:\n%s", out)
 	}
-	// The listing says what a person does next with an up host.
 	if !strings.Contains(out, "tuios attach --host") {
 		t.Errorf("the listing does not say how to attach a session on a host:\n%s", out)
 	}
-	// The link's hello carries the host's load: its cores, its one-minute
-	// load and the round trip, in the table and in the JSON.
 	if !strings.Contains(out, "LOAD") || !strings.Contains(out, " cores") {
 		t.Errorf("ASSERTION: the listing does not show the host's load:\n%s", out)
 	}

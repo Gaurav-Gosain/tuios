@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// richBlocksAnswer is an agent's reply with a TML block, a TML block that is
-// not valid, and a Mermaid block, the last block, so C copies the Mermaid one.
-// A line of text follows the diagram.
 const richBlocksAnswer = "The state of the build:\n\n" +
 	"```tml\n<row gap=\"2\"><badge role=\"success\">Ready</badge><progress value=\"0.6\" label=\"60 percent\"/></row>\n```\n\n" +
 	"A broken one:\n\n" +
@@ -19,7 +16,6 @@ const richBlocksAnswer = "The state of the build:\n\n" +
 	"```mermaid\nflowchart LR\n  A[Plan] --> B[Ship]\n```\n\n" +
 	"Then it ships.\n"
 
-// richBlocksSource is the Mermaid block's source.
 const richBlocksSource = "flowchart LR\n  A[Plan] --> B[Ship]"
 
 // TestCockpitThreadDrawsRichBlocks shows an agent's reply that holds a TML
@@ -43,12 +39,9 @@ func TestCockpitThreadDrawsRichBlocks(t *testing.T) {
 	railLists(t, term, "the blocks are drawn", []string{"Ready", "60 percent", "Not drawn", "picture / text"},
 		[]string{"<badge", "<row", "flowchart LR"})
 
-	// The diagram is a picture on the rows under its header.
 	head := lastRowWith(term.Screen(), "picture / text")
 	pic := waitPlaced(t, term, host, func(p hostPlace) bool { return p.row == head+1 && p.rows > 0 })
 	saveCockpitFrames(t, term, "rich-blocks-picture", hostPictures(t, []byte(host.String()))...)
-	// The picture takes the rows it draws on, and the next line follows it
-	// after one blank row at most.
 	if next := lastRowWith(term.Screen(), "Then it ships."); next < 0 || next > pic.row+pic.rows+1 {
 		t.Fatalf("ASSERTION: the picture takes rows %d to %d, and the next line is on row %d, more than one row under it\n%s",
 			pic.row, pic.row+pic.rows-1, next, term.Snapshot())
@@ -57,13 +50,11 @@ func TestCockpitThreadDrawsRichBlocks(t *testing.T) {
 		t.Fatalf("ASSERTION: the diagram is a picture, and its node names are drawn as text too\n%s", term.Snapshot())
 	}
 
-	// A click on "text" in the header draws it as text.
 	clickWord(t, term, head, "text   show the source")
 	railLists(t, term, "a click on text draws the diagram as text", []string{"Plan", "Ship", "picture / text"}, []string{"flowchart LR"})
 	waitUnplaced(t, term, host, pic.img, "the diagram is text")
 	saveCockpitFrames(t, term, "rich-blocks-text", hostPictures(t, []byte(host.String()))...)
 
-	// T draws it as a picture again, and T once more as text.
 	sendKeys(t, term, "T")
 	railLists(t, term, "T draws the diagram as a picture", []string{"picture / text"}, []string{"Plan", "Ship"})
 	head = lastRowWith(term.Screen(), "picture / text")
@@ -73,13 +64,10 @@ func TestCockpitThreadDrawsRichBlocks(t *testing.T) {
 	railLists(t, term, "T again draws the diagram as text", []string{"Plan", "Ship"}, nil)
 	waitUnplaced(t, term, host, pic.img, "T drew the diagram as text")
 
-	// The rest of the header shows the source.
 	head = lastRowWith(term.Screen(), "show the source")
 	if head < 0 {
 		t.Fatalf("ASSERTION: no block header offers the source\n%s", term.Snapshot())
 	}
-	// A press on the header right after the one on its switch would be a
-	// double click, which selects a word.
 	pause(t, "a click, not a double click", time.Second)
 	clickWord(t, term, head, "show the source")
 	railLists(t, term, "a click on the header shows the source", []string{"flowchart LR", "show the diagram"}, nil)
@@ -88,13 +76,11 @@ func TestCockpitThreadDrawsRichBlocks(t *testing.T) {
 	clickWord(t, term, rowWith(term.Screen(), "show the diagram"), "show the diagram")
 	railLists(t, term, "a second click shows the diagram", []string{"Plan", "show the source"}, []string{"flowchart LR"})
 
-	// V does the same for the lowest block on screen, the diagram.
 	sendKeys(t, term, "V")
 	railLists(t, term, "V shows the source", []string{"flowchart LR", "show the diagram"}, nil)
 	sendKeys(t, term, "V")
 	railLists(t, term, "V again shows the diagram", []string{"Plan", "show the source"}, []string{"flowchart LR"})
 
-	// C copies the lowest block as its source.
 	before := mustCLIOr(t, base, "show-buffer")
 	if err := term.SendKeys("C"); err != nil {
 		t.Fatal(err)
@@ -127,7 +113,6 @@ func TestCockpitThreadMermaidTextSetting(t *testing.T) {
 	alive(t, term, "after the setting")
 }
 
-// clickWord clicks the first cell of word on screen row row.
 func clickWord(t *testing.T, term *tuitest.Terminal, row int, word string) {
 	t.Helper()
 	line := term.Screen().Line(row)
@@ -138,7 +123,6 @@ func clickWord(t *testing.T, term *tuitest.Terminal, row int, word string) {
 	mouseClick(t, term, len([]rune(line[:col]))+1, row, tuitest.MouseLeft, 0)
 }
 
-// waitUnplaced waits for the host to show picture img nowhere.
 func waitUnplaced(t *testing.T, term *tuitest.Terminal, host *lockedBuffer, img uint32, why string) {
 	t.Helper()
 	if err := term.WaitFor(func(tuitest.Screen) bool { return countPlaced([]byte(host.String()), img) == 0 }, uiTimeout); err != nil {
@@ -146,9 +130,6 @@ func waitUnplaced(t *testing.T, term *tuitest.Terminal, host *lockedBuffer, img 
 	}
 }
 
-// lrBackEdgeAnswer is a reply with a flowchart that runs across: six boxes
-// and a back edge. Drawn as one row it is a little wider than the thread at
-// 120 columns.
 const lrBackEdgeAnswer = "The loop:\n\n" +
 	"```mermaid\nflowchart LR\n  A[Read issue] --> B[Write test] --> C[Fix bug] --> D[Run suite] --> E[Open PR] --> F[Merge] --> G[Deploy]\n  D -->|fails| C\n```\n"
 

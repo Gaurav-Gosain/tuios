@@ -17,7 +17,6 @@ import (
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Live handoff").
 
-// defunctChildren is every zombie child of pid.
 func defunctChildren(t *testing.T, pid int) []string {
 	t.Helper()
 	var out []string
@@ -72,8 +71,6 @@ func TestHandoffHoldsHooks(t *testing.T) {
 			if tc.putBack {
 				replaceWithNonTuios(t, second)
 			}
-			// The hook takes 3 s from the switch, and a put-back starts it
-			// 1.5 s in.
 			time.Sleep(5 * time.Second)
 			var ran []byte
 			for deadline := time.Now().Add(5 * time.Second); tc.putBack && len(ran) == 0 && time.Now().Before(deadline); {

@@ -31,8 +31,6 @@ func TestHarnessTakesAPastedImagePath(t *testing.T) {
 	if len(list) == 0 {
 		t.Skip("TUIOS_E2E_HARNESSES is not set: this runs real agent harnesses")
 	}
-	// The mark each harness draws for an attached image, and none for a
-	// harness that keeps the path as text.
 	attached := map[string]string{"opencode": "[Image 1]", "crush": "shot.png  "}
 	for _, h := range list {
 		t.Run(h, func(t *testing.T) {
@@ -53,7 +51,6 @@ func TestHarnessTakesAPastedImagePath(t *testing.T) {
 			tuiosCLI(t, base, "send-keys", "-s", "h", "Enter")
 			time.Sleep(12 * time.Second)
 			if h == "crush" {
-				// A first run asks to initialize the project: Nope.
 				tuiosCLI(t, base, "send-keys", "-s", "h", "Right")
 				time.Sleep(500 * time.Millisecond)
 				tuiosCLI(t, base, "send-keys", "-s", "h", "Enter")

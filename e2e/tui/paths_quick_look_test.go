@@ -14,16 +14,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The paths tests print and show these. The project folder sits in the test's
-// HOME, so a screenshot shows no scratch folder.
 const (
 	pathsFile    = "internal/app/os.go"
 	pathsMissing = "internal/app/missing.go"
 	pathsURL     = "https://example.com/pane-url"
 )
 
-// pathsProject makes ~/proj with internal/app/os.go of 200 numbered lines,
-// and returns the folder.
 func pathsProject(t *testing.T, base string) string {
 	t.Helper()
 	proj := filepath.Join(xdgDir(base, "HOME"), "proj")
@@ -41,8 +37,6 @@ func pathsProject(t *testing.T, base string) string {
 	return proj
 }
 
-// pathsEditor writes an editor named vi that records its arguments, and
-// returns the editor and its record. Named vi, it is given +LINE.
 func pathsEditor(t *testing.T, base string) (string, string) {
 	t.Helper()
 	dir := filepath.Join(base, "editor")
@@ -57,7 +51,6 @@ func pathsEditor(t *testing.T, base string) (string, string) {
 	return editor, record
 }
 
-// waitQuickLookAt waits for quick look to show os.go from line 120.
 func waitQuickLookAt(t *testing.T, term *tuitest.Terminal, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -68,7 +61,6 @@ func waitQuickLookAt(t *testing.T, term *tuitest.Terminal, what string) {
 	}
 }
 
-// waitQuickLookClosed waits for the preview to be gone.
 func waitQuickLookClosed(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "line 120 of os.go") }, uiTimeout); err != nil {
@@ -108,13 +100,10 @@ func TestPanePathsOpenInQuickLook(t *testing.T) {
 	waitWindowCount(t, term, 1, "opening a shell for the paths")
 	enterTerminalMode(t, term)
 	runInShell(t, term, "cd ~/proj && clear && echo CD''DONE", "CDDONE", uiTimeout)
-	// The command holds no :120 and no whole URL, so the only copies on
-	// screen are the output's.
 	runInShell(t, term, "printf 'build failed at %s:%s\\nnot found: %s:3\\ndocs: https://%s\\n' "+pathsFile+" 120 "+pathsMissing+" "+strings.TrimPrefix(pathsURL, "https://"), pathsURL, uiTimeout)
 	leaveTerminalMode(t, term)
 	_ = term.WaitStable(uiTimeout)
 
-	// The output row, not the command line: the command holds no :120.
 	col, row := mustFind(t, term, pathsFile+":120")
 	mid := col + 5
 	if cellUnderlined(term.Screen(), mid, row) {
@@ -126,7 +115,6 @@ func TestPanePathsOpenInQuickLook(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "pane-path-hover")
 
-	// The missing path: the disk is asked, says no, and nothing is drawn.
 	mcol, mrow := mustFind(t, term, pathsMissing)
 	mouseHover(t, term, mcol+5, mrow)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !cellUnderlined(s, mid, row) }, uiTimeout); err != nil {
@@ -136,7 +124,6 @@ func TestPanePathsOpenInQuickLook(t *testing.T) {
 		return !cellUnderlined(term.Screen(), mcol+5, mrow), term.Snapshot()
 	})
 
-	// The URL in the same output still opens with the link opener.
 	ucol, urow := mustFind(t, term, pathsURL)
 	mouseClick(t, term, ucol+4, urow, tuitest.MouseLeft, tuitest.ModCtrl)
 	waitOpened(t, record, []string{pathsURL}, "ASSERTION: ctrl+click on the URL beside the paths")
@@ -145,7 +132,6 @@ func TestPanePathsOpenInQuickLook(t *testing.T) {
 	waitQuickLookAt(t, term, "ctrl+click on the path")
 	saveCockpitFrames(t, term, "pane-path-quick-look")
 
-	// e opens the editor at the line on top.
 	if err := term.SendKeys("e"); err != nil {
 		t.Fatal(err)
 	}
@@ -232,8 +218,6 @@ func TestCockpitPathsOpenInQuickLook(t *testing.T) {
 	alive(t, term, "after the path clicks")
 }
 
-// pathsTranscript is the transcript of TestCockpitPathsOpenInQuickLook: a
-// prompt and an answer that names the file twice, relative and under ~/.
 func pathsTranscript(t *testing.T) []byte {
 	t.Helper()
 	recs := []map[string]any{

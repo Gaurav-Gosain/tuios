@@ -68,11 +68,6 @@ working = false
 	setState("working")
 	waitCell("WAIT0", "after the answer moved the pane to working")
 
-	// Issue 1416: the answer lands while the cell is still running. The run has
-	// read needs_input and is held on a file, so the event comes in mid-run with
-	// no race. It has to start one more run, which reads the pane as working.
-	// Negative control: keep fire's re-run for the rail only, and the second run
-	// never comes, so the cell keeps WAIT1.
 	hold := filepath.Join(gate, "hold")
 	if err := os.WriteFile(hold, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -92,9 +87,6 @@ working = false
 		t.Fatal(err)
 	}
 	setState("working")
-	// Long enough for the debounce to fire inside the run. A run released sooner
-	// would see the event after it ended and pass on any build, so this cannot
-	// fail a good build, only weaken the check.
 	time.Sleep(time.Second)
 	if err := os.Remove(hold); err != nil {
 		t.Fatal(err)

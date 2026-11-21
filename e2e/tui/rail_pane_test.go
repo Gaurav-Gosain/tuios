@@ -14,29 +14,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The rail's pane section ([appearance.sidebar.pane]), driven on a real
-// daemon and a real client: a small program runs in a pane the rail draws
-// under its own heading.
-//
-// How this could pass wrongly, written down first:
-//   - The ticks could be the main pane's output. The program runs only in the
-//     rail pane, and every read is confined to the rail's columns.
-//   - "Sized to the rail" could be the PTY's default size. The program prints
-//     what stty reports, and the rail's 27 content columns and the 8 rows of
-//     height are both far from 80 by 24.
-//   - "Not in tiling" could hold only because the pane never started. The
-//     window count is read after the rail shows the program's output, and
-//     list-windows --rail must list it.
-//   - The typed line could reach the main shell. It is checked inside the
-//     rail, as the program's GOT: echo, which only the rail pane prints.
-//   - "Keeps running while hidden" could be a pane restarted on show. The
-//     counter must go on from where it was, not start again at zero.
-
-// railPaneScript prints the size it was given, a counter, and the last line
-// typed into it, redrawn every half second. bash reads a tty a byte at a
-// time, so the timeout can fire part way through a typed line: read then
-// fails with the bytes so far in part. They are kept for the next read, or
-// "hello" shows as GOT:ello.
 const railPaneScript = `i=0; got=""; buf=""
 while :; do
   printf '\033[H\033[2J'
@@ -50,7 +27,6 @@ done
 
 var railTickRe = regexp.MustCompile(`TICK-(\d+)`)
 
-// railTick is the counter the rail pane shows, or -1.
 func railTick(s tuitest.Screen) int {
 	row := railRowOf(s, "TICK-")
 	if row < 0 {
@@ -64,8 +40,6 @@ func railTick(s tuitest.Screen) int {
 	return n
 }
 
-// railPaneWindows lists the session's windows, with the rail pane when rail
-// is set.
 func railPaneWindows(t *testing.T, base string, rail bool) []map[string]any {
 	t.Helper()
 	args := []string{"list-windows", "--json", "-s", "e2e"}
@@ -99,7 +73,6 @@ func TestRailPaneSection(t *testing.T) {
 		savePNG(t, term.Screen(), shot.XTermPalette(), frames, name)
 	}
 
-	// The heading, then the program's own lines under it, in the rail.
 	waitRailShows(t, term, "TICK-", "the program's output in the rail")
 	s := term.Screen()
 	head := railRowOf(s, "railtv")
@@ -107,13 +80,9 @@ func TestRailPaneSection(t *testing.T) {
 	if head < 0 || size != head+1 {
 		t.Fatalf("the pane's first line is not right under its heading (heading row %d, first line row %d)\n%s", head, size, term.Snapshot())
 	}
-	// stty size is rows then columns: the configured height, and the rail's
-	// 28 columns less its edge rule.
 	waitRailShows(t, term, "SZ 8 27", "the program sized to the rail")
 	snap("rail-pane")
 
-	// One pane in the layout, and the rail pane only when asked for. Tiling
-	// is on, so a rail pane the tiler counted would halve the main pane.
 	if out, err := tuiosCLI(t, base, "set-layout", "-s", "e2e", "--tiling", "true"); err != nil {
 		t.Fatalf("turn tiling on: %v\n%s", err, out)
 	}
@@ -150,7 +119,6 @@ func TestRailPaneSection(t *testing.T) {
 		t.Fatalf("list-windows --rail marks %d windows as the rail pane, want 1: %v", railCount, all)
 	}
 
-	// A click gives the pane the keyboard, and a typed line reaches it.
 	mouseClick(t, term, 5, size+1, tuitest.MouseLeft, 0)
 	if err := term.SendKeys("hello", tuitest.Enter); err != nil {
 		t.Fatalf("type into the rail pane: %v", err)
@@ -158,9 +126,6 @@ func TestRailPaneSection(t *testing.T) {
 	waitRailShows(t, term, "GOT:hello", "the typed line reached the program")
 	snap("rail-pane-typed")
 
-	// alt+esc gives the keyboard back: what is typed next is not the pane's.
-	// Nothing on screen says the rail pane let go, so alt+esc goes as its own
-	// press, apart from the keys after it, as a person types it.
 	sendKeys(t, term, tuitest.Alt(tuitest.Esc))
 	if err := term.SendKeys("i", "zzz", tuitest.Enter); err != nil {
 		t.Fatalf("type into the main pane: %v", err)
@@ -170,8 +135,6 @@ func TestRailPaneSection(t *testing.T) {
 		t.Fatalf("a line typed after alt+esc reached the rail pane\n%s", term.Snapshot())
 	}
 
-	// Hiding the rail leaves the program running. Shown again, the counter
-	// goes on from where it was.
 	before := railTick(term.Screen())
 	leaveTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "b"); err != nil {
@@ -210,8 +173,6 @@ func TestRailPaneArrivalSaysNothing(t *testing.T) {
 	if all := railPaneWindows(t, base, true); len(all) != 2 {
 		t.Fatalf("list-windows --rail lists %d windows after the rail-pane call, want 2: %v", len(all), all)
 	}
-	// The frame is kept whichever way it goes: the dock on a failure, the
-	// dock after two quiet seconds on a pass.
 	frames := artifactDir(t)
 	snap := func() {
 		saveArtifact(t, term, frames, "rail-pane-arrived")

@@ -13,9 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// railOrder reports whether the rail on s lists the names top to bottom in
-// this order. The rail sits at the top of the screen, so a name's topmost row
-// is its rail row.
 func railOrder(s tuitest.Screen, names ...string) bool {
 	prev := -1
 	for _, n := range names {
@@ -28,7 +25,6 @@ func railOrder(s tuitest.Screen, names ...string) bool {
 	return true
 }
 
-// lsOrder is the session names tuios ls lists, in its order.
 func lsOrder(t *testing.T, base string) []string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "ls", "--json")
@@ -78,12 +74,8 @@ func TestSessionOrderIsTheDaemons(t *testing.T) {
 		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
 			t.Fatalf("create %s: %v\n%s", name, err, out)
 		}
-		// Creation order is the order before any move, and it is kept to the
-		// second in places: keep the three apart.
 		time.Sleep(50 * time.Millisecond)
 	}
-	// toggle shows the rail. The rail is one setting for every session, so
-	// the second client finds it shown already.
 	open := func(sess string, toggle bool) *tuitest.Terminal {
 		t.Helper()
 		term := startIn(t, base, startOpts{cols: 140, rows: 40, args: []string{"attach", sess}})
@@ -105,7 +97,6 @@ func TestSessionOrderIsTheDaemons(t *testing.T) {
 		}
 	}
 
-	// 2. Move alpha to the bottom on A.
 	if err := a.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatalf("ctrl+b e: %v", err)
 	}
@@ -132,7 +123,6 @@ func TestSessionOrderIsTheDaemons(t *testing.T) {
 	railShot(t, a, "client-a")
 	railShot(t, b, "client-b")
 
-	// 3. From the command line.
 	if out, err := tuiosCLI(t, base, "set-session-order", "charlie", "alpha"); err != nil || !strings.Contains(out, "charlie, alpha, bravo") {
 		t.Fatalf("ASSERTION: set-session-order charlie alpha: %v\n%s", err, out)
 	}
@@ -143,7 +133,6 @@ func TestSessionOrderIsTheDaemons(t *testing.T) {
 	}
 }
 
-// wantLsOrder waits until tuios ls lists want first, in that order.
 func wantLsOrder(t *testing.T, base, what string, want ...string) {
 	t.Helper()
 	var got []string
@@ -158,10 +147,6 @@ func wantLsOrder(t *testing.T, base, what string, want ...string) {
 	t.Fatalf("ASSERTION: %s: tuios ls lists %v, want %v first", what, got, want)
 }
 
-// showRail shows the rail when it is hidden. The rail is one setting for
-// every session, so a client may attach with it shown already, and a toggle
-// then hides it. An older client keeps the rail per session, so the client
-// after it may find it hidden.
 func showRail(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	_ = term.WaitStable(uiTimeout)
@@ -192,11 +177,9 @@ func TestSessionOrderSurvivesTheDaemon(t *testing.T) {
 	}
 	wantLsOrder(t, base, "before a restart", "charlie", "alpha", "bravo")
 
-	// kill-server is synchronous and saves every session on the way out.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}
-	// Starting any session starts a daemon, and a daemon restores on start.
 	if out, err := tuiosCLI(t, base, "new", "trigger", "--detach"); err != nil {
 		t.Fatalf("start a fresh daemon: %v: %s", err, out)
 	}
@@ -245,8 +228,6 @@ func TestSessionOrderTakesQuickMoves(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railOrder(s, names...) }, uiTimeout); err != nil {
 		t.Fatalf("setup: the rail does not list the creation order: %v\n%s", err, term.Snapshot())
 	}
-	// The bug is in the order the daemon keeps, so the daemon keeps one from
-	// the start: the creation order, set.
 	if out, err := tuiosCLI(t, base, append([]string{"set-session-order"}, names...)...); err != nil {
 		t.Fatalf("set-session-order: %v\n%s", err, out)
 	}
@@ -258,7 +239,6 @@ func TestSessionOrderTakesQuickMoves(t *testing.T) {
 		wantLsOrder(t, base, what, order...)
 	}
 
-	// 1. Three presses in one burst.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatalf("ctrl+b e: %v", err)
 	}
@@ -268,9 +248,6 @@ func TestSessionOrderTakesQuickMoves(t *testing.T) {
 	}
 	want("three quick shift+down", "bravo", "charlie", "delta", "alpha")
 
-	// 2. Two drags, the second before the daemon has answered the first. The
-	// rows are read once: the first drag puts delta on the top row, so the
-	// second drags alpha, still on the bottom row, onto the row above it.
 	s := term.Screen()
 	col, _ := findOnScreen(t, term, "delta")
 	top, third, bottom := screenRowOf(s, "bravo"), screenRowOf(s, "delta"), screenRowOf(s, "alpha")
@@ -342,18 +319,13 @@ func TestSessionOrderRestoredSessionDoesNotTie(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "set-session-order", "charlie", "delta"); err != nil {
 		t.Fatalf("set-session-order: %v\n%s", err, out)
 	}
-	// resurrect takes no --no-animations, so the harness is told to keep them.
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, animations: true, args: []string{"resurrect", "alpha"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
 		t.Fatalf("setup: tuios resurrect alpha never attached: %v\n%s", err, term.Snapshot())
 	}
-	// The restored mark comes off when a client attaches, and resurrect
-	// attaches, so being listed again is the proof here.
 	waitForSessionInfo(t, base, "alpha")
 	wantLsOrder(t, base, "after alpha is restored", "charlie", "delta", "alpha")
 
-	// A full restart restores every saved session in name order. bravo was
-	// never in the order set since, so it must not take delta's place.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v\n%s", err, out)
 	}
@@ -421,9 +393,6 @@ func TestSessionOrderBuildsOnAnotherClientsMove(t *testing.T) {
 	}
 	want("two quick shift+down after the other client's move", "bravo", "charlie", "alpha", "delta")
 
-	// Once the daemon has answered, this client keeps no order of its own:
-	// the one it drew is the daemon's now. A copy left in the sidebar state
-	// file would be drawn again for this machine's group from another one.
 	path := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sidebar.json")
 	deadline := time.Now().Add(uiTimeout)
 	var data []byte

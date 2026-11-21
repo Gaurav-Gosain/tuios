@@ -7,19 +7,9 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The footer's files control is a switch. A person whose layout leaves the
-// files section out clicked it once by accident, the section came up, and the
-// control looked the same as before: nothing on the rail said why the section
-// was there or how to take it off again.
-
-// railFilesSwitchConfig is the person's layout: a left rail 28 columns wide
-// with no files section.
 const railFilesSwitchConfig = "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 28\n" +
 	"sections = \"sessions:20,terminals,agents\"\n"
 
-// footerFilesAt is the screen row of the footer's files control, the last
-// rail row that carries the word, and its first column. ok is false when the
-// footer draws no such control.
 func footerFilesAt(s tuitest.Screen) (col, row int, ok bool) {
 	_, rows := s.Size()
 	for r := rows - 1; r >= 0; r-- {
@@ -30,9 +20,6 @@ func footerFilesAt(s tuitest.Screen) (col, row int, ok bool) {
 	return 0, 0, false
 }
 
-// footerFilesOn reports whether the footer's files control draws as on: every
-// cell of the word underlined. The underline is the attribute that reads at
-// every colour depth, so the test asks for it rather than for a colour.
 func footerFilesOn(s tuitest.Screen) bool {
 	col, row, ok := footerFilesAt(s)
 	if !ok {
@@ -46,8 +33,6 @@ func footerFilesOn(s tuitest.Screen) bool {
 	return true
 }
 
-// filesHeaderRow is the screen row of the files section's header, or -1. It
-// is the first rail row above the footer that starts with the section's label.
 func filesHeaderRow(s tuitest.Screen) int {
 	_, footer, ok := footerFilesAt(s)
 	if !ok {
@@ -62,8 +47,6 @@ func filesHeaderRow(s tuitest.Screen) int {
 	return -1
 }
 
-// filesHeaderClose is the column of the close control at the right end of the
-// files header, or -1 when the header has none.
 func filesHeaderClose(s tuitest.Screen) int {
 	r := filesHeaderRow(s)
 	if r < 0 {
@@ -76,8 +59,6 @@ func filesHeaderClose(s tuitest.Screen) int {
 	return len([]rune(line)) - 1
 }
 
-// railFilesDefaultConfig is the person's rail: the shipped layout, which has
-// the files section, on the left at 28 columns.
 const railFilesDefaultConfig = "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 28\n"
 
 // TestRailFilesSwitchIsSaved: the footer's files control is a switch the

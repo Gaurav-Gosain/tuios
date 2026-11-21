@@ -15,14 +15,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The review overlay, end to end through the binary a person runs: a fan of
-// two fake agents in a throwaway repository, a client attached to one of
-// them, and the keys a person presses. Nothing here touches any repository
-// but the one fanFixture makes.
-
-// reviewFan starts a fan of two fake agents named try/NAME, waits for both
-// prompts to be typed, and changes README in the second attempt. It returns
-// the second attempt's session.
 func reviewFan(t *testing.T, base, repo, name string) string {
 	t.Helper()
 	second, path := reviewFanAt(t, base, repo, name)
@@ -32,8 +24,6 @@ func reviewFan(t *testing.T, base, repo, name string) string {
 	return second
 }
 
-// reviewFanAt starts the fan reviewFan does and returns the second attempt's
-// session and its worktree, changing nothing in it.
 func reviewFanAt(t *testing.T, base, repo, name string) (string, string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "new", "plain", "--detach"); err != nil {
@@ -66,7 +56,6 @@ func reviewFanAt(t *testing.T, base, repo, name string) (string, string) {
 	return second, path
 }
 
-// sendKeys presses keys one after another, a moment apart, as a person types.
 func sendKeys(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	t.Helper()
 	for _, k := range keys {
@@ -77,7 +66,6 @@ func sendKeys(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	}
 }
 
-// waitScreen waits for every marker to be on screen.
 func waitScreen(t *testing.T, term *tuitest.Terminal, what string, markers ...string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -115,7 +103,6 @@ func TestReviewOverlayNotesSendCompareAndKeep(t *testing.T) {
 	waitScreen(t, term, "the review never opened", "Review", "1 file", "vs main", "M README", "retry three times", "c note")
 	saveFrame(t, term, "review-overlay-120x40")
 
-	// The cursor starts on the hunk; two rows down is the added line.
 	sendKeys(t, term, "j", "j", "c")
 	waitScreen(t, term, "c did not open the note line", "save", "drop")
 	if err := term.SendKeys("say why three"); err != nil {
@@ -156,7 +143,6 @@ func TestReviewOverlayNotesSendCompareAndKeep(t *testing.T) {
 	}
 	waitScreen(t, term, "the notes never read as sent", "sent ")
 
-	// The compare view.
 	sendKeys(t, term, "w")
 	waitScreen(t, term, "the compare view never showed both attempts", "Compare  try/ov in repo, 2 attempts", other+" ", session, "not run")
 	waitScreen(t, term, "the compare view never counted the change", "+1 -0")
@@ -176,7 +162,6 @@ func TestReviewOverlayNotesSendCompareAndKeep(t *testing.T) {
 	}
 	saveFrame(t, term, "review-compare-verified")
 
-	// The cursor is on the attempt the review came from, the one kept.
 	sendKeys(t, term, "K")
 	waitScreen(t, term, "K did not ask", "Keep "+session+" and remove "+other+"?")
 	sendKeys(t, term, "y")
@@ -402,7 +387,6 @@ func TestReviewWrappedNoteIsOneStop(t *testing.T) {
 		}
 	}
 
-	// The hunk header, the context line, then the note on it.
 	sendKeys(t, term, "j", "j")
 	waitMark("j onto the note", func() int { return rowOf("firstword") })
 	saveArtifact(t, term, dir, "note-selected")
@@ -677,8 +661,6 @@ func TestReviewFileKeysFollowTheirBindings(t *testing.T) {
 	saveFrame(t, term, "review-empty-opens-on-diff")
 	sendKeys(t, term, tuitest.Esc)
 
-	// [review] scope = "uncommitted" (#1472): README is committed in the
-	// worktree and ZETA is not. A review opens on ZETA alone, and u shows both.
 	if err := os.WriteFile(filepath.Join(path, "README"), []byte("hello\nretry three times\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -705,8 +687,6 @@ func TestReviewFileKeysFollowTheirBindings(t *testing.T) {
 	waitScreen(t, term, "u did not show the changes since the base", "2 files", "README", "ZETA", "u uncommitted only")
 	sendKeys(t, term, tuitest.Esc)
 
-	// The frames: a fresh client at truecolor and at 16 colours reads the
-	// setting from config.toml, which set-config wrote.
 	for _, d := range chromeDepths {
 		if d.name == "256" {
 			continue
@@ -767,8 +747,6 @@ func TestReviewOverlayStagesAHunk(t *testing.T) {
 	testutil.Git(t, repo, "add", "list.txt")
 	testutil.Git(t, repo, "commit", "-q", "-m", "list")
 
-	// Hunk 1 adds a line after line 01, hunk 2 changes line 15 and hunk 3
-	// changes line 28.
 	changed := slices.Clone(lines)
 	changed[14] = "LINE 15"
 	changed[27] = "LINE 28"
@@ -784,8 +762,6 @@ func TestReviewOverlayStagesAHunk(t *testing.T) {
 			t.Logf("save the cached diffs: %v", err)
 		}
 	})
-	// cached waits for git diff --cached to hold exactly want, its added and
-	// removed lines in order, and checks the working file kept its bytes.
 	cached := func(step string, want ...string) {
 		t.Helper()
 		var got []string
@@ -812,8 +788,6 @@ func TestReviewOverlayStagesAHunk(t *testing.T) {
 		}
 	}
 	var term *tuitest.Terminal
-	// marks waits for the hunk headers that say staged to be exactly want,
-	// each named by the start of its old side.
 	marks := func(step string, want ...string) {
 		t.Helper()
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -842,7 +816,6 @@ func TestReviewOverlayStagesAHunk(t *testing.T) {
 	waitScreen(t, term, "the review never opened", "Review", "list.txt", "LINE 15", "a stage")
 	cached("before any key")
 
-	// The cursor starts on the first hunk. ] moves to the middle one.
 	sendKeys(t, term, "]", "a")
 	marks("a on the middle hunk", "-12,")
 	waitScreen(t, term, "the stage was not reported", "Hunk staged", "d unstage", "z undo")
@@ -872,9 +845,6 @@ func TestReviewOverlayStagesAHunk(t *testing.T) {
 	marks("D on the file")
 	cached("D on the file")
 
-	// Stage the last hunk, then change one more of its lines in the working
-	// file: after r the hunk is partly staged, and d takes the staged part
-	// out again.
 	sendKeys(t, term, "]", "a")
 	marks("a on the last hunk", "-25,")
 	cached("a on the last hunk", "-line 28", "+LINE 28")

@@ -14,39 +14,10 @@ import (
 	"tuios.dev/shot"
 )
 
-// Issue 567: chafa -f kitty in a pane, in Netcatty, leaves the picture's
-// bottom rows behind each time the pane scrolls, and a grey checker where the
-// picture was after clear.
-//
-// Netcatty is xterm.js with its image addon. The addon writes a kitty image
-// into the cells under it, the way it draws a sixel: a second placement with
-// the same ids is a second picture, text does not erase one, and deleting one
-// leaves its cells drawing the addon's placeholder checker. tuios moves a
-// pane's picture by placing it again and clears it by deleting it, so every
-// move left a row behind and every clear left the checker. tuios now reads the
-// host's XTVERSION answer and, for xterm.js, turns both image protocols off and
-// draws the picture as block glyphs.
-//
-// How this could pass wrongly, written down first:
-//   - The probe could not read the XTVERSION answer at all, and the host be
-//     taken for one without graphics for some other reason. The positive half
-//     answers as kitty with the same probe and must get the picture as kitty
-//     graphics.
-//   - The host could be sent nothing because the picture never reached tuios.
-//     The xterm.js host must show the sixel picture as glyphs, and the pane
-//     must be told sixel, so a tool that asks gets a picture.
-//   - A DA1 answer that misses the probe could turn sixel back on, and an
-//     XTVERSION answer that misses it could go unread. hostterm answers DA1
-//     itself, after the probe has given up, with and without XTVERSION
-//     held back too.
-
-// xtermJSVersion is what Netcatty's xterm.js answers to XTVERSION.
 const xtermJSVersion = "xterm.js(6.1.0-beta.292)"
 
-// kittyVersion is what kitty answers.
 const kittyVersion = "kitty(0.49.2)"
 
-// cellBoundPNG is a small opaque picture, sent as a kitty a=T transmission.
 func cellBoundPNG(t *testing.T) string {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 8*cellW, 3*cellH))
@@ -64,32 +35,22 @@ func cellBoundPNG(t *testing.T) string {
 
 func TestCellBoundImageHostGetsGlyphs(t *testing.T) {
 	hostterm := buildHostTerm(t)
-	// lateDA1 plays xterm.js answering DA1 after the startup probe gave up,
-	// with the attributes it lists: sixel among them.
 	lateDA1 := []string{"-da1", "?62;4;9;22c", "-da1-delay", "500ms"}
 	for _, tc := range []struct {
 		name    string
 		version string
 		daemon  bool
-		// host is more hostterm flags.
-		host []string
+		host    []string
 	}{
 		{"xtermjs-standalone", xtermJSVersion, false, nil},
 		{"xtermjs-daemon", xtermJSVersion, true, nil},
-		// XTVERSION reaches the probe and DA1 does not. The late DA1 must
-		// not turn sixel back on.
 		{"xtermjs-late-da1", xtermJSVersion, false, lateDA1},
-		// Both answers miss the probe. The late XTVERSION, read by the
-		// program, must turn off what the probe's kitty answer turned on.
 		{"xtermjs-late-both", xtermJSVersion, false, append([]string{"-xtversion-delay", "500ms"}, lateDA1...)},
 		{"xtermjs-late-both-daemon", xtermJSVersion, true, append([]string{"-xtversion-delay", "500ms"}, lateDA1...)},
 		{"kitty-standalone", kittyVersion, false, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			xtermJS := tc.version == xtermJSVersion
-			// tuitest's emulator answers the kitty query OK and lists
-			// sixel in DA1, the way Netcatty does with both protocols on.
-			// hostterm sits in front of it and names the host.
 			host := newSixelHost(true, true)
 			term, base := start(t, startOpts{
 				cols: 120, rows: 40,
@@ -112,7 +73,6 @@ func TestCellBoundImageHostGetsGlyphs(t *testing.T) {
 			}
 
 			before := len(host.bytes())
-			// The reporter's case: a kitty picture, then the pane scrolls.
 			runToExit(t, term, `printf '\033_Ga=T,q=2,f=100;`+cellBoundPNG(t)+`\033\\'; seq 3`)
 			f := writeSixelFixture(t, dir, 20, 4)
 			origin := showFixture(t, term, f, "IMGTOP")
@@ -130,10 +90,6 @@ func TestCellBoundImageHostGetsGlyphs(t *testing.T) {
 				return n
 			}
 			painted := paintedIn(s)
-			// The glyphs reach the host over more than one frame, and on a
-			// loaded machine a single read landed between them (60 of 80
-			// cells). Where every cell has to be painted, read until it is.
-			// Where none may be, one read is the stricter test.
 			for deadline := time.Now().Add(5 * time.Second); xtermJS && painted != f.cols*f.rows && time.Now().Before(deadline); {
 				time.Sleep(50 * time.Millisecond)
 				s = term.Screen()

@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// hermesScript is the agent's side of the stand-in: it waits for a line from
-// the test, so the process stays in the pane's foreground until then.
 const hermesScript = `#!/bin/sh
 read -r _
 exit 0
@@ -66,9 +64,6 @@ func TestAVersionedPythonRunsADetectedAgent(t *testing.T) {
 		t.Fatalf("create %s: %v\n%s", session, err, out)
 	}
 
-	// The shell names the program by its link, as Hermes's launcher does, and
-	// exec -a keeps argv0 python3 while the kernel names the process after
-	// the file it ran.
 	line := "bash -c 'exec -a python3 " + py + " " + script + " -p cos chat'\n"
 	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", "0", line); err != nil {
 		t.Fatalf("start the stand-in: %v\n%s", err, out)
@@ -121,8 +116,6 @@ func TestAVersionedPythonRunsADetectedAgent(t *testing.T) {
 		t.Errorf("ASSERTION: the hermes manifest did not match: %s", raw)
 	}
 
-	// A name that starts with a family and is not a version stays a program
-	// of its own. The script exits on a line, and the shell starts the copy.
 	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", "0", "\n"); err != nil {
 		t.Fatalf("end the stand-in: %v\n%s", err, out)
 	}
@@ -135,9 +128,6 @@ func TestAVersionedPythonRunsADetectedAgent(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", "0", line); err != nil {
 		t.Fatalf("start python3-config: %v\n%s", err, out)
 	}
-	// The pane keeps the label of the program before until the detector has
-	// read the new one, so the wait is for the new process and the label
-	// both. A python3-config taken for an interpreter keeps hermes and fails.
 	waitUntil(t, "the detector reads python3-config and the pane leaves hermes", 20*time.Second, func() (bool, string) {
 		out, err := tuiosCLI(t, base, "explain-agent-detect", "-s", session, "-w", "0", "--json")
 		if err != nil {

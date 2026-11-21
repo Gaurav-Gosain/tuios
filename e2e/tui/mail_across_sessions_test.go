@@ -73,7 +73,6 @@ func TestMailFromAPaneOfAnotherSession(t *testing.T) {
 	if got := read("team", worker); len(got) != 1 || got[0]["from"] != lead {
 		t.Fatalf("the worker's inbox should hold one message from the lead: %v", got)
 	}
-	// A name is not an id: it never reaches into another session.
 	if out, err := send("lead", lead, workerName, "by name"); err == nil {
 		t.Fatalf("a sender named %q from another session was taken: %s", workerName, out)
 	}
@@ -111,8 +110,6 @@ func TestMailAndAskFromAPaneByItsOwnName(t *testing.T) {
 		}
 	}
 
-	// inLead types a command line at the lead pane's shell and returns what
-	// the pane shows once the line has printed its mark and exit status.
 	n := 0
 	inLead := func(args string) (int, string) {
 		t.Helper()
@@ -155,7 +152,6 @@ func TestMailAndAskFromAPaneByItsOwnName(t *testing.T) {
 		t.Fatalf("ASSERTION: a pane could not ask another session by its own short id:\n%s", pane)
 	}
 
-	// A name of a third session is neither the recipient's nor the caller's.
 	rc, pane := inLead("send-agent-message -s team -w worker --from stranger 'not me'")
 	if rc == 0 {
 		t.Fatalf("ASSERTION: a sender named after a pane of a third session was taken:\n%s", pane)

@@ -11,13 +11,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// codexBoxScript is a stand-in for the Codex composer as codex-cli 0.166.0
-// and 0.167.0 draw it with no status line setting (issue #1588): the bold
-// glyph and the faint placeholder, an empty row, then two footer rows, the
-// status line and the key hints. The key-hint row with "for agents" shows
-// only while the box is empty. Typed text replaces the placeholder and hides
-// that row. Enter moves the line above the box as "sent: ...", and Ctrl+U
-// clears the box.
 const codexBoxScript = `stty -icanon -echo min 1 2>/dev/null
 draft=""
 sent=""
@@ -79,7 +72,6 @@ func TestQueuedMessageReachesAnEmptyCodexBox(t *testing.T) {
 	cli("set working", "set-agent-state", "-s", sess, "working", "--harness", "codex")
 	cli("set idle", "set-agent-state", "-s", sess, "idle", "--harness", "codex")
 
-	// The box is empty: the queued entry is typed.
 	const first = "queued-into-empty-codex-91d2"
 	cli("queue at rest", "queue", "-s", sess, "echo", first)
 	if err := term.WaitForText("sent: echo "+first, uiTimeout); err != nil {
@@ -92,7 +84,6 @@ func TestQueuedMessageReachesAnEmptyCodexBox(t *testing.T) {
 	saveArtifact(t, term, dir, "codex-empty-box-typed")
 	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "codex-empty-box-typed")
 
-	// The person types into the box: the next entry waits for them.
 	cli("set working", "set-agent-state", "-s", sess, "working", "--harness", "codex")
 	cli("set idle", "set-agent-state", "-s", sess, "idle", "--harness", "codex")
 	enterTerminalMode(t, term)

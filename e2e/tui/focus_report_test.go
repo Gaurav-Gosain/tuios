@@ -42,9 +42,6 @@ func TestFocusReportOnEnable(t *testing.T) {
 				t.Helper()
 				out := filepath.Join(dir, step)
 				script := filepath.Join(dir, step+".sh")
-				// Raw mode so the report reaches the file unchanged. With
-				// min 0 time 10 cat ends after a second of silence. 1004 is
-				// set after stty, so nothing typed before it is read.
 				body := "stty raw -echo min 0 time 10\n" +
 					"printf '\\033[?1004h'\n" +
 					"cat > " + out + "\n" +
@@ -63,7 +60,6 @@ func TestFocusReportOnEnable(t *testing.T) {
 				return string(raw)
 			}
 
-			// Host focused: one focus-in report.
 			if err := term.Type("\x1b[I"); err != nil {
 				t.Fatal(err)
 			}
@@ -72,7 +68,6 @@ func TestFocusReportOnEnable(t *testing.T) {
 				t.Fatalf("focused pane read %q after setting 1004, want exactly %q\n%s", got, "\x1b[I", term.Snapshot())
 			}
 
-			// Host out of focus: nothing.
 			if err := term.Type("\x1b[O"); err != nil {
 				t.Fatal(err)
 			}

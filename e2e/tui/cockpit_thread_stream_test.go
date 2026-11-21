@@ -68,8 +68,6 @@ func TestCockpitThreadStreamsInPlace(t *testing.T) {
 	say := func(ago time.Duration, text string) {
 		rec("assistant", ago, map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "text", "text": text}}})
 	}
-	// The new turn is written as it happens: an echo gives way only to a
-	// prompt logged after it was sent.
 	live := func(typ string, msg map[string]any) {
 		now = time.Now()
 		rec(typ, 0, msg)
@@ -77,7 +75,6 @@ func TestCockpitThreadStreamsInPlace(t *testing.T) {
 	liveSay := func(text string) {
 		live("assistant", map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "text", "text": text}}})
 	}
-	// Three earlier turns, so the thread is taller than the view.
 	for i := 1; i <= 3; i++ {
 		rec("user", time.Duration(40-i)*time.Minute, map[string]any{"role": "user", "content": fmt.Sprintf("Earlier question %d.", i)})
 		var b strings.Builder
@@ -131,8 +128,6 @@ func TestCockpitThreadStreamsInPlace(t *testing.T) {
 	fr.settle("open")
 	saveCockpitFrames(t, term, "stream-0-open")
 
-	// The person sends the prompt. The agent rests, so it is typed at once
-	// and the echo waits for the transcript.
 	sendReply(t, term, "Add a footer to the page.")
 	fr.until("the echo", func(s string) bool { return strings.Contains(s, "Add a footer to the page.") })
 	fr.settle("echo")
@@ -165,16 +160,12 @@ func TestCockpitThreadStreamsInPlace(t *testing.T) {
 	}
 	cmds := []string{"ls web/layout", "grep -rn footer web/", "go test ./web/..."}
 	for i, cmd := range cmds {
-		// The hook names the tool first; the transcript has the call a
-		// moment later.
 		pre(cmd)
 		fr.until("the hook names "+cmd, func(s string) bool { return strings.Contains(s, cmd) })
 		fr.settle("pre " + cmd)
 		call(fmt.Sprintf("toolu_s%d", i), cmd)
 		fr.settle("call " + cmd)
 	}
-	// The results arrive late, after all three calls. The last one fails and
-	// its card shows its output.
 	result("toolu_s0", "base.html\nfooter.html", false)
 	post(cmds[0])
 	fr.settle("result 0")
@@ -195,7 +186,6 @@ func TestCockpitThreadStreamsInPlace(t *testing.T) {
 	saveCockpitFrames(t, term, "stream-3-reply")
 	fr.check()
 
-	// Held: scrolled up, an entry that arrives moves nothing.
 	ckPress(t, term, tuitest.Tab)
 	ckPress(t, term, tuitest.PageUp)
 	_ = term.WaitStable(uiTimeout)
@@ -216,8 +206,6 @@ func TestCockpitThreadStreamsInPlace(t *testing.T) {
 	alive(t, term, "after streaming the turn")
 }
 
-// streamFrames records every frame the client draws while the test streams,
-// and writes them as one strip.
 type streamFrames struct {
 	t      *testing.T
 	term   *tuitest.Terminal
@@ -230,7 +218,6 @@ type streamFrame struct {
 	screen tuitest.Screen
 }
 
-// record keeps s when it differs from the last frame kept.
 func (f *streamFrames) record(step string, s tuitest.Screen) string {
 	text := s.Text()
 	if n := len(f.frames); n == 0 || f.frames[n-1].text != text {
@@ -239,7 +226,6 @@ func (f *streamFrames) record(step string, s tuitest.Screen) string {
 	return text
 }
 
-// until records frames until cond holds.
 func (f *streamFrames) until(step string, cond func(string) bool) {
 	f.t.Helper()
 	if err := f.term.WaitFor(func(s tuitest.Screen) bool { return cond(f.record(step, s)) }, uiTimeout); err != nil {
@@ -248,11 +234,6 @@ func (f *streamFrames) until(step string, cond func(string) bool) {
 	}
 }
 
-// settle records frames until the screen has not changed for 600 ms. Each
-// wait returns on the next change, and one that times out has seen the screen
-// hold still for the whole window. A wait re-checks its condition only when
-// the screen can change, so a condition that read the clock would never see
-// the window end.
 func (f *streamFrames) settle(step string) {
 	f.t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -272,9 +253,6 @@ func (f *streamFrames) settle(step string) {
 	}
 }
 
-// write saves the frame strip into the test's artifact folder: every frame
-// as text in stream-frames.txt, and, when TUIOS_E2E_FRAMES keeps the
-// artifacts, each one as stream-frame-NN.png.
 func (f *streamFrames) write() {
 	var b strings.Builder
 	for i, fr := range f.frames {
@@ -288,15 +266,9 @@ func (f *streamFrames) write() {
 	}
 }
 
-// check holds every pair of frames to the follow rules: in the thread's
-// rows, a line that is on both frames keeps its row or moves up, no line
-// moves less far than a line under it, and the newest line has no more
-// blank rows under it than at rest.
 func (f *streamFrames) check() {
 	f.t.Helper()
 	f.write()
-	// The rows under the newest line at rest: the blank line that ends a
-	// card and the gap over the reply line.
 	gap := streamBlankUnder(streamRows(f.frames[0].text))
 	var bad []string
 	for i := 1; i < len(f.frames); i++ {
@@ -321,8 +293,6 @@ func (f *streamFrames) check() {
 			return at
 		}
 		was, now := where(a), where(b)
-		// A line moves up by the lines added under it, so a line higher
-		// on screen moves at least as far as one lower down.
 		shift := make([]int, len(a))
 		for r := range shift {
 			shift[r] = -1
@@ -346,7 +316,6 @@ func (f *streamFrames) check() {
 			}
 			lower = max(lower, shift[r])
 		}
-		// The blank band: rows under the newest line.
 		if blank := streamBlankUnder(b); why == "" && blank > gap && blank < len(b) {
 			why = fmt.Sprintf("%d blank rows under the newest line, %d at rest", blank, gap)
 		}
@@ -360,7 +329,6 @@ func (f *streamFrames) check() {
 	}
 }
 
-// streamBlankUnder counts the blank rows at the end of rows.
 func streamBlankUnder(rows []string) int {
 	n := 0
 	for r := len(rows) - 1; r >= 0 && strings.TrimSpace(rows[r]) == ""; r-- {
@@ -369,8 +337,6 @@ func streamBlankUnder(rows []string) int {
 	return n
 }
 
-// streamRows are the thread's rows on a cockpit screen: the rows under the
-// focus tabs' rule and over the reply line, from the thread's left edge.
 func streamRows(screen string) []string {
 	lines := strings.Split(screen, "\n")
 	top, bot := -1, -1
@@ -388,7 +354,6 @@ func streamRows(screen string) []string {
 	}
 	rows := lines[top:bot]
 	for i, s := range rows {
-		// The ruler in the last column moves with the view, not the lines.
 		rows[i] = strings.TrimRight(s, " ━┃")
 	}
 	return rows

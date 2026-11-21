@@ -55,10 +55,8 @@ import (
 //   - with ansi.Strip cut from transcriptText, the test fails at the Bash
 //     result's colours.
 
-// transcriptSession is the session the test reads.
 const transcriptSession = "convo"
 
-// atMadeUpNonce is a nonce no daemon issued.
 const atMadeUpNonce = "00112233445566778899aabbccddeeff"
 
 // TestPersonReadsAgentTranscript is the whole path above.
@@ -116,12 +114,10 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 		return p
 	}
 
-	// --- Before the join there is nothing to read.
 	if _, verr := read(ctl, params(nil)); verr == nil || verr.Code != "no_transcript" {
 		t.Fatalf("a pane with no join: want no_transcript, got %v", verr)
 	}
 
-	// --- The real hook joins the pane, as Claude Code's SessionStart does.
 	hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", transcriptSession, "--window", win)
 	hook.Dir = workDirIn(t, base)
 	hook.Env = append(os.Environ(), "SHELL=/bin/sh")
@@ -134,7 +130,6 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 		t.Fatalf("agent-hook SessionStart: %v\n%s", err, out)
 	}
 
-	// --- Who may read. Each refusal comes before the read that works.
 	noNonce := params(nil)
 	delete(noNonce, "human_nonce")
 	if _, verr := read(ctl, noNonce); verr == nil || verr.Code != "not_human" {
@@ -164,9 +159,6 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 	}
 	vs.close()
 
-	// From inside a pane: its own presence is refused, and the person's
-	// nonce does not work there either. A local presence is held open for
-	// the length of the check, so the nonce it hands the pane is live.
 	sock := filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")
 	local := dialVerbs(t, sock)
 	lres, lerr := local.call("attach-presence", nil)
@@ -192,7 +184,6 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 	}
 	local.close()
 
-	// --- The read that works: the newest entries of the whole fixture.
 	res, verr := read(ctl, params(nil))
 	if verr != nil {
 		t.Fatalf("agent-transcript with the presence nonce: %v", verr)
@@ -205,7 +196,6 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 	cursor := res["cursor"].(string)
 	start := cursor
 
-	// The limit keeps the newest.
 	res, verr = read(ctl, params(map[string]any{"limit": 3}))
 	if verr != nil {
 		t.Fatal(verr)
@@ -217,14 +207,11 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 		t.Fatalf("limit 1001: want invalid_params, got %v", verr)
 	}
 
-	// Nothing after the cursor yet.
 	res, verr = read(ctl, params(map[string]any{"after": cursor}))
 	if verr != nil || len(atEntries(t, res)) != 0 || res["cursor"] != cursor || res["reset"] != false {
 		t.Fatalf("a read at the end: want no entries and the same cursor, got %v %v", res, verr)
 	}
 
-	// --- The event, and the cursor across appends. The phone subscribes
-	// on its own stream, as it does in the app.
 	sub := link.open(t, true)
 	ack, verr := sub.call(t, "subscribe", map[string]any{"session": transcriptSession, "types": []string{"transcript"}})
 	if verr != nil || ack["type"] != "subscribed" {
@@ -233,7 +220,6 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 	appendLines(t, path,
 		`{"type":"assistant","uuid":"b1","timestamp":"2026-10-09T10:01:00.000Z","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"Running the tests again."},{"type":"tool_use","id":"toolu_bash2","name":"Bash","input":{"command":"go test ./api/..."}}],"stop_reason":"tool_use"}}`,
 	)
-	// Half of the next record: the cursor must stop before it.
 	half := `{"type":"user","uuid":"b2","timestamp":"2026-10-09T10:01:02.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_bash2","content":"ok  api 0.02s"}]}}`
 	appendRaw(t, path, half[:40])
 	ev := atEvent(t, sub, art, win)
@@ -261,8 +247,6 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 	}
 	cursor = res["cursor"].(string)
 
-	// A limit after a cursor ends a page inside a record that gives two
-	// entries, and the next page goes on from there with nothing lost.
 	var walked []string
 	for at, pages := start, 0; ; pages++ {
 		if pages > 5 {
@@ -292,14 +276,11 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 		t.Fatalf("limit 1 after a cursor walked %v", walked)
 	}
 
-	// --- A cursor that is not one, and a replaced file, start over.
 	res, verr = read(ctl, params(map[string]any{"after": "t1.0000000000000000.0"}))
 	if verr != nil || res["reset"] != true || len(atEntries(t, res)) == 0 {
 		t.Fatalf("a made-up cursor: want reset with the newest entries, got %v %v", res, verr)
 	}
 	fresh := `{"type":"user","uuid":"c1","timestamp":"2026-10-09T11:00:00.000Z","message":{"role":"user","content":"A new conversation in the same file"}}` + "\n"
-	// The new file has a record boundary exactly at the old cursor, so only
-	// the file's identity can tell the cursor is not into this file.
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
@@ -324,8 +305,6 @@ func TestPersonReadsAgentTranscript(t *testing.T) {
 	}
 }
 
-// checkFixtureEntries holds the fixture's entries to what the person should
-// see.
 func checkFixtureEntries(t *testing.T, entries []atEntry) {
 	t.Helper()
 	var kinds []string
@@ -355,11 +334,11 @@ func checkFixtureEntries(t *testing.T, entries []atEntry) {
 	}
 	want := []string{
 		"user/text", "assistant/thinking", "assistant/text",
-		"assistant/tool_call", "tool/tool_result", // Read
-		"assistant/tool_call", "tool/tool_result", // Edit
-		"assistant/tool_call", "tool/tool_result", // Write
+		"assistant/tool_call", "tool/tool_result",
+		"assistant/tool_call", "tool/tool_result",
+		"assistant/tool_call", "tool/tool_result",
 		"assistant/todos", "tool/tool_result",
-		"assistant/tool_call", "tool/tool_result", // Bash
+		"assistant/tool_call", "tool/tool_result",
 		"assistant/plan", "tool/tool_result",
 		"assistant/text",
 	}
@@ -411,8 +390,6 @@ func checkFixtureEntries(t *testing.T, entries []atEntry) {
 		t.Errorf("the last answer: want the escapes and bidi controls gone and the newline kept, got %q", last.Text)
 	}
 }
-
-// --- What the test reads back.
 
 type atEntry struct {
 	ID        string   `json:"id"`
@@ -469,8 +446,6 @@ func atEntries(t *testing.T, res map[string]any) []atEntry {
 	return out
 }
 
-// atEvent waits for the next transcript event about window and returns its
-// cursor.
 func atEvent(t *testing.T, sub *linkStream, art *atArtifact, window string) string {
 	t.Helper()
 	sub.timeout = uiTimeout
@@ -539,8 +514,6 @@ func appendRaw(t *testing.T, path, text string) {
 	}
 }
 
-// --- A local verb connection, as the person's own tools hold one.
-
 type verbConn struct {
 	t    *testing.T
 	conn net.Conn
@@ -585,12 +558,9 @@ func (c *verbConn) call(verb string, params map[string]any) (map[string]any, str
 
 func (c *verbConn) close() { _ = c.conn.Close() }
 
-// --- The artifact.
-
 type atArtifact struct {
-	t *testing.T
-	b strings.Builder
-	// name is the artifact's file name, agent-transcript.txt when empty.
+	t    *testing.T
+	b    strings.Builder
 	name string
 }
 

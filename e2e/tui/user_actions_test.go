@@ -84,7 +84,6 @@ grants = ["read"]
 	title := `it's "$(touch ` + marker + `)" and $HOME`
 	mustCLI(t, base, "set-window", "-s", "S", "-w", "0", "--name", title)
 
-	// The list, with the bad action left out, and the command entry as user:.
 	listed, _ := run("actions", "list")
 	for _, want := range []string{"save-title", "more-panes", "note-it", "command key", "prefix+alt+u"} {
 		if !strings.Contains(listed, want) {
@@ -98,16 +97,11 @@ grants = ["read"]
 		t.Errorf("ASSERTION: list unsafe does not say why the unsafe action is left out: %v\n%s", err, o)
 	}
 
-	// The dry run fills the title into one argument.
 	dry, err := run("actions", "run", "save-title", "-s", "S", "--dry-run")
 	if err != nil || !strings.Contains(dry, `"it's \"$(touch `) {
 		t.Errorf("ASSERTION: the dry run does not show the title as one argument: %v\n%s", err, dry)
 	}
 
-	// The key runs the command action. attachIn left the client in window
-	// management mode, and only CLI calls came since. A second alt+esc there
-	// changes nothing on screen, so the leader would follow it at once and
-	// read as alt and the leader.
 	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Alt('u')); err != nil {
 		t.Fatalf("press the key: %v", err)
 	}
@@ -121,7 +115,6 @@ grants = ["read"]
 		return os.IsNotExist(err), "the title's $(touch) ran: " + marker + " exists"
 	})
 
-	// tuios actions run of a built-in action, and of a command entry.
 	if o, err := run("actions", "run", "more-panes", "-s", "S"); err != nil {
 		t.Fatalf("ASSERTION: tuios actions run more-panes failed: %v\n%s", err, o)
 	}
@@ -134,7 +127,6 @@ grants = ["read"]
 	}
 	waitForFileText(t, note, func(s string) bool { return strings.Contains(s, "noted") }, "the command entry never ran as user:note-it")
 
-	// A pane with only read may not run an action.
 	pane := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", "S", "worker", "--no-focus", "--print-id"))
 	paneOut := filepath.Join(base, "pane.out")
 	mustCLI(t, base, "send-text", "-s", "S", "-w", pane, tuiosBin+" actions run note-it > "+paneOut+".tmp 2>&1; echo EXIT=$? >> "+paneOut+".tmp; mv "+paneOut+".tmp "+paneOut+"\n")

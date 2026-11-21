@@ -18,18 +18,6 @@ import (
 	"time"
 )
 
-// What the review of the file verbs found, each as the attack or the load
-// that shows it.
-//
-// The far machine is not trusted to name where its files land here. A real
-// tuios daemon never sends a name with "..", so the tests that need a lying
-// machine put a fake daemon on build's socket: the hub reaches it through the
-// real ssh stand-in, stdio-proxy and mux, and it answers the file verbs the
-// way a daemon an attacker controls could.
-
-// fakeFar is a daemon socket on the far machine that answers verbs from a
-// table. Each handler returns the result, or an error code, and may take the
-// connection over after the reply (open-file-stream).
 type fakeFar struct {
 	t    *testing.T
 	ln   net.Listener
@@ -114,8 +102,6 @@ func shaHex(b []byte) string {
 	return hex.EncodeToString(s[:])
 }
 
-// hubWithFakeFar starts the hub with build reached through the ssh stand-in,
-// where the fake daemon answers.
 func hubWithFakeFar(t *testing.T, base, remote string) {
 	t.Helper()
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -129,7 +115,6 @@ func hubWithFakeFar(t *testing.T, base, remote string) {
 	}, "the hub never reported build up")
 }
 
-// waitTransferEnd polls a transfer until it is done, failed or cancelled.
 func waitTransferEnd(t *testing.T, base, id string, within time.Duration) transferRow {
 	t.Helper()
 	deadline := time.Now().Add(within)
@@ -210,7 +195,6 @@ func TestAFolderFromAHostCannotLandOutsideItsDestination(t *testing.T) {
 	}
 }
 
-// callWithin is one verb call that must answer within d.
 func (c *fileVerbConn) callWithin(d time.Duration, verb string, params any) (json.RawMessage, error) {
 	c.id++
 	line, _ := json.Marshal(map[string]any{"id": c.id, "verb": verb, "params": params})
@@ -331,7 +315,6 @@ func TestATransferStoppedWhileQueuedStaysStopped(t *testing.T) {
 			t.Errorf("ASSERTION: %s arrived although its copy was stopped while queued", name)
 		}
 	}
-	// The positive half: the paused copy goes on when it is resumed.
 	c.must("transfer-resume", map[string]any{"id": paused.ID}, nil)
 	if r := waitTransferEnd(t, base, paused.ID, 30*time.Second); r.State != "done" || !r.Verified {
 		t.Errorf("ASSERTION: the paused copy, resumed, ended %s (verified %v): %s", r.State, r.Verified, r.Error)
@@ -394,8 +377,6 @@ func TestACopyDoesNotWriteThroughALinkAtItsPart(t *testing.T) {
 			dir:      filepath.Join(farHome, "shared"),
 		},
 		{
-			// A relative link stays inside build's home, where the os.Root a
-			// link's writes go through follows it.
 			name:     "on build, relative",
 			precious: filepath.Join(farHome, "precious2.txt"),
 			src:      map[string]any{"path": src},
@@ -488,7 +469,6 @@ func TestADropNamesEachFileSafely(t *testing.T) {
 	}
 }
 
-// daemonReadBytes is how many bytes the daemon of base has read, from /proc.
 func daemonReadBytes(t *testing.T, base string) int64 {
 	t.Helper()
 	var hello struct {
@@ -541,8 +521,6 @@ func TestACancelledCopyStopsReadingItsSource(t *testing.T) {
 		"src": map[string]any{"path": src},
 		"dst": map[string]any{"host": "build", "path": filepath.Join(xdgDir(remote, "HOME"), "sparse.img")},
 	}, &row)
-	// A resume is what hashes the source now. A first run hashes nothing, and this
-	// test passed with the hash ignoring its context until it did this.
 	time.Sleep(time.Second)
 	c.must("transfer-pause", map[string]any{"id": row.ID}, nil)
 	waitTransferState(t, base, row.ID, "paused", 20*time.Second)

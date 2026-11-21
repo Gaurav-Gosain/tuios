@@ -18,24 +18,6 @@ import (
 	"time"
 )
 
-// tuios cp and tuios transfers, against two real daemons.
-//
-// The far machine is build, the second daemon of host_attach_test.go, reached
-// through the hub's link and the ssh stand-in. Every test runs the real tuios
-// binary as a person or a script would, reads its exit code and its output,
-// and checks every file it copied byte for byte. Each saves what it saw under
-// TUIOS_E2E_FRAMES: the NDJSON of each run, the exit codes, and the sha256 of
-// the files on both machines.
-//
-// What would pass a weaker test and fail these: a copy that reports done
-// before the bytes are in place (the files are hashed on both machines), a
-// second run that sends the bytes again (it must move almost nothing over the
-// link), a conflict policy that writes over a file it should leave (the file's
-// bytes are checked), an exit code that says success for a partial copy, a
-// cancel that leaves the copy running, and a pane that copies without the
-// grant.
-
-// cpRun is one run of the tuios CLI.
 type cpRun struct {
 	Args   []string `json:"args"`
 	Code   int      `json:"code"`
@@ -44,8 +26,6 @@ type cpRun struct {
 	Ms     int64    `json:"ms"`
 }
 
-// runTuios runs the tuios binary against the hub under base, with stdout and
-// stderr apart, and returns its exit code. It is not a terminal.
 func runTuios(t *testing.T, base string, args ...string) cpRun {
 	t.Helper()
 	pinPreV080Looks(t, base)
@@ -68,9 +48,6 @@ func runTuios(t *testing.T, base string, args ...string) cpRun {
 	return r
 }
 
-// cliEnv is the environment of a tuios command for the hub under base. The
-// pane variables of a tuios the suite runs in are left out, so the command
-// is the person's, outside every pane.
 func cliEnv(base string) []string {
 	var env []string
 	for _, kv := range os.Environ() {
@@ -86,7 +63,6 @@ func cliEnv(base string) []string {
 	return env
 }
 
-// cpEvents decodes the NDJSON a --json run printed.
 func cpEvents(t *testing.T, r cpRun) []map[string]any {
 	t.Helper()
 	var out []map[string]any
@@ -116,8 +92,6 @@ func eventsNamed(evs []map[string]any, name string) []map[string]any {
 	return out
 }
 
-// treeSums is the sha256 of every regular file under root, by its path
-// under root, and the mode and time of each.
 type fileFacts struct {
 	SHA   string `json:"sha256"`
 	Perm  uint32 `json:"perm"`
@@ -148,8 +122,6 @@ func treeSums(t *testing.T, root string) map[string]fileFacts {
 	return out
 }
 
-// sameTrees fails the test when two trees do not hold the same files with
-// the same bytes, permission bits and times.
 func sameTrees(t *testing.T, what string, want, got map[string]fileFacts) {
 	t.Helper()
 	if len(want) != len(got) {
@@ -170,9 +142,6 @@ func sameTrees(t *testing.T, what string, want, got map[string]fileFacts) {
 	}
 }
 
-// makeSmallTree writes n small files in folders of 100 under root, half text
-// that compresses and half random bytes, with sizes from 0 to 6 KiB, some
-// with modes and times of their own. It returns the bytes written.
 func makeSmallTree(t *testing.T, root string, n int, seed uint64) int64 {
 	t.Helper()
 	rng := mrand.New(mrand.NewPCG(seed, seed^0x9e3779b97f4a7c15))
@@ -218,7 +187,6 @@ func makeSmallTree(t *testing.T, root string, n int, seed uint64) int64 {
 	return total
 }
 
-// farHome is build's home folder.
 func farHome(remote string) string { return xdgDir(remote, "HOME") }
 
 // TestCopyAFileAndAFolderToAHostAndBack copies one file and a folder of 2,000
@@ -247,7 +215,6 @@ func TestCopyAFileAndAFolderToAHostAndBack(t *testing.T) {
 	want := treeSums(t, tree)
 	artifact := map[string]any{}
 
-	// One file into the host's home folder.
 	r := runTuios(t, base, "cp", "--json", one, "build:")
 	artifact["file_up"] = r
 	if r.Code != 0 {
@@ -264,7 +231,6 @@ func TestCopyAFileAndAFolderToAHostAndBack(t *testing.T) {
 		t.Fatalf("ASSERTION: a text file that compresses well crossed the link at %v bytes, not compressed", done["wire_bytes"])
 	}
 
-	// The folder up.
 	r = runTuios(t, base, "cp", "--json", tree, "build:~/")
 	artifact["tree_up"] = r
 	if r.Code != 0 {
@@ -287,7 +253,6 @@ func TestCopyAFileAndAFolderToAHostAndBack(t *testing.T) {
 	}
 	sameTrees(t, "the folder on build", want, treeSums(t, filepath.Join(farHome(remote), "tree")))
 
-	// The same copy again: everything is there with the same bytes.
 	r = runTuios(t, base, "cp", "--json", tree, "build:~/")
 	artifact["tree_up_again"] = r
 	if r.Code != 0 {
@@ -301,7 +266,6 @@ func TestCopyAFileAndAFolderToAHostAndBack(t *testing.T) {
 		t.Fatalf("ASSERTION: the second run moved %.0f bytes over the link, want almost none", wire)
 	}
 
-	// And back, to a folder that does not exist yet: it is the new name.
 	back := filepath.Join(base, "back")
 	r = runTuios(t, base, "cp", "build:tree", back)
 	artifact["tree_down"] = r
@@ -383,7 +347,6 @@ func TestCopyConflictsFollowThePolicy(t *testing.T) {
 		t.Fatalf("ASSERTION: keep-both did not find the 57 other files the same: %v", done)
 	}
 
-	// One file onto one that differs, with no policy and no terminal.
 	one := filepath.Join(src, "d00", "s0", "f0003.txt")
 	r = runTuios(t, base, "cp", one, "build:site/d00/s0/")
 	check("one file default", r, 3, true)
@@ -427,8 +390,6 @@ func TestCopyExitCodes(t *testing.T) {
 	}
 	expect("3 skipped by default", runTuios(t, base, "cp", small, "build:"), 3)
 
-	// 6: the file grows while its bytes move.
-	// The stand-in slows what build sends, so these copies come from build.
 	here := filepath.Join(base, "here")
 	if err := os.MkdirAll(here, 0o755); err != nil {
 		t.Fatal(err)
@@ -460,7 +421,6 @@ func TestCopyExitCodes(t *testing.T) {
 		t.Fatalf("ASSERTION: the failure does not say source_changed: %s", r.Stdout)
 	}
 
-	// 130: Ctrl+C on a cp that is not on a terminal cancels it.
 	randomFile(t, filepath.Join(farHome(remote), "slow.bin"), 32<<20)
 	cmd = exec.Command(tuiosBin, "cp", "--json", "build:slow.bin", filepath.Join(here, "slow-copy.bin"))
 	cmd.Dir, cmd.Env = workDirIn(t, base), cliEnv(base)
@@ -484,8 +444,6 @@ func TestCopyExitCodes(t *testing.T) {
 		t.Fatalf("ASSERTION: a cancelled copy left its part: %v", parts)
 	}
 
-	// 5: the link is cut and stays cut past --timeout. The copy waits in
-	// the daemon after the command gives up.
 	cmd = exec.Command(tuiosBin, "cp", "--json", "--timeout", "3s", "build:slow.bin", filepath.Join(here, "slow-two.bin"))
 	cmd.Dir, cmd.Env = workDirIn(t, base), cliEnv(base)
 	out.Reset()
@@ -494,7 +452,6 @@ func TestCopyExitCodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	time.Sleep(1200 * time.Millisecond)
-	// Cut and keep cutting, so the link stays down.
 	stopCut := make(chan struct{})
 	go func() {
 		for {
@@ -517,8 +474,6 @@ func TestCopyExitCodes(t *testing.T) {
 		t.Fatalf("ASSERTION: the copy never said it was waiting: %s", r.Stdout)
 	}
 
-	// 4: build's default write roots. A copy to build's home is refused and
-	// says how to allow it; a copy to build: lands in the receive folder.
 	writeRemoteConfig(t, remote, "[hosts.\"*\"]\n")
 	waitForHostListing(t, base, func(s string) bool { return strings.Contains(s, "build") && strings.Contains(s, "up") }, "build did not come back up")
 	deadline := time.Now().Add(20 * time.Second)
@@ -542,7 +497,6 @@ func TestCopyExitCodes(t *testing.T) {
 		t.Fatalf("ASSERTION: build: did not put the file in build's receive folder: %q %v", got, err)
 	}
 
-	// 4: build lets this machine list and nothing more.
 	writeRemoteConfig(t, remote, "[hosts.\"*\"]\nallow = [\"list\"]\n")
 	waitForHostListing(t, base, func(s string) bool { return strings.Contains(s, "build") && strings.Contains(s, "up") }, "build did not come back up")
 	deadline = time.Now().Add(20 * time.Second)
@@ -568,7 +522,6 @@ func TestCopyPauseResumeAndCancel(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	hubWithFileHost(t, base, remote, writeSlowFakeSSH(t, base, remote, 4<<20, 1<<20))
-	// The stand-in slows what build sends, so the copies come from build.
 	big := filepath.Join(farHome(remote), "big.bin")
 	want := randomFile(t, big, 24<<20)
 	artifact := map[string]any{}
@@ -659,7 +612,6 @@ func TestAMoveOntoItsOwnFileKeepsTheFile(t *testing.T) {
 	remote := remoteMachine(t)
 	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
 	const body = "IMPORTANT ORIGINAL DATA\n"
-	// setup makes work/file.txt and the link link -> work under root.
 	setup := func(root string) {
 		t.Helper()
 		if err := os.MkdirAll(filepath.Join(root, "work"), 0o755); err != nil {

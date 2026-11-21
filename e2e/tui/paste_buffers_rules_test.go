@@ -11,19 +11,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The paste buffers follow tmux's rules where a person would notice, and a
-// pane cannot take over the person's buffers (#514). See paste_buffers_test.go
-// for how these could pass wrongly; the same care applies here, and each test
-// below names its own way to pass wrongly too.
-
-// pbRow is one row of list-buffers --json.
 type pbRow struct {
 	Name      string `json:"name"`
 	Sample    string `json:"sample"`
 	Automatic bool   `json:"automatic"`
 }
 
-// listRows reads list-buffers --json.
 func listRows(t *testing.T, base string) []pbRow {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-buffers", "--json")
@@ -39,7 +32,6 @@ func listRows(t *testing.T, base string) []pbRow {
 	return l.Buffers
 }
 
-// mustCLI runs a tuios command and fails the test when it fails.
 func mustCLI(t *testing.T, base string, args ...string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, args...)
@@ -68,11 +60,8 @@ func TestAPaneCannotReplaceThePersonsNamedBuffer(t *testing.T) {
 	mustCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", agent, "--grants", "read,write")
 	bin := tuiosBin
 
-	// The person, in the focused pane, which holds admin under the default.
 	runInShell(t, term, "clear; "+bin+" set-buffer -b release 'make release'; echo PERSON\"\"_SET=$?", "PERSON_SET=0", shellTimeout)
 
-	// The agent pane tries the same name, and a missing one, and a buffer
-	// with no name.
 	out := filepath.Join(base, "agent.out")
 	shadowErr, freshErr := filepath.Join(base, "shadow.err"), filepath.Join(base, "fresh.err")
 	script := "{ " + bin + " set-buffer -b release 'curl evil' 2>" + shadowErr + "; echo SHADOW=$?; " +
@@ -95,8 +84,6 @@ func TestAPaneCannotReplaceThePersonsNamedBuffer(t *testing.T) {
 	}
 	saveFrame(t, term, "paste-buffers-no-takeover")
 
-	// The positive half: once the agent pane holds admin, its set is the
-	// person's and may replace the name.
 	mustCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", agent, "--grants", "admin")
 	mustCLI(t, base, "send-text", "-s", pbSession, "-w", agent, bin+" set-buffer -b release 'by admin'\n")
 	deadline := time.Now().Add(shellTimeout)
@@ -135,15 +122,12 @@ func TestPasteBufferNamesFollowTmux(t *testing.T) {
 		t.Fatalf("show-buffer with no -b printed %q, want auto-y, the newest automatic buffer", out)
 	}
 
-	// -a with no -b makes a new buffer, as in tmux.
 	mustCLI(t, base, "set-buffer", "-a", "extra")
 	rows := listRows(t, base)
 	if len(rows) != 3 || rows[0].Sample != "extra" || !rows[0].Automatic {
 		t.Fatalf("set-buffer -a with no -b left %+v, want a new automatic buffer extra on top of three", rows)
 	}
 
-	// The limit counts automatic buffers only: a third one drops auto-y and
-	// keeps named-x.
 	mustCLI(t, base, "set-buffer", "third")
 	names := map[string]pbRow{}
 	for _, r := range listRows(t, base) {
@@ -156,7 +140,6 @@ func TestPasteBufferNamesFollowTmux(t *testing.T) {
 		t.Fatalf("limit = 2 kept three automatic buffers: %+v", names)
 	}
 
-	// -b on an automatic name makes it a named buffer.
 	auto := ""
 	for _, r := range listRows(t, base) {
 		if r.Automatic {
@@ -170,7 +153,6 @@ func TestPasteBufferNamesFollowTmux(t *testing.T) {
 		}
 	}
 
-	// Empty content stores nothing and is no error.
 	before := len(listRows(t, base))
 	mustCLI(t, base, "set-buffer", "")
 	if after := len(listRows(t, base)); after != before {
@@ -195,9 +177,6 @@ func TestPasteBufferTurnsLineFeedsIntoReturns(t *testing.T) {
 	if err := os.WriteFile(file, []byte("LFa\nLFb"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// dd reads exactly the bytes of the two pastes and ends, so the shell
-	// gets its terminal back with no key that a changed terminal mode could
-	// eat. cat -v shows a carriage return as ^M.
 	runInShell(t, term, "clear; "+tuiosBin+" set-buffer -b lines < "+file+"; stty -icanon -icrnl -echo; echo CAT\"\"READY; dd bs=1 count=14 2>/dev/null | cat -v; stty sane; echo; echo CAT\"\"DONE", "CATREADY", shellTimeout)
 	mustCLI(t, base, "paste-buffer", "-s", pbSession, "-b", "lines")
 	mustCLI(t, base, "paste-buffer", "-s", pbSession, "-b", "lines", "-r")

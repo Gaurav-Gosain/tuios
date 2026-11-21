@@ -24,8 +24,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// ttyState is the pty's line discipline as stty -g writes it, read from the
-// slave side.
 func ttyState(t *testing.T, p xpty.Pty) string {
 	t.Helper()
 	name := p.Name()
@@ -47,8 +45,7 @@ func ttyState(t *testing.T, p xpty.Pty) string {
 }
 
 var (
-	reMermaidFrame = regexp.MustCompile(`\x1b_Ga=T`)
-	// The end of a frame: the cursor restored and synchronized output ended.
+	reMermaidFrame  = regexp.MustCompile(`\x1b_Ga=T`)
 	mermaidFrameEnd = "\x1b8\x1b[?2026l"
 )
 
@@ -64,8 +61,7 @@ var (
 // reset must not land inside that frame.
 func TestMermaidLiveGivesTheTerminalBack(t *testing.T) {
 	cases := []struct {
-		name string
-		// tags builds tuios from source with these build tags for the case.
+		name  string
 		tags  string
 		stall bool
 		end   func(t *testing.T, ft *fakeTerm)
@@ -131,10 +127,6 @@ func TestMermaidLiveGivesTheTerminalBack(t *testing.T) {
 	}
 }
 
-// buildTuiosWithTags builds tuios from this checkout with the given build
-// tags. The panic case needs it: only a mermaidpanic build panics in the frame
-// encoder, and a release build has no hook to make it. It ignores
-// TUIOS_E2E_BIN, so a negative control of that case edits the source.
 func buildTuiosWithTags(t *testing.T, tags string) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "tuios-"+tags)
@@ -172,7 +164,6 @@ func TestMermaidLiveWritesNoTerminalControls(t *testing.T) {
 				t.Fatal(err)
 			}
 			ft := startFakeTerm(t, base, 140, 40, opts, "mermaid", path, "--watch", "--split", "--theme", "flexoki")
-			// The source pane colours the source, so a match is on a word of it.
 			shown := regexp.MustCompile(`aGk=|broken`)
 			if _, ok := ft.waitFor(shown, 20*time.Second); !ok {
 				t.Fatalf("the source pane never showed; output:\n%q", tailString(ft.output(), 600))
@@ -233,10 +224,8 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 	cases := []struct {
 		name   string
 		daemon bool
-		// wrap runs tuios mermaid in a pane that reports these cell pixels.
-		wrap string
-		// cellW is the cell width the pane reports.
-		cellW float64
+		wrap   string
+		cellW  float64
 	}{
 		{name: "standalone", cellW: 10},
 		{name: "daemon", daemon: true, cellW: 10},
@@ -258,7 +247,6 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 	if err := os.WriteFile(md, []byte(doc), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// The tall and the small diagram's own sizes, in diagram units.
 	tallW, tallH := svgSize(t, md, 1)
 	smallW, _ := svgSize(t, md, 3)
 	for _, tc := range cases {
@@ -279,9 +267,6 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 			newWindow(t, term)
 			enterTerminalMode(t, term)
 			runInShell(t, term, "echo RE\"\"ADY", "READY", shellTimeout)
-			// With --fit the tall diagram fits the pane, so it must be whole
-			// on screen. A picture sized for cells the host is not drawing
-			// came out taller than the pane and lost its top.
 			runToExit(t, term, "clear")
 			host.mark("tall")
 			runToExit(t, term, tc.wrap+tuiosBin+" mermaid --theme flexoki-dark --fit --diagram 1 "+md)
@@ -298,7 +283,6 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 			runToExit(t, term, "clear")
 			host.mark("mermaid")
 			runToExit(t, term, tc.wrap+tuiosBin+" mermaid --theme flexoki-dark "+md)
-			// The refresh passes that place the pictures run on the next frames.
 			view := settleKittyHost(t, host, "mermaid", 3)
 			g := screenGrid(term.Screen(), shot.XTermPalette())
 			for _, p := range view.live {
@@ -309,9 +293,6 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 			if len(view.uploads) != 3 {
 				t.Fatalf("the host was sent %d pictures, want the 3 diagrams", len(view.uploads))
 			}
-			// Every picture on screen at the end has its bottom on screen, as
-			// the prompt comes after the last one. So each must show its
-			// picture down to the last pixel row, and across its whole width.
 			for _, p := range view.live {
 				up := view.uploads[p.id]
 				if p.sx != 0 || p.sw < up.w-1 {
@@ -321,13 +302,6 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 					t.Errorf("picture %d (%dx%d) shows pixel rows %d to %d, want its bottom row %d: %+v", p.id, up.w, up.h, p.sy, p.sy+p.sh, up.h, *p)
 				}
 			}
-			// The tall diagram keeps the text size of the others: 16px labels
-			// at four fifths of a 20 pixel cell is one pixel a diagram unit,
-			// so its box is its own width over the cell width the pane
-			// reports, and its own height over 20 pixels. It is taller than
-			// the pane, so its top is in the scrollback, and every row is
-			// reserved: its bottom is on screen and the next diagram starts
-			// under it (checked above).
 			if p := view.live[[2]int{view.order[0], 1}]; p == nil {
 				t.Errorf("the bottom of the tall diagram is not on screen\n%s", term.Snapshot())
 			} else {
@@ -336,18 +310,12 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 				if p.c < wantC-1 || p.c > wantC+1 {
 					t.Errorf("the tall diagram (%.0f units wide) takes %d columns, want about %d", tallW, p.c, wantC)
 				}
-				// The rows of the whole box, from the part on screen.
 				if p.sh <= 0 {
 					t.Errorf("the tall diagram shows no pixel rows: %+v", *p)
 				} else if got := int(math.Round(float64(p.r) * float64(up.h) / float64(p.sh))); got < wantR-1 || got > wantR+1 {
 					t.Errorf("the tall diagram (%.0f units high) takes %d rows, want about %d: %+v", tallH, got, wantR, *p)
 				}
 			}
-			// The last diagram is small and fits whole, with its text at the
-			// terminal's text size: 16px labels at four fifths of a 20 pixel
-			// cell is one pixel a diagram unit, so the box is its own width
-			// over the cell width the pane reports. It must not be blown up to
-			// fill the pane.
 			if p := view.live[[2]int{view.order[len(view.order)-1], 1}]; p != nil {
 				if p.sy != 0 || p.sh < view.uploads[p.id].h-1 {
 					t.Errorf("the small diagram is not whole on screen: %+v", *p)
@@ -357,7 +325,6 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 					t.Errorf("the small diagram (%.0f units wide) takes %d columns, want about %d", smallW, p.c, want)
 				}
 			}
-			// The pictures on screen at the end, top to bottom, stand apart.
 			live := slices.SortedFunc(maps.Values(view.live), func(a, b *hostPlacement) int { return a.row - b.row })
 			if len(live) == 0 || live[len(live)-1].id != view.order[len(view.order)-1] {
 				t.Fatalf("the last diagram is not on screen at the end\n%s", term.Snapshot())
@@ -383,7 +350,6 @@ func TestMermaidDiagramsStackInAPane(t *testing.T) {
 	}
 }
 
-// svgSize is the size in diagram units of diagram n of the Markdown file md.
 func svgSize(t *testing.T, md string, n int) (w, h float64) {
 	t.Helper()
 	svg, err := exec.Command(tuiosBin, "mermaid", "--diagram", strconv.Itoa(n), "--format", "svg", md).Output()
@@ -405,7 +371,6 @@ var (
 	cellsizeErr  error
 )
 
-// buildCellsize compiles ./cellsize once per test binary.
 func buildCellsize(t *testing.T) string {
 	t.Helper()
 	cellsizeOnce.Do(func() {
@@ -427,14 +392,11 @@ func buildCellsize(t *testing.T) string {
 	return cellsizeBin
 }
 
-// hostUpload is one picture the host was sent.
 type hostUpload struct {
 	png  []byte
 	w, h int
 }
 
-// hostPlacement is one a=p the host was given: its picture, the cell of its
-// top-left corner, its box in cells, and the part of the picture it shows.
 type hostPlacement struct {
 	id, pid        int
 	col, row, c, r int
@@ -448,22 +410,14 @@ func (p *hostPlacement) shotImage(v *kittyHostView) shot.Image {
 		Col: p.col, Row: p.row, Cols: p.c, Rows: p.r}
 }
 
-// kittyHostView is what a kitty host holds after a stream: the pictures sent
-// after the phase mark, in order, and the placements still on screen.
 type kittyHostView struct {
 	uploads map[int]*hostUpload
 	order   []int
 	live    map[[2]int]*hostPlacement
 }
 
-// hostCmdRE is a graphics command with the cursor move tuios puts in front of
-// each placement.
 var hostCmdRE = regexp.MustCompile(`(?:\x1b\[(\d+);(\d+)H)?\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\`)
 
-// settleKittyHost waits until the host was sent at least want pictures since
-// the phase mark and the stream has gone quiet, then replays it. The pictures
-// arrive over the next frames after the command exits, and a fixed sleep lost
-// the last of them on a busy runner.
 func settleKittyHost(t *testing.T, host *kittyHost, phase string, want int) *kittyHostView {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -484,8 +438,6 @@ func settleKittyHost(t *testing.T, host *kittyHost, phase string, want int) *kit
 	}
 }
 
-// replayKittyHost plays the host's stream from the phase mark the way kitty
-// keeps pictures and placements.
 func replayKittyHost(t *testing.T, stream []byte, phase string) *kittyHostView {
 	t.Helper()
 	if i := bytes.Index(stream, []byte(phaseMark+phase)); i >= 0 {

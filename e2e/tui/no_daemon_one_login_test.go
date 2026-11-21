@@ -34,7 +34,7 @@ import (
 // 20s, and the first assertion fails.
 func TestAHostWithNoDaemonCostsOneLogin(t *testing.T) {
 	base := t.TempDir()
-	remote := remoteMachine(t) // no daemon there yet
+	remote := remoteMachine(t)
 	ssh := writeFakeSSHTo(t, base, remote)
 	writeOneHostConfig(t, base, tuiosBin)
 	env := []string{"TUIOS_SSH=" + ssh}
@@ -61,16 +61,11 @@ func TestAHostWithNoDaemonCostsOneLogin(t *testing.T) {
 		t.Fatalf("ASSERTION: build should still list as no_daemon:\n%s", out)
 	}
 
-	// The held ssh drops (the network, a sleep). The link dials again under
-	// its backoff, which is one more login, and holds the new ssh.
 	pids, _ := os.ReadFile(fakeSSHPids(remote))
 	pid, err := strconv.Atoi(strings.Fields(string(pids))[0])
 	if err != nil {
 		t.Fatalf("read the ssh pid: %v", err)
 	}
-	// The stand-in's shell execs the far command on macOS. Linux's dash runs
-	// it as a child, which then still holds the link's pipes, so the whole
-	// tree under the recorded pid is ended.
 	killTree(t, pid)
 	deadline := time.Now().Add(30 * time.Second)
 	for logins() < 2 {
@@ -83,8 +78,6 @@ func TestAHostWithNoDaemonCostsOneLogin(t *testing.T) {
 		t.Fatalf("ASSERTION: after the held ssh dropped the hub ran ssh %d times in all, want 2: one redial, then held again", n)
 	}
 
-	// The daemon starts on build. The next ask, which the hosts command makes
-	// at once, finds it over the same ssh.
 	if out, err := tuiosCLI(t, remote, "new", "far", "--detach"); err != nil {
 		t.Fatalf("start the far daemon: %v\n%s", err, out)
 	}
@@ -97,7 +90,6 @@ func TestAHostWithNoDaemonCostsOneLogin(t *testing.T) {
 	}
 }
 
-// killTree ends pid and every process under it, children first.
 func killTree(t *testing.T, pid int) {
 	t.Helper()
 	out, _ := exec.Command("pgrep", "-P", strconv.Itoa(pid)).Output()

@@ -58,11 +58,8 @@ sleep 30
 	waitShimScreen(t, tr, pane, "KEYSDONE")
 }
 
-// hexFields is od's output as one line of bytes.
 func hexFields(s string) string { return strings.Join(strings.Fields(s), " ") }
 
-// waitShimScreen waits until the pane's screen, read through the shim, shows
-// want.
 func waitShimScreen(t *testing.T, tr *shimTranscript, pane, want string) {
 	t.Helper()
 	waitUntil(t, "pane "+pane+" shows "+want, shellTimeout, func() (bool, string) {

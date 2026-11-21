@@ -51,8 +51,6 @@ func TestReboundListKeysMoveEveryList(t *testing.T) {
 	term := attachIn(t, base, session, startOpts{cols: 160, rows: 40})
 	dir := artifactDir(t)
 
-	// moved presses key once and waits for cursor() to differ from what it
-	// read before the key.
 	moved := func(what string, key any, cursor func(tuitest.Screen) string) {
 		t.Helper()
 		if err := term.WaitStable(uiTimeout); err != nil {
@@ -63,8 +61,6 @@ func TestReboundListKeysMoveEveryList(t *testing.T) {
 			t.Fatalf("%s: no cursor row on screen\n%s", what, term.Snapshot())
 		}
 		sendKeys(t, term, key)
-		// A list that did not move is reported and the test goes on, so one
-		// run names every list that ignores the config.
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
 			now := cursor(s)
 			return now != "" && now != before
@@ -74,8 +70,6 @@ func TestReboundListKeysMoveEveryList(t *testing.T) {
 		saveArtifact(t, term, dir, strings.ReplaceAll(what, " ", "-"))
 	}
 
-	// The palette: a picker with a filter, so only keys that are not
-	// letters move it, which ctrl+j and ctrl+k are not.
 	sendKeys(t, term, tuitest.Ctrl('p'))
 	waitPaletteOpen(t, term, "for the rebound list keys")
 	paletteCursor := func(s tuitest.Screen) string {
@@ -102,8 +96,6 @@ func TestReboundListKeysMoveEveryList(t *testing.T) {
 		}
 		return ""
 	}
-	// Each list's footer names the keys the config holds, not the arrows
-	// or j and k it would name by default.
 	footerNames := func(what string) {
 		t.Helper()
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -117,11 +109,8 @@ func TestReboundListKeysMoveEveryList(t *testing.T) {
 	moved("palette ctrl+k", tuitest.Ctrl('k'), paletteCursor)
 	closePalette(t, term, "after the rebound list keys")
 
-	// The review panel: its diff rows.
 	sendKeys(t, term, tuitest.Ctrl('b'), "v")
 	waitScreen(t, term, "the review never opened", "Review", "M main.go")
-	// The diff's cursor row is the one marked › after the file list's
-	// column rule.
 	reviewCursor := func(s tuitest.Screen) string {
 		for line := range strings.SplitSeq(s.Text(), "\n") {
 			if _, after, ok := strings.Cut(line, "│ › "); ok {
@@ -135,8 +124,6 @@ func TestReboundListKeysMoveEveryList(t *testing.T) {
 	sendKeys(t, term, tuitest.Esc)
 	waitGone(t, term, "the review", "M main.go")
 
-	// The scrollback browser: three commands in a shell, each with its own
-	// output, marked the way a shell with OSC 133 marks them.
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 	block := func(name string) string {
@@ -147,7 +134,6 @@ func TestReboundListKeysMoveEveryList(t *testing.T) {
 	if err := term.WaitForText(browserTitle, uiTimeout); err != nil {
 		t.Fatalf("the scrollback browser did not open: %v\n%s", err, term.Snapshot())
 	}
-	// The browser's cursor row is the command marked > in its list.
 	browserCursor := func(s tuitest.Screen) string {
 		for line := range strings.SplitSeq(s.Text(), "\n") {
 			if _, after, ok := strings.Cut(line, "> cmd-"); ok {
@@ -158,8 +144,6 @@ func TestReboundListKeysMoveEveryList(t *testing.T) {
 		}
 		return ""
 	}
-	// The browser lists the newest command first, so its first row is
-	// cmd-three and the row under it cmd-two.
 	footerNames("scrollback browser")
 	if strings.Contains(term.Screen().Text(), "j/k") {
 		t.Errorf("ASSERTION: the scrollback browser footer still names j/k\n%s", term.Snapshot())

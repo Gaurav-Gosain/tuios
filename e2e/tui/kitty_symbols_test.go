@@ -16,9 +16,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// writeKittyPicture writes the test picture as kitty graphics: one a=T
-// transmission of RGBA pixels in 4096-byte chunks, as chafa and timg send
-// it, with id id. The cursor moves past the picture (C=0).
 func writeKittyPicture(t *testing.T, dir string, id int) (*vt.SixelImage, string) {
 	t.Helper()
 	img := symbolPicture()
@@ -98,10 +95,6 @@ func TestKittyImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 				}
 				return at
 			}
-			// The cursor ends at column 0 under the picture (C=0), where it
-			// ends on a host that draws kitty graphics (ReserveImageSpace),
-			// so echo's newline leaves one blank row before SHOWN, as for a
-			// sixel picture.
 			gap := shownAt(term.Screen()) - origin.Y
 			if gap != symPicRows+1 {
 				t.Fatalf("ASSERTION: SHOWN is %d rows under the picture's top, want %d: the cursor did not move past the picture\n%s", gap, symPicRows+1, term.Screen().Text())
@@ -114,7 +107,6 @@ func TestKittyImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 				}
 			}
 
-			// Scroll it up until its top rows leave the pane.
 			typeLine(t, term, fmt.Sprintf("for i in $(seq 1 %d); do echo L$i; done; echo SC''ROLLED", paneBottom-(origin.Y+gap+1)+5))
 			if err := term.WaitForText("SCROLLED", shellTimeout); err != nil {
 				t.Fatalf("the lines did not print: %v", err)
@@ -138,7 +130,6 @@ func TestKittyImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 			}
 			savePNG(t, s, shot.XTermPalette(), artifactDir(t), "scrolled")
 
-			// a=d by id: the picture goes, with no clear.
 			typeLine(t, term, "printf '\\033_Ga=d,d=I,i=7,q=2\\033\\\\'; echo DE''LETED")
 			if err := term.WaitForText("DELETED", shellTimeout); err != nil {
 				t.Fatalf("the delete did not run: %v", err)
@@ -149,7 +140,6 @@ func TestKittyImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 			}
 			savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "deleted")
 
-			// Again, then a=d of all, then again and a clear.
 			typeLine(t, term, "clear; cat "+path+"; echo; echo AG''AIN")
 			if err := term.WaitForText("AGAIN", shellTimeout); err != nil {
 				t.Fatalf("the picture did not print again: %v", err)

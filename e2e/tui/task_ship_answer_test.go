@@ -70,8 +70,6 @@ func TestReadyToMergeAnswerStaysWithItsCard(t *testing.T) {
 	sendKeys(t, term, "b")
 	waitText(t, term, "the board", "Verify passed")
 	sendKeys(t, term, "B")
-	// j walks the cards. M opens Ready to merge on the card under the
-	// cursor, and its key bar names the card.
 	ready := func(id string) {
 		t.Helper()
 		for i := 0; ; i++ {

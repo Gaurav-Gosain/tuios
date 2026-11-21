@@ -47,8 +47,6 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 	artifacts := artifactDir(t)
 	base := t.TempDir()
 	killDaemon(t, base)
-	// The daemon saves the folders the kernel reports, with symlinks resolved,
-	// and on macOS the temporary directory is under one.
 	gone, kept := filepath.Join(base, "gone"), filepath.Join(base, "kept")
 	for _, dir := range []*string{&gone, &kept} {
 		if err := os.Mkdir(*dir, 0o755); err != nil {
@@ -69,8 +67,6 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 		if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
 			t.Fatalf("create the session: %v\n%s", err, out)
 		}
-		// Moved there by its shell, because a writer from before new --cwd
-		// has to run this too.
 		if out, err := tuiosCLI(t, base, "new", session+"-kept", "--detach"); err != nil {
 			t.Fatalf("create the session that keeps its folder: %v\n%s", err, out)
 		}
@@ -87,7 +83,6 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 			fmt.Sprintf("HIST-%d-END", last), bulkTimeout)
 		saveArtifact(t, first, artifacts, "before-restart")
 
-		// kill-server saves every session, and every pane's history, on the way out.
 		if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 			t.Fatalf("kill-server: %v\n%s", err, out)
 		}
@@ -97,7 +92,6 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The history file is private: it holds whatever the pane printed.
 	files, _ := filepath.Glob(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sessions", "scrollback", session, "*.hist.gz"))
 	if len(files) != 1 {
 		t.Fatalf("want one saved history file, got %v", files)
@@ -121,7 +115,6 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 		t.Fatalf("the restored pane does not show its history and the divider: %v\n%s", err, second.Snapshot())
 	}
 
-	// A live shell under the divider.
 	runInShell(t, second, `echo "AFTER-$((40+2))-RESTORE"`, "AFTER-42-RESTORE", shellTimeout)
 	if err := second.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
@@ -146,14 +139,12 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 		t.Fatalf("ASSERTION: want the old lines, then the divider, then the new output; rows old=%d divider=%d new=%d\n%s",
 			oldRow, divRow, newRow, second.Snapshot())
 	}
-	// The divider is dim, so it reads as a note and not as output.
 	line := scr.Line(divRow)
 	col := strings.Index(line, "-- tuios")
 	if c := scr.Cell(col+3, divRow); !c.Faint {
 		t.Errorf("the divider is not dim: %+v", c)
 	}
 
-	// Copy mode reaches the oldest restored line.
 	windowManagementMode(t, second)
 	if err := second.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("enter copy mode: %v", err)
@@ -169,8 +160,6 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 	}
 	saveArtifact(t, second, artifacts, "copy-mode-oldest")
 
-	// The folders the banners name. The paths can be wider than the pane, so
-	// the panes are read unwrapped.
 	if got, want := restoreBannerOf(t, base, session), "fresh shell in "+daemonDir+" ("+gone+" no longer available) --"; !strings.HasSuffix(got, want) {
 		t.Errorf("ASSERTION: the divider of the pane whose folder is gone is %q, want it to end %q", got, want)
 	}
@@ -180,8 +169,6 @@ func TestRestoredPaneShowsItsHistoryAboveTheDivider(t *testing.T) {
 	alive(t, second, "after restoring history")
 }
 
-// restoreBannerOf is the last restore banner in the session's whole pane, read
-// unwrapped, or "" when the pane has none.
 func restoreBannerOf(t *testing.T, base, session string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "capture-pane", "-s", session, "--scrollback", "--lines", "0", "--unwrap")

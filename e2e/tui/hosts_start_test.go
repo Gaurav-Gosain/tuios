@@ -6,11 +6,6 @@ import (
 	"testing"
 )
 
-// --start on tuios hosts test and tuios hosts sync, against the fake hosts of
-// hosts_sync_test.go. The daemons started here run under each host's own
-// root, and remoteMachine stops them when the test ends.
-
-// hostTestJSON is the part of `tuios hosts test --json` the tests read.
 type hostTestJSON struct {
 	Host         string `json:"host"`
 	Status       string `json:"status"`
@@ -21,7 +16,6 @@ type hostTestJSON struct {
 	Error        string `json:"error"`
 }
 
-// hostTest runs `tuios hosts test NAME --json` with args and reads the result.
 func (f *syncFleet) hostTest(t *testing.T, name string, args ...string) (hostTestJSON, string, error) {
 	t.Helper()
 	out, err := tuiosCLIEnv(t, f.here, f.env, append([]string{"hosts", "test", name, "--json"}, args...)...)
@@ -44,8 +38,6 @@ func TestHostsTestStart(t *testing.T) {
 	idle := f.hosts["idle"]
 	idle.install(t, tuiosBin)
 
-	// The message for no_daemon gives the exact command for the host, and
-	// the --start that runs it from here.
 	out, err := tuiosCLIEnv(t, f.here, f.env, "hosts", "test", "idle")
 	saveSyncArtifact(t, "no-daemon.txt", out)
 	if err == nil {
@@ -61,7 +53,6 @@ func TestHostsTestStart(t *testing.T) {
 		t.Errorf("ASSERTION: the message does not suggest --start:\n%s", out)
 	}
 
-	// The dry run: the plan, and no daemon.
 	plan, out, err := f.hostTest(t, "idle", "--start", "--dry-run")
 	saveSyncArtifact(t, "test-start-dry-run.json", out)
 	if err != nil {
@@ -74,7 +65,6 @@ func TestHostsTestStart(t *testing.T) {
 		t.Fatalf("ASSERTION: the dry run changed the host, which now reports %q\n%s", now.Status, out)
 	}
 
-	// The start.
 	res, out, err := f.hostTest(t, "idle", "--start")
 	saveSyncArtifact(t, "test-start.json", out)
 	if err != nil {
@@ -89,7 +79,6 @@ func TestHostsTestStart(t *testing.T) {
 		t.Errorf("ASSERTION: after --start the host is not up: %v\n%s", err, out)
 	}
 
-	// A second --start finds the daemon up and does nothing.
 	out, err = tuiosCLIEnv(t, f.here, f.env, "hosts", "test", "idle", "--start")
 	saveSyncArtifact(t, "start-again.txt", out)
 	if err != nil || !strings.Contains(out, "--start did nothing") {
@@ -105,7 +94,6 @@ func TestHostsSyncStart(t *testing.T) {
 	f := newSyncFleet(t, []string{"fresh"}, nil)
 	fresh := f.hosts["fresh"]
 
-	// No tuios, so no daemon.
 	res, out, err := f.hostTest(t, "fresh", "--start")
 	saveSyncArtifact(t, "test-start-no-tuios.json", out)
 	if err == nil || res.Action == "daemon started" || res.Status == "up" {
@@ -134,7 +122,6 @@ func TestHostsSyncStart(t *testing.T) {
 		t.Errorf("ASSERTION: fresh was not installed and started: %+v\n%s", r, out)
 	}
 
-	// The daemon runs the version just installed.
 	now, out, _ := f.syncJSON(t, "--binary", next, "--dry-run")
 	saveSyncArtifact(t, "sync-after-start.json", out)
 	if d := now["fresh"].Daemon; d.State != "running" || d.Version != syncNextVersion {

@@ -12,32 +12,14 @@ import (
 	"tuios.dev/vt"
 )
 
-// ghostTarget is the row the fixture settles on, and ghostStale differs from it
-// only at the columns holding a space. A renderer diffing the two emits one run
-// covering the changed cells, which is the shape a full-screen TUI's input line
-// has when a few of its characters change.
 const (
 	ghostTarget = "ABCDE FGHIJ KLMNO PQRST ZZZZZ QQQQQ WWWW"
 	ghostStale  = "ABCDE#FGHIJ#KLMNO#PQRST#ZZZZZ#QQQQQ#WWWW"
 
-	// ghostRunTarget and ghostRunStale are the span the renderer actually
-	// rewrites: the changed cells and the unchanged ones it is cheaper to
-	// reprint than to jump over. The columns outside it never appear in a
-	// recording that starts mid-stream, because a diffing renderer never
-	// writes a cell that did not change.
 	ghostRunTarget = " FGHIJ KLMNO PQRST ZZZZZ QQQQQ "
 	ghostRunStale  = "#FGHIJ#KLMNO#PQRST#ZZZZZ#QQQQQ#"
 )
 
-// ghostCmd is an alt-screen guest that rewrites one row in place, bracketing
-// each rewrite in a synchronized update the way a full-screen TUI does, and
-// handing the whole row over in a single write.
-//
-// The bracket is what makes the assertion meaningful. A guest that does not ask
-// for its frame to be held has no claim on being shown whole: tuios applies the
-// bytes as they arrive and composes from whatever it has, exactly as a terminal
-// does. A guest that does ask must never be composed mid-frame, and must never
-// be presented mid-frame either.
 func ghostCmd(passes int) string {
 	return fmt.Sprintf(`awk 'BEGIN{`+
 		`printf "\033[?1049h\033[2J\033[H\033[8;1HGHOSTREADY";fflush();`+
@@ -50,18 +32,13 @@ func ghostCmd(passes int) string {
 		`}'; exec sleep 300`, ghostStale, ghostTarget, passes)
 }
 
-// ghostFloodCmd is a neighbour pane producing continuous output, which is the
-// split layout the ghost-text report came from.
 const ghostFloodCmd = `awk 'BEGIN{for(n=0;n<2000000;n++){printf "flood %d line of noise\n",n;fflush()}}'; exec sleep 300`
 
-// syncBegin and syncEnd bracket a synchronized update (DEC private mode 2026).
 var (
 	syncBegin = []byte("\x1b[?2026h")
 	syncEnd   = []byte("\x1b[?2026l")
 )
 
-// ghostGate records tuios's output once the setup keystrokes are done, so the
-// recording is a pure output stream that can be replayed into an emulator.
 type ghostGate struct {
 	mu sync.Mutex
 	on bool
@@ -118,8 +95,6 @@ func TestGhostTextFramesArePresentedWhole(t *testing.T) {
 	term, _ := start(t, startOpts{cols: cols, rows: rows, out: &g})
 	waitBoot(t, term)
 
-	// A neighbour saturating the pipe keeps frames coming while the guest
-	// rewrites its row, which is the split layout the report came from.
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(ghostFloodCmd, tuitest.Enter); err != nil {
@@ -136,7 +111,6 @@ func TestGhostTextFramesArePresentedWhole(t *testing.T) {
 		t.Fatalf("the ghost fixture never started: %v\n%s", err, term.Snapshot())
 	}
 
-	// No keystroke is sent from here on, so everything recorded is output.
 	g.open()
 	time.Sleep(10 * time.Second)
 	stream := g.bytes()
@@ -144,8 +118,6 @@ func TestGhostTextFramesArePresentedWhole(t *testing.T) {
 		t.Fatalf("tuios wrote nothing to the host\n%s", term.Snapshot())
 	}
 
-	// Every frame must be bracketed. An unbracketed frame is one the host is
-	// free to present halfway through.
 	brackets := bytes.Count(stream, syncBegin)
 	if brackets == 0 {
 		t.Fatalf("not one of the %d bytes tuios wrote to the host was inside a "+
@@ -159,8 +131,6 @@ func TestGhostTextFramesArePresentedWhole(t *testing.T) {
 		t.Errorf("%d bytes were written to the host outside any synchronized update", outside)
 	}
 
-	// Replay the stream and read the row only where a conforming host presents
-	// it: at the close of each synchronized update.
 	emu := vt.NewEmulator(cols, rows)
 	var presented, torn int
 	var example string
@@ -191,17 +161,12 @@ func TestGhostTextFramesArePresentedWhole(t *testing.T) {
 		t.Fatalf("the fixture's row was never presented in %d frames\n%s",
 			brackets, term.Snapshot())
 	}
-	// Logged, not asserted. A frame presented whole can still have been
-	// composed from a half-applied guest frame, which is a separate defect on
-	// the other side of the emulator; see the sync hold in GetCanvas. The
-	// assertions above are the ones this fix owns.
 	t.Logf("presented=%d composed-torn=%d", presented, torn)
 	if torn > 0 {
 		t.Logf("example of a frame composed mid-guest-update: %q", example)
 	}
 }
 
-// bytesOutsideSync counts the bytes that fall outside a synchronized update.
 func bytesOutsideSync(stream []byte) int {
 	outside, rest := 0, stream
 	for len(rest) > 0 {
@@ -220,7 +185,6 @@ func bytesOutsideSync(stream []byte) int {
 	return outside
 }
 
-// ghostRowOf reads the fixture's row out of a replayed screen.
 func ghostRowOf(emu *vt.Emulator, cols, rows int) string {
 	for y := range rows {
 		var sb strings.Builder

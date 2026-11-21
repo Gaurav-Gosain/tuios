@@ -12,20 +12,8 @@ import (
 	"testing"
 )
 
-// The person's own user services: the systemd user units on Linux and the
-// launchd agents on macOS. A test once wrote the real
-// ~/.config/systemd/user/tuios-daemon.service, pointed at its temp HOME,
-// and the unit then failed in a loop once the test removed that folder.
-// runE2E takes a snapshot of these folders before the run and fails the run
-// when anything in them changed after it.
-
-// guardDirs are the folders the guard watches. TestUserServicesGuardSeesAChange
-// points it at a folder of its own, so it proves the guard without touching
-// the real ones.
 var guardDirs = userServiceDirs
 
-// userServiceDirs are the folders of the account's own services, from the
-// account database: a test moves HOME, and the service manager does not.
 func userServiceDirs() []string {
 	home := ""
 	if u, err := user.Current(); err == nil {
@@ -47,8 +35,6 @@ func userServiceDirs() []string {
 	return nil
 }
 
-// serviceSnapshot is each file and link under the folders, with what tells a
-// change: its kind and mode, its size, its time and a link's target.
 type serviceSnapshot map[string]string
 
 func snapshotUserServices() serviceSnapshot {
@@ -77,8 +63,6 @@ func snapshotUserServices() serviceSnapshot {
 	return snap
 }
 
-// changes lists what differs between the snapshot and the folders now, one
-// line for each path. Empty means nothing changed.
 func (s serviceSnapshot) changes() string {
 	now := snapshotUserServices()
 	var lines []string

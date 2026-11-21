@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// whichKeyKeyOf returns the key which-key shows in front of desc, or "" when
-// no row says desc. The key is the word just before the description.
 func whichKeyKeyOf(s tuitest.Screen, desc string) string {
 	re := regexp.MustCompile(`(\S+)\s+` + regexp.QuoteMeta(desc) + `(\s|$)`)
 	for line := range strings.SplitSeq(s.Text(), "\n") {
@@ -21,9 +19,6 @@ func whichKeyKeyOf(s tuitest.Screen, desc string) string {
 	return ""
 }
 
-// whichKeyRebindConfig rebinds the workspace menu's rename key, unbinds its
-// fifth switch, and moves the leader's zoom key. Empty values keep the
-// defaults.
 func whichKeyRebindConfig(themeName, rename, zoom string, unbindFifth bool) string {
 	cfg := "[appearance]\n"
 	if themeName != "" {
@@ -102,7 +97,6 @@ func TestWhichKeyShowsTheConfiguredKeys(t *testing.T) {
 				}
 			}
 
-			// The rebound and unbound keys, from the config read at start.
 			openWorkspaceMenu()
 			waitKeys("the workspace menu after a rebind", map[string]string{
 				"Rename workspace":    "e",
@@ -115,14 +109,12 @@ func TestWhichKeyShowsTheConfiguredKeys(t *testing.T) {
 			savePNG(t, term.Screen(), host, dir, "workspace-rebound")
 			closeMenu()
 
-			// The leader's own menu reads the config too.
 			sendKeys(t, term, tuitest.Ctrl('b'))
 			waitScreen(t, term, "the leader menu never drew", "Toggle zoom", "Workspace")
 			waitKeys("the leader menu after a rebind", map[string]string{"Toggle zoom": "Z"})
 			sendKeys(t, term, tuitest.Esc)
 			waitGone(t, term, "the leader menu", "Toggle zoom")
 
-			// Saved again while tuios runs: the menu follows the new file.
 			saveConfigLikeAnEditor(t, base, whichKeyRebindConfig(look.theme, "y", "", false))
 			openWorkspaceMenu()
 			waitKeys("the workspace menu after a runtime rebind", map[string]string{
@@ -161,7 +153,6 @@ func TestWhichKeyRowsAreTheKeysThatRun(t *testing.T) {
 	writeConfig(t, base, "[keybindings.window_prefix]\nwindow_prefix_new = [\"y\"]\nwindow_prefix_close = []\n")
 	term := startIn(t, base, startOpts{cols: 120, rows: 36})
 	waitBoot(t, term)
-	// The dock's "1:<windows>" readout is the count of windows on workspace 1.
 	readout := regexp.MustCompile(`\b1:(\d+)\b`)
 	frames := func(s tuitest.Screen) int {
 		m := readout.FindStringSubmatch(s.Text())
@@ -188,13 +179,11 @@ func TestWhichKeyRowsAreTheKeysThatRun(t *testing.T) {
 	}
 	saveArtifact(t, term, artifactDir(t), "window-menu-rebound")
 
-	// The key the row names runs the action.
 	sendKeys(t, term, "y")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return frames(s) == before+1 }, uiTimeout); err != nil {
 		t.Fatalf("the y the menu shows did not open a window: %d windows, want %d\n%s", panes(), before+1, term.Snapshot())
 	}
 
-	// The old key and the unbound key do nothing.
 	for _, key := range []string{"n", "x"} {
 		sendKeys(t, term, tuitest.Ctrl('b'), "t")
 		waitScreen(t, term, "the window menu never drew", "New window")

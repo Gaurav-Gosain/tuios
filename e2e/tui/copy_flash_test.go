@@ -11,68 +11,22 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The copy sweep: a band of light that crosses text a mouse selection has just
-// copied. These tests read it off the cells the real binary sends, frame by
-// frame, and hold it to what an animation has to be: many frames, evenly
-// spaced, each one further along than the last, with the light on the text
-// for the length of the sweep.
-//
-// How these could pass wrongly, written down first:
-//   - A lit cell could be something other than the light, such as the
-//     selection itself. The light is configured white, and a cell counts as lit
-//     only when its ground is brighter than every ground the settled selection
-//     uses.
-//   - The sampler could see fewer frames than were drawn on a slow machine.
-//     The bounds leave room for that: the sweep runs for a second, a client at
-//     60 frames a second draws about fifty lit frames, and the test asks for
-//     twenty with no gap over 120ms. The build this was written against drew
-//     four, 230ms apart, because only the dock message's burn asked for
-//     frames.
-//   - The long selection could fail to reach the scrollback, so the test would
-//     check a short one twice. It requires the view to have scrolled back past
-//     the oldest line the pane showed before the drag.
-//
-// Negative controls: moving the sweep back onto the maintenance tick fails
-// both tests on frame count and gap. Measuring the block before clamping it to
-// where the text ends fails the long one on how long the light stays on the
-// text.
-
-// flashTestMs is how long the sweep takes in these tests. Longer than the
-// shipped 420ms so a frame loop at 60 a second has room for dozens of frames,
-// which makes a stall easy to tell from sampling noise.
 const flashTestMs = 1000
 
-// flashFrame is one distinct screen drawn while a sweep ran, reduced to the
-// lit cells of the selection rows.
 type flashFrame struct {
-	at time.Duration
-	// peak is the column of the brightest lit cell on the reference row, or
-	// -1 when that row has no lit cell.
-	peak int
-	// lit is how many cells across all sampled rows carry the light.
-	lit int
-	// refLo and refHi are the first and last lit columns on the reference
-	// row, or -1 when it has none.
+	at           time.Duration
+	peak         int
+	lit          int
 	refLo, refHi int
-	// art is the reference row, one character per cell, for the log.
-	art string
-	// mask holds, for each sampled row from the first, which columns carry
-	// the light.
-	mask [][]bool
+	art          string
+	mask         [][]bool
 }
 
-// startFlashClient starts a client with the sweep on, a white light so the
-// brightest cell is the centre of the band, and a horizontal sweep so the
-// centre is a column on every row. With daemon, the client attaches to a
-// daemon session, which is how tuios ships.
 func startFlashClient(t *testing.T, motion string, daemon bool) *tuitest.Terminal {
 	t.Helper()
 	return startFlashClientWith(t, motion, daemon, "")
 }
 
-// startFlashClientWith is startFlashClient with extra config appended. The
-// extra lines land in the [appearance.selection] table unless they open a
-// table of their own.
 func startFlashClientWith(t *testing.T, motion string, daemon bool, extra string) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -104,7 +58,6 @@ func startFlashClientWith(t *testing.T, motion string, daemon bool, extra string
 	return term
 }
 
-// luminance is a cell ground's brightness, 0 for the default ground.
 func luminance(c tuitest.Color) int {
 	if c.Kind != tuitest.ColorRGB {
 		return 0
@@ -112,9 +65,6 @@ func luminance(c tuitest.Color) int {
 	return int(c.R)*299 + int(c.G)*587 + int(c.B)*114
 }
 
-// sampleFlash calls release, then records every distinct state of rows
-// [r0, r1] until they have held still for a while after the sweep's time is
-// up. Only the grounds of those rows are kept, so the capture stays small.
 func sampleFlash(t *testing.T, term *tuitest.Terminal, r0, r1, ref int, release func()) []flashFrame {
 	t.Helper()
 	cols, _ := term.Screen().Size()
@@ -158,7 +108,6 @@ func sampleFlash(t *testing.T, term *tuitest.Terminal, r0, r1, ref int, release 
 		}
 		time.Sleep(time.Millisecond)
 	}
-	// The settled selection's grounds are whatever the last frame holds.
 	settled := 0
 	for _, row := range frames[len(frames)-1].cells {
 		for _, bg := range row {
@@ -208,7 +157,6 @@ func sampleFlash(t *testing.T, term *tuitest.Terminal, r0, r1, ref int, release 
 	return out
 }
 
-// logFlash writes the sampled frames to the test log, bounded.
 func logFlash(t *testing.T, frames []flashFrame) {
 	t.Helper()
 	for i, f := range frames {
@@ -224,10 +172,6 @@ func logFlash(t *testing.T, frames []flashFrame) {
 	}
 }
 
-// checkSmoothSweep holds the lit frames to the shape of an animation: enough
-// of them, no stall between two, the light moving one way only, and the light
-// on the text for most of the sweep. textEnd is the last column of text on
-// the reference row.
 func checkSmoothSweep(t *testing.T, frames []flashFrame, textStart, textEnd int) {
 	t.Helper()
 	first, last := -1, -1
@@ -254,8 +198,6 @@ func checkSmoothSweep(t *testing.T, frames []flashFrame, textStart, textEnd int)
 	if worst > 120*time.Millisecond {
 		t.Errorf("the sweep stalled for %v between two frames", worst)
 	}
-	// The light on the reference row: only over its text, and there for
-	// most of the sweep.
 	var onFrom, onTo time.Duration = -1, -1
 	for _, f := range lit {
 		if f.refLo < 0 {
@@ -292,8 +234,6 @@ func checkSmoothSweep(t *testing.T, frames []flashFrame, textStart, textEnd int)
 	}
 }
 
-// echoedRow is the row and column of the line a command printed, not the
-// command line that typed it: the last row that starts with the text.
 func echoedRow(t *testing.T, term *tuitest.Terminal, text string) (row, col int) {
 	t.Helper()
 	findText(t, term, text)
@@ -354,10 +294,8 @@ func TestCopyFlashSweepsAShortSelectionSmoothly(t *testing.T) {
 	}
 }
 
-// wallLine matches the tag fillScrollback prints on each line.
 var wallLine = regexp.MustCompile(`WALL-(\d+)-END`)
 
-// oldestWall is the lowest WALL line number on screen, or -1.
 func oldestWall(s tuitest.Screen) int {
 	oldest := -1
 	for _, m := range wallLine.FindAllStringSubmatch(s.Text(), -1) {
@@ -402,7 +340,6 @@ func TestCopyFlashSweepsASelectionIntoScrollback(t *testing.T) {
 			for r := bottom - 1; r >= top; r-- {
 				mouseMotion(t, term, col, r, tuitest.MouseLeft, 0)
 			}
-			// Over the border: the view scrolls back while the button is down.
 			mouseMotion(t, term, col, top-1, tuitest.MouseLeft, 0)
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				n := oldestWall(s)
@@ -416,7 +353,6 @@ func TestCopyFlashSweepsASelectionIntoScrollback(t *testing.T) {
 				mouseRelease(t, term, col, top-1, tuitest.MouseLeft, 0)
 			})
 			logFlash(t, frames)
-			// The text on the reference row is one WALL-n-END line.
 			midLine := term.Screen().Line(mid)
 			loc := wallLine.FindStringIndex(midLine)
 			if loc == nil {

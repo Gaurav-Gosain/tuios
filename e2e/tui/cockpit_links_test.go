@@ -14,19 +14,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The addresses in the thread of TestCockpitLinksOpenOnClick. Each one is
-// written once in the transcript, so the cell a test finds it on is the only
-// place it is drawn.
 const (
 	ckLinkMarkdown = "https://example.com/cockpit-markdown"
 	ckLinkBare     = "https://example.com/cockpit-bare"
 	ckLinkTool     = "https://example.com/cockpit-tool"
 )
 
-// cockpitLinksTerm starts the agents view on the thread of linksTranscript,
-// every card open, with a link opener that writes each link it is given to
-// the returned record file. out is the host stream the clipboard is read
-// from.
 func cockpitLinksTerm(t *testing.T) (term *tuitest.Terminal, record string, out *lockedBuffer) {
 	t.Helper()
 	base := t.TempDir()
@@ -77,7 +70,6 @@ func cockpitLinksTerm(t *testing.T) (term *tuitest.Terminal, record string, out 
 		t.Fatalf("open the agents view: %v", err)
 	}
 	waitText(t, term, "the thread", "Where are the retry rules", "the retry docs")
-	// The finished turn folds; e opens every card, the tool's among them.
 	if err := term.SendKeys("e"); err != nil {
 		t.Fatal(err)
 	}
@@ -106,8 +98,6 @@ func TestCockpitLinksOpenOnClick(t *testing.T) {
 	term, record, _ := cockpitLinksTerm(t)
 	saveCockpitFrames(t, term, "cockpit-links-before")
 
-	// The pointer on the URL in the tool line underlines it. The line is
-	// plain text, not underlined before, so the underline is the hover's.
 	col, row := mustFind(t, term, ckLinkTool)
 	mid := col + len(ckLinkTool)/2
 	if cellUnderlined(term.Screen(), mid, row) {
@@ -131,7 +121,6 @@ func TestCockpitLinksOpenOnClick(t *testing.T) {
 	click(ckLinkBare, ckLinkBare, "ASSERTION: a click on the bare URL")
 	click(ckLinkTool, ckLinkTool, "ASSERTION: a click on the URL in the tool line")
 
-	// Keyboard: copy mode, a search to the link, then gx.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatal(err)
 	}
@@ -158,9 +147,6 @@ func TestCockpitLinksOpenOnClick(t *testing.T) {
 	alive(t, term, "after the link clicks")
 }
 
-// linksTranscript is the transcript of TestCockpitLinksOpenOnClick: a prompt,
-// an answer with a Markdown link and a bare URL, and a Bash call whose command
-// holds a URL.
 func linksTranscript(t *testing.T) []byte {
 	t.Helper()
 	recs := []map[string]any{
@@ -211,7 +197,6 @@ func TestCockpitDragFromALinkSelects(t *testing.T) {
 		got := openedLinks(record)
 		return len(got) == 0, fmt.Sprintf("the opener was started with %q", got)
 	})
-	// A plain click on the link opens it, on its release.
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
 	waitOpened(t, record, []string{ckLinkBare}, "ASSERTION: a click on the link after the drag")
 	alive(t, term, "after a drag from a link")

@@ -9,21 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Two clients of one session attach, resize, change the rail and leave, under
-// each window_size policy that sizes by the clients' terminals. After every
-// step four things have to agree, read from the daemon and from the screens:
-//
-//   - the session's size is what the policy makes of the clients attached,
-//   - the daemon's pane rectangles fill that size,
-//   - each pane's emulator is its rectangle less its border, so the shell has
-//     the size the pane is drawn at,
-//   - each pane keeps the share of the box the user gave it, so no step put
-//     the layout back to equal splits.
-//
-// A client at least as wide as the session draws the panes out to the
-// session's right edge. latest is left out: it follows input, and
-// window_size_test.go drives it.
-
 type mcClient struct {
 	term       *tuitest.Terminal
 	cols, rows int
@@ -43,7 +28,6 @@ type mcRun struct {
 	dir      string
 }
 
-// want is the session's size under the policy, over the attached clients.
 func (r *mcRun) want() (w, h int) {
 	first := true
 	for _, c := range r.clients {
@@ -63,7 +47,6 @@ func (r *mcRun) want() (w, h int) {
 	return w, h
 }
 
-// check waits for every agreement after a step.
 func (r *mcRun) check(step string) {
 	t := r.t
 	t.Helper()
@@ -82,7 +65,6 @@ func (r *mcRun) check(step string) {
 		}
 		return nil
 	})
-	// The shells are the size their panes are drawn at.
 	deadline := time.Now().Add(uiTimeout)
 	for _, rc := range rects {
 		for {
@@ -113,7 +95,6 @@ func (r *mcRun) check(step string) {
 	}
 }
 
-// waitWSSizeIn is waitWSSize for a named session.
 func waitWSSizeIn(t *testing.T, base, name string, w, h int, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -128,9 +109,6 @@ func waitWSSizeIn(t *testing.T, base, name string, w, h int, what string) {
 	t.Fatalf("%s: the session is %dx%d under %s, want %dx%d", what, gw, gh, policy, w, h)
 }
 
-// atOnce checks that the session takes its new size within a second of a
-// client leaving. A leave is not something the remaining client should wait
-// on: nothing else is coming to correct the size.
 func (r *mcRun) atOnce(step string) {
 	r.t.Helper()
 	w, h := r.want()
@@ -197,7 +175,6 @@ func TestTwoClientsKeepOneLayout(t *testing.T) {
 				r.resize("b", 200, 50)
 				r.check("b grew past a")
 
-				// The rail is session state: shown from b, it is shown on a.
 				toggleRail(t, b)
 				if err := a.WaitFor(railShown, uiTimeout); err != nil {
 					t.Fatalf("the rail never showed on a\n%s", a.Snapshot())
@@ -211,13 +188,11 @@ func TestTwoClientsKeepOneLayout(t *testing.T) {
 				r.railCols = 0
 				r.check("rail hidden")
 
-				// A drag of b's terminal edge: sizes faster than any answer.
 				for i := range 12 {
 					r.resize("b", 140+i*5, 36+i%5)
 					time.Sleep(25 * time.Millisecond)
 				}
 				r.check("b dragged")
-				// Both at once.
 				go func() { _ = a.Resize(170, 42) }()
 				r.resize("b", 190, 45)
 				r.clients["a"].cols, r.clients["a"].rows = 170, 42
@@ -226,24 +201,15 @@ func TestTwoClientsKeepOneLayout(t *testing.T) {
 				r.resize("b", 200, 50)
 				r.check("b at 200x50")
 
-				// The larger client leaves: under largest the session shrinks to
-				// a at once.
 				sendKeys(t, b, tuitest.Ctrl('b'), "d")
 				r.clients["b"].attached = false
 				r.atOnce("b detached")
 				r.check("b detached")
 
-				// The smaller client attaches and exits: under smallest the
-				// session grows back to a at once.
 				b2 := attachIn(t, r.base, r.name, startOpts{cols: 160, rows: 40})
 				r.clients["b"] = &mcClient{term: b2, cols: 160, rows: 40, attached: true}
 				r.check("b attached again at 160x40")
 				if policy == "smallest" {
-					// A third client larger than both moves nothing under
-					// smallest, so the count it brings and takes away is the
-					// message a shows.
-					// attachSmall: a client taller than the session draws its dock
-					// at the session's bottom row, where attachIn does not look.
 					c := attachSmall(t, r.base, r.name, startOpts{cols: 200, rows: 50})
 					waitStream(t, out, "Client joined (3 connected)", "a, when a third client attached")
 					if err := c.Close(); err != nil {
@@ -262,9 +228,6 @@ func TestTwoClientsKeepOneLayout(t *testing.T) {
 	}
 }
 
-// waitStream waits for text in what a client wrote to its terminal. A message
-// the dock shows for one frame before a newer one replaces it is still in the
-// stream.
 func waitStream(t *testing.T, out *syncBuffer, text, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)

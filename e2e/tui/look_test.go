@@ -93,7 +93,6 @@ border_unfocused_color = "#553300"
 		t.Fatalf("the double border of config.toml is not on screen: %v\n%s", err, term.Snapshot())
 	}
 
-	// --yes alone: the look goes in, and no file of the person's changes.
 	out := run("look", "apply", lookFile, "--yes")
 	if !strings.Contains(out, "These keys are set in a later file") {
 		t.Fatalf("ASSERTION: apply did not name the hidden keys:\n%s", out)
@@ -109,7 +108,6 @@ border_unfocused_color = "#553300"
 	}
 	themeFrom("config.toml")
 
-	// The take-over, answered on a terminal.
 	cli := startIn(t, base, startOpts{cols: 120, rows: 40, shippedLooks: true, animations: true,
 		args: []string{"look", "apply", lookFile}})
 	answer := func(question string) {
@@ -160,7 +158,6 @@ border_unfocused_color = "#553300"
 	}
 	saveArtifact(t, term, artifactDir(t), "client-after-take-over")
 
-	// The remove puts every file back as it was.
 	run("look", "remove", "--yes")
 	if got := readFileString(t, mainPath); got != mainBody {
 		t.Fatalf("ASSERTION: look remove did not put config.toml back byte for byte:\n--- got\n%s--- want\n%s", got, mainBody)
@@ -176,7 +173,6 @@ border_unfocused_color = "#553300"
 		t.Fatalf("ASSERTION: the running client did not go back to the double border: %v\n%s", err, term.Snapshot())
 	}
 
-	// A key the person sets again after a take-over keeps the newer value.
 	run("look", "apply", lookFile, "--yes", "--take-over")
 	edited := strings.Replace(readFileString(t, mainPath), "gap = 0\n", "gap = 0\nborder_style = \"thick\"\n", 1)
 	saveConfigLikeAnEditor(t, base, edited)
@@ -198,8 +194,6 @@ border_unfocused_color = "#553300"
 	alive(t, term, "after the look came and went")
 }
 
-// lookCase is a scratch config for one case of TestLookTakeOverKeepsLaterEdits:
-// its root, a look file per name, and a runner for the CLI.
 type lookCase struct {
 	t     *testing.T
 	base  string
@@ -222,7 +216,6 @@ func newLookCase(t *testing.T, main string, looks map[string]string) *lookCase {
 	return c
 }
 
-// run runs tuios and fails the test when it fails.
 func (c *lookCase) run(args ...string) string {
 	c.t.Helper()
 	out, err := tuiosCLI(c.t, c.base, args...)
@@ -245,9 +238,6 @@ func (c *lookCase) dropIn(name string) string {
 func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
 	const amber = "look = 1\nname = \"Amber\"\n\n[appearance]\ntheme = \"nord\"\nborder_style = \"rounded\"\nborder_focused_color = \"#ffb000\"\n"
 
-	// A take-over that leaves a file empty, then a second take-over after
-	// the person wrote the file again. The remove must keep what they wrote
-	// second: the newer value and the key that is not a look key.
 	t.Run("second take-over after an edit", func(t *testing.T) {
 		c := newLookCase(t, "[appearance]\ngap = 0\n", map[string]string{"amber": amber})
 		only := c.dropIn("zz-only.toml")
@@ -276,8 +266,6 @@ func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
 		}
 	})
 
-	// An edit made while tuios asks its question stops the command, and the
-	// edit stays.
 	t.Run("edit during the question", func(t *testing.T) {
 		c := newLookCase(t, "[appearance]\ntheme = \"dracula\"\n", map[string]string{"amber": amber})
 		cli := startIn(t, c.base, startOpts{cols: 120, rows: 40, shippedLooks: true, animations: true,
@@ -299,8 +287,6 @@ func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
 		if _, err := os.Stat(c.dropIn("look.toml")); err == nil {
 			t.Fatal("ASSERTION: the stopped take-over still applied the look")
 		}
-		// A stopped command leaves nothing: no temporary file and no saved
-		// values.
 		for _, dir := range []string{configDirIn(c.base), filepath.Dir(c.dropIn("x"))} {
 			entries, _ := os.ReadDir(dir)
 			for _, e := range entries {
@@ -311,8 +297,6 @@ func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
 		}
 	})
 
-	// The person deleted look.toml by hand. The remove must still put the
-	// saved values back.
 	t.Run("look file deleted by hand", func(t *testing.T) {
 		mainBody := "# mine\n[appearance]\ntheme = \"dracula\" # keep\nborder_style = \"double\"\n"
 		c := newLookCase(t, mainBody, map[string]string{"amber": amber})
@@ -332,8 +316,6 @@ func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
 		}
 	})
 
-	// Look B over look A's take-over: the keys A took and B does not set
-	// come back to the person.
 	t.Run("second look over a take-over", func(t *testing.T) {
 		const plain = "look = 1\nname = \"Plain\"\n\n[appearance]\nborder_style = \"thick\"\n"
 		c := newLookCase(t, "[appearance]\ntheme = \"dracula\"\nborder_style = \"double\"\n",
@@ -351,13 +333,8 @@ func TestLookTakeOverKeepsLaterEdits(t *testing.T) {
 	})
 }
 
-// galleryFeedLook is one look the fake gallery serves: the feed entry and the
-// look file, which the real gallery serves from the same text.
 type galleryFeedLook struct{ id, title, login, text string }
 
-// fakeGallery serves a gallery feed and its looks on a loopback address, the
-// way tuios.dev serves /gallery/feed and /r/<id>.toml. It records each path
-// asked for.
 func fakeGallery(t *testing.T, looks []galleryFeedLook) (*httptest.Server, *sync.Map) {
 	t.Helper()
 	type file struct {
@@ -382,7 +359,6 @@ func fakeGallery(t *testing.T, looks []galleryFeedLook) (*httptest.Server, *sync
 			Files: []file{{Label: "toml", Text: l.text}}, Look: map[string]string{"id": l.id}})
 		byPath["/r/"+l.id+".toml"] = l.text
 	}
-	// An entry with no look is a screenshot alone. The list leaves it out.
 	feed.Entries = append(feed.Entries, entry{ID: "999", Login: "someone", Title: "Just a picture"})
 	feedJSON, err := json.Marshal(feed)
 	if err != nil {
@@ -544,8 +520,6 @@ func TestLookShareRoundTrip(t *testing.T) {
 	writeStub("gh", `echo e2e-user`)
 	writeStub("browser", `echo "$1" >> `+opened)
 	env := []string{"HOME=" + home, "PATH=" + stubs + ":" + os.Getenv("PATH"), "BROWSER=" + filepath.Join(stubs, "browser"),
-		// No display, so no clipboard tool reaches the clipboard of the
-		// machine that runs the suite.
 		"WAYLAND_DISPLAY=", "DISPLAY="}
 
 	writeConfigPart(t, base, filepath.Join("themes", "neon.json"),
@@ -563,7 +537,6 @@ func TestLookShareRoundTrip(t *testing.T) {
 		return out
 	}
 
-	// Export, apply in a fresh config, export again.
 	file := filepath.Join(base, "neon.look.toml")
 	cli(base, "look", "export", "-o", file, "--name", "Neon 84")
 	exported := readFileString(t, file)
@@ -594,15 +567,12 @@ func TestLookShareRoundTrip(t *testing.T) {
 	}
 	printed := cli(base, "look", "share", "--print")
 
-	// Share from the palette of a running client.
 	out := &lockedBuffer{}
 	term := startIn(t, base, startOpts{cols: 120, rows: 36, shippedLooks: true, out: out, env: env, args: []string{"new", "share"}})
 	waitBoot(t, term)
 	newWindow(t, term)
 	from := len(clipboardWrites(out))
 	runPaletteRow(t, term, "share my look", "Share my look", "Share my look")
-	// The screenshot is rendered before the toast, which takes a few seconds
-	// on a loaded machine.
 	if err := term.WaitForText("Look copied. Paste it in the browser page.", 60*time.Second); err != nil {
 		t.Fatalf("the share did not finish: %v\n%s", err, term.Snapshot())
 	}
@@ -623,7 +593,6 @@ func TestLookShareRoundTrip(t *testing.T) {
 	}
 	_ = os.WriteFile(filepath.Join(artifactDir(t), "share-screenshot.png"), data, 0o644)
 
-	// The dock cuts the toast. prefix+N shows all of it, the path too.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "N"); err != nil {
 		t.Fatal(err)
 	}
@@ -635,7 +604,6 @@ func TestLookShareRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The CLI asks the running client, and prints at most three lines.
 	shared := cli(base, "look", "share")
 	lines := strings.Split(strings.TrimSpace(shared), "\n")
 	if len(lines) > 3 || lines[0] != "The comment is on your clipboard. Paste it into the discussion." ||
@@ -649,7 +617,6 @@ func TestLookShareRoundTrip(t *testing.T) {
 	if got := readFileString(t, opened); strings.Count(got, "https://github.com/Gaurav-Gosain/tuios/discussions/849") != 2 {
 		t.Fatalf("ASSERTION: the browser did not open the discussion twice:\n%s", got)
 	}
-	// At 80 columns the dock line is shorter, and the message still fits.
 	if err := term.Resize(80, 24); err != nil {
 		t.Fatal(err)
 	}
@@ -737,7 +704,6 @@ bg = "#101820"
 		}
 	})
 
-	// A source build has no release version, so it applies the far look.
 	out := c.run("look", "apply", c.looks["far"], "--yes")
 	fmt.Fprintf(&transcript, "$ tuios look apply far.look.toml --yes   (source build)\n%s\n", out)
 	if got := readFileString(t, lookFile); !strings.Contains(got, `border_style = 'rounded'`) {
@@ -745,7 +711,6 @@ bg = "#101820"
 	}
 	c.run("look", "remove", "--yes")
 
-	// The gallery list marks the far look, and Enter on it is refused.
 	srv, _ := fakeGallery(t, []galleryFeedLook{
 		{id: "101", title: "Old", login: "ann", text: old},
 		{id: "202", title: "Far", login: "bob", text: far},

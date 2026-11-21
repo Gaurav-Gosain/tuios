@@ -66,8 +66,6 @@ func TestCockpitThreadReadsATranscriptThatCameLate(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "late-1-sent")
 
-	// The agent takes the reply and answers, still with no transcript the
-	// daemon knows.
 	cli("set-agent-state", "working", "-s", "api", "-w", "fresh", "--harness", "claude-code")
 	cli("set-agent-state", "idle", "-s", "api", "-w", "fresh", "--harness", "claude-code", "-m", "Memo cache added.")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -92,8 +90,6 @@ func TestCockpitThreadReadsATranscriptThatCameLate(t *testing.T) {
 		t.Fatalf("ASSERTION: the answer (row %d) is drawn above the prompt it answers (row %d):\n%s", saysRow, promptRow, term.Snapshot())
 	}
 
-	// Now the harness writes its transcript and the hook joins it. The view
-	// is still open, and nothing is pressed.
 	path := filepath.Join(atProjects(base), "work", "late0001.jsonl")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
@@ -123,8 +119,6 @@ func TestCockpitThreadReadsATranscriptThatCameLate(t *testing.T) {
 		return strings.Contains(txt, "The fib cache is in place and the tests pass.") && strings.Count(txt, prompt) == 1
 	}, 3*uiTimeout); err != nil {
 		saveCockpitFrames(t, term, "late-3-missing")
-		// Whether a view opened again reads it says if the daemon has the
-		// transcript at all, so the failure names its side.
 		_ = term.SendKeys(tuitest.Esc)
 		_ = term.WaitStable(uiTimeout)
 		_ = term.SendKeys(tuitest.Ctrl('b'), "i")

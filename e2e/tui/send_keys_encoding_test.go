@@ -39,7 +39,6 @@ func TestSendKeysEncodesKeysForThePaneMode(t *testing.T) {
 		waitCapture(t, base, sess, name, "keydump "+mode+" ready")
 	}
 
-	// send runs one send-keys and waits for the pane to print the read.
 	send := func(window, want string, args ...string) {
 		t.Helper()
 		full := append([]string{"send-keys", "-s", sess, "-w", window}, args...)
@@ -75,9 +74,6 @@ func TestSendKeysEncodesKeysForThePaneMode(t *testing.T) {
 	}
 }
 
-// waitLine polls capture-pane until one line of the pane is want, with its
-// spaces trimmed. A whole line is compared so that read2=1b does not match
-// read2=1b5b.
 func waitLine(t *testing.T, base, session, window, want string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)

@@ -9,11 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The checks behind the navigator's look. The failure modes they are written
-// against are listed at the top of navigator_look_test.go.
-
-// navFind is where marker starts on row y at or after column from, by cell,
-// or -1. The markers are ASCII, one cell a character.
 func navFind(s tuitest.Screen, y int, marker string, from int) int {
 	cols, _ := s.Size()
 	for x := from; x+len(marker) <= cols; x++ {
@@ -31,13 +26,10 @@ func navFind(s tuitest.Screen, y int, marker string, from int) int {
 	return -1
 }
 
-// navColumn is the cell column a byte offset of row y's text falls on.
 func navColumn(s tuitest.Screen, y, offset int) int {
 	return len([]rune(s.Line(y)[:offset]))
 }
 
-// navPreviewBox is the preview box's left border column and its top row,
-// or -1 when the navigator is not up.
 func navPreviewBox(s tuitest.Screen) (x, y int) {
 	_, rows := s.Size()
 	for y := range rows {
@@ -48,8 +40,6 @@ func navPreviewBox(s tuitest.Screen) (x, y int) {
 	return -1, -1
 }
 
-// navPreviewInk is the foreground of the first cell of marker inside the
-// preview box, and whether the preview shows marker at all.
 func navPreviewInk(s tuitest.Screen, marker string) (tuitest.Color, bool) {
 	px, top := navPreviewBox(s)
 	if px < 0 {
@@ -64,7 +54,6 @@ func navPreviewInk(s tuitest.Screen, marker string) (tuitest.Color, bool) {
 	return tuitest.Color{}, false
 }
 
-// navIsSlot reports whether c is one of the palette slots in slots.
 func navIsSlot(c tuitest.Color, slots ...uint8) bool {
 	if c.Kind != tuitest.ColorIndexed {
 		return false
@@ -139,7 +128,6 @@ func TestNavigatorPreviewIsInert(t *testing.T) {
 		t.Fatalf("the preview never showed the pane's text: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "navigator-inert")
-	// A beat for any host write that trails the frame.
 	time.Sleep(500 * time.Millisecond)
 	out := host.String()
 	for _, bad := range []string{"evil.example", "\x1b]52;", "PWNTITLE", "SU5KRUNURUQ"} {
@@ -168,7 +156,6 @@ func TestNavigatorDrawsTheTree(t *testing.T) {
 	if px < 0 {
 		t.Fatalf("no preview box:\n%s", term.Snapshot())
 	}
-	// The list box's left border is the first │ on the row under its top.
 	i := strings.Index(s.Line(top+1), "│")
 	if i < 0 {
 		t.Fatalf("no list box border:\n%s", term.Snapshot())
@@ -190,13 +177,10 @@ func TestNavigatorDrawsTheTree(t *testing.T) {
 			if !strings.Contains(row, "├─") && !strings.Contains(row, "└─") {
 				t.Fatalf("the logs pane has no guide: %q\n%s", row, term.Snapshot())
 			}
-			// logs sits at its prompt, so its command is its session's
-			// shell, which the daemon names in list-windows.
 			if !strings.Contains(row, "logs │ sh") {
 				t.Fatalf("the logs pane does not say it runs sh: %q\n%s", row, term.Snapshot())
 			}
 		}
-		// A pane with only the name tuios made up is called by its folder.
 		if strings.Contains(row, "Terminal ") {
 			t.Fatalf("a row shows a made-up pane name: %q\n%s", row, term.Snapshot())
 		}

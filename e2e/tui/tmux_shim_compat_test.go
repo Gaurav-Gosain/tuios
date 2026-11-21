@@ -17,21 +17,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The tmux shim answering what common tools send: command prefixes, the
-// pane formats and their modifiers, wait-for, run-shell and if-shell,
-// buffers and environments, the commands that move panes, display-popup, and
-// control mode. Each test drives `tuios tmux` the way a tool outside tuios
-// does (no TUIOS_SESSION, so every session is a tmux session), against a real
-// daemon, and writes what it ran and read to transcript.txt in its artifact
-// directory.
-
-// shimRun is one `tuios tmux` call: its output and exit status.
 type shimRun struct {
 	out  string
 	code int
 }
 
-// shimTranscript records the calls of one test and saves them at its end.
 type shimTranscript struct {
 	t    *testing.T
 	base string
@@ -49,7 +39,6 @@ func newShimTranscript(t *testing.T, base string) *shimTranscript {
 	return tr
 }
 
-// tmux runs `tuios tmux args...` with stdin, outside every pane.
 func (tr *shimTranscript) tmux(stdin string, args ...string) shimRun {
 	tr.t.Helper()
 	pinPreV080Looks(tr.t, tr.base)
@@ -73,7 +62,6 @@ func (tr *shimTranscript) tmux(stdin string, args ...string) shimRun {
 	return shimRun{out.String(), code}
 }
 
-// ok runs a call that must succeed and returns its output, trimmed.
 func (tr *shimTranscript) ok(args ...string) string {
 	tr.t.Helper()
 	r := tr.tmux("", args...)
@@ -83,7 +71,6 @@ func (tr *shimTranscript) ok(args ...string) string {
 	return strings.TrimSpace(r.out)
 }
 
-// shimDaemon starts a daemon with detached sessions named names.
 func shimDaemon(t *testing.T, names ...string) (string, *shimTranscript) {
 	t.Helper()
 	base := t.TempDir()
@@ -143,7 +130,6 @@ func TestTmuxShimPaneFormats(t *testing.T) {
 		t.Errorf("pane_tty = %q, want a terminal device", f[1])
 	}
 	if runtime.GOOS == "linux" {
-		// The pane's process has the pane's terminal as its standard input.
 		if fd0, err := os.Readlink(fmt.Sprintf("/proc/%d/fd/0", pid)); err != nil || fd0 != f[1] {
 			t.Errorf("process %d reads %q (%v), want pane_tty %q", pid, fd0, err, f[1])
 		}
@@ -409,8 +395,6 @@ func TestTmuxShimSelectPaneDirection(t *testing.T) {
 			if len(want) == 0 {
 				continue
 			}
-			// Focus a pane that is neither from nor one of its neighbours,
-			// so the move has to start at the target and not at the focus.
 			other := ""
 			for _, r := range rects {
 				if r.ID != from.ID && !want[r.ID] {
@@ -435,8 +419,6 @@ func TestTmuxShimSelectPaneDirection(t *testing.T) {
 	saveArtifact(t, term, artifactDir(t), "shim-direction")
 }
 
-// waitFocused polls until the session's focused window is one of want, and
-// returns the last one it read.
 func waitFocused(t *testing.T, base, session string, want map[string]bool) string {
 	t.Helper()
 	focused := ""

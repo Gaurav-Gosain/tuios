@@ -30,8 +30,6 @@ func TestBareDefaultSessionStartsInCallersDirectory(t *testing.T) {
 	firstWindowCwd(t, base, rows[0].Name, callerDir)
 	saveFrame(t, term, "bare-default-cwd-first")
 
-	// A later bare attach comes from elsewhere. With pane inheritance off, a
-	// window it opens must still use the session's original start directory.
 	otherDir := projectDir(t, base, "other")
 	other := startIn(t, base, startOpts{args: []string{"attach"}, dir: otherDir})
 	waitWindowCount(t, other, 1, "second client attaching to the existing session")

@@ -75,14 +75,11 @@ import (
 //   - pushTTLWaiting 120: the approval's TTL is 120.
 //   - the old fitPayload: the ask's push has no options.
 
-// stubPush is the push service: it records each request and answers with the
-// status its path asks for.
 type stubPush struct {
-	srv  *http.Server
-	ln   net.Listener
-	mu   sync.Mutex
-	reqs []stubReq
-	// flaky counts the requests to /s/flaky, which fail once.
+	srv   *http.Server
+	ln    net.Listener
+	mu    sync.Mutex
+	reqs  []stubReq
 	flaky int
 	got   chan stubReq
 }
@@ -92,8 +89,7 @@ type stubReq struct {
 	Headers map[string]string `json:"headers"`
 	Body    []byte            `json:"-"`
 	Status  int               `json:"status"`
-	// Payload is the decrypted JSON, filled in by the test.
-	Payload map[string]any `json:"payload,omitempty"`
+	Payload map[string]any    `json:"payload,omitempty"`
 }
 
 func startStubPush(t *testing.T) *stubPush {
@@ -151,8 +147,6 @@ func (s *stubPush) requests(path string) []stubReq {
 	return out
 }
 
-// phoneKeys is a subscription's private half, kept by the test as a phone
-// keeps it.
 type phoneKeys struct {
 	priv *ecdh.PrivateKey
 	auth []byte
@@ -174,15 +168,12 @@ func (k phoneKeys) p256dh() string {
 }
 func (k phoneKeys) authB64() string { return base64.RawURLEncoding.EncodeToString(k.auth) }
 
-// hmacSHA256 is HMAC-SHA-256(key, data).
 func hmacSHA256(key, data []byte) []byte {
 	m := hmac.New(sha256.New, key)
 	m.Write(data)
 	return m.Sum(nil)
 }
 
-// decrypt is the phone's side of RFC 8291 over one aes128gcm record, written
-// from the RFCs and not from the daemon's code.
 func (k phoneKeys) decrypt(body []byte) ([]byte, error) {
 	if len(body) < 21 {
 		return nil, fmt.Errorf("body of %d bytes is shorter than the header", len(body))
@@ -225,7 +216,6 @@ func (k phoneKeys) decrypt(body []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("AES-GCM open: %w", err)
 	}
-	// The last record ends in 0x02, then any zero padding was before it.
 	end := len(plain) - 1
 	for end >= 0 && plain[end] == 0 {
 		end--
@@ -236,8 +226,6 @@ func (k phoneKeys) decrypt(body []byte) ([]byte, error) {
 	return plain[:end], nil
 }
 
-// checkVAPID verifies the Authorization header against the key register-push
-// returned, and returns the JWT's claims.
 func checkVAPID(t *testing.T, header, wantKey string) map[string]any {
 	t.Helper()
 	rest, ok := strings.CutPrefix(header, "vapid ")
@@ -284,7 +272,6 @@ func checkVAPID(t *testing.T, header, wantKey string) map[string]any {
 	return claims
 }
 
-// waitPush waits for a push to path that decrypts to a payload pred accepts.
 func waitPush(t *testing.T, s *stubPush, k phoneKeys, path string, pred func(map[string]any) bool) stubReq {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -319,8 +306,6 @@ func waitPush(t *testing.T, s *stubPush, k phoneKeys, path string, pred func(map
 	return stubReq{}
 }
 
-// subJSON is a subscription as PushSubscription.toJSON() gives it, the
-// shape tuios notify push register reads from a file or stdin.
 func (k phoneKeys) subJSON(endpoint string) string {
 	data, _ := json.Marshal(map[string]any{
 		"endpoint": endpoint,
@@ -329,7 +314,6 @@ func (k phoneKeys) subJSON(endpoint string) string {
 	return string(data)
 }
 
-// tuiosCLIStdin is tuiosCLI with stdin.
 func tuiosCLIStdin(t *testing.T, base, stdin string, args ...string) (string, error) {
 	t.Helper()
 	pinPreV080Looks(t, base)
@@ -346,12 +330,8 @@ func tuiosCLIStdin(t *testing.T, base, stdin string, args ...string) (string, er
 	return string(out), err
 }
 
-// pushPadBuckets are the sizes the daemon pads a payload up to. A body is
-// 86 bytes of header, then the padded payload, the delimiter and the 16-byte
-// tag.
 var pushPadBuckets = map[int]bool{256: true, 512: true, 1024: true, 2048: true, 3072: true}
 
-// phoneItem is the Inbox item about the phone device, or nil.
 func phoneItem(t *testing.T, ctl *linkStream, device string) map[string]any {
 	t.Helper()
 	items, verr := ctl.call(t, "list-attention", nil)
@@ -368,7 +348,6 @@ func phoneItem(t *testing.T, ctl *linkStream, device string) map[string]any {
 	return nil
 }
 
-// waitPhoneItem waits for the Inbox item about device to say want.
 func waitPhoneItem(t *testing.T, ctl *linkStream, device, want string) map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -429,7 +408,6 @@ func TestWebPushToAPhone(t *testing.T) {
 		return ctl.call(t, "register-push", p)
 	}
 
-	// --- Refusals, each before its positive half.
 	if _, verr := reg("pixel", "/s/pixel", phone, nil, ""); verr == nil || verr.Code != "not_human" {
 		t.Fatalf("ASSERTION: register-push with no nonce: want not_human, got %v", verr)
 	}
@@ -447,12 +425,10 @@ func TestWebPushToAPhone(t *testing.T) {
 	if _, verr := viewer.call(t, "register-push", map[string]any{"endpoint": stub.url("/s/viewer"), "p256dh": phone.p256dh(), "auth": phone.authB64(), "device": "viewer", "human_nonce": vpres["human_nonce"]}); verr == nil || verr.Code != "forbidden" {
 		t.Fatalf("ASSERTION: register-push over a link without respond: want forbidden, got %v", verr)
 	}
-	// Plain http to a public address is refused even with allow_insecure.
 	if _, verr := ctl.call(t, "register-push", map[string]any{"endpoint": "http://203.0.113.9/s/x", "p256dh": phone.p256dh(), "auth": phone.authB64(), "device": "x", "human_nonce": nonce}); verr == nil || verr.Code != "invalid_params" {
 		t.Fatalf("register-push to http on a public address: want invalid_params, got %v", verr)
 	}
 
-	// From a pane, with the person's live nonce in hand.
 	wins, verr := ctl.call(t, "list-windows", map[string]any{"session": streamSession})
 	if verr != nil {
 		t.Fatalf("list-windows: %v", verr)
@@ -472,10 +448,6 @@ func TestWebPushToAPhone(t *testing.T) {
 	if !strings.Contains(paneOut, "PANE_EXIT=1") || !strings.Contains(paneOut, "for the person") {
 		t.Fatalf("ASSERTION: register-push from a pane was not refused:\n%s", paneOut)
 	}
-	// The positive half: the same command outside every pane, with a
-	// presence of its own, is taken. It reads the subscription's secrets
-	// from stdin. The command line, which every process can read, takes
-	// none of them.
 	if out, err := tuiosCLI(t, base, "notify", "push", "register", "--device", "desk", "--p256dh", phone.p256dh(), "--auth", phone.authB64(), "--endpoint", stub.url("/s/desk")); err == nil || !strings.Contains(out, "unknown flag") {
 		t.Fatalf("ASSERTION: notify push register took the subscription's secrets on the command line: %v\n%s", err, out)
 	}
@@ -483,15 +455,11 @@ func TestWebPushToAPhone(t *testing.T) {
 		t.Fatalf("ASSERTION: notify push register with the subscription on stdin: %v\n%s", err, out)
 	}
 	waitPhoneItem(t, ctl, "desk", "by this machine")
-	// The person registers desk again on this machine: the item says so.
 	if out, err := tuiosCLIStdin(t, base, phone.subJSON(stub.url("/s/desk")), "notify", "push", "register", "--device", "desk", "--subscription", "-", "--kind", "finished"); err != nil || !strings.Contains(out, "Registered desk") {
 		t.Fatalf("notify push register desk again: %v\n%s", err, out)
 	}
 	waitPhoneItem(t, ctl, "desk", "in place of the phone of that name")
 
-	// A presence made for one session covers only that session. A phone
-	// gets the Inbox of every session, so such a presence can not register,
-	// list or remove one.
 	scoped := link.open(t, true)
 	spres, verr := scoped.call(t, "attach-presence", map[string]any{"session": streamSession})
 	if verr != nil {
@@ -512,7 +480,6 @@ func TestWebPushToAPhone(t *testing.T) {
 		}
 	}
 
-	// --- Register the phone, a gone one, a flaky one and one for another kind.
 	res, verr := reg("pixel", "/s/pixel", phone, nil, nonce)
 	if verr != nil {
 		t.Fatalf("register-push: %v", verr)
@@ -522,16 +489,12 @@ func TestWebPushToAPhone(t *testing.T) {
 	if fmt.Sprint(res["kinds"]) != "[approval plan ask question]" || vapidKey == "" {
 		t.Fatalf("register-push reply: %v", res)
 	}
-	// The person sees every phone a link registers, in the Inbox.
 	waitPhoneItem(t, ctl, "pixel", "by the link from phone")
-	// A link may not put its own phone in place of the person's.
 	other := newPhoneKeys(t)
 	if _, verr := reg("pixel", "/s/swapped", other, nil, nonce); verr == nil || verr.Code != "forbidden" {
 		t.Fatalf("ASSERTION: register-push over a link in place of a registered phone: want forbidden, got %v", verr)
 	}
 	gone, flaky, hop := newPhoneKeys(t), newPhoneKeys(t), newPhoneKeys(t)
-	// The endpoint an Android emulator's UnifiedPush distributor gives, with
-	// adb reverse taking its loopback to a push service on this machine.
 	android := newPhoneKeys(t)
 	if _, verr := reg("android", "/upAbC123xyz?up=1", android, nil, nonce); verr != nil {
 		t.Fatalf("ASSERTION: register-push of a loopback UnifiedPush endpoint with allow_insecure: %v", verr)
@@ -544,7 +507,6 @@ func TestWebPushToAPhone(t *testing.T) {
 			t.Fatalf("register %s: %v", r.device, verr)
 		}
 	}
-	// The files the daemon keeps, private to the person.
 	stateRoot := xdgDir(base, "XDG_STATE_HOME")
 	found := 0
 	_ = filepath.WalkDir(stateRoot, func(path string, d fs.DirEntry, err error) error {
@@ -564,7 +526,6 @@ func TestWebPushToAPhone(t *testing.T) {
 		t.Fatalf("want the subscriptions and the VAPID key under the state dir, found %d files", found)
 	}
 
-	// --- An approval opens: the phone gets it, decrypted and signed.
 	hook := startApprovalHook(t, base, w0)
 	open := waitPush(t, stub, phone, "/s/pixel", func(p map[string]any) bool {
 		return p["type"] == "open" && p["request_id"] != nil && p["request_id"] != ""
@@ -594,14 +555,10 @@ func TestWebPushToAPhone(t *testing.T) {
 	if left := time.Until(time.Unix(int64(exp), 0)); left <= 0 || left > 24*time.Hour {
 		t.Errorf("JWT exp is %v from now, want within 24 h", left)
 	}
-	// The JWT goes to the push service in clear: it names no machine.
 	if sub, _ := claims["sub"].(string); sub != "https://tuios.dev/push" || (machine != "" && strings.Contains(strings.ToLower(sub), strings.ToLower(machine))) {
 		t.Errorf("ASSERTION: JWT sub %q, want https://tuios.dev/push, with no machine name (%s) in it", sub, machine)
 	}
 
-	// The flaky service got it on the retry. The gone one lost its phone.
-	// The push the 503 refused is sent again: the same payload, encrypted
-	// again, in a later request.
 	failed := stub.requests("/s/flaky")[0]
 	if failed.Status != http.StatusServiceUnavailable {
 		t.Fatalf("the flaky service's first answer was %d", failed.Status)
@@ -619,17 +576,14 @@ func TestWebPushToAPhone(t *testing.T) {
 	})
 	waitPush(t, stub, android, "/upAbC123xyz", func(p map[string]any) bool { return p["type"] == "open" })
 
-	// A push service that redirects is not followed, even with
-	// allow_http_redirects for the other providers, and not tried again.
 	deadline = time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) && len(stub.requests("/s/redirect")) == 0 {
 		time.Sleep(50 * time.Millisecond)
 	}
-	time.Sleep(6 * time.Second) // past the first two retry waits
+	time.Sleep(6 * time.Second)
 	if n := len(stub.requests("/s/landed")); n != 0 {
 		t.Fatalf("ASSERTION: the push followed the redirect: /s/landed got %d requests", n)
 	}
-	// A retry sends the same payload again. Each push here is a new one.
 	seenPlain := map[string]bool{}
 	for _, r := range stub.requests("/s/redirect") {
 		plain, err := hop.decrypt(r.Body)
@@ -657,13 +611,11 @@ func TestWebPushToAPhone(t *testing.T) {
 	if strings.Contains(fmt.Sprint(listed["devices"]), "device:old") || len(stub.requests("/s/gone")) == 0 {
 		t.Fatalf("ASSERTION: the phone whose service answered 410 is still listed: %v", listed)
 	}
-	// The removal is not silent: the Inbox says the phone is gone.
 	waitPhoneItem(t, ctl, "old", "no longer knows this phone")
 	if s := fmt.Sprint(listed["devices"]); strings.Contains(s, "/s/") || !strings.Contains(s, "device:pixel") {
 		t.Errorf("list-push shows %s, want pixel with only the service origin", s)
 	}
 
-	// --- The person answers: the phone gets the close, under the same topic.
 	reqID := open.Payload["request_id"].(string)
 	if _, verr := ctl.call(t, "reply-approval", map[string]any{"request_id": reqID, "decision": "deny", "human_nonce": nonce}); verr != nil {
 		t.Fatalf("reply-approval: %v", verr)
@@ -683,9 +635,6 @@ func TestWebPushToAPhone(t *testing.T) {
 		t.Errorf("the phone registered for finished got an approval push")
 	}
 
-	// --- A payload past 3 KiB is cut, not dropped, and the answers stay.
-	// Nine options of 60 "<" were 3 KiB of JSON escapes, and the push went
-	// with no options, so the phone could not answer.
 	asker := newPhoneKeys(t)
 	if _, verr := reg("asker", "/s/asker", asker, []string{"ask"}, nonce); verr != nil {
 		t.Fatalf("register asker: %v", verr)
@@ -706,7 +655,6 @@ func TestWebPushToAPhone(t *testing.T) {
 		t.Fatalf("the ask's push has no request id: %v", asked.Payload)
 	}
 
-	// --- remove-push.
 	if _, verr := ctl.call(t, "remove-push", map[string]any{"device": "pixel"}); verr == nil || verr.Code != "not_human" {
 		t.Fatalf("remove-push with no nonce: want not_human, got %v", verr)
 	}
@@ -716,7 +664,6 @@ func TestWebPushToAPhone(t *testing.T) {
 	if _, verr := ctl.call(t, "remove-push", map[string]any{"device": "pixel", "human_nonce": nonce}); verr == nil || verr.Code != "invalid_params" {
 		t.Fatalf("remove-push of a removed phone: want invalid_params, got %v", verr)
 	}
-	// A link that removes the person's phone is seen too.
 	waitPhoneItem(t, ctl, "pixel", "Removed from Web Push by the link from phone")
 	for i := range transcript {
 		if transcript[i].Payload == nil {
@@ -762,7 +709,6 @@ func TestWebPushRefusesLocalAddresses(t *testing.T) {
 		t.Fatalf("create the session: %v\n%s", err, out)
 	}
 
-	// A listener that counts who connects, and hangs up.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -851,7 +797,6 @@ func TestWebPushRefusesLocalAddresses(t *testing.T) {
 		t.Fatalf("ASSERTION: list-push last_error %q, want the refusal of a loopback address", lastError)
 	}
 
-	// Let the hook go.
 	deadline = time.Now().Add(uiTimeout)
 	answered := false
 	for !answered && time.Now().Before(deadline) {

@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// needPython skips a test whose pane dials a unix socket with python3.
 func needPython(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("python3"); err != nil {
@@ -20,8 +19,6 @@ func needPython(t *testing.T) {
 	}
 }
 
-// dialScript writes a python3 script that sends one line to the unix socket
-// at sock and prints the reply after marker.
 func dialScript(t *testing.T, dir, name, sock, line, marker string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
@@ -36,13 +33,11 @@ func dialScript(t *testing.T, dir, name, sock, line, marker string) string {
 	return path
 }
 
-// pyString quotes s as a python string literal.
 func pyString(s string) string {
 	raw, _ := json.Marshal(s)
 	return string(raw)
 }
 
-// grantWindowIDs lists a session's windows, the focused one first.
 func grantWindowIDs(t *testing.T, base, sess string) []string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
@@ -149,7 +144,6 @@ func TestAnOpenPaneCannotApproveAnotherPanesPrompt(t *testing.T) {
 	}
 	saveFrame(t, term, "open-pane-prompt-refused")
 
-	// The person is not held by it.
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", "-w", sibling, "echo PERSON_TYPED\n"); err != nil {
 		t.Fatalf("the person's send-text into a prompt failed: %v\n%s", err, out)
 	}
@@ -284,8 +278,6 @@ func TestAWideningReloadSaysItWaits(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A warning stays a minute, so only the close of the item can take the
-	// dock message off inside the test's wait.
 	strict := "[notifications]\nwarning_duration = 60\n\n[agents.permissions]\nmode = \"strict\"\ngrants = [\"read\"]\n"
 	if err := os.WriteFile(cfg, []byte(strict), 0o600); err != nil {
 		t.Fatal(err)

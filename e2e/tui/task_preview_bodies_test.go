@@ -90,7 +90,6 @@ func TestTaskBoardPreviewShowsEachAttachment(t *testing.T) {
 	}
 	waitText(t, term, "the pull request's state", "#7 open", "checks pass")
 
-	// Back to the picture, and o opens it in the image view.
 	if err := term.SendKeys("]"); err != nil {
 		t.Fatalf("press ]: %v", err)
 	}

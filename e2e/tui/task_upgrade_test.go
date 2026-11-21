@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// dispatchStatus is `tuios task dispatch status --json`, and the raw text.
 func dispatchStatus(t *testing.T, base string) (session.DispatchStatus, string) {
 	t.Helper()
 	raw := mustCLI(t, base, "task", "dispatch", "status", "--json")
@@ -23,7 +22,6 @@ func dispatchStatus(t *testing.T, base string) (session.DispatchStatus, string) 
 	return st, raw
 }
 
-// boardRow is the row of board key in st, or nil.
 func boardRow(st session.DispatchStatus, key string) *session.DispatchBoardRow {
 	for i := range st.Boards {
 		if st.Boards[i].Board == key {
@@ -71,7 +69,7 @@ func TestTaskDispatchSurvivesALiveUpgrade(t *testing.T) {
 	before, raw := dispatchStatus(t, base)
 	note("before the upgrade:\n%s", raw)
 
-	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do the work", "the work") // t1
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do the work", "the work")
 	mustCLI(t, base, "task", "claim", "t1", "-s", sess, "-w", a)
 	if out := inPane(t, base, sess, a, "task done t1"); !strings.Contains(out, "EXIT=0") {
 		t.Fatalf("ASSERTION: tuios task done t1 in the agent's pane failed:\n%s", out)
@@ -103,14 +101,12 @@ func TestTaskDispatchSurvivesALiveUpgrade(t *testing.T) {
 			row, got.Paused, got.Quiet, *want, before.Paused, before.Quiet)
 	}
 
-	// The verify that ran at the upgrade runs again and lands.
 	cards, raw := waitLife(t, base, sess, 30*time.Second, "t1 did not reach review after a live upgrade mid-verify",
 		func(c map[string]lifeCard) bool { return c["t1"].Stage == "review" })
 	note("after the resumed verify:\n%s", raw)
 	if cards["t1"].Verify == nil || cards["t1"].Verify.State != "passed" {
 		t.Errorf("ASSERTION: t1 in review has verify %+v, want passed", cards["t1"].Verify)
 	}
-	// The old image's run would end 5 s after it started; give it that long.
 	time.Sleep(6 * time.Second)
 	ran, _ := os.ReadFile(runs)
 	children := childCommands(t, after.PID)
@@ -124,7 +120,6 @@ func TestTaskDispatchSurvivesALiveUpgrade(t *testing.T) {
 		}
 	}
 
-	// A change made after the upgrade is saved: a cold restart reads it.
 	mustCLI(t, base, "task", "dispatch", "quiet", "off")
 	mustCLI(t, base, "task", "dispatch", "resume")
 	if out, err := handoffCLI(t, base, 30*time.Second, "kill-server"); err != nil {

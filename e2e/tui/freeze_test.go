@@ -36,18 +36,12 @@ func TestSustainedOutputKeepsRendering(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	// A directory big enough that each listing is a real burst of output, so
-	// the PTY reader is taking the exclusive lock continuously while the UI
-	// goroutine renders.
 	runInShell(t, term, "mkdir -p /tmp/tuios-e2e-ls && (cd /tmp/tuios-e2e-ls && for i in $(seq 1 200); do : > f$i; done) && echo SETUP-\"\"DONE",
 		"SETUP-DONE", soakTimeout)
 
 	const rounds = 6
 	for i := 1; i <= rounds; i++ {
 		marker := fmt.Sprintf("ROUND-%d-OK", i)
-		// ls of the large directory, then a marker the shell must compute. The
-		// marker can only render if the UI goroutine is still alive after the
-		// burst it just had to draw.
 		cmd := fmt.Sprintf("ls /tmp/tuios-e2e-ls; ls /tmp/tuios-e2e-ls; echo ROUND-$((%d))-OK", i)
 		if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
 			t.Fatalf("round %d: send: %v", i, err)
@@ -61,8 +55,6 @@ func TestSustainedOutputKeepsRendering(t *testing.T) {
 		alive(t, term, fmt.Sprintf("during output round %d", i))
 	}
 
-	// The UI must still respond to input, not merely have painted. A frozen
-	// tuios cannot service the keystroke that toggles the mode indicator.
 	leaveTerminalMode(t, term)
 	if !strings.Contains(term.Screen().Text(), "Window management mode") {
 		t.Fatalf("UI did not react to the mode switch after sustained output\n%s", term.Snapshot())

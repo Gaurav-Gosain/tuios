@@ -57,7 +57,6 @@ import (
 //     silent after the phone falls behind and the test fails at "read a pane
 //     frame: stream read timed out".
 
-// streamSession is the session every stream in the test reads.
 const streamSession = "phone"
 
 // TestPhoneStreamsAPaneAndAnswersTheInbox is the whole path above.
@@ -90,7 +89,6 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 		return res
 	}
 
-	// Two panes, so the lease can be seen to leave the other alone.
 	call(ctl, "new-window", map[string]any{"session": streamSession})
 	wins := call(ctl, "list-windows", map[string]any{"session": streamSession})["windows"].([]any)
 	if len(wins) != 2 {
@@ -102,11 +100,9 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	spType(t, ctl, w2, "echo SZ-$(stty size | tr ' ' x)\n")
 	w2Size := spSize(t, ctl, w2, "SZ-")
 
-	// History, then colour and the input modes on the screen.
 	spType(t, ctl, w1, "seq 1 60; printf '\\033[?1h\\033[?2004h\\033[?1000h\\033[?1006h\\033=\\033[31mRED\\033[0m \\033[38;2;1;2;3mTRUE\\033[0m\\n'\n")
 	spWait(t, ctl, w1, "RED TRUE")
 
-	// --- Snapshot.
 	ps := link.open(t, true)
 	reply := ps.streamPane(t, tr, map[string]any{"session": streamSession, "window": w1})
 	if reply["mode"] != "snapshot" || reply["window"] != w1 {
@@ -141,17 +137,14 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	}
 	checkSnapColours(t, emu)
 
-	// --- Live output, numbered by seq with no hole and no overlap.
 	spType(t, ctl, w1, "echo LIVE-$((40+2))\n")
 	seq = ps.readUntil(t, tr, emu, seq, "LIVE-42")
 
-	// --- Input typed from the phone.
 	ps.send(t, 'I', []byte("echo TYPED-$((6*7))\r"))
 	seq = ps.readUntil(t, tr, emu, seq, "TYPED-42")
 	spWait(t, ctl, w1, "TYPED-42")
 	settleAndCompare(t, ps, tr, emu, &seq, ctl, w1, "after live output and input")
 
-	// --- Resume from the seq reached.
 	ps.close()
 	spType(t, ctl, w1, "echo AFTER-$((1+1))\n")
 	spWait(t, ctl, w1, "AFTER-2")
@@ -168,15 +161,12 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	seq = int64(binary.BigEndian.Uint64(payload[0:8]))
 	settleAndCompare(t, ps, tr, emu, &seq, ctl, w1, "after the resume")
 
-	// A boot id from another daemon start is not resumed.
 	other := link.open(t, true)
 	if r := other.streamPane(t, tr, map[string]any{"session": streamSession, "window": w1, "from_seq": seq, "boot_id": "another-boot"}); r["mode"] != "snapshot" {
 		t.Fatalf("a foreign boot_id resumed: %v", r)
 	}
 	other.close()
 
-	// --- The lease: only this pane changes, a desktop resize is clamped,
-	// and the pane goes back when the stream closes.
 	ps.send(t, 'L', []byte{0, 40, 0, 10})
 	seq = ps.readResize(t, tr, emu, seq, 40, 10)
 	ps.send(t, 'I', []byte("echo SZ-$(stty size | tr ' ' x)\r"))
@@ -205,7 +195,6 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 		t.Fatalf("the pane did not go back to the size asked for when the stream closed:\n%s", strings.Join(spLines(t, ctl, w1), "\n"))
 	}
 
-	// --- A ring that no longer holds the seq gives a fresh snapshot.
 	spType(t, ctl, w1, "seq 1 20000; echo FLOOD-$((1+2))\n")
 	spWait(t, ctl, w1, "FLOOD-3")
 	ps = link.open(t, true)
@@ -217,10 +206,6 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	}
 	ps.close()
 
-	// --- A phone that falls behind by more than its queue holds gets a
-	// fresh snapshot, never a hole. The link stops reading while the pane
-	// prints more than the daemon queues for one stream (8 MiB) and its
-	// 64 KiB ring, so the daemon cannot resume the stream from the ring.
 	ps = link.open(t, true)
 	reply = ps.streamPane(t, tr, map[string]any{"session": streamSession, "window": w1})
 	typ, payload = ps.frame(t, tr)
@@ -269,8 +254,6 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	settleAndCompare(t, ps, tr, emu, &seq, ctl, w1, "after falling behind")
 	ps.close()
 
-	// --- A program on the alternate screen: the snapshot switches to it,
-	// with the shell's screen kept underneath.
 	spType(t, ctl, w1, "clear; echo UNDER-$((2+2)); printf '\\033[?1049h\\033[2J\\033[3;5HALT%sSCREEN' -; sleep 600\n")
 	spWait(t, ctl, w1, "ALT-SCREEN")
 	ps = link.open(t, true)
@@ -290,10 +273,8 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 		t.Fatalf("leaving the alternate screen did not bring back the shell's screen:\n%s", spScreen(alt))
 	}
 	ps.close()
-	// Ctrl+C ends the sleep, and the program's screen with it.
 	spType(t, ctl, w1, "\x03")
 
-	// --- attach-presence.
 	plain := link.open(t, false)
 	if _, verr := plain.call(t, "attach-presence", nil); verr == nil || verr.Code != "forbidden" {
 		t.Fatalf("attach-presence on a stream the hub did not vouch for: want forbidden, got %v", verr)
@@ -314,8 +295,6 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	if _, verr := ctl.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "once", "human_nonce": "0000"}); verr == nil || verr.Code != "not_human" {
 		t.Fatalf("a made-up nonce: want not_human, got %v", verr)
 	}
-	// The line the phone showed: an allow names it (reply-approval refuses one
-	// without it).
 	res, verr := ctl.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "once", "human_nonce": nonce,
 		"summary": heldApprovalLine(t, ctl, streamSession, id)})
 	if verr != nil || res["applied"] != true || res["answered_by"] != pres["client_id"] {
@@ -327,7 +306,6 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 		t.Fatalf("the hook printed %q, want the allow decision", out)
 	}
 
-	// The presence ends with its connection.
 	ctl.close()
 	hook = startApprovalHook(t, base, w2)
 	ctl = link.open(t, true)
@@ -344,8 +322,6 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	}
 }
 
-// checkSnapColours finds RED and TRUE on the emulator and checks a palette
-// colour stayed a palette index and a truecolour stayed truecolour.
 func checkSnapColours(t *testing.T, emu *vt.Emulator) {
 	t.Helper()
 	found := 0
@@ -380,8 +356,6 @@ func spSameRGB(c color.Color, want color.RGBA) bool {
 	return uint8(r>>8) == want.R && uint8(g>>8) == want.G && uint8(b>>8) == want.B
 }
 
-// settleAndCompare reads output until the pane is quiet, then holds the
-// emulator fed by the frames to the daemon's capture of the pane.
 func settleAndCompare(t *testing.T, ps *linkStream, tr *spTranscript, emu *vt.Emulator, seq *int64, ctl *linkStream, window, when string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -399,9 +373,6 @@ func settleAndCompare(t *testing.T, ps *linkStream, tr *spTranscript, emu *vt.Em
 	}
 }
 
-// --- The phone's end of the link.
-
-// phoneLink is a stdio-proxy child and the frames on its stdio.
 type phoneLink struct {
 	cmd    *exec.Cmd
 	in     io.WriteCloser
@@ -412,15 +383,11 @@ type phoneLink struct {
 	gate   sync.Mutex
 }
 
-// startPhoneLink runs `tuios stdio-proxy --as phone` against the daemon under
-// base, the command a phone runs over ssh.
 func startPhoneLink(t *testing.T, base string) *phoneLink {
 	t.Helper()
 	return startLinkAs(t, base, "phone")
 }
 
-// startLinkAs is startPhoneLink for the peer name as, which picks the
-// [hosts.NAME] policy the daemon holds the link to.
 func startLinkAs(t *testing.T, base, as string) *phoneLink {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, "stdio-proxy", "--as", as)
@@ -455,19 +422,14 @@ func startLinkAs(t *testing.T, base, as string) *phoneLink {
 	return l
 }
 
-// pause stops reading the proxy's output until resume, as a phone on a
-// stalled network does. The proxy, and then the daemon, block on their
-// writes.
 func (l *phoneLink) pause()  { l.gate.Lock() }
 func (l *phoneLink) resume() { l.gate.Unlock() }
 
-// waitResume returns at once, or after resume when the link is paused.
 func (l *phoneLink) waitResume() {
 	l.gate.Lock()
 	defer l.gate.Unlock()
 }
 
-// readLoop hands each data frame to its stream.
 func (l *phoneLink) readLoop(br *bufio.Reader) {
 	var head [9]byte
 	for {
@@ -514,7 +476,6 @@ func (l *phoneLink) writeFrame(typ byte, id uint32, payload []byte) error {
 	return err
 }
 
-// open opens a stream, vouched for as the person when human is set.
 func (l *phoneLink) open(t *testing.T, human bool) *linkStream {
 	t.Helper()
 	l.smu.Lock()
@@ -534,8 +495,6 @@ func (l *phoneLink) open(t *testing.T, human bool) *linkStream {
 	return s
 }
 
-// linkStream is one stream: a verb connection, or a pane stream after its
-// reply.
 type linkStream struct {
 	l       *phoneLink
 	id      uint32
@@ -559,7 +518,6 @@ func (s *linkStream) end() { s.endOnce.Do(func() { close(s.done) }) }
 
 var errSPTimeout = errors.New("stream read timed out")
 
-// Read blocks for at most the stream's timeout, uiTimeout when unset.
 func (s *linkStream) Read(p []byte) (int, error) {
 	if len(s.rest) == 0 {
 		wait := s.timeout
@@ -601,7 +559,6 @@ func (s *linkStream) close() {
 	s.end()
 }
 
-// spVerbErr is a verb's error envelope.
 type spVerbErr struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
@@ -609,7 +566,6 @@ type spVerbErr struct {
 
 func (e *spVerbErr) String() string { return e.Code + ": " + e.Message }
 
-// call sends one verb and reads its reply line.
 func (s *linkStream) call(t *testing.T, verb string, params any) (map[string]any, *spVerbErr) {
 	t.Helper()
 	s.nextID++
@@ -635,7 +591,6 @@ func (s *linkStream) call(t *testing.T, verb string, params any) (map[string]any
 	return env.Result, env.Error
 }
 
-// streamPane sends stream-pane and returns its result.
 func (s *linkStream) streamPane(t *testing.T, tr *spTranscript, params map[string]any) map[string]any {
 	t.Helper()
 	res, verr := s.call(t, "stream-pane", params)
@@ -647,7 +602,6 @@ func (s *linkStream) streamPane(t *testing.T, tr *spTranscript, params map[strin
 	return res
 }
 
-// frame reads one pane frame.
 func (s *linkStream) frame(t *testing.T, tr *spTranscript) (byte, []byte) {
 	t.Helper()
 	typ, payload, err := s.tryFrame()
@@ -670,7 +624,6 @@ func (s *linkStream) tryFrame() (byte, []byte, error) {
 	return head[0], payload, nil
 }
 
-// send writes one client frame.
 func (s *linkStream) send(t *testing.T, typ byte, payload []byte) {
 	t.Helper()
 	b := make([]byte, 5, 5+len(payload))
@@ -679,8 +632,6 @@ func (s *linkStream) send(t *testing.T, typ byte, payload []byte) {
 	s.write(t, append(b, payload...))
 }
 
-// spApply feeds one frame to the emulator and checks it continues the stream
-// at seq. It returns the stream position after the frame.
 func spApply(t *testing.T, emu *vt.Emulator, seq int64, typ byte, payload []byte) int64 {
 	t.Helper()
 	switch typ {
@@ -708,11 +659,6 @@ func spApply(t *testing.T, emu *vt.Emulator, seq int64, typ byte, payload []byte
 	return seq
 }
 
-// readUntil applies frames until a line of the emulator starts with marker,
-// the output of a command typed into the pane. The shell's prompt may come
-// first on that line: input typed before the shell prints its prompt is
-// echoed by the terminal at once, so the prompt lands in front of the
-// output, as in "$ TYPED-42".
 func (s *linkStream) readUntil(t *testing.T, tr *spTranscript, emu *vt.Emulator, seq int64, marker string) int64 {
 	t.Helper()
 	line := regexp.MustCompile(`(?m)^(?:\$ )?` + regexp.QuoteMeta(marker))
@@ -731,7 +677,6 @@ func (s *linkStream) readUntil(t *testing.T, tr *spTranscript, emu *vt.Emulator,
 	return seq
 }
 
-// readResize applies frames until an R frame of cols by rows.
 func (s *linkStream) readResize(t *testing.T, tr *spTranscript, emu *vt.Emulator, seq int64, cols, rows int) int64 {
 	t.Helper()
 	for {
@@ -743,7 +688,6 @@ func (s *linkStream) readResize(t *testing.T, tr *spTranscript, emu *vt.Emulator
 	}
 }
 
-// drain applies frames until none arrives for quiet.
 func (s *linkStream) drain(t *testing.T, tr *spTranscript, emu *vt.Emulator, seq int64, quiet time.Duration) int64 {
 	t.Helper()
 	s.timeout = quiet
@@ -760,8 +704,6 @@ func (s *linkStream) drain(t *testing.T, tr *spTranscript, emu *vt.Emulator, seq
 		seq = spApply(t, emu, seq, typ, payload)
 	}
 }
-
-// --- Daemon reads through the control stream.
 
 func spType(t *testing.T, ctl *linkStream, window, text string) {
 	t.Helper()
@@ -805,8 +747,6 @@ func spWait(t *testing.T, ctl *linkStream, window, marker string) {
 	}
 }
 
-// spSize waits for a line that starts with prefix and holds a size, and
-// returns the size.
 func spSize(t *testing.T, ctl *linkStream, window, prefix string) string {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -831,7 +771,6 @@ func spSessionSize(t *testing.T, ctl *linkStream) string {
 	return fmt.Sprintf("%vx%v", res["width"], res["height"])
 }
 
-// spApproval waits for the pane's held approval and returns its id.
 func spApproval(t *testing.T, ctl *linkStream, window string) string {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -854,8 +793,6 @@ func spApproval(t *testing.T, ctl *linkStream, window string) string {
 	return ""
 }
 
-// heldApprovalLine is the line the Inbox item of request id shows, which a
-// client that answers it sends back as summary.
 func heldApprovalLine(t *testing.T, ctl *linkStream, session, id string) string {
 	t.Helper()
 	res, verr := ctl.call(t, "list-attention", map[string]any{"session": session})
@@ -873,7 +810,6 @@ func heldApprovalLine(t *testing.T, ctl *linkStream, session, id string) string 
 	return ""
 }
 
-// approvalHook is the real Claude Code hook, waiting for the Inbox.
 type approvalHook struct {
 	out  bytes.Buffer
 	done chan error
@@ -910,8 +846,6 @@ func (h *approvalHook) wait(t *testing.T) string {
 	}
 	return h.out.String()
 }
-
-// --- The emulator, read back.
 
 func spEmuLine(emu *vt.Emulator, y int) string {
 	var b strings.Builder
@@ -954,14 +888,10 @@ func spHistory(emu *vt.Emulator) string {
 	return b.String()
 }
 
-// spAll is the history and the screen, for a marker that may have scrolled.
 func spAll(emu *vt.Emulator) string {
 	return spHistory(emu) + spScreen(emu)
 }
 
-// --- The artifact.
-
-// spTranscript records what the phone saw, for a person to read after a run.
 type spTranscript struct {
 	t     *testing.T
 	b     strings.Builder
@@ -977,7 +907,6 @@ func (tr *spTranscript) add(title, body string) {
 	fmt.Fprintf(&tr.b, "=== %s\n%s\n\n", title, body)
 }
 
-// frame records one frame header. A run of output frames is one line.
 func (tr *spTranscript) frame(typ byte, payload []byte) {
 	if typ == 'O' && tr.last == 'O' {
 		tr.runs++
@@ -1015,10 +944,6 @@ func (tr *spTranscript) save() {
 	tr.t.Logf("transcript: %s", path)
 }
 
-// spWaitPaneSize waits until the pane is cols by rows, as a stream that
-// holds no lease reads it. A lease ends when the daemon sees its stream
-// close, and at most leaseInterval after the last resize a lease made, so
-// the pane takes its size back a moment after the phone lets go.
 func spWaitPaneSize(t *testing.T, link *phoneLink, tr *spTranscript, window string, cols, rows int) {
 	t.Helper()
 	waitUntil(t, fmt.Sprintf("the pane goes back to %dx%d when the stream closes", cols, rows), uiTimeout, func() (bool, string) {

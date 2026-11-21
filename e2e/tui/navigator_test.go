@@ -12,37 +12,11 @@ import (
 	"tuios.dev/shot"
 )
 
-// The pane navigator (choose_tree, prefix /), driven through a real client:
-// it lists the sessions and their panes, a search finds a pane in another
-// session by a line on its screen, the preview shows that line, and Enter
-// switches the client to that session and pane. The host test does the same
-// for a pane on another machine, through the ssh stand-in.
-//
-// How these could pass wrongly, written down first:
-//   - The search could match the pane by its name or by the command typed to
-//     print the line. The pane's name holds no part of the marker, and the
-//     command prints it in two halves (printf 'nee%s' dle-...), so only the
-//     printed line holds it whole.
-//   - The marker on screen could be the query echoed in the search line, not
-//     a row. The test waits for the marker twice on top of the search line:
-//     the row's snippet and the preview.
-//   - The jump could leave the focus where it was in a session that only
-//     looks right. Each jump reads the target session's focused pane from
-//     list-windows, and the rail's current session, after Enter.
-//   - The host pane could be listed from a cached name with no read of its
-//     screen. Its search is by its screen text, which only a capture over
-//     the link can supply.
-//
-// Negative controls, all confirmed red (see NEGATIVE_CONTROLS.md).
-
-// navMarker is printed in the target pane, in two halves.
 const (
 	navMarker      = "needle-7781"
 	navPrintMarker = "printf 'nee%s\\n' dle-7781"
 )
 
-// printMarker types a command into a pane that prints marker, and waits for
-// the pane's screen to show it.
 func printMarker(t *testing.T, base, sess, window, command, marker string) {
 	t.Helper()
 	if o, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", window, command); err != nil {
@@ -64,17 +38,12 @@ func printMarker(t *testing.T, base, sess, window, command, marker string) {
 	t.Fatalf("the pane never printed %s", marker)
 }
 
-// openNavigator presses the leader and / and waits for the panel with every
-// marker in it.
 func openNavigator(t *testing.T, term *tuitest.Terminal, markers ...string) {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('b'), "/")
 	waitScreen(t, term, "the navigator never showed", append([]string{"Panes", "Press / to search"}, markers...)...)
 }
 
-// searchNavigator moves to the search line, types query, and waits for the
-// query to be found in a row and in the preview as well as in the search
-// line.
 func searchNavigator(t *testing.T, term *tuitest.Terminal, query, row string) {
 	t.Helper()
 	sendKeys(t, term, "/")
@@ -89,7 +58,6 @@ func searchNavigator(t *testing.T, term *tuitest.Terminal, query, row string) {
 	}
 }
 
-// focusedIn is the focused pane of a session, from list-windows.
 func focusedIn(t *testing.T, base, sess string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "-s", sess)
@@ -105,7 +73,6 @@ func focusedIn(t *testing.T, base, sess string) string {
 	return res.Focused
 }
 
-// windowIDByName is the id of the pane called name in a session.
 func windowIDByName(t *testing.T, base, sess, name string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "-s", sess)
@@ -130,9 +97,6 @@ func windowIDByName(t *testing.T, base, sess, name string) string {
 	return ""
 }
 
-// navigatorSessions makes two sessions, home and work, with a pane called
-// logs in work that prints the marker, and the work pane that is not logs
-// focused. It returns the isolation root and the logs pane's id.
 func navigatorSessions(t *testing.T) (string, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -280,7 +244,6 @@ func TestNavigatorKeepsADonePaneSeen(t *testing.T) {
 //     pane the session had focused. In pane-row that pane, first, is a
 //     finished agent too, and it must still show ■ after the jump to logs.
 func TestSessionSwitchMarksTheFocusedPaneSeen(t *testing.T) {
-	// finished reports each pane in work working and then done.
 	finished := func(t *testing.T, base string, panes ...string) {
 		t.Helper()
 		for _, pane := range panes {
@@ -291,9 +254,6 @@ func TestSessionSwitchMarksTheFocusedPaneSeen(t *testing.T) {
 			}
 		}
 	}
-	// marks waits for the navigator to show each of rows (a mark and a pane
-	// name) on a row of its list, once the load has brought the marker into
-	// the preview.
 	marks := func(t *testing.T, term *tuitest.Terminal, what string, rows ...string) {
 		t.Helper()
 		missing := func(text string) []string {
@@ -414,9 +374,6 @@ func TestSessionSwitchMarksTheFocusedPaneSeen(t *testing.T) {
 	})
 }
 
-// navDecoy is a pane name that holds every character of navMarker in order,
-// spread out, and never the marker whole. A fuzzy search for the marker
-// matches it.
 const navDecoy = "need a ledge-77 81"
 
 // TestNavigatorRanksScreenTextOverAScatteredName: a pane whose screen shows
@@ -442,8 +399,6 @@ func TestNavigatorRanksScreenTextOverAScatteredName(t *testing.T) {
 	if err := term.SendKeys(navMarker); err != nil {
 		t.Fatalf("type the query: %v", err)
 	}
-	// The load fills in the logs pane's text after the decoy is already
-	// listed by name, so the wait is for the order the finished load gives.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		if !strings.Contains(text, navDecoy) || strings.Count(text, navMarker) < 3 {
@@ -461,9 +416,6 @@ func TestNavigatorRanksScreenTextOverAScatteredName(t *testing.T) {
 	saveFrame(t, term, "navigator-ranking")
 }
 
-// navListRow is a screen line from the list box's left border on, without
-// the border: a row of the list starts with the cursor bar or a blank. It is
-// empty for a line with no border.
 func navListRow(l string) string {
 	_, row, ok := strings.Cut(strings.TrimLeft(l, " "), "│")
 	if !ok {
@@ -565,7 +517,6 @@ func TestNavigatorListsAHostPane(t *testing.T) {
 func TestListWindowsAllHoldsToTheReadGrant(t *testing.T) {
 	base, _ := navigatorSessions(t)
 
-	// The positive half: the person's own shell, outside every pane.
 	out, err := tuiosCLI(t, base, "list-windows", "--all", "--text", "5", "--json")
 	if err != nil {
 		t.Fatalf("list-windows --all from outside every pane: %v\n%s", err, out)
@@ -607,7 +558,6 @@ func TestListWindowsAllHoldsToTheReadGrant(t *testing.T) {
 	}
 }
 
-// navClient attaches a client to home with env, in terminal mode.
 func navClient(t *testing.T, base string, env []string) *tuitest.Terminal {
 	t.Helper()
 	term := attachIn(t, base, "home", startOpts{cols: 140, rows: 40, env: env})
@@ -617,9 +567,6 @@ func navClient(t *testing.T, base string, env []string) *tuitest.Terminal {
 	return term
 }
 
-// openWorkLogs opens the navigator and puts the cursor on work's logs pane:
-// G goes to the last row, work, l opens it, and G again goes to its last
-// pane, logs.
 func openWorkLogs(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	openNavigator(t, term, "work")
@@ -782,7 +729,6 @@ func TestNavigatorOpensReadyToType(t *testing.T) {
 	toggleSidebarViaPalette(t, term)
 	waitRailCurrent(t, term, "home")
 
-	// esc with nothing typed closes it at once.
 	sendKeys(t, term, tuitest.Ctrl('b'), "/")
 	waitScreen(t, term, "the navigator never showed", "Panes", "home", "work")
 	saveFrame(t, term, "navigator-ready-to-type")
@@ -791,7 +737,6 @@ func TestNavigatorOpensReadyToType(t *testing.T) {
 		t.Fatalf("ASSERTION: esc with nothing typed did not close the navigator: %v\n%s", err, term.Snapshot())
 	}
 
-	// Typed at once, the marker is the search.
 	sendKeys(t, term, tuitest.Ctrl('b'), "/")
 	waitScreen(t, term, "the navigator never showed", "Panes", "work")
 	if err := term.SendKeys(navMarker); err != nil {
@@ -861,13 +806,11 @@ func TestNavigatorOpensOverTheFocusedRail(t *testing.T) {
 	}
 	saveFrame(t, term, "navigator-over-rail-search")
 	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "navigator-over-rail-search")
-	// esc leaves the search line, esc clears the query, and q closes.
 	sendKeys(t, term, tuitest.Esc)
 	sendKeys(t, term, tuitest.Esc)
 	sendKeys(t, term, "q")
 	railHasKeysAgain(t, term, "Panes")
 
-	// The go-to picker, opened over the rail, takes its query too.
 	openGotoPicker(t, term)
 	if err := term.SendKeys("zq7x"); err != nil {
 		t.Fatalf("type the query: %v", err)
@@ -881,8 +824,6 @@ func TestNavigatorOpensOverTheFocusedRail(t *testing.T) {
 	}
 }
 
-// railHasKeysAgain waits for the panel that shows marker to close, and for the
-// mode pill to still say SIDEBAR: the rail has the keyboard back.
 func railHasKeysAgain(t *testing.T, term *tuitest.Terminal, marker string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -893,16 +834,9 @@ func railHasKeysAgain(t *testing.T, term *tuitest.Terminal, marker string) {
 	}
 }
 
-// navCheckMargins reads the navigator's box from the cells of its ground, and
-// fails unless it sits in the pane area with a margin on every side: the same
-// margin, to a cell, above and below it in the rows over the dock, and each
-// side in the columns beside the rail. The ground is read in the pane area
-// only, since panels drawn there never cover the dock or the rail, and a
-// panel over the dock leaves no margin under it.
 func navCheckMargins(t *testing.T, s tuitest.Screen) {
 	t.Helper()
 	cols, rows := s.Size()
-	// The panel's ground is under the corner of its Search box.
 	gx, gy := -1, -1
 	for y := 0; y < rows && gx < 0; y++ {
 		if strings.Contains(s.Line(y), "╭─ Search") {
@@ -918,8 +852,6 @@ func navCheckMargins(t *testing.T, s tuitest.Screen) {
 		t.Fatalf("no Search box on screen\n%s", s.Text())
 	}
 	ground := s.Cell(gx, gy).Bg
-	// The rail's edge is its border column on the first row, left of the
-	// panel. The dock is the rows from its top rule down.
 	rail := -1
 	for x := range gx {
 		if s.Cell(x, 0).Content == "│" {
@@ -940,8 +872,6 @@ func navCheckMargins(t *testing.T, s tuitest.Screen) {
 			}
 		}
 	}
-	// Across, it is centred on the whole screen and clear of the rail by a
-	// cell. Down, it is centred between the docks, which it is fitted to.
 	top, bottom := y0, dock-1-y1
 	left, right := x0, cols-1-x1
 	gap := x0 - (rail + 1)

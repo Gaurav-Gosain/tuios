@@ -32,7 +32,6 @@ func TestScrollbackBrowserSelectionIsReadable(t *testing.T) {
 			if err := term.WaitForText(browserTitle, uiTimeout); err != nil {
 				t.Fatalf("the scrollback browser did not open: %v\n%s", err, term.Snapshot())
 			}
-			// Output mode, then a visual selection of the whole line.
 			sendKeys(t, term, "l", "v", "$")
 			var shot tuitest.Screen
 			row := -1
@@ -57,8 +56,6 @@ func TestScrollbackBrowserSelectionIsReadable(t *testing.T) {
 			host := hostPalette(t, look.theme)
 			savePNG(t, shot, host, artifactDir(t), "scrollback-selection-"+look.name)
 			cols, _ := shot.Size()
-			// The selected cells, and the cursor cell right after them,
-			// which has a ground of its own.
 			last := -1
 			for c := range cols {
 				if shot.Cell(c, row).Bg == sel {

@@ -105,7 +105,6 @@ func TestCockpitPathsAreRelativeToTheWorktree(t *testing.T) {
 		t.Fatalf("the agents view never read the thread: %v\n%s", err, term.Snapshot())
 	}
 	dir := artifactDir(t)
-	// The Changes tab draws every edit of the last turn open.
 	sendKeys(t, term, "]")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "main.go") && strings.Contains(s.Text(), "open in review")
@@ -123,7 +122,6 @@ func TestCockpitPathsAreRelativeToTheWorktree(t *testing.T) {
 		t.Errorf("ASSERTION: the plan file outside the worktree is on the Changes tab:\n%s", term.Snapshot())
 	}
 
-	// The thread keeps the plan file, named under ~.
 	sendKeys(t, term, "[", "e")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, "cmd/main.go", "~/.claude/plans/json-flag.md")
@@ -135,8 +133,6 @@ func TestCockpitPathsAreRelativeToTheWorktree(t *testing.T) {
 	alive(t, term, "after reading a thread with paths")
 }
 
-// savePNGBelow saves the screen from the row that holds mark down, less the
-// dock, as a PNG: the header above it names the test's scratch folders.
 func savePNGBelow(t *testing.T, s tuitest.Screen, mark, dir, name string) {
 	t.Helper()
 	g := screenGrid(s, shot.XTermPalette())

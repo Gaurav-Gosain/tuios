@@ -12,43 +12,10 @@ import (
 	"time"
 )
 
-// Shell integration by default. tuios starts the bash and zsh in its panes
-// so that they send OSC 133 prompt marks, without a line in the user's own
-// files. Each test runs a real daemon against a real shell, with the user's
-// startup files written into the test's own home, and reads what the shell
-// did back through tuios run, capture-pane and the raw pane log.
-//
-// How these could pass wrongly, written down first:
-//   - run could work because the test's rc file sends marks itself. Only the
-//     test of a setup that marks itself writes a mark; the others write a
-//     prompt and a PROMPT_COMMAND or precmd with none.
-//   - The marks could come at the cost of the user's setup: the rc file not
-//     read, PS1 replaced, PROMPT_COMMAND dropped or fed the wrong status, a
-//     ZDOTDIR lost. Each of those is read back from the shell: the custom
-//     prompt on the screen, the status the user's hook saw, the value of
-//     ZDOTDIR and a variable from .zshenv.
-//   - The shell could pick up the developer's own files. HOME is the
-//     test's, and ZDOTDIR and BASH_ENV are taken out of the daemon's
-//     environment unless the test sets them.
-//   - "No marks with integration off" could pass because the shell had not
-//     drawn its prompt yet. The off case waits for the prompt on the screen
-//     before it asks run.
-//   - "Not marked twice" could pass because the count is of the wrong pane
-//     or the wrong bytes. The count is of the raw log of the one pane in the
-//     session, and the marks the rc file sends are counted with ours.
-//   - The narrowed pane could show its prompt once only because the prompt
-//     scrolled away. The screen must still hold the prompt line, with the
-//     typed text after it.
-
-// siZshenv keeps Debian's and Ubuntu's /etc/zsh/zshrc from running compinit,
-// which stops at a question about the test's folders before the prompt.
 const siZshenv = "skip_global_compinit=1\n"
 
-// siBaseConfig is the config every test here starts from.
 const siBaseConfig = "[appearance]\npreferred_shell = %q\n"
 
-// siEnv is the environment a tuios command of these tests runs with: the
-// suite's, without the developer's ZDOTDIR and BASH_ENV, plus extra.
 func siEnv(base string, extra ...string) []string {
 	var env []string
 	for _, kv := range cliEnv(base) {
@@ -61,17 +28,11 @@ func siEnv(base string, extra ...string) []string {
 	return append(env, extra...)
 }
 
-// siShellPath finds a shell, and skips the test when it is not installed.
 func siShellPath(t *testing.T, name string) string {
 	t.Helper()
 	return needTool(t, name)
 }
 
-// siSession starts a daemon with one detached session whose pane runs
-// shell. config goes after preferred_shell. files are written under the
-// test's home, by path relative to it. The daemon logs each pane's raw output
-// under base/ptylog. extraEnv, given the home, adds to the daemon's
-// environment.
 func siSession(t *testing.T, sess, shell, config string, files map[string]string, extraEnv func(home string) []string) string {
 	t.Helper()
 	base := t.TempDir()
@@ -101,8 +62,6 @@ func siSession(t *testing.T, sess, shell, config string, files map[string]string
 	return base
 }
 
-// siRun is tuios run in a window. It returns the output, and the exit
-// status of the run command, which is the command's own.
 func siRun(t *testing.T, base, sess, window, command string) (string, int) {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, "run", "-s", sess, "-w", window, "--timeout", "20000", "--", command)
@@ -119,8 +78,6 @@ func siRun(t *testing.T, base, sess, window, command string) (string, int) {
 	return string(out), code
 }
 
-// siRunOK runs a command that must succeed. The first prompt may still be
-// on its way, so a refusal for that is tried again.
 func siRunOK(t *testing.T, base, sess, window, command string) string {
 	t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -136,7 +93,6 @@ func siRunOK(t *testing.T, base, sess, window, command string) string {
 	}
 }
 
-// siWaitScreen waits for want on the pane's screen and returns the screen.
 func siWaitScreen(t *testing.T, base, sess, window, want string) string {
 	t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -153,7 +109,6 @@ func siWaitScreen(t *testing.T, base, sess, window, want string) string {
 	}
 }
 
-// siSave writes a capture into the test's artifact folder.
 func siSave(t *testing.T, name, body string) {
 	t.Helper()
 	path := filepath.Join(artifactDir(t), name)
@@ -163,7 +118,6 @@ func siSave(t *testing.T, name, body string) {
 	t.Logf("artifact: %s", path)
 }
 
-// siRawLog is the raw output of the session's one pane.
 func siRawLog(t *testing.T, base string) string {
 	t.Helper()
 	logs, _ := filepath.Glob(filepath.Join(base, "ptylog", "*.raw"))
@@ -177,7 +131,6 @@ func siRawLog(t *testing.T, base string) string {
 	return string(raw)
 }
 
-// siMarkCounts counts the OSC 133 marks of each kind in raw output.
 func siMarkCounts(raw string) map[string]int {
 	counts := map[string]int{}
 	for _, m := range []string{"A", "B", "C", "D"} {
@@ -186,7 +139,6 @@ func siMarkCounts(raw string) map[string]int {
 	return counts
 }
 
-// siDoctor is tuios doctor shell --json.
 type siDoctor struct {
 	Integration  string `json:"integration"`
 	SetUpByTuios bool   `json:"set_up_by_tuios"`
@@ -212,8 +164,6 @@ func siDoctorReport(t *testing.T, base string) siDoctor {
 	return r
 }
 
-// siUserBashrc is a ~/.bashrc with a prompt and a PROMPT_COMMAND of its own,
-// and no mark.
 const siUserBashrc = `PS1='CUSTOM-PS1> '
 PROMPT_COMMAND='LAST_STATUS=$?; PC_RAN=$((PC_RAN+1))'
 `
@@ -254,7 +204,6 @@ func TestShellIntegrationBashByDefault(t *testing.T) {
 		t.Fatalf("ASSERTION: doctor shell says integration %q, set up by tuios %v, want auto and true", doc.Integration, doc.SetUpByTuios)
 	}
 
-	// The same session, one pane opened with the integration off.
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "plain", "--shell-integration", "off", "--no-focus"); err != nil {
 		t.Fatalf("new-window --shell-integration off: %v: %s", err, out)
 	}
@@ -289,7 +238,6 @@ func TestShellIntegrationZshByDefault(t *testing.T) {
 	}
 	out := siRunOK(t, base, sess, win, `echo "zdot=${ZDOTDIR-unset} env=${FROM_ZSHENV-none} status=$LAST_STATUS shim=${TUIOS_ZSH_ZDOTDIR-none}"`)
 	want := "zdot=" + zdot + " env=yes status=1 shim=none"
-	// A line wider than the pane comes back wrapped.
 	if got := strings.ReplaceAll(out, "\n", ""); !strings.Contains(got, want) {
 		t.Fatalf("ASSERTION: the shell said %q, want %q", got, want)
 	}
@@ -309,7 +257,6 @@ func TestShellIntegrationOff(t *testing.T) {
 	base := siSession(t, sess, bash, "[shell]\nintegration = \"off\"\n", map[string]string{".bashrc": siUserBashrc}, nil)
 	win := firstWindow(t, base, sess).ID
 	siWaitScreen(t, base, sess, win, "CUSTOM-PS1>")
-	// Time for any mark that would come with the prompt.
 	time.Sleep(500 * time.Millisecond)
 	if out, code := siRun(t, base, sess, win, "echo hi"); code == 0 || !strings.Contains(out, "OSC 133") {
 		t.Fatalf("ASSERTION: run in a pane with integration off exited %d, want a refusal for no marks: %s", code, out)
@@ -399,8 +346,6 @@ func TestShellIntegrationNarrowPaneKeepsOnePrompt(t *testing.T) {
 	term := attachIn(t, base, sess, startOpts{cols: 140, rows: 30})
 	enableTiling(t, term)
 	win := firstWindow(t, base, sess).ID
-	// Typed, not run: run needs the marks, and the build without them must
-	// reach the narrowing too.
 	siWaitScreen(t, base, sess, win, "END>")
 	if err := paneSend(base, sess, win, "clear\n"); err != nil {
 		t.Fatal(err)

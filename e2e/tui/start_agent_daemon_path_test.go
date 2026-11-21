@@ -39,7 +39,6 @@ func TestStartAgentFallsBackToTheDaemonsPath(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// A stand-in no manifest knows, which writes the PATH it got and stays.
 	standIn := func(dir, name string) {
 		script := "#!/bin/sh\nprintf '%s' \"$PATH\" > '" + filepath.Join(seen, name) + "'\nexec sleep 600\n"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil { //nolint:gosec // a pane runs it
@@ -53,8 +52,6 @@ func TestStartAgentFallsBackToTheDaemonsPath(t *testing.T) {
 	if out, err := tuiosCLIEnv(t, base, []string{"PATH=" + daemonPath}, "new", "work", "--detach"); err != nil {
 		t.Fatalf("new: %v\n%s", err, out)
 	}
-	// A bare PATH as Rex gives one, without a real agent CLI (crush is in
-	// /usr/bin on Arch), which agentPathGuard refuses.
 	bare := agentFreePath("/usr/bin", "/bin")
 
 	start := func(path, agent string) (map[string]any, string) {
@@ -153,7 +150,6 @@ func TestStartAgentNoWaitAnswersBeforeReady(t *testing.T) {
 	path := "PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")
 	mustCLI(t, base, "new", "work", "--detach")
 
-	// The wait for ready would be 60 s: the answer has to come well before.
 	out, err := tuiosCLIEnv(t, base, []string{path}, "start-agent", "slowagent", "-s", "work", "--no-wait", "--ready-timeout", "60000", "--prompt", "hello from no-wait", "--json")
 	saveText(t, "no-wait", out)
 	if err != nil {

@@ -16,25 +16,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The bridge between tuios and a terminal that speaks the drag and drop
-// protocol itself (internal/app/dnd_host.go), against a real kitty under
-// Xvfb. kitty and the programs in its windows speak XDND to each other as
-// they do on a desktop; the drags are made by xdotool through XTEST, so the X
-// server sees a real pointer. The drags tuios carries between its own panes,
-// with no such terminal, are in dnd_osc72_test.go.
-//
-// TUIOS_E2E_KITTY names the kitty binary and turns the test on; the kitten is
-// taken from beside it. Xvfb, xdotool and xclip have to be in PATH.
-//
-// The debug log tuios writes with TUIOS_DEBUG_INTERNAL=1 holds the exchange
-// with kitty, which is how a test tells a drag kitty carried from one tuios
-// carried, and that a gesture went unanswered.
-
-// deskConfig is dndConfig with the bridge on.
 const deskConfig = dndConfig + "drag_and_drop_desktop = true\n"
 
-// x11Desk is an Xvfb display and the programs on it. t is the test that owns
-// the display; a kitty window belongs to the subtest that starts it.
 type x11Desk struct {
 	t       *testing.T
 	display string
@@ -43,7 +26,6 @@ type x11Desk struct {
 	kitten  string
 }
 
-// startDesk starts an Xvfb of its own, or skips when the pieces are missing.
 func startDesk(t *testing.T) *x11Desk {
 	t.Helper()
 	kitty := os.Getenv("TUIOS_E2E_KITTY")
@@ -62,8 +44,6 @@ func startDesk(t *testing.T) *x11Desk {
 		}
 	}
 	d := &x11Desk{t: t, kitty: kitty, kitten: kitten}
-	// A display of its own: the suite may run beside a desktop, and a
-	// second test must not land on the first one's server.
 	for n := 90; n < 110; n++ {
 		display := ":" + strconv.Itoa(n)
 		cmd := exec.Command("Xvfb", display, "-screen", "0", "1280x800x24")
@@ -82,8 +62,6 @@ func startDesk(t *testing.T) *x11Desk {
 	return nil
 }
 
-// waitDisplay reports whether the X server answers before xvfb exits, which
-// it does at once when the display is taken.
 func (d *x11Desk) waitDisplay(xvfb *exec.Cmd) bool {
 	done := make(chan struct{})
 	go func() { _, _ = xvfb.Process.Wait(); close(done) }()
@@ -102,8 +80,6 @@ func (d *x11Desk) waitDisplay(xvfb *exec.Cmd) bool {
 	return false
 }
 
-// environ is the test process's environment under this display, with the
-// Wayland display taken out: kitty would take it over the X display.
 func (d *x11Desk) environ(extra ...string) []string {
 	env := make([]string, 0, len(os.Environ())+len(d.env)+len(extra))
 	for _, kv := range os.Environ() {
@@ -130,14 +106,12 @@ func (d *x11Desk) mustXdotool(args ...string) string {
 	return out
 }
 
-// kittyWindow is a kitty window on the desk, where it is, and how to end it.
 type kittyWindow struct {
 	id   string
 	x, y int
 	kill func()
 }
 
-// geometry is a window's position and size, from the X server.
 func (d *x11Desk) geometry(id string) (x, y, w, h int) {
 	out, err := d.xdotool("getwindowgeometry", "--shell", id)
 	if err != nil {
@@ -160,9 +134,6 @@ func (d *x11Desk) geometry(id string) (x, y, w, h int) {
 	return x, y, w, h
 }
 
-// settle waits until the window is mapped and reports the same geometry
-// twice, 150 ms apart, and until ok holds for it. A move before kitty has
-// settled its first size is lost, which failed every fourth run.
 func (d *x11Desk) settle(t *testing.T, id string, ok func(x, y, w, h int) bool) {
 	t.Helper()
 	deadline := time.Now().Add(bootTimeout)
@@ -178,9 +149,6 @@ func (d *x11Desk) settle(t *testing.T, id string, ok func(x, y, w, h int) bool) 
 	t.Fatalf("window %s never settled", id)
 }
 
-// startKitty starts kitty running argv in dir, with class as its X class,
-// moves the window to (x, y) and returns it once it is mapped. env is added
-// to the environment.
 func (d *x11Desk) startKitty(t *testing.T, class, dir string, width, height, x, y int, env []string, argv ...string) kittyWindow {
 	t.Helper()
 	args := []string{"--config", "NONE", "--class", class, "--directory", dir,
@@ -195,8 +163,6 @@ func (d *x11Desk) startKitty(t *testing.T, class, dir string, width, height, x, 
 		t.Fatal(err)
 	}
 	cmd.Stdout, cmd.Stderr = logf, logf
-	// The windows of an earlier subtest are gone by now; one of this
-	// subtest's own class would be a second window of the same program.
 	if out, _ := d.xdotool("search", "--class", class); out != "" {
 		t.Fatalf("a %s window is already on the display: %s", class, out)
 	}
@@ -221,8 +187,6 @@ func (d *x11Desk) startKitty(t *testing.T, class, dir string, width, height, x, 
 	}
 }
 
-// drag presses at (x1, y1), carries the pointer to (x2, y2) in steps and
-// releases there, in screen pixels.
 func (d *x11Desk) drag(x1, y1, x2, y2 int) {
 	d.t.Helper()
 	d.mustXdotool("mousemove", strconv.Itoa(x1), strconv.Itoa(y1))
@@ -238,8 +202,6 @@ func (d *x11Desk) drag(x1, y1, x2, y2 int) {
 	d.mustXdotool("mouseup", "1")
 }
 
-// screenshot keeps a picture of the whole display as an artifact, when
-// ImageMagick's import is installed: what the person would have seen.
 func (d *x11Desk) screenshot(t *testing.T, name string) {
 	t.Helper()
 	bin, err := exec.LookPath("import")
@@ -253,7 +215,6 @@ func (d *x11Desk) screenshot(t *testing.T, name string) {
 	}
 }
 
-// clipboard is the X clipboard's text.
 func (d *x11Desk) clipboard() string {
 	cmd := exec.Command("xclip", "-o", "-selection", "clipboard")
 	cmd.Env = d.environ()
@@ -261,9 +222,6 @@ func (d *x11Desk) clipboard() string {
 	return string(out)
 }
 
-// deskTuios is a tuios session whose client runs in a kitty window on the
-// desk: the isolation root, the window, and kitty's cell size, which turns a
-// pane's cell into a screen pixel.
 type deskTuios struct {
 	t             *testing.T
 	desk          *x11Desk
@@ -273,9 +231,6 @@ type deskTuios struct {
 	logFrom       int64
 }
 
-// startDeskTuios makes a session with n plain panes, detached, and attaches a
-// client to it in a kitty window in terminal mode, where a press reaches the
-// program in a pane. The panes are plain shells; the test types into them.
 func startDeskTuios(t *testing.T, desk *x11Desk, config string, n int) (*deskTuios, []winRect) {
 	t.Helper()
 	base := t.TempDir()
@@ -300,8 +255,6 @@ func startDeskTuios(t *testing.T, desk *x11Desk, config string, n int) (*deskTui
 	if st, err := os.Stat(dndDebugLog); err == nil {
 		d.logFrom = st.Size()
 	}
-	// The size is read from kitty's own tty before tuios takes it: kitty
-	// fills in the pixel fields, which is where the cell size comes from.
 	d.win = desk.startKitty(t, "tuiosB", base, 630, 700, 640, 0, env,
 		"sh", "-c", buildDnDPeer(t)+" winsize "+size+" && exec "+tuiosBin+" attach --terminal-mode "+session+" 2>"+filepath.Join(base, "client.err"))
 	ws := waitFile(t, size, func(s string) bool { return len(strings.Fields(s)) == 4 }, "kitty never reported its size")
@@ -314,8 +267,6 @@ func startDeskTuios(t *testing.T, desk *x11Desk, config string, n int) (*deskTui
 		t.Fatalf("kitty reported a size with a zero in it: %q", ws)
 	}
 	d.cw, d.ch = xpx/cols, ypx/rows
-	// The client is up once the panes span kitty's columns rather than the
-	// daemon's default.
 	var rects []winRect
 	deadline := time.Now().Add(bootTimeout)
 	for {
@@ -347,10 +298,8 @@ func startDeskTuios(t *testing.T, desk *x11Desk, config string, n int) (*deskTui
 	return d, rects
 }
 
-// dndDebugLog is where TUIOS_DEBUG_INTERNAL=1 writes (internal/debuglog).
 const dndDebugLog = "/tmp/tuios-debug.log"
 
-// log is what tuios logged about drag and drop since this client started.
 func (d *deskTuios) log() string {
 	data, _ := os.ReadFile(dndDebugLog)
 	if int64(len(data)) < d.logFrom {
@@ -365,8 +314,6 @@ func (d *deskTuios) log() string {
 	return strings.Join(lines, "\n")
 }
 
-// hostOffers counts the drags tuios offered kitty: a t=o with operation
-// flags, as against the registration, which is t=o with x=1 and no flags.
 func hostOffers(log string) int {
 	n := 0
 	for line := range strings.SplitSeq(log, "\n") {
@@ -377,23 +324,16 @@ func hostOffers(log string) int {
 	return n
 }
 
-// hostDataRequests matches tuios asking kitty for the data of a MIME type
-// (t=r with a 1-based index), as against ending a drop (t=r with x=0).
 var hostDataRequests = regexp.MustCompile(`host send t=r o=\d+ x=[1-9]`)
 
-// saveLog keeps the exchange as an artifact.
 func (d *deskTuios) saveLog(name string) {
 	_ = os.WriteFile(filepath.Join(artifactDir(d.t), name+".dnd.log"), []byte(d.log()+"\n"), 0o644)
 }
 
-// cell is the screen pixel at the centre of cell (cx, cy) of the program in
-// pane. The rectangle the daemon reports includes the border, which the
-// program's first cell sits inside of.
 func (d *deskTuios) cell(pane winRect, cx, cy int) (int, int) {
 	return d.win.x + (pane.X+1+cx)*d.cw + d.cw/2, d.win.y + (pane.Y+1+cy)*d.ch + d.ch/2
 }
 
-// find is the row and column of text in a pane, as the daemon captures it.
 func (d *deskTuios) find(pane winRect, text string) (row, col int) {
 	d.t.Helper()
 	capture, _ := tuiosCLI(d.t, d.base, "capture-pane", "-s", d.session, "-w", pane.ID)
@@ -406,18 +346,15 @@ func (d *deskTuios) find(pane winRect, text string) (row, col int) {
 	return 0, 0
 }
 
-// run types a command into a pane and waits for marker.
 func (d *deskTuios) run(pane winRect, command, marker string) {
 	d.t.Helper()
 	runInPane(d.t, d.base, d.session, pane, command, marker)
 }
 
-// kittenTarget is the dnd kitten taking drops into dir, as a pane command.
 func kittenTarget(kitten, dir string) string {
 	return "cd " + dir + " && exec " + kitten + " dnd --drop-anywhere=copy"
 }
 
-// readerPane is a plain reader with bracketed paste on, writing to out.
 func readerPane(out string) string {
 	return "stty raw -echo; printf '\\033[?2004h'; printf 'SINK%sREADY\\n' ''; cat > " + out
 }
@@ -465,8 +402,6 @@ func TestDnDDesktopBridge(t *testing.T) {
 		if !strings.Contains(d.log(), "host send t=a") {
 			t.Fatalf("tuios did not register with kitty:\n%s", d.log())
 		}
-		// The kitten draws Copy and Move zones in its middle; the drop goes
-		// to the pane's upper left, where --drop-anywhere=copy holds.
 		x, y := d.cell(panes[0], 4, 3)
 		desk.drag(other.x+300, other.y+250, x, y)
 		desk.screenshot(t, "after-drop")
@@ -618,8 +553,6 @@ func TestDnDDesktopBridge(t *testing.T) {
 		defer d.saveLog("source-dies")
 		d.run(panes[0], "cd "+src2+" && exec "+kitten+" dnd across.txt", "across.txt")
 		d.run(panes[1], kittenTarget(kitten, dst), "transfer the files here")
-		// The outside drag is carried over the target pane and held there;
-		// then its source dies under the held button, and no leave comes.
 		x, y := d.cell(panes[1], 4, 3)
 		desk.mustXdotool("mousemove", strconv.Itoa(other.x+300), strconv.Itoa(other.y+250))
 		time.Sleep(300 * time.Millisecond)
@@ -636,7 +569,6 @@ func TestDnDDesktopBridge(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 		desk.mustXdotool("mouseup", "1")
 		desk.screenshot(t, "after-the-source-died")
-		// The next drag out of a pane must work as if nothing had happened.
 		x1, y1 := d.cell(panes[0], panes[0].Width/2, panes[0].Height/2)
 		desk.drag(x1, y1, x, y)
 		waitFile(t, filepath.Join(dst, "across.txt"), func(s string) bool { return s == "payload across.txt\n" }, "the drag after the stuck one never delivered its file")
@@ -664,7 +596,6 @@ func TestDnDDesktopBridge(t *testing.T) {
 	})
 }
 
-// hostWrote is what the client wrote to its terminal so far.
 func hostWrote(term *tuitest.Terminal) string {
 	v, ok := dndHostOut.Load(term)
 	if !ok {
@@ -673,7 +604,6 @@ func hostWrote(term *tuitest.Terminal) string {
 	return v.(*lockedBuffer).String()
 }
 
-// waitHostWrote waits for the client to write want to its terminal.
 func waitHostWrote(t *testing.T, term *tuitest.Terminal, want, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -685,7 +615,6 @@ func waitHostWrote(t *testing.T, term *tuitest.Terminal, want, what string) {
 	}
 }
 
-// osc72 is one message as a terminal would send it.
 func osc72(body string) string { return "\x1b]72;" + body + "\x1b\\" }
 
 // TestDnDBridgeWithAnEmulatedTerminal plays the terminal's side of the bridge
@@ -712,7 +641,6 @@ func TestDnDBridgeWithAnEmulatedTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	uri := base64.StdEncoding.EncodeToString([]byte("file://" + file + "\r\n"))
-	// drop types the moves and the drop of an outside drag at a pane's centre.
 	drop := func(t *testing.T, term *tuitest.Terminal, pane winRect) {
 		t.Helper()
 		cx, cy := pane.X+pane.Width/2, pane.Y+pane.Height/2
@@ -756,8 +684,6 @@ func TestDnDBridgeWithAnEmulatedTerminal(t *testing.T) {
 		waitHostWrote(t, term, "\x1b]72;t=r:o=1", "the end of the drop")
 		saveArtifact(t, term, artifactDir(t), "after-drop")
 
-		// The switch goes off in the config file: the client takes its
-		// registration back, and asks again when it comes back on.
 		writeConfig(t, base, dndConfig)
 		waitHostWrote(t, term, osc72("t=A"), "the registration taken back")
 		if !strings.Contains(hostWrote(term), "\x1b]72;t=o:x=2") {
@@ -784,8 +710,6 @@ func TestDnDBridgeWithAnEmulatedTerminal(t *testing.T) {
 		waitHostWrote(t, term, "\x1b]72;t=o:x=1", "the registration")
 		drop(t, term, right)
 		waitHostWrote(t, term, "\x1b]72;t=r:x=1", "the data request")
-		// The terminal never answers. The client ends the drop on its own
-		// and takes the next one.
 		end := time.Now().Add(45 * time.Second)
 		for !strings.Contains(hostWrote(term), osc72("t=r:x=0:y=0")) {
 			if time.Now().After(end) {

@@ -33,7 +33,6 @@ import (
 //     TestStreamPaneSnapshotCharged fails at "a second snapshot was taken
 //     while the first held the budget".
 
-// otherSession is a second session, for the nonce scope.
 const otherSession = "other"
 
 // TestPresenceNonceScope: a presence made for one session cannot answer an
@@ -63,21 +62,16 @@ func TestPresenceNonceScope(t *testing.T) {
 	hook := startSessionApprovalHook(t, base, otherSession, ow)
 	id := sessionApproval(t, ctl, otherSession, ow)
 
-	// reply-approval in the other session, with the scoped nonce.
 	if r, verr := ctl.call(t, "reply-approval", map[string]any{"request_id": id, "decision": "once", "human_nonce": scoped["human_nonce"]}); verr == nil || verr.Code != "not_human" {
 		t.Fatalf("a presence for session %s answered in session %s: reply-approval %v %v", streamSession, otherSession, r, verr)
 	}
-	// respond in the other session, with the scoped nonce. The nonce is
-	// checked before the prompt, so a nonce that passes gets another error.
 	if r, verr := ctl.call(t, "respond", map[string]any{"session": otherSession, "window": ow, "action": "deny", "human_nonce": scoped["human_nonce"]}); verr == nil || verr.Code != "not_human" {
 		t.Fatalf("a presence for session %s answered in session %s: respond %v %v", streamSession, otherSession, r, verr)
 	}
-	// The same scoped nonce still acts in its own session.
 	if _, verr := ctl.call(t, "respond", map[string]any{"session": streamSession, "window": linkFirstWindow(t, ctl, streamSession), "action": "deny", "human_nonce": scoped["human_nonce"]}); verr != nil && verr.Code == "not_human" {
 		t.Fatalf("a presence for session %s was refused in its own session: %v", streamSession, verr)
 	}
 
-	// The presence with no session answers both.
 	if _, verr := anyConn.call(t, "respond", map[string]any{"session": otherSession, "window": ow, "action": "deny", "human_nonce": unscoped["human_nonce"]}); verr != nil && verr.Code == "not_human" {
 		t.Fatalf("a presence with no session was refused by respond in session %s: %v", otherSession, verr)
 	}
@@ -108,8 +102,6 @@ func TestStreamPaneLeaseExpires(t *testing.T) {
 	renew.streamPane(t, newSPTranscript(t), map[string]any{"session": streamSession, "window": w2, "lease_cols": 31, "lease_rows": 9})
 	start := time.Now()
 
-	// Read the silent stream's frames while the renewing one sends an L
-	// frame every 10 seconds.
 	expired := make(chan time.Duration, 1)
 	var expiredCode string
 	go func() {
@@ -151,7 +143,6 @@ wait:
 			t.Fatalf("the lease of a silent client did not end within 40s")
 		}
 	}
-	// A client learns the code from list-verbs, like a verb error's.
 	wantCatalogued(t, base, expiredCode, "the E frame of an expired lease")
 	if took < 29*time.Second || took > 33*time.Second {
 		t.Fatalf("the lease ended %s after the stream opened, want 30s", took.Round(time.Second))
@@ -167,7 +158,6 @@ wait:
 	writeReviewArtifact(t, "stream-lease-expiry.txt", fmt.Sprintf("silent stream: lease_expired after %s, pane back at 80x24\nrenewing stream: pane held at 31x9 after %s\n", took.Round(100*time.Millisecond), time.Since(start).Round(time.Second)))
 }
 
-// busyRefusal is an E frame with code busy.
 type busyRefusal struct {
 	Code     string `json:"code"`
 	Accepted *int64 `json:"accepted"`
@@ -182,8 +172,6 @@ func TestStreamPaneLeaseBehindBlockedInput(t *testing.T) {
 	if _, verr := ctl.call(t, "resize", map[string]any{"session": streamSession, "window": w1, "width": 80, "height": 24}); verr != nil {
 		t.Fatalf("resize: %v", verr)
 	}
-	// A program that never reads its input, with the line discipline in raw
-	// mode so the pane's input buffer fills.
 	spType(t, ctl, w1, "stty raw -echo; echo NOREAD; sleep 600\n")
 	spWait(t, ctl, w1, "NOREAD")
 	ps := link.open(t, true)
@@ -224,8 +212,6 @@ func TestStreamPaneLeaseBehindBlockedInput(t *testing.T) {
 		}
 	}
 	leaseTook := time.Since(sent)
-	// Fill the queue: the next frames are refused as busy, with the offset
-	// to send again from.
 	for range 8 {
 		ps.send(t, 'I', chunk)
 	}
@@ -251,8 +237,6 @@ func TestStreamPaneLeaseBehindBlockedInput(t *testing.T) {
 	if first.Accepted == nil || *first.Accepted <= 0 || *first.Accepted%int64(len(chunk)) != 0 {
 		t.Fatalf("ASSERTION: the busy refusal gives accepted %v, want the bytes of the whole frames taken", first.Accepted)
 	}
-	// Drain the other refusals of the burst, then a frame small enough to
-	// fit: it is refused too, so it is never typed before the refused ones.
 	time.Sleep(time.Second)
 	for len(frames) > 0 {
 		<-frames
@@ -274,9 +258,6 @@ func TestStreamPaneSnapshotCharged(t *testing.T) {
 	if _, verr := ctl.call(t, "resize", map[string]any{"session": streamSession, "window": w1, "width": 1200, "height": 100}); verr != nil {
 		t.Fatalf("resize: %v", verr)
 	}
-	// Colour on every cell, so the snapshot is megabytes of VT bytes and
-	// its write cannot finish into the buffers of a client that stopped
-	// reading.
 	spType(t, ctl, w1, `awk 'BEGIN{for(i=0;i<300;i++){s="";for(j=0;j<1200;j++)s=s "\033[3" (j%8) "mx";print s}; print "\033[0mFILLED"}'`+"\n")
 	spWait(t, ctl, w1, "FILLED")
 
@@ -298,7 +279,6 @@ func TestStreamPaneSnapshotCharged(t *testing.T) {
 		t.Fatalf("a second stream-pane while the first snapshot held the budget: want busy, got %v", verr)
 	}
 	held.close()
-	// After the first is sent or dropped, the budget is free again.
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		third := other.open(t, true)
@@ -316,7 +296,6 @@ func TestStreamPaneSnapshotCharged(t *testing.T) {
 	writeReviewArtifact(t, "stream-snapshot-charge.txt", fmt.Sprintf("pane 1200x100 with history: second stream-pane while the first was held: %s\nafter the first ended: snapshot\n", verr.Code))
 }
 
-// linkFirstWindow is the first window id of session.
 func linkFirstWindow(t *testing.T, ctl *linkStream, session string) string {
 	t.Helper()
 	res, verr := ctl.call(t, "list-windows", map[string]any{"session": session})
@@ -326,7 +305,6 @@ func linkFirstWindow(t *testing.T, ctl *linkStream, session string) string {
 	return res["windows"].([]any)[0].(map[string]any)["window_id"].(string)
 }
 
-// startSessionApprovalHook is startApprovalHook for a pane in session.
 func startSessionApprovalHook(t *testing.T, base, session, window string) *approvalHook {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", session, "--window", window)
@@ -346,7 +324,6 @@ func startSessionApprovalHook(t *testing.T, base, session, window string) *appro
 	return h
 }
 
-// sessionApproval is spApproval for a pane in session.
 func sessionApproval(t *testing.T, ctl *linkStream, session, window string) string {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -369,8 +346,6 @@ func sessionApproval(t *testing.T, ctl *linkStream, session, window string) stri
 	return ""
 }
 
-// writeReviewArtifact saves a short record of what a test saw under
-// TUIOS_E2E_FRAMES, when it is set.
 func writeReviewArtifact(t *testing.T, name, body string) {
 	t.Helper()
 	dir := os.Getenv("TUIOS_E2E_FRAMES")
@@ -420,7 +395,6 @@ func TestStreamPaneTypesABurstOfInputInOrder(t *testing.T) {
 	for i := range 600 {
 		key := fmt.Appendf(nil, "k%03d;", i)
 		want = append(want, key...)
-		// All the frames go out in one write, as one burst on the wire.
 		burst = append(burst, 'I', 0, 0, 0, byte(len(key)))
 		burst = append(burst, key...)
 	}
@@ -488,7 +462,7 @@ func TestStreamPaneTypesInputAtItsOffset(t *testing.T) {
 		return append(binary.BigEndian.AppendUint64(nil, uint64(off)), s...)
 	}
 	ps.send(t, 'J', at(0, "AAA"))
-	ps.send(t, 'J', at(10, "BBB")) // a stale frame: the daemon expects 3
+	ps.send(t, 'J', at(10, "BBB"))
 	var e map[string]any
 	select {
 	case e = <-refused:

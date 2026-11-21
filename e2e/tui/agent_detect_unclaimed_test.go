@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// unclaimedBoxScript draws Claude Code's empty prompt box, waits for a line
-// from the test, then wipes the screen and exits. It runs under sh, so the
-// foreground-process detector never takes it for an agent.
 const unclaimedBoxScript = `#!/bin/sh
 printf '\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\n\342\235\257 \n\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\342\224\200\n'
 read -r _
@@ -20,8 +17,6 @@ printf '\033[2J\033[H'
 exit 0
 `
 
-// unclaimedAgentScript is the agent's side, run by the stand-in claude: it
-// draws nothing and waits for a line from the test.
 const unclaimedAgentScript = `#!/bin/sh
 read -r _
 exit 0

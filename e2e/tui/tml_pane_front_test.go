@@ -7,7 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tmlFrontDoc is a surface with one line on it that no shell prints.
 const tmlFrontDoc = `<tml version="1" title="Build report">
   <col pad="1"><text>FRONT-MARKER build report</text></col>
 </tml>
@@ -38,8 +37,6 @@ func TestTMLShowPaneOpensInFront(t *testing.T) {
 	const sess = "e2e-tmlfront"
 	term, base := start(t, startOpts{cols: 120, rows: 36, args: []string{"new", sess}})
 	waitBoot(t, term)
-	// Two panes, so the focused one is over another, as after any day of
-	// work with tiling off.
 	for i := 1; i <= 2; i++ {
 		if out, err := tuiosCLI(t, base, "run-command", "--session", sess, "NewWindow"); err != nil {
 			t.Fatalf("run-command NewWindow: %v\n%s", err, out)

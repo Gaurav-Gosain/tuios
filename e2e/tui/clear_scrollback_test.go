@@ -10,36 +10,14 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// How TestClearScrollback could pass wrongly, written down first:
-//   - The rows could never have been in the history. Copy mode goes to the top
-//     before the clear and must show row-1 there.
-//   - The key could do nothing and the rows scroll away by themselves. The
-//     screen holds rows before the clear and must hold none after it, with
-//     nothing printed in between.
-//   - The clear could take the prompt with it, as ED 2 with the cursor at home
-//     does. The command typed after the clear must sit on the pane's first row
-//     behind the "$ " prompt.
-//   - A client could clear only its own emulator. The daemon case detaches and
-//     attaches again, and an attach rebuilds the pane from the daemon. Then it
-//     reads the daemon's copy with capture-pane.
-//   - The CLI could clear the screen too, or clear nothing. With no --screen it
-//     must keep the newest row on the screen and drop the oldest.
-
-// superK is super+k in the kitty keyboard protocol, which is what a host
-// terminal sends for cmd+k when it lets the key through.
 const superK = "\x1b[107;9u"
 
-// clearScrollbackConfig binds clear_scrollback to super+k in the global
-// section, which is the cmd+k binding the docs give.
 const clearScrollbackConfig = copyCursorConfig + "\n[keybindings.global]\nclear_scrollback = [\"super+k\"]\n"
 
-// rowLine matches a row-N line of the loop's output for one N.
 func rowLine(n int) *regexp.Regexp {
 	return regexp.MustCompile(`(^|[^-\w])row-` + strconv.Itoa(n) + `(\D|$)`)
 }
 
-// anyRow matches any row-N line of the loop.
-// The typed loop spells it "row-$i", so only output matches.
 var anyRow = regexp.MustCompile(`row-\d`)
 
 // TestClearScrollback prints numbered rows, then presses the clear_scrollback
@@ -83,7 +61,6 @@ func TestClearScrollback(t *testing.T) {
 			}
 			time.Sleep(300 * time.Millisecond)
 
-			// The pane's first content row is the first row the output fills.
 			top := firstRowMatching(term.Screen(), anyRow)
 			if top < 0 {
 				t.Fatalf("no row-N output on the screen before the clear\n%s", term.Snapshot())
@@ -94,7 +71,6 @@ func TestClearScrollback(t *testing.T) {
 			}
 			saveFrame(t, term, "clear-scrollback-"+name+"-before")
 
-			// The key is pressed in copy mode, where cmd+k must work too.
 			if err := term.SendKeys(superK); err != nil {
 				t.Fatalf("send super+k: %v", err)
 			}
@@ -109,8 +85,6 @@ func TestClearScrollback(t *testing.T) {
 				return
 			}
 
-			// Detach and attach again. The attach rebuilds the pane from the
-			// daemon's emulator.
 			if err := term.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
 				t.Fatalf("send leader d: %v", err)
 			}
@@ -131,8 +105,6 @@ func TestClearScrollback(t *testing.T) {
 				t.Fatalf("the daemon's copy of the pane still holds the old rows\n%s", out)
 			}
 
-			// tuios clear-history without --screen drops the history and
-			// keeps the screen, as tmux clear-history does.
 			again := `for i in $(seq 1 ` + strconv.Itoa(rows) + `); do echo "again-$i"; done`
 			if err := term.SendKeys(again, tuitest.Enter); err != nil {
 				t.Fatalf("type the second loop: %v", err)
@@ -154,7 +126,6 @@ func TestClearScrollback(t *testing.T) {
 	}
 }
 
-// attachClear starts a client on sess and puts it in terminal mode.
 func attachClear(t *testing.T, base, sess string, opts startOpts) *tuitest.Terminal {
 	t.Helper()
 	opts.args = []string{"attach", sess}
@@ -167,8 +138,6 @@ func attachClear(t *testing.T, base, sess string, opts startOpts) *tuitest.Termi
 	return term
 }
 
-// waitCapture polls the daemon's capture of sess until ok holds, and returns
-// the last capture.
 func waitPaneCapture(t *testing.T, base, sess string, scrollback bool, ok func(string) bool) string {
 	t.Helper()
 	args := []string{"capture-pane", "-s", sess}
@@ -181,7 +150,6 @@ func waitPaneCapture(t *testing.T, base, sess string, scrollback bool, ok func(s
 	}, ok)
 }
 
-// firstRowMatching is the first screen row re matches, or -1.
 func firstRowMatching(s tuitest.Screen, re *regexp.Regexp) int {
 	for i, line := range strings.Split(s.Text(), "\n") {
 		if re.MatchString(line) {
@@ -191,7 +159,6 @@ func firstRowMatching(s tuitest.Screen, re *regexp.Regexp) int {
 	return -1
 }
 
-// copyTop enters copy mode and goes to the top of the history.
 func copyTop(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
@@ -201,8 +168,6 @@ func copyTop(t *testing.T, term *tuitest.Terminal) {
 	sendEach(t, term, "g", "g")
 }
 
-// checkPromptOnTop types a command and requires it on row top behind the
-// shell's "$ " prompt: the clear kept the prompt and moved it to the top.
 func checkPromptOnTop(t *testing.T, term *tuitest.Terminal, top int, marker string) {
 	t.Helper()
 	runInShell(t, term, "echo "+splitMarker(marker), marker, shellTimeout)
@@ -213,8 +178,6 @@ func checkPromptOnTop(t *testing.T, term *tuitest.Terminal, top int, marker stri
 	}
 }
 
-// checkNoHistory goes to the top of the history in copy mode and requires no
-// row-N output there, then leaves copy mode.
 func checkNoHistory(t *testing.T, term *tuitest.Terminal, when string) {
 	t.Helper()
 	copyTop(t, term)
@@ -236,7 +199,6 @@ func checkNoHistory(t *testing.T, term *tuitest.Terminal, when string) {
 func TestClearKeepsScrollback(t *testing.T) {
 	const rows = 200
 	loop := `for i in $(seq 1 ` + strconv.Itoa(rows) + `); do echo "row-$i"; done`
-	// clear's own bytes, so the test does not hang on the pane's terminfo.
 	const clearSeq = `printf '\033[H\033[2J\033[3J'`
 	for _, keep := range []bool{true, false} {
 		name := "keep"
@@ -272,8 +234,6 @@ func TestClearKeepsScrollback(t *testing.T) {
 			out := waitPaneCapture(t, base, sess, true, func(out string) bool {
 				return rowLine(1).MatchString(out) == keep
 			})
-			// The rows on the screen at the clear are erased, as tmux erases
-			// them. The ones that had scrolled off stay.
 			if keep && !rowLine(rows/2).MatchString(out) {
 				t.Fatalf("the daemon kept only part of the history: row-%d is gone\n%s", rows/2, out)
 			}

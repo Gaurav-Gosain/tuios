@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// The fixtures are in testdata, not in string constants here, because
-// TestNoNewBareSleeps counts every sleep call written in a _test.go file.
 func fixture(t *testing.T, name string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("testdata", name))

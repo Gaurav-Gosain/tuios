@@ -28,12 +28,8 @@ func TestReflowScratchReleasedBySweep(t *testing.T) {
 		width   = 200
 		narrow  = 190
 		height  = 60
-		cellLen = 112 // bytes in a uv.Cell
+		cellLen = 112
 	)
-	// The line wraps over every row of the screen and 240 rows of history,
-	// so each width change reflows the screen and the history rows the line
-	// started in. Commas, not spaces: capture-pane trims a row's trailing
-	// blanks, and a row that ended on one would not join back.
 	const fill = `awk 'BEGIN{for(i=1;i<=20000;i++) printf "%d,", i; print ""}'; echo FILL$((1+1))DONE` + "\n"
 	var line strings.Builder
 	for i := 1; i <= 20000; i++ {
@@ -98,12 +94,10 @@ func TestReflowScratchReleasedBySweep(t *testing.T) {
 				time.Sleep(100 * time.Millisecond)
 			}
 		}
-		// Two reflows leave a spare block; the third reuses it.
 		resize(d, narrow)
 		resize(d, width)
 		resize(d, narrow)
 	}
-	// The sweeping daemon runs its sweep at least twice in this time.
 	time.Sleep(3 * time.Second)
 
 	sweptHeap, err := pprofHeapHeld(swept.addr)
@@ -123,8 +117,6 @@ func TestReflowScratchReleasedBySweep(t *testing.T) {
 			released/1024, panes, want/1024, narrow, height)
 	}
 
-	// The next reflow allocates what the sweep dropped and lays the text out
-	// as the daemon that kept its buffers does.
 	resize(swept, 150)
 	resize(held, 150)
 	time.Sleep(300 * time.Millisecond)

@@ -1,30 +1,5 @@
 package tuie2e
 
-// Frame pacing: how steadily frames reach the host terminal, and how long a
-// frame the guest drew takes to get there.
-//
-// A guest (./framepace) draws at a fixed rate and logs when each frame was
-// ready. The host side of the client's PTY is read here with no rendering at
-// all, and each frame the client finishes (the end of its synchronized update)
-// is timestamped as it arrives. Every guest frame carries its sequence number
-// where the byte stream shows it, so a host frame is matched to the guest
-// frame it shows.
-//
-// The numbers:
-//
-//	interval  the time between two host frames that carry new content. At a
-//	          steady 120 fps every one is 8.3 ms; the tail is the stutter.
-//	latency   from the guest having a frame ready to the host receiving it.
-//	shown     guest frames that reached the host, of those the guest drew.
-//	cpu       the client's and the daemon's CPU, in ms per second of run.
-//
-// Gated like the other perf tests:
-//
-//	cd e2e/tui && TUIOS_E2E=1 TUIOS_PERF=1 go test -count=1 -v -run TestPerfFrames .
-//
-// TUIOS_PERF_OUT, when set, names a directory that gets one JSON file per case
-// with every sample, so two builds can be compared offline.
-
 import (
 	"bufio"
 	"bytes"
@@ -47,30 +22,16 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// frameClock reads the client's host stream and timestamps what arrives.
 type frameClock struct {
-	mu   sync.Mutex
-	tail []byte
-	// ends are the arrival times of the client's frame ends.
-	ends []int64
-	// seen maps a guest frame to when the host first received it.
-	seen map[int]int64
-	// images counts the kitty image transmissions the host received.
-	images int
-	// hostBytes is everything the host received.
+	mu        sync.Mutex
+	tail      []byte
+	ends      []int64
+	seen      map[int]int64
+	images    int
 	hostBytes int64
 	probe     chan struct{}
-	// screen returns the host's screen text once the client is running. The
-	// tags are read off the screen rather than the byte stream: the client
-	// writes only the cells that changed, so a tag is rarely whole in the
-	// stream.
-	screen func() string
-	// shm reads each t=s frame's object the way the host terminal does,
-	// and removes it when the client asked for that (the client's own
-	// objects; the guest's object is left alone).
+	screen    func() string
 	shmPrefix string
-	// dump, when set, receives every chunk the host reads with its arrival
-	// time, up to dumpLimit bytes. TUIOS_PERF_DUMP turns it on.
 	dump      *os.File
 	dumpBytes int
 }
@@ -89,7 +50,6 @@ var (
 	kittyKeyRE      = regexp.MustCompile(`(?:^|,)([a-zA-Z])=([^,;]*)`)
 )
 
-// decodeTag reads a sequence number back from a tag (see framepace's tag).
 func decodeTag(b []byte) (int, bool) {
 	n := 0
 	for _, c := range b[1:9] {
@@ -123,7 +83,6 @@ func (c *frameClock) Write(p []byte) (int, error) {
 	}
 	data := append(c.tail, p...)
 	c.tail = nil
-	// Frame ends.
 	counted := 0
 	for {
 		k := bytes.Index(data[counted:], frameSyncEndSeq)
@@ -133,7 +92,6 @@ func (c *frameClock) Write(p []byte) (int, error) {
 		c.ends = append(c.ends, now)
 		counted += k + len(frameSyncEndSeq)
 	}
-	// Kitty images.
 	pos := 0
 	for {
 		k := bytes.Index(data[pos:], apcStart)
@@ -152,7 +110,6 @@ func (c *frameClock) Write(p []byte) (int, error) {
 		c.kittyCommand(data[start+3:start+e], now)
 		pos = start + e + 2
 	}
-	// Keep a little so a sequence split across two reads is still found.
 	if counted > 0 && c.screen != nil {
 		for _, m := range textTagRE.FindAllString(c.screen(), -1) {
 			if seq, ok := decodeTag([]byte(m)); ok {
@@ -162,15 +119,12 @@ func (c *frameClock) Write(p []byte) (int, error) {
 			}
 		}
 	}
-	// A frame end already counted is not kept.
 	if len(c.tail) == 0 && len(data) > 0 {
 		c.tail = append(c.tail, data[max(counted, len(data)-len(frameSyncEndSeq)):]...)
 	}
 	return len(p), nil
 }
 
-// kittyCommand looks at one graphics command: its control keys, and the frame
-// number in the first eight bytes of its pixels.
 func (c *frameClock) kittyCommand(cmd []byte, now int64) {
 	head, payload, _ := bytes.Cut(cmd, []byte(";"))
 	keys := map[string]string{}
@@ -185,7 +139,7 @@ func (c *frameClock) kittyCommand(cmd []byte, now int64) {
 		return
 	}
 	if keys["s"] == "" && keys["m"] != "" && a != "f" {
-		return // a continuation chunk
+		return
 	}
 	c.images++
 	var first []byte
@@ -209,8 +163,6 @@ func (c *frameClock) kittyCommand(cmd []byte, now int64) {
 		if err != nil {
 			return
 		}
-		// A real kitty removes a t=s object once it has read it, and a t=t
-		// file. The guest's own object is the guest's to remove.
 		if keys["t"] != "f" && (c.shmPrefix == "" || !strings.HasPrefix(string(name), c.shmPrefix)) {
 			_ = os.Remove(path)
 		}
@@ -225,7 +177,7 @@ func (c *frameClock) kittyCommand(cmd []byte, now int64) {
 		first = b
 	}
 	if keys["o"] == "z" {
-		return // compressed; the number is not readable without inflating
+		return
 	}
 	seq := int(binary.LittleEndian.Uint64(first))
 	if seq > 0 && seq < 1<<30 {
@@ -235,7 +187,6 @@ func (c *frameClock) kittyCommand(cmd []byte, now int64) {
 	}
 }
 
-// frameReport is one case's result, also written as JSON.
 type frameReport struct {
 	Case        string          `json:"case"`
 	Seconds     float64         `json:"seconds"`
@@ -262,7 +213,6 @@ func (r frameReport) line() string {
 		r.ClientCPU, r.DaemonCPU, r.HostMBps)
 }
 
-// cpuTicks is a process's user plus system time in clock ticks.
 func cpuTicks(pid int) int64 {
 	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
 	if err != nil {
@@ -279,7 +229,6 @@ func cpuTicks(pid int) int64 {
 	return u + k
 }
 
-// readGuestLog reads framepace's log: sequence number to ready time.
 func readGuestLog(path string) map[int]int64 {
 	out := map[int]int64{}
 	f, err := os.Open(path)
@@ -299,7 +248,6 @@ func readGuestLog(path string) map[int]int64 {
 			out[seq] = ns
 		}
 	}
-	// A read error keeps the frames read before it, as a missing file does.
 	_ = sc.Err()
 	return out
 }
@@ -332,8 +280,6 @@ var (
 	framepaceErr  error
 )
 
-// attachArgs is the client's command line, with a profile server when addr
-// is set.
 func attachArgs(addr string) []string {
 	if addr == "" {
 		return []string{"attach", "fp"}
@@ -341,18 +287,16 @@ func attachArgs(addr string) []string {
 	return []string{"attach", "fp", "--pprof", addr}
 }
 
-// guestSeqBase separates the sequence numbers of guests in different panes.
 const guestSeqBase = 10_000_000
 
-// frameCase is one measurement.
 type frameCase struct {
 	name   string
-	maxFPS string // appearance.max_fps
-	mode   string // framepace mode
-	fps    int    // guest rate, 0 for as fast as it can
-	panes  int    // panes running the guest, tiled
-	idle   int    // extra idle panes
-	kitty  bool   // answer the kitty graphics probe
+	maxFPS string
+	mode   string
+	fps    int
+	panes  int
+	idle   int
+	kitty  bool
 }
 
 func perfFrameSecs() time.Duration {
@@ -368,8 +312,6 @@ func runFrameCase(t *testing.T, fc frameCase) frameReport {
 	killDaemon(t, base)
 	cfg := fmt.Sprintf("[appearance]\nmax_fps = %s\n[startup]\ntiled = true\n", fc.maxFPS)
 	writeConfig(t, base, cfg)
-	// TUIOS_PERF_PPROF names a directory for CPU profiles of the client and
-	// the daemon, taken over the measured window.
 	profDir := os.Getenv("TUIOS_PERF_PPROF")
 	var daemonAddr, clientAddr string
 	if profDir != "" {
@@ -380,9 +322,6 @@ func runFrameCase(t *testing.T, fc frameCase) frameReport {
 		t.Fatalf("create the session: %v: %s", err, out)
 	}
 	clock := newFrameClock()
-	// A truecolor host, as kitty and ghostty are: without it the renderer
-	// converts every colour to the 256-colour palette, which the hosts this
-	// measures never ask for.
 	env := append(perfEnvVars(), "TUIOS_SIXEL_GRAPHICS=0", "COLORTERM=truecolor", "TUIOS_KITTY_ANIMATION=1")
 	if v := os.Getenv("TUIOS_DBG_COMPOSE"); v != "" {
 		env = append(env, "TUIOS_DBG_COMPOSE="+v)
@@ -422,7 +361,6 @@ func runFrameCase(t *testing.T, fc frameCase) frameReport {
 			t.Fatalf("start the guest: %v", err)
 		}
 	}
-	// Warm up: the guest takes the screen and the first frames settle.
 	time.Sleep(1500 * time.Millisecond)
 
 	daemonPid := 0
@@ -469,11 +407,10 @@ func runFrameCase(t *testing.T, fc frameCase) frameReport {
 	}
 	clock.mu.Unlock()
 	profWG.Wait()
-	// Let the guests flush their logs.
 	time.Sleep(200 * time.Millisecond)
 
 	secs := t1.Sub(t0).Seconds()
-	tick := float64(1000) / 100 // ms per clock tick at USER_HZ 100
+	tick := float64(1000) / 100
 	r := frameReport{
 		Case:       fc.name,
 		Seconds:    secs,
@@ -483,12 +420,6 @@ func runFrameCase(t *testing.T, fc frameCase) frameReport {
 		HostMBps:   float64(hostBytes) / secs / 1e6,
 		Images:     images,
 	}
-	// For each guest: which of its frames reached the host, how long each
-	// took, and the intervals between the host frames that showed one.
-	// Several guest frames shown by one host frame arrive together, so the
-	// interval is between distinct arrivals. The report's own numbers are
-	// the first guest's; the worst guest's shown rate and p99 interval go in
-	// Extra.
 	lo, hi := t0.UnixNano(), t1.UnixNano()
 	worstShown, worstP99 := -1.0, time.Duration(0)
 	var guestFPS []float64
@@ -624,7 +555,7 @@ func TestFramePacingKeepsTheGuestsRate(t *testing.T) {
 		fc         frameCase
 		minFPS     float64
 		maxP95     time.Duration
-		maxLatency time.Duration // p50, guest to host
+		maxLatency time.Duration
 	}{
 		{frameCase{name: "pace-120guest/max120", maxFPS: "120", mode: "text", fps: 120, panes: 1}, 111, 11 * time.Millisecond, 12 * time.Millisecond},
 		{frameCase{name: "pace-240guest/max240", maxFPS: "240", mode: "text", fps: 240, panes: 1}, 200, 7500 * time.Microsecond, 10 * time.Millisecond},
@@ -657,9 +588,6 @@ func TestPerfFloodDrain(t *testing.T) {
 		took.Round(time.Millisecond), frames, float64(frames)/took.Seconds(), st.P50.Round(10*time.Microsecond), st.P95.Round(10*time.Microsecond), st.Max.Round(time.Millisecond))
 }
 
-// floodDrain runs 285 MB of 190-column lines through one pane at max_fps 120
-// and returns how long it took to reach the host, how many frames the host got
-// meanwhile, and the intervals between them.
 func floodDrain(t *testing.T) (time.Duration, int, perf.Stats) {
 	t.Helper()
 	base := t.TempDir()

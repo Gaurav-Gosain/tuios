@@ -71,8 +71,6 @@ func TestTapeRecordingKeepsEveryModeChoice(t *testing.T) {
 			enter, typed, leave, saved)
 	}
 
-	// Replayed from terminal mode, the tape ends in window management, where
-	// "," opens the settings panel instead of reaching the shell.
 	enterTerminalMode(t, term)
 	if out, errOut, err := splitCLI(t, base, "tape", "exec", "-s", "modes", path); err != nil {
 		t.Fatalf("tape exec of the recording: %v\n%s%s", err, out, errOut)
@@ -86,7 +84,6 @@ func TestTapeRecordingKeepsEveryModeChoice(t *testing.T) {
 	saveArtifact(t, term, artifactDir(t), "replayed-ends-in-window-mode")
 }
 
-// onlySavedTape returns the path and text of the one recording under base.
 func onlySavedTape(t *testing.T, base string) (string, string) {
 	t.Helper()
 	out, _, err := splitCLI(t, base, "tape", "list", "--json")
@@ -108,8 +105,6 @@ func onlySavedTape(t *testing.T, base string) (string, string) {
 	return list.Tapes[0].Path, string(saved)
 }
 
-// lineIndex is the byte offset of the first line of text that is exactly
-// want, or -1.
 func lineIndex(text, want string) int {
 	if found := lineOffsets(text, want); len(found) > 0 {
 		return found[0]
@@ -117,9 +112,6 @@ func lineIndex(text, want string) int {
 	return -1
 }
 
-// lastLineIndex is the byte offset of the last line of text that is exactly
-// want, or -1. A recording begun in window management mode opens with a
-// WindowManagementMode line of its own.
 func lastLineIndex(text, want string) int {
 	if found := lineOffsets(text, want); len(found) > 0 {
 		return found[len(found)-1]

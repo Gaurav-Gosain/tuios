@@ -12,24 +12,15 @@ import (
 	"testing"
 )
 
-// The review fixes of agent-transcript, on the rig of
-// agent_transcript_more_test.go. Each test names its negative controls,
-// recorded in NEGATIVE_CONTROLS.md under "agent-transcript review fixes".
-
-// atProjects is Claude Code's transcript folder under the test's home, the
-// only folder a reported transcript_path is accepted under.
 func atProjects(base string) string {
 	return filepath.Join(xdgDir(base, "HOME"), ".claude", "projects")
 }
 
-// hookPayload is a SessionStart payload that names path.
 func hookPayload(path, sessionID string) []byte {
 	b, _ := json.Marshal(map[string]any{"hook_event_name": "SessionStart", "session_id": sessionID, "transcript_path": path, "source": "startup"})
 	return b
 }
 
-// joinExplain runs the real SessionStart hook with --explain from outside
-// every pane, with env added to its environment, and returns what it printed.
 func (r *atRig) joinExplain(win, path, sessionID string, env ...string) map[string]any {
 	r.t.Helper()
 	hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", transcriptSession, "--window", win, "--explain")
@@ -53,7 +44,6 @@ func (r *atRig) joinExplain(win, path, sessionID string, env ...string) map[stri
 	return out
 }
 
-// noTranscript checks that win is not readable: no join, or no file to read.
 func (r *atRig) noTranscript(win, why string) {
 	r.t.Helper()
 	p := map[string]any{"session": transcriptSession, "window": win, "human_nonce": r.nonce}
@@ -99,7 +89,6 @@ func TestTranscriptNonceScope(t *testing.T) {
 		return res, verr
 	}
 
-	// A presence for the other session does not read this one.
 	otherConn := r.link.open(t, true)
 	other, verr := otherConn.call(t, "attach-presence", map[string]any{"session": "other"})
 	if verr != nil {
@@ -108,7 +97,6 @@ func TestTranscriptNonceScope(t *testing.T) {
 	if res, verr := read(otherConn, other["human_nonce"], nil); verr == nil || verr.Code != "not_human" || !strings.Contains(verr.Message, "another session") {
 		t.Fatalf("a presence for session other read session convo: %v %v", res, verr)
 	}
-	// A presence for this session reads it.
 	ownConn := r.link.open(t, true)
 	own, verr := ownConn.call(t, "attach-presence", map[string]any{"session": transcriptSession})
 	if verr != nil {
@@ -121,12 +109,10 @@ func TestTranscriptNonceScope(t *testing.T) {
 	if got := atEntries(t, res); len(got) != 1 || got[0].Text != "SCOPE-TEXT" {
 		t.Fatalf("the read with the scoped presence: %v", got)
 	}
-	// A presence with no session reads it too (the rig's).
 	if _, verr := read(r.ctl, r.nonce, nil); verr != nil {
 		t.Fatalf("a presence with no session did not read: %v", verr)
 	}
 
-	// limit 0 is refused, and no limit is the default.
 	if _, verr := read(r.ctl, r.nonce, map[string]any{"limit": 0}); verr == nil || verr.Code != "invalid_params" {
 		t.Fatalf("limit 0: want invalid_params, got %v", verr)
 	}
@@ -134,8 +120,6 @@ func TestTranscriptNonceScope(t *testing.T) {
 		t.Fatalf("limit 1: %v", verr)
 	}
 
-	// A restricted connection is refused with forbidden, after the same
-	// connection read before it restricted itself.
 	sock := filepath.Join(xdgDir(r.base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")
 	local := dialVerbs(t, sock)
 	lres, lerr := local.call("attach-presence", nil)
@@ -213,8 +197,6 @@ func TestTranscriptPathRules(t *testing.T) {
 	}
 	refused(winA, txt, "pattern", "a file that does not match *.jsonl")
 
-	// From inside pane A: a hook naming pane B is refused, and a hook naming
-	// pane B from pane B joins it.
 	good := filepath.Join(projects, "good.jsonl")
 	if err := os.WriteFile(good, []byte(atRecord("g1", "GOOD-TEXT")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -226,8 +208,6 @@ func TestTranscriptPathRules(t *testing.T) {
 	inPane := func(from, target, marker string) map[string]any {
 		t.Helper()
 		out := filepath.Join(r.base, marker+".json")
-		// The pane's environment is the daemon's, and it is set again so the
-		// hook reaches this test's daemon whatever the pane's shell did.
 		var envs []string
 		for _, key := range xdgKeys {
 			envs = append(envs, key+"="+xdgDir(r.base, key))
@@ -248,7 +228,6 @@ func TestTranscriptPathRules(t *testing.T) {
 		}
 		return res
 	}
-	// The whole report is refused: a pane reports only for its own window.
 	if res := inPane(winA, winB, "AFORB"); !strings.Contains(fmt.Sprint(res["error"]), "reports only for its own window") {
 		t.Fatalf("pane A reported for pane B: want the report refused, got %v", res)
 	}
@@ -260,8 +239,6 @@ func TestTranscriptPathRules(t *testing.T) {
 		t.Fatalf("pane B's own join: %v", got)
 	}
 
-	// The joined file is swapped for a FIFO. The read is refused at once,
-	// and the daemon goes on answering.
 	if err := os.Remove(good); err != nil {
 		t.Fatal(err)
 	}
@@ -336,8 +313,6 @@ func TestTranscriptPathFollowsClaudeConfigDir(t *testing.T) {
 	}
 	refused(winB, link, "a link in the profile's folder that leads out", withProfile)
 
-	// The folder is cut at the first {, so a { in the variable would move it
-	// up to the folder above.
 	braced := filepath.Join(r.base, "braced")
 	above := filepath.Join(braced, "logs", "above.jsonl")
 	if err := os.MkdirAll(filepath.Dir(above), 0o700); err != nil {
@@ -348,8 +323,6 @@ func TestTranscriptPathFollowsClaudeConfigDir(t *testing.T) {
 	}
 	refused(winB, above, "a CLAUDE_CONFIG_DIR with a { naming a file above its projects folder", "CLAUDE_CONFIG_DIR="+filepath.Join(braced, "{x"))
 
-	// A projects folder that is a link to another folder is not the
-	// profile's, whatever the variable names.
 	linked := filepath.Join(r.base, "claude-linked")
 	target := filepath.Join(r.base, "linked-target")
 	if err := os.MkdirAll(filepath.Join(target, "demo"), 0o700); err != nil {
@@ -366,7 +339,6 @@ func TestTranscriptPathFollowsClaudeConfigDir(t *testing.T) {
 	}
 	refused(winB, filepath.Join(linked, "projects", "demo", "target.jsonl"), "a projects folder that is a link to another folder", "CLAUDE_CONFIG_DIR="+linked)
 
-	// A profile folder that is itself a link is still the profile's.
 	profileLink := filepath.Join(r.base, "claude-work-link")
 	if err := os.Symlink(profile, profileLink); err != nil {
 		t.Fatal(err)
@@ -378,7 +350,6 @@ func TestTranscriptPathFollowsClaudeConfigDir(t *testing.T) {
 		t.Fatalf("the linked profile's transcript: %v", got)
 	}
 
-	// The default folder holds for a hook with the variable too.
 	home := filepath.Join(atProjects(r.base), "demo", "home.jsonl")
 	if err := os.MkdirAll(filepath.Dir(home), 0o700); err != nil {
 		t.Fatal(err)
@@ -424,7 +395,6 @@ func TestTranscriptSharedFileWatch(t *testing.T) {
 	}
 	start := r.read(winB, nil)["cursor"].(string)
 
-	// Window A leaves the shared file.
 	r.join(winA, moved, "moved")
 	if got := atEntries(t, r.read(winA, nil)); len(got) != 1 || got[0].Text != "MOVED-1" {
 		t.Fatalf("window A after the move: %v", got)
@@ -438,7 +408,6 @@ func TestTranscriptSharedFileWatch(t *testing.T) {
 	r.art.add("result", "window B still watched after window A left the shared file: event "+ev)
 }
 
-// atEditRecord is a record with one Edit call of file, from old to new.
 func atEditRecord(id, file, old, new string) string {
 	b, _ := json.Marshal(map[string]any{
 		"type": "assistant", "uuid": id, "timestamp": "2026-10-09T10:00:00.000Z", "isSidechain": false,
@@ -449,7 +418,6 @@ func atEditRecord(id, file, old, new string) string {
 	return string(b)
 }
 
-// atWriteRecord is a record with one Write call of file.
 func atWriteRecord(id, file, content string) string {
 	b, _ := json.Marshal(map[string]any{
 		"type": "assistant", "uuid": id, "timestamp": "2026-10-09T10:00:00.000Z", "isSidechain": false,
@@ -460,7 +428,6 @@ func atWriteRecord(id, file, content string) string {
 	return string(b)
 }
 
-// atResultRecord is a record with one tool result.
 func atResultRecord(id, toolID, text string) string {
 	b, _ := json.Marshal(map[string]any{
 		"type": "user", "uuid": id, "timestamp": "2026-10-09T10:00:01.000Z",
@@ -471,7 +438,6 @@ func atResultRecord(id, toolID, text string) string {
 	return string(b)
 }
 
-// atLines is n lines named prefix-0 to prefix-(n-1).
 func atLines(prefix string, n int) string {
 	var b strings.Builder
 	for i := range n {
@@ -480,7 +446,6 @@ func atLines(prefix string, n int) string {
 	return b.String()
 }
 
-// atFullDiff decodes the diffs of a reply with whole_replace and truncated.
 type atFullDiff struct {
 	File         string   `json:"file"`
 	Added        int      `json:"added"`
@@ -618,7 +583,6 @@ func TestTranscriptMasksMultiLineSecrets(t *testing.T) {
 	r.art.add("result", string(raw))
 }
 
-// atBashRecord is a record with one Bash call.
 func atBashRecord(id, command string) string {
 	b, _ := json.Marshal(map[string]any{
 		"type": "assistant", "uuid": id, "timestamp": "2026-10-09T10:00:00.000Z", "isSidechain": false,

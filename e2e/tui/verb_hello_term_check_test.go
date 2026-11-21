@@ -119,8 +119,6 @@ func TestHelloDropsAnUnsafeTerm(t *testing.T) {
 	}
 }
 
-// terminfoEntry reads the compiled terminfo entry for name from the system
-// folders, in either layout.
 func terminfoEntry(t *testing.T, name string) []byte {
 	t.Helper()
 	for _, dir := range []string{"/usr/share/terminfo", "/lib/terminfo", "/etc/terminfo", "/usr/lib/terminfo"} {
@@ -134,10 +132,6 @@ func terminfoEntry(t *testing.T, name string) []byte {
 	return nil
 }
 
-// paneTerms asks session's shell for its TERM and COLORTERM and returns them
-// as one "TERM=... COLORTERM=..." string, and the pane's text. Each is printed
-// on a line of its own, so a 65 byte TERM still fits the 80 column pane tuios
-// new -d makes. The verb cases ask for a wider one, for the 65 byte COLORTERM.
 func paneTerms(t *testing.T, base, session string) (got, pane string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "send-keys", "-s", session, "-l",

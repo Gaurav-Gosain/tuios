@@ -28,14 +28,7 @@ func TestTheFileSectionListsARemotePanesFiles(t *testing.T) {
 	writeOneHostConfig(t, base, tuiosBin)
 	env := []string{"TUIOS_SSH=" + ssh}
 
-	// A file that exists only on the far machine, in the directory its shells
-	// start in. Finding it named in the rail is the proof: nothing on this
-	// machine could have produced that row.
 	farDir := workDirIn(t, remote)
-	// Short on purpose: the rail is about twenty-four cells wide and truncates a
-	// long name, and an assertion that cannot fit on screen fails for the wrong
-	// reason. The first version of this used a sentence and failed with the
-	// file listed right there in the snapshot.
 	const marker = "far-only.txt"
 	if err := os.WriteFile(filepath.Join(farDir, marker), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)

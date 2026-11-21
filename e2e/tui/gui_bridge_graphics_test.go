@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// graphicsProbe asks the terminal it runs in for kitty graphics and for DA1,
-// with the tty raw, and prints what came back: KITTY-OK when the kitty query
-// is answered OK, and DA1-SIXEL when DA1 lists sixel (4).
 const graphicsProbe = `import os, select, sys, termios, tty
 fd = sys.stdin.fileno()
 old = termios.tcgetattr(fd)

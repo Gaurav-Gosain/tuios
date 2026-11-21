@@ -51,10 +51,6 @@ func TestNoTempIndexLeftWhenTheDaemonStops(t *testing.T) {
 		h := newIndexHold(t)
 		h.ok(90*time.Second, "daemon", "upgrade", "--binary", tuiosBin)
 		h.wantNoIndexFolder("after the live upgrade returned")
-		// The new image also removes a folder the old one left, so the folder
-		// alone does not show the old image cleaned up. Its git does: ended
-		// and waited for before the exec, it is gone. Left running, it would
-		// work on in a folder that is no longer there.
 		if processAlive(h.gitPID) {
 			t.Errorf("git %d, held at write-tree, still runs after the live upgrade", h.gitPID)
 		}
@@ -68,13 +64,9 @@ func TestNoTempIndexLeftWhenTheDaemonStops(t *testing.T) {
 		waitUntil(t, "the killed daemon to end", 10*time.Second, func() (bool, string) {
 			return !processAlive(pid), fmt.Sprintf("daemon %d still runs", pid)
 		})
-		// A killed daemon runs nothing: the folder is still there. Without
-		// this, the case would pass for a hold that never caught the folder.
 		if got := h.indexFolders(); len(got) != 1 {
 			t.Fatalf("after SIGKILL the temp dir holds %v, want the one folder of the killed daemon", got)
 		}
-		// A folder of a process that runs is not the next daemon's to remove:
-		// this test process stands in for one.
 		running := fmt.Sprintf("tuios-index-%d-running", os.Getpid())
 		if err := os.Mkdir(filepath.Join(h.tmp, running), 0o700); err != nil {
 			t.Fatal(err)
@@ -87,21 +79,14 @@ func TestNoTempIndexLeftWhenTheDaemonStops(t *testing.T) {
 	})
 }
 
-// indexHold is a daemon caught in a checkpoint, with its temporary index
-// folder made and git stopped at write-tree.
 type indexHold struct {
 	t          *testing.T
 	base, repo string
 	tmp        string
 	env        []string
-	// gitPID is the stand-in git that holds the checkpoint.
-	gitPID int
+	gitPID     int
 }
 
-// newIndexHold starts a daemon under a new isolation root with the stand-in
-// git on its PATH and a temp dir of its own, ends an agent turn in a
-// repository, and returns once the checkpoint of that turn holds its index
-// folder.
 func newIndexHold(t *testing.T) *indexHold {
 	t.Helper()
 	base := t.TempDir()
@@ -122,8 +107,6 @@ func newIndexHold(t *testing.T) *indexHold {
 	if err := syscall.Mkfifo(never, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// The stand-in opens a pipe nobody writes to, so it waits until it is
-	// killed. Its pid is its process group: git runs in a group of its own.
 	script := fmt.Sprintf(`#!/bin/sh
 case "$GIT_INDEX_FILE" in
 */tuios-index-*/index)
@@ -171,7 +154,6 @@ exec %[3]s "$@"
 	return h
 }
 
-// run runs tuios in the repository with the hold's environment.
 func (h *indexHold) run(timeout time.Duration, args ...string) (string, error) {
 	h.t.Helper()
 	pinPreV080Looks(h.t, h.base)
@@ -198,7 +180,6 @@ func (h *indexHold) ok(timeout time.Duration, args ...string) string {
 	return out
 }
 
-// daemonPID is the pid the daemon gives in its hello.
 func (h *indexHold) daemonPID() int {
 	h.t.Helper()
 	out := h.ok(30*time.Second, "call", "hello", "{}")
@@ -212,7 +193,6 @@ func (h *indexHold) daemonPID() int {
 	return hello.PID
 }
 
-// indexFolders lists the tuios-index-* entries in the daemon's temp dir.
 func (h *indexHold) indexFolders() []string {
 	h.t.Helper()
 	entries, err := os.ReadDir(h.tmp)

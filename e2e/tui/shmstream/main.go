@@ -29,7 +29,6 @@ import (
 
 const side = 64
 
-// patchW and patchH fill no whole cell in any cell size the harness uses.
 const patchW, patchH = 107, 63
 
 func main() {
@@ -64,8 +63,6 @@ func main() {
 	}
 	defer func() { _ = logf.Close() }()
 
-	// The harness names the objects with a prefix of its own, so it can
-	// remove them after a test even when this process dies by a signal.
 	prefix := os.Getenv("TUIOS_E2E_SHM_PREFIX")
 	if prefix == "" {
 		prefix = "tuios-shmstream-"

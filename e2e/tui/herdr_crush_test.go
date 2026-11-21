@@ -12,12 +12,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// crushSession is the session the Crush panes open in: the one the client is
-// attached to, so the frame shows the panes and their rail rows together.
 const crushSession = "e2e-home"
 
-// crushClient starts a daemon with the rail on and a client attached to
-// crushSession.
 func crushClient(t *testing.T) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -33,9 +29,6 @@ func crushClient(t *testing.T) (*tuitest.Terminal, string) {
 	return term, base
 }
 
-// crushPanes opens one shell pane per name in crushSession and returns their
-// window ids. The panes run the user's shell: a Crush in them is started from
-// a prompt, the way a person starts it.
 func crushPanes(t *testing.T, base string, names ...string) map[string]string {
 	t.Helper()
 	ids := map[string]string{}
@@ -48,7 +41,6 @@ func crushPanes(t *testing.T, base string, names ...string) map[string]string {
 	return ids
 }
 
-// typeIn types text and a newline into a pane.
 func typeIn(t *testing.T, base, window, text string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "send-text", "-s", crushSession, "-w", window, text+"\n"); err != nil {
@@ -123,9 +115,6 @@ func TestHerdrCrushPanesInParallel(t *testing.T) {
 	}
 	saveFrame(t, term, "herdr-crush-parallel-after")
 
-	// herdr's CLI, as an agent that follows herdr's guide calls it. The
-	// sleep keeps a program in the foreground: at a bare prompt the report
-	// would lapse like a crash.
 	typeIn(t, base, "crush-a", `"$HERDR_BIN_PATH" pane report-agent "$HERDR_PANE_ID" --source custom:e2e --agent prime-agent --state working --seq 1 && sleep 60`)
 	waitAgentState(t, base, crushSession, ids["crush-a"], "working", "prime-agent", log, "herdr CLI report through HERDR_BIN_PATH")
 	if out, err := tuiosCLI(t, base, "send-keys", "-s", crushSession, "-w", ids["crush-a"], "ctrl+c"); err != nil {
@@ -176,7 +165,6 @@ func TestRealCrushInParallelPanes(t *testing.T) {
 	})
 	bins := map[string]string{}
 	for _, name := range names {
-		// A binary path of its own per pane, so one of them can be killed.
 		dir := filepath.Join(t.TempDir(), name)
 		mustMkdir(dir)
 		if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
@@ -186,13 +174,9 @@ func TestRealCrushInParallelPanes(t *testing.T) {
 		if err := os.Symlink(crushBin, bins[name]); err != nil {
 			t.Fatal(err)
 		}
-		// A project with a context file: Crush then skips its offer to
-		// initialize one.
 		if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# e2e\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		// No key from the machine reaches Crush: the only provider it can
-		// call is the local stand-in.
 		typeIn(t, base, name, realCrushCommand(dir, bins[name]))
 	}
 	for _, name := range names {
@@ -205,8 +189,6 @@ func TestRealCrushInParallelPanes(t *testing.T) {
 			t.Fatalf("send-keys: %v\n%s", err, out)
 		}
 	}
-	// Crush draws its prompt a moment before it reads keys, so the prompt
-	// is typed, checked on the screen, and only then sent.
 	time.Sleep(2 * time.Second)
 	for _, name := range names {
 		if out, err := tuiosCLI(t, base, "send-text", "-s", crushSession, "-w", ids[name], "RUN-TOOL "+name); err != nil {
@@ -224,10 +206,9 @@ func TestRealCrushInParallelPanes(t *testing.T) {
 	waitForAll(t, term, uiTimeout, "the rail rows", "crush")
 	saveFrame(t, term, "real-crush-parallel-blocked")
 	for _, name := range names {
-		// The dialog reads keys a moment after it is drawn.
 		waitJoined(t, base, name, "Permission Required", "Allow")
 		time.Sleep(500 * time.Millisecond)
-		send(name, "a") // Allow, the dialog's key for it
+		send(name, "a")
 		waitAgentState(t, base, crushSession, ids[name], "done", "crush", log, name+" allowed, turn ended, done")
 	}
 	saveFrame(t, term, "real-crush-parallel-done")
@@ -248,8 +229,6 @@ func TestRealCrushInParallelPanes(t *testing.T) {
 	alive(t, term, "after three real Crush panes")
 }
 
-// startFakeProvider builds and starts the stand-in model provider and returns
-// its base URL. It is stopped when the test ends.
 func startFakeProvider(t *testing.T, env ...string) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "fakeopenai")
@@ -277,7 +256,6 @@ func startFakeProvider(t *testing.T, env ...string) string {
 	return strings.TrimSpace(line)
 }
 
-// waitAgentMeta waits until get-agent-state for a pane holds every marker.
 func waitAgentMeta(t *testing.T, base, window string, markers ...string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -293,8 +271,6 @@ func waitAgentMeta(t *testing.T, base, window string, markers ...string) {
 	}
 }
 
-// waitJoined waits for markers in a pane's text with its lines joined, since
-// the tiled panes are narrow and wrap a long line.
 func waitJoined(t *testing.T, base, window string, markers ...string) string {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)

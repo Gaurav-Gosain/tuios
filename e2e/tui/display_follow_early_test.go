@@ -49,7 +49,6 @@ func TestDisplayFollowReachesAPaneStartedBeforeAnyClient(t *testing.T) {
 	}
 	saveArtifact(t, a, artifactDir(t), "display-early-pane")
 
-	// An X11 client after the Wayland one: the link stays.
 	x11 := fakeX11(t, "TOKEN-X")
 	x := displayClient(t, base, sess, "DISPLAY="+x11)
 	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", "early", "true\n"); err != nil {
@@ -63,7 +62,6 @@ func TestDisplayFollowReachesAPaneStartedBeforeAnyClient(t *testing.T) {
 		t.Fatalf("an X11 client moved the link to %q, want %s", target, sock)
 	}
 
-	// The Wayland client leaves: the X11 client alone gives no link.
 	if err := a.Close(); err != nil {
 		t.Logf("close A: %v", err)
 	}

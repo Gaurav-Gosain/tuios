@@ -14,16 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// An image paste types a path. The paste preview shows the image itself in a
-// card at the pane's cursor, until the next key or a few seconds pass.
-//
-// The clipboard is the fake from paste_image_test.go, holding a real PNG so
-// the card can read its size. The harness's terminal has no kitty graphics,
-// so the card draws the picture as glyphs; the line under it, which names the
-// size, the type and the file, is drawn the same in every mode, and it is
-// what these tests read.
-
-// previewPNG is a small picture with a size no other text on screen has.
 func previewPNG(t *testing.T) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 97, 61))
@@ -41,14 +31,10 @@ func previewPNG(t *testing.T) []byte {
 
 const previewTitle = "pasted image"
 
-// showsPreviewCard reports whether the card is on screen: its title and the
-// line that names the pasted picture.
 func showsPreviewCard(s string) bool {
 	return strings.Contains(s, previewTitle) && strings.Contains(s, "97×61 png")
 }
 
-// startPreviewClient starts a client with the fake clipboard and one pane in
-// terminal mode, and returns it with its isolation root and environment.
 func startPreviewClient(t *testing.T, config string, host *lockedBuffer, extraEnv ...string) (term *tuitest.Terminal, base string, env []string) {
 	t.Helper()
 	base = t.TempDir()
@@ -79,11 +65,8 @@ func startPreviewClient(t *testing.T, config string, host *lockedBuffer, extraEn
 	return term, base, env
 }
 
-// previewPlaceRE is the kitty placement of a picture, at the row it is put
-// on.
 var previewPlaceRE = regexp.MustCompile(`\x1b\[(\d+);\d+H\x1b_Ga=p,i=(\d+),p=(\d+),`)
 
-// previewCardRow is the screen row of the card's top border, or -1.
 func previewCardRow(s string) int {
 	for i, line := range strings.Split(s, "\n") {
 		if strings.Contains(line, previewTitle) {
@@ -131,14 +114,10 @@ func TestAnImagePasteShowsTheImageInACard(t *testing.T) {
 		t.Fatalf("no card, or no picture placed in it: %v\n%s", err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "card", hostPictures(t, []byte(host.String()))...)
-	// The line under the picture keeps the end of the file name when it cuts
-	// the line short, which is the part that tells two pastes apart.
 	if !strings.Contains(term.Screen().Text(), ".png│") {
 		t.Errorf("the card's line lost the end of the file name\n%s", term.Snapshot())
 	}
 
-	// The card takes no key: the next one takes it down, takes its picture
-	// off the host, and still reaches the pane.
 	mark = len(host.String())
 	if err := term.SendKeys("#"); err != nil {
 		t.Fatal(err)
@@ -148,8 +127,6 @@ func TestAnImagePasteShowsTheImageInACard(t *testing.T) {
 		return !strings.Contains(s.Text(), previewTitle) &&
 			strings.Contains(unwrapped(paneBorderRows(s.Text())), ".png#") &&
 			strings.Contains(host.String()[mark:], unplace)
-		// Well inside the card's own six seconds, so the timer cannot pass
-		// this for the key.
 	}, 3*time.Second); err != nil {
 		t.Fatalf("the card or its picture outlived the next key, or the key did not reach the pane: %v\n%s", err, term.Snapshot())
 	}
@@ -170,7 +147,6 @@ func TestAPasteWithoutGraphicsDrawsThePictureInGlyphs(t *testing.T) {
 		if !showsPreviewCard(text) || row < 0 {
 			return false
 		}
-		// The row under the title is the picture's first: glyphs, not blanks.
 		lines := strings.Split(text, "\n")
 		return strings.ContainsAny(lines[row+1], "▀▄█▌▐▖▗▘▝▚▞▙▛▜▟")
 	}, uiTimeout); err != nil {
@@ -197,7 +173,6 @@ func TestPastePreviewCanBeTurnedOff(t *testing.T) {
 		return strings.Count(unwrapped(paneBorderRows(s.Text())), "tuios-paste-")
 	}
 
-	// On, the default: the card comes with the path.
 	paste()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return pastes(s) == 1 && showsPreviewCard(s.Text())
@@ -213,7 +188,6 @@ func TestPastePreviewCanBeTurnedOff(t *testing.T) {
 		t.Fatalf("the card outlived the next key: %v\n%s", err, term.Snapshot())
 	}
 
-	// Off: the path alone.
 	if out, err := tuiosCLIEnv(t, base, env, "set-config", "appearance.paste_preview", "false", "-s", "home"); err != nil {
 		t.Fatalf("turn the card off: %v\n%s", err, out)
 	}
@@ -223,8 +197,6 @@ func TestPastePreviewCanBeTurnedOff(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the second paste pasted no path: %v\n%s", err, term.Snapshot())
 	}
-	// The card comes with the path when it comes at all, and stays for
-	// seconds, so a wait shorter than that would see it.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), previewTitle)
 	}, 2*time.Second); err == nil {

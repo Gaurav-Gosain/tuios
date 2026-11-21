@@ -66,8 +66,6 @@ func TestKittyPlaceAfterTransmitShows(t *testing.T) {
 			if err := term.WaitForText("PLACEONCE-DONE", shellTimeout); err != nil {
 				t.Fatalf("the guest never finished: %v\n%s", err, term.Snapshot())
 			}
-			// Long enough for several render passes, each of which could take
-			// the placement down again.
 			time.Sleep(2 * time.Second)
 
 			stream := host.bytes()
@@ -79,15 +77,11 @@ func TestKittyPlaceAfterTransmitShows(t *testing.T) {
 	}
 }
 
-// assertPlacedAndKept finds the host id the 40x40 image (or the PNG) was
-// transmitted under and checks that the last command naming it is a placement
-// with a cell count.
 func assertPlacedAndKept(t *testing.T, stream []byte) {
 	t.Helper()
 	cmds := wireCmds(stream)
 	hostID := 0
 	for _, c := range cmds {
-		// A PNG goes out without s= and v=: its size is in its own header.
 		png := strings.Contains(","+c.params+",", ",f=100,")
 		if c.action == "t" && (png || (c.pixW == 40 && c.pixH == 40)) {
 			hostID = c.image
@@ -117,15 +111,11 @@ func assertPlacedAndKept(t *testing.T, stream []byte) {
 		t.Fatalf("the image was placed %d times, then taken down by %q and never placed again",
 			placed, last.params)
 	}
-	// The cell count follows from the image's pixels and the host's cell
-	// size. A placement with none is the bug: the host is left to guess, and
-	// the refresh pass reads the record as empty.
 	if last.cols <= 0 || last.rows <= 0 {
 		t.Fatalf("the image was placed with no cell count: %q", last.params)
 	}
 }
 
-// buildPlaceOnce compiles the transmit-then-place stand-in once per test binary.
 func buildPlaceOnce(t *testing.T) string {
 	t.Helper()
 	placeOnceOnce.Do(func() {

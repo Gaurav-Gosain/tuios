@@ -36,8 +36,6 @@ import (
 // this change. Each was run by mutating the shipped code and watching a named
 // assertion fail.
 
-// attachOnBuild starts a client on this machine, opens the rail and switches
-// onto the named session on build. It returns once the client is drawing it.
 func attachOnBuild(t *testing.T, base string, env []string, farSession string) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
@@ -45,16 +43,10 @@ func attachOnBuild(t *testing.T, base string, env []string, farSession string) *
 	toggleSidebarViaPalette(t, term)
 	railShows(t, term, farSession)
 	clickRailSession(t, term, farSession)
-	// The rail marks the far session as the one this client is on. It used to
-	// name this machine "@ local" in a group of its own; the section is laid
-	// out by machine now and the mark moves in place. See sidebar_hosts.go.
 	waitRailCurrent(t, term, farSession)
-	// The switch lands with the pane focused and the client in terminal mode,
-	// so a caller types straight into the far session's shell.
 	return term
 }
 
-// clickRailSession clicks the rail row that names session.
 func clickRailSession(t *testing.T, term *tuitest.Terminal, session string) {
 	t.Helper()
 	s := term.Screen()
@@ -72,11 +64,6 @@ func clickRailSession(t *testing.T, term *tuitest.Terminal, session string) {
 	mouseClick(t, term, 3, row, tuitest.MouseLeft, 0)
 }
 
-// freezeTheLink stops the far side of every link this test opened without
-// ending it. The pipe stays open and carries nothing, which is what a link
-// looks like after a laptop wakes from sleep: no end of it has been told, and
-// the fake ssh has no keepalives to find out. Only the link's own heartbeat
-// can.
 func freezeTheLink(t *testing.T) {
 	t.Helper()
 	pids := testProxies(t)
@@ -96,8 +83,6 @@ func freezeTheLink(t *testing.T) {
 	})
 }
 
-// breakTheLink kills the far side of every link this test opened, which is
-// what an ssh child dying looks like from this machine.
 func breakTheLink(t *testing.T) {
 	t.Helper()
 	pids := testProxies(t)
@@ -134,8 +119,6 @@ func TestAHostSessionStaysAttached(t *testing.T) {
 	term := attachOnBuild(t, base, env, "far-steady")
 	toggleSidebarViaPalette(t, term)
 
-	// A pane that prints every second, so every second is a chance for the
-	// relay's write to fail.
 	runInShell(t, term, "{ for i in $(seq 1 40); do echo TICK-$i; sleep 1; done; } & echo TICK\"\"ER-UP", "TICKER-UP", shellTimeout)
 	if err := term.WaitForText("TICK-3", shellTimeout); err != nil {
 		t.Fatalf("the far pane never printed: %v\n%s", err, term.Snapshot())
@@ -175,14 +158,10 @@ func TestALinkThatDropsIsDialedAgainAndThePaneComesBack(t *testing.T) {
 	}
 	term := attachOnBuild(t, base, env, "far-shell")
 
-	// Something on screen that only the far session could have produced, so a
-	// pane that came back empty is a failure rather than a pass.
 	runInShell(t, term, "echo BEFORE-\"\"DROP-42", "BEFORE-DROP-42", shellTimeout)
 
 	breakTheLink(t)
 
-	// The pane stays. What used to happen instead: every pane closed and the
-	// client went back to the session on this machine.
 	if err := term.WaitForText("Reconnecting to build", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the client did not say it was dialing the link again: %v\n%s", err, term.Snapshot())
 	}
@@ -194,7 +173,6 @@ func TestALinkThatDropsIsDialedAgainAndThePaneComesBack(t *testing.T) {
 		t.Fatalf("ASSERTION: the client switched away from the pane while the link was being dialed again\n%s", term.Snapshot())
 	}
 
-	// The link comes back on its own, and so does the session.
 	if err := term.WaitForText("The link to build is back", 60*time.Second); err != nil {
 		t.Fatalf("ASSERTION: the client never got the link back: %v\n%s", err, term.Snapshot())
 	}
@@ -205,14 +183,11 @@ func TestALinkThatDropsIsDialedAgainAndThePaneComesBack(t *testing.T) {
 	}
 	t.Logf("the same pane after the link came back:\n%s", term.Snapshot())
 
-	// The content it had is still there, and it is live again.
 	if s := term.Screen().Text(); !strings.Contains(s, "BEFORE-DROP-42") {
 		t.Fatalf("ASSERTION: the pane came back without the history it had before the drop\n%s", term.Snapshot())
 	}
 	runInShell(t, term, "echo AFTER-REC\"\"ONNECT-99", "AFTER-RECONNECT-99", shellTimeout)
 
-	// It is still the far session, drawn by this client, and not a new one
-	// here.
 	if out := remoteSessionsListed(t, remote); !strings.Contains(out, "far-shell") {
 		t.Fatalf("ASSERTION: the far session did not survive:\n%s", out)
 	}
@@ -259,8 +234,6 @@ func TestAScrolledPaneIsStillScrolledAfterAReconnect(t *testing.T) {
 	if err := term.WaitForText("The link to build is back", 60*time.Second); err != nil {
 		t.Fatalf("ASSERTION: the client never got the link back: %v\n%s", err, term.Snapshot())
 	}
-	// The reconnect asks the daemon for the rows this pane does not hold, so
-	// the history grows underneath a view that must not move with it.
 	time.Sleep(2 * time.Second)
 
 	after := newestVisible(term.Screen(), "FAR")
@@ -294,8 +267,6 @@ func TestAHostThatNeverComesBackGivesUpAndSaysWhy(t *testing.T) {
 	}
 	term := attachOnBuild(t, base, env, "far-gone")
 
-	// The machine goes away for good: the stand-in now fails the way ssh does
-	// when it cannot reach a host at all.
 	dead := "#!/bin/sh\necho 'ssh: connect to host buildbox port 22: No route to host' >&2\nexit 255\n"
 	if err := os.WriteFile(ssh, []byte(dead), 0o700); err != nil {
 		t.Fatalf("replace the ssh stand-in: %v", err)
@@ -305,8 +276,6 @@ func TestAHostThatNeverComesBackGivesUpAndSaysWhy(t *testing.T) {
 	if err := term.WaitForText("Reconnecting to build", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the client did not try to get the link back at all: %v\n%s", err, term.Snapshot())
 	}
-	// It stops on its own, and the sentence names the machine and says the
-	// session is still there.
 	if err := term.WaitForText("did not come back", 40*time.Second); err != nil {
 		t.Fatalf("ASSERTION: the client is still dialing a machine that cannot be reached. Retrying a real failure forever hides it: %v\n%s", err, term.Snapshot())
 	}
@@ -316,8 +285,6 @@ func TestAHostThatNeverComesBackGivesUpAndSaysWhy(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the dock still says the link is being dialed after the client gave up\n%s", term.Snapshot())
 	}
-	// The person is back on the session they left on this machine, which is
-	// the fallback that always existed.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return railCurrentIs(s, "home")
 	}, uiTimeout); err != nil {
@@ -401,9 +368,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	requireReal(t, "real ssh or sshd")
 	base := t.TempDir()
 	remote := remoteMachine(t)
-	// Two hosts reach the same far daemon. The second, spare, can be made
-	// unreachable on its own: its dials fail while the file spare-down
-	// exists.
 	spareDown := filepath.Join(base, "spare-down")
 	ssh := writeSpareSSH(t, base, writeFakeSSHTo(t, base, remote), spareDown)
 	writeOneHostConfig(t, base, tuiosBin)
@@ -415,7 +379,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 			t.Fatalf("create the far session %s: %v\n%s", name, err, out)
 		}
 	}
-	// A second session here, for the click that replaces one on the host.
 	if out, err := tuiosCLIEnv(t, base, env, "new", "elsewhere", "--detach", "--cwd", t.TempDir()); err != nil {
 		t.Fatalf("create the second local session: %v\n%s", err, out)
 	}
@@ -430,9 +393,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 		}
 	}
 
-	// A click the person replaces is dropped. They click a session of the
-	// frozen host, then a session here. The dial for the first click lands
-	// when the link is back, and it must not pull them off the second.
 	railShows(t, term, "elsewhere")
 	freezeTheLink(t)
 	clickRailSession(t, term, "far-quiet")
@@ -449,10 +409,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	}
 	save("replaced-click.txt")
 
-	// The navigator opens a session on the frozen link the way the rail
-	// does: off the Update goroutine, with the dock saying so (#742). It
-	// used to dial on the Update goroutine, and the screen froze until the
-	// dial failed.
 	freezeTheLink(t)
 	openNavigator(t, term, "far-quiet")
 	sendKeys(t, term, "/")
@@ -515,10 +471,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	}
 	alive(t, term, "after two frozen links")
 
-	// The attached host's link drops while a click waits for another
-	// host. The client used to read the put-off reconnect as a failed one
-	// and quit. It must keep the panes until the click decides: here the
-	// click waits for spare, which is down, then lands when spare is back.
 	toggleSidebarViaPalette(t, term)
 	railShows(t, term, "spare")
 	drops := hostDrops(t, base, "build")
@@ -553,8 +505,6 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	alive(t, term, "after the click landed")
 }
 
-// writeSpareSSH wraps the ssh stand-in so a dial to spare's address fails
-// as ssh does for a machine it cannot reach, while the file down exists.
 func writeSpareSSH(t *testing.T, dir, inner, down string) string {
 	t.Helper()
 	path := filepath.Join(dir, "fake-ssh-spare")
@@ -567,8 +517,6 @@ func writeSpareSSH(t *testing.T, dir, inner, down string) string {
 	return path
 }
 
-// appendSpareHost adds the host spare to the config writeOneHostConfig
-// wrote. Its stand-in reaches the same far daemon as build.
 func appendSpareHost(t *testing.T, base, tuiosPath string) {
 	t.Helper()
 	path := filepath.Join(base, "XDG_CONFIG_HOME", "tuios", "config.toml")
@@ -582,7 +530,6 @@ func appendSpareHost(t *testing.T, base, tuiosPath string) {
 	}
 }
 
-// hostDrops is how many times the daemon at base saw its link to host drop.
 func hostDrops(t *testing.T, base, host string) int {
 	t.Helper()
 	out, _ := tuiosCLI(t, base, "call", "list-hosts")
@@ -601,8 +548,6 @@ func hostDrops(t *testing.T, base, host string) int {
 	return 0
 }
 
-// railRowUnder is the screen row of session in the rail group of host, which
-// another group may also list, or -1.
 func railRowUnder(s tuitest.Screen, host, session string) int {
 	_, rows := s.Size()
 	in := false
@@ -619,8 +564,6 @@ func railRowUnder(s tuitest.Screen, host, session string) int {
 	return -1
 }
 
-// clickRailSessionUnder clicks the row named session in the rail group of
-// host.
 func clickRailSessionUnder(t *testing.T, term *tuitest.Terminal, host, session string) {
 	t.Helper()
 	r := railRowUnder(term.Screen(), host, session)

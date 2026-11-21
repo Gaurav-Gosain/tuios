@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// claudeFormAnswerScript paints a form from a file, as claudeFormScript
-// does, then writes the first key it gets to a second file.
 const claudeFormAnswerScript = `#!/bin/sh
 stty raw -echo
 printf '\033[2J\033[H'
@@ -76,8 +74,6 @@ func TestCockpitQuestionShowsItsOptionsAsKeys(t *testing.T) {
 	alive(t, term, "after a question was answered from its card")
 }
 
-// runHookIn runs the claude-code hook once for a window of a session, as
-// Claude Code runs it, and waits for it to exit.
 func runHookIn(t *testing.T, base, session, window, payload string) {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", session, "--window", window)

@@ -50,7 +50,6 @@ func TestCardPreviewOpensTheSelectedAttachmentUnderItsRow(t *testing.T) {
 	}
 	mustCLI(t, base, "task", "attach", "-s", "S", "t1", last, "--note", "what the steps add up to")
 
-	// task get lines the attachments up in columns.
 	got := mustCLI(t, base, "task", "get", "-s", "S", "t1")
 	var cols []int
 	for line := range strings.SplitSeq(got, "\n") {
@@ -78,7 +77,6 @@ func TestCardPreviewOpensTheSelectedAttachmentUnderItsRow(t *testing.T) {
 		t.Fatalf("press space: %v", err)
 	}
 	waitText(t, term, "the preview", "Card t1", "Attachments  11")
-	// [ from the first steps back to the last attachment.
 	if err := term.SendKeys("["); err != nil {
 		t.Fatalf("press [: %v", err)
 	}

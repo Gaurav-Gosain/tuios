@@ -10,12 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Reflow through the daemon and the client. A line on the screen that is
-// wider than a narrower pane wraps instead of losing its tail, and joins
-// back when the pane widens. The client's emulator resizes on every step of
-// a divider drag and the daemon's only when the drag ends, so a client that
-// cut a line on the way would disagree with the daemon after it.
-
 // TestScrollbackResizeNarrowKeepsScreenLine: a line on the screen, wider than
 // a narrower pane, must survive narrowing and widening again. The command echo
 // carries a space after LONGSTART-, so only the printed line matches.
@@ -72,7 +66,6 @@ func TestScrollbackResizeDragKeepsClientInStepWithDaemon(t *testing.T) {
 	if err != nil || len(wl.Windows) != 2 {
 		t.Fatalf("list-windows: %v %+v", err, wl)
 	}
-	// Both panes print the line, so whichever is on the left holds it.
 	const body = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMN"
 	full := "LONGSTART-" + body + "-LONGEND"
 	for _, w := range wl.Windows {
@@ -171,7 +164,6 @@ func TestScrollbackResizeDragResizesDaemonOnce(t *testing.T) {
 	}
 }
 
-// sbDivider finds the column of the division between two side-by-side panes.
 func sbDivider(t *testing.T, term *tuitest.Terminal) int {
 	t.Helper()
 	s := term.Screen()
@@ -195,8 +187,6 @@ func TestScrollbackResizeKeepsOutputUnderALoneA(t *testing.T) {
 	term, base, w := scrollbackResizeSession(t, "sb-lonea", 140, 30)
 	body := strings.Repeat("abcdefghij", 7)
 	full := "LONGSTART-" + body + "-LONGEND"
-	// The mark, the line, and a sleep so the shell draws no prompt (and no
-	// new mark) while the pane is resized.
 	emit := "\x1b[2J\x1b[H\x1b]133;A\x07$ cmd\r\n" + full + "\r\n"
 	cmd := strings.TrimSuffix(paneEmitCmd(emit), "\n") + "; sleep 60\n"
 	if err := paneSend(base, "sb-lonea", w.ID, cmd); err != nil {
@@ -223,8 +213,6 @@ func TestScrollbackResizeKeepsOutputUnderALoneA(t *testing.T) {
 	}
 }
 
-// dragPanes starts a client with two tiled panes, runs cmd in both, and
-// waits for the client to draw ready in both.
 func dragPanes(t *testing.T, session, cmd, ready string) (*tuitest.Terminal, string, daemonWindowList) {
 	t.Helper()
 	base := t.TempDir()
@@ -253,8 +241,6 @@ func dragPanes(t *testing.T, session, cmd, ready string) (*tuitest.Terminal, str
 	return term, base, wl
 }
 
-// dragDivider drags the divider between the two panes left by by columns, and
-// then to end columns left of where it started.
 func dragDivider(t *testing.T, term *tuitest.Terminal, by, end int) {
 	t.Helper()
 	div := sbDivider(t, term)
@@ -296,7 +282,7 @@ func TestScrollbackResizeDragKeepsATypedCommand(t *testing.T) {
 func TestScrollbackResizeDragAgreesWithTheDaemonAroundAParkedCursor(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		end  int // columns left of the start the drag ends at
+		end  int
 	}{
 		{"ends where it started", 0},
 		{"ends narrower", 20},
@@ -313,7 +299,6 @@ func TestScrollbackResizeDragAgreesWithTheDaemonAroundAParkedCursor(t *testing.T
 			term, base, wl := dragPanes(t, session, cmd, "FOOTERMARK")
 			dragDivider(t, term, 45, tc.end)
 
-			// Which marker lines each side shows whole on screen.
 			whole := func(text string) map[string]int {
 				got := map[string]int{}
 				for i := 1; i <= 14; i++ {
@@ -331,8 +316,6 @@ func TestScrollbackResizeDragAgreesWithTheDaemonAroundAParkedCursor(t *testing.T
 				if err != nil {
 					t.Fatal(err)
 				}
-				// The capture gives the screen as lines; the client's screen
-				// has them side by side, so only whole-line counts compare.
 				daemonText.WriteString(got.Content)
 				daemonText.WriteByte('\n')
 			}

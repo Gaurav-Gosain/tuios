@@ -48,8 +48,6 @@ func TestRailPeekHoldsTheTerminalsHeight(t *testing.T) {
 	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nwidth = 28\nposition = 'left'\n"+
 		"sections = 'terminals,spacer:5,agents,spacer:5,sessions,spacer:5,git,files'\n")
 	killDaemon(t, base)
-	// The attached session sits between the other two, so one peek is shorter
-	// than the held section and one is longer.
 	sessions := []struct {
 		name  string
 		panes int
@@ -87,15 +85,12 @@ func TestRailPeekHoldsTheTerminalsHeight(t *testing.T) {
 	rest := term.Screen()
 	saveArtifact(t, term, dir, "rest")
 
-	// What must hold still: every session row and every header.
 	type mark struct {
 		what string
 		row  int
 	}
 	snapshot := func(s tuitest.Screen) []mark {
 		var out []mark
-		// Below the sessions header: a peek names its session on the
-		// terminals header too, which is above it.
 		for _, s2 := range sessions {
 			out = append(out, mark{s2.name, railRowAfter(s, s2.name, peekHeaderRow(s, "sessions"))})
 		}
@@ -114,8 +109,6 @@ func TestRailPeekHoldsTheTerminalsHeight(t *testing.T) {
 		}
 	}
 	termHdr := peekHeaderRow(rest, "terminals")
-	// The held height: the lines under the terminals header, which at rest
-	// are the attached session's three panes.
 	held := 3
 	for r := termHdr + 1; r <= termHdr+held; r++ {
 		if peekRowText(rest, r) == "" {
@@ -123,7 +116,6 @@ func TestRailPeekHoldsTheTerminalsHeight(t *testing.T) {
 		}
 	}
 
-	// The sweep: down the session rows and back up, peeking each one.
 	order := []string{"pk-main", "pk-few", "pk-many", "pk-few", "pk-main", "pk-many"}
 	for step, name := range order {
 		row := railRowAfter(rest, name, peekHeaderRow(rest, "sessions"))
@@ -148,7 +140,6 @@ func TestRailPeekHoldsTheTerminalsHeight(t *testing.T) {
 		}
 		switch name {
 		case "pk-few":
-			// One pane, then blank lines to the held height.
 			if peekRowText(s, termHdr+1) == "" {
 				t.Fatalf("ASSERTION: peeking pk-few drew no pane row\n%s", term.Snapshot())
 			}
@@ -158,14 +149,12 @@ func TestRailPeekHoldsTheTerminalsHeight(t *testing.T) {
 				}
 			}
 		case "pk-many":
-			// Six panes in three lines: two rows and "+4".
 			if last := peekRowText(s, termHdr+held); !strings.HasSuffix(last, "+4") {
 				t.Fatalf("ASSERTION: peeking pk-many ends the section in %q, want the +4 overflow row\n%s", last, term.Snapshot())
 			}
 		}
 	}
 
-	// The pointer leaves the rail and the attached session's panes come back.
 	mouseHover(t, term, 80, 20)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(railLine(s, peekHeaderRow(s, "terminals")), "pk-")
@@ -176,9 +165,6 @@ func TestRailPeekHoldsTheTerminalsHeight(t *testing.T) {
 	alive(t, term, "after sweeping the session rows")
 }
 
-// peekHeaderRow is the screen row of a rail section's header: the row whose
-// first word is the label, where a session row starts with its glyph. -1 when
-// not drawn.
 func peekHeaderRow(s tuitest.Screen, label string) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -189,8 +175,6 @@ func peekHeaderRow(s tuitest.Screen, label string) int {
 	return -1
 }
 
-// peekRowText is a rail row with the gutter, the edge rule and the padding
-// taken off.
 func peekRowText(s tuitest.Screen, row int) string {
 	line := strings.TrimSuffix(strings.TrimRight(railLine(s, row), " "), "│")
 	return strings.TrimSpace(strings.TrimPrefix(line, "▎"))
@@ -294,10 +278,6 @@ func TestRailPeekOnTheDefaultOrderListsEveryPane(t *testing.T) {
 	}
 	saveArtifact(t, term, dir, "after")
 
-	// appearance.sidebar.peek = false (issue #1227): the same hover that just
-	// peeked pk-six leaves the attached session's pane in the section. The
-	// pointer reaches the row the same way it did above, so a hover that never
-	// landed cannot pass for a peek that is off.
 	if out, err := tuiosCLI(t, base, "set-config", "appearance.sidebar.peek", "false", "-s", "pk-one"); err != nil {
 		t.Fatalf("turn the peek off: %v: %s", err, out)
 	}

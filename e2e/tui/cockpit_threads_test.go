@@ -41,30 +41,14 @@ import (
 func TestCockpitThreadOtherHarnesses(t *testing.T) {
 	cases := []struct {
 		name, harness, fixture, sessionID string
-		// file is the transcript's path under the fake home.
-		file string
-		// want is what the thread shows: the answer, the failed command's
-		// output, the diff card's tool and added line, and the error.
-		want []string
-		// once is a line the thread shows exactly once.
-		once string
-		// never is text no screen of the thread shows: a wrapper the
-		// command labels take off.
-		never string
-		// payload is the hook's input, the SessionStart of hookPayload when
-		// empty.
-		payload string
-		// rewrite is a line appended to the transcript while the thread is
-		// open, which writes a message again with new text, and rewritten
-		// the text the thread then shows in place of want[0].
-		rewrite, rewritten string
-		// wide is a message of wide text that goes into the transcript after
-		// the first prompt, and pane a line of wide text the agent's pane
-		// prints for the Live box. Each line of wideWant must show on screen
-		// whole: a wide cell drawn into the thread or the Live box once
-		// blanked itself (#1184).
-		wide, pane string
-		wideWant   []string
+		file                              string
+		want                              []string
+		once                              string
+		never                             string
+		payload                           string
+		rewrite, rewritten                string
+		wide, pane                        string
+		wideWant                          []string
 	}{
 		{
 			name: "pi", harness: "pi", fixture: "pi-session.jsonl", sessionID: "pi-fixture",
@@ -75,9 +59,6 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 		{
 			name: "codex", harness: "codex", fixture: "codex-rollout.jsonl", sessionID: "0199aa00-0000-7000-8000-000000000001",
 			file: filepath.Join(".codex", "sessions", "2026", "10", "18", "rollout-2026-10-18T09-00-00-0199aa00-0000-7000-8000-000000000001.jsonl"),
-			// The rollout runs bash -lc 'cd /work/project && go test ./...'
-			// and an argv whose script prints an ESC byte. The tool lines
-			// show the program, and the ESC as its control picture.
 			want: []string{"Run now takes two. One test fails.", "--- FAIL: TestRun", "apply_patch", "run(2)", "The turn stopped: interrupted",
 				"exec_command  go test ./...", "shell  printf '␛[1m' && grep -n run src/app.go"},
 			never:    "bash -lc",
@@ -108,9 +89,6 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			payload: `{"hook_event_name":"agent.start","session_id":"T-00000000-0000-7000-8000-000000000001"}`,
 		},
 		{
-			// opencode keeps no file of a session: the thread comes from a
-			// service at 127.0.0.1 that this test runs, as opencode 2.0.32
-			// answers, and the plugin's report names the session.
 			name: "opencode", harness: "opencode", fixture: "opencode-messages.json", sessionID: "ses_01Fixture",
 			file:    "service.json",
 			want:    []string{"b is three. One test fails.", "Command exited with code 1", "edit", "const b = 3;", "Rate limit reached."},
@@ -134,7 +112,6 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 					t.Fatalf("create session %s: %v\n%s", s, err, out)
 				}
 			}
-			// The decoder test's fixtures, so the two tests read one file.
 			fixture, err := os.ReadFile(filepath.Join("..", "..", "internal", "transcriptview", "testdata", c.fixture))
 			if err != nil {
 				t.Fatal(err)
@@ -176,8 +153,6 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				payload = []byte(c.payload)
 			}
 			if c.harness == "cursor-agent" {
-				// Cursor names its events in camel case, and the transcript
-				// in every payload.
 				payload, _ = json.Marshal(map[string]any{"hook_event_name": "sessionStart", "session_id": c.sessionID, "transcript_path": path})
 			}
 			hook.Stdin = bytes.NewReader(payload)
@@ -194,8 +169,6 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 
 			cols, attach := 160, "home"
 			if c.pane != "" {
-				// The Live box is drawn from 170 columns, and it draws a
-				// pane of the session the client shows.
 				cols, attach = 180, "api"
 				if out, err := tuiosCLI(t, base, "send-text", "-s", "api", "-w", "agent", "printf '%s\\n' '"+c.pane+"'\n"); err != nil {
 					t.Fatalf("print in the pane: %v\n%s", err, out)
@@ -212,8 +185,6 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			if err := term.WaitFor(func(s tuitest.Screen) bool { return containsAll(s.Text(), c.want[0], c.want[1]) }, uiTimeout); err != nil {
 				t.Fatalf("ASSERTION: the %s thread never showed the answer and the failed command: %v\n%s", c.name, err, term.Snapshot())
 			}
-			// The thread shows the bottom. Scroll up until every card has
-			// been on screen.
 			seen := map[string]bool{}
 			count := 0
 			want := append(append([]string{}, c.want...), c.wideWant...)
@@ -230,9 +201,6 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				if c.never != "" && strings.Contains(text, c.never) {
 					wrapped = text
 				}
-				// A row of wide text fills the row: its last cell has the
-				// ground of the row under it. A row cut into more cells
-				// than the terminal shows ends short of the edge.
 				cols, rows := scr.Size()
 				for y := range rows - 1 {
 					line := scr.Line(y)
@@ -272,7 +240,6 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			if count != 1 {
 				t.Errorf("ASSERTION: the %s thread showed %q %d times on one screen, want once\n%s", c.name, c.once, count, term.Snapshot())
 			}
-			// The frame of the diff card.
 			for range 20 {
 				if strings.Contains(term.Screen().Text(), c.want[3]) {
 					break
@@ -284,8 +251,6 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			}
 			saveCockpitFrames(t, term, "thread-"+c.name)
 			if c.never != "" {
-				// The frame of the shell tool lines, from the first one
-				// down to the last.
 				kind, _, _ := strings.Cut(c.want[len(c.want)-2], "  ")
 				for range 20 {
 					if strings.Contains(term.Screen().Text(), kind) {
@@ -299,8 +264,6 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				saveCockpitFrames(t, term, "thread-"+c.name+"-commands")
 			}
 			if c.rewrite != "" {
-				// The message is written again under its id with new text,
-				// and the thread draws the new text, not the card it kept.
 				f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
 				if err != nil {
 					t.Fatal(err)
@@ -330,12 +293,8 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 	}
 }
 
-// fakeOpenCodeService runs a service that answers as opencode 2.0.32 does,
-// with page as the session's messages, and returns the service.json that
-// names it.
 func fakeOpenCodeService(t *testing.T, page []byte, session string) []byte {
 	t.Helper()
-	// Made when the test runs, so no secret scanner reads a literal.
 	password := strings.Repeat("y", 8) + strconv.Itoa(os.Getpid())
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if user, pass, ok := r.BasicAuth(); !ok || user != "opencode" || pass != password {

@@ -8,8 +8,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// shortMenuConfig opens the shipped short menu from leader t s, and draws a
-// dock with no mode pill, as the Simple profile does.
 const shortMenuConfig = `
 [keybindings.window_prefix]
 "open_menu:start" = ["s"]
@@ -18,7 +16,6 @@ const shortMenuConfig = `
 left = ["workspaces", "trail"]
 `
 
-// shortMenuShot saves the frame as text and as a PNG drawn by tuios.dev/shot.
 func shortMenuShot(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	saveFrame(t, term, name)
@@ -47,8 +44,6 @@ func TestShortMenuKeepsItsOrder(t *testing.T) {
 	if !strings.Contains(text, "Menu") || strings.Contains(text, " menu ") {
 		t.Fatalf("the panel title is not \"Menu\"\n%s", term.Snapshot())
 	}
-	// The panel reads down each column, then across: a row is below the one
-	// before it in the same column, or in a column to its right.
 	_, rows := s.Size()
 	where := func(label string) (x, y int) {
 		for y := range rows {

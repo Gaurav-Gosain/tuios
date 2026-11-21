@@ -8,12 +8,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// railShownNow reports whether the rail's sessions header is on screen.
 func railShownNow(s tuitest.Screen) bool {
 	return strings.Contains(s.Text(), sidebarHeader)
 }
 
-// waitRailShown waits until the rail is shown or hidden.
 func waitRailShown(t *testing.T, term *tuitest.Terminal, shown bool, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railShownNow(s) == shown }, uiTimeout); err != nil {
@@ -22,8 +20,6 @@ func waitRailShown(t *testing.T, term *tuitest.Terminal, shown bool, what string
 	time.Sleep(300 * time.Millisecond)
 }
 
-// railGlobalClient starts two sessions, attaches to the first, and visits
-// the second and back, so both have a rail state of their own.
 func railGlobalClient(t *testing.T, config string) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()

@@ -14,19 +14,9 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The herdr front: herdr's CLI, as tools built for herdr run it through
-// $HERDR_BIN_PATH inside a pane. Each test types a shell script into a real
-// pane of a real daemon with a client attached. The script runs one plugin's
-// command sequence through "$HERDR_BIN_PATH" and writes each command's
-// stdout, stderr and exit code to files the test reads.
-
-// herdrFrontClient is crushClient with tiling on, as the plugins expect: a
-// split in herdr is a tile.
 func herdrFrontClient(t *testing.T) (*tuitest.Terminal, string) {
 	t.Helper()
 	term, base := crushClient(t)
-	// A failure keeps what the screen and the daemon showed at that moment,
-	// so a failure seen once under load can be read afterwards.
 	t.Cleanup(func() {
 		if !t.Failed() {
 			return
@@ -41,13 +31,11 @@ func herdrFrontClient(t *testing.T) (*tuitest.Terminal, string) {
 	return term, base
 }
 
-// herdrStep is what one command of a sequence printed and its exit code.
 type herdrStep struct {
 	out, err string
 	code     int
 }
 
-// json decodes the step's stdout as one JSON object.
 func (s herdrStep) json(t *testing.T, name string) map[string]any {
 	t.Helper()
 	var m map[string]any
@@ -57,10 +45,6 @@ func (s herdrStep) json(t *testing.T, name string) map[string]any {
 	return m
 }
 
-// runHerdrSteps runs body in pane window as a POSIX shell script and returns
-// the steps it ran. In body, `step NAME command...` runs one command and
-// records it, $H is "$HERDR_BIN_PATH", and $D is the directory of the
-// records.
 func runHerdrSteps(t *testing.T, base, window, name, body string) map[string]herdrStep {
 	t.Helper()
 	dir := filepath.Join(base, "steps-"+name)
@@ -104,7 +88,6 @@ func runHerdrSteps(t *testing.T, base, window, name, body string) map[string]her
 	return steps
 }
 
-// ok fails the test unless step name exited 0.
 func (s herdrStep) ok(t *testing.T, name string) {
 	t.Helper()
 	if s.code != 0 {
@@ -112,7 +95,6 @@ func (s herdrStep) ok(t *testing.T, name string) {
 	}
 }
 
-// dig reads a nested field of a decoded JSON object.
 func dig(m map[string]any, path ...string) any {
 	var v any = m
 	for _, p := range path {
@@ -125,15 +107,11 @@ func dig(m map[string]any, path ...string) any {
 	return v
 }
 
-// windowPrefix is the first 8 hex digits of the window a herdr pane id
-// names, which tuios takes as a window id prefix.
 func windowPrefix(paneID string) string {
 	_, win, _ := strings.Cut(paneID, ":p")
 	return win[:min(8, len(win))]
 }
 
-// herdrLayoutOf is the layout of the tab that pane is in, read from outside
-// every pane: pane id to its x, and whether the tab is zoomed.
 func herdrLayoutOf(t *testing.T, base, pane string) (map[string]float64, string, bool) {
 	t.Helper()
 	l := herdrCall(t, base, "pane.layout", map[string]any{"pane_id": pane})["layout"].(map[string]any)
@@ -181,7 +159,6 @@ step get "$H" pane get "$NEW"
 		t.Fatalf("the pane's HERDR_PANE_ID and HERDR_TAB_ID are %q, want %s %v", env, callerID, caller["tab_id"])
 	}
 
-	// The reload succeeds: tuios has no herdr config to read again.
 	if r := steps["reload"]; r.code != 0 || !strings.Contains(r.out, `"type":"config_reload"`) {
 		t.Fatalf("server reload-config: exit %d, stdout %q, stderr %q, want herdr's config_reload answer and exit 0", r.code, r.out, r.err)
 	}
@@ -216,7 +193,6 @@ step get "$H" pane get "$NEW"
 		t.Fatalf("the new pane is on tab %v, want the caller's %v", got, caller["tab_id"])
 	}
 
-	// The command reached the new pane, and the new pane holds the focus.
 	waitJoined(t, base, windowPrefix(newID), "browser-pane-ran")
 	if _, focused, _ := herdrLayoutOf(t, base, newID); focused != newID {
 		t.Fatalf("the focused pane is %s, want the new pane %s (pane split --focus)", focused, newID)
@@ -266,9 +242,6 @@ step neighbor "$H" pane neighbor --pane "$NEW" --direction right
 		t.Fatalf("after the swap the new pane is at x %v and the caller at %v, focus on %s; want the new pane left of the caller, focused", xs[newID], xs[callerID], focused)
 	}
 	waitJoined(t, base, windowPrefix(newID), "code-pane-ran")
-	// The client draws the same order: on the row with the caller's command
-	// line, the command typed into the new pane sits to its left. Both are
-	// matched by their first characters, since a narrow pane wraps them.
 	drawnLeft := func(s tuitest.Screen) bool {
 		for line := range strings.SplitSeq(s.Text(), "\n") {
 			ran, cmd := strings.Index(line, "echo code-pan"), strings.Index(line, "$ sh /")
@@ -326,8 +299,6 @@ step zoomon "$H" pane zoom "$HERDR_PANE_ID" --on
 	if z := steps["zoomon"].json(t, "pane zoom --on"); dig(z, "result", "zoom", "zoomed") != true || dig(z, "result", "zoom", "zoom_changed") != true || dig(z, "result", "zoom", "focused_pane_id") != navID {
 		t.Fatalf("pane zoom --on: %s", steps["zoomon"].out)
 	}
-	// The pane that asked is the one zoomed: the screen draws one pane, and
-	// its bottom border carries nav's title. The pane focused before the call was the other one.
 	zoomedOnNav := func(s tuitest.Screen) bool {
 		text := s.Text()
 		if strings.Count(text, "╰") != 1 {
@@ -392,7 +363,6 @@ func TestHerdrFrontHoldsThePaneToItsGrants(t *testing.T) {
 			otherID = id
 		}
 	}
-	// The other pane runs a program whose arguments stand for a secret.
 	typeIn(t, base, windowPrefix(otherID), "sleep 7654321")
 	waitForProcInfo := func() map[string]any {
 		for deadline := time.Now().Add(uiTimeout); ; time.Sleep(100 * time.Millisecond) {
@@ -419,14 +389,11 @@ step swap "$H" pane swap --pane "$HERDR_PANE_ID" --direction left
 step focus "$H" pane focus --direction left --pane "$HERDR_PANE_ID"
 step zoom "$H" pane zoom --on --pane "$HERDR_PANE_ID"
 `)
-	// The positive half: reads are answered.
 	steps["neighbor"].ok(t, "pane neighbor")
 	if dig(steps["neighbor"].json(t, "pane neighbor"), "result", "neighbor", "neighbor_pane_id") == nil {
 		t.Fatalf("pane neighbor from a read-only pane found no neighbour:\n%s", steps["neighbor"].out)
 	}
 	steps["edges"].ok(t, "pane edges")
-	// A read-only pane sees another pane's processes by pid and name, and
-	// not their arguments or directories. Its own pane it sees whole.
 	steps["procother"].ok(t, "pane process-info of another pane")
 	if o := steps["procother"].out; strings.Contains(o, "7654321") || strings.Contains(o, `"cwd"`) || !strings.Contains(o, `"name":"sleep"`) {
 		t.Errorf("pane process-info of another pane from a read-only pane: %s", o)
@@ -485,8 +452,6 @@ WS=$(sed -n 's/.*"workspace_id":"\([^"]*\)".*/\1/p' "$D/create.out" | head -1)
 step focus "$H" workspace focus "$WS"
 `)
 	steps["wslist"].ok(t, "workspace list")
-	// herdr refuses an agent kind it does not know, and an option it does
-	// not have, as usage errors: exit 2, the message on stderr.
 	if b := steps["badkind"]; b.code != 2 || strings.TrimSpace(b.err) != "unsupported interactive agent kind: nope" {
 		t.Errorf("agent start --kind nope: exit %d, stderr %q", b.code, b.err)
 	}
@@ -539,9 +504,7 @@ func TestHerdrFrontStartsCodexAndPi(t *testing.T) {
 	if err := os.MkdirAll(stubs, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// The script stays in the foreground, so its process is named codex.
 	codex := "#!/bin/sh\nprintf '\\033]7501;state=idle:app=codex\\033\\\\'\necho STUB-CODEX-UP\nwhile :; do read -r _ || sleep 1; done\n"
-	// exec gives the process another name, so only the report says pi.
 	pi := "#!/bin/sh\nexec sh -c 'sleep 1; \"$HERDR_BIN_PATH\" pane report-agent \"$HERDR_PANE_ID\" --source stub --agent pi --state idle --seq 1; echo STUB-PI-UP; sleep 300'\n"
 	for name, body := range map[string]string{"codex": codex, "pi": pi} {
 		if err := os.WriteFile(filepath.Join(stubs, name), []byte(body), 0o700); err != nil {
@@ -581,7 +544,6 @@ step list "$H" agent list
 	alive(t, term, "after the reviewers started")
 }
 
-// shq quotes s for the POSIX sh the step scripts run in.
 func shq(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // TestHerdrFrontAgentStartQuotesForTheShell starts an agent through
@@ -602,8 +564,6 @@ func TestHerdrFrontAgentStartQuotesForTheShell(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new-window", "fishpane", "-s", crushSession, "--no-focus", "--", fish, "--no-config"); err != nil {
 		t.Fatalf("new-window fish: %v\n%s", err, out)
 	}
-	// fish sets its title to its directory, so the pane is found by the
-	// name it was given.
 	out, _ := tuiosCLI(t, base, "list-windows", "--json", "-s", crushSession)
 	var listing struct {
 		Windows []struct {

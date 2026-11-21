@@ -8,13 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The agents view takes the keys while it is up, but the keys that open the
-// palette, the launcher, help and settings act over it, the way they act over
-// a pane. Each one opens on top of the view, takes the keys it is given, and
-// closes back to the view as the person left it.
-
-// ckCursorRow is the fleet row that wears the cursor bar, or "" when none
-// does.
 func ckCursorRow(s tuitest.Screen) string {
 	_, rows := s.Size()
 	for r := range rows {
@@ -25,14 +18,10 @@ func ckCursorRow(s tuitest.Screen) string {
 	return ""
 }
 
-// ckViewUp reports whether the agents view is drawn: its group headings and
-// a row of the fleet are on screen.
 func ckViewUp(s tuitest.Screen) bool {
 	return containsAll(s.Text(), "Ready for review", "release-not")
 }
 
-// waitCkBack waits until the panel's title is gone and the view is drawn
-// again with the cursor on the same row.
 func waitCkBack(t *testing.T, term *tuitest.Terminal, title, cursor, when string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -67,7 +56,6 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 	cursor := ckCursorRow(term.Screen())
 	saveCockpitFrames(t, term, "global-keys-0-view")
 
-	// The palette, over the view.
 	if err := term.SendKeys(legacyCtrlP); err != nil {
 		t.Fatalf("press ctrl+p: %v", err)
 	}
@@ -79,7 +67,6 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 	if got := ckCursorRow(term.Screen()); got != cursor {
 		t.Fatalf("ASSERTION: ctrl+p moved the list cursor from %q to %q\n%s", cursor, got, term.Snapshot())
 	}
-	// Keys typed into the palette are the palette's: j and k are its query.
 	if err := term.Type("jk"); err != nil {
 		t.Fatalf("type into the palette: %v", err)
 	}
@@ -93,8 +80,6 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 	}
 	waitCkBack(t, term, paletteTitle, cursor, "esc in the palette")
 
-	// A click on the view outside the palette closes the palette and does
-	// not select the row under the pointer.
 	if err := term.SendKeys(legacyCtrlP); err != nil {
 		t.Fatalf("press ctrl+p: %v", err)
 	}
@@ -107,7 +92,6 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 		t.Fatalf("ASSERTION: a click under the palette selected %q\n%s", got, term.Snapshot())
 	}
 
-	// Help, over the view.
 	if err := term.SendKeys("?"); err != nil {
 		t.Fatalf("press ?: %v", err)
 	}
@@ -122,7 +106,6 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 	}
 	waitCkBack(t, term, helpTitle, cursor, "esc in help")
 
-	// Settings, through the leader chord, over the view.
 	if err := term.SendKeys(tuitest.Ctrl('b'), ","); err != nil {
 		t.Fatalf("press ctrl+b ,: %v", err)
 	}
@@ -137,8 +120,6 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 	}
 	waitCkBack(t, term, "Settings", cursor, "esc in settings")
 
-	// A palette row that goes to another workspace closes the view, which
-	// then opens again on the same agent.
 	if err := term.SendKeys(legacyCtrlP); err != nil {
 		t.Fatalf("press ctrl+p: %v", err)
 	}
@@ -160,7 +141,6 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 	}
 	waitCkBack(t, term, paletteTitle, cursor, "the view opened again after the palette left it")
 
-	// The reply editor keeps its draft across the palette.
 	if err := term.SendKeys("i"); err != nil {
 		t.Fatalf("press i: %v", err)
 	}
@@ -188,7 +168,6 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the draft did not survive the palette: %v\n%s", err, term.Snapshot())
 	}
-	// The editor still has the keys: what is typed now joins the draft.
 	if err := term.Type(" here"); err != nil {
 		t.Fatalf("type more: %v", err)
 	}
@@ -198,15 +177,12 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("press esc: %v", err)
 	}
-	// The key bar is the list's again once the editor is closed.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "ctrl+z undo") && strings.Contains(s.Text(), "esc close")
 	}, uiTimeout); err != nil {
 		t.Fatalf("esc did not close the reply editor: %v\n%s", err, term.Snapshot())
 	}
 
-	// A sheet that takes every key: the palette opens over it too, and esc
-	// in the palette leaves the sheet open with its task.
 	if err := term.SendKeys("n"); err != nil {
 		t.Fatalf("press n: %v", err)
 	}
@@ -240,14 +216,12 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 		t.Fatalf("esc did not close the New agent sheet: %v\n%s", err, term.Snapshot())
 	}
 
-	// Terminal mode: the view lets the leader chord through.
 	if err := term.SendKeys("q"); err != nil {
 		t.Fatalf("press q: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !ckViewUp(s) }, uiTimeout); err != nil {
 		t.Fatalf("q did not close the view: %v\n%s", err, term.Snapshot())
 	}
-	// Back to the workspace with the pane, which the palette left.
 	if err := term.SendKeys(legacyCtrlP); err != nil {
 		t.Fatalf("press ctrl+p: %v", err)
 	}
@@ -267,7 +241,6 @@ func TestCockpitGlobalKeysOverTheView(t *testing.T) {
 	if err := term.WaitFor(ckViewUp, uiTimeout); err != nil {
 		t.Fatalf("the view did not open from terminal mode: %v\n%s", err, term.Snapshot())
 	}
-	// The view binds no comma, so only the prefix table can open settings.
 	if err := term.SendKeys(tuitest.Ctrl('b'), ","); err != nil {
 		t.Fatalf("press ctrl+b ,: %v", err)
 	}

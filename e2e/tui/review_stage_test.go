@@ -53,7 +53,6 @@ func TestReviewStageByHunkAndLine(t *testing.T) {
 	testutil.Git(t, repo, "add", "list.txt")
 	testutil.Git(t, repo, "commit", "-q", "-m", "list")
 
-	// Hunk 1 changes line 2. Hunk 2 adds two lines after line 10.
 	changed := slices.Clone(lines)
 	changed[1] = "TWO"
 	changed = slices.Insert(changed, 10, "new a", "new b")
@@ -136,8 +135,6 @@ func TestReviewStageByHunkAndLine(t *testing.T) {
 		fmt.Fprintf(&log, "## review-stage %v\n%s\n\n", params["action"], res.Result)
 		return r.Undo
 	}
-	// cached is git diff --cached of list.txt without its index line, whose
-	// blob names say nothing a reader can check by eye.
 	cached := func(step, want string) {
 		t.Helper()
 		raw := testutil.Git(t, repo, "diff", "--cached", "--no-color", "--", "list.txt")
@@ -147,7 +144,7 @@ func TestReviewStageByHunkAndLine(t *testing.T) {
 				kept = append(kept, l)
 			}
 		}
-		got := strings.Join(kept, "\n") + "\n" // testutil.Git trims the last newline
+		got := strings.Join(kept, "\n") + "\n"
 		fmt.Fprintf(&log, "## git diff --cached after %s\n%s\n", step, got)
 		if got != want {
 			t.Fatalf("after %s, git diff --cached =\n%s\nwant\n%s", step, got, want)
@@ -165,7 +162,6 @@ func TestReviewStageByHunkAndLine(t *testing.T) {
 		return -1
 	}
 
-	// The unstaged diff: two hunks of list.txt, and notes.txt untracked.
 	un := diff("unstaged")
 	f := un["list.txt"]
 	if f.Status != "M" || len(f.Hunks) != 2 {
@@ -178,11 +174,9 @@ func TestReviewStageByHunkAndLine(t *testing.T) {
 	head := "diff --git a/list.txt b/list.txt\n--- a/list.txt\n+++ b/list.txt\n"
 	hunk1 := "@@ -1,5 +1,5 @@\n one\n-two\n+TWO\n three\n four\n five\n"
 
-	// Stage hunk 1 whole.
 	stage(map[string]any{"action": "stage", "path": "list.txt", "hunk": f.Hunks[0].Header})
 	cached("staging hunk 1", head+hunk1)
 
-	// The unstaged diff now holds hunk 2 only. Stage its second added line.
 	f = diff("unstaged")["list.txt"]
 	if len(f.Hunks) != 1 {
 		t.Fatalf("after staging hunk 1, unstaged list.txt = %+v, want one hunk", f)
@@ -194,7 +188,6 @@ func TestReviewStageByHunkAndLine(t *testing.T) {
 		t.Fatalf("after staging new b, unstaged list.txt = %+v", f)
 	}
 
-	// Unstage that line from the staged diff.
 	st := diff("staged")["list.txt"]
 	if len(st.Hunks) != 2 {
 		t.Fatalf("staged list.txt = %+v, want two hunks", st)
@@ -202,14 +195,11 @@ func TestReviewStageByHunkAndLine(t *testing.T) {
 	unstageUndo := stage(map[string]any{"action": "unstage", "path": "list.txt", "hunk": st.Hunks[1].Header, "lines": []int{lineIndex(st.Hunks[1], "add", "new b")}})
 	cached("unstaging the line new b", head+hunk1)
 
-	// Undo the unstage, then redo it with the undo object the undo returned.
 	redo := stage(map[string]any{"action": "undo", "undo": unstageUndo})
 	cached("undoing the unstage", bothStaged)
 	again := stage(map[string]any{"action": "undo", "undo": redo})
 	cached("redoing the unstage", head+hunk1)
 
-	// After a manual git add the index is not as the redo left it, so its
-	// undo is refused, and changes nothing.
 	testutil.Git(t, repo, "add", "list.txt")
 	all := head + "@@ -1,5 +1,5 @@\n one\n-two\n+TWO\n three\n four\n five\n@@ -8,5 +8,7 @@ seven\n eight\n nine\n ten\n+new a\n+new b\n eleven\n twelve\n"
 	cached("git add", all)
@@ -220,8 +210,6 @@ func TestReviewStageByHunkAndLine(t *testing.T) {
 	}
 	cached("the refused undo", all)
 
-	// The untracked file: one line staged as a new file, then that hunk
-	// unstaged whole, which removes the file from the index again.
 	nf := diff("unstaged")["notes.txt"]
 	if nf.Status != "U" || len(nf.Hunks) != 1 {
 		t.Fatalf("unstaged notes.txt = %+v, want U with one hunk", nf)
@@ -239,7 +227,6 @@ func TestReviewStageByHunkAndLine(t *testing.T) {
 		t.Fatalf("after unstaging all of notes.txt, it is in the index: %q", got)
 	}
 
-	// Staged whole, then unstaged by its undo.
 	addNotes := stage(map[string]any{"action": "stage", "path": "notes.txt"})
 	if got := testutil.Git(t, repo, "diff", "--cached", "--name-status", "--", "notes.txt"); got != "A\tnotes.txt" {
 		t.Fatalf("after staging notes.txt, git diff --cached --name-status = %q", got)

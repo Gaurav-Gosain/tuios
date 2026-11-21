@@ -36,7 +36,6 @@ func TestTerminalModeRecolorsTheFocusedBorder(t *testing.T) {
 
 	dir := artifactDir(t)
 
-	// The window mode colour, read once the pane has stopped changing.
 	var windowInk tuitest.Color
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		ink, ok := screenBorderInk(s)
@@ -52,8 +51,6 @@ func TestTerminalModeRecolorsTheFocusedBorder(t *testing.T) {
 	if windowInk.Kind != tuitest.ColorRGB {
 		t.Fatalf("the border is not drawn in an RGB colour (%+v), so the modes cannot be told apart", windowInk)
 	}
-	// The pane must be quiet before i, so a late prompt redraw cannot repaint
-	// the border for the mode switch.
 	time.Sleep(500 * time.Millisecond)
 	saveArtifact(t, term, dir, "before")
 
@@ -85,10 +82,6 @@ func TestTerminalModeRecolorsTheFocusedBorder(t *testing.T) {
 	t.Logf("window mode border %+v, terminal mode border %+v; frames in %s", windowInk, terminalInk, dir)
 }
 
-// modeBorderInks starts tuios under base with config, opens one pane, and
-// returns the focused border's colour in window mode and in terminal mode. It
-// saves both frames, as text and as PNG painted with host, before it asserts
-// anything, so a failing run still leaves the frames to look at.
 func modeBorderInks(t *testing.T, config string, env []string, host *shot.Palette) (window, terminal tuitest.Color) {
 	t.Helper()
 	base := t.TempDir()
@@ -113,8 +106,6 @@ func modeBorderInks(t *testing.T, config string, env []string, host *shot.Palett
 	savePNG(t, term.Screen(), host, dir, "window")
 
 	enterTerminalMode(t, term)
-	// The colour may stay the same, which is what the shared key asks for, so
-	// this waits for the border to settle rather than to change.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		ink, ok := screenBorderInk(s)
 		same := ok && ink == terminal
@@ -199,8 +190,6 @@ border_focused_color_terminal = "#0088ff"
 	})
 }
 
-// markerPaneEdge is the left border cell of the pane showing marker: the nearest
-// vertical rule left of the marker on its row.
 func markerPaneEdge(s tuitest.Screen, marker string) (tuitest.Cell, bool) {
 	_, rows := s.Size()
 	for r := range rows {
@@ -249,10 +238,8 @@ func TestFocusedBorderStandsOutOnTheHostGround(t *testing.T) {
 	}
 }
 
-// focusedBorderOn is one case of TestFocusedBorderStandsOutOnTheHostGround.
 func focusedBorderOn(t *testing.T, scheme hostScheme, sessionBorder bool) {
 	ground := overlay.Lightness(scheme.ground())
-	// out is +1 where standing out from the ground means lighter.
 	out := 1.0
 	if ground > 0.5 {
 		out = -1
@@ -260,9 +247,6 @@ func focusedBorderOn(t *testing.T, scheme hostScheme, sessionBorder bool) {
 	dist := func(l float64) float64 { return (l - ground) * out }
 	term := startHostPanes(t, scheme, fmt.Sprintf("theme = \"none\"\nsession_border = %v\n", sessionBorder), false, "start")
 	dir := artifactDir(t)
-	// An attached client starts in terminal mode. The dock of the shipped
-	// looks names no mode, so each switch is given a beat rather than waited
-	// on by text.
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("send alt+esc: %v", err)
 	}
@@ -281,8 +265,6 @@ func focusedBorderOn(t *testing.T, scheme hostScheme, sessionBorder bool) {
 	cw, _ := read("PLAINBX")
 	cu, fu := read("PLAINAX")
 	if !sessionBorder {
-		// With no theme the unfocused border is a neutral grey: a hue there
-		// reads as loud as focus, and red reads as an alert.
 		if spread := max(fu.R, fu.G, fu.B) - min(fu.R, fu.G, fu.B); spread > 24 {
 			t.Errorf("the unfocused border is #%02x%02x%02x, a hue rather than a neutral", fu.R, fu.G, fu.B)
 		}
@@ -312,9 +294,6 @@ func focusedBorderOn(t *testing.T, scheme hostScheme, sessionBorder bool) {
 		}
 	}
 	if !sessionBorder {
-		// A one-cell line is read by its contrast. On a light ground the
-		// lightness step alone left the focused border at 1.7 times the
-		// unfocused border's contrast.
 		g := scheme.ground()
 		cru := overlay.ContrastRatio(cu, g)
 		for _, focused := range []struct {

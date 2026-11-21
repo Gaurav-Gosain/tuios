@@ -21,8 +21,6 @@ import (
 // Each case runs twice: once with no pane named, which dials to find the pane,
 // and once with TUIOS_PANE_ID set, which dials later to send the values.
 func TestStatusLineWithADeadDaemonStillRenders(t *testing.T) {
-	// Socket paths have a short length limit, so the directory is in /tmp
-	// rather than under TMPDIR.
 	dir, err := os.MkdirTemp("", "i374-")
 	if err != nil {
 		t.Fatal(err)
@@ -31,8 +29,6 @@ func TestStatusLineWithADeadDaemonStillRenders(t *testing.T) {
 
 	missing := filepath.Join(dir, "nope.sock")
 
-	// A daemon that died without removing its socket leaves a socket file
-	// that refuses every connection.
 	stale := filepath.Join(dir, "stale.sock")
 	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: stale, Net: "unix"})
 	if err != nil {
@@ -84,8 +80,6 @@ func TestStatusLineWithADeadDaemonStillRenders(t *testing.T) {
 	}
 }
 
-// envWithoutTuios is the environment without the TUIOS_ variables a run
-// from inside a tuios pane inherits, so a case names its own pane.
 func envWithoutTuios() []string {
 	var env []string
 	for _, kv := range os.Environ() {

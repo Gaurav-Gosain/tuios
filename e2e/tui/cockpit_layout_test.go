@@ -7,10 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The agents view's layout: the list's width, the side column and the zoom.
-
-// ckListEdge is where the list ends: the end of the region mark while the
-// list has the keys.
 func ckListEdge(s tuitest.Screen) int {
 	x0, x1, ok := ckMarkSpan(s)
 	if !ok || x0 > 4 {
@@ -19,7 +15,6 @@ func ckListEdge(s tuitest.Screen) int {
 	return x1
 }
 
-// waitListEdge waits for the list to end at want.
 func waitListEdge(t *testing.T, term *tuitest.Terminal, want int, when string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return ckListEdge(s) == want }, uiTimeout); err != nil {
@@ -47,7 +42,6 @@ func TestCockpitLayout(t *testing.T) {
 	ckPress(t, term, "<", "<")
 	waitListEdge(t, term, 52, "< twice")
 
-	// The edge is the gap column right of the list. Hover lights it.
 	row := 20
 	mouseHover(t, term, 53, row)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -64,15 +58,12 @@ func TestCockpitLayout(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "layout-dragged-70")
 
-	// A new client of the same machine keeps the width.
 	ckPress(t, term, "q")
 	again := openCockpitClient(t, base, 200, 50, nil)
 	waitListEdge(t, again, 70, "a new client after the drag")
-	// A double click on the edge gives the width back.
 	clickAt(t, again, 71, row, 2)
 	waitListEdge(t, again, 56, "a double click on the edge")
 
-	// w hides the side column and shows it again.
 	cursorTo(t, again, func(line string) bool { return strings.Contains(line, "bench-idle") })
 	if !strings.Contains(again.Screen().Text(), "Last turn") {
 		t.Fatalf("the side column is not drawn at 200 columns\n%s", again.Snapshot())
@@ -85,7 +76,6 @@ func TestCockpitLayout(t *testing.T) {
 	ckPress(t, again, "w")
 	waitText(t, again, "the side column again", "Last turn")
 
-	// Z shows the focus alone; esc gives the view back.
 	ckPress(t, again, tuitest.Tab)
 	waitRegion(t, again, "Focus", 48, 70, "tab to the focus")
 	ckPress(t, again, "Z")
@@ -104,7 +94,6 @@ func TestCockpitLayout(t *testing.T) {
 	}
 	alive(t, again, "after the layout keys")
 
-	// [agents] list_width sets the default.
 	cfg, _, _, _ := startCockpitFleetWith(t, 200, 50, nil, "[agents]\nlist_width = \"30\"\n")
 	waitListEdge(t, cfg, 30, "list_width = 30")
 }

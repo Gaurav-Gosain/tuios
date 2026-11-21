@@ -14,11 +14,6 @@ import (
 	"time"
 )
 
-// More of agent-transcript, on the rig TestPersonReadsAgentTranscript builds
-// inline: a daemon, a session, the phone's link with a presence, and panes
-// joined by the real agent-hook.
-
-// atRig is a daemon with a session and the phone's link to it.
 type atRig struct {
 	t     *testing.T
 	base  string
@@ -29,8 +24,6 @@ type atRig struct {
 	wins  []string
 }
 
-// newATRig starts a daemon with a session of n windows, and the phone's link
-// with a presence.
 func newATRig(t *testing.T, artifact string, n int, config ...string) *atRig {
 	t.Helper()
 	base := t.TempDir()
@@ -72,8 +65,6 @@ func newATRig(t *testing.T, artifact string, n int, config ...string) *atRig {
 	return r
 }
 
-// join joins window win to the transcript at path with the real
-// SessionStart hook.
 func (r *atRig) join(win, path, sessionID string) {
 	r.t.Helper()
 	hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", transcriptSession, "--window", win)
@@ -89,7 +80,6 @@ func (r *atRig) join(win, path, sessionID string) {
 	}
 }
 
-// read calls agent-transcript for win and fails the test on an error.
 func (r *atRig) read(win string, extra map[string]any) map[string]any {
 	r.t.Helper()
 	p := map[string]any{"session": transcriptSession, "window": win, "human_nonce": r.nonce}
@@ -102,7 +92,6 @@ func (r *atRig) read(win string, extra map[string]any) map[string]any {
 	return res
 }
 
-// atRecord is one Claude Code record with a text answer.
 func atRecord(uuid, text string) string {
 	b, _ := json.Marshal(map[string]any{
 		"type": "assistant", "uuid": uuid, "timestamp": "2026-10-09T10:00:00.000Z", "isSidechain": false,
@@ -111,9 +100,6 @@ func atRecord(uuid, text string) string {
 	return string(b)
 }
 
-// atEventPast waits for a transcript event about window whose cursor is none
-// of old, and returns it. A join reads its file at once and may raise an
-// event for what was already there; old skips those.
 func atEventPast(t *testing.T, sub *linkStream, art *atArtifact, window string, old ...string) string {
 	t.Helper()
 	for {
@@ -155,20 +141,17 @@ func TestTranscriptWatchOutlivesItsDirectory(t *testing.T) {
 	if verr != nil || ack["type"] != "subscribed" {
 		t.Fatalf("subscribe: %v %v", ack, verr)
 	}
-	// The watch works before the directory goes.
 	before := r.read(winA, nil)["cursor"].(string)
 	appendLines(t, pathA, atRecord("a2", "A-SECOND"))
 	atEventPast(t, sub, r.art, winA, before)
 	second := r.read(winA, nil)["cursor"].(string)
 
-	// The directory goes and comes back.
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// A new join in the directory made again is watched.
 	if err := os.WriteFile(pathB, []byte(atRecord("b1", "B-FIRST")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +163,6 @@ func TestTranscriptWatchOutlivesItsDirectory(t *testing.T) {
 	if len(added) != 1 || added[0].Text != "B-SECOND" {
 		t.Fatalf("the new join's append: %v", added)
 	}
-	// The old join is watched again, with the file back at its path.
 	if err := os.WriteFile(pathA, []byte(atRecord("a3", "A-AGAIN")+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -198,8 +180,6 @@ func TestTranscriptWatchOutlivesItsDirectory(t *testing.T) {
 	r.art.add("result", "event cursors: A "+evA+", B "+evB)
 }
 
-// atCallRecord is one Claude Code record that gives two entries: a text and
-// a Bash call.
 func atCallRecord(i int) string {
 	b, _ := json.Marshal(map[string]any{
 		"type": "assistant", "uuid": fmt.Sprintf("p%d", i), "timestamp": "2026-10-09T10:00:00.000Z", "isSidechain": false,
@@ -231,7 +211,6 @@ func TestPersonPagesBackThroughATranscript(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// A first record that gives no entry, as Claude Code writes one.
 	lines := []string{`{"type":"file-history-snapshot","messageId":"m0","snapshot":{"trackedFileBackups":{}},"isSnapshotUpdate":false}`}
 	const records = 40
 	for i := range records {
@@ -242,7 +221,6 @@ func TestPersonPagesBackThroughATranscript(t *testing.T) {
 	}
 	r.join(win, path, "pages")
 
-	// The whole conversation in one read has nothing older.
 	all := r.read(win, map[string]any{"limit": 1000})
 	want := atEntries(t, all)
 	if len(want) != 2*records || all["older"] != "" {
@@ -253,7 +231,6 @@ func TestPersonPagesBackThroughATranscript(t *testing.T) {
 		wantIDs = append(wantIDs, e.ID)
 	}
 
-	// From the newest page back, 7 at a time.
 	res := r.read(win, map[string]any{"limit": 7})
 	end := res["cursor"].(string)
 	var pages [][]atEntry
@@ -290,7 +267,6 @@ func TestPersonPagesBackThroughATranscript(t *testing.T) {
 	if first := pages[0][0]; first.Text != "STEP-000" {
 		t.Fatalf("the first page starts with %+v", first)
 	}
-	// A call and its text sit on two pages: a page ended inside a record.
 	split := false
 	for _, p := range pages {
 		if p[0].Kind == "tool_call" {
@@ -301,7 +277,6 @@ func TestPersonPagesBackThroughATranscript(t *testing.T) {
 		t.Fatalf("no page ended inside a record, so the test proves less than it says")
 	}
 
-	// A read with after carries older too: the entries before what it read.
 	appendLines(t, path, atCallRecord(records))
 	res = r.read(win, map[string]any{"after": end})
 	added := atEntries(t, res)
@@ -314,7 +289,6 @@ func TestPersonPagesBackThroughATranscript(t *testing.T) {
 		t.Fatalf("before the older of a read with after: got %v", back)
 	}
 
-	// A cursor that is not one starts over, and after with before is refused.
 	res = r.read(win, map[string]any{"before": "t1.0000000000000000.0", "limit": 3})
 	if res["reset"] != true || len(atEntries(t, res)) != 3 {
 		t.Fatalf("a made-up before: want reset with the newest entries, got %v", res)
@@ -326,7 +300,6 @@ func TestPersonPagesBackThroughATranscript(t *testing.T) {
 	r.art.add("result", fmt.Sprintf("%d pages, %d entries, in order", len(pages), len(gotIDs)))
 }
 
-// atEditRecord is a record with one tool call of tool with input.
 func atToolRecord(uuid, id, tool string, input map[string]any) string {
 	b, _ := json.Marshal(map[string]any{
 		"type": "assistant", "uuid": uuid, "timestamp": "2026-10-09T10:00:00.000Z", "isSidechain": false,
@@ -337,7 +310,6 @@ func atToolRecord(uuid, id, tool string, input map[string]any) string {
 	return string(b)
 }
 
-// atStyledLine is a diff line with its colours, as the phone reads it.
 type atStyledLine struct {
 	Op    string `json:"op"`
 	Text  string `json:"text"`
@@ -352,7 +324,6 @@ type atStyledLine struct {
 	} `json:"words"`
 }
 
-// atStyledLines returns the diff lines of the call with tool id id.
 func atStyledLines(t *testing.T, res map[string]any, id string) []atStyledLine {
 	t.Helper()
 	var entries []struct {
@@ -381,7 +352,6 @@ func atStyledLines(t *testing.T, res map[string]any, id string) []atStyledLine {
 	return nil
 }
 
-// utf16Len is the length of s in UTF-16 code units, as Kotlin counts it.
 func utf16Len(s string) int {
 	n := 0
 	for _, r := range s {
@@ -394,7 +364,6 @@ func utf16Len(s string) int {
 	return n
 }
 
-// atSpanOf returns the class of the span [s, e) of line, or "".
 func (l atStyledLine) spanOf(s, e int) string {
 	for _, sp := range l.Spans {
 		if sp.S == s && sp.E == e {
@@ -439,7 +408,6 @@ func TestPersonSeesDiffColours(t *testing.T) {
 	r.join(win, path, "colours")
 	res := r.read(win, nil)
 
-	// Every line: spans and words in order, inside the line, in UTF-16.
 	for _, id := range []string{"toolu_go", "toolu_py", "toolu_txt"} {
 		for _, l := range atStyledLines(t, res, id) {
 			n, last := utf16Len(l.Text), 0
@@ -460,7 +428,6 @@ func TestPersonSeesDiffColours(t *testing.T) {
 		}
 	}
 
-	// Go, by the .go name.
 	goLines := atStyledLines(t, res, "toolu_go")
 	var del, add, ctx atStyledLine
 	for _, l := range goLines {
@@ -476,8 +443,6 @@ func TestPersonSeesDiffColours(t *testing.T) {
 	if ctx.spanOf(0, 4) != "kd" || ctx.spanOf(5, 10) != "nf" {
 		t.Fatalf("the Go context line: want func as kd and greet as nf, got %+v", ctx.Spans)
 	}
-	// `\ts := "héllo 😀 " + ...`: the string starts at 6 and is 11 UTF-16
-	// units long. In bytes it would end at 21.
 	if k := del.spanOf(6, 17); k != "s" {
 		t.Fatalf("the string's span: want [6,17) as s, got %+v in %q", del.Spans, del.Text)
 	}
@@ -486,7 +451,6 @@ func TestPersonSeesDiffColours(t *testing.T) {
 		t.Fatalf("the changed words: want name at [20,24) and fullName at [20,28), got %+v and %+v", del.Words, add.Words)
 	}
 
-	// Python, by the .py name. A new file is all added, with no words.
 	py := atStyledLines(t, res, "toolu_py")
 	if len(py) != 3 || py[0].spanOf(0, 3) != "k" || py[0].spanOf(4, 8) != "nf" || py[1].spanOf(4, 12) != "c1" || py[2].spanOf(4, 9) != "nb" || py[2].spanOf(10, 14) != "s1" || py[2].spanOf(16, 18) != "mi" {
 		t.Fatalf("the Python spans: %+v", py)
@@ -497,8 +461,6 @@ func TestPersonSeesDiffColours(t *testing.T) {
 		}
 	}
 
-	// The colour budget: of twelve Writes of a 300-line Go file, the newest
-	// gets spans and the older ones say plain and carry none.
 	var big strings.Builder
 	for i := range 300 {
 		fmt.Fprintf(&big, "\tv%d := compute(%d, \"x\") // step\n", i, i)
@@ -539,7 +501,6 @@ func TestPersonSeesDiffColours(t *testing.T) {
 	}
 	r.art.add("reply size", fmt.Sprintf("%d bytes of entries for twelve 300-line Writes", len(b)))
 
-	// A text file has no lexer, so no spans, and still has its words.
 	txt := atStyledLines(t, res, "toolu_txt")
 	if len(txt) != 2 || len(txt[0].Spans)+len(txt[1].Spans) != 0 ||
 		len(txt[0].Words) != 1 || txt[0].Words[0] != (struct {
@@ -550,7 +511,6 @@ func TestPersonSeesDiffColours(t *testing.T) {
 	}
 }
 
-// goneHookWaitE2E is internal/session's goneHookWait.
 const goneHookWaitE2E = 10 * time.Second
 
 // TestCodexRolloutJoinsWithoutAHook is issue 1391. Codex's shared app-server was
@@ -579,8 +539,6 @@ const goneHookWaitE2E = 10 * time.Second
 //
 // Negative controls in NEGATIVE_CONTROLS.md.
 func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
-	// Every pane may report for another pane, so only the rule that a pane's
-	// process is never placed keeps the third pane's report off the second.
 	r := newATRig(t, "codex-rollout-join", 3, "[agents.permissions]\nmode = \"strict\"\ngrants = [\"admin\", \"respond\"]\n")
 	win, win2, shellWin := r.wins[0], r.wins[1], r.wins[2]
 
@@ -588,12 +546,9 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 	if err := os.MkdirAll(stubs, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// The script stays in the foreground, so its process is named codex.
 	if err := os.WriteFile(filepath.Join(stubs, "codex"), []byte("#!/bin/sh\nwhile :; do read -r line; done\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// startCodex runs the stub in pane w, in a folder of its own, and waits for
-	// the pane to show codex.
 	startCodex := func(w, folder string) string {
 		t.Helper()
 		dir := filepath.Join(r.base, folder)
@@ -621,7 +576,6 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// rollout writes the rollout of a conversation in cwd that starts now.
 	rollout := func(thread, cwd string) string {
 		t.Helper()
 		start := time.Now().UTC()
@@ -639,12 +593,9 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 	}
 
 	cwd := startCodex(win, "project")
-	// The rollout of the pane's conversation, started just after the pane's Codex.
 	const thread = "0199aa00-0000-7000-8000-000000000001"
 	path := rollout(thread, cwd)
 
-	// The search runs on a backoff, 10 s after the first and then 30 s, so a file
-	// written just after the first search waits for the next.
 	deadline := time.Now().Add(45 * time.Second)
 	for {
 		res, verr := r.ctl.call(t, "agent-transcript", map[string]any{"session": transcriptSession, "window": win, "human_nonce": r.nonce})
@@ -657,7 +608,6 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	// hook runs Codex's real hook with the environment of the shared server.
 	hook := func(pane, path, thread string) string {
 		t.Helper()
 		cmd := exec.Command(tuiosBin, "agent-hook", "codex")
@@ -684,7 +634,6 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 		return out
 	}
 	const gonePane = "0123dead-0000-4000-8000-000000000000"
-	// A conversation no pane runs: its rollout is in a folder no pane is in.
 	const stray = "0199aa00-0000-7000-8000-0000000000ff"
 	strayPath := rollout(stray, filepath.Join(r.base, "elsewhere"))
 	first := time.Now()
@@ -692,8 +641,6 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 	if got := inbox(); strings.Contains(got, notice) {
 		t.Fatalf("one report for a closed pane raised the notice:\n%s", got)
 	}
-	// A pane that has just closed can leave a hook or two in flight. Measured from
-	// before the first hook, so a slow runner can only make this pass, never fail.
 	hook(gonePane, strayPath, stray)
 	if got := inbox(); strings.Contains(got, notice) && time.Since(first) < goneHookWaitE2E {
 		t.Fatalf("two quick reports for a closed pane raised the notice:\n%s", got)
@@ -717,15 +664,12 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 		t.Fatalf("a conversation no pane runs was placed on the pane: %+v", st)
 	}
 
-	// The pane's own conversation, from the same server, reaches the pane.
 	hint := hook(gonePane, path, thread)
 	st := readAgentState(t, r.base, transcriptSession, win)
 	r.art.add("pane after its conversation's hook", fmt.Sprintf("%+v", st))
 	if st.Source != "report" || st.AgentSession != thread {
 		t.Fatalf("a hook for the pane's conversation did not reach the pane: %+v", st)
 	}
-	// Codex reads the start hint into the conversation, so it names the pane the
-	// report reached, not the pane that closed.
 	if !strings.Contains(hint, "tuios pane "+win[:8]+" ") {
 		t.Fatalf("the start hint does not name the pane the report reached (%s):\n%s", win[:8], hint)
 	}
@@ -733,8 +677,6 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 		t.Fatalf("a report that reached a pane left the notice open:\n%s", got)
 	}
 
-	// A second Codex starts a conversation. Its SessionStart comes at once, before
-	// the search could join the rollout, and is placed by the rollout it names.
 	cwd2 := startCodex(win2, "project2")
 	const thread2 = "0199aa00-0000-7000-8000-000000000002"
 	path2 := rollout(thread2, cwd2)
@@ -748,7 +690,6 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 		t.Fatalf("the second conversation moved the first pane: %+v", st)
 	}
 
-	// The second conversation's Stop, sent by a process in the third pane.
 	stop, err := json.Marshal(map[string]any{"hook_event_name": "Stop", "session_id": thread2, "transcript_path": path2})
 	if err != nil {
 		t.Fatal(err)
@@ -793,8 +734,6 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 		t.Fatalf("the Stop from outside every pane did not reach the second pane: %+v", st)
 	}
 
-	// The hook ran under this test, which outlives the second pane's codex, as a
-	// server does. The pane's agent still ends with that codex.
 	pressInPane(t, r.base, transcriptSession, win2, "ctrl+c")
 	deadline = time.Now().Add(uiTimeout)
 	for {

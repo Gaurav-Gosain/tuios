@@ -11,12 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// nestConfig is the default keys: nest is the leader then enter, as
-// tmux-matryoshka's prefix Enter.
 const nestConfig = ""
 
-// dockNested reports whether the dock's mode pill says nest mode is on, and
-// names F12 as the key that ends it.
 func dockNested(s tuitest.Screen) bool {
 	return strings.Contains(s.Text(), "NEST F12")
 }
@@ -57,14 +53,12 @@ func TestNestModeGivesEveryKeyToThePane(t *testing.T) {
 		t.Fatalf("setup: the dock says NEST before ctrl+b enter\n%s", term.Snapshot())
 	}
 
-	// 1. On.
 	send(tuitest.Ctrl('b'), tuitest.Enter)
 	if err := term.WaitFor(dockNested, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: ctrl+b enter did not turn nest mode on: %v\n%s", err, term.Snapshot())
 	}
 	railShot(t, term, "nested")
 
-	// 2. Every key is the pane's, the leader too.
 	send(tuitest.Ctrl('b'), tuitest.Alt('2'), tuitest.Ctrl('p'), "x", tuitest.Enter)
 	if err := term.WaitForText("^B^[2^Px", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: ctrl+b alt+2 ctrl+p x did not reach cat -v as bytes: %v\n%s", err, term.Snapshot())
@@ -80,7 +74,6 @@ func TestNestModeGivesEveryKeyToThePane(t *testing.T) {
 		t.Fatalf("ASSERTION: ctrl+p in nest mode opened the palette\n%s", term.Snapshot())
 	}
 
-	// 3. Off, and the leader is tuios's again.
 	send(tuitest.F12)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !dockNested(s) }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: F12 did not turn nest mode off: %v\n%s", err, term.Snapshot())
@@ -120,19 +113,12 @@ func TestNestModeHandsTheLeaderToANestedTmux(t *testing.T) {
 		}
 	}
 
-	// A tmux of its own: its own server, no user config, and a status line
-	// that names the windows W0, W1, so the test reads them off the screen.
-	// -L, not a socket under base: a socket path has a short limit, which
-	// the test's temporary folder is past on macOS.
 	server := "tuios-e2e-nest-" + strconv.Itoa(os.Getpid())
 	t.Cleanup(func() { _ = exec.Command(tmux, "-L", server, "kill-server").Run() })
 	send(tmux+" -L "+server+" -f /dev/null new-session \\; set status-left INNER-TMUX \\; set -g window-status-format W#I \\; set -g window-status-current-format W#I", tuitest.Enter)
 	if err := term.WaitForText("INNER-TMUX", uiTimeout); err != nil {
 		t.Fatalf("setup: the nested tmux did not start: %v\n%s", err, term.Snapshot())
 	}
-	// Its status line shows before it reads keys: tmux 3.3a drops the keys
-	// that come before the answers to the questions it asks the terminal at
-	// start. A command it runs is the proof it reads them.
 	send("echo READY-$((40+2))", tuitest.Enter)
 	if err := term.WaitForText("READY-42", uiTimeout); err != nil {
 		t.Fatalf("setup: the nested tmux does not run a command: %v\n%s", err, term.Snapshot())
@@ -382,7 +368,6 @@ func TestNestModeWaitsBehindTheRail(t *testing.T) {
 	if err := term.WaitFor(dockNested, uiTimeout); err != nil {
 		t.Fatalf("setup: ctrl+b enter did not turn nest mode on: %v\n%s", err, term.Snapshot())
 	}
-	// A blank row near the bottom of the rail.
 	mouseClick(t, term, 3, 30, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "SIDEBAR") && !dockNested(s)
@@ -439,8 +424,6 @@ session = "side"
 	if err := term.WaitForText("RAIL-READY", bootTimeout); err != nil {
 		t.Fatalf("setup: the rail pane does not show the docked session: %v\n%s", err, term.Snapshot())
 	}
-	// The rail is the right 36 columns. A click in it gives its pane the
-	// keyboard, and what is typed then is cat -v's.
 	mouseClick(t, term, 82, 12, tuitest.MouseLeft, 0)
 	sendKeys(t, term, "railkeys")
 	if err := term.WaitForText("railkeys", uiTimeout); err != nil {

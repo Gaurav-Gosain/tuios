@@ -7,11 +7,6 @@ import (
 	"testing"
 )
 
-// startingRC marks commands the way find_ports_tree_test.go's rc does, but
-// its first PROMPT_COMMAND waits a second between the D mark and the A
-// mark, and says on the screen when it starts to wait. A shell that has
-// just started is in that gap for a moment before every first prompt; here
-// the gap is long enough for a test to land in it.
 const startingRC = `PS1='$ \[\e]133;B\a\]'
 PS0='\e]133;C\a'
 PROMPT_COMMAND='printf "\e]133;D;%s\a" "$?"; if [ -z "$started" ]; then started=1; echo SHELL-STARTING; sleep 1; fi; printf "\e]133;A\a"'
@@ -39,7 +34,6 @@ func TestRunWaitsForTheFirstPromptAfterADMark(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new-window", "-s", session, "sh", "--", "bash", "--noprofile", "--rcfile", rc, "-i"); err != nil {
 		t.Fatalf("open the pane: %v\n%s", err, out)
 	}
-	// The D mark is out: the shell prints this line after it.
 	if out, err := tuiosCLI(t, base, "wait-for", "window-output", "-s", session, "-w", "sh", "--pattern", "SHELL-STARTING", "--timeout", "20000"); err != nil {
 		t.Fatalf("the shell never started its first prompt: %v\n%s", err, out)
 	}

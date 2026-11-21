@@ -74,9 +74,6 @@ func agentsViewContrast(t *testing.T, run chromeRun) {
 		}
 	}
 	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: run.cols, rows: run.rows, shippedLooks: true,
-		// No agent on the PATH: the sheet draws an agent that is not
-		// installed in its quiet ink, and the machine row warns. A machine
-		// with claude installed showed neither, and CI, with none, did.
 		env: append([]string{"TUIOS_KITTY_GRAPHICS=0", "PATH=" + agentFreePath("/usr/bin", "/bin")}, run.depth.env...)})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
@@ -114,7 +111,6 @@ func agentsViewContrast(t *testing.T, run chromeRun) {
 	s = shoot("reply-draft")
 	checkReplyArea(t, term, s, run, host, keys, draft)
 
-	// The draft is kept; the sheet opens from the list.
 	sendKeys(t, term, tuitest.Esc)
 	waitText(t, term, "the closed area with the draft", "Draft: ")
 	sendKeys(t, term, "n")
@@ -125,8 +121,6 @@ func agentsViewContrast(t *testing.T, run chromeRun) {
 	t.Logf("frames in %s", dir)
 }
 
-// inkFails gathers the glyphs under their floor, one line for each role,
-// ink and ground, so the message names each place to fix once.
 type inkFails struct {
 	seen  map[string]bool
 	lines []string
@@ -153,7 +147,6 @@ func (f *inkFails) report(t *testing.T, term *tuitest.Terminal, where string) {
 	}
 }
 
-// inkCell is one measured glyph.
 type inkCell struct {
 	x, y  int
 	text  string
@@ -162,9 +155,6 @@ type inkCell struct {
 	bg    any
 }
 
-// measureRow measures every glyph of row y from x0 to x1, and returns them
-// with the row's text, one rune per cell, so a string's index is its column
-// offset from x0.
 func measureRow(s tuitest.Screen, y, x0, x1 int, run chromeRun, host *shot.Palette) ([]inkCell, string) {
 	var cells []inkCell
 	var line strings.Builder
@@ -190,8 +180,6 @@ func measureRow(s tuitest.Screen, y, x0, x1 int, run chromeRun, host *shot.Palet
 	return cells, line.String()
 }
 
-// firstRune is the first rune of a cell's cluster, so a row reads one rune a
-// cell.
 func firstRune(s string) string {
 	for _, r := range s {
 		return string(r)
@@ -199,8 +187,6 @@ func firstRune(s string) string {
 	return " "
 }
 
-// spansOf marks the columns, as offsets into line, that any of words covers
-// where it stands as a word of its own.
 func spansOf(line string, words []string) map[int]bool {
 	out := map[int]bool{}
 	runes := []rune(line)
@@ -224,8 +210,6 @@ func spansOf(line string, words []string) map[int]bool {
 	return out
 }
 
-// checkReplyArea measures the reply area: from the "Reply to" row down to
-// the row of the Send button, from "Reply to" to the right edge.
 func checkReplyArea(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, run chromeRun, host *shot.Palette, keys []string, draft string) {
 	t.Helper()
 	top := rowWith(s, "Reply to docs-cli")
@@ -270,12 +254,8 @@ func checkReplyArea(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, run 
 	fails.report(t, term, "the reply area")
 }
 
-// checkSheet measures the New agent sheet: every glyph from the title row to
-// the Start row clears 3:1, and the task's placeholder 4.5:1.
 func checkSheet(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, run chromeRun, host *shot.Palette) {
 	t.Helper()
-	// The header's "+ New agent" button is above the sheet: the sheet's
-	// title is the row that also holds its way out.
 	top, bottom := -1, rowWith(s, "Start agent")
 	_, rows := s.Size()
 	for y := range rows {

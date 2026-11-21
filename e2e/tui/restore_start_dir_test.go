@@ -40,8 +40,6 @@ func TestRestoredSessionKeepsItsStartDirectory(t *testing.T) {
 		t.Fatalf("create the session: %v\n%s", err, out)
 	}
 	firstWindowCwd(t, base, session, proj)
-	// The first pane leaves the project, so a window that inherits from it
-	// lands in the wrong directory.
 	if !paneInDir(t, base, session, "cd '"+elsewhere+"' && ", elsewhere) {
 		t.Fatalf("the shell did not move into %s", elsewhere)
 	}
@@ -50,7 +48,6 @@ func TestRestoredSessionKeepsItsStartDirectory(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v\n%s", err, out)
 	}
-	// Starting any session starts a daemon, and a daemon restores on start.
 	if out, err := tuiosCLI(t, base, "new", "e2e-start-dir-trigger", "--detach"); err != nil {
 		t.Fatalf("start a fresh daemon: %v\n%s", err, out)
 	}
@@ -68,8 +65,6 @@ func TestRestoredSessionKeepsItsStartDirectory(t *testing.T) {
 	}
 }
 
-// windowCwdOn waits for a window on workspace ws of session to report want as
-// its directory, and returns the last directory it reported.
 func windowCwdOn(t *testing.T, base, session string, ws int, want string) string {
 	t.Helper()
 	var got string
@@ -99,7 +94,6 @@ func windowCwdOn(t *testing.T, base, session string, ws int, want string) string
 	return got
 }
 
-// saveListWindows writes list-windows --json for session to path.
 func saveListWindows(t *testing.T, base, session, path string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", session, "--json")
@@ -148,7 +142,6 @@ func TestStartDirectoryOutlivesARestartWhileMissing(t *testing.T) {
 	if err := os.Rename(proj, away); err != nil {
 		t.Fatal(err)
 	}
-	// Restored with the folder gone, then saved by the next kill-server.
 	restart("e2e-start-dir-trigger-1")
 	if err := os.Rename(away, proj); err != nil {
 		t.Fatal(err)

@@ -10,16 +10,6 @@ import (
 	"time"
 )
 
-// formAgentScript is a stand-in for Claude Code with auto mode on, run
-// through fakeclaude so the pane's program is claude. It reports its states
-// with the real hooks. A prompt runs a turn that ends with a Stop, and then
-// the stand-in draws, over its input box, the form Claude Code draws to teach
-// auto mode about the environment: exactly the lines captured from two
-// blocked workers, with the footer that counts a background shell. No hook
-// fires for the form. Esc closes it, and the input box comes back with the
-// same footer.
-//
-// $1 is tuios.
 const formAgentScript = `T="$1"
 hook() { printf '%s' "$1" | "$T" agent-hook claude-code >/dev/null 2>&1; }
 R=$(stty size | cut -d' ' -f1)
@@ -94,7 +84,6 @@ func TestABlockingFormOutranksADoneReport(t *testing.T) {
 		t.Fatalf("new-window: %v\n%s", err, out)
 	}
 	agent := windowID(t, base, session, "agent")
-	// Wide enough for the footer on one line, as Claude Code fits it.
 	if out, err := tuiosCLI(t, base, "call", "resize", `{"session":"`+session+`","window":"`+agent+`","width":120,"height":30}`); err != nil {
 		t.Fatalf("resize: %v\n%s", err, out)
 	}
@@ -135,15 +124,10 @@ func TestABlockingFormOutranksADoneReport(t *testing.T) {
 		t.Errorf("ASSERTION: a pane on needs_input shows a waits_on note:\n%s", out)
 	}
 
-	// Esc closes the form: done again, with the background shell noted.
 	if out, err := tuiosCLI(t, base, "send-keys", "-s", session, "-w", agent, "Escape"); err != nil {
 		t.Fatalf("send Esc: %v\n%s", err, out)
 	}
 	waitForFileText(t, closed, func(s string) bool { return strings.Contains(s, "FORM-CLOSED") }, "the stand-in did not close its form")
-	// At rest again: done, or idle once the redraw lets the title's rest
-	// glyph take the one-off done the Stop left (eventClaimStale). The note
-	// is read on the look that sees the footer, which can come a frame after
-	// the one that saw the form gone.
 	var raw map[string]any
 	out := ""
 	deadline = time.Now().Add(uiTimeout)

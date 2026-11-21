@@ -56,7 +56,6 @@ func TestSessionPickerRenameReachesLs(t *testing.T) {
 	if err := term.WaitForText("rename session test", uiTimeout); err != nil {
 		t.Fatalf("the rename editor did not open on test: %v\n%s", err, term.Snapshot())
 	}
-	// The editor may be seeded with the current name. Clear it either way.
 	if err := term.SendKeys(strings.Repeat("\x7f", 8)); err != nil {
 		t.Fatalf("clear the editor: %v", err)
 	}
@@ -80,14 +79,11 @@ func TestSessionPickerRenameReachesLs(t *testing.T) {
 		t.Fatalf("tuios ls lists %v after renaming test to work in the picker, want [work]\n%s", names, term.Snapshot())
 	}
 
-	// A process started in the session before the rename still has
-	// TUIOS_SESSION=test, and a tuios command it runs must still find it.
 	out, err := tuiosCLIEnv(t, base, []string{"TUIOS_SESSION=test"}, "list-windows", "-s", "test")
 	if err != nil {
 		t.Errorf("a command addressed by the old name lost the session: %v\n%s", err, out)
 	}
 
-	// attach by the old name refuses, and says what the session is called now.
 	var raw syncBuffer
 	old := startIn(t, base, startOpts{args: []string{"attach", "test"}, out: &raw})
 	if _, err := old.WaitExit(15 * time.Second); err != nil {
@@ -97,9 +93,6 @@ func TestSessionPickerRenameReachesLs(t *testing.T) {
 		t.Errorf("attach by the old name did not name the new one:\n%s", msg)
 	}
 
-	// The attached client shows the name the daemon holds. The picker is
-	// still open, and its row for the attached session reads the new name
-	// once the daemon's push lands.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "work") && !strings.Contains(text, "test")

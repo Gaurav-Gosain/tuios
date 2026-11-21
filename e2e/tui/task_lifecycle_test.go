@@ -14,7 +14,6 @@ import (
 	"time"
 )
 
-// lifeCard is a card of tuios task ls --json with the lifecycle fields.
 type lifeCard struct {
 	ID       string `json:"id"`
 	Stage    string `json:"stage"`
@@ -37,7 +36,6 @@ type lifeCard struct {
 	} `json:"verify"`
 }
 
-// lifeCards is the session's cards by id, and the raw listing.
 func lifeCards(t *testing.T, base, session string) (map[string]lifeCard, string) {
 	t.Helper()
 	raw := mustCLI(t, base, "task", "ls", "-s", session, "--json")
@@ -54,7 +52,6 @@ func lifeCards(t *testing.T, base, session string) (map[string]lifeCard, string)
 	return out, raw
 }
 
-// waitLife polls the cards until ok, within limit.
 func waitLife(t *testing.T, base, session string, limit time.Duration, why string, ok func(map[string]lifeCard) bool) (map[string]lifeCard, string) {
 	t.Helper()
 	var cards map[string]lifeCard
@@ -66,8 +63,6 @@ func waitLife(t *testing.T, base, session string, limit time.Duration, why strin
 	return cards, raw
 }
 
-// inPane runs a tuios command line from inside pane w, as its agent would,
-// and returns what it printed with its EXIT= line.
 func inPane(t *testing.T, base, session, w, args string) string {
 	t.Helper()
 	out := filepath.Join(base, "pane-"+strconv.FormatInt(time.Now().UnixNano(), 36)+".out")
@@ -76,7 +71,6 @@ func inPane(t *testing.T, base, session, w, args string) string {
 	return waitForFileText(t, out, func(s string) bool { return strings.Contains(s, "EXIT=") }, "the pane never ran: "+args)
 }
 
-// lifeRepo makes a git repository with one commit at dir.
 func lifeRepo(t *testing.T, dir string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -146,8 +140,7 @@ func TestCardLifecycleVerifiesTheAgentsWork(t *testing.T) {
 		note("%s", mustCLI(t, base, append([]string{"task", "dispatch", "verify", "-s", sess}, args...)...))
 	}
 
-	// No verify command: the agent's done goes to review, and the card is let go.
-	add("no check") // t1
+	add("no check")
 	claim("t1")
 	done("t1")
 	cards, raw := waitLife(t, base, sess, uiTimeout, "t1 did not go to review when its agent was done",
@@ -157,7 +150,6 @@ func TestCardLifecycleVerifiesTheAgentsWork(t *testing.T) {
 		t.Fatalf("ASSERTION: t1 in review is still held, or has no work in the demo repository: %+v", cards["t1"])
 	}
 
-	// The verify command is the person's: a pane is refused.
 	out := inPane(t, base, sess, a, "task dispatch verify true")
 	note("a pane sets the verify command:\n%s", out)
 	if strings.Contains(out, "EXIT=0") || !strings.Contains(out, "refused from every pane") {
@@ -165,8 +157,7 @@ func TestCardLifecycleVerifiesTheAgentsWork(t *testing.T) {
 	}
 	verify(`test -f ok || { echo "first line"; echo "not ok yet"; exit 3; }`)
 
-	// A fail: back to todo, one attempt, the last line as the note.
-	add("the fix") // t2
+	add("the fix")
 	claim("t2")
 	done("t2")
 	cards, raw = waitLife(t, base, sess, uiTimeout, "t2 did not go back to todo when its verify failed",
@@ -180,7 +171,6 @@ func TestCardLifecycleVerifiesTheAgentsWork(t *testing.T) {
 	}
 	note("%s", mustCLI(t, base, "task", "get", "t2", "-s", sess))
 
-	// The agent cannot move its card past verify by hand.
 	claim("t2")
 	out = inPane(t, base, sess, a, "task stage t2 review")
 	note("the agent moves its card to review:\n%s", out)
@@ -188,7 +178,6 @@ func TestCardLifecycleVerifiesTheAgentsWork(t *testing.T) {
 		t.Fatalf("ASSERTION: the agent moved t2 to review past the verify:\n%s", out)
 	}
 
-	// A pass: review.
 	if err := os.WriteFile(filepath.Join(repo, "ok"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -200,10 +189,9 @@ func TestCardLifecycleVerifiesTheAgentsWork(t *testing.T) {
 		t.Fatalf("ASSERTION: t2 in review has verify %+v and attempts %d, want passed and 1", c.Verify, c.Attempts)
 	}
 
-	// A hang: ended at its timeout, with the child it started.
 	pidFile := filepath.Join(base, "hang.pid")
 	verify("sleep 120 & echo $! > "+pidFile+"; wait", "--verify-timeout", "1")
-	add("hangs") // t3
+	add("hangs")
 	claim("t3")
 	start := time.Now()
 	done("t3")
@@ -232,9 +220,8 @@ func TestCardLifecycleVerifiesTheAgentsWork(t *testing.T) {
 		t.Fatalf("ASSERTION: the hang's child %d still runs after the timeout ended its verify", pid)
 	}
 
-	// A flood: only the end of the output is kept.
 	verify("yes flood-line | head -c 40000000; echo; echo the-last-line; exit 1")
-	add("floods") // t4
+	add("floods")
 	claim("t4")
 	done("t4")
 	cards, raw = waitLife(t, base, sess, 60*time.Second, "t4 did not fail after its flood",
@@ -245,10 +232,9 @@ func TestCardLifecycleVerifiesTheAgentsWork(t *testing.T) {
 			cards["t4"].Note, len(cards["t4"].Verify.Tail), len(raw))
 	}
 
-	// A card moved by hand mid-verify keeps its stage, and the run ends.
 	marker := filepath.Join(base, "lived")
 	verify("sleep 3; touch " + marker)
-	add("moved by hand") // t5
+	add("moved by hand")
 	claim("t5")
 	done("t5")
 	waitLife(t, base, sess, uiTimeout, "t5 did not go to verify",
@@ -265,13 +251,12 @@ func TestCardLifecycleVerifiesTheAgentsWork(t *testing.T) {
 		t.Fatalf("ASSERTION: the verify of t5 kept running after the card was moved by hand")
 	}
 
-	// A worktree that is gone fails, and the command runs nowhere else.
 	gone2 := filepath.Join(base, "gone")
 	lifeRepo(t, gone2)
 	b := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent-b", "--no-focus", "--print-id", "--cwd", gone2))
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", b, "working", "--harness", "claude-code", "-m", "on it")
 	verify("pwd > " + filepath.Join(base, "ran-in"))
-	add("its folder goes") // t6
+	add("its folder goes")
 	mustCLI(t, base, "task", "claim", "t6", "-s", sess, "-w", b)
 	if out := inPane(t, base, sess, b, "task done t6"); !strings.Contains(out, "EXIT=0") {
 		t.Fatalf("tuios task done t6: %s", out)
@@ -294,9 +279,8 @@ func TestCardLifecycleVerifiesTheAgentsWork(t *testing.T) {
 		t.Fatalf("ASSERTION: the verify of t6 ran somewhere else when its worktree was gone")
 	}
 
-	// A restart mid-verify runs it again.
 	verify("sleep 2")
-	add("across a restart") // t7
+	add("across a restart")
 	claim("t7")
 	done("t7")
 	waitLife(t, base, sess, uiTimeout, "t7 did not go to verify",
@@ -359,7 +343,6 @@ func TestCardLifecycleCountsOnAPullBoard(t *testing.T) {
 		return st.Board.Failures
 	}
 
-	// The agent is done with t1 (claimed by hand); pull gives it t2 at once.
 	mustCLI(t, base, "task", "claim", "t1", "-s", sess, "-w", a)
 	if out := inPane(t, base, sess, a, "task done t1"); !strings.Contains(out, "EXIT=0") {
 		t.Fatalf("tuios task done t1: %s", out)
@@ -368,7 +351,6 @@ func TestCardLifecycleCountsOnAPullBoard(t *testing.T) {
 		func(c map[string]lifeCard) bool { return c["t2"].Holder != nil && c["t2"].Holder.Window == a })
 	note("after the agent was done with t1:\n%s", raw)
 
-	// t2 is dispatched; its verify fails: one failure.
 	if out := inPane(t, base, sess, a, "task done t2"); !strings.Contains(out, "EXIT=0") {
 		t.Fatalf("tuios task done t2: %s", out)
 	}
@@ -380,8 +362,6 @@ func TestCardLifecycleCountsOnAPullBoard(t *testing.T) {
 		t.Fatalf("ASSERTION: the board counts %d failures after a dispatched card's verify failed, want 1", n)
 	}
 
-	// The agent now holds the next card; it errors: the card stays with it,
-	// blocked with its last line, and goes back to todo once let go.
 	cards, _ = lifeCards(t, base, sess)
 	held := ""
 	for id, c := range cards {
@@ -406,14 +386,11 @@ func TestCardLifecycleCountsOnAPullBoard(t *testing.T) {
 		func(c map[string]lifeCard) bool { return c[held].Holder == nil && c[held].Stage == "todo" })
 	note("after the errored agent let %s go (failures %d):\n%s", held, failures(), raw)
 
-	// A pass resets the count.
 	if err := os.WriteFile(filepath.Join(repo, "ok"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "working", "--harness", "claude-code", "-m", "again")
 	mustCLI(t, base, "task", "claim", "t3", "-s", sess, "-w", a)
-	// The claim by hand is not dispatched, so pull gives t3 again: let the
-	// agent take one by dispatch first.
 	if out := inPane(t, base, sess, a, "task done t3"); !strings.Contains(out, "EXIT=0") {
 		t.Fatalf("tuios task done t3: %s", out)
 	}
@@ -464,7 +441,7 @@ func TestCardLifecycleVerifiesOnTheCardsMachine(t *testing.T) {
 	defer func() { saveText(t, "task-lifecycle-far", report.String()) }()
 
 	const proj = "https://example.com/acme/api.git"
-	mustCLI(t, pp.base, "task", "add", "-s", "home", "--project", proj, "-p", "Fix it on build.", "far work") // t1
+	mustCLI(t, pp.base, "task", "add", "-s", "home", "--project", proj, "-p", "Fix it on build.", "far work")
 	note("%s", mustCLI(t, pp.base, "task", "dispatch", "verify", "-s", "home", "--project", proj,
 		`test -f far-ok || { echo far says no; exit 4; }`))
 	w := strings.TrimSpace(mustCLI(t, pp.remote, "new-window", "-s", "far", "far-agent", "--no-focus", "--print-id", "--cwd", pp.farCheckout))
@@ -494,7 +471,6 @@ func TestCardLifecycleVerifiesOnTheCardsMachine(t *testing.T) {
 		func(c map[string]lifeCard) bool { return c["t1"].Stage == "review" })
 	note("verify passed on build:\n%s", raw)
 
-	// build goes down: verify again, and the card waits in verify.
 	killDaemonNow(t, pp.remote)
 	mustCLI(t, pp.base, "task", "stage", "t1", "verify", "-s", "home")
 	cards, raw = waitLife(t, pp.base, "home", 45*time.Second, "t1 did not record that build was down",
@@ -530,7 +506,7 @@ func TestAMoveToVerifyLetsTheHolderGo(t *testing.T) {
 	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent-a", "--no-focus", "--print-id", "--cwd", repo))
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "working", "--harness", "claude-code", "-m", "on it")
 	note("%s", mustCLI(t, base, "task", "dispatch", "verify", "-s", sess, "sleep 1"))
-	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do it", "the work") // t1
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do it", "the work")
 	mustCLI(t, base, "task", "claim", "t1", "-s", sess, "-w", a)
 	note("%s", mustCLI(t, base, "task", "stage", "t1", "verify", "-s", sess))
 	cards, raw := lifeCards(t, base, sess)

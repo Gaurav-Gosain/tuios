@@ -74,8 +74,6 @@ func TestPaneFocusEventsFollowTheFocus(t *testing.T) {
 		}
 		t.Fatalf("%s: the pane read %q, want %q", step, got, want)
 	}
-	// The logger is up once the mode is on. The pane has focus, so turning
-	// the mode on gets one focus-in report, as xterm, kitty and ghostty send.
 	expect("logger started", "^[[I")
 
 	send := func(keys ...any) {
@@ -95,16 +93,12 @@ func TestPaneFocusEventsFollowTheFocus(t *testing.T) {
 	leaderKey(t, term, "d")
 	expect("detach", "^[[O")
 	term.Close()
-	// The client handles a few messages on its way out. None of them may
-	// report the focus again, and the reattach below would hide it if one did.
 	time.Sleep(time.Second)
 	expect("after the client left", "")
 
 	first := attachIn(t, base, session, startOpts{cols: 120, rows: 40})
 	expect("reattach", "^[[I")
 
-	// The host terminal's own focus. A person who moves from the terminal to
-	// another application is leaving the pane too, and comes back to it.
 	host := func(term *tuitest.Terminal, focused bool) {
 		t.Helper()
 		report := "\x1b[O"
@@ -127,12 +121,7 @@ func TestPaneFocusEventsFollowTheFocus(t *testing.T) {
 	host(first, true)
 	expect("the host terminal got focus back", "^[[I")
 
-	// Two clients show the session. The pane has focus while either host
-	// terminal has it, so it hears about the change only when the last one
-	// goes and the first one comes back.
 	second := attachIn(t, base, session, startOpts{cols: 120, rows: 40})
-	// The second client reports focus as it attaches; that report is the
-	// reattach step's subject, not this one's.
 	time.Sleep(time.Second)
 	data, _ := os.ReadFile(logPath)
 	want = string(data)

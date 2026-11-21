@@ -8,12 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The window controls as they reach the real screen: the pill and the dots, at
-// either end of the title bar, in the default glyphs and in ASCII. Each case
-// pins the cells the controls are drawn on and then presses every control on
-// its own glyph, so a layout change that moves the glyphs without moving the
-// click targets (or the other way round) fails here.
-
 type controlAction string
 
 const (
@@ -22,16 +16,13 @@ const (
 	ctlZoom     controlAction = "zoom"
 )
 
-// controlRun is one window's controls as found on screen.
 type controlRun struct {
 	row        int
-	start, end int // first and last cell of the run, inclusive
+	start, end int
 	text       string
-	at         map[controlAction]int // the column each control's glyph is on
+	at         map[controlAction]int
 }
 
-// pillMarks maps the glyph a pill control is drawn as to what it does, across
-// the default, unicode and ASCII glyphs.
 var pillMarks = map[string]controlAction{
 	"✕": ctlClose, "×": ctlClose, "X": ctlClose,
 	"□": ctlZoom, "O": ctlZoom,
@@ -41,11 +32,9 @@ var pillMarks = map[string]controlAction{
 var (
 	pillOpenCaps  = map[string]bool{"": true, "▏": true, "[": true}
 	pillCloseCaps = map[string]bool{"": true, "▕": true, "]": true}
-	// dotTriples are the three dots at rest and while hovered, where each
-	// shows the symbol of what it does.
-	dotTriples = [][3]string{{"●", "●", "●"}, {"⊗", "⊖", "⊕"}, {"o", "o", "o"}, {"x", "-", "+"}}
-	topLeft    = map[string]bool{"╭": true, "┌": true, "┏": true, "╔": true, "+": true}
-	topRight   = map[string]bool{"╮": true, "┐": true, "┓": true, "╗": true, "+": true}
+	dotTriples    = [][3]string{{"●", "●", "●"}, {"⊗", "⊖", "⊕"}, {"o", "o", "o"}, {"x", "-", "+"}}
+	topLeft       = map[string]bool{"╭": true, "┌": true, "┏": true, "╔": true, "+": true}
+	topRight      = map[string]bool{"╮": true, "┐": true, "┓": true, "╗": true, "+": true}
 )
 
 func rowCells(s tuitest.Screen, y int) []string {
@@ -61,9 +50,6 @@ func rowCells(s tuitest.Screen, y int) []string {
 	return cells
 }
 
-// findPills returns every run that opens with a pill cap, closes with one
-// within a few cells, and holds nothing but spaces and control marks. A title
-// badge wears the same caps and is left out because it holds letters.
 func findPills(s tuitest.Screen) []controlRun {
 	_, rows := s.Size()
 	var out []controlRun
@@ -98,8 +84,6 @@ func findPills(s tuitest.Screen) []controlRun {
 	return out
 }
 
-// findDots returns every run of three discs one cell apart. The dots are close,
-// minimize and zoom from left to right at either end of the bar.
 func findDots(s tuitest.Screen) []controlRun {
 	_, rows := s.Size()
 	var out []controlRun
@@ -123,8 +107,7 @@ func findDots(s tuitest.Screen) []controlRun {
 type buttonLayoutCase struct {
 	name, style, position string
 	ascii                 bool
-	// want is the run of cells the controls take, caps included.
-	want string
+	want                  string
 }
 
 var buttonLayoutCases = []buttonLayoutCase{
@@ -144,7 +127,6 @@ func (c buttonLayoutCase) find(s tuitest.Screen) []controlRun {
 	return findPills(s)
 }
 
-// waitRuns waits until exactly n windows' controls are on screen.
 func (c buttonLayoutCase) waitRuns(t *testing.T, term *tuitest.Terminal, n int, what string) []controlRun {
 	t.Helper()
 	var runs []controlRun
@@ -243,9 +225,6 @@ func TestWindowButtonLayoutOnScreen(t *testing.T) {
 				t.FailNow()
 			}
 
-			// Each press below lands on the glyph's own cell. The sequence
-			// checks itself: only two zoom presses bring the split back, and
-			// only a minimize leaves no window on screen after the close.
 			stillTwo := func(what string) {
 				t.Helper()
 				if n := countWindows(term.Screen()); n != 2 {
@@ -253,8 +232,6 @@ func TestWindowButtonLayoutOnScreen(t *testing.T) {
 				}
 			}
 
-			// Zoom: one window fills the screen, so one set of controls is
-			// left. The same control on that window puts the split back.
 			first := runs[0]
 			leftClick(t, term, first.at[ctlZoom], first.row)
 			zoomed := c.waitRuns(t, term, 1, "after pressing zoom")
@@ -267,14 +244,11 @@ func TestWindowButtonLayoutOnScreen(t *testing.T) {
 			runs = c.waitRuns(t, term, 2, "after pressing zoom again")
 			stillTwo("zoom")
 
-			// Minimize: the window leaves the screen and stays in the session.
 			first = runs[0]
 			leftClick(t, term, first.at[ctlMinimize], first.row)
 			rest := c.waitRuns(t, term, 1, "after pressing minimize")
 			stillTwo("minimize")
 
-			// Close: the window is gone from the session, and the minimized
-			// one stays off screen.
 			leftClick(t, term, rest[0].at[ctlClose], rest[0].row)
 			waitWindowCount(t, term, 1, "after pressing close")
 			c.waitRuns(t, term, 0, "after pressing close")

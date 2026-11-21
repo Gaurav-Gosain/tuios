@@ -13,26 +13,6 @@ import (
 	"time"
 )
 
-// [daemon] keep_awake = "agents" on a real daemon, read from logind: the
-// daemon must hold a systemd inhibitor lock on idle and sleep while an agent
-// pane works, and only then.
-//
-// How this could pass wrongly, written down first:
-//   - Another program, or the person's own daemon, can hold a "tuios" lock.
-//     The lock counted here is the one whose systemd-inhibit process is a
-//     child of this test's daemon, so no other holder can satisfy it.
-//   - A lock that is never released would pass "taken". Each step that
-//     should release is checked too, and the agent going idle, its pane
-//     closing and the daemon dying each release on a different path.
-//   - A daemon that died with the lock held could leave systemd-inhibit
-//     behind, now a child of init, and the parent check would no longer see
-//     it. The last step looks for any holder that names the dead daemon's
-//     reason and is not a child of a live tuios.
-//   - set-keep-awake could set the mode without saving it. The test reads
-//     config.toml after the CLI sets it.
-
-// inhibitors lists the pids of the systemd-inhibit processes that hold a lock
-// for who "tuios" whose parent is ppid.
 func inhibitors(t *testing.T, ppid int) []int {
 	t.Helper()
 	out, err := exec.Command("systemd-inhibit", "--list", "--no-pager", "--no-legend").Output()
@@ -56,13 +36,11 @@ func inhibitors(t *testing.T, ppid int) []int {
 	return pids
 }
 
-// procParent reads a process's parent pid from /proc, 0 when it is gone.
 func procParent(pid int) int {
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
 	if err != nil {
 		return 0
 	}
-	// The command name is in parentheses and may hold spaces.
 	s := string(data)
 	rest := s[strings.LastIndexByte(s, ')')+1:]
 	f := strings.Fields(rest)
@@ -73,9 +51,6 @@ func procParent(pid int) int {
 	return ppid
 }
 
-// waitInhibitors waits for want locks under ppid. status is what the daemon
-// says of its hold, printed when the wait fails: a hold the system refused
-// says why there.
 func waitInhibitors(t *testing.T, ppid, want int, why string, status func() string) []int {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -98,10 +73,6 @@ func TestKeepAwakeHoldsWhileAnAgentWorks(t *testing.T) {
 	if err := exec.Command("systemd-inhibit", "--list", "--no-pager").Run(); err != nil {
 		t.Skipf("logind does not answer here: %v", err)
 	}
-	// Listing locks is open to anyone, and taking a block lock is not: polkit
-	// refuses it to a user outside an active seat session, as on a CI runner.
-	// The daemon reports that refusal and holds nothing, so there is nothing
-	// to count here.
 	if out, err := exec.Command("systemd-inhibit", "--what=idle:sleep", "--who=tuios-e2e-probe",
 		"--why=probe", "--mode=block", "true").CombinedOutput(); err != nil {
 		t.Skipf("logind refuses an inhibitor lock to this user: %v: %s", err, strings.TrimSpace(string(out)))
@@ -156,7 +127,6 @@ func TestKeepAwakeHoldsWhileAnAgentWorks(t *testing.T) {
 	cli("close-window", second, "-s", "awake")
 	step("its pane closed: released", waitInhibitors(t, pid, 0, "the working pane closed", status))
 
-	// The mode from the CLI applies at once and is saved.
 	cli("keep-awake", "on")
 	step("keep-awake on, no agent works", waitInhibitors(t, pid, 1, "keep_awake = on", status))
 	if data, err := os.ReadFile(cfg); err != nil || !strings.Contains(string(data), `keep_awake = "on"`) {
@@ -165,8 +135,6 @@ func TestKeepAwakeHoldsWhileAnAgentWorks(t *testing.T) {
 	cli("keep-awake", "off")
 	step("keep-awake off: released", waitInhibitors(t, pid, 0, "keep_awake = off", status))
 
-	// A daemon that dies holds nothing: the holder reads a pipe only the
-	// daemon writes, and it ends when the daemon goes.
 	cli("keep-awake", "on")
 	held := waitInhibitors(t, pid, 1, "keep_awake = on again", status)
 	step("keep-awake on again", held)

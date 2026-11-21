@@ -10,10 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// kittyProbeQuery is how a program learns whether the terminal draws kitty
-// graphics, as kitty's documentation describes it: a query, then DA1, which
-// every terminal answers. A terminal without kitty graphics answers only the
-// DA1. DSR 5 after it marks the end of the replies.
 const kittyProbeQuery = `\033_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\033\\\033[c\033[5n`
 
 // TestKittyQueryFollowsTheHostTerminal sends the kitty graphics probe from a
@@ -77,9 +73,6 @@ func TestKittyQueryFollowsTheHostTerminal(t *testing.T) {
 	}
 }
 
-// startPlainPane boots tuios on a host terminal that draws neither kitty
-// graphics nor sixel, opens one pane and leaves it in terminal mode at a
-// shell prompt.
 func startPlainPane(t *testing.T, daemon bool) *tuitest.Terminal {
 	t.Helper()
 	term, base := start(t, startOpts{
@@ -97,16 +90,11 @@ func startPlainPane(t *testing.T, daemon bool) *tuitest.Terminal {
 	return term
 }
 
-// probePane writes query (printf syntax) from the focused pane's shell in raw
-// mode and returns every byte the pane read back.
 func probePane(t *testing.T, term *tuitest.Terminal, query string) string {
 	t.Helper()
 	dir := t.TempDir()
 	out := filepath.Join(dir, "reply")
 	script := filepath.Join(dir, "probe.sh")
-	// Raw mode so the reply reaches the file unchanged and unechoed. With
-	// min 0 time 10 a read returns nothing after a second of silence, so cat
-	// collects every chunk and then sees end of file.
 	body := "stty raw -echo min 0 time 10\n" +
 		"printf '" + query + "'\n" +
 		"cat > " + out + "\n" +

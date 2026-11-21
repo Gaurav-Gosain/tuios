@@ -28,8 +28,6 @@ func TestStartupTilingOnADaemonBuiltSession(t *testing.T) {
 			}
 			term := attachIn(t, base, "startup", startOpts{cols: 120, rows: 40})
 
-			// The daemon opened the session's window already, so the option that
-			// opens one has nothing to do: one pane, not two.
 			rects := waitForSettledGeometryIn(t, base, "startup", 1)
 			r := rects[0]
 
@@ -41,10 +39,6 @@ func TestStartupTilingOnADaemonBuiltSession(t *testing.T) {
 				t.Errorf("the session is %q, not tiling, in %s mode", info.TilingMode, mode)
 			}
 
-			// A tiled pane starts at the top left of the layout box and fills its
-			// height. The floating box a pane keeps when nothing tiles it is half
-			// the screen and inset from both edges, which is what the bug looked
-			// like on screen.
 			if r.X != 0 || r.Y != 0 || r.Height < 30 {
 				t.Errorf("the pane was never tiled in %s mode: (%d,%d) %dx%d",
 					mode, r.X, r.Y, r.Width, r.Height)

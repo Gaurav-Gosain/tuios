@@ -14,8 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// newerVersion is the version newerTuios is stamped with, newer than any
-// release and than a source build.
 const newerVersion = "v99.1.0"
 
 // TestAttachedClientRunsTheUpgradedBuild attaches a real client, with an
@@ -122,8 +120,6 @@ func TestAttachedClientRunsTheUpgradedBuild(t *testing.T) {
 	}
 }
 
-// processCommand is the command line pid runs, its arguments joined by
-// spaces.
 func processCommand(t *testing.T, pid int) string {
 	t.Helper()
 	if runtime.GOOS == "linux" {
@@ -140,8 +136,6 @@ func processCommand(t *testing.T, pid int) string {
 	return strings.TrimSpace(string(out))
 }
 
-// processExe is the file pid's image was loaded from, where the system says
-// it (Linux), and empty elsewhere.
 func processExe(pid int) string {
 	exe, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
 	if err != nil {
@@ -154,13 +148,9 @@ var (
 	newerOnce sync.Once
 	newerBin  string
 	newerErr  error
-	// newerDir holds that build, and runE2E removes it when the run ends,
-	// as it does otherProtocolDir.
-	newerDir string
+	newerDir  string
 )
 
-// newerTuios builds this tree once per run stamped newerVersion, as a
-// release after this one would be.
 func newerTuios(t *testing.T) string {
 	t.Helper()
 	newerOnce.Do(func() {
@@ -188,7 +178,6 @@ func newerTuios(t *testing.T) string {
 	return newerBin
 }
 
-// buildError is a go build that failed, with what it printed.
 type buildError struct {
 	err error
 	out string

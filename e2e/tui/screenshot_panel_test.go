@@ -11,25 +11,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The two reports about the preview panel after a capture: the picture does not
-// survive the host terminal being resized, and it is not centred.
-//
-// Every expected value here is read off the drawn screen, from the panel's own
-// footer rule and its own metadata line, and compared against the placement the
-// client sent to the host. Nothing asks the client's geometry helpers what the
-// answer should be. That mistake has been made twice on this feature: an
-// assertion that gets its expected value from the call under test agrees with a
-// wrong answer as readily as with a right one.
-
-// shotPlaceRE matches one preview placement together with the cursor move that
-// positions it, which is how appendKittyPlaceBox writes it.
 var shotPlaceRE = regexp.MustCompile(`\x1b\[(\d+);(\d+)H\x1b_Ga=p,i=(\d+),p=(\d+),c=(\d+),r=(\d+)`)
 
-// shotPlaceAt is one placement of the preview picture: where on the host screen
-// it was drawn and how many cells it covers.
 type shotPlaceAt struct{ x, y, cols, rows int }
 
-// parseShotPlacesAt returns every preview placement in a host stream, in order.
 func parseShotPlacesAt(stream []byte) []shotPlaceAt {
 	var out []shotPlaceAt
 	for _, m := range shotPlaceRE.FindAllSubmatch(stream, -1) {
@@ -40,27 +25,11 @@ func parseShotPlacesAt(stream []byte) []shotPlaceAt {
 		x, _ := strconv.Atoi(string(m[2]))
 		c, _ := strconv.Atoi(string(m[5]))
 		r, _ := strconv.Atoi(string(m[6]))
-		// The escape is one-based and every other number here is not.
 		out = append(out, shotPlaceAt{x: x - 1, y: y - 1, cols: c, rows: r})
 	}
 	return out
 }
 
-// panelRule finds the panel's footer rule at or below fromRow and returns the
-// row it is on, the column it starts at and how many cells it spans.
-//
-// The rule is the panel's own drawing of its own width, which is why the
-// assertions below measure against it: it comes from the overlay package, not
-// from anything the picture's geometry is computed with. The dock draws a
-// separator out of the same character but mixes a heavy rune into it and runs
-// the whole screen width, so a run of nothing but the light rune, narrower than
-// the screen, is the panel's.
-//
-// It reads a run inside the row rather than the whole row. The row the rule is
-// on also carries whatever the panel is drawn over, and a tiled pane, which is
-// what a session comes up as, puts its own side borders at both ends of every
-// row. Requiring the trimmed row to be nothing but the light rune found the
-// rule only while the panel floated over empty ground.
 func panelRule(t *testing.T, s tuitest.Screen, fromRow, screenWidth int) (row, col, width int) {
 	t.Helper()
 	for y := fromRow; y < fromRow+60; y++ {
@@ -72,10 +41,6 @@ func panelRule(t *testing.T, s tuitest.Screen, fromRow, screenWidth int) (row, c
 	return 0, 0, 0
 }
 
-// longestRuleRun returns where the longest run of the light horizontal rune
-// starts on a row and how long it is, ignoring any run that a box corner opens
-// or closes. That last part is what tells the panel's rule from a pane's own
-// top or bottom border, which is drawn out of the same rune.
 func longestRuleRun(line string) (col, width int) {
 	const rule = '─'
 	opens, closes := "╭╰┌└├┬┴┼", "╮╯┐┘┤┬┴┼"
@@ -100,8 +65,6 @@ func longestRuleRun(line string) (col, width int) {
 	return bestAt, best
 }
 
-// openShotPanel is the whole setup: a graphics client with a known cell size, a
-// capture, and the panel up with its picture on the host.
 func openShotPanel(t *testing.T, cols, rows int, capture func(*tuitest.Terminal)) (*tuitest.Terminal, *hostStream) {
 	t.Helper()
 	stream := &hostStream{}
@@ -133,8 +96,6 @@ func openShotPanel(t *testing.T, cols, rows int, capture func(*tuitest.Terminal)
 	}, uiTimeout); err != nil {
 		t.Fatalf("the preview never placed its picture: %v\n%s", err, term.Snapshot())
 	}
-	// The panel settles: the file lands, the status line grows a row and the
-	// picture is placed again below it.
 	time.Sleep(900 * time.Millisecond)
 	return term, stream
 }
@@ -188,8 +149,6 @@ func TestScreenshotPreviewSurvivesAHostResize(t *testing.T) {
 	places := parseShotPlacesAt(stream.bytes())
 	t.Logf("after the resize: %d uploads, %d placements, last %+v",
 		len(uploads), len(places), places[len(places)-1])
-	// The picture that is put back has to be this capture's, not a fresh render
-	// of something else.
 	last := uploads[len(uploads)-1].png
 	if len(last) == 0 {
 		t.Fatalf("the upload after the resize is not a PNG")
@@ -238,8 +197,6 @@ func TestScreenshotPreviewCentresThePicture(t *testing.T) {
 		t.Fatalf("the picture is not inside the panel: margins left %d right %d\n%s",
 			left, right, term.Snapshot())
 	}
-	// An odd number of spare columns cannot be split evenly, so one cell of
-	// difference is all a cell box can promise.
 	if diff := left - right; diff > 1 || diff < -1 {
 		t.Errorf("the picture has %d columns to its left and %d to its right, so it is pushed to "+
 			"the %s of the panel instead of sitting in the middle of it",
@@ -265,8 +222,6 @@ func TestScreenshotPreviewCentresThePicture(t *testing.T) {
 // is 12 rows of nothing below the picture. This failed by those 12 rows.
 func TestScreenshotPreviewBodyEndsWithThePicture(t *testing.T) {
 	term, stream := openShotPanel(t, 120, 40, func(term *tuitest.Terminal) {
-		// A wide, short rectangle: far wider than it is tall, so the picture
-		// letterboxes to a handful of rows.
 		mouseDrag(t, term, 4, 10, 114, 14, tuitest.MouseLeft, 0)
 	})
 
@@ -282,10 +237,6 @@ func TestScreenshotPreviewBodyEndsWithThePicture(t *testing.T) {
 			"%d rows of the panel below the picture are neither picture nor anything else",
 			pic.y+pic.rows-1, ruleRow-1, ruleRow-wantRule)
 	}
-	// Nothing of the capture is drawn beside the picture either. Only the
-	// panel's own columns are read: the rows it covers run on past both of its
-	// edges, and what is out there belongs to whatever the panel is drawn over,
-	// which for a tiled session is a pane and its two side borders.
 	s := term.Screen()
 	for y := pic.y; y < ruleRow; y++ {
 		if body := strings.TrimSpace(cropLine(s.Line(y), ruleCol, ruleCol+ruleWidth)); body != "" {
@@ -337,8 +288,6 @@ func TestScreenshotPictureHasTheTerminalsOwnAspect(t *testing.T) {
 	setShotOption(t, term, base, "screenshot.directory", dir)
 	setShotOption(t, term, base, "screenshot.format", "png")
 	setShotOption(t, term, base, "screenshot.scale", "1")
-	// No frame, so the picture is the grid and nothing else, and its own size
-	// divided by the grid's is the cell the renderer drew with.
 	setShotOption(t, term, base, "screenshot.frame", "none")
 	fillPane(t, term, "ROW")
 
@@ -359,8 +308,6 @@ func TestScreenshotPictureHasTheTerminalsOwnAspect(t *testing.T) {
 	}
 	time.Sleep(600 * time.Millisecond)
 
-	// The capture's size in cells comes off the panel's own header line, which
-	// the panel writes from the grid it captured.
 	capCols, capRows := captureCells(t, term)
 	uploads, _ := parseShotGraphics(stream.bytes())
 	pngW, pngH := pngSize(uploads[len(uploads)-1].png)
@@ -368,8 +315,6 @@ func TestScreenshotPictureHasTheTerminalsOwnAspect(t *testing.T) {
 		t.Fatalf("the upload is not a PNG")
 	}
 
-	// The host's cell is what this test told the client it is, through the
-	// environment, before the client ever started.
 	want := float64(shotCellW) / float64(shotCellH)
 	got := (float64(pngW) / float64(capCols)) / (float64(pngH) / float64(capRows))
 	t.Logf("capture %dx%d cells; PNG %dx%d px; the picture's cell is %.3f by %.3f px, ratio %.4f; "+
@@ -378,10 +323,6 @@ func TestScreenshotPictureHasTheTerminalsOwnAspect(t *testing.T) {
 		float64(pngW)/float64(capCols), float64(pngH)/float64(capRows), got,
 		shotCellW, shotCellH, want, 100*(got-want)/want)
 
-	// One percent covers the rounding of the raster to whole pixels and of the
-	// preview downscale to whole pixels, which together are under a tenth of a
-	// percent here. It does not cover a cell taken from a font instead of from
-	// the terminal, which is 3.5 percent on this harness and 11 on a real kitty.
 	if got < want*0.99 || got > want*1.01 {
 		word := "narrower"
 		if got > want {
@@ -394,8 +335,6 @@ func TestScreenshotPictureHasTheTerminalsOwnAspect(t *testing.T) {
 	alive(t, term, "after an aspect check")
 }
 
-// captureCellsRE reads the capture's size in cells out of the panel's own header
-// line, which is the panel reporting the grid it captured.
 var captureCellsRE = regexp.MustCompile(`(\d+)x(\d+) cells`)
 
 func captureCells(t *testing.T, term *tuitest.Terminal) (cols, rows int) {

@@ -17,8 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// hostStream records the raw PTY traffic with phase markers written into it, so
-// a graphics command can be attributed to what the pane beside it was doing.
 type hostStream struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -52,9 +50,6 @@ var (
 	markRE      = regexp.MustCompile(phaseMark + `([a-z0-9-]+)\x00\x00`)
 )
 
-// placementsByPhase returns, per phase, the distinct placements emitted in it.
-// A placement is its cursor position plus its parameters, which together are the
-// whole of what the host is told about where an image goes and how big it is.
 func placementsByPhase(stream []byte) map[string][]string {
 	out := map[string][]string{}
 	prevEnd, prevName := 0, "boot"
@@ -77,8 +72,6 @@ func placementsByPhase(stream []byte) map[string][]string {
 	return out
 }
 
-// kittyFrameFile writes one kitty direct-transmission frame (a=T, reused image
-// id, zlib RGBA), the shape terminal-browser emits for every rendered frame.
 func kittyFrameFile(t *testing.T, dir string, wpx, hpx int) string {
 	t.Helper()
 	var z bytes.Buffer
@@ -134,24 +127,15 @@ func TestKittyPlacementSurvivesNeighbourOutput(t *testing.T) {
 	enableTiling(t, term)
 	waitWindowCount(t, term, 2, "two tiled panes")
 
-	// The image pane is the right one, as in the report.
 	frame := kittyFrameFile(t, t.TempDir(), 522, 720)
 	clickToType(t, term, 90, 12)
 	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
-	// The loops run in a shell without job control. The pane's interactive
-	// shell gives each command it starts its own process group, and bash
-	// sometimes fails that and says "sh: child setpgid (...): Operation not
-	// permitted" inside the loop. That line moves the cursor, and with it the
-	// image, down the pane, which is a real change of placement that has
-	// nothing to do with the neighbour. exec replaces the prompt's shell with
-	// one that only runs the loop and never touches process groups.
 	typeLine(t, term, noJobControl("while :; do cat "+frame+"; sleep 0.05; done"))
 	leaveTerminalMode(t, term)
 
 	stream.mark("image-only")
 	time.Sleep(3 * time.Second)
 
-	// The neighbour starts printing.
 	clickToType(t, term, 20, 12)
 	runInShell(t, term, "echo TEXT\"\"PANE", "TEXTPANE", shellTimeout)
 	typeLine(t, term, noJobControl("while :; do seq 1 60; sleep 0.05; done"))
@@ -160,7 +144,6 @@ func TestKittyPlacementSurvivesNeighbourOutput(t *testing.T) {
 	stream.mark("neighbour-busy")
 	time.Sleep(4 * time.Second)
 
-	// The repair in the report: click back into the image pane.
 	mouseClick(t, term, 90, 12, tuitest.MouseLeft, 0)
 	stream.mark("after-click")
 	time.Sleep(3 * time.Second)
@@ -184,7 +167,7 @@ func TestKittyPlacementSurvivesNeighbourOutput(t *testing.T) {
 	for _, phase := range []string{"neighbour-busy", "after-click"} {
 		got := byPhase[phase]
 		if len(got) == 0 {
-			continue // no frame reached the host in that window; nothing to compare
+			continue
 		}
 		if len(got) != 1 || got[0] != quiet[0] {
 			t.Fatalf("placement changed in phase %q with no geometry change:\n got=%v\nwant=%v",
@@ -193,16 +176,10 @@ func TestKittyPlacementSurvivesNeighbourOutput(t *testing.T) {
 	}
 }
 
-// noJobControl wraps an endless loop so it runs in a non-interactive shell that
-// replaces the pane's own, where no command is put in a process group of its
-// own and the shell has no job control messages to print. The loop must not
-// contain a single quote.
 func noJobControl(loop string) string {
 	return "exec sh -c '" + loop + "'"
 }
 
-// typeLine types a command and runs it without waiting for output, for the
-// endless loops these panes are given.
 func typeLine(t *testing.T, term *tuitest.Terminal, cmd string) {
 	t.Helper()
 	if err := term.SendKeys(cmd); err != nil {

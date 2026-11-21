@@ -35,10 +35,6 @@ import (
 // Each case raises an Edit, which the hook only reports, or a Bash cp, which
 // the hook holds. Negative controls are in NEGATIVE_CONTROLS.md.
 func TestRiskRootIsTheStartFolder(t *testing.T) {
-	// The folders are at a short path with a short name: t.TempDir() carries
-	// the test's name and a random suffix, a run the line redacts to "***",
-	// and a line that hides part of its path cannot be read as outside. They
-	// are under /tmp, since the temp folder on macOS is long by itself.
 	up, err := os.MkdirTemp("", "r")
 	if err != nil {
 		t.Fatal(err)
@@ -47,8 +43,6 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 	if resolved, err := filepath.EvalSymlinks(up); err == nil {
 		up = resolved
 	}
-	// The isolation root is short too. The harness gives the daemon and
-	// the panes its HOME (xdgKeys), so that is the home folder here.
 	base, err := os.MkdirTemp("", "b")
 	if err != nil {
 		t.Fatal(err)
@@ -75,8 +69,6 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 	if err := os.MkdirAll(start, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A start folder reached through a link, as /home is a link to
-	// /var/home on Fedora Silverblue.
 	real := filepath.Join(up, "real")
 	link := filepath.Join(up, "link")
 	if err := os.MkdirAll(real, 0o755); err != nil {
@@ -85,11 +77,7 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 	if err := os.Symlink(real, link); err != nil {
 		t.Fatal(err)
 	}
-	// Outside the start folder, inside the folder above it, and not under
-	// any system folder, so only the outside-the-worktree rule can mark it.
 	outsidePath := filepath.Join(up, "elsewhere", "notes.txt")
-	// A linked worktree of a repository, at a short path, that tuios did not
-	// make: the daemon detects it from the pane's folder.
 	repo := testutil.GitRepo(t)
 	linked := filepath.Join(up, "wt")
 	testutil.Git(t, repo, "worktree", "add", "-q", "-b", "elsewhere", linked)
@@ -98,19 +86,12 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 
 	type pane struct {
 		session, window, startIn, moveTo, tool, target string
-		// announce is the folder the pane's OSC 7 names, when it is not
-		// moveTo: the pane says one thing and its process is in another.
-		announce string
-		// harnessCwd is the cwd the hook payload carries, "" for none.
-		harnessCwd string
-		// agent says an agent starts in moveTo, through a hook that names
-		// it, before the approval. agentMovesTo is where that agent goes
-		// after, with a hook that names the new folder.
-		agent        bool
-		agentMovesTo string
-		detect       bool
-		// safe says the write stays inside the root and must not be marked.
-		safe bool
+		announce                                       string
+		harnessCwd                                     string
+		agent                                          bool
+		agentMovesTo                                   string
+		detect                                         bool
+		safe                                           bool
 	}
 	cases := []*pane{
 		{session: "edit-root", moveTo: "/", tool: "Edit", target: outsidePath},
@@ -121,21 +102,15 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 		{session: "bash-wt", moveTo: linked, tool: "Bash", target: inLinked, detect: true},
 		{session: "edit-home", startIn: home, moveTo: home, tool: "Edit", target: inHome},
 		{session: "bash-home", startIn: home, moveTo: home, tool: "Bash", target: inHome},
-		// A relative path is read from where the call runs: the pane's own
-		// process, or the cwd the harness sends with a held call.
 		{session: "edit-rel-root", moveTo: "/", tool: "Edit", target: "etc/notes.txt"},
 		{session: "bash-rel-root", moveTo: "/", tool: "Bash", target: "etc/notes.txt"},
 		{session: "bash-rel-cwd", moveTo: start, tool: "Bash", target: "notes-copy.txt", harnessCwd: "/"},
 		{session: "bash-rel-osc7", moveTo: "/", announce: start, tool: "Bash", target: "notes-copy.txt"},
 		{session: "edit-rel-in", moveTo: start, tool: "Edit", target: "notes-copy.txt", safe: true},
 		{session: "bash-rel-in", moveTo: start, tool: "Bash", target: "notes-copy.txt", harnessCwd: start, safe: true},
-		// A start folder through a link: a write in it is inside, written
-		// through the link or resolved.
 		{session: "edit-link-real", startIn: link, moveTo: link, tool: "Edit", target: filepath.Join(real, "main.go"), safe: true},
 		{session: "edit-link-link", startIn: link, moveTo: link, tool: "Edit", target: filepath.Join(link, "main.go"), safe: true},
 		{session: "bash-link-real", startIn: link, moveTo: link, tool: "Bash", target: filepath.Join(real, "main.go"), safe: true},
-		// tuios started in the home folder, then cd proj && claude: the
-		// agent's start folder is the root.
 		{session: "agent-in", startIn: home, moveTo: proj, tool: "Edit", target: filepath.Join(proj, "main.go"), agent: true, safe: true},
 		{session: "agent-in-bash", startIn: home, moveTo: proj, tool: "Bash", target: filepath.Join(proj, "main.go"), agent: true, safe: true},
 		{session: "agent-out", startIn: home, moveTo: proj, tool: "Edit", target: inHome, agent: true},
@@ -149,26 +124,20 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 		if c.announce == "" {
 			c.announce = c.moveTo
 		}
-		// PWD names the folder as the test wrote it, so a link stays a
-		// link in the folder tuios records.
 		if out, err := tuiosCLIInDir(t, base, c.startIn, []string{"PWD=" + c.startIn}, "new", c.session, "--detach"); err != nil {
 			t.Fatalf("create %s: %v\n%s", c.session, err, out)
 		}
 		c.window = onlyWindow(t, base, c.session)
 		typeInPane(t, base, c.session, c.window, "cd "+c.moveTo+" && printf '\\033]7;file://localhost"+c.announce+"\\007'")
 	}
-	// Precondition: the daemon reads the new folder as each pane's folder.
 	for _, c := range cases {
 		waitWindowCwd(t, base, c.session, c.window, c.announce)
 	}
-	// Precondition: the daemon detects the linked worktree as the session's
-	// worktree. It looks on a save, which a change of state brings.
 	for _, c := range cases {
 		if c.detect {
 			waitDetectedWorktree(t, base, c.session, linked)
 		}
 	}
-	// The agents start, and some move on.
 	for _, c := range cases {
 		if !c.agent {
 			continue
@@ -183,7 +152,6 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 
 	for _, c := range cases {
 		if c.tool == "Edit" {
-			// The hook reports the pane blocked and exits.
 			fields := map[string]any{
 				"hook_event_name": "PermissionRequest",
 				"tool_name":       "Edit",
@@ -195,7 +163,6 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 			fireClaudeHook(t, base, c.session, fields)
 			continue
 		}
-		// The hook holds the pane's prompt until it is answered.
 		startHeldBashHook(t, base, c.session, "cp notes.txt "+c.target, c.harnessCwd)
 	}
 
@@ -214,8 +181,6 @@ func TestRiskRootIsTheStartFolder(t *testing.T) {
 	saveRiskItems(t, base, "risk-root-start-folder-items.json")
 }
 
-// fireClaudeHook runs Claude Code's hook for an event in window 0 of
-// session, with the payload fields given beside the session id.
 func fireClaudeHook(t *testing.T, base, session string, fields map[string]any) {
 	t.Helper()
 	fields["session_id"] = "e2e-" + session
@@ -235,9 +200,6 @@ func fireClaudeHook(t *testing.T, base, session string, fields map[string]any) {
 	}
 }
 
-// startHeldBashHook runs Claude Code's PermissionRequest hook for a Bash call
-// in window 0 of session, in the background. The hook holds the prompt; the
-// test's cleanup ends it.
 func startHeldBashHook(t *testing.T, base, session, command, cwd string) {
 	t.Helper()
 	body := map[string]any{
@@ -274,7 +236,6 @@ func startHeldBashHook(t *testing.T, base, session, command, cwd string) {
 	})
 }
 
-// onlyWindow is the id of a session's one window.
 func onlyWindow(t *testing.T, base, session string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", session, "--json")
@@ -292,7 +253,6 @@ func onlyWindow(t *testing.T, base, session string) string {
 	return listing.Windows[0].WindowID
 }
 
-// waitWindowCwd waits until list-windows reports want as the window's folder.
 func waitWindowCwd(t *testing.T, base, session, window, want string) {
 	t.Helper()
 	var out string
@@ -317,8 +277,6 @@ func waitWindowCwd(t *testing.T, base, session, window, want string) {
 	t.Fatalf("precondition: %s never reported %s as its folder:\n%s", session, want, out)
 }
 
-// waitHeldRiskItem waits until session has an approval item the daemon holds
-// (it carries a request id), so its risk is the hold's.
 func waitHeldRiskItem(t *testing.T, base, session string) riskItem {
 	t.Helper()
 	var out string
@@ -344,9 +302,6 @@ func waitHeldRiskItem(t *testing.T, base, session string) riskItem {
 	return riskItem{}
 }
 
-// waitDetectedWorktree waits until worktree ls reports path as the session's
-// worktree, not one tuios made. A save is when the daemon looks, and only a
-// change of state brings one soon, so each try marks the pane idle.
 func waitDetectedWorktree(t *testing.T, base, session, path string) {
 	t.Helper()
 	var out string

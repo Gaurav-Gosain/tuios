@@ -39,8 +39,6 @@ func TestLayoutTemplateSaveAndLoadInTheDaemon(t *testing.T) {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		// A pane reports its folder with symlinks resolved (/private/var on
-		// macOS), so compare against the resolved path.
 		if r, err := filepath.EvalSymlinks(d); err == nil {
 			d = r
 		}

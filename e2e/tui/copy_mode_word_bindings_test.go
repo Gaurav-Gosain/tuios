@@ -60,8 +60,6 @@ func TestCopyModeWordMotionBindings(t *testing.T) {
 				for _, key := range []any{right, left} {
 					at("gamma")
 					from := len(clipboardWrites(out))
-					// The yank acknowledges the key; no sleep can mistake an
-					// unprocessed key for a disabled binding.
 					sendEach(t, term, "v", key, "y")
 					if got := rawWrite(t, term, out, from, "unbound word motion"); got != "g" {
 						t.Fatalf("unbound key %v extended selection: copied %q, want g", key, got)

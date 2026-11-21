@@ -73,7 +73,6 @@ func TestPaneViewReportsTheAgentState(t *testing.T) {
 				t.Fatalf("ASSERTION: the pane's needs_input never reached the terminal:\n%q", ft.output())
 			}
 
-			// The pane's own report must not pass through.
 			if out, err := tuiosCLI(t, base, "send-text", "-s", "pvs", "-w", win,
 				`printf '\033]7501;state=working:id=ev''il:app=rawapp\033\\'; echo RAW-$((1+1))-SENT`+"\n"); err != nil {
 				t.Fatalf("send-text: %v\n%s", err, out)
@@ -85,7 +84,6 @@ func TestPaneViewReportsTheAgentState(t *testing.T) {
 				t.Fatalf("ASSERTION: the pane's own OSC 7501 reached the terminal:\n%q", ft.output())
 			}
 
-			// No state: the record is cleared.
 			setState("none")
 			clear := regexp.MustCompile(`\x1b\]7501;state=clear\x1b\\`)
 			if _, ok := ft.waitFor(clear, uiTimeout); !ok {
@@ -93,7 +91,6 @@ func TestPaneViewReportsTheAgentState(t *testing.T) {
 			}
 			clears := func() int { return len(clear.FindAllString(ft.output(), -1)) }
 
-			// A new state, then the block closes: a clear follows the record.
 			setState("working", "--message", "Deploying")
 			if _, ok := ft.waitFor(regexp.MustCompile(`\x1b\]7501;state=working:[^\x1b]*msg=`+regexp.QuoteMeta(b64e("Deploying"))), uiTimeout); !ok {
 				t.Fatalf("ASSERTION: the working state never reached the terminal:\n%q", ft.output())

@@ -9,13 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The backgrounds, set where a user sets them: the settings panel's
-// Backgrounds tab and its colour picker. One row paints every surface and one
-// override repaints a single surface, and every assertion is a cell colour
-// read off the terminal.
-
-// openBackgrounds opens the settings panel on the Backgrounds tab, which is
-// the one after Appearance.
 func openBackgrounds(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	openSettings(t, term)
@@ -27,8 +20,6 @@ func openBackgrounds(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// pickHex opens the picker on a colour row, types a hex into it and applies
-// it, then waits for the row to carry the value.
 func pickHex(t *testing.T, term *tuitest.Terminal, row, hex string) {
 	t.Helper()
 	clickSettingsRow(t, term, row)
@@ -44,8 +35,6 @@ func pickHex(t *testing.T, term *tuitest.Terminal, row, hex string) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	// The picker's own field shows the hex before enter lands, so what is
-	// waited for is the row itself carrying it, which only an apply does.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		y := findRow(s, row)
 		return y >= 0 && strings.Contains(s.Line(y), "#"+hex)
@@ -54,7 +43,6 @@ func pickHex(t *testing.T, term *tuitest.Terminal, row, hex string) {
 	}
 }
 
-// closeBackgrounds closes the settings panel and waits until it is gone.
 func closeBackgrounds(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Esc); err != nil {
@@ -116,9 +104,6 @@ func TestBackgroundsFromTheSettingsPanel(t *testing.T) {
 		t.Log("no border glyph on the marker row, so the border was not checked")
 	}
 
-	// Every cell on the screen is painted now, by All surfaces or by the
-	// dock's own colour, or keeps a colour of its own. And the dock's colour
-	// is on the dock's rows only: no row carries both.
 	lines := strings.Count(term.Snapshot(), "\n")
 	dockRows := 0
 	var problems []string

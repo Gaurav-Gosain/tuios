@@ -11,33 +11,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The review overlay's diff at each colour depth a terminal can have, on a
-// dark terminal and under a light theme, in the unified and the split view.
-//
-// Below truecolor the diff's tints used to be stepped down one colour at a
-// time by the frame writer, and an added line and a removed line both landed
-// on the same grey (239 at 256 colours, bright black at 16): only the sign
-// column still told them apart. The diff is designed per depth instead:
-//
-//   - truecolor: the designed tints, an added and a removed line on grounds of
-//     their own.
-//   - 256 colours: fixed palette entries, the ones Codex uses. On a dark ground
-//     an added line is 22 and a removed one 52, with the changed words one step
-//     brighter on 28 and 88; on a light ground 194 and 224, with the words on
-//     157 and 217.
-//   - 16 colours: no line grounds at all. The line numbers are in green for an
-//     added line and red for a removed one, the changed words are bold and
-//     underlined, and the cursor is reverse video on the gutter only, so the
-//     code keeps its colours and its marks under it.
-//
-// Each frame is saved as text, as styled text and as a PNG drawn by tuios's
-// own renderer (tuios.dev/shot), with the palette a terminal of that kind
-// paints the sixteen slots with.
-
-// reviewDepthBase is the file the fan's base commit holds; reviewDepthNew is
-// what the second attempt changes it to. Between them: a removed line with no
-// counterpart (the const), a changed line whose changed words are marked (the
-// return), and an added line with no counterpart (the second Println).
 const reviewDepthBase = `package main
 
 import "fmt"
@@ -67,24 +40,13 @@ func main() {
 }
 `
 
-// reviewDiffCells are the cells of one frame of the diff the checks read.
 type reviewDiffCells struct {
-	// del and add are a code cell of the removed and the added line that have
-	// no counterpart.
-	del, add tuitest.Cell
-	// delNum and addNum are a digit of each of those lines' numbers.
-	delNum, addNum tuitest.Cell
-	// chgDelLine and chgAddLine are a cell of the changed line's old and new
-	// text outside the changed words ("return"); chgDelWord and chgAddWord a
-	// cell inside them ("hello", "good").
+	del, add                                       tuitest.Cell
+	delNum, addNum                                 tuitest.Cell
 	chgDelLine, chgAddLine, chgDelWord, chgAddWord tuitest.Cell
-	// ctx is a code cell of a context line.
-	ctx tuitest.Cell
+	ctx                                            tuitest.Cell
 }
 
-// readReviewDiff finds the cells reviewDiffCells names. Every line is
-// found by its own text, so a stale frame or a different layout fails here
-// rather than passing on the wrong cells.
 func readReviewDiff(t *testing.T, term *tuitest.Terminal) reviewDiffCells {
 	t.Helper()
 	s := term.Screen()
@@ -112,9 +74,6 @@ func readReviewDiff(t *testing.T, term *tuitest.Terminal) reviewDiffCells {
 	return d
 }
 
-// reviewLineNumber is the last digit of the line number in front of the line
-// whose code starts with text: left of the code, past the blanks, the sign,
-// and the blanks between the sign and the number.
 func reviewLineNumber(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, text string) tuitest.Cell {
 	t.Helper()
 	row, col, ok := textAt(s, text, 0)
@@ -201,8 +160,6 @@ func TestReviewDiffAtEveryColourDepth(t *testing.T) {
 	}
 }
 
-// reviewDiff256 are the palette entries the diff takes at 256 colours: the
-// removed line, the added line, the removed words and the added words.
 var reviewDiff256 = map[string][4]uint8{
 	"dark":  {52, 22, 88, 28},
 	"light": {224, 194, 217, 157},
@@ -254,9 +211,6 @@ func checkReviewDiff(t *testing.T, term *tuitest.Terminal, look, depth, view str
 			fail("a changed line's ground outside its words (%+v, %+v) is not its kind's (%+v, %+v)",
 				c.chgDelLine.Bg, c.chgAddLine.Bg, c.del.Bg, c.add.Bg)
 		}
-		// The numbers carry the kind's colour too. A red placed on the
-		// palette by nearest match can land on a grey, which is what
-		// colorprofile did with Catppuccin Latte's red.
 		for name, cell := range map[string]tuitest.Cell{"removed": c.delNum, "added": c.addNum} {
 			if cell.Fg.Kind != tuitest.ColorIndexed || grey256(cell.Fg.Index) {
 				fail("the %s line's number is drawn in %+v, a grey or not a palette entry", name, cell.Fg)
@@ -281,8 +235,6 @@ func checkReviewDiff(t *testing.T, term *tuitest.Terminal, look, depth, view str
 	}
 }
 
-// grey256 reports whether xterm palette entry i is a grey: the grey ramp, or
-// a cube entry with its three channels equal.
 func grey256(i uint8) bool {
 	if i >= 232 {
 		return true
@@ -294,9 +246,6 @@ func grey256(i uint8) bool {
 	return v/36 == v/6%6 && v/6%6 == v%6
 }
 
-// checkReviewCursor16 moves the diff's cursor onto the new side of the
-// changed line and holds it to the 16-colour cursor: the line number reversed,
-// the code under it neither reversed nor stripped of its marks.
 func checkReviewCursor16(t *testing.T, term *tuitest.Terminal, host *shot.Palette, dir string) {
 	t.Helper()
 	onLine := func(s tuitest.Screen) bool {

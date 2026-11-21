@@ -14,23 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The picture-in-picture view (toggle_pip, p in window mode, and tuios pip)
-// driven through a real PTY.
-//
-// How these could pass wrongly, written down first:
-//   - The box found could be a pane's own border. It is found by its exact
-//     size, 40 by 12 with the name on its top edge, and the panes here are
-//     60 wide.
-//   - The ticks in the box could be the pane's own output showing through.
-//     The box sits over columns the pane's short lines never reach.
-//   - "Live" could be one frame that happened to be current. The box has to
-//     show a tick that moves on, and one within a few ticks of the pane.
-//   - The cursor check could look only at the moments the test chose. A
-//     sampler reads the screen every 40 ms for the whole test.
-//   - A click could focus the pane through the tile under the box. The pane
-//     the box shows is not under the box when it is clicked.
-
-// pipBox is the view's box on the screen, in cells, inclusive of the border.
 type pipBox struct {
 	x0, y0, x1, y1 int
 }
@@ -39,13 +22,11 @@ func (b pipBox) holds(col, row int) bool {
 	return col >= b.x0 && col <= b.x1 && row >= b.y0 && row <= b.y1
 }
 
-// pipBoxWidth and pipBoxHeight are [pip]'s default size.
 const (
 	pipBoxWidth  = 40
 	pipBoxHeight = 12
 )
 
-// findPiPBox finds a 40 by 12 box with name on its top edge.
 func findPiPBox(s tuitest.Screen, name string) (pipBox, bool) {
 	cols, rows := s.Size()
 	for y := 0; y+pipBoxHeight-1 < rows; y++ {
@@ -73,7 +54,6 @@ func findPiPBox(s tuitest.Screen, name string) (pipBox, bool) {
 	return pipBox{}, false
 }
 
-// pipBoxText is the text inside the box, one line per row.
 func pipBoxText(s tuitest.Screen, b pipBox) string {
 	var out strings.Builder
 	for y := b.y0 + 1; y < b.y1; y++ {
@@ -91,7 +71,6 @@ func pipBoxText(s tuitest.Screen, b pipBox) string {
 
 var pipTick = regexp.MustCompile(`PIPTICK-([0-9]+)`)
 
-// lastTick is the highest tick in text, or -1.
 func lastTick(text string) int {
 	best := -1
 	for _, m := range pipTick.FindAllStringSubmatch(text, -1) {
@@ -102,7 +81,6 @@ func lastTick(text string) int {
 	return best
 }
 
-// cornerOf names the corner of the screen the box is in.
 func cornerOf(s tuitest.Screen, b pipBox) string {
 	cols, rows := s.Size()
 	v, h := "top", "left"
@@ -115,7 +93,6 @@ func cornerOf(s tuitest.Screen, b pipBox) string {
 	return v + "-" + h
 }
 
-// waitPiP waits for the box to be drawn, and returns it.
 func waitPiP(t *testing.T, term *tuitest.Terminal, name, what string) pipBox {
 	t.Helper()
 	var box pipBox
@@ -129,7 +106,6 @@ func waitPiP(t *testing.T, term *tuitest.Terminal, name, what string) pipBox {
 	return box
 }
 
-// waitNoPiP waits for the box to be gone.
 func waitNoPiP(t *testing.T, term *tuitest.Terminal, name, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -140,8 +116,6 @@ func waitNoPiP(t *testing.T, term *tuitest.Terminal, name, what string) {
 	}
 }
 
-// cursorWatch reads the screen every 40 ms and counts the samples where the
-// visible cursor is inside the view's box.
 type cursorWatch struct {
 	samples, covered atomic.Int64
 	mu               sync.Mutex
@@ -197,7 +171,6 @@ func (w *cursorWatch) finish(t *testing.T) {
 	}
 }
 
-// windowIDNamed is the id of the window with this name in session work.
 func windowIDNamed(t *testing.T, base, name string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "get-window", name, "--json", "--session", "work")
@@ -213,9 +186,6 @@ func windowIDNamed(t *testing.T, base, name string) string {
 	return res.ID
 }
 
-// startPiPPanes starts a client with two tiled panes, the right one named
-// agent and printing a tick every 0.2 s, and returns with the agent pane
-// focused in window mode. loop is the shell loop the agent pane runs.
 func startPiPPanes(t *testing.T, base string, args []string, loop string) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: args})
@@ -230,14 +200,8 @@ func startPiPPanes(t *testing.T, base string, args []string, loop string) *tuite
 	return term
 }
 
-// toWindowMode leaves terminal mode when the client under base is in it. A
-// click on a pane starts typing into it, so a click leaves terminal mode on.
 func toWindowMode(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
-	// A client attached to a daemon says its mode. A "Terminal mode" notice
-	// on the dock can outlive the mode it named: a workspace switch can leave
-	// the client in window mode while the notice still shows. A local session
-	// has no daemon to ask, so there the dock is read.
 	if mode := daemonClientMode(base); mode != "" {
 		if mode == "terminal" {
 			leaveTerminalMode(t, term)
@@ -249,7 +213,6 @@ func toWindowMode(t *testing.T, term *tuitest.Terminal, base string) {
 	}
 }
 
-// pinWithKey presses p in window mode and waits for the dock to say so.
 func pinWithKey(t *testing.T, term *tuitest.Terminal, base, want string) {
 	t.Helper()
 	toWindowMode(t, term, base)
@@ -261,8 +224,6 @@ func pinWithKey(t *testing.T, term *tuitest.Terminal, base, want string) {
 	}
 }
 
-// assertLive waits for the box's tick to move on, and checks it against the
-// pane's own screen.
 func assertLive(t *testing.T, term *tuitest.Terminal, base string, daemon bool) {
 	t.Helper()
 	var first int
@@ -310,14 +271,11 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 		`i=0; while :; do i=$((i+1)); echo PIPTICK-$i; sleep 0.2; done`)
 	agentID := windowIDNamed(t, base, "agent")
 
-	// Pin the focused pane. It has the focus, so no view is drawn yet.
 	pinWithKey(t, term, base, "Pinned agent")
 	if _, ok := findPiPBox(term.Screen(), "agent"); ok {
 		t.Fatalf("the view is drawn while its own pane has the focus\n%s", term.Snapshot())
 	}
 
-	// Focus the other pane with a click on it. The view comes up in the
-	// bottom-right corner and follows the agent pane.
 	mouseClick(t, term, 20, 10, tuitest.MouseLeft, 0)
 	box := waitPiP(t, term, "agent", "after focusing the other pane")
 	if c := cornerOf(term.Screen(), box); c != "bottom-right" {
@@ -327,8 +285,6 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 	assertLive(t, term, base, true)
 	t.Logf("the view over two panes:\n%s", term.Snapshot())
 
-	// Zoom the focused pane over the whole region. The view stays on top of
-	// it, and is now the only place the agent pane shows.
 	toWindowMode(t, term, base)
 	if err := term.SendKeys("z"); err != nil {
 		t.Fatalf("send z: %v", err)
@@ -336,9 +292,6 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 	waitPiP(t, term, "agent", "over the zoomed pane")
 	assertLive(t, term, base, true)
 
-	// Type in the zoomed pane until the line runs into the view's corner. The
-	// view moves off the bottom edge, since the line crosses both bottom
-	// corners, and the sampler checks that it never covers the cursor.
 	enterTerminalMode(t, term)
 	runInShell(t, term, "seq 1 60; echo SEQ$((6*10))DONE", "SEQ60DONE", shellTimeout)
 	for range 10 {
@@ -369,7 +322,6 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 		t.Fatalf("the zoom never ended\n%s", term.Snapshot())
 	}
 
-	// Move the agent pane to workspace 2. The view keeps following it.
 	if out, err := tuiosCLI(t, base, "move-window", "2", "-w", "agent", "-s", "work"); err != nil {
 		t.Fatalf("move-window: %v\n%s", err, out)
 	}
@@ -379,9 +331,6 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 	box = waitPiP(t, term, "agent", "with the agent pane on workspace 2")
 	assertLive(t, term, base, true)
 
-	// A click on the view goes to the agent pane on its workspace, and the
-	// view goes away while that pane has the focus. The agent pane is not on
-	// this workspace, so only the view can have taken the click there.
 	mouseClick(t, term, (box.x0+box.x1)/2, (box.y0+box.y1)/2, tuitest.MouseLeft, 0)
 	waitNoPiP(t, term, "agent", "after the click")
 	deadline := time.Now().Add(uiTimeout)
@@ -395,8 +344,6 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 		t.Fatalf("the jump did not show the agent pane\n%s", term.Snapshot())
 	}
 
-	// Back on workspace 1 the view comes back, and it still follows the
-	// pane: leaving workspace 2 kept the pinned pane's stream.
 	if err := term.SendKeys(tuitest.Alt('1')); err != nil {
 		t.Fatalf("send alt+1: %v", err)
 	}
@@ -404,21 +351,16 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 	assertLive(t, term, base, true)
 	watch.finish(t)
 
-	// p unpins from the other pane.
 	pinWithKey(t, term, base, "Unpinned agent")
 	waitNoPiP(t, term, "agent", "after the unpin")
 
-	// tuios pip pins by name.
 	out, err := tuiosCLI(t, base, "pip", "agent", "-s", "work")
 	if err != nil || !strings.Contains(out, "Pinned") {
 		t.Fatalf("tuios pip agent: %v\n%s", err, out)
 	}
 	waitPiP(t, term, "agent", "after tuios pip")
-	// The unpin closed the stream of a pane on another workspace, and the pin
-	// opened it again.
 	assertLive(t, term, base, true)
 
-	// The agent pane's shell exits. The view goes, and the dock says why.
 	if out, err := tuiosCLI(t, base, "send-keys", "-s", "work", "-w", "agent", "ctrl+c"); err != nil {
 		t.Fatalf("stop the loop: %v\n%s", err, out)
 	}
@@ -461,8 +403,6 @@ func TestPiPInALocalSession(t *testing.T) {
 // either gone, or it is live.
 func TestPiPDoesNotFreezeAcrossASessionSwitch(t *testing.T) {
 	base := t.TempDir()
-	// The other session exists before the client starts, so the client's
-	// session list has it.
 	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "other", "--detach"); err != nil {
 		t.Fatalf("create other: %v\n%s", err, out)
@@ -485,7 +425,6 @@ func TestPiPDoesNotFreezeAcrossASessionSwitch(t *testing.T) {
 			t.Fatalf("never landed on %s\n%s", want, term.Snapshot())
 		}
 	}
-	// Long enough for a live view to move on by several ticks.
 	time.Sleep(2 * time.Second)
 	first, ok := findPiPBox(term.Screen(), "agent")
 	if !ok {
@@ -500,8 +439,6 @@ func TestPiPDoesNotFreezeAcrossASessionSwitch(t *testing.T) {
 	}
 }
 
-// findPiPBoxWide finds a box w cells wide, of any height, with name on its
-// top edge. The panes here are 60 wide, so a box of another width is the view.
 func findPiPBoxWide(s tuitest.Screen, name string, w int) (pipBox, bool) {
 	cols, rows := s.Size()
 	for y := range rows {
@@ -547,7 +484,7 @@ func findPiPBoxWide(s tuitest.Screen, name string, w int) (pipBox, bool) {
 // Negative control: on main, no view 48 cells wide and a quarter of the pane
 // area high is drawn, so step 1 fails. See NEGATIVE_CONTROLS.md.
 func TestPiPSizeInPercentAtTheEdgeCentre(t *testing.T) {
-	const wide = 48 // 40% of 120 columns
+	const wide = 48
 	base := t.TempDir()
 	writeConfig(t, base, "[pip]\nwidth = \"40%\"\nheight = \"25%\"\ncorner = \"bottom-center\"\n")
 	term := startPiPPanes(t, base, []string{"new", "work"},
@@ -575,7 +512,6 @@ func TestPiPSizeInPercentAtTheEdgeCentre(t *testing.T) {
 	}
 	railShot(t, term, "pip-bottom-center")
 
-	// 2. Type along the bottom row of the zoomed pane into the box.
 	watch := watchCursorWide(term, "agent", wide)
 	toWindowMode(t, term, base)
 	if err := term.SendKeys("z"); err != nil {
@@ -597,8 +533,6 @@ func TestPiPSizeInPercentAtTheEdgeCentre(t *testing.T) {
 		t.Fatalf("ASSERTION: on the top edge the view is not centred: %d columns on the left, %d on the right\n%s", left, right, term.Snapshot())
 	}
 	railShot(t, term, "pip-top-center")
-	// The step is short, so the sampler's floor of 20 frames does not apply.
-	// It must still have seen the view with the cursor, and never over it.
 	close(watch.stop)
 	<-watch.done
 	t.Logf("cursor sampler: %d frames with the view and a visible cursor, %d with the cursor inside the view",
@@ -613,13 +547,11 @@ func TestPiPSizeInPercentAtTheEdgeCentre(t *testing.T) {
 		t.Fatalf("clear the line: %v", err)
 	}
 
-	// 3. A percent over 100 is refused.
 	if out, err := tuiosCLI(t, base, "set-config", "pip.width", "130%"); err == nil {
 		t.Fatalf("ASSERTION: set-config pip.width 130%% was accepted\n%s", out)
 	}
 }
 
-// watchCursorWide is watchCursor for a view w cells wide.
 func watchCursorWide(term *tuitest.Terminal, name string, w int) *cursorWatch {
 	cw := &cursorWatch{stop: make(chan struct{}), done: make(chan struct{})}
 	go func() {

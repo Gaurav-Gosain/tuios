@@ -49,11 +49,6 @@ func TestProgramStatusOutlivesTheShellCheck(t *testing.T) {
 		}
 	})
 	t.Run("a foreground program beside a background job", func(t *testing.T) {
-		// Each record keeps the group it came from: the foreground program
-		// exiting ends its own record and leaves the job's.
-		// The job reports first, while the shell holds the foreground, and the
-		// program starts after: which process wrote a report is not something
-		// the terminal can see, only who held the foreground when it came.
 		if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", "shell",
 			`(printf '\033]7501;state=working:id=job\033\\'; sleep 40) &`+"\n"); err != nil {
 			t.Fatalf("send-text: %v\n%s", err, out)
@@ -73,11 +68,6 @@ func TestProgramStatusOutlivesTheShellCheck(t *testing.T) {
 		}
 	})
 	t.Run("a program that reports and exits between two readings", func(t *testing.T) {
-		// The group is read as the report comes off the terminal, so a
-		// program that lives a fifth of a second, far less than the 2 seconds
-		// between two detector readings, still has its exit seen. A program
-		// that exits in the same instant it reports can beat that read; the
-		// docs say so, and this test does not cover it.
 		for i := range 10 {
 			id := "fast" + string(rune('a'+i))
 			if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", "shell",
@@ -169,7 +159,6 @@ func TestProgramStatusAlertAfterTheGap(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "set-window", "-s", session, "--name", "job"); err != nil {
 		t.Fatalf("name the pane: %v\n%s", err, out)
 	}
-	// Another pane takes the focus, since the focused pane raises no alert.
 	if out, err := tuiosCLI(t, base, "new-window", "other", "-s", session); err != nil {
 		t.Fatalf("open another pane: %v\n%s", err, out)
 	}
@@ -275,8 +264,6 @@ func TestProgramStatusYieldsToAHook(t *testing.T) {
 		t.Errorf("ASSERTION: the records ending erased the hook's state: %+v", st)
 	}
 
-	// A weaker source, in a pane of its own: the screen tier. The program
-	// takes the pane from it, and lets go of it.
 	if out, err := tuiosCLI(t, base, "new-window", "weak", "-s", session); err != nil {
 		t.Fatalf("open the second pane: %v\n%s", err, out)
 	}

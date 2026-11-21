@@ -25,7 +25,6 @@ func TestAPaneWhoseFarShellExitsClosesItsWindow(t *testing.T) {
 	writeOneHostConfig(t, base, tuiosBin)
 	env := []string{"TUIOS_SSH=" + ssh}
 
-	// The far daemon has to be running for a pane to be opened on it.
 	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
 		t.Fatalf("create the far session: %v\n%s", err, out)
 	}
@@ -41,7 +40,6 @@ func TestAPaneWhoseFarShellExitsClosesItsWindow(t *testing.T) {
 		t.Fatalf("create a window on build: %v\n%s", err, out)
 	}
 
-	// The pane is alive and talking, and the client is drawing it.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return contains(s.Text(), "READY") && contains(s.Text(), "build:goner")
 	}, uiTimeout); err != nil {
@@ -56,14 +54,6 @@ func TestAPaneWhoseFarShellExitsClosesItsWindow(t *testing.T) {
 		t.Fatal("ASSERTION: the session holds no windows, so there is nothing to lose")
 	}
 
-	// Nothing is sent from here at all. The far process ends on its own, and
-	// the window has to go because of that rather than because a later
-	// keystroke happened to shake the connection: the fault this covers was a
-	// stream whose close was never passed on until something was written.
-
-	// The daemon first, which is the half the link answers for. A session that
-	// has lost its last window is gone, so the listing failing is the same
-	// answer as the listing shrinking.
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		wl, err := daemonWindows(base, "home")
@@ -76,7 +66,6 @@ func TestAPaneWhoseFarShellExitsClosesItsWindow(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Then the client, which is what the person is looking at.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !contains(s.Text(), "build:goner")
 	}, uiTimeout); err != nil {

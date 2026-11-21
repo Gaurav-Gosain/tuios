@@ -9,28 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The screenshot chord over an open overlay. The Inbox and the review own the
-// keyboard while they are up, and they used to own the leader with it, so
-// ctrl+b C did nothing and neither screen could be captured.
-//
-// How these could pass wrongly, written down first:
-//   - the capture might be of the screen after the overlay closed, so the file
-//     is checked for the overlay's own text;
-//   - capture mode's hint strip might be in the file, so the file is checked
-//     for its absence;
-//   - the chord might work by closing the overlay first, so the overlay is
-//     checked to still be open after the preview closes;
-//   - holding the leader for the chord might take the leader, or the key after
-//     it, away from the overlay, so a leader followed by an ordinary key is
-//     checked to still reach the overlay (the positive half).
-
-// captureFullScreenOver opens capture mode with the leader chord while an
-// overlay is up, takes the full screen with key (f or enter), waits for the
-// file and returns what it holds. Capture mode must not offer a pane: the panes
-// are under the overlay. The preview panel is closed with enter, which keeps the file.
-//
-// The host stream up to capture mode is saved as well, so the screen as tuios
-// drew it can be rendered to an image and looked at.
 func captureFullScreenOver(t *testing.T, term *tuitest.Terminal, stream *hostStream, dir, what string, key any) string {
 	t.Helper()
 	before := len(shotFiles(t, dir))
@@ -103,9 +81,6 @@ func TestScreenshotOverTheInbox(t *testing.T) {
 	}
 	waitScreen(t, term, "the Inbox closed when the capture was taken", "No agents yet.")
 
-	// The positive half: the capture takes the leader and C only. Another
-	// chord reaches the prefix table over the view, as it does over a
-	// pane: ctrl+b ? opens help on top of it.
 	sendKeys(t, term, tuitest.Ctrl('b'), "?")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), helpTitle) && strings.Contains(s.Text(), "New agent")
@@ -149,7 +124,6 @@ func TestScreenshotOverTheReview(t *testing.T) {
 	}
 	waitScreen(t, term, "the review closed when the capture was taken", "retry three times", "esc close")
 
-	// A region: drag across the line the review shows, inside the overlay.
 	row := -1
 	for y, line := range strings.Split(term.Screen().Text(), "\n") {
 		if strings.Contains(line, "retry three times") {

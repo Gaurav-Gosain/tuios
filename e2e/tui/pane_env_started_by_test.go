@@ -60,9 +60,6 @@ func TestPanesDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 	const session = "e2e-started-by"
 	base := t.TempDir()
 	killDaemon(t, base)
-	// The folders have a short name under the run's temp folder (/tmp/tuios-e2e-run-PID)
-	// because a pane is 80 columns wide, and a line holding a path under
-	// t.TempDir wraps, so it would not read back as one line.
 	home, err := os.MkdirTemp("", "e-")
 	if err != nil {
 		t.Fatal(err)
@@ -77,7 +74,6 @@ func TestPanesDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 		"CLAUDECODE=1", "CLAUDE_CODE_SESSION_ID=outer-session",
 		"CODEX_HOME=" + codexHome, "CLAUDE_CONFIG_DIR=" + claudeDir,
 		"TUIOS_E2E_CALLER_KEPT=kept",
-		// The terminal the agent ran in. The pane names tuios's build.
 		"TERM_PROGRAM_VERSION=9.9.9-outer",
 	}
 	removed := []string{
@@ -94,8 +90,6 @@ func TestPanesDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 		t.Fatalf("create the session: %v\n%s", err, out)
 	}
 
-	// TERM_PROGRAM_VERSION is the build version, the word after "tuios
-	// version" in what tuios --version prints, and never the caller's.
 	version, err := exec.Command(tuiosBin, "--version").Output()
 	fields := strings.Fields(strings.TrimPrefix(string(version), "tuios version "))
 	if err != nil || len(fields) == 0 || !strings.HasPrefix(string(version), "tuios version ") {
@@ -160,9 +154,6 @@ func TestPanesDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 			"want them unset\n%s", strings.Join(leaked, " "), pane)
 	}
 
-	// The Codex hook, run in the pane the way a Codex started there runs it.
-	// Its decision goes to a file, which is moved into place only when the
-	// hook has finished, so a half-written one is never read.
 	payload := `{"hook_event_name":"SessionStart","session_id":"inner-thread"}`
 	hook := func(file, prefix string) string {
 		t.Helper()
@@ -228,9 +219,6 @@ func TestPanesDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// The positive half of the gate: a Codex really started inside another
-	// Codex has CODEX_THREAD_ID in its own environment, and its events are
-	// still dropped.
 	nested := hook("hook-nested.json", "CODEX_THREAD_ID=outer-in-pane ")
 	if d := readDecision(nested); d.Skip != "nested Codex session" {
 		t.Errorf("a Codex nested in another in the pane was not skipped as a nested Codex session, "+

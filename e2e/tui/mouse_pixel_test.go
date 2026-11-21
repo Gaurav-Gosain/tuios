@@ -13,11 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// pixelReporter is a pane program that tracks the mouse in SGR-pixel mode
-// (1003, 1006 and 1016), the modes a kitty-graphics browser or a Wayland
-// window turns on. It prints each motion report on its own line as
-// PX<button>;<x>;<y>. The input "off" followed by M turns 1016 off again, and
-// the reports that follow are in cells.
 const pixelReporter = `bash -c 'stty -echo -icanon; ` +
 	`printf "\033[?1003h\033[?1006h\033[?1016h"; echo PIX""ON; ` +
 	`while IFS= read -r -d M r; do case $r in ` +
@@ -26,10 +21,6 @@ const pixelReporter = `bash -c 'stty -echo -icanon; ` +
 
 var pixelReport = regexp.MustCompile(`PX35;(\d+);(\d+)\.`)
 
-// waitPixelReport waits for a report at exactly (x, y), 1-based as on the wire.
-// The send function runs again on every poll, because a report sent before
-// tuios has read the host's answer to its 1016 request is read in the old
-// encoding.
 func waitPixelReport(t *testing.T, term *tuitest.Terminal, what string, x, y int, send func()) {
 	t.Helper()
 	want := fmt.Sprintf("PX35;%d;%d.", x, y)
@@ -77,9 +68,6 @@ func TestSGRPixelMouseCarriesTheHostPixel(t *testing.T) {
 			enterTerminalMode(t, term)
 			runInShell(t, term, pixelReporter, "PIXON", shellTimeout)
 
-			// One report in cells. tuios reads it as cells, since it has not
-			// turned 1016 on yet, and the pane gets the cell centre. That
-			// gives the pane cell under (col, row) without knowing the layout.
 			col, row := paneCell(t, term)
 			mouseHover(t, term, col, row)
 			var cx, cy int
@@ -94,15 +82,12 @@ func TestSGRPixelMouseCarriesTheHostPixel(t *testing.T) {
 			}, uiTimeout); err != nil {
 				t.Fatalf("the first motion never reached the pane: %v\n%s", err, term.Snapshot())
 			}
-			// The centre of an 8x16 cell is (4, 8) into it, and the wire adds 1.
 			termX, termY := (cx-1-4)/8, (cy-1-8)/16
 
-			// tuios asks its terminal for 1016 after that event.
 			if err := waitOutput(out, "\x1b[?1016h", uiTimeout); err != nil {
 				t.Fatalf("tuios never turned on SGR-pixel reports in its terminal: %v", err)
 			}
 
-			// The pointer at (1, 3) pixels into the same host cell.
 			const subX, subY = 1, 3
 			waitPixelReport(t, term, "pixel report", termX*8+subX+1, termY*16+subY+1, func() {
 				sendMouseThenWait(t, term, "pixel hover", tuitest.MouseEvent{
@@ -111,8 +96,6 @@ func TestSGRPixelMouseCarriesTheHostPixel(t *testing.T) {
 				}, mouseGap)
 			})
 
-			// The program turns 1016 off. The next report still arrives in
-			// pixels, since the terminal is in 1016 until tuios turns it off.
 			if err := term.SendKeys("offM"); err != nil {
 				t.Fatal(err)
 			}
@@ -123,14 +106,10 @@ func TestSGRPixelMouseCarriesTheHostPixel(t *testing.T) {
 				Col: col*8 + subX, Row: row*16 + subY,
 				Button: tuitest.MouseNone, Action: tuitest.MouseMove, Pixel: true,
 			}, mouseGap)
-			// 1006 and 1016 are one setting in ghostty, xterm and kitty, so
-			// 1016 off alone leaves the terminal in X10, not in SGR.
 			if err := waitOutput(out, "\x1b[?1016l\x1b[?1006h", uiTimeout); err != nil {
 				t.Fatalf("tuios never turned off SGR-pixel reports and put SGR back in its terminal: %v", err)
 			}
 
-			// A cell report one cell to the right now reaches the pane as an
-			// SGR cell report.
 			waitPixelReport(t, term, "cell report", termX+2, termY+1, func() {
 				mouseHover(t, term, col+1, row)
 			})
@@ -154,7 +133,6 @@ func TestSGRPixelMouseAfterTheEditor(t *testing.T) {
 		daemon bool
 	}{{"standalone", false}, {"daemon", true}} {
 		t.Run(tc.name, func(t *testing.T) {
-			// The editor shows a marker for a moment and exits.
 			editor := filepath.Join(t.TempDir(), "editor")
 			if err := os.WriteFile(editor, []byte("#!/bin/sh\necho EDITOR\"\"RAN\nsleep 1\n"), 0o755); err != nil {
 				t.Fatal(err)
@@ -170,8 +148,6 @@ func TestSGRPixelMouseAfterTheEditor(t *testing.T) {
 			enterTerminalMode(t, term)
 			runInShell(t, term, pixelReporter, "PIXON", shellTimeout)
 
-			// Find the pane cell under (col, row) from one cell report, as
-			// TestSGRPixelMouseCarriesTheHostPixel does.
 			col, row := paneCell(t, term)
 			mouseHover(t, term, col, row)
 			var cx, cy int
@@ -197,7 +173,6 @@ func TestSGRPixelMouseAfterTheEditor(t *testing.T) {
 				}, mouseGap)
 			})
 
-			// The editor runs on tuios's own terminal and exits.
 			before := strings.Count(out.String(), "\x1b[?1016h")
 			openPaletteRow(t, term, "edit the scrollback", "Edit the scrollback in the editor")
 			if err := term.WaitForText("EDITORRAN", uiTimeout); err != nil {
@@ -212,12 +187,6 @@ func TestSGRPixelMouseAfterTheEditor(t *testing.T) {
 				t.Fatalf("tuios did not turn SGR-pixel reports off before the editor")
 			}
 
-			// The terminal is back in SGR cells, and reports in cells until
-			// tuios asks for 1016 again; the send below plays a real terminal
-			// and follows that. The pointer is on the centre of the cell to
-			// the right, so the pane must get that centre in its own pixels
-			// either way. Read as pixels, the cell report lands near the top
-			// left of the screen instead.
 			waitPixelReport(t, term, "report after the editor", (termX+1)*8+4+1, termY*16+8+1, func() {
 				if strings.Count(out.String(), "\x1b[?1016h") > before {
 					sendMouseThenWait(t, term, "pixel hover", tuitest.MouseEvent{
@@ -229,7 +198,6 @@ func TestSGRPixelMouseAfterTheEditor(t *testing.T) {
 				mouseHover(t, term, col+1, row)
 			})
 
-			// tuios asks for 1016 again, and pixel reports work as before.
 			for deadline := time.Now().Add(uiTimeout); strings.Count(out.String(), "\x1b[?1016h") <= before; {
 				if time.Now().After(deadline) {
 					t.Fatalf("tuios never turned SGR-pixel reports on again after the editor")
@@ -248,7 +216,6 @@ func TestSGRPixelMouseAfterTheEditor(t *testing.T) {
 	}
 }
 
-// waitOutput waits until tuios has written s to its terminal.
 func waitOutput(out *lockedBuffer, s string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

@@ -75,8 +75,6 @@ func TestTaskAttachmentsSurviveARestartAndGoWithTheCard(t *testing.T) {
 	if err := os.WriteFile(big, bytes.Repeat([]byte("x"), 2<<20), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// A 1 MiB limit makes the refusal cheap to reach. The open default
-	// gives every pane admin, so the pane's rule needs strict grants.
 	writeConfig(t, base, "[tasks]\nattachment_max_mib = 1\n\n[agents.permissions]\nmode = \"strict\"\ngrants = [\"read\", \"task\"]\n")
 	mustCLI(t, base, "restart-server", "--yes")
 	waitForSessionInfo(t, base, sess)
@@ -91,8 +89,6 @@ func TestTaskAttachmentsSurviveARestartAndGoWithTheCard(t *testing.T) {
 	if out, err := run("task", "attach", "-s", sess, "t1", "--link", pr); err != nil {
 		t.Fatalf("ASSERTION: attaching the link failed: %v\n%s", err, out)
 	}
-	// The same file again is left as it is; another file under its name is
-	// refused, with the flag that would replace it.
 	if out, err := run("task", "attach", "-s", sess, "t1", pic); err != nil || !strings.Contains(out, "already, with the same content") {
 		t.Errorf("ASSERTION: the same file again was not taken as a no-op: %v\n%s", err, out)
 	}
@@ -106,7 +102,6 @@ func TestTaskAttachmentsSurviveARestartAndGoWithTheCard(t *testing.T) {
 		t.Errorf("ASSERTION: a file over the limit was not refused with the option's name: %v\n%s", err, out)
 	}
 
-	// A pane attaches only to the card it holds.
 	pane := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "worker", "--no-focus", "--print-id"))
 	paneOut := filepath.Join(base, "pane.out")
 	script := tuiosBin + " task attach t1 " + note + " --name from-pane.md > " + paneOut + ".1 2>&1; echo EXIT=$? >> " + paneOut + ".1; " +
@@ -189,7 +184,6 @@ func TestTaskAttachmentsSurviveARestartAndGoWithTheCard(t *testing.T) {
 	waitForFileGone(t, stored(note), "the notes' file stayed after its card was removed")
 }
 
-// writeTestPNG writes a small real PNG to path.
 func writeTestPNG(t *testing.T, path string) {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 32, 16))
@@ -207,7 +201,6 @@ func writeTestPNG(t *testing.T, path string) {
 	}
 }
 
-// waitForFileGone waits until no file is at path.
 func waitForFileGone(t *testing.T, path, why string) {
 	t.Helper()
 	waitUntil(t, why, uiTimeout, func() (bool, string) {

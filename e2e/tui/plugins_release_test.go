@@ -15,15 +15,6 @@ import (
 	"testing"
 )
 
-// tuios plugins install NAME from the assets of the running release, against
-// a fake GitHub API that serves the archive scripts/plugin-assets.sh makes
-// from this tree. A stamped build stands for a release.
-//
-// The negative controls are in NEGATIVE_CONTROLS.md, "Plugins from the
-// release".
-
-// fakeReleases serves releases: tag to asset name to bytes. checksums.txt
-// is made from the assets unless a test set it.
 type fakeReleases struct {
 	mu   sync.Mutex
 	tags map[string]map[string][]byte
@@ -62,8 +53,6 @@ func (f *fakeReleases) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-// add publishes a release with the plugin archive of this tree, changed by
-// edit, and its checksums.
 func (f *fakeReleases) add(t *testing.T, tag string, edit func(dir string), sums func(name string, data []byte) string) {
 	t.Helper()
 	root, _ := filepath.Abs(filepath.Join("..", ".."))
@@ -105,7 +94,6 @@ func (f *fakeReleases) add(t *testing.T, tag string, edit func(dir string), sums
 	f.mu.Unlock()
 }
 
-// stampedTuios builds tuios as release version v.
 func stampedTuios(t *testing.T, v string) string {
 	t.Helper()
 	root, _ := filepath.Abs(filepath.Join("..", ".."))
@@ -147,14 +135,12 @@ func TestPluginsFromRelease(t *testing.T) {
 	lockPath := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "plugins.lock")
 	lock := func() string { b, _ := os.ReadFile(lockPath); return string(b) }
 
-	// A build that no release made names the folder form instead.
 	if out, err := tuiosCLI(t, base, "plugins", "install", "pr-status", "--yes"); err == nil || !strings.Contains(out, "plugins install Gaurav-Gosain/tuios/plugins/NAME") {
 		t.Errorf("install by name on a dev build: %v\n%s", err, out)
 	}
 	if out, err := cli(old, "new", "rel", "--detach"); err != nil {
 		t.Fatalf("create session: %v\n%s", err, out)
 	}
-	// A wrong checksum installs nothing.
 	if out, err := cli(bad, "plugins", "install", "pr-status", "--yes"); err == nil || !strings.Contains(strings.ToLower(out), "checksum") || strings.Contains(lock(), "pr-status") {
 		t.Fatalf("install with a wrong checksum: %v\n%s\n%s", err, out, lock())
 	}
@@ -172,7 +158,6 @@ func TestPluginsFromRelease(t *testing.T) {
 		t.Errorf("a second install: %v\n%s", err, out)
 	}
 
-	// The same tuios has nothing newer. A newer one moves the plugin.
 	if out, err := cli(old, "plugins", "update", "--yes"); err != nil || !strings.Contains(out, "up to date at v0.99.0") {
 		t.Errorf("update with the same tuios: %v\n%s", err, out)
 	}
@@ -180,7 +165,6 @@ func TestPluginsFromRelease(t *testing.T) {
 		t.Fatalf("update with a newer tuios: %v\n%s\n%s", err, out, lock())
 	}
 
-	// Another machine gets the pinned files, or nothing.
 	other := t.TempDir()
 	writeConfig(t, other, "")
 	if err := os.MkdirAll(filepath.Join(xdgDir(other, "XDG_CONFIG_HOME"), "tuios"), 0o700); err != nil {
@@ -224,8 +208,6 @@ func TestPluginsReleaseNameBeatsAFolder(t *testing.T) {
 	writeConfig(t, base, "")
 	killDaemon(t, base)
 
-	// A folder pr-status with the release plugin's id, whose build leaves a
-	// file outside it.
 	dir := t.TempDir()
 	marker := filepath.Join(t.TempDir(), "built")
 	if err := os.Mkdir(filepath.Join(dir, "pr-status"), 0o755); err != nil {
@@ -267,7 +249,6 @@ func TestPluginsReleaseNameBeatsAFolder(t *testing.T) {
 		t.Errorf("install pr-status built the folder pr-status/:\n%s", out)
 	}
 
-	// The folder, given as ./pr-status, replaces the release's plugin.
 	if err := os.Remove(marker); err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
@@ -280,7 +261,6 @@ func TestPluginsReleaseNameBeatsAFolder(t *testing.T) {
 		t.Errorf("uninstall pr-status in that folder: %v\n%s\n%s", err, out, lock())
 	}
 
-	// A dev build installs the folder, as before.
 	out, err = tuiosCLIIn(t, base, dir, "plugins", "install", "pr-status", "--yes")
 	if err != nil || !fromFolder() {
 		t.Errorf("install pr-status on a dev build: %v\n%s\n%s", err, out, lock())

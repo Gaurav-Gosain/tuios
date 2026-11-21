@@ -12,35 +12,11 @@ import (
 	"tuios.dev/shot"
 )
 
-// The agent switch, [agents] enabled = false, on a real daemon and a real
-// client. Each test writes the switch into config.toml before the daemon
-// starts, or rewrites it while both run, and reads what a person sees: the
-// rail, the Inbox key, the CLI's answer, and whether one pane can type into
-// another pane's prompt.
-//
-// How these could pass wrongly, written down first:
-//   - A rail that never lists agents at all would pass the "no row" half. So
-//     every rail check has its positive half in the same fixture: the same
-//     fake agent, with the switch on, gets a row under the agents header.
-//   - A fake agent the detector never recognises would pass the "no row" half
-//     too. The positive half is what proves it is recognised.
-//   - A refusal that is only the CLI's would leave the daemon serving the
-//     verb. The JSON answer is read for the daemon's code, agents_disabled.
-//   - The respond test could pass because typing failed for some other
-//     reason. Its positive half gives the typing pane respond and watches the
-//     same keys answer the prompt.
-
-// fakeRailAgent is a program the detector takes for an agent through
-// [daemon] agent_binaries: its process name is its file name. It draws a
-// line and waits on its terminal with no child process, so the foreground
-// process is the script itself.
 const fakeRailAgent = `#!/bin/sh
 printf 'fakeagent ready>\n'
 while read -r line; do :; done
 `
 
-// promptProgram asks a question the way a program says it needs a person:
-// the OSC 9;4 warning state, then a prompt that waits for a line.
 const promptProgram = `#!/bin/sh
 printf '\033]9;4;4;0\007'
 printf 'Allow the edit? [y/n] '
@@ -48,9 +24,6 @@ read -r ans
 printf 'ANSWERED:%s\n' "$ans"
 `
 
-// agentsOffFixture writes a config with the fake agent named, and the switch
-// set when off is true, then starts a detached session "rail" with one pane
-// named AGENTPANE. It returns the isolation root.
 func agentsOffFixture(t *testing.T, off bool) string {
 	t.Helper()
 	base := t.TempDir()
@@ -76,8 +49,6 @@ func agentsOffFixture(t *testing.T, off bool) string {
 	return base
 }
 
-// writeAgentsConfig writes config.toml with the agent switch on or off. The
-// detector reads every second so a test waits on it for a short time.
 func writeAgentsConfig(t *testing.T, base string, off bool) {
 	t.Helper()
 	cfg := configPathIn(base)
@@ -88,8 +59,6 @@ func writeAgentsConfig(t *testing.T, base string, off bool) {
 	if off {
 		body += "\n[agents]\nenabled = false\n"
 	}
-	// Write and rename, the way an editor saves, so a watcher never reads a
-	// half-written file.
 	tmp := cfg + ".tmp"
 	if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -99,8 +68,6 @@ func writeAgentsConfig(t *testing.T, base string, off bool) {
 	}
 }
 
-// railAgentRows reads the rows under the rail's agents header. nil means the
-// rail has no agents header at all.
 func railAgentRows(s tuitest.Screen, railCol int) []string {
 	cols, rows := s.Size()
 	text := func(y int) string {
@@ -127,7 +94,6 @@ func railAgentRows(s tuitest.Screen, railCol int) []string {
 	return nil
 }
 
-// railHasAgent reports whether the agents section lists the pane.
 func railHasAgent(s tuitest.Screen, railCol int, pane string) bool {
 	for _, row := range railAgentRows(s, railCol) {
 		if strings.Contains(row, pane) {
@@ -137,7 +103,6 @@ func railHasAgent(s tuitest.Screen, railCol int, pane string) bool {
 	return false
 }
 
-// railShot saves the frame as text and as a PNG drawn by tuios.dev/shot.
 func railShot(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	dir := artifactDir(t)
@@ -146,7 +111,6 @@ func railShot(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Logf("frame %s saved under %s", name, dir)
 }
 
-// startFakeAgent runs the fake agent in AGENTPANE and waits for its line.
 func startFakeAgent(t *testing.T, base string, term *tuitest.Terminal) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "rail", "-w", "AGENTPANE", "tuiosfakeagent\n"); err != nil {
@@ -195,8 +159,6 @@ func TestAgentsOffShowsNoAgentRow(t *testing.T) {
 				return
 			}
 
-			// The detector reads every second. Five reads with no row is the
-			// answer; a row at any point fails at once.
 			deadline := time.Now().Add(5 * time.Second)
 			for time.Now().Before(deadline) {
 				if s := term.Screen(); railAgentRows(s, railCol) != nil {
@@ -270,7 +232,6 @@ func TestAgentsOffRefusesAgentCommands(t *testing.T) {
 		}
 	}
 
-	// The daemon's own answer, as a program reads it.
 	out, _ := tuiosCLI(t, base, "start-agent", "tuiosfakeagent", "-s", "rail", "--json")
 	if !strings.Contains(out, "agents_disabled") {
 		t.Errorf("ASSERTION: start-agent --json does not carry agents_disabled:\n%s", out)
@@ -320,10 +281,6 @@ func TestAgentsOffRespondGrantStillHolds(t *testing.T) {
 	}
 	waitPane("PROMPTPANE", "Allow the edit? [y/n]")
 
-	// A types y and Enter into B, from a shell in A.
-	// The quotes keep the typed line itself from matching the marker.
-	// Only the part of the refusal that names the grant reaches the pane:
-	// the whole message is long enough to scroll it off a small pane.
 	answer := "e=$(mktemp); " + tuiosBin + " send-keys -s rail -w PROMPTPANE 'y Enter' 2>\"$e\"; s=$?; grep -o 'needs the [a-z]* grant' \"$e\"; rm -f \"$e\"; echo RESP_\"EXIT\"=$s\n"
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "rail", "-w", "AGENTPANE", answer); err != nil {
 		t.Fatalf("send-text into A: %v\n%s", err, out)
@@ -340,18 +297,15 @@ func TestAgentsOffRespondGrantStillHolds(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	a, _ := tuiosCLI(t, base, "capture-pane", "-s", "rail", "-w", "AGENTPANE")
-	// The pane wraps the message, so it is read with its line breaks folded.
 	if flat := strings.Join(strings.Fields(a), " "); !strings.Contains(flat, "RESP_EXIT=1") || !strings.Contains(flat, "needs the respond grant") {
 		t.Errorf("ASSERTION: A was not refused for the respond grant:\n%s", a)
 	}
-	// Give stray keys time to land before reading B.
 	time.Sleep(time.Second)
 	if b, _ := tuiosCLI(t, base, "capture-pane", "-s", "rail", "-w", "PROMPTPANE"); strings.Contains(b, "ANSWERED") {
 		t.Fatalf("ASSERTION: A answered B's prompt without respond:\n%s", b)
 	}
 	saveFrame(t, term, "agents-off-respond-refused")
 
-	// The positive half: with respond, the same keys answer the prompt.
 	out, err := tuiosCLI(t, base, "list-windows", "-s", "rail", "--json")
 	if err != nil {
 		t.Fatalf("list-windows: %v\n%s", err, out)
@@ -428,8 +382,6 @@ func TestAgentsSwitchAppliesOnReload(t *testing.T) {
 	alive(t, term, "after the switch went off and on")
 }
 
-// waitAgentsSwitch waits until the daemon under base applies the switch: an
-// agent verb is refused while it is off and served while it is on.
 func waitAgentsSwitch(t *testing.T, base string, off bool) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -472,7 +424,6 @@ func TestAgentsOffDropsTheQueue(t *testing.T) {
 		return out
 	}
 
-	// The positive half: a queue with no switch in between is typed.
 	queue("AGENTPANE", "POSMARK-9c1")
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "rail", "-w", "AGENTPANE", "idle"); err != nil {
 		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
@@ -562,8 +513,6 @@ func TestAgentsOffTmuxShimTypesIntoItsOwnPane(t *testing.T) {
 		a, _ := tuiosCLI(t, base, "capture-pane", "-s", "rail", "-w", "AGENTPANE")
 		t.Fatalf("ASSERTION: the shim could not type into the pane it opened:\n%s", a)
 	}
-	// cat echoes the line in the pane it runs in. The pane opened with -d
-	// may be out of sight, so it is read with capture-pane.
 	out, err := tuiosCLI(t, base, "list-windows", "-s", "rail", "--json")
 	if err != nil {
 		t.Fatalf("list-windows: %v\n%s", err, out)
@@ -611,7 +560,6 @@ func TestAgentsSwitchIsThePersons(t *testing.T) {
 	base := agentsOffFixture(t, false)
 	term := attachIn(t, base, "rail", startOpts{cols: 120, rows: 32, shippedLooks: true})
 
-	// The quotes keep the typed line itself from matching the marker.
 	line := tuiosBin + " set-config agents.enabled false; echo SC_\"EXIT\"=$?\n"
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "rail", "-w", "AGENTPANE", line); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)
@@ -671,8 +619,6 @@ func TestAgentsOffHereRefusesACallToAnotherMachine(t *testing.T) {
 	}
 }
 
-// helpFinds opens the help, searches it for query, and reports whether want
-// is among the results. The search lists every tab at once.
 func helpFinds(t *testing.T, term *tuitest.Terminal, query, want string) bool {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Esc); err != nil {

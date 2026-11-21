@@ -77,7 +77,6 @@ func main() {
 	case "late":
 		late()
 	case "cbirdsrun":
-		// cbirds quits when its frames are done, and so does this.
 		cbirdsrun(len(os.Args) > 2 && os.Args[2] == "exit")
 		return
 	case "multi":
@@ -149,13 +148,10 @@ func multi() {
 	_, _ = out.WriteString("\x1b[13;3H\x1b_Ga=p,i=20,p=7,q=2,C=1\x1b\\")
 	time.Sleep(300 * time.Millisecond)
 	_, _ = out.WriteString("\x1b[13;31H\x1b_Ga=p,i=20,p=7,q=2,C=1\x1b\\")
-	// A p= in the range tuios once took its own slots from.
 	_, _ = out.WriteString("\x1b[13;51H\x1b_Ga=p,i=20,p=2147483649,q=2,C=1\x1b\\")
 	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
 }
 
-// flood places one image 20000 times without p= and never deletes, the way
-// a guest that redraws by placing again does.
 func flood() {
 	out := os.Stdout
 	_, _ = fmt.Fprintf(out, "\x1b_Ga=t,q=2,f=100,i=21,m=0;%s\x1b\\", pngOf(20, 20, 60))
@@ -171,9 +167,6 @@ func flood() {
 	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
 }
 
-// reply sends uploads and placements that kitty answers, and some it does
-// not, then prints each answer the terminal gave. See TestKittyUploadReply
-// for the list.
 func reply() {
 	restore, ok := rawInput()
 	if !ok {
@@ -192,8 +185,6 @@ func reply() {
 	send("\x1b_Ga=t,f=100,I=6,m=1;%s\x1b\\", chunked[:cut])
 	send("\x1b_Gm=0;%s\x1b\\", chunked[cut:])
 
-	// Files: one that exists, one that does not, and a temporary file in a
-	// temporary directory with the name kitty asks for.
 	dir, err := os.MkdirTemp("", "imagenumbers")
 	if err != nil {
 		fmt.Printf("IMAGENUMBERS-ERR %v\r\n", err)
@@ -220,23 +211,16 @@ func reply() {
 	send("\x1b_Ga=t,t=f,f=100,i=11;%s\x1b\\", enc(filepath.Join(dir, "missing.png")))
 	send("\x1b_Ga=t,t=t,f=100,i=12;%s\x1b\\", enc(temp))
 
-	// Both i= and I=: an error.
 	send("\x1b_Ga=t,f=100,i=14,I=13;%s\x1b\\", pngOf(8, 8, 7))
-	// Placements: an image the pane has, one it does not, a number it does
-	// not.
 	send("\x1b_Ga=t,f=100,i=19,q=2;%s\x1b\\", pngOf(8, 8, 8))
 	send("\x1b_Ga=p,i=19,C=1\x1b\\")
 	send("\x1b_Ga=p,i=99,C=1\x1b\\")
 	send("\x1b_Ga=p,I=77,C=1\x1b\\")
-	// q=2 on the last chunk only: no answer.
 	send("\x1b_Ga=t,f=100,I=15,m=1;%s\x1b\\", chunked[:cut])
 	send("\x1b_Gm=0,q=2;%s\x1b\\", chunked[cut:])
-	// A last chunk that names its number again keeps the first chunk's id,
-	// so the next number gets the id after it.
 	send("\x1b_Ga=t,f=100,I=16,m=1;%s\x1b\\", chunked[:cut])
 	send("\x1b_GI=16,m=0;%s\x1b\\", chunked[cut:])
 	send("\x1b_Ga=t,f=100,I=17;%s\x1b\\", pngOf(8, 8, 9))
-	// Not a PNG.
 	send("\x1b_Ga=t,f=100,i=18;%s\x1b\\", enc("this is not a PNG image at all"))
 
 	for _, r := range readReplies(3 * time.Second) {
@@ -245,8 +229,6 @@ func reply() {
 	_, _ = out.WriteString("\r\nIMAGENUMBERS-DONE\r\n")
 }
 
-// late uploads I=1, waits for a key, then uploads I=2, learns its id from
-// the answer and places the image by that id.
 func late() {
 	restore, ok := rawInput()
 	if !ok {
@@ -275,9 +257,6 @@ func late() {
 	_, _ = fmt.Fprintf(out, "\x1b[20;1HIMAGENUMBERS-DONE id=%s\r\n", id)
 }
 
-// cbirdsrun does what one cbirds run does to the terminal: it uploads its
-// sprites by number, draws two frames, and with "exit" frees every image
-// with d=A as it quits.
 func cbirdsrun(exit bool) {
 	out := os.Stdout
 	for n := 1; n <= 5; n++ {
@@ -294,14 +273,11 @@ func cbirdsrun(exit bool) {
 	if exit {
 		_, _ = out.WriteString("\x1b_Ga=d,d=A,q=2\x1b\\")
 	} else {
-		// A delete at the cursor takes placements down and frees nothing.
 		_, _ = out.WriteString("\x1b_Ga=d,d=c,q=2\x1b\\")
 	}
 	_, _ = out.WriteString("\x1b[20;1HIMAGENUMBERS-DONE\r\n")
 }
 
-// rawInput puts the terminal in raw mode so an answer arrives byte for byte,
-// and returns what puts it back.
 func rawInput() (func(), bool) {
 	raw := exec.Command("stty", "raw", "-echo")
 	raw.Stdin = os.Stdin
@@ -316,7 +292,6 @@ func rawInput() (func(), bool) {
 	}, true
 }
 
-// readReplies reads input for d and returns the graphics answers in it.
 func readReplies(d time.Duration) []string {
 	got := make(chan []byte, 64)
 	go func() {

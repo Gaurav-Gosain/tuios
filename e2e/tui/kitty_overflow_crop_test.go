@@ -124,7 +124,6 @@ func TestKittyOverflowCropKeepsThePicturesScale(t *testing.T) {
 	}
 }
 
-// placementIDOf is the p= key of a kitty command's parameters, "" for none.
 func placementIDOf(params string) string {
 	for kv := range strings.SplitSeq(params, ",") {
 		if v, ok := strings.CutPrefix(kv, "p="); ok {
@@ -134,7 +133,6 @@ func placementIDOf(params string) string {
 	return ""
 }
 
-// saveText writes text to the test's artifact directory.
 func saveText(t *testing.T, name, text string) {
 	t.Helper()
 	path := filepath.Join(artifactDir(t), name+".txt")
@@ -143,8 +141,6 @@ func saveText(t *testing.T, name, text string) {
 	}
 }
 
-// buildOverflow compiles the overflow stand-in into the test's temporary
-// directory, which is removed with the test.
 func buildOverflow(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "overflow")

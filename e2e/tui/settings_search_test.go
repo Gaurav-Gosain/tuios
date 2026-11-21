@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// selectedSettingsRow is the settings row the cursor is on: the one line of
-// the panel carrying the selection sigil ahead of a label.
 func selectedSettingsRow(s tuitest.Screen, labels ...string) string {
 	_, rows := s.Size()
 	for row := range rows {
@@ -35,8 +33,6 @@ func TestSettingsSearchChangesARowAndListsWrap(t *testing.T) {
 	newWindow(t, term)
 	openSettings(t, term)
 
-	// The Appearance tab opens on its first row, Agent features. Up wraps to
-	// its last.
 	if err := term.SendKeys(tuitest.Up); err != nil {
 		t.Fatalf("up: %v", err)
 	}
@@ -54,7 +50,6 @@ func TestSettingsSearchChangesARowAndListsWrap(t *testing.T) {
 		t.Fatalf("down on the last row did not go back to the first, Agent features: %v\n%s", err, term.Snapshot())
 	}
 
-	// Confirm quit lives on the Behavior tab; the search finds it from here.
 	if err := term.SendKeys("/", "confirm quit"); err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -76,8 +71,6 @@ func TestSettingsSearchChangesARowAndListsWrap(t *testing.T) {
 		t.Fatalf("enter on the result did not turn Confirm quit on in place: %v\n%s", err, term.Snapshot())
 	}
 
-	// esc clears the search and leaves the page up, with the cursor back on
-	// the row it was on when the search opened; the next esc closes it.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("esc: %v", err)
 	}
@@ -97,8 +90,6 @@ func TestSettingsSearchChangesARowAndListsWrap(t *testing.T) {
 		t.Fatalf("the second esc did not close the page: %v\n%s", err, term.Snapshot())
 	}
 
-	// The change was made to the real setting: its own tab shows it. Tab in
-	// the search goes to the row where it lives.
 	if err := term.SendKeys(",", "/", "confirm quit", tuitest.Tab); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}

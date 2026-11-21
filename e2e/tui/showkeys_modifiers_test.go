@@ -9,11 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Kitty keyboard reports a modifier pressed on its own as a key of its own,
-// with the code of that modifier key: CSI 57441 u is left shift, 57442 left
-// ctrl, 57444 left super. The modifier field adds the modifier itself, so a
-// lone left ctrl press is CSI 57442 ; 5 u. A chord with super is the key's
-// code with modifier 9 (1 + super 8): CSI 107 ; 9 u is super+k.
 const (
 	kittyLeftShift = "\x1b[57441;2u"
 	kittyLeftCtrl  = "\x1b[57442;5u"
@@ -54,7 +49,6 @@ func TestShowKeysSkipsModifierPresses(t *testing.T) {
 		t.Fatalf("ASSERTION: the keycast does not name %s for super+k: %v\n%q\n%s", super, err, showkeysRow(term.Screen()), term.Snapshot())
 	}
 
-	// x, a lone ctrl, a lone shift, x: one pill with a count of two.
 	for _, k := range []string{"x", kittyLeftCtrl, kittyLeftShift, "x"} {
 		if err := term.Type(k); err != nil {
 			t.Fatalf("send %q: %v", k, err)

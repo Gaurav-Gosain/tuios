@@ -12,8 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// peekAgentScript paints Claude Code's permission menu, reads one key, writes
-// it to the file named by its argument, and prints that it was answered.
 const peekAgentScript = `#!/bin/sh
 stty raw -echo
 printf '\033[2J\033[H Bash command\r\n   rm -rf build\r\n Do you want to proceed?\r\n \342\235\257 1. Yes\r\n   2. Yes, and don'\''t ask again for rm commands\r\n   3. No, and tell Claude what to do differently (esc)\r\n'
@@ -67,21 +65,14 @@ func TestInboxPeekAnswersAnApproval(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		// A numbered menu is answered by its digits, which is the one way the
-		// footer offers; a still approves, as pressed below.
 		return strings.Contains(text, "Do you want to proceed?") && strings.Contains(text, "rm -rf build") &&
 			strings.Contains(text, "choose") && strings.Contains(text, "Yes, and don")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the peek never showed the menu and its answers: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "inbox-peek")
-	// Issue #2065: the active row keeps its cursor glyph, and its number sits
-	// in the same column as the other rows'. The title filter dropped the
-	// glyph and left the space after it, a column to the left.
 	assertPeekRowsAligned(t, term.Snapshot(), "1. Yes", "2. Yes, and")
 
-	// esc closes the peek. Nothing in the frame cache's key moves with the
-	// peek, so the next frame once matched the peek's and drew it again.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("close the peek: %v", err)
 	}
@@ -97,7 +88,6 @@ func TestInboxPeekAnswersAnApproval(t *testing.T) {
 		t.Fatalf("the peek did not open again: %v\n%s", err, term.Snapshot())
 	}
 
-	// a asks, and enter answers.
 	if err := term.SendKeys("a", tuitest.Enter); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
@@ -121,8 +111,6 @@ func TestInboxPeekAnswersAnApproval(t *testing.T) {
 	alive(t, term, "after answering from the peek")
 }
 
-// assertPeekRowsAligned fails unless the screen has a row with the cursor glyph
-// before active, and active starts in the same column as other.
 func assertPeekRowsAligned(t *testing.T, screen, active, other string) {
 	t.Helper()
 	col := func(want string) (int, string) {
@@ -146,8 +134,6 @@ func assertPeekRowsAligned(t *testing.T, screen, active, other string) {
 	}
 }
 
-// gateAgentManifest is a harness whose one needs_input rule takes typed text
-// and esc, and no number, on a screen that still shows a numbered list.
 const gateAgentManifest = `schema_version = 1
 id = "tuiosgateagent"
 [detect]
@@ -165,7 +151,6 @@ text = true
 deny = { keys = ["esc"] }
 `
 
-// gateAgentScript paints a numbered list above a text field and waits.
 const gateAgentScript = `#!/bin/sh
 stty raw -echo
 printf '\033[2J\033[H Which change?\r\n \342\235\257 1. Bug fix\r\n   2. New feature\r\n   3. Refactor\r\n Type your answer:\r\n'

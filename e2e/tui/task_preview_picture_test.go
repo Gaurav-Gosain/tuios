@@ -47,8 +47,6 @@ func TestCardPreviewDrawsTheSelectedPicture(t *testing.T) {
 			opts.out = host
 			opts.env = []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
 			if !kitty {
-				// A host that draws no graphics, as image_symbols_test.go makes
-				// one: the picture is block glyphs.
 				opts.env = append(opts.env, "TUIOS_CELL_SIZE=10x20", "TUIOS_SIXEL_GRAPHICS=0", "TUIOS_KITTY_GRAPHICS=0")
 			}
 			term := startIn(t, base, opts)

@@ -12,14 +12,6 @@ import (
 	"time"
 )
 
-// The asks wait 10 seconds of silence before they guess the agent is done,
-// longer than it is silent over a question, so each ask ends on the agent's
-// own idle report.
-
-// slowAgentScript is a stand-in agent that takes 3 seconds over every line
-// typed into it: it reports working, prints GOT[line], waits, prints
-// DONE[line] and reports idle. The terminal does not echo, so the pane shows
-// only what the agent printed.
 const slowAgentScript = `T="$1"
 stty -echo
 "$T" set-agent-state idle -w "$TUIOS_PANE_ID" >/dev/null
@@ -33,7 +25,6 @@ while IFS= read -r l; do
 done
 `
 
-// askResult is the part of ask-agent --json the test reads.
 type askResult struct {
 	Reply        string `json:"reply"`
 	SettledBy    string `json:"settled_by"`
@@ -41,8 +32,6 @@ type askResult struct {
 	WaitedTurnMS int64  `json:"waited_turn_ms"`
 }
 
-// askAsync runs ask-agent in the background and returns a func that waits
-// for it and reads its answer.
 func askAsync(t *testing.T, base, session, window, text string, extra ...string) func() (askResult, string, error) {
 	t.Helper()
 	args := append([]string{"ask-agent", "-s", session, "-w", window, "--json", "--settle", "10000", "--timeout", "60000"}, extra...)
@@ -140,13 +129,11 @@ func TestAsksOfOneAgentTakeTurns(t *testing.T) {
 		return res
 	}
 
-	// Two asks sent together: each types alone and gets its own answer.
 	three := askAsync(t, base, session, agent, "ASK-THREE")
 	four := askAsync(t, base, session, agent, "ASK-FOUR")
 	check("ASK-THREE", three)
 	check("ASK-FOUR", four)
 
-	// One ask is being answered; a second comes with a short ready timeout.
 	one := askAsync(t, base, session, agent, "ASK-ONE")
 	waitCapture(t, base, session, agent, "GOT[ASK-ONE]")
 	two := askAsync(t, base, session, agent, "ASK-TWO", "--ready-timeout", "1000")
@@ -156,11 +143,9 @@ func TestAsksOfOneAgentTakeTurns(t *testing.T) {
 		t.Fatalf("ask ASK-TWO says it waited %d ms behind %d asks, want behind 1 for a second or more", res.WaitedTurnMS, res.QueuedBehind)
 	}
 
-	// The pane took the questions one at a time, in the order they came.
 	pane := strings.ReplaceAll(capture(t, base, session, agent), "\n", "")
 	pos := func(s string) int { return strings.Index(pane, s) }
 	order := []string{"GOT[ASK-ONE]", "DONE[ASK-ONE]", "GOT[ASK-TWO]", "DONE[ASK-TWO]"}
-	// ASK-THREE and ASK-FOUR came first, so ASK-ONE is looked for after them.
 	if done := max(pos("DONE[ASK-THREE]"), pos("DONE[ASK-FOUR]")); pos("GOT[ASK-ONE]") < done {
 		t.Fatalf("ASK-ONE was typed before the asks ahead of it were answered:\n%s", pane)
 	}
@@ -210,7 +195,6 @@ func TestACancelledAskLeavesTheLine(t *testing.T) {
 	first := askAsync(t, base, session, agent, "ASK-FIRST")
 	waitCapture(t, base, session, agent, "GOT[ASK-FIRST]")
 
-	// The second caller waits its turn, then goes away.
 	args := []string{"ask-agent", "-s", session, "-w", agent, "--json", "--settle", "10000", "--timeout", "60000", "ASK-CANCELLED"}
 	cancelled := exec.Command(tuiosBin, args...)
 	cancelled.Dir = workDirIn(t, base)
@@ -236,7 +220,6 @@ func TestACancelledAskLeavesTheLine(t *testing.T) {
 	if res.QueuedBehind != 1 {
 		t.Errorf("the third ask waited behind %d asks, want 1: the cancelled one left the line", res.QueuedBehind)
 	}
-	// Room for the cancelled question to be typed, if it were.
 	time.Sleep(4 * time.Second)
 	pane := capture(t, base, session, agent)
 	if err := os.WriteFile(filepath.Join(artifactDir(t), "ask-cancel.log"), []byte(pane), 0o644); err != nil {

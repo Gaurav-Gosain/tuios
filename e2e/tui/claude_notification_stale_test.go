@@ -10,21 +10,14 @@ import (
 	"time"
 )
 
-// claudeStage is one pane in a throwaway daemon that draws Claude Code's
-// screens, with Claude Code's real hook run against it. The pane never runs
-// Claude Code: each frame is printed with the shell held in a read so its
-// prompt does not come back under it, and Esc is modelled by the frame Esc
-// leaves.
 type claudeStage struct {
 	t               *testing.T
 	base, sess, win string
 	log             *stateLog
 	title           string
-	// playing says a frame's read holds the shell.
-	playing bool
+	playing         bool
 }
 
-// Claude Code's frames, as tuios's screen rules read them.
 var (
 	claudeRule      = strings.Repeat("─", 60)
 	claudeMenu      = []string{"Bash command", "  go test ./...", "Do you want to proceed?", "❯ 1. Yes", "  2. Yes, and don't ask again for go test commands", "  3. No, and tell Claude what to do differently (esc)"}
@@ -53,8 +46,6 @@ func newClaudeStage(t *testing.T, logName string) *claudeStage {
 	return c
 }
 
-// hook runs Claude Code's hook with payload and waits for the pane to be on
-// state.
 func (c *claudeStage) hook(step, payload, state string) {
 	c.t.Helper()
 	if out := runHook(c.t, c.base, "claude-code", c.sess, c.win, payload); out != "" {
@@ -63,21 +54,16 @@ func (c *claudeStage) hook(step, payload, state string) {
 	waitAgentState(c.t, c.base, c.sess, c.win, state, "claude-code", c.log, step)
 }
 
-// draw stops the frame on the pane and draws lines in its place, under the
-// stage's title when it has one.
 func (c *claudeStage) draw(lines ...string) {
 	c.t.Helper()
 	c.play(c.frame(lines))
 }
 
-// drawUntil draws lines, and the frame next once the file flag exists, with
-// nothing written to the pane in between.
 func (c *claudeStage) drawUntil(lines []string, flag string, next ...string) {
 	c.t.Helper()
 	c.play(c.frame(lines) + fmt.Sprintf("until [ -e '%s' ]; do sleep 0.1; done; ", flag) + c.frame(next))
 }
 
-// frame is the shell command that clears the pane and prints one frame.
 func (c *claudeStage) frame(lines []string) string {
 	quoted := make([]string, len(lines))
 	for i, l := range lines {
@@ -93,10 +79,6 @@ func (c *claudeStage) frame(lines []string) string {
 	return cmd
 }
 
-// play ends the frame the pane holds, if any, and types cmd, which holds its
-// frame with a read so the shell's prompt does not come back under it. A
-// newline ends the frame. A Ctrl-C to a sleep did too, but on macOS the next
-// write to the pane failed with EIO in four runs of five on a loaded machine.
 func (c *claudeStage) play(cmd string) {
 	c.t.Helper()
 	if c.playing {
@@ -110,8 +92,6 @@ func (c *claudeStage) play(cmd string) {
 	}
 }
 
-// waitItems waits for the pane's prompt to open an Inbox item, and returns
-// the open items about it.
 func (c *claudeStage) waitItems() []string {
 	c.t.Helper()
 	items := c.blockItems()
@@ -125,7 +105,6 @@ func (c *claudeStage) waitItems() []string {
 	return items
 }
 
-// sameItems checks the Inbox holds the items want and no others.
 func (c *claudeStage) sameItems(step string, want []string) {
 	c.t.Helper()
 	if got := c.blockItems(); len(got) != len(want) || (len(got) > 0 && got[0] != want[0]) {
@@ -138,7 +117,6 @@ func (c *claudeStage) note(step string, st agentStateJSON) {
 	c.log.add("%-48s state=%s source=%s blocked_by=%s message=%q", step, st.State, st.Source, st.BlockedBy, st.Message)
 }
 
-// holds checks the pane stays on state for d, and returns what it says then.
 func (c *claudeStage) holds(state, step string, d time.Duration) agentStateJSON {
 	c.t.Helper()
 	deadline := time.Now().Add(d)
@@ -154,7 +132,6 @@ func (c *claudeStage) holds(state, step string, d time.Duration) agentStateJSON 
 	return st
 }
 
-// leaves waits for the pane to leave needs_input.
 func (c *claudeStage) leaves(step string) {
 	c.t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -172,7 +149,6 @@ func (c *claudeStage) leaves(step string) {
 	}
 }
 
-// waitSource waits for the pane's state to be read from source.
 func (c *claudeStage) waitSource(source, step string) {
 	c.t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -190,9 +166,6 @@ func (c *claudeStage) waitSource(source, step string) {
 	}
 }
 
-// waitFrame waits for the pane to show the frame lines and nothing else: the
-// command that printed it cleared the screen first, so the command itself is
-// gone once the frame is up.
 func (c *claudeStage) waitFrame(lines ...string) {
 	c.t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -215,7 +188,6 @@ func (c *claudeStage) waitFrame(lines ...string) {
 	}
 }
 
-// blockItems lists the ids of the open Inbox items about the pane's prompt.
 func (c *claudeStage) blockItems() []string {
 	c.t.Helper()
 	out, err := tuiosCLI(c.t, c.base, "list-attention", "--json")
@@ -304,8 +276,6 @@ func TestClaudePromptKeepsItsWordsThroughARedraw(t *testing.T) {
 	}
 	c.draw(claudeMenu...)
 	c.waitSource("screen", "the menu drawn: the screen reads it")
-	// A frame of the redraw that no rule reads, standing long enough for the
-	// screen to give the prompt back.
 	partial := []string{"Bash command", "  go test ./..."}
 	c.draw(partial...)
 	c.waitFrame(partial...)
@@ -350,8 +320,6 @@ func TestClaudePromptHoldsThroughABlankFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.waitFrame()
-	// Longer than agentStartupGrace, which holds every idle look for a
-	// harness the daemon has only just seen in the pane.
 	c.holds("needs_input", "the menu, then a blank frame for 4s", 4*time.Second)
 	c.draw(claudeMenu...)
 	c.holds("needs_input", "the menu back", 2*time.Second)
@@ -418,8 +386,6 @@ func TestClaudeFormOptionIsNoPromptBox(t *testing.T) {
 	c.leaves("the form answered: the prompt box empty")
 }
 
-// Frames of a turn running, as Claude Code draws them: the spinner in the
-// title, and the spinner line a screen rule reads as working.
 const (
 	claudeSpinnerTitle = "⠋ Claude Code"
 	claudeRestTitle    = "✳ Claude Code"
@@ -427,7 +393,6 @@ const (
 )
 
 var (
-	// claudeUnreadForm is a form no screen rule reads.
 	claudeUnreadForm = []string{"Bash command", "  go test ./...", "Allow this command to run?"}
 	claudeThinking   = "✻ Thinking… (3s · ↑ 120 tokens)"
 	claudeRunning    = []string{"⏺ Bash(go test ./...)", "", "✻ Running… (1s)"}

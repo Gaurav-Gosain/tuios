@@ -11,26 +11,13 @@ import (
 	"tuios.dev/shot"
 )
 
-// The way out of the spotlight, driven against the real binary.
-//
-// People who switched the beam on by accident saw "Spotlight: ON" for a few
-// seconds and then a dimmed screen with nothing on it that said why or how to
-// undo it. These hold the fix to what a person sees and presses: a chip in the
-// dock while the beam is on, esc in window mode, a click on the chip, and the
-// leader chord in terminal mode, where esc stays with the program in the pane.
-
-// spotlightChipText is the chip's name for the beam.
 const spotlightChipText = "Spotlight"
 
-// spotlightOnMessage and spotlightOffMessage are the dock messages for the
-// two states, in window mode.
 const (
 	spotlightOnMessage  = "Spotlight is on. Press Esc to turn it off."
 	spotlightOffMessage = "Spotlight is off."
 )
 
-// spotlightChip finds the chip in the dock row: the first "Spotlight" there,
-// with its hint after it. ok is false when the dock carries no chip.
 func spotlightChip(s tuitest.Screen) (row, col int, ok bool) {
 	_, rows := s.Size()
 	for y := rows - 1; y >= 0; y-- {
@@ -38,7 +25,6 @@ func spotlightChip(s tuitest.Screen) (row, col int, ok bool) {
 		if line == "" {
 			continue
 		}
-		// The last non-empty row is the dock.
 		b := strings.Index(line, spotlightChipText+" ")
 		if b < 0 || !strings.Contains(line[b:], "turn off") {
 			return y, -1, false
@@ -48,7 +34,6 @@ func spotlightChip(s tuitest.Screen) (row, col int, ok bool) {
 	return -1, -1, false
 }
 
-// waitSpotlightChip waits for the chip and returns where it is.
 func waitSpotlightChip(t *testing.T, term *tuitest.Terminal) (row, col int) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -61,7 +46,6 @@ func waitSpotlightChip(t *testing.T, term *tuitest.Terminal) (row, col int) {
 	return row, col
 }
 
-// waitSpotlightOff waits for the off message and for the chip to go.
 func waitSpotlightOff(t *testing.T, term *tuitest.Terminal, how string) {
 	t.Helper()
 	if err := term.WaitForText(spotlightOffMessage, uiTimeout); err != nil {
@@ -75,8 +59,6 @@ func waitSpotlightOff(t *testing.T, term *tuitest.Terminal, how string) {
 	}
 }
 
-// saveSpotlightFrame keeps the frame as text, styled text and a PNG when
-// TUIOS_E2E_FRAMES names a directory.
 func saveSpotlightFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	saveFrame(t, term, name)
@@ -85,8 +67,6 @@ func saveSpotlightFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	}
 }
 
-// startWithSpotlight boots tuios with the beam already on, as a person who
-// switched it on last time finds it: the choice is saved.
 func startWithSpotlight(t *testing.T) *tuitest.Terminal {
 	t.Helper()
 	base := spotlightConfigFile(t, spotlightOn)
@@ -114,7 +94,6 @@ func TestSpotlightKeyShowsTheChipAndTheWayOut(t *testing.T) {
 	waitSpotlightChip(t, term)
 	saveSpotlightFrame(t, term, "spotlight-chip-message")
 
-	// The message burns down. The chip is what is left, and it has to be.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), spotlightOnMessage)
 	}, 30*time.Second); err != nil {
@@ -125,8 +104,6 @@ func TestSpotlightKeyShowsTheChipAndTheWayOut(t *testing.T) {
 	if !strings.Contains(line, "esc") {
 		t.Errorf("the chip in window mode does not name esc: %q", line)
 	}
-	// The chip is the way out, so the beam must not dim it. Its label is a
-	// light ink; dimmed, it carries a quarter of its light.
 	if label := term.Screen().Cell(col+1, row); spotlightLight(t, label.Fg) < 400 || label.Faint {
 		t.Errorf("the chip label is dimmed (%+v, faint %v); the way out is in the dark",
 			label.Fg, label.Faint)
@@ -196,14 +173,8 @@ func TestEscReachesTheProgramWhileTheSpotlightIsOn(t *testing.T) {
 	term := startWithSpotlight(t)
 	enterTerminalMode(t, term)
 	runInShell(t, term, `echo "$(echo CAT)READY"; cat -v`, "CATREADY", shellTimeout)
-	// The positive half: the beam is on, so a chip that is still there after
-	// the escs means they left it on.
 	waitSpotlightChip(t, term)
 
-	// One esc on its own reaches the pane as fast as a plain key does. A
-	// double-esc exit has to hold the first esc until it knows no second one
-	// follows, and that hold is the lag this measures. The tty echoes each
-	// key as it arrives, esc as ^[, so the echo is the moment cat got it.
 	plain := echoLatency(t, term, "X", "X")
 	single := echoLatency(t, term, tuitest.Esc, "X^[")
 	t.Logf("echo of a plain key took %v, of a single esc %v", plain, single)
@@ -214,9 +185,6 @@ func TestEscReachesTheProgramWhileTheSpotlightIsOn(t *testing.T) {
 		t.Fatalf("send enter: %v", err)
 	}
 
-	// Two escs 100 ms apart, inside the 300 ms a double esc would take, then
-	// a Z to mark the end. They are sent apart because a host that sends ESC
-	// ESC Z as one write has sent esc and alt+z, which is a different press.
 	for _, k := range []tuitest.Key{tuitest.Esc, tuitest.Esc} {
 		if err := term.SendKeys(k); err != nil {
 			t.Fatalf("send esc: %v", err)
@@ -226,7 +194,6 @@ func TestEscReachesTheProgramWhileTheSpotlightIsOn(t *testing.T) {
 	if err := term.SendKeys("Z", tuitest.Enter); err != nil {
 		t.Fatalf("send Z: %v", err)
 	}
-	// cat -v prints esc as ^[. Both have to arrive, in order, before the Z.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "^[^[Z")
 	}, 2*time.Second); err != nil {
@@ -257,7 +224,6 @@ func TestTheLeaderChordTurnsTheSpotlightOffInTerminalMode(t *testing.T) {
 	}
 	waitSpotlightOff(t, term, "ctrl+b, B in terminal mode")
 
-	// The pane is still the one typing, and the B was not typed into it.
 	if err := term.SendKeys("Q", tuitest.Enter); err != nil {
 		t.Fatalf("type into cat: %v", err)
 	}
@@ -271,8 +237,6 @@ func TestTheLeaderChordTurnsTheSpotlightOffInTerminalMode(t *testing.T) {
 	}
 }
 
-// echoLatency sends one key and returns how long the screen took to show one
-// more want than it showed before the key.
 func echoLatency(t *testing.T, term *tuitest.Terminal, key any, want string) time.Duration {
 	t.Helper()
 	before := strings.Count(term.Screen().Text(), want)

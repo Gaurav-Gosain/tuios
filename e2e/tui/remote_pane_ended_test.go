@@ -8,23 +8,6 @@ import (
 	"time"
 )
 
-// A pane on another machine whose daemon there no longer has it cannot come
-// back: the far daemon restarted, and the pane's process went with it. This
-// side must say so, everywhere a caller looks, and tell the person once. A
-// pane whose machine is only down keeps waiting for it, and says that instead.
-//
-// How these could pass wrongly, written down first:
-//   - The rig could link the daemon to itself, and the pane would be hosted
-//     here. It links to a second daemon of its own (remoteMachine).
-//   - A pane that is only reconnecting could be called ended. The third test
-//     holds the far daemon down and wants reconnecting, not ended.
-//   - A refusal could name "ended" and still come back as code internal. The
-//     tests want the pane_ended code and the machine's name.
-//   - wait-for could fail only because its timeout ran out. It is given 30 s
-//     and must answer in a few.
-
-// openFarShell opens a window on build in session near running a shell, and
-// waits until it answers.
 func openFarShell(t *testing.T, base string, env []string, name string) {
 	t.Helper()
 	if out, err := tuiosCLIEnv(t, base, env, "new-window", name, "-s", "near", "--host", "build", "--", "/bin/sh"); err != nil {
@@ -37,8 +20,6 @@ func openFarShell(t *testing.T, base string, env []string, name string) {
 	})
 }
 
-// farPane is far-pane's entry in near's window list, as list-windows --json
-// gives it, and the whole output for a failure message.
 func farPane(base string) (map[string]any, string) {
 	out, err := tuiosOut(base, "list-windows", "-s", "near", "--json")
 	if err != nil {
@@ -58,8 +39,6 @@ func farPane(base string) (map[string]any, string) {
 	return nil, out
 }
 
-// restartBuild stops build's daemon and starts a new one, as a restart over
-// there does: the panes it ran for this machine are gone.
 func restartBuild(t *testing.T, remote string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, remote, "kill-server"); err != nil {
@@ -70,8 +49,6 @@ func restartBuild(t *testing.T, remote string) {
 	}
 }
 
-// endedRig is upgradeRemoteRig with the far machine's base kept, so a test
-// can restart it.
 func endedRig(t *testing.T) (base, remote string, env []string) {
 	t.Helper()
 	base = t.TempDir()

@@ -10,13 +10,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// frameGlyphs is every box-drawing glyph a dialog or panel frame can be drawn
-// with in the styles this test sets. A hidden frame draws none of them.
 const frameGlyphs = "╭╮╰╯─│╔╗╚╝═║┌┐└┘━┃┏┓┗┛"
 
-// overlayFrame is the frame glyphs read off the screen at the corners and
-// edges of an overlay: tl, tr, bl and br are the four corners, top is the
-// cell next to the top-left corner and side the cell under it.
 type overlayFrame struct {
 	tl, tr, bl, br, top, side string
 }
@@ -129,23 +124,17 @@ func TestOverlayBordersFollowBorderStyle(t *testing.T) {
 	})
 }
 
-// The colour depths the subtests run at, as TERM and COLORTERM select them.
 var (
 	truecolor      = []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
 	sixteenColours = []string{"TERM=xterm", "COLORTERM="}
 )
 
-// startOverlayBorders attaches a client with env (its colour depth) to a fresh
-// daemon whose config carries appearance, and settles it in window-management
-// mode.
 func startOverlayBorders(t *testing.T, appearance string, env []string) *tuitest.Terminal {
 	t.Helper()
 	term, _ := startOverlaySession(t, appearance, env)
 	return term
 }
 
-// startOverlaySession is startOverlayBorders that also returns the client's
-// base directory, for a test that runs the CLI against the same daemon.
 func startOverlaySession(t *testing.T, appearance string, env []string) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -171,12 +160,8 @@ func startOverlaySession(t *testing.T, appearance string, env []string) (*tuites
 	return term, base
 }
 
-// overlayBox is where an overlay's frame cells are: x0 and x1 are its left and
-// right columns, y0 and y1 its top and bottom rows.
 type overlayBox struct{ x0, x1, y0, y1 int }
 
-// rowCol returns the column text starts at in row y, counting cells rather
-// than runes, or -1.
 func rowCol(s tuitest.Screen, y int, text string) int {
 	cols, _ := s.Size()
 	var row strings.Builder
@@ -198,9 +183,6 @@ func rowCol(s tuitest.Screen, y int, text string) int {
 	return at[i]
 }
 
-// renameBox finds the rename dialog: its title sits three cells right of the
-// top-left corner, and its hint strip ends with "cancel", one pad cell and one
-// rule cell inside the right edge, on the bottom border two rows down.
 func renameBox(s tuitest.Screen) (overlayBox, bool) {
 	_, rows := s.Size()
 	for y := 0; y+2 < rows; y++ {
@@ -239,11 +221,6 @@ func closeRename(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// openPaletteFrame opens the command palette and finds its frame cells. The
-// title chip's text is one chip pad and two cells of panel padding right of
-// the left edge, the top edge is the row above the chip, and the right edge
-// and the bottom are where the panel's surface ends, read along the top row
-// and down the padding column, which no row highlight reaches.
 func openPaletteFrame(t *testing.T, term *tuitest.Terminal) overlayBox {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('p'))
@@ -271,12 +248,6 @@ func openPaletteFrame(t *testing.T, term *tuitest.Terminal) overlayBox {
 	return overlayBox{}
 }
 
-// openPaletteFrameByCorners is openPaletteFrame for a framed panel, whose
-// frame cells sit on what is behind the panel rather than on its fill, so the
-// panel's extent cannot be read off a fill. The left edge is found the same
-// way, and the right edge and the bottom are the top-right corner tr and the
-// bottom-left corner bl the test expects there: a missing corner leaves the
-// box at the left edge alone, and wantFrame then reports what is drawn there.
 func openPaletteFrameByCorners(t *testing.T, term *tuitest.Terminal, tr, bl string) overlayBox {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('p'))
@@ -307,7 +278,6 @@ func openPaletteFrameByCorners(t *testing.T, term *tuitest.Terminal, tr, bl stri
 	return overlayBox{}
 }
 
-// wantFrame fails unless the overlay's corners and edges carry want.
 func wantFrame(t *testing.T, term *tuitest.Terminal, what string, b overlayBox, want overlayFrame) {
 	t.Helper()
 	var got overlayFrame
@@ -326,7 +296,6 @@ func wantFrame(t *testing.T, term *tuitest.Terminal, what string, b overlayBox, 
 	}
 }
 
-// saveOverlayText writes text into the artifact directory beside the frames.
 func saveOverlayText(t *testing.T, dir, name, text string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name+".txt"), []byte(text), 0o644); err != nil {

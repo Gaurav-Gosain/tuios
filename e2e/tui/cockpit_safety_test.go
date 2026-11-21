@@ -8,10 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The agents view's safety rules, each read off the screen the way a person
-// reads it: a bulk key acts only on marks the person can see, and an
-// approval whose command the card cannot show whole is not answered there.
-
 // TestCockpitBulkActsOnlyOnSeenMarks marks the agent that holds an approval.
 // The mark shows on its row and the title counts it. With its group folded
 // the row is gone from the list, and 3, the bulk reject, rejects nothing: the
@@ -22,10 +18,8 @@ import (
 // list instead of the rows the fleet shows, 3 rejects the folded agent's
 // approval and the hook prints the reject.
 func TestCockpitBulkActsOnlyOnSeenMarks(t *testing.T) {
-	// The mark in the Nerd Font set, which the client draws by default.
 	const markGlyph = "\uf14a"
 	term, base, hookOut, _ := startCockpitFleet(t, 200, 55, nil)
-	// The cursor opens on the oldest wait, api-auth's approval.
 	if err := term.SendKeys("x"); err != nil {
 		t.Fatalf("x: %v", err)
 	}
@@ -37,8 +31,6 @@ func TestCockpitBulkActsOnlyOnSeenMarks(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "cockpit-marked")
 
-	// A click on the Needs you heading folds the group, and the marked row
-	// with it.
 	head := fleetRowWith(term.Screen(), "Needs you")
 	mouseClick(t, term, 4, head, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return fleetRowWith(s, "api-auth") < 0 }, uiTimeout); err != nil {
@@ -101,7 +93,6 @@ func TestCockpitCutApprovalIsNotAnswered(t *testing.T) {
 		t.Fatalf("ASSERTION: the card does not say the command is too long to show: %v\n%s", err, term.Snapshot())
 	}
 	s := term.Screen()
-	// The card stays inside the body: its last line is above the hints row.
 	if cut, hints := rowWith(s, "Too long to show here"), rowWith(s, "esc close"); cut < 0 || hints <= cut {
 		t.Fatalf("ASSERTION: the card runs into the hints row (card %d, hints %d)\n%s", cut, hints, term.Snapshot())
 	}
@@ -153,8 +144,6 @@ func TestCockpitApprovalCardOnEveryTab(t *testing.T) {
 		t.Fatalf("open the agents view: %v", err)
 	}
 	waitText(t, term, "the approval on the Thread tab", "Allow Bash?", "Allow once", "Checkpoints", "Pane")
-	// ] steps the tabs: Thread, Changes, Checkpoints, Live. Each tab's own
-	// body says it is drawn, and the card is under it.
 	for _, tab := range []struct{ name, body string }{
 		{"Checkpoints", "Checkpoints need the pane in a git work tree."},
 		{"Pane", "╭"},
@@ -178,7 +167,6 @@ func TestCockpitApprovalCardOnEveryTab(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "approval-on-live-tab")
 	time.Sleep(answerSettle)
-	// The key asks, and enter answers.
 	if err := term.SendKeys("a", tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}

@@ -10,14 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The ui grant: a shell plugin sets a dock cell from an action and exits, the
-// daemon keeps the text, a click runs an action, a notice shows under the
-// plugin's name, and a TML panel opens that the plugin reads back. The grant
-// reaches nothing else, a form a hook opened outside every pane included. A
-// plugin without it is refused, and a person's shell is refused.
-//
-// The negative controls are in NEGATIVE_CONTROLS.md, "The ui grant".
-
 const uiManifest = `api = 1
 id = "e2e.ui"
 name = "UI probe"
@@ -68,7 +60,6 @@ echo $? > panel.code
 echo $? > own.code
 `
 
-// uiProbe tries what the ui grant must not reach.
 const uiProbe = `D="$TUIOS_PLUGIN_STATE_DIR"
 run() { n=$1; shift; "$@" >"$D/$n.out" 2>&1; echo $? >"$D/$n.code"; }
 run type "$TUIOS_BIN" send-text -s "$TUIOS_PLUGIN_SESSION" "echo typed"
@@ -84,8 +75,6 @@ func TestPluginUIGrant(t *testing.T) {
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{"tuios-plugin.toml": uiManifest, "set.sh": uiSet, "panel.sh": uiPanel, "probe.sh": uiProbe})
 	base := t.TempDir()
-	// A hook runs outside every pane, so tuios cannot place it. Armed once,
-	// it opens a form as a pane and leaves the surface id in hookID.
 	armed := filepath.Join(base, "armed")
 	hookID := filepath.Join(base, "hook.id")
 	hookOut := filepath.Join(base, "hook.out")
@@ -119,12 +108,10 @@ func TestPluginUIGrant(t *testing.T) {
 		}
 	}
 
-	// A person's shell has no plugin.
 	if out, err := tuiosCLI(t, base, "plugin-cell", "set", "status", "x"); err == nil || !strings.Contains(out, "for a plugin's process") {
 		t.Errorf("plugin-cell from a shell: %v\n%s", err, out)
 	}
 
-	// The hook's form, with a value the person typed into it.
 	if err := os.WriteFile(armed, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +137,6 @@ func TestPluginUIGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// What the grant does not reach.
 	run("probe")
 	for name, want := range map[string]string{"type": "needs the", "read": "needs the", "list": "needs the", "other": "no [[cell]] with the id", "hook": "refused for plugin " + id} {
 		code, _ := os.ReadFile(filepath.Join(state, name+".code"))
@@ -171,7 +157,6 @@ func TestPluginUIGrant(t *testing.T) {
 		t.Fatalf("attach: %v\n%s", err, term.Snapshot())
 	}
 	run("set")
-	// The notice sits where the right-hand cells do while it shows.
 	if err := term.WaitForText("UI probe: The build passed", uiTimeout); err != nil {
 		t.Fatalf("the notice did not show under the plugin's name: %v\n%s", err, term.Snapshot())
 	}
@@ -181,7 +166,6 @@ func TestPluginUIGrant(t *testing.T) {
 	}
 	savePNG(t, term.Screen(), hostPalette(t, ""), art, "cell")
 
-	// A click on the cell runs the action it names.
 	x, y, ok := dockCellFind(term.Screen(), "CI ok")
 	if !ok {
 		t.Fatalf("the cell is not on the dock:\n%s", term.Snapshot())
@@ -189,14 +173,12 @@ func TestPluginUIGrant(t *testing.T) {
 	mouseClick(t, term, x+1, y, tuitest.MouseLeft, 0)
 	waitFile(t, filepath.Join(state, "clicked"), func(s string) bool { return strings.Contains(s, "yes") }, "the action of the cell")
 
-	// A panel, with the ui grant alone.
 	go func() { _, _ = tuiosCLI(t, base, "plugins", "run", id, "panel", "--wait") }()
 	if err := term.WaitForText("panel from a plugin", uiTimeout); err != nil {
 		b, _ := os.ReadFile(filepath.Join(state, "panel.out"))
 		e, _ := os.ReadFile(filepath.Join(state, "panel.err"))
 		t.Fatalf("the panel did not open: %v\n%s%s\n%s", err, b, e, term.Snapshot())
 	}
-	// The plugin reads its own panel.
 	code := strings.TrimSpace(waitFile(t, filepath.Join(state, "own.code"), func(s string) bool { return strings.TrimSpace(s) != "" }, "the plugin's tml get of its panel"))
 	if own, _ := os.ReadFile(filepath.Join(state, "own.out")); code != "0" || !strings.Contains(string(own), "panel from a plugin") {
 		e, _ := os.ReadFile(filepath.Join(state, "own.err"))
@@ -207,14 +189,12 @@ func TestPluginUIGrant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A client that attaches later gets the cell, at 16 colours too.
 	late := startIn(t, base, startOpts{args: []string{"attach", "work"}, env: []string{"TERM=xterm", "COLORTERM="}})
 	if err := late.WaitForText("CI ok", bootTimeout); err != nil {
 		t.Fatalf("a late client has no cell: %v\n%s", err, late.Snapshot())
 	}
 	savePNG(t, late.Screen(), hostPalette(t, ""), art, "cell-16-colours")
 
-	// The cell goes when the plugin stops.
 	if out, err := tuiosCLI(t, base, "plugins", "disable", id); err != nil {
 		t.Fatalf("disable: %v\n%s", err, out)
 	}
@@ -226,7 +206,6 @@ func TestPluginUIGrant(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Without the grant.
 	plain := t.TempDir()
 	writeFiles(t, plain, map[string]string{
 		"tuios-plugin.toml": strings.NewReplacer(`"e2e.ui"`, `"e2e.noui"`, `grants = ["ui"]`, `grants = ["read"]`).Replace(uiManifest),

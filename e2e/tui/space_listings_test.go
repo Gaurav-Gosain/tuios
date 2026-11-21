@@ -11,21 +11,11 @@ import (
 	"time"
 )
 
-// The two session listings besides the live tuios ls: the saved listing tuios
-// ls prints with no daemon, and tuios ls --all-hosts. Both group by space the
-// way tuios ls does, and with no session in any space both print what a build
-// without the grouping prints.
-
-// spaceGroup is one table a grouped listing should draw: the space heading it,
-// "" for the sessions in no space, and the sessions it holds.
 type spaceGroup struct {
 	heading string
 	members []string
 }
 
-// wantSpaceGroups fails unless blocks starts with exactly groups, in order:
-// each space's table under its name, the sessions in no space with no heading,
-// and each table holding only its own sessions out of all.
 func wantSpaceGroups(t *testing.T, what string, blocks []string, groups []spaceGroup, all []string, out string) {
 	t.Helper()
 	if len(blocks) < len(groups) {
@@ -48,8 +38,6 @@ func wantSpaceGroups(t *testing.T, what string, blocks []string, groups []spaceG
 	}
 }
 
-// savedListing is tuios ls with no daemon running. It exits with the
-// no-daemon status, so only the output is kept.
 func savedListing(t *testing.T, base string, args ...string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, append([]string{"ls"}, args...)...)
@@ -93,7 +81,6 @@ func TestSavedLsGroupsSessionsBySpace(t *testing.T) {
 	newInSpace(t, base, "e2e-alpha-1", "alpha")
 	newInSpace(t, base, "e2e-alpha-2", "alpha")
 
-	// kill-server is synchronous and saves every session on the way out.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}
@@ -150,8 +137,6 @@ func TestSavedLsGroupsSessionsBySpace(t *testing.T) {
 	}
 }
 
-// allHostsListing polls tuios ls --all-hosts until every name in want is
-// listed, which is when the link to the host has answered.
 func allHostsListing(t *testing.T, bin, base string, env []string, want []string, args ...string) string {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -171,8 +156,6 @@ func allHostsListing(t *testing.T, bin, base string, env []string, want []string
 	return out
 }
 
-// hostSections splits tuios ls --all-hosts output, styling stripped, into each
-// host's blocks, keyed by the host's line.
 func hostSections(out string, hosts []string) map[string][]string {
 	sections := map[string][]string{}
 	current := ""
@@ -228,7 +211,6 @@ func TestAllHostsLsGroupsEachHostBySpace(t *testing.T) {
 	newInSpace(t, remote, "far-api", "payments")
 	newInSpace(t, remote, "far-alpha", "alpha")
 
-	// The first command starts this machine's daemon, with the ssh stand-in.
 	if out, err := tuiosCLIEnv(t, base, env, "new", "near-loose", "--detach"); err != nil {
 		t.Fatalf("create near-loose: %v: %s", err, out)
 	}
@@ -361,7 +343,6 @@ func TestSpacelessListingsAreUnchanged(t *testing.T) {
 	}
 }
 
-// tuiosCLIBinEnv is tuiosCLIWith with extra environment.
 func tuiosCLIBinEnv(t *testing.T, bin, base string, env []string, args ...string) (string, error) {
 	t.Helper()
 	pinPreV080Looks(t, base)

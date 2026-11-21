@@ -29,11 +29,6 @@ func TestRailRenamesAndAccentsAWindow(t *testing.T) {
 		t.Fatalf("sidebar did not open: %v\n%s", err, term.Snapshot())
 	}
 
-	// Focus the rail and step onto the first window row. l is the rail's own
-	// "into the next section" key, which lands on the first row of the terminals
-	// list: the section's header carries an add control that the j walk steps
-	// onto on the way past, and a test about renaming should not be spelling out
-	// that arithmetic to reach the row it is about.
 	if err := term.SendKeys("s"); err != nil {
 		t.Fatalf("focus the rail: %v", err)
 	}
@@ -61,8 +56,6 @@ func TestRailRenamesAndAccentsAWindow(t *testing.T) {
 		t.Fatalf("the rename did not commit to the row: %v\n%s", err, term.Snapshot())
 	}
 
-	// The colour picker opens on the same row and takes a colour. The hex field
-	// is the part a keyboard-driven test can steer without guessing at cells.
 	if err := term.SendKeys("c"); err != nil {
 		t.Fatalf("open the accent picker: %v", err)
 	}

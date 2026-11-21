@@ -14,8 +14,6 @@ import (
 	"testing"
 )
 
-// managedTools are the tools the workflow installs on the shard that holds a
-// test needing them. The rest (bash, tmux, git) are on every runner.
 var managedTools = []string{"fish", "jj", "lua", "zsh"}
 
 // TestToolsListMatchesTheTests keeps tools.txt whole. The CI workflow reads
@@ -87,7 +85,6 @@ func TestToolsListMatchesTheTests(t *testing.T) {
 			})
 		}
 	}
-	// What each test reaches, through the helpers it calls.
 	got := map[string][]string{}
 	for name := range funcs {
 		if !strings.HasPrefix(name, "Test") {
@@ -143,7 +140,6 @@ func TestToolsListMatchesTheTests(t *testing.T) {
 	}
 }
 
-// readToolsList reads tools.txt: one test per line, then the tools it needs.
 func readToolsList(t *testing.T) map[string][]string {
 	t.Helper()
 	f, err := os.Open("tools.txt")
@@ -178,7 +174,6 @@ func readToolsList(t *testing.T) map[string][]string {
 	return out
 }
 
-// callName is the name a call goes to, and for pkg.Name the package.
 func callName(call *ast.CallExpr) (name, recv string) {
 	switch f := call.Fun.(type) {
 	case *ast.Ident:
@@ -192,7 +187,6 @@ func callName(call *ast.CallExpr) (name, recv string) {
 	return "", ""
 }
 
-// stringArgs are the arguments of call that are string literals.
 func stringArgs(call *ast.CallExpr) []string {
 	var out []string
 	for _, a := range call.Args {

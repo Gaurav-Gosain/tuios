@@ -10,53 +10,14 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The go-to picker (goto_picker, prefix G), driven through a real client over
-// a real daemon: a fuzzy query finds a pane on another workspace of another
-// session and Enter lands there; selector terms narrow the rows; and with
-// nothing typed, Enter goes back to where the client was before, even with an
-// agent that needs you waiting in another session.
-//
-// How these could pass wrongly, written down first:
-//   - The jump could look right on screen and leave the daemon elsewhere. Each
-//     landing is read from the daemon: the client's session from
-//     list-clients, the workspace from list-workspaces, and the focused pane
-//     from list-windows.
-//   - The target could be on the workspace or in the session the client is
-//     already on. It is a pane on workspace 2 of work, the client starts on
-//     home, and work shows workspace 1 until the jump.
-//   - A filter could pass by showing everything. Every structured query names
-//     rows that must be absent as well as rows that must be present, and the
-//     absent ones exist and are listed by another query in the same run.
-//   - The query text echoed in the search line could be read as a row. Rows
-//     are matched with their kind tag in front ("session  home"), which the
-//     search line never holds.
-//   - "Back to where I was" could be the first row by luck. The flip back is
-//     done twice: once to another session, and once to a pane of the same
-//     session that was focused with the prefix key rather than the picker,
-//     so the place is the one the client was on, not the one the picker
-//     last left.
-//   - An agent that needs you could take the first row and Enter would go to
-//     it. The agent needy in ops is in needs_input for both flips back, its
-//     row is on screen when Enter is pressed, and the landing is read from
-//     the daemon, which would show ops.
-//
-// Negative controls, all confirmed red (see NEGATIVE_CONTROLS.md).
-
-// gotoRowText is a row as the picker draws it: the kind tag in its column,
-// then the place.
 func gotoRowText(kind, label string) string {
 	return kind + strings.Repeat(" ", len("workspace")+2-len(kind)) + label
 }
 
-// gotoKindRow matches a row of a kind with any label: the tag sits right
-// after the row's marker column, which is the cursor or two spaces, and the
-// label follows the tag's padding. A pane count ("1 pane   ") is not one.
 func gotoKindRow(kind string) *regexp.Regexp {
 	return regexp.MustCompile(`(› |  )` + regexp.QuoteMeta(gotoRowText(kind, "")) + `\S`)
 }
 
-// gotoWaitRows waits until every present row is drawn and no absent row is.
-// An absent entry is a full row, or a bare kind for every row of that kind.
 func gotoWaitRows(t *testing.T, term *tuitest.Terminal, what string, present, absent []string) {
 	t.Helper()
 	var wrong string
@@ -84,18 +45,14 @@ func gotoWaitRows(t *testing.T, term *tuitest.Terminal, what string, present, ab
 	}
 }
 
-// gotoKindNames are the kind tags, which gotoWaitRows takes as "any row of
-// this kind".
 var gotoKindNames = map[string]bool{"agent": true, "session": true, "workspace": true, "pane": true}
 
-// openGotoPicker presses the leader and G and waits for the panel.
 func openGotoPicker(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('b'), "G")
 	waitScreen(t, term, "the go-to picker never showed", "Go to", "@ # ! filter")
 }
 
-// gotoQuery clears the picker's query and types q.
 func gotoQuery(t *testing.T, term *tuitest.Terminal, q string) {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('u'))
@@ -104,8 +61,6 @@ func gotoQuery(t *testing.T, term *tuitest.Terminal, q string) {
 	}
 }
 
-// waitLanded waits for the daemon to say the client is on sess, showing
-// workspace ws, with pane focused.
 func waitLanded(t *testing.T, term *tuitest.Terminal, base, what, sess string, ws int, pane string) {
 	t.Helper()
 	clientShows(t, base, sess)
@@ -157,7 +112,6 @@ func TestGotoPickerGoesAnywhere(t *testing.T) {
 	clientShows(t, base, "home")
 	dir := artifactDir(t)
 
-	// A fuzzy query finds the pane on workspace 2 of work, and Enter goes there.
 	openGotoPicker(t, term)
 	gotoQuery(t, term, "zebra")
 	gotoWaitRows(t, term, "the fuzzy query did not find the pane", []string{gotoRowText("pane", "work › 2 › zebra-ledger")}, nil)
@@ -165,7 +119,6 @@ func TestGotoPickerGoesAnywhere(t *testing.T) {
 	sendKeys(t, term, tuitest.Enter)
 	waitLanded(t, term, base, "enter on the pane row", "work", 2, zebra)
 
-	// Selector terms narrow the rows, and combine with the picker's own.
 	openGotoPicker(t, term)
 	gotoQuery(t, term, "kind:session space:surge")
 	gotoWaitRows(t, term, "kind:session space:surge",
@@ -185,8 +138,6 @@ func TestGotoPickerGoesAnywhere(t *testing.T) {
 	sendKeys(t, term, tuitest.Esc)
 	waitLanded(t, term, base, "esc closed the picker", "work", 2, zebra)
 
-	// With nothing typed, Enter goes back to the place the client left, not to
-	// the agent that needs you, which is listed right after it.
 	needy := gotoRowText("agent", "ops › 1 › needy")
 	openGotoPicker(t, term)
 	gotoWaitRows(t, term, "the empty query does not list the agent that needs you", []string{needy}, nil)
@@ -194,7 +145,6 @@ func TestGotoPickerGoesAnywhere(t *testing.T) {
 	sendKeys(t, term, tuitest.Enter)
 	waitLanded(t, term, base, "enter on an empty query, back to home", "home", 1, homePane)
 
-	// A move made without the picker is a place left as well.
 	sendKeys(t, term, tuitest.Ctrl('b'), "n")
 	waitLanded(t, term, base, "the prefix n to homeb", "home", 1, homeB)
 	openGotoPicker(t, term)

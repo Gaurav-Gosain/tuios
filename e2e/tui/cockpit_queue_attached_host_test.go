@@ -50,8 +50,6 @@ func TestCockpitQueueWhileAttachedThroughAHost(t *testing.T) {
 		saveCockpitFrames(t, term, "attached-queue-not-listed")
 		t.Fatalf("ASSERTION: the reply is not in alpha's queue:\n%s\n%s", ls, term.Snapshot())
 	}
-	// The thread reads the queue again on its poll. An echo that the poll
-	// cannot find is dropped, so the echo must still be there after it.
 	_ = term.WaitStable(uiTimeout)
 	if !strings.Contains(term.Screen().Text(), "Queued, typed when it rests") {
 		saveCockpitFrames(t, term, "attached-queue-echo-dropped")
@@ -69,8 +67,6 @@ func TestCockpitQueueWhileAttachedThroughAHost(t *testing.T) {
 		out, _ := cliWithin(t, f.alpha, f.env, "capture-pane", "-s", "far", "-w", "far-fix")
 		t.Fatalf("ASSERTION: the queued reply was never typed on alpha at rest: %v\n%s", err, out)
 	}
-	// A real agent starts a turn on the typed reply. That tells the far
-	// daemon the reply was taken, and the entry leaves the queue.
 	if out, err := cliWithin(t, f.alpha, f.env, "set-agent-state", "working", "-s", "far", "-w", "far-fix", "--harness", "claude-code"); err != nil {
 		t.Fatalf("set the agent to work on alpha: %v\n%s", err, out)
 	}
@@ -81,8 +77,6 @@ func TestCockpitQueueWhileAttachedThroughAHost(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the typed reply stayed in alpha's queue: %v\n%s", err, ls)
 	}
-	// The thread reads alpha's queue on its poll and sees the reply gone,
-	// so the echo stops saying it waits.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "Queued, typed when it rests")
 	}, uiTimeout); err != nil {

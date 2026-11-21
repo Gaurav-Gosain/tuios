@@ -12,10 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// borderColumns returns, in order, the screen columns tuios draws a full-height
-// vertical rule in: a pane's own border under separate borders, the divider
-// between two panes under shared borders. The height threshold keeps a stray
-// bar in a pane's text or in the dock from counting as one.
 func borderColumns(s tuitest.Screen) []int {
 	counts := map[int]int{}
 	widest := 0
@@ -38,8 +34,6 @@ func borderColumns(s tuitest.Screen) []int {
 	return cols
 }
 
-// borderRightOf returns the first border column to the right of col, or -1 when
-// the pane's right-hand boundary is the screen edge rather than a drawn rule.
 func borderRightOf(cols []int, col int) int {
 	for _, c := range cols {
 		if c > col {
@@ -49,16 +43,13 @@ func borderRightOf(cols []int, col int) int {
 	return -1
 }
 
-// placedRect is one a=p placement reduced to where it starts and how wide it is.
 type placedRect struct {
-	col, row int // zero-based screen cell of the image's top-left
-	cols     int // c= , the columns the host is told to draw it over
+	col, row int
+	cols     int
 }
 
 var placementColsRE = regexp.MustCompile(`\bc=(\d+)`)
 
-// lastPlacement returns the final placement in the stream, which is the one the
-// host is left showing.
 func lastPlacement(t *testing.T, stream []byte) placedRect {
 	t.Helper()
 	ms := placementRE.FindAllSubmatch(stream, -1)
@@ -110,17 +101,11 @@ func TestKittyImageStopsAtPaneBorder(t *testing.T) {
 			mouseClick(t, term, tc.clickX, 12, tuitest.MouseLeft, 0)
 			time.Sleep(400 * time.Millisecond)
 			enterTerminalMode(t, term)
-			// A click into a pane can already be terminal mode, in which case
-			// enterTerminalMode's own 'i' was typed at the shell prompt. Discard
-			// whatever is on the line before the shell is asked anything.
 			if err := term.SendKeys("\x15"); err != nil {
 				t.Fatalf("clear prompt line: %v", err)
 			}
 			rows, cols := reportedPaneSize(t, term, "A")
 
-			// terminal-browser renders at the pane's own pixel size, which is
-			// its cell size times the cell metrics tuios reports. The e2e host
-			// has no pixel size of its own, so tuios falls back to 9x20.
 			frame := kittyFrameFile(t, t.TempDir(), cols*9, rows*20)
 			stream.mark("frame")
 			typeLine(t, term, "cat "+frame)
@@ -140,11 +125,6 @@ func TestKittyImageStopsAtPaneBorder(t *testing.T) {
 				t.Errorf("image drawn over %d columns in a pane the guest was told was %d wide "+
 					"(placed at col %d)", got.cols, cols, got.col)
 			}
-			// A full-pane image ends where its pane does: on the first column
-			// tuios draws a rule in to its right, or on the screen edge when the
-			// pane is the last one. Landing short leaves a strip the guest
-			// rendered pixels for; landing beyond it paints over the rule and
-			// into the neighbour.
 			wantEnd := borderRightOf(bars, got.col)
 			if wantEnd < 0 {
 				wantEnd = 120

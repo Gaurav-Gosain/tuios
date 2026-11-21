@@ -20,7 +20,6 @@ func TestCopySelectionTextIsReadable(t *testing.T) {
 	for _, look := range chromeLooks {
 		t.Run(look.name, func(t *testing.T) {
 			base := t.TempDir()
-			// The copy cursor in magenta, which copySearch finds it by.
 			conf := copyCursorConfig
 			if look.theme != "" {
 				conf = "[appearance]\ntheme = \"" + look.theme + "\"\n\n" + conf

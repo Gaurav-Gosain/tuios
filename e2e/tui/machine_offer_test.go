@@ -11,24 +11,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The offer to add a machine, on a real daemon with the agent features off
-// and a real client.
-//
-// How this could pass wrongly, written down first:
-//   - A client that never shows the offer passes every "does not fire" half.
-//     So the same daemon, pane and client then show it for a plain login,
-//     and the negative halves wait longer than the positive one needs.
-//   - An offer that rides the agent detection only would pass with the agent
-//     features on. The daemon here runs with [agents] enabled = false.
-//   - A Never kept in memory only would pass while the client runs. The test
-//     starts a new client, and checks sidebar.json. A new client that shows
-//     no offer at all would pass that half too, so the new client must still
-//     show the offer for another machine.
-
-// offerFakeSSH stands in for ssh. ssh -G prints the user, the host and port 22
-// from the destination, as ssh does with no config. Any other run prints a
-// login banner and reads lines until "exit", with no child process, so the
-// pane's foreground program stays the script.
 const offerFakeSSH = `#!/bin/sh
 if [ "$1" = "-G" ]; then
 	for a in "$@"; do d=$a; done
@@ -46,9 +28,6 @@ while IFS= read -r l; do
 done
 `
 
-// offerFakeSCP runs ssh for its transfer and stays its parent, as scp does.
-// The -t makes the line a login with a tty by its options alone, so only the
-// rule for a transfer program keeps it from the offer.
 const offerFakeSCP = `#!/bin/sh
 ssh -t gaurav@scpbox scp -t /tmp
 `
@@ -71,8 +50,6 @@ func TestMachineOfferOnSSHLogin(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(cfg), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// The message stays long enough to be read by the test. The poll reads
-	// every second.
 	body := "[daemon]\nagent_detect_seconds = 1\n\n[agents]\nenabled = false\n\n[notifications]\nduration = 60\n"
 	if err := os.WriteFile(cfg, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -98,8 +75,6 @@ func TestMachineOfferOnSSHLogin(t *testing.T) {
 			t.Fatalf("leave the fake ssh: %v\n%s", err, out)
 		}
 	}
-	// noOffer watches for longer than the positive half needs, and fails at
-	// once when an offer for machine shows.
 	noOffer := func(tt *tuitest.Terminal, machine, why string) {
 		t.Helper()
 		deadline := time.Now().Add(9 * time.Second)
@@ -112,17 +87,14 @@ func TestMachineOfferOnSSHLogin(t *testing.T) {
 	}
 	const offerWait = 20 * time.Second
 
-	// A tunnel reads no keys: no offer.
 	run("ssh -N gaurav@tunnelbox", "gaurav@tunnelbox ~ $")
 	noOffer(term, "tunnelbox", "ssh -N")
 	leave()
 
-	// ssh that scp started is a transfer: no offer.
 	run("scp", "gaurav@scpbox ~ $")
 	noOffer(term, "scpbox", "ssh run by scp")
 	leave()
 
-	// A login: one offer, without the agent features.
 	run("clear; ssh gaurav@buildbox", "gaurav@buildbox ~ $")
 	offer := "buildbox is not a machine here. Add it?"
 	if err := term.WaitForText(offer, offerWait); err != nil {
@@ -131,8 +103,6 @@ func TestMachineOfferOnSSHLogin(t *testing.T) {
 	if err := term.WaitForText("Add  Not now  Never", uiTimeout); err != nil {
 		t.Fatalf("the offer has no choices: %v\n%s", err, term.Snapshot())
 	}
-	// The frame waits for the attach message queued behind the offer to
-	// go, so it shows the offer alone, as a person sees it a moment later.
 	_ = term.WaitFor(func(s tuitest.Screen) bool {
 		r := findRow(s, offer)
 		return r < 0 || !strings.Contains(s.Line(r), "+1")
@@ -145,7 +115,6 @@ func TestMachineOfferOnSSHLogin(t *testing.T) {
 		t.Fatalf("ASSERTION: the offer shows %d times\n%s", n, term.Snapshot())
 	}
 
-	// Never: the offer goes, and the target is stored.
 	row, col := findText(t, term, "Not now  Never")
 	mouseClick(t, term, col+10, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), offer) }, uiTimeout); err != nil {
@@ -162,13 +131,11 @@ func TestMachineOfferOnSSHLogin(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	// Once per run: the pane still runs the login, and the offer stays away.
 	noOffer(term, "buildbox", "the same login, after Never")
 	if err := term.Close(); err != nil {
 		t.Logf("close the client: %v", err)
 	}
 
-	// A new client: buildbox stays away, and another machine is offered.
 	second := attachIn(t, base, "offer", startOpts{cols: cols, rows: rows, shippedLooks: true})
 	noOffer(second, "buildbox", "a new client after Never")
 	term = second
@@ -179,8 +146,6 @@ func TestMachineOfferOnSSHLogin(t *testing.T) {
 	}
 	saveArtifact(t, second, dir, "machine-offer-second-client")
 
-	// Add opens the add-a-machine sheet for the login's address, and the
-	// sheet goes straight to its test step.
 	row, col = findText(t, second, "Add  Not now")
 	mouseClick(t, second, col, row, tuitest.MouseLeft, 0)
 	if err := second.WaitFor(func(s tuitest.Screen) bool {

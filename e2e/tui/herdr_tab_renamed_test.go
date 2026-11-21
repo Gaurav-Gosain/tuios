@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// herdrEventStream is an events.subscribe stream of global events.
 type herdrEventStream struct {
 	conn net.Conn
 	r    *bufio.Reader
@@ -39,8 +38,6 @@ func subscribeHerdrEvents(t *testing.T, base string, types ...string) *herdrEven
 	return s
 }
 
-// next waits for the stream's next event and fails unless it is kind. It
-// returns the event's data.
 func (s *herdrEventStream) next(t *testing.T, kind, why string) map[string]any {
 	t.Helper()
 	_ = s.conn.SetReadDeadline(time.Now().Add(uiTimeout))
@@ -62,7 +59,6 @@ func (s *herdrEventStream) next(t *testing.T, kind, why string) map[string]any {
 	return ev.Data
 }
 
-// herdrTabByLabel is the tab labelled label in tab.list.
 func herdrTabByLabel(t *testing.T, base, label string) map[string]any {
 	t.Helper()
 	for _, tb := range herdrCall(t, base, "tab.list", map[string]any{})["tabs"].([]any) {
@@ -74,8 +70,6 @@ func herdrTabByLabel(t *testing.T, base, label string) map[string]any {
 	return nil
 }
 
-// wantTabRenamed checks a tab_renamed against herdr's TabRenamed: the tab's
-// id and workspace, and label, which tab.get reads back afterwards.
 func wantTabRenamed(t *testing.T, base string, data, tab map[string]any, label, why string) {
 	t.Helper()
 	if data["tab_id"] != tab["tab_id"] || data["workspace_id"] != tab["workspace_id"] || data["label"] != label {
@@ -120,8 +114,6 @@ func TestHerdrTabRenamed(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "set-workspace-name", "-s", session, "1", "from-tuios"); err != nil {
 		t.Fatalf("set-workspace-name: %v\n%s", err, out)
 	}
-	// Each step after a rename opens a tab, so a rename that sent nothing
-	// shows up as that tab_created arriving first.
 	sentinel := func(ws, name string) {
 		t.Helper()
 		if out, err := tuiosCLI(t, base, "new-window", name, "-s", session, "--workspace", ws, "--no-focus"); err != nil {

@@ -14,22 +14,6 @@ import (
 	"time"
 )
 
-// Removing a paired device, end to end: a real sshd, a real far daemon that
-// the device's key reaches, and a hub daemon that links through that key.
-//
-// The failure modes this is written against:
-//   - tuios hosts remove deletes the [hosts.DEVICE] table and leaves the
-//     tuios-pair:DEVICE line, so the key still logs in;
-//   - a key whose pinned name has no table, a device removed by hand or by an
-//     older tuios, gets [hosts."*"] or the built-in default after a restart,
-//     and can type into panes and start programs;
-//   - an ssh session that was open before the remove keeps the device's old
-//     grant, because sshd does not end it when the key line goes;
-//   - the rewrite of authorized_keys cuts the person's own keys, or the
-//     command reports success when it could not read or write the file.
-
-// pairedLink is a far machine with a device paired, its sshd, and a hub that
-// links to it with the device's key.
 type pairedLink struct {
 	base, remote string
 	ak, own      string
@@ -101,8 +85,6 @@ func setupPairedLink(t *testing.T, device string) *pairedLink {
 	return &pairedLink{base: base, remote: remote, ak: ak, own: own, sshWrap: sshWrap, env: env}
 }
 
-// sshLogsIn reports whether the device key still opens the link: a new ssh
-// login that prints the link preamble.
 func (p *pairedLink) sshLogsIn(t *testing.T) (bool, string) {
 	t.Helper()
 	me, _ := user.Current()
@@ -131,8 +113,6 @@ func (p *pairedLink) sshLogsIn(t *testing.T) (bool, string) {
 	return strings.TrimSpace(line) == "TUIOS-LINK 1", line + sshErr.String()
 }
 
-// pinnedRefusal is the words the far daemon refuses a pinned name with no
-// table in.
 const pinnedRefusal = "has no [hosts.phone] table"
 
 // TestRemovedPairedDeviceLosesItsLink pairs a phone, then removes it the way
@@ -149,9 +129,6 @@ func TestRemovedPairedDeviceLosesItsLink(t *testing.T) {
 		t.Fatalf("a listing over the paired key was refused before the remove: %v\n%s", err, out)
 	}
 
-	// The table goes and the key stays, as tuios hosts remove left it
-	// before. The running far daemon reads the change from its watch, and
-	// the link that is open must lose even what the table allowed.
 	cfg, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatal(err)
@@ -179,13 +156,9 @@ func TestRemovedPairedDeviceLosesItsLink(t *testing.T) {
 	}, func(s string) bool { return contains(strings.Join(strings.Fields(s), " "), pinnedRefusal) })
 	tr.add("hot, list-windows -s studio:far:\n%s", hot)
 
-	// A restart reads the file as it is. The pinned name has no table, and
-	// it must not get the default, which types into panes.
 	if out, err := tuiosCLI(t, p.remote, "kill-server"); err != nil {
 		t.Fatalf("kill the far daemon: %v\n%s", err, out)
 	}
-	// The saved session far comes back with the daemon. A new session names
-	// a target that exists whatever the restore does.
 	if out, err := tuiosCLI(t, p.remote, "new", "again", "--detach"); err != nil {
 		t.Fatalf("start the far daemon again: %v\n%s", err, out)
 	}
@@ -203,8 +176,6 @@ func TestRemovedPairedDeviceLosesItsLink(t *testing.T) {
 		t.Errorf("ASSERTION: the removed device typed into a pane after the restart:\n%s", after)
 	}
 
-	// tuios hosts remove takes out the key line that is left, with no table
-	// to remove, and leaves the person's own key as it was.
 	out, err = tuiosCLI(t, p.remote, "hosts", "remove", "phone")
 	tr.add("hosts remove phone: %v\n%s", err, out)
 	if err != nil {
@@ -278,7 +249,6 @@ func TestHostRemoveKeepsTheTableWhenTheKeyStays(t *testing.T) {
 		}
 	}
 
-	// A file tuios cannot read.
 	if err := os.Chmod(ak, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +257,6 @@ func TestHostRemoveKeepsTheTableWhenTheKeyStays(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A folder tuios cannot write the new file in: the old file stays whole.
 	if err := os.Chmod(sshDir, 0o500); err != nil {
 		t.Fatal(err)
 	}

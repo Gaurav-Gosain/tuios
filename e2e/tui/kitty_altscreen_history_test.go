@@ -1,13 +1,5 @@
 package tuie2e
 
-// A full-screen guest (yazi browsing a directory) draws a kitty image while
-// the pane already has shell history. Placement lines are computed as
-// ScrollbackLen()+cursorY, and the ghostty backend once answered with the
-// alternate screen's empty history instead of the main screen's: every
-// placement shifted by the pane's real history and the preview pane rendered
-// blank. Panes without history were fine, which made it look intermittent.
-// This guard runs that exact shape and asserts a placement reaches the host.
-
 import (
 	"bytes"
 	"os"
@@ -30,16 +22,8 @@ func TestKittyImageSurvivesAltScreenWithHistory(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	// The pane earns real history first; without it half the bug hid.
 	runInShell(t, term, "seq 1 200; echo HISTO\"\"RYDONE", "HISTORYDONE", shellTimeout)
 
-	// A yazi-shaped guest, compressed into one write the way a TUI paints
-	// a frame: junk that parks the cursor at the bottom-right, the
-	// alt-screen switch, a cursor move to the preview cell, and the image,
-	// all in the same chunk. Any emulator state read at APC time that lags
-	// the chunk (cursor, alt flag, history length) sends the placement to
-	// wherever the previous frame finished, clipped in a corner. On
-	// screen that is a blank preview pane.
 	frame := kittyFrameFile(t, t.TempDir(), 64, 48)
 	payload, err := os.ReadFile(frame)
 	if err != nil {
@@ -74,9 +58,6 @@ func TestKittyImageSurvivesAltScreenWithHistory(t *testing.T) {
 		t.Fatalf("no kitty placement reached the host after the alt-screen guest drew with pane history; the image pane is blank\n%s", term.Snapshot())
 	}
 	row, col := atoiB(t, m[1]), atoiB(t, m[2])
-	// The guest drew at alt-screen row 2; the pane sits near the top of
-	// the host screen. A placement computed against stale state lands at
-	// the bottom-right, where the junk left the previous frame's cursor.
 	if row > 20 || col > 60 {
 		t.Fatalf("kitty placement landed at host row %d col %d, far from the pane's preview cell: placed against stale emulator state\n%q", row, col, m[0])
 	}

@@ -23,13 +23,10 @@ func TestDaemonCreatedWindowsTile(t *testing.T) {
 
 	waitBoot(t, term)
 
-	// One window interactively, then turn tiling on. From here the attached
-	// client is in tiling mode and has synced that to the daemon.
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "first window")
 	enableTiling(t, term)
 
-	// Create five more windows through the daemon verb path.
 	for i := 2; i <= 6; i++ {
 		out, err := tuiosCLI(t, base, "run-command", "NewWindow")
 		if err != nil {
@@ -38,11 +35,8 @@ func TestDaemonCreatedWindowsTile(t *testing.T) {
 		waitWindowCount(t, term, i, fmt.Sprintf("after daemon NewWindow #%d", i))
 	}
 
-	// Give the client a beat to place and sync the final window back.
 	rects := waitForSettledGeometry(t, base, 6)
 
-	// The signature of the bug: a window still carrying the daemon's full-size
-	// Unplaced box, or two windows on top of each other.
 	for _, r := range rects {
 		if r.Width >= 120 {
 			t.Errorf("window %s spans the full width (%d): it was never tiled", r.ID, r.Width)
@@ -72,17 +66,11 @@ func geomOverlap(a, b winRect) bool {
 	return a.X < b.X+b.Width && b.X < a.X+a.Width && a.Y < b.Y+b.Height && b.Y < a.Y+a.Height
 }
 
-// waitForSettledGeometry polls list-windows --json until the daemon reports n
-// windows whose geometry has stopped changing, so the assertion runs against the
-// placed layout rather than a mid-flight frame.
 func waitForSettledGeometry(t *testing.T, base string, n int) []winRect {
 	t.Helper()
 	return waitForSettledGeometryIn(t, base, "", n)
 }
 
-// waitForSettledGeometryIn is waitForSettledGeometry against a named session,
-// which is what a test with more than one session in the daemon has to ask for:
-// the default target is whichever session was active last.
 func waitForSettledGeometryIn(t *testing.T, base, session string, n int) []winRect {
 	t.Helper()
 	args := []string{"list-windows", "--json"}
@@ -215,8 +203,6 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 			base := t.TempDir()
 			writeConfig(t, base, fmt.Sprintf("[startup]\ntiled = true\nlayout = %q\n[workspaces]\nnew_window_when_empty = true\n[keybindings.global]\nscroll_focus_right = ['f6']\n", tc.layout))
 			logPath := filepath.Join(base, "size.log")
-			// The trap is set before the start line, so a resize that lands
-			// after the shell logs its start size is never missed.
 			rc := "_log() { echo \"$$ $1 $(stty size) $EPOCHREALTIME\" >> " + logPath + "; }\n" +
 				"trap '_log WINCH' WINCH\n_log start\nPROMPT_COMMAND='_log precmd'\nsleep 0.1\nPS1='p$$ $ '\n"
 			if err := os.WriteFile(filepath.Join(xdgDir(base, "HOME"), ".bashrc"), []byte(rc), 0o600); err != nil {
@@ -227,7 +213,6 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 			if tc.args != nil {
 				killDaemon(t, base)
 			}
-			// Each log line is the shell's pid, the event and the size.
 			events := func() [][]string {
 				data, _ := os.ReadFile(logPath)
 				var out [][]string
@@ -238,10 +223,6 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 				}
 				return out
 			}
-			// awaitNewShell waits until a shell that is not in seen has logged
-			// its start and then its first prompt, and returns its pid. Each
-			// pane is judged only once its shell is up, so a slow start on a
-			// busy machine is not read as the next pane's.
 			seen := map[string]bool{}
 			awaitNewShell := func(pane string) string {
 				var pid string
@@ -260,16 +241,8 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 				seen[pid] = true
 				return pid
 			}
-			// awaitTileSize waits until the frame the client draws around the
-			// shell's prompt, "p<pid> $ ", holds exactly the size the shell
-			// last logged. The next pane is not made before then. Without the
-			// fix the client resizes a new pane after its first prompt, and a
-			// keypress made at the prompt let that SIGWINCH fall among the
-			// next pane's lines, where it was never judged.
 			awaitTileSize := func(pane, pid string) string {
 				if tc.layout == "scrolling" {
-					// New columns can be only partly visible. Reveal the focused
-					// one without changing its width before measuring its frame.
 					sendKeys(t, term, tuitest.F6)
 				}
 				var size string
@@ -310,11 +283,8 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 					t.Fatalf("measured layout is %q, want %q: %v\n%s", info.Layout, tc.layout, err, out)
 				}
 			}
-			// Establish the first shell before judging subsequent insertions.
 			awaitNewShell("the first pane")
 			if tc.resized {
-				// A divider resize marks the workspace custom, but the stock
-				// tree/ratios still describe where the next pane will go.
 				newWindow(t, term)
 				pid := awaitNewShell("resize setup")
 				awaitTileSize("resize setup", pid)
@@ -328,9 +298,6 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 				})
 				awaitTileSize("after the divider resize", pid)
 			}
-			// Each pane is judged on the log lines from its own keypress to the
-			// next one. The SIGWINCH of the pane it split is the right answer
-			// to the split, and comes from another pid.
 			type pane struct {
 				name, pid, size string
 				from            int
@@ -347,8 +314,6 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 			saveArtifact(t, term, artifactDir(t), "multiple-panes")
 			savePNG(t, term.Screen(), hostPalette(t, ""), artifactDir(t), "multiple-panes")
 			if tc.args != nil {
-				// This has its own daemon request, distinct from the new-window
-				// intent above. Ask for nothing manually on the new workspace.
 				from := len(events())
 				sendKeys(t, term, tuitest.Alt("2"))
 				exactlyPanesOn(t, term, base, "winch", 2, 1, "automatic empty-workspace pane")
@@ -385,7 +350,6 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 						"shell must start at its tile's size\n%s", p.name, p.pid, start, p.size, winch, text.String())
 				}
 			}
-			// Positive half: this same shell must report a deliberate resize.
 			last := panes[len(panes)-1]
 			from := len(events())
 			if err := term.Resize(tc.cols-8, tc.rows-3); err != nil {
@@ -414,10 +378,6 @@ func TestNewPaneShellStartsAtItsSize(t *testing.T) {
 	}
 }
 
-// frameAround finds marker on the first row inside a pane's frame and returns
-// the cells inside that frame. ok is false while the marker is not on screen
-// or does not sit right inside a frame's top-left corner, as during an
-// animation.
 func frameAround(s tuitest.Screen, marker string) (cols, rows int, ok bool) {
 	vertical := func(r rune) bool { return strings.ContainsRune("│┃║╎┆┊", r) }
 	w, h := s.Size()
@@ -434,8 +394,6 @@ func frameAround(s tuitest.Screen, marker string) (cols, rows int, ok bool) {
 			if !hit {
 				continue
 			}
-			// The marker starts right after the left border, and the cell
-			// above that border is the top edge, not more border.
 			left := x - 1
 			if !vertical(s.Cell(left, y).Rune) || vertical(s.Cell(left, y-1).Rune) {
 				return 0, 0, false

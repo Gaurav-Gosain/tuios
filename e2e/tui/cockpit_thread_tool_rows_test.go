@@ -14,8 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// toolRowsCmd is the long command of TestCockpitThreadToolRowsOpen. Its end
-// is past what the folded line shows.
 const toolRowsCmd = "cd /work && go test -count=1 -run 'TestHeaderPadding|TestListGrid|TestSidebarWidth' ./ui/... ./layout/... ./theme/... 2>&1 | tee /tmp/ui-tests.log | grep -v '^ok' ; echo END_OF_CMD_A"
 
 // TestCockpitThreadToolRowsOpen reads a Claude Code transcript in the agents
@@ -90,8 +88,6 @@ func TestCockpitThreadToolRowsOpen(t *testing.T) {
 	if strings.Contains(text, "END_OF_CMD_A") || strings.Contains(text, "out line 1") {
 		t.Fatalf("ASSERTION: a tool row is open before a click\n%s", term.Snapshot())
 	}
-	// The status marks keep out of the ruler's column, and the ruler, with
-	// prompts on most of its rows, draws none.
 	if marks, status := toolRowsRuler(term); marks > 0 || status > 0 {
 		t.Fatalf("ASSERTION: the ruler draws prompt marks (%d), or a status mark sits in its column (%d)\n%s", marks, status, term.Snapshot())
 	}
@@ -101,7 +97,6 @@ func TestCockpitThreadToolRowsOpen(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "tool-rows-folded")
 
-	// A click opens the long call on its command and the head of its output.
 	row, col := findLastText(t, term, "Bash  go test")
 	folded := toolRowMark(term, row, col)
 	if folded == " " {
@@ -120,11 +115,9 @@ func TestCockpitThreadToolRowsOpen(t *testing.T) {
 	if open := toolRowMark(term, row, col); open == folded || open == " " {
 		t.Fatalf("ASSERTION: the fold mark did not turn to the open mark (%q, folded %q)\n%s", open, folded, term.Snapshot())
 	}
-	// The empty call says so.
 	row, col = findText(t, term, "Bash  sleep 1")
 	mouseClick(t, term, col+8, row, tuitest.MouseLeft, 0)
 	waitText(t, term, "the empty call open", "No output.")
-	// The Read group opens on each file's whole path.
 	row, col = findText(t, term, "Read 2")
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
 	waitText(t, term, "the read group open", "/work/ui/header.go", "/work/layout/list.go")
@@ -133,14 +126,12 @@ func TestCockpitThreadToolRowsOpen(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "tool-rows-open")
 
-	// A second click folds the long call.
 	row, col = findLastText(t, term, "Bash  go test")
 	mouseClick(t, term, col+8, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "END_OF_CMD_A") }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: a second click did not fold the tool row: %v\n%s", err, term.Snapshot())
 	}
 
-	// e opens every row with all of its output.
 	if err := term.SendKeys("e"); err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +144,6 @@ func TestCockpitThreadToolRowsOpen(t *testing.T) {
 	alive(t, term, "after the tool rows")
 }
 
-// findLastText is findText for the last row that holds want.
 func findLastText(t *testing.T, term *tuitest.Terminal, want string) (row, col int) {
 	t.Helper()
 	if err := term.WaitForText(want, uiTimeout); err != nil {
@@ -170,9 +160,6 @@ func findLastText(t *testing.T, term *tuitest.Terminal, want string) (row, col i
 	return row, col
 }
 
-// toolRowsRuler finds the thread's ruler, the column of its thumb, and
-// counts the prompt marks in it and the tool lines whose status mark (a
-// check) is drawn there.
 func toolRowsRuler(term *tuitest.Terminal) (marks, status int) {
 	s := term.Screen()
 	_, rows := s.Size()
@@ -206,8 +193,6 @@ func toolRowsRuler(term *tuitest.Terminal) (marks, status int) {
 	return marks, status
 }
 
-// toolRowMark is the fold mark of the tool line whose kind starts at col:
-// the cell two to its left.
 func toolRowMark(term *tuitest.Terminal, row, col int) string {
 	rs := []rune(term.Screen().Line(row))
 	if col < 2 || col-2 >= len(rs) {
@@ -216,8 +201,6 @@ func toolRowMark(term *tuitest.Terminal, row, col int) string {
 	return string(rs[col-2])
 }
 
-// toolRowsTranscript is the transcript of TestCockpitThreadToolRowsOpen,
-// with times before now.
 func toolRowsTranscript(t *testing.T, now time.Time) []byte {
 	t.Helper()
 	at := func(ago time.Duration) string { return now.Add(-ago).UTC().Format("2006-01-02T15:04:05.000Z") }

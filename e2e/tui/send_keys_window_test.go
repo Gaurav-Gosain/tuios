@@ -59,7 +59,6 @@ func TestSendKeysToANamedWindowWithAClientAttached(t *testing.T) {
 		t.Errorf("the focus moved from %s to %s: the keys reached the window manager", focusedBefore, got)
 	}
 
-	// The other window by id, with a page key.
 	if out, err := tuiosCLI(t, base, "send-keys", "-s", sess, "-w", ids[1], "PageDown"); err != nil {
 		t.Fatalf("send-keys to pager-b: %v\n%s", err, out)
 	}
@@ -70,7 +69,6 @@ func TestSendKeysToANamedWindowWithAClientAttached(t *testing.T) {
 	alive(t, term, "after sending keys to named windows")
 }
 
-// capture is one window's visible screen.
 func capture(t *testing.T, base, sess, window string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", window)
@@ -80,7 +78,6 @@ func capture(t *testing.T, base, sess, window string) string {
 	return out
 }
 
-// focusedWindowID is the id of the session's focused window.
 func focusedWindowID(t *testing.T, base, sess string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")

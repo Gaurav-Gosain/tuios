@@ -34,8 +34,6 @@ func TestCockpitRRepliesAndXRejects(t *testing.T) {
 	if !strings.Contains(text, "X  Reject") || !strings.Contains(text, "X reject") || strings.Contains(text, "r reject") || strings.Contains(text, "r  Reject") {
 		t.Errorf("ASSERTION: the card and the key bar do not name X as reject:\n%s", term.Snapshot())
 	}
-	// The dock shows the newest notice. The agent's own notice comes first,
-	// so the words r shows are not hidden under it.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, "needs approval")
 	}, uiTimeout); err != nil {
@@ -43,7 +41,6 @@ func TestCockpitRRepliesAndXRejects(t *testing.T) {
 	}
 	pause(t, "the view takes no answer key in the moment after a card is shown", answerSettle)
 
-	// r rejects nothing: the call stays held.
 	if err := term.SendKeys("r"); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +51,6 @@ func TestCockpitRRepliesAndXRejects(t *testing.T) {
 			return false, "the hook returned: " + hook.stdout.String() + "\n" + term.Snapshot()
 		default:
 		}
-		// main opens the reject confirm on r.
 		if screenHas(term.Screen(), "Press enter to reject") {
 			return false, "r opened the reject confirm:\n" + term.Snapshot()
 		}
@@ -69,7 +65,6 @@ func TestCockpitRRepliesAndXRejects(t *testing.T) {
 	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "after-r")
 	pause(t, "the view takes no answer key in the moment after a card is shown", answerSettle)
 
-	// X rejects.
 	if err := term.SendKeys("X", tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}

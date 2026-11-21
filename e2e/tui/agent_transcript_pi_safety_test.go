@@ -74,8 +74,6 @@ func TestPiTranscriptSafety(t *testing.T) {
 			}
 			return out
 		}
-		// Masking of a multi-line secret runs per entry, so a key a message splits
-		// across its blocks must still be seen whole. The unsplit key is the control.
 		whole := strings.Repeat("WholeKeyMaterial", 4)
 		text := strings.Repeat("SplitTextKeyMaterial", 3)
 		thinking := strings.Repeat("SplitThinkKeyMaterial", 3)

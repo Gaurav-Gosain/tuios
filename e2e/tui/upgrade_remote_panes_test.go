@@ -6,25 +6,6 @@ import (
 	"time"
 )
 
-// A live upgrade and the panes of this daemon's sessions that run on another
-// machine. Such a pane has no terminal here to hand over. A running one
-// refuses the upgrade, and the refusal names every one at once. An exited one
-// holds nothing to keep: the upgrade closes it and says so, before the new
-// binary starts and in its result line.
-//
-// How these could pass wrongly, written down first:
-//   - The pane on build could be hosted by this same daemon (a link to
-//     itself), and the hosted-pane refusal would answer instead. The rig links
-//     to a second daemon of its own.
-//   - The upgrade could run before the pane's exit is recorded and be refused
-//     for a running pane. The test waits for the exit note the pane prints.
-//   - The refusal could name one pane per try and still contain the word
-//     "another machine". Both panes' names and sessions must be in one answer.
-
-// upgradeRemoteRig is a daemon here that can upgrade live, with a session
-// "near" holding a local pane, linked to a second machine's daemon as build.
-// It returns the base, the environment that reaches build, a second tuios
-// binary to upgrade to, and the local pane's window id.
 func upgradeRemoteRig(t *testing.T) (base string, env []string, second, anchor string) {
 	t.Helper()
 	base = t.TempDir()
@@ -42,7 +23,6 @@ func upgradeRemoteRig(t *testing.T) (base string, env []string, second, anchor s
 	return base, env, second, anchor
 }
 
-// openOnBuild opens a kept-open window on build in session, running script.
 func openOnBuild(t *testing.T, base string, env []string, session, name, script string) {
 	t.Helper()
 	if out, err := tuiosCLIEnv(t, base, env, "new-window", name, "-s", session, "--host", "build", "--keep-open",

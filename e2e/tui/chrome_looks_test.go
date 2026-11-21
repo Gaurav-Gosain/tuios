@@ -15,26 +15,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The chrome under a light theme and a dark terminal, at each colour depth and
-// at two sizes, over every overlay that has a key-hint footer.
-//
-// Three findings from the visual QA of wave01 are held here:
-//
-//  1. On a light theme every dialog, the palette, which-key, settings, the
-//     Inbox and help drew as a dark slab, and the 30% dim behind a modal
-//     pushed the light screen toward a mid grey.
-//  2. A footer too narrow for its hints dropped labels from the end first, so
-//     the Inbox at 120 and 80 columns ended "d   esc": two keys with nothing
-//     saying what they do, "esc close" among them.
-//  3. The palette's "71 of 71 commands" sat indented in the list, where it
-//     read as one more command.
-//
-// Each run saves every overlay as text, styled text and a PNG drawn by
-// tuios's own renderer, under artifactDir. With TUIOS_E2E_QA set the matrix
-// is the whole QA set (both looks, three depths, two sizes); without it, the
-// runs that hold each finding.
-
-// chromeLook is a theme and whether its ground is light.
 type chromeLook struct {
 	name, theme string
 	light       bool
@@ -44,13 +24,9 @@ var (
 	lookDark   = chromeLook{name: "dark"}
 	lookLatte  = chromeLook{name: "latte", theme: "catppuccin_latte", light: true}
 	lookGruvbx = chromeLook{name: "gruvbox_light", theme: "gruvbox_light", light: true}
-	// Gilt names its whole neutral ramp in code rather than in a theme file.
-	// Its chrome once skipped the ink tiers derived from that ramp, and the
-	// Inbox crashed on the nil foreground (#1309).
-	lookGilt = chromeLook{name: "gilt", theme: "gilt"}
+	lookGilt   = chromeLook{name: "gilt", theme: "gilt"}
 )
 
-// chromeRun is one client: a look, a depth and a size.
 type chromeRun struct {
 	look       chromeLook
 	depth      chromeDepth
@@ -77,8 +53,6 @@ func chromeRuns() []chromeRun {
 		}
 		return runs
 	}
-	// Each light theme at every depth, the dark look as the half that must
-	// not move, and the footers at both sizes.
 	for _, look := range []chromeLook{lookLatte, lookGruvbx} {
 		for _, d := range chromeDepths {
 			runs = append(runs, chromeRun{look, d, 120, 40})
@@ -94,9 +68,6 @@ func chromeRuns() []chromeRun {
 	return runs
 }
 
-// chromeStep is one overlay: the keys that open it from a closed screen, the
-// text that says it is drawn (its title first), the keys that close it, and
-// whether it has a key-hint footer.
 type chromeStep struct {
 	name   string
 	open   []any
@@ -122,10 +93,6 @@ func chromeSteps() []chromeStep {
 	}
 }
 
-// chromeClient is groundClient for one run: the shipped looks, the run's
-// theme and depth, no dim behind a modal (the overlay is found by the cells
-// that change when it opens), two panes, and an Inbox holding a risky
-// approval that takes a reason, a plan, an error and a finished job.
 func chromeClient(t *testing.T, r chromeRun) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -251,13 +218,10 @@ func TestChromeLooksAndFooters(t *testing.T) {
 	}
 }
 
-// isLight is theme.GroundIsLight: dark ink reads better on c than light ink.
 func isLight(c color.Color) bool {
 	return overlay.ContrastRatio(c, color.Black) > overlay.ContrastRatio(c, color.White)
 }
 
-// cellColour is a cell's colour as the host terminal paints it, def standing
-// in for the default.
 func cellColour(c tuitest.Color, host *shot.Palette, def shot.Color) color.Color {
 	s := resolveCell(c, host, def)
 	return color.RGBA{R: s.R, G: s.G, B: s.B, A: 0xff}
@@ -276,14 +240,10 @@ func checkPanelGround(t *testing.T, term *tuitest.Terminal, name string, look ch
 	}
 }
 
-// inkExempt are glyphs whose colour is a picture rather than ink: swatches
-// and bars that show a colour, not text written in one.
 func inkExempt(s string) bool {
 	return strings.ContainsAny(s, "█▀▄▌▐■▔▁━─│╭╮╰╯")
 }
 
-// checkPanelInk measures every glyph in the panel against the ground it is
-// drawn on and fails the first under the 3:1 mark floor.
 func checkPanelInk(t *testing.T, term *tuitest.Terminal, name, depth string, s tuitest.Screen, r overlayRect, host *shot.Palette) {
 	t.Helper()
 	fgDef, bgDef := host.FG, host.BG
@@ -300,9 +260,6 @@ func checkPanelInk(t *testing.T, term *tuitest.Terminal, name, depth string, s t
 				fg, bg = bg, fg
 			}
 			if structureInk(fg, bg, depth) {
-				// Furniture such as the keybinds' scope column is drawn in
-				// overlay.Structure on purpose, aimed at StructureTarget
-				// rather than at a floor.
 				continue
 			}
 			ratio := overlay.ContrastRatio(fg, bg)
@@ -316,9 +273,6 @@ func checkPanelInk(t *testing.T, term *tuitest.Terminal, name, depth string, s t
 	}
 }
 
-// footerLine is the panel's footer: the last row from the title down that
-// holds the way out ("close", "cancel", or a bare esc), cut to the panel's columns, with the frame's own glyphs
-// taken out. At 16 colours the columns are the frame's corners.
 func footerLine(s tuitest.Screen, titleRow, x0, x1 int, colour bool) (int, string) {
 	_, rows := s.Size()
 	row := -1
@@ -342,7 +296,6 @@ func footerLine(s tuitest.Screen, titleRow, x0, x1 int, colour bool) (int, strin
 	}
 	line := []rune(s.Line(row))
 	if !colour {
-		// The panel's frame: the corner or side left and right of the hints.
 		x0, x1 = 0, len(line)-1
 		text := s.Line(row)
 		at := strings.LastIndex(text, " c")
@@ -373,8 +326,6 @@ func footerLine(s tuitest.Screen, titleRow, x0, x1 int, colour bool) (int, strin
 	return row, seg
 }
 
-// footerHints splits a footer into its hints: a hint is a key, a space and a
-// label, and hints are two or more spaces apart.
 func footerHints(line string) []string {
 	var out []string
 	for f := range strings.SplitSeq(line, "  ") {
@@ -389,8 +340,6 @@ func checkFooter(t *testing.T, term *tuitest.Terminal, name string, s tuitest.Sc
 	t.Helper()
 	row, line := footerLine(s, titleRow, x0, x1, colour)
 	if row < 0 {
-		// A screen too short for the body and the footer drops the footer
-		// whole (panelBody); that keeps no bare key either.
 		t.Logf("%s: no footer on screen", name)
 		return
 	}
@@ -406,7 +355,6 @@ func checkFooter(t *testing.T, term *tuitest.Terminal, name string, s tuitest.Sc
 		}
 		labelled = append(labelled, h)
 	}
-	// The way out keeps its label: esc on most panels, ? on help.
 	outOK := false
 	for _, h := range labelled {
 		if strings.HasSuffix(h, " close") || strings.HasSuffix(h, " cancel") {
@@ -425,8 +373,6 @@ func checkFooter(t *testing.T, term *tuitest.Terminal, name string, s tuitest.Sc
 	}
 }
 
-// checkPaletteCount holds the palette's match count to the search line,
-// right-aligned against the rule under it, and quieter than a command.
 func checkPaletteCount(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, colour bool) {
 	t.Helper()
 	p := findPalette(t, term)
@@ -449,8 +395,6 @@ func checkPaletteCount(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, c
 	if !colour {
 		return
 	}
-	// The cursor row has a ground of its own. On a tinted light surface at
-	// 256 colours the step to it landed on the surface's own entry.
 	if sel, ground := s.Cell(p.ruleStart, p.selRow).Bg, s.Cell(p.ruleStart, p.searchRow).Bg; sel == ground {
 		t.Errorf("palette: the selected row's ground %+v is the panel's own\n%s", sel, term.SnapshotStyled())
 	}
@@ -467,9 +411,6 @@ func checkPaletteCount(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, c
 	}
 }
 
-// checkScrim turns the dim behind a modal on and opens the palette over the
-// panes. On a light theme the ground behind stays the theme's own and the
-// rail's text fades toward it; on the dark look the text is turned down.
 func checkScrim(t *testing.T, term *tuitest.Terminal, base string, look chromeLook, host *shot.Palette) {
 	t.Helper()
 	if o, err := tuiosCLI(t, base, "set-config", "appearance.modal_dim", "30"); err != nil {
@@ -524,8 +465,6 @@ func checkScrim(t *testing.T, term *tuitest.Terminal, base string, look chromeLo
 	closePalette(t, term, "after the scrim")
 }
 
-// structureInk reports whether fg is overlay.Structure's ink for bg at the
-// run's depth, which is where tuios picks the palette entry at 256 colours.
 func structureInk(fg, bg color.Color, depth string) bool {
 	if depth == "256" {
 		prev := overlay.CurrentDepth()

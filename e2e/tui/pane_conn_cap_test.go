@@ -9,24 +9,6 @@ import (
 	"time"
 )
 
-// Connections from panes to the daemon's own socket are capped, and some
-// slots are kept for the person.
-//
-// The failure modes this is written against:
-//   - one pane opens connections and holds them until the daemon's 1024
-//     slots are gone, so the person's own tuios commands are refused;
-//   - one pane takes the slots every other pane needs;
-//   - a pane that forks children, each in a session of its own with no
-//     terminal, gets around the cap per pane;
-//   - enough panes together fill the pool;
-//   - the caps refuse the person, or a pane that holds a few connections.
-
-// connHolderScript writes a python3 program that opens n connections to the
-// socket, sends "{" on each and holds them. A connection the daemon refuses
-// is told why and closed, so it turns readable. Once the count of held ones
-// stops changing, it writes that count to out+"."+tag. With forks, it first
-// starts that many children, each in a new session with no terminal, which
-// do the same under the tags c0, c1 and so on.
 func connHolderScript(t *testing.T, dir string) string {
 	t.Helper()
 	body := `import os, select, socket, sys, time
@@ -75,7 +57,6 @@ while True:
 	return path
 }
 
-// heldCount waits for the count a holder wrote under tag.
 func heldCount(t *testing.T, out, tag string) int {
 	t.Helper()
 	text := waitFileHas(t, out+"."+tag, "the holder "+tag+" never wrote its count", 60*time.Second, func(s string) bool { return s != "" })
@@ -107,7 +88,6 @@ func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 	}
 	sock := filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")
 	script := connHolderScript(t, base)
-	// Each holder runs in the background, so the pane takes the next one.
 	run := func(window, out string, n, forks int) {
 		t.Helper()
 		line := "python3 " + script + " " + sock + " " + out + " " + strconv.Itoa(n) + " " + strconv.Itoa(forks) + " &\n"
@@ -116,7 +96,6 @@ func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 		}
 	}
 
-	// One pane cannot hold more than its share.
 	first := filepath.Join(base, "first")
 	run(ids[0], first, 100, 0)
 	got := heldCount(t, first, "main")
@@ -125,8 +104,6 @@ func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 		t.Errorf("ASSERTION: one pane holds %d connections, want 64", got)
 	}
 
-	// Children of that pane in sessions of their own, with no terminal, are
-	// still that pane's, and it is full.
 	escaped := filepath.Join(base, "escaped")
 	run(ids[0], escaped, 64, 4)
 	for i := range 4 {
@@ -137,7 +114,6 @@ func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 		}
 	}
 
-	// Another pane still gets what it asks for.
 	second := filepath.Join(base, "second")
 	run(ids[1], second, 10, 0)
 	got = heldCount(t, second, "main")
@@ -146,7 +122,6 @@ func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 		t.Errorf("ASSERTION: a second pane holds %d connections, want 10", got)
 	}
 
-	// 14 more panes ask for 64 each: more than panes may hold in all.
 	for i := range 14 {
 		name := "more" + strconv.Itoa(i)
 		if o, err := tuiosCLI(t, base, "new-window", "-s", "conns", name, "--no-focus"); err != nil {
@@ -174,7 +149,6 @@ func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 		t.Errorf("ASSERTION: programs in panes hold %d connections, want at most %d", total, 1024-128)
 	}
 
-	// The person's commands still work.
 	for _, args := range [][]string{{"ls"}, {"list-windows", "-s", "conns"}} {
 		out, err := tuiosCLI(t, base, args...)
 		tr.add("tuios %s: %v\n%s", strings.Join(args, " "), err, out)

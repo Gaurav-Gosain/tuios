@@ -18,31 +18,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// kitten icat draws nothing inside tuios, reported while recording.
-//
-// Two bugs, one cause. kitten icat is written in Go and encodes its payloads
-// with base64.RawStdEncoding, so nothing it sends is padded, and tuios decoded
-// with StdEncoding, which requires padding:
-//
-//   - In its default mode for a PNG, icat sends the file's path (t=f). A path
-//     whose length is not a multiple of three decoded to nothing, and the
-//     command was dropped. icat exits 0 and nothing is drawn.
-//   - In stream mode (t=d, m=1 chunks) the unpadded final chunk failed to
-//     decode and was passed on as raw base64 text inside the image bytes, so
-//     the host was handed a corrupt PNG.
-//
-// Both tests run in the standalone TUI and against a daemon, whose kitty query
-// answers are its own and not the standalone passthrough's.
-
-// icatImage is the PNG these tests draw, with dimensions nothing else in tuios
-// transmits so its commands can be told apart on the wire.
 const (
 	icatImageW = 37
 	icatImageH = 23
 )
 
-// writeIcatPNG writes the test PNG under dir at a path whose length is not a
-// multiple of three, so its unpadded base64 needs the padding it lacks.
 func writeIcatPNG(t *testing.T, dir string) (string, []byte) {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, icatImageW, icatImageH))
@@ -66,8 +46,6 @@ func writeIcatPNG(t *testing.T, dir string) (string, []byte) {
 	return path, buf.Bytes()
 }
 
-// startGraphicsPane boots tuios against a host that answers like kitty, opens
-// one pane and leaves it in terminal mode at a shell prompt.
 func startGraphicsPane(t *testing.T, daemon bool) (*tuitest.Terminal, *kittyHost) {
 	t.Helper()
 	host := newKittyHost()
@@ -88,8 +66,6 @@ func startGraphicsPane(t *testing.T, daemon bool) (*tuitest.Terminal, *kittyHost
 	return term, host
 }
 
-// runToExit types a command and waits for the exit status it prints. The
-// marker is split in the typed text so the echo of the command cannot match.
 func runToExit(t *testing.T, term *tuitest.Terminal, cmd string) {
 	t.Helper()
 	typeLine(t, term, cmd+`; echo "DONE""-RC=$?"`)
@@ -98,9 +74,6 @@ func runToExit(t *testing.T, term *tuitest.Terminal, cmd string) {
 	}
 }
 
-// hostTransmits returns what the host was told about the test image after the
-// "icat" mark: the path of each file transmission, and the decoded bytes of
-// each direct one, chunks joined.
 func hostTransmits(t *testing.T, stream []byte) (paths []string, direct [][]byte) {
 	t.Helper()
 	if i := bytes.Index(stream, []byte(phaseMark+"icat")); i >= 0 {
@@ -189,16 +162,11 @@ func TestKittenIcatDrawsInAPane(t *testing.T) {
 			path, img := writeIcatPNG(t, t.TempDir())
 			host.mark("icat")
 
-			// Default mode. The host answered that it reads files, so icat
-			// sends the path and tuios hands it to the host.
 			runToExit(t, term, kitten+" icat --stdin=no "+path)
-			// Stream mode. The bytes go through tuios.
 			runToExit(t, term, kitten+" icat --stdin=no --transfer-mode=stream "+path)
 			time.Sleep(time.Second)
 
 			paths, direct := hostTransmits(t, host.bytes())
-			// tuios follows symlinks before it hands a path on, and /tmp is one
-			// on macOS.
 			wantPath, err := filepath.EvalSymlinks(path)
 			if err != nil {
 				t.Fatal(err)
@@ -214,8 +182,6 @@ func TestKittenIcatDrawsInAPane(t *testing.T) {
 				t.Errorf("stream mode: host received transmissions of %v bytes, want one of the %d-byte PNG", lens, len(img))
 			}
 
-			// Asked last, with a marker of its own, so it cannot change what
-			// the checks above read.
 			runTagged(t, term, "medium", kitten+" icat --detect-support 2>&1 | tr a-z A-Z | sed 's/^/MEDIUM-/'")
 			_, statErr := os.Stat("/dev/shm")
 			reachable := statErr == nil || runtime.GOOS == "darwin"

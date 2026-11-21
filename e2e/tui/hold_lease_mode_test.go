@@ -7,15 +7,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// kittyAltX is x struck while the left Option key is held: x is close_window
-// in window mode.
 const kittyAltX = "\x1b[120;3u"
 
-// kittyN is a plain n under the report-all-keys flag the hold key turns on.
 const kittyN = "\x1b[110u"
 
-// holdKeys sends each key as its own event, with a pause the client needs to
-// see them apart, and saves the frame after each one.
 func holdKeys(t *testing.T, term *tuitest.Terminal, frame string, keys ...string) {
 	t.Helper()
 	art := artifactDir(t)
@@ -53,8 +48,6 @@ func TestHoldReleaseAfterTheLastPaneClosedStaysInWindowMode(t *testing.T) {
 	waitWindowCount(t, term, 1, "n after the release opens a pane")
 }
 
-// kittyAltN is n struck while the left Option key is held. Held, it is n in
-// window mode, new_window. In terminal mode alt+n moves to the next pane.
 const kittyAltN = "\x1b[110;3u"
 
 // TestHoldOutlastsADividerDrag: in terminal mode the person drags the divider

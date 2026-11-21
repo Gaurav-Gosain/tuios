@@ -22,7 +22,6 @@ func TestDaemonToggleTilingReproFlow(t *testing.T) {
 	killDaemon(t, base)
 	waitBoot(t, term)
 
-	// Three windows created ONLY through the daemon verb path, tiling off.
 	for i := 1; i <= 3; i++ {
 		out, err := tuiosCLI(t, base, "run-command", "--session", "rs2", "NewWindow")
 		if err != nil {
@@ -31,7 +30,6 @@ func TestDaemonToggleTilingReproFlow(t *testing.T) {
 		waitWindowCount(t, term, i, fmt.Sprintf("after daemon NewWindow #%d", i))
 	}
 
-	// Enable tiling the way the user did in the bug report: the daemon verb.
 	out, err := tuiosCLI(t, base, "run-command", "--session", "rs2", "ToggleTiling")
 	if err != nil {
 		t.Fatalf("run-command ToggleTiling failed: %v\n%s", err, out)
@@ -57,12 +55,6 @@ func TestDaemonToggleTilingReproFlow(t *testing.T) {
 		}
 	}
 
-	// Rendered proof: the tiled partition must show up as distinct on-screen
-	// regions separated by internal borders. A single stacked/floating window
-	// fills the frame edge-to-edge with no interior vertical split; three tiles
-	// (a full-height master on the left, two stacked on the right) put an
-	// interior vertical border down the middle of the screen. Require at least
-	// one interior column that is a vertical border for most of the height.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return hasInteriorVerticalSplit(s)
 	}, uiTimeout); err != nil {
@@ -72,10 +64,6 @@ func TestDaemonToggleTilingReproFlow(t *testing.T) {
 	t.Logf("rendered tiled grid:\n%s", term.Snapshot())
 }
 
-// hasInteriorVerticalSplit reports whether the rendered screen has a column,
-// away from both edges, that is a vertical box-drawing border for most of the
-// usable height. A stacked/floating full-screen window has borders only at the
-// frame edges; a tiled layout adds interior ones where panes meet.
 func hasInteriorVerticalSplit(s tuitest.Screen) bool {
 	cols, rows := s.Size()
 	if cols < 8 || rows < 6 {
@@ -85,7 +73,6 @@ func hasInteriorVerticalSplit(s tuitest.Screen) bool {
 	for r := range rows {
 		lines[r] = s.Line(r)
 	}
-	// Vertical box-drawing glyphs used for borders.
 	isVert := func(r rune) bool {
 		switch r {
 		case '│', '┃', '║', '|', '┆', '┇', '┊', '┋':
@@ -93,7 +80,6 @@ func hasInteriorVerticalSplit(s tuitest.Screen) bool {
 		}
 		return false
 	}
-	// Scan interior columns (skip the two edge columns on each side).
 	for c := 3; c < cols-3; c++ {
 		run := 0
 		for r := 1; r < rows-2; r++ {

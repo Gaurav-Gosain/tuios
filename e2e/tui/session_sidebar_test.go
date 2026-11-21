@@ -10,23 +10,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Whether the sidebar rail is shown is session state (see
-// internal/session/sidebar_visibility.go). Hiding it on one client hides it on
-// every client of the session, the panes grow into the columns it gave back on
-// every screen, and the daemon keeps the grown rectangles. Each test here
-// reads the rectangles back from the daemon with list-windows and reads the
-// frame each client draws, and saves the frames it checks under artifactDir.
-
-// sessionRailConfig is a config with the rail on the left and the dock at the top,
-// tiled in layout, so the rail is the only thing to the left of the panes.
 func sessionRailConfig(layout string, shown bool) string {
 	return fmt.Sprintf("[startup]\nopen_default_window = true\ntiled = true\nlayout = %q\n"+
 		"[appearance]\ndockbar_position = \"top\"\n"+
 		"[appearance.sidebar]\nenabled = %v\nposition = \"left\"\n", layout, shown)
 }
 
-// railSession makes a detached session with config written under base, attaches
-// one client with o and opens a second window. It returns the client.
 func railSession(t *testing.T, base, name, layout string, o startOpts) *tuitest.Terminal {
 	t.Helper()
 	writeConfig(t, base, sessionRailConfig(layout, true))
@@ -45,8 +34,6 @@ func railSession(t *testing.T, base, name, layout string, o startOpts) *tuitest.
 	return term
 }
 
-// paneSpan is the box the daemon's rectangles cover: the leftmost and the
-// rightmost column, and the summed width of the panes.
 type paneSpan struct{ left, right, width int }
 
 func spanOf(rects []winRect) paneSpan {
@@ -59,9 +46,6 @@ func spanOf(rects []winRect) paneSpan {
 	return s
 }
 
-// waitSpan polls the daemon's rectangles until want accepts their span. The
-// daemon is read without any input in between, so a client that laid its
-// panes out and never told the daemon fails here.
 func waitSpan(t *testing.T, base, name, what string, want func(paneSpan) bool) []winRect {
 	t.Helper()
 	return waitForShape(t, base, name, 2, what, func(rects []winRect) error {
@@ -72,14 +56,10 @@ func waitSpan(t *testing.T, base, name, what string, want func(paneSpan) bool) [
 	})
 }
 
-// railShown reports whether a client draws the rail: its header and the
-// first pane starting to the right of it.
 func railShown(s tuitest.Screen) bool {
 	return strings.Contains(s.Text(), sidebarHeader)
 }
 
-// waitRail waits for a client to show or hide the rail, and for its first pane
-// to start at col.
 func waitRail(t *testing.T, term *tuitest.Terminal, shown bool, col int, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -91,7 +71,6 @@ func waitRail(t *testing.T, term *tuitest.Terminal, shown bool, col int, what st
 	}
 }
 
-// toggleRail presses the sidebar key: the leader, then b.
 func toggleRail(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('b'), "b")
@@ -113,17 +92,11 @@ func TestHidingTheRailGrowsThePanes(t *testing.T) {
 			const name = "rail"
 			term := railSession(t, base, name, layout, startOpts{})
 			if layout == "scrolling" {
-				// The strip shows the pane it just opened whole, which
-				// scrolls the first column under the rail. Focus the first
-				// column so the strip starts at the edge of the box, which
-				// is the edge this test measures.
 				first := stripOrder(waitForSettledGeometryIn(t, base, name, 2))[0]
 				if out, err := tuiosCLI(t, base, "focus-window", "-s", name, first); err != nil {
 					t.Fatalf("focus the first column: %v\n%s", err, out)
 				}
 			}
-			// The scrolling strip is longer than the screen by design, so its
-			// far edge says nothing. Its near edge is where the box starts.
 			reaches := func(s paneSpan) bool { return layout == "scrolling" || s.right == bigCols }
 			before := spanOf(waitSpan(t, base, name, "the daemon with the rail shown", func(s paneSpan) bool {
 				return s.left > 0 && reaches(s)
@@ -139,8 +112,6 @@ func TestHidingTheRailGrowsThePanes(t *testing.T) {
 				return s.left == 0 && reaches(s)
 			}))
 			saveArtifact(t, term, dir, "rail-hidden")
-			// The scrolling strip keeps its columns' width and moves the strip,
-			// so only the tiled layouts that partition the box grow each pane.
 			if layout != "scrolling" && after.width != before.width+rail {
 				t.Errorf("the panes are %d columns wide in all after the rail is hidden, want %d (%d plus the rail's %d)",
 					after.width, before.width+rail, before.width, rail)
@@ -233,7 +204,6 @@ func TestHiddenRailSurvivesADaemonRestart(t *testing.T) {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}
 	waitExit(t, first, "after kill-server")
-	// Starting any session starts a daemon, and a daemon restores on start.
 	if out, err := tuiosCLI(t, base, "new", "railrs-trigger", "--detach"); err != nil {
 		t.Fatalf("start a fresh daemon: %v: %s", err, out)
 	}
@@ -305,9 +275,6 @@ func TestChromeSetFromTheCommandLineRetilesThePanes(t *testing.T) {
 	waitSpan(t, base, name, "the daemon after the rail is turned off", func(s paneSpan) bool {
 		return s.left == 0 && s.right == bigCols && s.width == spanOf(before).width+rail
 	})
-	// The dock stays hidden. A config file rewritten under the client while it
-	// saved this change brought the dock back at the bottom, and the span
-	// above does not see rows.
 	waitForShape(t, base, name, 2, "the daemon after the rail is turned off", func(rects []winRect) error {
 		for _, r := range rects {
 			if r.Y != 0 || r.Height != height+top {
@@ -353,8 +320,6 @@ func TestAnEmptySessionTakesTheRailOfItsMaker(t *testing.T) {
 
 	home := t.TempDir()
 	writeConfigIn(t, home, sessionRailConfig("bsp", true))
-	// attachSmall, because a session with no windows shows the welcome
-	// screen and no mode banner.
 	b := attachSmall(t, base, "zzspawn", startOpts{cols: bigCols, rows: bigRows, env: []string{"XDG_CONFIG_HOME=" + home}})
 	time.Sleep(2 * time.Second)
 	dir := artifactDir(t)
@@ -419,8 +384,6 @@ func TestRailOpenedForTheKeyboardMovesNoPanes(t *testing.T) {
 	})
 }
 
-// rectStarts is where the daemon's rectangles begin, in the form paneStarts
-// reads a frame in: row,column of each top-left corner, sorted.
 func rectStarts(rects []winRect) []string {
 	starts := make([]string, 0, len(rects))
 	for _, r := range rects {
@@ -468,8 +431,6 @@ func TestDaemonKeepsTheLayoutTheClientsDraw(t *testing.T) {
 			term, who = narrow, "narrow"
 		}
 		toggleRail(t, term)
-		// The session follows the client that toggled, so that client draws
-		// the whole session and its frame is the layout to compare with.
 		var last []string
 		deadline := time.Now().Add(shellTimeout)
 		for {

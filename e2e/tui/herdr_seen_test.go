@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// herdrTry sends one request to the herdr socket from the test process and
-// returns the result, or the error object when the call failed.
 func herdrTry(t *testing.T, base, method string, params any) (result, failure map[string]any) {
 	t.Helper()
 	conn, err := net.Dial("unix", herdrSocket(base))
@@ -37,8 +35,6 @@ func herdrTry(t *testing.T, base, method string, params any) (result, failure ma
 	return out["result"].(map[string]any), nil
 }
 
-// herdrStatusStream is an events.subscribe stream of one pane's
-// pane.agent_status_changed events.
 type herdrStatusStream struct {
 	conn net.Conn
 	r    *bufio.Reader
@@ -66,7 +62,6 @@ func subscribeHerdrStatus(t *testing.T, base, pane string) *herdrStatusStream {
 	return s
 }
 
-// next waits for the stream's next status and fails unless it is want.
 func (s *herdrStatusStream) next(t *testing.T, want, why string) {
 	t.Helper()
 	_ = s.conn.SetReadDeadline(time.Now().Add(uiTimeout))
@@ -89,7 +84,6 @@ func (s *herdrStatusStream) next(t *testing.T, want, why string) {
 	}
 }
 
-// herdrPaneStatus is a pane's agent_status in session.snapshot.
 func herdrPaneStatus(t *testing.T, base, pane string) string {
 	t.Helper()
 	snap := herdrCall(t, base, "session.snapshot", map[string]any{})["snapshot"].(map[string]any)
@@ -102,8 +96,6 @@ func herdrPaneStatus(t *testing.T, base, pane string) string {
 	return ""
 }
 
-// finishTurn reports a turn that starts and finishes, which counts as a
-// finished turn nobody has looked at yet.
 func finishTurn(t *testing.T, base, session, win string) {
 	t.Helper()
 	for _, state := range []string{"working", "done"} {
@@ -185,7 +177,6 @@ func TestHerdrSeenDoneIsIdle(t *testing.T) {
 			t.Fatalf("agent.wait for done matched a pane that was seen")
 		}
 
-		// The next turn is news again.
 		finishTurn(t, base, session, win)
 		stream.next(t, "working", "the next turn starting")
 		stream.next(t, "done", "the next turn finishing")
@@ -198,8 +189,6 @@ func TestHerdrSeenDoneIsIdle(t *testing.T) {
 		pane := herdrPaneByLabel(t, base, "agent")["pane_id"].(string)
 		stream := subscribeHerdrStatus(t, base, pane)
 
-		// The pane opened with --no-focus, so the client shows another pane
-		// while it finishes.
 		finishTurn(t, base, crushSession, ids["agent"])
 		stream.next(t, "working", "a turn starting off screen")
 		stream.next(t, "done", "a turn finishing off screen")

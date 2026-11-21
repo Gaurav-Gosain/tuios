@@ -65,30 +65,20 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 	}
 	w := firstWindow(t, base, session)
 
-	// The width the detached pane has. Both lines have to fit it, or they wrap
-	// when printed and no rune ever sits at a column a resize can cut.
 	wide := paneCols(t, base, session, w.ID, "WIDE0", func(int) bool { return true })
-	lineA := "WRA" + strings.Repeat(rune2, runes)  // runes on odd columns
-	lineB := "WRBx" + strings.Repeat(rune2, runes) // runes on even columns
+	lineA := "WRA" + strings.Repeat(rune2, runes)
+	lineB := "WRBx" + strings.Repeat(rune2, runes)
 	if wide < len("WRBx")+2*runes {
 		t.Fatalf("the detached pane is %d columns, too narrow for a %d-column line", wide, len("WRBx")+2*runes)
 	}
-	// paneEmitCmd spells every byte in octal, so the echoed command line holds
-	// neither marker and only the printed lines can match.
-	// Both lines are printed on a blue background, so the frame can show
-	// whether the pane's last column kept the line's style.
 	const blue, reset = "\x1b[44m", "\x1b[0m"
 	if err := paneSend(base, session, w.ID, paneEmitCmd(blue+lineA+reset+"\n"+blue+lineB+reset+"\n")); err != nil {
 		t.Fatalf("print the lines: %v", err)
 	}
-	// Push both lines off the screen and into history.
 	if err := paneSend(base, session, w.ID, "seq 1 60\n"); err != nil {
 		t.Fatalf("fill the screen: %v", err)
 	}
 
-	// A client that then shrinks to 50 columns narrows the pane below the 64
-	// the lines need. It attaches wider first: the mode banner the attach
-	// waits for does not fit a 50-column dock.
 	term := attachIn(t, base, session, startOpts{cols: 100, rows: 20})
 	if err := term.Resize(50, 20); err != nil {
 		t.Fatalf("narrow the client: %v", err)
@@ -96,7 +86,6 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 	narrow := paneCols(t, base, session, w.ID, "NARROW", func(c int) bool { return c < len(lineA) })
 	t.Logf("the pane is %d columns wide, then %d", wide, narrow)
 
-	// The screenshot of the narrow pane, history included.
 	shotFile := filepath.Join(t.TempDir(), "narrow.txt")
 	if out, err := tuiosOut(base, "screenshot", "-s", session, "-w", w.ID, "--scrollback",
 		"--format", "txt", "--frame", "none", "--no-copy", "--out", shotFile); err != nil {
@@ -120,7 +109,6 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 		t.Fatalf("the screenshot holds %d of the 2 lines:\n%s", shotRows, shotText)
 	}
 
-	// Scroll the pane back until the lines are on screen.
 	col, row := paneCell(t, term)
 	deadline := time.Now().Add(uiTimeout)
 	for !screenHas(term.Screen(), "WRA", "WRBx") {
@@ -146,8 +134,6 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 		}
 		checked++
 		t.Logf("row %d: %q", r, line)
-		// The positive half: the line really reaches the border, so the
-		// question of what is drawn at the edge is a real one on this row.
 		last := -1
 		for c := range right {
 			if s.Cell(c, r).Content == rune2 {
@@ -158,10 +144,6 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 			t.Fatalf("row %d stops at column %d, short of the pane's border at column %d, so it cannot test the edge: %q\n%s",
 				r, last, right, line, term.Snapshot())
 		}
-		// The line's background reaches the pane's last column. A row drawn
-		// one column too wide is cut at the border by the frame, and that cut
-		// drops the whole wide cell, background, copy cursor and selection
-		// with it. The positive half: the line's first cell has the blue.
 		first := -1
 		for c := range right {
 			if s.Cell(c, r).Content == "W" {
@@ -173,15 +155,10 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 			t.Fatalf("row %d: the line's first cell has no background, so the edge check below tests nothing: %q\n%s",
 				r, line, term.Snapshot())
 		}
-		// The pane's own border is the first of the border columns the row
-		// ends in, and its last column is the one before that. A border
-		// cell beside the scrolled pane can be the scrollbar's thumb.
 		edge := right
 		for edge > 0 && (s.Cell(edge-1, r).Content == "│" || s.Cell(edge-1, r).Content == "┃") {
 			edge--
 		}
-		// The last column can be the second half of a wide rune, which has no
-		// cell of its own. Its style is the rune's.
 		edgeCol := edge - 1
 		if s.Cell(edgeCol, r).Content == "" {
 			edgeCol--
@@ -199,7 +176,6 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 		t.Fatalf("checked %d rows holding the lines, want 2\n%s", checked, term.Snapshot())
 	}
 
-	// Widen the pane again. Every rune has to be in the history still.
 	if err := term.Resize(160, 40); err != nil {
 		t.Fatalf("resize the client: %v", err)
 	}
@@ -226,12 +202,8 @@ func TestWideRuneInHistorySurvivesANarrowPane(t *testing.T) {
 	}
 }
 
-// paneCols asks the pane's own shell how many columns its terminal has, which
-// is the size of the daemon's emulator for that pane, and waits until ok holds.
-// tag keeps one question's answer apart from an earlier one on the screen.
 func paneCols(t *testing.T, base, session, window, tag string, ok func(int) bool) int {
 	t.Helper()
-	// The tag is split in the command so only the printed answer matches.
 	half := len(tag) / 2
 	deadline := time.Now().Add(shellTimeout)
 	for {

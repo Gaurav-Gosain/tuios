@@ -8,34 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The Close row on a workspace tab's right-click menu: it closes every pane on
-// the workspace of the tab it was opened on, through close_workspace's
-// confirmation, and close_workspace reached any other way still closes the
-// workspace in view.
-//
-// How these could pass wrongly, written down first:
-//   - The row could act on the workspace in view instead of the tab's. The
-//     panes are on workspace 2 while the client shows workspace 1, so the
-//     dialog would name workspace 1 and the confirm would close the wrong
-//     panes. The test checks both the question and the daemon's listing.
-//   - The dialog could name the tab's workspace and count the current one.
-//     Workspace 1 holds one pane and workspace 2 two, so the toll line tells
-//     them apart.
-//   - Cancel could close something, or the panes could go before the answer.
-//     The counts are read after Cancel and before Close.
-//   - The close could be a no-op that passes because nothing was asserted. Each
-//     close is checked against the daemon's own list-windows, and the other
-//     workspace's panes are checked to still be there.
-//   - The tab's workspace could be the current one only by accident. The
-//     current-tab and palette tests close workspace 1 while workspace 2 keeps
-//     its pane, which is the positive half of the first test. A workspace's
-//     number is its position, so that pane is on workspace 1 afterwards.
-
 const wsCloseSession = "wc"
 
-// startTwoWorkspaces starts a client on workspace 1, named homews, with one
-// pane, and puts far panes on workspace 2, named farws, without leaving 1. It
-// leaves the client in window management mode.
 func startTwoWorkspaces(t *testing.T, base string, far int) *tuitest.Terminal {
 	t.Helper()
 	term := startHome(t, base, wsCloseSession)
@@ -64,9 +38,6 @@ func startTwoWorkspaces(t *testing.T, base string, far int) *tuitest.Terminal {
 	return term
 }
 
-// dockCell finds needle on the dock's rows, the bottom three, and returns its
-// cell column. The column counts runes because the mode pill's icon before the
-// tabs is one cell and several bytes.
 func dockCell(s tuitest.Screen, needle string) (col, row int, ok bool) {
 	_, rows := s.Size()
 	for r := rows - 1; r >= max(0, rows-3); r-- {
@@ -83,9 +54,6 @@ func dockCellOK(s tuitest.Screen, needle string) bool {
 	return ok
 }
 
-// screenCell finds needle above the dock's tab row and returns its cell
-// column. A menu opened on a tab draws over the dock's rule, so that row is
-// searched too.
 func screenCell(t *testing.T, term *tuitest.Terminal, needle string) (col, row int) {
 	t.Helper()
 	s := term.Screen()
@@ -100,8 +68,6 @@ func screenCell(t *testing.T, term *tuitest.Terminal, needle string) (col, row i
 	return 0, 0
 }
 
-// openTabClose right-clicks the dock tab labelled tab, takes the menu's Close
-// row, and waits for the confirmation to ask question.
 func openTabClose(t *testing.T, term *tuitest.Terminal, tab, question string) {
 	t.Helper()
 	col, row, ok := dockCell(term.Screen(), tab)
@@ -117,7 +83,6 @@ func openTabClose(t *testing.T, term *tuitest.Terminal, tab, question string) {
 	}
 }
 
-// workspaceNamesOf is the session's workspace names, keyed by number.
 func workspaceNamesOf(t *testing.T, base, sess string) map[string]string {
 	t.Helper()
 	info, err := daemonJSON[struct {
@@ -129,7 +94,6 @@ func workspaceNamesOf(t *testing.T, base, sess string) map[string]string {
 	return info.WorkspaceNames
 }
 
-// confirmClose takes the dialog's destructive row, which is not the default.
 func confirmClose(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	col, row := screenCell(t, term, "Close workspace")
@@ -145,13 +109,11 @@ func TestWorkspaceTabCloseClosesThatTabsWorkspace(t *testing.T) {
 	const question = "Close every pane on workspace 2 (farws)?"
 
 	openTabClose(t, term, "farws", question)
-	// The toll is workspace 2's: two panes. Workspace 1 holds one.
 	text := term.Screen().Text()
 	if !strings.Contains(text, "2 panes") || strings.Contains(text, "1 pane,") {
 		t.Fatalf("the dialog does not count workspace 2's two panes\n%s", term.Snapshot())
 	}
 
-	// Enter on the default row is Cancel.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("answer the dialog: %v", err)
 	}
@@ -171,7 +133,6 @@ func TestWorkspaceTabCloseClosesThatTabsWorkspace(t *testing.T) {
 	if n := panesOn(t, base, wsCloseSession, 1); n != 1 {
 		t.Fatalf("closing workspace 2 from its tab left workspace 1 with %d panes, want 1\n%s", n, term.Snapshot())
 	}
-	// Closing another workspace leaves the view where it was.
 	waitShowing(t, base, wsCloseSession, 1, "HOME-42", term)
 	alive(t, term, "after closing workspace 2 from its tab")
 }
@@ -184,8 +145,6 @@ func TestWorkspaceTabCloseOnTheCurrentTab(t *testing.T) {
 
 	openTabClose(t, term, "homews", "Close every pane on workspace 1 (homews)?")
 	confirmClose(t, term)
-	// Workspace 1 stops existing, so farws, the one left, becomes workspace 1:
-	// workspace 2 empties when it moves down.
 	waitPanesOn(t, term, base, wsCloseSession, 2, 0, "closing workspace 1 from its tab")
 	if n := panesOn(t, base, wsCloseSession, 1); n != 1 {
 		t.Fatalf("closing workspace 1 from its tab left workspace 1 with %d panes, want farws's 1\n%s", n, term.Snapshot())
@@ -203,7 +162,6 @@ func TestCloseWorkspaceFromThePaletteClosesTheCurrentOne(t *testing.T) {
 	base := t.TempDir()
 	term := startTwoWorkspaces(t, base, 1)
 
-	// A tab menu opened on workspace 2 and dismissed leaves no target behind.
 	col, row, ok := dockCell(term.Screen(), "farws")
 	if !ok {
 		t.Fatalf("no dock tab farws\n%s", term.Snapshot())
@@ -215,12 +173,8 @@ func TestCloseWorkspaceFromThePaletteClosesTheCurrentOne(t *testing.T) {
 	}
 	waitMenuGone(t, term, "Switch to", "the dismissed tab menu")
 
-	// "close works" matches the one row: "Close window" ranks above "Close
-	// workspace" for the row's full name.
 	runPaletteRow(t, term, "close works", "Close workspace", "Close every pane on workspace 1 (homews)?")
 	confirmClose(t, term)
-	// Workspace 1 stops existing, so farws, the one left, becomes workspace 1:
-	// workspace 2 empties when it moves down.
 	waitPanesOn(t, term, base, wsCloseSession, 2, 0, "closing workspace 1 from the palette")
 	if n := panesOn(t, base, wsCloseSession, 1); n != 1 {
 		t.Fatalf("closing workspace 1 from the palette left workspace 1 with %d panes, want farws's 1\n%s", n, term.Snapshot())
@@ -246,8 +200,6 @@ func TestCloseWorkspaceFromAKeyClosesTheCurrentOne(t *testing.T) {
 		t.Fatalf("ctrl+b alt+x did not ask to close workspace 1: %v\n%s", err, term.Snapshot())
 	}
 	confirmClose(t, term)
-	// Workspace 1 stops existing, so farws, the one left, becomes workspace 1:
-	// workspace 2 empties when it moves down.
 	waitPanesOn(t, term, base, wsCloseSession, 2, 0, "closing workspace 1 from the key")
 	if n := panesOn(t, base, wsCloseSession, 1); n != 1 {
 		t.Fatalf("closing workspace 1 from the key left workspace 1 with %d panes, want farws's 1\n%s", n, term.Snapshot())

@@ -69,12 +69,10 @@ argv = ["echo", "resumed-{session_id}"]
 		waitAttention(offered(conv), "the restore did not offer "+conv)
 	}
 
-	// a: resumed by hand in a new pane of its own session.
 	mustCLI(t, base, "new-window", "-s", "e2e-stale-a", "again")
 	mustCLI(t, base, "set-agent-state", "-s", "e2e-stale-a", "-w", "again", "working", "--harness", "echoer", "--agent-session-id", convs["e2e-stale-a"])
 	waitAttention(func(out string) bool { return !offered(convs["e2e-stale-a"])(out) }, "the offer for a conversation a pane runs stayed open")
 
-	// b: resumed in a pane of another session, named by set-agent-session.
 	mustCLI(t, base, "new-window", "-s", "e2e-stale-other", "elsewhere")
 	mustCLI(t, base, "set-agent-session", "-s", "e2e-stale-other", "-w", "elsewhere", "--harness", "echoer", convs["e2e-stale-b"])
 	out := waitAttention(func(out string) bool { return !offered(convs["e2e-stale-b"])(out) }, "the offer for a conversation another session runs stayed open")

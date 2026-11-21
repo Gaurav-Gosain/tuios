@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// agentMeta reads a pane's agent metadata with get-agent-state.
 func agentMeta(t *testing.T, base string, args ...string) map[string]string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, append([]string{"get-agent-state", "--json"}, args...)...)
@@ -24,7 +23,6 @@ func agentMeta(t *testing.T, base string, args ...string) map[string]string {
 	return st.Meta
 }
 
-// waitMeta polls a pane's metadata until every key has its value.
 func waitMeta(t *testing.T, base string, want map[string]string, args ...string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -68,8 +66,6 @@ func TestStatusLineFeedReachesTheRail(t *testing.T) {
 	waitForAll(t, term, uiTimeout, "the rail row", "Opus 4.7")
 	saveFrame(t, term, "statusline-feed-rail")
 
-	// Chained: the person's command gets the same stdin and its output is
-	// printed as it wrote it.
 	chained := "printf '%s' '" + payload + "' | " + tuiosBin + " agent-statusline claude-code --then 'wc -c | tr -d \" \"; echo MINE-LINE'\n"
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", chained); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)

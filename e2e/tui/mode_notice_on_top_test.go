@@ -32,20 +32,14 @@ import (
 // dock shows "Session size: ... +1" and the first wait fails.
 func TestAModeNoticeStaysAboveANoticeItDidNotAsk(t *testing.T) {
 	base := t.TempDir()
-	// The mode notice lasts long enough that a slow runner still reads it
-	// live. The size notice keeps its own two seconds.
 	writeConfig(t, base, "[notifications]\nduration = 30\n")
 	if out, err := tuiosCLI(t, base, "new", "S", "--detach"); err != nil {
 		t.Fatalf("create the session: %v\n%s", err, out)
 	}
-	// The large client presses a key, so the session takes its size.
 	large := attachIn(t, base, "S", startOpts{cols: 160, rows: 45})
 	w0, h0 := sessionSize(t, base, "S")
 
-	// The small client attaches and presses nothing, so the session keeps
-	// the large client's size.
 	small := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", "S"}})
-	// A join is announced to the client already there, not to the joiner.
 	if err := large.WaitForText("2 connected", bootTimeout); err != nil {
 		t.Fatalf("the large client was never told a second one joined: %v\n%s", err, large.Snapshot())
 	}
@@ -65,8 +59,6 @@ func TestAModeNoticeStaysAboveANoticeItDidNotAsk(t *testing.T) {
 		saveArtifact(t, small, dir, name)
 		savePNG(t, small.Screen(), shot.XTermPalette(), dir, name)
 	}
-	// The notices last two seconds, so the dock as it was when the size
-	// notice showed is kept for the failure message.
 	var covered string
 	if err := small.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()

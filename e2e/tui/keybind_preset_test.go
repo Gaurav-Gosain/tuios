@@ -32,8 +32,6 @@ func TestTmuxPresetDrivesWorkspaces(t *testing.T) {
 			t.Fatalf("press ctrl+b %v: %v", keys, err)
 		}
 	}
-	// p and n step through workspaces that hold a pane, so each new
-	// workspace's pane is waited for before the next key.
 	paneOn := func(ws int) {
 		t.Helper()
 		deadline := time.Now().Add(uiTimeout)
@@ -62,7 +60,6 @@ func TestTmuxPresetDrivesWorkspaces(t *testing.T) {
 	press("l")
 	waitWorkspace(t, base, "tmuxkeys", 3)
 
-	// ctrl+b p then p at once: one switch, and the second p is typed.
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "p", "p"); err != nil {
 		t.Fatalf("press ctrl+b p p: %v", err)
@@ -146,8 +143,6 @@ func TestScreenPresetLeaderTwiceAndSend(t *testing.T) {
 // Bindings() spelling chords from Scopes(leader), the list says ctrl+g t r
 // for the split and the list check fails.
 func TestZellijPresetOpensModes(t *testing.T) {
-	// The preset turns lock on, so the client stays in terminal mode: see
-	// lockedSession.
 	term, base := lockedSession(t, "zellijkeys", "\n[keybindings]\npreset = \"zellij\"\n")
 	waitForSettledGeometryIn(t, base, "zellijkeys", 1)
 	for _, tc := range []struct{ key, title string }{{"t", "Switch to workspace"}, {"p", "Toggle tiling mode"}} {
@@ -165,8 +160,6 @@ func TestZellijPresetOpensModes(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 	}
 
-	// Pane mode: p r splits right. Tab mode: t n opens a workspace and t h
-	// goes back to the one before it.
 	if err := term.SendKeys(tuitest.Ctrl('g'), "p", "r"); err != nil {
 		t.Fatalf("press ctrl+g p r: %v", err)
 	}
@@ -187,7 +180,6 @@ func TestZellijPresetOpensModes(t *testing.T) {
 	}
 	waitWorkspace(t, base, "zellijkeys", 1)
 
-	// keybinds list spells each menu key with the key that opens the menu.
 	out, err := tuiosCLI(t, base, "keybinds", "list", "--json")
 	if err != nil {
 		t.Fatalf("keybinds list --json: %v\n%s", err, out)

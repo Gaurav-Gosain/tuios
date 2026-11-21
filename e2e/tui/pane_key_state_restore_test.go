@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// keyStateProbe writes a script that sets up key state with setup, prints
-// <name>SET, waits for the file go, runs then, prints <name>READY, and copies
-// the keys it reads into out until four seconds of silence.
 func keyStateProbe(t *testing.T, dir, name, setup, then string) (script, out, gate string) {
 	t.Helper()
 	out = filepath.Join(dir, name+".keys")
@@ -33,8 +30,6 @@ func keyStateProbe(t *testing.T, dir, name, setup, then string) (script, out, ga
 	return script, out, gate
 }
 
-// readProbeKeys sends ctrl+A as kitty CSI u, the way a kitty-protocol host
-// reports it, and returns what the probe read.
 func readProbeKeys(t *testing.T, term *tuitest.Terminal, name, out string) string {
 	t.Helper()
 	if err := term.WaitForText(name+"READY", shellTimeout); err != nil {
@@ -90,8 +85,6 @@ func TestPaneModifyOtherKeysOffWhileHidden(t *testing.T) {
 	if err := os.WriteFile(gate, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// The probe turns the level off and prints its marker while hidden. Give
-	// it the time to, then come back.
 	time.Sleep(time.Second)
 	switchWorkspace(t, term, "1", 1)
 	enterTerminalMode(t, term)

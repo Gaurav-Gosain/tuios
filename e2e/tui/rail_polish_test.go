@@ -12,13 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The rail's polish gap, issues 165 to 178: each of these drives a real
-// daemon and a real client and reads the behaviour off the screen, because a
-// visual feature with only unit-level proof has burned this project before.
-
-// railClient writes a config, creates a detached session named session with
-// one window, attaches a client to it, and settles it in window-management
-// mode. The rail is on and wide enough to read a sentence.
 func railClient(t *testing.T, session, config string, o startOpts) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -43,9 +36,6 @@ func railClient(t *testing.T, session, config string, o startOpts) (*tuitest.Ter
 	return term, base
 }
 
-// railConfig is a rail on the left at width columns, with agent alerts not
-// suppressed for the focused pane, so a test can read the toast for the pane
-// it is typing into.
 func railConfig(width int) string {
 	return "[appearance.sidebar]\nenabled = true\nwidth = " + strconv.Itoa(width) + "\n\n[notifications.agent]\nsuppress_focused = false\nsettle_seconds = 0\n"
 }
@@ -62,32 +52,21 @@ func TestBlockedAgentAlertCarriesTheQuestion(t *testing.T) {
 	term, base := railClient(t, "e2e", railConfig(60), startOpts{cols: 140, rows: 40})
 	renameWindow(t, term, "REVIEW")
 
-	// The lowest-ranked claim there is, naming the harness: it gives the screen
-	// tier rules to run and nothing that outranks it, which is the state an
-	// unhooked harness sits in once the detector has seen its binary.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "e2e", "-w", "REVIEW",
 		"--source", "stall", "--harness", "claude-code"); err != nil {
 		t.Fatalf("set-agent-state failed: %v\n%s", err, out)
 	}
 	enterTerminalMode(t, term)
-	// The words the rule reads come in as printf's arguments, so the command
-	// line the shell echoes does not hold the question. The rule
-	// takes the first line in the pane's last rows that has the question's
-	// stem. Until the shell prints its next prompt, the echoed command is in
-	// those rows, and a literal question in it was read as the question.
 	runInShell(t, term,
 		`printf '%s want to make this edit to main.go?\n\342\235\257 1. Yes\n  2. %s, and tell Claude what to do differently (esc)\n' 'Do you' No`,
 		"2. No, and tell Claude", shellTimeout)
 
-	// The dock cuts a long toast to its budget and the rail cuts the note to
-	// its width, so both are matched on their opening words.
 	const question = "approval: Do you want to make this edit"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "REVIEW needs you · "+question)
 	}, uiTimeout); err != nil {
 		t.Fatalf("the toast never carried the question the agent asked: %v\n%s", err, term.Snapshot())
 	}
-	// The rail's two-line agent row carries it too, under the pane's name.
 	const note = "approval · claude · Do you want to make this edit"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), note)
@@ -111,12 +90,9 @@ func TestFocusingAPaneScrollsTheRailToItsRow(t *testing.T) {
 		newWindow(t, term)
 		renameWindow(t, term, name)
 	}
-	// Back to the first pane, so the section rests at its top.
 	if err := term.SendKeys("1"); err != nil {
 		t.Fatalf("select the first pane: %v", err)
 	}
-	// The dock repeats every pane's name, so the rows are read off the rail's
-	// own columns.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return railRowOf(s, "P1") == railRowOf(s, "terminals")+1
 	}, uiTimeout); err != nil {
@@ -155,15 +131,9 @@ func TestAgentsHeaderShowsBlockedAndDone(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "set-agent-state", "done", "-s", "e2e", "-w", "BUILD"); err != nil {
 		t.Fatalf("set-agent-state failed: %v\n%s", err, out)
 	}
-	// BUILD is the focused pane, and focusing a finished pane is what marks it
-	// seen; a done pane nobody has looked at is the one that counts, so move
-	// to REVIEW, which is blocked and stays blocked when looked at.
 	if err := term.SendKeys("1"); err != nil {
 		t.Fatalf("select the first pane: %v", err)
 	}
-	// The daemon hears of the focus from the client, so once it names REVIEW
-	// the client has moved off BUILD. A BUILD turn that lands before that
-	// finishes in front of the user and is rightly seen.
 	waitForFocusedPane(t, base, "e2e", "REVIEW")
 	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "e2e", "-w", "BUILD"); err != nil {
 		t.Fatalf("set-agent-state failed: %v\n%s", err, out)
@@ -180,8 +150,6 @@ func TestAgentsHeaderShowsBlockedAndDone(t *testing.T) {
 	saveFrame(t, term, "167-header-count")
 }
 
-// waitForFocusedPane polls list-windows until the daemon reports the pane
-// named name as the focused one.
 func waitForFocusedPane(t *testing.T, base, session, name string) {
 	t.Helper()
 	var last string
@@ -222,14 +190,10 @@ contains = "REV"
 fg = "#ff0000"
 bold = true
 `
-	// A truecolor host, so the hex the rule names arrives as it was written
-	// rather than stepped down to a 256-colour slot.
 	term, base := railClient(t, "e2e", cfg, startOpts{cols: 140, rows: 40, env: []string{"COLORTERM=truecolor"}})
 	renameWindow(t, term, "REVIEW")
 	newWindow(t, term)
 	renameWindow(t, term, "BUILD")
-	// Both names on the rail before either is reported on, so the rows the
-	// assertion reads are the rows the names were given.
 	waitForAll(t, term, uiTimeout, "both renamed panes on the rail", "REVIEW", "BUILD")
 	for _, w := range []string{"REVIEW", "BUILD"} {
 		if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", "e2e", "-w", w); err != nil {
@@ -243,8 +207,6 @@ bold = true
 	}
 	red := tuitest.Color{Kind: tuitest.ColorRGB, R: 255}
 	cellFg := func(s tuitest.Screen, name string, below int) (tuitest.Color, bool) {
-		// The agents section lists the pane under its header; the terminals
-		// section lists it too, higher up, so search below the agents header.
 		agents := screenRowOf(s, "agents")
 		if agents < 0 {
 			return tuitest.Color{}, false
@@ -289,10 +251,6 @@ func TestDividerDragMovesTheSplitAndPersists(t *testing.T) {
 			t.Fatalf("set-agent-state failed: %v\n%s", err, out)
 		}
 	}
-	// The grip is three cells of the border glyph, which every pane's title
-	// bar also draws, so the search is confined to the rail's columns. The six
-	// reports land one at a time and the block grows with each, so the grip's
-	// row is read only once the last pane is listed under the header.
 	const grip = "───"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r := railRowOf(s, grip)
@@ -306,7 +264,6 @@ func TestDividerDragMovesTheSplitAndPersists(t *testing.T) {
 	agentsBefore := railHeaderRow(term.Screen(), "agents")
 	saveFrame(t, term, "178-before")
 
-	// Down four rows: the block gives up lines and its header moves down.
 	mouseDrag(t, term, col+1, row, col+1, row+4, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return railHeaderRow(s, "agents") > agentsBefore
@@ -326,8 +283,6 @@ func TestDividerDragMovesTheSplitAndPersists(t *testing.T) {
 		t.Fatalf("sidebar.json never recorded section_split: %v", err)
 	}
 
-	// A double-click on the divider resets it: the block comes back up and
-	// the file forgets the share.
 	row = railRowOf(term.Screen(), grip)
 	col = strings.Index(railLine(term.Screen(), row), grip)
 	mousePress(t, term, col+1, row, tuitest.MouseLeft, 0)
@@ -349,11 +304,8 @@ func TestDividerDragMovesTheSplitAndPersists(t *testing.T) {
 	alive(t, term, "after dragging the divider")
 }
 
-// railWidth is the rail's columns in the divider test: the configured 28,
-// which the 120-column screen honours in full.
 const railWidth = 28
 
-// railLine is the rail's part of screen row r.
 func railLine(s tuitest.Screen, r int) string {
 	runes := []rune(s.Line(r))
 	if len(runes) > railWidth {
@@ -362,7 +314,6 @@ func railLine(s tuitest.Screen, r int) string {
 	return string(runes)
 }
 
-// railRowAfter is railRowOf starting below screen row after, or -1.
 func railRowAfter(s tuitest.Screen, needle string, after int) int {
 	_, rows := s.Size()
 	for r := after + 1; r < rows; r++ {
@@ -373,7 +324,6 @@ func railRowAfter(s tuitest.Screen, needle string, after int) int {
 	return -1
 }
 
-// railRowOf is screenRowOf confined to the rail's columns, or -1.
 func railRowOf(s tuitest.Screen, needle string) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -384,8 +334,6 @@ func railRowOf(s tuitest.Screen, needle string) int {
 	return -1
 }
 
-// railGutterAt is the gutter cell of the rail row that holds needle: column 0
-// of a left rail. It returns "" when no rail row holds needle.
 func railGutterAt(s tuitest.Screen, needle string) string {
 	r := railRowOf(s, needle)
 	if r < 0 {
@@ -434,8 +382,6 @@ func TestAgentRowMarksFocusWithoutTerminals(t *testing.T) {
 					return mark != "" && mark != " " && railGutterAt(s, other) == " "
 				}
 			}
-			// BRAVO is the pane made last, so it has focus. The frame is saved
-			// before the verdict, so a failing build leaves its frame too.
 			err := term.WaitFor(markedOn("BRAVO", "ALPHA"), uiTimeout)
 			dir := artifactDir(t)
 			savePNG(t, term.Screen(), hostPalette(t, ""), dir, "agent-focus-"+depth.name+"-bravo")

@@ -35,14 +35,10 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 		panes   = 4
 		cols    = 240
 		rows    = 72
-		cellLen = 112 // bytes in a uv.Cell
+		cellLen = 112
 		history = 400
-		// Lines of history each pane is paged through: more than a screen,
-		// under the cache's 256 lines and its cells for these widths.
-		paged = 200
+		paged   = 200
 	)
-	// Several screens of numbered lines. The command line spells the tag with
-	// a gap, so only the output holds HIST-1-END.
 	const fill = `seq 1 400 | sed 's/.*/HIST-&-END/'; echo FILL$((1+1))DONE` + "\n"
 	const oldest = "HIST-1-END"
 
@@ -81,8 +77,6 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 			t.Fatalf("send-text: %v: %s", err, out)
 		}
 	}
-	// run types text into every pane and waits until the client shows the
-	// marker in each of them.
 	run := func(c *client, text, marker string) {
 		t.Helper()
 		for _, id := range c.ids {
@@ -94,7 +88,6 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 			t.Fatalf("the %s client never showed %s in every pane: %v\n%s", c.name, marker, err, c.term.Snapshot())
 		}
 	}
-	// interior is the pane's own size, as stty in the pane reads it.
 	interior := func(c *client, i int) (r, w int) {
 		t.Helper()
 		typeInto(c, c.ids[i], fmt.Sprintf("printf 'SZ%%s=%%sE\\n' %d \"$(stty size)\"\n", i))
@@ -122,8 +115,6 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 			t.Fatalf("the %s client %s: %v\n%s", c.name, what, err, c.term.Snapshot())
 		}
 	}
-	// back focuses a pane and scrolls it in copy mode to its oldest line, so
-	// the client draws a whole screen of history.
 	back := func(c *client, id string) {
 		t.Helper()
 		if out, err := tuiosCLI(t, c.base, "focus-window", "-s", "mem", id); err != nil {
@@ -142,8 +133,6 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 		pressOn(c, "g", "g")
 		waitScreen(c, "never scrolled back to "+oldest, func(s string) bool { return strings.Count(s, oldest) == 1 })
 	}
-	// through pages the focused pane down from its oldest line, one screen
-	// of r rows at a time, until it has drawn paged/r*r lines of history.
 	through := func(c *client, r int) {
 		t.Helper()
 		for k := 1; k*r <= paged; k++ {
@@ -152,8 +141,6 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 			waitScreen(c, "never paged down to "+mark, func(s string) bool { return strings.Contains(s, mark) })
 		}
 	}
-	// down takes the focused pane back to its newest line and out of copy
-	// mode.
 	down := func(c *client) {
 		t.Helper()
 		pressOn(c, "G")
@@ -161,8 +148,6 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 		pressOn(c, "q")
 		waitScreen(c, "never left copy mode", func(s string) bool { return !strings.Contains(s, "y yank") })
 	}
-	// heap is the least of a few readings: one reading carries whatever the
-	// client was drawing at that moment, a few hundred KiB at times.
 	heap := func(c *client) int64 {
 		t.Helper()
 		least := int64(math.MaxInt64)
@@ -176,8 +161,6 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 		}
 		return least
 	}
-	// settle waits until both clients have no notice drawing and nothing
-	// changing, so neither holds a frame the other has already let go.
 	settle := func(what string, a, b *client) {
 		t.Helper()
 		for _, c := range []*client{a, b} {
@@ -211,10 +194,6 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 	released, kept := start("releasing", "1"), start("keeping", "3600")
 	both := []*client{released, kept}
 
-	// A quarter of the cells of the history each pane draws. Both clients
-	// run the same command, so their histories hold the same lines. A
-	// quarter of one screen is under the gap's own noise between two runs
-	// with nothing released, up to about 400 KiB.
 	var want int64
 	sizes := make([]string, 0, panes)
 	heights := make([]int, 0, panes)
@@ -230,7 +209,6 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 	for _, c := range both {
 		run(c, fill, "FILL2DONE")
 	}
-	// The releasing client runs its release at least twice in this time.
 	settle("after the setup", released, kept)
 	time.Sleep(3 * time.Second)
 	gap0 := heap(kept) - heap(released)
@@ -252,8 +230,6 @@ func TestClientReleasesScrollbackCache(t *testing.T) {
 			(gap1-gap0)/1024, panes, want/1024)
 	}
 
-	// The next read decodes the lines again and draws them as the client
-	// that kept them does.
 	for i := range panes {
 		for _, c := range both {
 			back(c, c.ids[i])

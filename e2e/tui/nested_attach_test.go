@@ -15,19 +15,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Issue #235: tuios run inside one of its own panes attached to the same
-// session. The inner client's terminal is a pane of the session, so its size
-// is the session's size less the chrome, and the session is the minimum over
-// its clients: every resize shrank the pane, which shrank the inner client,
-// which shrank the session, until the session was 1x1. Its output also lands
-// in the pane it draws, so it redrew its own frames without end.
-//
-// These tests run tuios from a pane of the session it would attach to, by
-// every route the daemon can see, and check that the attach is refused with a
-// message, the session keeps its size, and no nested client is left running.
 const nestSession = "e2e-nest"
 
-// sessionSize reads a session's size from 'tuios ls --json'.
 func sessionSize(t *testing.T, base, name string) (int, int) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "ls", "--json")
@@ -51,17 +40,12 @@ func sessionSize(t *testing.T, base, name string) (int, int) {
 	return 0, 0
 }
 
-// nestedSetup starts a daemon session, attaches a client to it and opens a
-// shell in terminal mode, ready to type a nested tuios command into.
 func nestedSetup(t *testing.T) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
 	if out, err := tuiosCLI(t, base, "new", nestSession, "--detach"); err != nil {
 		t.Fatalf("create session: %v: %s", err, out)
 	}
-	// daemonDefault leaves TUIOS_NO_DAEMON out of the environment, so the
-	// panes do not inherit it and a bare tuios in a pane is a daemon client,
-	// as it is for a user.
 	outer := attachIn(t, base, nestSession, startOpts{daemonDefault: true})
 	if settledWindowCount(t, outer) == 0 {
 		newWindow(t, outer)
@@ -70,8 +54,6 @@ func nestedSetup(t *testing.T) (*tuitest.Terminal, string) {
 	return outer, base
 }
 
-// waitSessionSize waits until the session reports a size, since the daemon
-// records the client a moment after its first frame.
 func waitSessionSize(t *testing.T, base string) (int, int) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -84,11 +66,6 @@ func waitSessionSize(t *testing.T, base string) (int, int) {
 	}
 }
 
-// tuiosProcessesUnder returns the pids of tuios client processes whose command
-// line holds marker, other than the outer client, so a test can find the
-// nested client it started. Only processes whose environment names the
-// test's isolation root base count: the e2e workflow runs several go test
-// processes on one machine, and their clients carry the same flags.
 func tuiosProcessesUnder(outer *tuitest.Terminal, base, marker string) []int {
 	var pids []int
 	for _, p := range listProcesses() {
@@ -103,16 +80,11 @@ func tuiosProcessesUnder(outer *tuitest.Terminal, base, marker string) []int {
 	return pids
 }
 
-// process is one running process: its command line, and its environment.
 type process struct {
 	pid          int
 	command, env string
 }
 
-// listProcesses reads every process from /proc. Without /proc, as on macOS,
-// it asks ps, whose -E prints each process's environment after its command
-// line. The two cannot be told apart there, so both fields hold the whole
-// line.
 func listProcesses() []process {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
@@ -149,12 +121,8 @@ func listProcesses() []process {
 	return ps
 }
 
-// nestExit matches the exit status the pane echoes after a nested command.
-// The typed command holds "NEST-EXIT-$?", so a digit is what says it ran.
 var nestExit = regexp.MustCompile(`NEST-EXIT-([0-9]+)`)
 
-// assertRefused runs cmd in the pane and checks the refusal, the exit status,
-// the session size and that no nested client is left running.
 func assertRefused(t *testing.T, outer *tuitest.Terminal, base, cmd, marker string) {
 	t.Helper()
 	w0, h0 := waitSessionSize(t, base)
@@ -182,8 +150,6 @@ func assertRefused(t *testing.T, outer *tuitest.Terminal, base, cmd, marker stri
 	if status == "0" {
 		t.Errorf("the nested attach exited 0, want a failure status\n%s", outer.Snapshot())
 	}
-	// The refusal is the whole answer: no notice about the session's other
-	// clients, and none of the client's start-up log.
 	if text := outer.Screen().Text(); strings.Contains(text, "already has a client") || strings.Contains(text, "[CLIENT]") {
 		t.Errorf("the refusal came with other output\n%s", text)
 	}
@@ -201,11 +167,7 @@ func assertRefused(t *testing.T, outer *tuitest.Terminal, base, cmd, marker stri
 func TestNestedBareTuiosIsRefused(t *testing.T) {
 	requireReal(t, "asserts on OS processes (pids, signals, /proc)")
 	outer, base := nestedSetup(t)
-	// The trailing flag marks this client's command line for the process scan.
 	assertRefused(t, outer, base, tuiosBin+" --no-animations", "--no-animations")
-	// A bare tuios asked for nothing in particular, so it is told what it can
-	// do instead. The message wraps in the pane, so it is read with the
-	// borders and the spaces taken out.
 	flat := strings.Join(strings.Fields(strings.ReplaceAll(outer.Screen().Text(), "│", "")), "")
 	if !strings.Contains(flat, "tuiosnewNAME") || strings.Contains(flat, "Attachingto") {
 		t.Errorf("a bare tuios in a pane did not get the bare message\n%s", outer.Snapshot())
@@ -233,8 +195,6 @@ func TestNestedAttachThroughScriptIsRefused(t *testing.T) {
 	}
 	outer, base := nestedSetup(t)
 	inner := tuiosBin + " attach " + nestSession + " --no-animations"
-	// util-linux takes the command as -c, BSD script as the arguments after
-	// the file.
 	cmd := "script -qfec '" + inner + "' /dev/null"
 	if runtime.GOOS != "linux" {
 		cmd = "script -q /dev/null " + inner
@@ -242,8 +202,6 @@ func TestNestedAttachThroughScriptIsRefused(t *testing.T) {
 	assertRefused(t, outer, base, cmd, "--no-animations")
 }
 
-// buildUnplaced builds the helper that runs a program in a pane where no
-// process test can place it. See testdata/unplaced.
 func buildUnplaced(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "unplaced")
@@ -281,7 +239,6 @@ func TestAttachFromPaneToOtherSessionWorks(t *testing.T) {
 	if err := outer.SendKeys(tuiosBin+" attach "+other, tuitest.Enter); err != nil {
 		t.Fatalf("type the attach: %v", err)
 	}
-	// The inner client draws its own dock inside the pane, so two docks show.
 	if err := outer.WaitFor(func(s tuitest.Screen) bool {
 		return len(dockStatus.FindAllString(s.Text(), -1)) >= 2
 	}, bootTimeout); err != nil {
@@ -320,7 +277,6 @@ func TestForcedNestedAttachSettles(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// Settled means the same size on three reads a second apart.
 	var w, h, same int
 	deadline = time.Now().Add(soakTimeout)
 	for same < 3 && time.Now().Before(deadline) {

@@ -17,27 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The reported scenario, as reported: two tiled panes with shared borders, a
-// graphics app filling the LEFT one, an ordinary shell in the RIGHT one, and
-// nothing happening but that shell printing.
-//
-// Three things here are not interchangeable with the earlier neighbour test,
-// and each of them is a different code path in the passthrough:
-//
-//   - The image is in the LEFT pane. A right-hand pane's image ends at the
-//     screen's right edge, where the refresh has a clamp of its own; a
-//     left-hand one does not, so a difference seen here is not that clamp.
-//   - The frames arrive over shared memory (t=s), which is what
-//     terminal-browser uses. A host that can read files gets the path
-//     forwarded verbatim from forwardFileTransmit; only a host that cannot
-//     takes the direct-transmission path the earlier test exercised.
-//   - The host answers the capability probe, so KittyFileTransfer is true.
-//     Without an answer tuios assumes a browser-shaped host and re-encodes
-//     every file transmission inline, which is a different writer entirely.
-//
-// kittyHost plays a real kitty terminal: it records every byte tuios writes and
-// answers the capability probe with the replies kitty gives, so tuios takes the
-// native file-transmission path rather than the browser fallback.
 type kittyHost struct {
 	mu    sync.Mutex
 	buf   bytes.Buffer
@@ -75,22 +54,16 @@ func (h *kittyHost) bytes() []byte {
 	return append([]byte(nil), h.buf.Bytes()...)
 }
 
-// cellW and cellH are the cell size this host reports, so a frame sized to the
-// pane can be generated in pixels.
 const (
 	cellW = 10
 	cellH = 20
 )
 
-// answerProbe replies the way kitty does: pixel geometry, an OK for each of the
-// three graphics probes, and DA1 last because DA1 is what closes the read.
 func (h *kittyHost) answerProbe(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	answerKittyProbe(t, term, h.probe, 120, 40)
 }
 
-// answerKittyProbe answers each probe signalled on probe, for a terminal of
-// cols by rows cells.
 func answerKittyProbe(t *testing.T, term *tuitest.Terminal, probe <-chan struct{}, cols, rows int) {
 	t.Helper()
 	go func() {
@@ -110,8 +83,6 @@ func answerKittyProbe(t *testing.T, term *tuitest.Terminal, probe <-chan struct{
 	}()
 }
 
-// buildFrameloop compiles the graphics-app stand-in once per test binary and
-// returns its path.
 func buildFrameloop(t *testing.T) string {
 	t.Helper()
 	frameloopOnce.Do(func() {
@@ -140,18 +111,11 @@ var (
 	frameloopErr  error
 )
 
-// startFrameloop runs the graphics-app stand-in in the focused pane and returns
-// the geometry it was actually given. The geometry comes back through a file
-// because the app takes the alt screen the moment it starts, so a marker
-// printed to the grid is gone before a poll can read it.
 func startFrameloop(t *testing.T, term *tuitest.Terminal, repaintMS int) (geom string, cols, rows, xpx, ypx int) {
 	t.Helper()
 	return startFrameloopOpts(t, term, repaintMS, 20, "shm")
 }
 
-// startFrameloopOpts is startFrameloop with the frame rate and the kitty
-// transmission medium chosen, so the same guest can be run over shared memory
-// and over inline base64 and the two capture streams compared.
 func startFrameloopOpts(t *testing.T, term *tuitest.Terminal, repaintMS, fps int, transport string) (geom string, cols, rows, xpx, ypx int) {
 	t.Helper()
 	if transport == "shm" {
@@ -176,14 +140,6 @@ func startFrameloopOpts(t *testing.T, term *tuitest.Terminal, repaintMS, fps int
 	return "", 0, 0, 0, 0
 }
 
-// requireDevShm skips a test whose guest streams frames over shared memory on
-// a host that has no /dev/shm directory to put them in.
-//
-// The frameloop guest writes its frames as files under /dev/shm, the Linux
-// layout, and tuios reads a t=s name from the same place. macOS has no such
-// directory: POSIX shared memory there lives behind shm_open and has no path.
-// Without this the guest prints FRAMELOOP-ERR, nothing is ever drawn, and the
-// test fails as if the passthrough had lost the image.
 func requireDevShm(t *testing.T) {
 	t.Helper()
 	if info, err := os.Stat("/dev/shm"); err != nil || !info.IsDir() {
@@ -191,8 +147,6 @@ func requireDevShm(t *testing.T) {
 	}
 }
 
-// announcedSizes is every size the guest has been told it has, in order, as
-// cols/rows/xpixels/ypixels.
 func announcedSizes(geom string) [][4]int {
 	b, err := os.ReadFile(geom)
 	if err != nil {
@@ -208,11 +162,8 @@ func announcedSizes(geom string) [][4]int {
 	return out
 }
 
-// graphicsRE matches one kitty APC command on the wire, params and payload
-// apart. Params never contain an ESC, which is what bounds the match.
 var graphicsRE = regexp.MustCompile(`\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\`)
 
-// wireCmd is one graphics command as the host received it.
 type wireCmd struct {
 	phase  string
 	action string
@@ -228,8 +179,6 @@ type wireCmd struct {
 	params string
 }
 
-// wireCmds parses every graphics command out of a capture, tagged with the
-// phase it landed in.
 func wireCmds(stream []byte) []wireCmd {
 	var out []wireCmd
 	prevEnd, prevName := 0, "boot"
@@ -297,7 +246,6 @@ func TestKittyLeftPaneImageSurvivesRightPaneFlood(t *testing.T) {
 	enableTiling(t, term)
 	waitWindowCount(t, term, 2, "two tiled panes")
 
-	// Left pane: the graphics app, rendering at the size it was given.
 	clickToType(t, term, 20, 12)
 	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
 	_, cols, rows, xpx, ypx := startFrameloop(t, term, 0)
@@ -308,7 +256,6 @@ func TestKittyLeftPaneImageSurvivesRightPaneFlood(t *testing.T) {
 	host.mark("image-only")
 	time.Sleep(3 * time.Second)
 
-	// Right pane: the flood, exactly as reported.
 	clickToType(t, term, 95, 12)
 	typeLine(t, term, "while :; do ls; done")
 	leaveTerminalMode(t, term)
@@ -325,20 +272,11 @@ func TestKittyLeftPaneImageSurvivesRightPaneFlood(t *testing.T) {
 	assertWholeImage(t, term, host.bytes(), cols, rows, xpx, ypx)
 }
 
-// assertWholeImage is the invariant the report is about. The guest renders a
-// bitmap of exactly its pane, so every command that tells the host how to draw
-// that image must say: this many cells, which is the pane, and this much of the
-// image, which is all of it. A cell count that is not the pane's scales the
-// bitmap into the wrong box; a source rectangle smaller than the bitmap throws
-// the rest of it away and scales what is left over the same box. Either one is
-// the image the report calls stretched.
 func assertWholeImage(t *testing.T, term *tuitest.Terminal, stream []byte, cols, rows, xpx, ypx int) {
 	t.Helper()
 	cmds := wireCmds(stream)
 	var drawing []wireCmd
 	for _, c := range cmds {
-		// a=p places; a=T transmits and places; a=t carrying a cell count is
-		// also telling the host how big to draw the image it is replacing.
 		if c.action == "p" || c.action == "T" || (c.action == "t" && c.cols > 0) {
 			drawing = append(drawing, c)
 		}

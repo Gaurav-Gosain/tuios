@@ -11,16 +11,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// railText is the text of the rail on one edge, w columns wide with its
-// border, as one string a line. Read by column rather than up to the first
-// border glyph, because a tree line on the rail is that glyph too.
 func railText(s tuitest.Screen, w int, right bool) string {
 	cols, rows := s.Size()
 	out := make([]string, 0, rows)
 	for y := range rows {
 		line := []rune(s.Line(y))
 		if right {
-			// A line can come back without its trailing blanks.
 			for len(line) < cols {
 				line = append(line, ' ')
 			}
@@ -32,16 +28,10 @@ func railText(s tuitest.Screen, w int, right bool) string {
 	return strings.Join(out, "\n")
 }
 
-// subagentStylesRail is the rail both subagent style tests start from: the
-// agents section alone, 24 columns, on the left.
 const subagentStylesRail = "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 24\nsections = \"agents\"\n"
 
-// startSubagentStyles attaches a 120x50 client to a session whose pane runs
-// the stand-in claude, with config rail, and waits for its four subagents to
-// run with a tool each.
 func startSubagentStyles(t *testing.T, log *stateLog, rail string) (string, *tuitest.Terminal) {
 	t.Helper()
-	// Long enough that the finished rows outlive the early hide by far.
 	t.Setenv("TUIOS_SUBAGENT_FADE_SECONDS", "60")
 	base := t.TempDir()
 	useShippedLooks(base)
@@ -108,7 +98,6 @@ func TestSubagentRailStyles(t *testing.T) {
 	rail := subagentStylesRail
 	base, term := startSubagentStyles(t, log, rail)
 
-	// look rewrites the config and waits for the left rail to match.
 	look := func(name, extra, why string, ok func(left string) bool) {
 		t.Helper()
 		writeConfig(t, base, rail+extra)
@@ -135,9 +124,6 @@ func TestSubagentRailStyles(t *testing.T) {
 		return strings.Contains(l, "    ▾ 4 subagents") && strings.Contains(l, "    ● Research")
 	})
 
-	// A click on the heading shuts the rows. The rail takes the keyboard
-	// first, so the click also puts the cursor on the heading, and space
-	// there opens them again.
 	if err := term.SendKeys("s"); err != nil {
 		t.Fatalf("focus the rail: %v", err)
 	}
@@ -167,9 +153,6 @@ func TestSubagentRailStyles(t *testing.T) {
 		t.Fatalf("leave the rail: %v", err)
 	}
 
-	// The pane was opened by hand, so a new start state applies to it only
-	// once the client forgets that. The collapsed start is read from a fresh
-	// client.
 	writeConfig(t, base, rail+"subagent_collapse = \"collapsed\"\n")
 	fresh := attachIn(t, base, "e2e-sub", startOpts{cols: 120, rows: rows})
 	if err := fresh.WaitFor(func(s tuitest.Screen) bool {
@@ -192,8 +175,6 @@ func TestSubagentRailStyles(t *testing.T) {
 			!strings.Contains(l, "Research") && !strings.Contains(l, "Audit")
 	})
 
-	// A second rail on the right edge with its own style: tree lines there,
-	// the list on the left.
 	edge := "[appearance.sidebar.right]\nenabled = true\nwidth = 24\nsections = \"agents\"\nsubagent_rows = \"tree\"\n"
 	writeConfig(t, base, rail+edge)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -206,8 +187,6 @@ func TestSubagentRailStyles(t *testing.T) {
 	log.add("per edge\nleft:\n%s\nright:\n%s", railText(term.Screen(), w, false), railText(term.Screen(), w, true))
 	saveFrame(t, term, "subagent-style-per-edge")
 
-	// Two end. The early hide takes their rows away while the daemon still
-	// lists all four.
 	writeConfig(t, base, rail+"subagent_hide_finished = \"2s\"\n")
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-sub", "-w", "0", "\n"); err != nil {
 		t.Fatalf("step the fake claude: %v\n%s", err, out)
@@ -253,8 +232,6 @@ func TestSubagentHideTimer(t *testing.T) {
 	}
 	waitCapture(t, base, "e2e-sub", "0", "FAKE-AT two-ended")
 	ended := time.Now()
-	// The rows of the two that ended stay, muted, until the hide is due: a
-	// wait for them to go must run out 4 seconds after the end.
 	err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !finished(railText(s, w, false))
 	}, time.Until(ended.Add(4*time.Second)))

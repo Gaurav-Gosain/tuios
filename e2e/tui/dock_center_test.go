@@ -63,7 +63,6 @@ refresh = "once"
 					if err := term.SendKeys(tuitest.Esc); err != nil {
 						t.Fatal(err)
 					}
-					// Let a bare Esc resolve before the next key can become Alt+key.
 					time.Sleep(200 * time.Millisecond)
 					if err := term.WaitFor(func(s tuitest.Screen) bool {
 						line := s.Line(row)
@@ -106,8 +105,6 @@ refresh = "once"
 					}
 				}
 
-				// Named minimized panes must not be shortened by a popup, or use
-				// so much of the dock that its message can no longer be opened.
 				for i, name := range []string{"EDITOR-WITH-A-LONG-NAME", "SERVER-WITH-A-LONG-NAME"} {
 					if i > 0 {
 						if err := term.SendKeys("n"); err != nil {
@@ -130,7 +127,6 @@ refresh = "once"
 					if err != nil {
 						t.Fatalf("show long notification: %v: %s", err, out)
 					}
-					// A crowded dock may show only the error mark and an ellipsis.
 					if err := term.WaitForText("\uf057", uiTimeout); err != nil {
 						t.Fatalf("long popup did not draw: %v\n%s", err, term.Snapshot())
 					}
@@ -158,7 +154,6 @@ refresh = "once"
 				if !ok {
 					t.Fatalf("no minimized entry to restore: %q", line)
 				}
-				// The pane the first pill names is the one its click restores.
 				name := "EDITOR"
 				if strings.HasPrefix(after, "SERVE") {
 					name = "SERVER"

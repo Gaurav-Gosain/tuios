@@ -68,7 +68,6 @@ session = "side"
 	if err := term.WaitFor(func(s tuitest.Screen) bool { _, rows := s.Size(); return rows == 43 }, uiTimeout); err != nil {
 		t.Fatalf("host resize not visible: %v", err)
 	}
-	// Give the resized rail time to settle before asking the shared guest.
 	time.Sleep(300 * time.Millisecond)
 	afterRows, afterCols := guestSize("AFTERSIZE")
 	if beforeCols < 36 || beforeRows < 10 || afterCols != beforeCols || afterRows != beforeRows {

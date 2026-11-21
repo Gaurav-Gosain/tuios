@@ -50,7 +50,6 @@ func TestPluginsAuthorTools(t *testing.T) {
 		t.Errorf("new over a folder: %v\n%s", err, out)
 	}
 
-	// check says what is wrong, and warns on an old key.
 	manifest := filepath.Join(dir, "tuios-plugin.toml")
 	good, _ := os.ReadFile(manifest)
 	write := func(s string) {
@@ -73,7 +72,6 @@ func TestPluginsAuthorTools(t *testing.T) {
 	}
 	write(string(good))
 
-	// dev asks once, then reloads a changed manifest without a question.
 	if out, err := tuiosCLI(t, base, "new", "work", "--detach"); err != nil {
 		t.Fatalf("create session: %v\n%s", err, out)
 	}
@@ -101,7 +99,6 @@ func TestPluginsAuthorTools(t *testing.T) {
 	if err := term.WaitForText("Installed you.weather", 15*time.Second); err != nil {
 		t.Fatalf("dev did not reload a changed manifest: %v\n%s", err, term.Snapshot())
 	}
-	// The daemon reuses its listing of the plugins for 2 s.
 	runSecond := func() (string, error) {
 		var out string
 		var err error
@@ -116,7 +113,6 @@ func TestPluginsAuthorTools(t *testing.T) {
 	if out, err := runSecond(); err != nil || !strings.Contains(out, "second-ran") {
 		t.Fatalf("the new action after a reload: %v\n%s", err, out)
 	}
-	// A broken manifest is reported, and the fix is reloaded.
 	write("api = 1\n")
 	if err := term.WaitForText("The plugin cannot load, and it does not run", 15*time.Second); err != nil {
 		t.Errorf("dev did not report a broken manifest: %v\n%s", err, term.Snapshot())

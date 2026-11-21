@@ -32,11 +32,8 @@ import (
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Live handoff").
 
-// handoffTestEnv makes the daemon register the test-only handoff verbs.
 func handoffTestEnv() []string { return []string{knob("handoff=1")} }
 
-// startHandoffDaemon starts a scratch daemon under base with the test verbs,
-// and env, which the daemon and so every image it execs inherits.
 func startHandoffDaemon(t *testing.T, base string, env ...string) {
 	t.Helper()
 	killDaemon(t, base)
@@ -45,8 +42,6 @@ func startHandoffDaemon(t *testing.T, base string, env ...string) {
 	}
 }
 
-// handoffCLI runs the tuios binary under base and gives up after timeout: a
-// daemon that hangs leaves a caller waiting in the socket's backlog for good.
 func handoffCLI(t *testing.T, base string, timeout time.Duration, args ...string) (string, error) {
 	t.Helper()
 	pinPreV080Looks(t, base)
@@ -62,7 +57,6 @@ func handoffCLI(t *testing.T, base string, timeout time.Duration, args ...string
 	return string(out), err
 }
 
-// callVerb runs `tuios call verb params` and decodes the result.
 func callVerb(t *testing.T, base, verb string, params any) (map[string]any, error) {
 	t.Helper()
 	raw, err := json.Marshal(params)
@@ -74,7 +68,6 @@ func callVerb(t *testing.T, base, verb string, params any) (map[string]any, erro
 		return nil, fmt.Errorf("call %s: %w: %s", verb, err, strings.TrimSpace(out))
 	}
 	var res map[string]any
-	// The result is the last line; a session may print notices before it.
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &res); err != nil {
 		return nil, fmt.Errorf("call %s: decode %q: %w", verb, out, err)
@@ -91,8 +84,6 @@ func mustCall(t *testing.T, base, verb string, params any) map[string]any {
 	return res
 }
 
-// daemonImage is the daemon's pid and the id of its current image, which a
-// handoff keeps and changes.
 type daemonImage struct {
 	PID      int    `json:"pid"`
 	Instance string `json:"instance"`
@@ -111,8 +102,6 @@ func helloImage(t *testing.T, base string) daemonImage {
 	return img
 }
 
-// awaitNewImage waits until the daemon answers hello from an image other
-// than before, and returns it.
 func awaitNewImage(t *testing.T, base string, before daemonImage, timeout time.Duration) daemonImage {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -136,8 +125,6 @@ func awaitNewImage(t *testing.T, base string, before daemonImage, timeout time.D
 	return daemonImage{}
 }
 
-// newCommandWindow opens a window running argv in session, creating the
-// session when it does not exist, and returns the window's id.
 func newCommandWindow(t *testing.T, base, session, name string, keepOpen bool, argv ...string) string {
 	t.Helper()
 	if _, err := callVerb(t, base, "session-info", map[string]any{"session": session}); err != nil {
@@ -156,7 +143,6 @@ func newCommandWindow(t *testing.T, base, session, name string, keepOpen bool, a
 	return id
 }
 
-// panePIDs is each window's process, by window id, as list-windows reports it.
 func panePIDs(t *testing.T, base, session string) map[string]int {
 	t.Helper()
 	out, err := tuiosOut(base, "list-windows", "-s", session, "--json")
@@ -179,7 +165,6 @@ func panePIDs(t *testing.T, base, session string) map[string]int {
 	return pids
 }
 
-// waitPane waits until a pane's scrollback matches re, and returns the match.
 func waitHandoffPane(t *testing.T, base, session, window string, re *regexp.Regexp, timeout time.Duration) []string {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -200,7 +185,6 @@ func waitHandoffPane(t *testing.T, base, session, window string, re *regexp.Rege
 	return nil
 }
 
-// windowExitCode waits for a window's process to exit and returns its status.
 func windowExitCode(t *testing.T, base, session, window string, timeout time.Duration) int {
 	t.Helper()
 	res := mustCall(t, base, "wait-for", map[string]any{
@@ -213,7 +197,6 @@ func windowExitCode(t *testing.T, base, session, window string, timeout time.Dur
 	return int(code)
 }
 
-// writeHandoffArtifact saves what a test measured.
 func writeHandoffArtifact(t *testing.T, v any) string {
 	t.Helper()
 	data, err := json.MarshalIndent(v, "", "  ")
@@ -228,8 +211,6 @@ func writeHandoffArtifact(t *testing.T, v any) string {
 	return path
 }
 
-// counterLines reads the numbers of a pane's "<prefix><n>" lines, oldest
-// first, dropping the last line, which may be cut mid-write.
 func counterLines(lines []string, prefix string) []int {
 	re := regexp.MustCompile(`^` + regexp.QuoteMeta(prefix) + `(\d+)$`)
 	var out []int
@@ -245,8 +226,6 @@ func counterLines(lines []string, prefix string) []int {
 	return out
 }
 
-// firstGap is the index of the first number that does not follow the one
-// before it, or -1.
 func firstGap(nums []int) int {
 	for i := 1; i < len(nums); i++ {
 		if nums[i] != nums[i-1]+1 {
@@ -456,9 +435,6 @@ func TestSelfExecAdoptsPanes(t *testing.T) {
 	})
 }
 
-// callVerbWithin is callVerb with a deadline on the whole call, connect
-// included: a daemon that stopped accepting would leave callVerb waiting in
-// the listen backlog for as long as the test runs.
 func callVerbWithin(t *testing.T, base string, within time.Duration, verb string, params any) (map[string]any, error) {
 	t.Helper()
 	raw, err := json.Marshal(params)
@@ -509,9 +485,6 @@ func TestHandoffRefusedWhileHostedPaneRuns(t *testing.T) {
 	newCommandWindow(t, base, session, "local", false, "sh", "-c", "exec "+marker+"1")
 	t.Cleanup(func() { _ = exec.Command("pkill", "-f", marker).Run() })
 
-	// open-pane is what another machine's daemon sends over a link. The
-	// connection becomes the pane's terminal, so it is held open, as the
-	// owner's would be.
 	raw, err := dialFileVerbs(t, base).call("open-pane", map[string]any{
 		"width": 80, "height": 24, "command": []string{"sh", "-c", "exec " + marker + "2"},
 	})
@@ -585,17 +558,12 @@ func TestHandoffRefusedByPaneNotReadingInput(t *testing.T) {
 	const marker = "sleep 600.4545"
 	t.Cleanup(func() { _ = exec.Command("pkill", "-f", marker).Run() })
 	newCommandWindow(t, base, session, "anchor", false, "sh", "-c", "exec "+marker+"1")
-	// Raw mode, so the input queue blocks the writer when full rather than
-	// dropping, and no echo, so the replies are not printed back. Each DA1
-	// query is answered with a reply of a dozen bytes or more, and 6000 of
-	// them are far past the input queue on Linux (4 KB) and macOS.
 	stuck := newCommandWindow(t, base, session, "stuck", false, "sh", "-c",
 		`stty raw -echo; i=0; while [ $i -lt 6000 ]; do printf '\033[c'; i=$((i+1)); done; printf 'flooded\r\n'; exec `+marker+`2`)
 	waitHandoffPane(t, base, session, stuck, regexp.MustCompile(`flooded`), 30*time.Second)
 
 	img := helloImage(t, base)
 	started := time.Now()
-	// The quiesce deadline is 10s. Twice that is a hang.
 	_, refusal := callVerbWithin(t, base, 20*time.Second, "test-handoff", map[string]any{})
 	took := time.Since(started)
 	t.Logf("the handoff answered after %s: %v", took.Round(time.Millisecond), refusal)
@@ -628,8 +596,6 @@ func TestHandoffRefusedByPaneNotReadingInput(t *testing.T) {
 	}
 }
 
-// paneSnapshot opens a stream-pane on window and returns the stream's reply
-// and the bytes of its snapshot frame that paint the pane.
 func paneSnapshot(t *testing.T, base, sess, window string, params map[string]any) (session.PaneStreamReply, []byte) {
 	t.Helper()
 	client, err := session.DialVerbClientAt(frameSocket(base), "e2e")
@@ -657,9 +623,6 @@ func paneSnapshot(t *testing.T, base, sess, window string, params map[string]any
 	return reply, payload[12:]
 }
 
-// paneFacts is what the daemon says about a pane beyond its screen: where its
-// shell is, its title, its OSC 7501 records and the commands its OSC 133 marks
-// delimit.
 type paneFacts struct {
 	Cwd      string
 	Title    string

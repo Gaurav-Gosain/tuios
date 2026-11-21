@@ -59,7 +59,6 @@ func TestHintsFindURLsInMarkdown(t *testing.T) {
 		label := waitHintLabel(t, term, pos[0], pos[1], want)
 		frame := term.Screen()
 
-		// "</p>" keeps its text and carries no label.
 		tag := at["</p>"]
 		for i := range 4 {
 			if isHintLabelCell(frame.Cell(tag[0]+i, tag[1])) {

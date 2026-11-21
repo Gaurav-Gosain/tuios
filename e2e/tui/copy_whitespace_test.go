@@ -12,27 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A copy keeps the whitespace the program printed (#516). Leading spaces,
-// interior runs, the columns a tab moved over, the indent of every line of a
-// multi-line copy, and the spaces at the edge of a soft-wrapped line all reach
-// the clipboard exactly. Each case reads the OSC 52 write off the wire and
-// compares it untrimmed.
-//
-// How these could pass wrongly, written down first:
-//   - The harness helper clipboardSince trims each write, which is the very
-//     fault under test. These cases read clipboardWrites directly.
-//   - A stale write could match. Each case counts the writes before its
-//     gesture and reads only the one after.
-//   - A search could land on the typed command rather than its output. The
-//     commands spell every marker with a gap, so only the output holds it.
-//   - The wrapped line could happen to wrap only between words. Its words are
-//     three columns apart and it spans more than three rows, so at least one
-//     row ends on a space whatever the pane width is.
-//   - The trailing blanks of a row could leak in. Every want ends on printed
-//     text, and the single-line want would gain the row's padding.
-
-// whitespaceLines are the three indented lines the line cases copy. printf
-// prints them, with a tab in front of the middle one.
 const whitespaceCmd = `printf '    LEAD%sone  two   x\n\tLEAD%stab\n  LEAD%sthree\n' - - -`
 
 var whitespaceLines = []string{
@@ -41,8 +20,6 @@ var whitespaceLines = []string{
 	"  LEAD-three",
 }
 
-// rawWrite waits for exactly one clipboard write after the first from, and
-// returns it untrimmed. The copy-mode tests share it.
 func rawWrite(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, from int, what string) string {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -60,7 +37,6 @@ func rawWrite(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, from int,
 	return writes[0]
 }
 
-// sendEach sends keys one at a time, with a beat between, as a person types.
 func sendEach(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	t.Helper()
 	for _, k := range keys {
@@ -71,8 +47,6 @@ func sendEach(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	}
 }
 
-// copySearch enters copy mode and searches backwards for needle, then waits
-// for the copy cursor to reach row.
 func copySearch(t *testing.T, term *tuitest.Terminal, needle string, row int) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
@@ -90,8 +64,6 @@ func copySearch(t *testing.T, term *tuitest.Terminal, needle string, row int) {
 	}
 }
 
-// startWhitespaceClient starts tuios with one pane in terminal mode, alone or
-// attached to a daemon, with its host output captured.
 func startWhitespaceClient(t *testing.T, daemon bool) (*tuitest.Terminal, *lockedBuffer) {
 	t.Helper()
 	base := t.TempDir()
@@ -135,7 +107,6 @@ func TestCopyKeepsPrintedWhitespace(t *testing.T) {
 			one := lastRowWith(s, "LEAD-one")
 			three := lastRowWith(s, "LEAD-three")
 
-			// V on one line: the whole line, indent first.
 			copySearch(t, term, "LEAD-one", one)
 			from := len(clipboardWrites(out))
 			sendEach(t, term, "V", "y")
@@ -143,7 +114,6 @@ func TestCopyKeepsPrintedWhitespace(t *testing.T) {
 				t.Fatalf("V y copied %q, want %q", got, want)
 			}
 
-			// v from the start of the line to its end.
 			copySearch(t, term, "LEAD-one", one)
 			from = len(clipboardWrites(out))
 			sendEach(t, term, "0", "v", "$", "y")
@@ -151,7 +121,6 @@ func TestCopyKeepsPrintedWhitespace(t *testing.T) {
 				t.Fatalf("0 v $ y copied %q, want %q", got, want)
 			}
 
-			// V over three lines: every line keeps its own indent.
 			copySearch(t, term, "LEAD-one", one)
 			from = len(clipboardWrites(out))
 			sendEach(t, term, "V", "j", "j", "y")
@@ -166,8 +135,6 @@ func TestCopyKeepsPrintedWhitespace(t *testing.T) {
 				t.Fatalf("q did not leave copy mode\n%s", term.Snapshot())
 			}
 
-			// The mouse: a triple click takes the line, and a drag from the
-			// pane's first column to the last letter takes all three.
 			_, colOne := findText(t, term, "LEAD-one")
 			left := colOne - 4
 			time.Sleep(gestureGap)
@@ -221,8 +188,6 @@ func TestCopyKeepsSpacesAtASoftWrap(t *testing.T) {
 				t.Fatalf("the wrapped line copied as\n%q\nwant\n%q", got, want)
 			}
 
-			// A wide character that does not fit in the last column wraps
-			// early and leaves that column as padding. The pad is not text.
 			sendEach(t, term, "q")
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				_, _, ok := copyCursorCell(s)
@@ -256,12 +221,8 @@ func TestCopyKeepsSpacesAtASoftWrap(t *testing.T) {
 	}
 }
 
-// blockCmd prints the rows the block cases select. The commands spell every
-// marker with a gap, so only the output holds it.
 const blockCmd = `clear; printf 'BLOCK%sA one two\nBLOCK%sB \344\270\255\346\226\207 x\nBLOCK%sC\nBLOCK%sD     far\n' - - - -`
 
-// blockSelectionConfig gives the selection a ground no other cell has, so the
-// shape on the screen can be read off the cells.
 var blockSelectionConfig = strings.Replace(copyPipeConfig, "[appearance.selection]\n", "[appearance.selection]\nbg = \"#00ff00\"\n", 1)
 
 // TestCopyBlockSelection is ctrl+v in copy mode: the selection draws as a
@@ -299,14 +260,11 @@ func TestCopyBlockSelection(t *testing.T) {
 	if at < 0 {
 		t.Fatalf("no first row on screen\n%s", term.Snapshot())
 	}
-	// A column, not a byte offset: the pane's border comes first.
 	marker := utf8.RuneCountInString(line[:at])
 	selected := func(s tuitest.Screen, col, row int) bool {
 		bg := s.Cell(col, row).Bg
 		return bg.Kind == tuitest.ColorRGB && bg.R == 0 && bg.G == 0xff && bg.B == 0
 	}
-	// startBlock goes to the marker of the first row, moves right to column
-	// left, and starts a block.
 	startBlock := func(left int) {
 		t.Helper()
 		copySearch(t, term, "BLOCK-A", top)
@@ -330,16 +288,11 @@ func TestCopyBlockSelection(t *testing.T) {
 		}
 	}
 
-	// Columns 6 to 9 of four rows. The text is what tmux takes: the short row
-	// stops at its text, the fourth keeps the blanks before its text, and the
-	// wide character that starts on column 8 is whole.
 	startBlock(6)
 	sendEach(t, term, "l", "l", "l", "j", "j", "j")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		for row := top; row <= top+3; row++ {
 			for col := 6; col <= 9; col++ {
-				// The cursor's own cell has the cursor ground, not the selection's,
-				// and the second column of the wide character is read at its first.
 				if (row == top+3 || row == top+1) && col == 9 {
 					continue
 				}
@@ -365,7 +318,6 @@ func TestCopyBlockSelection(t *testing.T) {
 	}
 	leave()
 
-	// o goes to the opposite corner, and the next motion moves that corner.
 	startBlock(6)
 	sendEach(t, term, "l", "l", "l", "j", "j", "j", "o", "l")
 	from = len(clipboardWrites(out))
@@ -375,9 +327,6 @@ func TestCopyBlockSelection(t *testing.T) {
 	}
 	leave()
 
-	// The left edge falls on the second column of the wide character on the
-	// second row, and the right edge on the first column of the next one. Both
-	// come whole, and the selection draws over both.
 	startBlock(9)
 	sendEach(t, term, "l", "j")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -392,7 +341,6 @@ func TestCopyBlockSelection(t *testing.T) {
 	}
 	leave()
 
-	// A copy pipe gets the same rows, and tr shows the newlines were there.
 	startBlock(0)
 	sendEach(t, term, "l", "l", "l", "l", "j", "j", "j")
 	from = len(clipboardWrites(out))
@@ -402,7 +350,6 @@ func TestCopyBlockSelection(t *testing.T) {
 	}
 	leave()
 
-	// A wrapped line gives one line per row on the screen, unlike v and V.
 	runInShell(t, term, `clear; printf 'WRAP%sS%s\n' - "$(printf 'x%.0s' $(seq 300))"`, "xxxx", shellTimeout)
 	time.Sleep(300 * time.Millisecond)
 	first := lastRowWith(term.Screen(), "WRAP-S")

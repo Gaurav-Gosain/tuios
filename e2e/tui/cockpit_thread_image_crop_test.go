@@ -45,7 +45,6 @@ func TestCockpitThreadImageCropsWhenScrolled(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the agents view: %v", err)
 	}
-	// The thread from its top, where the card is whole.
 	if err := term.WaitForText("Now fix the padding.", uiTimeout); err != nil {
 		t.Fatalf("the thread never showed: %v\n%s", err, term.Snapshot())
 	}
@@ -59,8 +58,6 @@ func TestCockpitThreadImageCropsWhenScrolled(t *testing.T) {
 	rowPx := whole.imgH / cardRows
 	saveCockpitFrames(t, term, "crop-0-whole", hostPictures(t, []byte(host.String()))...)
 
-	// A shorter screen cuts the card's bottom: the rows on screen show the
-	// picture's top.
 	if err := term.Resize(160, 40); err != nil {
 		t.Fatal(err)
 	}
@@ -84,8 +81,6 @@ func TestCockpitThreadImageCropsWhenScrolled(t *testing.T) {
 	}
 	threadTop(t, term)
 
-	// J scrolls the thread up three rows a step. The card's last row is the
-	// row above its blank line and the turn line.
 	cutSeen, goneSeen, threadTopRow := false, false, -1
 	for step := 1; step <= 8; step++ {
 		if err := term.SendKeys("J"); err != nil {
@@ -97,13 +92,12 @@ func TestCockpitThreadImageCropsWhenScrolled(t *testing.T) {
 			break
 		}
 		turnRow, _ := findText(t, term, "Worked for 1m 0s")
-		cardEnd := turnRow - 2 // the card's last row
+		cardEnd := turnRow - 2
 		if strings.Contains(text, "PNG image  320×180") {
-			continue // the card is whole yet
+			continue
 		}
 		frame := fmt.Sprintf("crop-%d", step)
 		if threadTopRow >= 0 && cardEnd < threadTopRow {
-			// The card has gone above the thread's top: nothing shows it.
 			_ = term.WaitStable(uiTimeout)
 			saveCockpitFrames(t, term, frame, hostPictures(t, []byte(host.String()))...)
 			if n := countPlaced([]byte(host.String()), whole.img); n != 0 {
@@ -124,7 +118,6 @@ func TestCockpitThreadImageCropsWhenScrolled(t *testing.T) {
 			t.Fatalf("ASSERTION: step %d: the card is placed on %d rows of %d: %+v", step, pl.rows, cardRows, pl)
 		}
 		if cut == 0 {
-			// Only the head line went: every picture row is on screen.
 			if pl.srcH != 0 && pl.srcY != 0 {
 				t.Fatalf("ASSERTION: step %d: the whole card is placed cropped: %+v", step, pl)
 			}
@@ -146,8 +139,6 @@ func TestCockpitThreadImageCropsWhenScrolled(t *testing.T) {
 	alive(t, term, "after scrolling the image card out")
 }
 
-// hostPlace is a live placement on the host: its cells, its source rect
-// (zero for the whole picture), and the picture's size in pixels.
 type hostPlace struct {
 	img, p                 uint32
 	row, col, cols, rows   int
@@ -155,8 +146,6 @@ type hostPlace struct {
 	imgW, imgH             int
 }
 
-// livePlaces replays the kitty graphics in stream as the host does, as
-// hostPictures does, and returns the placements live at the end.
 func livePlaces(stream []byte) []hostPlace {
 	data := map[uint32][]byte{}
 	live := map[gfxKey]hostPlace{}
@@ -176,8 +165,6 @@ func livePlaces(stream []byte) []hostPlace {
 		case "":
 			data[sending] = append(data[sending], m[4]...)
 		case "p":
-			// A virtual placement (U=1) has no position: placeholder cells
-			// place it.
 			if _, held := data[id]; !held || p["U"] == "1" {
 				continue
 			}
@@ -215,7 +202,6 @@ func livePlaces(stream []byte) []hostPlace {
 	return out
 }
 
-// countPlaced is how many live placements show image id.
 func countPlaced(stream []byte, id uint32) int {
 	n := 0
 	for _, p := range livePlaces(stream) {
@@ -226,7 +212,6 @@ func countPlaced(stream []byte, id uint32) int {
 	return n
 }
 
-// waitPlacedOK waits a few seconds for a live placement that ok accepts.
 func waitPlacedOK(term *tuitest.Terminal, host *lockedBuffer, ok func(hostPlace) bool) (hostPlace, bool) {
 	var found hostPlace
 	err := term.WaitFor(func(tuitest.Screen) bool {
@@ -241,7 +226,6 @@ func waitPlacedOK(term *tuitest.Terminal, host *lockedBuffer, ok func(hostPlace)
 	return found, err == nil
 }
 
-// waitPlaced is waitPlacedOK that fails the test when nothing is placed.
 func waitPlaced(t *testing.T, term *tuitest.Terminal, host *lockedBuffer, ok func(hostPlace) bool) hostPlace {
 	t.Helper()
 	p, found := waitPlacedOK(term, host, ok)
@@ -251,7 +235,6 @@ func waitPlaced(t *testing.T, term *tuitest.Terminal, host *lockedBuffer, ok fun
 	return p
 }
 
-// threadTop presses K until the thread stops moving: its top is on screen.
 func threadTop(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	_ = term.WaitStable(uiTimeout)
@@ -282,7 +265,6 @@ func threadTop(t *testing.T, term *tuitest.Terminal) {
 // well; the host lets go of the picture while its cells are on screen.
 func TestCockpitThreadImagePlaceholdersScroll(t *testing.T) {
 	const cfg = "[appearance]\nkitty_placeholders = \"on\"\n"
-	// The whole card, then its top cut as J scrolls it up three rows a step.
 	term, host, headRow, headCol, id, cardRows := openPlaceholderThread(t, 52, cfg)
 	whole := placeholderRows(term, host, headCol)
 	saveCockpitFrames(t, term, "ph-0-whole", hostPictures(t, []byte(host.String()))...)
@@ -321,8 +303,6 @@ func TestCockpitThreadImagePlaceholdersScroll(t *testing.T) {
 	}
 	alive(t, term, "after scrolling the placeholder card")
 
-	// A shorter screen from the start cuts the card's bottom: the cells of
-	// its first rows show.
 	term, host, _, headCol, id, cardRows = openPlaceholderThread(t, 40, cfg)
 	bottom := placeholderRows(term, host, headCol)
 	saveCockpitFrames(t, term, "ph-bottom", hostPictures(t, []byte(host.String()))...)
@@ -332,10 +312,6 @@ func TestCockpitThreadImagePlaceholdersScroll(t *testing.T) {
 	checkPlaceholderRun(t, bottom, id, cardRows)
 }
 
-// openPlaceholderThread starts a client rows high on the cards thread with
-// cfg, opens the agents view at the thread's top, and waits for the image
-// card's virtual placement. It returns the client, its host stream, the
-// card's head line, and the picture's id and rows.
 func openPlaceholderThread(t *testing.T, rows int, cfg string) (*tuitest.Terminal, *lockedBuffer, int, int, uint32, int) {
 	t.Helper()
 	term, host := startCardsThread(t, 160, rows, cfg)
@@ -367,25 +343,15 @@ func openPlaceholderThread(t *testing.T, rows int, cfg string) (*tuitest.Termina
 	return term, host, headRow, headCol, id, cardRows
 }
 
-// virtualAPC is a virtual placement: the image id, its placement id, and its
-// cell box.
 var virtualAPC = regexp.MustCompile(`\x1b_Ga=p,U=1,i=(\d+),p=(\d+),c=(\d+),r=(\d+)`)
 
 func atoiInt(s string) int { n, _ := strconv.Atoi(s); return n }
 
-// phRow is a screen row of placeholder cells: the screen row, the picture
-// row the cells name, and the image id.
 type phRow struct {
 	row, pic int
 	id       uint32
 }
 
-// placeholderRows are the rows of placeholder cells at column col, top to
-// bottom, on the screen the host stream draws. tuitest's emulator drops a
-// placeholder's base character and runs its marks into the cell before, so
-// the stream is replayed through tuios's own emulator with placeholders
-// kept, at the screen's size. The client this reads is never resized, so the
-// stream draws one screen of one size.
 func placeholderRows(term *tuitest.Terminal, host *lockedBuffer, col int) []phRow {
 	cols, rows := term.Screen().Size()
 	em := vt.NewEmulator(cols, rows)
@@ -408,7 +374,6 @@ func placeholderRows(term *tuitest.Terminal, host *lockedBuffer, col int) []phRo
 	return out
 }
 
-// diacriticRow is the row a placeholder's first combining mark stands for.
 func diacriticRow(r rune) int {
 	for i := range 300 {
 		if kitty.Diacritic(i) == r {
@@ -418,8 +383,6 @@ func diacriticRow(r rune) int {
 	return -1
 }
 
-// checkPlaceholderRun asserts rows are one run of screen rows naming id, each
-// the picture row after the one above.
 func checkPlaceholderRun(t *testing.T, rows []phRow, id uint32, cardRows int) {
 	t.Helper()
 	for i, r := range rows {
@@ -435,8 +398,6 @@ func checkPlaceholderRun(t *testing.T, rows []phRow, id uint32, cardRows int) {
 	}
 }
 
-// placeholderHeld reports whether the host holds image id at the end of
-// stream: its last upload comes after its last delete.
 func placeholderHeld(stream string, id uint32) bool {
 	up := strings.LastIndex(stream, fmt.Sprintf("\x1b_Ga=t,f=100,i=%d,", id))
 	gone := strings.LastIndex(stream, fmt.Sprintf("\x1b_Ga=d,d=I,i=%d,", id))

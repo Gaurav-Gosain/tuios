@@ -56,9 +56,6 @@ func TestModalDimsTheScreenBehind(t *testing.T) {
 	}
 }
 
-// dimWords are the three words the pane prints, each ending in x so the
-// command line that prints them (which spells the stem and the x apart) never
-// contains one.
 var dimWords = []string{"DIMTRUx", "DIMIDXx", "DIMANSIx"}
 
 const dimCommand = `clear; printf '\n\033[38;2;200;150;90m%s\033[m \033[38;5;208m%s\033[m \033[31m%s\033[m\n\n' "$(echo DIMTRU)x" "$(echo DIMIDX)x" "$(echo DIMANSI)x"`
@@ -109,14 +106,11 @@ func modalDimRun(t *testing.T, themeName string, d chromeDepth) {
 		was, now := before.Cell(at[0], at[1]), dimmed.Cell(at[0], at[1])
 		checkDimmed(t, term, dimWords[i], was, now, d.name, themeName)
 	}
-	// The rail is behind the palette too: its text is quieter or faint.
 	if was, now := before.Cell(railCol, railRow), dimmed.Cell(railCol, railRow); !now.Faint && !quieter(now.Fg, was.Fg, themeName != "") {
 		t.Errorf("the rail's session name at (%d,%d) was not dimmed: %+v then %+v\n%s",
 			railCol, railRow, was, now, term.SnapshotStyled())
 	}
 
-	// The same open palette with the dim off: the words come back as they
-	// were, and not one palette cell moves.
 	if out, err := tuiosCLI(t, base, "set-config", "appearance.modal_dim", "0"); err != nil {
 		t.Fatalf("set modal_dim 0: %v\n%s", err, out)
 	}
@@ -142,7 +136,6 @@ func modalDimRun(t *testing.T, themeName string, d chromeDepth) {
 		}
 	}
 
-	// Back on, and closed: the screen is as it was before the palette.
 	if out, err := tuiosCLI(t, base, "set-config", "appearance.modal_dim", "30"); err != nil {
 		t.Fatalf("set modal_dim 30: %v\n%s", err, out)
 	}
@@ -160,9 +153,6 @@ func modalDimRun(t *testing.T, themeName string, d chromeDepth) {
 	saveArtifact(t, term, dir, "closed")
 }
 
-// paletteBottom is the palette's last row. findPalette reads it off the
-// panel's ground, which a 16-colour panel does not paint, so there the frame's
-// bottom corner is what says where the panel ends.
 func paletteBottom(s tuitest.Screen, p palettePanel) int {
 	_, rows := s.Size()
 	for y := p.selRow; y < rows; y++ {
@@ -173,7 +163,6 @@ func paletteBottom(s tuitest.Screen, p palettePanel) int {
 	return p.bottomRow
 }
 
-// findDimWords returns the first cell of each word the pane printed.
 func findDimWords(t *testing.T, term *tuitest.Terminal, s tuitest.Screen) [][2]int {
 	t.Helper()
 	out := make([][2]int, len(dimWords))
@@ -187,7 +176,6 @@ func findDimWords(t *testing.T, term *tuitest.Terminal, s tuitest.Screen) [][2]i
 	return out
 }
 
-// railNameCell is the first cell of the attached session's name on the rail.
 func railNameCell(t *testing.T, term *tuitest.Terminal, s tuitest.Screen) (row, col int) {
 	t.Helper()
 	railX := railHeaderColumn(s)
@@ -201,7 +189,6 @@ func railNameCell(t *testing.T, term *tuitest.Terminal, s tuitest.Screen) (row, 
 	return row, col
 }
 
-// checkDimmed holds one word's first cell to what its depth can draw.
 func checkDimmed(t *testing.T, term *tuitest.Terminal, word string, was, now tuitest.Cell, depth, themeName string) {
 	t.Helper()
 	ansiNoTheme := word == "DIMANSIx" && themeName == ""
@@ -215,9 +202,6 @@ func checkDimmed(t *testing.T, term *tuitest.Terminal, word string, was, now tui
 				word, depth, was.Fg, now.Fg, term.SnapshotStyled())
 		}
 	default:
-		// On a dark theme the scrim pulls text toward black; on a light one
-		// it pulls it toward the light surface. Either way the text sits
-		// closer to its ground than it did.
 		if !quieter(now.Fg, was.Fg, themeName != "") {
 			t.Errorf("%s at %s colours is %+v under the palette and was %+v: not moved toward its ground\n%s",
 				word, depth, now.Fg, was.Fg, term.SnapshotStyled())
@@ -225,9 +209,6 @@ func checkDimmed(t *testing.T, term *tuitest.Terminal, word string, was, now tui
 	}
 }
 
-// quieter reports whether text moved toward its ground under the scrim:
-// darker on the dark terminal, lighter under the light theme, whose scrim
-// pulls toward the light surface.
 func quieter(now, was tuitest.Color, light bool) bool {
 	if light {
 		return darker(was, now)
@@ -235,8 +216,6 @@ func quieter(now, was tuitest.Color, light bool) bool {
 	return darker(now, was)
 }
 
-// darker reports whether a is a darker colour than b, measured as the host
-// paints them: through the xterm table for an index.
 func darker(a, b tuitest.Color) bool {
 	if a.Kind == tuitest.ColorDefault || b.Kind == tuitest.ColorDefault {
 		return false

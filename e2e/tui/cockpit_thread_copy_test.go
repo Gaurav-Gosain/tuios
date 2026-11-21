@@ -14,12 +14,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// copyParagraph is an answer's first paragraph, long enough that the thread
-// wraps it over several rows at 120 columns.
 const copyParagraph = "The retry loop gave up after the third attempt because the backoff doubled past the deadline, so the last call never ran and the error said timeout instead of the real cause from the server."
 
-// copyKnownLines are lines whose screen row must not change when copy mode
-// starts: the first and the last line of the thread.
 var copyKnownLines = []string{"Why does the retry loop stop", "Fixed: the backoff stops"}
 
 // TestCockpitThreadCopyMode runs copy mode over the agents view's thread:
@@ -86,7 +82,6 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 		t.Fatalf("open the agents view: %v", err)
 	}
 	waitText(t, term, "the thread", "Why does the retry loop stop", "Worked for 50s")
-	// The finished turn folds; e opens every card.
 	if err := term.SendKeys("e"); err != nil {
 		t.Fatal(err)
 	}
@@ -103,10 +98,6 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 			t.Fatalf("ASSERTION: copy mode did not start: %v\n%s", err, term.Snapshot())
 		}
 	}
-	// search moves the cursor to text, and is the frame that enter drew.
-	// Enter puts "/text (1 matches)" in the dock in the same update that
-	// ends the search, so the frame that shows it has the cursor on the
-	// match.
 	search := func(text string) tuitest.Screen {
 		t.Helper()
 		if err := term.SendKeys("/"); err != nil {
@@ -124,8 +115,6 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 		}
 		return term.Screen()
 	}
-	// lineSelect selects the rows from the one with first to the one with
-	// last, and yanks them with key.
 	lineSelect := func(first, last, key string) string {
 		t.Helper()
 		s := search(first)
@@ -137,7 +126,6 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 		for range r1 - r0 {
 			keys = append(keys, "j")
 		}
-		// The last selected row is lit once the keys are drawn.
 		lastCol := strings.Index(s.Line(r1), last)
 		lastCol = len([]rune(s.Line(r1)[:lastCol]))
 		ground := s.Cell(lastCol, r1).Bg
@@ -166,8 +154,6 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 		}
 	}
 
-	// The thread is shorter than its region, so the view draws it on the
-	// bottom. Copy mode starts with every line on the row it was on.
 	viewed := term.Screen()
 	saveCockpitFrames(t, term, "cockpit-copy-before-start")
 	var rowsBefore []int
@@ -200,8 +186,6 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 	if !strings.HasPrefix(got, "```diff\n--- a/retry.go\n+++ b/retry.go\n") || !strings.Contains(got, "-\tbackoff *= 2\n") || !strings.Contains(got, "+\tbackoff = min(backoff*2, deadline/4)\n") || !strings.HasSuffix(got, "```") {
 		t.Fatalf("ASSERTION: Y on the edit is not a diff block:\n%s", got)
 	}
-	// esc leaves copy mode and the view stays. The next esc reaches the
-	// view, which closes.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +193,6 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 	if !strings.Contains(term.Screen().Text(), "Why does the retry loop stop") {
 		t.Fatalf("ASSERTION: esc in copy mode closed the agents view\n%s", term.Snapshot())
 	}
-	// In the focus region y starts copy mode too, and y in it copies.
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +208,6 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 	if got := lineSelect("gave up after the third", "from the server.", "y"); got != copyParagraph {
 		t.Fatalf("ASSERTION: y in the focus region did not start copy mode; the yank is\n%q", got)
 	}
-	// esc leaves copy mode, the next esc goes back to the list.
 	ckPress(t, term, tuitest.Esc)
 	ckPress(t, term, tuitest.Esc)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(ckKeyBar(s), "esc close") }, uiTimeout); err != nil {
@@ -240,10 +222,6 @@ func TestCockpitThreadCopyMode(t *testing.T) {
 	alive(t, term, "after copy mode")
 }
 
-// threadRowWith is the first row of the thread that holds needle, -1 for
-// none. The rows above the thread's tabs do not count: the dock shows a copy
-// mode search as a notification, "/text (1 matches)", for two seconds, and a
-// row read there sends the selection a screen too far.
 func threadRowWith(s tuitest.Screen, needle string) int {
 	tabs := rowWith(s, "Checkpoints")
 	if tabs < 0 {
@@ -258,7 +236,6 @@ func threadRowWith(s tuitest.Screen, needle string) int {
 	return -1
 }
 
-// mustCLIOr is the output of a tuios command, "" when it fails.
 func mustCLIOr(t *testing.T, base string, args ...string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, args...)
@@ -268,8 +245,6 @@ func mustCLIOr(t *testing.T, base string, args ...string) string {
 	return out
 }
 
-// copyTranscript is the transcript of TestCockpitThreadCopyMode: a prompt
-// that wraps, an answer of a paragraph and a Go block, and an edit.
 func copyTranscript(t *testing.T) []byte {
 	t.Helper()
 	code := "func retry(n int) error {\n    for i := 0; i < n; i++ {\n        if err := call(); err == nil {\n            return nil\n        }\n    }\n    return errTimeout\n}"

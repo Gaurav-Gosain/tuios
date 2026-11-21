@@ -10,9 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// writeProjectTape creates a project directory under base with a .tuios.tape and
-// returns its absolute path. The directory is 0700 so it passes the trust
-// hygiene checks.
 func writeProjectTape(t *testing.T, base, name, content string) string {
 	t.Helper()
 	dir := filepath.Join(base, name)
@@ -25,10 +22,6 @@ func writeProjectTape(t *testing.T, base, name, content string) string {
 	return dir
 }
 
-// enterProjectDir cd's the focused shell into dir and emits an OSC 7
-// working-directory report, which is what tuios keys project-tape detection off.
-// A bare `cd` under /bin/sh does not emit OSC 7, so the test emits it explicitly,
-// exactly as an OSC-7-aware shell would.
 func enterProjectDir(t *testing.T, term *tuitest.Terminal, dir string) {
 	t.Helper()
 	osc := `printf '\033]7;file://localhost` + dir + `\033\\'`
@@ -37,19 +30,14 @@ func enterProjectDir(t *testing.T, term *tuitest.Terminal, dir string) {
 	}
 }
 
-// lsHasSession reports whether `tuios ls` lists a session with the given name.
 func lsHasSession(t *testing.T, base, name string) bool {
 	t.Helper()
 	out, _ := tuiosCLI(t, base, "ls")
 	return strings.Contains(out, name)
 }
 
-// contains reports substring membership.
 func contains(s, sub string) bool { return strings.Contains(s, sub) }
 
-// writeTapeConfigFile writes a config.toml with the given [tape] body into the
-// isolated XDG_CONFIG_HOME, before tuios starts, so the setting is in effect at
-// boot.
 func writeTapeConfigFile(t *testing.T, base, tapeBody string) {
 	t.Helper()
 	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
@@ -80,25 +68,21 @@ func TestProjectTapeAutoReviewOpensDialog(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	// Entering the directory auto-opens the review dialog, with no leader T t.
 	enterProjectDir(t, term, dir)
 	if err := term.WaitForText("project tape", uiTimeout); err != nil {
 		t.Fatalf("review dialog did not auto-open with auto_review=true: %v\n%s", err, term.Snapshot())
 	}
-	// It is the untrusted review, and it shows the actions. Nothing has run.
 	if err := term.WaitForText("trust and run", uiTimeout); err != nil {
 		t.Fatalf("auto-opened dialog missing the trust and run action: %v\n%s", err, term.Snapshot())
 	}
 	if !contains(term.Screen().Text(), "untrusted") {
 		t.Fatalf("auto-opened dialog is not the untrusted review\n%s", term.Snapshot())
 	}
-	// Auto-review must not execute anything.
 	time.Sleep(1500 * time.Millisecond)
 	if lsHasSession(t, base, sessionName) {
 		t.Fatalf("auto-review ran the tape; session %q must not exist", sessionName)
 	}
 
-	// Dismiss with Esc; the dialog closes and nothing is trusted.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("send esc: %v", err)
 	}
@@ -108,8 +92,6 @@ func TestProjectTapeAutoReviewOpensDialog(t *testing.T) {
 		t.Fatalf("dialog did not close on Esc: %v\n%s", err, term.Snapshot())
 	}
 
-	// Re-entering the same directory must NOT re-pop the dialog (once per dir per
-	// session dedup). Emit the OSC 7 report again for the same path.
 	osc := `printf '\033]7;file://localhost` + dir + `\033\\'`
 	if err := term.SendKeys(osc, tuitest.Enter); err != nil {
 		t.Fatalf("re-emit osc7: %v", err)
@@ -136,11 +118,9 @@ func TestProjectTapeAutoReviewDisabledStaysPassive(t *testing.T) {
 	enterTerminalMode(t, term)
 
 	enterProjectDir(t, term, dir)
-	// The passive badge appears...
 	if err := term.WaitForText("tape ?", uiTimeout); err != nil {
 		t.Fatalf("no passive indicator: %v\n%s", err, term.Snapshot())
 	}
-	// ...but the dialog must NOT auto-open.
 	time.Sleep(1500 * time.Millisecond)
 	if contains(term.Screen().Text(), "project tape") {
 		t.Fatalf("review dialog auto-opened with auto_review off (default must stay passive)\n%s", term.Snapshot())
@@ -184,7 +164,6 @@ func TestProjectTapeCurrentScopeRendersLayout(t *testing.T) {
 		t.Fatalf("send trust-and-run: %v", err)
 	}
 
-	// The rendered screen must show both panes' executed output at once.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		txt := s.Text()
 		return contains(txt, "editormark-6") && contains(txt, "servermark-56")
@@ -227,7 +206,6 @@ func TestProjectTapeSessionScopeBuildsSession(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	// Detection surfaces the passive indicator; nothing runs yet.
 	enterProjectDir(t, term, dir)
 	if err := term.WaitForText("tape ?", uiTimeout); err != nil {
 		t.Fatalf("no untrusted indicator: %v\n%s", err, term.Snapshot())
@@ -236,7 +214,6 @@ func TestProjectTapeSessionScopeBuildsSession(t *testing.T) {
 		t.Fatalf("session %q exists before trust; detection must run nothing", sessionName)
 	}
 
-	// Review + Trust and run.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "T", "t"); err != nil {
 		t.Fatalf("review chord: %v", err)
 	}
@@ -247,22 +224,15 @@ func TestProjectTapeSessionScopeBuildsSession(t *testing.T) {
 		t.Fatalf("trust-and-run: %v", err)
 	}
 
-	// The project session is created.
 	if err := term.WaitFor(func(tuitest.Screen) bool {
 		return lsHasSession(t, base, sessionName)
 	}, uiTimeout); err != nil {
 		t.Fatalf("session %q was not created: %v", sessionName, err)
 	}
 
-	// Ground truth: the daemon's own capture of each named pane shows the echo
-	// actually ran there (the marker is computed, so it proves execution). This
-	// also proves the panes were named (editor/server) and that Split created
-	// distinct panes.
 	assertPaneRan(t, base, sessionName, "editor", "editormark-6")
 	assertPaneRan(t, base, sessionName, "server", "servermark-56")
 
-	// Render proof: a fresh client attaching to the built session renders the
-	// three-pane layout with the executed output visible.
 	c2 := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"attach", sessionName}})
 	if err := c2.WaitFor(func(s tuitest.Screen) bool {
 		txt := s.Text()
@@ -272,7 +242,6 @@ func TestProjectTapeSessionScopeBuildsSession(t *testing.T) {
 	}
 	waitWindowCount(t, c2, 3, "fresh client on the built session")
 
-	// Trust persisted.
 	storePath := filepath.Join(base, "XDG_DATA_HOME", "tuios", "tape-trust.toml")
 	data, _ := os.ReadFile(storePath)
 	if !contains(string(data), "[[trusted]]") || !contains(string(data), ".tuios.tape") {
@@ -281,8 +250,6 @@ func TestProjectTapeSessionScopeBuildsSession(t *testing.T) {
 	alive(t, term, "after Trust and run built the project session")
 }
 
-// assertPaneRan fails unless the daemon's capture of the named pane contains the
-// computed marker, i.e. the tape's command executed in that pane.
 func assertPaneRan(t *testing.T, base, session, window, marker string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -318,7 +285,6 @@ func TestProjectTapeUntrustedNeverAutoRuns(t *testing.T) {
 		t.Fatalf("no untrusted indicator in auto mode: %v\n%s", err, term.Snapshot())
 	}
 
-	// Give auto mode every chance to (wrongly) act, then assert it did not.
 	time.Sleep(2 * time.Second)
 	if lsHasSession(t, base, sessionName) {
 		t.Fatalf("auto mode ran an untrusted tape; session %q must not exist", sessionName)

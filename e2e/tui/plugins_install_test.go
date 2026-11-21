@@ -17,20 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tuios plugins install, offline: a bare repository under the test's temp
-// folder, reached over file://, holds a probe plugin on five branches. On
-// "main" its build writes its folder to dist/where and "built-by-install" to
-// dist/out, and its one action prints dist/out. "next" is main with one
-// more commit. On "broken" the build fails. On "escape" herdr-plugin.toml is
-// a link to a manifest outside the repository, and on "linkdir" the folder
-// plug is a link to a folder outside it. The outside manifest's build
-// writes a marker file, so a build that ran outside the checkout shows.
-// While the file slow exists, the build sleeps, so the test can kill an
-// install during the build.
-//
-// The negative controls are in NEGATIVE_CONTROLS.md, "tuios plugins
-// install".
-
 const probeManifest = `id = "e2e.probe"
 name = "Probe"
 version = "1.0.0"
@@ -54,8 +40,6 @@ placement = "tab"
 command = ["sh", "-c", "exec sleep 600"]
 `
 
-// probeRepo makes the bare repository and returns its file:// URL, the
-// commits of main and next, and the folder outside it.
 func probeRepo(t *testing.T) (url, main, next, outside string) {
 	t.Helper()
 	work := testutil.GitRepo(t)
@@ -74,8 +58,6 @@ func probeRepo(t *testing.T) (url, main, next, outside string) {
 		}
 		testutil.Git(t, work, "add", "herdr-plugin.toml")
 	}
-	// With the file slow in place the build stops in a sleep, so a test can
-	// kill the install during the build. sleep writes its pid first.
 	slow := filepath.Join(outside, "slow")
 	write("test -e " + slow + " && echo $$ > " + slow + ".pid && exec sleep 30; mkdir -p dist && pwd > dist/where && echo built-by-install > dist/out")
 	testutil.Git(t, work, "commit", "-q", "-m", "probe")
@@ -95,8 +77,6 @@ func probeRepo(t *testing.T) (url, main, next, outside string) {
 	}
 	link("escape", "herdr-plugin.toml", filepath.Join(outside, "herdr-plugin.toml"))
 	link("linkdir", "plug", outside)
-	// next is main with one more commit that leaves the plugin alone: a
-	// reinstall at a new commit with the same build.
 	testutil.Git(t, work, "checkout", "-q", "main")
 	testutil.Git(t, work, "checkout", "-q", "-b", "next")
 	if err := os.WriteFile(filepath.Join(work, "NOTES"), []byte("next\n"), 0o644); err != nil {
@@ -146,8 +126,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 			t.Fatalf("plugins run ping %s: %v\n%s", when, err, out)
 		}
 	}
-	// checkFolders checks that the build folders of the plugin are the
-	// ones named, the first being the live one, whose build ran in it.
 	checkFolders := func(live string, also ...string) {
 		t.Helper()
 		folder := filepath.Join(data, "tuios", filepath.FromSlash(live))
@@ -164,8 +142,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 			t.Errorf("%s holds %v, want %v", managed, got, want)
 		}
 	}
-	// checkStartup waits until the plugin's startup last ran from the
-	// folder the state file names.
 	checkStartup := func(live string) {
 		t.Helper()
 		want, _ := filepath.EvalSymlinks(filepath.Join(data, "tuios", filepath.FromSlash(live)))
@@ -182,8 +158,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		}
 	}
 
-	// A link out of the repository, as the manifest or as the plugin
-	// folder: refused before any build, and nothing is left behind.
 	for _, c := range []struct{ name, want string }{
 		{"escape", "outside the repository"},
 		{"linkdir", "has no folder plug"},
@@ -204,11 +178,8 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		}
 	}
 
-	// A kill at the prompt, while the install lock is held: the next
-	// install must still work.
 	killInstallAt(t, base, "Continue?", url+"@main")
 
-	// main: built in the folder the state file names, pinned and enabled.
 	out, err := tuiosCLI(t, base, "plugins", "install", url+"@main", "--yes")
 	if err != nil {
 		t.Fatalf("install of main after a kill at the prompt: %v\n%s", err, out)
@@ -250,8 +221,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		t.Errorf("the plugins list table lacks the source and the pin:\n%s", table)
 	}
 	ping("after the install of main")
-	// stats shows the resident startup command: its reaper and its sleep,
-	// with memory, and the runs so far.
 	if out, err := tuiosCLI(t, base, "plugins", "stats", "--json"); err != nil {
 		t.Fatalf("plugins stats: %v\n%s", err, out)
 	} else {
@@ -267,14 +236,10 @@ func TestPluginsInstallFromGit(t *testing.T) {
 			t.Errorf("plugins stats does not show the startup's processes, memory and runs: %v\n%s", err, out)
 		}
 	}
-	// A plugin pane opened from the build of main. Its folder stays while
-	// the pane is open.
 	if out, err := tuiosCLI(t, base, "plugins", "open", id, "hold", "--placement", "tab"); err != nil {
 		t.Fatalf("plugins open hold: %v\n%s", err, out)
 	}
 
-	// A failed build: the lock file, the state file and the running plugin
-	// stay as they were, and the failed build folder is gone.
 	lockBefore, stateBefore := readLock(), readState()
 	out, err = tuiosCLI(t, base, "plugins", "install", url+"@broken", "--yes")
 	if err == nil || !strings.Contains(out, "the build command failed") || !strings.Contains(out, "The plugin is not installed") {
@@ -289,8 +254,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	checkFolders(mainDir)
 	ping("after a failed build")
 
-	// A kill during the build of next: the lock file, the state file and
-	// the running plugin stay as they were.
 	if err := os.WriteFile(filepath.Join(outside, "slow"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -308,9 +271,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	}
 	ping("after a kill during the build")
 
-	// next: a new folder. The plugin restarts from it, config.toml keeps it
-	// enabled, and the build of main stays as the previous one. The folder
-	// of the killed build goes.
 	if out, err := tuiosCLI(t, base, "plugins", "install", url+"@next", "--yes"); err != nil {
 		t.Fatalf("install of next after a kill during the build: %v\n%s", err, out)
 	}
@@ -326,9 +286,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	}
 	ping("after the install of next")
 
-	// An install killed between the state write and the lock write leaves
-	// the state a commit ahead of plugins.lock. The plugin then runs from
-	// the previous folder, the one plugins.lock names.
 	nextLock := readLock()
 	if err := os.WriteFile(lockPath, []byte(strings.ReplaceAll(nextLock, nextCommit, mainCommit)), 0o600); err != nil {
 		t.Fatal(err)
@@ -341,9 +298,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// main again, at a new folder: the live one and the one before it stay,
-	// and the first build of main stays too, because the plugin pane runs
-	// from it.
 	if out, err := tuiosCLI(t, base, "plugins", "install", url+"@main", "--yes"); err != nil {
 		t.Fatalf("install of main again: %v\n%s", err, out)
 	}
@@ -352,13 +306,10 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(art, "plugins.lock"), []byte(readLock()), 0o644)
 	_ = os.WriteFile(filepath.Join(art, "state.toml"), []byte(readState()), 0o644)
 
-	// A word that names no subcommand fails. Cobra used to print the help
-	// of tuios plugins and exit 0.
 	if out, err := tuiosCLI(t, base, "plugins", "uninstal", id); err == nil || !strings.Contains(out, `unknown command "uninstal" for "tuios plugins"`) {
 		t.Errorf("tuios plugins uninstal: %v, want an unknown command error\n%s", err, out)
 	}
 
-	// uninstall refuses a linked folder, and leaves it alone.
 	linked := t.TempDir()
 	linkedManifest := filepath.Join(linked, "herdr-plugin.toml")
 	if err := os.WriteFile(linkedManifest, []byte("id = \"e2e.linked\"\nname = \"Linked\"\nversion = \"1.0.0\"\nmin_herdr_version = \"0.9.3\"\n"), 0o644); err != nil {
@@ -374,9 +325,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		t.Errorf("uninstall of a linked folder touched it: %v", err)
 	}
 
-	// uninstall, by the source it was installed from: the plugin's
-	// processes stop, its pane closes, and its lock entry, state entry and
-	// build folders go. Nothing else in the data folder goes.
 	windows := func() int {
 		out, _ := tuiosCLI(t, base, "list-windows", "--json", "--session", "probe")
 		var res struct {
@@ -422,7 +370,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 		}
 	}
 	if runtime.GOOS == "linux" && realManaged != "" {
-		// No process of the plugin, startup or pane, runs in its folder.
 		deadline := time.Now().Add(5 * time.Second)
 		for {
 			left := procsIn(realManaged)
@@ -438,7 +385,6 @@ func TestPluginsInstallFromGit(t *testing.T) {
 	}
 }
 
-// procsIn lists the pids whose working folder is in dir, from /proc.
 func procsIn(dir string) []string {
 	ents, _ := os.ReadDir("/proc")
 	var out []string
@@ -447,8 +393,6 @@ func procsIn(dir string) []string {
 			continue
 		}
 		cwd, err := os.Readlink(filepath.Join("/proc", e.Name(), "cwd"))
-		// The folder of a process whose folder was removed reads
-		// "<path> (deleted)".
 		cwd = strings.TrimSuffix(cwd, " (deleted)")
 		if err == nil && (cwd == dir || strings.HasPrefix(cwd, dir+string(filepath.Separator))) {
 			out = append(out, e.Name())
@@ -457,7 +401,6 @@ func procsIn(dir string) []string {
 	return out
 }
 
-// listEntry is one plugin of plugins list --json.
 type listEntry struct {
 	ID      string          `json:"plugin_id"`
 	Origin  string          `json:"origin"`
@@ -477,8 +420,6 @@ func listEntries(out string) []listEntry {
 	return entries
 }
 
-// field reads one key of a TOML file off its own line, so the test needs no
-// TOML parser of its own. read gives the file.
 func field(read func() string) func(string) string {
 	return func(key string) string {
 		m := regexp.MustCompile(`(?m)^` + key + ` = ['"]?([^'"\n]*)['"]?$`).FindStringSubmatch(read())
@@ -489,7 +430,6 @@ func field(read func() string) func(string) string {
 	}
 }
 
-// foldersIn lists the folders in dir, sorted.
 func foldersIn(dir string) []string {
 	ents, _ := os.ReadDir(dir)
 	var out []string
@@ -501,8 +441,6 @@ func foldersIn(dir string) []string {
 	return out
 }
 
-// killInstallAt runs tuios plugins install with args in a terminal, waits
-// until want is on the screen, and kills the process.
 func killInstallAt(t *testing.T, base, want string, args ...string) {
 	t.Helper()
 	env := make([]string, 0, len(xdgKeys))

@@ -10,45 +10,15 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// appearance.zoom_borderless: a zoomed pane takes the whole pane region, draws
-// no border and no title bar, and its shell is told the full size. Zooming out
-// gives the pane its border back.
-//
-// How this could pass wrongly, written down first:
-//   - The zoom could fail to come on, and an unzoomed pane with no border is
-//     not what is being tested. The shell's size must be the region's, which
-//     no tile of a two-pane layout is.
-//   - The region could be measured off the frame under test, so a pane that
-//     kept its border would shrink the region with it. The rows are read off
-//     the dock and the left edge off the rail, never off the pane.
-//   - The border check could look at rows where no border is ever drawn. The
-//     boxed run, zoom_borderless off, must find border corners on the same
-//     rows and a shell two cells smaller each way. That is the positive half.
-//     Every borderless run must also find the pane's edge next to its text
-//     again after zooming out, which a floating pane only gets back if the
-//     zoom hands its border back.
-//   - The frame could show no border while the pointer still treats the first
-//     cell as one. A drag from the region's first cell must copy the text
-//     there and nothing else.
-//   - The shell size could be read off the echo of the typed command. The
-//     marker is matched by a pattern the command does not contain.
-//
-// Negative control: see NEGATIVE_CONTROLS.md, "Borderless zoom".
-
 const (
 	zoomBorderlessCols = 100
 	zoomBorderlessRows = 30
 )
 
-// borderGlyphs are the corners and edges a pane's own border is drawn with,
-// in every glyph set the default looks can pick.
 const borderGlyphs = "╭╮╰╯┌┐└┘│─━┃"
 
-// shellSizeRe is the size the pane's shell reports, printed as SZ<rows>x<cols>.
 var shellSizeRe = regexp.MustCompile(`SZ([0-9]+)x([0-9]+)`)
 
-// dockTop is the first row of the dock, which is at the bottom: the lowest run
-// of rows that start with the dock's rule or carry its window count.
 func dockTop(s tuitest.Screen) int {
 	_, rows := s.Size()
 	top := rows
@@ -61,8 +31,6 @@ func dockTop(s tuitest.Screen) int {
 	return top
 }
 
-// regionCols is the part of a screen row right of the rail: the columns from
-// left on.
 func regionCols(line string, left int) string {
 	r := []rune(line)
 	if left >= len(r) {
@@ -76,18 +44,12 @@ func TestZoomBorderless(t *testing.T) {
 		name       string
 		borderless bool
 		daemon     bool
-		// extra is more [appearance] or other config, after the zoom keys.
-		extra string
-		// floating starts the panes untiled.
-		floating bool
-		// rail shows the sidebar, so the region does not start at column 0.
-		rail bool
+		extra      string
+		floating   bool
+		rail       bool
 	}{
 		{name: "borderless", borderless: true},
 		{name: "borderless/daemon", borderless: true, daemon: true},
-		// Shared borders alone already drop the border of a zoom of the whole
-		// screen, so this run zooms to part of it: without the option that is
-		// the camera over the layout, with it the whole region.
 		{name: "borderless/shared", borderless: true, extra: "shared_borders = true\nzoom_size = 90\n"},
 		{name: "borderless/max-width", borderless: true, extra: "zoom_max_width = 60\n"},
 		{name: "borderless/light", borderless: true, extra: "theme = \"catppuccin_latte\"\n"},
@@ -131,9 +93,6 @@ func TestZoomBorderless(t *testing.T) {
 				t.Fatalf("send z: %v", err)
 			}
 			enterTerminalMode(t, term)
-			// clear first, so the only text on the pane is the answer and the
-			// prompt: a border check over rows of shell output would be a check
-			// of the output.
 			if err := term.SendKeys(`clear; printf 'SZ%sx%s\n' "$(tput lines)" "$(tput cols)"`, tuitest.Enter); err != nil {
 				t.Fatalf("type the size probe: %v", err)
 			}
@@ -161,9 +120,6 @@ func TestZoomBorderless(t *testing.T) {
 			if regionH >= zoomBorderlessRows || regionH < zoomBorderlessRows-3 {
 				t.Fatalf("could not find the dock: its first row is %d of %d\n%s", regionH, zoomBorderlessRows, term.Snapshot())
 			}
-			// The region's left edge is where the rail ends. Without a rail it
-			// is column 0. With one, the rail's own rule is the last column
-			// that has a border glyph on every region row.
 			left := 0
 			if r.rail {
 				left = -1
@@ -193,8 +149,6 @@ func TestZoomBorderless(t *testing.T) {
 			}
 
 			if !r.borderless {
-				// The positive half: the same probe on a boxed zoom finds the
-				// border and a shell one cell in from each edge.
 				if rows != regionH-2 || cols != regionW-2 {
 					t.Fatalf("the boxed zoomed shell is %dx%d, want %dx%d\n%s", cols, rows, regionW-2, regionH-2, term.Snapshot())
 				}
@@ -213,13 +167,9 @@ func TestZoomBorderless(t *testing.T) {
 				t.Fatalf("the shell's first column is at region column %d, want 0\n%s", col, term.Snapshot())
 			}
 
-			// The pointer reaches the pane's first cell, where a border would be:
-			// a drag over the answer selects it and copies exactly it.
 			dragSelect(t, term, left, left+len(answer)-1, 0)
 			waitClipboardSequence(t, term, out, 0, answer)
 
-			// The option applies at once, to a pane that is already zoomed:
-			// off draws the border, on takes it away again.
 			if r.daemon {
 				hasBorder := func(s tuitest.Screen) bool {
 					for y := range dockTop(s) {
@@ -239,13 +189,10 @@ func TestZoomBorderless(t *testing.T) {
 				}
 			}
 
-			// Zooming out gives the pane its border back. Under shared borders
-			// that is the divider between the two panes, not a box of its own.
 			leaveTerminalMode(t, term)
 			if err := term.SendKeys("z"); err != nil {
 				t.Fatalf("send z: %v", err)
 			}
-			// The cell left of the answer is the pane's own edge again.
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				for y := range dockTop(s) {
 					line := s.Line(y)

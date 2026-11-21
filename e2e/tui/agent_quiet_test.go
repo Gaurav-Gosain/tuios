@@ -58,7 +58,6 @@ errored = true
 	}
 	enterTerminalMode(t, term)
 
-	// The subscription prints its ack first, so an event cannot come before it.
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 	sub := exec.CommandContext(ctx, tuiosBin, "subscribe", "-s", "e2e-quiet", "--types", "agent-state")
@@ -82,7 +81,6 @@ errored = true
 		for lines.Scan() {
 			events <- lines.Text()
 		}
-		// The wait for an event says the stream ended, and this says why.
 		if err := lines.Err(); err != nil {
 			events <- "the event stream failed: " + err.Error()
 		}
@@ -105,10 +103,6 @@ errored = true
 		}
 	}
 
-	// report types a state report into the pane's shell, as an agent's hook runs
-	// it, and waits for the event it raises. The pane is not focused: a client that
-	// has the pane focused closes a finished item as soon as it sees it, which would
-	// hide an item this test has to be able to see.
 	typeReport := func(state, message string, extra ...string) {
 		t.Helper()
 		cmd := fmt.Sprintf("%q set-agent-state %s --harness pi -m %q %s", tuiosBin, state, message, strings.Join(extra, " "))
@@ -129,7 +123,6 @@ errored = true
 		}
 		return out
 	}
-	// waitInbox waits for a change of kind within one state, which raises no event.
 	waitInbox := func(marker string, want bool) {
 		t.Helper()
 		deadline := time.Now().Add(uiTimeout)
@@ -159,7 +152,6 @@ errored = true
 		return res.Agents[0]
 	}
 
-	// The pane holds only read, so it cannot hide itself.
 	runInShell(t, term, fmt.Sprintf("%q set-agent-quiet; echo RC''=$?", tuiosBin), "RC=", shellTimeout)
 	if text := term.Screen().Text(); !strings.Contains(text, "RC=1") || !strings.Contains(text, "admin grant") {
 		t.Fatalf("the pane marked itself quiet:\n%s", term.Snapshot())
@@ -170,9 +162,6 @@ errored = true
 	waitWindowCount(t, term, 2, "second window")
 	renameWindow(t, term, "OTHER")
 
-	// alerted reports whether a desktop notification named marker: the one sink of
-	// an alert that a later one cannot cover, as a dock message can be queued
-	// behind the one on show.
 	alerted := func(marker string) bool {
 		return regexp.MustCompile("\x1b\\]9;[^\x07]*" + marker).MatchString(host.String())
 	}
@@ -183,7 +172,6 @@ errored = true
 		}
 	}
 
-	// A loud turn opens its item and raises its alert.
 	report("working", "starting")
 	report("done", "LOUD-TURN")
 	if got := inbox(); !strings.Contains(got, "LOUD-TURN") {
@@ -194,7 +182,6 @@ errored = true
 		t.Fatalf("a refused call changed the mark: %v", agent())
 	}
 
-	// The person marks it, and the open item closes.
 	out, err := tuiosCLI(t, base, "set-agent-quiet", "-s", "e2e-quiet", "-w", "WORKER")
 	if err != nil || !strings.Contains(out, "Inbox items closed: 1.") {
 		t.Fatalf("set-agent-quiet: %v\n%s", err, out)
@@ -214,8 +201,6 @@ errored = true
 		t.Fatalf("the rail row does not say quiet: %v\n%s", err, term.Snapshot())
 	}
 
-	// A quiet turn, a question and a failure. The events come, list-agents reads
-	// as for any pane, and neither the Inbox nor the dock hears of them.
 	seqBefore, _ := agent()["completion_seq"].(float64)
 	report("working", "starting again")
 	report("done", "QUIET-TURN")
@@ -231,26 +216,20 @@ errored = true
 	if got := inbox(); strings.Contains(got, "QUIET-") || strings.Contains(got, `"kind"`) {
 		t.Fatalf("a quiet pane reached the Inbox:\n%s", got)
 	}
-	// A question that becomes an approval with no change of state is the first the
-	// person hears of it, in the Inbox and in the alerts.
 	report("needs_input", "QUIET-ASK2", "--kind", "question")
 	typeReport("needs_input", "QUIET-APPROVE", "--kind", "approval")
 	waitInbox("QUIET-APPROVE", true)
-	// Alerts go out in order, so with this one here the ones before it would have
-	// been too.
 	waitAlert("QUIET-APPROVE")
 	for _, marker := range []string{"QUIET-TURN", "QUIET-ASK", "QUIET-FAIL"} {
 		if alerted(marker) {
 			t.Fatalf("a quiet pane raised an alert named %s", marker)
 		}
 	}
-	// An approval that becomes a question leaves no stale approval behind.
 	typeReport("needs_input", "QUIET-ASK3", "--kind", "question")
 	waitInbox("QUIET-APPROVE", false)
 	if got := inbox(); strings.Contains(got, "QUIET-ASK3") {
 		t.Fatalf("a quiet pane's question reached the Inbox:\n%s", got)
 	}
-	// A login gets through too, and going quiet leaves it open.
 	typeReport("needs_input", "QUIET-LOGIN", "--kind", "auth")
 	waitInbox("QUIET-LOGIN", true)
 	waitAlert("QUIET-LOGIN")
@@ -260,8 +239,6 @@ errored = true
 	waitInbox("QUIET-LOGIN", true)
 	report("working", "logged in")
 
-	// Going loud while the pane waits raises the question it waits on, with its
-	// alert. The turns and the failure from before stay closed.
 	report("needs_input", "QUIET-OPEN", "--kind", "question")
 	if got := inbox(); strings.Contains(got, "QUIET-OPEN") {
 		t.Fatalf("a quiet pane's question reached the Inbox:\n%s", got)
@@ -285,8 +262,6 @@ errored = true
 		t.Fatalf("list-agents still says quiet: %v", agent())
 	}
 
-	// A pane with admin may mark a worker, as a moderator does, but it does not
-	// close a question for the person. The person can.
 	report("needs_input", "LOUD-ASK", "--kind", "question")
 	waitInbox("LOUD-ASK", true)
 	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", "e2e-quiet", "-w", "OTHER", "--grants", "admin"); err != nil {
@@ -306,14 +281,12 @@ errored = true
 	}
 	waitInbox("LOUD-ASK", false)
 
-	// The mark goes with the agent, so the next one in the pane does not inherit it.
 	report("none", "left")
 	report("working", "the next agent")
 	if agent()["quiet"] != false {
 		t.Fatalf("the next agent inherited the mark: %v", agent())
 	}
 
-	// A pane with no agent has nothing to mark, and no row would show it.
 	if out, err := tuiosCLI(t, base, "set-agent-quiet", "-s", "e2e-quiet", "-w", "OTHER"); err == nil || !strings.Contains(out, "runs no agent") {
 		t.Fatalf("set-agent-quiet on a pane with no agent: %v\n%s", err, out)
 	}

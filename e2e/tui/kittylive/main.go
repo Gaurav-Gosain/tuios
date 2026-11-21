@@ -45,14 +45,9 @@ import (
 
 type step struct {
 	name, desc string
-	// run sends the command and returns what the screen should show and a
-	// check run after the reply.
-	run func() (expect string, after func() (string, bool))
-	// refuse says the reply must be an error.
-	refuse bool
-	// keeps says only the check after the reply decides: something the
-	// command names must still be there.
-	keeps bool
+	run        func() (expect string, after func() (string, bool))
+	refuse     bool
+	keeps      bool
 }
 
 var (
@@ -73,21 +68,16 @@ func main() {
 		*dir = d
 		defer func() { _ = os.RemoveAll(d) }()
 	}
-	// stty reads the terminal from its stdin, so it is given this one.
 	get := exec.Command("stty", "-g")
 	get.Stdin = os.Stdin
 	saved, _ := get.Output()
 	stty("-icanon", "-echo", "min", "0", "time", "1")
-	// The reader stops, and the terminal is put back, before the last line
-	// is printed. Whoever waits for that line types next, and a key that
-	// arrived while this program still read the terminal was its, not the
-	// shell's: a test's "clear" was lost that way on macOS.
 	var stop atomic.Bool
 	stopped := make(chan struct{})
 	finish := func() {
 		stop.Store(true)
 		select {
-		case <-stopped: // a read returns within a tenth of a second (time 1)
+		case <-stopped:
 		case <-time.After(time.Second):
 		}
 		stty(strings.TrimSpace(string(saved)))
@@ -218,8 +208,6 @@ func mediaSteps() []step {
 			_, _ = f.Write(img)
 			_ = f.Close()
 			p := f.Name()
-			// S= says the object is this frame, which is what lets the
-			// terminal delete a file it did not make.
 			apc(fmt.Sprintf("a=T,i=5,f=100,t=t,S=%d,c=16,r=4", len(img)), []byte(p))
 			return "purple and white checkerboard above", func() (string, bool) {
 				gone := waitGone(p)
@@ -301,8 +289,6 @@ func refuseSteps() []step {
 	return steps
 }
 
-// shmKeepSteps name shared memory objects that are not the frame a command
-// sends, or not one a terminal may delete. Each must still be there after.
 func shmKeepSteps() []step {
 	w, h := 64, 32
 	frame := bytes.Repeat([]byte{1, 2, 3, 4}, w*h)
@@ -342,12 +328,10 @@ func shmKeepSteps() []step {
 	}
 }
 
-// apc sends one graphics command with payload base64 encoded.
 func apc(keys string, payload []byte) {
 	fmt.Printf("\x1b_G%s;%s\x1b\\", keys, base64.StdEncoding.EncodeToString(payload))
 }
 
-// chunked sends data as a t=d upload in 4096-character chunks.
 func chunked(keys string, data []byte) {
 	enc := base64.StdEncoding.EncodeToString(data)
 	var b strings.Builder
@@ -366,7 +350,6 @@ func chunked(keys string, data []byte) {
 	fmt.Print(b.String())
 }
 
-// checker is a 160x80 PNG of c and white squares.
 func checker(c color.RGBA) []byte {
 	img := image.NewRGBA(image.Rect(0, 0, 160, 80))
 	for y := range 80 {
@@ -405,7 +388,6 @@ func write(path string, data []byte) {
 	}
 }
 
-// waitGone waits up to two seconds for path to be removed.
 func waitGone(path string) bool {
 	for range 40 {
 		if _, err := os.Lstat(path); os.IsNotExist(err) {
@@ -417,7 +399,6 @@ func waitGone(path string) bool {
 	return false
 }
 
-// readReply reads one graphics reply, or nothing when none comes in time.
 func readReply(in <-chan byte, wait time.Duration) string {
 	var b []byte
 	t := time.NewTimer(wait)
@@ -449,7 +430,6 @@ func waitEnter(in <-chan byte) {
 	}
 }
 
-// shown writes a reply the way Python's repr would.
 func shown(s string) string {
 	if s == "" {
 		return "(none)"

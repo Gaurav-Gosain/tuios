@@ -11,23 +11,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// appearance.dock_compact draws the dock as one row: the pills, without the
-// rule between them and the panes. These drive it on the real binary, at the
-// top and at the bottom: the pane gets the row, a click on a pill still lands
-// on it, and a config save switches it on a running client.
-//
-// Negative controls are in NEGATIVE_CONTROLS.md under "Compact dock".
-
 const compactCols, compactRows = 100, 40
 
-// compactConfig is a config that puts the dock at pos, compact or full.
 func compactConfig(pos string, compact bool) string {
 	return fmt.Sprintf("[appearance]\ndockbar_position = %q\ndock_compact = %t\n", pos, compact)
 }
 
-// dockRowAt is the row the dock's pills are on: the first row with the dock at
-// the top, the last with it at the bottom. Compact or full, the pills keep the
-// screen edge.
 func dockRowAt(pos string) int {
 	if pos == "top" {
 		return 0
@@ -35,12 +24,8 @@ func dockRowAt(pos string) int {
 	return compactRows - 1
 }
 
-// dockStatusRe is the dock's "<workspace>:<count>" status field.
 var dockStatusRe = regexp.MustCompile(`([0-9]+):([0-9]+)`)
 
-// dockStatusOn reads the workspace and the window count off one row, or -1, -1
-// when the row carries no status. countWindows reads only the rows where a
-// full dock sits, so it cannot see a compact dock at the top.
 func dockStatusOn(s tuitest.Screen, row int) (ws, n int) {
 	m := dockStatusRe.FindStringSubmatch(s.Line(row))
 	if m == nil {
@@ -51,7 +36,6 @@ func dockStatusOn(s tuitest.Screen, row int) (ws, n int) {
 	return ws, n
 }
 
-// waitDockStatus waits for the dock row to read ws:n.
 func waitDockStatus(t *testing.T, term *tuitest.Terminal, pos string, ws, n int, what string) {
 	t.Helper()
 	row := dockRowAt(pos)
@@ -63,7 +47,6 @@ func waitDockStatus(t *testing.T, term *tuitest.Terminal, pos string, ws, n int,
 	}
 }
 
-// paneTopRow is the first row that carries a pane's top-left corner, or -1.
 func paneTopRow(s tuitest.Screen) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -76,7 +59,6 @@ func paneTopRow(s tuitest.Screen) int {
 	return -1
 }
 
-// paneBottomEdge is the last row that carries a pane's bottom-left corner, or -1.
 func paneBottomEdge(s tuitest.Screen) int {
 	_, rows := s.Size()
 	last := -1
@@ -91,8 +73,6 @@ func paneBottomEdge(s tuitest.Screen) int {
 	return last
 }
 
-// startCompactFixture starts a standalone tuios with the dock at pos, opens one
-// tiled pane, and waits until the pane is drawn where the dock leaves room.
 func startCompactFixture(t *testing.T, base, pos string, compact bool) *tuitest.Terminal {
 	t.Helper()
 	writeConfig(t, base, compactConfig(pos, compact)+
@@ -107,8 +87,6 @@ func startCompactFixture(t *testing.T, base, pos string, compact bool) *tuitest.
 	return term
 }
 
-// wantPaneEdge is the row the pane's border meets the dock on: its top row with
-// the dock at the top, its bottom row with the dock at the bottom.
 func wantPaneEdge(pos string, compact bool) int {
 	rule := 1
 	if compact {
@@ -120,7 +98,6 @@ func wantPaneEdge(pos string, compact bool) int {
 	return compactRows - 2 - rule
 }
 
-// paneEdge reads the row wantPaneEdge predicts.
 func paneEdge(s tuitest.Screen, pos string) int {
 	if pos == "top" {
 		return paneTopRow(s)
@@ -128,8 +105,6 @@ func paneEdge(s tuitest.Screen, pos string) int {
 	return paneBottomEdge(s)
 }
 
-// waitPaneEdge waits for the pane to meet the dock at the row a dock of that
-// height leaves.
 func waitPaneEdge(t *testing.T, term *tuitest.Terminal, pos string, compact bool, what string) {
 	t.Helper()
 	want := wantPaneEdge(pos, compact)
@@ -153,7 +128,6 @@ func TestDockCompactGivesThePaneARow(t *testing.T) {
 				base := t.TempDir()
 				term := startCompactFixture(t, base, pos, compact)
 				waitPaneEdge(t, term, pos, compact, fmt.Sprintf("compact=%t", compact))
-				// The frame as tuios captures it, for a person to look at.
 				name := fmt.Sprintf("%s-compact-%t", pos, compact)
 				saveArtifact(t, term, artifactDir(t), name)
 				captureScreenTo(t, term, shotDir(t, base), artifactDir(t), name)
@@ -174,9 +148,6 @@ func TestDockCompactGivesThePaneARow(t *testing.T) {
 	}
 }
 
-// pillCol is the screen column of the first cell of a workspace pill labelled
-// label on the dock row, found by the label with a space on each side. -1 when
-// it is not there.
 func pillCol(line, label string) int {
 	return pillColumn(line, " "+label+" ")
 }
@@ -195,7 +166,6 @@ func TestDockCompactPillClickSwitchesWorkspace(t *testing.T) {
 			term := startCompactFixture(t, base, pos, true)
 			waitPaneEdge(t, term, pos, true, "compact")
 
-			// A window on workspace 2, so its pill is on the strip, then back to 1.
 			if err := term.SendKeys(tuitest.Ctrl('b'), "w", "2"); err != nil {
 				t.Fatalf("switch to workspace 2: %v", err)
 			}
@@ -218,7 +188,6 @@ func TestDockCompactPillClickSwitchesWorkspace(t *testing.T) {
 			leftClick(t, term, col+1, row)
 			waitDockStatus(t, term, pos, 2, 1, "after a click on the pill for workspace 2")
 
-			// The pane's edge row next to the dock opens the pane's menu.
 			edge := wantPaneEdge(pos, true)
 			shiftRightClick(t, term, 30, edge)
 			waitMenu(t, term, "the pane row next to a compact dock", "Split right", "Rename")
@@ -246,9 +215,6 @@ func TestDockCompactSwitchesOnConfigSave(t *testing.T) {
 				t.Fatalf("clear: %v", err)
 			}
 
-			// The whole file is replaced, so it carries the pinned looks too:
-			// without them the rail and the title bars move to their shipped
-			// places and the rows would not be comparable.
 			pinned := "window_title_position = \"bottom\"\nzoom_size = 100\nclick_to_type = \"single\"\nmodal_dim = 0\n" +
 				"[appearance.sidebar]\nenabled = false\n[appearance.scrollbar]\nstyle = \"thin\"\n"
 			saveConfigLikeAnEditor(t, base, compactConfig(pos, true)+pinned)
@@ -305,7 +271,6 @@ func TestDockCompactClientSharesASessionWithAFullOne(t *testing.T) {
 	saveArtifact(t, compact, artifactDir(t), "compact-alone")
 }
 
-// waitBottomEdge waits for the lowest pane border to be on row want.
 func waitBottomEdge(t *testing.T, term *tuitest.Terminal, want int, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {

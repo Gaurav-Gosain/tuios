@@ -20,18 +20,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The GUI bridge (`tuios gui-bridge`) end to end: a real bridge process
-// against a real daemon, spoken to over its own frame protocol the way
-// tuios-gpui speaks to it. The wire types below are written from the
-// protocol document, not imported, so a change to the JSON breaks these
-// tests even when the Go side still agrees with itself.
-//
-// Every layout test checks the edit three ways: the bridge's own state, a
-// second client that attaches afterwards and reads the tree back from the
-// daemon, and for swap and move a real terminal client, whose screen shows
-// each pane's marker inside the rectangle the bridge says the pane has.
-
-// wireState is the bridge's "state" event.
 type wireState struct {
 	Session     string               `json:"session"`
 	Cols        int                  `json:"cols"`
@@ -47,9 +35,8 @@ type wireState struct {
 	ClientSize  wireSize             `json:"client_size"`
 	Viewport    *struct{ X, Y int }  `json:"viewport"`
 	AgentSeen   bool                 `json:"agent_seen"`
-	// Wave 3b (gui_bridge_wave3b_test.go).
-	Multifocus []string `json:"multifocus"`
-	PiP        *struct {
+	Multifocus  []string             `json:"multifocus"`
+	PiP         *struct {
 		Window string `json:"window"`
 		Corner string `json:"corner"`
 	} `json:"pip"`
@@ -169,64 +156,42 @@ type wireEvent struct {
 	Keybinds *wireKeybinds `json:"keybinds"`
 }
 
-// guiBridge is one running `tuios gui-bridge`.
 type guiBridge struct {
-	t    *testing.T
-	in   io.WriteCloser
-	wmu  sync.Mutex
-	mu   sync.Mutex
-	cond *sync.Cond
-	// state is the newest state, keybinds the newest keybinds event, and
-	// keybindsSeen how many keybinds events came.
+	t            *testing.T
+	in           io.WriteCloser
+	wmu          sync.Mutex
+	mu           sync.Mutex
+	cond         *sync.Cond
 	state        *wireState
 	keybinds     *wireKeybinds
 	keybindsSeen int
 	results      map[int64]wireResult
-	// events holds every event of another type, in the order it came, for
-	// the Inbox tests (gui_bridge_inbox_test.go).
-	events []json.RawMessage
-	// snaps counts the SNAP frames of each PTY, for an in-place session
-	// switch, which sends a snapshot of every pane of the new session.
-	snaps map[string]int
-	// outputs holds each PTY's OUTPUT bytes, and snapBytes its last SNAP's
-	// VT bytes, for wave 4 (gui_bridge_wave4_test.go).
-	outputs   map[string][]byte
-	snapBytes map[string][]byte
-	// resizes counts the RESIZE frames, one for each PTY resize of any pane.
-	resizes int
-	closed  bool
-	req     int64
-	// log is every command sent and every result, kept as the test's
-	// artifact.
-	log []string
-	// pid is the bridge process, to stop it as a crash does.
-	pid int
-	// gate is held while the test plays a renderer that stopped reading.
-	gate sync.Mutex
+	events       []json.RawMessage
+	snaps        map[string]int
+	outputs      map[string][]byte
+	snapBytes    map[string][]byte
+	resizes      int
+	closed       bool
+	req          int64
+	log          []string
+	pid          int
+	gate         sync.Mutex
 }
 
-// startBridge runs a bridge on session under the isolation root base, sized
-// cols by rows, and waits for its first state.
 func startBridge(t *testing.T, base, session string, cols, rows int) *guiBridge {
 	t.Helper()
 	return startBridgeWith(t, base, bridgeOpts{args: []string{"--session", session}, cols: cols, rows: rows, name: session})
 }
 
-// bridgeOpts are the flags and environment of one bridge. keepDaemon leaves
-// a daemon an earlier bridge started running, for a bridge that comes back.
 type bridgeOpts struct {
 	args       []string
 	env        []string
 	cols, rows int
 	keepDaemon bool
-	// name labels the bridge's artifact.
-	name string
-	// noWait returns before the first state, for a bridge that is expected
-	// to stop.
-	noWait bool
+	name       string
+	noWait     bool
 }
 
-// startBridgeWith runs a bridge with opts under the isolation root base.
 func startBridgeWith(t *testing.T, base string, opts bridgeOpts) *guiBridge {
 	t.Helper()
 	if !opts.keepDaemon {
@@ -273,7 +238,6 @@ func startBridgeWith(t *testing.T, base string, opts bridgeOpts) *guiBridge {
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			// Stopped by its own PID, never by name.
 			_ = cmd.Process.Kill()
 			<-done
 		}
@@ -294,11 +258,8 @@ func startBridgeWith(t *testing.T, base string, opts bridgeOpts) *guiBridge {
 	return b
 }
 
-// bridgeCount numbers the bridges a run starts, for the artifact names.
 var bridgeCount int
 
-// saveLog writes the commands, the results and the last state to
-// $TUIOS_E2E_FRAMES/<test>/<name>.jsonl when that directory is set.
 func (b *guiBridge) saveLog(name string) {
 	if os.Getenv("TUIOS_E2E_FRAMES") == "" {
 		return
@@ -315,13 +276,11 @@ func (b *guiBridge) saveLog(name string) {
 	}
 }
 
-// waitUnpaused returns at once, or when pauseReading lets go of the gate.
 func (b *guiBridge) waitUnpaused() {
 	b.gate.Lock()
 	defer b.gate.Unlock()
 }
 
-// read decodes the bridge's frames until its output closes.
 func (b *guiBridge) read(r io.Reader) {
 	br := bufio.NewReaderSize(r, 256<<10)
 	var hdr [5]byte
@@ -398,7 +357,6 @@ func (b *guiBridge) read(r io.Reader) {
 	b.mu.Unlock()
 }
 
-// send writes one JSON command frame.
 func (b *guiBridge) send(cmd map[string]any) {
 	b.t.Helper()
 	body, err := json.Marshal(cmd)
@@ -421,14 +379,12 @@ func (b *guiBridge) frame(kind byte, body []byte) {
 	}
 }
 
-// input types text into a pane's PTY through the bridge.
 func (b *guiBridge) input(pty, text string) {
 	b.t.Helper()
 	body := append([]byte{byte(len(pty))}, pty...)
 	b.frame(2, append(body, text...))
 }
 
-// call sends a command with a fresh req and returns its result.
 func (b *guiBridge) call(cmd map[string]any) wireResult {
 	b.t.Helper()
 	b.mu.Lock()
@@ -462,7 +418,6 @@ func (b *guiBridge) call(cmd map[string]any) wireResult {
 	}
 }
 
-// mustCall is call for a command that has to succeed.
 func (b *guiBridge) mustCall(cmd map[string]any) wireResult {
 	b.t.Helper()
 	r := b.call(cmd)
@@ -472,7 +427,6 @@ func (b *guiBridge) mustCall(cmd map[string]any) wireResult {
 	return r
 }
 
-// waitLocked waits on the condition for at most d. Called with mu held.
 func (b *guiBridge) waitLocked(d time.Duration) {
 	timer := time.AfterFunc(d, func() {
 		b.mu.Lock()
@@ -483,7 +437,6 @@ func (b *guiBridge) waitLocked(d time.Duration) {
 	timer.Stop()
 }
 
-// waitState waits until the newest state satisfies ok and returns it.
 func (b *guiBridge) waitState(ok func(*wireState) bool, what string) *wireState {
 	b.t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -504,8 +457,6 @@ func (b *guiBridge) waitState(ok func(*wireState) bool, what string) *wireState 
 	}
 }
 
-// tiledPanes gets the session to n tiled panes on the split tree, and returns
-// their window ids in the order they were made.
 func (b *guiBridge) tiledPanes(n int) []string {
 	b.t.Helper()
 	st := b.waitState(func(*wireState) bool { return true }, "a state")
@@ -514,8 +465,6 @@ func (b *guiBridge) tiledPanes(n int) []string {
 		want := i + 1
 		b.waitState(func(s *wireState) bool { return len(s.Windows) == want }, fmt.Sprintf("%d panes", want))
 	}
-	// Tiling is turned on once there are panes: a session with none ignores
-	// the toggle.
 	if st = b.waitState(func(*wireState) bool { return true }, "a state"); !st.Tiling {
 		b.mustCall(map[string]any{"cmd": "action", "name": "toggle_tiling"})
 		b.waitState(func(s *wireState) bool { return s.Tiling }, "tiling on")
@@ -530,7 +479,6 @@ func (b *guiBridge) tiledPanes(n int) []string {
 	return ids
 }
 
-// tree is the split tree of the workspace on screen, or nil.
 func (s *wireState) tree() *wireNode {
 	if s == nil || s.Trees == nil {
 		return nil
@@ -561,7 +509,6 @@ func leafCount(n *wireNode) int {
 	return leafCount(n.A) + leafCount(n.B)
 }
 
-// leaf finds the leaf of a window.
 func leaf(n *wireNode, id string) *wireNode {
 	if n == nil {
 		return nil
@@ -575,7 +522,6 @@ func leaf(n *wireNode, id string) *wireNode {
 	return leaf(n.B, id)
 }
 
-// parentOf finds the split whose child is c.
 func parentOf(n, c *wireNode) *wireNode {
 	if n == nil || (n.A == nil && n.B == nil) {
 		return nil
@@ -589,8 +535,6 @@ func parentOf(n, c *wireNode) *wireNode {
 	return parentOf(n.B, c)
 }
 
-// shape writes a tree with names in place of window ids and with no node ids,
-// so two clients' trees compare equal when they hold the same layout.
 func shape(n *wireNode, names map[string]string) string {
 	if n == nil {
 		return "-"
@@ -604,7 +548,6 @@ func shape(n *wireNode, names map[string]string) string {
 	return fmt.Sprintf("%s%.3f(%s %s)", n.Axis, n.Ratio, shape(n.A, names), shape(n.B, names))
 }
 
-// paneNames names panes A, B, C... in the order given.
 func paneNames(ids []string) map[string]string {
 	names := map[string]string{}
 	for i, id := range ids {
@@ -613,10 +556,6 @@ func paneNames(ids []string) map[string]string {
 	return names
 }
 
-// confirmByObserver attaches a second bridge to the session and checks that
-// the tree it reads back from the daemon has the same shape. The second
-// bridge runs the terminal client's model, so this is what any client that
-// attaches now is given.
 func confirmByObserver(t *testing.T, base, session string, want string, names map[string]string) {
 	t.Helper()
 	obs := startBridge(t, base, session, 120, 40)
@@ -627,9 +566,6 @@ func confirmByObserver(t *testing.T, base, session string, want string, names ma
 	}, "the same tree in a second client: want "+want+", last "+got)
 }
 
-// terminalShowsLayout attaches a terminal client and checks that each pane's
-// marker shows inside the rectangle the bridge gives the pane. The session has
-// one size, so the terminal client and the bridge lay the tree out alike.
 func terminalShowsLayout(t *testing.T, term *tuitest.Terminal, b *guiBridge, markers map[string]string) {
 	t.Helper()
 	st := b.waitState(func(*wireState) bool { return true }, "a state")
@@ -658,8 +594,6 @@ func terminalShowsLayout(t *testing.T, term *tuitest.Terminal, b *guiBridge, mar
 	}
 }
 
-// markPanes prints a marker in every pane through the bridge's input frames,
-// and returns the marker of each pane.
 func markPanes(t *testing.T, b *guiBridge, ids []string) map[string]string {
 	t.Helper()
 	st := b.waitState(func(*wireState) bool { return true }, "a state")
@@ -669,8 +603,6 @@ func markPanes(t *testing.T, b *guiBridge, ids []string) map[string]string {
 		if w == nil {
 			t.Fatalf("no pane %s", id)
 		}
-		// The marker is built by the shell, so the echoed command line does
-		// not contain it.
 		letter := string(rune('A' + i))
 		marks[id] = "PANE" + letter + "MARK"
 		b.input(w.PTY, "printf 'PANE%sMARK\\n' "+letter+"\r")
@@ -693,7 +625,6 @@ func TestGUIBridgeSetRatio(t *testing.T) {
 		t.Errorf("result ratio = %v, want 0.3", r.Ratio)
 	}
 	st := b.waitState(func(s *wireState) bool { return s.tree() != nil && s.tree().Ratio == 0.3 }, "the root at 0.3")
-	// The panes moved with the split: the first pane's side is now 30 %.
 	a := leaf(st.tree(), st.tree().A.Window)
 	extent := st.tree().Rect.W
 	if st.tree().Axis == "y" {
@@ -707,14 +638,11 @@ func TestGUIBridgeSetRatio(t *testing.T) {
 		t.Errorf("near pane is %d cells, want %d", got, want)
 	}
 
-	// The positive half above, and here the hold: 0.99 would leave the far
-	// pane under the smallest pane size, so the split stops short of it.
 	r = b.mustCall(map[string]any{"cmd": "layout", "op": "set-ratio", "split": root.ID, "ratio": 0.99})
 	if r.Ratio >= 0.99 || r.Ratio <= 0.5 {
 		t.Errorf("a 0.99 request came back as %v; want it held below 0.99", r.Ratio)
 	}
 
-	// An unknown split is refused, not guessed at.
 	if r := b.call(map[string]any{"cmd": "layout", "op": "set-ratio", "split": 999999, "ratio": 0.4}); r.OK {
 		t.Errorf("set-ratio on a split that does not exist succeeded")
 	}
@@ -737,7 +665,6 @@ func TestGUIBridgeSwap(t *testing.T) {
 	saveFrame(t, term, "gui-bridge-swap-before")
 
 	b.mustCall(map[string]any{"cmd": "layout", "op": "swap", "a": ids[0], "b": ids[2]})
-	// The tree from before with A and C trading leaves.
 	swapped := paneNames(ids)
 	swapped[ids[0]], swapped[ids[2]] = "C", "A"
 	want := shape(beforeTree, swapped)
@@ -779,7 +706,6 @@ func TestGUIBridgeMove(t *testing.T) {
 	saveFrame(t, term, "gui-bridge-move-after")
 	confirmByObserver(t, base, "gb", shape(st.tree(), names), names)
 
-	// Moving a pane beside itself changes nothing and says so.
 	if r := b.call(map[string]any{"cmd": "layout", "op": "move", "id": ids[1], "target": ids[1], "side": "top"}); r.OK {
 		t.Errorf("a move beside itself succeeded")
 	}
@@ -807,7 +733,6 @@ func TestGUIBridgeMoveRoot(t *testing.T) {
 	}
 	confirmByObserver(t, base, "gb", shape(st.tree(), names), names)
 
-	// The only tiled pane has nothing to go beside.
 	b2 := startBridge(t, t.TempDir(), "solo", 120, 40)
 	solo := b2.tiledPanes(1)
 	if r := b2.call(map[string]any{"cmd": "layout", "op": "move-root", "id": solo[0], "side": "left"}); r.OK {
@@ -873,7 +798,6 @@ func TestGUIBridgeFloatGeometry(t *testing.T) {
 	obs := startBridge(t, base, "gb", 120, 40)
 	obs.waitState(func(s *wireState) bool { return at(s.window(ids[1])) }, "B at 12,6 50x15 in a second client")
 
-	// A tiled pane has no floating geometry to set.
 	if r := b.call(map[string]any{"cmd": "layout", "op": "float-geometry", "id": ids[0], "rect": rect}); r.OK {
 		t.Errorf("float-geometry on a tiled pane succeeded")
 	}
@@ -891,7 +815,6 @@ func TestGUIBridgeAction(t *testing.T) {
 	b.waitState(func(s *wireState) bool { return s.Zoomed == "" }, "no pane zoomed")
 	b.mustCall(map[string]any{"cmd": "action", "name": "split_vertical"})
 	b.waitState(func(s *wireState) bool { return len(s.Windows) == len(ids)+1 }, "a third pane from split_vertical")
-	// The names the renderer's own prefix resolver ends with run too.
 	b.mustCall(map[string]any{"cmd": "action", "name": "workspace_prefix_switch_2"})
 	b.waitState(func(s *wireState) bool { return s.Workspace == 2 }, "workspace 2 from the workspace prefix")
 	b.mustCall(map[string]any{"cmd": "action", "name": "switch_workspace_1"})
@@ -949,8 +872,6 @@ func TestGUIBridgeKeybinds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	// The user's leader is ctrl+a, and a command key of their own under it.
-	// The first-run file has no keybinding tables, only comments about them.
 	if strings.Contains(string(data), "\n[keybindings") {
 		t.Fatalf("the first-run config already has a keybindings table; this edit assumes it has none")
 	}
@@ -992,7 +913,6 @@ func TestGUIBridgeKeybinds(t *testing.T) {
 	if command == "" {
 		t.Fatalf("the user's command key ctrl+a y is not in the bindings")
 	}
-	// The action the key names runs the user's command, a popup by default.
 	b.mustCall(map[string]any{"cmd": "action", "name": command})
 	b.waitState(func(s *wireState) bool {
 		for _, w := range s.Windows {
@@ -1015,8 +935,6 @@ func TestGUIBridgeKeybinds(t *testing.T) {
 	if !menuHas("", "prefix_window") || len(kb.Menus["window"]) == 0 {
 		t.Errorf("the which-key menus are missing rows: %v", kb.Menus[""])
 	}
-	// A renderer in a typed language can reject null where it reads a list,
-	// and drop the whole event with the keys in it.
 	for name, groups := range kb.Menus {
 		if groups == nil {
 			t.Errorf("menu %q is null, want a list", name)
@@ -1032,7 +950,6 @@ func TestGUIBridgeKeybinds(t *testing.T) {
 		t.Errorf("the list rows have no gui scope")
 	}
 
-	// A rebind in the file reaches the renderer without a restart.
 	rebound := edited + "\n[keybindings.gui]\ntoggle_zoom = [\"ctrl+shift+m\"]\n"
 	writeConfigAtomically(t, cfg, []byte(rebound))
 	kb = b.waitKeybinds(2)
@@ -1041,7 +958,6 @@ func TestGUIBridgeKeybinds(t *testing.T) {
 	}
 }
 
-// waitKeybinds waits for the n-th keybinds event and returns it.
 func (b *guiBridge) waitKeybinds(n int) *wireKeybinds {
 	b.t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -1097,14 +1013,7 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 	b := startBridge(t, base, "gb", 160, 50)
 	b.tiledPanes(2)
 	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session at the bridge's own width")
-	// The terminal client takes the session with input of its own: under
-	// latest the client that last had input holds it, and the bridge has
-	// had none yet. Alt+Esc is the window manager's own key, so it types
-	// nothing into a shell. It is pressed until the session follows,
-	// because a key that lands before the attach settles is not counted.
 	term, st := smallClientTakesTheSession(t, b, base, "gb")
-	// The session is smaller than the bridge, so the bridge shows all of
-	// it: no viewport, which is only for a larger session.
 	if st.Viewport != nil {
 		t.Errorf("viewport %+v is set, but the session is smaller than the bridge", *st.Viewport)
 	}
@@ -1118,10 +1027,6 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 	if pty == "" {
 		t.Fatalf("no pane to type in: %+v", st.Windows)
 	}
-	// The terminal client holds the session for a second after its last
-	// key (latestHold), and the loop above may have pressed one more after
-	// the switch. The hand-over is tested past the hold, as in
-	// window_size_test.go.
 	pastLatestHold(t)
 	b.input(pty, "echo TYPED-IN-THE-GUI\r")
 	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session back at the bridge's size after input through it")
@@ -1129,8 +1034,6 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 		t.Errorf("the terminal client does not show a part of the larger session: %v\n%s", err, term.Snapshot())
 	}
 
-	// A command the renderer runs itself, such as a click that moves the focus,
-	// is the person using the renderer too.
 	pastLatestHold(t)
 	waitUntil(t, "the terminal client took the session back to its size", shellTimeout, func() (bool, string) {
 		_ = term.SendKeys(tuitest.Alt(tuitest.Esc))
@@ -1145,11 +1048,6 @@ func TestGUIBridgeInputTakesTheSession(t *testing.T) {
 	b.saveLog("input-takes-the-session")
 }
 
-// smallClientTakesTheSession attaches an 80x24 terminal client to session and
-// gives it input until the session takes its size, under window_size latest.
-// Alt+Esc is the window manager's own key, so it types nothing into a shell.
-// It is pressed until the session follows, because a key that lands before
-// the attach settles is not counted.
 func smallClientTakesTheSession(t *testing.T, b *guiBridge, base, session string) (*tuitest.Terminal, *wireState) {
 	t.Helper()
 	term := startIn(t, base, startOpts{cols: 80, rows: 24, args: []string{"attach", session}})
@@ -1177,8 +1075,6 @@ func TestGUIBridgeResizeTakesTheSession(t *testing.T) {
 	b.tiledPanes(2)
 	b.waitState(func(s *wireState) bool { return s.SessionSize.Cols == 160 }, "the session at the bridge's own width")
 	term, _ := smallClientTakesTheSession(t, b, base, "gb")
-	// Past the terminal client's hold (latestHold), so only the kept size
-	// stands between the bridge and the session.
 	pastLatestHold(t)
 	_ = term.Close()
 	pause(t, "the daemon sees the terminal client go", 1500*time.Millisecond)
@@ -1210,8 +1106,6 @@ func TestGUIBridgeFillsATerminalSession(t *testing.T) {
 	base := t.TempDir()
 	writeConfig(t, base, "[startup]\ntiled = true\n\n[appearance]\nshared_borders = false\n\n[appearance.sidebar]\nenabled = true\nposition = \"right\"\nwidth = 24\n")
 	term := startIn(t, base, startOpts{cols: 97, rows: 40, args: []string{"new", "gb"}})
-	// The config written above opens no pane at startup, so the client opens
-	// on its welcome card. n opens a pane, and is the client's own input.
 	if err := term.WaitForText("new window", bootTimeout); err != nil {
 		t.Fatalf("the terminal client never drew its welcome card: %v\n%s", err, term.Snapshot())
 	}
@@ -1224,9 +1118,6 @@ func TestGUIBridgeFillsATerminalSession(t *testing.T) {
 	_ = term.Close()
 	pause(t, "the daemon sees the terminal client go", 1500*time.Millisecond)
 
-	// The renderer keeps 20 px across and 40 px down of each pane's slot for
-	// its own frame. The slot is the pane's cells and one gap cell, so the
-	// guest gets one column and one row less than the pane: (w+1)-2 and (h+1)-2.
 	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "gb", "--cell-width", "10", "--cell-height", "20", "--insets", "40,10,10,0"}, cols: 170, rows: 52, keepDaemon: true, name: "gb"})
 	paneFills := func(what string) {
 		t.Helper()
@@ -1241,9 +1132,6 @@ func TestGUIBridgeFillsATerminalSession(t *testing.T) {
 			if w.Border != 0 {
 				t.Errorf("%s: pane %s has a border of %d cells, so its guest is smaller than its tile", what, w.ID, w.Border)
 			}
-			// The guest's own word for its size. Asked again until it
-			// matches, because the resize and the keys reach the daemon on
-			// separate paths, and a guest asked first answers with its old size.
 			marker := fmt.Sprintf("SIZE-%d-%d", w.H-1, w.W-1)
 			said := regexp.MustCompile(`SIZE-\d+-\d+`)
 			last := ""
@@ -1268,24 +1156,14 @@ func TestGUIBridgeFillsATerminalSession(t *testing.T) {
 	b.tiledPanes(2)
 	paneFills("with two panes")
 
-	// A terminal client that is still attached lays the panes out too, and
-	// gives each guest its whole rectangle. Once the renderer has the session
-	// back, the bridge gives the panes its own sizes again.
 	_, st := smallClientTakesTheSession(t, b, base, "gb")
 	pastLatestHold(t)
 	b.input(st.Windows[0].PTY, "\r")
-	// A new pane moves the rectangles. The bridge resizes the PTYs first, and
-	// the terminal client second, when the bridge's state reaches it. So the
-	// terminal client's sizes are the last ones the daemon has, and only the
-	// bridge saying its own again can put them right.
 	b.tiledPanes(3)
 	paneFills("with a terminal client still attached")
 	b.saveLog("fills-a-terminal-session")
 }
 
-// paneBoxes reads every pane of session as a daemon client sees it: the box, and
-// the PTY's real size from outside the pane. It returns "" until every pane
-// answers.
 func paneBoxes(t *testing.T, base, session string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "ls", "--json")
@@ -1335,8 +1213,6 @@ func paneBoxes(t *testing.T, base, session string) string {
 	return strings.Join(rows, "; ")
 }
 
-// waitPaneBoxes waits until paneBoxes returns want, and returns what it read
-// last.
 func waitPaneBoxes(t *testing.T, base, session, want string) string {
 	t.Helper()
 	got := ""
@@ -1347,9 +1223,6 @@ func waitPaneBoxes(t *testing.T, base, session, want string) string {
 	return got
 }
 
-// pastLatestHold waits out the terminal client's hold on the session after its
-// last key (latestHold), so the hand-over that follows is tested past the hold,
-// as in window_size_test.go. The end of the hold is not on screen.
 func pastLatestHold(t *testing.T) {
 	t.Helper()
 	pause(t, "the terminal client holds the session for latestHold after its last key", 1500*time.Millisecond)
@@ -1411,10 +1284,6 @@ func TestGUIBridgeLeavesATerminalSessionAsItWas(t *testing.T) {
 				t.Errorf("the terminal client came back after the bridge left:\n got %s\nwant %s", got, before)
 			}
 
-			// The session's rail reserve counts a client of the session's own
-			// size, so here the panes may stop short of the bridge's edge in
-			// the same size case. Nothing may be left behind, and nothing may
-			// fight.
 			b = bridge()
 			b.waitState(func(s *wireState) bool {
 				return s.SessionSize == wireSize{Cols: tc.cols, Rows: tc.rows}
@@ -1466,7 +1335,6 @@ func TestGUIBridgeAttachTakesTheSession(t *testing.T) {
 	first.tiledPanes(1)
 	smallClientTakesTheSession(t, first, base, "gb")
 	_ = first.in.Close()
-	// Past the terminal client's hold (latestHold).
 	pastLatestHold(t)
 	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "gb"}, cols: 170, rows: 52, keepDaemon: true, name: "gb-second"})
 	b.waitState(func(s *wireState) bool {
@@ -1538,8 +1406,6 @@ func TestGUIBridgeGitBranch(t *testing.T) {
 	}
 }
 
-// along is a node's extent and position along a split's axis: width and x for
-// "x", height and y for "y".
 func along(r wireRect, axis string) (pos, extent int) {
 	if axis == "y" {
 		return r.Y, r.H
@@ -1547,8 +1413,6 @@ func along(r wireRect, axis string) (pos, extent int) {
 	return r.X, r.W
 }
 
-// splitAcross is the split action that cuts a pane across axis: a pane cut
-// along x gets a new pane beside it.
 func splitAcross(axis string) string {
 	if axis == "y" {
 		return "split_horizontal"
@@ -1565,9 +1429,6 @@ func TestGUIBridgeSplitRefusesSmallPanes(t *testing.T) {
 	ids := b.tiledPanes(2)
 	root := b.waitState(func(*wireState) bool { return true }, "a state").tree()
 	_, extent := along(root.Rect, root.Axis)
-	// The first pane gets 40 cells along the root's axis on x (halves of 20
-	// and 19 plus the gap), or 10 rows on y (5 and 4 plus the gap): too small
-	// to split again that way, by one cell.
 	want := 40
 	if root.Axis == "y" {
 		want = 10
@@ -1585,13 +1446,11 @@ func TestGUIBridgeSplitRefusesSmallPanes(t *testing.T) {
 	if r.OK || !strings.Contains(r.Error, "too small") {
 		t.Fatalf("%s on a %d-cell pane: ok=%v error=%q; want a refusal that says the pane is too small", splitAcross(root.Axis), want, r.OK, r.Error)
 	}
-	// Give a split that slipped through time to arrive.
 	pause(t, "a split that slipped through has time to arrive", 500*time.Millisecond)
 	if st = b.waitState(func(*wireState) bool { return true }, "a state"); len(st.Windows) != 2 {
 		t.Fatalf("the refused split still made a pane: %d panes", len(st.Windows))
 	}
 
-	// One cell more and the same split runs: both halves are at the minimum.
 	b.mustCall(map[string]any{"cmd": "layout", "op": "set-ratio", "split": root.ID, "ratio": (float64(want+1) + 0.5) / float64(extent)})
 	b.waitState(func(s *wireState) bool {
 		_, e := along(leaf(s.tree(), ids[0]).Rect, root.Axis)
@@ -1620,7 +1479,6 @@ func TestGUIBridgeSetRatioUnderMinimum(t *testing.T) {
 	b.mustCall(map[string]any{"cmd": "layout", "op": "set-ratio", "split": root.ID, "ratio": 0.3})
 	b.waitState(func(s *wireState) bool { return s.tree().Ratio == 0.3 }, "the root at 0.3")
 
-	// Shrink the grid along the axis until 0.3 of it is under the minimum.
 	cols, rows, size := 50, 40, 50
 	if axis == "y" {
 		cols, rows, size = 120, 14, 14
@@ -1637,8 +1495,6 @@ func TestGUIBridgeSetRatioUnderMinimum(t *testing.T) {
 		return e == size && a == cur
 	}, fmt.Sprintf("the root %d cells long with the first pane at %d", size, cur))
 
-	// One cell up from where it is. The minimum is further, and the line
-	// must not jump there.
 	step := (float64(cur+1) + 0.5) / float64(size)
 	r := b.mustCall(map[string]any{"cmd": "layout", "op": "set-ratio", "split": root.ID, "ratio": step})
 	if r.Ratio != step {
@@ -1649,7 +1505,6 @@ func TestGUIBridgeSetRatioUnderMinimum(t *testing.T) {
 		return a == cur+1
 	}, fmt.Sprintf("the first pane at %d cells", cur+1))
 
-	// Smaller than it is now: held at the current line.
 	r = b.mustCall(map[string]any{"cmd": "layout", "op": "set-ratio", "split": root.ID, "ratio": 0.05})
 	if got := int(float64(size) * r.Ratio); got != cur+1 {
 		t.Errorf("a shrink came back as %v (line %d); want it held at the current line %d", r.Ratio, got, cur+1)
@@ -1665,7 +1520,6 @@ func TestGUIBridgeSetRatioUnderMinimum(t *testing.T) {
 func TestGUIBridgeZoomKeepsHiddenPanes(t *testing.T) {
 	base := t.TempDir()
 	pinPreV080Looks(t, base)
-	// The bridge reads this file: a zoom of 95 % of the screen.
 	cfg := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")
 	data, err := os.ReadFile(cfg)
 	if err != nil {
@@ -1674,30 +1528,20 @@ func TestGUIBridgeZoomKeepsHiddenPanes(t *testing.T) {
 	if !strings.Contains(string(data), "zoom_size = 100") {
 		t.Fatalf("the pinned config does not set zoom_size = 100; this edit assumes it does")
 	}
-	// Shared borders on, so the session's terminal client and the bridge work
-	// out the same rectangles, and a resize of a hidden pane can only be the
-	// bridge's zoom. With shared borders off, a terminal client retiles at its
-	// own rectangles on the zoom, and the bridge then says its sizes again.
 	if strings.Contains(string(data), "\nshared_borders") {
 		t.Fatalf("the pinned config already sets shared_borders; this edit assumes it does not")
 	}
 	writeConfigAtomically(t, cfg, []byte(strings.Replace(string(data), "zoom_size = 100", "zoom_size = 95\nshared_borders = true", 1)))
-	// The terminal client reads its own, with a zoom of the whole screen, so
-	// any resize of a hidden pane comes from the bridge.
 	termHome := filepath.Join(base, "term-config")
 	pinPreV080LooksIn(t, base, termHome)
 
 	b := startBridge(t, base, "gb", 120, 40)
 	ids := b.tiledPanes(3)
 	term := attachIn(t, base, "gb", startOpts{cols: 120, rows: 40, env: []string{"XDG_CONFIG_HOME=" + termHome}})
-	// The attach can resize the panes once. Wait for that to pass before
-	// the programs start listening.
 	pause(t, "the attach can resize the panes once; the programs start listening after it", time.Second)
 	st := b.waitState(func(*wireState) bool { return true }, "a state")
 	for i, id := range ids {
 		w := st.window(id)
-		// Pane i prints SIG4i on a resize. The command line shows the sum
-		// unworked, so only a resize puts the number on screen.
 		b.input(w.PTY, fmt.Sprintf("clear; sh -c 'trap \"echo SIG\\$((40+%d))\" WINCH; while :; do sleep 0.2; done'\r", i))
 	}
 	pause(t, "the shells start their WINCH traps", time.Second)
@@ -1712,7 +1556,6 @@ func TestGUIBridgeZoomKeepsHiddenPanes(t *testing.T) {
 	pause(t, "the zoomed frame settles before the zoom toggles back", time.Second)
 	b.mustCall(map[string]any{"cmd": "action", "name": "toggle_zoom"})
 	b.waitState(func(s *wireState) bool { return s.Zoomed == "" }, "no pane zoomed")
-	// The hidden panes' programs wake every 200 ms. A second is five of them.
 	pause(t, "the hidden panes programs wake every 200 ms, so this lets five of them run", 1500*time.Millisecond)
 	snap := term.Snapshot()
 	saveFrame(t, term, "gui-bridge-zoom-after")

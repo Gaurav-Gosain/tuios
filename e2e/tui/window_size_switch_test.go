@@ -11,15 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The latest policy across a session switch: a person at one client leaves
-// the session for another and comes back, while a second client stays on the
-// first session and nobody touches it.
-
 const wsOther = "other"
 
-// switchClient moves the client running in term to the session, through
-// switch-session as the tower and the session switcher do, and waits for the
-// daemon to list it there.
 func switchClient(t *testing.T, base string, term *tuitest.Terminal, session string) {
 	t.Helper()
 	id := ""
@@ -58,8 +51,6 @@ func switchClient(t *testing.T, base string, term *tuitest.Terminal, session str
 	t.Fatalf("the client (pid %d) never showed %s", term.Pid(), session)
 }
 
-// wsSizes samples the size the daemon settles ws on until stop closes, and
-// sends every size it saw, sorted.
 func wsSizes(t *testing.T, base string, stop <-chan struct{}) <-chan string {
 	sizes := make(chan string, 1)
 	go func() {
@@ -111,7 +102,6 @@ func TestWindowSizeLatestRoundTripKeepsSize(t *testing.T) {
 	stop := make(chan struct{})
 	sizes := wsSizes(t, base, stop)
 	switchClient(t, base, big, wsOther)
-	// Past the hold, so a hand-over to the small client would have landed.
 	time.Sleep(2 * wsHoldGap)
 	switchClient(t, base, big, wsSession)
 	time.Sleep(wsHoldGap)
@@ -120,7 +110,6 @@ func TestWindowSizeLatestRoundTripKeepsSize(t *testing.T) {
 		t.Fatalf("over the round trip ws was %s, want only %s", got, want)
 	}
 
-	// The small client takes it with its first key, as before.
 	activity(t, small)
 	waitWSSize(t, base, wsSmallCols, wsSmallRows, "after input in the small client")
 }
@@ -153,7 +142,6 @@ func TestWindowSizeLatestReturnKeepsItsInput(t *testing.T) {
 	switchClient(t, base, big, wsOther)
 	time.Sleep(wsHoldGap)
 	switchClient(t, base, big, wsSession)
-	// Past the hold, so a hand-over to the small client would have landed.
 	time.Sleep(2 * wsHoldGap)
 	close(stop)
 	if got, want := <-sizes, fmt.Sprintf("%dx%d", wsBigCols, wsBigRows); got != want {

@@ -10,22 +10,6 @@ import (
 	"time"
 )
 
-// The waits every test uses. A test waits on the thing it needs, never on a
-// guess of how long that takes:
-//
-//   - waitUntil polls a probe until it is done, and says what it saw last when
-//     it gives up;
-//   - stayTrue proves that something holds for a while, which is the only
-//     honest form of "nothing happens";
-//   - pause is the one bare pause, for a delay with nothing to observe, and it
-//     names its reason. TestNoNewBareSleeps lets the number of time.Sleep calls
-//     in a file only fall.
-//
-// TUIOS_E2E_TIME_SCALE multiplies every timeout and every pause, so a slow
-// machine scales the whole suite at once.
-
-// failer is what the waits need of a test: *testing.T, or a fake that records
-// the failure.
 type failer interface {
 	Helper()
 	Fatalf(format string, args ...any)
@@ -41,7 +25,6 @@ var (
 	timeScaleValue = 1.0
 )
 
-// scaled is d times TUIOS_E2E_TIME_SCALE.
 func scaled(d time.Duration) time.Duration {
 	timeScaleOnce.Do(func() {
 		if v, err := strconv.ParseFloat(os.Getenv("TUIOS_E2E_TIME_SCALE"), 64); err == nil && v > 0 {
@@ -51,11 +34,6 @@ func scaled(d time.Duration) time.Duration {
 	return time.Duration(float64(d) * timeScaleValue)
 }
 
-// waitUntil polls probe until it reports done, within timeout. The probe
-// returns what it saw, so the failure says what the state was when the wait
-// ran out. The first look is immediate, and the gap between looks grows from
-// pollFirst to pollMax: a condition that already holds costs nothing, and one
-// that takes seconds is not hammered.
 func waitUntil(t failer, what string, timeout time.Duration, probe func() (done bool, state string)) {
 	t.Helper()
 	timeout = scaled(timeout)
@@ -76,9 +54,6 @@ func waitUntil(t failer, what string, timeout time.Duration, probe func() (done 
 	}
 }
 
-// stayTrue checks probe at every poll for d, and fails at the first look that
-// is not ok. It proves the condition held for that long, where a bare pause
-// proves only that time passed.
 func stayTrue(t failer, what string, d time.Duration, probe func() (ok bool, state string)) {
 	t.Helper()
 	d = scaled(d)
@@ -94,16 +69,12 @@ func stayTrue(t failer, what string, d time.Duration, probe func() (ok bool, sta
 	}
 }
 
-// pause waits for d, for a delay with nothing to observe: a product timer
-// that has no visible end, or the pace of a gesture. why says which, and shows
-// with -v.
 func pause(t *testing.T, why string, d time.Duration) {
 	t.Helper()
 	t.Logf("pause %s: %s", d, why)
 	time.Sleep(scaled(d))
 }
 
-// fakeT records the first failure and stops the wait, as t.Fatalf does.
 type fakeT struct{ msg string }
 
 func (*fakeT) Helper() {}
@@ -113,8 +84,6 @@ func (f *fakeT) Fatalf(format string, args ...any) {
 	panic(f)
 }
 
-// failureOf runs fn against a fake test and returns the message it failed with,
-// or "" when it did not fail.
 func failureOf(fn func(failer)) (msg string) {
 	f := &fakeT{}
 	defer func() {
@@ -157,10 +126,6 @@ func TestWaitsFailWithTheirAssertionAndLastState(t *testing.T) {
 	}
 }
 
-// waitTextOf polls read until ok accepts what it returns, and returns it. The
-// failure prints what the source held last, so a test that waits on a file, a
-// listing or a capture says what it saw. It is the one shape behind the
-// wait helpers that poll text.
 func waitTextOf(t failer, what string, timeout time.Duration, read func() string, ok func(string) bool) string {
 	t.Helper()
 	var got string
@@ -171,8 +136,6 @@ func waitTextOf(t failer, what string, timeout time.Duration, read func() string
 	return got
 }
 
-// waitFileHas waits until the file at path exists and ok accepts its text, and
-// returns the text. A file that is not there yet reads as empty.
 func waitFileHas(t failer, path, what string, timeout time.Duration, ok func(string) bool) string {
 	t.Helper()
 	return waitTextOf(t, what+" ("+path+")", timeout, func() string {
@@ -181,7 +144,6 @@ func waitFileHas(t failer, path, what string, timeout time.Duration, ok func(str
 	}, ok)
 }
 
-// waitFileExists waits until path exists.
 func waitFileExists(t failer, path, what string, timeout time.Duration) {
 	t.Helper()
 	waitUntil(t, what, timeout, func() (bool, string) {

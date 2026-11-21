@@ -511,10 +511,6 @@ sections = "sessions"
 	if err := term.WaitForText("Session: dual-input", uiTimeout); err != nil {
 		t.Fatalf("right rail did not attach back: %v\n%s", err, term.Snapshot())
 	}
-	// Empty space belongs to the left rail too: click there to move keyboard
-	// focus into its own nav list, then choose the next session with j/Enter.
-	// Assert keyboard ownership changed on the actual left rail, not merely
-	// that a session row shared with the right rail can be activated there.
 	leftBefore, rightBefore := term.Screen().Cell(27, 12).Fg, term.Screen().Cell(92, 12).Fg
 	mouseClick(t, term, 4, 12, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -564,8 +560,6 @@ command = "printf 'LEFT-CUSTOM-ROW\\n'"
 		for y := range rows {
 			line := []rune(s.Line(y))
 			left = left || strings.Contains(string(line[:min(28, len(line))]), "LEFT-CUSTOM-ROW")
-			// Screen.Line may omit trailing blank cells. Only require
-			// enough cells to reach the right edge, not all screen columns.
 			if len(line) > cols-28 {
 				right = right || strings.Contains(string(line[cols-28:]), "RIGHT-CUSTOM-ROW")
 			}
@@ -574,8 +568,6 @@ command = "printf 'LEFT-CUSTOM-ROW\\n'"
 	}, uiTimeout); err != nil {
 		t.Fatalf("both independently configured custom sections did not render on their edges: %v\n%s", err, term.Snapshot())
 	}
-	// The snapshot is the repeatable artifact: run this test with -v to see
-	// the real client's settled screen, including both edge regions.
 	t.Logf("dual-rail screen:\n%s", term.Snapshot())
 	alive(t, term, "with both rails visible")
 }

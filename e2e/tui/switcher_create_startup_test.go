@@ -30,9 +30,6 @@ func TestSwitcherCreateAppliesStartup(t *testing.T) {
 	waitWindowCount(t, term, 1, "home's first pane")
 	waitTilingMode(t, base, "home", "tiling")
 
-	// start_in_terminal_mode is off, so the client is in window mode already.
-
-	// The switcher, with a name that matches no session.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
 		t.Fatalf("open the session switcher: %v", err)
 	}
@@ -53,7 +50,6 @@ func TestSwitcherCreateAppliesStartup(t *testing.T) {
 	newWindowFills(t, base, "fresh")
 	saveFrame(t, term, "switcher-create-tiled")
 
-	// The palette's "New session", from the session the switcher made.
 	runPaletteEntry(t, term, "New session")
 	if err := term.WaitForText("Session: session-0", uiTimeout); err != nil {
 		t.Fatalf("the palette did not create and switch to session-0: %v\n%s", err, term.Snapshot())
@@ -64,9 +60,6 @@ func TestSwitcherCreateAppliesStartup(t *testing.T) {
 	alive(t, term, "after creating sessions from the switcher and the palette")
 }
 
-// waitTilingMode waits for session-info to report the tiling mode want for
-// session. The client sends [startup] tiling to the daemon after the switch, so
-// the first read can come before it.
 func waitTilingMode(t *testing.T, base, session, want string) {
 	t.Helper()
 	var info daemonSessionInfo
@@ -84,8 +77,6 @@ func waitTilingMode(t *testing.T, base, session, want string) {
 	}
 }
 
-// newWindowFills opens a window in session, its first, and fails unless it
-// fills most of the session. A floating first window is a box half the size.
 func newWindowFills(t *testing.T, base, session string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "new-window", "-s", session); err != nil {

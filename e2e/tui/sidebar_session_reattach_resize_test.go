@@ -38,9 +38,6 @@ session = "side"
 	}, bootTimeout); err != nil {
 		t.Fatalf("first attach: %v\n%s", err, first.Snapshot())
 	}
-	// Arm the guest shell after the first legitimate resize. The command
-	// clears its visible text so the only later occurrence of the marker
-	// must come from a second, unnecessary window-size signal.
 	for _, command := range []string{`trap 'printf "WINCH_MARK\n"' WINCH`, `printf '\033[2J\033[H'`} {
 		if out, err := tuiosCLI(t, base, "send-keys", "-s", "side", "-w", id, "--literal", command); err != nil {
 			t.Fatalf("arm WINCH trap: %v\n%s", err, out)

@@ -9,15 +9,12 @@ import (
 	"time"
 )
 
-// herdrWorkspaceStream is an events.subscribe stream of herdr's workspace
-// lifecycle events: created, renamed and closed.
 type herdrWorkspaceStream struct {
 	conn net.Conn
 	r    *bufio.Reader
 	log  strings.Builder
 }
 
-// herdrWorkspaceEvent is one line of the stream.
 type herdrWorkspaceEvent struct {
 	Event string `json:"event"`
 	Data  struct {
@@ -54,7 +51,6 @@ func subscribeHerdrWorkspaces(t *testing.T, base string) *herdrWorkspaceStream {
 	return s
 }
 
-// next reads the stream's next event, failing with why when none arrives.
 func (s *herdrWorkspaceStream) next(t *testing.T, why string) herdrWorkspaceEvent {
 	t.Helper()
 	_ = s.conn.SetReadDeadline(time.Now().Add(uiTimeout))
@@ -70,8 +66,6 @@ func (s *herdrWorkspaceStream) next(t *testing.T, why string) herdrWorkspaceEven
 	return ev
 }
 
-// renamed reads the next event and fails unless it is the one
-// workspace_renamed for workspace, with label.
 func (s *herdrWorkspaceStream) renamed(t *testing.T, workspace, label, why string) {
 	t.Helper()
 	ev := s.next(t, why)
@@ -81,7 +75,6 @@ func (s *herdrWorkspaceStream) renamed(t *testing.T, workspace, label, why strin
 	}
 }
 
-// herdrWorkspaceLabel is a workspace's label in session.snapshot.
 func herdrWorkspaceLabel(t *testing.T, base, workspace string) string {
 	t.Helper()
 	snap := herdrCall(t, base, "session.snapshot", map[string]any{})["snapshot"].(map[string]any)
@@ -94,7 +87,6 @@ func herdrWorkspaceLabel(t *testing.T, base, workspace string) string {
 	return ""
 }
 
-// herdrWorkspaceByLabel is the id of the workspace labelled label.
 func herdrWorkspaceByLabel(t *testing.T, base, label string) string {
 	t.Helper()
 	snap := herdrCall(t, base, "session.snapshot", map[string]any{})["snapshot"].(map[string]any)

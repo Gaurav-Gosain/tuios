@@ -12,40 +12,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// Two clients of different sizes on one session, each with a rail on the
-// right edge, drawn the way the report saw it: a laptop attached over a host
-// link, and the desktop the session's daemon runs on attached locally.
-//
-// The report: the desktop, the wider client, showed its panes ending three
-// columns before its rail, and a second blank strip after the rail, with
-// [daemon] window_size = "latest" already set.
-//
-// What was wrong, in order of the columns:
-//   - The three columns. The daemon laid the panes out around the largest
-//     chrome reserve any client asked for, so the laptop's 31 column rail
-//     took 31 columns off the desktop's layout, which only draws a 28 column
-//     rail. Under latest the reserve is now the latest client's own.
-//   - The strip after the rail. Until the desktop has input the laptop is
-//     the latest client (an attach does not take the size, see
-//     window_size.go), and the desktop drew all of its chrome inside the
-//     laptop's size: the rail sat just past the panes, and the rest of the
-//     screen was blank. The rail and the dock now sit at the client's own
-//     edges, and the space between is a dotted pattern with a line that
-//     names the laptop.
-//
-// How these tests could pass wrongly, written down first:
-//   - The rail could be found at the right edge because the session is the
-//     desktop's size. The first stage checks the rail while the session is
-//     the laptop's 140 columns, read from session-info.
-//   - A pane border could be mistaken for the rail's. The rail is found by
-//     its header text, on the row where it starts, and the column checked is
-//     the rail's first.
-//   - The pattern could be the shell's output. The pane prints nothing like
-//     it, and the dots are checked in the columns past the session's width.
-//   - The hint could name the wrong client. The laptop runs in a user and UTS
-//     namespace whose host name is "macbook", when unshare can make one, and
-//     the hint has to say that name.
-
 const (
 	linkRail        = 28
 	linkMacRail     = 31
@@ -58,14 +24,10 @@ const (
 	leftoverHint    = "sets the session size"
 )
 
-// rightRailConfig is a rail on the right edge, width columns wide.
 func rightRailConfig(width string) string {
 	return "[appearance.sidebar]\nenabled = true\nposition = \"right\"\nwidth = " + width + "\n"
 }
 
-// railLeft is the first column of the right rail: the column of the border
-// on the row whose text holds the rail's "sessions" header. -1 when no rail
-// is drawn.
 func railLeft(s tuitest.Screen) int {
 	_, rows := s.Size()
 	for y := range rows {
@@ -79,9 +41,6 @@ func railLeft(s tuitest.Screen) int {
 	return -1
 }
 
-// renamedHostBinary is a wrapper that runs the tuios binary in a user and
-// UTS namespace whose host name is name, or "" when unshare cannot make one
-// on this machine.
 func renamedHostBinary(t *testing.T, name string) string {
 	t.Helper()
 	unshare, err := exec.LookPath("unshare")
@@ -99,7 +58,6 @@ func renamedHostBinary(t *testing.T, name string) string {
 	return path
 }
 
-// saveSizeFrame keeps the screen as text and as a PNG.
 func saveSizeFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	dir := artifactDir(t)
@@ -107,8 +65,6 @@ func saveSizeFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	savePNG(t, term.Screen(), shot.XTermPalette(), dir, name)
 }
 
-// waitSizeScreen waits for cond on the screen. On a timeout it keeps the
-// screen as "failed" beside the other frames, and fails with it.
 func waitSizeScreen(t *testing.T, term *tuitest.Terminal, what string, cond func(tuitest.Screen) bool) {
 	t.Helper()
 	if err := term.WaitFor(cond, uiTimeout); err != nil {
@@ -167,8 +123,6 @@ func linkClientsUseTheirOwnEdges(t *testing.T, policy string) {
 	waitWindowCount(t, mac, 2, "two windows on the laptop")
 	enableTiling(t, mac)
 
-	// startIn, not attachIn: attachIn waits for the dock on the last rows,
-	// which is the thing under test.
 	deskTerm := startIn(t, desk, startOpts{cols: linkDeskCols, rows: linkDeskRows, args: []string{"attach", wsSession}})
 	waitSizeScreen(t, deskTerm, "the desktop never drew the session", func(s tuitest.Screen) bool {
 		return railLeft(s) >= 0
@@ -178,9 +132,6 @@ func linkClientsUseTheirOwnEdges(t *testing.T, policy string) {
 		t.Fatalf("with the laptop latest the session is %dx%d under %s, want %dx%d under latest", w, h, policy, linkMacCols, linkMacRows)
 	}
 
-	// Stage 1: the laptop sets the size. The desktop's rail is at its own
-	// right edge, and the space the session does not reach is the pattern
-	// and the hint, naming the laptop.
 	waitSizeScreen(t, deskTerm, "the desktop's rail is not at its right edge while the laptop sets the size", func(s tuitest.Screen) bool {
 		return railLeft(s) == linkDeskCols-linkRail
 	})
@@ -200,8 +151,6 @@ func linkClientsUseTheirOwnEdges(t *testing.T, policy string) {
 	})
 	saveSizeFrame(t, deskTerm, "desktop-laptop-sets-size")
 
-	// Stage 2: input on the desktop takes the size. Its panes reach its own
-	// rail: the column before the rail is a pane's border, not blank.
 	time.Sleep(wsHoldGap)
 	activity(t, deskTerm)
 	waitWSSize(t, desk, linkDeskCols, linkDeskRows, "after input on the desktop")
@@ -213,7 +162,6 @@ func linkClientsUseTheirOwnEdges(t *testing.T, policy string) {
 	})
 	saveSizeFrame(t, deskTerm, "desktop-sets-size")
 
-	// The laptop shows part of the session, with its own rail at its own edge.
 	waitMark(t, mac, true, "the laptop, with the desktop latest")
 	waitSizeScreen(t, mac, "the laptop's rail is not at its right edge", func(s tuitest.Screen) bool {
 		return railLeft(s) == linkMacCols-linkMacRail
@@ -262,7 +210,6 @@ func TestWindowSizeSmallestFillsTheLeftover(t *testing.T) {
 	if dots == 0 {
 		t.Fatalf("no dot in the space past the session\n%s", big.Snapshot())
 	}
-	// The dock is at the client's bottom edge, not under the session.
 	if line := s.Line(wsBigRows - 2); !strings.Contains(line, "────") {
 		t.Fatalf("the dock's rule is not on the big client's last rows: %q\n%s", line, big.Snapshot())
 	}
@@ -270,7 +217,6 @@ func TestWindowSizeSmallestFillsTheLeftover(t *testing.T) {
 	saveSizeFrame(t, small, "smallest-small")
 }
 
-// leftRailConfig is a rail on the left edge, width columns wide.
 func leftRailConfig(width string) string {
 	return "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = " + width + "\n"
 }
@@ -303,8 +249,6 @@ func TestWindowSizeLeftoverTakesNoClick(t *testing.T) {
 	if boxLeft == 0 {
 		t.Fatalf("the session's panes start at column 0, so the dots cover no pane column: %+v", rects)
 	}
-	// The focus goes to the left pane first. The dots cover layout columns
-	// of the right pane, so a click that leaks through would move it there.
 	left, right := rects[0], rects[1]
 	if right.X < left.X {
 		left, right = right, left
@@ -326,8 +270,6 @@ func TestWindowSizeLeftoverTakesNoClick(t *testing.T) {
 	focusOn(left, "the left pane")
 	focused := left.ID
 
-	// The first dot on a row inside the panes, and every dot after it that
-	// is still inside the session's 80 columns.
 	row := 5
 	var dots []int
 	waitSizeScreen(t, big, "the big client draws no dots", func(s tuitest.Screen) bool {
@@ -349,8 +291,6 @@ func TestWindowSizeLeftoverTakesNoClick(t *testing.T) {
 		t.Fatalf("a click on the dots at columns %v moved the focus from %s to %s", dots, focused, now)
 	}
 
-	// The positive half: a click inside the right pane, where the big client
-	// draws it, moves the focus there.
 	focusOn(right, "the right pane")
 }
 
@@ -372,7 +312,6 @@ func TestWindowSizeRailOverLeftoverTakesClicks(t *testing.T) {
 	if err := big.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatalf("open the rail: %v", err)
 	}
-	// The row of the pane that is not focused, in the rail at the right edge.
 	railX := wsBigCols - linkRail
 	row, col := -1, -1
 	waitSizeScreen(t, big, "the rail never opened with both terminal rows", func(s tuitest.Screen) bool {

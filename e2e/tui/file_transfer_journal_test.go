@@ -15,17 +15,6 @@ import (
 	"time"
 )
 
-// Copies that outlive their daemon, copies that share a destination, writes a
-// linked machine may not make, and the events a copy sends.
-//
-// What would pass a weaker test and fail these: a job kept only in memory (a
-// restart loses it, and its part stays as a hidden file), one part name per
-// destination (two copies to one file write into each other and fail their
-// check), a link write checked by its name and not its real path (a link in
-// the home folder carries it into ~/.ssh), and a copy that polls instead of
-// saying what it does (no transfer events, or one progress event per write).
-
-// partsIn lists the part files in dir.
 func partsIn(t *testing.T, dir string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
@@ -41,7 +30,6 @@ func partsIn(t *testing.T, dir string) []string {
 	return out
 }
 
-// daemonPID is the pid of the daemon of base.
 func daemonPID(t *testing.T, base string) int {
 	t.Helper()
 	var hello struct {
@@ -317,9 +305,6 @@ func TestALinkCannotWriteKeysOrLeaveTheHome(t *testing.T) {
 	if err := os.Symlink(filepath.Join(farHome, ".ssh"), filepath.Join(farHome, "innocent")); err != nil {
 		t.Fatal(err)
 	}
-	// build lets a machine write anywhere in its home folder (hubWithFileHost
-	// writes that), so this test is
-	// about the deny list that holds inside every root, not about the roots.
 	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
 
 	evil := filepath.Join(base, "evil.pub")
@@ -342,9 +327,6 @@ func TestALinkCannotWriteKeysOrLeaveTheHome(t *testing.T) {
 		filepath.Join(remote, "outside.txt"),
 	}
 	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
-		// A disk that folds case opens .ssh under another spelling; on a
-		// case-sensitive disk .SSH is a different folder that does not exist,
-		// so the copy fails as no_file, not forbidden.
 		dsts = append(dsts, filepath.Join(farHome, ".SSH", "authorized_keys"))
 	}
 	for _, dst := range dsts {
@@ -398,7 +380,6 @@ func TestALinkCannotWriteKeysOrLeaveTheHome(t *testing.T) {
 		t.Errorf("ASSERTION: a file arrived outside build's home")
 	}
 
-	// The positive half.
 	far.must("file-mkdir", map[string]any{"path": "~/inbox"}, nil)
 	mtime := time.Date(2023, 7, 1, 8, 0, 0, 0, time.UTC)
 	if err := os.Chtimes(evil, mtime, mtime); err != nil {
@@ -417,8 +398,6 @@ func TestALinkCannotWriteKeysOrLeaveTheHome(t *testing.T) {
 	if !fi.ModTime().Equal(mtime) {
 		t.Errorf("ASSERTION: the copy on build does not keep the original's time: %v, want %v", fi.ModTime().UTC(), mtime)
 	}
-	// A link inside the home folder to another folder there is a fine
-	// place to write: the write lands where the link points.
 	if err := os.Symlink(filepath.Join(farHome, "inbox"), filepath.Join(farHome, "projects")); err != nil {
 		t.Fatal(err)
 	}
@@ -439,14 +418,8 @@ func TestALinkCannotWriteKeysOrLeaveTheHome(t *testing.T) {
 	saveTransferArtifact(t, "link-write-confinement", map[string]any{"copies": copies, "verbs": verbs, "allowed": ok, "modes": modes})
 }
 
-// linkCommitModes is issue 1285: a file a linked machine commits with perm
-// 0o6777 must land with the receiving process's umask applied and without
-// group or world write, and keep its execute bits. The positive half: the
-// person's own copy on this machine keeps 0o777 exactly, as the docs promise.
 func linkCommitModes(t *testing.T, base string, c, far *fileVerbConn, farHome string) map[string]string {
 	t.Helper()
-	// The daemons inherit this process's umask. It can only be read by
-	// setting it.
 	umask := os.FileMode(syscall.Umask(0o022))
 	syscall.Umask(int(umask))
 	modes := map[string]string{}
@@ -507,7 +480,6 @@ func TestFileWritesNeedTheFilesCapability(t *testing.T) {
 	}
 	far := dialHostVerbs(t, base)
 	far.must("file-list", map[string]any{"dir": "~"}, nil)
-	// Each verb on its own, so one that needs only write is seen.
 	for _, v := range []struct {
 		verb   string
 		params map[string]any
@@ -543,7 +515,6 @@ func TestFileWritesNeedTheFilesCapability(t *testing.T) {
 	}
 }
 
-// eventLine is one line of the event stream, as far as these tests read it.
 type eventLine struct {
 	Type     string      `json:"type"`
 	Action   string      `json:"action"`
@@ -551,8 +522,6 @@ type eventLine struct {
 	Ms       int64       `json:"ms"`
 }
 
-// subscribeTransfers opens an event stream on the daemon of base. types may
-// be nil for every type a plain subscriber gets.
 func subscribeTransfers(t *testing.T, base string, types []string) (*bufio.Reader, net.Conn) {
 	t.Helper()
 	c := dialFileVerbs(t, base)
@@ -565,7 +534,6 @@ func subscribeTransfers(t *testing.T, base string, types []string) (*bufio.Reade
 	return c.br, c.conn
 }
 
-// readTransferEvents reads the transfer events of id until it ends.
 func readTransferEvents(t *testing.T, br *bufio.Reader, conn net.Conn, id string, within time.Duration) []eventLine {
 	t.Helper()
 	start := time.Now()

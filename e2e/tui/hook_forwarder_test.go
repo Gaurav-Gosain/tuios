@@ -10,35 +10,6 @@ import (
 	"testing"
 )
 
-// The hook command tuios integration installs where the machine has nc -U or
-// socat: a line of sh that forwards the event to the daemon's
-// agent-hook-event verb instead of starting tuios (R12). It must do for the
-// harness exactly what tuios agent-hook does.
-//
-// Every Claude Code fixture in internal/integration/testdata/hooks runs, in
-// order, through both commands: tuios agent-hook (the command an older
-// install has) in one pane, and the installed forwarder line in another. After
-// each event the two must have printed the same, exited the same, and left
-// their panes in the same agent state.
-//
-// How this could pass wrongly, written down first:
-//   - The forwarder line could fall back to tuios agent-hook for every event,
-//     and the two would agree trivially. The program installed is a wrapper
-//     that records every start of tuios and the pane it ran in: the
-//     forwarder's pane may start it only for the fixtures whose payload is
-//     empty or not JSON.
-//   - The installed command could be the plain one. The test reads it from
-//     the settings file the install wrote and needs agent-hook-event in it.
-//   - Pane ids differ between the two panes, so output naming the pane is
-//     compared with each pane's own id put back as PANE.
-//   - Fixtures that name the event on the command line are not what an
-//     installed hook runs, so they are left out and listed in the artifact.
-//
-// The artifact is hook-forwarder.txt in the test's output folder: each
-// fixture, both outputs and both states.
-
-// forwarderScript runs one hook command in the pane it is typed into, with
-// the fixture's variables, and writes the output and exit status to a file.
 const forwarderScript = `#!/bin/sh
 ( if [ -s "$3" ]; then set -a; . "$3"; set +a; fi; sh "$4" < "$1" ) > "$2.tmp" 2>/dev/null
 echo "exit=$?" >> "$2.tmp"
@@ -56,10 +27,6 @@ type forwarderFixture struct {
 func TestInstalledForwarderMatchesTheHook(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
-	// The process detector clears a report's claim once the process that
-	// reported has gone, and here that is a short-lived sh in each pane. Its
-	// poll reaches the two panes at different times, so it is off: only the
-	// hook path decides the state.
 	cfgPath := configPathIn(base)
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o700); err != nil {
 		t.Fatal(err)
@@ -78,8 +45,6 @@ func TestInstalledForwarderMatchesTheHook(t *testing.T) {
 	}
 	oldWin, newWin := windowID(t, base, sess, "OLD"), windowID(t, base, sess, "NEW")
 
-	// Install the Claude Code integration into a home of its own and read
-	// the command it wrote.
 	home := filepath.Join(base, "fwd-home")
 	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
 		t.Fatal(err)
@@ -209,7 +174,6 @@ func TestInstalledForwarderMatchesTheHook(t *testing.T) {
 		t.Fatalf("only %d fixtures ran", ran)
 	}
 
-	// Every other event went over the socket.
 	startsData, _ := os.ReadFile(starts)
 	fromNew := strings.Count(string(startsData), newWin)
 	fmt.Fprintf(&artifact, "fixtures run: %d, tuios starts from the forwarder's pane: %d (want %d), from the plain hook's pane: %d\n",

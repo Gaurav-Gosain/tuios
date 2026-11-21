@@ -107,9 +107,6 @@ func TestSpliceDetectorSeesTheClientScreen(t *testing.T) {
 	w := firstWindow(t, base, "splice-plumbing")
 	tag := w.tag()
 
-	// One command, so the rows are adjacent: a second command would put a prompt
-	// and an echoed command line between the two runs, and the rule would
-	// correctly decline to compare across them.
 	if err := paneSend(base, "splice-plumbing", w.ID,
 		"printf 'MK"+tag+"-%d\\n' 1 2 3 200 201 202\n"); err != nil {
 		t.Fatalf("seed the pane: %v", err)

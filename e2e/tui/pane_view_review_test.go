@@ -20,8 +20,6 @@ import (
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "pane-view review"): see
 // that file for each control and the test it fails.
 
-// pvSession makes a detached session for one test and returns its base dir
-// and the window id of its pane.
 func pvSession(t *testing.T, name string) (string, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -32,9 +30,6 @@ func pvSession(t *testing.T, name string) (string, string) {
 	return base, firstWindow(t, base, name).ID
 }
 
-// pvReady waits until the viewer shows the pane: a line typed through the
-// daemon comes back through pane-view. The prompt is no sign, since it
-// differs between shells.
 func pvReady(ft *fakeTerm, t *testing.T, base, session, window string) bool {
 	t.Helper()
 	pvSend(t, base, session, window, "echo RDY-$((6*7))")
@@ -42,7 +37,6 @@ func pvReady(ft *fakeTerm, t *testing.T, base, session, window string) bool {
 	return ok
 }
 
-// pvSend types a line into the pane through the daemon, not through a viewer.
 func pvSend(t *testing.T, base, session, window, line string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", window, line+"\n"); err != nil {
@@ -107,7 +101,6 @@ func TestPaneViewSizes(t *testing.T) {
 	base, win := pvSession(t, "pvs")
 	own := pvPaneSize(t, base, "pvs", win)
 
-	// One viewer comes and goes: the pane takes its size, then its own back.
 	solo := startFakeTerm(t, base, 120, 36, fakeTermOpts{bg: "rgb:0000/0000/0000"}, "pane-view", "-s", "pvs", "-w", win)
 	waitPaneSize(t, base, "pvs", win, "36 120", "one viewer")
 	_ = solo.cmd.Process.Signal(syscall.SIGTERM)
@@ -121,7 +114,6 @@ func TestPaneViewSizes(t *testing.T) {
 	_ = a.cmd.Process.Signal(syscall.SIGTERM)
 	waitPaneSize(t, base, "pvs", win, "20 70", "the larger viewer left")
 
-	// A client attaches, then detaches.
 	client := startIn(t, base, startOpts{cols: 60, rows: 18, args: []string{"attach", "pvs"}, daemonDefault: true})
 	time.Sleep(2 * time.Second)
 	if got := pvPaneSize(t, base, "pvs", win); got == "20 70" {
@@ -130,7 +122,6 @@ func TestPaneViewSizes(t *testing.T) {
 	_ = client.Close()
 	waitPaneSize(t, base, "pvs", win, "20 70", "the client detached, and the viewer did not size the pane again")
 
-	// A rename, then the viewer's terminal grows.
 	if out, err := tuiosCLI(t, base, "rename-session", "-s", "pvs", "pvs2"); err != nil {
 		t.Fatalf("rename: %v: %s", err, out)
 	}
@@ -140,7 +131,6 @@ func TestPaneViewSizes(t *testing.T) {
 	waitPaneSize(t, base, "pvs2", win, "32 110", "after a rename the viewer must still size the pane")
 
 	_ = b.cmd.Process.Signal(syscall.SIGTERM)
-	// Its own size is now the one the client asked for, not a viewer's.
 	time.Sleep(time.Second)
 	if got := pvPaneSize(t, base, "pvs2", win); got == "32 110" || got == "20 70" {
 		t.Fatalf("ASSERTION: the last viewer left, and the pane kept a viewer's size %s", got)
@@ -153,7 +143,6 @@ func TestPaneViewExit(t *testing.T) {
 	base, win := pvSession(t, "pve")
 	opts := fakeTermOpts{bg: "rgb:0000/0000/0000"}
 
-	// SIGTERM: the terminal comes back cooked, and the status is 128+15.
 	ft := startFakeTerm(t, base, 80, 24, opts, "pane-view", "-s", "pve", "-w", win)
 	if ok := pvReady(ft, t, base, "pve", win); !ok {
 		t.Fatalf("no prompt: %q", ft.output())
@@ -167,7 +156,6 @@ func TestPaneViewExit(t *testing.T) {
 		t.Fatalf("ASSERTION: SIGTERM left the terminal raw")
 	}
 
-	// The pane's program killed by SIGKILL: 128+9.
 	ft = startFakeTerm(t, base, 80, 24, opts, "pane-view", "-s", "pve", "-w", win)
 	if ok := pvReady(ft, t, base, "pve", win); !ok {
 		t.Fatalf("no prompt: %q", ft.output())
@@ -183,13 +171,8 @@ func TestPaneViewExit(t *testing.T) {
 		t.Fatalf("ASSERTION: pane-view of a pane whose program got SIGKILL exited %d (done %v), want 137", code, ok)
 	}
 
-	// A window closed while its program runs: status 3, and no error printed.
-	// Three times: tuios ends the program with a signal as it closes the
-	// window, and which of the two the stream sees first is a race.
 	base2 := ""
 	for round := range 3 {
-		// Each round closes a session's only window, which is when the
-		// race showed: the window and its session go together.
 		name := fmt.Sprintf("pvc%d", round)
 		var win2 string
 		base2, win2 = pvSession(t, name)
@@ -211,7 +194,6 @@ func TestPaneViewExit(t *testing.T) {
 		}
 	}
 
-	// A window that does not exist fails at once.
 	start := time.Now()
 	if _, err := tuiosCLI(t, base2, "new", "pvc", "--detach"); err != nil {
 		t.Fatalf("new: %v", err)
@@ -234,14 +216,12 @@ func TestPaneViewFilter(t *testing.T) {
 	}
 	cases := []struct {
 		name string
-		seq  string // printf format
+		seq  string
 		keep bool
-		want string // when kept, a part that must reach the terminal
+		want string
 	}{
 		{"title ending ;?", `\033]2;build;?\007`, true, "\x1b]2;build;?"},
 		{"modifyOtherKeys reset", `\033[>4n`, true, "\x1b[>4n"},
-		// A terminal answers an XTSMGRAPHICS set as it answers a read, and
-		// the daemon has answered it already.
 		{"XTSMGRAPHICS set", `\033[?1;3;256S`, false, ""},
 		{"kitty q=1 forced quiet", `\033_Ga=d,q=1\033\\`, true, "\x1b_Gq=2,a=d\x1b\\"},
 		{"OSC 21 query", `\033]21;foreground=?\033\\`, false, ""},
@@ -254,16 +234,12 @@ func TestPaneViewFilter(t *testing.T) {
 	}
 	for i, c := range cases {
 		open, closeM := fmt.Sprintf("<<%02d", i), fmt.Sprintf("%02d>>", i)
-		// The daemon answers the requests itself, and its answer reaches the
-		// pane as input; the read drains it so the next line types clean.
 		pvSend(t, base, "pvf", win, fmt.Sprintf(`bash -c 'printf "<<%%02d%s%%02d>>\n" %d %d; IFS= read -rs -t 1 -d "" junk; true'`, c.seq, i, i))
 		re := regexp.MustCompile(regexp.QuoteMeta(open) + `(?s)(.*?)` + regexp.QuoteMeta(closeM))
 		var got string
 		found := false
 		deadline := time.Now().Add(shellTimeout)
 		for time.Now().Before(deadline) {
-			// The echo of the typed line also holds the markers, as
-			// literal %02d; the printed one holds the number.
 			if ms := re.FindAllStringSubmatch(ft.output(), -1); len(ms) > 0 {
 				got, found = ms[len(ms)-1][1], true
 				break
@@ -283,7 +259,6 @@ func TestPaneViewFilter(t *testing.T) {
 		if !c.keep && got != "" {
 			t.Fatalf("ASSERTION: %s: a request reached the terminal: %q", c.name, got)
 		}
-		// The drain reads for a second; the next line waits for it.
 		time.Sleep(1300 * time.Millisecond)
 	}
 }
@@ -311,8 +286,6 @@ func TestPaneViewGone(t *testing.T) {
 	if ok := pvReady(ft, t, base, "pvg", win); !ok {
 		t.Fatalf("no prompt: %q", ft.output())
 	}
-	// The daemon restarts and restores the session: pane-view resumes on
-	// the new daemon and shows the pane again.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}
@@ -326,8 +299,6 @@ func TestPaneViewGone(t *testing.T) {
 		t.Fatalf("ASSERTION: pane-view did not resume after the daemon restarted: %q", out[max(0, len(out)-400):])
 	}
 
-	// The daemon stops, and starts again without the session: its saved
-	// state is removed in between, so nothing restores it.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}

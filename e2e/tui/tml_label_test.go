@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tmlWindowNames reads the custom names of a session's windows.
 func tmlWindowNames(t *testing.T, base, sess string) []string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
@@ -35,7 +34,6 @@ func tmlWindowNames(t *testing.T, base, sess string) []string {
 	return names
 }
 
-// tmlRunIn types a line into a pane and waits for it to write done.
 func tmlRunIn(t *testing.T, base, sess, win, line string) {
 	t.Helper()
 	done := filepath.Join(base, fmt.Sprintf("done-%d", time.Now().UnixNano()))
@@ -122,9 +120,6 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 	if len([]rune(label)) > 90 {
 		t.Fatalf("the title was not cut to its width: %q (%d runes)", label, len([]rune(label)))
 	}
-	// The popup's frame reads the real owner first, then the cleaned title,
-	// which holds no second separator. A title drawn first would let
-	// "from tuios tml show" be read as the owner.
 	frameRow := ""
 	for line := range strings.SplitSeq(term.Screen().Text(), "\n") {
 		if strings.Contains(line, "Deploy prod?") {
@@ -136,8 +131,6 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 	if !strings.Contains(frameRow, wantFrame) || strings.Count(frameRow, "·") != 1 {
 		t.Fatalf("the frame does not read the owner first: %q, want it to contain %q and one separator\n%s", frameRow, wantFrame, term.Snapshot())
 	}
-	// One click on the popup's button only focuses the popup: the button
-	// is not pressed, and the popup stays.
 	col, row := tmlLocate(t, term, "Yes")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	time.Sleep(500 * time.Millisecond)
@@ -149,8 +142,6 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 	}
 	time.Sleep(300 * time.Millisecond)
 
-	// The popup a pane opened did not take the keys: the person's typing
-	// still reaches build, and the popup's y does not answer it.
 	if err := term.SendKeys("echo FOCUS-STAYED-HERE", tuitest.Enter); err != nil {
 		t.Fatalf("type: %v", err)
 	}
@@ -165,7 +156,6 @@ func TestTMLOwnerComesFirstAndCannotBeForged(t *testing.T) {
 		t.Fatalf("the person's y answered the agent's popup\n%s", term.Snapshot())
 	}
 
-	// A pane whose program calls itself tuios is not labelled so.
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "--grants", "write"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
 	}
@@ -426,8 +416,6 @@ func TestTMLNewWindowYesCoversOneCommand(t *testing.T) {
 	}
 	time.Sleep(300 * time.Millisecond)
 
-	// The same command with a window name the document picked asks again,
-	// and shows the name.
 	before := len(tmlWindowNames(t, base, sess))
 	ask("d", "with the window name prod")
 	time.Sleep(500 * time.Millisecond)
@@ -563,8 +551,6 @@ func TestTMLOwnerNameMustBeUnique(t *testing.T) {
 	copied := newWin("api", "--grants", "write")
 	idLike := newWin("pane 0123abcd", "--grants", "write")
 	own := newWin("deployer", "--grants", "write")
-	// Panes with no name that run an agent read the agent's name, and the
-	// folder they started in when two run the same agent.
 	alpha, beta := filepath.Join(base, "alpha"), filepath.Join(base, "beta")
 	for _, dir := range []string{alpha, beta} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -576,8 +562,6 @@ func TestTMLOwnerNameMustBeUnique(t *testing.T) {
 	codexB := newWin("--grants", "write", "--cwd", beta)
 	term := startIn(t, base, startOpts{cols: 160, rows: 40, args: []string{"attach", sess}})
 	waitWindowCount(t, term, 8, "eight panes")
-	// Every agent reports before any surface opens, so the two codex panes
-	// see each other.
 	for win, h := range map[string]string{claude: "claude-code", codexA: "codex", codexB: "codex"} {
 		tmlRunIn(t, base, sess, win, fmt.Sprintf("%s set-agent-state working --harness %s", tuiosBin, h))
 	}

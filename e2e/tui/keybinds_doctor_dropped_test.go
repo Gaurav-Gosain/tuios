@@ -44,8 +44,6 @@ swap_right = ['shift+right', 'x']
 		Note    string   `json:"note"`
 	}
 	want := []string{"swap_down ,", "swap_left d", "swap_right x", "swap_up c"}
-	// Each run walks the maps afresh, so five runs in one order rule out an
-	// unsorted list passing by luck.
 	for run := range 5 {
 		out, err = tuiosCLI(t, base, "keybinds", "doctor", "--json")
 		if err != nil {

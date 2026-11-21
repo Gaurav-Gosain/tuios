@@ -27,7 +27,6 @@ func TestWindowCreateAndClose(t *testing.T) {
 		}
 		waitWindowCount(t, term, i, fmt.Sprintf("after closing down to %d", i))
 	}
-	// With every window gone the welcome screen must come back.
 	if err := term.WaitForText(welcomeHint, uiTimeout); err != nil {
 		t.Fatalf("welcome screen did not return after closing every window: %v\n%s",
 			err, term.Snapshot())
@@ -45,8 +44,6 @@ func TestRenameWindow(t *testing.T) {
 	const name = "RENAMEDWIN"
 	renameWindow(t, term, name)
 
-	// Minimizing puts the window in the dock, where the custom name must also
-	// appear: that is a different render path from the title bar.
 	if err := term.SendKeys("m"); err != nil {
 		t.Fatalf("minimize: %v", err)
 	}
@@ -81,7 +78,6 @@ func TestFocusCycleWithRapidKeyRepeat(t *testing.T) {
 
 	enableTiling(t, term, markers...)
 
-	// Paced cycling: a full trip around must return every pane intact.
 	for i := range 6 {
 		if err := term.SendKeys(tuitest.Tab); err != nil {
 			t.Fatalf("paced tab %d: %v", i, err)
@@ -89,8 +85,6 @@ func TestFocusCycleWithRapidKeyRepeat(t *testing.T) {
 		waitForAll(t, term, uiTimeout, fmt.Sprintf("after paced focus change %d", i+1), markers...)
 	}
 
-	// Rapid repeat: 40 focus changes with no waiting, the shape of a held-down
-	// Tab key.
 	for range 40 {
 		if err := term.SendKeys(tuitest.Tab); err != nil {
 			t.Fatalf("rapid tab: %v", err)
@@ -99,7 +93,6 @@ func TestFocusCycleWithRapidKeyRepeat(t *testing.T) {
 	alive(t, term, "during rapid focus cycling")
 	waitForAll(t, term, shellTimeout, "after 40 rapid focus changes", markers...)
 
-	// Backwards too, since previous-window is a separate action.
 	for range 20 {
 		if err := term.SendKeys(tuitest.Ctrl('b'), "p"); err != nil {
 			t.Fatalf("rapid prev: %v", err)
@@ -107,18 +100,6 @@ func TestFocusCycleWithRapidKeyRepeat(t *testing.T) {
 	}
 	waitForAll(t, term, shellTimeout, "after 20 rapid previous-window changes", markers...)
 
-	// The UI must still take input after the storm, proven by an action that
-	// produces a fresh message of its own.
-	//
-	// This used to call leaveTerminalMode, which sends alt+esc and waits for the
-	// "Window management mode" message. The storm never entered terminal mode,
-	// so alt+esc had nothing to leave and pushed no message; the wait was
-	// satisfied by the message from the last leaveTerminalMode inside the window
-	// loop, which was still on screen because the old renderer stacked three
-	// toasts at once and a stale one stayed visible underneath a newer one.
-	// The dock's message block shows the newest message and counts the rest, so
-	// there is no longer a stale message to lean on, and the assertion has to
-	// name something this keystroke actually causes.
 	if err := term.SendKeys("t"); err != nil {
 		t.Fatalf("toggle tiling after the storm: %v", err)
 	}
@@ -137,7 +118,6 @@ func TestWorkspaceSwitch(t *testing.T) {
 	runInShell(t, term, "echo WS1MARK-$((1+0))", "WS1MARK-1", shellTimeout)
 	leaveTerminalMode(t, term)
 
-	// Workspace 2 must be empty and must not show workspace 1's pane.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "2"); err != nil {
 		t.Fatalf("switch to workspace 2: %v", err)
 	}
@@ -148,13 +128,11 @@ func TestWorkspaceSwitch(t *testing.T) {
 			err, term.Snapshot())
 	}
 
-	// A window created here belongs to workspace 2.
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo WS2MARK-$((1+1))", "WS2MARK-2", shellTimeout)
 	leaveTerminalMode(t, term)
 
-	// Back to workspace 1: its pane must return, and workspace 2's must not.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "1"); err != nil {
 		t.Fatalf("switch to workspace 1: %v", err)
 	}
@@ -198,14 +176,10 @@ func TestMinimizeAndRestore(t *testing.T) {
 	alive(t, term, "after minimize/restore")
 }
 
-// zoomNoticeShown reports whether the dock shows the ZOOM notice. The marker
-// the test prints also starts with ZOOM, so its count is taken off.
 func zoomNoticeShown(frame string) bool {
 	return strings.Count(frame, "ZOOM") > strings.Count(frame, "ZOOMMARK")
 }
 
-// zoomNoticeGone is how long the ZOOM notice may stay after an unzoom. The
-// notice lives for six seconds, so a notice that is only waited out fails.
 const zoomNoticeGone = 2 * time.Second
 
 // TestZoomToggle zooms a window to fill the screen and back, asserting content
@@ -224,7 +198,6 @@ func TestZoomToggle(t *testing.T) {
 	newWindow(t, term)
 	waitWindowCount(t, term, 2, "before zooming")
 
-	// Focus back to the marked window, then zoom it.
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("tab: %v", err)
 	}
@@ -285,7 +258,6 @@ func TestZoomFollowsDirectionalFocus(t *testing.T) {
 			newWindow(t, term)
 			waitWindowCount(t, term, 3, "three panes")
 
-			// focused and zoomed are the indexes the daemon reports, -1 for none.
 			state := func() (focused, zoomed int) {
 				out, err := tuiosCLI(t, base, "list-windows", "--json", "-s", "zoomfocus")
 				if err != nil {
@@ -323,13 +295,10 @@ func TestZoomFollowsDirectionalFocus(t *testing.T) {
 				}
 			}
 
-			// The leftmost pane, zoomed.
 			sendKeys(t, term, tuitest.Ctrl('b'), tuitest.Left)
 			sendKeys(t, term, "z")
 			first := waitState("the zoom never came on", func(f, z int) bool { return f >= 0 && z == f })
 
-			// The prefix arrow, then the window-mode key back: each moves the
-			// focus, and the zoom follows it.
 			sendKeys(t, term, tuitest.Ctrl('b'), tuitest.Right)
 			waitState("the prefix arrow left the zoom behind", func(f, z int) bool { return f != first && z == f })
 			sendKeys(t, term, "h")
@@ -389,19 +358,6 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 	}
 
 	c2 := startIn(t, base, startOpts{args: []string{"attach", "e2e-shared"}})
-	// The daemon's own statement that both clients are attached, read on the
-	// client already there: a join is announced to the clients being joined,
-	// and the joiner learns the session's size from its attach reply rather
-	// than from a broadcast.
-	//
-	// It used to wait for the "Session size: WxH (2 clients)" toast on c2, and
-	// that toast was a symptom. The joining client is deliberately left out of
-	// the join broadcast, so the only way c2 could ever see a session-resize
-	// notification was the round trip that followed its attaching at a
-	// placeholder 80x24: the session shrank around the client already there,
-	// then grew back when c2 announced its real size. With c2 announcing its
-	// real size to begin with the session never moves, and no such toast exists
-	// to wait for.
 	if err := c1.WaitForText("2 connected", bootTimeout); err != nil {
 		t.Fatalf("the first client was never told a second one joined: %v\n%s", err, c1.Snapshot())
 	}
@@ -411,10 +367,6 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 		t.Fatalf("second client never attached: %v\n%s", err, c2.Snapshot())
 	}
 
-	// An attached client boots straight into terminal mode when the session
-	// already has a window, so the pane is reachable immediately. Exercise the
-	// content path first, while that is still true: driving output through one
-	// client must reach the other.
 	if err := c1.SendKeys("echo SHAREDMARK-$((7*8))", tuitest.Enter); err != nil {
 		t.Fatalf("c1 echo: %v", err)
 	}
@@ -425,8 +377,6 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 		}
 	}
 
-	// Now the window-list path. Leaving terminal mode is required first, or "n"
-	// would go to the shell rather than the window manager.
 	if err := c1.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("c1 to window mode: %v", err)
 	}
@@ -434,7 +384,6 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 		t.Fatalf("c1 never entered window management mode: %v\n%s", err, c1.Snapshot())
 	}
 
-	// A window created on client one must show up on client two.
 	if err := c1.SendKeys("n"); err != nil {
 		t.Fatalf("c1 new window: %v", err)
 	}

@@ -41,7 +41,6 @@ func TestPluginOvnfs(t *testing.T) {
 	art := artifactDir(t)
 
 	t.Run("not installed", func(t *testing.T) {
-		// PATH has the system tools and jq, and no ovnfs.
 		bin := t.TempDir()
 		for _, tool := range []string{"jq"} {
 			if p, err := exec.LookPath(tool); err == nil {
@@ -75,8 +74,6 @@ func TestPluginOvnfs(t *testing.T) {
 	})
 
 	t.Run("too old", func(t *testing.T) {
-		// An ovnfs that answers version with 0.2.3 and writes down every
-		// call, and jq. Nothing else of ovnfs may run.
 		bin := t.TempDir()
 		calls := filepath.Join(bin, "calls")
 		fake := "#!/bin/sh\necho \"$*\" >>" + calls + "\n" +
@@ -130,8 +127,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	// A daemon of the test's own: its state and its mount under the test.
-	// The mount path is short, since it goes into NFS handles and mount(8).
 	ovdir, err := os.MkdirTemp("", "ovt")
 	if err != nil {
 		t.Fatal(err)
@@ -201,7 +196,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 		t.Fatalf("attach: %v\n%s", err, term.Snapshot())
 	}
 
-	// New checkout here: a checkout of the folder, in a new pane.
 	if out, err := tuiosCLI(t, base, "plugins", "open", "tuios.ovnfs", "new"); err != nil {
 		t.Fatalf("open new: %v\n%s", err, out)
 	}
@@ -214,9 +208,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 		t.Fatalf("checkouts after New checkout here: %+v, want one of %s", l.Checkouts, repo)
 	}
 	co := l.Checkouts[0]
-	// The new pane works in the checkout. The mount sits under the temp
-	// folder, which macOS reaches through /private, so the end of the path
-	// names it.
 	pane := ""
 	for deadline := time.Now().Add(uiTimeout); pane == "" && time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
 		out, _ := tuiosCLI(t, base, "list-windows", "-s", "ov", "--json")
@@ -239,7 +230,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 	}
 	savePNG(t, term.Screen(), hostPalette(t, ""), art, "ovnfs-new")
 
-	// An edit in the checkout stays out of the folder.
 	if err := os.WriteFile(filepath.Join(co.Path, "notes.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +237,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 		t.Fatalf("the folder changed before an apply: %q", b)
 	}
 
-	// Close the checkout's pane: a message and the cell, and no apply.
 	if out, err := tuiosCLI(t, base, "close-window", "-s", "ov", pane); err != nil {
 		t.Fatalf("close the checkout's pane: %v\n%s", err, out)
 	}
@@ -261,7 +250,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 		t.Fatalf("closing the pane applied the changes: %q", b)
 	}
 
-	// Apply: the dry run, then a typed yes.
 	if out, err := tuiosCLI(t, base, "plugins", "open", "tuios.ovnfs", "apply"); err != nil {
 		t.Fatalf("open apply: %v\n%s", err, out)
 	}
@@ -272,7 +260,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 		t.Errorf("the dry run does not name the file:\n%s", term.Snapshot())
 	}
 	savePNG(t, term.Screen(), hostPalette(t, ""), art, "ovnfs-apply-ask")
-	// A key that is not yes applies nothing.
 	term.Type("y\r")
 	if err := term.WaitForText("Nothing was applied", uiTimeout); err != nil {
 		t.Fatalf("a bare y did something else: %v\n%s", err, term.Snapshot())
@@ -308,7 +295,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 		t.Fatalf("ovnfs rm: %v\n%s", err, out)
 	}
 
-	// The list of checkouts.
 	if out, err := ov("new", repo, "--name", "demo-list"); err != nil {
 		t.Fatalf("ovnfs new: %v\n%s", err, out)
 	}
@@ -327,8 +313,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 		t.Fatalf("ovnfs rm: %v\n%s", err, out)
 	}
 
-	// A worktree that tuios made goes, and its checkout goes with it. Its
-	// change stays in a snapshot.
 	out, err := tuiosCLIIn(t, base, repo, "worktree", "new", "feat/x", "--json")
 	if err != nil {
 		t.Fatalf("new-worktree: %v\n%s", err, out)
@@ -350,7 +334,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 	if out, err := tuiosCLI(t, base, "worktree", "rm", wt.Session, "--force"); err != nil {
 		t.Fatalf("remove-worktree: %v\n%s", err, out)
 	}
-	// The message comes once the hook is done, so the checkout is gone by then.
 	if err := term.WaitForText("Removed checkout demo-wt. Its changes are in", uiTimeout); err != nil {
 		log, _ := tuiosCLI(t, base, "plugins", "log", "tuios.ovnfs")
 		t.Errorf("no message for the removed checkout: %v\n%s\n%s", err, log, term.Snapshot())
@@ -383,7 +366,6 @@ func testPluginOvnfsReal(t *testing.T, plugin, ovnfs, art string) {
 	if snap == "" {
 		t.Fatalf("ASSERTION: no snapshot keeps the removed checkout's change: %+v", l.Snapshots)
 	}
-	// The snapshot opens again with the change in it.
 	if out, err := ov("new", "--from", snap, "--name", "demo-back"); err != nil {
 		t.Fatalf("ASSERTION: ovnfs new --from %s: %v\n%s", snap, err, out)
 	}

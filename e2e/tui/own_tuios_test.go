@@ -9,29 +9,8 @@ import (
 	"testing"
 )
 
-// A bare tuios is always the build under test.
-//
-// Panes type tuios by name (tuios set-agent-state, tuios respond, tuios
-// send-agent-message), and so do the scripts stand-in agents run. Each found
-// whatever tuios came first on PATH: on a developer's machine the installed
-// one, an older build talking to the test daemon; on CI, which has none,
-// nothing at all. Tests passed on the one and failed on the other.
-//
-// So the suite puts a folder holding a tuios link to the build under test
-// first on its own PATH, which every daemon, client and pane it starts
-// inherits (ownTuiosOnPath), and fails a test that hands a child process a
-// PATH on which another tuios comes first (ownTuiosGuard): one that is not the
-// build under test and lives outside the temporary folder, as an installed one
-// does. A test that swaps
-// tuiosBin for another build keeps the link on the suite's build: it runs that
-// build by path, never by name.
-
-// ownTuiosDir is the folder ownTuiosOnPath puts first on PATH.
 var ownTuiosDir string
 
-// ownTuiosOnPath links tuiosBin as tuios in a folder of its own, puts that
-// folder first on the process's PATH and checks a bare tuios finds it. It
-// returns a cleanup.
 func ownTuiosOnPath() (func(), error) {
 	dir, err := os.MkdirTemp("", "tuios-e2e-own")
 	if err != nil {
@@ -55,17 +34,8 @@ func ownTuiosOnPath() (func(), error) {
 	return cleanup, nil
 }
 
-// ownTuios is the bare tuios every child of the suite finds first: the link
-// to the build under test. tuios names itself by it where it writes its own
-// path for later, as pair's forced command does (pairTuiosPath), since it is
-// the tuios on PATH and the same binary.
 func ownTuios() string { return filepath.Join(ownTuiosDir, "tuios") }
 
-// ownTuiosGuard fails t when path, a PATH a test hands a child process, puts
-// a tuios ahead of the suite's own that the suite did not build or copy: one
-// outside the temporary folder, where every build and copy of this suite
-// lives. A PATH with no tuios on it passes: a bare tuios then fails visibly,
-// the same on every machine.
 func ownTuiosGuard(t failer, path string) {
 	t.Helper()
 	tmp, err := filepath.EvalSymlinks(os.TempDir())
@@ -95,8 +65,6 @@ func ownTuiosGuard(t failer, path string) {
 	}
 }
 
-// ownTuiosEnvGuard is ownTuiosGuard for the PATH in env, a child's
-// environment as KEY=VALUE entries, the last PATH winning.
 func ownTuiosEnvGuard(t failer, env []string) {
 	t.Helper()
 	path, found := "", false
@@ -110,7 +78,6 @@ func ownTuiosEnvGuard(t failer, env []string) {
 	}
 }
 
-// guardRecorder is a failer that records a Fatalf instead of stopping.
 type guardRecorder struct{ failed string }
 
 func (r *guardRecorder) Helper() {}
@@ -155,8 +122,6 @@ func TestABareTuiosInAPaneIsTheBuildUnderTest(t *testing.T) {
 		}
 	}
 
-	// An installed tuios lives outside the temporary folder: one under the
-	// package folder stands in for it.
 	installed, err := os.MkdirTemp(".", "installed-tuios-")
 	if err != nil {
 		t.Fatal(err)

@@ -6,13 +6,6 @@ import (
 	"testing"
 )
 
-// herdr's methods that tuios answered with unsupported until plugins needed
-// them: pane.resize (herdr-splits.nvim's resize keys), server.reload_config
-// (terminal-browser and the config-writing plugins), pane.move,
-// agent.rename and agent.explain. Each runs through "$HERDR_BIN_PATH" in a
-// real pane, as the plugins run it.
-
-// herdrWidths is the width of each pane of the tab pane is in.
 func herdrWidths(t *testing.T, base, pane string) map[string]float64 {
 	t.Helper()
 	l := herdrCall(t, base, "pane.layout", map[string]any{"pane_id": pane})["layout"].(map[string]any)
@@ -62,8 +55,6 @@ step grow "$H" pane resize --direction left --amount 0.1 --pane "$HERDR_PANE_ID"
 		t.Fatalf("after moving the border left the widths are %v, were %v; want nav wider", grown, before)
 	}
 
-	// nav is at the right edge, so "right" moves its left border right:
-	// nav shrinks again.
 	more := runHerdrSteps(t, base, "nav", "resize2", `
 step shrink "$H" pane resize --direction right --amount 0.1 --pane "$HERDR_PANE_ID"
 `)
@@ -74,7 +65,6 @@ step shrink "$H" pane resize --direction right --amount 0.1 --pane "$HERDR_PANE_
 	}
 	saveFrame(t, term, "herdr-front-resize")
 
-	// A pane with the read grant alone may not move a border.
 	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", crushSession, "-w", ids["nav"], "--grants", "read"); err != nil {
 		t.Fatalf("set-pane-grants: %v\n%s", err, out)
 	}
@@ -112,8 +102,6 @@ func TestHerdrFrontReloadMoveRename(t *testing.T) {
 	mover := herdrPaneByLabel(t, base, "mover")
 	moverID := mover["pane_id"].(string)
 	agentID := herdrPaneByLabel(t, base, "agentpane")["pane_id"].(string)
-	// The agent pane reports a claude agent, as an agent with herdr support
-	// does.
 	typeIn(t, base, "agentpane", `"$HERDR_BIN_PATH" pane report-agent "$HERDR_PANE_ID" --source stub --agent claude --state idle --seq 1; echo REPORTED`)
 	waitJoined(t, base, "agentpane", "REPORTED")
 
@@ -169,8 +157,6 @@ step manifests "$H" server agent-manifests
 	if got := herdrPaneByLabel(t, base, "mover")["tab_id"]; got != newTab {
 		t.Fatalf("the daemon puts mover on tab %v, want %s", got, newTab)
 	}
-	// The metadata shows on the workspace, and a report with an older seq
-	// changes nothing.
 	steps["meta"].ok(t, "workspace report-metadata")
 	steps["stale"].ok(t, "workspace report-metadata, older seq")
 	steps["wsget"].ok(t, "workspace get")
@@ -181,8 +167,6 @@ step manifests "$H" server agent-manifests
 	if ti := steps["title"].json(t, "terminal title set"); dig(ti, "result", "type") != "client_window_title" || dig(ti, "result", "changed") != true || dig(ti, "result", "reason") != "set" {
 		t.Fatalf("terminal title set: %s", steps["title"].out)
 	}
-	// Tools check that a server answers with status server, by its text or
-	// its JSON.
 	steps["status"].ok(t, "status server")
 	if !strings.HasPrefix(steps["status"].out, "status: running\n") {
 		t.Fatalf("status server: %q", steps["status"].out)
@@ -191,13 +175,11 @@ step manifests "$H" server agent-manifests
 	if st := steps["statusjson"].json(t, "status server --json"); st["running"] != true || st["protocol"] != float64(22) {
 		t.Fatalf("status server --json: %s", steps["statusjson"].out)
 	}
-	// herdr-projects finds the server's socket in session list.
 	steps["sessions"].ok(t, "session list --json")
 	if sl := steps["sessions"].json(t, "session list --json"); dig(sl, "sessions") == nil || len(dig(sl, "sessions").([]any)) != 1 ||
 		dig(dig(sl, "sessions").([]any)[0].(map[string]any), "socket_path") != herdrSocket(base) {
 		t.Fatalf("session list --json does not name the herdr socket %s: %s", herdrSocket(base), steps["sessions"].out)
 	}
-	// The bridges list the agents the server knows.
 	steps["manifests"].ok(t, "server agent-manifests")
 	if !strings.Contains(steps["manifests"].out, `"agent":"claude"`) || !strings.Contains(steps["manifests"].out, `"type":"agent_manifest_status"`) {
 		t.Fatalf("server agent-manifests does not list claude: %s", steps["manifests"].out)

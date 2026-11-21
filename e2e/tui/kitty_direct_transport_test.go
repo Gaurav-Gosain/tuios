@@ -35,8 +35,6 @@ func TestKittyDirectTransportDrawsWholeImage(t *testing.T) {
 
 			enterTerminalMode(t, term)
 			runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
-			// 10 fps: a full-pane RGBA frame is over a megabyte of base64, and
-			// the question here is what the host is told, not how fast.
 			_, cols, rows, xpx, ypx := startFrameloopOpts(t, term, 0, 10, transport)
 			t.Logf("pane: %dx%d cells, %dx%d px (%d x %d px per cell)",
 				cols, rows, xpx, ypx, xpx/cols, ypx/rows)

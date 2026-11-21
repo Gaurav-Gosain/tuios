@@ -10,27 +10,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The rail's hierarchy, on screen.
-//
-// The complaint these are the answer to: a machine's row and a session's row
-// sat at the same indent, in the same weight and in the same ink, so the only
-// thing separating "this is a computer" from "this is a shell on it" was one
-// dim glyph. What a person reads at a glance is weight and position, and the
-// rail spent neither.
-//
-// Every claim here is read off a real client's grid, attributes included. A
-// plain snapshot cannot see a heading: bold is what carries the level, and it
-// is invisible in text.
-
-// railNameCol is the column a name starts on in a rail line, counting from the
-// rail's own first column: the gutter, the glyph, and a cell of air.
 const railNameCol = 3
 
-// railNarrowWidth is the narrow rail's width, the least the rail draws names
-// at. It mirrors config.SidebarNarrowWidth.
 const railNarrowWidth = 16
 
-// nameColOf is the column the given name starts at on its rail row, or -1.
 func nameColOf(s tuitest.Screen, row int, name string) int {
 	if row < 0 {
 		return -1
@@ -40,13 +23,9 @@ func nameColOf(s tuitest.Screen, row int, name string) int {
 	if !ok {
 		return -1
 	}
-	// Byte offset to cell column: the rail's marks are multi-byte.
 	return len([]rune(before))
 }
 
-// ruledAfter reports whether a heading's rule runs out of the name on this row.
-// It looks for the rule glyph anywhere to the right of where the name ends,
-// which is where the heading draws it and where no item row draws anything.
 func ruledAfter(s tuitest.Screen, row, fromCol int) bool {
 	w, _ := s.Size()
 	for col := fromCol; col < w; col++ {
@@ -57,13 +36,10 @@ func ruledAfter(s tuitest.Screen, row, fromCol int) bool {
 	return false
 }
 
-// boldAt reports whether the cell at (col, row) is drawn bold.
 func boldAt(s tuitest.Screen, col, row int) bool {
 	return s.Cell(col, row).Bold
 }
 
-// writeHierarchyConfig names a rail width, one host the stand-in reaches and
-// one that cannot be reached.
 func writeHierarchyConfig(t *testing.T, base, tuiosPath, remoteCommand string, width int) {
 	t.Helper()
 	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
@@ -108,7 +84,6 @@ func TestTheRailReadsMachinesAsHeadings(t *testing.T) {
 	waitBoot(t, term)
 	toggleSidebarViaPalette(t, term)
 
-	// The far machine's group, drawn from a listing that came over the link.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return railRowOf(s, hostOpen+" oci") >= 0 && railRowOf(s, "session-0") >= 0
 	}, uiTimeout); err != nil {
@@ -128,14 +103,6 @@ func TestTheRailReadsMachinesAsHeadings(t *testing.T) {
 		t.Errorf("ASSERTION: the session under oci starts at column %d and its machine at %d; "+
 			"a session must step in under its machine\n%s", rowCol, headCol, term.Snapshot())
 	}
-	// A heading is told from the rows under it by a rule running out of its name
-	// to the right spine, and no longer by weight.
-	//
-	// It used to be bold, and in the brightest ink on the rail. That put the
-	// loudest treatment on the least actionable row, and it spent the one bold
-	// voice the rail keeps for a row that wants a human. A rule is a different
-	// kind of mark rather than a louder one, so a heading still reads as a
-	// heading with colour and weight both switched off.
 	if boldAt(s, headCol, head) {
 		t.Errorf("ASSERTION: the machine's name is bold, which is the voice the rail keeps for an alarm\n%s",
 			term.SnapshotStyled())
@@ -151,7 +118,6 @@ func TestTheRailReadsMachinesAsHeadings(t *testing.T) {
 		t.Errorf("ASSERTION: a session row carries a heading's rule\n%s", term.Snapshot())
 	}
 
-	// This machine reads the same way, and it is the one the client is on.
 	local := railRowOf(s, hostOpen+" local")
 	if local < 0 {
 		t.Fatalf("ASSERTION: this machine has no heading on the rail\n%s", term.Snapshot())
@@ -164,18 +130,11 @@ func TestTheRailReadsMachinesAsHeadings(t *testing.T) {
 		t.Errorf("ASSERTION: this machine's own heading carries no rule\n%s", term.Snapshot())
 	}
 
-	// A machine that cannot be reached keeps its row and says why.
 	down := railRowOf(s, hostOpen+" work")
 	if down < 0 || !strings.Contains(s.Text(), "offline") {
 		t.Fatalf("ASSERTION: the unreachable machine left the rail\n%s", term.Snapshot())
 	}
 
-	// The rail's ink is a ramp, and it runs the other way now: a session name is
-	// the brightest thing on the rail because it is what you act on, the
-	// machine heading over it is a step quieter, and a machine that does not
-	// answer is quieter still. Every machine that answers still reads at one
-	// strength, and a session must never share its machine's ink, which is the
-	// thing two levels of hierarchy cannot do.
 	hereInk := s.Cell(nameColOf(s, local, "local"), local).Fg
 	thereInk := s.Cell(headCol, head).Fg
 	downInk := s.Cell(nameColOf(s, down, "work"), down).Fg
@@ -193,7 +152,6 @@ func TestTheRailReadsMachinesAsHeadings(t *testing.T) {
 	}
 	saveFrame(t, term, "hier-after-machines")
 
-	// Folded: the group's rows go and the heading stays.
 	mouseClick(t, term, 3, head, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return railRowOf(s, hostShut+" oci") >= 0 && railRowOf(s, "session-0") < 0
@@ -308,7 +266,6 @@ func TestAMachineHeaderOffersItsMoveRows(t *testing.T) {
 		t.Fatalf("ASSERTION: the rail never listed build above offline: %v\n%s", err, term.Snapshot())
 	}
 
-	// Dragging this machine says why it will not move.
 	local := railRowOf(term.Screen(), hostOpen+" local")
 	mouseDrag(t, term, 3, local, 3, local+3, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("This machine stays first", uiTimeout); err != nil {
@@ -316,7 +273,6 @@ func TestAMachineHeaderOffersItsMoveRows(t *testing.T) {
 	}
 	saveFrame(t, term, "hier-after-pinned-notice")
 
-	// The menu on another machine's header, and its move row.
 	build := railRowOf(term.Screen(), hostOpen+" build")
 	mouseClick(t, term, 3, build, tuitest.MouseRight, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -368,7 +324,6 @@ func TestTheNarrowRailNamesAMachineWhole(t *testing.T) {
 			ssh := writeFakeSSHTo(t, base, remote)
 			writeHierarchyConfig(t, base, tuiosBin, tuiosBin, tc.width)
 			env := []string{"TUIOS_SSH=" + ssh}
-			// A daemon on the far side, so oci answers.
 			if out, err := tuiosCLI(t, remote, "new", "session-0", "--detach"); err != nil {
 				t.Fatalf("create the far session: %v\n%s", err, out)
 			}
@@ -377,14 +332,11 @@ func TestTheNarrowRailNamesAMachineWhole(t *testing.T) {
 			waitBoot(t, term)
 			toggleSidebarViaPalette(t, term)
 
-			// Both machines named, and the link to oci up: until it is, oci
-			// is muted too, and the ink check below would read nothing.
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				down, up := railRowOf(s, hostOpen+" wo"), railRowOf(s, hostOpen+" oci")
 				if down < 0 || up < 0 {
 					return false
 				}
-				// "wo", so a rail that cuts the name is read here and fails below.
 				return s.Cell(nameColOf(s, down, "wo"), down).Fg != s.Cell(nameColOf(s, up, "oci"), up).Fg
 			}, uiTimeout); err != nil {
 				t.Fatalf("ASSERTION: the rail never named both machines, one of them muted as not answering: %v\n%s", err, term.Snapshot())
@@ -402,8 +354,6 @@ func TestTheNarrowRailNamesAMachineWhole(t *testing.T) {
 				t.Fatalf("ASSERTION: the row at width %d says offline = %v, want %v: %q\n%s",
 					tc.width, got, tc.wantWord, line, term.Snapshot())
 			}
-			// The row still says the machine is down without the word: the wait
-			// above held until it was drawn in the muted ink and oci was not.
 			alive(t, term, "after the budgeted machine header")
 		})
 	}

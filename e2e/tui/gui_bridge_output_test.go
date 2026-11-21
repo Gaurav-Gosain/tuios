@@ -8,15 +8,6 @@ import (
 	"time"
 )
 
-// The bridge's output path (#598 on main): an output frame is queued as a
-// head and the daemon's own payload, not copied into one buffer, and the
-// model's emulator of each pane drops its history, which the renderer keeps.
-//
-// What would pass a weaker test and fail this one: a frame whose body is
-// lost, or written before its head, or interleaved with another frame (the
-// stream of seq is not whole), and an emulator that stops following the pane
-// once it drops its history (the title after the flood never arrives).
-
 // TestGUIBridgeFloodArrivesWhole runs seq 1 100000 in a pane and reads the
 // pane's output frames back: every line must be there, in order, with nothing
 // between. A title set after the flood must reach the state.

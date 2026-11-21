@@ -39,12 +39,10 @@ func TestLeaderTwiceClosesTheSubMenu(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "227") }, uiTimeout); err != nil {
 		t.Errorf("ASSERTION: the keys after the leader twice did not reach the shell\n%s", term.Snapshot())
 	}
-	// The dock names the workspace and the pane count, 1:1 on the first.
 	if !strings.Contains(term.Screen().Text(), "1:1") {
 		t.Fatalf("ASSERTION: the client left workspace 1\n%s", term.Snapshot())
 	}
 
-	// Window management mode: n after the leader twice opens a pane.
 	windowManagementMode(t, term)
 	sendKeys(t, term, tuitest.Ctrl('b'), "w")
 	sendKeys(t, term, tuitest.Ctrl('b'))

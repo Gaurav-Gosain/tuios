@@ -14,15 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The rail's worktree groups, end to end: a throwaway repository, two
-// worktree sessions made by the command a person runs, a real daemon, and a
-// real client drawing the rail. Nothing here touches any repository but the
-// one testutil.GitRepo makes under the test.
-
-// tuiosCLIIn is tuiosCLI with a working directory of its own. It exists for
-// the one command whose directory decides what the daemon records: this suite
-// runs inside a git worktree of tuios itself, so a session created from here
-// is a worktree session and cannot be the control.
 func tuiosCLIIn(t *testing.T, base, dir string, args ...string) (string, error) {
 	t.Helper()
 	pinPreV080Looks(t, base)
@@ -39,8 +30,6 @@ func tuiosCLIIn(t *testing.T, base, dir string, args ...string) (string, error) 
 	return string(out), err
 }
 
-// railLineWith is the screen row holding needle, or -1. The rail is at the top
-// of the screen, so the topmost match is the rail's row.
 func railLineWith(s tuitest.Screen, needle string) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -51,9 +40,6 @@ func railLineWith(s tuitest.Screen, needle string) int {
 	return -1
 }
 
-// railCellColumn is the screen column of needle on its topmost line, or -1. It
-// counts runes because the pill's cap and the tree bars take several bytes and
-// one cell each.
 func railCellColumn(s tuitest.Screen, needle string) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -77,14 +63,8 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 	repo := testutil.GitRepo(t)
-	// The worktrees land under the test's own directory. tuiosCLI passes this
-	// process's environment through, so the daemon it starts sees it too.
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
 
-	// A session that is not a worktree, which is the control on screen and the
-	// one this client attaches to.
-	// It is created from a directory that is in no repository, and it starts
-	// the daemon, so the daemon's own directory is that one too.
 	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
 		t.Fatalf("create the plain session: %v: %s", err, out)
 	}
@@ -108,9 +88,6 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 
 	toggleSidebarViaPalette(t, term)
 
-	// The repository row and both branches under it. The wait is what makes
-	// this a test of the daemon's record rather than of the CLI: the rows only
-	// appear once the client's listing carries the worktree of each session.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "· repo") &&
@@ -120,7 +97,6 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 		t.Fatalf("the rail never grouped the worktree sessions: %v\n%s", err, term.Snapshot())
 	}
 
-	// The parent is above its members, and the plain session keeps its own row.
 	screen := term.Screen()
 	parent := railLineWith(screen, "· repo")
 	first := railLineWith(screen, "├─ feat/one")
@@ -133,10 +109,6 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 	}
 	saveFrame(t, term, "rail-worktrees")
 
-	// A session a person named, which then walks into a worktree (#1245). It
-	// joins the group, and keeps its name with the branch after it: the
-	// promise is that a session with a custom name keeps it. Before the fix
-	// the row took the branch as its whole label.
 	var wtPath string
 	for _, r := range worktreeRows(t, base) {
 		if r["session"] == "repo-feat-one" {
@@ -149,8 +121,6 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "mine", "--detach"); err != nil {
 		t.Fatalf("create the named session: %v: %s", err, out)
 	}
-	// /bin/sh reports no directory on cd, so the report fish sends is printed
-	// by hand. The daemon reads the bytes either way.
 	cd := "cd '" + wtPath + "' && printf '\\033]7;file://localhost%s\\007' \"$PWD\"\n"
 	if err := paneSend(base, "mine", "0", cd); err != nil {
 		t.Fatalf("move the named session into the worktree: %v", err)
@@ -163,7 +133,6 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 	}
 	railShot(t, term, "rail-worktree-named")
 
-	// A display name wins the same way.
 	if out, err := tuiosCLI(t, base, "set-session-name", "-s", "mine", "My label"); err != nil {
 		t.Fatalf("set-session-name: %v: %s", err, out)
 	}
@@ -174,7 +143,6 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 	}
 	railShot(t, term, "rail-worktree-display-name")
 
-	// A click on the repository row folds the group.
 	col, row := findOnScreen(t, term, "· repo")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -279,7 +247,6 @@ switch_session_3 = ["alt+shift+z"]
 	if out, err := tuiosCLI(t, base, "set-agent-state", "done", "-s", "mainsess", "-w", "AGENT", "-m", "reached lunch"); err != nil {
 		t.Fatalf("report the agent: %v: %s", err, out)
 	}
-	// Two more agents, so the Inbox draws a list and not a single agent's page.
 	for _, win := range []string{"OTHERONE", "OTHERTWO"} {
 		if out, err := tuiosCLI(t, base, "new-window", win, "-s", "plain", "--no-focus"); err != nil {
 			t.Fatalf("open the pane %s: %v: %s", win, err, out)
@@ -314,8 +281,6 @@ switch_session_3 = ["alt+shift+z"]
 		t.Fatalf("the key numbered 3 did not open the row numbered 3: %v\n%s", err, term.Snapshot())
 	}
 
-	// A folded row holding the attached session wears that session's mark. Open,
-	// the same row wears none, so the mark says where the session went.
 	foldMark := func(glyph string) (int, int) {
 		return railCellColumn(term.Screen(), glyph), railLineWith(term.Screen(), glyph)
 	}
@@ -341,7 +306,6 @@ switch_session_3 = ["alt+shift+z"]
 		t.Fatalf("the fold mark did not open the group: %v\n%s", err, term.Snapshot())
 	}
 
-	// A click on the name opens the session and leaves the group open.
 	col, row = railCellColumn(term.Screen(), "mainsess"), railLineWith(term.Screen(), "mainsess")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Session: mainsess", uiTimeout); err != nil {
@@ -351,7 +315,6 @@ switch_session_3 = ["alt+shift+z"]
 		t.Errorf("opening the main checkout folded the group\n%s", term.Snapshot())
 	}
 
-	// A click on the mark folds. The row keeps its name and says what it holds.
 	col, row = foldMark("▾")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -359,7 +322,6 @@ switch_session_3 = ["alt+shift+z"]
 		if railLineWith(s, "f/one") >= 0 || line < 0 || !strings.Contains(s.Line(line), "▸") {
 			return false
 		}
-		// The name outranks the count, and at 18 columns only the name fits.
 		return width < 30 || strings.Contains(s.Line(line), "+1")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the fold mark did not fold the group: %v\n%s", err, term.Snapshot())
@@ -373,8 +335,6 @@ switch_session_3 = ["alt+shift+z"]
 		t.Fatalf("the fold mark did not open the group: %v\n%s", err, term.Snapshot())
 	}
 
-	// The row's menu has the group's fold row and a live New worktree. A dim row
-	// runs nothing, so running it is what tells it apart from a live one.
 	menu := func(pick string) {
 		t.Helper()
 		c, r := railCellColumn(term.Screen(), "mainsess"), railLineWith(term.Screen(), "mainsess")
@@ -406,9 +366,6 @@ switch_session_3 = ["alt+shift+z"]
 	}
 
 	windowManagementMode(t, term)
-	// The rail's cursor lands on the attached row, and the row's fold mark is the
-	// stop above it. On that stop enter folds and the keyboard stays in the rail.
-	// On the row itself enter would hand the keyboard to the session.
 	if err := term.SendKeys("s"); err != nil {
 		t.Fatalf("enter the rail: %v", err)
 	}
@@ -443,19 +400,15 @@ switch_session_3 = ["alt+shift+z"]
 		t.Fatalf("esc did not leave the rail: %v\n%s", err, term.Snapshot())
 	}
 
-	// The Inbox row of an agent in the main checkout keeps the agent's message. A
-	// worktree's branch takes that line, and a main checkout's says nothing.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		// The rail's agents section says the message too, until the Inbox covers it.
 		if !strings.Contains(s.Text(), "Search agents") {
 			return false
 		}
 		_, rows := s.Size()
 		for r := range rows {
-			// The selected agent's thread says the message too, on a line of its own.
 			if line := s.Line(r); strings.Contains(line, "reached lunch") && !strings.Contains(line, "Says:") {
 				return true
 			}
@@ -495,8 +448,6 @@ func TestRailMainCheckoutSiblings(t *testing.T) {
 	}
 
 	term := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
-	// siblings says the two main checkout rows are one above the other's level:
-	// the same column, no tree mark on the second, and its own number.
 	siblings := func(s tuitest.Screen) bool {
 		sib := railLineWith(s, "mainsib")
 		return sib >= 0 && strings.Contains(s.Line(sib), "4 mainsib") &&
@@ -525,8 +476,6 @@ func TestRailMainCheckoutSiblings(t *testing.T) {
 	}
 	railShot(t, term, "rail-main-siblings-folded")
 
-	// The group stays folded in the saved state while its worktree goes, so a
-	// fold that still reached the main checkout would hide mainsib here.
 	if out, err := tuiosCLI(t, base, "kill-session", "repo-f-one"); err != nil {
 		t.Fatalf("kill the worktree session: %v: %s", err, out)
 	}
@@ -553,9 +502,6 @@ func TestSidebarGroupsMainCheckout(t *testing.T) {
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
 	writeConfig(t, base, "[appearance.sidebar]\ngroup_main = true\n")
 
-	// The control that starts the daemon and the session this client attaches
-	// to, then the main checkout's own session, made from the repository
-	// itself, and one worktree of the same repository.
 	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
 		t.Fatalf("create the plain session: %v: %s", err, out)
 	}
@@ -566,8 +512,6 @@ func TestSidebarGroupsMainCheckout(t *testing.T) {
 		t.Fatalf("worktree new feat/one: %v: %s", err, out)
 	}
 
-	// Every consumer must distinguish the main checkout from a linked
-	// worktree, whether or not the sidebar grouping is enabled.
 	rows := worktreeRows(t, base)
 	for session, wantMain := range map[string]bool{"mainsess": true, "repo-feat-one": false} {
 		var row map[string]any
@@ -636,8 +580,6 @@ func TestSidebarGroupsMainCheckout(t *testing.T) {
 	windowManagementMode(t, term)
 	toggleSidebarViaPalette(t, term)
 
-	// The repo row holds both the worktree and the main checkout, each labelled
-	// by its branch.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return railLineWith(s, "· repo") >= 0 &&
 			railLineWith(s, "feat/one") >= 0 &&
@@ -650,8 +592,6 @@ func TestSidebarGroupsMainCheckout(t *testing.T) {
 		t.Errorf("the main checkout's row is not under the repo header\n%s", term.Snapshot())
 	}
 
-	// The header folds in this layout too. The main checkout has its own row
-	// under it, and a click there opens the session.
 	col, row := findOnScreen(t, term, "─ main")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Session: mainsess", uiTimeout); err != nil {
@@ -675,7 +615,6 @@ func TestSidebarGroupsMainCheckout(t *testing.T) {
 		t.Fatalf("the header click did not open the group: %v\n%s", err, term.Snapshot())
 	}
 
-	// The header's right-click menu folds too.
 	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
 	if err := term.WaitForText("Fold group", uiTimeout); err != nil {
 		t.Fatalf("the header's menu offered no fold: %v\n%s", err, term.Snapshot())
@@ -731,7 +670,6 @@ func TestRailRevealsGroupedRow(t *testing.T) {
 	}
 	windowManagementMode(t, term)
 
-	// inSessions reports whether needle is on a rail row of the sessions section.
 	inSessions := func(s tuitest.Screen, needle string) bool {
 		row := railRowOf(s, needle)
 		return row >= 0 && row < railRowOf(s, "terminals")
@@ -754,8 +692,6 @@ func TestRailRevealsGroupedRow(t *testing.T) {
 		}
 	}
 
-	// The six sessions fit this section and the nine rows do not, so the list's
-	// length said there was nothing to scroll.
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return inSessions(s, "· repo") }, bootTimeout); err != nil {
 		t.Fatalf("the rail never grouped the sessions: %v\n%s", err, term.Snapshot())
 	}
@@ -767,8 +703,6 @@ func TestRailRevealsGroupedRow(t *testing.T) {
 	shows("a switch to the last row", "feat/two")
 	railShot(t, term, "reveal-last-row")
 
-	// The sessions overflow this section too, so the old reveal did scroll, by
-	// the session's place in the list and not its row.
 	if err := term.Resize(120, 12); err != nil {
 		t.Fatalf("resize: %v", err)
 	}
@@ -778,8 +712,6 @@ func TestRailRevealsGroupedRow(t *testing.T) {
 	shows("a switch to the middle", "other")
 	railShot(t, term, "reveal-middle-row")
 
-	// A folded repository draws no row for the session, so the repository's row
-	// stands in for it, and the fold stays as the person left it.
 	switchTo("repo-feat-two")
 	shows("a switch back to the last row", "feat/two")
 	col, row := findOnScreen(t, term, "· repo")
@@ -799,8 +731,6 @@ func TestRailRevealsGroupedRow(t *testing.T) {
 	}
 	railShot(t, term, "reveal-folded")
 
-	// A session that a switch creates. The client's list has not heard of it
-	// yet, so its first frame draws it as the last row.
 	if out, err := tuiosCLIIn(t, base, plain, "switch-session", "-s", current, "--create", "--cwd", plain, "newest"); err != nil {
 		t.Fatalf("switch-session --create: %v: %s", err, out)
 	}
@@ -809,8 +739,6 @@ func TestRailRevealsGroupedRow(t *testing.T) {
 	current = "newest"
 	railShot(t, term, "reveal-new-session")
 
-	// A repository with a main checkout session has that session's row as its
-	// row, so that row stands in for a session inside the fold (#1399).
 	if out, err := tuiosCLIIn(t, base, repo, "new", "mainsess", "--detach"); err != nil {
 		t.Fatalf("create the main checkout's session: %v: %s", err, out)
 	}

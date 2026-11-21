@@ -14,9 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// freePort reserves a port by binding and immediately releasing it. There is a
-// race between release and tuios binding it, but the window is tiny and a
-// collision fails loudly at startup rather than silently.
 func freePort(t *testing.T) int {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -30,11 +27,8 @@ func freePort(t *testing.T) int {
 	return port
 }
 
-// goroutineCountRe pulls the total out of the pprof goroutine profile header,
-// which begins "goroutine profile: total 123".
 var goroutineCountRe = regexp.MustCompile(`goroutine profile: total (\d+)`)
 
-// pprofGoroutines asks the running tuios for its live goroutine count.
 func pprofGoroutines(addr string) (int, error) {
 	body, err := httpGet(fmt.Sprintf("http://%s/debug/pprof/goroutine?debug=1", addr))
 	if err != nil {
@@ -47,10 +41,8 @@ func pprofGoroutines(addr string) (int, error) {
 	return strconv.Atoi(m[1])
 }
 
-// heapInUseRe pulls the in-use bytes out of the debug=1 heap profile trailer.
 var heapInUseRe = regexp.MustCompile(`# HeapInuse = (\d+)`)
 
-// pprofHeapInUse asks the running tuios for its in-use heap in bytes.
 func pprofHeapInUse(addr string) (uint64, error) {
 	body, err := httpGet(fmt.Sprintf("http://%s/debug/pprof/heap?debug=1", addr))
 	if err != nil {
@@ -107,15 +99,12 @@ func TestSoakMixedActivity(t *testing.T) {
 	})
 	waitBoot(t, term)
 
-	// Two windows with identifiable content, tiled.
 	for i := 1; i <= 2; i++ {
 		newWindow(t, term)
 		waitWindowCount(t, term, i, fmt.Sprintf("soak setup window %d", i))
 	}
 	enableTiling(t, term)
 
-	// Let startup settle before taking the baseline, so one-time initialisation
-	// is not counted as growth.
 	time.Sleep(3 * time.Second)
 	baseGoroutines, err := pprofGoroutines(addr)
 	if err != nil {
@@ -132,7 +121,6 @@ func TestSoakMixedActivity(t *testing.T) {
 	sizes := [][2]int{{120, 40}, {100, 30}, {140, 46}, {90, 28}}
 
 	for cycle := 1; cycle <= cycles; cycle++ {
-		// Output burst in the focused pane.
 		enterTerminalMode(t, term)
 		marker := fmt.Sprintf("SOAK-%d-DONE", cycle)
 		cmd := fmt.Sprintf("for i in $(seq 1 120); do echo soak-%d-$i; done; echo SOAK-$((%d))-DONE",
@@ -140,33 +128,28 @@ func TestSoakMixedActivity(t *testing.T) {
 		if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
 			t.Fatalf("cycle %d: send burst: %v", cycle, err)
 		}
-		// A frozen UI never shows this, so the hang check is per cycle.
 		if err := term.WaitForText(marker, soakTimeout); err != nil {
 			t.Fatalf("UI stopped rendering during soak cycle %d/%d: %q never appeared: %v\n%s",
 				cycle, cycles, marker, err, term.Snapshot())
 		}
 		leaveTerminalMode(t, term)
 
-		// Focus churn.
 		for range 8 {
 			if err := term.SendKeys(tuitest.Tab); err != nil {
 				t.Fatalf("cycle %d: tab: %v", cycle, err)
 			}
 		}
-		// Zoom in and out.
 		for range 2 {
 			if err := term.SendKeys(tuitest.Ctrl('b'), "z"); err != nil {
 				t.Fatalf("cycle %d: zoom: %v", cycle, err)
 			}
 			time.Sleep(120 * time.Millisecond)
 		}
-		// Resize.
 		sz := sizes[cycle%len(sizes)]
 		if err := term.Resize(sz[0], sz[1]); err != nil {
 			t.Fatalf("cycle %d: resize to %dx%d failed (tuios likely died): %v\n%s",
 				cycle, sz[0], sz[1], err, term.Snapshot())
 		}
-		// Create and close a window, so window lifecycle churns too.
 		newWindow(t, term)
 		waitWindowCount(t, term, 3, fmt.Sprintf("soak cycle %d: transient window", cycle))
 		if err := term.SendKeys("x"); err != nil {
@@ -177,8 +160,6 @@ func TestSoakMixedActivity(t *testing.T) {
 		alive(t, term, fmt.Sprintf("during soak cycle %d", cycle))
 	}
 
-	// Back to the starting size and let things quiesce so the comparison is
-	// like for like, and give the GC a chance to return what is genuinely free.
 	if err := term.Resize(120, 40); err != nil {
 		t.Fatalf("final resize: %v", err)
 	}
@@ -196,10 +177,6 @@ func TestSoakMixedActivity(t *testing.T) {
 		cycles, endGoroutines, baseGoroutines,
 		float64(endHeap)/(1<<20), float64(baseHeap)/(1<<20))
 
-	// The window count is back where it started, so the goroutine count should
-	// be too. The allowance covers per-window and per-client goroutines that
-	// legitimately come and go, without tolerating a per-cycle leak: with 8
-	// cycles, a leak of even two goroutines per cycle exceeds it.
 	const goroutineAllowance = 12
 	if endGoroutines > baseGoroutines+goroutineAllowance {
 		profile, _ := httpGet(fmt.Sprintf("http://%s/debug/pprof/goroutine?debug=1", addr))
@@ -208,24 +185,17 @@ func TestSoakMixedActivity(t *testing.T) {
 			baseGoroutines, endGoroutines, cycles, goroutineAllowance, topGoroutineStacks(profile))
 	}
 
-	// Heap is noisier than goroutine count because scrollback genuinely grows
-	// with the output produced, so the bound is a ratio and generous. It is
-	// there to catch an unbounded leak, not to police allocation.
 	if endHeap > baseHeap*4 && endHeap-baseHeap > 64<<20 {
 		t.Fatalf("in-use heap grew from %.1f MiB to %.1f MiB over %d cycles, "+
 			"more than 4x and more than 64 MiB: this looks unbounded",
 			float64(baseHeap)/(1<<20), float64(endHeap)/(1<<20), cycles)
 	}
 
-	// Finally, the UI must still work after the whole soak.
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo SOAK-FINAL-$((11*11))", "SOAK-FINAL-121", soakTimeout)
 	alive(t, term, "at the end of the soak")
 }
 
-// topGoroutineStacks trims a pprof goroutine profile to its first few stacks,
-// which is enough to name the leak in a failure message without dumping
-// thousands of lines into CI output.
 func topGoroutineStacks(profile string) string {
 	lines := strings.Split(profile, "\n")
 	if len(lines) > 60 {

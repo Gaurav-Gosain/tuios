@@ -11,29 +11,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Issue #649: in Claude Code, a prompt holding a URL followed by Chinese text
-// ran past the right edge of the pane and pushed the border over.
-//
-// The URL detector reads up to the next space, so the address held the Chinese
-// characters. tuios wrote that address raw into the frame's OSC 8. The UTF-8
-// continuation bytes of many runes are 0x80-0x9f, which a parser that reads
-// 8-bit controls takes as C1, and 0x9c is ST: "术" is E6 9C AF. The host ended
-// the sequence there and printed the rest of the address as text, so the row
-// came out wider than the pane and everything after it moved right.
-//
-// The frame now percent-encodes every byte outside printable ASCII in a link's
-// address, as the OSC 8 spec asks. tuitest reads 8-bit controls the way the
-// hosts in the report do, so the broken frame shows here as the same overflow.
-
-// unicodeLinkURL is the bare URL the pane prints. "术" carries the 0x9c byte.
 const unicodeLinkURL = "https://example.com/技术/方案"
 
-// unicodeMarkedURL is the OSC 8 link's address. It differs from the bare URL,
-// so the hover label naming it is not the bare URL's text read off the screen.
 const unicodeMarkedURL = "https://example.com/文档/技术"
 
-// percentEncodeHigh percent-encodes every byte of s outside printable ASCII,
-// the form the frame must carry.
 func percentEncodeHigh(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
@@ -46,7 +27,6 @@ func percentEncodeHigh(s string) string {
 	return b.String()
 }
 
-// lastBorderCol returns the column of the last "│" on row, or -1.
 func lastBorderCol(s tuitest.Screen, row int) int {
 	cols, _ := s.Size()
 	for c := cols - 1; c >= 0; c-- {
@@ -57,9 +37,6 @@ func lastBorderCol(s tuitest.Screen, row int) int {
 	return -1
 }
 
-// unicodeRowsStayInPane checks the rows the script printed: each starts where
-// it should, its last word is where the pane put it, and its right border is
-// at the same column as the plain row's. It returns the bare URL's position.
 func unicodeRowsStayInPane(t *testing.T, term *tuitest.Terminal, when string) (int, int) {
 	t.Helper()
 	s := term.Screen()
@@ -74,10 +51,8 @@ func unicodeRowsStayInPane(t *testing.T, term *tuitest.Terminal, when string) (i
 	var urlCol, urlRow int
 	for _, r := range []struct {
 		prefix, head, last string
-		// width is the columns from the start of head to last.
-		width int
+		width              int
 	}{
-		// 技术 and 方案 are two columns each, with "/" and a space between.
 		{"U: ", "U: https://example.com/", "TAIL", len("U: https://example.com/") + 4 + 1 + 4 + 1},
 		{"G: ", "G: label ", "END", len("G: label ")},
 	} {
@@ -145,7 +120,6 @@ func TestAUnicodeURLStaysInsideItsPane(t *testing.T) {
 
 	col, row := unicodeRowsStayInPane(t, term, "focused")
 
-	// The frame carries the bare URL as a link, with the address percent-encoded.
 	encoded := percentEncodeHigh(unicodeLinkURL)
 	deadline := time.Now().Add(uiTimeout)
 	for !bareLinkFrame(encoded).MatchString(out.String()) {
@@ -155,12 +129,9 @@ func TestAUnicodeURLStaysInsideItsPane(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// The bare URL still opens the address the pane printed.
 	mouseClick(t, term, col+6, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	waitOpened(t, record, []string{unicodeLinkURL}, "ctrl+click on a URL with Chinese characters")
 
-	// The OSC 8 link's hover label shows the address as the program wrote it,
-	// and a ctrl+click opens it in the encoded form tuios keeps.
 	gcol, grow := mustFind(t, term, "G: label")
 	mouseHover(t, term, gcol+5, grow)
 	if err := term.WaitForText(unicodeMarkedURL, uiTimeout); err != nil {
@@ -170,7 +141,6 @@ func TestAUnicodeURLStaysInsideItsPane(t *testing.T) {
 	waitOpened(t, record, []string{unicodeLinkURL, percentEncodeHigh(unicodeMarkedURL)},
 		"ctrl+click on an OSC 8 link with Chinese characters")
 
-	// An unfocused pane is drawn by another path, the emulator's own renderer.
 	newWindow(t, term)
 	waitWindowCount(t, term, 2, "opening a second window")
 	enableTiling(t, term, "R: a plain row")

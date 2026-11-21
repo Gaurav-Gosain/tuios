@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// restoreRow is one row of list-windows --json.
 type restoreRow struct {
 	Name      string `json:"display_name"`
 	Minimized bool   `json:"minimized"`
@@ -20,8 +19,6 @@ type restoreRow struct {
 	Height    int    `json:"height"`
 }
 
-// waitRestoreRow waits until the window named name in session matches ok, and
-// returns it.
 func waitRestoreRow(t *testing.T, term *tuitest.Terminal, base, session, name, what string, ok func(restoreRow) bool) restoreRow {
 	t.Helper()
 	var last string
@@ -53,8 +50,6 @@ func waitRestoreRow(t *testing.T, term *tuitest.Terminal, base, session, name, w
 // 0x0, so the restored pane must also have a size, and a box of its own: the
 // daemon gives every pane made with no client the same box.
 func TestRailClickRestoresAMinimizedAgent(t *testing.T) {
-	// Both panes are made and the agent minimized with no client attached,
-	// the way a script does it: the daemon gives both the same box.
 	base := t.TempDir()
 	killDaemon(t, base)
 	writeConfig(t, base, railFilesSwitchConfig)

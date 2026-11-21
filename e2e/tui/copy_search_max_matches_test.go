@@ -37,9 +37,6 @@ func TestCopySearchMatchLimitIsAnOption(t *testing.T) {
 			sendKeys(t, term, "/")
 			sendKeys(t, term, "C", "A", "P", "H", "I", "T")
 			sendKeys(t, term, tuitest.Enter)
-			// The count reads "(N matches)", or "(100+ matches)" when the search
-			// stopped at its limit. The command line itself holds the word once
-			// more, so the uncapped count is 151, not 150.
 			if err := term.WaitFor(func(sc tuitest.Screen) bool {
 				text := sc.Text()
 				if tc.capped {

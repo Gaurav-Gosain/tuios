@@ -15,8 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// crushHomeWindow is the window crushClient's session opens with. A Crush in
-// it has the whole pane, so its dialog is drawn as wide as Crush draws it.
 func crushHomeWindow(t *testing.T, base string) string {
 	t.Helper()
 	ids := grantWindowIDs(t, base, crushSession)
@@ -26,10 +24,6 @@ func crushHomeWindow(t *testing.T, base string) string {
 	return ids[0]
 }
 
-// openCrushPeek opens the Inbox, waits for the one approval, and peeks it.
-// summary is the whole message list-attention must carry, and shown is what
-// the dialog shows of the call: the command, or the description a narrow
-// dialog shows in its place.
 func openCrushPeek(t *testing.T, term *tuitest.Terminal, base, summary, shown, frame string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-attention", "--json")
@@ -39,8 +33,6 @@ func openCrushPeek(t *testing.T, term *tuitest.Terminal, base, summary, shown, f
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
-	// The row shows the summary beside the pane's name, however long the
-	// name is.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "1 needs you") && strings.Contains(text, "Allow") && strings.Contains(text, "Allow bash")
@@ -51,10 +43,6 @@ func openCrushPeek(t *testing.T, term *tuitest.Terminal, base, summary, shown, f
 	if err := term.SendKeys(" "); err != nil {
 		t.Fatalf("peek: %v", err)
 	}
-	// Crush's own dialog in the pane behind the Inbox shows the same words, so
-	// they can be on the screen before the peek has read the prompt. A key
-	// pressed while the read is out does nothing. The answer hints are drawn
-	// only from a finished read, so the wait is on them.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "Tool bash") && strings.Contains(text, shown) &&
@@ -65,9 +53,6 @@ func openCrushPeek(t *testing.T, term *tuitest.Terminal, base, summary, shown, f
 	}
 }
 
-// allowFromPeek presses a in the open peek, then enter. The key only asks:
-// it must press nothing into the pane, which still shows the dialog a
-// second later, and the peek says what enter does.
 func allowFromPeek(t *testing.T, term *tuitest.Terminal, base, win string, risky bool) {
 	t.Helper()
 	if err := term.SendKeys("a"); err != nil {
@@ -88,8 +73,6 @@ func allowFromPeek(t *testing.T, term *tuitest.Terminal, base, win string, risky
 	}
 }
 
-// tileCrushPane turns tiling on, so the one pane takes the screen and a
-// Crush in it draws its wide dialog.
 func tileCrushPane(t *testing.T, base string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "set-layout", "-s", crushSession, "--tiling", "true"); err != nil {
@@ -97,7 +80,6 @@ func tileCrushPane(t *testing.T, base string) {
 	}
 }
 
-// startFakeCrushIn starts a stand-in Crush in the window and returns its pid.
 func startFakeCrushIn(t *testing.T, base, win, bin string) int {
 	t.Helper()
 	typeIn(t, base, win, bin)
@@ -110,8 +92,6 @@ func startFakeCrushIn(t *testing.T, base, win, bin string) int {
 	return pid
 }
 
-// refusedFromAPane runs tuios respond from a pane with no respond grant, in a
-// session of its own, against the Crush pane, and checks it is refused.
 func refusedFromAPane(t *testing.T, base, window string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "new", "e2e-other", "--detach"); err != nil {
@@ -175,7 +155,6 @@ func TestCrushPermissionAnsweredFromTheInbox(t *testing.T) {
 	saveFrame(t, term, "crush-needs-input")
 
 	refusedFromAPane(t, base, win)
-	// Crush's pane is named for its folder, often a long path.
 	if out, err := tuiosCLI(t, base, "set-window", "-s", crushSession, "-w", win, "--name", "crush /home/someone/src/github.com/example/a-project-with-a-long-name"); err != nil {
 		t.Fatalf("set-window: %v\n%s", err, out)
 	}
@@ -193,8 +172,6 @@ func TestCrushPermissionAnsweredFromTheInbox(t *testing.T) {
 	alive(t, term, "after answering Crush from the Inbox")
 }
 
-// writeRealCrushConfig points a real Crush at the stand-in provider, and at
-// nothing else, through the daemon's XDG_CONFIG_HOME.
 func writeRealCrushConfig(t *testing.T, base, provider string) {
 	t.Helper()
 	cfgDir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "crush")
@@ -215,8 +192,6 @@ func writeRealCrushConfig(t *testing.T, base, provider string) {
 	}
 }
 
-// realCrushCommand is the line that starts a real Crush in dir, with no key
-// from the machine: the only provider it can call is the stand-in.
 func realCrushCommand(dir, bin string) string {
 	return "cd " + dir + " && env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u GEMINI_API_KEY -u OPENROUTER_API_KEY -u GROQ_API_KEY -u XAI_API_KEY CRUSH_DISABLE_PROVIDER_AUTO_UPDATE=1 CRUSH_DISABLE_METRICS=1 " + bin
 }
@@ -257,7 +232,6 @@ func TestRealCrushAnsweredFromTheInbox(t *testing.T) {
 	typeIn(t, base, win, realCrushCommand(dir, crushBin))
 	waitAgentState(t, base, crushSession, win, "idle", "crush", log, "started, idle")
 	waitCapture(t, base, crushSession, win, "Ready")
-	// Crush draws its prompt a moment before it reads keys.
 	time.Sleep(2 * time.Second)
 	if out, err := tuiosCLI(t, base, "send-text", "-s", crushSession, "-w", win, "RUN-TOOL inbox"); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)
@@ -272,9 +246,6 @@ func TestRealCrushAnsweredFromTheInbox(t *testing.T) {
 		t.Fatalf("ASSERTION: blocked by %q, want approval", st.BlockedBy)
 	}
 	log.add("needs_input came from %s", st.Source)
-	// Crush shows the command in a dialog wide enough for it, and its
-	// description in a narrow one. A description is not the call, so the
-	// message says so and allowing takes a second press.
 	shown, summary, risky := "touch tuios-e2e-marker", "approve bash: touch tuios-e2e-marker", false
 	if !strings.Contains(waitJoined(t, base, win, "Permission Required", "Allow"), shown) {
 		shown, summary, risky = "Create a marker file", "approve bash: Create a marker file (not all shown)", true
@@ -353,7 +324,6 @@ func TestCrushQuotedDialogIsNotAPrompt(t *testing.T) {
 	typeIn(t, base, win, "quote")
 	waitCapture(t, base, crushSession, win, "Here is what you will see")
 	waitAgentState(t, base, crushSession, win, "done", "crush", log, "quoted the dialog, turn ended")
-	// Past the screen tier's settle look, which reads the quote.
 	time.Sleep(1500 * time.Millisecond)
 	if st := readAgentState(t, base, crushSession, win); st.State != "done" {
 		t.Fatalf("ASSERTION: the quoted dialog made the pane %s (%q)", st.State, st.Message)
@@ -381,15 +351,10 @@ func TestCrushCrashAtItsDialogClearsThePane(t *testing.T) {
 	requireReal(t, "perf or external program, env-gated")
 	_, base := crushClient(t)
 	win := crushHomeWindow(t, base)
-	// A tall pane, so what the shell prints after the crash leaves the
-	// dialog whole on the screen.
 	tileCrushPane(t, base)
 	pid := startFakeCrushIn(t, base, win, buildFakeCrush(t))
 	log := &stateLog{name: "crush-crash"}
 	typeIn(t, base, win, "dialog")
-	// The blocked report puts the pane on needs_input for a moment, before
-	// the working report takes it off and the screen puts it back. The
-	// kill must come after the screen's claim, so the wait is on its source.
 	deadline := time.Now().Add(uiTimeout)
 	for st := waitAgentState(t, base, crushSession, win, "needs_input", "crush", log, "dialog up"); st.State != "needs_input" || st.Source != "screen"; st = readAgentState(t, base, crushSession, win) {
 		if time.Now().After(deadline) {
@@ -444,7 +409,7 @@ func TestOnlyCrushGetsCrushAnswers(t *testing.T) {
 	if out := peek(); !strings.Contains(out, `"answerable": false`) || !strings.Contains(out, "does not see crush") {
 		t.Fatalf("ASSERTION: a program that only says it is Crush is offered answers:\n%s", out)
 	}
-	typeIn(t, base, win, "d") // the stand-in reads one key
+	typeIn(t, base, win, "d")
 	waitCapture(t, base, crushSession, win, "DENIED")
 	typeIn(t, base, win, "quit")
 	waitAgentState(t, base, crushSession, win, "none", "", log, "notcrush quit")
@@ -540,8 +505,6 @@ func TestRealCrushQuotedDialogIsNotAPrompt(t *testing.T) {
 	log.save(t)
 }
 
-// realCrushProject is a git repository with a context file, so Crush skips
-// its offer to write one.
 func realCrushProject(t *testing.T) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "proj")
@@ -555,8 +518,6 @@ func realCrushProject(t *testing.T) string {
 	return dir
 }
 
-// sendRealPrompt types a prompt into a real Crush, checks it on the screen,
-// and sends it.
 func sendRealPrompt(t *testing.T, base, win, prompt string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "send-text", "-s", crushSession, "-w", win, prompt); err != nil {
@@ -568,7 +529,6 @@ func sendRealPrompt(t *testing.T, base, win, prompt string) {
 	}
 }
 
-// jsonField is the first string value of a key in JSON text, "" when none.
 func jsonField(out, key string) string {
 	m := regexp.MustCompile(`"` + regexp.QuoteMeta(key) + `": "((?:[^"\\]|\\.)*)"`).FindStringSubmatch(out)
 	if m == nil {

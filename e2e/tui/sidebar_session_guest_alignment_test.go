@@ -32,8 +32,6 @@ session = "side"
 	}, bootTimeout); err != nil {
 		t.Fatalf("sessions did not attach: %v\n%s", err, term.Snapshot())
 	}
-	// Drive the two real daemon PTYs to known screens after both sizes settle.
-	// The side guest has one extra empty row, not one extra app chrome row.
 	for _, target := range []struct{ name, command string }{
 		{"center", `printf '\033[2J\033[H\nCMARK\n'`},
 		{"side", `printf '\033[2J\033[H\n\nSMARK\n'`},
@@ -50,7 +48,6 @@ session = "side"
 			t.Fatalf("%s enter: %v\n%s", target.name, err, out)
 		}
 	}
-	// The *underlying* side screen still contains its extra blank row.
 	deadline := time.Now().Add(uiTimeout)
 	for {
 		out, err := tuiosCLI(t, base, "capture-pane", "-s", "side")
@@ -84,7 +81,6 @@ session = "side"
 	}, uiTimeout); err != nil {
 		t.Fatalf("guest's extra blank row was hidden: %v\n%s", err, term.Snapshot())
 	}
-	// The host cursor and mouse use the guest's original row coordinates.
 	mousePress(t, term, 5, 3, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, 5, 3, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -93,8 +89,6 @@ session = "side"
 	}, uiTimeout); err != nil {
 		t.Fatalf("cursor did not follow the unshifted prompt: %v\n%s", err, term.Snapshot())
 	}
-	// A click on the SMARK row (screen row 3) belongs to guest row 2,
-	// hence SGR row 3.
 	for _, command := range []string{
 		"stty -echo",
 		`stty -icanon min 1; printf '\033[?1000h\033[?1006h'; printf '%s\n' MOUSE""READY; od -An -tx1 -N9; printf '\033[?1000l\033[?1006l'; printf '%s\n' MOUSE""DONE; stty sane`,
@@ -119,8 +113,6 @@ session = "side"
 		t.Fatalf("tracked click did not map screen row 3 to guest row 3: %v\n%s", err, mouseOutput)
 	}
 
-	// An alternate-screen program with the same leading blank rows must not
-	// be shifted. Its screen has its own full-screen geometry and cursor.
 	command := `printf '\033[?1049h\033[2J\033[H\n\nALTTEST'; sleep 3; printf '\033[?1049l'`
 	if out, err := tuiosCLI(t, base, "send-keys", "-s", "side", "--literal", command); err != nil {
 		t.Fatalf("start alternate screen: %v\n%s", err, out)

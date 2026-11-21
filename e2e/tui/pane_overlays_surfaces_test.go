@@ -10,13 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The three surfaces the first pass of pane-styled overlays left on the
-// chrome's own palette: the plugin approval dialog, the scrollback browser and
-// the copy-mode search bar. Each is opened end to end here, with
-// appearance.pane_overlays on and with it off.
-
-// paneOverlaysLook is the config the pane-styled checks run under: the
-// focused border and the pane ground in colours no palette lands on by chance.
 const paneOverlaysLook = "pane_overlays = true\n" +
 	"border_focused_color = \"#ff8800\"\n" +
 	"pane_background = \"#203040\"\n"
@@ -114,10 +107,6 @@ func TestPaneOverlaysReachTheRemainingSurfaces(t *testing.T) {
 	})
 }
 
-// paneStep reports whether c is a step of the navy pane ground: a 24-bit
-// colour that is neither the ground nor stock, on the navy's side of the
-// wheel, at about one ramp step from it. TestPaneOverlaysStepRowsFromThePaneGround
-// holds the palette's cursor row to the same.
 func paneStep(c, stock tuitest.Color) bool {
 	if c.Kind != tuitest.ColorRGB || c == matchPaneBg || c == stock || c.B <= c.R {
 		return false
@@ -126,11 +115,6 @@ func paneStep(c, stock tuitest.Color) bool {
 	return ratio > 1.05 && ratio < 1.6
 }
 
-// browserStock is what the scrollback browser draws itself with under a config
-// without pane_overlays: its frame ink, the selected command row's ground and
-// a footer key pill's ground. It was read off a build of this branch before
-// the browser followed the overlay palette (4a9267a44), which draws it as
-// upstream main does.
 type browserStock struct {
 	frameFg, selected, pill tuitest.Color
 }
@@ -141,16 +125,10 @@ var (
 		selected: tuitest.Color{Kind: tuitest.ColorRGB, R: 0x2d, G: 0x2c, B: 0x36},
 		pill:     tuitest.Color{Kind: tuitest.ColorRGB, R: 0x4d, G: 0x4c, B: 0x57},
 	}
-	// At 16 colours the frame is bright cyan, and the selected row and the
-	// pills are on the terminal's own ground: the row says it is selected in
-	// reverse video.
 	stockBrowserSixteen = browserStock{
 		frameFg: tuitest.Color{Kind: tuitest.ColorIndexed, Index: 14},
 	}
 
-	// stockCopySearchTrueColor is the copy-mode search bar's ground under the
-	// same stock config, read off the same build. At 16 colours it is the
-	// terminal's own.
 	stockCopySearchTrueColor = tuitest.Color{Kind: tuitest.ColorRGB, R: 0x3a, G: 0x39, B: 0x43}
 	stockCopySearchSixteen   = tuitest.Color{}
 )
@@ -234,13 +212,8 @@ func TestStockRemainingSurfacesKeepTheirOwnLook(t *testing.T) {
 	}
 }
 
-// pluginApprovalTitle is the plugin the dialog asks about.
 const pluginApprovalTitle = "Allow the plugin Look probe?"
 
-// openPluginApproval links a native plugin while the client is attached, waits
-// for the dialog it opens, and finds its frame: the title sits two cells right
-// of the top-left corner, and the other corners are read along the top row and
-// down the left edge.
 func openPluginApproval(t *testing.T, term *tuitest.Terminal, base string) overlayBox {
 	t.Helper()
 	approvalPlugin(t, base, "e2e.look", "Look probe", `"read"`, "sleep 1\n")
@@ -278,15 +251,10 @@ func pluginApprovalBox(s tuitest.Screen) (overlayBox, bool) {
 	return b, b.x1 > 0 && b.y1 > 0 && strings.Contains(s.Line(b.y1), "not now")
 }
 
-// pluginApprovalInterior is the dialog's interior probes: the padding cell
-// right of the left edge on the question's row, and the question's first
-// letter.
 func pluginApprovalInterior(s tuitest.Screen, b overlayBox) []cellProbe {
 	return []cellProbe{{"padding", b.x0 + 1, b.y0 + 1}, {"body text", rowCol(s, b.y0+1, pluginApprovalTitle), b.y0 + 1}}
 }
 
-// closePluginApproval answers Not now with esc, past the half second the
-// dialog ignores keys for.
 func closePluginApproval(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	time.Sleep(700 * time.Millisecond)
@@ -296,13 +264,8 @@ func closePluginApproval(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// browserTitle is the scrollback browser's title.
 const browserTitle = "Scrollback browser"
 
-// openScrollbackBrowser prints two commands with OSC 133 marks in the pane,
-// opens the scrollback browser on them and finds its frame: the title is one
-// row of padding below the top edge and two cells of padding right of the
-// left one.
 func openScrollbackBrowser(t *testing.T, term *tuitest.Terminal) overlayBox {
 	t.Helper()
 	showScrollbackBrowser(t, term)
@@ -331,8 +294,6 @@ func openScrollbackBrowser(t *testing.T, term *tuitest.Terminal) overlayBox {
 	return b
 }
 
-// showScrollbackBrowser prints two commands with OSC 133 marks in the pane and
-// presses the keys that open the scrollback browser on them.
 func showScrollbackBrowser(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	enterTerminalMode(t, term)
@@ -349,16 +310,11 @@ func closeScrollbackBrowser(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// browserLook is what readBrowserLook read off the scrollback browser.
 type browserLook struct {
 	frameFg, frameBg, padding, selected, pill tuitest.Color
 	report                                    string
 }
 
-// readBrowserLook reads the browser at b: the frame's ink and ground, which
-// must be one colour round all four corners and the edges; the padding cell
-// inside the top-left corner; the selected command's first letter; and the key
-// pill of the footer's first hint. ok is false until the rows are drawn.
 func readBrowserLook(s tuitest.Screen, b overlayBox) (browserLook, bool) {
 	var l browserLook
 	var r strings.Builder
@@ -384,7 +340,6 @@ func readBrowserLook(s tuitest.Screen, b overlayBox) (browserLook, bool) {
 	if sy >= 0 {
 		sx = rowCol(s, sy, "echo two")
 	}
-	// The footer's first key pill names the list keys, the arrows by default.
 	hx, hy := -1, rowWith(s, "↑↓")
 	if hy >= 0 {
 		hx = rowCol(s, hy, "↑↓")
@@ -407,11 +362,6 @@ func readBrowserLook(s tuitest.Screen, b overlayBox) (browserLook, bool) {
 	return l, ok
 }
 
-// wantBrowserFrameOnPane fails unless every cell of the browser's frame at b,
-// all four edges end to end, is a frame glyph on the pane's ground.
-// readBrowserLook reads six cells round the top-left corner, so a frame whose
-// right or bottom edge took another ground would pass it; this reads them all,
-// as wantFrameRowsOnPane does the rows a dialog's title and hints ride in.
 func wantBrowserFrameOnPane(t *testing.T, term *tuitest.Terminal, art, name string, b overlayBox) {
 	t.Helper()
 	var report string
@@ -444,8 +394,6 @@ func wantBrowserFrameOnPane(t *testing.T, term *tuitest.Terminal, art, name stri
 	}
 }
 
-// openCopyModeSearch prints a line to find, enters copy mode and types a
-// search for it, and waits for the bar to show the query and its one match.
 func openCopyModeSearch(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	enterTerminalMode(t, term)
@@ -461,15 +409,11 @@ func openCopyModeSearch(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// copySearchLook is what readCopySearchLook read off the copy-mode search bar.
 type copySearchLook struct {
 	pane, pad, prompt, count tuitest.Color
 	report                   string
 }
 
-// readCopySearchLook reads the search bar: the pad cell left of the prompt,
-// the prompt, and the match count's bracket, and the pane content cell left of
-// the bar. ok is false until the bar shows the query and its count.
 func readCopySearchLook(s tuitest.Screen) (copySearchLook, bool) {
 	var l copySearchLook
 	y := lastRowWith(s, "/need")

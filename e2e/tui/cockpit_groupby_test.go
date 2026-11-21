@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// ckHeadingRow is the first fleet row that starts with heading, or -1.
 func ckHeadingRow(s tuitest.Screen, heading string) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -61,7 +60,6 @@ func TestCockpitGroupBy(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "groupby-session")
 
-	// A new client keeps the grouping.
 	ckPress(t, term, "q")
 	again := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 200, rows: 50, shippedLooks: true})
 	if err := again.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
@@ -73,7 +71,6 @@ func TestCockpitGroupBy(t *testing.T) {
 		t.Fatalf("ASSERTION: a new client did not keep the session grouping: %v\n%s", err, again.Snapshot())
 	}
 
-	// Machine, then project, then back to state.
 	ckPress(t, again, "s", "3")
 	waitText(t, again, "the machine grouping", "Group: machine")
 	ckPress(t, again, "s", "4")
@@ -89,7 +86,6 @@ func TestCockpitGroupBy(t *testing.T) {
 		t.Fatalf("ASSERTION: 1 did not give the state groups back: %v\n%s", err, again.Snapshot())
 	}
 
-	// The header's control opens the menu.
 	row, col := findText(t, again, "Group: state")
 	mouseClick(t, again, col, row, tuitest.MouseLeft, 0)
 	if err := again.WaitFor(groupMenuOpen, uiTimeout); err != nil {

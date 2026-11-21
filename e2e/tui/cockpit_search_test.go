@@ -11,8 +11,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// screenLineFinds is the first line of s that holds every marker, "" when no
-// line does.
 func screenLineFinds(s tuitest.Screen, markers ...string) string {
 	for line := range strings.SplitSeq(s.Text(), "\n") {
 		ok := true
@@ -26,8 +24,6 @@ func screenLineFinds(s tuitest.Screen, markers ...string) string {
 	return ""
 }
 
-// stopHook runs Claude Code's Stop hook for a pane with what the agent said
-// last.
 func stopHook(t *testing.T, base, sessionName, window, said string) {
 	t.Helper()
 	payload, err := json.Marshal(map[string]any{"hook_event_name": "Stop", "session_id": "e2e-" + window, "last_assistant_message": said})
@@ -124,7 +120,6 @@ func TestCockpitSearchFindsByNameAndKeepsTheAgent(t *testing.T) {
 	}
 	saveFrame(t, term, "search-cleared")
 
-	// The finished agent's preview, in its focus.
 	sendKeys(t, term, "/")
 	sendKeys(t, term, "printer")
 	sendKeys(t, term, tuitest.Enter)

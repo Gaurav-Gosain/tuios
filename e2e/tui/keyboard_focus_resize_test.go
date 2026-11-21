@@ -10,40 +10,15 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Moving keyboard focus between panes must not resize the shell in either of
-// them.
-//
-// A report said that moving left and right between windows on macOS left empty
-// lines in a pane, with no visible size change, after the click and drag paths
-// had been fixed. These pin every keyboard path that moves focus, in every
-// configuration the report could plausibly be running: window-mode Tab, the
-// alt+arrow chords in terminal mode, own borders and shared borders, a daemon
-// session and a standalone one, a host that reports pixel sizes, auto-enter
-// on focus, zsh, and the scrolling layout. Each measures zero on Linux.
-//
-// The pane counts the signals itself, the way click_focus_resize_test.go does:
-// its shell prints one marker line per SIGWINCH, and the assertion is on rows
-// in the grid, which is exactly the symptom. The swap test at the end is the
-// positive half in the same fixture, so a fixture that cannot see a resize at
-// all cannot pass the others for the wrong reason.
-
-// focusFixture is one way of building the two-pane fixture.
 type focusFixture struct {
-	config string
-	env    []string
-	// standalone runs plain tuios with no daemon behind it.
+	config     string
+	env        []string
 	standalone bool
-	// layout is a palette search that picks a layout after tiling is on.
-	layout string
-	// animations keeps the UI animations on, which is the default a user has.
+	layout     string
 	animations bool
-	// fish runs fish in the panes instead of bash. Its trap is spelled
-	// differently and its prompt repaints differently on SIGWINCH.
-	fish bool
+	fish       bool
 }
 
-// focusPanes builds two tiled panes and arms a SIGWINCH counter in the second
-// one, which tiling puts on the right and leaves focused, in terminal mode.
 func focusPanes(t *testing.T, f focusFixture) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -80,17 +55,12 @@ func focusPanes(t *testing.T, f focusFixture) *tuitest.Terminal {
 		arm = `function __w --on-signal WINCH; printf "WI%sCH\n" N; end; clear; printf "AR%sED\n" M`
 	}
 	runInShell(t, term, arm, "ARMED", shellTimeout)
-	// The trap is armed once the marker is on screen, and the clear has left
-	// the command echo behind it, so every WINCH row after this came from a
-	// signal.
 	time.Sleep(2 * time.Second)
 	return term
 }
 
 const sharedBordersConfig = "[appearance]\nshared_borders = true\nclick_to_type = 'double'\n"
 
-// winchRows is how many marker rows the armed pane printed, once the screen
-// has settled.
 func winchRows(t *testing.T, term *tuitest.Terminal, what string) int {
 	t.Helper()
 	time.Sleep(2 * time.Second)
@@ -109,8 +79,6 @@ func requireNoWinch(t *testing.T, term *tuitest.Terminal, what string) {
 	}
 }
 
-// markerColumn is the column the marker starts at on the first row holding
-// it, or -1.
 func markerColumn(s tuitest.Screen, marker string) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -121,7 +89,6 @@ func markerColumn(s tuitest.Screen, marker string) int {
 	return -1
 }
 
-// send types keys and gives the client a beat to act on them.
 func send(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	t.Helper()
 	if err := term.SendKeys(keys...); err != nil {
@@ -130,8 +97,6 @@ func send(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	time.Sleep(700 * time.Millisecond)
 }
 
-// altArrowRoundTrips moves focus to the left pane and back three times with
-// the terminal-mode chords.
 func altArrowRoundTrips(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	for range 3 {
@@ -159,16 +124,11 @@ func TestAltArrowsMoveFocus(t *testing.T) {
 	}
 }
 
-// focusCase is one keyboard focus path in one configuration. Each is its own
-// top-level test rather than a subtest: the daemon's socket lives under the
-// test's temp dir, and a subtest name pushes that path past the unix socket
-// limit, so the daemon cannot start.
 type focusCase struct {
 	fixture focusFixture
 	drive   func(*testing.T, *tuitest.Terminal)
 }
 
-// tabRoundTrips walks focus with Tab in window mode.
 func tabRoundTrips(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	leaveTerminalMode(t, term)
@@ -177,8 +137,6 @@ func tabRoundTrips(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// runFocusCase is the regression: the keyboard focus path adds no line to the
-// pane.
 func runFocusCase(t *testing.T, c focusCase) {
 	t.Helper()
 	shells := []string{}

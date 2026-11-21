@@ -12,24 +12,13 @@ import (
 	"testing"
 )
 
-// The ssh relay stands in for sshd. The fake ssh a daemon runs execs this test
-// binary with relaySockEnv set. That process sends the command and its own
-// environment to startSSHRelay's socket and relays its stdio. The relay, in the
-// test process, runs the command with the connection as its stdio. The command
-// is then a child of the test process and not of the daemon, as a command
-// sshd runs is not.
-
-// relaySockEnv names the relay socket for a relay client.
 const relaySockEnv = "TUIOS_E2E_RELAY_SOCK"
 
-// relayRequest is the first line a relay client sends.
 type relayRequest struct {
 	Cmd string   `json:"cmd"`
 	Env []string `json:"env"`
 }
 
-// runRelayClientIfAsked runs the relay client and exits when this binary was
-// started as one. TestMain calls it first.
 func runRelayClientIfAsked() {
 	sock := os.Getenv(relaySockEnv)
 	if sock == "" {
@@ -59,7 +48,6 @@ func runRelayClientIfAsked() {
 	os.Exit(0)
 }
 
-// testBinary is the path of this test binary.
 func testBinary(t *testing.T) string {
 	t.Helper()
 	exe, err := os.Executable()
@@ -69,7 +57,6 @@ func testBinary(t *testing.T) string {
 	return exe
 }
 
-// startSSHRelay starts the relay for one test and returns its socket.
 func startSSHRelay(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "rl")

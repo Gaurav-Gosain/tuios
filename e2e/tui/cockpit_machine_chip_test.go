@@ -7,19 +7,7 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// ckHostGlyph is the mark the agents view puts before a machine's name.
 const ckHostGlyph = "\U000f048b"
-
-// How TestCockpitMachineChip could pass wrongly, written down first:
-//   - Every row could keep a machine label, this machine's too, which says
-//     nothing and hides the session. The local rows must carry no machine
-//     mark at all.
-//   - A remote row could lose its machine with the label gone. ws-reconnect
-//     and release-notes run on build, bench-idle on gpu.
-//   - The fan's attempts are drawn by another path. cache-1 is local and must
-//     carry no mark either.
-//   - The rows could be read before the remote rows arrive. The test waits
-//     for both remote machines first.
 
 // TestCockpitMachineChip opens the frame A fleet (this machine plus build and
 // gpu) at 200x55. A row from another machine shows the machine's chip before

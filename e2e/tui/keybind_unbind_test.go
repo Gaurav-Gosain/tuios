@@ -9,11 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Unbinding is a gesture on a screen, and the unit tests only prove the model
-// agrees with itself. These drive a real client through a real terminal and
-// then read the file on disk, which is the only place the whole path shows up:
-// palette, overlay, key handler, config writer.
-
 // TestPaletteReachesTheKeybindManager. The manager was reachable only from the
 // leader chord, which is the one place a user who does not know the chord
 // cannot look.
@@ -65,8 +60,6 @@ func TestPaletteTokenSearchesActions(t *testing.T) {
 	if err := term.WaitForText(keybindTitle, uiTimeout); err != nil {
 		t.Fatalf("the action row did not open the manager: %v\n%s", err, term.Snapshot())
 	}
-	// Opened filtered to that action, so the list is that action's bindings and
-	// not the top of the whole list.
 	if err := term.WaitForText("Toggle zoom", uiTimeout); err != nil {
 		t.Fatalf("the manager did not open on the action that was picked: %v\n%s", err, term.Snapshot())
 	}
@@ -84,16 +77,12 @@ func TestPaletteTokenSearchesActions(t *testing.T) {
 // this fails, because config.toml then has no close_window line at all and the
 // default comes back at the next load.
 func TestUnbindingFromTheOverlayReachesTheConfigFile(t *testing.T) {
-	// attachClientBase, rather than a hand-rolled attach, because it also
-	// settles the client and returns the isolation root the config is written
-	// into. A client typed at before it has settled drops the keystrokes.
 	term, base := attachClientBase(t)
 
 	if err := term.SendKeys(legacyCtrlP); err != nil {
 		t.Fatalf("open palette: %v", err)
 	}
 	waitPaletteOpen(t, term, "before unbinding")
-	// One action, so the row under the cursor when the manager opens is known.
 	if err := term.Type("#toggle_zoom"); err != nil {
 		t.Fatalf("type the token query: %v", err)
 	}
@@ -110,8 +99,6 @@ func TestUnbindingFromTheOverlayReachesTheConfigFile(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('d')); err != nil {
 		t.Fatalf("send ctrl+d: %v", err)
 	}
-	// The notification names what was taken, which is also how this waits for
-	// the write rather than sleeping on it.
 	if err := term.WaitForText("Unbound", uiTimeout); err != nil {
 		t.Fatalf("nothing was reported after ctrl+d: %v\n%s", err, term.Snapshot())
 	}
@@ -127,8 +114,6 @@ func TestUnbindingFromTheOverlayReachesTheConfigFile(t *testing.T) {
 	alive(t, term, "after unbinding from the overlay")
 }
 
-// keybindTable is the window_management table out of a rendered config, for a
-// failure message that shows the relevant lines rather than the whole file.
 func keybindTable(file string) string {
 	const head = "[keybindings.window_management]"
 	i := strings.Index(file, head)

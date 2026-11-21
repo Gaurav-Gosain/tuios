@@ -68,8 +68,6 @@ session = "side-left"
 	saveArtifact(t, term, dir, "ordinary-rail-pane-titles")
 	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "ordinary-rail-pane-titles")
 
-	// An attached rail also follows the pane's ordinary live rename, rather
-	// than holding an assignment label or a stale snapshot title.
 	for _, title := range []string{"Live Renamed", "Left Shell"} {
 		if out, err := tuiosCLI(t, base, "run-command", "-s", "side-left", "RenameWindow", original.Windows[0].ID, title); err != nil {
 			t.Fatalf("live rename: %v\n%s", err, out)
@@ -94,8 +92,6 @@ session = "side-left"
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// The three ordinary title-bar controls target the rail pane, not the
-	// center window. Default dots are close (x=2), minimize (x=4), zoom (x=6).
 	mousePress(t, term, 6, 0, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, 6, 0, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {

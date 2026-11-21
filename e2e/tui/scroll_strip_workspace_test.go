@@ -32,8 +32,6 @@ import (
 // is how these tests are known to be bound to the threshold rather than to the
 // name of the function called.
 
-// stripClient brings up one client on one daemon session with three named
-// panes in the scrolling layout, focused on the leftmost column.
 func stripClient(t *testing.T, base string) *tuitest.Terminal {
 	t.Helper()
 	killDaemon(t, base)
@@ -58,8 +56,6 @@ func stripClient(t *testing.T, base string) *tuitest.Terminal {
 	}
 	waitPaletteClosed(t, a, "after picking the scrolling layout")
 
-	// Columns are 55% of the screen each, so at most two are ever on screen.
-	// Step left to the first column, which is where every row below starts.
 	for range 2 {
 		if err := a.SendKeys(tuitest.Alt(tuitest.Left)); err != nil {
 			t.Fatalf("step left: %v", err)
@@ -76,8 +72,6 @@ func stripClient(t *testing.T, base string) *tuitest.Terminal {
 	return a
 }
 
-// stripBand is the screen without the dock's last two rows, so a notification
-// expiring does not read as the strip having moved.
 func stripBand(term *tuitest.Terminal) string {
 	s := term.Screen()
 	_, rows := s.Size()
@@ -89,7 +83,6 @@ func stripBand(term *tuitest.Terminal) string {
 	return b.String()
 }
 
-// wheelStrip turns the wheel with alt held, which is how the strip is scrolled.
 func wheelStrip(t *testing.T, term *tuitest.Terminal, notches int) {
 	t.Helper()
 	for range notches {
@@ -98,14 +91,6 @@ func wheelStrip(t *testing.T, term *tuitest.Terminal, notches int) {
 	time.Sleep(time.Second)
 }
 
-// wheelStripToEnd walks the strip with the wheel until it stops moving.
-//
-// A notch was a fifth of the viewport when this suite was written, so a fixed
-// count of them was a fair proxy for "scroll to the far end". A notch is
-// appearance.niri_scroll_cells now, eight cells by default, because a trackpad
-// reports one wheel event per cell the fingers cross and a fifth of a viewport
-// per event made a flick unusable. The count that used to clear the strip no
-// longer does, so this asks the strip where the end is rather than assuming.
 func wheelStripToEnd(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	last := ""
@@ -120,7 +105,6 @@ func wheelStripToEnd(t *testing.T, term *tuitest.Terminal) {
 	t.Fatalf("the strip never stopped moving:\n%s", stripBand(term))
 }
 
-// roundTrip switches to workspace 2 and back to workspace 1.
 func roundTrip(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	switchWorkspace(t, term, "2", 0)
@@ -164,8 +148,6 @@ func TestWorkspaceRoundTripKeepsTheScrolledStrip(t *testing.T) {
 func TestWorkspaceRoundTripRevealsAHiddenColumn(t *testing.T) {
 	a := stripClient(t, t.TempDir())
 
-	// To the far end, so the focused column is off the left edge. Walked rather
-	// than counted: how far one notch moves is a setting now.
 	wheelStripToEnd(t, a)
 	before := stripBand(a)
 	t.Logf("the strip parked off the focused column:\n%s", before)
@@ -218,8 +200,6 @@ func TestWorkspaceRoundTripRevealsAHiddenColumn(t *testing.T) {
 //     pane it is typing into. (It was measured together with a joining-client
 //     unit test that has since been removed.)
 
-// parkStripPastFocus scrolls the strip until the focused column is entirely off
-// screen, and returns the frame it settled on.
 func parkStripPastFocus(t *testing.T, term *tuitest.Terminal) string {
 	t.Helper()
 	wheelStrip(t, term, 5)
@@ -255,10 +235,6 @@ func TestAPeerJoiningLeavesTheParkedStripAlone(t *testing.T) {
 			before, after)
 	}
 
-	// The joiner's own screen, because the offset is session state and the
-	// screen is the only place this suite can read it. A joiner that snapped
-	// its own strip to the focused column would have pushed that offset to the
-	// session, and the row above would then be passing on timing alone.
 	joined := stripBand(b)
 	if strings.Contains(joined, "ALPHA") {
 		t.Errorf("the joining client landed on the focused column instead of the session's "+
@@ -277,8 +253,6 @@ func TestClosingTheFocusedColumnStillRevealsTheStrip(t *testing.T) {
 	before := parkStripPastFocus(t, a)
 	t.Logf("the parked strip:\n%s", before)
 
-	// ALPHA is the focused column and it is off screen. Closing it hands focus
-	// to a column that must be brought on screen.
 	if out, err := tuiosCLI(t, base, "send-text", "exit\n", "--window", "ALPHA"); err != nil {
 		t.Fatalf("close ALPHA: %v: %s", err, out)
 	}

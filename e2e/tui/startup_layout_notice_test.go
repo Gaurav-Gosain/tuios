@@ -7,7 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// startupLayoutNotice is the fix the warning names.
 const startupLayoutNotice = "Set tiled = true to use the layout."
 
 // TestStartupLayoutWithTilingOffIsNamed: a config that sets [startup] layout

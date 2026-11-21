@@ -55,8 +55,6 @@ toggle_mouse = ["alt+m"]
 	}
 }
 
-// waitOutputSince waits for s in what the client wrote after the first from
-// bytes of out.
 func waitOutputSince(out *lockedBuffer, from int, s string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

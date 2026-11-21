@@ -51,7 +51,6 @@ func TestShipJJRefusals(t *testing.T) {
 	tip := commitOf(`bookmarks(exact:"feat/jj")`)
 	mainBefore := commitOf(`bookmarks(exact:"main")`)
 
-	// A squash merge is refused, and main stays where it was.
 	out, err := tr.run("ship", "merge", "-s", session, "--squash")
 	if err == nil || !strings.Contains(out, "jj squash") {
 		t.Errorf("ASSERTION: ship merge --squash = %v:\n%s\nwant a refusal naming jj squash", err, out)
@@ -60,7 +59,6 @@ func TestShipJJRefusals(t *testing.T) {
 		t.Errorf("ASSERTION: the refused squash moved main from %s to %s", mainBefore, got)
 	}
 
-	// The person commits on main: feat/jj is no longer a fast-forward.
 	write(repo, "person.txt")
 	testutil.JJ(t, repo, "commit", "-m", "The person's file")
 	testutil.JJ(t, repo, "bookmark", "set", "main", "-r", "@-")
@@ -73,8 +71,6 @@ func TestShipJJRefusals(t *testing.T) {
 		t.Errorf("ASSERTION: the refused merge moved main from %s to %s", moved, got)
 	}
 
-	// The push from the pane waits for the person. The agent commits again
-	// while the question waits, and the answer then sends nothing.
 	term := startIn(t, base, startOpts{args: []string{"attach", session}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())

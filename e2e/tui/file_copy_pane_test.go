@@ -11,15 +11,6 @@ import (
 	"time"
 )
 
-// tuios cp in a pane: the terminal a person sees, and the grants a pane holds.
-//
-// A pane is a real terminal, so the progress block, the conflict question and
-// the Ctrl+C question are what a person in that pane gets. The commands are
-// typed into the pane with send-text, the keys pressed with send-keys, and the
-// screen read with capture-pane; each test saves the screens it read.
-
-// copyPane makes a detached session on the hub and returns its pane's id and
-// working folder.
 func copyTestPane(t *testing.T, base, session string) (string, string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
@@ -45,7 +36,6 @@ func copyTestPane(t *testing.T, base, session string) (string, string) {
 	return w.WindowID, w.Cwd
 }
 
-// typeLine types a line into the pane and presses Enter.
 func typeInPane(t *testing.T, base, session, pane, line string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", pane, line+"\n"); err != nil {
@@ -66,7 +56,6 @@ func paneScreen(t *testing.T, base, session, pane string) string {
 	return out
 }
 
-// waitScreen waits until the pane's screen holds every marker, and returns it.
 func waitPaneScreen(t *testing.T, base, session, pane string, timeout time.Duration, markers ...string) string {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -89,7 +78,6 @@ func waitPaneScreen(t *testing.T, base, session, pane string, timeout time.Durat
 	return s
 }
 
-// waitExit waits for a file the pane's shell writes an exit code into.
 func waitExitFile(t *testing.T, path string, timeout time.Duration) int {
 	t.Helper()
 	n := -1
@@ -104,8 +92,6 @@ func waitExitFile(t *testing.T, path string, timeout time.Duration) int {
 	return n
 }
 
-// waitPaneExit is waitExitFile for a command typed into a pane: on a timeout
-// it fails with the pane's screen, which says where the command stopped.
 func waitPaneExit(t *testing.T, base, session, pane, path string, timeout time.Duration) int {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -152,7 +138,6 @@ func TestAStrictPaneCopiesOnlyWithTheFilesGrant(t *testing.T) {
 	if err := os.WriteFile(outside, []byte("not the pane's\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// A copy of the person's, which the pane must not see.
 	if r := runTuios(t, base, "cp", "--detach", outside, "build:persons.txt"); r.Code != 0 {
 		t.Fatalf("the person's copy did not start: %s", r.Stderr)
 	}
@@ -163,9 +148,6 @@ func TestAStrictPaneCopiesOnlyWithTheFilesGrant(t *testing.T) {
 	run := func(name, args string) int {
 		t.Helper()
 		out := filepath.Join(codes, name)
-		// A run of the same name before left its files; a stale code would
-		// end the wait before this run, and the next one truncate its
-		// stderr.
 		_ = os.Remove(out)
 		_ = os.Remove(out + ".err")
 		typeInPane(t, base, "work", pane, tuiosBin+" cp --conflict replace "+args+" 2>"+out+".err; echo $? >"+out)
@@ -173,7 +155,6 @@ func TestAStrictPaneCopiesOnlyWithTheFilesGrant(t *testing.T) {
 	}
 	results := map[string]any{}
 
-	// The strict default reloads from the config file; wait for it to hold.
 	deadline := time.Now().Add(20 * time.Second)
 	code := run("default", "./report.txt build:")
 	for code != 4 && time.Now().Before(deadline) {
@@ -214,8 +195,6 @@ func TestAStrictPaneCopiesOnlyWithTheFilesGrant(t *testing.T) {
 		t.Fatalf("ASSERTION: a pane with files copied outside build's home: exit %d", code)
 	}
 
-	// What the pane sees of the copies: its own, with its id, and not the
-	// person's.
 	listOut := filepath.Join(codes, "list.json")
 	typeInPane(t, base, "work", pane, tuiosBin+" transfers --json >"+listOut+"; echo $? >"+listOut+".code")
 	if c := waitExitFile(t, listOut+".code", 30*time.Second); c != 0 {
@@ -232,9 +211,6 @@ func TestAStrictPaneCopiesOnlyWithTheFilesGrant(t *testing.T) {
 		t.Fatalf("transfers --json: %v\n%s", err, raw)
 	}
 	results["pane_list"] = listing.Transfers
-	// The pane's copies are the ones it ran before strict mode held and the
-	// one with the grant: each is report.txt with its id. The person's copy
-	// of persons.txt is not among them.
 	if len(listing.Transfers) == 0 {
 		t.Fatalf("ASSERTION: the pane sees none of its own copies")
 	}
@@ -261,7 +237,6 @@ func TestCopyOnATerminalAsksAndKeepsRunning(t *testing.T) {
 	screens := map[string]string{}
 	defer func() { saveTransferArtifact(t, "cp-terminal", screens) }()
 
-	// The question about files that differ.
 	src := filepath.Join(cwd, "docs")
 	for i, name := range []string{"a.txt", "b.txt", "c.txt"} {
 		if err := os.MkdirAll(src, 0o755); err != nil {
@@ -299,7 +274,6 @@ func TestCopyOnATerminalAsksAndKeepsRunning(t *testing.T) {
 		}
 	}
 
-	// The progress block, then Ctrl+C and keep.
 	big := filepath.Join(farHome(remote), "big.bin")
 	want := randomFile(t, big, 24<<20)
 	codeFile = filepath.Join(base, "keep.code")
@@ -375,8 +349,6 @@ func TestAFilesGrantCopyCannotWriteThroughALink(t *testing.T) {
 		return code, string(errText)
 	}
 	results := map[string]any{}
-	// Strict mode reloads from the config file. Wait until a pane without
-	// the files grant is refused, so the copies below run under strict.
 	deadline := time.Now().Add(20 * time.Second)
 	code, errText := run("strict", "build:~/fine.txt ./")
 	for code != 4 && time.Now().Before(deadline) {
@@ -453,8 +425,6 @@ func TestAFilesGrantFolderIsTheOneThePaneStartedIn(t *testing.T) {
 		return code, string(errText)
 	}
 	cp := tuiosBin + " cp --conflict replace "
-	// Strict mode reloads from the config file: wait until the pane, with no
-	// files grant yet, is refused.
 	deadline := time.Now().Add(20 * time.Second)
 	code, errText := run("strict", cp+filepath.Join(cwd, "mine.txt")+" build:~/strict.txt")
 	for code != 4 && time.Now().Before(deadline) {
@@ -531,8 +501,6 @@ func TestAFilesGrantFolderHoldsThroughOtherPanes(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _ = copyTestPane(t, base, "work")
-	// The pane works in base/projects/app. Its parent, base/projects, holds
-	// no home folder, so a pane started there would hold files for it.
 	parent := filepath.Join(base, "projects")
 	cwd := filepath.Join(parent, "app")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
@@ -554,8 +522,6 @@ func TestAFilesGrantFolderHoldsThroughOtherPanes(t *testing.T) {
 	if err := os.MkdirAll(codes, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// agentScript writes a script an agent pane runs: one copy, and its exit
-	// code in a file.
 	agentScript := func(name, src, dst string) (string, string) {
 		t.Helper()
 		out := filepath.Join(codes, name)
@@ -618,11 +584,9 @@ func TestAFilesGrantFolderHoldsThroughOtherPanes(t *testing.T) {
 		return -1, ""
 	}
 
-	// 1. The pane itself.
 	code, errText = run("direct", cp+secret+" build:~/direct.txt")
 	refused("a direct copy from outside the folder", "direct.txt", code, errText)
 
-	// 2. start-agent --cwd parent.
 	script, out := agentScript("cwd-parent", secret, "build:~/cwd-parent.txt")
 	code, errText = run("cwd-parent-start", tuiosBin+" start-agent --ready-timeout 500 --cwd "+parent+" "+script)
 	results["start-agent --cwd parent"] = map[string]any{"code": code, "stderr": errText}
@@ -634,13 +598,11 @@ func TestAFilesGrantFolderHoldsThroughOtherPanes(t *testing.T) {
 		t.Errorf("ASSERTION: an agent started with --cwd outside the folder ran")
 	}
 
-	// 3. cd parent, then start-agent with no --cwd.
 	script, out = agentScript("cd-parent", secret, "build:~/cd-parent.txt")
 	_, _ = run("cd-parent-start", "cd "+parent+" && "+tuiosBin+" start-agent --ready-timeout 500 "+script+"; cd "+cwd)
 	code, errText = waitFile(out)
 	refused("an agent started after cd to the parent", "cd-parent.txt", code, errText)
 
-	// 4. Typing into a sibling with a wider folder.
 	sibID := personWindow(t, base, parent)
 	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", "work", "-w", sibID, "--grants", "read,write,fan,files"); err != nil {
 		t.Fatalf("set-pane-grants on the sibling: %v\n%s", err, out)
@@ -652,7 +614,6 @@ func TestAFilesGrantFolderHoldsThroughOtherPanes(t *testing.T) {
 		t.Errorf("ASSERTION: the text typed into the sibling copied the file to build")
 	}
 
-	// 5. An agent inside the folder copies within it.
 	script, out = agentScript("inside", filepath.Join(sub, "inner.txt"), "build:~/inner.txt")
 	_, _ = run("inside-start", tuiosBin+" start-agent --ready-timeout 500 --cwd "+sub+" "+script)
 	code, errText = waitFile(out)
@@ -663,7 +624,6 @@ func TestAFilesGrantFolderHoldsThroughOtherPanes(t *testing.T) {
 		t.Errorf("ASSERTION: the agent's copy is not on build: %q", got)
 	}
 
-	// 6. A pane whose start folder is the home folder.
 	home := xdgDir(base, "HOME")
 	homeID := personWindow(t, base, home)
 	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", "work", "-w", homeID, "--grants", "read,files"); err != nil {
@@ -681,8 +641,6 @@ func TestAFilesGrantFolderHoldsThroughOtherPanes(t *testing.T) {
 		t.Errorf("ASSERTION: the refusal does not say to start the pane in a project folder:\n%s", he)
 	}
 
-	// 7. A link in the folder an agent started in, repointed after it
-	// started, does not move the agent's folder.
 	sub2 := filepath.Join(cwd, "sub2")
 	if err := os.MkdirAll(sub2, 0o755); err != nil {
 		t.Fatal(err)
@@ -712,7 +670,6 @@ func TestAFilesGrantFolderHoldsThroughOtherPanes(t *testing.T) {
 	code, errText = waitFile(out)
 	refused("an agent whose start link was repointed to the parent", "repoint.txt", code, errText)
 
-	// 8. A pane started in a folder another user owns.
 	sysID := personWindow(t, base, "/etc")
 	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", "work", "-w", sysID, "--grants", "read,files"); err != nil {
 		t.Fatalf("set-pane-grants on the /etc pane: %v\n%s", err, out)
@@ -725,8 +682,6 @@ func TestAFilesGrantFolderHoldsThroughOtherPanes(t *testing.T) {
 	saveTransferArtifact(t, "cp-files-grant-other-panes", results)
 }
 
-// personWindow opens a window in session work with the person's CLI, started
-// in dir, and returns its id.
 func personWindow(t *testing.T, base, dir string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "new-window", "-s", "work", "--cwd", dir, "--json")

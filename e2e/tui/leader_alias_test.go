@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// altF12 is Alt+F12 as a terminal sends it: F12 with xterm modifier 3 (Alt).
-// It is what Ghostty sends for Option+F12 with macos-option-as-alt on.
 const altF12 = "\x1b[24;3~"
 
 // TestLeaderSpelledWithOptAliasStartsThePrefix is issue #201. On macOS a

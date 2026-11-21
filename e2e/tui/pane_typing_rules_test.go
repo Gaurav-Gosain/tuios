@@ -9,39 +9,6 @@ import (
 	"time"
 )
 
-// Two rules for a pane that types into another pane, on a real daemon in the
-// default open mode:
-//
-//   - send-text, send-keys and run from a pane need -w. Without it they used
-//     to type into the pane the person has in focus.
-//   - From a pane, they do not type into a pane on needs_input without
-//     --allow-blocked, even when the caller holds respond. ask-agent already
-//     had this rule.
-//
-// The person, outside every pane, is held to neither rule.
-//
-// How this could pass wrongly, written down first:
-//   - The probe's calls could fail for a reason that is not the rule, such as
-//     a missing grant or a CLI that cannot reach the daemon. So the probe
-//     holds admin and respond, and the same calls with -w (into a plain
-//     pane) and with --allow-blocked (into the blocked pane) must work and
-//     land.
-//   - "Nothing landed" could be read before the bytes arrive. The blocked
-//     pane's log is read after the allowed text and the person's text have
-//     landed, and those were typed after the refused calls.
-//   - The blocked pane could fail to report needs_input, and the calls would
-//     go through for that reason. The test waits for needs_input first, and
-//     the refusals must name agent_blocked's remedy, --allow-blocked.
-//   - The focused pane could not be the plain pane, and text without -w would
-//     land somewhere the test does not read. The plain pane is created with
-//     the focus, and the test checks that it still has it.
-//   - run could be refused for a reason that is not the rule: a shell with no
-//     OSC 133 marks, or one not yet at its prompt. The plain pane is a bash
-//     that marks its commands, and the probe starts only once list-windows
-//     says it is at its prompt.
-
-// blockedPrompt reports needs_input for its own pane, shows a prompt, and
-// appends every byte typed into it to the log named by $1.
 const blockedPrompt = `#!/usr/bin/env bash
 log=$1 bin=$2
 : > "$log"
@@ -51,8 +18,6 @@ stty -icanon -echo min 1
 exec cat >> "$log"
 `
 
-// typingProbe waits for its go file, then runs each call and records its
-// output and exit status in the out folder.
 const typingProbe = `#!/usr/bin/env bash
 out=$1 bin=$2 s=$3
 until [ -e "$out/go" ]; do sleep 0.05; done
@@ -134,12 +99,9 @@ func TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt(t *testing.T) {
 		return o
 	}
 
-	// The person, outside every pane, types into the blocked pane.
 	if o, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", blocked, "PERSON_TEXT"); err != nil {
 		t.Errorf("ASSERTION: the person's send-text into the blocked pane was refused: %v\n%s", err, o)
 	}
-	// The person's text is typed last, so once it is in the log every call
-	// before it has landed or never will.
 	got := waitFile(t, log, func(s string) bool {
 		return strings.Contains(s, "PERSON_TEXT")
 	}, "ASSERTION: the person's text never reached the blocked pane")
@@ -181,8 +143,6 @@ func TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt(t *testing.T) {
 	}
 }
 
-// waitPlainAtPrompt waits until list-windows says the pane's shell is at its
-// prompt, so a run into it is refused only by the rule under test.
 func waitPlainAtPrompt(t *testing.T, base, sess, id string) {
 	t.Helper()
 	deadline := time.Now().Add(shellTimeout)

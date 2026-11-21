@@ -24,8 +24,6 @@ func TestPaneXTVERSIONNamesTuios(t *testing.T) {
 			dir := t.TempDir()
 			out := filepath.Join(dir, "reply")
 			script := filepath.Join(dir, "probe.sh")
-			// DSR 5 after the question, so the reply is complete when its
-			// answer arrives. Raw mode so the reply reaches the file unchanged.
 			body := "stty raw -echo min 0 time 10\n" +
 				`printf '\033[>q\033[5n'` + "\n" +
 				"cat > " + out + "\n" +

@@ -10,31 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Two clients of different builds on one daemon of a third, reshaping one
-// tree. It covers the compatibility promise of the tree op
-// (internal/session/layout_tree.go): a client too old for ops still sends its
-// trees in its push, and a new client against an old daemon falls back to
-// that.
-//
-// It runs only when the three binaries are named, because the older build is
-// not something this suite builds:
-//
-//	TUIOS_E2E_MIX_DAEMON  the daemon, which also creates the session
-//	TUIOS_E2E_MIX_A       the first client
-//	TUIOS_E2E_MIX_B       the second client
-//
-// The second client attaches after the first has printed a styled line, so it
-// reads that line from the daemon's snapshot of the pane. The snapshot crosses
-// the wire as gob, and its type moved from internal/session to
-// vt/snapshot. A client and a daemon on each side of the move must
-// still read each other's snapshots, styles included.
-//
-// A mixed pair is last-writer-wins for the older client's pushes, as it was
-// before the op, so a round where the screens differ for a moment is logged
-// and not failed. What has to hold is the end: after a split crossing a resize
-// the two clients push one layout and draw one layout.
-
-// withBinary runs f with tuiosBin set to the binary the variable names.
 func withBinary(env string, f func()) {
 	prev := tuiosBin
 	if b := os.Getenv(env); b != "" {
@@ -50,8 +25,6 @@ func attachWith(t *testing.T, base, name, env string) (term *tuitest.Terminal) {
 	return term
 }
 
-// waitEqualSplit waits until the session's two panes are the same size, give
-// or take a cell.
 func waitEqualSplit(t *testing.T, base, name string) {
 	t.Helper()
 	var g []winRect
@@ -94,8 +67,6 @@ func TestMixedVersionsReshapeOneTree(t *testing.T) {
 	for y := range rows {
 		line := scr.Line(y)
 		if before, _, ok := strings.Cut(line, "SNAP-42-MARK"); ok {
-			// The frame around the pane is drawn in runes of more than one
-			// byte, so the column is counted in runes.
 			if c := scr.Cell(utf8.RuneCountInString(before), y); !c.Bold || !c.Italic {
 				t.Errorf("the snapshot lost the line's style: %+v", c)
 			}
@@ -141,7 +112,6 @@ func TestMixedVersionsReshapeOneTree(t *testing.T) {
 	withBinary("TUIOS_E2E_MIX_DAEMON", func() { waitEqualSplit(t, base, name) })
 	requireSameScreens(t, a, b, "after the equalize")
 
-	// A split on one client while the other resizes.
 	together(t, a, "|", b, ">>>")
 	waitWindowCount(t, a, 3, "the new pane on the first client")
 	waitWindowCount(t, b, 3, "the new pane on the second client")

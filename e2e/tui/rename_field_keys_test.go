@@ -7,12 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// renameWordKeys are the bytes terminals send for a word move, by terminal.
-// xterm, kitty, WezTerm and Ghostty send CSI 1;3 D for option or alt plus
-// left, and CSI 1;5 D for ctrl plus left. Terminal.app and iTerm2 with
-// "Esc+" send ESC b and ESC f. iTerm2's older Meta mode sends ESC then the
-// arrow. CSI 1;9 is super, Command on a Mac, which goes to the start and the
-// end of the field as it does in a native one.
 var renameWordKeys = []struct {
 	name, left, right string
 }{
@@ -84,8 +78,6 @@ func TestRenameFieldWordKeys(t *testing.T) {
 	alive(t, term, "after word keys in the rename field")
 }
 
-// selectionCells reads the cells of want on the row that holds it: whether
-// each is drawn on the same ground, and which of them, if any, is underlined.
 func selectionCells(s tuitest.Screen, want string) (row, col int, ok bool) {
 	_, rows := s.Size()
 	for r := range rows {
@@ -132,7 +124,6 @@ func TestRenameFieldSelects(t *testing.T) {
 		}
 		pause(t, "the field ignores a plain key for a moment after a modified one, and that moment has no end on screen", insertGuard)
 	}
-	// check reads the five cells from col on the field's row.
 	check := func(what, word string, caretAt int) {
 		t.Helper()
 		var s tuitest.Screen
@@ -187,9 +178,6 @@ func TestComposerSelectionLooksTheSameBothWays(t *testing.T) {
 	}
 	waitText(t, term, "the task typed", "hello world")
 	art := artifactDir(t)
-	// cells checks the n selected cells from offset from of "hello world":
-	// one ground, none reversed, other than the text's, and the caret the
-	// underlined cell at offset caretAt.
 	cells := func(what string, from, n, caretAt int) {
 		t.Helper()
 		if err := term.WaitFor(func(sc tuitest.Screen) bool {

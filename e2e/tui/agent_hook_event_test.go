@@ -10,28 +10,6 @@ import (
 	"time"
 )
 
-// agent-hook-event runs a harness hook event in the daemon, through the real
-// socket, from a process inside a pane, as an installed hook would send it.
-//
-// How these could pass wrongly, written down first:
-//   - The report could land on a pane the call named instead of the one it
-//     came from. The verb takes no pane param at all, a second pane runs the
-//     same event, and each pane must hold only its own conversation.
-//   - The env param could carry the pane. A call naming TUIOS_PANE_ID in env
-//     must be refused, and a call from outside every pane must report
-//     nothing on any pane.
-//   - stdout could be empty because the event printed nothing anyway. A
-//     Claude Code SessionStart from inside a pane prints the lines that tell
-//     the agent where it runs, so the stdout must hold them.
-//   - The state could come from something else than the verb. The panes are
-//     plain shells with no harness, and each state is read back after its
-//     call, with the conversation id the payload named.
-//
-// The artifact is the call results and the agent states, written to
-// agent-hook-event.txt in the test's output folder.
-
-// hookEventScript runs one agent-hook-event call from the pane it is typed
-// into and writes the result to a file, renamed into place when complete.
 const hookEventScript = `#!/bin/sh
 "$TUIOS_E2E_CLI" call agent-hook-event "$(cat "$1")" > "$2.tmp" 2>&1
 echo "exit=$?" >> "$2.tmp"
@@ -55,7 +33,6 @@ func TestAgentHookEventReportsForTheCallingPane(t *testing.T) {
 	}
 	var artifact strings.Builder
 
-	// fromPane types the call into a pane's shell and returns what it wrote.
 	n := 0
 	fromPane := func(window string, params map[string]any) string {
 		t.Helper()
@@ -102,8 +79,6 @@ func TestAgentHookEventReportsForTheCallingPane(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(artifactDir(t), "agent-hook-event.txt"), []byte(artifact.String()), 0o600)
 	})
 
-	// A session start from pane 0 reports idle for pane 0 and prints where
-	// the agent runs.
 	res := fromPane("0", map[string]any{
 		"harness": "claude-code",
 		"payload": `{"hook_event_name":"SessionStart","session_id":"conv-zero","source":"startup"}`,
@@ -115,7 +90,6 @@ func TestAgentHookEventReportsForTheCallingPane(t *testing.T) {
 		t.Fatalf("pane 0 after its session start: %v", st)
 	}
 
-	// A prompt from the other pane moves only that pane.
 	fromPane("OTHER", map[string]any{
 		"harness": "claude",
 		"payload": `{"hook_event_name":"UserPromptSubmit","session_id":"conv-other","prompt":"run the tests"}`,
@@ -127,7 +101,6 @@ func TestAgentHookEventReportsForTheCallingPane(t *testing.T) {
 		t.Fatalf("pane 0 changed when the other pane reported: %v", st)
 	}
 
-	// The env param cannot name a pane.
 	res = fromPane("OTHER", map[string]any{
 		"harness": "claude-code",
 		"payload": `{"hook_event_name":"Stop","session_id":"conv-zero"}`,
@@ -137,7 +110,6 @@ func TestAgentHookEventReportsForTheCallingPane(t *testing.T) {
 		t.Fatalf("a call naming TUIOS_PANE_ID in env was not refused:\n%s", res)
 	}
 
-	// From outside every pane the event reports for no pane.
 	out, err := tuiosCLI(t, base, "call", "agent-hook-event",
 		`{"harness":"claude-code","payload":"{\"hook_event_name\":\"Stop\",\"session_id\":\"conv-zero\"}","explain":true}`)
 	fmt.Fprintf(&artifact, "call from outside every pane:\n%s\n", out)

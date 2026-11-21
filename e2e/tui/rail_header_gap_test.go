@@ -29,8 +29,6 @@ func TestRailHeaderKeepsAGapBeforeThePeekedName(t *testing.T) {
 	}
 }
 
-// longPeekSession is the session the test peeks. Its name is longer than any
-// of the rail widths, so the header always has to cut it.
 const longPeekSession = "zebra-session-with-a-very-long-name"
 
 func railHeaderGapAt(t *testing.T, width int) {
@@ -57,8 +55,6 @@ func railHeaderGapAt(t *testing.T, width int) {
 		return -1
 	}
 
-	// The long session's row, cut to the rail. Its first letters are enough to
-	// find it, and nothing else on the rail starts with them.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return rowOf(s, "zeb") >= 0 && rowOf(s, "HOME") > rowOf(s, "terminals")
 	}, uiTimeout); err != nil {
@@ -67,7 +63,6 @@ func railHeaderGapAt(t *testing.T, width int) {
 	sessRow := rowOf(term.Screen(), "zeb")
 	mouseHover(t, term, strings.Index(line(term.Screen(), sessRow), "zeb")+1, sessRow)
 
-	// The peek is on when this session's pane leaves the terminals list.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		h := rowOf(s, "terminals")
 		return h >= 0 && rowOf(s, "HOME") < 0
@@ -87,7 +82,6 @@ func railHeaderGapAt(t *testing.T, width int) {
 				width, gap, text, term.Snapshot())
 		}
 	}
-	// On a rail with room for a few letters of the name, the header shows them.
 	if width >= 20 && !strings.Contains(rest, "ze") {
 		t.Fatalf("width %d: the header does not name the peeked session: %q\n%s", width, text, term.Snapshot())
 	}
@@ -95,15 +89,11 @@ func railHeaderGapAt(t *testing.T, width int) {
 	if addCol < 0 {
 		t.Fatalf("width %d: the terminals header has no add control: %q\n%s", width, text, term.Snapshot())
 	}
-	// The control sits one cell in from the rail's edge rule.
 	if want := width - 3; len([]rune(text[:addCol])) != want {
 		t.Fatalf("width %d: the add control is at column %d, want %d: %q",
 			width, len([]rune(text[:addCol])), want, text)
 	}
 
-	// The pointer moves onto the control, which takes it off the session rows
-	// and ends the peek. The click then lands at the column the peek drew the
-	// control in, so it makes a pane in this session.
 	col := len([]rune(text[:addCol]))
 	mouseHover(t, term, col, header)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {

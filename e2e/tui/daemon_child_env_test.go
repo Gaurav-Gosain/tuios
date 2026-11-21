@@ -9,19 +9,6 @@ import (
 	"time"
 )
 
-// The processes the daemon starts outside every pane get the filtered
-// environment a pane gets.
-//
-// The failure modes this is written against:
-//   - a daemon hook, a plugin command or an exec line keeps the variables of
-//     the agent tool call that started the daemon: its session ids, its
-//     credential, NO_COLOR;
-//   - after a restart from pane X the daemon holds TUIOS_PANE_ID=X, and every
-//     exec line and hook is then placed in pane X and may act as X;
-//   - the filter takes away an ordinary variable of the person's.
-
-// childEnvAgent is the environment of an agent's tool call that starts the
-// daemon, and childEnvRemoved the names of it no daemon child may keep.
 var (
 	childEnvAgent = []string{
 		"CLAUDECODE=1", "CLAUDE_CODE_SESSION_ID=outer-session",
@@ -35,7 +22,6 @@ var (
 	}
 )
 
-// envLines reads an "env" dump into a map.
 func envLines(text string) map[string]string {
 	got := map[string]string{}
 	for line := range strings.SplitSeq(text, "\n") {
@@ -46,8 +32,6 @@ func envLines(text string) map[string]string {
 	return got
 }
 
-// checkChildEnv fails for each removed variable the child kept, and when it
-// lost the ordinary one.
 func checkChildEnv(t *testing.T, who, text string) {
 	t.Helper()
 	got := envLines(text)
@@ -79,13 +63,11 @@ func TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 		t.Fatalf("start the daemon: %v\n%s", err, o)
 	}
 
-	// The hook.
 	if o, err := tuiosCLI(t, base, "new-window", "-s", "childenv", "trigger", "--no-focus"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, o)
 	}
 	checkChildEnv(t, "hook", waitFileHas(t, hookFile, "the hook never wrote its environment", 20*time.Second, func(s string) bool { return strings.Contains(s, "TUIOS_EVENT=") }))
 
-	// The plugin action.
 	plug := filepath.Join(base, "envdump")
 	mustMkdir(plug)
 	pluginFile := filepath.Join(out, "plugin-env.txt")
@@ -104,7 +86,6 @@ func TestDaemonChildrenDoNotInheritTheAgentThatStartedTheDaemon(t *testing.T) {
 	}
 	checkChildEnv(t, "plugin", waitFileHas(t, pluginFile, "the plugin never wrote its environment", 20*time.Second, func(s string) bool { return s != "" }))
 
-	// The exec line.
 	execFile := filepath.Join(out, "exec-env.txt")
 	req, _ := json.Marshal(map[string]any{"line": "env > " + execFile, "timeout_ms": 20000})
 	if o, err := tuiosCLI(t, base, "call", "exec", string(req)); err != nil {
@@ -130,7 +111,6 @@ func TestExecAfterARestartFromAPaneIsNotThatPane(t *testing.T) {
 	if o, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v\n%s", err, o)
 	}
-	// What restart-server run in pane X starts the new daemon with.
 	env := []string{"TUIOS_PANE_ID=" + x, "TUIOS_SESSION=restart"}
 	if o, err := tuiosCLIEnv(t, base, env, "new", "again", "--detach"); err != nil {
 		t.Fatalf("start the daemon again: %v\n%s", err, o)

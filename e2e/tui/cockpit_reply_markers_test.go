@@ -16,9 +16,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// replyMarkersAnswer is an agent's answer with each reply marker, a synonym,
-// a word the list does not know, the marks that take a colour, a tree, and a
-// marker in a code span and in a code block, which stay as text.
 const replyMarkersAnswer = "[[Done]] The parser reads markers.\n\n" +
 	"- [[Failed: 3 tests]] in the store package\n" +
 	"- [[Blocked]] on the CI runner\n" +
@@ -31,7 +28,6 @@ const replyMarkersAnswer = "[[Done]] The parser reads markers.\n\n" +
 	"In code it stays: `[[Done]]`\n\n" +
 	"```\n[[Failed]] in a block\n```"
 
-// treeLongRow is a tree row longer than the thread is wide.
 const treeLongRow = "tuios: the command line, with its flags, its help and every subcommand a person or an agent runs, and the WRAPEND"
 
 // TestCockpitThreadReplyMarkers reads an agent's answer with reply markers in
@@ -73,7 +69,6 @@ func TestCockpitThreadReplyMarkers(t *testing.T) {
 				row, col := findText(t, term, want)
 				return s.Cell(col+at, row)
 			}
-			// The Done pill ends one cell of its ground and one gap before the text.
 			failed, done := cell("Failed: 3", 0), cell("The parser", -4)
 			plain := cell("in the store", 0)
 			for name, c := range map[string]tuitest.Cell{"Failed": failed, "Done": done} {
@@ -81,10 +76,6 @@ func TestCockpitThreadReplyMarkers(t *testing.T) {
 					t.Errorf("ASSERTION: the %s pill has the ground of plain text and is not in reverse\n%s", name, term.SnapshotStyled())
 				}
 			}
-			// The cell before the gap after a pill ends the pill: its
-			// rounded cap, or with square ends a cell of its ground. A pill
-			// in reverse whose end cells read as spaces between words lost
-			// them.
 			if end := cell("in the store", -2); end.Content != "\ue0b4" && !end.Reverse && end.Bg == plain.Bg {
 				t.Errorf("ASSERTION: the Failed pill has no end after its label\n%s", term.SnapshotStyled())
 			}
@@ -94,15 +85,12 @@ func TestCockpitThreadReplyMarkers(t *testing.T) {
 			if check, word := cell("✓ unit", 0), cell("✓ unit", 2); check.Fg == word.Fg {
 				t.Errorf("ASSERTION: the check is in the ink of the text after it\n%s", term.SnapshotStyled())
 			}
-			// Each tree row is a line of its own, under the line before it.
 			if r1, _ := findText(t, term, "├── cmd"); func() bool { r2, _ := findText(t, term, "└── tuios:"); return r2 != r1+1 }() {
 				t.Errorf("ASSERTION: the tree rows are not on lines of their own:\n%s", term.Snapshot())
 			}
 			if tree, word := cell("├── cmd", 0), cell("├── cmd", 4); tree.Fg == word.Fg {
 				t.Errorf("ASSERTION: the tree line is in the ink of its item\n%s", term.SnapshotStyled())
 			}
-			// A tree row that wraps goes on under its text, after the
-			// branch, with the guide of the row above beside it.
 			if r, c := findText(t, term, "└── tuios:"); r >= 0 {
 				line := []rune(s.Line(r + 1))
 				_, gc := findText(t, term, "├── cmd")
@@ -120,16 +108,11 @@ func TestCockpitThreadReplyMarkers(t *testing.T) {
 	}
 }
 
-// replyMarkersThread writes a Claude Code transcript whose answer is
-// replyMarkersAnswer, binds it to a pane, and opens the agents view on it in
-// a client with env.
 func replyMarkersThread(t *testing.T, env []string) *tuitest.Terminal {
 	t.Helper()
 	return replyThread(t, env, replyMarkersAnswer, "on Windows", "in a block")
 }
 
-// replyThread is replyMarkersThread for any answer: it waits for want in the
-// thread.
 func replyThread(t *testing.T, env []string, answer string, want ...string) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -199,8 +182,6 @@ func replyThread(t *testing.T, env []string, answer string, want ...string) *tui
 	return term
 }
 
-// markerLookAnswer is a reply written the way the guidance asks: lead labels,
-// a pill of each group, a numbered list, bold anchor terms and a tree.
 const markerLookAnswer = "**Finding:** the cache drops entries early. [[Failed: 3 tests]]\n\n" +
 	"**Cause:** the **eviction clock** runs in wall time.\n\n" +
 	"**Plan:**\n\n1. Switch to the monotonic clock [[Implement]]\n2. Run the store tests again [[Pending]]\n\n" +
@@ -226,7 +207,6 @@ func TestCockpitThreadMarkerLook(t *testing.T) {
 				row, col := findText(t, term, want)
 				return s.Cell(col+at, row)
 			}
-			// The Done pill: its cap, its icon and a space before the word.
 			if c := cell("Done", -3); c.Content != "\ue0b6" {
 				t.Errorf("ASSERTION: the Done pill has no rounded cap before its icon: %q\n%s", c.Content, term.Snapshot())
 			}
@@ -240,8 +220,6 @@ func TestCockpitThreadMarkerLook(t *testing.T) {
 			if mark := cell("Switch to the", -3); mark.Fg == plain.Fg {
 				t.Errorf("ASSERTION: the list number is in the plain ink\n%s", term.SnapshotStyled())
 			}
-			// At 16 colours there are no tints: a problem and a consequence
-			// are both the error colour in reverse.
 			failed, destructive := cell("Failed: 3", 0), cell("Destructive", 0)
 			if d.name == "truecolor" && failed.Bg == destructive.Bg && failed.Reverse == destructive.Reverse && failed.Fg == destructive.Fg {
 				t.Errorf("ASSERTION: the Destructive pill looks like the Failed one\n%s", term.SnapshotStyled())

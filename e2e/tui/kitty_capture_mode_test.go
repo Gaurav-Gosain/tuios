@@ -55,7 +55,6 @@ func TestKittyImageSurvivesCaptureMode(t *testing.T) {
 			enterTerminalMode(t, term)
 			runInShell(t, term, "echo RE\"\"ADY", "READY", shellTimeout)
 
-			// Transmit and display in one command, the way chafa does.
 			_, img := writeIcatPNG(t, t.TempDir())
 			enc := base64.StdEncoding.EncodeToString(img)
 			host.mark("image")
@@ -85,8 +84,6 @@ func TestKittyImageSurvivesCaptureMode(t *testing.T) {
 			}, uiTimeout); err != nil {
 				t.Fatalf("capture mode never opened: %v\n%s", err, term.Snapshot())
 			}
-			// Frames keep coming while the mode is open; give a hide the
-			// chance to happen.
 			time.Sleep(time.Second)
 
 			host.mark("closed")
@@ -106,7 +103,6 @@ func TestKittyImageSurvivesCaptureMode(t *testing.T) {
 				}
 			}
 
-			// Take the window and look for the image in the picture.
 			host.mark("shot")
 			if err := term.SendKeys(tuitest.Ctrl('b'), "C"); err != nil {
 				t.Fatalf("send leader+C: %v", err)
@@ -200,8 +196,6 @@ func TestReplyPreviewInScreenCapture(t *testing.T) {
 	}
 	waitText(t, term, "the reply editor", "Reply to", "Type your reply.")
 
-	// A wide gradient, so the thumbnail is as wide as the strip allows: red
-	// rises from left to right, green is at least 40, blue is 99.
 	const w, h = 320, 60
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := range h {
@@ -222,7 +216,6 @@ func TestReplyPreviewInScreenCapture(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The preview is a kitty placement of tuios's own, at 0xF2000000 and up.
 	placed := false
 	deadline := time.Now().Add(uiTimeout)
 	for !placed && time.Now().Before(deadline) {
@@ -251,7 +244,6 @@ func TestReplyPreviewInScreenCapture(t *testing.T) {
 	checkIcatInPicture(t, shotPath)
 }
 
-// findCapturePNG returns the first finished PNG capture under base, or "".
 func findCapturePNG(base string) string {
 	var found string
 	_ = filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
@@ -267,13 +259,6 @@ func findCapturePNG(base string) string {
 	return found
 }
 
-// checkIcatInPicture checks that the test image is drawn in a capture. Its
-// pixels are (7x, 11y, 99): the blue channel is 99 everywhere and the red one
-// rises from left to right, which neither the theme nor any glyph draws. The
-// green rises from top to bottom, and the rows with some green are counted.
-// The
-// image fills 10 by 5 cells of a window about 118 cells wide, so it is a few
-// percent of the picture, and the cells under it are blank.
 func checkIcatInPicture(t *testing.T, path string) {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -293,22 +278,15 @@ func checkIcatInPicture(t *testing.T, path string) {
 		for x := b.Min.X; x < b.Max.X; x++ {
 			r, g, bl, _ := img.At(x, y).RGBA()
 			r8, g8, b8 := int(r>>8), int(g>>8), int(bl>>8)
-			// The frame's wash crosses blue 99 too, but it has almost no
-			// green. The image's green is 11y, so most of its rows pass.
 			if b8 >= 96 && b8 <= 102 && g8 >= 40 {
 				n++
 				hits = append(hits, px{x, r8})
 			}
 		}
 	}
-	// A cell is at least 10 by 20 pixels at the default scale, so the image
-	// is at least 100 by 100. Half of that is far more than stray pixels of
-	// antialiased text could make.
 	if n < 5000 {
 		t.Fatalf("the capture %s has %d pixels of the image, want at least 5000: the image is not in the picture", path, n)
 	}
-	// Split at the mean column of the matches: the image holds nearly all of
-	// them, and the few stray pixels of antialiased text barely move it.
 	var sumX int
 	for _, h := range hits {
 		sumX += h.x
@@ -366,9 +344,6 @@ func TestLauncherIconsInScreenCapture(t *testing.T) {
 	waitBoot(t, term)
 	f := &launcherFixture{term: term, stream: stream, base: base}
 	f.openWithQuery(t, "zzapp", apps)
-	// A decode that lands on a still panel waits for the next frame to be
-	// placed (see requirePlaced), so the selection is moved until every row
-	// has its icon.
 	f.requirePlaced(t)
 	deadline := time.Now().Add(uiTimeout)
 	for len(f.live()) < apps {
@@ -405,8 +380,6 @@ func TestLauncherIconsInScreenCapture(t *testing.T) {
 			}
 		}
 	}
-	// An icon is about one cell square: at least 10 by 20 pixels at the
-	// default scale, so six of them are well over 1000.
 	if n < 1000 {
 		t.Fatalf("the capture %s has %d pixels of the icons, want at least 1000: the icons are not in the picture", shotPath, n)
 	}

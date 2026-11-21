@@ -14,7 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// codeLongBlock is a code block of 2000 short lines.
 var codeLongBlock = func() string {
 	var b strings.Builder
 	for i := 1; i <= 2000; i++ {
@@ -23,27 +22,18 @@ var codeLongBlock = func() string {
 	return strings.TrimSuffix(b.String(), "\n")
 }()
 
-// codeBlocksAnswer is an answer with the 300-column Go block, then the
-// 2000-line block.
 var codeBlocksAnswer = "Here it is:\n\n```go\npackage words\n\n" + codeWrapLine + "\n```\n\nAnd the long one:\n\n```text\n" + codeLongBlock + "\n```\n\nThat is all."
 
-// openCodeThread starts a client at 120 columns on the agents view, its
-// thread on an agent whose answer is text, and focuses the thread.
 func openCodeThread(t *testing.T, text string) (string, *tuitest.Terminal) {
 	t.Helper()
 	return openTextThread(t, text, "package words", "var table", "line 0001")
 }
 
-// openTextThread is openCodeThread for any reply text: it waits for want in
-// the thread.
 func openTextThread(t *testing.T, text string, want ...string) (string, *tuitest.Terminal) {
 	t.Helper()
 	return openTextThreadOn(t, text, "", nil, want...)
 }
 
-// openTextThreadOn is openTextThread with extra lines in the [agents] table
-// of the config, and the client's output to its host copied to host when it
-// is not nil.
 func openTextThreadOn(t *testing.T, text, extra string, host *lockedBuffer, want ...string) (string, *tuitest.Terminal) {
 	t.Helper()
 	base := t.TempDir()
@@ -145,8 +135,6 @@ func TestCockpitThreadCodeBlockScroll(t *testing.T) {
 		t.Fatalf("ASSERTION: a line not scrolled has a mark in its gutter: %q\n%s", g0, term.Snapshot())
 	}
 
-	// 1. ) moves the wide block, every line of it, and leaves a mark in the
-	// gutter of each line with text left of the view.
 	if err := term.SendKeys(")"); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +159,6 @@ func TestCockpitThreadCodeBlockScroll(t *testing.T) {
 		t.Fatalf("ASSERTION: the 2000-line block moved with the wide one\n%s", term.Snapshot())
 	}
 
-	// 2. ) up to the end of the widest line, and no further.
 	for i := 0; i < 60 && !strings.Contains(term.Screen().Text(), "END300"); i++ {
 		if err := term.SendKeys(")"); err != nil {
 			t.Fatal(err)
@@ -196,8 +183,6 @@ func TestCockpitThreadCodeBlockScroll(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "code-scroll-right")
 
-	// 3. Shift and the wheel on the block bring it back to its start, and no
-	// further.
 	wheel := func(button tuitest.MouseButton, mods tuitest.KeyMods) {
 		t.Helper()
 		if err := term.SendMouse(tuitest.MouseEvent{Col: col + 10, Row: row, Button: button, Action: tuitest.MousePress, Mods: mods}); err != nil {
@@ -221,7 +206,6 @@ func TestCockpitThreadCodeBlockScroll(t *testing.T) {
 		t.Fatalf("ASSERTION: the wheel moved the block past its start\n%s", term.Snapshot())
 	}
 
-	// 4. A sideways wheel moves it too.
 	wheel(tuitest.MouseWheelRight, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Line(row), "var table") }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: a sideways wheel did not scroll the block: %v\n%s", err, term.Snapshot())

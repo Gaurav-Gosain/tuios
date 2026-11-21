@@ -27,8 +27,6 @@ func TestRailNewSessionComesUpTiled(t *testing.T) {
 	}, bootTimeout); err != nil {
 		t.Fatalf("the first session never opened its window: %v\n%s", err, term.Snapshot())
 	}
-	// start_in_terminal_mode is off, so the client is already in window mode and
-	// the rail's controls are clickable without a mode switch.
 
 	toggleSidebarViaPalette(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -37,19 +35,12 @@ func TestRailNewSessionComesUpTiled(t *testing.T) {
 		t.Fatalf("rail never listed the attached session: %v\n%s", err, term.Snapshot())
 	}
 
-	// The sessions header's own "+", which is the route the user took. The line
-	// is found by its label and the control by its column, since a bare "+" turns
-	// up elsewhere on the screen; it sits on the rail's figure spine, one cell in
-	// from the edge rule.
 	_, row := findOnScreen(t, term, "sessions")
 	mouseClick(t, term, sidebarBand-3, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Session: session-0", uiTimeout); err != nil {
 		t.Fatalf("the rail's new-session control did not create and switch: %v\n%s", err, term.Snapshot())
 	}
 
-	// With the rail open the panes get the screen minus the rail's columns. A
-	// tiled single pane takes essentially all of that; the floating placement box
-	// is half of it, so the two cannot be confused.
 	content := 120 - sidebarBand
 	rects := waitForSettledGeometryIn(t, base, "session-0", 1)
 	pane := rects[0]
@@ -60,13 +51,10 @@ func TestRailNewSessionComesUpTiled(t *testing.T) {
 			pane.Width, content)
 	}
 
-	// A floating first window spawns at the pointer, which is what put the box in
-	// the bottom-right corner of the screenshot.
 	if pane.Y > 4 {
 		t.Errorf("the created session's pane starts at y=%d, want it at the top of the content area", pane.Y)
 	}
 
-	// The dock says the same thing the geometry does.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "1:1")
 	}, uiTimeout); err != nil {

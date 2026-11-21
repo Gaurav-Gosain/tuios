@@ -54,8 +54,6 @@ func TestListClientsTracksSwitcherSwitches(t *testing.T) {
 		t.Fatal("list-clients did not include the attached client in client-one")
 	}
 
-	// subscribe starts `tuios subscribe` with args and returns its output after
-	// the acknowledgement line.
 	subscribe := func(args ...string) *bufio.Scanner {
 		ctx, cancel := context.WithTimeout(context.Background(), shellTimeout)
 		cmd := exec.CommandContext(ctx, tuiosBin, append([]string{"subscribe", "--types", "client-session-changed"}, args...)...)
@@ -73,8 +71,6 @@ func TestListClientsTracksSwitcherSwitches(t *testing.T) {
 		if err := cmd.Start(); err != nil {
 			t.Fatalf("start subscribe: %v", err)
 		}
-		// Waited on only at cleanup: Wait closes stdout, and the last event is
-		// still unread when the process exits after --count events.
 		t.Cleanup(func() {
 			cancel()
 			_ = cmd.Wait()
@@ -135,8 +131,6 @@ func TestListClientsTracksSwitcherSwitches(t *testing.T) {
 	}
 	saveArtifact(t, term, artifactDir(t), "client-switched")
 
-	// A killed session is gone from the daemon before its clients leave it, so
-	// the leave event has to carry the name the client attached under.
 	killed := subscribe("--session", "client-renamed", "--count", "1")
 	if out, err := tuiosCLI(t, base, "kill-session", "client-renamed"); err != nil {
 		t.Fatalf("kill client-renamed: %v\n%s", err, out)

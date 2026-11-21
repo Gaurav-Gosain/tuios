@@ -19,18 +19,6 @@ import (
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Live handoff").
 
-// stillAltScreenGuest is a program on the alternate screen that draws one
-// frame when the file named by its second argument appears, and never draws on
-// its own. It draws every row of its window with the row's number, then parks
-// the cursor on row 3, as a full-screen program parks it in its input box.
-// Every SIGWINCH it gets is appended to the log named by its first argument,
-// with the size it reads in the handler.
-//
-// It does not draw again on a SIGWINCH, so a screen changed under it stays
-// changed, which is what a program that repaints only the cells it believes
-// changed leaves behind. It is Python and not sh because a shell runs its
-// trap only between commands, and two SIGWINCHes 30 ms apart arrive while it
-// waits in one: a sh guest recorded neither.
 const stillAltScreenGuest = `import fcntl, os, signal, struct, sys, termios, time
 log, go = sys.argv[1], sys.argv[2]
 def size():
@@ -102,8 +90,6 @@ func TestUpgradeReattachLeavesAltScreenPaneAlone(t *testing.T) {
 		if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "╰") }, bootTimeout); err != nil {
 			t.Fatalf("%s never drew the session: %v\n%s", what, err, term.Snapshot())
 		}
-		// Every resize the attach makes has reached the pane by then: a held
-		// size is written 30 ms after the last one.
 		time.Sleep(time.Second)
 		return term
 	}
@@ -139,8 +125,6 @@ func TestUpgradeReattachLeavesAltScreenPaneAlone(t *testing.T) {
 		t.Fatalf("tuios daemon upgrade failed: %v\n%s\n%v", err, out, outcome)
 	}
 	awaitNewImage(t, base, img, 30*time.Second)
-	// The first client follows the upgrade and attaches again by itself, which
-	// is a reattach to the restored session like the second client's.
 	if err := first.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "tuios reattached") }, bootTimeout); err != nil {
 		t.Fatalf("the first client did not follow the upgrade: %v\n%s", err, first.Snapshot())
 	}
@@ -174,7 +158,6 @@ func TestUpgradeReattachLeavesAltScreenPaneAlone(t *testing.T) {
 	}
 }
 
-// trimBlankTail drops trailing spaces from each row and the blank rows at the end.
 func trimBlankTail(rows []string) []string {
 	out := make([]string, 0, len(rows))
 	for _, r := range rows {
@@ -186,7 +169,6 @@ func trimBlankTail(rows []string) []string {
 	return out
 }
 
-// mustDaemonPane is daemonPane, failing the test on an error.
 func mustDaemonPane(t *testing.T, base, sess, window string) []string {
 	t.Helper()
 	rows, err := daemonPane(base, sess, window)

@@ -7,11 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// helpTitle is the header the keybindings overlay renders. Asserting on it
-// proves the overlay is on screen rather than that a state flag was flipped.
 const helpTitle = "Keybindings"
 
-// openHelp opens the help overlay from window-management mode and waits for it.
 func openHelp(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys("?"); err != nil {
@@ -41,11 +38,6 @@ func openHelp(t *testing.T, term *tuitest.Terminal) {
 // Verified failing against a binary built from the parent commit: with two
 // windows and help open, n took the dock from 1:2 to 1:3.
 func TestHelpOverlayIsModalInWindowMode(t *testing.T) {
-	// Both keys are asserted through the dock's window count, which is the one
-	// piece of state the overlay does not cover. Bindings whose effect the panel
-	// hides entirely (t, i, ',') are pinned in
-	// internal/input.TestHelpOverlaySwallowsUnhandledKeys instead, which can see
-	// the whole model.
 	cases := []struct {
 		name string
 		key  string
@@ -72,9 +64,6 @@ func TestHelpOverlayIsModalInWindowMode(t *testing.T) {
 				t.Fatalf("send %q: %v", tc.key, err)
 			}
 
-			// There is no event to wait for when the fix works, so wait for the
-			// failure instead and require it not to arrive: if the key reaches
-			// the window manager the count changes within the UI timeout.
 			err := term.WaitFor(func(s tuitest.Screen) bool {
 				n := countWindows(s)
 				return n >= 0 && n != before
@@ -88,8 +77,6 @@ func TestHelpOverlayIsModalInWindowMode(t *testing.T) {
 				t.Fatalf("help overlay left the screen after %q\n%s", tc.key, term.Snapshot())
 			}
 
-			// The overlay must still close on a key it does handle, so this is
-			// modality rather than a wedged input path.
 			if err := term.SendKeys(tuitest.Esc); err != nil {
 				t.Fatalf("send esc: %v", err)
 			}

@@ -14,27 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// These tests hold what a client that mirrors a session's layout reads: the
-// rectangles list-windows reports, the side split-window puts a new pane on,
-// and the layout-changed event that says the rectangles moved. The phone app's
-// Mirror view is built on the three.
-//
-// The command output of each test is saved under artifactDir.
-//
-// Negative controls (NEGATIVE_CONTROLS.md):
-//   - TestSplitWindowTakesTheNamedSide: SplitToward maps "left" and "up" to
-//     PreselectionRight and PreselectionDown. The new pane lands to the right
-//     of and below the pane it was cut from, and both checks fail.
-//   - TestLayoutChangedFollowsASplit: the layoutChanges call cut from
-//     diffLifecycle. The subscription is live and never sees a
-//     layout-changed, and the wait for it times out.
-//   - TestSplitWindowFromAZoomedPaneAnswersAtOnce: main before #2180. The
-//     split from the zoomed pane, and each split whose pane exits at once,
-//     answers after the 10 s limit, and the budget checks fail.
-//   - TestAgentArrangesPanesWithNoClient: one control per layout verb, and
-//     two for the attached client. See NEGATIVE_CONTROLS.md.
-
-// layoutRect is one window's rectangle, as list-windows reports it.
 type layoutRect struct {
 	ID        string `json:"window_id"`
 	X         int    `json:"x"`
@@ -44,7 +23,6 @@ type layoutRect struct {
 	Workspace int    `json:"workspace"`
 }
 
-// listRects reads the session's window rectangles.
 func listRects(t *testing.T, base, sess string) map[string]layoutRect {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
@@ -64,8 +42,6 @@ func listRects(t *testing.T, base, sess string) map[string]layoutRect {
 	return rects
 }
 
-// tileOn turns tiling on in the attached client and waits for the client to
-// say so.
 func tileOn(t *testing.T, base, sess string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "call", "set-layout", `{"session":"`+sess+`","tiling":true}`); err != nil {
@@ -83,8 +59,6 @@ func tileOn(t *testing.T, base, sess string) {
 	t.Fatalf("tiling never came on:\n%s", out)
 }
 
-// splitSide splits pane from toward side and returns the new pane's id, once
-// both rectangles are in daemon state.
 func splitSide(t *testing.T, base, sess, from, side string, log *strings.Builder) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "split-window", "-s", sess, "-w", from, side, "--json")
@@ -118,8 +92,6 @@ func TestSplitWindowTakesTheNamedSide(t *testing.T) {
 		first = id
 	}
 
-	// left: the new pane takes the left half, and the pane it was cut from
-	// keeps the right half.
 	left := splitSide(t, base, sess, first, "left", &log)
 	waitWindowCount(t, term, 2, "after split-window left")
 	rects := listRects(t, base, sess)
@@ -130,7 +102,6 @@ func TestSplitWindowTakesTheNamedSide(t *testing.T) {
 	}
 	saveArtifact(t, term, dir, "after-left")
 
-	// up: the new pane takes the top half of the pane it was cut from.
 	up := splitSide(t, base, sess, first, "up", &log)
 	waitWindowCount(t, term, 3, "after split-window up")
 	rects = listRects(t, base, sess)
@@ -141,7 +112,6 @@ func TestSplitWindowTakesTheNamedSide(t *testing.T) {
 	}
 	saveArtifact(t, term, dir, "after-up")
 
-	// A side the daemon does not know is refused by name.
 	out, err := tuiosCLI(t, base, "call", "split-window", `{"session":"`+sess+`","side":"middle"}`)
 	log.WriteString("$ tuios call split-window side=middle\n" + out + "\n")
 	if err == nil || !strings.Contains(out, "unknown split side") {
@@ -149,8 +119,6 @@ func TestSplitWindowTakesTheNamedSide(t *testing.T) {
 	}
 }
 
-// splitTimed runs split-window with args and returns the new pane's id and
-// how long the command took to answer.
 func splitTimed(t *testing.T, base string, log *strings.Builder, args ...string) (string, time.Duration) {
 	t.Helper()
 	start := time.Now()
@@ -169,9 +137,6 @@ func splitTimed(t *testing.T, base string, log *strings.Builder, args ...string)
 	return res.WindowID, took
 }
 
-// splitAnswerBudget is how long split-window may take to answer with a client
-// attached. The daemon gives up waiting on the client after 10 s
-// (routedVerbTimeout), and a split that rides that out is the bug.
 const splitAnswerBudget = 5 * time.Second
 
 // TestSplitWindowFromAZoomedPaneAnswersAtOnce holds #2180. With a client
@@ -197,14 +162,12 @@ func TestSplitWindowFromAZoomedPaneAnswersAtOnce(t *testing.T) {
 		t.Errorf("ASSERTION: a split from a tiled pane answered in %s, want under %s", took, splitAnswerBudget)
 	}
 
-	// A pane whose program exits at once.
 	_, took = splitTimed(t, base, &log, "-s", sess, "-w", first, "down", "--", "sh", "-c", "exit 0")
 	if took > splitAnswerBudget {
 		t.Errorf("ASSERTION: a split whose pane exits at once answered in %s, want under %s", took, splitAnswerBudget)
 	}
 	waitWindowCount(t, term, 2, "after the split pane exited")
 
-	// layoutPanes keys by name, and these panes keep the names tuios gave.
 	byID := func() map[string]layoutPane {
 		rows := map[string]layoutPane{}
 		for _, r := range layoutPanes(t, base, sess) {
@@ -221,7 +184,6 @@ func TestSplitWindowFromAZoomedPaneAnswersAtOnce(t *testing.T) {
 	})
 	saveArtifact(t, term, dir, "zoomed")
 
-	// The split from the zoomed pane.
 	created, took := splitTimed(t, base, &log, "-s", sess, "-w", first, "down", "--", "sh", "-c", "echo ZOOM-SPLIT; exec sleep 600")
 	if took > splitAnswerBudget {
 		t.Errorf("ASSERTION: a split from a zoomed pane answered in %s, want under %s", took, splitAnswerBudget)
@@ -242,14 +204,12 @@ func TestSplitWindowFromAZoomedPaneAnswersAtOnce(t *testing.T) {
 	}
 	saveArtifact(t, term, dir, "after-zoomed-split")
 
-	// A pane that exits at once, split from the zoomed pane.
 	_, took = splitTimed(t, base, &log, "-s", sess, "-w", first, "right", "--", "sh", "-c", "exit 0")
 	if took > splitAnswerBudget {
 		t.Errorf("ASSERTION: a split from a zoomed pane whose pane exits at once answered in %s, want under %s", took, splitAnswerBudget)
 	}
 }
 
-// rectLine is the rectangles in one line per pane, for the artifact.
 func rectLine(label string, rects map[string]layoutRect) string {
 	var b strings.Builder
 	b.WriteString("# " + label + "\n")
@@ -269,9 +229,6 @@ func TestLayoutChangedFollowsASplit(t *testing.T) {
 		first = id
 	}
 
-	// A layout-changed is not kept for replay, so one sent before the
-	// subscription reached the daemon would be lost. The stream's first line
-	// says the subscription is live.
 	pinPreV080Looks(t, base)
 	cmd := exec.Command(tuiosBin, "subscribe", "-s", sess, "--types", "layout-changed")
 	cmd.Dir = workDirIn(t, base)
@@ -293,14 +250,12 @@ func TestLayoutChangedFollowsASplit(t *testing.T) {
 		for sc.Scan() {
 			lines <- sc.Text()
 		}
-		// A read error ends the stream as EOF does, and waitEvent reports it.
 		_ = sc.Err()
 		close(lines)
 	}()
 	var stream strings.Builder
 	defer func() { _ = os.WriteFile(filepath.Join(dir, "events.jsonl"), []byte(stream.String()), 0o644) }()
 
-	// waitEvent reads the stream until an event of type typ arrives.
 	waitEvent := func(typ string, d time.Duration) map[string]any {
 		deadline := time.After(d)
 		for {
@@ -332,7 +287,6 @@ func TestLayoutChangedFollowsASplit(t *testing.T) {
 	saveArtifact(t, term, dir, "after-split")
 }
 
-// layoutPane is one window of list-windows, with what the layout verbs change.
 type layoutPane struct {
 	layoutRect
 	Name   string `json:"display_name"`
@@ -340,7 +294,6 @@ type layoutPane struct {
 	Zoomed bool   `json:"zoomed"`
 }
 
-// layoutPanes reads the session's windows by name.
 func layoutPanes(t *testing.T, base, sess string) map[string]layoutPane {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
@@ -400,8 +353,6 @@ func TestAgentArrangesPanesWithNoClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// What an agent's shell tool runs. Each step names the pane by the id the
-	// split printed.
 	id := `sed -n 's/.*"window_id": *"\([^"]*\)".*/\1/p'`
 	script := `set -e
 T=` + tuiosBin + `
@@ -430,7 +381,6 @@ $T zoom-window -w "$X" --on
 		t.Fatalf("the script failed with %s:\n%s", status, logged)
 	}
 
-	// Headless: the daemon laid the panes out itself.
 	rows := layoutPanes(t, base, sess)
 	a, l, x := rows["agent"], rows["logs"], rows["tests"]
 	var log strings.Builder
@@ -439,8 +389,6 @@ $T zoom-window -w "$X" --on
 	if l.ID == "" || x.ID == "" {
 		t.Fatalf("the splits made no logs and tests panes: %v", rows)
 	}
-	// The script cds by the path t.TempDir() gave, which on macOS goes
-	// through the /var link. The daemon reports the folder the kernel names.
 	if want := resolvedPath(t, agentDir); l.Cwd != want {
 		t.Errorf("ASSERTION: the split started in %q, want the agent's folder %s", l.Cwd, want)
 	}
@@ -454,7 +402,6 @@ $T zoom-window -w "$X" --on
 		t.Errorf("ASSERTION: with no client, the agent's pane has %.2f of the width, want 0.60 (0.70 less the resize)", share)
 	}
 
-	// A client attaches and shows the zoomed pane.
 	term := attachIn(t, base, sess, startOpts{cols: 120, rows: 40})
 	if err := term.WaitForText("TESTS-PANE", uiTimeout); err != nil {
 		t.Fatalf("the attached client does not show the zoomed tests pane: %v\n%s", err, term.Snapshot())
@@ -464,7 +411,6 @@ $T zoom-window -w "$X" --on
 		t.Errorf("ASSERTION: the client shows logs beside a zoomed pane:\n%s", term.Snapshot())
 	}
 
-	// The zoom ends from outside, and the client shows the layout.
 	if out, err := tuiosCLI(t, base, "zoom-window", "-s", sess, "-w", x.ID, "--off"); err != nil {
 		t.Fatalf("zoom-window --off: %v\n%s", err, out)
 	}

@@ -8,14 +8,6 @@ import (
 	"testing"
 )
 
-// fullScreenAgentScript is a stand-in for Claude Code that draws its whole
-// screen, as Claude Code does: the alternate screen, a header, the reply in
-// the middle and a footer on a fixed row, drawn again for each prompt. It
-// joins its pane to a transcript with the real SessionStart hook, writes each
-// prompt and its answer there in Claude Code's format, and ends each turn with
-// a Stop hook. Run through fakeclaude, so the pane's program is claude.
-//
-// $1 is tuios, $2 the transcript.
 const fullScreenAgentScript = `T="$1"; TR="$2"
 hook() { printf '%s' "$1" | "$T" agent-hook claude-code >/dev/null 2>&1; }
 draw() {
@@ -72,7 +64,6 @@ func TestAskAgentReadsAFullScreenAgentsReply(t *testing.T) {
 	if err := os.WriteFile(script, []byte(fullScreenAgentScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Under Claude Code's own folder, the only place a hook may name.
 	transcript := filepath.Join(atProjects(base), "ask", "tk-ask.jsonl")
 	if err := os.MkdirAll(filepath.Dir(transcript), 0o755); err != nil {
 		t.Fatal(err)
@@ -106,8 +97,6 @@ func TestAskAgentReadsAFullScreenAgentsReply(t *testing.T) {
 		t.Errorf("ASSERTION: the reply does not say it came from the transcript:\n%s", out)
 	}
 
-	// A second question: its reply is its own answer, and not the first one,
-	// which the transcript holds too.
 	res, out, err = askAsync(t, base, session, agent, "and the second", "--settle", "1500")()
 	if err != nil {
 		t.Fatalf("the second ask-agent failed: %v\n%s", err, out)

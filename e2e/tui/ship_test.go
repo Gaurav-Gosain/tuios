@@ -14,14 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The ship verbs end to end, through the binary a person runs: a throwaway
-// repository with a bare repository as its origin, a worktree session made
-// with tuios worktree new, a fake gh on PATH that records its arguments and
-// answers with canned JSON, and a fake gpg that signs anything, so the
-// person's signing config can be seen to be used. Nothing here reaches a
-// network or a real GitHub.
-
-// shipFixture is what the ship tests share.
 type shipFixture struct {
 	t        *testing.T
 	base     string
@@ -33,22 +25,14 @@ type shipFixture struct {
 	tr       *checkpointTranscript
 }
 
-// shipCanned is the pull request the fake gh opens: one check still running
-// and one commit status that passed, so its rollup is pending.
 const shipCanned = `{"number":7,"url":"https://github.example/o/r/pull/7","state":"OPEN","statusCheckRollup":[` +
 	`{"__typename":"CheckRun","name":"test","status":"IN_PROGRESS","conclusion":""},` +
 	`{"__typename":"StatusContext","context":"lint","state":"SUCCESS"}]}`
 
-// shipCannedPass is the same pull request once its checks passed.
 const shipCannedPass = `{"number":7,"url":"https://github.example/o/r/pull/7","state":"OPEN","statusCheckRollup":[` +
 	`{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS"},` +
 	`{"__typename":"StatusContext","context":"lint","state":"SUCCESS"}]}`
 
-// newShipFixture makes the repository, its bare origin, the fakes, the
-// person's git identity and signing setup, and a worktree session on
-// feat/ship. The identity is in the global config the test points git at,
-// and the variables testutil.GitRepo sets to override it are removed, so a
-// commit that names the person did so by reading their config.
 func newShipFixture(t *testing.T) *shipFixture {
 	t.Helper()
 	base := t.TempDir()
@@ -80,8 +64,6 @@ func newShipFixture(t *testing.T) *shipFixture {
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
 	t.Setenv("TUIOS_PR_POLL_SECONDS", "1")
 
-	// The person's identity and signing setup, in their global config. The
-	// identity is not an address: the test writes no email address anywhere.
 	for _, kv := range [][2]string{
 		{"user.name", "Ship Tester"},
 		{"user.email", "ship-tester"},
@@ -111,7 +93,6 @@ func newShipFixture(t *testing.T) *shipFixture {
 	return f
 }
 
-// write puts content in a file of the worktree.
 func (f *shipFixture) write(name, content string) {
 	f.t.Helper()
 	if err := os.WriteFile(filepath.Join(f.worktree, name), []byte(content), 0o644); err != nil {
@@ -119,7 +100,6 @@ func (f *shipFixture) write(name, content string) {
 	}
 }
 
-// ghCalls are the fake gh's calls, one argument list each.
 func (f *shipFixture) ghCalls() [][]string {
 	f.t.Helper()
 	data, err := os.ReadFile(filepath.Join(f.fakes, "gh.log"))
@@ -136,7 +116,6 @@ func (f *shipFixture) ghCalls() [][]string {
 	return calls
 }
 
-// jsonFailure reads the --json form of a failed ship command.
 func jsonFailure(t *testing.T, out string) (code string, files []string) {
 	t.Helper()
 	var res struct {
@@ -191,7 +170,6 @@ func TestShipFromWorktreeToPullRequest(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(artifactDir(t), "gh-calls.txt"), []byte(b.String()), 0o644)
 	})
 
-	// The agent writes a file and is still working: the commit waits.
 	f.write("hello.txt", "hello from the agent\n")
 	tr.ok("set-agent-state", "-s", f.session, "working")
 	if out, err := tr.run("ship", "commit", "-s", f.session, "-m", "Add the hello file"); err == nil || !strings.Contains(out, "not_ready") && !strings.Contains(out, "working") {
@@ -222,7 +200,6 @@ func TestShipFromWorktreeToPullRequest(t *testing.T) {
 	}
 	tip := testutil.Git(t, f.worktree, "rev-parse", "HEAD")
 
-	// The merge fast-forwards main in the main checkout.
 	out = tr.ok("ship", "merge", "-s", f.session)
 	if !strings.Contains(out, "Merged feat/ship into main") || !strings.Contains(out, "fast-forward") {
 		t.Errorf("ship merge printed:\n%s", out)
@@ -234,7 +211,6 @@ func TestShipFromWorktreeToPullRequest(t *testing.T) {
 		t.Errorf("the main checkout's hello.txt = %q", got)
 	}
 
-	// Both sides change README: the merge conflicts and is aborted.
 	f.write("README", "the agent's README\n")
 	tr.ok("ship", "commit", "-s", f.session, "-m", "Rewrite the README")
 	if err := os.WriteFile(filepath.Join(f.repo, "README"), []byte("the person's README\n"), 0o644); err != nil {
@@ -266,7 +242,6 @@ func TestShipFromWorktreeToPullRequest(t *testing.T) {
 		t.Errorf("the aborted merge left README as %q", got)
 	}
 
-	// A dirty main checkout is refused before anything is merged.
 	if err := os.WriteFile(filepath.Join(f.repo, "hello.txt"), []byte("edited by the person\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -282,8 +257,6 @@ func TestShipFromWorktreeToPullRequest(t *testing.T) {
 	}
 	testutil.Git(t, f.repo, "checkout", "--", "hello.txt")
 
-	// A push sends nothing until it is confirmed. The CLI's stdin is not a
-	// terminal here, so without --yes it cannot ask.
 	branchTip := testutil.Git(t, f.worktree, "rev-parse", "HEAD")
 	out, err = tr.run("ship", "push", "-s", f.session)
 	if refs := testutil.Git(t, f.remote, "for-each-ref", "--format=%(refname)", "refs/heads/feat/"); refs != "" {
@@ -303,7 +276,6 @@ func TestShipFromWorktreeToPullRequest(t *testing.T) {
 		t.Errorf("the branch's upstream is %q, want origin/feat/ship", up)
 	}
 
-	// The pull request, through the fake gh.
 	if out := tr.ok("ship", "status", "-s", f.session, "--refresh"); !strings.Contains(out, "no pull request is known") {
 		t.Errorf("ship status before the pull request printed:\n%s", out)
 	}
@@ -333,7 +305,6 @@ func TestShipFromWorktreeToPullRequest(t *testing.T) {
 		t.Errorf("ship status printed:\n%s", out)
 	}
 
-	// The listings carry it.
 	rows := worktreeRows(t, f.base)
 	var pr map[string]any
 	for _, r := range rows {
@@ -367,7 +338,6 @@ func TestShipFromWorktreeToPullRequest(t *testing.T) {
 		t.Errorf("ls --json does not carry the pull request on %s:\n%s", f.session, lsOut)
 	}
 
-	// The badge on the rail, and the poll that moves it.
 	writeConfig(t, f.base, "[appearance.sidebar]\nenabled = true\n")
 	term := startIn(t, f.base, startOpts{args: []string{"attach", f.session}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
@@ -453,7 +423,6 @@ func TestShipPushSendsTheCommitThePersonAllowed(t *testing.T) {
 	question := "Push feat/ship (" + tip[:7] + ") to origin"
 	waitText(t, term, "the push question in the Inbox", question)
 
-	// The agent commits again while the person reads the question.
 	f.write("later.txt", "not what the person was asked about\n")
 	f.tr.ok("ship", "commit", "-s", f.session, "-m", "Add a later file", "--force")
 	later := testutil.Git(t, f.worktree, "rev-parse", "HEAD")
@@ -480,9 +449,6 @@ func TestShipPushSendsTheCommitThePersonAllowed(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	// The ref is on the origin before git push returns, and the daemon sets
-	// the upstream after that, so the check waits for the command's answer,
-	// which comes only once both are done.
 	pushOut := filepath.Join(f.fakes, "pane-push.txt")
 	for {
 		data, _ := os.ReadFile(pushOut)
@@ -524,7 +490,6 @@ func TestShipPushQuestionNamesWhereThePushGoes(t *testing.T) {
 	out := filepath.Join(f.fakes, "pane-push.txt")
 	f.tr.ok("send-text", "-s", f.session, "-w", "0", fmt.Sprintf("%s ship push --yes --wait 60s > %s 2>&1\n", tuiosBin, out))
 
-	// The Inbox wraps the question, so its two halves are looked for apart.
 	question := "Push feat/ship (" + tip[:7] + ") to origin (elsewhere.example/someone/else.git)?"
 	waitText(t, term, "the push question naming the push URL's host and path",
 		"Push feat/ship ("+tip[:7]+") to origin", "(elsewhere.example/someone/else.git)?")
@@ -583,7 +548,6 @@ func TestFanKeepMergesTheKeptAttempt(t *testing.T) {
 	tr.ok("ship", "commit", "-s", "repo-try-ship-2", "-m", "Do the thing", "--force")
 	tip := testutil.Git(t, winner, "rev-parse", "HEAD")
 
-	// A dirty main checkout refuses the merge, and nothing is removed.
 	if err := os.WriteFile(filepath.Join(repo, "README"), []byte("edited\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

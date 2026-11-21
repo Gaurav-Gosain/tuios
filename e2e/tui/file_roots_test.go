@@ -12,14 +12,6 @@ import (
 	"time"
 )
 
-// Write roots and the read deny list, over a real link.
-//
-// TestALinkCannotWriteKeysOrLeaveTheHome gives build a wide root (~), so it
-// proves the deny list. These prove the other half: that the default root is
-// one receive folder, that a link cannot read keys out, and that the escapes
-// the review found (a renamed ancestor, a stowed dotfile, a case-folded deny
-// name) are closed.
-
 // TestALinkWritesOnlyInItsRoots leaves build on the default policy: no
 // files_roots, so a linked machine writes only to the receive folder. A copy
 // into the home folder is refused and the refusal says where writes may land
@@ -29,8 +21,6 @@ func TestALinkWritesOnlyInItsRoots(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
 	farHome := xdgDir(remote, "HOME")
-	// A policy that sets allow but not files_roots: the default receive
-	// folder is the only write root.
 	writeRemoteConfig(t, remote, "[hosts.\"*\"]\nallow = [\"list\", \"files\"]\n")
 	hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
 
@@ -54,7 +44,6 @@ func TestALinkWritesOnlyInItsRoots(t *testing.T) {
 		t.Errorf("ASSERTION: the file arrived in build's home folder")
 	}
 
-	// The receive folder is created on first use and the copy lands there.
 	var inside transferRow
 	dialFileVerbs(t, base).must("transfer-start", map[string]any{
 		"src": map[string]any{"path": src}, "dst": map[string]any{"host": "build", "path": "~/Downloads/tuios/report.pdf"}, "conflict": "replace",
@@ -175,8 +164,6 @@ func TestALinkCannotReadKeys(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(farHome, ".config", "app", "settings.txt"), []byte("ordinary\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Files the link may not write because they can hold a token. A link may
-	// not read them either.
 	carriers := []string{".gitconfig", ".bashrc", ".config/git/credentials"}
 	for _, rel := range carriers {
 		p := filepath.Join(farHome, filepath.FromSlash(rel))
@@ -210,8 +197,6 @@ func TestALinkCannotReadKeys(t *testing.T) {
 			t.Errorf("ASSERTION: a link read ~/%s: %v", rel, err)
 		}
 	}
-	// A walk is what a folder copy lists its source with. It names no file
-	// the link may not read.
 	raw, err := far.call("file-walk", map[string]any{"path": "~"})
 	if err != nil {
 		t.Fatalf("walk build's home folder: %v", err)
@@ -236,8 +221,6 @@ func TestALinkCannotReadKeys(t *testing.T) {
 	if !slices.Contains(names, "notes.txt") {
 		t.Errorf("ASSERTION: a walk of build's home folder left out notes.txt: %v", names)
 	}
-	// A folder copy from build leaves the denied entries out and says how
-	// many, without their names.
 	var row transferRow
 	dialFileVerbs(t, base).must("transfer-start", map[string]any{
 		"src": map[string]any{"host": "build", "path": "~/.config"}, "dst": map[string]any{"path": filepath.Join(base, "cfg")},
@@ -280,7 +263,6 @@ func TestADarwinCaseFoldedDenyNameIsRefused(t *testing.T) {
 	if err := os.WriteFile(src, []byte("ssh-ed25519 AAAA the attacker's key\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// U+017F LATIN SMALL LETTER LONG S folds to s on APFS.
 	var row transferRow
 	dialFileVerbs(t, base).must("transfer-start", map[string]any{
 		"src": map[string]any{"path": src}, "dst": map[string]any{"host": "build", "path": "~/.ſsh/authorized_keys"}, "conflict": "replace",
@@ -292,8 +274,6 @@ func TestADarwinCaseFoldedDenyNameIsRefused(t *testing.T) {
 	if got, _ := os.ReadFile(filepath.Join(farHome, ".ssh", "authorized_keys")); string(got) != keep {
 		t.Errorf("ASSERTION: build's authorized_keys changed through a case-folded name: %q", got)
 	}
-	// APFS folds the long s, so a stat of ~/.ſsh finds ~/.ssh. The names in
-	// the folder show whether a second folder was made.
 	entries, err := os.ReadDir(farHome)
 	if err != nil {
 		t.Fatal(err)

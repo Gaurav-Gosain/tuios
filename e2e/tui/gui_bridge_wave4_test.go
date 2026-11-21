@@ -18,19 +18,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Wave 4 of the GUI bridge: muxed by default and machines.
-//
-// A renderer reopens where the person left, and a bridge that dies is
-// started again behind emulators the renderer kept. The bridge attaches a
-// session by id, then the one the person used last. It sends a "seq" event
-// with each snapshot's stream position, and a bridge started with the
-// positions the renderer holds (--resume) sends no snapshot for a pane the
-// renderer is current on, and only the missing bytes for one that is a
-// little behind. The bridge also reaches a session on another machine
-// (--host), and sends every machine with its link, round trip and sessions
-// (the "hosts" event).
-
-// wireAttached is the attached event's own object.
 type wireAttached struct {
 	SessionID string `json:"session_id"`
 	DaemonPID int    `json:"daemon_pid"`
@@ -38,14 +25,12 @@ type wireAttached struct {
 	Host      string `json:"host"`
 }
 
-// wireSeq is a "seq" event.
 type wireSeq struct {
 	PTY  string `json:"pty"`
 	Seq  int64  `json:"seq"`
 	Kept bool   `json:"kept"`
 }
 
-// wireHosts is the "hosts" event's object.
 type wireHosts struct {
 	Live  bool `json:"live"`
 	Hosts []struct {
@@ -61,7 +46,6 @@ type wireHosts struct {
 	} `json:"hosts"`
 }
 
-// eventsOf decodes every event of type kind into a new T, in order.
 func eventsOf[T any](b *guiBridge, kind, field string) []T {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -88,7 +72,6 @@ func eventsOf[T any](b *guiBridge, kind, field string) []T {
 	return out
 }
 
-// waitFor waits until ok holds, under the bridge's lock.
 func (b *guiBridge) waitFor(ok func() bool, d time.Duration, what string) {
 	b.t.Helper()
 	deadline := time.Now().Add(d)
@@ -102,7 +85,6 @@ func (b *guiBridge) waitFor(ok func() bool, d time.Duration, what string) {
 	}
 }
 
-// attachedOf waits for the attached event and returns it.
 func attachedOf(b *guiBridge) (string, wireAttached) {
 	b.t.Helper()
 	type ev struct {
@@ -121,8 +103,6 @@ func attachedOf(b *guiBridge) (string, wireAttached) {
 	return got[len(got)-1].Message, got[len(got)-1].Attached
 }
 
-// position is the stream position the renderer holds for pty: the last seq
-// event plus every OUTPUT byte since it, which is how tuios-gpui counts.
 func (b *guiBridge) position(pty string) int64 {
 	seqs := eventsOf[wireSeq](b, "seq", "")
 	var at int64 = -1
@@ -151,8 +131,6 @@ func TestGUIBridgeAttachesByIDThenLastUsed(t *testing.T) {
 			t.Fatalf("new %s: %v\n%s", name, err, out)
 		}
 	}
-	// zeta is the newer session and neither is used: the daemon's pick is
-	// zeta, and the first one listed is alpha.
 	b := startBridgeWith(t, base, bridgeOpts{cols: 100, rows: 30, keepDaemon: true, name: "none"})
 	name, info := attachedOf(b)
 	if name != "zeta" {
@@ -163,7 +141,6 @@ func TestGUIBridgeAttachesByIDThenLastUsed(t *testing.T) {
 	}
 	_ = b.in.Close()
 
-	// The person uses alpha in a terminal client: it is the last used now.
 	term := startIn(t, base, startOpts{args: []string{"attach", "alpha"}})
 	time.Sleep(2 * time.Second)
 	if err := term.SendKeys("echo USED\r"); err != nil {
@@ -178,7 +155,6 @@ func TestGUIBridgeAttachesByIDThenLastUsed(t *testing.T) {
 	}
 	_ = b.in.Close()
 
-	// By id: zeta's id still finds it after a rename.
 	zetaID := info.SessionID
 	if out, err := tuiosCLI(t, base, "rename-session", "zeta", "omega"); err != nil {
 		t.Fatalf("rename: %v\n%s", err, out)
@@ -190,7 +166,6 @@ func TestGUIBridgeAttachesByIDThenLastUsed(t *testing.T) {
 	}
 	_ = b.in.Close()
 
-	// An id the daemon does not hold falls back to the last used.
 	b = startBridgeWith(t, base, bridgeOpts{args: []string{"--session-id", "no-such-id"}, cols: 100, rows: 30, keepDaemon: true, name: "gone"})
 	if name, _ := attachedOf(b); name != "alpha" {
 		t.Fatalf("ASSERTION: an unknown id attached %q, want alpha (used last)", name)
@@ -223,12 +198,9 @@ func TestGUIBridgeResumesKeptEmulators(t *testing.T) {
 		})
 	}
 	settle := func(b *guiBridge) {
-		// The pane is restored and subscribed with the first state; give
-		// any snapshot time to arrive.
 		time.Sleep(1500 * time.Millisecond)
 	}
 
-	// 1. Current: kept, and no snapshot.
 	b = resume("current", held, info.DaemonPID)
 	settle(b)
 	seqs := eventsOf[wireSeq](b, "seq", "")
@@ -241,8 +213,6 @@ func TestGUIBridgeResumesKeptEmulators(t *testing.T) {
 	_ = b.in.Close()
 	b.waitFor(func() bool { return b.closed }, uiTimeout, "the bridge to stop")
 
-	// 2. Behind: the pane prints while no bridge runs. The new bridge sends
-	// those bytes as output, and still no snapshot.
 	if out, err := tuiosCLI(t, base, "send-keys", "-s", "kept", "-l", "echo SECOND-$((6*8))\r"); err != nil {
 		t.Fatalf("send-keys: %v\n%s", err, out)
 	}
@@ -257,8 +227,6 @@ func TestGUIBridgeResumesKeptEmulators(t *testing.T) {
 	if n := b.snaps[pty]; n != 0 {
 		t.Fatalf("ASSERTION: an emulator a little behind got %d snapshots", n)
 	}
-	// The catch-up starts where the renderer stopped: the first echo is not
-	// sent again.
 	if bytes.Contains(b.outputs[pty], []byte("FIRST-42")) {
 		t.Fatalf("ASSERTION: the catch-up repeats output the renderer had:\n%q", b.outputs[pty])
 	}
@@ -266,13 +234,11 @@ func TestGUIBridgeResumesKeptEmulators(t *testing.T) {
 	_ = b.in.Close()
 	b.waitFor(func() bool { return b.closed }, uiTimeout, "the bridge to stop")
 
-	// 3. Another daemon pid: the positions are not trusted.
 	b = resume("otherpid", now, info.DaemonPID+100000)
 	b.waitFor(func() bool { return b.snaps[pty] > 0 }, uiTimeout, "a snapshot for positions from another daemon")
 	_ = b.in.Close()
 	b.waitFor(func() bool { return b.closed }, uiTimeout, "the bridge to stop")
 
-	// 4. The ring moved on: far more than 64 KiB printed while away.
 	if out, err := tuiosCLI(t, base, "send-keys", "-s", "kept", "-l", "seq 1 30000\r"); err != nil {
 		t.Fatalf("send-keys: %v\n%s", err, out)
 	}
@@ -302,7 +268,6 @@ func TestGUIBridgeKilledLeavesTheSession(t *testing.T) {
 	if !strings.Contains(out, "crash") {
 		t.Fatalf("ASSERTION: the session ended with the bridge:\n%s", out)
 	}
-	// A newer session, so only the id leads back to crash.
 	if out, err := tuiosCLI(t, base, "new", "-d", "other"); err != nil {
 		t.Fatalf("new other: %v\n%s", err, out)
 	}
@@ -330,7 +295,6 @@ func TestGUIBridgeOnAHostAndItsLink(t *testing.T) {
 	}
 	waitForHostListing(t, base, func(s string) bool { return strings.Contains(s, "│ up ") }, "the link to build comes up")
 
-	// A bridge on this machine sees build in its hosts event.
 	b := startBridgeWith(t, base, bridgeOpts{args: []string{"--session", "here"}, env: env, cols: 100, rows: 30, keepDaemon: true, name: "here"})
 	row := func() (bool, string) {
 		ev := eventsOf[wireHosts](b, "hosts", "hosts")
@@ -362,7 +326,6 @@ func TestGUIBridgeOnAHostAndItsLink(t *testing.T) {
 	t.Logf("hosts event row: %s", desc)
 	_ = b.in.Close()
 
-	// A bridge on build's session far.
 	b = startBridgeWith(t, base, bridgeOpts{args: []string{"--host", "build", "--session", "far"}, env: env, cols: 100, rows: 30, keepDaemon: true, name: "far"})
 	name, info := attachedOf(b)
 	if name != "far" || info.Host != "build" || info.SessionID == "" {
@@ -372,7 +335,6 @@ func TestGUIBridgeOnAHostAndItsLink(t *testing.T) {
 	pty := st.Windows[0].PTY
 	b.input(pty, "echo FAR-$((6*7))\r")
 	b.waitFor(func() bool { return bytes.Contains(b.outputs[pty], []byte("FAR-42")) }, shellTimeout, "the far shell's echo through the bridge")
-	// The session is the far daemon's, not this machine's.
 	if out, _ := tuiosCLI(t, base, "ls"); strings.Contains(out, "far") {
 		t.Fatalf("ASSERTION: this machine's daemon holds far:\n%s", out)
 	}
@@ -392,8 +354,6 @@ func TestGUIBridgeKeepsItsChromeAcrossAReload(t *testing.T) {
 	}
 	st := b.waitState(full, "one pane over the whole grid")
 	before, _ := json.Marshal(st.Windows[0])
-	// The person's file puts the dock at the top, as a config with no dock
-	// setting does; the watcher reloads it.
 	cfg := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")
 	if err := os.WriteFile(cfg, []byte("[appearance]\ndockbar_position = \"top\"\n"), 0o600); err != nil {
 		t.Fatalf("write the config: %v", err)
@@ -406,17 +366,6 @@ func TestGUIBridgeKeepsItsChromeAcrossAReload(t *testing.T) {
 	}
 }
 
-// farProxies is every stdio-proxy that serves the far machine at
-// remoteBase. A link can have more than one: the daemon's link and a dial a
-// client made through it. Which one is listed first is not fixed, so a test
-// that cuts the link stops or kills them all.
-//
-// The ssh stand-in for that machine (writeFakeSSHTo) records its pid in
-// fakeSSHPids before it runs the far command, so the proxies are that pid and
-// its descendants whose command runs stdio-proxy. This reads ps, which Linux
-// and macOS both have. It used to read each process's environment under
-// /proc, which macOS does not have, so the tests that cut a link failed there
-// before they cut anything.
 func farProxies(remoteBase string) []int {
 	data, _ := os.ReadFile(fakeSSHPids(remoteBase))
 	var roots []int
@@ -465,7 +414,6 @@ func farProxies(remoteBase string) []int {
 	return pids
 }
 
-// signalFarProxies sends sig to every stdio-proxy of the far machine.
 func signalFarProxies(t *testing.T, remoteBase string, sig syscall.Signal) []int {
 	t.Helper()
 	pids := farProxies(remoteBase)
@@ -533,7 +481,6 @@ func TestGUIBridgeHostStallAndRecovery(t *testing.T) {
 		}
 	}
 	waitRow(func(r row) bool { return r.Health == "good" && r.RTTMs > 0 }, 30*time.Second, "build good with a round trip")
-	// Right after a probe: the next one is about 5 s away.
 	time.Sleep(500 * time.Millisecond)
 
 	pids := signalFarProxies(t, remote, syscall.SIGSTOP)
@@ -592,7 +539,6 @@ func TestGUIBridgeSnapshotCarriesTheRenderersHistory(t *testing.T) {
 		b.mu.Lock()
 		snap := b.snapBytes[pty]
 		b.mu.Unlock()
-		// Row 100 and not row 1000 or 1001: a digit may not follow.
 		has := regexp.MustCompile(`deep row 100[^0-9]`).Match(snap)
 		first := ""
 		if i := bytes.Index(snap, []byte("deep row ")); i >= 0 {
@@ -718,10 +664,6 @@ func TestGUIBridgeTypesAfterTheLinkComesBack(t *testing.T) {
 	b.input(pty, "echo BEFORE-$((6*7))\r")
 	b.waitFor(func() bool { return bytes.Contains(b.outputs[pty], []byte("BEFORE-42")) }, shellTimeout, "the far shell's echo before the drop")
 
-	// The link drops: its far end goes away, as when the network does.
-	// The listing can miss a drop that is over before it looks, so the drop
-	// is seen as the proxies being replaced: none of the killed ones is
-	// running once the link is up again.
 	killed := signalFarProxies(t, remote, syscall.SIGKILL)
 	t.Logf("killed the far proxies %v", killed)
 	dropDeadline := time.Now().Add(30 * time.Second)
@@ -743,8 +685,6 @@ func TestGUIBridgeTypesAfterTheLinkComesBack(t *testing.T) {
 	}
 	waitForHostListing(t, base, func(s string) bool { return strings.Contains(s, "│ up ") }, "the link to build comes back")
 
-	// The bridge dials the session again on its own. Keys sent until then
-	// may be lost; one sent after it must reach the far shell.
 	deadline := time.Now().Add(40 * time.Second)
 	for n := 0; ; n++ {
 		marker := fmt.Sprintf("AFTER-%d", n)
@@ -775,7 +715,6 @@ func TestGUIBridgeSnapshotCarriesTabsAndTitle(t *testing.T) {
 	b.mustCall(map[string]any{"cmd": "action", "name": "new_window"})
 	st := b.waitState(func(s *wireState) bool { return len(s.Windows) == 1 }, "one pane")
 	pty := st.Windows[0].PTY
-	// Clear every stop, set one at column 13, and title the pane.
 	b.input(pty, "printf '\\033[3g\\033[1;13H\\033H\\033]2;GUI-TABS-TITLE\\007'; echo SET-$((6*7))\r")
 	b.waitFor(func() bool { return bytes.Contains(b.outputs[pty], []byte("SET-42")) }, shellTimeout, "the stops and title set")
 	_ = b.in.Close()
@@ -795,7 +734,6 @@ func TestGUIBridgeSnapshotCarriesTabsAndTitle(t *testing.T) {
 	again.saveLog("snapshot-tabs-title")
 }
 
-// procPeakKB is a process's resident high-water mark, from /proc.
 func procPeakKB(t *testing.T, pid int) int64 {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("/proc", fmt.Sprint(pid), "status"))
@@ -837,14 +775,11 @@ func TestGUIBridgeResyncsARendererThatFellBehind(t *testing.T) {
 
 	b.gate.Lock()
 	b.input(pty, "seq -f 'flood %g' 1 2500000; echo FLOOD-$((6*7))-DONE\r")
-	// The flood runs while the renderer reads nothing.
 	time.Sleep(15 * time.Second)
 	peak := procPeakKB(t, b.pid)
 	b.gate.Unlock()
 
 	b.waitFor(func() bool { return b.snaps[pty] > snaps0 }, 60*time.Second, "a fresh snapshot of the pane after the renderer read again")
-	// The end of the flood reaches the renderer: in the snapshot's screen,
-	// or in the output that follows it.
 	b.waitFor(func() bool {
 		return bytes.Contains(b.snapBytes[pty], []byte("FLOOD-42-DONE")) || bytes.Contains(b.outputs[pty], []byte("FLOOD-42-DONE"))
 	}, 60*time.Second, "the flood's last line at the renderer")
@@ -876,7 +811,6 @@ func TestGUIBridgeResyncsOnePaneOnRequest(t *testing.T) {
 
 	b.send(map[string]any{"cmd": "resync", "id": flood})
 	b.waitFor(func() bool { return b.snaps[flood] > snapsFlood }, uiTimeout, "a fresh snapshot of the flooding pane")
-	// It streams on from the snapshot: the line after the flood arrives.
 	b.waitFor(func() bool {
 		return bytes.Contains(b.outputs[flood], []byte("AFTER-42")) || bytes.Contains(b.snapBytes[flood], []byte("AFTER-42"))
 	}, 60*time.Second, "the line after the flood")

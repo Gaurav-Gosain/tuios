@@ -8,20 +8,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The agents view has regions: the list, the focus, the reply and the side
-// column. tab steps them and skips one the frame does not draw, the key bar
-// names the one that has the keys and shows its keys, and an accent rule
-// marks its top edge. esc goes back one step at a time. N goes to the next
-// agent that needs the person.
-
-// ckKeyBar is the key bar, the screen's last row.
 func ckKeyBar(s tuitest.Screen) string {
 	_, rows := s.Size()
 	return strings.TrimSpace(s.Line(rows - 1))
 }
 
-// ckMarkSpan is the columns of the region mark: the run of the rule glyph on
-// the row above the columns. ok is false when no row has one.
 func ckMarkSpan(s tuitest.Screen) (x0, x1 int, ok bool) {
 	cols, rows := s.Size()
 	for y := 1; y < min(rows, 6); y++ {
@@ -41,8 +32,6 @@ func ckMarkSpan(s tuitest.Screen) (x0, x1 int, ok bool) {
 	return 0, 0, false
 }
 
-// waitRegion waits for the key bar to name region and for the mark to start
-// in the columns [lo, hi).
 func waitRegion(t *testing.T, term *tuitest.Terminal, region string, lo, hi int, when string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -55,9 +44,6 @@ func waitRegion(t *testing.T, term *tuitest.Terminal, region string, lo, hi int,
 	}
 }
 
-// ckBarNames reports whether the key bar is region's: it names region, or,
-// on a bar too full for the name (the bar gives the name up before a key),
-// it names no other region and shows a key only region's bar has.
 func ckBarNames(bar, region string) bool {
 	if strings.HasPrefix(bar, region+" ") {
 		return true
@@ -78,7 +64,6 @@ func ckBarNames(bar, region string) bool {
 	return !strings.Contains(bar, "scroll") && !strings.Contains(bar, "undo")
 }
 
-// ckPress sends keys and gives the frame a beat.
 func ckPress(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	t.Helper()
 	if err := term.SendKeys(keys...); err != nil {
@@ -102,7 +87,6 @@ func ckPress(t *testing.T, term *tuitest.Terminal, keys ...any) {
 // once, the ladder fails; with N doing nothing, the N check fails.
 func TestCockpitRegions(t *testing.T) {
 	term, base, _, _ := startCockpitFleet(t, 200, 50, nil)
-	// A second agent that needs the person, for N.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "needs_input", "-s", "misc", "-w", "scratch",
 		"--harness", "claude-code", "--kind", "question", "-m", "Which branch?"); err != nil {
 		t.Fatalf("scratch asks: %v\n%s", err, out)
@@ -114,7 +98,6 @@ func TestCockpitRegions(t *testing.T) {
 	}
 	cursorTo(t, term, func(line string) bool { return strings.Contains(line, "bench-idle") })
 
-	// 200 columns: list 0..48, focus from 51, side from 154.
 	waitRegion(t, term, "List", 0, 4, "the view opens on the list")
 	saveCockpitFrames(t, term, "regions-200-list")
 	ckPress(t, term, tuitest.Tab)
@@ -139,14 +122,12 @@ func TestCockpitRegions(t *testing.T) {
 	ckPress(t, term, tuitest.Esc)
 	waitRegion(t, term, "List", 0, 4, "esc in the side column")
 
-	// A click in the focus gives it the keys.
 	row, col := findText(t, term, "Says:")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	waitRegion(t, term, "Focus", 48, 60, "a click in the focus")
 	ckPress(t, term, tuitest.Esc)
 	waitRegion(t, term, "List", 0, 4, "esc in the focus")
 
-	// The esc ladder, from the reply with text in it.
 	ckPress(t, term, "i")
 	if err := term.Type("keep this draft"); err != nil {
 		t.Fatalf("type a draft: %v", err)
@@ -181,7 +162,6 @@ func TestCockpitRegions(t *testing.T) {
 	cursorTo(t, term, func(line string) bool { return strings.Contains(line, "bench-idle") })
 	waitText(t, term, "the draft after the view closed", "keep this draft")
 
-	// N: each agent that needs the person, then the first again.
 	var seen []string
 	for range 3 {
 		ckPress(t, term, "N")
@@ -193,7 +173,6 @@ func TestCockpitRegions(t *testing.T) {
 		t.Fatalf("ASSERTION: N did not walk the two agents that need you and wrap: %q\n%s", seen, term.Snapshot())
 	}
 
-	// 120 columns: no side column, so tab goes List, Focus, Reply, List.
 	ckPress(t, term, "q")
 	narrow := openCockpitClient(t, base, 120, 36, nil)
 	cursorTo(t, narrow, func(line string) bool { return strings.Contains(line, "bench-idle") })
@@ -208,5 +187,4 @@ func TestCockpitRegions(t *testing.T) {
 	alive(t, narrow, "after the regions")
 }
 
-// ckShiftTab is shift+tab as terminals send it, CSI Z.
 const ckShiftTab = "\x1b[Z"

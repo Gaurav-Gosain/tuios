@@ -60,14 +60,10 @@ func TestPaneModifyOtherKeys(t *testing.T) {
 				{"plain", "", "\n;\x01"},
 				{"level1", "\\033[>4;1m", "\x1b[27;5;13~\x1b[27;5;59~\x01"},
 				{"level2", "\\033[>4;2m", "\x1b[27;5;13~\x1b[27;5;59~\x1b[27;5;97~"},
-				// The flags are popped when the step ends, so the shell after
-				// it reads keys as before.
 				{"kitty", "\\033[>4;2m\\033[>1u", ctrlEnter + ctrlSemi + ctrlA},
 			} {
 				out := filepath.Join(dir, step.name)
 				script := filepath.Join(dir, step.name+".sh")
-				// Raw mode so the keys reach the file unchanged. With min 0
-				// time 40, cat ends after four seconds of silence.
 				body := "stty raw -echo min 0 time 40\n" +
 					"printf '" + step.setup + "'\n" +
 					"printf 'KEYS%sREADY\\r\\n' " + step.name + "\n" +

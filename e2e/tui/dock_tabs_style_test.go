@@ -49,7 +49,6 @@ func TestDockTabsFlatStyle(t *testing.T) {
 			if got := strings.Contains(row, "+"); got != tc.add {
 				t.Fatalf("%s: \"+\" tab on the dock row = %v, want %v\n%s", tc.name, got, tc.add, row)
 			}
-			// The mode chip keeps its caps; the tab's would make a third pair.
 			caps := dockCapsIn(row)
 			if tc.flat && len(caps) > 2 {
 				t.Fatalf("%s: flat tab drawn with caps %q\n%s", tc.name, caps, row)
@@ -61,8 +60,6 @@ func TestDockTabsFlatStyle(t *testing.T) {
 	}
 }
 
-// twoWorkspaces leaves workspaces 1 and 2 with a window each, workspace 1
-// current, and waits until the dock says so.
 func twoWorkspaces(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	newWindow(t, term)
@@ -81,7 +78,6 @@ func twoWorkspaces(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// dockRowIndex is the screen row dockRow reads.
 func dockRowIndex(s tuitest.Screen) int {
 	_, rows := s.Size()
 	for y := rows - 1; y >= 0; y-- {
@@ -119,9 +115,6 @@ number_glyphs = ["A"]
 bell_marker = "!"
 activity_marker = "#"
 `)
-	// Attached to a daemon, as tuios runs by default. The client streams
-	// only the panes it shows, so the bell and output of workspace 1 reach
-	// it only as the daemon's pane mark.
 	term := startIn(t, base, startOpts{cols: 120, rows: 30, args: []string{"new", "e2e"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(dockRow(s), "1:0")
@@ -129,15 +122,10 @@ activity_marker = "#"
 		t.Fatalf("the dock never drew: %v\n%s", err, term.Snapshot())
 	}
 
-	// A lone workspace is already one flat tab, with no separator and no "+".
-	// Only the strip is read, up to the window readout: a daemon client
-	// draws its own "+" for a new session at the right end of the bar.
 	if row := dockRow(term.Screen()); strings.ContainsAny(row[:strings.Index(row, "1:0")], "|+") {
 		t.Fatalf("a lone flat tab drew a separator or a \"+\": %s", row)
 	}
 
-	// {icon} is the first number_glyphs entry on workspace 1, and the number
-	// itself on workspace 2, which the list does not reach.
 	twoWorkspaces(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(dockRow(s), " 1~A  |  2~2 ")
@@ -145,9 +133,6 @@ activity_marker = "#"
 		t.Fatalf("the strip never joined the tabs with the separator: %v\n%s", err, term.Snapshot())
 	}
 
-	// Only the current tab is filled. The harness terminal quantises the
-	// colour to its palette, so the fill is read as "not the default ground"
-	// rather than as the configured RGB; inactive tabs set no inactive_bg.
 	activeBg := func(s tuitest.Screen, col int) bool {
 		return s.Cell(col, dockRowIndex(s)).Bg.Kind != tuitest.ColorDefault
 	}
@@ -161,7 +146,6 @@ activity_marker = "#"
 		t.Fatalf("no pane is zoomed, but the row carries the zoom marker: %s", row)
 	}
 
-	// Zooming marks the current tab only.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "z"); err != nil {
 		t.Fatalf("zoom: %v", err)
 	}
@@ -174,10 +158,7 @@ activity_marker = "#"
 		t.Fatalf("the zoom marker is on a tab that is not current: %s", dockRow(term.Screen()))
 	}
 
-	// A click on tab 2 switches to it, and the fill follows.
 	row = dockRow(term.Screen())
-	// The click is on the tab's last column, where a hit rect that lost the
-	// separator's width has already ended.
 	leftClick(t, term, pillColumn(row, "2~2")+3, dockRowIndex(term.Screen()))
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r := dockRow(s)
@@ -186,8 +167,6 @@ activity_marker = "#"
 		t.Fatalf("a click on the second flat tab did not switch to workspace 2: %v\n%s", err, term.Snapshot())
 	}
 
-	// A bell and output on workspace 1 while workspace 2 is in view put
-	// bell_marker and activity_marker on tab 1. Looking at it clears them.
 	row = dockRow(term.Screen())
 	leftClick(t, term, pillColumn(row, "1~A")+1, dockRowIndex(term.Screen()))
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(dockRow(s), "1:1") }, uiTimeout); err != nil {
@@ -369,9 +348,9 @@ func TestDockTabsCapsAndColours(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name, tabs string
-		coloured   bool // the tabs carry the colours above
-		capped     bool // each tab has a cap either side
-		underline  bool // the current tab is underlined
+		coloured   bool
+		capped     bool
+		underline  bool
 	}{
 		{"pill", "", false, true, true},
 		{"flat", "style = \"flat\"\n", false, false, false},
@@ -402,7 +381,6 @@ func TestDockTabsCapsAndColours(t *testing.T) {
 			if label.Underline != tc.underline {
 				t.Errorf("the current tab underlined = %v, want %v\n%s", label.Underline, tc.underline, term.SnapshotStyled())
 			}
-			// A tab is " AA ": its caps sit a column outside the padding.
 			for _, c := range []struct {
 				col    int
 				ground rgb
@@ -424,8 +402,6 @@ func TestDockTabsCapsAndColours(t *testing.T) {
 	}
 }
 
-// twoWorkspacesAt is twoWorkspaces for a strip whose labels are not the
-// workspace numbers: it waits until the dock draws the second label.
 func twoWorkspacesAt(t *testing.T, term *tuitest.Terminal, second string) {
 	t.Helper()
 	newWindow(t, term)

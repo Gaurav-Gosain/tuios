@@ -10,15 +10,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// sortRowRe is the Group menu's sort row: the label, the order in force as
-// its note, and its key.
 var sortRowRe = regexp.MustCompile(`Sort\s+(needs you|name|recent|session)\s+s`)
 
-// sortRowShown reports whether the Group menu's sort row is on screen.
 func sortRowShown(s tuitest.Screen) bool { return sortRowRe.MatchString(s.Text()) }
 
-// menuRow is the screen row whose text holds label inside the open menu,
-// below the header's row, and the column the label starts at.
 func menuRow(s tuitest.Screen, header int, label string) (row, col int) {
 	_, rows := s.Size()
 	for y := header + 1; y < rows; y++ {
@@ -93,7 +88,6 @@ func TestCockpitHeaderDropdowns(t *testing.T) {
 		return header, x
 	}
 
-	// The Group menu: the groupings, the current one marked, a key each.
 	header, gx := openMenu("Group: state", "state", "session", "machine", "project")
 	s := term.Screen()
 	for i, name := range []string{"state", "session", "machine", "project"} {
@@ -111,7 +105,6 @@ func TestCockpitHeaderDropdowns(t *testing.T) {
 	}
 	railShot(t, term, "group-menu")
 
-	// The pointer lights the row it is over.
 	mr, mc := menuRow(s, header, "machine")
 	before := s.Cell(mc, mr).Bg
 	mouseHover(t, term, mc, mr)
@@ -120,7 +113,6 @@ func TestCockpitHeaderDropdowns(t *testing.T) {
 	}
 	railShot(t, term, "group-menu-hover")
 
-	// A click on session groups by session and closes the menu.
 	sr, sc := menuRow(term.Screen(), header, "session")
 	mouseClick(t, term, sc, sr, tuitest.MouseLeft, 0)
 	waitText(t, term, "the grouping after the click", "Group: session")
@@ -128,7 +120,6 @@ func TestCockpitHeaderDropdowns(t *testing.T) {
 		t.Fatalf("ASSERTION: the menu stayed open after a pick: %v\n%s", err, term.Snapshot())
 	}
 
-	// Esc closes it with nothing changed.
 	openMenu("Group: session", "state", "session")
 	sendKeys(t, term, tuitest.Esc)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -137,8 +128,6 @@ func TestCockpitHeaderDropdowns(t *testing.T) {
 		t.Fatalf("ASSERTION: esc did not close the menu, or changed the grouping: %v\n%s", err, term.Snapshot())
 	}
 
-	// A click outside closes it and does nothing else: on New agent, the
-	// sheet does not open.
 	openMenu("Group: session", "state", "session")
 	nr, nc := findText(t, term, "New agent")
 	mouseClick(t, term, nc+2, nr, tuitest.MouseLeft, 0)
@@ -149,7 +138,6 @@ func TestCockpitHeaderDropdowns(t *testing.T) {
 		t.Fatalf("ASSERTION: the click that closed the menu also opened the New agent sheet\n%s", term.Snapshot())
 	}
 
-	// The Board control: a menu of the two views, and a key pick.
 	openMenu("Board", "Agents", "Board")
 	railShot(t, term, "board-menu")
 	sendKeys(t, term, "2")
@@ -182,10 +170,6 @@ func TestSpawnSheetListIsTheDropdown(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
 		t.Fatalf("create session home: %v\n%s", err, out)
 	}
-	// No agent on the PATH, as on CI: the list's order follows what is
-	// installed, and on a machine with eight agent CLIs (stubbed by the
-	// suite, so each looks installed) aider was ranked past the ninth row and
-	// had no key, which the check below reads as no list.
 	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 160, rows: 48, shippedLooks: true,
 		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor", "PATH=" + agentFreePath(filepath.SplitList(os.Getenv("PATH"))...)}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
@@ -217,7 +201,6 @@ func TestSpawnSheetListIsTheDropdown(t *testing.T) {
 	}
 	railShot(t, term, "sheet-list")
 
-	// The pointer lights the row it is over.
 	ar, ac := menuRow(s, mr, "amp")
 	before := s.Cell(ac, ar).Bg
 	mouseHover(t, term, ac, ar)
@@ -225,8 +208,6 @@ func TestSpawnSheetListIsTheDropdown(t *testing.T) {
 		t.Fatalf("ASSERTION: the list row under the pointer did not light: %v\n%s", err, term.Snapshot())
 	}
 
-	// A click outside closes the list and does nothing else: on Cancel, the
-	// sheet stays open.
 	cr, cc := findText(t, term, "Cancel")
 	mouseClick(t, term, cc+1, cr, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { r, _ := menuRow(s, mr, "aider"); return r < 0 }, uiTimeout); err != nil {
@@ -236,8 +217,6 @@ func TestSpawnSheetListIsTheDropdown(t *testing.T) {
 		t.Fatalf("ASSERTION: the click that closed the list also cancelled the sheet\n%s", term.Snapshot())
 	}
 
-	// A row's key picks it: the key at the end of aider's row. The order
-	// follows what this machine has installed, so the key is read.
 	open()
 	kr, _ := menuRow(term.Screen(), mr, "aider")
 	key := regexp.MustCompile(`([1-9])\s*$`).FindStringSubmatch(strings.TrimRight(term.Screen().Line(kr), " │"))

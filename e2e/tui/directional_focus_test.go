@@ -23,8 +23,8 @@ import (
 // saying focus never left the pane.
 
 type focusKey struct {
-	name string // direction, for messages
-	keys []any  // what to press
+	name string
+	keys []any
 }
 
 var windowModeFocusKeys = []focusKey{
@@ -66,10 +66,6 @@ func focusedLayout(t *testing.T, base, session string) ([]focusedRect, string) {
 	return rects, focused
 }
 
-// touchingNeighbours is the set of panes that share an edge with from on the
-// side named by dir. A tiled layout is a partition of the screen, so these are
-// exactly the panes a directional focus key may land on. Two cells of slack
-// cover a shared border and a gap.
 func touchingNeighbours(from winRect, all []focusedRect, dir string) map[string]bool {
 	overlap := func(a0, a1, b0, b1 int) int { return min(a1, b1) - max(a0, b0) }
 	near := func(v, want int) bool { return v >= want-2 && v <= want+2 }
@@ -101,7 +97,6 @@ func touchingNeighbours(from winRect, all []focusedRect, dir string) map[string]
 	return out
 }
 
-// waitFocusChange polls until the daemon names a focused pane other than prev.
 func waitFocusChange(t *testing.T, base, session, prev string) string {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -114,10 +109,6 @@ func waitFocusChange(t *testing.T, base, session, prev string) string {
 	return prev
 }
 
-// waitClientFocus waits until the client draws pane id as the focused one:
-// its border's top left corner in one colour and every other pane's in
-// another. The daemon answers list-windows from its own state, which a focus
-// change reaches before the client does.
 func waitClientFocus(t *testing.T, term *tuitest.Terminal, layout []focusedRect, id string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -145,8 +136,6 @@ func waitClientFocus(t *testing.T, term *tuitest.Terminal, layout []focusedRect,
 	}
 }
 
-// walkEveryDirection presses each direction key from each pane that has a
-// neighbour that way, and checks where focus lands.
 func walkEveryDirection(t *testing.T, term *tuitest.Terminal, base, session string, keys []focusKey, panes int) {
 	t.Helper()
 	rects := waitForSettledGeometryIn(t, base, session, panes)
@@ -168,8 +157,6 @@ func walkEveryDirection(t *testing.T, term *tuitest.Terminal, base, session stri
 		}
 	}
 	seen := map[string]bool{cur: true}
-	// moves records where each tested press went, which is the map the walk
-	// uses to get back to a pane that still has an untested direction.
 	moves := map[string]map[string]string{}
 	pressed := map[string]int{}
 
@@ -185,7 +172,6 @@ func walkEveryDirection(t *testing.T, term *tuitest.Terminal, base, session stri
 			}
 		}
 		if pick == nil {
-			// Head for a pane with work left along a known press.
 			pick = routeTo(cur, moves, keys, func(id string) bool {
 				for _, k := range keys {
 					if todo[edge{id, k.name}] {
@@ -220,8 +206,6 @@ func walkEveryDirection(t *testing.T, term *tuitest.Terminal, base, session stri
 	t.Logf("presses per direction: %v", pressed)
 }
 
-// routeTo is the first key of the shortest known path from cur to a pane
-// that wants(), over presses already made.
 func routeTo(cur string, moves map[string]map[string]string, keys []focusKey, wants func(string) bool) *focusKey {
 	type hop struct {
 		id    string
@@ -259,14 +243,11 @@ func keysOf(m map[string]bool) []string {
 	return out
 }
 
-// tiledPanes starts a daemon session with n tiled panes in window mode.
-// layout is a palette search that picks a tiling scheme, or empty for BSP.
 func tiledPanes(t *testing.T, session, layout string, n int) (*tuitest.Terminal, string) {
 	t.Helper()
 	return tiledPanesWith(t, session, layout, "", n)
 }
 
-// tiledPanesWith is tiledPanes with a config file written before tuios starts.
 func tiledPanesWith(t *testing.T, session, layout, config string, n int) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -338,7 +319,6 @@ func TestDirectionalFocusWrapBSP(t *testing.T) {
 	waitForSettledGeometryIn(t, base, session, 4)
 	layout, _ := focusedLayout(t, base, session)
 
-	// The prefix arrows reach the focus action from any mode.
 	arrows := []focusKey{
 		{"left", []any{tuitest.Ctrl('b'), tuitest.Left}},
 		{"down", []any{tuitest.Ctrl('b'), tuitest.Down}},
@@ -357,9 +337,6 @@ func TestDirectionalFocusWrapBSP(t *testing.T) {
 			if _, now := focusedLayout(t, base, session); now != from.ID {
 				t.Fatalf("focus-window %s left focus on %s", from.ID[:8], now)
 			}
-			// The daemon has the focus at once. The client draws it when the
-			// push lands, and a key before that moves from the pane the client
-			// still has: wait for the client.
 			waitClientFocus(t, term, layout, from.ID)
 			want := farSide(from.winRect, layout, k.name)
 			send(t, term, k.keys...)
@@ -387,7 +364,6 @@ func TestDirectionalFocusWrapBSP(t *testing.T) {
 		t.Fatal("no edge press wrapped; the layout has no edge to test")
 	}
 
-	// The CLI: from a pane on the left edge, --direction left wraps too.
 	for _, from := range layout {
 		want := farSide(from.winRect, layout, "left")
 		if len(touchingNeighbours(from.winRect, layout, "left")) > 0 || len(want) == 0 {
@@ -407,10 +383,6 @@ func TestDirectionalFocusWrapBSP(t *testing.T) {
 	saveArtifact(t, term, artifactDir(t), "focus-wrap")
 }
 
-// farSide is the set of panes focus may wrap to from from when dir has no
-// neighbour: the panes whose edge lies on the far edge of the layout, on the
-// side opposite dir, and that share at least two cells with from across the
-// axis. Two cells of slack cover a shared border and a gap.
 func farSide(from winRect, all []focusedRect, dir string) map[string]bool {
 	overlap := func(a0, a1, b0, b1 int) int { return min(a1, b1) - max(a0, b0) }
 	minX, minY, maxX, maxY := from.X, from.Y, from.X+from.Width, from.Y+from.Height

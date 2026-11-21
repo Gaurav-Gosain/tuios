@@ -7,13 +7,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// newWindowOn is a config that binds new_window, and nothing else, to key.
 func newWindowOn(key string) string {
 	return "[keybindings.window_management]\nnew_window = [\"" + key + "\"]\n"
 }
 
-// helpRowShows reports whether the help overlay has a "New window" row that
-// lists key.
 func helpRowShows(s tuitest.Screen, key string) bool {
 	for line := range strings.SplitSeq(s.Text(), "\n") {
 		if strings.Contains(line, "New window") && strings.Contains(line, key) {
@@ -47,7 +44,6 @@ func TestHelpShowsAKeyReboundAtRuntime(t *testing.T) {
 			err, term.Snapshot())
 	}
 
-	// Closed and opened again, it still shows the new key.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("send esc: %v", err)
 	}

@@ -50,8 +50,6 @@ func TestDaemonCaptureKeepsFastOutput(t *testing.T) {
 	if err := paneSend(base, "capture-load", w.ID, cmd); err != nil {
 		t.Fatalf("seed the control: %v", err)
 	}
-	// A second run with nothing slowing it down, straight at the PTY. This is
-	// the one that used to lose lines.
 	if err := paneSend(base, "capture-load", w.ID, paneWitnessCmd(tag, lines+1, 2*lines)); err != nil {
 		t.Fatalf("seed the pane: %v", err)
 	}

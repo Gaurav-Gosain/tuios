@@ -50,7 +50,6 @@ func TestPaletteRunsTheActionItFinds(t *testing.T) {
 	}
 	saveArtifact(t, term, dir, "2-after-enter")
 
-	// The manager is one key away on the same row.
 	if err := term.SendKeys(legacyCtrlP); err != nil {
 		t.Fatalf("reopen palette: %v", err)
 	}
@@ -167,7 +166,6 @@ func TestPaletteFooterNamesTheActionSearch(t *testing.T) {
 	saveArtifact(t, term, dir, "2-action-search-footer")
 }
 
-// waitSessionWindows waits for the daemon to list want windows in session.
 func waitSessionWindows(t *testing.T, base, session string, want int, what string) {
 	t.Helper()
 	var raw string

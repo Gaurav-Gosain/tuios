@@ -47,7 +47,6 @@ func TestFocusKeyRightAfterACommandFocus(t *testing.T) {
 	waitForSettledGeometryIn(t, base, session, 4)
 	layout, _ := focusedLayout(t, base, session)
 
-	// The top right pane, and the pane left of it.
 	var from focusedRect
 	for _, r := range layout {
 		if r.Y == 0 && r.X > 0 {

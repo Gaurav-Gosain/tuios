@@ -10,21 +10,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Editing config.toml in one pane has to reach the tuios running in the next
-// one. These drive the real file: a running client, a save on disk, and the
-// screen afterwards.
-//
-// The trap under it is that an editor does not write through the inode. vim
-// writes a temporary file and renames it into place, so a watch on the file
-// itself is dead after the first :w. saveConfigLikeAnEditor is that save.
-
-// configPathIn is where a client started with startIn reads its config from.
 func configPathIn(base string) string {
 	return filepath.Join(base, "XDG_CONFIG_HOME", "tuios", "config.toml")
 }
 
-// saveConfigLikeAnEditor replaces the config the way vim does: a new file
-// beside it, renamed over the old one.
 func saveConfigLikeAnEditor(t *testing.T, base, body string) {
 	t.Helper()
 	path := configPathIn(base)
@@ -37,7 +26,6 @@ func saveConfigLikeAnEditor(t *testing.T, base, body string) {
 	}
 }
 
-// configWatchTimeout covers the debounce plus the reload plus the frame.
 const configWatchTimeout = 15 * time.Second
 
 // TestConfigEditedOnDiskReachesTheScreen is the whole feature, driven through
@@ -70,9 +58,6 @@ func TestConfigEditedOnDiskReachesTheScreen(t *testing.T) {
 		t.Fatalf("a config saved on disk never reached the screen: %v\n%s", err, term.Snapshot())
 	}
 
-	// And the other way, so this is a reload and not a one-way switch. A watch
-	// on the inode is dead after the save above, so a second save proves the
-	// watch survived the first.
 	saveConfigLikeAnEditor(t, base, spotlightNoTheme)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !s.Cell(at.topCol, at.topRow).Faint
@@ -113,8 +98,6 @@ func TestAnEditBackToATuiosSaveReachesTheScreen(t *testing.T) {
 		return func(s tuitest.Screen) bool { return s.Cell(at.topCol, at.topRow).Faint == want }
 	}
 
-	// tuios saves calm on and calm off. Each save changes the file, and the second
-	// leaves calm = false in it.
 	for _, want := range []string{"calm = true", "calm = false"} {
 		if err := term.SendKeys(tuitest.Ctrl('b'), "Z"); err != nil {
 			t.Fatalf("send leader Z: %v", err)
@@ -205,9 +188,6 @@ func TestAKeybindingSavedOnDiskReachesTheClient(t *testing.T) {
 		time.Sleep(300 * time.Millisecond)
 	}
 
-	// The second save drops the h binding and points y at a new marker, so
-	// firing y proves the reloaded table replaced the old one instead of
-	// stacking on top of it.
 	after := filepath.Join(base, "after.fired")
 	saveConfigLikeAnEditor(t, base, keybindConfigFor("late2", "y", after))
 	deadline = time.Now().Add(configWatchTimeout)
@@ -225,11 +205,6 @@ func TestAKeybindingSavedOnDiskReachesTheClient(t *testing.T) {
 	alive(t, term, "after two config reloads")
 }
 
-// keybindConfigFor is one [[keybindings.command]] entry: the chord alt+key
-// touches marker. A fired chord leaves evidence on disk instead of on a
-// screen the test would have to read. The name is explicit because two
-// nameless entries whose command text shares a 40-character prefix slug to
-// the same name and tuios keeps only the first.
 func keybindConfigFor(name, key, marker string) string {
 	return `
 [[keybindings.command]]
@@ -285,8 +260,6 @@ func TestBrokenConfigOnDiskKeepsWhatIsRunning(t *testing.T) {
 		t.Errorf("a config file that does not parse turned the beam off\n%s", term.Snapshot())
 	}
 
-	// And the fix is taken. A reload that recorded the broken file as the one in
-	// force would go quiet here, which is the failure that hides itself.
 	saveConfigLikeAnEditor(t, base, spotlightNoTheme)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !s.Cell(at.topCol, at.topRow).Faint

@@ -10,7 +10,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// windowNames is the display name of every window of a session.
 func windowNames(t *testing.T, base, sessionName string) []string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", sessionName, "--json")
@@ -65,7 +64,6 @@ func TestNewAgentIsNamedFromItsBranchOrTask(t *testing.T) {
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	waitText(t, term, "the agents view", "Agents", "New agent")
 
-	// The sheet starts an agent in this folder, which is no repository.
 	sendKeys(t, term, "n")
 	waitText(t, term, "the sheet", "Task", "Where it works", "Start agent")
 	sendKeys(t, term, "Add a json flag to main.go")
@@ -85,17 +83,12 @@ func TestNewAgentIsNamedFromItsBranchOrTask(t *testing.T) {
 		return false, strings.Join(names, ", ")
 	})
 
-	// Both rows name the agents, never by the program's title.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "2 agents") && !strings.Contains(s.Text(), "Claude Code")
 	}, 20*time.Second); err != nil {
 		t.Fatalf("ASSERTION: the agents view does not list both agents by name: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "agent-names")
-	// The worktree agent's focus names its branch once: the session, named
-	// after the branch, is not beside it.
-	// The view drops a key in the moment after it opens, so a move can
-	// be lost: wait for the focus after each one, then move again.
 	found := false
 	for range 5 {
 		if term.WaitFor(func(s tuitest.Screen) bool {

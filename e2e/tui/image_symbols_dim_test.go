@@ -41,7 +41,6 @@ func TestImageSymbolsDimEvenly(t *testing.T) {
 		{"octant-truecolor", "octant", "truecolor", nil},
 		{"quadrant-truecolor", "quadrant", "truecolor", nil},
 		{"octant-256", "octant", "", nil},
-		// TERM=linux with no COLORTERM: sixteen colours and half blocks.
 		{"half-16", "", "", []string{"TERM=linux"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,15 +87,11 @@ func TestImageSymbolsDimEvenly(t *testing.T) {
 	}
 }
 
-// discCX, discCY and discR place the disc in a picture of symPicCols by symPicRows
-// cells: its centre, and its radius in pixels.
 const (
 	discCX, discCY = symPicCols * cellW / 2, symPicRows * cellH / 2
 	discR          = 110
 )
 
-// writeDiscPicture writes a white disc with a light-grey speckle on black as
-// a sixel file.
 func writeDiscPicture(t *testing.T, dir string) string {
 	t.Helper()
 	w, h := symPicCols*cellW, symPicRows*cellH
@@ -109,8 +104,6 @@ func writeDiscPicture(t *testing.T, dir string) string {
 			v := uint16(1)
 			if math.Hypot(float64(px-discCX), float64(py-discCY)) < discR {
 				v = 2
-				// About one pixel in seven, scattered, so most cells
-				// hold some.
 				if (px*7+py*13+px*py)%7 == 0 {
 					v = 3
 				}
@@ -126,7 +119,6 @@ func writeDiscPicture(t *testing.T, dir string) string {
 	return path
 }
 
-// discRead is what the inside of the disc shows on a screen.
 type discRead struct {
 	cells, split      int
 	meanLuma, spread  float64
@@ -138,11 +130,6 @@ func (d discRead) String() string {
 		d.cells, d.split, d.meanLuma, d.spread, d.lightest, d.darkest)
 }
 
-// discSubBlocks reads every visible colour of the image cells wholly inside
-// the disc, with origin the picture's top-left cell. A glyph cell shows its
-// foreground and its background, a blank shows only its background and a
-// full block only its foreground. The spread is the largest distance between
-// any two of those colours.
 func discSubBlocks(s tuitest.Screen, origin image.Point) discRead {
 	var d discRead
 	var seen [][3]float64

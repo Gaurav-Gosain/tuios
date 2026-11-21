@@ -12,44 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Tailscale SSH in front of a host, against the ssh stand-in of the sync
-// tests.
-//
-// A wrapper goes in front of that stand-in and plays Tailscale for two
-// addresses:
-//
-//	someone@gatedbox   check mode. A new connection prints the two banner
-//	                   lines real Tailscale prints, with a URL of its own,
-//	                   and then waits until the test writes approved-ID.
-//	                   It prints the "Authentication checked" line, and the
-//	                   call goes on to the real host behind it. A connection
-//	                   that carries a ControlPath which exists shares a
-//	                   master that was already approved, so it is let
-//	                   through, which is what ssh does.
-//	someone@policybox  the policy refuses the login as root, and ssh exits
-//	                   255, as real Tailscale does.
-//	someone@quickbox   check mode, but Tailscale ends the wait after
-//	                   quickHold: ssh prints that the connection closed and
-//	                   exits 255. Each dial asks for a new sign-in.
-//	someone@localbox   check mode, with a banner that names a page on this
-//	                   machine (http://127.0.0.1:631/admin), as anything on
-//	                   the host could print.
-//	someone@lookalikebox  the same, with an https host that only starts like
-//	                   Tailscale's (login.tailscale.com.evil.example).
-//
-// Once the test writes signedin, every connection to a gated host goes on, and
-// a connection that waits goes on at once: the person signed in, and Tailscale
-// keeps that for a while.
-//
-// The banner text is copied from a real run against a host in check mode:
-//
-//	# Tailscale SSH requires an additional check.
-//	# To authenticate, visit: https://login.tailscale.com/a/l1d9c7e392d3020
-//
-// Every URL the wrapper gives out is appended to urls, one per line, so a test
-// can count the approvals a run asked for.
-
-// tailscaleGate is the wrapper's state folder.
 type tailscaleGate struct {
 	dir string
 }
@@ -66,7 +28,6 @@ func (g tailscaleGate) urls(t *testing.T) []string {
 	return strings.Fields(string(data))
 }
 
-// approve approves the check behind url.
 func (g tailscaleGate) approve(t *testing.T, url string) {
 	t.Helper()
 	id := url[strings.LastIndex(url, "/")+1:]
@@ -75,7 +36,6 @@ func (g tailscaleGate) approve(t *testing.T, url string) {
 	}
 }
 
-// signIn marks the person as signed in: every gated connection goes on.
 func (g tailscaleGate) signIn(t *testing.T) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(g.dir, "signedin"), nil, 0o600); err != nil {
@@ -83,11 +43,8 @@ func (g tailscaleGate) signIn(t *testing.T) {
 	}
 }
 
-// quickHold is how many tenths of a second the quickbox wrapper waits for a
-// sign-in before Tailscale ends the connection.
 const quickHold = 60
 
-// gateFleet puts the Tailscale wrapper in front of the fleet's ssh stand-in.
 func gateFleet(t *testing.T, f *syncFleet) tailscaleGate {
 	t.Helper()
 	path, g := writeTailscaleSSH(t, f.here, strings.TrimPrefix(f.env[0], "TUIOS_SSH="))
@@ -95,8 +52,6 @@ func gateFleet(t *testing.T, f *syncFleet) tailscaleGate {
 	return g
 }
 
-// writeTailscaleSSH puts the Tailscale wrapper in dir, in front of the ssh
-// stand-in inner, and returns its path.
 func writeTailscaleSSH(t *testing.T, dir, inner string) (string, tailscaleGate) {
 	t.Helper()
 	g := tailscaleGate{dir: filepath.Join(dir, "tailscale")}
@@ -154,7 +109,6 @@ exec '` + inner + `' "$@"
 	return path, g
 }
 
-// gateRow is the part of a sync row these tests read.
 type gateRow struct {
 	Host        string `json:"host"`
 	Action      string `json:"action"`
@@ -226,7 +180,6 @@ func TestHostsSyncReportsATailscaleCheck(t *testing.T) {
 		t.Errorf("ASSERTION: the table does not show the approval and its URL:\n%s", out)
 	}
 
-	// hosts test dials a link of its own.
 	out, err = tuiosCLIEnv(t, f.here, f.env, "hosts", "test", "gated", "--json")
 	saveSyncArtifact(t, "check-hosts-test.json", out)
 	if err == nil {
@@ -244,7 +197,6 @@ func TestHostsSyncReportsATailscaleCheck(t *testing.T) {
 		t.Errorf("ASSERTION: hosts test reports %q with URL %q, want tailscale_check and %s\n%s", rep.Status, rep.ApprovalURL, last[len(last)-1], out)
 	}
 
-	// The daemon's link waits, and its listing says so with the URL.
 	if out, err := tuiosCLIEnv(t, f.here, f.env, "new", "hub", "--detach"); err != nil {
 		t.Fatalf("start the daemon: %v\n%s", err, out)
 	}
@@ -267,7 +219,6 @@ func TestHostsSyncReportsATailscaleCheck(t *testing.T) {
 		t.Errorf("ASSERTION: the host with no gate is not listed as reached:\n%s", listing)
 	}
 
-	// The link goes on when the person approves, with no new dial.
 	g.approve(t, last[len(last)-1])
 	deadline = time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {

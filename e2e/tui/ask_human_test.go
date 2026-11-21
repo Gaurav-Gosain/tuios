@@ -15,20 +15,13 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// startAskHuman runs `tuios ask-human` in the background against the suite's
-// daemon and returns a channel that delivers its stdout and exit error.
 func startAskHuman(t *testing.T, base string, args ...string) <-chan askRun {
 	t.Helper()
 	return startCLIBackground(t, base, append([]string{"ask-human"}, args...)...)
 }
 
-// startCLIBackground runs a tuios command in the background against the
-// suite's daemon and returns a channel that delivers its stdout and exit
-// error, for a command that blocks until something happens on the screen.
 func startCLIBackground(t *testing.T, base string, args ...string) <-chan askRun {
 	t.Helper()
-	// A command that runs before any client would write the first-run config
-	// with the shipped looks, which the pins then read as the test's choice.
 	pinPreV080Looks(t, base)
 	cmd := exec.Command(tuiosBin, args...)
 	cmd.Dir = workDirIn(t, base)
@@ -55,7 +48,6 @@ func startCLIBackground(t *testing.T, base string, args ...string) <-chan askRun
 	return done
 }
 
-// askRun is how a background ask-human ended.
 type askRun struct {
 	out string
 	err error
@@ -298,11 +290,6 @@ func TestAskHumanWaitsInTheInboxWhenNobodyIsThere(t *testing.T) {
 	alive(t, term, "after answering a question from the Inbox")
 }
 
-// askerScript is an agent in a pane that asks the person twice. It reports
-// for its own pane, with no --window, the way a harness hook does. While the
-// first question waits it reports idle from a second process in the pane.
-// Before the second it reports a real prompt of its own. $1 is the folder the
-// script and the test signal each other through.
 const askerScript = `#!/usr/bin/env bash
 T="$TUIOS_E2E_CLI"; D="$1"
 "$T" set-agent-state -s e2e-ctrlp working --message 'refactoring the parser'
@@ -425,10 +412,8 @@ func TestAskHumanFromAPaneShowsNeedsInput(t *testing.T) {
 		t.Fatalf("start the asker: %v\n%s", err, out)
 	}
 
-	// The question shows as the pane's state while the call waits.
 	waitState(agentState{"needs_input", "Ship the parser refactor?"}, "while the question waits")
 
-	// A report from the pane while it waits goes beneath the question.
 	signal("go-idle")
 	if got := waitFile(t, filepath.Join(dir, "idle"), func(s string) bool { return strings.Contains(s, "exit=") }, "the idle report"); !strings.Contains(got, "exit=0") {
 		t.Fatalf("the pane's idle report failed: %q", got)
@@ -440,7 +425,6 @@ func TestAskHumanFromAPaneShowsNeedsInput(t *testing.T) {
 		t.Errorf("ASSERTION: the Inbox holds %+v for the asking pane, want the one ask item with its two answers", mine)
 	}
 
-	// The person sees one item and answers it on a real client.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
@@ -459,8 +443,6 @@ func TestAskHumanFromAPaneShowsNeedsInput(t *testing.T) {
 		t.Fatalf("ASSERTION: the asker got %q, want the answer ship and exit 0", got)
 	}
 
-	// The pane ends on what it reported while it waited, not on the state
-	// from before the question.
 	waitState(agentState{"idle", "tests pass"}, "after the answer")
 	waitFile(t, filepath.Join(dir, "asked1"), func(string) bool { return true }, "the first question's end")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -473,8 +455,6 @@ func TestAskHumanFromAPaneShowsNeedsInput(t *testing.T) {
 		t.Fatalf("close the Inbox: %v", err)
 	}
 
-	// Typing into the pane is as it was before the question: pane B, which
-	// holds admin and not respond, may type into it.
 	typistText := func() string {
 		out, _ := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", typist)
 		return strings.Join(strings.Fields(out), " ")
@@ -494,7 +474,6 @@ func TestAskHumanFromAPaneShowsNeedsInput(t *testing.T) {
 		t.Errorf("ASSERTION: B could not type into the pane after its question ended:\n%s", text)
 	}
 
-	// A pane already on a prompt keeps it while its question waits and after.
 	signal("go-2")
 	deadline = time.Now().Add(uiTimeout)
 	for {

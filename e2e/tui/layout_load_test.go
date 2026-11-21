@@ -8,11 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// layoutPrompt is the shell prompt of every pane in TestALoadedLayoutShowsItsShells.
-// It is unusual so a count of it on screen is a count of panes that drew.
 const layoutPrompt = "LYT>"
 
-// promptCount is the number of screen rows that show layoutPrompt.
 func promptCount(s tuitest.Screen) int {
 	n := 0
 	_, rows := s.Size()
@@ -55,7 +52,6 @@ func TestALoadedLayoutShowsItsShells(t *testing.T) {
 		t.Fatalf("the three panes of workspace 1 never showed their prompts: %v\n%s", err, term.Snapshot())
 	}
 
-	// Save it: prefix, the layout prefix, save.
 	sendKeys(t, term, tuitest.Ctrl('b'), "L", "s")
 	sendKeys(t, term, "t", "r", "i", "o", tuitest.Enter)
 	if err := term.WaitForText("Layout saved", uiTimeout); err != nil {
@@ -69,7 +65,6 @@ func TestALoadedLayoutShowsItsShells(t *testing.T) {
 		t.Fatalf("workspace 2 never showed: %v\n%s", err, term.Snapshot())
 	}
 
-	// Load it: prefix, the layout prefix, load, and the only entry.
 	sendKeys(t, term, tuitest.Ctrl('b'), "L", "l")
 	if err := term.WaitForText("trio", uiTimeout); err != nil {
 		t.Fatalf("the layout picker never listed the layout: %v\n%s", err, term.Snapshot())
@@ -88,7 +83,6 @@ func TestALoadedLayoutShowsItsShells(t *testing.T) {
 			promptCount(term.Screen()), err, term.Snapshot())
 	}
 
-	// The pane has to stream, not only show a snapshot taken once.
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo "+splitMarker("LAYOUTLIVE"), "LAYOUTLIVE", shellTimeout)
 	time.Sleep(100 * time.Millisecond)

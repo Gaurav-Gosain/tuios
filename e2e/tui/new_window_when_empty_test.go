@@ -12,31 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// workspaces.new_window_when_empty (#477): a switch to a workspace with no
-// panes opens one there, as the new-window key would.
-//
-// How these could pass wrongly, written down first:
-//   - The pane could come from somewhere else: the startup, a second
-//     client, or the test itself. The test counts the panes on the workspace
-//     with list-windows, checks that startup opened none, and opens no pane
-//     by key on any workspace it switches to.
-//   - A second pane could land after the count was read. Every count waits
-//     until the client that took the keys has no pane request in flight
-//     (GetSessionInfo's pane_requests), and is read again after that. The
-//     two client test asks each client.
-//   - The directory could match by accident. The pane the switch comes from
-//     is in "elsewhere", the session starts in "start", the daemon runs in
-//     base/cwd, and inheriting from the focused pane is off, so each folder
-//     has one way to be chosen.
-//   - A switch that brings its own panes could pass because no pane opens
-//     at all. The same fixture first shows a plain switch opening one.
-//
-// The list-windows output at the end is saved under artifactDir.
-
-// paneRequestsDone waits until the client that took the last input has no
-// request for a pane in flight. A request is cleared when a sync brings its
-// pane, so after this the daemon has made every pane this client asked for.
-// A build without the field reports none.
 func paneRequestsDone(t *testing.T, base, what string) {
 	t.Helper()
 	var out string
@@ -61,8 +36,6 @@ func paneRequestsDone(t *testing.T, base, what string) {
 	t.Fatalf("%s: a pane request is still in flight\n%s", what, out)
 }
 
-// clientWorkspace is the workspace the client that took the last input
-// shows, from GetSessionInfo.
 func clientWorkspace(t *testing.T, base string) int {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "run-command", "--json", "GetSessionInfo")
@@ -81,8 +54,6 @@ func clientWorkspace(t *testing.T, base string) int {
 	return int(ws)
 }
 
-// clientMode is the mode of the client that took the last input, from
-// GetSessionInfo: "terminal" or "window_management".
 func clientMode(t *testing.T, base string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "run-command", "--json", "GetSessionInfo")
@@ -96,8 +67,6 @@ func clientMode(t *testing.T, base string) string {
 	return mode
 }
 
-// daemonClientMode is clientMode for a caller that also runs local
-// sessions: it is empty when no daemon answers, or no client does.
 func daemonClientMode(base string) string {
 	out, err := tuiosOut(base, "run-command", "--json", "GetSessionInfo")
 	if err != nil {
@@ -109,7 +78,6 @@ func daemonClientMode(base string) string {
 	return ""
 }
 
-// sessionInfoMode reads the client's mode from GetSessionInfo's JSON.
 func sessionInfoMode(out string) (string, error) {
 	var res map[string]any
 	if err := json.Unmarshal([]byte(out), &res); err != nil {
@@ -123,9 +91,6 @@ func sessionInfoMode(out string) (string, error) {
 	return mode, nil
 }
 
-// cwdOnWorkspace waits for a pane on workspace ws of session sess to report
-// want as its directory, and returns the last directory a pane there
-// reported.
 func cwdOnWorkspace(t *testing.T, base, sess string, ws int, want string) string {
 	t.Helper()
 	var got string
@@ -155,8 +120,6 @@ func cwdOnWorkspace(t *testing.T, base, sess string, ws int, want string) string
 	return got
 }
 
-// exactlyPanesOn waits for workspace ws to hold n panes and for the client to
-// have no pane request in flight, and fails when the count moved.
 func exactlyPanesOn(t *testing.T, term *tuitest.Terminal, base, sess string, ws, n int, what string) {
 	t.Helper()
 	waitPanesOn(t, term, base, sess, ws, n, what)
@@ -166,7 +129,6 @@ func exactlyPanesOn(t *testing.T, term *tuitest.Terminal, base, sess string, ws,
 	}
 }
 
-// saveWindowList writes list-windows --json for session sess to path.
 func saveWindowList(t *testing.T, base, sess, path string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
@@ -182,8 +144,6 @@ func saveWindowList(t *testing.T, base, sess, path string) {
 func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 	const sess = "nw"
 	base := t.TempDir()
-	// move_and_follow_7 gets a plain key, because alt+shift+7 reaches the
-	// client as whatever the keyboard layout puts on shift+7.
 	writeConfig(t, base, "[workspaces]\nnew_window_when_empty = true\nreturn_when_empty = false\n"+
 		"[appearance]\nnew_window_inherit_cwd = false\n"+
 		"[keybindings.workspaces]\nmove_and_follow_7 = [\"alt+m\"]\n")
@@ -192,7 +152,6 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", sess, "--cwd", start}})
 	waitBoot(t, term)
-	// Startup is not a switch: the splash stays and no pane opens.
 	paneRequestsDone(t, base, "startup")
 	if n := len(xpanesRowsIn(t, base, sess)); n != 0 {
 		t.Fatalf("ASSERTION: startup opened %d panes, want none\n%s", n, term.Snapshot())
@@ -202,10 +161,6 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 	enterTerminalMode(t, term)
 	runInShell(t, term, "cd '"+elsewhere+"' && echo HOME-$((6*7))", "HOME-42", shellTimeout)
 
-	// 1. A switch by key opens one pane, in the directory of the pane the
-	// switch came from. The switch is made in terminal mode, so the pane
-	// takes typing when it arrives, with no "i" (#1173). The shell
-	// computing the marker shows the keys reached the new pane.
 	sendKeys(t, term, tuitest.Alt("2"))
 	waitShowing(t, base, sess, 2, "", term)
 	exactlyPanesOn(t, term, base, sess, 2, 1, "the switch to workspace 2")
@@ -217,16 +172,10 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 	}
 	runInShell(t, term, "echo NEW-$((7*7))", "NEW-49", shellTimeout)
 
-	// 2. A switch from a workspace with no pane takes the session's start
-	// directory. The pane on 2 exits, and return_when_empty is off, so the
-	// session stays on 2 with nothing focused. opt+5 opens the next workspace,
-	// which is that empty 2, and opens its pane there.
 	if err := term.SendKeys("exit", tuitest.Enter); err != nil {
 		t.Fatalf("type exit: %v", err)
 	}
 	waitPanesOn(t, term, base, sess, 2, 0, "the shell on workspace 2 exits")
-	// The splash on an empty workspace is window mode already, and a switch
-	// made in window mode leaves the new pane in window mode.
 	sendKeys(t, term, tuitest.Alt("5"))
 	waitShowing(t, base, sess, 2, "", term)
 	exactlyPanesOn(t, term, base, sess, 2, 1, "the switch to a new workspace from an empty workspace")
@@ -237,9 +186,6 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 		t.Errorf("ASSERTION: after a switch in window mode the new pane arrived in %q mode, want window_management", got)
 	}
 
-	// 3. move_and_follow brings its own pane: workspace 7 holds that pane
-	// and no other. Workspace 2, which it leaves, goes, so that is
-	// workspace 6 afterwards.
 	var moved string
 	for _, r := range xpanesRowsIn(t, base, sess) {
 		if r.Workspace == 2 {
@@ -256,8 +202,6 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 		}
 	}
 
-	// 4. tuios xpanes brings its own panes: its workspace holds the two it
-	// opened and no third.
 	if out, err := tuiosCLI(t, base, "xpanes", "--session", sess, "--no-sync", "a", "b"); err != nil {
 		t.Fatalf("xpanes: %v\n%s", err, out)
 	}
@@ -281,9 +225,6 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 	waitShowing(t, base, sess, xws, "", term)
 	exactlyPanesOn(t, term, base, sess, xws, 2, "tuios xpanes")
 
-	// 5. A switch a script makes opens nothing: run-command, which the
-	// client runs as a tape command, and select-workspace, which the
-	// daemon makes.
 	if out, err := tuiosCLI(t, base, "run-command", "SwitchWorkspace", "4"); err != nil {
 		t.Fatalf("run-command SwitchWorkspace 4: %v\n%s", err, out)
 	}
@@ -323,11 +264,8 @@ func TestEmptyWorkspaceOpensOnePaneForTwoClients(t *testing.T) {
 	sendKeys(t, term, tuitest.Alt("2"))
 	waitShowing(t, base, sess, 2, "", term)
 	exactlyPanesOn(t, term, base, sess, 2, 1, "the switch to workspace 2 with two clients")
-	// The second client takes an input that changes nothing, so the next
-	// GetSessionInfo goes to it, and it must have asked for nothing.
 	sendKeys(t, second, tuitest.Esc)
 	exactlyPanesOn(t, second, base, sess, 2, 1, "the second client after the switch")
-	// The second client draws the pane the first one opened.
 	if err := second.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "HOME-42") && !strings.Contains(s.Text(), "Terminal UI Operating System")
 	}, uiTimeout); err != nil {
@@ -356,10 +294,6 @@ func TestEmptyWorkspacePaneSettingReloads(t *testing.T) {
 	exactlyPanesOn(t, term, base, sess, 2, 0, "the switch with the setting off")
 
 	writeConfigAtomically(t, cfg, []byte("[workspaces]\nnew_window_when_empty = true\n"))
-	// The reload lands some time after the write. Each round goes to
-	// workspace 1 and back to a new workspace, so a round before the
-	// reload opens nothing and the first one after it opens a pane. The
-	// empty workspace a round leaves goes, so the new one is always 2.
 	ws := 2
 	deadline := time.Now().Add(uiTimeout)
 	for round := 0; panesOn(t, base, sess, ws) == 0; round++ {
@@ -401,9 +335,6 @@ func TestEmptyWorkspaceFastSwitches(t *testing.T) {
 	waitWindowCount(t, term, 1, "setup")
 	toWindowMode(t, term, base)
 
-	// run sends keys as one write while the daemon holds each pane request
-	// for a second, which is far longer than the client takes to read the
-	// keys, so every push the keys make reaches the daemon after the request.
 	run := func(name string, keys ...any) {
 		t.Helper()
 		if err := os.WriteFile(hold, []byte("1000"), 0o644); err != nil {
@@ -431,7 +362,6 @@ func TestEmptyWorkspaceFastSwitches(t *testing.T) {
 			}
 		}
 	}
-	// reset closes the panes a sequence opened and goes back to 1.
 	reset := func(wss ...int) {
 		t.Helper()
 		if err := os.Remove(hold); err != nil {
@@ -465,14 +395,10 @@ func TestEmptyWorkspaceFastSwitches(t *testing.T) {
 	alive(t, term, "after the fast switches")
 }
 
-// holdEnv is the environment that lets the daemon hold or refuse pane
-// requests through the file hold. See paneHoldForTest.
 func holdEnv(hold string) []string {
 	return []string{"TUIOS_E2E=1", knob("hold_pane=" + hold)}
 }
 
-// setHold writes value to the hold file: milliseconds to hold each request,
-// or "refuse".
 func setHold(t *testing.T, hold, value string) {
 	t.Helper()
 	if err := os.WriteFile(hold, []byte(value), 0o644); err != nil {
@@ -480,9 +406,6 @@ func setHold(t *testing.T, hold, value string) {
 	}
 }
 
-// startHeld starts a client on a new session with one pane on workspace 1,
-// the setting on, and pane requests that read the hold file. It returns in
-// window-management mode.
 func startHeld(t *testing.T, base, sess, hold string) *tuitest.Terminal {
 	t.Helper()
 	writeConfig(t, base, "[workspaces]\nnew_window_when_empty = true\n")
@@ -508,8 +431,6 @@ func TestEmptyWorkspaceSlowRequestOpensOnePane(t *testing.T) {
 	sendKeys(t, term, tuitest.Alt("2"))
 	time.Sleep(5500 * time.Millisecond)
 	sendKeys(t, term, tuitest.Alt("1"), tuitest.Alt("2"))
-	// The second request reads the file when the first is done, so it is
-	// not held.
 	if err := os.Remove(hold); err != nil {
 		t.Fatal(err)
 	}
@@ -532,7 +453,6 @@ func TestEmptyWorkspaceTwoClientsSwitchAtOnce(t *testing.T) {
 	hold := filepath.Join(base, "hold-pane")
 	term := startHeld(t, base, sess, hold)
 	second := attachIn(t, base, sess, startOpts{cols: 120, rows: 40, env: holdEnv(hold)})
-	// attachIn left the second client in window mode.
 	waitWindowCount(t, second, 1, "the second client")
 
 	setHold(t, hold, "2000")

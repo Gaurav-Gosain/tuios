@@ -21,17 +21,12 @@ func TestKeybindTileThenNewWindows(t *testing.T) {
 	killDaemon(t, base)
 	waitBoot(t, term)
 
-	// Tiling ON first (owner presses `t`, unless the session already came up
-	// tiled, which is what startup.tiled ships as).
 	enableTiling(t, term)
 
-	// Then create three windows one at a time (owner presses `n` `n` `n`).
 	for i := 1; i <= 3; i++ {
 		newWindow(t, term)
 	}
 
-	// The daemon is the source of truth for placed geometry (the client syncs
-	// its placement back). Read it and assert a non-overlapping partition.
 	n := settledWindowCount(t, term)
 	rects := waitForSettledGeometry(t, base, n)
 	for _, r := range rects {
@@ -58,7 +53,6 @@ func TestKeybindTileThenNewWindows(t *testing.T) {
 		}
 	}
 
-	// Rendered proof: a proper split shows an interior vertical border.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return hasInteriorVerticalSplit(s)
 	}, uiTimeout); err != nil {

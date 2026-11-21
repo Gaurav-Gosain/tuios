@@ -19,31 +19,15 @@ import (
 	"time"
 )
 
-// The review of 217e663d: what a linked machine can still reach through a
-// hard link, a rename that races a read, open writes that the free space does
-// not show yet, a copy that outlives its capability, and the directory
-// listings outside the file verbs.
-//
-// Nothing here touches a real file of the person who runs the suite. The
-// "protected" file is a scratch file in the far daemon's own temporary home
-// folder, holding protectedMarker, and the "key" is a dummy file named like a
-// key, holding dummyKeyMarker. Each test asserts the refusal and that the
-// marker file is unchanged or was not returned.
-
 const (
 	protectedMarker = "ORIGINAL\n"
 	dummyKeyMarker  = "DUMMY-KEY-MARKER\n"
 )
 
-// listFilesPolicy lets a linked machine list and use the file verbs, with the
-// default write root, the receive folder.
 const listFilesPolicy = "[hosts.\"*\"]\nallow = [\"list\", \"files\"]\n"
 
-// relayNoFilesPolicy is relayFilesPolicy with files taken away: the machine
-// may still relay, and may no longer copy here.
 const relayNoFilesPolicy = "[hosts.\"*\"]\nallow = [\"list\", \"mail\", \"open\", \"write\", \"respond\"]\n"
 
-// writeFarFile writes body to path, with its folders.
 func writeFarFile(t *testing.T, path, body string, perm os.FileMode) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -54,8 +38,6 @@ func writeFarFile(t *testing.T, path, body string, perm os.FileMode) {
 	}
 }
 
-// dummyKey writes the dummy key at ~/.ssh/id_ed25519 in home and returns its
-// path.
 func dummyKey(t *testing.T, home string) string {
 	t.Helper()
 	key := filepath.Join(home, ".ssh", "id_ed25519")
@@ -63,7 +45,6 @@ func dummyKey(t *testing.T, home string) string {
 	return key
 }
 
-// readContent reads path on build through c and returns its text.
 func readContent(c *fileVerbConn, path string) (string, error) {
 	raw, err := c.call("file-read", map[string]any{"path": path})
 	if err != nil {
@@ -79,8 +60,6 @@ func readContent(c *fileVerbConn, path string) (string, error) {
 	return string(b), err
 }
 
-// streamCode is the code of a write stream's refusal: from the call, or
-// from the reply line after the bytes.
 func streamCode(reply map[string]any, err error) string {
 	if err != nil {
 		return code(err)
@@ -138,8 +117,6 @@ func TestALinkCannotWriteThroughAHardLinkedPart(t *testing.T) {
 		}
 	}
 
-	// The positive half: the repro's second step, a stream to the part name
-	// the rename aimed at, makes a new part and leaves the protected file.
 	reply, err = writeStream(dialHostVerbs(t, base), "~/Downloads/tuios/out2", "abd", int64(len(payload)), payload)
 	record["write into a new part"] = map[string]any{"reply": reply, "error": errString(err)}
 	if err != nil || reply["error"] != nil {
@@ -192,7 +169,6 @@ func TestALinkReadCannotRaceARename(t *testing.T) {
 	far := dialHostVerbs(t, base)
 	record := map[string]any{}
 
-	// Without a race the symlink is followed before the check and refused.
 	_, direct := readContent(far, "~/Downloads/tuios/evil/k/id_ed25519")
 	record["read through the symlink"] = errString(direct)
 	if !forbidden(direct) {
@@ -272,9 +248,6 @@ func TestOpenLinkWritesCountAgainstTheFreeSpaceReserve(t *testing.T) {
 		t.Fatal(err)
 	}
 	free := int64(st.Bavail) * int64(st.Bsize) //nolint:unconvert // the field types differ by system
-	// Each stream claims 768 MiB against a reserve 1 GiB under the free
-	// space now. The first fits while the disk loses less than 256 MiB in the
-	// meantime, and the second does not fit unless the disk gains 512 MiB.
 	const each = 768 << 20
 	if free < 4<<30 {
 		t.Skipf("the disk has %d MiB free, and the test needs 4 GiB", free>>20)
@@ -304,7 +277,6 @@ func TestOpenLinkWritesCountAgainstTheFreeSpaceReserve(t *testing.T) {
 	_ = first.conn.Close()
 	_ = second.conn.Close()
 
-	// The positive half: once the first stream ends, its claim ends with it.
 	time.Sleep(300 * time.Millisecond)
 	third := dialHostVerbs(t, base)
 	_, err = third.call("open-file-stream", map[string]any{"path": filepath.Join(root, "c.bin"), "mode": "write", "length": each})
@@ -316,8 +288,6 @@ func TestOpenLinkWritesCountAgainstTheFreeSpaceReserve(t *testing.T) {
 	saveTransferArtifact(t, "link-free-space-claims", record)
 }
 
-// startFarBigCopy starts a copy of 2 GiB on build over the link, into the
-// receive folder, and returns its row.
 func startFarBigCopy(t *testing.T, far *fileVerbConn, farHome string) transferRow {
 	t.Helper()
 	f, err := os.Create(filepath.Join(farHome, "big.bin"))
@@ -383,7 +353,6 @@ func TestALinkCopyStopsWhenItsFilesCapabilityGoes(t *testing.T) {
 		far := dialHostVerbs(t, base)
 		row := startFarBigCopy(t, far, farHome)
 		far.must("transfer-pause", map[string]any{"id": row.ID}, nil)
-		// The pause stops the running attempt first, so the state follows.
 		state := ""
 		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
 			if state = farTransfer(t, dialFileVerbs(t, remote), row.ID, 0).State; state != "running" {
@@ -408,10 +377,8 @@ func TestALinkCopyStopsWhenItsFilesCapabilityGoes(t *testing.T) {
 	})
 }
 
-// readDirPayload is MsgReadDir's payload, as gob writes it by field name.
 type readDirPayload struct{ Dir string }
 
-// dirListing is the reply to MsgReadDir, as gob reads it by field name.
 type dirListing struct {
 	Dir     string
 	Entries []struct {
@@ -421,16 +388,12 @@ type dirListing struct {
 	Err string
 }
 
-// msgReadDir and msgDirListing are the binary message types of a listing
-// (internal/session/protocol.go); msgError is the binary error.
 const (
 	msgReadDir    = 56
 	msgDirListing = 57
 	msgError      = 28
 )
 
-// binaryReadDir sends MsgReadDir for dir on c, a connection to build through
-// the hub, and returns the answer.
 func binaryReadDir(t *testing.T, c *fileVerbConn, dir string) dirListing {
 	t.Helper()
 	var payload bytes.Buffer
@@ -512,7 +475,6 @@ func TestALinkListsNoDeniedFolderOutsideTheFileVerbs(t *testing.T) {
 		}
 	}
 
-	// The positive half: each way lists the home folder.
 	var listing struct {
 		Entries []struct {
 			Name string `json:"name"`
@@ -572,8 +534,6 @@ func TestALinkCannotReadAFileWithTwoNames(t *testing.T) {
 		_ = c.conn.Close()
 	}
 
-	// A copy the link starts reads its source on build, so it is held to the
-	// same rule: it may start, and must end refused with nothing in place.
 	var row transferRow
 	raw, err := far.call("transfer-start", map[string]any{
 		"src": map[string]any{"path": "~/Downloads/tuios/keylink"}, "dst": map[string]any{"path": "~/Downloads/tuios/copied"}, "conflict": "replace",
@@ -595,7 +555,6 @@ func TestALinkCannotReadAFileWithTwoNames(t *testing.T) {
 		t.Errorf("ASSERTION: the copy of a file with two names was put in place: %q", b)
 	}
 
-	// The positive half: a file with one name reads.
 	if got, err := readContent(far, "~/Downloads/tuios/single.txt"); err != nil || got != "one name\n" {
 		t.Errorf("ASSERTION: a read of a file with one name failed: %q %v", got, err)
 	}
@@ -655,7 +614,6 @@ func TestADarwinLinkCannotReadThroughTheDataVolume(t *testing.T) {
 			t.Errorf("ASSERTION: %s through %s over the link was not refused: %s %v", verb, data, raw, err)
 		}
 	}
-	// The positive half: an ordinary file reads through the same folder.
 	if got, err := readContent(far, data+realNotes); err != nil || got != "ordinary\n" {
 		t.Errorf("ASSERTION: a read of an ordinary file through %s failed: %q %v", data, got, err)
 	}
@@ -695,7 +653,7 @@ func TestALinkCopyRevokedBeforeItsVerifyStaysFailed(t *testing.T) {
 	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
 		t.Fatalf("apply build's config: %v\n%s", err, out)
 	}
-	time.Sleep(4 * time.Second) // the hold ends, and the attempt goes on
+	time.Sleep(4 * time.Second)
 	end := farTransfer(t, dialFileVerbs(t, remote), row.ID, 15*time.Second)
 	record := map[string]any{"revoked": end}
 	if end.State != "failed" || end.Code != "forbidden" {
@@ -705,8 +663,6 @@ func TestALinkCopyRevokedBeforeItsVerifyStaysFailed(t *testing.T) {
 		t.Errorf("ASSERTION: the copy was put in place after its files capability was taken away")
 	}
 
-	// The positive half: with files given back, the same copy starts and
-	// ends done.
 	writeRemoteConfig(t, remote, relayFilesPolicy)
 	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
 		t.Fatalf("apply build's config: %v\n%s", err, out)

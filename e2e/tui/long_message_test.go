@@ -11,23 +11,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A message longer than the dock's block used to be cut with an ellipsis and
-// could not be read anywhere: a click on it went to its pane, and the log
-// viewer cut the same line at the panel's edge (issue #381). These tests raise
-// a long OSC 9 notification from a pane and read its last word, which only the
-// full message holds.
-//
-// The message is built by the shell, so neither marker is in the typed command
-// and the echo of the keystrokes cannot satisfy a wait: the command holds
-// "LONG%s" and the shell prints LONGHEAD and LONGTAIL.
 const (
 	longHead = "LONGHEAD"
 	longTail = "LONGTAIL"
 )
 
-// raiseLongMessage makes the focused pane send an OSC 9 notification whose
-// words are the numbers from first to last, between the two markers. It
-// leaves the client in terminal mode.
 func raiseLongMessage(t *testing.T, term *tuitest.Terminal, first, last int) {
 	t.Helper()
 	enterTerminalMode(t, term)
@@ -42,8 +30,6 @@ func raiseLongMessage(t *testing.T, term *tuitest.Terminal, first, last int) {
 	}
 }
 
-// longMessageShot keeps a frame in artifactDir, and in $TUIOS_E2E_SHOTS as a
-// PNG when that is set.
 func longMessageShot(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	saveArtifact(t, term, artifactDir(t), name)
@@ -55,7 +41,6 @@ func longMessageShot(t *testing.T, term *tuitest.Terminal, name string) {
 	}
 }
 
-// dockColumnOf is the column of needle on the dock row.
 func dockColumnOf(t *testing.T, term *tuitest.Terminal, needle string) (col, row int) {
 	t.Helper()
 	s := term.Screen()
@@ -138,8 +123,6 @@ func TestLogViewerShowsALongEntryInFull(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the log viewer does not list the long message: %v\n%s", err, term.Snapshot())
 	}
-	// Opening the viewer logs a line of its own when it is verbose. Move the
-	// cursor onto the long entry, wherever it is.
 	for range 4 {
 		if strings.Count(paneRows(term.Screen()), longHead) > 1 {
 			break
@@ -162,7 +145,6 @@ func TestLogViewerShowsALongEntryInFull(t *testing.T) {
 	}
 	longMessageShot(t, term, "2-entry")
 
-	// Esc closes the message view and leaves the log viewer open behind it.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("send esc: %v", err)
 	}
@@ -203,7 +185,6 @@ func TestMessageViewScrolls(t *testing.T) {
 		return strings.Contains(paneRows(s), longHead) && !strings.Contains(s.Text(), longTail)
 	}
 
-	// Keys: G to the end, g back to the start, then j one line down.
 	if err := term.SendKeys("G"); err != nil {
 		t.Fatalf("send G: %v", err)
 	}
@@ -224,7 +205,6 @@ func TestMessageViewScrolls(t *testing.T) {
 		t.Fatalf("j did not move one line: %v\n%s", err, term.Snapshot())
 	}
 
-	// The wheel: down until the last line shows, then up until the first.
 	for range 60 {
 		if atEnd(term.Screen()) {
 			break
@@ -258,7 +238,6 @@ func TestHoverHoldsAMessage(t *testing.T) {
 
 	col, row := dockColumnOf(t, term, longHead)
 	mouseHover(t, term, col+2, row)
-	// An info message lasts six seconds unless configured.
 	time.Sleep(8 * time.Second)
 	if !strings.Contains(dockRow(term.Screen()), longHead) {
 		t.Fatalf("the message burned down under the pointer\n%s", term.Snapshot())
@@ -281,7 +260,6 @@ func TestClipboardAskIsAllowedByAClick(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	// UFJPQkUzODY= is PROBE386, eight characters.
 	if err := term.SendKeys(`(sleep 4; printf '\033]52;c;UFJPQkUzODY=\007') &`, tuitest.Enter); err != nil {
 		t.Fatalf("start the background write: %v", err)
 	}
@@ -294,8 +272,6 @@ func TestClipboardAskIsAllowedByAClick(t *testing.T) {
 		t.Fatalf("the background write raised no ask: %v\n%s", err, term.Snapshot())
 	}
 	longMessageShot(t, term, "1-ask")
-	// A click allows only once the message has shown its text for the
-	// settle (TestClipboardAskSettlesBeforeAClickAllows).
 	time.Sleep(700 * time.Millisecond)
 	col, row := dockColumnOf(t, term, "asks to copy")
 	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
@@ -320,7 +296,6 @@ func TestClipboardAskSettlesBeforeAClickAllows(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	// UFJPQkUzODY= is PROBE386, eight characters.
 	if err := term.SendKeys(`(sleep 4; printf '\033]52;c;UFJPQkUzODY=\007') &`, tuitest.Enter); err != nil {
 		t.Fatalf("start the background write: %v", err)
 	}
@@ -337,7 +312,6 @@ func TestClipboardAskSettlesBeforeAClickAllows(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "Copied 8 characters") }, 2*time.Second); err == nil {
 		t.Fatalf("ASSERTION: a click as the ask appeared allowed the write\n%s", term.Snapshot())
 	}
-	// The early click allowed nothing and left the ask up.
 	if !strings.Contains(dockRow(term.Screen()), "asks to copy") {
 		t.Fatalf("ASSERTION: the early click took the ask off the dock, with no way left to allow it\n%s", term.Snapshot())
 	}
@@ -417,7 +391,6 @@ func TestViewersOverTheRailAndTheLeader(t *testing.T) {
 	newWindow(t, term)
 	raiseLongMessage(t, term, 100, 220)
 
-	// A paste while the view is open is dropped.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "N"); err != nil {
 		t.Fatalf("send prefix N: %v", err)
 	}
@@ -427,7 +400,6 @@ func TestViewersOverTheRailAndTheLeader(t *testing.T) {
 	if err := term.Paste("PASTE" + "LEAK"); err != nil {
 		t.Fatalf("paste: %v", err)
 	}
-	// The leader works over the view: ctrl+b D l opens the log viewer.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "D", "l"); err != nil {
 		t.Fatalf("open the log viewer: %v", err)
 	}
@@ -448,7 +420,6 @@ func TestViewersOverTheRailAndTheLeader(t *testing.T) {
 		t.Errorf("a paste made while the view was open reached the pane\n%s", term.Snapshot())
 	}
 
-	// With the rail focused, the view still takes its keys.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatalf("focus the rail: %v", err)
 	}

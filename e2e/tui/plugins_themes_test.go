@@ -23,8 +23,6 @@ func TestPluginThemes(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "plugins", "check", plugin); err != nil || !strings.Contains(out, "themes   dusk, paper (2)") {
 		t.Fatalf("check: %v\n%s", err, out)
 	}
-	// No daemon runs, so a plugin that runs something would wait for its
-	// approval. This one runs nothing.
 	out, err := tuiosCLI(t, base, "plugins", "install", plugin, "--yes")
 	if err != nil || strings.Contains(out, "waits for your approval") {
 		t.Fatalf("install: %v\n%s", err, out)
@@ -52,13 +50,11 @@ func TestPluginThemes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("--preview-theme %s: %v\n%s", id, err, out)
 		}
-		// The colours only: the first line names the theme.
 		_, colors, _ := strings.Cut(out, "\n")
 		return colors
 	}
 	plugins := preview("dusk")
 
-	// A theme of the person's own with the same id wins.
 	mine := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "themes")
 	if err := os.MkdirAll(mine, 0o755); err != nil {
 		t.Fatal(err)
@@ -71,7 +67,6 @@ func TestPluginThemes(t *testing.T) {
 	}
 	_ = os.Remove(filepath.Join(mine, "dusk.json"))
 
-	// Off, the themes go.
 	if out, err := tuiosCLI(t, base, "plugins", "disable", "tuios.themes"); err != nil {
 		t.Fatalf("disable: %v\n%s", err, out)
 	}

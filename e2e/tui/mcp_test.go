@@ -93,8 +93,6 @@ func TestMCPServerInAPaneIsHeldToItsSession(t *testing.T) {
 	if !strings.Contains(state, "needs_input") || !strings.Contains(state, "mcp asks") {
 		t.Errorf("the pane's state after its MCP report = %s, want needs_input", state)
 	}
-	// The report reached the client too: the pane's needs_input indicator is
-	// drawn.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), needsInputGlyph)
 	}, uiTimeout); err != nil {

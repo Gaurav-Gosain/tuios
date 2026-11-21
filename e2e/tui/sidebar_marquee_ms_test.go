@@ -42,8 +42,6 @@ func TestSidebarMarqueeTimingIsAnOption(t *testing.T) {
 			}, bootTimeout); err != nil {
 				t.Fatalf("the rail never showed the long name: %v\n%s", err, term.Snapshot())
 			}
-			// The name is on the pane's border too; the rail's row is the one
-			// in the left-hand columns, where the rail is.
 			row, col := -1, 0
 			s := term.Screen()
 			_, rows := s.Size()
@@ -57,11 +55,8 @@ func TestSidebarMarqueeTimingIsAnOption(t *testing.T) {
 			}
 			rowText := func() string { return term.Screen().Line(row) }
 			before := rowText()
-			// A hover first shows the row whole (the ellipsis goes); the marquee has
-			// moved once the title no longer starts at its own first letter.
 			stillAtStart := func() bool { return strings.Contains(rowText(), "  marquee-row-with-a-long") }
 			sendMouse(t, term, "hover", tuitest.MouseEvent{Col: col + 2, Row: row, Button: tuitest.MouseNone, Action: tuitest.MouseMove})
-			// 600 ms is inside the default 900 ms pause and long past a pause of 0.
 			if tc.moves {
 				waitUntil(t, "the hovered row moves", 600*time.Millisecond, func() (bool, string) {
 					return !stillAtStart(), fmt.Sprintf("before: %q after: %q", before, rowText())

@@ -55,7 +55,6 @@ func TestCockpitThreadMailCards(t *testing.T) {
 	cli("new", "api", "--detach")
 	cli("new-window", "-s", "api", "beta", "--no-focus")
 	cli("new-window", "-s", "api", "gamma", "--no-focus")
-	// The panes open on their own time.
 	var ids map[string]string
 	waitTextOf(t, "the three panes", shellTimeout, func() string {
 		out, _ := tuiosCLI(t, base, "list-windows", "-s", "api", "--json")
@@ -72,7 +71,6 @@ func TestCockpitThreadMailCards(t *testing.T) {
 	cli("set-window", "-s", "api", "-w", ids["alpha"], "--name", "alpha")
 	alpha, beta, gamma := ids["alpha"], ids["beta"], ids["gamma"]
 
-	// The talk, through the real CLI.
 	body := "rebased onto **main**, please retest:\n\n- `go test ./...`\n- the e2e shard for mail"
 	sendBeta := cli("send-agent-message", "-s", "api", "-w", beta[:8], "--from", alpha, "--subject", "retest please", body)
 	sendGamma := cli("send-agent-message", "-s", "api", "-w", "gamma", "--from", alpha, "gamma: please take the docs")
@@ -127,10 +125,8 @@ func TestCockpitThreadMailCards(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the agents view: %v", err)
 	}
-	// alpha works, so it is the first row and its thread shows.
 	waitText(t, term, "alpha's thread", "step 40 is done")
 	_ = term.WaitStable(uiTimeout)
-	// gamma closes while the view lists it.
 	waitText(t, term, "gamma in the fleet", "gamma")
 	cli("close-window", "-s", "api", gamma)
 	scrollUntil(t, term, "K", "retest please")
@@ -159,7 +155,6 @@ func TestCockpitThreadMailCards(t *testing.T) {
 		t.Fatalf("ASSERTION: gamma is not marked closed: %q\n%s", term.Screen().Line(row-1), term.Snapshot())
 	}
 
-	// . stops on gamma first, the newest, and enter says it is closed.
 	if err := term.SendKeys("."); err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +164,6 @@ func TestCockpitThreadMailCards(t *testing.T) {
 	}
 	waitText(t, term, "the jump to a closed agent", "gamma is closed.")
 
-	// A click on beta's name selects beta.
 	sent = scrollToCardHead(t, term, "retest please", "Sent to")
 	headRow := sent - 1
 	col := strings.Index(term.Screen().Line(headRow), "beta")
@@ -185,7 +179,6 @@ func TestCockpitThreadMailCards(t *testing.T) {
 		t.Fatalf("ASSERTION: beta's read is not drawn as a message from alpha\n%s", term.Snapshot())
 	}
 
-	// ctrl+o goes back to alpha, at the same place.
 	if err := term.SendKeys(tuitest.Ctrl('o')); err != nil {
 		t.Fatal(err)
 	}
@@ -202,11 +195,8 @@ func TestCockpitThreadMailCards(t *testing.T) {
 	alive(t, term, "after the mail cards")
 }
 
-// mailCall is one Bash call of a scripted transcript and what it printed.
 type mailCall struct{ command, out string }
 
-// writeMailTranscript writes a Claude Code transcript: a prompt, each call
-// with its result, and an answer, at times just before now.
 func writeMailTranscript(t *testing.T, path string, now time.Time, prompt string, calls []mailCall, answer string) {
 	t.Helper()
 	at := func(ago time.Duration) string { return now.Add(-ago).UTC().Format("2006-01-02T15:04:05.000Z") }
@@ -242,8 +232,6 @@ func writeMailTranscript(t *testing.T, path string, now time.Time, prompt string
 	}
 }
 
-// mailWindowIDsOf are a session's window ids by name, from list-windows
-// --json, empty when out does not decode.
 func mailWindowIDsOf(out string) map[string]string {
 	var payload struct {
 		Windows []struct {
@@ -261,7 +249,6 @@ func mailWindowIDsOf(out string) map[string]string {
 	return ids
 }
 
-// mailFirstID is the message id a send printed: "message 12 delivered to".
 func mailFirstID(t *testing.T, out string) string {
 	t.Helper()
 	f := strings.Fields(out)
@@ -271,8 +258,6 @@ func mailFirstID(t *testing.T, out string) string {
 	return f[1]
 }
 
-// scrollToCardHead presses K until the card whose text has want shows its
-// head line, the line above want, and returns want's row.
 func scrollToCardHead(t *testing.T, term *tuitest.Terminal, want, head string) int {
 	t.Helper()
 	for range 15 {

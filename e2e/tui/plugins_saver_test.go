@@ -10,11 +10,6 @@ import (
 	"time"
 )
 
-// A plugin's screen saver as a frames file: check reads it, the saver plays
-// its frames at their times with no process, and a key ends it.
-//
-// The negative controls are in NEGATIVE_CONTROLS.md, "Frames savers".
-
 const saverFrames = `tuios-saver 1
 size 14 3
 color a #ff5f87
@@ -48,7 +43,6 @@ func TestPluginFramesSaver(t *testing.T) {
 	writeConfig(t, base, "[screensaver]\neffect = \"plugin/e2e.saver/box\"\n")
 	killDaemon(t, base)
 
-	// check names the line that is wrong.
 	if err := os.WriteFile(saver, []byte(strings.Replace(saverFrames, "size 14 3", "size 14", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +81,6 @@ func TestPluginFramesSaver(t *testing.T) {
 	if err := term.WaitForText("SAVER-ONE", uiTimeout); err != nil {
 		t.Errorf("the saver did not loop: %v\n%s", err, term.Snapshot())
 	}
-	// A key ends it.
 	if err := term.SendKeys("x"); err != nil {
 		t.Fatal(err)
 	}

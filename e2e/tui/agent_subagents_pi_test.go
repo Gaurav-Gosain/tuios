@@ -12,11 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// piHook runs the real Pi hook for a pane in dir, with --explain, the way the
-// managed pi extension (v4) sends its reports: the event name and its payload
-// on stdin. It is an error when the hook fails or prints anything on stdout,
-// which nothing reads. Like subagentHook, it touches nothing of the test's,
-// so several may run at once.
 func piSubagentHook(base, dir, session, payload string) (string, error) {
 	cmd := exec.Command(tuiosBin, "agent-hook", "pi", "--integration", "4", "--session", session, "--window", "0", "--timeout", "10s", "--explain")
 	cmd.Dir = dir
@@ -35,7 +30,6 @@ func piSubagentHook(base, dir, session, payload string) (string, error) {
 	return explained, nil
 }
 
-// piSubagentRow is one entry of get-agent-state's subagent_list.
 type piSubagentRow struct {
 	ID          string `json:"id"`
 	Type        string `json:"type"`
@@ -46,7 +40,6 @@ type piSubagentRow struct {
 	Result      string `json:"result"`
 }
 
-// piSubagentRows reads a pane's subagent_list from get-agent-state --json.
 func piSubagentRows(t *testing.T, base, session string) ([]piSubagentRow, int) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "get-agent-state", "--json", "-s", session, "-w", "0")
@@ -63,8 +56,6 @@ func piSubagentRows(t *testing.T, base, session string) ([]piSubagentRow, int) {
 	return st.List, st.Subagents
 }
 
-// waitPiSubagent waits until want says true about the pane's subagent_list,
-// then returns the last read.
 func waitPiSubagent(t *testing.T, base, session, what string, want func(list []piSubagentRow, count int) bool) []piSubagentRow {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -129,8 +120,6 @@ func TestPiSubagentRowsThroughTheRealHook(t *testing.T) {
 		log.add("%-44s state=%s subagents=%d rows=%+v", name, st.State, count, list)
 	}
 
-	// The pane's agent is at work when the runs start, the way it is while a
-	// foreground child holds its turn.
 	hook(`{"hook_event_name":"session_start","session_id":"pi-1"}`)
 	hook(`{"hook_event_name":"agent_start","session_id":"pi-1"}`)
 	if st := readAgentState(t, base, "e2e-pi", "0"); st.State != "working" {
@@ -142,7 +131,6 @@ func TestPiSubagentRowsThroughTheRealHook(t *testing.T) {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
 
-	// Two subagents start at once.
 	hook(`{"hook_event_name":"subagent_start","session_id":"pi-1","agent_id":"9f0c2e71d4b5a683","agent_type":"researcher","text":"Review auth boundaries"}`)
 	hook(`{"hook_event_name":"subagent_start","session_id":"pi-1","agent_id":"run-docs-sweep-0c2e71d4","agent_type":"worker","text":"Sweep the docs"}`)
 	waitMeta(t, base, map[string]string{"subagents": "2 subagents"}, "-s", "e2e-pi", "-w", "0")
@@ -168,7 +156,6 @@ func TestPiSubagentRowsThroughTheRealHook(t *testing.T) {
 		t.Fatalf("the rows carry no description: %+v", list)
 	}
 
-	// What a subagent runs now shows on its row.
 	hook(`{"hook_event_name":"subagent_update","session_id":"pi-1","agent_id":"9f0c2e71d4b5a683","tool":"bash","target":"go test ./..."}`)
 	list = waitPiSubagent(t, base, "e2e-pi", "the tool line on the row", func(list []piSubagentRow, count int) bool {
 		for _, row := range list {
@@ -183,8 +170,6 @@ func TestPiSubagentRowsThroughTheRealHook(t *testing.T) {
 		t.Fatalf("a tool update moved the count to %d, want 2", n)
 	}
 
-	// One subagent finishes with a result, one is stopped with none. The
-	// pane's own state is not theirs to move.
 	hook(`{"hook_event_name":"subagent_stop","session_id":"pi-1","agent_id":"9f0c2e71d4b5a683","text":"Wrote the brief"}`)
 	list = waitPiSubagent(t, base, "e2e-pi", "the first subagent done", func(list []piSubagentRow, count int) bool {
 		for _, row := range list {
@@ -216,22 +201,18 @@ func TestPiSubagentRowsThroughTheRealHook(t *testing.T) {
 	saveFrame(t, term, "pi-subagents-both-ended")
 	step("both subagents ended", list, 0)
 
-	// A stop for an id the pane never started is nothing.
 	hook(`{"hook_event_name":"subagent_stop","session_id":"pi-1","agent_id":"a0000000000000000","text":"nothing"}`)
 	if _, count := piSubagentRows(t, base, "e2e-pi"); count != 0 {
 		t.Fatalf("a stop for an unknown subagent moved the count to %d", count)
 	}
 	step("stop for an unknown id", list, 0)
 
-	// An id tuios does not keep is skipped, and the hook still exits 0 with
-	// empty stdout, which is what the extension's fire-and-forget spawn sees.
 	hook(`{"hook_event_name":"subagent_start","session_id":"pi-1","agent_id":"bad id!","agent_type":"researcher"}`)
 	if _, count := piSubagentRows(t, base, "e2e-pi"); count != 0 {
 		t.Fatalf("an invalid agent_id was counted: count %d", count)
 	}
 	step("invalid agent_id skipped", list, 0)
 
-	// The events reached list-agents and agent-log like any harness's.
 	raw, err := tuiosCLI(t, base, "list-agents", "--all-sessions", "--json")
 	if err != nil {
 		t.Fatalf("list-agents: %v\n%s", err, raw)
@@ -263,9 +244,6 @@ func TestPiSubagentRowsThroughTheRealHook(t *testing.T) {
 	}
 	log.add("agent-log e2e-pi:\n%s", out)
 
-	// A daemon restart starts the set empty, and a lone stop for an old id
-	// changes nothing. The pane comes back rehydrated; the subagent set does
-	// not (it is daemon memory only).
 	killDaemon(t, base)
 	hook(`{"hook_event_name":"session_start","session_id":"pi-1"}`)
 	hook(`{"hook_event_name":"subagent_stop","session_id":"pi-1","agent_id":"9f0c2e71d4b5a683","text":"Wrote the brief"}`)

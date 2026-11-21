@@ -54,7 +54,6 @@ func TestPluginPRStatus(t *testing.T) {
 	if err := term.WaitForText("$", bootTimeout); err != nil {
 		t.Fatalf("attach: %v\n%s", err, term.Snapshot())
 	}
-	// A new pane takes the focus, and the hook runs.
 	if out, err := tuiosCLI(t, base, "new-window", "-s", "pr"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
 	}
@@ -64,7 +63,6 @@ func TestPluginPRStatus(t *testing.T) {
 	}
 	savePNG(t, term.Screen(), hostPalette(t, ""), artifactDir(t), "pr-status")
 
-	// More focuses reuse the saved text.
 	if out, err := tuiosCLI(t, base, "new-window", "-s", "pr"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
 	}
@@ -74,8 +72,6 @@ func TestPluginPRStatus(t *testing.T) {
 		t.Errorf("gh ran %d times for two focuses in a minute, want 1:\n%s", n, b)
 	}
 
-	// Nothing stays: the hook exits, so the plugin holds no process, and stats
-	// says so with the runs counted.
 	if out, err := tuiosCLI(t, base, "plugins", "stats"); err != nil || !regexp.MustCompile(`tuios\.pr-status\s+0\s+0 B\s+[2-9]`).MatchString(out) {
 		t.Errorf("plugins stats for a hook plugin: %v, want no process and two runs or more\n%s", err, out)
 	}
@@ -83,7 +79,6 @@ func TestPluginPRStatus(t *testing.T) {
 		t.Errorf("a hook still runs:\n%s", out)
 	}
 
-	// Refresh reads now, and a pull request that is gone clears the cell.
 	if err := os.WriteFile(reply, []byte("#7 ok\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

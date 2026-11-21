@@ -43,8 +43,6 @@ func TestFanCompareVerifyAndDiff(t *testing.T) {
 		}
 	}
 
-	// The check passes where done.txt is and fails where it is not, and the
-	// command exits 1 because one failed.
 	out, err = tuiosCLI(t, base, "fan", "verify", "repo-try-cmp", "--", "test", "-f", "done.txt")
 	if err == nil {
 		t.Fatalf("fan verify exited 0 with a failed check:\n%s", out)

@@ -12,23 +12,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Paste buffers that hold bytes, not only text (#514). A tmux buffer can hold
-// any bytes, and the tmux shim's files kept every one. With the daemon holding
-// the buffers, every byte has to survive the trip over the JSON protocol, and
-// a buffer sent in parts has to come back whole.
-//
-// How these could pass wrongly: a check on text alone passes when a byte that
-// is not UTF-8 is lost, so the files are compared byte for byte. A file under
-// one part never takes the parts path, so the large file is over 1 MiB, and
-// its characters are three bytes wide, so a cut on a byte count lands inside
-// one.
-
-// shimRoundTrip loads in into a buffer through the tmux shim, saves the
-// buffer to out, and waits for the shell to say it is done.
 func shimRoundTrip(t *testing.T, term *tuitest.Terminal, base, in, out, buffer string) {
 	t.Helper()
-	// The marker names the buffer, so the end of an earlier round trip on
-	// the screen cannot end the wait for this one.
 	marker := strings.ToUpper(buffer) + "_EXIT="
 	runInShell(t, term, "clear; "+tuiosBin+" tmux-shim -- sh -c 'tmux load-buffer -b "+buffer+" "+in+" && tmux save-buffer -b "+buffer+" "+out+"'; echo "+splitMarker(marker)+"$?", marker, shellTimeout)
 	if !strings.Contains(term.Screen().Text(), marker+"0") {
@@ -36,8 +21,6 @@ func shimRoundTrip(t *testing.T, term *tuitest.Terminal, base, in, out, buffer s
 	}
 }
 
-// sameBytes fails when the files at a and b differ, naming the first byte
-// that does.
 func sameBytes(t *testing.T, what, a, b string) {
 	t.Helper()
 	want, err := os.ReadFile(a) //nolint:gosec // a file of this test's own
@@ -82,8 +65,6 @@ func TestPasteBufferKeepsEveryByte(t *testing.T) {
 		t.Fatal(err)
 	}
 	big := filepath.Join(dir, "euro.txt")
-	// One ASCII byte first, so the three-byte characters straddle every cut
-	// that falls on a round number of bytes.
 	if err := os.WriteFile(big, []byte("x"+strings.Repeat("€", 600000)), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +77,6 @@ func TestPasteBufferKeepsEveryByte(t *testing.T) {
 	shimRoundTrip(t, term, base, big, bigOut, "large")
 	sameBytes(t, "the 1.8 MB file through the shim", big, bigOut)
 
-	// The CLI keeps every byte too.
 	cliOut := filepath.Join(dir, "cli.out")
 	runInShell(t, term, "clear; "+tuiosBin+" set-buffer -b clibin < "+bin+" && "+tuiosBin+" show-buffer -b clibin > "+cliOut+"; echo CLI_\"\"EXIT=$?", "CLI_EXIT=", shellTimeout)
 	if !strings.Contains(term.Screen().Text(), "CLI_EXIT=0") {
@@ -104,8 +84,6 @@ func TestPasteBufferKeepsEveryByte(t *testing.T) {
 	}
 	sameBytes(t, "the binary file through the CLI", bin, cliOut)
 
-	// The listing shows a sample of every buffer, escaped, and never cuts a
-	// character.
 	var listing struct {
 		Buffers []struct {
 			Name   string `json:"name"`

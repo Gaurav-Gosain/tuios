@@ -65,22 +65,18 @@ func TestWhichKeySitsBesideTheRail(t *testing.T) {
 	}
 	after := term.Screen()
 	saveArtifact(t, term, artifactDir(t), "whichkey-beside-rail")
-	// The dock and its rule are left out: the prefix changes what the dock says.
 	for r := 2; r < rows; r++ {
 		if got, want := railBand(after, r), railBand(before, r); got != want {
 			t.Fatalf("row %d of the rail changed under the which-key overlay:\n got %q\nwant %q\n%s",
 				r, got, want, term.Snapshot())
 		}
 	}
-	// The list is longer than forty rows can hold, and it is cut to the
-	// panes' rows rather than run up over the dock on the top two.
 	titleRow := -1
 	for r := 0; r < rows && titleRow < 0; r++ {
 		if slices.Contains(strings.Fields(after.Line(r)), "prefix") {
 			titleRow = r
 		}
 	}
-	// Row 0 is the dock, row 1 its rule and row 2 the overlay's top pad.
 	if titleRow < 3 {
 		t.Fatalf("the which-key title is on row %d, over the dock on the top two rows\n%s", titleRow, term.Snapshot())
 	}
@@ -216,7 +212,6 @@ func TestAPanelWiderThanThePanesCoversTheWholeRail(t *testing.T) {
 		t.Fatalf("the Inbox starts at column %d, inside the rail at %d: it fits beside the rail and this tests nothing\n%s",
 			titleCol, railX, term.Snapshot())
 	}
-	// The cell left of the title's pill is the panel's padding.
 	ground := s.Cell(titleCol-2, title).Bg
 	for r := title; r <= footer; r++ {
 		if got := s.Cell(cols-1, r).Bg; got != ground {

@@ -11,10 +11,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// stockLook is what a dialog and the palette show under a config that does
-// not ask for pane-styled overlays, read off an upstream main build (b90ef7e71)
-// under the same harness: the rename dialog's frame ink and ground and its
-// interior ground, and the palette's search-line and selected-row grounds.
 type stockLook struct {
 	frameFg, frameBg, dialogBg tuitest.Color
 	paletteBg, paletteSel      tuitest.Color
@@ -28,7 +24,6 @@ var (
 		paletteBg:  tuitest.Color{Kind: tuitest.ColorRGB, R: 0x3a, G: 0x39, B: 0x43},
 		paletteSel: tuitest.Color{Kind: tuitest.ColorRGB, R: 0x2d, G: 0x2c, B: 0x36},
 	}
-	// At 16 colours the frame is bright black on the terminal's own ground.
 	stockSixteen = stockLook{
 		frameFg: tuitest.Color{Kind: tuitest.ColorIndexed, Index: 8},
 	}
@@ -88,9 +83,6 @@ func TestStockOverlaysKeepTheirOwnLook(t *testing.T) {
 	}
 }
 
-// wantStockDialog fails unless the dialog at b, named what in the failure, has
-// its frame in want's ink and ground and its padding cell on want's dialog
-// ground.
 func wantStockDialog(t *testing.T, term *tuitest.Terminal, art, name, what string, b overlayBox, want stockLook) {
 	t.Helper()
 	var report string
@@ -167,8 +159,6 @@ func TestPaneOverlaysStepRowsFromThePaneGround(t *testing.T) {
 	alive(t, term, "after the pane overlay row check")
 }
 
-// paletteRows is findPalette for a WaitFor predicate: it reports false rather
-// than failing while the palette is not yet drawn.
 func paletteRows(s tuitest.Screen) (palettePanel, bool) {
 	var p palettePanel
 	p.titleRow = rowWith(s, paletteTitle)
@@ -190,15 +180,10 @@ func paletteRows(s tuitest.Screen) (palettePanel, bool) {
 	return p, false
 }
 
-// truecolorRGB is a 24-bit cell colour as a colour.
 func truecolorRGB(c tuitest.Color) color.Color { return color.RGBA{R: c.R, G: c.G, B: c.B, A: 0xff} }
 
-// mochaGround is catppuccin_mocha's background, the ground the rail is drawn
-// on under that theme where it paints none of its own.
 var mochaGround = color.RGBA{R: 0x1e, G: 0x1e, B: 0x2e, A: 0xff}
 
-// railProbes are the rail texts TestRailReadsOnALightPaneGround measures, and
-// the floor each is held to.
 var railProbes = []struct {
 	what, text string
 	floor      float64
@@ -236,7 +221,6 @@ func TestRailReadsOnALightPaneGround(t *testing.T) {
 	}
 }
 
-// overlaySameColour reports whether a and b are the same colour.
 func overlaySameColour(a, b color.Color) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -246,9 +230,6 @@ func overlaySameColour(a, b color.Color) bool {
 	return ar == br && ag == bg && ab == bb
 }
 
-// railInks attaches under catppuccin_mocha with the shipped looks and extra
-// appearance keys, holds each rail probe to its floor, saves the frame and the
-// measurements under name, and returns each probe's ink by its text.
 func railInks(t *testing.T, art, name, extra string) map[string]color.Color {
 	t.Helper()
 	base := t.TempDir()

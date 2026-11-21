@@ -63,8 +63,6 @@ func TestHostSwitchBackKeepsTheLocalSessionsWindows(t *testing.T) {
 		railShows(t, term, want)
 	}
 	waitRailCurrent(t, term, "home")
-	// A text home's panes print, read later in a pane. Every pane prints it,
-	// since the windows overlap and the one in front shows it whole.
 	const homeText = "HOME-42"
 	for _, id := range homeBefore {
 		if out, err := tuiosCLI(t, base, "send-keys", "-s", "home", "-w", id, "--raw", "echo HOME-$((6*7))"); err != nil {
@@ -112,8 +110,6 @@ func TestHostSwitchBackKeepsTheLocalSessionsWindows(t *testing.T) {
 	saveFrame(t, term, "host-switch-back")
 }
 
-// windowIDsOf is the session's window ids as the daemon at base lists them,
-// sorted. It waits until list-windows answers.
 func windowIDsOf(t *testing.T, base, session string) []string {
 	t.Helper()
 	var ids []string
@@ -132,11 +128,6 @@ func windowIDsOf(t *testing.T, base, session string) []string {
 	return ids
 }
 
-// waitBackOnLocal blocks until the rail marks a session under this machine
-// as the attached one, or until the daemon at base lists home with windows
-// other than want. A client that took the host's state back with it marks
-// the host's session name under this machine, not home, and what that does
-// to home is row (a)'s to report, not a wait's.
 func waitBackOnLocal(t *testing.T, term *tuitest.Terminal, base string, want []string, round int) {
 	t.Helper()
 	what := fmt.Sprintf("round %d: the rail marks a session under local as the attached one, or home lists other windows than %v", round, want)
@@ -149,15 +140,11 @@ func waitBackOnLocal(t *testing.T, term *tuitest.Terminal, base string, want []s
 	})
 }
 
-// railMarksUnder reports whether the rail marks name, in host's group, as
-// the attached session.
 func railMarksUnder(s tuitest.Screen, host, name string) bool {
 	r := railRowUnder(s, host, name)
 	return r >= 0 && strings.HasPrefix(s.Line(r), "▎")
 }
 
-// railMarksALocalRow reports whether the rail marks a row of this machine's
-// group as the attached session.
 func railMarksALocalRow(s tuitest.Screen) bool {
 	local, build := railRowOf(s, hostOpen+" local"), railRowOf(s, hostOpen+" build")
 	if local < 0 || build < local {
@@ -171,7 +158,6 @@ func railMarksALocalRow(s tuitest.Screen) bool {
 	return false
 }
 
-// paneShows blocks until text is on screen right of the rail, in a pane.
 func paneShows(t *testing.T, term *tuitest.Terminal, text string, within time.Duration) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -188,10 +174,6 @@ func paneShows(t *testing.T, term *tuitest.Terminal, text string, within time.Du
 	}
 }
 
-// keepSessionBusy runs four loops of set-agent-state against the session's
-// first two windows on the daemon at base, so the daemon sends its clients a
-// stream of state syncs. The returned func stops the loops and waits for them;
-// it runs at cleanup too.
 func keepSessionBusy(t *testing.T, base, session string) func() {
 	t.Helper()
 	dir := workDirIn(t, base)

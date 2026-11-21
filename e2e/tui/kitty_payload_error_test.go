@@ -22,7 +22,6 @@ import (
 //     chunk, which names no image.
 func TestKittyPayloadErrorReplies(t *testing.T) {
 	const einval = "EINVAL:payload is not valid base64"
-	// Each command is sent once. '!' is never base64.
 	probe := `\033_Ga=t,f=24,s=1,v=1,i=41;AA!A\033\\` +
 		`\033_Ga=q,f=24,s=1,v=1,t=d,i=42;AA!A\033\\` +
 		`\033_Ga=q,f=24,s=1,v=1,t=d,i=43;AAAA\033\\` +
@@ -40,9 +39,6 @@ func TestKittyPayloadErrorReplies(t *testing.T) {
 			dir := t.TempDir()
 			out := filepath.Join(dir, "reply")
 			script := filepath.Join(dir, "probe.sh")
-			// Raw mode so the replies reach the file unchanged and unechoed.
-			// With min 0 time 10 a read returns nothing after a second of
-			// silence, so cat collects every reply and then sees end of file.
 			body := "stty raw -echo min 0 time 10\n" +
 				"printf '" + probe + "'\n" +
 				"cat > " + out + "\n" +
@@ -58,8 +54,6 @@ func TestKittyPayloadErrorReplies(t *testing.T) {
 				t.Fatalf("read reply: %v", err)
 			}
 			got := string(raw)
-			// DSR 5 is answered after every graphics command before it, so its
-			// reply proves the pane read them all.
 			if !strings.HasSuffix(got, "\x1b[0n") {
 				t.Fatalf("the replies do not end with the status report: %q", got)
 			}

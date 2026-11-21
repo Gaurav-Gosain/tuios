@@ -58,9 +58,6 @@ func TestNoNewBareSleeps(t *testing.T) {
 	}
 }
 
-// sleepGrowth reads a unified diff and returns, for each *_test.go file other
-// than the two that hold the helpers, the time.Sleep( calls added minus the ones removed. Only
-// code counts: a comment that names the call does not.
 func sleepGrowth(diff string) map[string]int {
 	growth := map[string]int{}
 	file := ""

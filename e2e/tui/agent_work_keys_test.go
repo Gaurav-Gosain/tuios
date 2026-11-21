@@ -53,8 +53,6 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 	saveFrame(t, term, "agent-work-menu-no-agents")
 	closeMenu()
 
-	// A pane reports an agent waiting on an approval, which also gives the
-	// Inbox an item.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-ctrlp", "needs_input",
 		"--kind", "approval", "--harness", "claude-code", "-m", "approve Bash: go test ./..."); err != nil {
 		t.Fatalf("set-agent-state: %v\n%s", err, out)
@@ -73,8 +71,6 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 	}
 	saveFrame(t, term, "agent-work-menu-agents")
 
-	// v reviews the focused pane, which has no repository under it: the menu
-	// closes and nothing opens.
 	if err := term.SendKeys("v"); err != nil {
 		t.Fatalf("press v: %v", err)
 	}
@@ -85,7 +81,6 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 	}
 	alive(t, term, "after ctrl+b v")
 
-	// The Inbox's new keys leave it open on the same list.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the Inbox: %v", err)
 	}
@@ -120,7 +115,6 @@ func TestAgentWorkKeysWaitForAnAgent(t *testing.T) {
 // "not handled", both Os reach the shell and it prints PENDOOZ.
 func TestPendingPrefixKeysReachThePane(t *testing.T) {
 	term, base := attachClientBase(t)
-	// An agent in view, so the keys are the ones a person with agents has.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-ctrlp", "working",
 		"--harness", "claude-code"); err != nil {
 		t.Fatalf("set-agent-state: %v\n%s", err, out)

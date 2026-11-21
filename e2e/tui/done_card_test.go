@@ -12,8 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// doneCardLastSaid is the end of a turn longer than a one-line message, with
-// no space at the cut: the old clip cut "vanishing" in the middle.
 const doneCardLastSaid = "A thread image card that the window cuts now shows its visible part, cropped, instead of vanishing from the thread"
 
 // TestDoneCardDismissAndRecapLines finishes a turn of a Claude Code stand-in
@@ -116,8 +114,6 @@ func TestDoneCardDismissAndRecapLines(t *testing.T) {
 		}
 	}
 
-	// The cross on the card's head, then the card is gone and the row is
-	// not.
 	row, col := findText(t, term, "×")
 	if hr, _ := findText(t, term, "dismiss"); hr != row {
 		t.Errorf("ASSERTION: the dismiss key is not beside the cross (rows %d and %d)\n%s", hr, row, term.Snapshot())
@@ -132,8 +128,6 @@ func TestDoneCardDismissAndRecapLines(t *testing.T) {
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "done-card-dismissed-160x45")
 
-	// The next turn brings a new card, and the key shown beside the cross
-	// puts it away.
 	turn("The second turn is done.")
 	waitText(t, term, "the next turn's card", "Last said: The second turn is done.", "×")
 	if err := term.SendKeys("d"); err != nil {

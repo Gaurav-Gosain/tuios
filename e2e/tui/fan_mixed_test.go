@@ -63,7 +63,6 @@ func TestFanMixesAgentsFromTheCallersPathAndStartAgentWaits(t *testing.T) {
 	waitPane("repo-mix-2", "ARGS: --flag")
 	waitPane("repo-mix-2", "MARK: from-the-shell")
 
-	// mytool showed no state, so its prompt still waits.
 	for _, r := range worktreeRows(t, base, "--group", "mix") {
 		if r["session"] == "repo-mix-2" && r["prompt_status"] == "sent" {
 			t.Fatalf("the prompt was typed at a program that showed nothing: %v", r)

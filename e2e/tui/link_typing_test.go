@@ -9,16 +9,6 @@ import (
 	"time"
 )
 
-// Typing over a link is held to the prompt rule a pane on the same machine is
-// held to: keys typed into a pane on needs_input answer it, so a caller needs
-// respond. A pane's grants do not travel over a link, so on the far machine
-// the link policy stands for them, and a link without respond may not type
-// into a prompt. The person, typing from outside every pane on the hub, is
-// not held by it.
-
-// linkTypingFixture is a hub with a link to build, a pane on build waiting on
-// a prompt, and the id of that pane. farAllow is build's allow list for every
-// machine linked to it.
 func linkTypingFixture(t *testing.T, farAllow string) (base, remote string, env []string, prompted string) {
 	t.Helper()
 	base = t.TempDir()
@@ -58,8 +48,6 @@ func linkTypingFixture(t *testing.T, farAllow string) (base, remote string, env 
 	return base, remote, env, prompted
 }
 
-// waitForCaptureOn polls a pane on the daemon at base until its capture holds
-// want, and returns the capture.
 func waitForCaptureOn(t *testing.T, base, sess, window, want string) string {
 	t.Helper()
 	return waitTextOf(t, fmt.Sprintf("pane %s in %s never showed %q", window, sess, want), uiTimeout, func() string {
@@ -68,10 +56,6 @@ func waitForCaptureOn(t *testing.T, base, sess, window, want string) string {
 	}, func(out string) bool { return strings.Contains(out, want) })
 }
 
-// typeFromAHubPane runs send-text in a pane on the hub, aimed at the prompted
-// pane on build. It returns the pane's screen once the exit code is on it, and
-// what send-text printed, read from a file so the pane's line wrap cannot cut
-// a word.
 func typeFromAHubPane(t *testing.T, base string, env []string, prompted, text string) (screen, said string) {
 	t.Helper()
 	outFile := filepath.Join(base, "send-text.out")
@@ -83,8 +67,6 @@ func typeFromAHubPane(t *testing.T, base string, env []string, prompted, text st
 	if err != nil || len(hub.Windows) == 0 {
 		t.Fatalf("list the hub windows: %v", err)
 	}
-	// The command line itself holds "RESP_EXIT=$?", so only a digit after it
-	// is the exit code.
 	deadline := time.Now().Add(uiTimeout)
 	var out string
 	for time.Now().Before(deadline) {
@@ -122,7 +104,6 @@ func TestAPaneOverALinkCannotAnswerAPrompt(t *testing.T) {
 			t.Fatalf("ASSERTION: the refused text reached the prompted pane on build:\n%s", far)
 		}
 
-		// The person on the hub is not held by it.
 		if out, err := tuiosCLIEnv(t, base, env, "send-text", "-s", "build:far", "-w", prompted, "PERSON-ANSWER\n"); err != nil {
 			t.Fatalf("ASSERTION: the person's typing over the link into a prompt was refused: %v\n%s", err, out)
 		}

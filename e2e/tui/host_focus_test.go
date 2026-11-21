@@ -12,24 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Host terminal focus. The client asks its terminal for focus events (DECSET
-// 1004); the harness plays the terminal and sends them. What the test reads is
-// what a person or a script can read: session-info's host_focus, the OSC 9
-// notification on the host stream, and the file an after-agent-state hook
-// writes.
-//
-// How this could pass wrongly, written down first:
-//   - host_focus might read "focused" from a default rather than from the
-//     event, so it is read as "unknown" before any event is sent;
-//   - an alert might be missing for a reason other than focus (settle, quiet
-//     hours, the state not alerting), so the same transition is shown to alert
-//     once the terminal loses focus, in the same fixture (the positive half);
-//   - an alert that arrives late could land after the check, so the held case
-//     waits well past the settle window, which is zero here, before it looks;
-//   - the stream holds the alerts of earlier steps, so every check reads only
-//     what arrived after its own mark.
-
-// sessionHostFocus reads host_focus from session-info.
 func sessionHostFocus(t *testing.T, base, session string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "session-info", "-s", session, "--json")
@@ -45,7 +27,6 @@ func sessionHostFocus(t *testing.T, base, session string) string {
 	return res.HostFocus
 }
 
-// waitHostFocus polls session-info until host_focus is want.
 func waitHostFocus(t *testing.T, base, session, want string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -59,7 +40,6 @@ func waitHostFocus(t *testing.T, base, session, want string) {
 	t.Fatalf("host_focus is %q, want %q", got, want)
 }
 
-// waitNotified waits for an OSC 9 notification holding want after mark.
 func waitNotified(t *testing.T, term *tuitest.Terminal, stream *hostStream, mark int, want string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -76,7 +56,6 @@ func waitNotified(t *testing.T, term *tuitest.Terminal, stream *hostStream, mark
 	}
 }
 
-// notifySince returns the OSC 9 notifications on the host stream after mark.
 func notifySince(stream *hostStream, mark int) []string {
 	b := stream.bytes()
 	if mark > len(b) {
@@ -139,7 +118,6 @@ func TestHostFocusHoldsAlertsForThePaneYouAreLookingAt(t *testing.T) {
 		return string(b)
 	}
 
-	// Focused: the pane the person is looking at raises nothing.
 	if err := term.Type("\x1b[I"); err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +144,6 @@ func TestHostFocusHoldsAlertsForThePaneYouAreLookingAt(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, "focused-held.ansi"), stream.bytes()[mark:], 0o644)
 	setState("working")
 
-	// Out of focus: the same transition on the same pane is announced.
 	if err := term.Type("\x1b[O"); err != nil {
 		t.Fatal(err)
 	}
@@ -189,11 +166,6 @@ func TestHostFocusHoldsAlertsForThePaneYouAreLookingAt(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, "hook.log"), []byte(hookLines()), 0o644)
 	t.Logf("notifications after the blur: %q; artifacts in %s", got, dir)
 
-	// A run alerts once for each state, and a client that attaches starts
-	// from the states it finds. The turn ends with one alert. A new client
-	// alerts for the question, and the same turn's done reported again
-	// raises nothing. The after-agent-state hook is the daemon's, which sees
-	// every transition, so it is not counted here.
 	setState("working")
 	mark = len(stream.bytes())
 	setState("done")
@@ -224,7 +196,6 @@ func TestHostFocusHoldsAlertsForThePaneYouAreLookingAt(t *testing.T) {
 	}
 	_ = os.WriteFile(filepath.Join(dir, "reattach-alerts.ansi"), again.bytes(), 0o644)
 
-	// Focus back: host_focus follows.
 	if err := term.Type("\x1b[I"); err != nil {
 		t.Fatal(err)
 	}

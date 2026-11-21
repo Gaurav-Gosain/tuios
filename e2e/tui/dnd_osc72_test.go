@@ -16,39 +16,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Drag and drop between panes over the kitty drag and drop protocol (OSC 72).
-//
-// Two tiled panes side by side in a daemon session. A program in the left pane
-// offers files; the pointer presses on it, crosses to the right pane and
-// releases. What each program received is read from its log, so the assertion
-// is on the protocol exchange, not on the screen.
-//
-// How this could pass wrongly, written down first:
-//   - the target could log a drop that never crossed tuios, if the two
-//     programs shared a channel. They run in two panes with two PTYs and the
-//     only path between them is tuios.
-//   - the gesture could be recognised from the harness's own mouse reports
-//     reaching the source program, which also turns on mouse reporting. The
-//     source only offers after a t=o from tuios, which the harness never
-//     writes, and the log records that t=o first.
-//   - the fallback paste could come from the harness typing. The harness
-//     types nothing into the target pane after starting its reader, and the
-//     paste carries paths the harness never typed.
-//
-// Negative controls: with DnDMotion returning false for every event, the
-// source never receives t=o and every subtest fails on its first wait. With
-// the MIME list sent on the first move only, the target (which reads it from
-// every move, as yazi does) refuses every later move and no drop comes. With
-// a new press not ending a stale gesture, the ignored-gesture subtest never
-// sees its second drag. See NEGATIVE_CONTROLS.md.
-
-// dndConfig is the config of a board: tiled, so two panes sit side by side,
-// and drag and drop on, which is off unless asked for.
 const dndConfig = "[startup]\ndaemon = true\ntiled = true\nlayout = 'bsp'\n[panes]\ndrag_and_drop = true\n"
 
-// dndClient starts a client with the arguments given: a fixed cell size, so a
-// pixel report is arithmetic (see dndMouse), and the host's output kept for
-// hostInPixelMode. env is added to that.
 func dndClient(t *testing.T, base string, env []string, args ...string) *tuitest.Terminal {
 	t.Helper()
 	env = append([]string{"TUIOS_CELL_SIZE=8x16"}, env...)
@@ -58,19 +27,15 @@ func dndClient(t *testing.T, base string, env []string, args ...string) *tuitest
 	return term
 }
 
-// dndBoard is a daemon session with two tiled panes side by side, in terminal
-// mode, and their rectangles, with drag and drop on.
 func dndBoard(t *testing.T) (term *tuitest.Terminal, base, session string, left, right winRect) {
 	return dndBoardWith(t, dndConfig)
 }
 
-// dndBoardWith is dndBoard under the config given.
 func dndBoardWith(t *testing.T, config string) (term *tuitest.Terminal, base, session string, left, right winRect) {
 	t.Helper()
 	return dndBoardEnv(t, config, nil)
 }
 
-// dndBoardEnv is dndBoardWith with env added to the client's environment.
 func dndBoardEnv(t *testing.T, config string, env []string) (term *tuitest.Terminal, base, session string, left, right winRect) {
 	t.Helper()
 	session = "e2e-dnd"
@@ -94,8 +59,6 @@ func dndBoardEnv(t *testing.T, config string, env []string) (term *tuitest.Termi
 	return term, base, session, left, right
 }
 
-// runInPane types a command into a pane through the daemon and waits for the
-// pane to show marker.
 func runInPane(t *testing.T, base, session string, pane winRect, command, marker string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "send-text", "-s", session, "-w", pane.ID, command+"\n"); err != nil {
@@ -104,15 +67,8 @@ func runInPane(t *testing.T, base, session string, pane winRect, command, marker
 	waitCapture(t, base, session, pane.ID, marker)
 }
 
-// dndHostOut is each board's copy of what tuios wrote to its terminal, by
-// terminal, so the mouse helpers can tell which form tuios asked for.
 var dndHostOut sync.Map
 
-// hostInPixelMode reports whether tuios has put its terminal in SGR-pixel
-// mouse mode (1016), which it does while a pane that asked for pixel
-// reports is on screen. The dnd kitten is such a pane. A real terminal then
-// reports the pointer in pixels; the harness has to as well, or tuios reads
-// cell 104 as pixel 104, which is cell 13.
 func hostInPixelMode(term *tuitest.Terminal) bool {
 	v, ok := dndHostOut.Load(term)
 	if !ok {
@@ -122,8 +78,6 @@ func hostInPixelMode(term *tuitest.Terminal) bool {
 	return strings.LastIndex(s, "\x1b[?1016h") > strings.LastIndex(s, "\x1b[?1016l")
 }
 
-// dndMouse sends one report at a cell, in pixels at the cell's centre when
-// the host is in pixel mode.
 func dndMouse(t *testing.T, term *tuitest.Terminal, what string, action tuitest.MouseAction, col, row int) {
 	t.Helper()
 	ev := tuitest.MouseEvent{Col: col, Row: row, Button: tuitest.MouseLeft, Action: action}
@@ -133,9 +87,6 @@ func dndMouse(t *testing.T, term *tuitest.Terminal, what string, action tuitest.
 	sendMouse(t, term, what, ev)
 }
 
-// peerSource and peerTarget are the shell commands that run a dndpeer in a
-// raw pane, logging to log. The source offers files; env goes in front of
-// the peer, after the stty that the raw pane needs.
 func peerSource(bin, log, env string, files ...string) string {
 	quoted := make([]string, len(files))
 	for i, f := range files {
@@ -148,8 +99,6 @@ func peerTarget(bin, log string) string {
 	return "stty raw -echo; " + bin + " target " + log
 }
 
-// dragAcross presses in from, carries the pointer a cell at a time to to, and
-// returns without releasing. The frame mid-drag is saved as an artifact.
 func dragAcross(t *testing.T, term *tuitest.Terminal, fromX, fromY, toX, toY int, art string) {
 	t.Helper()
 	dndMouse(t, term, "press", tuitest.MousePress, fromX, fromY)
@@ -161,7 +110,6 @@ func dragAcross(t *testing.T, term *tuitest.Terminal, fromX, fromY, toX, toY int
 	saveArtifact(t, term, art, "mid-drag")
 }
 
-// dropAt releases the button at a cell.
 func dropAt(t *testing.T, term *tuitest.Terminal, col, row int) {
 	t.Helper()
 	dndMouse(t, term, "release", tuitest.MouseRelease, col, row)
@@ -188,8 +136,6 @@ func TestDnDBetweenPanes(t *testing.T) {
 		toX, toY := right.X+right.Width/2, right.Y+right.Height/2
 		dragAcross(t, term, fromX, fromY, toX, toY, art)
 
-		// The label names the files and the pane they come from, so the person
-		// can check both before letting go.
 		if s := term.Screen().Text(); !strings.Contains(s, "a.txt, b.txt from ") {
 			t.Errorf("the drag label is not on screen mid-drag\n%s", term.Snapshot())
 		}
@@ -200,8 +146,6 @@ func TestDnDBetweenPanes(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(art, "source.log"), []byte(src), 0o644)
 		_ = os.WriteFile(filepath.Join(art, "target.log"), []byte(got), 0o644)
 
-		// The source: the gesture at the pressed cell, the start accepted, the
-		// target's acceptance, the drop, the finish.
 		for _, want := range []string{
 			"recv t=o o=0 x=", "sent offer+start", `recv t=E o=0 x=0 y=0 m=false payload="OK"`,
 			"recv t=e o=0 x=1 y=0", "recv t=e o=1 x=2", "recv t=e o=0 x=3", "finished canceled=0",
@@ -210,7 +154,6 @@ func TestDnDBetweenPanes(t *testing.T) {
 				t.Errorf("the source log lacks %q:\n%s", want, src)
 			}
 		}
-		// The target: a move with the MIME list, the drop, the URI list.
 		uris := "file://" + filepath.Join(dir, "a.txt") + "\\r\\nfile://" + filepath.Join(dir, "b.txt")
 		for _, want := range []string{
 			`recv t=m o=3 x=`, `payload="text/uri-list text/plain"`, "recv t=M o=1", `data x=1 err=<nil> "` + uris + `"`,
@@ -232,8 +175,6 @@ func TestDnDBetweenPanes(t *testing.T) {
 			t.Fatal(err)
 		}
 		srcLog, out := filepath.Join(dir, "source.log"), filepath.Join(dir, "pasted")
-		// A reader with bracketed paste on, as a shell or an agent has it: the
-		// paths must arrive bracketed, so the program knows they were not typed.
 		runInPane(t, base, session, right,
 			"stty raw -echo; printf '\\033[?2004h'; printf 'SINK%sREADY\\n' ''; cat > "+out, "SINKREADY")
 		runInPane(t, base, session, left, peerSource(bin, srcLog, "", filepath.Join(dir, "one.txt")), "DNDPEER-READY")
@@ -242,8 +183,6 @@ func TestDnDBetweenPanes(t *testing.T) {
 		dragAcross(t, term, left.X+4, left.Y+5, toX, toY, art)
 		dropAt(t, term, toX, toY)
 
-		// The path and a trailing space, as the rail's drop pastes it, so the
-		// next word typed is an argument of its own.
 		want := "\x1b[200~" + filepath.Join(dir, "one.txt") + " \x1b[201~"
 		pasted := waitFile(t, out, func(s string) bool { return strings.Contains(s, "\x1b[201~") }, "the pane never got the paste")
 		if pasted != want {
@@ -256,12 +195,6 @@ func TestDnDBetweenPanes(t *testing.T) {
 	})
 
 	t.Run("dropped text goes only into a pane with bracketed paste on", func(t *testing.T) {
-		// A source that offers text/plain alone, two lines of it. A shell
-		// without bracketed paste would run the first line as typed, so the
-		// drop is refused there and nothing arrives; once the reader turns
-		// bracketed paste on, the text arrives inside the marks. The same
-		// reader script in two acts: a cat that times out, then a cat with
-		// the mode on.
 		term, base, session, left, right := dndBoard(t)
 		dir := t.TempDir()
 		srcLog, out1, out2 := filepath.Join(dir, "source.log"), filepath.Join(dir, "without"), filepath.Join(dir, "with")
@@ -294,14 +227,8 @@ func TestDnDBetweenPanes(t *testing.T) {
 	})
 
 	t.Run("a drop on a fish pane is quoted for fish", func(t *testing.T) {
-		// The fallback goes through the rail's drop path, which quotes for
-		// the program that reads the paste. fish reads \' inside single
-		// quotes, where a POSIX shell wants '\''. Needs fish, as the other
-		// fish tests of the suite do.
 		fish := needTool(t, "fish")
 		term, base, session, left, right := dndBoard(t)
-		// A short directory: the pasted path has to fit on one line of the
-		// pane for the screen to show it whole.
 		dir, err := os.MkdirTemp("", "dnd")
 		if err != nil {
 			t.Fatal(err)
@@ -312,15 +239,11 @@ func TestDnDBetweenPanes(t *testing.T) {
 			t.Fatal(err)
 		}
 		srcLog := filepath.Join(t.TempDir(), "source.log")
-		// fish at its prompt, with a marker printed once it is up. The prompt
-		// is fixed and short: the default one holds the user and host names,
-		// and a long host name wraps the pasted path onto a second line.
 		runInPane(t, base, session, right, "exec "+fish+" -C 'set -g fish_greeting; function fish_prompt; echo -n \"> \"; end; echo FISH\"\"READY'", "FISHREADY")
 		runInPane(t, base, session, left, peerSource(bin, srcLog, "", file), "DNDPEER-READY")
 		toX, toY := right.X+right.Width/2, right.Y+right.Height/2
 		dragAcross(t, term, left.X+4, left.Y+5, toX, toY, artifactDir(t))
 		dropAt(t, term, toX, toY)
-		// fish shows the pasted text on its command line.
 		waitCapture(t, base, session, right.ID, `'`+strings.ReplaceAll(file, "'", `\'`)+`'`)
 		src := waitFile(t, srcLog, func(s string) bool { return strings.Contains(s, "finished") }, "the source never heard the drag finish")
 		if !strings.Contains(src, "finished canceled=0") {
@@ -338,12 +261,9 @@ func TestDnDBetweenPanes(t *testing.T) {
 		runInPane(t, base, session, right, peerTarget(bin, dstLog), "DNDPEER-READY")
 		runInPane(t, base, session, left, peerSource(bin, srcLog, "DNDPEER_IGNORE_GESTURES=1 ", filepath.Join(dir, "one.txt")), "DNDPEER-READY")
 		toX, toY := right.X+right.Width/2, right.Y+right.Height/2
-		// The first gesture lands on nothing the program drags: it stays
-		// silent, and the button comes up.
 		dragAcross(t, term, left.X+4, left.Y+5, left.X+12, left.Y+9, artifactDir(t))
 		dropAt(t, term, left.X+12, left.Y+9)
 		waitFile(t, srcLog, func(s string) bool { return strings.Contains(s, "ignored gesture") }, "the source never saw the first gesture")
-		// The second gesture is a new drag, not a continuation of the first.
 		dragAcross(t, term, left.X+4, left.Y+6, toX, toY, artifactDir(t))
 		dropAt(t, term, toX, toY)
 		waitFile(t, dstLog, func(s string) bool { return strings.Contains(s, "data x=1") }, "the target never got the drop data of the second gesture")
@@ -361,8 +281,6 @@ func TestDnDBetweenPanes(t *testing.T) {
 		toX, toY := right.X+right.Width/2, right.Y+right.Height/2
 		dragAcross(t, term, left.X+4, left.Y+5, toX, toY, artifactDir(t))
 		dropAt(t, term, toX, toY)
-		// The press and the motion reach the source as mouse reports, which
-		// is what a terminal without the protocol does with them.
 		src := waitFile(t, srcLog, func(s string) bool { return strings.Contains(s, "mouse") }, "the source never got the press as a mouse report")
 		time.Sleep(time.Second)
 		b, _ := os.ReadFile(srcLog)
@@ -462,8 +380,6 @@ func TestDnDLabelNamesEachPathOfALine(t *testing.T) {
 	}
 
 	t.Run("a line with a space starts the desktop drag", func(t *testing.T) {
-		// The emulated terminal of TestDnDBridgeWithAnEmulatedTerminal: the
-		// test answers the probe and sends the gesture as kitty would.
 		term, base, session, left, _ := dndBoardWith(t, deskConfig)
 		srcLog := filepath.Join(t.TempDir(), "source.log")
 		waitHostWrote(t, term, osc72("t=q"), "the probe")
@@ -485,8 +401,6 @@ func TestDnDLabelNamesEachPathOfALine(t *testing.T) {
 			t.Errorf("save host-wrote: %v", err)
 		}
 
-		// The drag image the client wrote ahead of the start: t=p with x=-1,
-		// base64 in chunks.
 		wrote := hostWrote(term)
 		var enc strings.Builder
 		for msg := range strings.SplitSeq(wrote[:strings.Index(wrote, "\x1b]72;t=P")], "\x1b]72;") {
@@ -519,8 +433,6 @@ func TestDnDRealPrograms(t *testing.T) {
 		t.Skip("TUIOS_E2E_YAZI is not set")
 	}
 
-	// yaziIn starts yazi in a pane on dir and returns the screen row and
-	// column of the file to drag.
 	yaziIn := func(t *testing.T, term *tuitest.Terminal, base, session string, pane winRect, home, dir string) (int, int) {
 		t.Helper()
 		runInPane(t, base, session, pane, fmt.Sprintf("cd %s && HOME=%s %s", dir, home, yazi), "drag-me.txt")
@@ -574,7 +486,6 @@ func TestDnDRealPrograms(t *testing.T) {
 	})
 }
 
-// buildDnDPeer compiles the protocol peer once per test binary.
 func buildDnDPeer(t *testing.T) string {
 	t.Helper()
 	dndPeerOnce.Do(func() {
@@ -625,7 +536,6 @@ func TestDnDRegistrationOutlivesTheClient(t *testing.T) {
 	requireReal(t, "perf or external program, env-gated")
 	bin := buildDnDPeer(t)
 
-	// peers starts a target in the right pane and a source in the left one.
 	peers := func(t *testing.T, base, session string, left, right winRect) (dir, srcLog, dstLog string) {
 		t.Helper()
 		dir = t.TempDir()
@@ -637,7 +547,6 @@ func TestDnDRegistrationOutlivesTheClient(t *testing.T) {
 		runInPane(t, base, session, left, peerSource(bin, srcLog, "", filepath.Join(dir, "a.txt")), "DNDPEER-READY")
 		return dir, srcLog, dstLog
 	}
-	// another attaches one more client of the board's size, in terminal mode.
 	another := func(t *testing.T, base, session string, args ...string) *tuitest.Terminal {
 		t.Helper()
 		term := dndClient(t, base, nil, append([]string{"attach", session}, args...)...)
@@ -652,8 +561,6 @@ func TestDnDRegistrationOutlivesTheClient(t *testing.T) {
 	t.Run("a client attached after the programs started", func(t *testing.T) {
 		_, base, session, left, right := dndBoard(t)
 		dir, srcLog, dstLog := peers(t, base, session, left, right)
-		// The first client goes; a new one comes, which never saw the peers
-		// register.
 		term := another(t, base, session, "-d")
 		dragAcross(t, term, left.X+4, left.Y+5, right.X+right.Width/2, right.Y+right.Height/2, artifactDir(t))
 		dropAt(t, term, right.X+right.Width/2, right.Y+right.Height/2)
@@ -671,18 +578,10 @@ func TestDnDRegistrationOutlivesTheClient(t *testing.T) {
 		first, base, session, left, right := dndBoard(t)
 		second := another(t, base, session)
 		_, srcLog, dstLog := peers(t, base, session, left, right)
-		// The drag is made in the first client, still in terminal mode from
-		// the board; the second one sees every byte the peers write and must
-		// stay out of it.
 		dragAcross(t, first, left.X+4, left.Y+5, right.X+right.Width/2, right.Y+right.Height/2, artifactDir(t))
 		dropAt(t, first, right.X+right.Width/2, right.Y+right.Height/2)
 		waitFile(t, dstLog, func(s string) bool { return strings.Contains(s, "data x=1") }, "the target never got the drop data")
 		waitFile(t, srcLog, func(s string) bool { return strings.Contains(s, "finished") }, "the source never heard the drag finish")
-		// A second answer to the query, or an error from the client that
-		// did not make the drag, would have been written before the drop
-		// finished: both clients read the same stream, and the second one
-		// got every message long before the first one's drag ended. The
-		// pause is for what is still in flight through the daemon.
 		alive(t, second, "the second client after the drag")
 		time.Sleep(time.Second)
 		b, _ := os.ReadFile(dstLog)
@@ -739,7 +638,6 @@ func TestDnDRefusesPanesOnAnotherMachine(t *testing.T) {
 		t.Fatal(err)
 	}
 	srcLog, dstLog := filepath.Join(dir, "source.log"), filepath.Join(dir, "target.log")
-	// The session's first window and one more: two tiled panes side by side.
 	if out, err := tuiosCLI(t, remote, "new-window", "dst", "-s", session); err != nil {
 		t.Fatalf("new-window on the far machine: %v\n%s", err, out)
 	}
@@ -761,7 +659,6 @@ func TestDnDRefusesPanesOnAnotherMachine(t *testing.T) {
 	}
 	windowManagementMode(t, term)
 	enterTerminalMode(t, term)
-	// Two tiled panes side by side in 140 columns: the source on the left.
 	dragAcross(t, term, 20, 12, 110, 12, artifactDir(t))
 	dropAt(t, term, 110, 12)
 	src := waitFile(t, srcLog, func(s string) bool { return strings.Contains(s, "mouse") }, "the source never got the press as a mouse report")
@@ -804,7 +701,6 @@ func TestDnDRefusesAPaneHostedElsewhere(t *testing.T) {
 	ssh := writeFakeSSHTo(t, base, remote)
 	writeConfig(t, base, dndConfig+"[hosts.build]\naddr = \"someone@buildbox\"\ncommand = \""+tuiosBin+"\"\nconnect_timeout = 5\n")
 	writeConfig(t, remote, dndConfig)
-	// build's daemon has to be up for a window to be opened there.
 	if out, err := tuiosCLI(t, remote, "new", "far", "--detach"); err != nil {
 		t.Fatalf("start build's daemon: %v\n%s", err, out)
 	}
@@ -820,9 +716,6 @@ func TestDnDRefusesAPaneHostedElsewhere(t *testing.T) {
 	killDaemon(t, base)
 	waitBoot(t, term)
 	waitForHostListing(t, base, func(s string) bool { return containsAll(s, "build", "up") }, "the daemon never reported build up")
-	// A local pane with a peer that offers and takes, and a pane on build
-	// with the same peer. The far machine shares this file system, so the
-	// peer there logs into the same directory.
 	if out, err := tuiosCLIEnv(t, base, env, "new-window", "near", "-s", session, "--", "sh", "-c", peerSource(bin, localLog, "", filepath.Join(dir, "one.txt"))); err != nil {
 		t.Fatalf("create the local window: %v\n%s", err, out)
 	}
@@ -842,23 +735,18 @@ func TestDnDRefusesAPaneHostedElsewhere(t *testing.T) {
 	if !strings.Contains(term.Screen().Text(), "build:faraway") {
 		t.Fatalf("the far pane is not marked as on build:\n%s", term.Snapshot())
 	}
-	// Which rectangle is the far pane: the one whose title carries the host.
 	farRow := strings.Split(term.Screen().Text(), "\n")[far.Y+far.Height-1]
 	if !strings.Contains(farRow, "build:faraway") {
 		near, far = far, near
 	}
 	enterTerminalMode(t, term)
 
-	// Local to hosted: the hosted pane is no target, so the drop is
-	// cancelled and nothing reaches it.
 	dragAcross(t, term, near.X+4, near.Y+5, far.X+far.Width/2, far.Y+far.Height/2, artifactDir(t))
 	dropAt(t, term, far.X+far.Width/2, far.Y+far.Height/2)
 	local := waitFile(t, localLog, func(s string) bool { return strings.Contains(s, "finished") }, "the local source never heard its drag end")
 	if !strings.Contains(local, "finished canceled=1") {
 		t.Errorf("a drop onto a pane hosted elsewhere was not cancelled:\n%s", local)
 	}
-	// Hosted to local: the press is the hosted program's, as a mouse report,
-	// and no gesture follows.
 	dragAcross(t, term, far.X+4, far.Y+5, near.X+near.Width/2, near.Y+near.Height/2, artifactDir(t))
 	dropAt(t, term, near.X+near.Width/2, near.Y+near.Height/2)
 	farOut := waitFile(t, farLog, func(s string) bool { return strings.Contains(s, "mouse") }, "the hosted source never got the press as a mouse report")
@@ -868,11 +756,6 @@ func TestDnDRefusesAPaneHostedElsewhere(t *testing.T) {
 	if strings.Contains(farOut, "recv t=o") || strings.Contains(farOut, "recv t=m") || strings.Contains(farOut, "recv t=M") {
 		t.Errorf("a pane hosted elsewhere took part in a drag:\n%s", farOut)
 	}
-	// Nothing answers the hosted program's query: the daemon here relays
-	// the pane and does not speak for it, and the daemon on build runs the
-	// process without an emulator of its own. To the program this is a
-	// terminal without the protocol, which is what a pane that takes no
-	// part should look like.
 	if n := strings.Count(farOut, "recv t=q"); n != 0 {
 		t.Errorf("the hosted program got %d answers to its query, want none:\n%s", n, farOut)
 	}
@@ -902,8 +785,6 @@ func TestDnDRegistrationEndsWithItsProgram(t *testing.T) {
 	requireReal(t, "perf or external program, env-gated")
 	bin := buildDnDPeer(t)
 
-	// doomed starts a target peer in pane whose pid is written to a file, so
-	// the test can kill it, and returns that file.
 	doomed := func(t *testing.T, base, session string, pane winRect, dir string) string {
 		t.Helper()
 		pidFile := filepath.Join(dir, "target.pid")
@@ -927,8 +808,6 @@ func TestDnDRegistrationEndsWithItsProgram(t *testing.T) {
 			t.Fatalf("kill the target: %v", err)
 		}
 	}
-	// dropOnReader starts a reader in the pane the dead peer held, drags a
-	// file from the source on the left onto it and returns what it read.
 	dropOnReader := func(t *testing.T, term *tuitest.Terminal, base, session string, left, right winRect, dir string) string {
 		t.Helper()
 		out := filepath.Join(dir, "pasted")

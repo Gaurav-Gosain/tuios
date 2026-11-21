@@ -11,13 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// paletteTitle is the header the command palette overlay renders. Asserting on
-// it proves the palette is actually on screen, not merely that a state flag was
-// flipped.
 const paletteTitle = "Command Palette"
 
-// waitPaletteOpen fails unless the command palette overlay is on screen within
-// uiTimeout.
 func waitPaletteOpen(t *testing.T, term *tuitest.Terminal, when string) {
 	t.Helper()
 	if err := term.WaitForText(paletteTitle, uiTimeout); err != nil {
@@ -25,7 +20,6 @@ func waitPaletteOpen(t *testing.T, term *tuitest.Terminal, when string) {
 	}
 }
 
-// waitPaletteClosed fails unless the palette overlay leaves the screen.
 func waitPaletteClosed(t *testing.T, term *tuitest.Terminal, when string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -35,7 +29,6 @@ func waitPaletteClosed(t *testing.T, term *tuitest.Terminal, when string) {
 	}
 }
 
-// closePalette dismisses the palette with esc and waits for it to disappear.
 func closePalette(t *testing.T, term *tuitest.Terminal, when string) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Esc); err != nil {
@@ -44,53 +37,29 @@ func closePalette(t *testing.T, term *tuitest.Terminal, when string) {
 	waitPaletteClosed(t, term, when)
 }
 
-// kittyCtrlP is the Kitty keyboard protocol CSI u encoding of Ctrl+P:
-// ESC [ 112 ; 5 u  (112 = 'p', modifier 5 = 1 + ctrl-bit(4)). A real
-// terminal that has negotiated the Kitty keyboard protocol sends this instead
-// of the legacy 0x10 byte. bubbletea parses it into a KeyPressMsg regardless of
-// whether tuios itself requested the enhancement, so sending the raw bytes
-// reproduces exactly what the owner's terminal delivers.
 const kittyCtrlP = "\x1b[112;5u"
 
-// legacyCtrlP is the legacy control byte for Ctrl+P (0x10, DLE).
 var legacyCtrlP = tuitest.Ctrl('p')
 
-// numLockCtrlP is Ctrl+P under the Kitty keyboard protocol with Num Lock
-// active: ESC [ 112 ; 133 u. The modifier field 133 = 1 + ctrl(4) + num_lock(128).
-// Num Lock is the boot default on most desktop keyboards, so this is the
-// real-world encoding the owner's terminal delivers. The decoder keeps the Num
-// Lock bit on the event (Mod = ModCtrl|ModNumLock), which an exact Mod == ModCtrl
-// check missed; this case guards the palette still opens.
 const numLockCtrlP = "\x1b[112;133u"
 
-// attachClient creates a detached daemon session with one window and attaches a
-// client. This is the owner's real setup: a daemon-backed session reached with
-// `tuios attach`. The returned client is settled in window-management mode with
-// exactly one window focused.
 func attachClient(t *testing.T) *tuitest.Terminal {
 	t.Helper()
 	term, _ := attachClientBase(t)
 	return term
 }
 
-// attachClientBase is attachClient but also returns the isolation root, so tests
-// that drive the same daemon over the CLI (e.g. `tuios tape exec`) can reach it.
 func attachClientBase(t *testing.T) (*tuitest.Terminal, string) {
 	t.Helper()
 	return attachClientBaseOut(t, nil)
 }
 
-// attachClientBaseOut is attachClientBase with a copy of what tuios writes to
-// the host going to out, when out is not nil.
 func attachClientBaseOut(t *testing.T, out io.Writer) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
 	return attachClientIn(t, base, out), base
 }
 
-// attachClientIn is attachClientBaseOut on a base the caller made, so it can
-// put files the daemon reads at start, such as a harness manifest, in place
-// first.
 func attachClientIn(t *testing.T, base string, out io.Writer) *tuitest.Terminal {
 	t.Helper()
 	killDaemon(t, base)
@@ -105,9 +74,6 @@ func attachClientIn(t *testing.T, base string, out io.Writer) *tuitest.Terminal 
 	}, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
-	// An attached client to a session with a window boots into terminal mode;
-	// normalise to window-management mode so the two mode-specific tests share a
-	// known starting point.
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("normalise to window mode: %v", err)
 	}
@@ -117,8 +83,6 @@ func attachClientIn(t *testing.T, base string, out io.Writer) *tuitest.Terminal 
 	return term
 }
 
-// attachTerminalModeClient attaches a client and puts it in terminal mode, the
-// mode the owner types the shell in and where they report Ctrl+P failing.
 func attachTerminalModeClient(t *testing.T) *tuitest.Terminal {
 	t.Helper()
 	term := attachClient(t)
@@ -148,8 +112,6 @@ func TestCtrlPOpensPaletteTerminalModeKitty(t *testing.T) {
 	}
 	waitPaletteOpen(t, term, "on kitty ctrl+p in terminal mode")
 
-	// The palette must not have leaked a history-back / ^P into the shell. The
-	// pane behind the overlay must show no stray ^P text.
 	if strings.Contains(term.Screen().Text(), "^P") {
 		t.Fatalf("ctrl+p leaked to the shell (found ^P on screen)\n%s", term.Snapshot())
 	}
@@ -177,7 +139,7 @@ func TestCtrlPOpensPaletteTerminalModeNumLock(t *testing.T) {
 
 // TestCtrlPOpensPaletteWindowModeNumLock is the window-management-mode counterpart.
 func TestCtrlPOpensPaletteWindowModeNumLock(t *testing.T) {
-	term := attachClient(t) // already in window-management mode
+	term := attachClient(t)
 	if err := term.SendKeys(tuitest.Key(numLockCtrlP)); err != nil {
 		t.Fatalf("send numlock ctrl+p: %v", err)
 	}
@@ -189,7 +151,7 @@ func TestCtrlPOpensPaletteWindowModeNumLock(t *testing.T) {
 // TestCtrlPOpensPaletteWindowModeKitty checks the window-management-mode path
 // under the Kitty encoding.
 func TestCtrlPOpensPaletteWindowModeKitty(t *testing.T) {
-	term := attachClient(t) // already in window-management mode
+	term := attachClient(t)
 	if err := term.SendKeys(tuitest.Key(kittyCtrlP)); err != nil {
 		t.Fatalf("send kitty ctrl+p: %v", err)
 	}
@@ -200,7 +162,7 @@ func TestCtrlPOpensPaletteWindowModeKitty(t *testing.T) {
 
 // TestCtrlPOpensPaletteWindowModeLegacy is the legacy baseline for window mode.
 func TestCtrlPOpensPaletteWindowModeLegacy(t *testing.T) {
-	term := attachClient(t) // already in window-management mode
+	term := attachClient(t)
 	if err := term.SendKeys(legacyCtrlP); err != nil {
 		t.Fatalf("send legacy ctrl+p: %v", err)
 	}
@@ -215,12 +177,9 @@ func TestCtrlPOpensPaletteWindowModeLegacy(t *testing.T) {
 // leader chord lives.
 func TestLeaderPPrevWindowStillWorks(t *testing.T) {
 	term := attachTerminalModeClient(t)
-	// leader+p is previous-window; with a single window it is a no-op but must
-	// not open the palette.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "p"); err != nil {
 		t.Fatalf("send leader+p: %v", err)
 	}
-	// Give it a beat, then assert the palette did not open.
 	time.Sleep(500 * time.Millisecond)
 	if strings.Contains(term.Screen().Text(), paletteTitle) {
 		t.Fatalf("leader+p wrongly opened the command palette\n%s", term.Snapshot())
@@ -231,7 +190,7 @@ func TestLeaderPPrevWindowStillWorks(t *testing.T) {
 // TestLeaderShiftPOpensPalette guards the configured palette binding (leader+P)
 // still opens the palette, so the fix does not regress the second binding.
 func TestLeaderShiftPOpensPalette(t *testing.T) {
-	term := attachClient(t) // window-management mode
+	term := attachClient(t)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "P"); err != nil {
 		t.Fatalf("send leader+P: %v", err)
 	}
@@ -249,10 +208,8 @@ func TestLeaderShiftPOpensPalette(t *testing.T) {
 //
 // FAILS on the pre-fix binary (palette never opens); PASSES after the fix.
 func TestCtrlPAfterTapeScript(t *testing.T) {
-	term, base := attachClientBase(t) // window-management mode
+	term, base := attachClientBase(t)
 
-	// A trivial tape: one command that completes quickly. Running it flips the
-	// client into script mode.
 	tapePath := filepath.Join(t.TempDir(), "trivial.tape")
 	if err := os.WriteFile(tapePath, []byte("Sleep 200ms\n"), 0o600); err != nil {
 		t.Fatalf("write tape: %v", err)
@@ -261,9 +218,6 @@ func TestCtrlPAfterTapeScript(t *testing.T) {
 		t.Fatalf("tape exec: %v: %s", err, out)
 	}
 
-	// The tape has finished (tape exec blocks until the daemon reports done).
-	// Wait past the completion-indicator linger so a fixed binary has left
-	// script mode; a pre-fix binary is still stuck in it.
 	time.Sleep(scriptDoneLingerE2E + time.Second)
 
 	if err := term.SendKeys(legacyCtrlP); err != nil {
@@ -274,7 +228,4 @@ func TestCtrlPAfterTapeScript(t *testing.T) {
 	alive(t, term, "after ctrl+p following a tape script")
 }
 
-// scriptDoneLingerE2E mirrors app.scriptDoneLinger (2s), the window the "DONE"
-// indicator is shown before script mode is left. Kept as a local literal so the
-// e2e module needs no dependency on internal packages.
 const scriptDoneLingerE2E = 2 * time.Second

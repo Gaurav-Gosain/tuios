@@ -11,44 +11,20 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A session on another machine, drawn by this client.
-//
-// The other machine is real in every way that matters: a second daemon with
-// its own runtime directory, its own sessions and its own shells, reached only
-// over the hub daemon's link. The ssh stand-in below switches the XDG
-// directories to that machine's before it runs the command, so `ssh build
-// tuios stdio-proxy` reaches the second daemon's socket and nothing else. No
-// network is used and nothing reads the developer's ssh configuration.
-//
-// What would pass a weaker test and fail these: a --host flag that still runs
-// ssh in a pane (the session would be drawn by a nested client and the hub's
-// daemon would hold a second window), a rail row that opens a pane instead of
-// switching (same), or a relay that carries the attach and not the keystrokes
-// (the echo would never come back).
-
-// writeFakeSSHTo puts an ssh stand-in in dir whose far side is the daemon
-// rooted at remoteBase. Every XDG directory is switched before the command
-// runs, so the proxy it starts dials that daemon's socket.
 func writeFakeSSHTo(t *testing.T, dir, remoteBase string) string {
 	t.Helper()
 	path := filepath.Join(dir, "fake-ssh-remote")
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\n")
 	b.WriteString("while [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) shift 2 ;;\n    -T) shift ;;\n    -t) shift ;;\n    --) shift; break ;;\n    *) break ;;\n  esac\ndone\n")
-	b.WriteString("shift\n") // the address
+	b.WriteString("shift\n")
 	for _, key := range xdgKeys {
-		// Through xdgDir, so the far daemon's socket is short enough to bind
-		// on this machine too. The stand-in is what puts the second daemon's
-		// environment in place, so a path decided anywhere else never reaches
-		// it. See xdgDir.
 		b.WriteString("export ")
 		b.WriteString(key)
 		b.WriteString("=")
 		b.WriteString(xdgDir(remoteBase, key))
 		b.WriteString("\n")
 	}
-	// Its pid is the far command's, after the exec: farProxies finds the
-	// link's proxy under it.
 	b.WriteString(recordFakeSSHPid(remoteBase))
 	b.WriteString("exec /bin/sh -c \"$*\"\n")
 	if err := os.WriteFile(path, []byte(b.String()), 0o700); err != nil {
@@ -57,22 +33,14 @@ func writeFakeSSHTo(t *testing.T, dir, remoteBase string) string {
 	return path
 }
 
-// fakeSSHPids is the file the ssh stand-in for the machine at remoteBase
-// writes its pid to, one line for each link it carries.
 func fakeSSHPids(remoteBase string) string {
 	return filepath.Join(remoteBase, "fake-ssh.pids")
 }
 
-// recordFakeSSHPid is the line an ssh stand-in runs, for the far machine at
-// remoteBase, before it execs the far command.
 func recordFakeSSHPid(remoteBase string) string {
 	return "echo $$ >> " + posixQuote(fakeSSHPids(remoteBase)) + "\n"
 }
 
-// remoteMachine is the second daemon: its isolation root, with the XDG
-// directories made and a cleanup that kills it. The root is kept for the
-// test, so breakTheLink and freezeTheLink reach this test's links and no
-// other's.
 func remoteMachine(t *testing.T) string {
 	t.Helper()
 	base := t.TempDir()
@@ -84,8 +52,6 @@ func remoteMachine(t *testing.T) string {
 	return base
 }
 
-// remotesOfTests is the far machines each running test made, keyed by the
-// top-level test's name, so a subtest finds the machines its parent made.
 var remotesOfTests = &remoteRegistry{byTest: map[string][]string{}}
 
 type remoteRegistry struct {
@@ -113,11 +79,6 @@ func (r *remoteRegistry) add(t *testing.T, base string) {
 	})
 }
 
-// testProxies is every stdio-proxy that serves a far machine this test made.
-//
-// The suite runs in parallel processes on one machine, so a match on the
-// binary's command line, which every link of every test shares, ends links
-// of tests that have nothing to do with this one.
 func testProxies(t *testing.T) []int {
 	t.Helper()
 	remotesOfTests.mu.Lock()
@@ -130,8 +91,6 @@ func testProxies(t *testing.T) []int {
 	return pids
 }
 
-// writeOneHostConfig names one host, build, that the stand-in routes to the
-// remote machine.
 func writeOneHostConfig(t *testing.T, base, tuiosPath string) {
 	t.Helper()
 	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
@@ -147,15 +106,12 @@ func writeOneHostConfig(t *testing.T, base, tuiosPath string) {
 	}
 }
 
-// remoteSessionsListed is what the remote daemon says its sessions are.
 func remoteSessionsListed(t *testing.T, remoteBase string) string {
 	t.Helper()
 	out, _ := tuiosCLI(t, remoteBase, "ls")
 	return out
 }
 
-// noNestedClient fails the test if a tuios client is running on the far side
-// for the session, which is what the old ssh-in-a-pane path leaves behind.
 func noNestedClient(t *testing.T, session string) {
 	t.Helper()
 	for _, line := range commandLinesContaining(t, tuiosBin) {
@@ -174,22 +130,18 @@ func TestAttachOnAHostIsDrawnByThisClient(t *testing.T) {
 	writeOneHostConfig(t, base, tuiosBin)
 	env := []string{"TUIOS_SSH=" + ssh}
 
-	// The session lives on the other machine and nowhere else.
 	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
 		t.Fatalf("create the far session: %v\n%s", err, out)
 	}
 
-	// The command a person types, in a plain terminal.
 	term := startIn(t, base, startOpts{args: []string{"attach", "--host", "build", "far-shell"}, env: env})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "╰──")
 	}, bootTimeout); err != nil {
 		t.Fatalf("ASSERTION: the client never drew the far session: %v\n%s", err, term.Snapshot())
 	}
-	// Drawn by this client, not by one on the far side.
 	noNestedClient(t, "far-shell")
 
-	// Keystrokes cross to the far shell and its output crosses back.
 	if err := term.SendKeys("echo REMOTE-$((6*7))\r"); err != nil {
 		t.Fatalf("type into the far shell: %v", err)
 	}
@@ -197,13 +149,10 @@ func TestAttachOnAHostIsDrawnByThisClient(t *testing.T) {
 		t.Fatalf("ASSERTION: the far shell's output never reached this client: %v\n%s", err, term.Snapshot())
 	}
 
-	// The rail names the machine.
 	toggleSidebarViaPalette(t, term)
 	railShows(t, term, hostOpen+" build")
 	t.Logf("a session on build, drawn by this client:\n%s", term.Snapshot())
 
-	// It is the far daemon's session: this machine's daemon does not hold
-	// it, and the far daemon sees a client attached.
 	if out, _ := tuiosCLI(t, base, "ls"); strings.Contains(out, "far-shell") {
 		t.Fatalf("ASSERTION: this machine's daemon holds far-shell, so the session was not attached across the link:\n%s", out)
 	}
@@ -213,9 +162,6 @@ func TestAttachOnAHostIsDrawnByThisClient(t *testing.T) {
 	alive(t, term, "after attaching a session on a host")
 }
 
-// railCurrentIs reports whether the rail marks the session named want as the
-// one this client is on: its row wears the focus mark in the rail's gutter,
-// which is the screen's first column for a left rail.
 func railCurrentIs(s tuitest.Screen, want string) bool {
 	r := railRowOf(s, want)
 	if r < 0 {
@@ -224,7 +170,6 @@ func railCurrentIs(s tuitest.Screen, want string) bool {
 	return strings.HasPrefix(s.Line(r), "▎")
 }
 
-// waitRailCurrent blocks until the rail marks want as the attached session.
 func waitRailCurrent(t *testing.T, term *tuitest.Terminal, want string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railCurrentIs(s, want) }, uiTimeout); err != nil {
@@ -232,7 +177,6 @@ func waitRailCurrent(t *testing.T, term *tuitest.Terminal, want string) {
 	}
 }
 
-// railRows is where each of the named rows is on screen right now.
 func railRows(s tuitest.Screen, wants ...string) map[string]int {
 	out := make(map[string]int, len(wants))
 	for _, w := range wants {
@@ -296,13 +240,11 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 	t.Logf("before the click:\n%s", term.Snapshot())
 	saveFrame(t, term, "rail-switch-before")
 
-	// The click on the remote row.
 	mouseClick(t, term, 3, before["far-shell"], tuitest.MouseLeft, 0)
 	waitRailCurrent(t, term, "far-shell")
 	t.Logf("after the click:\n%s", term.Snapshot())
 	saveFrame(t, term, "rail-switch-after")
 
-	// The proof: every row is where it was, and only the mark moved.
 	after := railRows(term.Screen(), rows...)
 	for _, want := range rows {
 		if after[want] != before[want] {
@@ -313,20 +255,15 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 	if railCurrentIs(term.Screen(), "home") {
 		t.Errorf("ASSERTION: this machine's session is still marked current after the switch:\n%s", term.Snapshot())
 	}
-	// The rail band only: the dock still says "far-shell @ build", which is
-	// the one place the qualifier belongs.
 	if railRowOf(term.Screen(), "@ ") >= 0 {
 		t.Errorf("ASSERTION: the rail still marks the attached machine with @:\n%s", term.Snapshot())
 	}
 
-	// No pane was opened for it on this machine, and no nested client runs.
 	if wl, err := daemonWindows(base, "home"); err == nil && len(wl.Windows) != panesBefore {
 		t.Fatalf("ASSERTION: the switch opened a pane in the local session: %d windows, had %d", len(wl.Windows), panesBefore)
 	}
 	noNestedClient(t, "far-shell")
 
-	// A click on the machine's header folds its group: far-shell leaves the
-	// rail, the header wears the shut mark and says how many it holds.
 	mouseClick(t, term, 3, after[hostOpen+" build"], tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r := railRowOf(s, hostShut+" build")
@@ -340,11 +277,9 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 	t.Logf("with build folded:\n%s", term.Snapshot())
 	saveFrame(t, term, "rail-host-folded")
 
-	// And open again.
 	mouseClick(t, term, 3, after[hostOpen+" build"], tuitest.MouseLeft, 0)
 	railShows(t, term, "far-shell")
 
-	// And back: the local session row under this machine's header.
 	mouseClick(t, term, 3, before["home"], tuitest.MouseLeft, 0)
 	waitRailCurrent(t, term, "home")
 	back := railRows(term.Screen(), rows...)
@@ -356,10 +291,6 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 	}
 	alive(t, term, "after coming back from build")
 
-	// Another client on build holds far-other, so build's attached session is
-	// not the one this client left. far-mark is made after that attach, and
-	// the rail showing it says the host listing in hand is newer than the
-	// attach.
 	if out, err := tuiosCLI(t, remote, "new", "far-other", "--detach"); err != nil {
 		t.Fatalf("create far-other: %v\n%s", err, out)
 	}
@@ -369,13 +300,11 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 	}
 	railShows(t, term, "far-mark")
 
-	// next_host: to build, on the session this client last showed there.
 	if err := term.SendKeys(tuitest.Alt('.')); err != nil {
 		t.Fatalf("press alt+.: %v", err)
 	}
 	waitRailCurrent(t, term, "far-shell")
 	saveFrame(t, term, "next-host")
-	// prev_host: two machines, so it wraps back to this one, on home.
 	if err := term.SendKeys(tuitest.Alt(',')); err != nil {
 		t.Fatalf("press alt+,: %v", err)
 	}

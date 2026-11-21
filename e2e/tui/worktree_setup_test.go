@@ -11,20 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The worktree setup, end to end through the binary a person runs: a
-// throwaway repository, a fake agent named claude that writes a mark when it
-// starts, and setups that wait on a gate file the test creates. The marks
-// say whether, and when, the agent started; worktree ls --json says what the
-// daemon recorded; git says what is left in the repository.
-//
-// Negative controls (NEGATIVE_CONTROLS.md): with undoFailedSetup returning
-// before it removes anything, TestWorktreeSetupSyncFailureRemoves fails on
-// the worktree folder that is still there. With the async agent started only
-// after the setup, as a sync one is, TestWorktreeSetupAsync fails on the
-// agent mark that is missing while the setup runs.
-
-// setupFixture is fanFixture with a fake claude that marks its start in
-// marks, named by the worktree folder, and a gate path the setups wait on.
 func setupFixture(t *testing.T) (base, repo, marks, gate string) {
 	t.Helper()
 	base, repo = fanFixture(t)
@@ -44,14 +30,10 @@ func setupFixture(t *testing.T) (base, repo, marks, gate string) {
 	return base, repo, marks, gate
 }
 
-// gatedSetup prints five lines, waits for the gate file, then prints one
-// more and exits with code.
 func gatedSetup(gate string, code int) string {
 	return fmt.Sprintf("printf 'one\\ntwo\\nthree\\nfour\\nfive\\n'; while [ ! -f '%s' ]; do sleep 0.1; done; echo installed; exit %d", gate, code)
 }
 
-// setupOf is the setup record of session in worktree ls --json, nil when
-// the session has none or is not listed.
 func setupOf(t *testing.T, base, session string) map[string]any {
 	t.Helper()
 	for _, r := range worktreeRows(t, base) {
@@ -63,7 +45,6 @@ func setupOf(t *testing.T, base, session string) map[string]any {
 	return nil
 }
 
-// waitSetup waits until the setup record of session satisfies ok.
 func waitSetup(t *testing.T, base, session, what string, ok func(map[string]any) bool) map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -79,13 +60,11 @@ func waitSetup(t *testing.T, base, session, what string, ok func(map[string]any)
 	}
 }
 
-// marked reports whether the fake agent started in the worktree folder dir.
 func marked(marks, dir string) bool {
 	_, err := os.Stat(filepath.Join(marks, dir))
 	return err == nil
 }
 
-// tailHas reports whether the setup's tail holds want.
 func tailHas(s map[string]any, want string) bool {
 	tail, _ := s["tail"].([]any)
 	for _, l := range tail {
@@ -186,9 +165,6 @@ func TestWorktreeSetupSyncFailureRemoves(t *testing.T) {
 		return strings.TrimSpace(gitOut(t, repo, "branch", "--list", name)) != ""
 	}
 
-	// A new branch, clean: both go. The client attaches while the setup
-	// runs, so the keys the harness sends on attach meet a card no key
-	// hides, and the failure lands on a card nobody has hidden.
 	out, err := tuiosCLI(t, base, "worktree", "new", "feat/broken", "--repo", repo, "--agent", "claude", "--detach", "--setup", gatedSetup(gate, 3))
 	if err != nil {
 		t.Fatalf("worktree new: %v: %s", err, out)
@@ -222,8 +198,6 @@ func TestWorktreeSetupSyncFailureRemoves(t *testing.T) {
 		t.Errorf("worktree ls does not say failed, exit 3: %v\n%s", err, table)
 	}
 
-	// The session stays, with the setup window open on the failure. The
-	// card says what was removed.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "Failed, exit 3") && strings.Contains(text, "removed") && strings.Contains(text, "The setup exited 3")
@@ -232,7 +206,6 @@ func TestWorktreeSetupSyncFailureRemoves(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "setup-failed")
 
-	// A branch that was there before is kept; its worktree goes.
 	gitOut(t, repo, "branch", "feat/old")
 	if out, err := tuiosCLI(t, base, "worktree", "new", "feat/old", "--repo", repo, "--agent", "claude", "--detach", "--setup", "exit 1"); err != nil {
 		t.Fatalf("worktree new feat/old: %v: %s", err, out)
@@ -245,7 +218,6 @@ func TestWorktreeSetupSyncFailureRemoves(t *testing.T) {
 		t.Errorf("the branch feat/old, which was there before, was deleted")
 	}
 
-	// A setup that leaves a change: both are kept.
 	if out, err := tuiosCLI(t, base, "worktree", "new", "feat/dirty", "--repo", repo, "--agent", "claude", "--detach", "--setup", "echo half > half.txt; exit 1"); err != nil {
 		t.Fatalf("worktree new feat/dirty: %v: %s", err, out)
 	}
@@ -263,7 +235,6 @@ func TestWorktreeSetupSyncFailureRemoves(t *testing.T) {
 		t.Errorf("the branch feat/dirty was deleted with a change in its worktree")
 	}
 
-	// No agent started in any of them.
 	time.Sleep(time.Second)
 	for _, d := range []string{"feat-broken", "feat-old", "feat-dirty"} {
 		if marked(marks, d) {
@@ -300,7 +271,6 @@ func TestWorktreeSetupAsync(t *testing.T) {
 		t.Errorf("with the agent up, the record is %v, want running and agent started", s)
 	}
 
-	// The fan's setup fails once the gate opens.
 	out, err = tuiosCLI(t, base, "fan", "1", "--agent", "claude", "--repo", repo, "--name", "try/async", "--setup", gatedSetup(gate, 4), "--setup-async", "Do the thing.")
 	if err != nil {
 		t.Fatalf("fan: %v: %s", err, out)

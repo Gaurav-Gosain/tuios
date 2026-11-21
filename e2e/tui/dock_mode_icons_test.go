@@ -7,15 +7,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// defaultWindowModeIcon is config.DockModeIconWindow, nf-fa-window_restore,
-// spelled out because this module does not import the one under test.
 const defaultWindowModeIcon = "\uf2d2"
 
-// prefixPillIcon is config.DockModeIconPrefix, nf-fa-keyboard: the mode
-// pill's icon while the leader is armed.
 const prefixPillIcon = "\uf11c"
 
-// dockStatusRow is the row that carries the dock's "1:" readout, or -1.
 func dockStatusRow(s tuitest.Screen) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -26,8 +21,6 @@ func dockStatusRow(s tuitest.Screen) int {
 	return -1
 }
 
-// cellColumnOf is the screen column where text starts on row, counting a wide
-// cell as the two columns it takes, or -1 when the row does not carry it.
 func cellColumnOf(s tuitest.Screen, row int, text string) int {
 	cols, _ := s.Size()
 	var line strings.Builder
@@ -53,10 +46,6 @@ func cellColumnOf(s tuitest.Screen, row int, text string) int {
 	return starts[len([]rune(line.String()[:idx]))]
 }
 
-// pillFill is the run of columns on row that share the background of the cell
-// at col: the mode pill's filled body when col is inside its icon. The
-// continuation column of a wide cell carries no style of its own, so it counts
-// as part of the run it follows.
 func pillFill(s tuitest.Screen, row, col int) int {
 	bg := s.Cell(col, row).Bg
 	if bg.Kind == tuitest.ColorDefault {
@@ -77,8 +66,6 @@ func pillFill(s tuitest.Screen, row, col int) int {
 	return right - left + 1
 }
 
-// startDockModeIcons starts tuios with the [appearance] body and waits for a
-// whole dock: one that shows the workspace readout.
 func startDockModeIcons(t *testing.T, appearance string) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -108,7 +95,7 @@ func startDockModeIcons(t *testing.T, appearance string) *tuitest.Terminal {
 // compact. Drawing the empty label as a pill fails hidden. Dropping the width
 // limit in DockModeIconUsable fails too-wide.
 func TestDockModeIconsFollowTheConfig(t *testing.T) {
-	const wide = "終端" // two wide characters, four cells
+	const wide = "終端"
 
 	base := startDockModeIcons(t, "")
 	bs := base.Screen()
@@ -119,8 +106,6 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 	if baseIcon < 0 {
 		t.Fatalf("default: the dock row shows no window mode icon\n%s", bs.Line(baseRow))
 	}
-	// The positive half of every case below: unset draws the built-in icon in
-	// a filled pill of one space, the icon and one space.
 	if got := pillFill(bs, baseRow, baseIcon); got != 3 {
 		t.Fatalf("default: the mode pill fill is %d cells, want 3\n%s", got, bs.Line(baseRow))
 	}
@@ -152,7 +137,6 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 			}
 			saveArtifact(t, term, artifactDir(t), look.name+"-window")
 
-			// Tiling has its own icon, with the next split after it.
 			if err := term.SendKeys("t"); err != nil {
 				t.Fatalf("toggle tiling: %v", err)
 			}
@@ -187,7 +171,6 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 		if strings.Contains(line, defaultWindowModeIcon) {
 			t.Fatalf("the dock row shows the default icon with the icon set empty\n%s", line)
 		}
-		// The workspace pills keep their caps. The mode pill's two go.
 		if caps := dockCapsIn(line); len(caps) != baseCaps-2 {
 			t.Fatalf("the dock row draws %d pill caps, want %d: the default row's less the mode pill's two\n%s", len(caps), baseCaps-2, line)
 		}
@@ -197,13 +180,6 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 		saveArtifact(t, term, artifactDir(t), "hidden")
 	})
 
-	// An armed leader shows on the mode pill: the keyboard icon on a ground
-	// other than window mode's, and no floating PREFIX badge. With
-	// dock_prefix_indicator = "badge" the pill keeps its icon and the badge
-	// comes back.
-	//
-	// Negative control, recorded in NEGATIVE_CONTROLS.md: dropping the
-	// prefixOnPill case in buildDockLeftText fails pill.
 	t.Run("prefix", func(t *testing.T) {
 		for _, tc := range []struct{ name, cfg string }{
 			{"pill", ""},
@@ -252,12 +228,6 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 		}
 	})
 
-	// Issue 931: while tiling is on, the pill shows the next split, V or H,
-	// after the icon, and is two cells wider than the leader's pill, so the
-	// tabs after it move each time the leader is pressed. With
-	// dock_mode_split_letter = false the pill shows the icon alone and the
-	// tabs stay where they are. The default case is the positive half: it
-	// shows the letter and the move the measure has to catch.
 	t.Run("split-letter", func(t *testing.T) {
 		for _, tc := range []struct {
 			name   string
@@ -310,11 +280,6 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 		}
 	})
 
-	// Discussion 1182: while tiling is on, the pill shows the tiling icon in
-	// window mode and in terminal mode, so only the colour tells them apart.
-	// With dock_mode_pill = "input" it shows the window or terminal icon, and
-	// the split letter after it still says tiling is on. The default case is
-	// the positive half: the tiling icon in both modes.
 	t.Run("mode-pill", func(t *testing.T) {
 		icons := "dock_mode_icon_window = \"WM\"\ndock_mode_icon_terminal = \">_\"\ndock_mode_icon_tiling = \"TL\"\n"
 		for _, tc := range []struct{ name, cfg, window, terminal string }{
@@ -362,8 +327,6 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 		}
 	})
 
-	// The word default, written in the file by hand, is the built-in icon,
-	// as it is on the settings page and for set-config.
 	t.Run("default-word", func(t *testing.T) {
 		term := startDockModeIcons(t, "dock_mode_icon_window = \"default\"\n")
 		s := term.Screen()
@@ -373,8 +336,6 @@ func TestDockModeIconsFollowTheConfig(t *testing.T) {
 		}
 	})
 
-	// The settings page lists the three rows: an empty icon reads as no icon,
-	// and an unset one as the word that puts it back.
 	t.Run("settings", func(t *testing.T) {
 		term := startDockModeIcons(t, "dock_mode_icon_window = \"\"\ndock_mode_icon_terminal = \">_\"\n")
 		if err := term.SendKeys(",", "/", "mode icon"); err != nil {

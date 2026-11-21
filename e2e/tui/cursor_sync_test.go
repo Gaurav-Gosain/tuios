@@ -67,7 +67,6 @@ func TestSynchronizedOutputHoldsHostCursor(t *testing.T) {
 	}{
 		{"visible", false, false}, {"hide-during", false, true}, {"show-during", true, false},
 	} {
-		// Baseline and positive controls are ordinary, unsynchronized output.
 		write("\x1b[2J\x1b[HSYNCCOMMITTED\x1b[3;5H\x1b[6 q" + vis(tc.beforeHidden))
 		if err := term.WaitForText("SYNCCOMMITTED", shellTimeout); err != nil {
 			t.Fatal(err)
@@ -81,10 +80,6 @@ func TestSynchronizedOutputHoldsHostCursor(t *testing.T) {
 		stream.mark(tc.name + "-hold")
 		written := time.Now()
 		write("\x1b[?2026h\x1b[HSYNCPARTIAL!!\x1b[13;37H\x1b[2 q" + vis(tc.duringHidden))
-		// get-window is answered by the attached client and reads its raw VT
-		// cursor, independently of the cursor cache presented to the host.
-		// Acknowledge that the partial stream reached that VT before sampling
-		// the hold, so a delayed producer cannot make broken code pass.
 		for {
 			out, err := tuiosCLI(t, base, "get-window", "--session", "e2e-cursor-sync", "--json")
 			if err != nil {
@@ -108,9 +103,6 @@ func TestSynchronizedOutputHoldsHostCursor(t *testing.T) {
 			time.Sleep(5 * time.Millisecond)
 		}
 		started := time.Now()
-		// Several render opportunities, within VT's one-second sync deadline.
-		// Do not wait for the wrong cursor: that would outlive the hold on a
-		// correct build and accidentally test the timeout instead.
 		leaked := false
 		for time.Since(started) < 300*time.Millisecond {
 			if text := term.Screen().Text(); !strings.Contains(text, "SYNCCOMMITTED") || strings.Contains(text, "SYNCPARTIAL!!") {

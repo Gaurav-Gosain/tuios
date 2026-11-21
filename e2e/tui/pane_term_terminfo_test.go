@@ -72,8 +72,6 @@ func TestPaneTermNeedsATerminfoEntry(t *testing.T) {
 		if _, err := exec.LookPath("tic"); err != nil {
 			t.Skip("tic is not installed, so no entry can be compiled into the home")
 		}
-		// The entry's name line is the first line that is not a comment. It
-		// is replaced, so the compiled file has a name no system ships.
 		const name = "tuios-e2e-home-term"
 		lines := strings.Split(string(src), "\n")
 		for i, line := range lines {
@@ -93,12 +91,8 @@ func TestPaneTermNeedsATerminfoEntry(t *testing.T) {
 	})
 }
 
-// paneTermLine is the line the pane's shell prints, read off the capture.
 var paneTermLine = regexp.MustCompile(`TERM=(\S+) COLS=(.*) END`)
 
-// checkPaneTerm makes a session under base from a client whose TERM is
-// clientTerm, and fails unless the pane's TERM is want and tput reads a
-// width from it.
 func checkPaneTerm(t *testing.T, base, clientTerm, want string) {
 	t.Helper()
 	const session = "e2e-pane-term"

@@ -56,14 +56,11 @@ func TestRailRightClickKillsTheSessionUnderThePointer(t *testing.T) {
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "sidebar with both session rows", sidebarHeader, "bravo")
 
-	// Right-click the row of the session this client is NOT in.
 	col, row := findOnScreen(t, term, "bravo")
 	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
 	if err := term.WaitForText("Kill session", uiTimeout); err != nil {
 		t.Fatalf("the row's menu offered no kill: %v\n%s", err, term.Snapshot())
 	}
-	// Opening a menu on a row is not choosing that row: a switch announces
-	// itself, and nothing has been taken yet.
 	if strings.Contains(term.Screen().Text(), "Session: bravo") {
 		t.Fatalf("right-clicking bravo attached this client to it\n%s", term.Snapshot())
 	}
@@ -74,7 +71,6 @@ func TestRailRightClickKillsTheSessionUnderThePointer(t *testing.T) {
 		t.Fatalf("the confirmation did not name the session it would kill: %v\n%s", err, term.Snapshot())
 	}
 
-	// The dialog opens on cancel, so the destructive row takes a second answer.
 	col, row = findOnScreen(t, term, "Close session")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 
@@ -87,8 +83,6 @@ func TestRailRightClickKillsTheSessionUnderThePointer(t *testing.T) {
 	if countWindows(term.Screen()) != 1 {
 		t.Errorf("killing another session disturbed this one's panes\n%s", term.Snapshot())
 	}
-	// The daemon is the authority on which session died, and it is the assertion
-	// that would fail if the row's kill had reached the attached session instead.
 	out, err := tuiosCLI(t, base, "ls")
 	if err != nil {
 		t.Fatalf("list sessions: %v: %s", err, out)
@@ -97,10 +91,6 @@ func TestRailRightClickKillsTheSessionUnderThePointer(t *testing.T) {
 		t.Errorf("the daemon still lists bravo, or lost alpha:\n%s", out)
 	}
 
-	// A script makes and ends a session right after the rail's own kill
-	// (issue #1225): the rail must show each change at once. The kill above
-	// has just sent a listing push, so a push that waits out listingPushGap
-	// (3 seconds) keeps the old list on screen for that long.
 	railShowsWithin := func(what string, want func(string) bool) {
 		t.Helper()
 		start := time.Now()
@@ -130,7 +120,4 @@ func TestRailRightClickKillsTheSessionUnderThePointer(t *testing.T) {
 	alive(t, term, "after killing another session from the rail")
 }
 
-// sessionChangeOnRail is how soon a session made or ended by the CLI must
-// reach the rail: well under listingPushGap (3 seconds), and loose enough for
-// a loaded machine.
 const sessionChangeOnRail = 1500 * time.Millisecond

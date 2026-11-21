@@ -7,17 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The splits a user makes in the master-stack layout, kept when the layout is
-// computed again. A terminal resize computes it again every time, so it is
-// the way the report reached the user: with shared borders on, every pane but
-// the master and the first stack split went back to an equal share.
-//
-// Each case resizes the panes with the keys, then resizes the client, then
-// attaches a second, smaller client, which lays the panes out again from the
-// session's state alone. After each step every pane must keep its share of
-// the box the panes fill, in the daemon's rectangles.
-
-// paneBoxOf is the box the rectangles fill.
 func paneBoxOf(rects []winRect) (x, y, w, h int) {
 	x, y = 1<<30, 1<<30
 	right, bottom := 0, 0
@@ -28,8 +17,6 @@ func paneBoxOf(rects []winRect) (x, y, w, h int) {
 	return x, y, right - x, bottom - y
 }
 
-// sameShares reports the first pane whose share of the box differs from its
-// share in want by more than slack cells.
 func sameShares(want, got []winRect, slack int) error {
 	_, _, ww, wh := paneBoxOf(want)
 	_, _, gw, gh := paneBoxOf(got)
@@ -77,8 +64,6 @@ func TestMasterStackKeepsSplitsAcrossAResize(t *testing.T) {
 			const name = "splits"
 			term := masterSession(t, base, name, tc.appearance, tc.panes)
 			equal := waitForSettledGeometryIn(t, base, name, tc.panes)
-			// The focus is on the last pane: narrow the masters' side and
-			// make the last pane taller.
 			sendKeys(t, term, ">", ">", ">", "}", "}", "}")
 			resized := waitForShape(t, base, name, tc.panes, "the daemon after the keys", func(rects []winRect) error {
 				if sameShares(equal, rects, 1) == nil {
@@ -100,8 +85,6 @@ func TestMasterStackKeepsSplitsAcrossAResize(t *testing.T) {
 			})
 			saveArtifact(t, term, dir, "grown")
 
-			// A second client lays the panes out again from the session's
-			// state: smallest policy, set here, so the session shrinks to it.
 			if out, err := tuiosCLI(t, base, "set-config", "daemon.window_size", "smallest", "-s", name); err != nil {
 				t.Fatalf("set-config daemon.window_size: %v\n%s", err, out)
 			}
@@ -163,7 +146,6 @@ func TestEqualizeSplitsInMasterStack(t *testing.T) {
 			saveArtifact(t, term, dir, "equalized")
 			saveArtifact(t, peer, dir, "equalized-peer")
 
-			// Kept as session state: a resize lays the panes out again.
 			if err := term.Resize(140, 44); err != nil {
 				t.Fatalf("resize the client: %v", err)
 			}

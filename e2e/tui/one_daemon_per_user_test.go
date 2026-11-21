@@ -14,30 +14,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// One user on one machine reaches one daemon, whether XDG_RUNTIME_DIR is set
-// or not. A desktop session sets it; the command a host link runs over ssh
-// often does not. Before the fix the desktop used $XDG_RUNTIME_DIR/tuios and
-// the link used /tmp/tuios-<uid>: two daemons, each blind to the other's
-// sessions.
-//
-// The real /run/user and /tmp hold the daemons of whoever runs the suite, so
-// both roots are moved into the test with knob run_user and
-// knob tmp. /run/user/<uid> becomes <run>/<uid>, made 0700 the way
-// pam_systemd makes it.
-//
-// Negative control: with sockpath.RuntimeDir going straight to "" when
-// XDG_RUNTIME_DIR is unset, and pickLiveSocket returning primary, both tests
-// fail. See NEGATIVE_CONTROLS.md.
-
-// oneMachine is one machine of one user: the isolation root, the moved
-// roots, and the folder that stands in for /run/user/<uid>.
 type oneMachine struct {
 	base     string
 	run, tmp string
-	// empty is a /run/user with no folder for this user, for a command that
-	// must behave like a tuios that never looks there.
-	empty string
-	sys   string
+	empty    string
+	sys      string
 }
 
 func newOneMachine(t *testing.T) *oneMachine {
@@ -65,7 +46,6 @@ func newOneMachine(t *testing.T) *oneMachine {
 	for _, key := range xdgKeys {
 		xdgDir(m.base, key)
 	}
-	// Both daemons, by the environment that can only reach each one.
 	t.Cleanup(func() {
 		for _, env := range [][]string{m.desktopEnv(), m.oldLinkEnv()} {
 			_, _ = m.cli(t, env, "kill-server")
@@ -74,8 +54,6 @@ func newOneMachine(t *testing.T) *oneMachine {
 	return m
 }
 
-// env is the environment of a tuios on this machine, with XDG_RUNTIME_DIR
-// set to runtimeDir ("" is unset) and /run/user moved to runUser.
 func (m *oneMachine) env(runtimeDir, runUser string) []string {
 	env := []string{"SHELL=/bin/sh", "HOME=" + m.base}
 	for _, key := range xdgKeys {
@@ -87,17 +65,10 @@ func (m *oneMachine) env(runtimeDir, runUser string) []string {
 		knob("run_user="+runUser, "tmp="+m.tmp))
 }
 
-// desktopEnv is a desktop session: XDG_RUNTIME_DIR=/run/user/<uid>. /run/user
-// is empty for it, so it never looks in /tmp and only ever reaches the daemon
-// in the runtime folder.
 func (m *oneMachine) desktopEnv() []string { return m.env(m.sys, m.empty) }
 
-// oldLinkEnv is what an older tuios run over ssh did: no runtime folder, so
-// /tmp/tuios-<uid>.
 func (m *oneMachine) oldLinkEnv() []string { return m.env("", m.empty) }
 
-// sshEnv is a command over ssh on a systemd machine: no XDG_RUNTIME_DIR, and a
-// /run/user/<uid> pam_systemd made.
 func (m *oneMachine) sshEnv() []string { return m.env("", m.run) }
 
 func (m *oneMachine) cli(t *testing.T, env []string, args ...string) (string, error) {
@@ -123,8 +94,6 @@ func (m *oneMachine) legacySocket() string {
 	return filepath.Join(m.tmp, "tuios-"+strconv.Itoa(os.Getuid()), "tuios.sock")
 }
 
-// writeLinkSSH is the ssh stand-in for a link to m: it runs the command the
-// way sshd does on a systemd machine, with no XDG_RUNTIME_DIR.
 func writeLinkSSH(t *testing.T, dir string, m *oneMachine) string {
 	t.Helper()
 	var b strings.Builder
@@ -159,8 +128,6 @@ func TestOneDaemonWithAndWithoutXDGRuntimeDir(t *testing.T) {
 	m := newOneMachine(t)
 	m.mustCLI(t, m.desktopEnv(), "new", "desk", "--detach")
 
-	// A command over ssh sees the desktop's session, and what it makes the
-	// desktop sees. Errorf, so a broken build also reports the link below.
 	if out, _ := m.cli(t, m.sshEnv(), "ls"); !strings.Contains(out, "desk") {
 		t.Errorf("ASSERTION: without XDG_RUNTIME_DIR, ls does not list the desktop session:\n%s", out)
 	}
@@ -172,7 +139,6 @@ func TestOneDaemonWithAndWithoutXDGRuntimeDir(t *testing.T) {
 		t.Errorf("ASSERTION: a second daemon socket exists at %s", m.legacySocket())
 	}
 
-	// A host link, through the real stdio-proxy over the ssh stand-in.
 	hub := t.TempDir()
 	writeOneHostConfig(t, hub, tuiosBin)
 	env := []string{"TUIOS_SSH=" + writeLinkSSH(t, hub, m)}
@@ -217,7 +183,6 @@ func TestADaemonAnOlderLinkStartedIsFoundNotSplit(t *testing.T) {
 		t.Fatalf("ASSERTION: a second daemon started in the runtime folder")
 	}
 
-	// The desktop daemon, as an older tuios left both running.
 	m.mustCLI(t, m.desktopEnv(), "new", "desk", "--detach")
 
 	ls := func() string {
@@ -244,7 +209,6 @@ func TestADaemonAnOlderLinkStartedIsFoundNotSplit(t *testing.T) {
 		t.Fatalf("ASSERTION: the warning showed a second time:\n%s", second)
 	}
 
-	// What the warning says to do: stop the other daemon, then resurrect.
 	data, err := os.ReadFile(m.legacySocket() + ".pid")
 	if err != nil {
 		t.Fatal(err)
@@ -275,7 +239,6 @@ func TestAPaneOfTheTmpDaemonStaysWithIt(t *testing.T) {
 	if err := os.Remove(m.sys); err != nil {
 		t.Fatal(err)
 	}
-	// No runtime folder yet: this daemon and its panes resolve to /tmp.
 	m.mustCLI(t, m.sshEnv(), "new", "old", "--detach")
 	if _, err := os.Stat(m.legacySocket()); err != nil {
 		t.Fatalf("the old daemon is not at %s: %v", m.legacySocket(), err)
@@ -288,8 +251,6 @@ func TestAPaneOfTheTmpDaemonStaysWithIt(t *testing.T) {
 	}
 	m.mustCLI(t, m.desktopEnv(), "new", "desk", "--detach")
 
-	// Typed into the old daemon's pane. oldLinkEnv reaches only that daemon,
-	// so the send itself does not depend on the code under test.
 	out := filepath.Join(m.base, "pane-out")
 	line := tuiosBin + " list-windows -s old > " + out + ".tmp 2>&1; echo \"exit=$?\" >> " + out + ".tmp; mv " + out + ".tmp " + out + "\n"
 	m.mustCLI(t, m.oldLinkEnv(), "send-text", "-s", "old", line)
@@ -310,7 +271,6 @@ func TestAPaneOfTheTmpDaemonStaysWithIt(t *testing.T) {
 		t.Errorf("ASSERTION: list-windows -s old in a pane of its own daemon failed: it reached the other daemon:\n%s", got)
 	}
 
-	// The /tmp daemon stops cleanly though /run/user/<uid> now exists.
 	m.mustCLI(t, m.desktopEnv(), "kill-server")
 	start := time.Now()
 	if o, err := m.cli(t, m.sshEnv(), "kill-server"); err != nil {

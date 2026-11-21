@@ -43,9 +43,6 @@ func main() {
 	var transmit string
 	switch transport {
 	case "shm":
-		// The harness names the object with a prefix of its own, so it can
-		// remove it after a test even when this process dies by a signal and
-		// the deferred removal never runs.
 		prefix := os.Getenv("TUIOS_E2E_SHM_PREFIX")
 		if prefix == "" {
 			prefix = "tuios-placeonce-"
@@ -87,8 +84,6 @@ func main() {
 	}
 
 	_, _ = os.Stdout.WriteString(transmit)
-	// The placement names the image and nothing else: no c=, no r=. The size
-	// has to come from the transmission above.
 	_, _ = fmt.Fprintf(os.Stdout, "\x1b_Ga=p,i=%d,p=1,C=1,q=2\x1b\\", imageID)
 	_, _ = os.Stdout.WriteString("\r\n\r\n\r\nPLACEONCE-DONE\r\n")
 

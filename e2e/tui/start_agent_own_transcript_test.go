@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// ownTranscriptParent is a Claude Code stand-in that works on and on: it
-// writes a mid-turn record (a tool call) to its transcript every second, under
-// $CLAUDE_CONFIG_DIR/projects/<folder with dashes>, as Claude Code does.
 const ownTranscriptParent = `cwd=$(pwd -P)
 dir="$CLAUDE_CONFIG_DIR/projects/$(printf %s "$cwd" | tr / -)"
 mkdir -p "$dir"
@@ -23,9 +20,6 @@ while :; do
 done
 `
 
-// ownTranscriptChild is a Claude Code stand-in that stops at once on the
-// folder-trust question, the way Claude Code does in a folder it has not been
-// told to trust, before it writes a transcript of its own.
 const ownTranscriptChild = `printf '%s\n' \
  '╭───────────────────────────────────────────────────────────╮' \
  '│ Do you trust the files in this folder?                    │' \
@@ -146,11 +140,6 @@ func TestStartAgentInItsParentsFolderShowsItsOwnQuestion(t *testing.T) {
 	}
 }
 
-// ownTranscriptResumed is a Claude Code stand-in run as claude
-// resumed.sh --resume old-conv: it goes on with conversation old-conv,
-// appending a mid-turn record every second to that conversation's file,
-// whose first record is hours older than this process, as claude --resume
-// does.
 const ownTranscriptResumed = `cwd=$(pwd -P)
 dir="$CLAUDE_CONFIG_DIR/projects/$(printf %s "$cwd" | tr / -)"
 echo RESUMED-WORKING
@@ -160,8 +149,6 @@ while :; do
 done
 `
 
-// ownTranscriptQuiet is a fresh Claude Code stand-in that writes no
-// transcript and prints one line.
 const ownTranscriptQuiet = `echo QUIET-AGENT
 exec sleep 600
 `
@@ -214,8 +201,6 @@ func TestAResumedAgentReadsItsOwnOldTranscript(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The resumed conversation began three hours ago and ended its turn; the
-	// other one began then too and is done.
 	old := time.Now().Add(-3 * time.Hour).UTC().Format("2006-01-02T15:04:05.000Z")
 	rec := func(session, stop string) string {
 		return `{"type":"assistant","sessionId":"` + session + `","cwd":"` + real + `","version":"claude","timestamp":"` + old + `","message":{"stop_reason":"` + stop + `"}}` + "\n"
@@ -257,7 +242,6 @@ func TestAResumedAgentReadsItsOwnOldTranscript(t *testing.T) {
 		st, out := stateOf("resumed")
 		return st.State == "working" && st.Source == "transcript", out
 	})
-	// The fresh pane has had as long as the resumed one to be given a file.
 	if st, raw := stateOf("fresh"); st.Source == "transcript" {
 		t.Errorf("ASSERTION: the fresh pane in the same folder reads from a transcript it never wrote:\n%s", raw)
 	}
@@ -267,10 +251,6 @@ func TestAResumedAgentReadsItsOwnOldTranscript(t *testing.T) {
 	}
 }
 
-// ownTranscriptContinued is a Claude Code stand-in run as claude cont.sh
-// --continue: it goes on with the folder's most recent conversation,
-// recent-conv, appending a mid-turn record every second to its file, as
-// claude --continue does.
 const ownTranscriptContinued = `cwd=$(pwd -P)
 dir="$CLAUDE_CONFIG_DIR/projects/$(printf %s "$cwd" | tr / -)"
 echo CONTINUED-WORKING
@@ -328,8 +308,6 @@ func TestAContinuedAgentReadsTheMostRecentConversation(t *testing.T) {
 		at := time.Now().Add(-ago).UTC().Format("2006-01-02T15:04:05.000Z")
 		return `{"type":"assistant","sessionId":"` + session + `","cwd":"` + real + `","version":"claude","timestamp":"` + at + `","message":{"stop_reason":"end_turn"}}` + "\n"
 	}
-	// recent-conv was used an hour ago, older-conv three hours ago; older-conv's
-	// file is the one touched last.
 	if err := os.WriteFile(filepath.Join(dir, "recent-conv.jsonl"), []byte(rec("recent-conv", 2*time.Hour)+rec("recent-conv", time.Hour)), 0o644); err != nil {
 		t.Fatal(err)
 	}

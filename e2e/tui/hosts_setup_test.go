@@ -18,28 +18,8 @@ import (
 	"tuios.dev/shot"
 )
 
-// tuios hosts setup, the whole way, against two real daemons.
-//
-// buildbox is a fresh machine: its own HOME, no tuios anywhere it looks, and
-// a PATH that starts with its own ~/.local/bin. laptopbox is this machine, as
-// buildbox reaches it back. One ssh stand-in routes both addresses, and it is
-// the ssh both machines run, so the far side's test of its way back and its
-// link to this machine go through it too. Everything else is real: the probe
-// and install scripts in a real sh, the copy of this tuios over the pipe,
-// the far daemon started by the setup, the config files on both sides, and
-// the links.
-//
-// The proof is the end state a person wants: a link each way, and an agent
-// on buildbox that reaches this machine's Inbox.
-
-// writeSetupSSH writes the ssh stand-in for the setup test. someone@buildbox
-// runs in far, with far's HOME and a PATH with no tuios on it.
-// someone@laptopbox runs in here, with this test's tuios on the PATH, the
-// way a real machine has its own tuios installed.
 func writeSetupSSH(t *testing.T, here, far string) string {
 	t.Helper()
-	// This machine's own tuios, on its PATH by that name, whatever the test
-	// binary is called: the far side's link looks for "tuios".
 	hereBin := filepath.Join(here, "bin")
 	if err := os.MkdirAll(hereBin, 0o700); err != nil {
 		t.Fatal(err)
@@ -71,13 +51,6 @@ func writeSetupSSH(t *testing.T, here, far string) string {
 	return ssh
 }
 
-// skipOnOutsideTuios skips the test when the far machine finds a tuios that
-// is not under the test's own folder. The far machine is this one with a
-// temp HOME, and the link also looks in fixed places such as
-// /opt/homebrew/bin and /usr/local/bin, which no HOME hides. A tuios found
-// there is the person's own install, an older release: the setup would run
-// it, and its install-service would write the person's real service, as one
-// run once did. The lookup is the link's own (federation.FindBinaryScript).
 func skipOnOutsideTuios(t *testing.T, ssh, far string) {
 	t.Helper()
 	out, err := exec.Command(ssh, "someone@buildbox", federation.FindBinaryScript()+`; echo "found=$p"`).Output() //nolint:gosec // the test's own ssh stand-in
@@ -91,7 +64,6 @@ func skipOnOutsideTuios(t *testing.T, ssh, far string) {
 	}
 }
 
-// setupResult is the part of the setup JSON the test reads.
 type setupResult struct {
 	OK        bool   `json:"ok"`
 	Name      string `json:"name"`
@@ -149,13 +121,10 @@ func TestSetUpAMachineBothWays(t *testing.T) {
 	farBin := filepath.Join(xdgDir(far, "HOME"), ".local", "bin", "tuios")
 	env := []string{"TUIOS_SSH=" + writeSetupSSH(t, here, far)}
 
-	// The daemon here runs, as it does for a person who is in tuios.
 	if out, err := tuiosCLIEnv(t, here, env, "new", "home", "--detach"); err != nil {
 		t.Fatalf("start the daemon here: %v\n%s", err, out)
 	}
 
-	// 1. With no terminal and no --install, the setup stops before it
-	// changes anything, names the flag, and exits 2.
 	out, err := tuiosCLIEnv(t, here, env, "hosts", "setup", "someone@buildbox", "--name", "build", "--yes")
 	if exitStatus(err) != 2 || !strings.Contains(out, "--install copy, release, pkg or script") {
 		t.Fatalf("ASSERTION: a setup with no --install must exit 2 and name the flag, got %v:\n%s", err, out)
@@ -165,7 +134,6 @@ func TestSetUpAMachineBothWays(t *testing.T) {
 	}
 	t.Logf("no --install:\n%s", out)
 
-	// 2. A dry run probes, prints every command, and changes nothing.
 	out, err = tuiosCLIEnv(t, here, env, "hosts", "setup", "someone@buildbox", "--name", "build", "--install", "copy", "--both-ways", "--address", "someone@laptopbox", "--dry-run")
 	if err != nil {
 		t.Fatalf("ASSERTION: the dry run failed: %v\n%s", err, out)
@@ -183,7 +151,6 @@ func TestSetUpAMachineBothWays(t *testing.T) {
 	}
 	t.Logf("dry run:\n%s", out)
 
-	// 3. The setup itself.
 	out, err = tuiosCLIEnv(t, here, env, "hosts", "setup", "someone@buildbox", "--name", "build", "--install", "copy", "--both-ways", "--address", "someone@laptopbox", "--as", "laptop", "--yes", "--json")
 	t.Logf("tuios hosts setup --json:\n%s", out)
 	if err != nil {
@@ -207,12 +174,10 @@ func TestSetUpAMachineBothWays(t *testing.T) {
 		t.Fatalf("ASSERTION: buildbox has no [hosts.%s]:\n%s", r.BothWays.Name, farCfg)
 	}
 
-	// 4. The daemon here holds the link without a restart.
 	waitForHostListing(t, here, func(s string) bool {
 		return containsAll(s, "build", "up")
 	}, "the daemon here never reported build up after the setup")
 
-	// 5. An agent on buildbox reaches the Inbox here.
 	if out, err := tuiosCLI(t, far, "new", "far", "--detach"); err != nil {
 		t.Fatalf("create a session on buildbox: %v\n%s", err, out)
 	}
@@ -245,11 +210,6 @@ func TestSetUpNamesAnUnknownHostKey(t *testing.T) {
 	}
 }
 
-// writeBareSetupSSH writes an ssh stand-in for someone@barebox: a machine
-// with no service manager and none of the tools the probe looks for. Its
-// PATH is a folder of links to every program in /usr/bin and /bin but
-// those tools, and its shell drops -l, so a login profile cannot put them
-// back on the PATH.
 func writeBareSetupSSH(t *testing.T, here, far string) string {
 	t.Helper()
 	bin := filepath.Join(far, "barebin")
@@ -263,7 +223,6 @@ func writeBareSetupSSH(t *testing.T, here, far string) string {
 	for _, dir := range []string{"/usr/bin", "/bin"} {
 		entries, _ := os.ReadDir(dir)
 		for _, e := range entries {
-			// No agent CLI either: the suite runs none (agent_stubs_test.go).
 			if skip[e.Name()] || slices.Contains(agentNames, e.Name()) {
 				continue
 			}
@@ -326,7 +285,6 @@ func TestSetUpDryRunWithNoInstallChoice(t *testing.T) {
 		t.Fatalf("ASSERTION: the dry run wrote [hosts.build]:\n%s", hosts)
 	}
 
-	// The same dry run for a script: the plan names the install it shows.
 	out, err = tuiosCLIEnv(t, here, env, "hosts", "setup", "someone@buildbox", "--name", "build", "--dry-run", "--json")
 	_ = os.WriteFile(filepath.Join(dir, "dry-run.json"), []byte(out), 0o644)
 	if err != nil {
@@ -336,9 +294,6 @@ func TestSetUpDryRunWithNoInstallChoice(t *testing.T) {
 		t.Errorf("ASSERTION: the JSON dry run plans the install %q, want copy, the first choice:\n%s", r.Installed, out)
 	}
 
-	// A machine with no service manager and no package manager: the probe's
-	// line names what it found and has no empty item. It once read
-	// "go, . tuios is not installed", and with nothing found ". .".
 	bare := []string{"TUIOS_SSH=" + writeBareSetupSSH(t, here, far)}
 	out, err = tuiosCLIEnv(t, here, bare, "hosts", "setup", "someone@barebox", "--name", "bare", "--dry-run")
 	t.Logf("tuios hosts setup someone@barebox --dry-run:\n%s", out)
@@ -355,8 +310,6 @@ func TestSetUpDryRunWithNoInstallChoice(t *testing.T) {
 	}
 }
 
-// writeFakeTailscale puts a tailscale stand-in in dir whose status names
-// this machine, buildbox (online, linux) and sleepy (offline).
 func writeFakeTailscale(t *testing.T, dir string) {
 	t.Helper()
 	status := `{"Self":{"HostName":"laptop","DNSName":"laptop.example.ts.net.","OS":"linux","UserID":1,"TailscaleIPs":["100.64.0.1"],"Online":true},` +
@@ -372,9 +325,6 @@ func writeFakeTailscale(t *testing.T, dir string) {
 	}
 }
 
-// writeTailnetSetupSSH is writeSetupSSH where the tailnet name of buildbox
-// reaches the same far machine, and a dial of sleepy, the offline machine,
-// leaves a mark in here.
 func writeTailnetSetupSSH(t *testing.T, here, far string) string {
 	t.Helper()
 	ssh := writeSetupSSH(t, here, far)
@@ -585,7 +535,6 @@ func TestSetUpAMachineOnATerminal(t *testing.T) {
 	}
 	const slow = 90 * time.Second
 
-	// 1. ctrl+c at the install list.
 	term := setup()
 	waitFor(t, term, "the install list", installList, slow)
 	press(term, tuitest.Ctrl('c'))
@@ -597,7 +546,6 @@ func TestSetUpAMachineOnATerminal(t *testing.T) {
 		t.Fatalf("ASSERTION: the stopped setup installed tuios on buildbox")
 	}
 
-	// 2. The whole setup, with the keys a person presses.
 	term = setup()
 	waitFor(t, term, "the install list", installList, slow)
 	frame(term, "setup-install-list")
@@ -663,7 +611,6 @@ func TestSetUpTailnetMachinesOnATerminal(t *testing.T) {
 	farBin := filepath.Join(xdgDir(far, "HOME"), ".local", "bin", "tuios")
 	farBin2 := filepath.Join(xdgDir(far2, "HOME"), ".local", "bin", "tuios")
 	signedIn := filepath.Join(here, "signed-in")
-	// The stand-in for far2 first, to take its machine block for checkbox.
 	data2, err := os.ReadFile(writeSetupSSH(t, here, far2))
 	if err != nil {
 		t.Fatal(err)
@@ -719,7 +666,6 @@ func TestSetUpTailnetMachinesOnATerminal(t *testing.T) {
 			t.Fatalf("send %q: %v", keys, err)
 		}
 	}
-	// cursorOn moves the checklist cursor down to the row of name.
 	cursorOn := func(name string) {
 		t.Helper()
 		for range 6 {
@@ -758,7 +704,6 @@ func TestSetUpTailnetMachinesOnATerminal(t *testing.T) {
 	frame(term, "tailnet-checklist")
 	press(tuitest.Enter)
 
-	// The two fixes come in either order.
 	skipped, signed := false, false
 	for !skipped || !signed {
 		waitFor(t, term, "a fix", func(s tuitest.Screen) bool {

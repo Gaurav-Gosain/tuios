@@ -81,7 +81,6 @@ func TestTheBoardShowsTheCardLifecycle(t *testing.T) {
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "board-lifecycle-160x45")
 
-	// The list, where j walks the cards: to t1, the card in review.
 	if err := term.SendKeys("B"); err != nil {
 		t.Fatal(err)
 	}
@@ -96,13 +95,10 @@ func TestTheBoardShowsTheCardLifecycle(t *testing.T) {
 	}
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "board-lifecycle-review-160x45")
-	// The card's history names the pane that finished it, as the rail
-	// does, not by its window id.
 	if text := term.Screen().Text(); !strings.Contains(text, "finished  agent") || strings.Contains(text, a[:8]) {
 		t.Errorf("ASSERTION: the history does not name the pane agent that finished t1 (window %s)\n%s", a[:8], text)
 	}
 
-	// v: the Changes view of the agent's worktree.
 	if err := term.SendKeys("v"); err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +110,6 @@ func TestTheBoardShowsTheCardLifecycle(t *testing.T) {
 	}
 	_ = term.WaitStable(uiTimeout)
 
-	// M, c: commit with the card's title.
 	if err := term.SendKeys("M"); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +123,6 @@ func TestTheBoardShowsTheCardLifecycle(t *testing.T) {
 		t.Fatalf("ASSERTION: the last commit is %q, want the card's title", got)
 	}
 
-	// M, p: what the push sends, then enter pushes.
 	if err := term.SendKeys("M"); err != nil {
 		t.Fatal(err)
 	}

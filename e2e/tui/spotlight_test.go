@@ -11,23 +11,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The spotlight is a colour transform, so the only place it can honestly be
-// checked is the colour a host terminal was given. These read Cell.Fg off the
-// real screen a real tuios wrote to, at one place inside the beam and one
-// outside it.
-//
-// The two places are the pane's own top and bottom border corners, not text the
-// shell printed. A corner sits at a fixed cell for a given geometry and carries
-// a colour of its own, while shell output scrolls and is mostly at the terminal
-// default, which made an earlier version of this read a cell that had moved.
-
 const (
 	spotlightTopCorner    = "╭"
 	spotlightBottomCorner = "╰"
 )
 
-// spotlightConfigFile writes a config.toml into an isolated XDG root and
-// returns the root.
 func spotlightConfigFile(t *testing.T, body string) string {
 	t.Helper()
 	base := t.TempDir()
@@ -41,19 +29,6 @@ func spotlightConfigFile(t *testing.T, body string) string {
 	return base
 }
 
-// spotlightProbe boots tuios with the given config, prints two markers far
-// apart in the pane, and returns three cells: the lower marker, which is beside
-// the cursor and so under the beam; the upper marker, which is far above it;
-// and the pane's top border.
-//
-// Both markers are text the shell printed with no colour of its own, which is
-// what most of a real screen is. tuios emits no colour for such a cell, so a
-// pass that only touched cells already carrying one would dim the syntax
-// highlighting and leave everything else at full brightness.
-//
-// A blank cell is not used for this. A space with a foreground looks exactly
-// like a space without one, so the renderer is entitled to drop the colour on
-// the way out and an assertion about it would be an assertion about nothing.
 func spotlightProbe(t *testing.T, body string) (lit, far, farBorder tuitest.Cell) {
 	t.Helper()
 	term, at := spotlightMarkers(t, body)
@@ -61,17 +36,12 @@ func spotlightProbe(t *testing.T, body string) (lit, far, farBorder tuitest.Cell
 	return s.Cell(at.botCol, at.botRow), s.Cell(at.topCol, at.topRow), s.Cell(at.topCol, at.borderRow)
 }
 
-// spotlightMarks is where spotlightMarkers found the three cells, so a test
-// that has to act on the screen before it reads it can aim at them.
 type spotlightMarks struct {
 	topCol, topRow int
 	botCol, botRow int
 	borderRow      int
 }
 
-// spotlightMarkers is spotlightProbe up to the point of reading a cell: it
-// boots tuios, prints the two markers, and returns the running terminal with
-// the places they landed.
 func spotlightMarkers(t *testing.T, body string) (*tuitest.Terminal, spotlightMarks) {
 	t.Helper()
 	base := spotlightConfigFile(t, body)
@@ -79,8 +49,6 @@ func spotlightMarkers(t *testing.T, body string) (*tuitest.Terminal, spotlightMa
 	waitBoot(t, term)
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	// The markers are assembled by the shell, so the command line the harness
-	// typed does not carry them and the rows found below are real output.
 	runInShell(t, term,
 		`printf '%sTOP\n' "$(echo INK)"; printf '\n%.0s' $(seq 1 12); printf '%sBOT\n' "$(echo INK)"`,
 		"INKBOT", shellTimeout)
@@ -88,8 +56,6 @@ func spotlightMarkers(t *testing.T, body string) (*tuitest.Terminal, spotlightMa
 	return term, findSpotlightMarks(t, term)
 }
 
-// findSpotlightMarks locates the two markers and the pane's top border on a
-// screen that already has them.
 func findSpotlightMarks(t *testing.T, term *tuitest.Terminal) spotlightMarks {
 	t.Helper()
 	s := term.Screen()
@@ -102,9 +68,6 @@ func findSpotlightMarks(t *testing.T, term *tuitest.Terminal) spotlightMarks {
 		if c := strings.Index(s.Line(row), "INKBOT"); c >= 0 {
 			botRow, botCol = row, c
 		}
-		// The pane's top border, which is above both markers and so further from
-		// the cursor than either. The bottom border is beside the cursor and is
-		// inside the light.
 		if strings.Contains(s.Line(row), spotlightTopCorner) && borderRow < 0 {
 			borderRow = row
 		}
@@ -112,8 +75,6 @@ func findSpotlightMarks(t *testing.T, term *tuitest.Terminal) spotlightMarks {
 	if topRow < 0 || botRow < 0 || borderRow < 0 {
 		t.Fatalf("a marker or the pane's top border is not on screen\n%s", term.Snapshot())
 	}
-	// The beam is five rows. The two markers have to be further apart than that
-	// or this measures one place twice.
 	if botRow-topRow < 10 {
 		t.Fatalf("the two markers are %d rows apart; too close to be one inside the beam "+
 			"and one outside\n%s", botRow-topRow, term.Snapshot())
@@ -127,11 +88,6 @@ func findSpotlightMarks(t *testing.T, term *tuitest.Terminal) spotlightMarks {
 
 const spotlightTheme = "[appearance]\ntheme = \"catppuccin_mocha\"\n"
 
-// follow is pinned rather than left at the default. The beam follows the mouse
-// unless told otherwise, and no test using this config moves a pointer, so a
-// beam left at the default would sit where it was seeded and every assertion
-// about the cursor would be about a beam that is not on it.
-// TestSpotlightFollowsTheMouse is where the default is driven instead.
 const spotlightOn = spotlightTheme + "\n[spotlight]\nenabled = true\nradius = 5\nfollow = \"cursor\"\n"
 
 // TestSpotlightDimsAwayFromTheCursor is the on-screen form of the whole
@@ -195,10 +151,6 @@ func TestSpotlightTurnsTheBackgroundDownOnScreen(t *testing.T) {
 		t.Fatal("the marker outside the beam came back with no background at all; the " +
 			"light was never turned down on it")
 	}
-	// catppuccin_mocha's base, which is what the host paints a cell that names
-	// no background of its own. Half of it is the bar: the default leaves an
-	// unlit cell at a quarter of its light, and the room between the two is
-	// what the 256-colour palette this harness runs on costs.
 	const ground = 30 + 30 + 46
 	if got := spotlightLight(t, beamFar.Bg); got > ground/2 {
 		t.Errorf("the background outside the beam carries %d of light against the "+
@@ -206,14 +158,6 @@ func TestSpotlightTurnsTheBackgroundDownOnScreen(t *testing.T) {
 	}
 }
 
-// spotlightLight is how much light a cell colour carries, as the sum of its
-// three channels.
-//
-// It resolves an indexed colour itself because this harness runs on
-// TERM=xterm-256color with no COLORTERM, so tuios downsamples the frame and a
-// dimmed colour reaches the screen as a palette entry. Reading the number
-// through the downsample is the point: a 256-colour terminal is what a lot of
-// people are on, and the beam has to work there too.
 func spotlightLight(t *testing.T, c tuitest.Color) int {
 	t.Helper()
 	switch c.Kind {
@@ -221,9 +165,9 @@ func spotlightLight(t *testing.T, c tuitest.Color) int {
 		return int(c.R) + int(c.G) + int(c.B)
 	case tuitest.ColorIndexed:
 		switch {
-		case c.Index >= 232: // the 24-step greyscale ramp
+		case c.Index >= 232:
 			return 3 * (8 + 10*int(c.Index-232))
-		case c.Index >= 16: // the 6x6x6 cube
+		case c.Index >= 16:
 			levels := [6]int{0, 95, 135, 175, 215, 255}
 			i := int(c.Index - 16)
 			return levels[i/36] + levels[(i/6)%6] + levels[i%6]
@@ -328,20 +272,8 @@ func TestSpotlightIsInTheCommandPalette(t *testing.T) {
 	alive(t, term, "after the palette toggled the spotlight")
 }
 
-// The no-theme screen. His config has theme = '', which is the case the pass
-// used to answer with SGR 2 for the whole screen: a foreground attribute the
-// host scales by an amount of its own choosing, so the dim setting was read and
-// thrown away and 10 and 95 drew the same frame.
-//
-// A themeless screen now comes back mixed, which is what these read off it. The
-// chrome carries hex colours, so it is scaled toward black by the setting. Text
-// the shell printed at the terminal default carries no colour anybody can
-// resolve, so it keeps SGR 2. Both halves are asserted, because a pass that did
-// one of them and not the other looks right in a screenshot of the other half.
-
 const spotlightNoTheme = "[appearance]\ntheme = \"\"\n"
 
-// spotlightNoThemeBeam is the beam on a themeless client at one dim setting.
 func spotlightNoThemeBeam(dim int) string {
 	return spotlightNoTheme + "\n[spotlight]\nenabled = true\nradius = 5\nfollow = \"cursor\"\ndim = " +
 		strconv.Itoa(dim) + "\n"
@@ -421,23 +353,8 @@ func TestSpotlightKeepsAThemedScreenOffTheFaintPath(t *testing.T) {
 	}
 }
 
-// The shake gesture, driven with a real pointer against the real binary.
-//
-// It has to be driven here. The local program installs filterMouseMotion as a
-// bubbletea filter, and that filter is a whitelist: it drops every motion event
-// it does not recognise, so a gesture read off bare motion sees nothing at all
-// until it has a clause of its own. The detector passed every unit test in the
-// tree while the events could not reach it. This is the test that says a person
-// shaking a mouse turns the beam on.
-
-// shakeConfig turns the gesture on and nothing else, so the beam starts off and
-// the gesture is the only thing that can turn it on.
 const shakeConfig = spotlightTheme + "\n[spotlight]\nradius = 5\nshake = true\n"
 
-// shakePointer moves the pointer left and right about the middle of the screen,
-// far enough and often enough to be a shake. The harness sends each report as
-// it is called, so the events arrive as fast as the program can read them,
-// which is what a shake looks like.
 func shakePointer(t *testing.T, term *tuitest.Terminal, turns int) {
 	t.Helper()
 	const row, mid, leg = 20, 60, 20
@@ -466,9 +383,6 @@ func TestShakingTheMouseTogglesTheSpotlight(t *testing.T) {
 	alive(t, term, "after shaking the spotlight on")
 }
 
-// noShakeBudget is how long a shake that was going to fire has to show its
-// notification. A gesture that fired is on screen in a frame or two, so this is
-// generous, and it is the budget behind every "did not toggle" below.
 const noShakeBudget = 2 * time.Second
 
 // TestSweepingTheMouseLeavesTheSpotlightAlone is the negative half, driven the
@@ -490,8 +404,6 @@ func TestSweepingTheMouseLeavesTheSpotlightAlone(t *testing.T) {
 		t.Errorf("a sweep across the screen and back toggled the beam\n%s", term.Snapshot())
 	}
 
-	// The positive half, in the same fixture. Without it the check above could
-	// pass on a client whose pointer never reaches the program at all.
 	shakePointer(t, term, 12)
 	if err := term.WaitForText(spotlightOnMessage, uiTimeout); err != nil {
 		t.Fatalf("the pointer never reached the program at all: %v\n%s", err, term.Snapshot())
@@ -534,8 +446,6 @@ func TestTheShakeGestureIsOffByDefault(t *testing.T) {
 			term.Snapshot())
 	}
 
-	// The positive half, in the same fixture: this client can show a spotlight
-	// notification, it just did not have one to show.
 	if err := term.SendKeys("B"); err != nil {
 		t.Fatalf("press B: %v", err)
 	}

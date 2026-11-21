@@ -49,7 +49,6 @@ ask = [{ name = "env", kind = "pick", title = "Deploy to?", items = ["stg=Stagin
 		_ = os.Remove(out)
 	}
 
-	// The key asks the step, and the defaults fill the rest.
 	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Alt('d')); err != nil {
 		t.Fatalf("press the key: %v", err)
 	}
@@ -57,7 +56,6 @@ ask = [{ name = "env", kind = "pick", title = "Deploy to?", items = ["stg=Stagin
 	pressAfterSettle(t, term, promptKeyDown, promptKeyEnter)
 	ran("prod 2 false", "the key")
 
-	// A value of the wrong type, and a name the action does not have.
 	if o, err := tuiosCLI(t, base, "actions", "run", "deploy", "-s", "S", "dry=yes"); err == nil || !strings.Contains(o, "true or false") {
 		t.Errorf("ASSERTION: dry=yes ran or did not say why: %v\n%s", err, o)
 	}
@@ -65,7 +63,6 @@ ask = [{ name = "env", kind = "pick", title = "Deploy to?", items = ["stg=Stagin
 		t.Errorf("ASSERTION: an unknown argument ran or did not say why: %v\n%s", err, o)
 	}
 
-	// The CLI asks only for what it was not given, and prints typed values.
 	run := startCLIBackground(t, base, "actions", "run", "deploy", "-s", "S", "replicas=3", "dry=true", "--json")
 	waitPrompt(t, term, "action-ask-cli", "Deploy to?", "Prompt from a command")
 	pressAfterSettle(t, term, promptKeyEnter)
@@ -80,13 +77,11 @@ ask = [{ name = "env", kind = "pick", title = "Deploy to?", items = ["stg=Stagin
 	}
 	ran("stg 3 true", "the CLI")
 
-	// Every value given: nothing is asked.
 	if o, err := tuiosCLI(t, base, "actions", "run", "deploy", "-s", "S", "env=prod", "replicas=1.5"); err != nil {
 		t.Errorf("ASSERTION: actions run with every value failed: %v\n%s", err, o)
 	}
 	ran("prod 1.5 false", "the CLI with every value")
 
-	// Esc runs nothing, and the command exits 1.
 	run = startCLIBackground(t, base, "actions", "run", "deploy", "-s", "S")
 	waitPrompt(t, term, "action-ask-cancel", "Deploy to?")
 	pressAfterSettle(t, term, promptKeyEsc)

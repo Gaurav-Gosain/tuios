@@ -43,7 +43,6 @@ func TestWaitForWindowOutputNewIgnoresOldOutput(t *testing.T) {
 		t.Fatalf("the marker never reached the screen: %v: %s", err, out)
 	}
 
-	// Negative half: the marker is on the screen, and --new must not see it.
 	start := time.Now()
 	out, err := tuiosCLI(t, base, "wait-for", "window-output", "-s", sess, "-w", "0", "--pattern", "DONE-7", "--new", "--timeout", "1500")
 	if err == nil {
@@ -53,7 +52,6 @@ func TestWaitForWindowOutputNewIgnoresOldOutput(t *testing.T) {
 		t.Fatalf("ASSERTION: wait-for --new failed for a reason other than the timeout: %v: %s", err, out)
 	}
 
-	// Positive half: the same marker, printed after the wait starts, matches.
 	type result struct {
 		out string
 		err error
@@ -74,7 +72,6 @@ func TestWaitForWindowOutputNewIgnoresOldOutput(t *testing.T) {
 		t.Fatalf("ASSERTION: the result does not say new was used: %s", r.out)
 	}
 
-	// The artifact: the pane holds the marker twice, once from before each wait.
 	screen, _ := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", "0")
 	if n := strings.Count(screen, "\nDONE-7"); n < 2 {
 		t.Fatalf("want the marker printed twice on the pane, got %d:\n%s", n, screen)

@@ -9,19 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A scratch group is a small layout of its own: split it, type in each pane,
-// hide and show the whole group with one key, and a second scratch entry keeps
-// a layout of its own.
-//
-// How this could pass wrongly, written down first:
-//   - The three markers could be on screen because the group never hid. The
-//     hide waits for all three to leave the screen.
-//   - A show could make new panes. The daemon must list exactly three panes
-//     of the group after the round trip.
-//   - The second entry could share the first group's layout. Each group is
-//     counted by name, and the markers of the other group must be gone.
-
-// scratchCount counts the panes of the scratch group name in list-windows.
 func scratchCount(t *testing.T, base, name string) int {
 	t.Helper()
 	n := 0
@@ -33,8 +20,6 @@ func scratchCount(t *testing.T, base, name string) int {
 	return n
 }
 
-// waitSessionScratch waits until the built-in scratch group of session has n
-// panes. waitScratchCount reads the session "work" only.
 func waitSessionScratch(t *testing.T, term *tuitest.Terminal, base, session string, n int, what string) {
 	t.Helper()
 	count := func() int {
@@ -64,7 +49,6 @@ func waitSessionScratch(t *testing.T, term *tuitest.Terminal, base, session stri
 	t.Fatalf("%s: the scratch group of %s has %d panes, want %d\n%s", what, session, count(), n, term.Snapshot())
 }
 
-// waitScratchCount waits until the group name has n panes.
 func waitScratchCount(t *testing.T, term *tuitest.Terminal, base, name string, n int, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -77,7 +61,6 @@ func waitScratchCount(t *testing.T, term *tuitest.Terminal, base, name string, n
 	t.Fatalf("%s: group %s has %d panes, want %d\n%s", what, name, scratchCount(t, base, name), n, term.Snapshot())
 }
 
-// prefix presses the leader and then key.
 func prefix(t *testing.T, term *tuitest.Terminal, key any) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), key); err != nil {
@@ -85,7 +68,6 @@ func prefix(t *testing.T, term *tuitest.Terminal, key any) {
 	}
 }
 
-// allOnScreen waits until every marker is on the screen at once.
 func allOnScreen(t *testing.T, term *tuitest.Terminal, what string, markers ...string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -101,7 +83,6 @@ func allOnScreen(t *testing.T, term *tuitest.Terminal, what string, markers ...s
 	}
 }
 
-// noneOnScreen waits until no marker is on the screen.
 func noneOnScreen(t *testing.T, term *tuitest.Terminal, what string, markers ...string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -126,7 +107,6 @@ func TestScratchGroupLayout(t *testing.T) {
 	newWindow(t, term)
 	typeUntil(t, term, "echo BASE-$((5*5))", "BASE-25")
 
-	// Show the built-in group and split it into three panes.
 	toggleScratch(t, term)
 	waitScratchCount(t, term, base, "scratch", 1, "first show")
 	typeUntil(t, term, "echo AAA-$((1+1))", "AAA-2")
@@ -139,7 +119,6 @@ func TestScratchGroupLayout(t *testing.T) {
 	allOnScreen(t, term, "three panes in the group", "AAA-2", "BBB-4", "CCC-6", "BASE-25")
 	t.Logf("the group of three over the layout:\n%s", term.Snapshot())
 
-	// Hide the whole group, and show it again: all three are intact.
 	toggleScratch(t, term)
 	noneOnScreen(t, term, "after the hide", "AAA-2", "BBB-4", "CCC-6")
 	allOnScreen(t, term, "the layout after the hide", "BASE-25")
@@ -148,7 +127,6 @@ func TestScratchGroupLayout(t *testing.T) {
 	allOnScreen(t, term, "the group shown again", "AAA-2", "BBB-4", "CCC-6")
 	waitScratchCount(t, term, base, "scratch", 3, "after the round trip")
 
-	// A second entry has a layout of its own. Showing it hides the first.
 	pressCommand(t, term, 'y')
 	waitScratchCount(t, term, base, "second", 1, "the second group")
 	noneOnScreen(t, term, "the first group behind the second", "AAA-2", "BBB-4", "CCC-6")
@@ -159,7 +137,6 @@ func TestScratchGroupLayout(t *testing.T) {
 	allOnScreen(t, term, "the second group", "DDD-16", "EEE-26")
 	t.Logf("the second group:\n%s", term.Snapshot())
 
-	// Back to the first: its three panes, and none of the second's.
 	toggleScratch(t, term)
 	allOnScreen(t, term, "the first group again", "AAA-2", "BBB-4", "CCC-6")
 	noneOnScreen(t, term, "the second group behind the first", "DDD-16", "EEE-26")
@@ -167,7 +144,6 @@ func TestScratchGroupLayout(t *testing.T) {
 		t.Fatalf("groups have %d and %d panes, want 3 and 2", a, b)
 	}
 
-	// tuios xpanes run inside the group opens its panes in the group.
 	typeUntil(t, term, tuiosBin+" xpanes --no-sync -c 'echo XP-{}-$((9*9)); exec sh' aa bb", "XP-bb-81")
 	waitScratchCount(t, term, base, "scratch", 5, "xpanes inside the group")
 	allOnScreen(t, term, "xpanes panes in the group", "XP-aa-81", "XP-bb-81", "AAA-2")
@@ -193,8 +169,6 @@ func TestScratchGroupSurvivesADaemonRestart(t *testing.T) {
 		t.Fatalf("the client never attached: %v\n%s", err, first.Snapshot())
 	}
 
-	// Wait for each pane of the group before typing into it. Typed at once,
-	// the text can reach the pane the focus was on before.
 	toggleScratch(t, first)
 	waitSessionScratch(t, first, base, session, 1, "the group shown")
 	typeUntil(t, first, "echo PANEONE-$((1+1))", "PANEONE-2")

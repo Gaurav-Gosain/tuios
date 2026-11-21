@@ -11,10 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// fakeSheetClaude is a program called claude for the sheet test. Its auth
-// check answers signed in when the marker file exists and signed out when it
-// does not. Started as an agent, it writes its argv to the argv file, reports
-// itself idle, and writes the first line typed into it to the prompt file.
 const fakeSheetClaude = `#!/bin/sh
 if [ "$1" = auth ]; then
   if [ -f "__MARK__" ]; then echo '{"loggedIn": true}'; exit 0; fi
@@ -97,8 +93,6 @@ func TestNewAgentSheetChoicesAndReadiness(t *testing.T) {
 		return term
 	}
 
-	// Signed out: claude is on the PATH, and the daemon says it is not
-	// signed in.
 	outPath, _, _ := bin("out", false)
 	term := open(outPath)
 	waitText(t, term, "the signed-out row", "claude not signed in", ": claude not signed in.")
@@ -112,7 +106,6 @@ func TestNewAgentSheetChoicesAndReadiness(t *testing.T) {
 		t.Logf("close: %v", err)
 	}
 
-	// Signed in.
 	inPath, argvFile, promptFile := bin("in", true)
 	term = open(inPath)
 	waitText(t, term, "the ready row", "claude ready", "Effort", "Permissions", "Most free cores first")
@@ -127,8 +120,6 @@ func TestNewAgentSheetChoicesAndReadiness(t *testing.T) {
 	}
 	waitText(t, term, "the image in the task", "[Image #1", "64×32 png]")
 
-	// tab: Agent, Model. The model is typed; then the effort and the mode
-	// are stepped with the arrows.
 	sendKeys(t, term, tuitest.Tab, tuitest.Tab, "opus", tuitest.Tab)
 	sendKeys(t, term, tuitest.Right, tuitest.Right, tuitest.Right)
 	waitText(t, term, "the effort pill on high", " high ")
@@ -136,7 +127,6 @@ func TestNewAgentSheetChoicesAndReadiness(t *testing.T) {
 	waitText(t, term, "the risky mode marked", "bypassPermissions", "approvals off")
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "sheet-risky-200x55")
-	// default, manual, acceptEdits, plan.
 	sendKeys(t, term, tuitest.Right, tuitest.Right, tuitest.Right, tuitest.Right)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), " plan ") && !strings.Contains(s.Text(), "approvals off")

@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// openSwitcherOn opens the session switcher, filters it to query and presses
-// Enter, once the row want is on screen.
 func openSwitcherOn(t *testing.T, term *tuitest.Terminal, want, query string) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
@@ -28,8 +26,6 @@ func openSwitcherOn(t *testing.T, term *tuitest.Terminal, want, query string) {
 	}
 }
 
-// noSwitchFailure fails the test if the screen shows a refused switch, which
-// is what #196 put on screen: the rail identity sent to a daemon as a name.
 func noSwitchFailure(t *testing.T, term *tuitest.Terminal, when string) {
 	t.Helper()
 	text := term.Screen().Text()
@@ -56,13 +52,10 @@ func TestSwitcherCrossesMachines(t *testing.T) {
 
 	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
 	waitBoot(t, term)
-	// The rail is where the host listing shows up, and the switcher reads the
-	// same listing, so wait for build's session there first.
 	toggleSidebarViaPalette(t, term)
 	railShows(t, term, "far-shell")
 	waitRailCurrent(t, term, "home")
 
-	// Out to build.
 	openSwitcherOn(t, term, "far-shell @ build", "far")
 	waitRailCurrent(t, term, "far-shell")
 	noSwitchFailure(t, term, "going to build,")
@@ -72,7 +65,6 @@ func TestSwitcherCrossesMachines(t *testing.T) {
 	t.Logf("on build:\n%s", term.Snapshot())
 	saveFrame(t, term, "switcher-to-build")
 
-	// And back to this machine.
 	openSwitcherOn(t, term, "home @ local", "home")
 	waitRailCurrent(t, term, "home")
 	noSwitchFailure(t, term, "coming back from build,")

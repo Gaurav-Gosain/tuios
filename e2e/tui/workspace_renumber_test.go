@@ -17,20 +17,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A workspace's number is its position. Moving one, by the move keys or by
-// dragging its dock pill, renumbers it: the pill's {index}, opt+N, the daemon's
-// numbering and a second client all follow the place it was moved to. A herdr
-// tab id is the one thing that does not follow the position: it names the tab,
-// so an id read before a move names the same tab after it.
-//
-// The session under test holds three workspaces with different pane counts, so
-// the dock's "<workspace>:<count>" status says which one is on screen without
-// reading a name: EDIT holds one pane, REVW two and DPLY three.
-
 const renumberSession = "renum"
 
-// renumberConfig shows the number on every pill, the way the report's config
-// does, and binds the move keys under the workspace prefix.
 const renumberConfig = `[appearance]
 dock_workspace_tab_format = '{index}·{name}'
 
@@ -39,11 +27,8 @@ move_workspace_left = ['<']
 move_workspace_right = ['>']
 `
 
-// renumberPanes is how many panes each named workspace holds.
 var renumberPanes = map[string]int{"EDIT": 1, "REVW": 2, "DPLY": 3}
 
-// renumberSetup builds the three workspaces through the daemon and attaches a
-// client to workspace 1.
 func renumberSetup(t *testing.T) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -73,7 +58,6 @@ func renumberSetup(t *testing.T) (*tuitest.Terminal, string) {
 	return term, base
 }
 
-// waitPills waits for the dock to draw every one of the labels.
 func waitPills(t *testing.T, term *tuitest.Terminal, labels ...string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -83,15 +67,12 @@ func waitPills(t *testing.T, term *tuitest.Terminal, labels ...string) {
 	}
 }
 
-// renumberInfo is what session-info says about the numbering.
 type renumberInfo struct {
 	CurrentWorkspace int               `json:"current_workspace"`
 	WorkspaceNames   map[string]string `json:"workspace_names"`
 	WorkspaceOrder   []int             `json:"workspace_order"`
 }
 
-// wantNumbering checks the daemon's numbering: the name each number holds, and
-// that no display order is left over beside it.
 func wantNumbering(t *testing.T, base string, want map[string]string) renumberInfo {
 	t.Helper()
 	info, err := daemonJSON[renumberInfo](base, "session-info", "-s", renumberSession)
@@ -109,8 +90,6 @@ func wantNumbering(t *testing.T, base string, want map[string]string) renumberIn
 	return info
 }
 
-// wantPanesOn checks how many panes the daemon holds on each named workspace,
-// so a renumber is seen to have moved the panes and not only the names.
 func wantPanesOn(t *testing.T, base string, want map[int]string) {
 	t.Helper()
 	out, err := tuiosOut(base, "list-windows", "-s", renumberSession, "--json")
@@ -131,8 +110,6 @@ func wantPanesOn(t *testing.T, base string, want map[int]string) {
 	}
 }
 
-// altReaches presses opt+N and checks the workspace that comes up is the one
-// called name, by its pane count.
 func altReaches(t *testing.T, term *tuitest.Terminal, n rune, name string) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Alt(n)); err != nil {
@@ -147,8 +124,6 @@ func altReaches(t *testing.T, term *tuitest.Terminal, n rune, name string) {
 	}
 }
 
-// renumberDockStatus is the dock's "<workspace>:<count>" status field, read the way
-// countWindows reads it, or nil when the dock is not on screen.
 func renumberDockStatus(s tuitest.Screen) []string {
 	_, rows := s.Size()
 	for r := rows - 1; r >= max(0, rows-3); r-- {
@@ -159,7 +134,6 @@ func renumberDockStatus(s tuitest.Screen) []string {
 	return nil
 }
 
-// moveWorkspaceKey presses the bound move key under the workspace prefix.
 func moveWorkspaceKey(t *testing.T, term *tuitest.Terminal, key string) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", key); err != nil {
@@ -167,14 +141,12 @@ func moveWorkspaceKey(t *testing.T, term *tuitest.Terminal, key string) {
 	}
 }
 
-// dragPill drags the pill labelled from onto the pill labelled onto.
 func dragPill(t *testing.T, term *tuitest.Terminal, from, onto string, all ...string) {
 	t.Helper()
 	row, line := dockPillRow(t, term, all...)
 	mouseDrag(t, term, pillColumn(line, from)+1, row, pillColumn(line, onto)+1, row, tuitest.MouseLeft, 0)
 }
 
-// herdrTabIDByLabel is the herdr tab id of the tab labelled label.
 func herdrTabIDByLabel(t *testing.T, base, label string) string {
 	t.Helper()
 	tabs := herdrCall(t, base, "tab.list", map[string]any{})["tabs"].([]any)
@@ -187,7 +159,6 @@ func herdrTabIDByLabel(t *testing.T, base, label string) string {
 	return ""
 }
 
-// wantHerdrTab checks that a tab id still names the tab labelled label.
 func wantHerdrTab(t *testing.T, base, id, label string) {
 	t.Helper()
 	tab := herdrCall(t, base, "tab.get", map[string]any{"tab_id": id})["tab"].(map[string]any)
@@ -220,7 +191,6 @@ func TestWorkspaceKeyMoveRenumbers(t *testing.T) {
 	altReaches(t, term, '2', "EDIT")
 	altReaches(t, term, '3', "DPLY")
 
-	// And back, from the other end: DPLY to the left swaps it with EDIT.
 	moveWorkspaceKey(t, term, "<")
 	waitPills(t, term, "1·REVW", "2·DPLY", "3·EDIT")
 	wantNumbering(t, base, map[string]string{"1": "REVW", "2": "DPLY", "3": "EDIT"})
@@ -256,7 +226,6 @@ func TestWorkspaceDragThenKeyMove(t *testing.T) {
 	dragPill(t, term, "3·DPLY", "1·EDIT", "1·EDIT", "2·REVW", "3·DPLY")
 	waitPills(t, term, "1·DPLY", "2·EDIT", "3·REVW")
 
-	// EDIT is on screen, now as workspace 2, and the pill left of it is DPLY's.
 	altReaches(t, term, '2', "EDIT")
 	moveWorkspaceKey(t, term, "<")
 	waitPills(t, term, "1·EDIT", "2·DPLY", "3·REVW")
@@ -286,7 +255,6 @@ func TestWorkspaceRenumberReachesEveryClient(t *testing.T) {
 	altReaches(t, second, '1', "DPLY")
 	altReaches(t, term, '3', "EDIT")
 
-	// The first client goes away and a new one comes back to the session.
 	term.Close()
 	again := attachIn(t, base, renumberSession, startOpts{})
 	waitPills(t, again, "1·DPLY", "2·REVW", "3·EDIT")
@@ -356,7 +324,6 @@ func TestHerdrTabMoveKeepsTabIDs(t *testing.T) {
 		label := names[fmt.Sprint(w.Workspace)]
 		want := ids[label]
 		typeInPane(t, base, renumberSession, w.ID, `echo "TAB=$HERDR_TAB_ID:END"`)
-		// "TAB=w" is in the echo's output alone, not in the line typed.
 		screen := waitPaneScreen(t, base, renumberSession, w.ID, uiTimeout, "TAB=w")
 		if !strings.Contains(screen, "TAB="+want+":END") {
 			t.Fatalf("the restored pane on workspace %d (%s) started with the wrong HERDR_TAB_ID, want %s:\n%s", w.Workspace, label, want, screen)
@@ -426,7 +393,6 @@ func TestWorkspaceCloseRenumbersTheRest(t *testing.T) {
 	altReaches(t, term, '2', "DPLY")
 	altReaches(t, term, '1', "EDIT")
 
-	// The verb, on the workspace that is not in view: EDIT goes, DPLY is 1.
 	altReaches(t, term, '2', "DPLY")
 	if out, err := tuiosCLI(t, base, "close-workspace", "1", "-s", renumberSession); err != nil {
 		t.Fatalf("close-workspace 1: %v: %s", err, out)
@@ -472,7 +438,6 @@ func TestWorkspaceSwitchPastTheLastOpensTheNext(t *testing.T) {
 	}
 	wantNumbering(t, base, map[string]string{"1": "EDIT", "2": "REVW", "3": "DPLY"})
 
-	// An empty workspace that is left stops existing, and nothing moves.
 	if err := term.SendKeys(tuitest.Alt('7')); err != nil {
 		t.Fatalf("press alt+7: %v", err)
 	}
@@ -510,8 +475,6 @@ func TestWorkspaceSwitchFromAnEmptyOneStaysOnIt(t *testing.T) {
 			t.Fatalf("alt+%c did not show workspace 4: %v\n%s", key, err, term.Snapshot())
 		}
 	}
-	// The status read 4:0 before opt+6 too, so the switch is given time to
-	// land before the dock is read again.
 	time.Sleep(time.Second)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
@@ -562,8 +525,6 @@ func TestWorkspaceSwitchFromTheSplashStaysOnIt(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
 		t.Fatalf("press alt+2: %v", err)
 	}
-	// Keys are handled in order, so the pane n opens shows where opt+2 left
-	// the session.
 	newWindow(t, term)
 	if ws := currentWorkspace(t, base, renumberSession); ws != 1 {
 		t.Fatalf("opt+2 from the splash went to workspace %d, want it to stay on 1\n%s", ws, term.Snapshot())
@@ -574,10 +535,6 @@ func TestWorkspaceSwitchFromTheSplashStaysOnIt(t *testing.T) {
 	alive(t, term, "after opt+2 from the splash")
 }
 
-// renumberExitSetup is renumberSetup with REVW's two panes running a command
-// that exits once release is created, one of them with close_on_exit: the
-// daemon closes that one, and the attached client closes the other when its
-// process ends. The client is left on DPLY, workspace 3.
 func renumberExitSetup(t *testing.T) (term *tuitest.Terminal, base, release string) {
 	t.Helper()
 	base = t.TempDir()
@@ -613,9 +570,6 @@ func renumberExitSetup(t *testing.T) (term *tuitest.Terminal, base, release stri
 	return term, base, release
 }
 
-// subscribeLines streams `tuios subscribe` with args into a buffer until the
-// test ends. It returns once the subscription is acknowledged, so nothing that
-// happens after it can be missed, and read returns the event lines so far.
 func subscribeLines(t *testing.T, base string, args ...string) (read func() []string) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -654,7 +608,6 @@ func subscribeLines(t *testing.T, base string, args ...string) (read func() []st
 	}
 }
 
-// waitPaneCount waits until the daemon holds n panes in the session.
 func waitPaneCount(t *testing.T, base string, n int) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -697,7 +650,6 @@ func TestWorkspaceSelfExitLeavesTheNumbers(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !screenHas(s, "REVW") }, uiTimeout); err != nil {
 		t.Fatalf("REVW stayed on the dock after its panes exited: %v\n%s", err, term.Snapshot())
 	}
-	// Long enough for a renumber, which is one state push away, to land.
 	time.Sleep(2 * time.Second)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
@@ -717,8 +669,6 @@ func TestWorkspaceSelfExitLeavesTheNumbers(t *testing.T) {
 		t.Fatalf("panes exiting on their own sent %d window-moved or workspace-switched events, want none:\n%s", len(got), strings.Join(got, "\n"))
 	}
 
-	// opt+N past the last workspace opens the one after it, not the number
-	// of workspaces plus one, which with a gap is DPLY's.
 	if err := term.SendKeys(tuitest.Alt('5')); err != nil {
 		t.Fatalf("press alt+5: %v", err)
 	}
@@ -731,7 +681,6 @@ func TestWorkspaceSelfExitLeavesTheNumbers(t *testing.T) {
 	altReaches(t, term, '3', "DPLY")
 	wantNumbering(t, base, map[string]string{"1": "EDIT", "3": "DPLY"})
 
-	// A pane the person closes closes the gap: DPLY becomes 2.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "x"); err != nil {
 		t.Fatalf("close a pane: %v", err)
 	}
@@ -798,8 +747,6 @@ func TestWorkspaceShellExitClosesUp(t *testing.T) {
 	alive(t, term, "after typing exit in the last shell of a workspace")
 }
 
-// attentionWorkspace is the workspace list-attention gives the item of the
-// pane named window, or 0 when it lists none.
 func attentionWorkspace(t *testing.T, base, window string) int {
 	t.Helper()
 	out, err := tuiosOut(base, "list-attention", "--json")
@@ -860,8 +807,6 @@ func TestWorkspaceMoveRenumbersInboxItems(t *testing.T) {
 	alive(t, term, "after moving a workspace with an Inbox item")
 }
 
-// minimizedOn is how many panes of the renumber session are minimized on
-// workspace ws, by the daemon's list-windows.
 func minimizedOn(t *testing.T, base string, ws int) int {
 	t.Helper()
 	out, err := tuiosOut(base, "list-windows", "-s", renumberSession, "--json")
@@ -886,7 +831,6 @@ func minimizedOn(t *testing.T, base string, ws int) int {
 	return n
 }
 
-// waitMinimizedOn waits until workspace ws holds want minimized panes.
 func waitMinimizedOn(t *testing.T, term *tuitest.Terminal, base string, ws, want int, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)

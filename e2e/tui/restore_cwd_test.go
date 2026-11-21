@@ -55,8 +55,6 @@ func TestRestoredPaneComesBackInItsDirectory(t *testing.T) {
 	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
-	// The kernel reports the directory with its symlinks resolved, and on
-	// macOS the temporary directory is under one (/var is /private/var).
 	want, err := filepath.EvalSymlinks(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -71,11 +69,9 @@ func TestRestoredPaneComesBackInItsDirectory(t *testing.T) {
 	artifacts := artifactDir(t)
 	savePane(t, base, session, filepath.Join(artifacts, "before-restart.txt"))
 
-	// kill-server saves every session while its shells are still alive.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v\n%s", err, out)
 	}
-	// Starting any session starts a daemon, and a daemon restores on start.
 	if out, err := tuiosCLI(t, base, "new", "e2e-restore-cwd-trigger", "--detach"); err != nil {
 		t.Fatalf("start a fresh daemon: %v\n%s", err, out)
 	}
@@ -87,7 +83,6 @@ func TestRestoredPaneComesBackInItsDirectory(t *testing.T) {
 		t.Errorf("ASSERTION: the restored session's first listing has worktree %+v, want the main checkout of %s, so the rail draws it ungrouped until the next save", wt, filepath.Base(dir))
 	}
 
-	// The restored shell is asked where it is before anything moves it.
 	inDir := paneInDir(t, base, session, "", want)
 	savePane(t, base, session, filepath.Join(artifacts, "after-restart.txt"))
 	if !inDir {
@@ -95,9 +90,6 @@ func TestRestoredPaneComesBackInItsDirectory(t *testing.T) {
 	}
 }
 
-// paneInDir runs prefix and then asks the shell in the session's pane whether
-// its working directory is dir, and returns its answer. The shell compares,
-// rather than printing the path, because a long path wraps in the capture.
 func paneInDir(t *testing.T, base, session, prefix, dir string) bool {
 	t.Helper()
 	cmd := prefix + `if [ "$(pwd -P)" = '` + dir + `' ]; then printf 'CWD-%s\n' SAME; else printf 'CWD-%s\n' ELSEWHERE; fi` + "\r"
@@ -124,7 +116,6 @@ func paneInDir(t *testing.T, base, session, prefix, dir string) bool {
 	}
 }
 
-// savePane writes the session's pane text to path.
 func savePane(t *testing.T, base, session, path string) {
 	t.Helper()
 	pane, err := tuiosCLI(t, base, "capture-pane", "-s", session)

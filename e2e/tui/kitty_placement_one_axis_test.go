@@ -65,10 +65,6 @@ func TestKittyPlacementSizingFromOneAxis(t *testing.T) {
 	}
 }
 
-// settledPlacement waits until the render passes stop re-placing the image and
-// returns the last placement they left. Two reads have to agree, as
-// settledWindowCount does in the harness: the first read after the guest has
-// finished can land between passes, and each pass after it re-places the image.
 func settledPlacement(t *testing.T, host *kittyHost, phase string) (wireCmd, []string) {
 	t.Helper()
 	seen := -2
@@ -89,8 +85,6 @@ func settledPlacement(t *testing.T, host *kittyHost, phase string) (wireCmd, []s
 	return wireCmd{}, nil
 }
 
-// lastPlacementIn is the last placement or delete the host received in a phase,
-// with every one it saw there.
 func lastPlacementIn(cmds []wireCmd, phase string) (wireCmd, []string) {
 	var last wireCmd
 	var history []string
@@ -104,7 +98,6 @@ func lastPlacementIn(cmds []wireCmd, phase string) (wireCmd, []string) {
 	return last, history
 }
 
-// buildOneAxis compiles the one-axis stand-in once per test binary.
 func buildOneAxis(t *testing.T) string {
 	t.Helper()
 	oneAxisOnce.Do(func() {

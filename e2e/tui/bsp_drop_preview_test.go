@@ -11,31 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// appearance.drop_preview picks what a BSP drag draws where the pane would
-// land (fill, outline, off), and appearance.drop_preview_delay how long the
-// pointer rests on one zone before that shows. The board and the gesture are
-// the ones in bsp_drop_zone_test.go.
-//
-// How these could pass wrongly, written down first:
-//   - off could hide the highlight by breaking the drop. The off case drops on
-//     A's left edge and holds the result to the split.
-//   - outline could draw the fill too, or nothing at all. The outline case
-//     holds every visible ring cell to the outline and every visible inside
-//     cell to the ground it had before the drag.
-//   - The delay could be read only as "the zone shows eventually", which an
-//     immediate highlight passes too. The delay is long against the frame
-//     read right after the move, which must show nothing, and the frame read
-//     well past it must show the zone.
-//   - The highlight could arrive only with the next event rather than when
-//     the delay runs out. Nothing moves between the two frames of the delay
-//     case, so a timer that does not ask for a frame leaves the first one up.
-//   - A zone left before its delay could still show when the delay runs out,
-//     on the zone the pointer is on by then. The left-zone case reads a frame
-//     after the first zone's delay ran out and before the second's did.
-
-// previewDelay is long against what one frame read takes, so a frame read
-// right after a move cannot be one the delay has already run out for, and
-// short enough to wait out.
 const previewDelay = 3 * time.Second
 
 // TestDropPreviewOffDrawsNothing carries C to A's left edge with the preview
@@ -87,7 +62,6 @@ func TestDropPreviewWaitsForItsDelay(t *testing.T) {
 // has, all of A is, and the release swaps.
 func TestADropZoneLeftBeforeItsDelayNeverShows(t *testing.T) {
 	term, base, p := dropBoardWith(t, "drop-preview-left", chromeDepths[2].env, fillPreview+"\ndrop_preview_delay = '"+previewDelay.String()+"'")
-	// carry returns half a second after the pointer reached the edge.
 	d := carry(t, term, p, p.a.X+1, p.a.Y+p.a.Height/2)
 	edgeEntered := time.Now().Add(-500 * time.Millisecond)
 	time.Sleep(previewDelay/2 - 500*time.Millisecond)
@@ -99,7 +73,6 @@ func TestADropZoneLeftBeforeItsDelayNeverShows(t *testing.T) {
 	middleEntered := time.Now()
 	d.checkHeld(t)
 
-	// Halfway between the two delays running out.
 	time.Sleep(time.Until(edgeEntered.Add(previewDelay + middleEntered.Sub(edgeEntered)/2)))
 	if time.Since(middleEntered) >= previewDelay {
 		t.Fatalf("the frame between the two delays was read too late, %v after the middle was entered", time.Since(middleEntered))
@@ -119,10 +92,6 @@ func TestADropZoneLeftBeforeItsDelayNeverShows(t *testing.T) {
 	d.checkHighlight(t, &whole, false)
 }
 
-// paintShell writes a shell into base that fills its pane with text in many
-// colours before it hands over to /bin/sh: plain colours, bold, a cell on a
-// ground of its own, faint text, reverse video and a truecolour ink. It
-// returns the [appearance] line that makes it the panes' shell.
 func paintShell(t *testing.T, base string) string {
 	t.Helper()
 	line := `printf '\033[7mrev\033[0m \033[31mred\033[0m \033[1;34mbold\033[0m \033[42;30m green \033[0m \033[2mfaint\033[0m \033[38;2;250;180;40mamber\033[0m plain\n'`
@@ -213,12 +182,6 @@ func TestDropPreviewLooks(t *testing.T) {
 	}
 }
 
-// waitFishPrompts waits until each of the three panes shows fish's prompt,
-// which fish draws only after config.fish has printed both listings, and the
-// tiled region then stays the same for half a second. The frame read before
-// the drag is the ground every later frame is held to, so a shell still
-// printing, or fish redrawing its prompt for a late resize, would show as a
-// cell outside the landing rectangle that changed mid-drag.
 func waitFishPrompts(t *testing.T, term *tuitest.Terminal, p dropPanes) {
 	t.Helper()
 	row := func(s tuitest.Screen, r winRect, y int) string {
@@ -263,8 +226,6 @@ func waitFishPrompts(t *testing.T, term *tuitest.Terminal, p dropPanes) {
 	})
 }
 
-// fishLooks gives fish a busy prompt (segments on grounds of their own, a
-// faint clock) and starts it in a folder whose ls listing is in colour.
 func fishLooks(t *testing.T, base string) {
 	t.Helper()
 	dir := filepath.Join(base, "project")

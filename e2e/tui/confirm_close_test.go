@@ -8,12 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// closeQuestion is the start of the one-pane close dialog's question.
 const closeQuestion = "Close pane '"
 
-// busyPanes opens two panes and runs sleep in the focused one, so it runs
-// something besides its shell, and waits until tuios sees it there. It
-// returns in window mode.
 func busyPanes(t *testing.T, config string) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -27,15 +23,11 @@ func busyPanes(t *testing.T, config string) *tuitest.Terminal {
 	if err := term.SendKeys("sleep 600", tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
-	// The daemon names the foreground program on its detector poll.
 	time.Sleep(2500 * time.Millisecond)
 	leaveTerminalMode(t, term)
 	return term
 }
 
-// busyCloseDot is the screen cell of the close control of the pane that
-// shows "sleep 600": the first dot of the title row above that line, to its
-// left. The default controls are close, minimize, zoom, in that order.
 func busyCloseDot(t *testing.T, term *tuitest.Terminal) (col, row int) {
 	t.Helper()
 	s := term.Screen()
@@ -65,7 +57,6 @@ func busyCloseDot(t *testing.T, term *tuitest.Terminal) (col, row int) {
 	return 0, 0
 }
 
-// noDialogFor fails when the close dialog shows within d.
 func noDialogFor(t *testing.T, term *tuitest.Terminal, d time.Duration, what string) {
 	t.Helper()
 	deadline := time.Now().Add(d)
@@ -91,7 +82,6 @@ func TestConfirmCloseAsksForABusyPane(t *testing.T) {
 	if n := countWindows(term.Screen()); n != 2 {
 		t.Fatalf("ASSERTION: the pane closed before the answer: %d panes\n%s", n, term.Snapshot())
 	}
-	// For one pane the dialog says what runs in it.
 	if err := term.WaitForText("is running sleep", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the dialog does not say what runs in the pane: %v\n%s", err, term.Snapshot())
 	}
@@ -104,7 +94,6 @@ func TestConfirmCloseAsksForABusyPane(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	waitWindowCount(t, term, 2, "esc keeps the pane")
 
-	// The title bar's close control follows the same rule.
 	col, row := busyCloseDot(t, term)
 	mousePress(t, term, col, row, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, col, row, tuitest.MouseLeft, 0)
@@ -128,7 +117,6 @@ func TestConfirmCloseAsksForABusyPane(t *testing.T) {
 	sendKeys(t, term, tuitest.Down, tuitest.Enter)
 	waitWindowCount(t, term, 1, "the Close pane row closes it")
 
-	// The other pane is at its prompt: it closes at once.
 	sendKeys(t, term, "x")
 	noDialogFor(t, term, 500*time.Millisecond, "x on a pane at its prompt")
 	waitWindowCount(t, term, 0, "a pane at its prompt closes at once")

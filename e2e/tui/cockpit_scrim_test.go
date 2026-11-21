@@ -6,16 +6,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// chromeCell is one cell of the rail or the dock as it was drawn.
 type chromeCell struct {
 	x, y    int
 	content string
 	fg, bg  tuitest.Color
 }
 
-// chromeCells are the drawn cells of the dock, the two rows at the top and
-// the two at the foot of the screen, and of the rail, beyond its border on
-// the fourth row on whichever side it is.
 func chromeCells(s tuitest.Screen) []chromeCell {
 	cols, rows := s.Size()
 	var out []chromeCell

@@ -27,9 +27,6 @@ import (
 
 const paneSyncSession = "work"
 
-// paneSyncRig is this machine: a live-capable daemon of the old version, the
-// tuios on PATH that sync replaces, and a session with a shell pane that runs
-// the sync and a sleeper whose program a restart would end.
 type paneSyncRig struct {
 	base, binDir, local, next string
 	agent                     string
@@ -62,7 +59,6 @@ func (r *paneSyncRig) attach(t *testing.T) *tuitest.Terminal {
 	return term
 }
 
-// paneSyncRun is one sync run from the agent pane.
 type paneSyncRun struct {
 	Code    string        `json:"exit"`
 	Seconds float64       `json:"seconds"`
@@ -70,8 +66,6 @@ type paneSyncRun struct {
 	Stderr  string        `json:"stderr"`
 }
 
-// sync has the agent pane run the sync, and returns a function that waits
-// for it to exit and reads its row.
 func (r *paneSyncRig) sync(t *testing.T) func() paneSyncRun {
 	t.Helper()
 	r.runs++
@@ -99,8 +93,6 @@ func (r *paneSyncRig) sync(t *testing.T) func() paneSyncRun {
 	}
 }
 
-// waitDialog waits for the upgrade dialog on term and past the moment it
-// ignores keys for.
 func (r *paneSyncRig) waitDialog(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	if err := term.WaitForText(upgradeDialogTitle, 90*time.Second); err != nil {

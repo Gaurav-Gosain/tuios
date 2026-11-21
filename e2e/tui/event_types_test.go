@@ -13,25 +13,6 @@ import (
 	"time"
 )
 
-// These tests hold the scripting surface to what a script reads from it: a
-// subscribe filter naming a type no event has is refused instead of
-// streaming nothing, subscribe --format text --state --once prints one
-// readable line for the first matching state and exits, and close-window
-// closes one pane by name with no client attached.
-//
-// The output of each command is saved under artifactDir.
-//
-// Negative controls (NEGATIVE_CONTROLS.md):
-//   - TestSubscribeRefusesUnknownTypes: the checkEventTypes call cut from
-//     verbSubscribe: subscribe --types window-creted runs and prints nothing.
-//   - TestSubscribeRefusesUnknownTypes, the text half: the --state check in
-//     runSubscribe always true: the idle report prints a line and --once
-//     exits on it, so the line is "working -> idle".
-//   - TestCloseWindowClosesOnePane: the window passed to dialSessionTarget's
-//     params instead of dialTarget, which sends an empty window: the focused
-//     pane, keep, is closed instead of build.
-
-// startDetached makes a detached session named name under base.
 func startDetached(t *testing.T, base, name string) {
 	t.Helper()
 	killDaemon(t, base)
@@ -40,8 +21,6 @@ func startDetached(t *testing.T, base, name string) {
 	}
 }
 
-// subscribeCmd is a tuios command against the daemon under base, for a
-// test that reads its output while it runs.
 func subscribeCmd(ctx context.Context, t *testing.T, base string, args ...string) *exec.Cmd {
 	t.Helper()
 	pinPreV080Looks(t, base)
@@ -54,7 +33,6 @@ func subscribeCmd(ctx context.Context, t *testing.T, base string, args ...string
 	return cmd
 }
 
-// subscribeWithin is splitCLI with a deadline, for a command that may not exit.
 func subscribeWithin(t *testing.T, base string, d time.Duration, args ...string) (string, string, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), d)
@@ -81,9 +59,6 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 		{"window-creted", "unknown event type window-creted"},
 		{"after-new-window", "after-new-window is a hook name. The event it fires on is window-created"},
 	} {
-		// A filter that is not refused streams nothing and never exits, so
-		// the call has a deadline: it fails the check below instead of the
-		// whole run timing out.
 		out, errOut, err := subscribeWithin(t, base, uiTimeout, "subscribe", "-s", "events", "--types", tc.types, "--count", "1")
 		transcript.WriteString("$ tuios subscribe --types ")
 		transcript.WriteString(tc.types)
@@ -100,7 +75,6 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 		}
 	}
 
-	// The positive half: a real type still streams its event.
 	ctx, cancel := context.WithTimeout(context.Background(), shellTimeout)
 	defer cancel()
 	sub := subscribeCmd(ctx, t, base, "subscribe", "-s", "events", "--types", "window-created", "--count", "1")
@@ -112,8 +86,6 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 	lines := bufio.NewScanner(pipe)
-	// subscribe prints its ack line first. The window is made after that,
-	// so the event cannot come before the subscription.
 	if !lines.Scan() || !strings.Contains(lines.Text(), "subscribed") {
 		t.Fatalf("subscribe --types window-created did not acknowledge: %q", lines.Text())
 	}
@@ -135,10 +107,6 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 		t.Errorf("subscribe --types window-created printed %q, want a window-created event", event)
 	}
 
-	// The text half. The pane reports working before the subscription, then
-	// idle, which --state drops, then needs_input. The one line printed
-	// must name the state the agent came from and the message it gave, and
-	// --once must end the run with status 0.
 	report := func(args ...string) {
 		t.Helper()
 		args = append([]string{"set-agent-state"}, args...)
@@ -158,7 +126,6 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 	if err := text.Start(); err != nil {
 		t.Fatal(err)
 	}
-	// In text mode the ack goes to standard error. The reports come after it.
 	ackLines := bufio.NewScanner(ackPipe)
 	if !ackLines.Scan() || !strings.HasPrefix(ackLines.Text(), "Subscribed at seq ") {
 		t.Fatalf("subscribe --format text did not acknowledge on standard error: %q", ackLines.Text())
@@ -184,7 +151,6 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 		t.Errorf("subscribe --format text printed %q, want one line matching %s", textOut.String(), want)
 	}
 
-	// A --timeout that ends before --once is met fails the run.
 	timeoutArgs := []string{"subscribe", "-s", "events", "--format", "text", "--state", "errored", "--once", "--timeout", "500"}
 	out, errOut, err := subscribeWithin(t, base, uiTimeout, timeoutArgs...)
 	for _, part := range []string{"$ tuios ", strings.Join(timeoutArgs, " "), "\n", out, errOut} {
@@ -202,8 +168,6 @@ func TestSubscribeRefusesUnknownTypes(t *testing.T) {
 func TestCloseWindowClosesOnePane(t *testing.T) {
 	base := t.TempDir()
 	startDetached(t, base, "closing")
-	// build first, so keep has focus: closing the focused pane instead of
-	// the named one closes keep.
 	for _, name := range []string{"build", "keep"} {
 		if out, err := tuiosCLI(t, base, "new-window", "-s", "closing", name); err != nil {
 			t.Fatalf("new-window %s: %v\n%s", name, err, out)
@@ -225,7 +189,6 @@ func TestCloseWindowClosesOnePane(t *testing.T) {
 	if !strings.Contains(list, "keep") {
 		t.Errorf("close-window build closed keep too:\n%s", list)
 	}
-	// A name no pane has is refused.
 	if out, err := tuiosCLI(t, base, "close-window", "-s", "closing", "no-such-pane"); err == nil {
 		t.Errorf("close-window no-such-pane succeeded:\n%s", out)
 	}

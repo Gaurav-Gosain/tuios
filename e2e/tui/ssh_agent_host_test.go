@@ -17,18 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Discussion #549 also asks for the agent to follow through a host: a person
-// attaches a session on another machine from this one, and ssh in that
-// session's panes uses the person's agent. The link's ssh forwards the agent
-// when the person asks for it per host (-A in ssh_options). This machine's
-// daemon starts that ssh with SSH_AUTH_SOCK naming its own agent link, which
-// points at the agent of the client attached here. On the other machine,
-// tuios stdio-proxy reports the forwarded socket, and that daemon follows it
-// for a client attached through the link.
-
-// testAgent starts a real ssh-agent on a socket in a private folder, holding
-// one key whose comment is comment, and returns the socket. It skips the test
-// when the OpenSSH tools are not installed.
 func testAgent(t *testing.T, comment string) string {
 	t.Helper()
 	for _, tool := range []string{"ssh-agent", "ssh-add", "ssh-keygen"} {
@@ -76,21 +64,6 @@ func testAgent(t *testing.T, comment string) string {
 	return resolved
 }
 
-// forwardingSSH writes an ssh stand-in for a link to the daemon rooted at
-// remoteBase that forwards the agent the way ssh -A does. It forwards with -A,
-// and for an address that starts with fwd@, which stands for ForwardAgent yes
-// in ~/.ssh/config: ssh -G says forwardagent yes with -A or for such an
-// address, and no
-// for any other. When it forwards, the far command runs with SSH_AUTH_SOCK
-// naming relay, a socket that sshd would make, and every connection to relay
-// reaches the socket the stand-in's own SSH_AUTH_SOCK names at that moment:
-// the stand-in writes that path to agentPath, and the relay reads it per
-// connection, as ssh opens its SSH_AUTH_SOCK per request. Without forwarding
-// the far command has no SSH_AUTH_SOCK.
-//
-// Every run also writes the SSH_AUTH_SOCK it got to env-ADDR in dir, with
-// ADDR's punctuation as underscores, so a test can read what each link's ssh
-// was started with.
 func forwardingSSH(t *testing.T, dir, remoteBase, relay, agentPath string) string {
 	t.Helper()
 	path := filepath.Join(dir, "fake-ssh-agent")
@@ -145,10 +118,6 @@ case "$addr" in fwd@*) fwd=1 ;; esac
 	return path
 }
 
-// hostLinkName is the daemon's name for a host's agent link, after the
-// prefix: link-, the host name lowered and cut to 32, and eight hex digits of
-// the sha256 of the exact name. It is written out here rather than imported,
-// so a change to the name on one side fails this suite.
 func hostLinkName(host string) string {
 	sum := sha256.Sum256([]byte(host))
 	name := strings.ToLower(host)
@@ -158,8 +127,6 @@ func hostLinkName(host string) string {
 	return "link-" + name + "-" + hex.EncodeToString(sum[:4])
 }
 
-// linkEnv waits for the link ssh to addr to have run, and returns the
-// SSH_AUTH_SOCK it was started with.
 func linkEnv(t *testing.T, dir, addr string) string {
 	t.Helper()
 	name := strings.Map(func(r rune) rune {
@@ -180,9 +147,6 @@ func linkEnv(t *testing.T, dir, addr string) string {
 	}
 }
 
-// agentRelay listens on a socket in a private folder and joins every
-// connection to the socket named in agentPath, read when the connection
-// comes. It returns the relay's socket.
 func agentRelay(t *testing.T, agentPath string) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "rl")
@@ -263,10 +227,6 @@ func TestSSHAgentFollowsThroughAHost(t *testing.T) {
 		t.Fatalf("the client never drew the far session: %v\n%s", err, term.Snapshot())
 	}
 
-	// The pane was started with the far session's link, which now points
-	// at the forwarded socket. ssh-add asks the person's agent through it.
-	// The comment is printed on a line of its own, so the pane's width
-	// cannot split it.
 	line := "ssh-add -l >/dev/null; echo ADD_EXIT=$?; ssh-add -L | awk '{print \"KEY=\" $3}'\n"
 	if out, err := tuiosCLI(t, remote, "send-text", "-s", "far-agent", line); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)
@@ -283,11 +243,6 @@ func TestSSHAgentFollowsThroughAHost(t *testing.T) {
 	saveArtifact(t, term, artifactDir(t), "ssh-agent-through-host")
 }
 
-// hubWithHost sets up a hub and a remote daemon on one machine, both with
-// ssh_agent = "follow", and a host build whose link forwards with -A. The far
-// session is far-agent, and the hub holds a local session home. Neither
-// daemon has an agent of its own. It returns the hub's root, the remote's,
-// the ssh stand-in and the folder the stand-in records in.
 func hubWithHost(t *testing.T, extraHosts string) (base, remote, ssh string) {
 	t.Helper()
 	base = t.TempDir()
@@ -310,17 +265,11 @@ func hubWithHost(t *testing.T, extraHosts string) (base, remote, ssh string) {
 	return base, remote, ssh
 }
 
-// farKeyRuns numbers the farKey calls, so each one waits for its own line and
-// never for one an earlier call left on the screen.
 var farKeyRuns atomic.Int64
 
-// farKey runs ssh-add in the far pane, typed by the remote daemon and not by
-// any client, and waits for term to show the comment of the key the agent
-// holds.
 func farKey(t *testing.T, remote string, term *tuitest.Terminal, want, what string) {
 	t.Helper()
 	tag := fmt.Sprintf("R%d", farKeyRuns.Add(1))
-	// The tag is split in the typed line, so only the output carries it whole.
 	line := "clear; ssh-add -L | awk '{print \"" + tag[:1] + "\" \"" + tag[1:] + "KEY=\" $3}'\n"
 	if out, err := tuiosCLI(t, remote, "send-text", "-s", "far-agent", line); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)
@@ -374,15 +323,12 @@ func TestSSHAgentHostLinkFollowsOnlyThatHostsClients(t *testing.T) {
 	c := onHost(agentC)
 	farKey(t, remote, c, "kc549", "after C attached through the link")
 
-	// A types in the far pane. Its keys cross the hub's relay.
 	if err := a.SendKeys("echo TYPED-$((5*7))\r"); err != nil {
 		t.Fatalf("type in A: %v", err)
 	}
 	if err := a.WaitForText("TYPED-35", uiTimeout); err != nil {
 		t.Fatalf("A's keys never reached the far pane: %v\n%s", err, a.Snapshot())
 	}
-	// Input counts at most once a second, so the hub's link for build can
-	// move up to a second after the keys.
 	hubLink := filepath.Join(filepath.Dir(readAgentLink(t, base, "home").Path), "agent-"+hostLinkName("build")+".sock")
 	waitLinkTo(t, hubLink, agentA, "the hub's link for build after A typed")
 	farKey(t, remote, a, "ka549", "after A typed")
@@ -477,7 +423,6 @@ func TestSSHAgentHostLinkNames(t *testing.T) {
 		t.Fatalf("the link ssh to undone, whose -a undoes its -A, started with SSH_AUTH_SOCK %q, want the daemon's own %q", got, own)
 	}
 
-	// pair leaves the config, and its link goes with it.
 	writeConfigAtomically(t, configPathIn(base), []byte(cfg))
 	waitLinkTo(t, links["pair"], "", "after pair left the config")
 	if _, err := os.Lstat(links["Pair"]); err != nil {

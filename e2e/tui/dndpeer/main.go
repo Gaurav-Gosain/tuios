@@ -93,8 +93,6 @@ func send(meta string, payload []byte) {
 	_, _ = os.Stdout.WriteString(s + "\x1b\\")
 }
 
-// sendData writes a data stream the way kitty and the kitten write one:
-// base64 in chunks, m=0 on the last with data, then an empty message.
 func sendData(meta string, data []byte) {
 	enc := base64.StdEncoding.EncodeToString(data)
 	for len(enc) > 0 {
@@ -151,15 +149,10 @@ func main() {
 	} else {
 		send("t=a", []byte("text/uri-list text/plain"))
 	}
-	// Ask whether the terminal speaks the protocol, as yazi and the kitten
-	// do. The answer is logged; a test counts it.
 	send("t=q", nil)
 	_, _ = os.Stdout.WriteString("\x1b[?1002h\x1b[?1006h")
-	// Split so the command line that starts the peer, which the pane echoes,
-	// does not show the marker before the peer is up.
 	_, _ = os.Stdout.WriteString("DNDPEER-" + "READY\r\n")
 
-	// Streams of dropped data by MIME index, joined until the empty close.
 	streams := map[int][]byte{}
 	var offered []string
 	in := make(chan []byte)
@@ -235,8 +228,6 @@ func main() {
 						logln("ignored gesture")
 						continue
 					}
-					// The gesture. Offer, pre-send the first type's data,
-					// present a text icon, start.
 					if textOnly {
 						send("t=o:o=3", []byte("text/plain"))
 						sendData("t=p:x=0", []byte(plain))

@@ -15,18 +15,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// An application that shows an image through kitty Unicode placeholders
-// (ntcharts/picture, kitten icat --unicode-placeholder) sends a=T with U=1
-// and prints the cells the image occupies itself. tuios honoured U=1 only on
-// a bare a=p; on a=T it reserved rows, which scrolled the guest's screen every
-// frame, and placed the image at the cursor. These tests run the stand-in in
-// ./placeholders through each transport and read what the host was told.
-
-// placeholderGuestID is the image id the stand-in transmits under. The host
-// knows the image by an id tuios allocates.
 const placeholderGuestID = 7
 
-// buildPlaceholders compiles the placeholder stand-in once per test binary.
 func buildPlaceholders(t *testing.T) string {
 	t.Helper()
 	placeholdersOnce.Do(func() {
@@ -55,9 +45,6 @@ var (
 	placeholdersErr  error
 )
 
-// runPlaceholders boots tuios against a host that draws placeholders, runs the
-// stand-in in one tiled pane for a few seconds, and returns the host stream
-// from the launch on, with the screen as it ended.
 func runPlaceholders(t *testing.T, daemon bool, transport string, extra ...string) ([]byte, tuitest.Screen) {
 	t.Helper()
 	if transport == "shm" {
@@ -67,8 +54,6 @@ func runPlaceholders(t *testing.T, daemon bool, transport string, extra ...strin
 	host := newKittyHost()
 	term, base := start(t, startOpts{
 		cols: 120, rows: 40,
-		// The host draws placeholders and takes the 24-bit foreground that
-		// carries the image id; a real ghostty or kitty says so itself.
 		env:           []string{"TUIOS_SIXEL_GRAPHICS=0", "TUIOS_KITTY_PLACEHOLDERS=1", "COLORTERM=truecolor"},
 		out:           host,
 		daemonDefault: daemon,
@@ -83,7 +68,6 @@ func runPlaceholders(t *testing.T, daemon bool, transport string, extra ...strin
 	waitWindowCount(t, term, 1, "one pane")
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
-	// The grid is printed once, with the first frame, so read from the launch.
 	host.mark("launch")
 	argv := append([]string{bin, transport, "10"}, extra...)
 	if transport == "shm" {
@@ -101,7 +85,6 @@ func runPlaceholders(t *testing.T, daemon bool, transport string, extra ...strin
 	return stream, term.Screen()
 }
 
-// hostImageID is the one id the host was told to hold the guest's image under.
 func hostImageID(t *testing.T, stream []byte) int {
 	t.Helper()
 	ids := map[int]int{}
@@ -119,8 +102,6 @@ func hostImageID(t *testing.T, stream []byte) int {
 	return 0
 }
 
-// placeholderCellsByID counts the placeholder cells in the stream by the image
-// id their foreground names. A cell in any other colour counts under -1.
 func placeholderCellsByID(stream []byte) map[int]int {
 	out := map[int]int{}
 	fg := -1
@@ -134,12 +115,8 @@ func placeholderCellsByID(stream []byte) map[int]int {
 	return out
 }
 
-// placeholderTokens matches an SGR sequence or a placeholder cell, in order.
 var placeholderTokens = regexp.MustCompile(`(\x1b\[([0-9;:]*)m)|\x{10EEEE}`)
 
-// foregroundID applies one SGR to the foreground id in effect: a 24-bit or
-// 256-colour foreground names an id, a reset names none, and anything else
-// leaves it.
 func foregroundID(params string, current int) int {
 	if params == "" || params == "0" {
 		return -1
@@ -157,8 +134,6 @@ func foregroundID(params string, current int) int {
 				current = r<<16 | g<<8 | b
 				i += 4
 			} else if i+2 < len(fields) && fields[i+1] == "5" {
-				// kitty reads a 256-colour foreground's index as the
-				// id, which is how tuios writes ids below 256.
 				current, _ = strconv.Atoi(fields[i+2])
 				i += 2
 			}
@@ -167,8 +142,6 @@ func foregroundID(params string, current int) int {
 	return current
 }
 
-// assertPlaceholdersNameTheHostImage is the positive half of every test here:
-// every cell reaching the host names the host's id, not the guest's.
 func assertPlaceholdersNameTheHostImage(t *testing.T, stream []byte, hostID int) {
 	t.Helper()
 	if hostID == placeholderGuestID {
@@ -185,11 +158,8 @@ func assertPlaceholdersNameTheHostImage(t *testing.T, stream []byte, hostID int)
 	}
 }
 
-// cursorPlacementRE matches a placement tuios positioned itself.
 var cursorPlacementRE = regexp.MustCompile(`\x1b\[\d+;\d+H\x1b_Ga=p`)
 
-// assertVirtualOnly checks that the host was told the image is virtual and
-// never told to draw it somewhere.
 func assertVirtualOnly(t *testing.T, stream []byte, hostID int) {
 	t.Helper()
 	cmds := wireCmds(stream)
@@ -218,8 +188,6 @@ func assertVirtualOnly(t *testing.T, stream []byte, hostID int) {
 	}
 }
 
-// assertPaneTextIntact checks the lines the guest printed above and below the
-// picture are still there. Reserving rows for the image scrolls them off.
 func assertPaneTextIntact(t *testing.T, s tuitest.Screen) {
 	t.Helper()
 	text := s.Text()
