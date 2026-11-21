@@ -7,6 +7,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // TestDockPlanDropsNamesNothingDefines is the other half of the config warning:
@@ -54,8 +55,14 @@ func TestDockEventAliasesMatchTheValidatedSet(t *testing.T) {
 			t.Errorf("hook event %q has no dock alias, so a component cannot watch it by its hub name", event)
 		}
 	}
+	visibility := []string{session.EventWindowMinimized, session.EventWindowRestored}
+	for _, name := range visibility {
+		if !slices.Contains(valid, name) {
+			t.Errorf("the config rejects window event %q", name)
+		}
+	}
 	for _, name := range valid {
-		fires := false
+		fires := slices.Contains(visibility, name)
 		for hook, hub := range dockEventAliases {
 			if name == hook || name == hub {
 				fires = true

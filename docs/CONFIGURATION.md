@@ -5400,7 +5400,7 @@ The built-in components are `mode`, `workspaces`, `trail`, `tape`, `windows`, `t
 
 These options are in the [option reference](config-options.md): [`dock.custom.NAME.command`](config-options.md#dock.custom.NAME.command), [`dock.custom.NAME.refresh`](config-options.md#dock.custom.NAME.refresh), [`dock.custom.NAME.on-click`](config-options.md#dock.custom.NAME.on-click), [`dock.custom.NAME.max-width`](config-options.md#dock.custom.NAME.max-width), [`dock.custom.NAME.fg`](config-options.md#dock.custom.NAME.fg), [`dock.custom.NAME.bg`](config-options.md#dock.custom.NAME.bg), [`dock.custom.NAME.bold`](config-options.md#dock.custom.NAME.bold), [`dock.custom.NAME.cap_left`](config-options.md#dock.custom.NAME.cap_left), [`dock.custom.NAME.cap_right`](config-options.md#dock.custom.NAME.cap_right).
 
-With `push`, the command keeps running and each line it prints replaces the cell. With `event:`, the command runs again when the daemon reports one of those [hook events](HOOKS.md).
+With `push`, the command keeps running and each line it prints replaces the cell. With `event:`, the command runs again when the daemon reports one of those [hook events](HOOKS.md). Use `event:window-minimized,window-restored` to refresh when a pane is minimized or restored, including changes made with `tuios set-window`. The same changes also refresh components watching `layout-changed`.
 
 A component whose command fails is hidden. `tuios list-dock-components` shows what each component last did and why a cell is missing. `tuios refresh-dock [name]` runs a component again now.
 

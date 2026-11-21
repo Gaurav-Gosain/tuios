@@ -75,6 +75,7 @@ func (m *OS) MinimizeWindow(i int) {
 				m.TileRemainingWindows(i)
 			}
 		}
+		m.notifyDockWindowVisibility(session.EventWindowMinimized)
 	}
 }
 
@@ -89,6 +90,7 @@ func (m *OS) RestoreWindow(i int) {
 	}
 	if i >= 0 && i < len(m.Windows) && m.Windows[i].Minimized {
 		window := m.Windows[i]
+		defer m.notifyDockWindowVisibility(session.EventWindowRestored)
 		// A title row of a stack that is restored from the dock leaves the
 		// stack and gets a tile of its own. See stack.go.
 		m.leaveStack(window)
