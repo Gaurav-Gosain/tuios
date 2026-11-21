@@ -8,64 +8,39 @@ import (
 	"io"
 )
 
-// Colour glyphs: the bitmap emoji of a colour font.
-//
-// A colour emoji font has no outline for its emoji. Apple Color Emoji keeps a
-// PNG per glyph and size in its sbix table; Noto Color Emoji keeps them in
-// CBDT, indexed by CBLC. x/image's sfnt reads neither, and gives no access to
-// tables it does not read, so this file reads the table directory itself and
-// then only the bytes of the glyphs a render draws.
-//
-// Every offset and count comes from the font file, so each read is bounded by
-// the table it is in, and a table that does not add up leaves the face with
-// no colour glyphs: it never panics and never reads past the table.
-//
-// COLR (layered outlines) is not read yet: no machine this was checked on has
-// such a font.
-
-// maxColorBitmap bounds the side of a glyph bitmap a render decodes. Emoji
-// strikes go up to 160 px (Apple) and 136 px (Noto).
 const maxColorBitmap = 1024
 
-// colorFace is the colour tables of one face.
 type colorFace struct {
-	src       io.ReaderAt
-	numGlyphs int
-	// sbix strikes, by ppem, and their offsets in the file.
-	sbix []sbixStrike
-	// cblc sizes, and the file offsets of CBLC and CBDT.
+	src        io.ReaderAt
+	numGlyphs  int
+	sbix       []sbixStrike
 	cblc       []cblcSize
 	cblcOffset int64
 	cblcLength int64
 	cbdtOffset int64
 	cbdtLength int64
-	// lig is where the face's ligature table is (morx, else GSUB), read on
-	// the first cluster of several code points. See shape.go.
-	lig    tableRecord
-	isMorx bool
-	shape  *shaper
+	lig        tableRecord
+	isMorx     bool
+	shape      *shaper
 }
 
 type sbixStrike struct {
 	ppem   int
-	offset int64 // of the strike in the file
+	offset int64
 }
 
 type cblcSize struct {
 	ppem          int
-	first, last   int // glyph range of the size
+	first, last   int
 	arrayOffset   int64
 	numSubtables  int
 	indexTableEnd int64
 }
 
-// tableRecord is one entry of the table directory.
 type tableRecord struct {
 	offset, length int64
 }
 
-// readColorFace finds the colour tables of face index of src, or nil when the
-// face has none it can read. numGlyphs is the face's glyph count.
 func readColorFace(src io.ReaderAt, index, numGlyphs int) *colorFace {
 	tables, ok := readTableDirectory(src, index)
 	if !ok {
@@ -93,11 +68,8 @@ func readColorFace(src io.ReaderAt, index, numGlyphs int) *colorFace {
 	return cf
 }
 
-// maxLigTable bounds the ligature table a face reads (Apple Color Emoji's
-// morx is about 470 KB).
 const maxLigTable = 8 << 20
 
-// shaper reads the face's ligature table once.
 func (cf *colorFace) shaper() *shaper {
 	if cf.shape != nil {
 		return cf.shape
@@ -116,7 +88,6 @@ func (cf *colorFace) shaper() *shaper {
 	return cf.shape
 }
 
-// readAt reads n bytes at off, or reports false.
 func readAt(src io.ReaderAt, off int64, n int) ([]byte, bool) {
 	if off < 0 || n < 0 || n > 1<<26 {
 		return nil, false
@@ -133,8 +104,6 @@ func u32(b []byte, i int) int64 {
 	return int64(binary.BigEndian.Uint32(b[i:]))
 }
 
-// readTableDirectory reads the table records of face index: the collection
-// header first when the file is a .ttc.
 func readTableDirectory(src io.ReaderAt, index int) (map[string]tableRecord, bool) {
 	head, ok := readAt(src, 0, 12)
 	if !ok {
@@ -172,7 +141,6 @@ func readTableDirectory(src io.ReaderAt, index int) (map[string]tableRecord, boo
 	return out, true
 }
 
-// readSbix reads the strikes of an sbix table.
 func readSbix(src io.ReaderAt, t tableRecord, numGlyphs int) []sbixStrike {
 	head, ok := readAt(src, t.offset, 8)
 	if !ok {
@@ -189,7 +157,6 @@ func readSbix(src io.ReaderAt, t tableRecord, numGlyphs int) []sbixStrike {
 	var out []sbixStrike
 	for i := range int(n) {
 		so := u32(offs, 4*i)
-		// The strike's header and its glyph offsets must be in the table.
 		if so+4+4*int64(numGlyphs+1) > t.length {
 			continue
 		}
@@ -202,7 +169,6 @@ func readSbix(src io.ReaderAt, t tableRecord, numGlyphs int) []sbixStrike {
 	return out
 }
 
-// readCBLC reads the bitmap sizes of a CBLC table.
 func readCBLC(src io.ReaderAt, t tableRecord) []cblcSize {
 	head, ok := readAt(src, t.offset, 8)
 	if !ok {
@@ -231,15 +197,11 @@ func readCBLC(src io.ReaderAt, t tableRecord) []cblcSize {
 	return out
 }
 
-// has reports whether the face has a colour form of glyph gid.
 func (cf *colorFace) has(gid int) bool {
 	_, ok := cf.bitmap(gid, 0)
 	return ok
 }
 
-// bitmap is the PNG bytes of glyph gid at the strike that suits a box px
-// tall: the smallest strike at least that big, else the biggest. px 0 takes
-// any strike, for the coverage question.
 func (cf *colorFace) bitmap(gid, px int) ([]byte, bool) {
 	if gid <= 0 || gid >= cf.numGlyphs {
 		return nil, false
@@ -259,8 +221,6 @@ func (cf *colorFace) bitmap(gid, px int) ([]byte, bool) {
 	return nil, false
 }
 
-// orderStrikes lists the strikes to try for a box px tall: those at least px
-// big, smallest first, then the rest, biggest first.
 func orderStrikes(n, px int, ppem func(int) int) []int {
 	var up, down []int
 	for i := range n {
@@ -283,8 +243,6 @@ func orderStrikes(n, px int, ppem func(int) int) []int {
 	return append(up, down...)
 }
 
-// sbixGlyph reads glyph gid of strike s: a PNG, or a dupe that names another
-// glyph of the strike, followed hops times at most.
 func (cf *colorFace) sbixGlyph(s sbixStrike, gid, hops int) ([]byte, bool) {
 	offs, ok := readAt(cf.src, s.offset+4+4*int64(gid), 8)
 	if !ok {
@@ -306,11 +264,9 @@ func (cf *colorFace) sbixGlyph(s sbixStrike, gid, hops int) ([]byte, bool) {
 			return cf.sbixGlyph(s, u16(rec, 8), hops-1)
 		}
 	}
-	// jpg and tiff are not drawn: no colour emoji font uses them.
 	return nil, false
 }
 
-// cbdtGlyph reads glyph gid at size s from CBDT, through its CBLC index.
 func (cf *colorFace) cbdtGlyph(s cblcSize, gid int) ([]byte, bool) {
 	if gid < s.first || gid > s.last {
 		return nil, false
@@ -343,9 +299,6 @@ func (cf *colorFace) cbdtGlyph(s cblcSize, gid int) ([]byte, bool) {
 	return nil, false
 }
 
-// cblcGlyphSpan finds glyph gid in an index subtable whose body starts at
-// body (CBLC-relative) and ends by end, and returns its offset from the
-// subtable's image data and its length.
 func (cf *colorFace) cblcGlyphSpan(body, end int64, format, first, last, gid int) (int64, int64, bool) {
 	read := func(off int64, n int) ([]byte, bool) {
 		if off+int64(n) > end {
@@ -419,8 +372,6 @@ func (cf *colorFace) cblcGlyphSpan(body, end int64, format, first, last, gid int
 	return 0, 0, false
 }
 
-// cbdtImage reads a CBDT glyph record of imageFormat 17, 18 or 19 and returns
-// its PNG.
 func (cf *colorFace) cbdtImage(off, length int64, format int) ([]byte, bool) {
 	if length <= 0 || off+length > cf.cbdtLength || length > 4<<20 {
 		return nil, false
@@ -429,7 +380,6 @@ func (cf *colorFace) cbdtImage(off, length int64, format int) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
-	// The metrics before the length: small (5 bytes), big (8), or none.
 	var m int
 	switch format {
 	case 17:
@@ -450,8 +400,6 @@ func (cf *colorFace) cbdtImage(off, length int64, format int) ([]byte, bool) {
 	return rec[m+4 : m+4+n], true
 }
 
-// decodeColorBitmap decodes a glyph's PNG, refusing one bigger than
-// maxColorBitmap on a side before it is decoded.
 func decodeColorBitmap(data []byte) (image.Image, bool) {
 	cfg, err := png.DecodeConfig(bytes.NewReader(data))
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > maxColorBitmap || cfg.Height > maxColorBitmap {

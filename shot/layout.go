@@ -1,25 +1,13 @@
 package shot
 
-// Run merging and pixel layout shared by every backend. All formats render
-// the same runs; only the serialization differs, so a fix here fixes all of
-// them at once.
-
-// A run is a horizontal stretch of one row that shares a style. Text runs
-// carry clusters; procedural cells (box drawing, blocks, braille, powerline)
-// are emitted as their own single-cell runs so the backends can draw them as
-// geometry.
 type run struct {
 	row, col, cells int
-	cell            Cell   // style carrier (first cell of the run)
-	text            string // concatenated clusters; empty for blank runs
-	procedural      rune   // non-zero when this run is one procedural glyph
-	wide            bool   // one cluster spanning two cells
+	cell            Cell
+	text            string
+	procedural      rune
+	wide            bool
 }
 
-// textRuns merges each row of g into style runs. Wide clusters and
-// procedural glyphs always get a run of their own: wide so the backend can
-// pin an explicit two-cell advance, procedural so it can swap the font for
-// geometry.
 func textRuns(g *Grid) []run {
 	var runs []run
 	for y := 0; y < g.Rows; y++ {
@@ -34,7 +22,7 @@ func textRuns(g *Grid) []run {
 		for x := 0; x < g.Cols; x++ {
 			c := row[x]
 			if c.Width == 0 {
-				continue // continuation of a wide cluster
+				continue
 			}
 			r := firstRune(c.Cluster)
 			single := len(c.Cluster) == len(string(r))
@@ -69,8 +57,6 @@ func pickProcedural(is bool, r rune) rune {
 	return 0
 }
 
-// displayCluster is the cluster with blanks normalized to a space so run
-// text always has one cluster per cell.
 func displayCluster(c Cell) string {
 	if c.Cluster == "" {
 		return " "
@@ -85,8 +71,6 @@ func firstRune(s string) rune {
 	return 0
 }
 
-// isBlank reports whether the run draws no ink: only spaces and no
-// decoration that would need a mark.
 func (r run) isBlank() bool {
 	if r.procedural != 0 {
 		return false
@@ -102,14 +86,11 @@ func (r run) isBlank() bool {
 	return true
 }
 
-// bgRun is a horizontal stretch that shares one non-default background.
 type bgRun struct {
 	row, col, cells int
 	color           Color
 }
 
-// bgRuns merges backgrounds per row, skipping default-background cells so
-// the card ground shows through them.
 func bgRuns(g *Grid) []bgRun {
 	var runs []bgRun
 	for y := 0; y < g.Rows; y++ {
@@ -124,8 +105,6 @@ func bgRuns(g *Grid) []bgRun {
 		for x := 0; x < g.Cols; x++ {
 			c := row[x]
 			if c.Width == 0 {
-				// A continuation cell inherits the wide cell's background,
-				// which the run already covers.
 				continue
 			}
 			span := int(c.Width)
@@ -227,20 +206,17 @@ type Frame struct {
 	CellAspect float64
 }
 
-// layout is the resolved pixel geometry for one render.
 type layout struct {
-	cw, ch                     float64 // cell size in px
-	pad                        float64 // wash border around the card
-	inset                      float64 // card padding around the grid
-	titleH                     float64 // title bar height, 0 without a bar
+	cw, ch                     float64
+	pad                        float64
+	inset                      float64
+	titleH                     float64
 	radius                     float64
 	cardX, cardY, cardW, cardH float64
 	gridX, gridY               float64
-	w, h                       float64 // full canvas
+	w, h                       float64
 }
 
-// computeLayout turns a grid and frame into pixel geometry, given the cell
-// size the backend renders at.
 func computeLayout(g *Grid, f *Frame, cw, ch, scale float64) layout {
 	l := layout{cw: cw, ch: ch}
 	if f == nil || f.Mode == FrameNone {
@@ -265,8 +241,6 @@ func computeLayout(g *Grid, f *Frame, cw, ch, scale float64) layout {
 	return l
 }
 
-// contrastRatio is WCAG contrast between two colors, local so the package
-// stays a leaf (overlay has the same math for chrome).
 func contrastRatio(a, b Color) float64 {
 	la, lb := luma(a), luma(b)
 	if la < lb {
@@ -275,10 +249,6 @@ func contrastRatio(a, b Color) float64 {
 	return (la + 0.05) / (lb + 0.05)
 }
 
-// deriveWash builds the auto gradient: two accent-family stops blended
-// toward the content background until they sit quietly next to it. A
-// gruvbox pane gets a gruvbox wash, a catppuccin pane gets theirs, because
-// the stops start from the theme's own accents.
 func deriveWash(bg Color, accents []Color) (Color, Color) {
 	a1, a2 := bg, bg
 	if len(accents) > 0 {
@@ -293,9 +263,6 @@ func deriveWash(bg Color, accents []Color) (Color, Color) {
 	return start, end
 }
 
-// quietStop pulls c toward bg until the wash cannot fight the card for
-// attention. 2.2 is under the 3:1 mark floor: visible as a wash, never
-// legible as a shape against the content.
 func quietStop(c, bg Color) Color {
 	for i := 0; i < 16 && contrastRatio(c, bg) > 2.2; i++ {
 		c = mix(c, bg, 0.2)

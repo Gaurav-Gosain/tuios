@@ -7,21 +7,6 @@ import (
 	"sync"
 )
 
-// The sixteen-colour floor.
-//
-// The Linux console (TERM=linux) shows sixteen colours from a font of 256 or
-// 512 glyphs, which carries the CP437 block set and nothing finer. So a cell
-// is two sub-pixels, top and bottom, drawn with ▀ or ▄, each dithered to the
-// sixteen colours with the 4x4 Bayer matrix.
-//
-// The colours are sent as ANSI indices, so the terminal paints its own
-// palette. The choice is made against the Linux console's default palette,
-// the VGA colours, which is also what most terminals ship. Only the first
-// eight are used as a background: the Linux console gives the bright
-// backgrounds to blink unless told otherwise, so a cell whose two colours are
-// both bright gives one of them up for its nearest dark colour.
-
-// vga16 is the Linux console's default palette.
 var vga16 = [16]color.RGBA{
 	{0, 0, 0, 255}, {170, 0, 0, 255}, {0, 170, 0, 255}, {170, 85, 0, 255},
 	{0, 0, 170, 255}, {170, 0, 170, 255}, {0, 170, 170, 255}, {170, 170, 170, 255},
@@ -33,8 +18,8 @@ var (
 	ansiOnce    sync.Once
 	ansiLUT     []uint8
 	ansiLab     [16][3]float32
-	darkNearest [16]uint8   // the nearest of 0..7 to each colour
-	darkCost    [16]float32 // and how far it is
+	darkNearest [16]uint8
+	darkCost    [16]float32
 )
 
 func ansiTable() []uint8 {
@@ -71,11 +56,8 @@ func ansiTable() []uint8 {
 	return ansiLUT
 }
 
-// ansiStep is the spread of the dither in sRGB units: the gap between the
-// VGA palette's levels (0, 85, 170, 255).
 const ansiStep = 85
 
-// dither16 is the palette index a sub-pixel at (x, y) becomes.
 func dither16(lab [3]float32, x, y int) int {
 	c := okLabToSRGB(lab[0], lab[1], lab[2])
 	off := ((bayer4[y&3][x&3]+0.5)/16 - 0.5) * ansiStep
@@ -83,8 +65,6 @@ func dither16(lab [3]float32, x, y int) int {
 	return int(ansiTable()[shift(c.R)<<10|shift(c.G)<<5|shift(c.B)])
 }
 
-// encodeANSI16 draws the cells of region as half blocks in the sixteen
-// colours.
 func encodeANSI16(dst []Cell, img Indexed, lin [][3]float32, cellW, cellH, cols int, region image.Rectangle) {
 	ansiTable()
 	half := cellH / 2
@@ -105,7 +85,6 @@ func encodeANSI16(dst []Cell, img Indexed, lin [][3]float32, cellW, cellH, cols 
 	}
 }
 
-// cell16 is a cell in ANSI colours: fg, and bg unless it is negative.
 func cell16(glyph string, fg, bg int) Cell {
 	c := Cell{Glyph: glyph}
 	if fg >= 0 {
@@ -117,8 +96,6 @@ func cell16(glyph string, fg, bg int) Cell {
 	return c
 }
 
-// halfCell16 is the cell for a top and a bottom colour, either of which may
-// be transparent, with a dark background.
 func halfCell16(topClear, botClear bool, t, b int) Cell {
 	switch {
 	case topClear && botClear:
@@ -136,7 +113,6 @@ func halfCell16(topClear, botClear bool, t, b int) Cell {
 	case t < 8:
 		return cell16("▄", b, t)
 	}
-	// Both bright: the one that loses least becomes its dark neighbour.
 	if darkCost[b] <= darkCost[t] {
 		return cell16("▀", t, int(darkNearest[b]))
 	}

@@ -39,7 +39,6 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		// No name and no time in the header, so a rerun writes the same bytes.
 		if _, err := zw.Write(ttf); err != nil {
 			panic(err)
 		}

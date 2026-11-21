@@ -15,15 +15,6 @@ import (
 	"golang.org/x/image/vector"
 )
 
-// PNG backend: direct cell rasterization, not SVG-to-PNG. freeze's route
-// (resvg compiled to WASM) works but drags a WASM runtime into the binary;
-// the direct blitter shares the procedural glyph code the SVG backend needs
-// anyway and renders in milliseconds. Frame.Font loads the user's own font so
-// their Nerd Font icons render, Frame.Fallback adds faces for the glyphs it
-// lacks, and embedded Go Mono regular and bold come last. A glyph in none of
-// them draws as a dotted outline box: visible tofu rather than silent blanks.
-// font.go holds the search order.
-
 const pngBaseFontSize = 14.0
 
 // RenderPNG renders the grid and frame to PNG bytes.
@@ -158,23 +149,6 @@ func Downscale(img *image.RGBA, maxW, maxH int) *image.RGBA {
 	return out
 }
 
-// fitCellToTerminal gives the raster's cell the shape of the cell of the
-// terminal being pictured.
-//
-// The font's own cell is not the terminal's. cellSize takes the width from the
-// 'M' advance and the height from the face's line box, and a terminal picks its
-// own height from ascent and descent and its own leading rules; the two agree
-// only by luck. Measured on this machine against a real kitty: the host's cell
-// was 9 by 20 pixels, a ratio of 0.450, while the raster's cell in the built-in
-// face was 5.76 by 14.4, a ratio of 0.400. Every column of the picture was
-// eleven percent narrower than the column it pictured, which is a whole screen
-// leaning tall, and no amount of correct letterboxing in the panel can undo it
-// because the picture itself is the wrong shape.
-//
-// The cell is only ever grown, never shrunk. A cell narrower than the advance
-// would run neighbouring glyphs into each other and a cell shorter than the
-// line box would clip them; a cell wider than the advance costs a glyph that is
-// centred in it, which drawCluster already does.
 func fitCellToTerminal(f *Frame, cw, ch float64) (float64, float64) {
 	if f == nil || f.CellAspect <= 0 || cw <= 0 || ch <= 0 {
 		return cw, ch
@@ -198,8 +172,6 @@ func drawPNGRun(img *image.RGBA, r run, l layout, faces *faceSet, g *Grid) {
 	}
 
 	if r.procedural != 0 {
-		// The paths come back on the canvas's own pixel grid, so they are
-		// filled with no further offset.
 		paths, _ := proceduralPaths(r.procedural, x, y, l.cw, l.ch)
 		for _, p := range paths {
 			pc := ink
@@ -227,9 +199,6 @@ func drawPNGRun(img *image.RGBA, r run, l layout, faces *faceSet, g *Grid) {
 	drawPNGDecor(img, r, x, y, w, l, ink)
 }
 
-// clusters splits run text into per-cell clusters. Merged narrow runs carry
-// one single-rune cluster per cell by construction (multi-rune clusters get
-// their own run in textRuns), so splitting by rune is exact.
 func clusters(s string) []string {
 	var out []string
 	for _, r := range s {
@@ -238,7 +207,6 @@ func clusters(s string) []string {
 	return out
 }
 
-// runClusters returns the per-cell clusters of a run.
 func runClusters(r run) []string {
 	if r.wide || r.cells == 1 {
 		return []string{r.text}
@@ -246,7 +214,6 @@ func runClusters(r run) []string {
 	return clusters(r.text)
 }
 
-// drawColorTile draws a colour glyph centred in its cell.
 func drawColorTile(img *image.RGBA, tile *image.RGBA, x, cellTop, cellW, cellH float64) {
 	tb := tile.Bounds()
 	ox := int(x + (cellW-float64(tb.Dx()))/2)
@@ -259,8 +226,6 @@ func drawCluster(img *image.RGBA, faces *faceSet, cl string, x, baseline, cellW,
 		return
 	}
 	r := firstRune(cl)
-	// A cluster of several code points is drawn whole by a colour font's
-	// ligature when one has it (shape.go).
 	if len(cl) > utf8.RuneLen(r) {
 		if tile := faces.pickSequence(cl, bold, int(cellW), int(cellH)); tile != nil {
 			drawColorTile(img, tile, x, cellTop, cellW, cellH)
@@ -272,8 +237,6 @@ func drawCluster(img *image.RGBA, faces *faceSet, cl string, x, baseline, cellW,
 		drawTofu(img, x, cellTop, cellW, cellH, ink)
 		return
 	}
-	// A colour glyph is drawn as its bitmap, centred in the cell, in its own
-	// colours.
 	if tile := faces.pickColor(r, bold, int(cellW), int(cellH)); tile != nil {
 		drawColorTile(img, tile, x, cellTop, cellW, cellH)
 		return
@@ -284,11 +247,6 @@ func drawCluster(img *image.RGBA, faces *faceSet, cl string, x, baseline, cellW,
 		Face: face,
 		Dot:  fixed.Point26_6{X: floatToFixed(x), Y: floatToFixed(baseline)},
 	}
-	// Center the glyph in its cell when the face advance disagrees with
-	// the grid, so a substituted glyph does not lean left. A face with a
-	// wider advance, such as Noto Sans Mono's two-column ◆ and ▤, has its ink
-	// centered instead: centering the advance box alone puts the ink half a
-	// cell to the right, over the next cell.
 	if adv, ok := face.GlyphAdvance(r); ok {
 		off := (cellW - fixedToFloat(adv)) / 2
 		switch {
@@ -304,15 +262,12 @@ func drawCluster(img *image.RGBA, faces *faceSet, cl string, x, baseline, cellW,
 	start := d.Dot
 	d.DrawString(cl)
 	if bold && doubleStrike {
-		// The second strike starts one pixel right of the first, centering
-		// included, so the two inks overlap.
 		d.Dot = fixed.Point26_6{X: start.X + fixed.I(1), Y: start.Y}
 		d.DrawString(cl)
 	}
-	_ = italic // no italic face embedded; the honest limitation is documented
+	_ = italic
 }
 
-// drawTofu draws the deliberate missing-glyph mark: a dotted outline box.
 func drawTofu(img *image.RGBA, x, y, w, h float64, ink Color) {
 	inset := w * 0.15
 	x0, y0 := x+inset, y+h*0.18
@@ -402,21 +357,13 @@ func drawPNGTitleBar(img *image.RGBA, g *Grid, f *Frame, l layout, faces *faceSe
 	}
 }
 
-// fillRect fills an axis-aligned rect with an opaque color.
 func fillRect(img *image.RGBA, x, y, w, h float64, c Color) {
 	r := image.Rect(int(x+0.5), int(y+0.5), int(x+w+0.5), int(y+h+0.5))
 	draw.Draw(img, r, image.NewUniform(c), image.Point{}, draw.Over)
 }
 
-// fillPath rasterizes one gpath at an origin with anti-aliasing.
 func fillPath(img *image.RGBA, p gpath, ox, oy float64, c Color) {
 	minX, minY, maxX, maxY := pathBounds(p, ox, oy)
-	// Clip to the canvas before sizing the rasterizer. A path is allowed to
-	// reach past the canvas (a curve's control points can, and at frame none a
-	// glyph in the first or last column ends on the canvas edge), and an
-	// unclipped rect would index past the pixel buffer. The rasterizer accepts
-	// path coordinates outside its own bounds, so clipping the rect is all
-	// that is needed and the geometry is unchanged.
 	clip := img.Bounds()
 	x0, y0 := max(int(minX), clip.Min.X), max(int(minY), clip.Min.Y)
 	x1, y1 := min(int(maxX+1), clip.Max.X), min(int(maxY+1), clip.Max.Y)
@@ -469,14 +416,6 @@ func pathBounds(p gpath, ox, oy float64) (minX, minY, maxX, maxY float64) {
 	return
 }
 
-// fillDiagonalGradient paints the wash: a top-left to bottom-right blend.
-//
-// The blend runs on x+y, so it is constant along every anti-diagonal. Mixing
-// per pixel therefore computed the same colour w times per diagonal and cost
-// 58 ms on a full-screen canvas; a lookup table indexed by x+y computes it
-// w+h times and copies the rest, which measured 17 ms for a picture nobody can
-// tell apart. Writing straight into Pix rather than through SetRGBA drops the
-// per-pixel bounds check the loop already made unnecessary.
 func fillDiagonalGradient(img *image.RGBA, start, end Color) {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
@@ -497,7 +436,6 @@ func fillDiagonalGradient(img *image.RGBA, start, end Color) {
 	}
 }
 
-// fillRoundedRect fills a rounded rectangle with anti-aliased corners.
 func fillRoundedRect(img *image.RGBA, x, y, w, h, radius float64, c Color) {
 	fillPath(img, roundedRectPath(0, 0, w, h, radius), x, y, c)
 }
@@ -525,22 +463,11 @@ func roundedRectPath(x, y, w, h, r float64) gpath {
 	}}
 }
 
-// shadowScale is how much smaller than the canvas the shadow is worked out at.
-//
-// A double box blur has no detail in it: it is a featureless ramp a few dozen
-// pixels wide, and blurring it at full resolution spent 388 ms of a 903 ms
-// full-screen render on pixels that carry no information. Rasterising the
-// silhouette and blurring it at a quarter on each axis is sixteen times less
-// work and measured 63 ms, and the result is interpolated back up rather than
-// stepped up, so no seam appears where the sample grid does.
 const shadowScale = 4
 
-// drawCardShadow blurs the card silhouette and composites it under where
-// the card will land, offset down: carbon's single soft shadow.
 func drawCardShadow(img *image.RGBA, l layout, ch float64) {
 	radius := int(ch * 0.5)
 	dy := ch * 0.45
-	// Render the silhouette into an alpha mask with a margin for the blur.
 	margin := radius * 3
 	mw := int(l.cardW) + 2*margin
 	mh := int(l.cardH) + 2*margin
@@ -562,28 +489,18 @@ func drawCardShadow(img *image.RGBA, l layout, ch float64) {
 	boxBlurAlpha(small, blur)
 	mask := upscaleAlpha(small, mw, mh)
 
-	// Composite at 35 percent black.
 	ox := int(l.cardX) - margin
 	oy := int(l.cardY+dy) - margin
 	draw.DrawMask(img, image.Rect(ox, oy, ox+mw, oy+mh),
 		image.NewUniform(color.RGBA{A: 89}), image.Point{}, mask, image.Point{}, draw.Over)
 }
 
-// upscaleAlpha resamples an alpha mask up to w by h, linearly on both axes.
-//
-// The x weights are worked out once per row width rather than once per pixel,
-// and everything is integer: the mask is nine megapixels on a full-screen
-// capture, so a float multiply per sample would give back most of what the
-// smaller blur just saved.
 func upscaleAlpha(src *image.Alpha, w, h int) *image.Alpha {
 	dst := image.NewAlpha(image.Rect(0, 0, w, h))
 	sw, sh := src.Bounds().Dx(), src.Bounds().Dy()
 	if sw <= 0 || sh <= 0 || w <= 0 || h <= 0 {
 		return dst
 	}
-	// Fixed point with 8 fractional bits, and half-pixel centres so the
-	// resampled mask sits where the small one did rather than a sample to its
-	// left.
 	type tap struct {
 		lo, hi int
 		frac   int32
@@ -591,8 +508,6 @@ func upscaleAlpha(src *image.Alpha, w, h int) *image.Alpha {
 	taps := func(n, out, limit int) []tap {
 		t := make([]tap, out)
 		for i := range out {
-			// int64 because the product is a pixel count times a pixel count
-			// times 256, which leaves 32 bits behind on a large canvas.
 			f := int(((int64(2*i+1)*int64(n)*256)/int64(2*out) - 128))
 			f = max(f, 0)
 			lo := f >> 8
@@ -621,7 +536,6 @@ func upscaleAlpha(src *image.Alpha, w, h int) *image.Alpha {
 	return dst
 }
 
-// boxBlurAlpha runs one separable box blur pass over an alpha mask.
 func boxBlurAlpha(m *image.Alpha, radius int) {
 	if radius < 1 {
 		return
@@ -630,7 +544,6 @@ func boxBlurAlpha(m *image.Alpha, radius int) {
 	w, h := b.Dx(), b.Dy()
 	tmp := make([]uint8, w*h)
 	window := 2*radius + 1
-	// Horizontal.
 	for y := range h {
 		row := m.Pix[y*m.Stride : y*m.Stride+w]
 		sum := 0
@@ -642,7 +555,6 @@ func boxBlurAlpha(m *image.Alpha, radius int) {
 			sum += int(row[clampInt(x+radius+1, w)]) - int(row[clampInt(x-radius, w)])
 		}
 	}
-	// Vertical.
 	for x := range w {
 		sum := 0
 		for y := -radius; y <= radius; y++ {

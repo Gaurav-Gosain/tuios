@@ -59,8 +59,6 @@ func ScaleBilinear(dst *image.RGBA, dr image.Rectangle, src image.Image, sr imag
 	}
 }
 
-// bilinearAxis names the two source positions, within size, that target
-// position p falls between, and the weight of each.
 func bilinearAxis(p int, scale float64, size int) (s0, s1 int, near, far float64) {
 	at := (float64(p)+0.5)*scale - 0.5
 	s0 = int(at)
