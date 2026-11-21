@@ -3082,12 +3082,7 @@ func (d *Daemon) nextStallCheck(interval time.Duration) (time.Time, bool) {
 	var next int64
 	found := false
 	for _, sess := range d.manager.AllSessions() {
-		at, ok := sess.nextStallAt(d.agentStallTimeout, func(ptyID string) int64 {
-			if pty := sess.GetPTY(ptyID); pty != nil {
-				return pty.LastOutput()
-			}
-			return 0
-		})
+		at, ok := sess.nextStallAt(d.agentStallTimeout, sess.textChangedAt)
 		if ok && (!found || at < next) {
 			next, found = at, true
 		}
@@ -3110,12 +3105,9 @@ func (d *Daemon) stallScan(now time.Time) {
 	}
 	reg := d.agentMatcher.registry
 	for _, sess := range d.manager.AllSessions() {
-		sess.applyStallHeuristic(now, d.agentStallTimeout, func(ptyID string) int64 {
-			if pty := sess.GetPTY(ptyID); pty != nil {
-				return pty.LastOutput()
-			}
-			return 0
-		}, func(ptyID string) bool {
+		// The clock is the screen's text, not its output: a cursor an agent
+		// blinks for itself is output, and it said nothing. See textClock.
+		sess.applyStallHeuristic(now, d.agentStallTimeout, sess.textChangedAt, func(ptyID string) bool {
 			// The last look before the pane is called idle. A stalled pane
 			// emits nothing, so the scan the output path would have run is
 			// the one that never happens.

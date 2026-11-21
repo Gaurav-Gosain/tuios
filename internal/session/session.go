@@ -1337,6 +1337,10 @@ type PTY struct {
 	// heuristic, so it is an atomic rather than guarded by a lock.
 	lastOutput atomic.Int64
 
+	// textClock is when the text on this PTY's screen last changed, as the
+	// silence timer reads it. See agent_text_clock.go.
+	textClock textClock
+
 	// humanKeyAt is the unix-nano time a person last typed into this pane
 	// through a client, focus and mouse reports left out. The delivery queue
 	// waits for it to be queueTypingQuiet old. draftWatch, when set, runs on
