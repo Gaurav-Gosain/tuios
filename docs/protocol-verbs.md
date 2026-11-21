@@ -2096,6 +2096,7 @@ Save the workspace a session shows as a layout template, load one back, list the
 | `action` | string | yes |  | What to do. One of `list`, `save`, `load` or `delete`. |
 | `session` | string |  |  | Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one. |
 | `name` | string |  |  | The layout. Needed to save, load and delete. |
+| `workspace` | int |  |  | save: the workspace to save. The one the session shows when absent. |
 
 | Result field | Type | Description |
 |---|---|---|

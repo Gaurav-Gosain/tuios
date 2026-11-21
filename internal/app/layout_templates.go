@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layouttmpl"
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
@@ -121,13 +122,25 @@ func (m *OS) layoutTemplateCmd(action, name string) tea.Cmd {
 // client's session, which holds nothing of the model.
 func (m *OS) layoutTemplateCall() func(action, name string) error {
 	host, build, sess := m.AttachedHost, m.DaemonClient.ClientVersion(), m.SessionName
+	// The workspace this client shows now, when it asks: the daemon reaches
+	// the save later, and the person may have switched workspace since.
+	ws := m.CurrentWorkspace
+	hold := testknob.Millis("layout_template_hold_ms")
 	return func(action, name string) error {
+		// A test holds the request, to switch workspace while it is out.
+		if hold > 0 {
+			time.Sleep(hold)
+		}
 		c, err := dialSessionDaemon(host, build)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = c.Close() }()
-		_, err = c.Call("layout-template", map[string]any{"action": action, "session": sess, "name": name})
+		params := map[string]any{"action": action, "session": sess, "name": name}
+		if action == "save" {
+			params["workspace"] = ws
+		}
+		_, err = c.Call("layout-template", params)
 		return err
 	}
 }
@@ -323,7 +336,9 @@ func (m *OS) LayoutSaveKey(msg tea.KeyPressMsg) {
 		}
 		if err := SaveLayoutTemplate(name, m); err != nil {
 			m.ShowNotification("Failed to save layout: "+err.Error(), "error", m.Settings.NotificationDuration)
-		} else {
+		} else if !m.daemonLayouts() {
+			// A daemon session's save is a request, and the answer says
+			// how it went (handleLayoutTemplateDone).
 			m.ShowNotification("Layout saved: "+name, "success", m.Settings.NotificationDuration)
 		}
 		m.CloseLayoutPicker()
@@ -366,6 +381,10 @@ func (m *OS) DeleteLayoutFromPicker(name string) tea.Cmd {
 // handleLayoutTemplateDone shows a save or load the daemon refused.
 func (m *OS) handleLayoutTemplateDone(msg LayoutTemplateDoneMsg) {
 	if msg.Err == nil {
+		// The daemon saved it: now it can be said.
+		if msg.Action == "save" {
+			m.ShowNotification("Layout saved: "+msg.Name, "success", m.Settings.NotificationDuration)
+		}
 		return
 	}
 	m.ShowNotification(fmt.Sprintf("Failed to %s layout %s: %v", msg.Action, msg.Name, msg.Err), "error", m.Settings.NotificationDuration)

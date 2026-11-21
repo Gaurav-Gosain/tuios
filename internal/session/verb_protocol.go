@@ -1849,6 +1849,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "action", Type: "string", Required: true, Description: "What to do.", Accepted: layoutTemplateActions},
 				sessionParam,
 				{Name: "name", Type: "string", Description: "The layout. Needed to save, load and delete."},
+				{Name: "workspace", Type: "int", Description: "save: the workspace to save. The one the session shows when absent."},
 			},
 			returns: []verbParam{
 				{Name: "layouts", Type: "[]object", Description: "list: each layout's name, panes, mode, tiling, created_at and version."},

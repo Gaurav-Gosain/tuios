@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,6 +45,10 @@ type layoutTemplateParams struct {
 	Action  string `json:"action"`
 	Session string `json:"session"`
 	Name    string `json:"name"`
+	// Workspace is the workspace to save. Absent, it is the one the session
+	// shows. A client names the one it showed when the person asked, since
+	// it may have switched by the time the request arrives.
+	Workspace *int `json:"workspace,omitempty"`
 }
 
 // layoutTemplateRow is one template as list answers it.
@@ -100,18 +105,25 @@ func (d *Daemon) verbLayoutTemplate(cs *connState, params json.RawMessage) (any,
 			return nil, verr
 		}
 		st := sess.GetState()
-		if IsScratchWorkspace(st.CurrentWorkspace) {
+		ws := st.CurrentWorkspace
+		if p.Workspace != nil {
+			ws = *p.Workspace
+		}
+		if IsScratchWorkspace(ws) {
 			return nil, invalidParam("session", "the session shows a scratch group, which is not a workspace. Show a workspace, then save it")
 		}
 		w, h := sess.Size()
-		t := templateFromState(st, name, w, h)
+		t := templateFromState(st, ws, name, w, h)
 		if len(t.Windows) == 0 {
+			if p.Workspace != nil {
+				return nil, invalidParam("workspace", "workspace "+strconv.Itoa(ws)+" has no panes to save")
+			}
 			return nil, invalidParam("session", "the workspace the session shows has no panes to save")
 		}
 		if err := layouttmpl.Save(t); err != nil {
 			return nil, newVerbError(ErrVerbInternal, "save layout: "+err.Error())
 		}
-		return map[string]any{"name": name, "panes": len(t.Windows), "mode": t.Mode, "workspace": st.CurrentWorkspace, "path": layouttmpl.Path(name)}, nil
+		return map[string]any{"name": name, "panes": len(t.Windows), "mode": t.Mode, "workspace": ws, "path": layouttmpl.Path(name)}, nil
 	case "load":
 		sess, verr := d.resolveVerbSession(cs, p.Session)
 		if verr != nil {
@@ -138,8 +150,7 @@ func layoutTemplateMissing(name string) *verbError {
 
 // templateFromState is the layout of the workspace st shows, named name, at
 // the session size w by h.
-func templateFromState(st *SessionState, name string, w, h int) layouttmpl.Template {
-	ws := st.CurrentWorkspace
+func templateFromState(st *SessionState, ws int, name string, w, h int) layouttmpl.Template {
 	mode := st.LayoutMode
 	if m, ok := st.WorkspaceLayoutModes[ws]; ok {
 		mode = m
