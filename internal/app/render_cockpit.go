@@ -2639,6 +2639,7 @@ func (m *OS) drawFocus(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Tim
 				st.ck.hits = ckLineHits(st.ck.hits, hits[i], x, right, x+w, top+y)
 			}
 		}
+		m.drawThreadCopyFlash(c, t, x, base-(end-start), w, start, min(end, len(lines))-start)
 		if t != nil {
 			m.drawThreadUnseen(c, l, t, x, w, base-1, top)
 			drawThreadRuler(c, l, t, x+w-1, base-room, room, len(lines), start)

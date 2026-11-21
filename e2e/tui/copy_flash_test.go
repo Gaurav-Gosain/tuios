@@ -117,7 +117,16 @@ func luminance(c tuitest.Color) int {
 // up. Only the grounds of those rows are kept, so the capture stays small.
 func sampleFlash(t *testing.T, term *tuitest.Terminal, r0, r1, ref int, release func()) []flashFrame {
 	t.Helper()
+	frames, _ := sampleFlashMid(t, term, r0, r1, ref, release)
+	return frames
+}
+
+// sampleFlashMid is sampleFlash, and the whole screen half way through the
+// sweep's time, kept for a picture.
+func sampleFlashMid(t *testing.T, term *tuitest.Terminal, r0, r1, ref int, release func()) ([]flashFrame, tuitest.Screen) {
+	t.Helper()
 	cols, _ := term.Screen().Size()
+	var mid tuitest.Screen
 	type raw struct {
 		at    time.Duration
 		cells [][]tuitest.Color
@@ -144,12 +153,21 @@ func sampleFlash(t *testing.T, term *tuitest.Terminal, r0, r1, ref int, release 
 		}
 		return true
 	}
+	// A frame the same as the one before the copy is not the copy's yet. A
+	// copy that ends its selection, as y in copy mode does, would otherwise
+	// show the selection as light, since the settled frame has none.
+	pre := grounds(term.Screen())
 	release()
 	start := time.Now()
 	lastChange := start
 	for time.Since(start) < 3*flashTestMs*time.Millisecond {
-		cells := grounds(term.Screen())
-		if len(frames) == 0 || !same(cells, frames[len(frames)-1].cells) {
+		s := term.Screen()
+		if mid == nil && time.Since(start) >= flashTestMs*time.Millisecond/2 {
+			mid = s
+		}
+		cells := grounds(s)
+		waiting := len(frames) == 0 && same(cells, pre) && time.Since(start) < flashTestMs*time.Millisecond
+		if !waiting && (len(frames) == 0 || !same(cells, frames[len(frames)-1].cells)) {
 			frames = append(frames, raw{at: time.Since(start), cells: cells})
 			lastChange = time.Now()
 		}
@@ -205,7 +223,7 @@ func sampleFlash(t *testing.T, term *tuitest.Terminal, r0, r1, ref int, release 
 		ff.art = strings.TrimRight(art.String(), " ")
 		out = append(out, ff)
 	}
-	return out
+	return out, mid
 }
 
 // logFlash writes the sampled frames to the test log, bounded.
@@ -425,4 +443,177 @@ func TestCopyFlashSweepsASelectionIntoScrollback(t *testing.T) {
 			checkSmoothSweep(t, frames, len([]rune(midLine[:loc[0]])), len([]rune(midLine[:loc[1]]))-1)
 		})
 	}
+}
+
+// flashThreadText is the answer of the agents view tests below: a paragraph
+// that wraps, a Go block, and a line of its own.
+const flashThreadText = copyParagraph + "\n\n```go\nfunc retry(n int) error {\n    for i := 0; i < n; i++ {\n        if err := call(); err == nil {\n            return nil\n        }\n    }\n    return errTimeout\n}\n```\n\nFixed: the backoff stops at a quarter of the deadline."
+
+// flashThreadSpan is the first and last column of the text on row of s that
+// starts with prefix and runs on as text, the part of the row that is a
+// piece of the answer. It fails the test when the row holds no such text.
+func flashThreadSpan(t *testing.T, s tuitest.Screen, row int, prefix string) (int, int) {
+	t.Helper()
+	line := []rune(s.Line(row))
+	at := strings.Index(string(line), prefix)
+	if at < 0 {
+		t.Fatalf("row %d does not hold %q: %q", row, prefix, string(line))
+	}
+	start := len([]rune(string(line)[:at]))
+	rest := strings.TrimRight(string(line[start:]), " ")
+	// The text ends where the answer stops matching it: chrome at the right
+	// of the row is not text.
+	words := strings.Split(rest, " ")
+	text := ""
+	for _, w := range words {
+		next := w
+		if text != "" {
+			next = text + " " + w
+		}
+		if !strings.Contains(flashThreadText, next) {
+			break
+		}
+		text = next
+	}
+	return start, start + len([]rune(text)) - 1
+}
+
+// startFlashThread opens the agents view on an agent whose answer is
+// flashThreadText, with the test sweep's settings. flash false turns the
+// sweep off.
+func startFlashThread(t *testing.T, flash bool) (string, *tuitest.Terminal) {
+	t.Helper()
+	extra := fmt.Sprintf("\n[appearance]\nmotion = \"full\"\n\n[appearance.selection]\nflash = %t\nflash_ms = %d\nflash_style = \"horizontal\"\nflash_color = \"#ffffff\"\n",
+		flash, flashTestMs)
+	return openTextThreadTuned(t, flashThreadText, extra, func(o *startOpts) { o.animations = true },
+		"gave up after the third", "func retry(", "Fixed: the backoff")
+}
+
+// TestCopyFlashSweepsInTheAgentsView copies text in the agents view's
+// thread the three ways it copies, and watches the sweep each copy starts:
+//
+//   - copy mode: ctrl+b [, a search, V over the paragraph's rows, and y;
+//   - a mouse selection across one line, which copies on release;
+//   - a click on a code block's copy, which sweeps the block's box.
+//
+// Each one has to be the pane's sweep: many frames, no stall, the light
+// moving one way and on the copied cells for most of the run. With the sweep
+// turned off the code block's copy draws none. The pictures are the frame
+// before each copy and the frame half way through its sweep.
+//
+// How this could pass wrongly, written down first:
+//   - The lit cells could be the selection. The light is white, and a cell
+//     counts as lit only when its ground is brighter than any ground of the
+//     settled frame (sampleFlash).
+//   - The light could land somewhere other than the copied text, such as
+//     the rows copy mode had on screen before it ended. checkSmoothSweep
+//     holds the light on the reference row to the text's columns.
+//
+// Negative control: on main none of the three copies starts a sweep, and
+// each run fails at "no frame showed the sweep".
+func TestCopyFlashSweepsInTheAgentsView(t *testing.T) {
+	t.Run("copy-mode-y", func(t *testing.T) {
+		_, term := startFlashThread(t, true)
+		sendKeys(t, term, tuitest.Ctrl('b'), "[")
+		waitText(t, term, "copy mode", "Copy mode. v selects")
+		sendKeys(t, term, "/")
+		if err := term.Type("gave up after the third"); err != nil {
+			t.Fatal(err)
+		}
+		sendKeys(t, term, tuitest.Enter)
+		waitText(t, term, "the search", "/gave up after the third (")
+		s := term.Screen()
+		r0, r1 := threadRowWith(s, "gave up after the third"), threadRowWith(s, "from the server.")
+		if r0 < 0 || r1 < r0 {
+			t.Fatalf("the paragraph's rows: %d %d\n%s", r0, r1, term.Snapshot())
+		}
+		keys := []any{"V"}
+		for range r1 - r0 {
+			keys = append(keys, "j")
+		}
+		// The reference row is the last one: the first holds the search's
+		// match, which copy mode still draws after y.
+		lo, hi := flashThreadSpan(t, s, r1, "never ran")
+		ground := s.Cell(hi, r1).Bg
+		sendKeys(t, term, keys...)
+		waitUntil(t, "the selection on the paragraph's last row", uiTimeout, func() (bool, string) {
+			return term.Screen().Cell(hi, r1).Bg != ground, term.Snapshot()
+		})
+		saveScreenPNG(t, term.Screen(), "copy-mode-before")
+		frames, mid := sampleFlashMid(t, term, r0, r1, r1, func() { sendKeys(t, term, "y") })
+		saveScreenPNG(t, mid, "copy-mode-mid")
+		logFlash(t, frames)
+		checkSmoothSweep(t, frames, lo, hi)
+	})
+
+	t.Run("mouse-selection", func(t *testing.T) {
+		_, term := startFlashThread(t, true)
+		s := term.Screen()
+		row := threadRowWith(s, "Fixed: the backoff")
+		lo, hi := flashThreadSpan(t, s, row, "Fixed: the backoff")
+		saveScreenPNG(t, s, "mouse-before")
+		mousePress(t, term, lo, row, tuitest.MouseLeft, 0)
+		for c := lo + 1; c <= hi; c++ {
+			mouseMotion(t, term, c, row, tuitest.MouseLeft, 0)
+		}
+		frames, mid := sampleFlashMid(t, term, row, row, row, func() {
+			mouseRelease(t, term, hi, row, tuitest.MouseLeft, 0)
+		})
+		saveScreenPNG(t, mid, "mouse-mid")
+		logFlash(t, frames)
+		checkSmoothSweep(t, frames, lo, hi)
+	})
+
+	// codeCopy clicks the Go block's copy and samples the block's rows. The
+	// box is the header row's ground under the copy, from its first cell to
+	// its last.
+	codeCopy := func(t *testing.T, term *tuitest.Terminal, name string) ([]flashFrame, int, int) {
+		t.Helper()
+		s := term.Screen()
+		head := threadRowWith(s, "func retry(") - 1
+		last := threadRowWith(s, "return errTimeout") + 2
+		at := strings.Index(s.Line(head), "copy")
+		if head < 0 || at < 0 {
+			t.Fatalf("the Go block's header has no copy: %q\n%s", s.Line(head), term.Snapshot())
+		}
+		col := len([]rune(s.Line(head)[:at]))
+		cols, _ := s.Size()
+		panel := s.Cell(col, head).Bg
+		lo, hi := col, col
+		for lo > 0 && s.Cell(lo-1, head).Bg == panel {
+			lo--
+		}
+		for hi+1 < cols && s.Cell(hi+1, head).Bg == panel {
+			hi++
+		}
+		saveScreenPNG(t, s, name+"-before")
+		frames, mid := sampleFlashMid(t, term, head, last, head, func() {
+			for _, a := range []tuitest.MouseAction{tuitest.MousePress, tuitest.MouseRelease} {
+				if err := term.SendMouse(tuitest.MouseEvent{Col: col + 1, Row: head, Button: tuitest.MouseLeft, Action: a}); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+		saveScreenPNG(t, mid, name+"-mid")
+		logFlash(t, frames)
+		return frames, lo, hi
+	}
+
+	t.Run("code-block", func(t *testing.T) {
+		_, term := startFlashThread(t, true)
+		frames, lo, hi := codeCopy(t, term, "code")
+		waitText(t, term, "the copy count", "Copied 8 lines.")
+		checkSmoothSweep(t, frames, lo, hi)
+	})
+
+	t.Run("code-block-flash-off", func(t *testing.T) {
+		_, term := startFlashThread(t, false)
+		frames, _, _ := codeCopy(t, term, "code-off")
+		waitText(t, term, "the copy count", "Copied 8 lines.")
+		for _, f := range frames {
+			if f.lit > 0 {
+				t.Fatalf("with flash off the copy drew a sweep at %v", f.at)
+			}
+		}
+	})
 }

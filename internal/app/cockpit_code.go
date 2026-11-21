@@ -163,6 +163,7 @@ func (m *OS) cockpitCopyCode(t *agentThread, key string) tea.Cmd {
 		word += " The thread has only part of this block."
 	}
 	m.ShowNotification(word, "success", m.Settings.NotificationDuration)
+	m.noteCodeCopyFlash(t, key)
 	if m.Settings.CopyCommand != "" {
 		// Yank keeps the paste buffer itself.
 		return m.Yank(c.text)

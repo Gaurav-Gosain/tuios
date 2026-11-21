@@ -58,6 +58,10 @@ func handleCockpitCopyKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				fx.notifications[i].message = "Yanked " + strconv.Itoa(len(fx.clipboard)) + " chars"
 			}
 		}
+		if fx.flash {
+			// Before copy mode ends: the sweep's region is its rows.
+			o.CockpitCopyFlash(fx.flashStart, fx.flashEnd, state == terminal.CopyModeVisualLine, fx.flashBlock)
+		}
 	}
 	return fx.applyOver(o, o.CockpitCopyEnd)
 }

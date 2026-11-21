@@ -45,6 +45,23 @@ type copyFlash struct {
 	End   terminal.Position
 	// At is when the copy happened.
 	At time.Time
+	// Thread is the agents view thread the text came from, by its agent's
+	// key, and "" for a pane. A thread's region is Spans, from row Start.Y
+	// of the thread's lines; see copy_flash_thread.go.
+	Thread string
+	Spans  []copyFlashSpan
+}
+
+// noteCopyFlash starts the sweep f describes, as the only one, and reports
+// whether copy_flash and appearance.motion allow it.
+func (m *OS) noteCopyFlash(f copyFlash) bool {
+	if !m.copyFlashAllowed() {
+		return false
+	}
+	f.At = time.Now()
+	m.copyFlash = &f
+	m.copyFlashMore = nil
+	return true
 }
 
 // NoteCopyFlash records a copy so the next frames can sweep over it.
@@ -80,14 +97,15 @@ func (m *OS) NoteCopyFlashBlock(window *terminal.Window, a, b terminal.Position)
 // lock, and the copy is applied after the lock is dropped, so the region is
 // taken at the key and handed over here.
 func (m *OS) NoteCopyFlashRegion(window *terminal.Window, start, end terminal.Position) {
-	if window == nil || !m.copyFlashAllowed() {
+	if window == nil {
 		return
 	}
 	if start.Y > end.Y || (start.Y == end.Y && start.X > end.X) {
 		start, end = end, start
 	}
-	m.copyFlash = &copyFlash{WindowID: window.ID, Start: start, End: end, At: time.Now()}
-	m.copyFlashMore = nil
+	if !m.noteCopyFlash(copyFlash{WindowID: window.ID, Start: start, End: end}) {
+		return
+	}
 	// Nothing in the pane changed, so nothing else is going to ask for a
 	// frame. The first one is asked for here and the motion clock keeps them
 	// coming while the sweep runs; see effects.go.
@@ -145,9 +163,10 @@ func (m *OS) copyFlashFor(id string) *copyFlash {
 	return nil
 }
 
-// copyFlashIDs is every pane a sweep is crossing.
+// copyFlashIDs is every pane a sweep is crossing. A sweep over the agents
+// view's thread crosses no pane.
 func (m *OS) copyFlashIDs() []string {
-	if m.copyFlash == nil {
+	if m.copyFlash == nil || m.copyFlash.Thread != "" {
 		return nil
 	}
 	ids := []string{m.copyFlash.WindowID}
@@ -190,6 +209,10 @@ func (m *OS) markCopyFlashPane() bool {
 		return false
 	}
 	ids := m.copyFlashIDs()
+	if m.copyFlash.Thread != "" {
+		// The agents view keeps its frame until something touches it.
+		m.cockpitTouch()
+	}
 	// Asked whether it is still running or has just this moment stopped, and
 	// the pane is marked either way.
 	//
@@ -221,6 +244,9 @@ func (m *OS) CancelCopyFlash() {
 		return
 	}
 	ids := m.copyFlashIDs()
+	if m.copyFlash.Thread != "" {
+		m.cockpitTouch()
+	}
 	m.copyFlash = nil
 	m.copyFlashMore = nil
 	for _, id := range ids {
@@ -241,6 +267,16 @@ func (m *OS) copyFlashDuration() time.Duration {
 // The flash is dropped as soon as it has run its course, so an idle client
 // holds nothing and asks for no frames on its account.
 func (m *OS) copyFlashProgress(windowID string) (float64, bool) {
+	progress, ok := m.copyFlashClock()
+	if !ok || m.copyFlashFor(windowID) == nil {
+		return 0, false
+	}
+	return progress, true
+}
+
+// copyFlashClock is how far through its run the sweep is, from 0 to 1, and
+// whether one runs at all. A sweep that has run its course is dropped here.
+func (m *OS) copyFlashClock() (float64, bool) {
 	if m.copyFlash == nil {
 		return 0, false
 	}
@@ -248,9 +284,6 @@ func (m *OS) copyFlashProgress(windowID string) (float64, bool) {
 	total := m.copyFlashDuration()
 	if total <= 0 || elapsed >= total {
 		m.copyFlash = nil
-		return 0, false
-	}
-	if m.copyFlashFor(windowID) == nil {
 		return 0, false
 	}
 	return float64(elapsed) / float64(total), true
@@ -361,8 +394,8 @@ func (b copyFlashBand) intensity(x, row int) float64 {
 // carried toward the light as well, because a sweep that touched only the
 // background would pass behind the words rather than over them.
 func (b copyFlashBand) styleFor(x, row int, hasGlyph bool, bg color.Color) (lipgloss.Style, bool) {
-	i := b.intensity(x, row)
-	if i <= 0.02 {
+	g, lit := b.ground(x, row, bg)
+	if !lit {
 		return lipgloss.Style{}, false
 	}
 	// Only the background. The text is left exactly as the program wrote it.
@@ -378,7 +411,18 @@ func (b copyFlashBand) styleFor(x, row int, hasGlyph bool, bg color.Color) (lipg
 	// cell's, so a coloured line lost its colour for the duration and snapped
 	// back at the end. Light passing over text does not repaint the text.
 	_ = hasGlyph
-	return lipgloss.NewStyle().Background(overlay.MixColors(bg, b.tint, i)), true
+	return lipgloss.NewStyle().Background(g), true
+}
+
+// ground is styleFor's ground alone: bg carried toward the light, and
+// whether the light has reached the cell. The agents view sets a cell's
+// ground on its canvas rather than drawing a style.
+func (b copyFlashBand) ground(x, row int, bg color.Color) (color.Color, bool) {
+	i := b.intensity(x, row)
+	if i <= 0.02 {
+		return nil, false
+	}
+	return overlay.MixColors(bg, b.tint, i), true
 }
 
 // copyFlashEnvelope is the sweep's brightness over its life: it ramps in,
@@ -635,13 +679,23 @@ func (m *OS) copyFlashGrid(window *terminal.Window, screen cellGrid, scrollbackL
 	}
 	fillPaneRegion(grid, fl.Start, fl.End, fl.Block,
 		scrollbackLen, window.ScrollbackOffset, maxY, maxX, textEnd)
-	box, ok := copyFlashBoxOf(grid, maxY, maxX)
+	band, ok := m.copyFlashLight(grid, maxY, maxX, progress)
 	if !ok {
 		pool.PutHighlightGrid(grid)
 		m.dropCopyFlash(window.ID)
 		return nil, copyFlashBand{}
 	}
-	return grid, m.copyFlashBandFor(progress, box)
+	return grid, band
+}
+
+// copyFlashLight is the band of light over the marked cells of grid on this
+// frame, sized to the block they make. ok is false when no cell is marked.
+func (m *OS) copyFlashLight(grid *pool.HighlightGrid, maxY, maxX int, progress float64) (copyFlashBand, bool) {
+	box, ok := copyFlashBoxOf(grid, maxY, maxX)
+	if !ok {
+		return copyFlashBand{}, false
+	}
+	return m.copyFlashBandFor(progress, box), true
 }
 
 // paneRowTextEnd is the last column on row y of the pane's view that holds

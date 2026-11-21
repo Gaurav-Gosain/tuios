@@ -394,6 +394,7 @@ func (m *OS) drawThreadCopy(c *ckCanvas, t *agentThread, x, w, top, room, screen
 		c.draw(x, top+y, w, q.out[first+y])
 	}
 	drawCopyMarks(c, m.marks(), &q.cm, x, top, q.w, q.visible(), first)
+	m.drawThreadCopyFlash(c, t, x, top, w, first, min(q.visible(), len(q.out)-first))
 	return true
 }
 

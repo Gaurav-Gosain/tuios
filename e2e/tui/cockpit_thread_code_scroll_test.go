@@ -46,6 +46,17 @@ func openTextThread(t *testing.T, text string, want ...string) (string, *tuitest
 // is not nil.
 func openTextThreadOn(t *testing.T, text, extra string, host *lockedBuffer, want ...string) (string, *tuitest.Terminal) {
 	t.Helper()
+	return openTextThreadTuned(t, text, extra, func(o *startOpts) {
+		if host != nil {
+			o.out = host
+		}
+	}, want...)
+}
+
+// openTextThreadTuned is openTextThreadOn with tune applied to the client's
+// start options.
+func openTextThreadTuned(t *testing.T, text, extra string, tune func(*startOpts), want ...string) (string, *tuitest.Terminal) {
+	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
@@ -95,9 +106,7 @@ func openTextThreadOn(t *testing.T, text, extra string, host *lockedBuffer, want
 	}
 	opts := startOpts{args: []string{"attach", "home"}, cols: 120, rows: 60, shippedLooks: true,
 		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}}
-	if host != nil {
-		opts.out = host
-	}
+	tune(&opts)
 	term := startIn(t, base, opts)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())

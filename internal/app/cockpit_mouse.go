@@ -120,6 +120,7 @@ func (m *OS) CockpitCopyFinish(clicks int) tea.Cmd {
 	if text == "" {
 		return nil
 	}
+	m.CockpitCopyFlash(cm.VisualStart, cm.VisualEnd, cm.State == terminal.CopyModeVisualLine, cm.State == terminal.CopyModeVisualBlock)
 	lines := 1
 	for i := range len(text) {
 		if text[i] == '\n' {
