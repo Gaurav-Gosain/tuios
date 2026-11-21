@@ -50,8 +50,8 @@ concurrency:
 # shard's, is over E2E_LANE_LIMIT, which leaves a wide margin under the 12
 # minute go test timeout. The shard plan job makes the matrix from E2E_SHARDS.
 env:
-  E2E_SHARDS: "16"
-  E2E_LANES: "2"
+  E2E_SHARDS: "8"
+  E2E_LANES: "4"
   E2E_LANE_LIMIT: 6m
   # A partial selection fills lanes to about this much each and leaves the
   # rest empty, so a small change does not start every runner.
@@ -366,18 +366,22 @@ jobs:
     # globals. Each shard runs E2E_LANES go test processes side by side
     # instead, each with a list of its own. The tests mostly wait on a pty or
     # a daemon: a serial run used about one CPU second in five of its wall
-    # time, so two lanes on a four-core runner do twice the work in about the
-    # same time. Four lanes were tried: the runner stayed about two thirds
-    # idle on average, but the bursts made one to two timing-sensitive tests
-    # fail in four of seven full runs. Tests that must not overlap share a
-    # lane through e2e/tui/shardplan/together.txt.
+    # time. Two lanes left a four-core runner about three quarters idle. Four
+    # lanes were tried before: the bursts made one to two
+    # timing-sensitive tests fail in four of seven full runs. Those tests
+    # check a time or a count that load changes, and now run alone in a shard
+    # of their own (e2e/tui/shardplan/alone.txt), so a shard runs four lanes. Tests
+    # that must not overlap share a lane through
+    # e2e/tui/shardplan/together.txt.
     #
     # The split was a hash of the test name until seven shards ran between 525
     # and 1054 seconds, and the long one crossed the 1080 second timeout. A
     # hash balances the count of tests, and a few tests take a minute or two.
-    # The split is now by measured time, with sixteen shards of two lanes near
-    # five minutes each (twelve until the suite outgrew them, 2026-11-09, and
-    # fourteen until 2026-11-12, when the lanes were within seconds of the limit).
+    # The split is now by measured time, with eight shards of four lanes near
+    # five and a half minutes each, and one more shard for the tests that run
+    # alone. Sixteen shards of two lanes came before (twelve until the suite
+    # outgrew them, 2026-11-09, and fourteen until 2026-11-12, when the lanes
+    # were within seconds of the limit).
     #
     # The shard plan job names the shards that get a test, and only those
     # start. It also selects and packs the tests and builds the binaries, so
