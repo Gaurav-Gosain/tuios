@@ -74,14 +74,15 @@ func TestUnhookedAgentLifecycleAnswersBlockedOrThinking(t *testing.T) {
 	}
 
 	// 5. The person types a new prompt and the agent works again. Output from
-	// the agent's own process takes the pane back from the silence timer.
-	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
+	// the agent's own process takes the pane back from the silence timer. The
+	// paint in step 4 is the pane's last word and sits inside the stall window.
+	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail, stall) {
 		t.Fatal("resume: output from the agent did not move the pane back to working")
 	}
 	assertAttention(t, sess, winID, AgentStateWorking, false)
 
 	// 6. The agent exits and the shell prompt returns. The pane is no agent.
-	if !sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail) {
+	if !sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail, 0) {
 		t.Fatal("exit: the shell's output did not clear the pane")
 	}
 	assertAttention(t, sess, winID, AgentStateNone, false)
@@ -168,13 +169,13 @@ func TestOutputProbeClearsOnlyWhenTheShellIsBack(t *testing.T) {
 	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
 	}
-	if sess.reconcileAgentOnOutput(ptyID, pager, agent.identifyDetail) {
+	if sess.reconcileAgentOnOutput(ptyID, pager, agent.identifyDetail, 0) {
 		t.Fatal("a pager in the foreground cleared the agent on one probe")
 	}
 	if got := agentStateOf(t, sess, winID); got != AgentStateWorking {
 		t.Fatalf("state with a pager up = %q, want working kept", got)
 	}
-	if !sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail) {
+	if !sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail, 0) {
 		t.Fatal("the shell prompt returning did not clear the agent")
 	}
 	assertAttention(t, sess, winID, AgentStateNone, false)

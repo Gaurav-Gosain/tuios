@@ -308,7 +308,7 @@ func TestClearExitedAgent(t *testing.T) {
 	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
 
 	// Unowned: an output probe must not touch a window the detector never claimed.
-	if sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail) {
+	if sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail, 0) {
 		t.Fatal("reconcileAgentOnOutput changed an unowned window")
 	}
 
@@ -318,7 +318,7 @@ func TestClearExitedAgent(t *testing.T) {
 	}
 
 	// Agent still in the foreground: a probe on output leaves it working.
-	if sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
+	if sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail, 0) {
 		t.Fatal("reconcileAgentOnOutput cleared a window whose agent is still running")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
@@ -326,7 +326,7 @@ func TestClearExitedAgent(t *testing.T) {
 	}
 
 	// Agent quits: the very next output probe clears it, no detection poll needed.
-	if !sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail) {
+	if !sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail, 0) {
 		t.Fatal("reconcileAgentOnOutput did not clear after the agent left the foreground")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNone {
@@ -361,8 +361,10 @@ func TestAgentResumesAfterStall(t *testing.T) {
 	}
 
 	// The user sends a prompt: the agent produces output again while still in the
-	// foreground. The pane has to go back to working.
-	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
+	// foreground. The pane has to go back to working. The output lands on the
+	// pane, because that is the speaking the reclaim demands.
+	paintPane(t, sess.GetPTY(ptyID), "Working on it...\r\n")
+	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail, stall) {
 		t.Fatal("output from a resumed agent did not change the pane's state")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
@@ -383,6 +385,79 @@ func TestAgentResumesAfterStall(t *testing.T) {
 	}
 }
 
+// TestReclaimNeedsFreshOutput pins the honesty of the reclaim. A foreground
+// agent whose pane has been quiet longer than the stall window is not taken
+// back to working: pi is a persistent TUI that never leaves the foreground,
+// even at its own prompt, so presence alone would flip an idle pane back to
+// working on every tick and the silence timer could never have the last word.
+// Output inside the stall window is the "it just spoke" the reclaim promises,
+// and that reclaim stands.
+func TestReclaimNeedsFreshOutput(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
+	const stall = 30 * time.Second
+
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
+		t.Fatalf("promotion changed %d windows, want 1", n)
+	}
+
+	// The pane goes quiet past the stall window and the silence timer demotes it.
+	if n := sess.applyStallHeuristic(time.Now().Add(stall+time.Second), stall, func(string) int64 { return 0 }, nil); n != 1 {
+		t.Fatalf("stall heuristic demoted %d windows, want 1", n)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
+		t.Fatalf("state after stall = %q, want idle", got)
+	}
+
+	// The agent process is still in the foreground, but the pane's last word
+	// predates the demotion. Presence alone must not take the pane back.
+	sess.GetPTY(ptyID).lastOutput.Store(time.Now().Add(-2 * stall).UnixNano())
+	if sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail, stall) {
+		t.Fatal("a stale-quiet pane was reclaimed to working on presence alone")
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
+		t.Fatalf("state after a stale reclaim = %q, want idle", got)
+	}
+
+	// Output inside the stall window is the speaking the reclaim demands.
+	sess.GetPTY(ptyID).lastOutput.Store(time.Now().UnixNano())
+	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail, stall) {
+		t.Fatal("output inside the stall window did not reclaim the pane")
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Fatalf("state after a fresh reclaim = %q, want working", got)
+	}
+}
+
+// TestReclaimDeclinesAPaneThatNeverSpoke checks the no-output edge of the same
+// rule: a pane that has never produced a byte has no evidence of speaking, so
+// the reclaim declines it however alive its foreground process looks.
+func TestReclaimDeclinesAPaneThatNeverSpoke(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
+	const stall = 30 * time.Second
+
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
+		t.Fatalf("promotion changed %d windows, want 1", n)
+	}
+	if n := sess.applyStallHeuristic(time.Now().Add(stall+time.Second), stall, func(string) int64 { return 0 }, nil); n != 1 {
+		t.Fatalf("stall heuristic demoted %d windows, want 1", n)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
+		t.Fatalf("state after stall = %q, want idle", got)
+	}
+	if sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail, stall) {
+		t.Fatal("a pane that never spoke was reclaimed to working")
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
+		t.Fatalf("state after the declined reclaim = %q, want idle", got)
+	}
+}
+
 // TestAgentResumeRespectsHigherSource proves the resume never overwrites a state
 // a harness reported for itself: a pane that reported needs_input keeps saying
 // needs_input however much output it produces, since a report outranks the
@@ -399,7 +474,7 @@ func TestAgentResumeRespectsHigherSource(t *testing.T) {
 	if err := sess.SetDaemonWindowAgentState(id, AgentStateNeedsInput, "approve?"); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
-	if sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
+	if sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail, 0) {
 		t.Fatal("output overwrote a reported needs_input")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
@@ -418,7 +493,7 @@ func TestClearExitedAgentRespectsManual(t *testing.T) {
 	if err := sess.SetDaemonWindowAgentState(id, AgentStateNeedsInput, "waiting"); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
-	if sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail) {
+	if sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail, 0) {
 		t.Fatal("reconcileAgentOnOutput cleared a manual state")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
