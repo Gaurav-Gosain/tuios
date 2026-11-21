@@ -242,7 +242,7 @@ func ckReadResult(out string) (msgs []ckReadMail, none bool) {
 		case inBody:
 			body = append(body, strings.TrimPrefix(strings.TrimPrefix(line, session.UntrustedGutter), strings.TrimSpace(session.UntrustedGutter)))
 		case strings.HasPrefix(line, "#"):
-			// #12  message  from review (c7be946f)  2m ago  new
+			// #12  message  from pane "review" (c7be946f)  2m ago  new
 			f := strings.SplitN(line[1:], "  ", 4)
 			n, err := strconv.ParseUint(f[0], 10, 64)
 			if err != nil || len(f) < 3 {
@@ -252,6 +252,20 @@ func ckReadResult(out string) (msgs []ckReadMail, none bool) {
 			cur = &msgs[len(msgs)-1]
 			who := strings.TrimPrefix(f[2], "from ")
 			who = strings.TrimPrefix(who, "your lead ")
+			// A pane is pane "LABEL" (id), the label quoted by
+			// session.MailSender, so it can hold " (" itself.
+			if rest, ok := strings.CutPrefix(who, "pane "); ok {
+				if q, err := strconv.QuotedPrefix(rest); err == nil {
+					if name, err := strconv.Unquote(q); err == nil {
+						cur.fromName = name
+						rest = strings.TrimPrefix(rest[len(q):], " ")
+						if id, ok := strings.CutPrefix(rest, "("); ok {
+							cur.from, _, _ = strings.Cut(id, ")")
+						}
+						continue
+					}
+				}
+			}
 			if name, id, ok := strings.Cut(who, " ("); ok {
 				cur.fromName, cur.from = name, strings.TrimSuffix(id, ")")
 			} else {

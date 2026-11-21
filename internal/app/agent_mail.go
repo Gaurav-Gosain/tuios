@@ -206,6 +206,21 @@ func agentMailSender(m session.AgentMessage) string {
 	return name
 }
 
+// agentMailFenceSender names the sender in the fence's open line the way
+// read-agent-messages does: a pane as its label in quotes and its short id
+// (session.MailSender), so a title that reads as a trust mark stays a name.
+// The person's own mail is "you", as in the header.
+func agentMailFenceSender(m session.AgentMessage) string {
+	if m.From == session.AgentInboxHuman {
+		return agentMailSender(m)
+	}
+	name := session.MailSender(m.From, printableTitle(m.FromLabel))
+	if agentMailFromLink(m) {
+		return name + " @ " + agentMailOriginHost(m)
+	}
+	return name
+}
+
 // agentMailName is what to call a party to a message: its label, "you" for
 // the person at this client, or "all" for a notice with no recipient.
 func agentMailName(id, label string, recipient bool) string {
