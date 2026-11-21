@@ -1,7 +1,8 @@
 # Tests that run with no other test beside them. Each one checks a time or
 # a count that load from other lanes changes: a clock budget, a frame gap,
-# a stream rate, or the wakeups of an idle client. The shard runs them one
-# at a time after its other lanes are done (lane 0 in e2e-tui.yml).
+# a stream rate, or the wakeups of an idle client. They go to one shard of
+# their own, which runs them one at a time: lane 0 of shard E2E_SHARDS plus 1
+# in e2e-tui.yml.
 #
 # Add a test here only when it fails beside other lanes and passes alone,
 # and its check is about time or load. Do not use this list to hide a race.

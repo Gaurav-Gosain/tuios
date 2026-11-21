@@ -45,9 +45,9 @@ concurrency:
 # shard run side by side on its runner. shardplan packs the tests into
 # E2E_SHARDS times E2E_LANES lanes by the measured times in
 # e2e/tui/shardplan/durations.txt. The tests in e2e/tui/shardplan/alone.txt
-# go to lane 0 of a shard, which runs them one at a time after its other
-# lanes. The shard plan job fails when a shard's estimate (its longest lane,
-# then lane 0) is over E2E_LANE_LIMIT, which leaves a wide margin under the 12
+# go to one more shard, E2E_SHARDS plus 1, which runs them one at a time as
+# its lane 0. The shard plan job fails when a lane's estimate, or the alone
+# shard's, is over E2E_LANE_LIMIT, which leaves a wide margin under the 12
 # minute go test timeout. The shard plan job makes the matrix from E2E_SHARDS.
 env:
   E2E_SHARDS: "16"
@@ -83,7 +83,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          url=$(scripts/e2e-tested.sh "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$E2E_SHARDS" || true)
+          url=$(scripts/e2e-tested.sh "$GITHUB_REPOSITORY" "$GITHUB_SHA" || true)
           echo "url=$url" >> "$GITHUB_OUTPUT"
           if [ -n "$url" ]; then
             echo "This commit passed every shard in an earlier run: $url" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -161,7 +161,7 @@ jobs:
           case $GITHUB_EVENT_NAME in
           pull_request) [ "$LABELED" = true ] || full=false ;;
           push)
-            url=$(scripts/e2e-tested.sh "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$E2E_SHARDS" full || true)
+            url=$(scripts/e2e-tested.sh "$GITHUB_REPOSITORY" "$GITHUB_SHA" full || true)
             if [ -n "$url" ]; then
               full=false
               echo "This commit passed every frame path and backend in $url" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -200,11 +200,12 @@ jobs:
           go build -o "$RUNNER_TEMP/shardplan" ./shardplan
           mkdir -p "$RUNNER_TEMP/suite"
           # pack FILL: write every lane's list, and print the shards that got a test.
+          # The shard after the last, E2E_SHARDS plus 1, holds only lane 0:
+          # the tests that run alone.
           pack() {
             local shard lane n f
-            for shard in $(seq 1 "$E2E_SHARDS"); do
+            for shard in $(seq 1 "$((E2E_SHARDS + 1))"); do
               n=0
-              # Lane 0 is the tests that run alone after the other lanes.
               for lane in $(seq 0 "$E2E_LANES"); do
                 f="$RUNNER_TEMP/suite/names-$shard-$lane.txt"
                 if [ "$mode" = none ]; then
@@ -216,7 +217,7 @@ jobs:
               done
               if [ "$n" -gt 0 ]; then
                 echo "$shard"
-              elif [ "$mode" = all ]; then
+              elif [ "$mode" = all ] && [ "$shard" -le "$E2E_SHARDS" ]; then
                 echo "shard $shard of $E2E_SHARDS matched no tests, which means the split is broken" >&2
                 exit 1
               fi
@@ -227,7 +228,7 @@ jobs:
             if [ ! -s "$RUNNER_TEMP/shards.txt" ]; then
               echo "::warning title=Shard plan::The selection holds tests but no shard got one, so they spread over every shard."
               pack > "$RUNNER_TEMP/shards.txt"
-            elif [ "$(grep -c . "$RUNNER_TEMP/shards.txt")" -eq "$E2E_SHARDS" ]; then
+            elif [ "$(awk -v n="$E2E_SHARDS" '$1 <= n' "$RUNNER_TEMP/shards.txt" | grep -c .)" -eq "$E2E_SHARDS" ]; then
               echo "The selection of $(grep -c . "$RUNNER_TEMP/selected.txt") of $(grep -c . "$RUNNER_TEMP/all.txt") tests fills every shard, so every test runs." | tee -a "$GITHUB_STEP_SUMMARY"
               mode=all
               cp "$RUNNER_TEMP/all.txt" "$RUNNER_TEMP/selected.txt"
@@ -251,8 +252,15 @@ jobs:
           mapfile -t shards < "$RUNNER_TEMP/shards.txt"
           list=$(IFS=,; echo "${shards[*]:-}")
           echo "shards=[$list]" >> "$GITHUB_OUTPUT"
-          echo "total=$E2E_SHARDS" >> "$GITHUB_OUTPUT"
-          echo "Shards that run: ${list:-none} of $E2E_SHARDS" | tee -a "$GITHUB_STEP_SUMMARY"
+          # The alone shard counts when the suite has a test for it, so the
+          # shard names say how many shards a full run has.
+          total=$E2E_SHARDS
+          alone=$("$RUNNER_TEMP/shardplan" -shards "$E2E_SHARDS" -lanes "$E2E_LANES" -shard "$((E2E_SHARDS + 1))" -lane 0 < "$RUNNER_TEMP/all.txt" | grep -c . || true)
+          if [ "$alone" -gt 0 ]; then
+            total=$((E2E_SHARDS + 1))
+          fi
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          echo "Shards that run: ${list:-none} of $total" | tee -a "$GITHUB_STEP_SUMMARY"
 
       # The binary under test and a test binary for each package of the
       # suite, built once here. Each shard used to list and compile the
@@ -461,7 +469,7 @@ jobs:
           cat "$RUNNER_TEMP"/names-*.txt > "$RUNNER_TEMP/names.txt"
           if [ -s "$RUNNER_TEMP/names.txt" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
-            wc -l < "$RUNNER_TEMP/names.txt" | xargs printf 'shard %s of %s runs %s tests\n' "$SHARD" "$E2E_SHARDS"
+            wc -l < "$RUNNER_TEMP/names.txt" | xargs printf 'shard %s runs %s tests\n' "$SHARD"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "::notice title=No e2e tests in this shard::The change reaches no test this shard would run."
@@ -621,8 +629,8 @@ jobs:
             pids+=("$!")
           done
           wait "${pids[@]}"
-          # Lane 0: the tests in e2e/tui/shardplan/alone.txt, one at a time
-          # with no lane beside them, once the other lanes are done.
+          # Lane 0: the tests in e2e/tui/shardplan/alone.txt, one at a time.
+          # Only the alone shard has them, and it has no other lane.
           if [ -s "$RUNNER_TEMP/names-0.txt" ]; then
             lstart=$SECONDS
             lstatus=0
