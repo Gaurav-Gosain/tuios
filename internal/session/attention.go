@@ -271,6 +271,10 @@ type AttentionItem struct {
 	// (upgrade_confirm.go). A client shows it as a dialog of its own, not as
 	// an Inbox question.
 	Upgrade *UpgradeAsk `json:"upgrade,omitempty"`
+	// Secret is set on an ask that is a program's prompt for a secret, such
+	// as an ssh key's passphrase (askpass.go). A client shows it as a dialog
+	// with a hidden field. It is never saved, and never holds the answer.
+	Secret *SecretAsk `json:"secret,omitempty"`
 
 	// Parent and Root are set on an item about a child agent, a pane another
 	// agent started (agent_parent.go): the agent that started it and the
@@ -1231,8 +1235,9 @@ func (a *attentionStore) changedLocked() {
 func (a *attentionStore) encodeLocked() []byte {
 	f := attentionFile{Version: 1, NextID: a.nextID, Rev: a.rev, Items: make([]AttentionItem, 0, len(a.items)+len(a.snoozed))}
 	for _, id := range a.sortedIDsLocked() {
-		// An upgrade's confirm never outlives the call that waits on it.
-		if a.items[id].Upgrade == nil {
+		// An upgrade's confirm and a secret prompt never outlive the call
+		// that waits on them.
+		if a.items[id].Upgrade == nil && a.items[id].Secret == nil {
 			f.Items = append(f.Items, *a.items[id])
 		}
 	}
@@ -1240,7 +1245,9 @@ func (a *attentionStore) encodeLocked() []byte {
 	// sleep. An older daemon reading the file lists it as open, which is
 	// what the item was before the snooze.
 	for _, id := range a.snoozedIDsLocked() {
-		f.Items = append(f.Items, *a.snoozed[id])
+		if a.snoozed[id].Secret == nil {
+			f.Items = append(f.Items, *a.snoozed[id])
+		}
 	}
 	data, err := jsonx.Marshal(f)
 	if err != nil {

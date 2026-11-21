@@ -3283,6 +3283,41 @@ func buildVerbRegistry() map[string]verbEntry {
 			examples: []string{`{"id":1,"verb":"answer-ask","params":{"request_id":"9f86d081884c7d65","answer":"yes","human_nonce":"<from the attach reply>"}}`},
 			handler:  (*Daemon).verbAnswerAsk,
 		},
+		"askpass": {
+			scope: scopeSelf,
+			// askpass's own handler refuses every link caller as well.
+			link:        needWrite,
+			description: "Ask the person for a secret on behalf of a program in the caller's pane, such as an ssh key's passphrase, and wait for the answer. tuios's askpass program calls it: ssh, git and gpg run that program when they have no terminal to ask on. The prompt goes in the Inbox as an ask marked secret, and a client opens it as a dialog with a hidden field. Only the person answers. The daemon finds the pane and the program that asks from the kernel. The secret is held in memory for this one answer and is never saved, logged or sent in an event. Only from inside a pane. Refused over a link.",
+			params: []verbParam{
+				{Name: "prompt", Type: "string", Description: "The program's prompt as it wrote it, such as Enter passphrase for key '/home/u/.ssh/id_ed25519':. Printable text, at most 1024 bytes."},
+				{Name: "timeout", Type: "int", Description: "Milliseconds to wait for the answer, at most one hour. The prompt closes when the wait ends.", Default: "300000"},
+			},
+			returns: []verbParam{
+				{Name: "request_id", Type: "string", Description: "The prompt's id."},
+				{Name: "status", Type: "string", Description: "answered, cancelled (the person cancelled, or the program went away), timeout, dismissed, window_closed, session_closed or shutdown."},
+				{Name: "secret", Type: "string", Description: "The answer, base64, when answered."},
+			},
+			examples: []string{`{"id":1,"verb":"askpass","params":{"prompt":"Enter passphrase for key '/home/u/.ssh/id_ed25519': "}}`},
+			handler:  (*Daemon).verbAskpass,
+		},
+		"askpass-answer": {
+			scope:       scopeDeny,
+			link:        needRespond,
+			description: "Answer a secret prompt for the person, or cancel it. Only a client attached right now can, with the nonce from its attach reply: an agent never can. The tuios client sends it from its secret dialog. Refused over a link.",
+			params: []verbParam{
+				{Name: "request_id", Type: "string", Description: "The request_id of the secret prompt's ask item."},
+				{Name: "secret", Type: "string", Description: "The answer, base64. Required unless cancel is true. At most 4096 bytes."},
+				{Name: "cancel", Type: "bool", Description: "Cancel the prompt: the program gets no answer."},
+				{Name: "human_nonce", Type: "string", Description: "The nonce the daemon issued in an attach reply, for a client attached now. The TUI sends its own."},
+			},
+			returns: []verbParam{
+				{Name: "request_id", Type: "string", Description: "The prompt answered."},
+				{Name: "applied", Type: "bool", Description: "False when the prompt had already ended."},
+				{Name: "reason", Type: "string", Description: "answered or cancelled, or how the prompt ended before this answer."},
+			},
+			examples: []string{`{"id":1,"verb":"askpass-answer","params":{"request_id":"9f86d081884c7d65","secret":"aHVudGVyMg==","human_nonce":"<from the attach reply>"}}`},
+			handler:  (*Daemon).verbAskpassAnswer,
+		},
 		"prompt": {
 			scope: scopeSelf,
 			// prompt's own handler refuses every link caller as well.

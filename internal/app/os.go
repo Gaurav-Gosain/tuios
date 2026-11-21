@@ -1883,6 +1883,9 @@ type OS struct {
 	// upgradeConfirm is the dialog that asks the person whether a pane may
 	// upgrade the daemon. See upgrade_confirm.go.
 	upgradeConfirm upgradeConfirmState
+	// askpass is the dialog that asks the person for a secret a program in
+	// a pane needs. See askpass_dialog.go.
+	askpass askpassState
 	// prompt is the prompt the palette shows. See prompt.go.
 	prompt promptState
 	// pressingTapeKeys is true while a tape's Press runs keys through the

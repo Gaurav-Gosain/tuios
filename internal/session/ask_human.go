@@ -113,6 +113,9 @@ type askHold struct {
 	// answer then goes down done; with nobody waiting it is mailed.
 	waiting bool
 	done    chan askOutcome
+	// secret carries the answer to a secret prompt (askpass.go), handed over
+	// before done says answered. nil for any other question.
+	secret chan []byte
 }
 
 var (
@@ -133,7 +136,9 @@ func (a *attentionStore) openAsk(it AttentionItem, waiting bool) (*askHold, erro
 			continue
 		}
 		switch {
-		case it.Window != "" && cur.Window == it.Window:
+		case it.Window != "" && cur.Window == it.Window && (cur.Secret != nil) == (it.Secret != nil):
+			// A secret prompt and a question are two things a pane can wait
+			// on at once: an agent's ssh asks while its question stands.
 			a.closeLocked(id, AttentionClosedSuperseded)
 		case cur.Window == "":
 			outside++
@@ -156,6 +161,9 @@ func (a *attentionStore) openAsk(it AttentionItem, waiting bool) (*askHold, erro
 		options:  slices.Clone(it.Options),
 		waiting:  waiting,
 		done:     make(chan askOutcome, 1),
+	}
+	if it.Secret != nil {
+		h.secret = make(chan []byte, 1)
 	}
 	a.nextID++
 	a.rev++
@@ -551,6 +559,12 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 		return nil, hintedVerbError(ErrVerbNotHuman, "answer-ask is for the person at an attached client", &VerbHint{
 			Param:  "human_nonce",
 			Detail: "Nothing was answered. Only a client attached right now can answer a question, by passing the nonce its attach reply carried. An agent never can.",
+		})
+	}
+	if d.attention.askIsSecret(p.RequestID) {
+		return nil, hintedVerbError(ErrVerbInvalidParams, "request "+echoName(p.RequestID)+" is a secret prompt, which askpass-answer answers", &VerbHint{
+			Verb:   "askpass-answer",
+			Detail: "Nothing was answered.",
 		})
 	}
 	if d.attention.askIsUpgrade(p.RequestID) {

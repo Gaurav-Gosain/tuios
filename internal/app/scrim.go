@@ -105,6 +105,7 @@ var modalOverlays = [...]modalOverlay{
 	{id: overlayKindMachineSheet, open: func(m *OS) bool { return m.MachineSheetOpen() }, scrim: true},
 	{id: overlayKindTaskCapture, open: func(m *OS) bool { return m.TaskCaptureOpen() }, scrim: true},
 	{id: overlayKindUpgradeConfirm, open: func(m *OS) bool { return m.UpgradeConfirmOpen() }, scrim: true},
+	{id: overlayKindAskpass, open: func(m *OS) bool { return m.AskpassOpen() }, scrim: true},
 	{id: "help", open: func(m *OS) bool { return m.ShowHelp }, scrim: true},
 	{id: "tape-manager", open: func(m *OS) bool { return m.ShowTapeManager }, scrim: true},
 	{id: "tape-review", open: func(m *OS) bool { return m.ShowTapeReview }, scrim: true},
