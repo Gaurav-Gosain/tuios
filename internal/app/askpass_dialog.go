@@ -215,7 +215,7 @@ func (m *OS) renderAskpass() (string, overlay.Geometry) {
 	case sec.Program == "":
 		program, warn = "", "tuios cannot tell which program asks. Check before you answer."
 	case !sec.Known:
-		programInk, warn = pal.Fg, "tuios does not know this program. Check before you answer."
+		programInk, warn = pal.Fg, "tuios cannot check that this program asks. Check before you answer."
 	}
 	note := "The answer goes to the program only. tuios does not keep it."
 	if st.sent {
