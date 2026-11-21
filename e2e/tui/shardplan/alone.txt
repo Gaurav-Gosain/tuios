@@ -1,0 +1,25 @@
+# Tests that run with no other test beside them. Each one checks a time or
+# a count that load from other lanes changes: a clock budget, a frame gap,
+# a stream rate, or the wakeups of an idle client. They go to one shard of
+# their own, which runs them one at a time: lane 0 of shard E2E_SHARDS plus 1
+# in e2e-tui.yml.
+#
+# Add a test here only when it fails beside other lanes and passes alone,
+# and its check is about time or load. Do not use this list to hide a race.
+
+# The fastest of five runs of tuios actions --json against a 50 ms budget.
+# It took 67 to 73 ms at best with three lanes beside it.
+TestRexActionsComeFromTuios
+
+# The copy sweep may not stall for more than 120 ms between two frames. A
+# lane beside it stalled one for 134 ms.
+TestCopyFlashSweepsACopyModeYank
+TestCopyFlashSweepsASelectionIntoScrollback
+TestCopyFlashSweepsAShortSelectionSmoothly
+
+# Counts the kitty placements that reach the host while the guest paints.
+# With three lanes beside it, 21 of about 24 arrived.
+TestKittyPlacementStressUnderPerturbation
+
+# The wakeups and context switches of an idle client have a budget.
+TestIdleCostStaysLow
