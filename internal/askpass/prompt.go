@@ -9,7 +9,9 @@ package askpass
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -97,13 +99,100 @@ func Tidy(s string) string {
 	return s
 }
 
-// KnownProgram reports whether the executable at path is one that asks
-// through an askpass program in the normal course of its work. A prompt from
-// any other program is shown with a warning: it may fish for a password.
-func KnownProgram(path string) bool {
-	switch strings.TrimSuffix(filepath.Base(path), " (deleted)") {
-	case "ssh", "ssh-add", "ssh-keygen", "scp", "sftp", "git", "git-remote-http", "git-remote-https", "gpg", "gpg2", "tuios":
+// systemDirs are the folders a package manager installs ssh, git and gpg
+// in. A process in a pane cannot write to them.
+var systemDirs = []string{
+	"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/opt/homebrew/bin",
+	"/usr/lib/git-core", "/usr/libexec/git-core", "/usr/local/libexec/git-core", "/opt/homebrew/libexec/git-core",
+}
+
+// KnownProgram reports whether exe, the resolved path of the program that
+// asks, is one that asks through an askpass program in the normal course of
+// its work: ssh, git or gpg by name, and found where that program lives. A
+// copy of any binary named ssh in a folder the pane can write does not count,
+// so its prompt shows a warning: it may fish for a password.
+//
+// A program lives in a system folder, or is the one the daemon's PATH finds
+// for its name.
+func KnownProgram(exe string) bool {
+	exe = strings.TrimSuffix(exe, " (deleted)")
+	name := filepath.Base(exe)
+	switch name {
+	case "ssh", "ssh-add", "ssh-keygen", "scp", "sftp", "git", "git-remote-http", "git-remote-https", "gpg", "gpg2":
+	default:
+		return false
+	}
+	if slices.Contains(systemDirs, filepath.Dir(exe)) {
 		return true
 	}
-	return false
+	found, err := exec.LookPath(name)
+	if err != nil {
+		return false
+	}
+	found, err = filepath.EvalSymlinks(found)
+	return err == nil && found == exe
+}
+
+// credentialFlags are the flags whose value is a password or a token.
+var credentialFlags = []string{"--password", "--passwd", "--pass", "--passphrase", "--token", "--secret", "--api-key"}
+
+// MaskCommandLine joins a command line for the dialog with its credentials
+// replaced by ***: the password and token in a URL's userinfo, the value of a
+// password or token flag, and sshpass's -p. The user name in a URL stays, so
+// the person can tell which account asks.
+func MaskCommandLine(args []string) string {
+	out := make([]string, len(args))
+	maskNext := false
+	// sshpass's own options come before the command it runs, whose -p is
+	// ssh's port.
+	sshpassOpts := len(args) > 0 && filepath.Base(args[0]) == "sshpass"
+	for i, a := range args {
+		if i > 0 && !maskNext && !strings.HasPrefix(a, "-") {
+			sshpassOpts = false
+		}
+		switch {
+		case maskNext:
+			a, maskNext = "***", false
+		case slices.Contains(credentialFlags, a) || (a == "-p" && sshpassOpts):
+			maskNext = true
+		default:
+			for _, f := range credentialFlags {
+				if strings.HasPrefix(a, f+"=") {
+					a = f + "=***"
+				}
+			}
+		}
+		out[i] = maskURLUserinfo(a)
+	}
+	return strings.Join(out, " ")
+}
+
+// maskURLUserinfo replaces the password in every URL's userinfo in s, or the
+// whole userinfo when it has no colon, since that form is a token:
+// https://user:TOKEN@host gives https://user:***@host, and
+// https://TOKEN@host gives https://***@host.
+func maskURLUserinfo(s string) string {
+	var b strings.Builder
+	for {
+		i := strings.Index(s, "://")
+		if i < 0 {
+			b.WriteString(s)
+			return b.String()
+		}
+		b.WriteString(s[:i+3])
+		s = s[i+3:]
+		end := strings.IndexAny(s, "/?# ")
+		if end < 0 {
+			end = len(s)
+		}
+		if at := strings.LastIndexByte(s[:end], '@'); at >= 0 {
+			if user, _, ok := strings.Cut(s[:at], ":"); ok {
+				b.WriteString(user)
+				b.WriteString(":***")
+			} else {
+				b.WriteString("***")
+			}
+			s = s[at:]
+		}
+	}
 }

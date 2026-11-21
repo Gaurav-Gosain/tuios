@@ -39,8 +39,13 @@ type askpassState struct {
 	buf []byte
 	// openedAt is when it opened. Keys are ignored for askpassSettle.
 	openedAt time.Time
-	// sent is true once this client sent an answer or a cancel.
+	// sent is true while this client's answer or cancel is on its way. A
+	// call that fails clears it, so the person can type again.
 	sent bool
+	// hidden is a prompt the person closed here with esc while an answer
+	// to it could not get through. It stays in the Inbox, and the dialog
+	// does not open on it again.
+	hidden string
 }
 
 // AskpassOpen reports whether the dialog owns the keyboard.
@@ -70,11 +75,11 @@ func (m *OS) syncAskpass() {
 		return
 	}
 	clear(st.buf)
-	*st = askpassState{buf: st.buf[:0]}
+	*st = askpassState{buf: st.buf[:0], hidden: st.hidden}
 	if m.UpgradeConfirmOpen() || m.inboxNonce() == "" {
 		return
 	}
-	if it := m.askpassFor(); it != nil {
+	if it := m.askpassFor(); it != nil && it.RequestID != st.hidden {
 		cp := *it
 		st.open, st.openedAt = &cp, time.Now()
 	}
@@ -83,9 +88,18 @@ func (m *OS) syncAskpass() {
 // AskpassKey handles a key while the dialog is open.
 func (m *OS) AskpassKey(msg tea.KeyPressMsg) tea.Cmd {
 	st := &m.askpass
-	if st.sent || m.notThePersonsKey() || time.Since(st.openedAt) < askpassSettle {
+	if m.notThePersonsKey() || time.Since(st.openedAt) < askpassSettle {
 		// Keys a script or a pane sent through the client are not the
 		// person's, and type nothing.
+		return nil
+	}
+	if st.sent {
+		// An answer is on its way. Esc still gets the person out: it
+		// closes the dialog here, and the prompt waits in the Inbox.
+		if msg.String() == "esc" {
+			clear(st.buf)
+			*st = askpassState{buf: st.buf[:0], hidden: st.open.RequestID}
+		}
 		return nil
 	}
 	switch msg.String() {
@@ -118,7 +132,7 @@ func (m *OS) AskpassPaste(text string) {
 		return
 	}
 	for _, r := range text {
-		if r == '\n' || len(st.buf) >= 4096 {
+		if r == '\n' || len(st.buf)+utf8.RuneLen(r) > 4096 {
 			return
 		}
 		if r >= 0x20 && r != 0x7f {
@@ -141,6 +155,15 @@ func (m *OS) askpassSend(cancel bool) tea.Cmd {
 	clear(st.buf)
 	st.buf, st.sent = st.buf[:0], true
 	return m.inboxAnswerAskCmd(*st.open, label, extra)
+}
+
+// askpassAnswered takes the result of the dialog's answer-ask call. A call
+// that failed, or that the daemon did not apply, clears sent: the dialog
+// takes keys again, so the person can send the answer again or cancel.
+func (m *OS) askpassAnswered(msg InboxAskAnsweredMsg) {
+	if st := &m.askpass; st.open != nil && st.sent && (msg.Err != nil || !msg.Applied) {
+		st.sent = false
+	}
 }
 
 // renderAskpass draws the dialog. The prompt and the program are never cut:

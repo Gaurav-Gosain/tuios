@@ -66,6 +66,8 @@ const (
 	askMaxOption  = 60
 	// askMaxOutside bounds the open questions with no pane, per session.
 	askMaxOutside = 16
+	// askMaxSecrets bounds the open secret prompts of one pane.
+	askMaxSecrets = 4
 	// askSettledMax bounds how many ended asks are remembered for a caller
 	// that comes back for the answer.
 	askSettledMax = 256
@@ -129,14 +131,19 @@ var (
 func (a *attentionStore) openAsk(it AttentionItem, waiting bool) (*askHold, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	outside := 0
+	outside, secrets := 0, 0
 	for _, id := range a.sortedIDsLocked() {
 		cur := a.items[id]
 		if cur.Kind != AttentionAsk || cur.Session != it.Session {
 			continue
 		}
 		switch {
-		case it.Window != "" && cur.Window == it.Window && (cur.Secret != nil) == (it.Secret != nil):
+		case it.Window != "" && cur.Window == it.Window && it.Secret != nil && cur.Secret != nil:
+			// Programs in one pane can ask at once, such as git fetch --all
+			// over ssh, so a secret prompt replaces none. A pane holds a
+			// few at most.
+			secrets++
+		case it.Window != "" && cur.Window == it.Window && cur.Secret == nil && it.Secret == nil:
 			// A secret prompt and a question are two things a pane can wait
 			// on at once: an agent's ssh asks while its question stands.
 			a.closeLocked(id, AttentionClosedSuperseded)
@@ -144,7 +151,7 @@ func (a *attentionStore) openAsk(it AttentionItem, waiting bool) (*askHold, erro
 			outside++
 		}
 	}
-	if it.Window == "" && outside >= askMaxOutside {
+	if (it.Window == "" && outside >= askMaxOutside) || secrets >= askMaxSecrets {
 		return nil, errAskTooMany
 	}
 	if len(a.items) >= attentionMaxItems {

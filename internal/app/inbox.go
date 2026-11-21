@@ -1662,6 +1662,7 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, extra ma
 
 // applyInboxAskAnswered says what became of an answer.
 func (m *OS) applyInboxAskAnswered(msg InboxAskAnsweredMsg) {
+	m.askpassAnswered(msg)
 	switch {
 	case msg.Err != nil:
 		m.ShowNotification("The answer did not go through: "+inboxActErr(msg.Err, m.AttachedHost), "error", m.Settings.NotificationDuration*2)
