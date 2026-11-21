@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// fakeResolver answers the way the system resolver of a cgo build does.
 type fakeResolver map[string][]string
 
 func (f fakeResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
@@ -24,8 +23,6 @@ func (f fakeResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Ad
 	return out, nil
 }
 
-// glibc getaddrinfo reads inet_aton forms, and /etc/hosts gives names to
-// loopback addresses. These are the answers a cgo build on Linux gets.
 var cgoResolver = fakeResolver{
 	"0":               {"0.0.0.0"},
 	"0x0":             {"0.0.0.0"},

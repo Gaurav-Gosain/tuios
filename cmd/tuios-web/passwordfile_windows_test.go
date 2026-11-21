@@ -32,13 +32,11 @@ func TestPasswordFileDACL(t *testing.T) {
 		}
 	}
 
-	// The remedy the refusal prints: drop inherited entries, keep the owner.
 	icacls("/inheritance:r", "/grant:r", "*"+me.String()+":F")
 	if pw, err := readPasswordFile(path); err != nil || pw != "pw" {
 		t.Fatalf("a file only its owner can read: %q, %v", pw, err)
 	}
 
-	// S-1-1-0 is Everyone.
 	icacls("/grant", "*S-1-1-0:(R)")
 	if _, err := readPasswordFile(path); err == nil {
 		t.Fatal("a password file Everyone can read was accepted")

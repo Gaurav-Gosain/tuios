@@ -22,14 +22,9 @@ import (
 	"tuios.dev/sketch"
 )
 
-// Limits for text a visitor types. They are lower than sketch's own, so one
-// paste cannot keep the worker busy for long.
 const (
 	maxSource = 20_000
 	maxEdges  = 2_000
-	// maxOutput is the longest SVG, in characters. sketch allows 4,000,000.
-	// The page parses, cleans and lays out the SVG on its main thread, and a
-	// 1 MB drawing already costs about 200 ms there.
 	maxOutput = 1_000_000
 )
 
@@ -44,19 +39,11 @@ func main() {
 	select {}
 }
 
-// render(source, options) draws one diagram. options may hold maxWidth, the
-// width in pixels the page has for it, and theme, a theme name. Without a
-// theme the SVG reads its colours from the --pele-* properties of the page.
-// It returns {svg, width, height, type} or {error: {message, code, line,
-// column}}.
 func render(_ js.Value, args []js.Value) any {
 	if len(args) < 1 || args[0].Type() != js.TypeString {
 		return failure(errors.New("render needs the diagram text"))
 	}
 	src := args[0].String()
-	// No links and no images: a share link shows someone else's diagram,
-	// and a click on it must not take the page anywhere. A click directive
-	// then draws nothing.
 	off := false
 	opt := sketch.RenderOptions{Limit: maxSource, MaxEdges: maxEdges, OutputLimit: maxOutput, Links: &off, Images: &off}
 	if len(args) > 1 && args[1].Type() == js.TypeObject {
@@ -95,8 +82,6 @@ func failure(err error) map[string]any {
 	return map[string]any{"error": e}
 }
 
-// themes() lists the named themes: [{name, title, dark, vars}], where vars
-// maps each --pele-* property to its value.
 func themes(js.Value, []js.Value) any {
 	list := sketch.Themes()
 	out := make([]any, 0, len(list))

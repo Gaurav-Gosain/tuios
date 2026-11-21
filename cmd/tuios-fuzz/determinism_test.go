@@ -11,19 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vis"
 )
 
-// The gate the whole display rests on: attaching one must not change what the
-// fuzzer explores. If it does, every recorded demo is a recording of a
-// different fuzzer than the one CI runs, and a failure shown on screen is not a
-// failure the seed reproduces.
-//
-// This is the real wiring rather than a stub: the real target, the real
-// display, and the decorator that captures the app's frame between actions,
-// which is the piece most likely to perturb a run because it is the only one
-// that touches the model.
-//
-// The trace is hashed closest to the target, by a decorator present in both
-// arms, so the only difference between them is the display.
-
 type tracer struct {
 	fuzz.Target
 	h       uint64
@@ -43,9 +30,6 @@ func (t *tracer) Apply(a fuzz.Action) error {
 	return t.Target.Apply(a)
 }
 
-// trace is one arm of the comparison. cadence selects the display: "off" runs
-// with a nil observer, "batch" and "fps" run with the display drawing to a
-// discarded writer.
 type trace struct {
 	hash     uint64
 	applied  int
@@ -76,7 +60,6 @@ func runArm(t *testing.T, seed uint64, steps int, cadence string) trace {
 		}
 		tr := &tracer{Target: target}
 		if last == nil {
-			// The first replay is the watched one, and its trace is the run.
 			last = tr
 		}
 		return tr, nil
@@ -178,8 +161,6 @@ func TestDisplayCostsLittleWork(t *testing.T) {
 	if off.captures != 0 {
 		t.Errorf("a run with no display rendered the app %d times for the viewport", off.captures)
 	}
-	// One capture per drawn frame, and a frame is drawn every -batch actions.
-	// The slack covers the phase-change frames and the final one.
 	ceiling := int64(on.applied/vis.DefaultBatch) + 8
 	if on.captures > ceiling {
 		t.Errorf("the viewport rendered the app %d times over %d actions drawing every %d; at most %d is per-frame, more is per-action",
@@ -192,15 +173,6 @@ func TestDisplayCostsLittleWork(t *testing.T) {
 	offRate := float64(off.applied) / off.elapsed.Seconds()
 	onRate := float64(on.applied) / on.elapsed.Seconds()
 	overhead := (offRate - onRate) / offRate * 100
-	// Reported, not gated. The comment above says a gate that reports the
-	// machine's mood is not a gate, and this figure is that mood: the same tree
-	// reads 7.7% on a developer box and 60.9% on a loaded CI runner, while the
-	// capture count above is 33 in both. The structural check is what catches
-	// the regression this test exists for, because rendering once per action
-	// instead of once per frame changes the count and no amount of load does.
-	// A render that got slower without getting more frequent belongs in a
-	// benchmark on a quiet machine, not in a throughput ratio measured beside
-	// the rest of the suite.
 	t.Logf("%d app renders over %d actions (one per %d); %.0f actions/s undrawn, %.0f drawn (%.1f%% slower, machine-dependent)",
 		on.captures, on.applied, vis.DefaultBatch, offRate, onRate, overhead)
 }

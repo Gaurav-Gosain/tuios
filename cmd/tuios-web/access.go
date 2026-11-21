@@ -16,52 +16,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 )
 
-// Who may open a session.
-//
-// Every session is a full tuios, with shells as the account running the
-// server and the session switcher reaching every other session. sip v0.8.2
-// can guard the page and the WebSocket and WebTransport handshakes with HTTP
-// Basic Auth (BasicUsername and BasicPassword), and until now nothing set
-// them, so anyone who could reach the port got a shell.
-//
-// The rules:
-//
-//   - A bind outside this machine needs a password, or --no-auth. TLS alone
-//     is not enough: it hides the traffic but does not say who is connecting.
-//   - --no-auth is refused on an unspecified bind (0.0.0.0, ::). Such a bind
-//     also listens on loopback, so with no password a page in a browser on
-//     this machine reaches the server by DNS rebinding. sip v0.9.4 checks the
-//     Host header on that bind when it has no TLS and no password, but that
-//     check lets every IP address through, and TLS turns it off. tuios-web
-//     keeps its own refusal so the rule does not depend on sip's.
-//   - A loopback bind may run with no password, for a browser on this
-//     machine. sip checks the Host header, because a web page whose name the
-//     attacker points at 127.0.0.1 (DNS rebinding) passes the same-origin
-//     check: its Origin and its Host both carry the attacker's name.
-//     --allow-host adds names for a reverse proxy, and needs a password or
-//     --no-auth, because the proxy lets the network in.
-//   - The password never comes from a flag value, which every user on the
-//     machine can read in ps. It comes from a file, from TUIOS_WEB_PASSWORD,
-//     or is generated at start and printed once. The variable is removed from
-//     the environment once read, so no pane inherits it. That does not change
-//     /proc/<pid>/environ, which the same user can still read, so the docs
-//     point at --password-file.
-
-// webPasswordEnv names the environment variable that can carry the password.
 const webPasswordEnv = "TUIOS_WEB_PASSWORD"
 
-// minWebPasswordRunes is the length, in characters, below which a password
-// from --password-file or TUIOS_WEB_PASSWORD gets a warning at start. sip
-// answers a wrong password at once and keeps no count of failures, so a short
-// password can be guessed at line rate. The start goes on: refusing it would
-// break setups that work today.
 const minWebPasswordRunes = 12
 
-// defaultWebUser is the Basic Auth user name when --user is not given.
 const defaultWebUser = "tuios"
 
-// webAccessFlags is the part of the command line that decides who may open a
-// session.
 type webAccessFlags struct {
 	host           string
 	port           string
@@ -71,44 +31,27 @@ type webAccessFlags struct {
 	randomPassword bool
 	noAuth         bool
 	allowHosts     []string
-	// tlsArgs repeats the TLS flags the user gave, so a command copied from
-	// the refusal keeps them.
-	tlsArgs string
+	tlsArgs        string
 }
 
-// webAccess is what one run decided about who may open a session.
 type webAccess struct {
-	user     string
-	password string
-	// allowHosts holds the names that --allow-host adds to sip's Host check.
-	// The check runs on a loopback bind only. A network bind answers on
-	// names this process cannot know, and its password keeps strangers out.
+	user       string
+	password   string
 	allowHosts []string
-	// loopback is whether the bind stays on this machine.
-	loopback bool
-	// announce holds the text that shows a generated password. It is printed
-	// by announcePassword, after every other startup check has passed.
-	announce string
+	loopback   bool
+	announce   string
 }
 
-// errNoAuthWildcard is the refusal for --no-auth on an unspecified bind.
 var errNoAuthWildcard = errors.New("refusing --no-auth on an address that listens on every interface")
 
-// errNoWebAuth is the refusal for a network bind with no password. The menu
-// of answers is printed beside it.
 var errNoWebAuth = errors.New("refusing to serve with no password")
 
-// planWebAccess settles the password and the Host allowlist before anything
-// starts, and refuses a network bind that has neither a password nor
-// --no-auth. It prints what the user needs to know to w.
 func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 	a := &webAccess{user: f.user}
 	if a.user == "" {
 		a.user = defaultWebUser
 	}
 
-	// Read and clear the variable first, whatever else happens, so a refused
-	// start does not leave it for a daemon started later in this process.
 	envPassword, envSet := os.LookupEnv(webPasswordEnv)
 	_ = os.Unsetenv(webPasswordEnv)
 	envSet = envSet && envPassword != ""
@@ -177,9 +120,6 @@ func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 	return a, nil
 }
 
-// checkAllowHosts refuses --allow-host where it cannot work or would open a
-// hole. A reverse proxy in front of a loopback server carries every request
-// from the network, so --allow-host needs a password or --no-auth.
 func checkAllowHosts(f webAccessFlags, hasPassword bool) error {
 	if !isLoopbackHost(f.host) {
 		return fmt.Errorf("the allowed host names work only with a loopback --host, such as localhost. %s is not loopback. Remove --allow-host", f.host)
@@ -188,8 +128,6 @@ func checkAllowHosts(f webAccessFlags, hasPassword bool) error {
 		if h == "" {
 			return errors.New("an --allow-host value is empty. Give a host name, such as term.example.com")
 		}
-		// sip reads "*" as "turn the Host check off". --allow-host only adds
-		// names, so tuios-web does not pass that switch through.
 		if h == "*" {
 			return errors.New("the allowed host * is not a host name. Give --allow-host a host name only, such as term.example.com")
 		}
@@ -206,32 +144,17 @@ func checkAllowHosts(f webAccessFlags, hasPassword bool) error {
 	return nil
 }
 
-// apply puts the decision on a sip config.
 func (a *webAccess) apply(cfg *sip.Config) {
 	if a.password != "" {
 		cfg.BasicUsername = a.user
 		cfg.BasicPassword = a.password
-		// sip refuses Basic Auth over plain HTTP unless this is set. On a
-		// loopback bind the password never crosses a network, so plain HTTP
-		// is fine there. A network bind in plain HTTP already needs
-		// --insecure, which sets this too.
 		if a.loopback {
 			cfg.AllowInsecureNoTLS = true
 		}
 	}
-	// sip checks the Host header of every session handshake on a loopback
-	// bind, and allows localhost, loopback addresses and the bind host.
-	// --allow-host adds the names a reverse proxy forwards.
 	cfg.AllowedHosts = a.allowHosts
 }
 
-// readPasswordFile reads the password from the first line of path. A file
-// that other users can read is refused: the password in it is not secret.
-//
-// The checks run on the open file, not on the path, so the file cannot be
-// swapped between the check and the read. The file must belong to the
-// current user and must not be readable or writable by anyone else. On
-// Windows the same rule is read from the file's owner and DACL.
 func readPasswordFile(path string) (string, error) {
 	f, err := os.Open(path) //nolint:gosec // the path is the operator's own configuration
 	if err != nil {
@@ -260,7 +183,6 @@ func readPasswordFile(path string) (string, error) {
 	return pw, nil
 }
 
-// randomPassword makes a password of 144 random bits.
 func randomPassword() (string, error) {
 	b := make([]byte, 18)
 	if _, err := rand.Read(b); err != nil {
@@ -269,16 +191,12 @@ func randomPassword() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// announcePassword prints a generated password. runWebServer calls it once
-// the TLS check has passed, so a refused start prints no password.
 func (a *webAccess) announcePassword(w io.Writer) {
 	if a.announce != "" {
 		_, _ = io.WriteString(w, a.announce)
 	}
 }
 
-// randomPasswordText shows the generated password, and a URL that carries it
-// so the first visit needs no typing.
 func randomPasswordText(f webAccessFlags, a *webAccess) string {
 	scheme := "http"
 	if f.tls {
@@ -292,9 +210,6 @@ func randomPasswordText(f webAccessFlags, a *webAccess) string {
 	return fmt.Sprintf("\nUser: %s\nPassword: %s\nOpen: %s\n\nThe password changes each time tuios-web starts.\n\n", a.user, a.password, u.String())
 }
 
-// printNoAuthMenu answers a network bind with no password. It is printed
-// rather than carried in the error because fang reflows an error into one
-// paragraph, which leaves no command to copy.
 func printNoAuthMenu(w io.Writer, f webAccessFlags) {
 	fmt.Fprintf(w, `
   %s is not this machine. Every browser that opens tuios-web gets a shell
@@ -322,8 +237,6 @@ func printNoAuthMenu(w io.Writer, f webAccessFlags) {
 		f.host, f.port, f.tlsArgs,
 		webPasswordEnv,
 		f.port, f.port)
-	// planWebAccess refuses --no-auth on 0.0.0.0 and ::, so the menu does not
-	// offer it there.
 	if !isUnspecifiedHost(f.host) {
 		fmt.Fprintf(w, `  5. Let anyone who reaches the port in. Only on a network you trust.
 
@@ -333,15 +246,8 @@ func printNoAuthMenu(w io.Writer, f webAccessFlags) {
 	}
 }
 
-// isUnspecifiedHost reports whether host is an unspecified IP address, such
-// as 0.0.0.0, :: or ::%lo, which listens on every interface, loopback
-// included.
-//
-// The empty host also listens on every interface, but sip counts it as
-// loopback and checks the Host header for it, so it is not refused here.
 func isUnspecifiedHost(host string) bool { return netutil.IsUnspecifiedHost(host) }
 
-// whoCanReach names who can reach a bind address.
 func whoCanReach(host string) string {
 	if isLoopbackHost(host) {
 		return "Anyone on this machine"
@@ -349,8 +255,6 @@ func whoCanReach(host string) string {
 	return "Anyone who reaches this port"
 }
 
-// authFlagsForMenu is the password part of the command line, repeated in the
-// TLS refusal so a command copied from it keeps the password.
 func authFlagsForMenu(f webAccessFlags) string {
 	switch {
 	case f.passwordFile != "":

@@ -20,16 +20,12 @@ import (
 	"github.com/Gaurav-Gosain/sip"
 )
 
-// idleModel is the smallest program a session can run. These tests are about
-// who gets through the handshake, not what they see after it.
 type idleModel struct{}
 
 func (idleModel) Init() tea.Cmd                       { return nil }
 func (idleModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return idleModel{}, nil }
 func (idleModel) View() tea.View                      { return tea.NewView("") }
 
-// startAccessServer runs a real sip server on loopback, configured by access
-// the way runWebServer configures it, and returns its port.
 func startAccessServer(t *testing.T, access *webAccess) string {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -42,8 +38,6 @@ func startAccessServer(t *testing.T, access *webAccess) string {
 	cfg := sip.DefaultConfig()
 	cfg.Host = "127.0.0.1"
 	cfg.Port = port
-	// No AllowInsecureNoTLS here: runWebServer sets it only for --insecure,
-	// so apply must make a loopback password work on its own.
 	access.apply(&cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -76,9 +70,6 @@ func startAccessServer(t *testing.T, access *webAccess) string {
 	}
 }
 
-// upgrade sends a WebSocket handshake for /ws to the server on port, naming
-// host in the Host header and origin in the Origin header, the way a browser
-// would. It returns the status code of the answer: 101 means a session.
 func upgrade(t *testing.T, port, host, origin, auth string) int {
 	t.Helper()
 	conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 5*time.Second)
@@ -245,7 +236,6 @@ func TestNetworkBindNeedsAPassword(t *testing.T) {
 		}
 	}
 
-	// An empty host listens on every interface.
 	if _, err := planWebAccess(&bytes.Buffer{}, webAccessFlags{host: "", port: "7681"}); err == nil {
 		t.Error("an empty host, which listens on every interface, was served with no password")
 	}
@@ -257,8 +247,6 @@ func TestNetworkBindNeedsAPassword(t *testing.T) {
 // machine that points its own name at 127.0.0.1 gets a shell.
 func TestNoAuthRefusedOnWildcardBind(t *testing.T) {
 	t.Setenv(webPasswordEnv, "")
-	// net.Listen accepts a zone and binds every interface for "::%lo", so the
-	// zone spellings must be refused too.
 	for _, host := range []string{"0.0.0.0", "::", "[::]", "::0", "0:0:0:0:0:0:0:0", "::ffff:0.0.0.0", "::%lo", "[::%lo]", "::%1"} {
 		var out bytes.Buffer
 		_, err := planWebAccess(&out, webAccessFlags{host: host, port: "7681", noAuth: true, tlsArgs: " --insecure"})
@@ -273,8 +261,6 @@ func TestNoAuthRefusedOnWildcardBind(t *testing.T) {
 		}
 	}
 
-	// The opt-out stays for one address, and a password still works on a
-	// wildcard bind.
 	for name, f := range map[string]webAccessFlags{
 		"loopback no-auth":     {host: "127.0.0.1", port: "7681", noAuth: true},
 		"LAN address no-auth":  {host: "192.168.1.20", port: "7681", noAuth: true},
@@ -285,8 +271,6 @@ func TestNoAuthRefusedOnWildcardBind(t *testing.T) {
 		}
 	}
 
-	// The menu for a wildcard bind with no password must not offer a
-	// command that the refusal above stops.
 	var out bytes.Buffer
 	if _, err := planWebAccess(&out, webAccessFlags{host: "0.0.0.0", port: "7681"}); err == nil {
 		t.Fatal("a wildcard bind with no password was accepted")

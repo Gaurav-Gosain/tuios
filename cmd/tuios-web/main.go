@@ -33,7 +33,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// Version information (set by goreleaser)
 var (
 	version = "dev"
 	commit  = "none"
@@ -41,12 +40,8 @@ var (
 	builtBy = "unknown"
 )
 
-// webSettings is the Settings the server resolved at start from the config
-// file and its flags, for what a connection's hello carries before its model
-// exists. Each connection resolves its own (see served.NewModel).
 var webSettings config.Settings
 
-// Command-line flags
 var (
 	webPort           string
 	webHost           string
@@ -58,29 +53,23 @@ var (
 	webInsecure       bool
 	webTouch          string
 	webCtrlVToProgram bool
-	// Who may open a session. See access.go.
 	webUser           string
 	webPasswordFile   string
 	webRandomPassword bool
 	webNoAuth         bool
 	webAllowHosts     []string
-	// TUIOS forwarded flags
-	debugMode bool
-	// interfaceFlags is the same interface flag set `tuios` registers.
-	interfaceFlags cliflags.Interface
-	// Daemon mode flags
-	defaultSession string
-	ephemeralMode  bool
+	debugMode         bool
+	interfaceFlags    cliflags.Interface
+	defaultSession    string
+	ephemeralMode     bool
 )
 
-// webServerConfig holds the server-wide configuration
 var webServerConfig struct {
 	defaultSession string
 	ephemeral      bool
 	version        string
 }
 
-// newRootCmd builds the tuios-web command with every flag it takes.
 func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "tuios-web",
@@ -159,7 +148,6 @@ Client features:
 		SilenceUsage: true,
 	}
 
-	// Web server flags
 	rootCmd.Flags().StringVar(&webPort, "port", "7681", "Web server port")
 	rootCmd.Flags().StringVar(&webHost, "host", "localhost", "Web server host")
 	rootCmd.Flags().BoolVar(&webReadOnly, "read-only", false, "Disable input from clients (view only)")
@@ -177,11 +165,9 @@ Client features:
 	rootCmd.Flags().StringVar(&webTouch, "touch", "auto", "Touch input mode: auto, on, off. Touch widens the gestures aimed at a single cell")
 	rootCmd.Flags().BoolVar(&webCtrlVToProgram, "ctrl-v-to-program", false, "Send Ctrl+V to the program in the pane. By default Ctrl+V pastes")
 
-	// Daemon mode flags
 	rootCmd.Flags().StringVar(&defaultSession, "default-session", "", "Default session name for all connections (creates shared session)")
 	rootCmd.Flags().BoolVar(&ephemeralMode, "ephemeral", false, "Disable daemon mode (sessions don't persist)")
 
-	// TUIOS forwarded flags
 	rootCmd.Flags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
 	interfaceFlags.Register(rootCmd.Flags())
 
@@ -190,12 +176,8 @@ Client features:
 }
 
 func main() {
-	// The build identity, the same call cmd/tuios makes: crash reports, and the
-	// in-process panes of --ephemeral, name this build.
 	applyBuildIdentity()
 
-	// The server TUIOS_SERVER names, as tuios applies it, so tuios-web started
-	// from a pane of a named server serves that server's daemon.
 	if err := serverscope.ApplyEnv(); err != nil {
 		fmt.Fprintf(os.Stderr, "tuios-web: %v.\n", err)
 		os.Exit(1)
@@ -203,7 +185,6 @@ func main() {
 
 	rootCmd := newRootCmd()
 
-	// Execute with fang
 	if err := fang.Execute(
 		context.Background(),
 		rootCmd,
@@ -213,7 +194,6 @@ func main() {
 	}
 }
 
-// accessFlags collects the command line that decides who may connect.
 func accessFlags() webAccessFlags {
 	return webAccessFlags{
 		host:           webBindAddr,
@@ -228,8 +208,6 @@ func accessFlags() webAccessFlags {
 	}
 }
 
-// tlsFlagsForMenu is the TLS part of the command line, repeated in the
-// password refusal so a command copied from it keeps TLS.
 func tlsFlagsForMenu() string {
 	switch {
 	case webTLSCert != "":
@@ -243,12 +221,6 @@ func tlsFlagsForMenu() string {
 }
 
 func runWebServer() error {
-	// Refuse a LAN bind with no password, then one in clear text, before
-	// anything is started, so the user gets the answer instead of a daemon
-	// and a half-open port. The password comes first: it is read and removed
-	// from the environment before the daemon starts, so no pane inherits it.
-	// Resolve --host once. The checks read the address it binds, and sip
-	// binds that address, so the two cannot disagree. See bindhost.go.
 	bind, err := resolveBindHost(context.Background(), netResolver, webHost)
 	if err != nil {
 		return err
@@ -264,29 +236,13 @@ func runWebServer() error {
 	}
 	access.announcePassword(os.Stderr)
 
-	// Settle the keypair here too, for the same reason: generating it can
-	// fail, and a failure should not leave a daemon running behind it.
 	tlsCert, tlsKey, err := resolveTLSFiles(os.Stderr)
 	if err != nil {
 		return err
 	}
 
-	// The accent picker labels colours through its own probe of this process's
-	// stdout, which is not a TTY here; pin it to what the browser terminal
-	// renders. Frames need no such pin: composeFrame hands the canvas to the
-	// bubbletea renderer unchanged, and sip sets that renderer's profile.
 	app.SetAccentColorProfile(colorprofile.TrueColor)
 
-	// Install the browser terminal as the process host capabilities. Without
-	// this, GetHostCapabilities probes this process's non-TTY stdin and reports
-	// no graphics and a 9x20 default cell, disagreeing with the capabilities
-	// every connection is given: the same terminal, described two ways.
-	//
-	// The cell size here is a process-wide default, and stays a placeholder: it
-	// is installed once at startup, before any browser has connected, and one
-	// process serves several browsers at once at whatever font size each reader
-	// chose. Each connection carries its own, measured from that browser's
-	// canvas. See cellSize and webHostCaps.
 	app.SetClientCapabilities(webHostCaps(webFallbackCellWidth, webFallbackCellHeight))
 
 	pinGuestTerminalEnv()
@@ -295,41 +251,23 @@ func runWebServer() error {
 		debuglog.Enable()
 	}
 
-	// Store server config for handler
 	webServerConfig.defaultSession = defaultSession
 	webServerConfig.ephemeral = ephemeralMode
 	webServerConfig.version = version
 
-	// Who owns which part of the configuration, for this process:
-	//
-	//   - [daemon] belongs to the DAEMON, which outlives every client, so it is
-	//     only honoured by whoever starts it (just below). An already-running
-	//     daemon keeps what it started with.
-	//   - The appearance globals in internal/config are the SERVER's, written
-	//     once at startup because every served session's render loop reads them.
-	//   - The *UserConfig handed to a session is the SESSION's, mutable by its
-	//     settings page and never written back to the operator's file.
-	//
-	// One read feeds all three, so they cannot disagree about what the file said.
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
 		userConfig = config.DefaultConfig()
 	}
 
-	// If using daemon mode, ensure daemon is running
 	if !ephemeralMode {
-		// The [daemon] settings reach it the same way `tuios daemon` passes
-		// them (see runDaemon). Without this a daemon autostarted here ran on
-		// the built-in defaults, so whether agent detection was on depended on
-		// which command happened to start the daemon first.
 		if err := session.EnsureDaemonRunningWith(version, daemonConfigFrom(userConfig)); err != nil {
 			log.Printf("Warning: Failed to start daemon, falling back to ephemeral mode: %v", err)
 			webServerConfig.ephemeral = true
 		}
 	}
 
-	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -339,10 +277,8 @@ func runWebServer() error {
 		<-c
 		log.Println("Shutting down...")
 		cancel()
-		// Stop in-process daemon if we started one
 		session.StopInProcessDaemon()
 
-		// Force exit after short timeout or on second signal
 		go func() {
 			select {
 			case <-c:
@@ -353,23 +289,8 @@ func runWebServer() error {
 		}()
 	}()
 
-	// The appearance globals, written once on the startup goroutine. A later
-	// connection must never rewrite them: they are read by the render loop of
-	// every session already drawing. internal/server/ssh.go's applyAppearanceOnce
-	// enforces the same rule for the same reason.
-	//
-	// ApplyOverrides must get the loaded config, not nil. With nil, everything
-	// reaching the client through a package global (theme, borders, dock,
-	// sidebar, scrollbar, which-key, notification timings) comes out at its
-	// built-in default, while the settings that ride on *UserConfig (startup,
-	// hooks, agent alerts, keybindings) still apply, and the half-applied
-	// config looks like a rendering bug.
-	//
-	// The file is the baseline; CLI flags win. The option flags are laid over a
-	// copy of the file, and ApplyOverrides applies the rest after it.
 	webSettings = config.Resolve(userConfig, webAppearanceOverrides())
 
-	// Create sip server
 	sipConfig := sip.DefaultConfig()
 	sipConfig.Host = webBindAddr
 	sipConfig.Port = webPort
@@ -383,48 +304,30 @@ func runWebServer() error {
 	sipConfig.MaxWindowCells = webMaxCells
 	access.apply(&sipConfig)
 
-	// How the page looks. Read after the config file and the flags have both
-	// landed on the globals above, because that is when theme.Current() is the
-	// theme the user asked for. Without it a browser gets sip's own palette
-	// whatever the user picked.
 	sipConfig.Appearance = browserAppearance()
 
-	// The colours the browser will resolve palette indices to follow from that
-	// appearance, so they are settled here too, before any browser connects.
-	// The seed installed above is replaced so it carries them as well.
 	webPalette = newBrowserPalette(sipConfig.Appearance.Theme)
 	app.SetClientCapabilities(webHostCaps(webFallbackCellWidth, webFallbackCellHeight))
 
-	// The touch key bar is server-wide while the keys it carries are user
-	// settings, so it is built from the startup config read above rather than
-	// from a second load that could disagree with the globals.
 	leader := webSettings.LeaderKey
 	if userConfig.Keybindings.LeaderKey != "" {
 		leader = userConfig.Keybindings.LeaderKey
 	}
 	sipConfig.MobilePrefix, sipConfig.MobileRows = mobileBar(config.NewKeybindRegistry(userConfig), leader)
 
-	// Whether the far end is a finger is decided once, at the handshake, and
-	// carried into the session on its context. See touch.go for why the
-	// handshake is the only place left to ask.
 	touch, ok := parseTouchMode(webTouch)
 	if !ok {
 		return fmt.Errorf("--touch is %q: it takes auto, on or off", webTouch)
 	}
 	sipConfig.ConnectMiddleware = append(sipConfig.ConnectMiddleware, touchMiddleware(touch), appleMiddleware())
-	// Ctrl+V pastes in the page unless the operator gives it to the pane.
-	// See paste_keys.go.
 	sipConfig.CtrlVToProgram = webCtrlVToProgram
 
-	// A notification's link opens the Inbox on its item. See inboxlink.go.
 	installInboxLink(&sipConfig)
 
-	// A horizontal finger drag scrolls the strip. See strip_touch.go.
 	installStripTouch(&sipConfig)
 
 	server := sip.NewServer(sipConfig)
 
-	// Log startup mode
 	mode := "daemon"
 	if webServerConfig.ephemeral {
 		mode = "ephemeral"
@@ -434,66 +337,36 @@ func runWebServer() error {
 		log.Printf("Insecure: %s is served over plain HTTP, so anyone on this network can read what you type", serverURL())
 	}
 
-	// Serve TUIOS using sip. The program is built here rather than by sip so
-	// the shared options go on last: sip's MakeOptions carries a WithFilter of
-	// its own, and Serve would append it after ours (see app.ProgramOptions).
 	return server.ServeWithProgram(ctx, createTUIOSProgram)
 }
 
-// pinGuestTerminalEnv sets the TERM and COLORTERM this process's panes get.
-//
-// This process's stdout is not the terminal anyone sees, so detecting from it
-// would hand an ephemeral pane TERM=dumb. getTerminalEnv in internal/terminal
-// trusts the environment when COLORTERM=truecolor is set, and it caches on the
-// first window, so this has to run before any window exists.
-//
-// TERM stays xterm-256color, the value daemon panes get, because a claim such
-// as xterm-kitty needs a terminfo entry the server may not have. Image tools
-// find kitty graphics through TERM_PROGRAM, which every spawn path sets from
-// the passthrough state (see guestenv.TermProgram), so it is not set here.
 func pinGuestTerminalEnv() {
 	_ = os.Setenv("TERM", "xterm-256color")
 	_ = os.Setenv("COLORTERM", "truecolor")
 }
 
-// createTUIOSProgram builds the program for one web session.
 func createTUIOSProgram(sess sip.Session) *tea.Program {
 	model := createTUIOSHandler(sess)
-	// running closes when the program's loop reaches the model. See
-	// programStart for why the teardown goroutine below has to wait for it.
 	running := make(chan struct{})
 	started := &programStart{Model: model, start: sync.OnceFunc(func() { close(running) })}
-	// sip stores each size on the session before it sends it, so the
-	// session is where the size the browser has now is. See
-	// app.WithCurrentSize.
 	current := app.WithCurrentSize(func() (int, int) {
 		pty := sess.Pty()
 		return pty.Width, pty.Height
 	})
 	slave, owned := sessionTerminal(sess)
-	// The client's frames are diffed as cells and written by the model's own
-	// screen, which needs the slave raw as Bubble Tea's renderer made it.
-	// See app.UseScreen.
 	ownScreen := slave != nil && model.Settings.CellFramesFor(true)
 	opts := append(sip.MakeOptions(sess), app.ProgramOptions(current, app.WithOwnScreen(ownScreen))...)
-	// The renderer's writer, so the sixel images drawn on a frame go out
-	// after it in the same write. Graphics already share the PTY slave.
 	if slave != nil {
 		frames := app.NewFrameHookFile(slave)
 		model.ConnectFrameWriter(frames)
 		opts = append(opts, tea.WithOutput(frames))
 		if ownScreen {
-			// The slave is the screen's console: it is raw while the screen
-			// draws, as Bubble Tea's renderer kept it.
 			model.UseScreen(frames, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor,
 				termio.Output{Raw: true, Console: slave})
 		}
 	}
 	program := tea.NewProgram(started, opts...)
 	model.BindProgram(program)
-	// Tear down after the program has fully stopped, the way the SSH server
-	// does. Closing on the session context instead ran Cleanup while the last
-	// frames were still going out.
 	go cleanupAfterProgram(program, running, func() {
 		model.CloseScreen()
 		if owned {
@@ -504,21 +377,6 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 	return program
 }
 
-// sessionTerminal is the terminal file this server draws a session on, and
-// whether the server owns it and has to close it.
-//
-// sip closes its own slave file on the goroutine that ran the program, as soon
-// as Run returns. The screen is closed on the teardown goroutine after that,
-// and it writes the sequences that leave the alternate screen and puts the
-// slave's terminal modes back. On sip's file those two ran in either order:
-// the leave sequences could be lost, and the restore read the descriptor while
-// sip closed it, so a descriptor number already reused by another session's
-// PTY could get this session's saved modes. A descriptor of the server's own
-// stays open until the screen is closed, so the restore finishes first and the
-// browser reads the leave sequences before the PTY reports the end.
-//
-// When the descriptor cannot be had, the session draws on sip's file as it did
-// before, and the shutdown keeps the old order.
 func sessionTerminal(sess sip.Session) (*os.File, bool) {
 	slave := sess.PtySlave()
 	if slave == nil {
@@ -532,75 +390,28 @@ func sessionTerminal(sess sip.Session) (*os.File, bool) {
 	return own, true
 }
 
-// cleanupAfterProgram runs cleanup once the program has stopped for good.
-//
-// It waits for running before it waits on the program, which is what makes the
-// second wait safe from another goroutine. See programStart.
 func cleanupAfterProgram(program *tea.Program, running <-chan struct{}, cleanup func()) {
 	<-running
 	program.Wait()
 	cleanup()
 }
 
-// programStart is the model a web session's program runs. It reports when the
-// program's own loop has reached the model, and delegates everything else.
-//
-// The report is what makes the teardown goroutine above safe. tea.Program.Wait
-// reads a channel that Run creates, and no lock or channel orders that write
-// against a Wait on another goroutine (bubbletea v2.0.8 writes it at tea.go:1000
-// and reads it at tea.go:1210). sip builds the program through this factory and
-// starts the goroutine that calls Run only afterwards, so a Wait started here
-// can read the field before Run writes it. That is a data race, and a read that
-// lands on the nil zero value blocks for ever, which drops Cleanup in silence.
-//
-// Run calls the model's Init on its own goroutine, after it creates that
-// channel. Closing running from Init therefore puts the write before every
-// receive on running, and the receive before Wait. The order is the Go memory
-// model's, not a guess about timing.
-//
-// Init is the only method here. Update and View come from the model, and the
-// model returns itself from Update, so this wrapper is gone after the first
-// message. The shared motion filter sees it for that one message and passes the
-// message on, which is what it does for any model it does not recognise.
-//
-// One case stays open: Run can fail before it calls Init, while it prepares the
-// terminal or the input reader. Then running never closes and Cleanup does not
-// run. Closing that needs Run's channel to exist before Run, which only
-// bubbletea can do. See the note on Wait in the upstream report.
 type programStart struct {
 	tea.Model
 	start func()
 }
 
-// Init reports that the program's loop is running, then inits the model.
 func (p *programStart) Init() tea.Cmd {
 	p.start()
 	return p.Model.Init()
 }
 
-// daemonConfigFrom maps the user's [daemon] section onto the daemon's own
-// config, mirroring what runDaemon does in cmd/tuios so a daemon autostarted by
-// the web server behaves like one started by `tuios daemon`.
 func daemonConfigFrom(userConfig *config.UserConfig) *session.DaemonConfig {
 	return session.DaemonConfigFromUser(userConfig)
 }
 
-// isLoopbackHost reports whether a bind address keeps traffic inside this
-// machine. It mirrors the check sip makes when it decides whether TLS is
-// mandatory, so the two agree on which binds need a certificate.
-//
-// The body moved to internal/netutil when `tuios ssh` grew the same kind of
-// gate for authentication. One answer to "is this address on the network"
-// serves both refusals.
 func isLoopbackHost(host string) bool { return netutil.IsLoopbackHost(host) }
 
-// resolveTLSFiles decides which keypair the server serves from, generating
-// sip's managed one when --auto-tls asked for it and there is none, or the one
-// on disk has expired or stopped covering the address being bound.
-//
-// An explicit --cert wins: sip's own resolveAutoTLS defers to a configured
-// keypair, and deferring the same way here keeps the two from disagreeing
-// about which certificate is in use.
 func resolveTLSFiles(w io.Writer) (certFile, keyFile string, err error) {
 	if !webAutoTLS || webTLSCert != "" {
 		return webTLSCert, webTLSKey, nil
@@ -614,19 +425,12 @@ func resolveTLSFiles(w io.Writer) (certFile, keyFile string, err error) {
 	if err != nil {
 		return "", "", fmt.Errorf("auto TLS: %w", err)
 	}
-	// Said before the browser says it. An unexplained "Your connection is not
-	// private" on a tool that just reported success reads as the tool being
-	// broken, and the next move is usually --insecure forever.
 	if created {
 		fmt.Fprintf(w, "\nGenerated a TLS certificate: %s\n\n%s\n\n", cert.CertFile, sip.SelfSignedWarning)
 	}
 	return cert.CertFile, cert.KeyFile, nil
 }
 
-// serverURL is the address to open, so a startup line can be pasted or
-// tapped rather than assembled by the reader. A wildcard bind answers on
-// every address this machine has, and localhost is the one that always
-// works from here.
 func serverURL() string {
 	scheme := "http"
 	if webTLSCert != "" || webAutoTLS {
@@ -642,31 +446,14 @@ func serverURL() string {
 	return fmt.Sprintf("%s://%s", scheme, net.JoinHostPort(host, webPort))
 }
 
-// checkTransportSecurity stops a bind that would carry keystrokes in clear
-// text over a network, and answers with the commands that fix it.
-//
-// sip enforces the same rule, but it states the escape hatch as
-// AllowInsecureNoTLS, a Go field of its config that nobody holding this
-// binary can reach. Deciding here means the message can name the flags this
-// command actually has, filled in with the address the user typed.
-//
-// Nothing here asks a question first. A prompt would make the same command do
-// different things depending on whether stdout is a terminal, and tuios-web is
-// started by unit files at least as often as by hand. What everyone gets is
-// the refusal, and the flag that answers it.
 func checkTransportSecurity(w io.Writer) error {
 	if (webTLSCert == "") != (webTLSKey == "") {
-		// Leading with a flag name would come out capitalized by fang's
-		// error rendering.
 		return errors.New("pass both --cert and --key, or neither: a certificate is no use without its key")
 	}
 	if webTLSCert != "" || webAutoTLS || webInsecure || isLoopbackHost(webBindAddr) {
 		return nil
 	}
 
-	// Printed here rather than carried in the error: fang reflows an error
-	// into a paragraph, which would run the commands together and leave
-	// nothing to copy.
 	auth := authFlagsForMenu(accessFlags())
 	fmt.Fprintf(w, `
   %s is not this machine, and without TLS every keystroke you send it, and
@@ -709,46 +496,19 @@ func checkTransportSecurity(w io.Writer) error {
 	return fmt.Errorf("refusing to serve %s in clear text: pass --auto-tls, or --cert and --key, or --insecure to accept it", webHost)
 }
 
-// webMaxCols, webMaxRows and webMaxCells are the largest window a browser may
-// ask for.
-//
-// Each cell costs tuios-web about 1.3 KB: one session resized to 2000x1000
-// took the process from 41 MB to 2.6 GB. sip clamps every resize to these
-// limits, the first one too, and the browser gets the clamped size. A resize
-// past webMaxCols or webMaxRows is cut to them. When columns times rows is
-// still past webMaxCells, the columns stay and the rows shrink: a 1200 column
-// window gets 208 rows. A 5120 pixel wide screen at a 5 pixel cell is 1024
-// columns, so real windows fit.
-//
-// webMaxCells is set here and not left to sip's default, because sip sizes
-// its default for a Bubble Tea cell of about 230 bytes. At 1.3 KB a cell,
-// 250000 cells bound one session near 325 MB. The limit bounds one window and
-// not the process: sip has no cap on the number of sessions yet.
 const (
 	webMaxCols  = 1200
 	webMaxRows  = 500
 	webMaxCells = 250_000
 )
 
-// createTUIOSHandler creates a TUIOS instance for each web session.
-//
-// Graphics: sip's page runs webterm's kitty overlay. Sixel pictures are
-// converted to kitty too, so rewritten cells can move and clear them. Output
-// goes through the sip session's PTY slave, in the same pipe as the text.
 func createTUIOSHandler(sess sip.Session) *app.OS {
 	pty := sess.Pty()
 	graphicsOut := sess.PtySlave()
 	touch := sessionIsTouch(sess.Context())
 
-	// This browser's own terminal, measured from its canvas, for either kind
-	// of session. Without it the ephemeral path falls back to the process-wide
-	// placeholder, and its image cell math uses a 10x20 cell whatever font
-	// size the reader has.
 	hostCaps := webHostCaps(cellSize(pty))
 
-	// The kind says the rest: read-only config, no desktop, graphics forced on
-	// because stdin is not a TTY here. Kitty output, including converted
-	// sixel, reaches the browser's overlay through the sip PTY slave.
 	opts := app.OSOptions{
 		Client:         app.ClientBrowser,
 		ShowKeys:       interfaceFlags.ShowKeys,
@@ -763,7 +523,6 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 		Caps: hostCaps,
 	}
 
-	// In ephemeral mode the model runs in-process, with no daemon
 	if webServerConfig.ephemeral {
 		return served.NewModel(opts, webAppearanceOverrides())
 	}
@@ -773,11 +532,6 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 		version = "web-client"
 	}
 
-	// Try to connect to daemon. The daemon is told this browser's own cell
-	// size, measured from the canvas it reports beside its grid (see
-	// cellSize), and hands it to every guest as the pixel size of its window.
-	// A tool that asks how big a cell is before drawing, kitty icat being the
-	// usual one, draws at the wrong scale with any fixed size.
 	daemonOpts := opts
 	daemonOpts.SessionName = webServerConfig.defaultSession
 	daemonOpts.ViewOnly = webReadOnly
@@ -790,18 +544,8 @@ func createTUIOSHandler(sess sip.Session) *app.OS {
 	return model
 }
 
-// pickWebSession is the session a browser gets when --default-session names
-// none: a dedicated one called "web", created when missing. Picking one of the
-// existing sessions instead was arbitrary and changed as sessions came and
-// went. Go-to reaches the others from inside tuios.
 func pickWebSession([]string) string { return "web" }
 
-// webHostCaps is the browser terminal one connection draws to. sip's page
-// draws graphics in webterm's kitty overlay. Sixel is converted to kitty:
-// xterm.js's native sixel addon does not clear images when cells are rewritten.
-// KittyAnimation stays false because the overlay has no a=f frame-edit path.
-// KittyFileTransfer stays false because the browser cannot read server-local
-// paths. The palette is the browser's; see browserPalette.
 func webHostCaps(cellWidth, cellHeight int) *app.HostCapabilities {
 	caps := &app.HostCapabilities{
 		KittyGraphics: true,
@@ -815,23 +559,11 @@ func webHostCaps(cellWidth, cellHeight int) *app.HostCapabilities {
 	return caps
 }
 
-// webFallbackCellWidth and webFallbackCellHeight are what a cell is taken to
-// measure when the browser reports no pixel dimensions at all, which is what an
-// older client does. They are a guess at a typical monospace cell and nothing
-// more; every connection that reports its canvas gets its real measurement.
 const (
 	webFallbackCellWidth  = vt.FallbackCellWidth
 	webFallbackCellHeight = vt.FallbackCellHeight
 )
 
-// cellSize works out what one cell measures in the browser's pixels, from the
-// canvas size the browser reports beside its grid. It is a real measurement:
-// the browser sends widthPx and heightPx with every resize, so the answer
-// follows the reader's font size instead of a number picked at build time.
-//
-// It falls back to the placeholder when the browser reports no pixels at all,
-// which is what an older client does. A cell is never reported as zero: a
-// caller multiplying by it would tell a guest its window is zero pixels wide.
 func cellSize(pty sip.Pty) (cellWidth, cellHeight int) {
 	cellWidth, cellHeight = webFallbackCellWidth, webFallbackCellHeight
 	if pty.Width > 0 && pty.WidthPx > 0 {
@@ -847,17 +579,10 @@ func cellSize(pty sip.Pty) (cellWidth, cellHeight int) {
 	return cellWidth, cellHeight
 }
 
-// webAppearanceOverrides is the interface flags this server layers over the
-// config file. It is built per call so a session that connects after an edit
-// gets the file as it is now with these flags on top of it, rather than the
-// file the server loaded when it started. See config.Resolve.
 func webAppearanceOverrides() config.Overrides {
 	return interfaceFlags.Overrides()
 }
 
-// applyBuildIdentity settles the build stamps (a `go install` build takes its
-// module version) and hands them to every package that reports them. See
-// app.SetBuildIdentity.
 func applyBuildIdentity() {
 	s := app.SetBuildIdentity(release.Stamps{Version: version, Commit: commit, Date: date, BuiltBy: builtBy})
 	version, commit, date, builtBy = s.Version, s.Commit, s.Date, s.BuiltBy

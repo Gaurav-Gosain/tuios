@@ -35,12 +35,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 )
 
-// ---------------------------------------------------------------------------
-// harness
-// ---------------------------------------------------------------------------
-
-// env is one isolated tuios installation: a binary plus a private set of XDG
-// directories. Everything a test does routes through it.
 type env struct {
 	t      *testing.T
 	bin    string
@@ -48,7 +42,6 @@ type env struct {
 	socket string
 }
 
-// newEnv locates or builds the tuios binary and prepares isolated XDG dirs.
 func newEnv(t *testing.T) *env {
 	t.Helper()
 
@@ -74,22 +67,18 @@ func newEnv(t *testing.T) *env {
 	}
 
 	e := &env{
-		t:    t,
-		bin:  bin,
-		dirs: dirs,
-		// The daemon socket path is derived from XDG_RUNTIME_DIR.
+		t:      t,
+		bin:    bin,
+		dirs:   dirs,
 		socket: filepath.Join(dirs["XDG_RUNTIME_DIR"], "tuios", "tuios.sock"),
 	}
 	t.Cleanup(e.killServer)
 	return e
 }
 
-// buildTuios compiles the binary under test once per test that needs it.
 func buildTuios(t *testing.T) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "tuios")
-	// Inlining off in the packages scripts/noinline-packages.txt lists, as
-	// the release builds it.
 	goflags, err := hostsync.NoinlineGoFlags("..", os.Getenv("GOFLAGS"))
 	if err != nil {
 		t.Fatal(err)
@@ -103,11 +92,8 @@ func buildTuios(t *testing.T) string {
 	return out
 }
 
-// environ returns the isolated environment for a tuios subprocess.
 func (e *env) environ() []string {
 	out := append([]string{}, os.Environ()...)
-	// Drop any inherited XDG vars so ours are authoritative, and a pane's
-	// TUIOS_SOCKET, which names the person's daemon.
 	filtered := out[:0]
 	for _, kv := range out {
 		name := strings.SplitN(kv, "=", 2)[0]
@@ -122,11 +108,9 @@ func (e *env) environ() []string {
 	for k, v := range e.dirs {
 		out = append(out, k+"="+v)
 	}
-	// A deterministic POSIX shell keeps pane content predictable.
 	return append(out, "SHELL=/bin/sh", "TERM=xterm-256color")
 }
 
-// run executes a tuios subcommand and returns its combined output.
 func (e *env) run(args ...string) (string, error) {
 	e.t.Helper()
 	cmd := exec.Command(e.bin, args...)
@@ -135,7 +119,6 @@ func (e *env) run(args ...string) (string, error) {
 	return string(b), err
 }
 
-// mustRun executes a tuios subcommand and fails the test if it errors.
 func (e *env) mustRun(args ...string) string {
 	e.t.Helper()
 	out, err := e.run(args...)
@@ -145,31 +128,12 @@ func (e *env) mustRun(args ...string) string {
 	return out
 }
 
-// killServer stops the isolated daemon and waits for it to actually exit.
-//
-// kill-server is itself synchronous, so the waits below are belt and braces for
-// teardown: they also cover the case where kill-server failed or timed out and
-// the daemon is still writing its final resurrection state into XDG_STATE_HOME.
-// Returning while that is in flight would race t.TempDir cleanup, which deletes
-// the directory out from under the daemon. Errors are ignored: this runs as
-// cleanup and the server may already be gone.
 func (e *env) killServer() {
 	_, _ = e.run("kill-server")
 	e.awaitDaemonGone(10 * time.Second)
 	e.awaitStateSettled(3 * time.Second)
 }
 
-// awaitStateSettled waits until the resurrection state directory stops changing.
-//
-// Daemon.shutdown now unlinks the socket last, after every final save, so on the
-// normal path awaitDaemonGone already implies the state directory is quiet. This
-// remains as teardown insurance for the one path where that does not hold:
-// shutdown caps draining goroutines at 5s and proceeds regardless, so a wedged
-// session can still write after the unlink. A save writes a temp file before
-// renaming it, and removing the test's TempDir during that window fails with
-// "directory not empty", which surfaces as a cleanup error on whichever short
-// test raced it. Waiting for two identical readings keeps teardown deterministic.
-// Best effort: it returns on timeout, since callers use it during cleanup.
 func (e *env) awaitStateSettled(timeout time.Duration) {
 	dir := filepath.Join(e.dirs["XDG_STATE_HOME"], "tuios", "sessions")
 
@@ -198,15 +162,6 @@ func (e *env) awaitStateSettled(timeout time.Duration) {
 	}
 }
 
-// awaitDaemonGone blocks until the daemon has fully finished shutting down.
-//
-// It waits for the socket FILE to be removed, not merely for connections to be
-// refused. The daemon closes its listener at the top of shutdown and only unlinks
-// the socket at the very end, after the final resurrection saves (see
-// Daemon.shutdown), so an unconnectable socket does not yet mean state has been
-// persisted while a removed one does. This is the same signal 'tuios kill-server'
-// waits on. Best effort: it returns on timeout rather than failing, since callers
-// use it during cleanup.
 func (e *env) awaitDaemonGone(timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -217,11 +172,6 @@ func (e *env) awaitDaemonGone(timeout time.Duration) {
 	}
 }
 
-// waitForStateFile blocks until a session's resurrection state lands on disk.
-// State is persisted by a periodic saver and by the final save during shutdown.
-// After a completed kill-server the final save has already happened, so this
-// returns at once; the wait is for callers that have not stopped the daemon and
-// are waiting on the periodic saver.
 func (e *env) waitForStateFile(session string, timeout time.Duration) string {
 	e.t.Helper()
 	path := filepath.Join(e.dirs["XDG_STATE_HOME"], "tuios", "sessions", session+".json")
@@ -236,7 +186,6 @@ func (e *env) waitForStateFile(session string, timeout time.Duration) string {
 	return ""
 }
 
-// waitForSocket blocks until the daemon socket accepts a connection.
 func (e *env) waitForSocket(timeout time.Duration) {
 	e.t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -251,13 +200,6 @@ func (e *env) waitForSocket(timeout time.Duration) {
 	e.t.Fatalf("daemon socket %s never became connectable", e.socket)
 }
 
-// ---------------------------------------------------------------------------
-// raw JSON verb client
-// ---------------------------------------------------------------------------
-
-// verbConn speaks the line delimited JSON verb protocol over a raw socket,
-// deliberately without using the in-repo client, so these tests exercise the
-// real wire format an external tool would have to speak.
 type verbConn struct {
 	t    *testing.T
 	conn net.Conn
@@ -274,9 +216,6 @@ func (e *env) dial() *verbConn {
 	return &verbConn{t: e.t, conn: conn, r: bufio.NewReader(conn)}
 }
 
-// call sends one request and returns the decoded response envelope. timeout
-// bounds the read, so a wait-for that never resolves fails the test instead of
-// hanging the suite.
 func (c *verbConn) call(id int, verb string, params map[string]any, timeout time.Duration) map[string]any {
 	c.t.Helper()
 
@@ -312,7 +251,6 @@ func (c *verbConn) call(id int, verb string, params map[string]any, timeout time
 	return resp
 }
 
-// result asserts the response carried a result (not an error) and returns it.
 func (c *verbConn) result(id int, verb string, params map[string]any, timeout time.Duration) map[string]any {
 	c.t.Helper()
 	resp := c.call(id, verb, params, timeout)
@@ -326,10 +264,6 @@ func (c *verbConn) result(id int, verb string, params map[string]any, timeout ti
 	return res
 }
 
-// ---------------------------------------------------------------------------
-// tests
-// ---------------------------------------------------------------------------
-
 // TestHeadlessControlPlane is the core dogfood: create a detached session with
 // no client ever attached, then drive it entirely over the JSON verb protocol.
 // It proves the daemon owns window state and pane content on its own, which is
@@ -337,29 +271,22 @@ func (c *verbConn) result(id int, verb string, params map[string]any, timeout ti
 func TestHeadlessControlPlane(t *testing.T) {
 	e := newEnv(t)
 
-	// 1. Create a headless session. --detach means no TUI is ever attached, so
-	//    everything below is served from daemon owned state.
 	e.mustRun("new", "--detach", "ctl")
 	e.waitForSocket(10 * time.Second)
 
 	c := e.dial()
 
-	// 2. list-verbs doubles as a protocol handshake and version check.
 	verbs := c.result(1, "list-verbs", nil, 5*time.Second)
 	if _, ok := verbs["version"]; !ok {
 		t.Fatalf("list-verbs did not report a protocol version: %v", verbs)
 	}
 
-	// 3. The detached session must already have its initial window, otherwise
-	//    control verbs would have no target and the session would be unusable
-	//    until someone attached.
 	wl := c.result(2, "list-windows", map[string]any{"session": "ctl"}, 5*time.Second)
 	initial := int(wl["total"].(float64))
 	if initial < 1 {
 		t.Fatalf("detached session has %d windows, want at least 1", initial)
 	}
 
-	// 4. Create a second window headlessly and confirm the count moved.
 	created := c.result(3, "new-window", map[string]any{"session": "ctl", "name": "worker"}, 10*time.Second)
 	winID, _ := created["window_id"].(string)
 	if winID == "" {
@@ -374,17 +301,12 @@ func TestHeadlessControlPlane(t *testing.T) {
 		t.Fatalf("new window not listed by name: %v", wl["windows"])
 	}
 
-	// 5. Run a real command in the new window. The marker is computed by the
-	//    shell ($((21*2)) -> 42), so seeing "marker-42" proves the shell
-	//    actually executed it rather than our bytes merely being echoed.
 	c.result(5, "send-text", map[string]any{
 		"session": "ctl",
 		"window":  winID,
 		"text":    "echo marker-$((21*2))\n",
 	}, 5*time.Second)
 
-	// 6. wait-for is the scripting primitive that replaces a capture-pane poll
-	//    loop. Blocking here proves the event stream actually fires on output.
 	wr := c.result(6, "wait-for", map[string]any{
 		"condition": "window-output",
 		"session":   "ctl",
@@ -396,8 +318,6 @@ func TestHeadlessControlPlane(t *testing.T) {
 		t.Fatalf("wait-for did not match: %v", wr)
 	}
 
-	// 7. capture-pane must independently show the same result, rendered from
-	//    the daemon side terminal emulator.
 	pane := c.result(7, "capture-pane", map[string]any{
 		"session": "ctl",
 		"window":  winID,
@@ -408,29 +328,21 @@ func TestHeadlessControlPlane(t *testing.T) {
 		t.Fatalf("capture-pane missing command output.\n--- pane ---\n%s", content)
 	}
 
-	// 8. Options round trip through the daemon owned store. The key is a real
-	//    configuration path: set-option validates against the option registry
-	//    now, so an arbitrary name is refused rather than stored, which is the
-	//    point of the validation.
 	c.result(8, "set-option", map[string]any{"session": "ctl", "key": "appearance.sidebar.position", "value": "right"}, 5*time.Second)
 	opt := c.result(9, "get-option", map[string]any{"session": "ctl", "key": "appearance.sidebar.position"}, 5*time.Second)
 	if got, _ := opt["value"].(string); got != "right" {
 		t.Fatalf("get-option = %q, want \"right\"", got)
 	}
-	// The value came from this session rather than from the default it would
-	// otherwise report, which is what makes the round trip a round trip.
 	if got, _ := opt["source"].(string); got != "session" {
 		t.Fatalf("get-option source = %q, want \"session\"", got)
 	}
 
-	// 9. close-window brings the count back down.
 	c.result(10, "close-window", map[string]any{"session": "ctl", "window": winID}, 10*time.Second)
 	wl = c.result(11, "list-windows", map[string]any{"session": "ctl"}, 5*time.Second)
 	if got := int(wl["total"].(float64)); got != initial {
 		t.Fatalf("after close-window: %d windows, want %d", got, initial)
 	}
 
-	// 10. kill-session tears it down and it disappears from the listing.
 	c.result(12, "kill-session", map[string]any{"session": "ctl"}, 10*time.Second)
 	sessions := c.result(13, "list-sessions", nil, 5*time.Second)
 	if strings.Contains(fmt.Sprint(sessions["sessions"]), "\"ctl\"") {
@@ -482,7 +394,6 @@ func TestUnknownVerbDoesNotKillConnection(t *testing.T) {
 		t.Fatalf("error code = %q, want \"unknown_verb\"", code)
 	}
 
-	// The connection must still serve a good request afterwards.
 	if _, ok := c.result(2, "list-sessions", nil, 5*time.Second)["sessions"]; !ok {
 		t.Fatal("connection unusable after an unknown verb")
 	}
@@ -504,8 +415,6 @@ func TestKillServerIsSynchronous(t *testing.T) {
 	c := e.dial()
 	c.result(1, "new-window", map[string]any{"session": "synckill", "name": "durable"}, 10*time.Second)
 
-	// Delete anything the periodic saver has already written, so a state file
-	// seen after kill-server can only have been written by the shutdown path.
 	stateDir := filepath.Join(e.dirs["XDG_STATE_HOME"], "tuios", "sessions")
 	statePath := filepath.Join(stateDir, "synckill.json")
 	if err := os.Remove(statePath); err != nil && !os.IsNotExist(err) {
@@ -514,7 +423,6 @@ func TestKillServerIsSynchronous(t *testing.T) {
 
 	e.mustRun("kill-server")
 
-	// No waiting: the point of the contract is that these hold on return.
 	if _, err := os.Stat(statePath); err != nil {
 		t.Fatalf("kill-server returned before session state was saved: %v", err)
 	}
@@ -522,7 +430,6 @@ func TestKillServerIsSynchronous(t *testing.T) {
 		t.Errorf("kill-server returned while the socket was still present: %v", err)
 	}
 
-	// The saved state must be complete, not a partial write caught mid-flight.
 	raw, err := os.ReadFile(statePath)
 	if err != nil {
 		t.Fatalf("reading state: %v", err)
@@ -535,8 +442,6 @@ func TestKillServerIsSynchronous(t *testing.T) {
 		t.Errorf("saved state is missing the window created before shutdown: %s", raw)
 	}
 
-	// Running it again with no daemon left must succeed rather than report a
-	// failure to stop something that is already stopped.
 	if out, err := e.run("kill-server"); err != nil {
 		t.Errorf("second kill-server failed: %v (%s)", err, out)
 	}
@@ -552,25 +457,17 @@ func TestResurrectionAcrossDaemonRestart(t *testing.T) {
 	e.mustRun("new", "--detach", "revive")
 	e.waitForSocket(10 * time.Second)
 
-	// Add a distinctively named window so we can prove identity survives, not
-	// merely that some window count matched.
 	c := e.dial()
 	c.result(1, "new-window", map[string]any{"session": "revive", "name": "phoenix"}, 10*time.Second)
 	before := c.result(2, "list-windows", map[string]any{"session": "revive"}, 5*time.Second)
 	wantTotal := int(before["total"].(float64))
 
-	// Resurrection state is written by a periodic saver and on shutdown; the
-	// clean kill-server path performs the final save before returning.
 	e.mustRun("kill-server")
 
-	// The state file must actually exist, otherwise the restore below would be
-	// vacuously true.
 	stateDir := filepath.Join(e.dirs["XDG_STATE_HOME"], "tuios", "sessions")
 	e.awaitDaemonGone(15 * time.Second)
 	e.waitForStateFile("revive", 15*time.Second)
 
-	// Start a fresh daemon process. It restores sessions before accepting
-	// clients, so the very first verb call must already see them.
 	daemon := exec.Command(e.bin, "daemon")
 	daemon.Env = e.environ()
 	if err := daemon.Start(); err != nil {
@@ -588,8 +485,6 @@ func TestResurrectionAcrossDaemonRestart(t *testing.T) {
 		t.Fatalf("named window did not survive restart: %v", after["windows"])
 	}
 
-	// The restored windows must have *live* shells, not just replayed metadata.
-	// Running a command through a restored PTY is the only convincing proof.
 	c2.result(2, "send-text", map[string]any{
 		"session": "revive",
 		"text":    "echo revived-$((6*7))\n",
@@ -604,8 +499,6 @@ func TestResurrectionAcrossDaemonRestart(t *testing.T) {
 		t.Fatalf("restored window's shell is not live: %v", wr)
 	}
 
-	// An explicit kill must make a session non resurrectable, otherwise killed
-	// sessions would come back from the dead on the next daemon start.
 	c2.result(4, "kill-session", map[string]any{"session": "revive"}, 10*time.Second)
 	entries, err := os.ReadDir(stateDir)
 	if err != nil {
@@ -644,7 +537,6 @@ func TestUnknownVerbHintsAtTheRightOne(t *testing.T) {
 		t.Errorf("hint verb = %q, want list-verbs", got)
 	}
 
-	// Following the hint must actually work.
 	suggested, _ := hint["did_you_mean"].(string)
 	if _, ok := c.result(2, suggested, map[string]any{"session": "hints"}, 5*time.Second)["windows"]; !ok {
 		t.Fatal("the suggested verb did not work")
@@ -719,8 +611,6 @@ func TestHelloReportsTheProtocolRange(t *testing.T) {
 		t.Errorf("pid = %v, want the daemon's process id", res["pid"])
 	}
 
-	// A client claiming a protocol this daemon cannot serve is refused with the
-	// typed code rather than being allowed to proceed.
 	resp := c.call(2, "hello", map[string]any{"version": "9.9.9", "protocol": 9999}, 5*time.Second)
 	errObj, ok := resp["error"].(map[string]any)
 	if !ok {
@@ -772,7 +662,6 @@ func TestListVerbsIsSelfDescribing(t *testing.T) {
 		if _, ok := v["params"].([]any); !ok {
 			t.Errorf("verb %q has no params list", name)
 		}
-		// Every example must be a parseable request for this verb.
 		examples, _ := v["examples"].([]any)
 		for _, rawEx := range examples {
 			ex, _ := rawEx.(string)
@@ -787,7 +676,6 @@ func TestListVerbsIsSelfDescribing(t *testing.T) {
 		}
 	}
 
-	// The verbs a scripting client depends on must all be present.
 	for _, want := range []string{
 		"hello", "list-verbs", "list-sessions", "list-windows", "new-window",
 		"close-window", "send-keys", "send-text", "capture-pane", "kill-session",
@@ -805,7 +693,6 @@ func TestListVerbsIsSelfDescribing(t *testing.T) {
 func TestCLIExplainsAMissingDaemon(t *testing.T) {
 	e := newEnv(t)
 
-	// No daemon has been started in this hermetic environment.
 	out, err := e.run("list-windows")
 	if err == nil {
 		t.Fatalf("expected list-windows to fail with no daemon, got: %s", out)
@@ -851,8 +738,6 @@ func TestAgentsTalkToEachOtherHeadless(t *testing.T) {
 
 	c := e.dial()
 
-	// Discovery. Nothing has reported, so nothing is an agent yet, and --all is
-	// what tells you the panes are there at all.
 	res := c.result(1, "list-agents", map[string]any{"session": "crew"}, 5*time.Second)
 	if res["total"] != float64(0) {
 		t.Fatalf("a session where nothing reported listed %v agents", res["total"])
@@ -877,9 +762,6 @@ func TestAgentsTalkToEachOtherHeadless(t *testing.T) {
 		t.Fatalf("list-agents did not name the panes that were created: %v", agents)
 	}
 
-	// The review pane reports itself, which is what makes it discoverable and
-	// what makes it askable. It reports idle: a pane on needs_input is waiting
-	// on a prompt, and ask-agent refuses it with agent_blocked.
 	c.result(3, "set-agent-state", map[string]any{
 		"session": "crew", "window": review, "state": "idle",
 		"harness": "claude-code", "message": "ready",
@@ -894,8 +776,6 @@ func TestAgentsTalkToEachOtherHeadless(t *testing.T) {
 		t.Errorf("agent row is wrong: %v", row)
 	}
 
-	// A message queued for a pane, read back by that pane, marked rather than
-	// consumed, and flagged as content the reader did not write.
 	sent := c.result(5, "send-agent-message", map[string]any{
 		"session": "crew", "to": review, "from": orch,
 		"subject": "retest", "text": "rebased onto main",
@@ -930,8 +810,6 @@ func TestAgentsTalkToEachOtherHeadless(t *testing.T) {
 		t.Errorf("the message was still unread after being read: %v", res)
 	}
 
-	// A wait blocks on the hub rather than polling, and wakes on a send from a
-	// second connection.
 	waiter := e.dial()
 	done := make(chan map[string]any, 1)
 	go func() {
@@ -955,12 +833,6 @@ func TestAgentsTalkToEachOtherHeadless(t *testing.T) {
 		t.Fatal("wait-for agent-message never returned")
 	}
 
-	// Asking a question types at the pane and comes back with what it printed.
-	// The pane is a plain shell that reported itself as claude-code, and a
-	// harness that can show working has to show it: output alone does not
-	// prove the question was taken (see prompt_gate.go), and without this the
-	// ask fails with prompt_stalled. So the pane reports working and then idle
-	// the way Claude Code's hook would, from a connection of its own.
 	hook := e.dial()
 	go func() {
 		time.Sleep(300 * time.Millisecond)
@@ -983,7 +855,6 @@ func TestAgentsTalkToEachOtherHeadless(t *testing.T) {
 		t.Errorf("reply did not carry what the pane printed: %q", reply)
 	}
 
-	// And the loop guards refuse rather than allowing a cycle to be built.
 	resp := c.call(12, "send-agent-message", map[string]any{
 		"session": "crew", "to": orch, "from": orch, "text": "self",
 	}, 5*time.Second)

@@ -10,9 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// certFlags is the TLS half of the command line, set for one test and put back
-// afterwards. The flags are package globals because cobra writes into them, so
-// a test that forgot to restore one would decide the next test's outcome.
 type certFlags struct {
 	host     string
 	port     string
@@ -42,8 +39,6 @@ func applyCertFlags(t *testing.T, f certFlags) {
 		f.port = "7681"
 	}
 	webHost, webPort = f.host, f.port
-	// runWebServer resolves --host before the checks. These tests give
-	// addresses and "localhost", which the checks read as they are.
 	webBindAddr = f.host
 	webTLSCert, webTLSKey = f.cert, f.key
 	webAutoTLS, webInsecure = f.autoTLS, f.insecure
@@ -51,8 +46,6 @@ func applyCertFlags(t *testing.T, f certFlags) {
 	webCertForce = f.force
 }
 
-// writeKeypair drops a real keypair somewhere other than the managed cert dir,
-// standing in for one the user brought themselves.
 func writeKeypair(t *testing.T) (certFile, keyFile string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -142,7 +135,6 @@ func TestResolveTLSFilesGeneratesOnce(t *testing.T) {
 		t.Errorf("first generation never warned about the browser warning:\n%s", out.String())
 	}
 
-	// A second run reuses it, and says nothing: the warning is only news once.
 	before, err := os.ReadFile(certFile)
 	if err != nil {
 		t.Fatalf("read certificate: %v", err)
@@ -219,8 +211,6 @@ func TestCertNewRefusesToReplaceWithoutForce(t *testing.T) {
 	}
 }
 
-// runCert drives the cert group the way a shell does, so the flag wiring is
-// under test and not just the functions behind it.
 func runCert(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	root := &cobra.Command{Use: "tuios-web", SilenceUsage: true, SilenceErrors: true}

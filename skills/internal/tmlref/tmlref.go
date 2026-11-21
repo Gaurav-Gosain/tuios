@@ -22,9 +22,6 @@ const (
 	End   = "<!-- END generated -->\n"
 )
 
-// groupTitles names each catalog group in the order the topic lists them.
-// A group the catalog gains later still prints, under its own name, after
-// these.
 var groupTitles = []struct{ group, title string }{
 	{"document", "Root"},
 	{"layout", "Layout"},
@@ -89,7 +86,6 @@ func Section() string {
 			b.WriteString(strings.Join(common, " "))
 		}
 		b.WriteString(":\n\n")
-		// Components with the same attributes and content share a line.
 		var names, rests []string
 		for _, c := range comps {
 			if !inGroup(c) {
@@ -125,8 +121,6 @@ func Section() string {
 	return b.String()
 }
 
-// tokens renders each own attribute of c: its name, * when required, and
-// the accepted values or =path.
 func tokens(c tml.Component) []string {
 	out := make([]string, 0, len(c.Attrs))
 	for _, a := range c.Attrs {
@@ -145,8 +139,6 @@ func tokens(c tml.Component) []string {
 	return out
 }
 
-// shared returns the attribute tokens every component that keep selects has,
-// in the order of the first such component.
 func shared(comps []tml.Component, keep func(tml.Component) bool) []string {
 	var out []string
 	first := true
@@ -164,7 +156,6 @@ func shared(comps []tml.Component, keep func(tml.Component) bool) []string {
 	return out
 }
 
-// holds says what a component may contain, or "" when it holds nothing.
 func holds(c tml.Component) string {
 	switch c.Content {
 	case tml.ContentBlocks:

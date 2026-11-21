@@ -8,8 +8,6 @@ import (
 	"syscall"
 )
 
-// checkPasswordFileMode refuses a password file that another user owns, or
-// that anyone other than its owner can read or write.
 func checkPasswordFileMode(_ *os.File, path string, info os.FileInfo, uid int) error {
 	if st, ok := info.Sys().(*syscall.Stat_t); ok && int(st.Uid) != uid {
 		return fmt.Errorf("the password file %s belongs to another user. Use a file that you own", path)

@@ -72,7 +72,6 @@ func TestSessionIntegrationEndToEnd(t *testing.T) {
 		t.Fatalf("list-windows gave no window_id: %v", wins[0])
 	}
 
-	// What qwen runs on SessionStart, with the pane's environment.
 	payload := `{"hook_event_name":"SessionStart","session_id":"qw-e2e","source":"startup"}`
 	explain := run(payload, withHome("TUIOS_PANE_ID="+win, "TUIOS_SESSION=work"), "agent-hook", "qwen", "--integration", "1", "--explain")
 	if !strings.Contains(explain, `"applied":true`) {

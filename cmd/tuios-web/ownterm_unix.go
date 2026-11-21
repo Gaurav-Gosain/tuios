@@ -9,9 +9,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// ownTerminal opens this server's own handle on a session's terminal: a
-// second descriptor for the same PTY slave, closed on exec so no pane program
-// inherits it. See createTUIOSProgram for why the session needs one.
 func ownTerminal(slave *os.File) (*os.File, error) {
 	raw, err := slave.SyscallConn()
 	if err != nil {
