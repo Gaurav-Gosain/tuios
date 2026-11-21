@@ -69,7 +69,7 @@ var agentOnlyVerbs = []string{
 	// The Inbox, attention and approvals.
 	"list-attention", "dismiss-attention", "mark-attention",
 	"peek-prompt", "respond", "request-approval", "reply-approval",
-	"get-approval", "ask-human", "answer-ask",
+	"get-approval", "ask-human", "answer-ask", "askpass", "askpass-answer",
 	// The queue, and the review sent to an agent.
 	"queue-prompt", "list-queued", "cancel-queued", "send-review",
 	// The person's reply history.
