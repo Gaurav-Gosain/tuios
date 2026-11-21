@@ -39,7 +39,7 @@ const inboxUndoNotice = 5 * time.Second
 // showUndoOffer tells the person an undo is on offer. The offer leaves the dock
 // no later than the undo it offers ends.
 func (m *OS) showUndoOffer(message string) {
-	m.showNotification(message, "info", "", inboxUndoNotice, nil, m.inboxUndoWindow())
+	m.showNotification(message, "info", "", inboxUndoNotice, nil, m.inboxUndoWindow(), false)
 }
 
 // inboxUndoMax bounds the closes kept for u.
