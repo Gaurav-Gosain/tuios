@@ -321,3 +321,83 @@ func neverRuns(text string) string {
 	}
 	return ""
 }
+
+// TestKeybindManagerChangesTheLeader changes the leader from the keybind
+// manager, the way every other key is changed there: the leader row leads the
+// Bindings list, ctrl+r records a key for it, and enter writes it. A key an
+// action holds is refused and names the action, so the change takes no key
+// away. The new leader works at once: it opens the manager again.
+//
+// Negative control: on main the list has no leader row, so the first row is
+// an action, and enter binds ctrl+a to that action instead.
+func TestKeybindManagerChangesTheLeader(t *testing.T) {
+	term, base := attachClientBase(t)
+	path := filepath.Join(base, "XDG_CONFIG_HOME", "tuios", "config.toml")
+	openKeybindManager(t, term)
+	if err := term.WaitForText("Leader key", uiTimeout); err != nil {
+		t.Fatalf("the Bindings list has no leader row: %v\n%s", err, term.Snapshot())
+	}
+
+	// record arms the recorder on the leader row, presses key and takes it.
+	// "/" puts the Bindings tab back, whose cursor is still on the leader.
+	record := func(key tuitest.Key) {
+		t.Helper()
+		if err := term.SendKeys(tuitest.Ctrl('r')); err != nil {
+			t.Fatalf("send ctrl+r: %v", err)
+		}
+		if err := term.WaitForText("Press any key", uiTimeout); err != nil {
+			t.Fatalf("recorder never armed: %v\n%s", err, term.Snapshot())
+		}
+		if err := term.SendKeys(key); err != nil {
+			t.Fatalf("send the key: %v", err)
+		}
+		if err := term.WaitForText("leader_key", uiTimeout); err != nil {
+			t.Fatalf("the recorder does not name the leader as its target: %v\n%s", err, term.Snapshot())
+		}
+		if err := term.SendKeys(tuitest.Enter); err != nil {
+			t.Fatalf("send enter: %v", err)
+		}
+	}
+
+	// ctrl+p opens the palette from every mode, so it cannot be the leader.
+	record(tuitest.Ctrl('p'))
+	if err := term.WaitForText("Free the key", uiTimeout); err != nil {
+		t.Fatalf("a key the palette holds was not refused: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "keybind-leader-refused")
+	if data, _ := os.ReadFile(path); strings.Contains(string(data), `leader_key = "ctrl+p"`) { // #nosec G304 - the test's own isolation root
+		t.Fatalf("the refused leader reached config.toml:\n%s", data)
+	}
+
+	if err := term.SendKeys("/"); err != nil {
+		t.Fatalf("send /: %v", err)
+	}
+	record(tuitest.Ctrl('a'))
+	if err := term.WaitForText("The leader is now ctrl+a", uiTimeout); err != nil {
+		t.Fatalf("ctrl+a did not become the leader: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "keybind-leader-changed")
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		data, err := os.ReadFile(path) // #nosec G304 - the test's own isolation root
+		return err == nil && strings.Contains(string(data), `leader_key = "ctrl+a"`)
+	}, uiTimeout); err != nil {
+		data, _ := os.ReadFile(path) // #nosec G304
+		t.Fatalf("config.toml never recorded the leader: %v\n%s", err, data)
+	}
+
+	// The new leader works in this client now.
+	if err := term.SendKeys("q"); err != nil {
+		t.Fatalf("send q: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), keybindTitle)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the manager did not close: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys(tuitest.Ctrl('a'), "k"); err != nil {
+		t.Fatalf("send ctrl+a k: %v", err)
+	}
+	if err := term.WaitForText(keybindTitle, uiTimeout); err != nil {
+		t.Fatalf("the new leader does not open the manager: %v\n%s", err, term.Snapshot())
+	}
+}

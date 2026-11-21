@@ -59,6 +59,10 @@ func (m *OS) KeybindUnbindSelected() tea.Cmd {
 		m.ShowNotification(b.Action+" already has no key. Press ctrl+r to give it one.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
+	if b.Action == config.LeaderAction {
+		m.ShowNotification("The leader cannot be removed. Press ctrl+r to change it.", "info", m.Settings.NotificationDuration)
+		return nil
+	}
 	if !m.keybindEditable() {
 		return nil
 	}

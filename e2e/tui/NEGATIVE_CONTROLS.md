@@ -18586,3 +18586,17 @@ Run on 2026-11-19 on Linux, sim backend, against main at 61507834e. The control 
 TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -v -run '^(TestScreenshotRegionDragOpensThePreview|TestScreenshotTwoCapturesInOneSecondKeepBothFiles)$' .
 ```
+
+## The leader in the keybind manager
+
+`TestKeybindManagerChangesTheLeader` opens the keybind manager, records ctrl+p on the leader row (refused: the palette holds it), then ctrl+a (taken). config.toml must hold `leader_key = "ctrl+a"`, and ctrl+a k must open the manager again.
+
+Run on 2026-11-21 on Linux, real backend, against main at 6419a7d9f.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Main | `TestKeybindManagerChangesTheLeader` | "the Bindings list has no leader row" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestKeybindManagerChangesTheLeader$' .
+```

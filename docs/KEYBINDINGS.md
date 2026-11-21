@@ -3544,7 +3544,7 @@ See [When a key is wrong](CONFIGURATION.md#when-a-key-is-wrong).
 
 `tuios keybinds browse` opens the rows of `tuios keybinds list --json` in an explorer. Press <kbd>/</kbd> to search, and <kbd>Tab</kbd> or a click on a tab to show one scope. The detail pane shows the keys, the action, the scope and the description. <kbd>q</kbd> or <kbd>Esc</kbd> leaves it. Add a search to start with it: `tuios keybinds browse spotlight`. `tuios keybinds list` prints plain text, on a terminal too.
 
-The **keybind manager** (<kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>k</kbd>) shows the same analysis in four tabs: Bindings, Conflicts, Guests and Record. Each tab keeps its place. Record captures the next key you press. On a binding, <kbd>Ctrl</kbd>+<kbd>D</kbd> removes it and <kbd>Ctrl</kbd>+<kbd>X</kbd> takes its key off every action.
+The **keybind manager** (<kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>k</kbd>) shows the same analysis in four tabs: Bindings, Conflicts, Guests and Record. Each tab keeps its place. Record captures the next key you press. On a binding, <kbd>Ctrl</kbd>+<kbd>D</kbd> removes it and <kbd>Ctrl</kbd>+<kbd>X</kbd> takes its key off every action. The first row of Bindings is the leader. To change the leader, select that row, press <kbd>Ctrl</kbd>+<kbd>R</kbd>, press the new key, then press <kbd>Enter</kbd>. A key that an action uses in global, window or terminal mode is refused. Free that key first.
 
 > **Keybinding edits apply at once.** A keybinding saved in `config.toml` works at the next key press in the running client. You do not need to restart TUIOS or attach again. Changes made with the keybind manager also apply at once.
 
