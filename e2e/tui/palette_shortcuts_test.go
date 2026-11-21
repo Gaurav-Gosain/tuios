@@ -120,3 +120,78 @@ func TestPaletteShortcutsFollowKeybinds(t *testing.T) {
 
 	alive(t, term, "after the palette followed the keybinds")
 }
+
+// paletteHasRow reports whether a row under the palette's search rule is the
+// row named name: the name, then the shortcut and category columns. A longer
+// row that starts with name, such as "New window on another machine", does
+// not count.
+func paletteHasRow(s tuitest.Screen, name string) bool {
+	lines := strings.Split(s.Text(), "\n")
+	rule := -1
+	for i, line := range lines {
+		if strings.Contains(line, "──────────") {
+			rule = i
+			break
+		}
+	}
+	if rule < 0 {
+		return false
+	}
+	for _, line := range lines[rule+1:] {
+		_, after, ok := strings.Cut(line, name)
+		if !ok {
+			continue
+		}
+		after = strings.ReplaceAll(after, "│", " ")
+		if strings.TrimSpace(after) == "" || strings.HasPrefix(after, "  ") {
+			return true
+		}
+	}
+	return false
+}
+
+// TestPaletteFindsWindowActionsByTmuxWords: a tmux pane is a tuios window,
+// so a person who types the tmux word finds the window action. "new pane"
+// finds "New window", "close pane" finds "Close window", and "split pane"
+// finds both splits. Each query leaves a frame under the artifact directory.
+//
+// Negative control: a build of main, which matches only Name, fails with
+// "new pane" does not find ["New window"]. It lists the rows whose names
+// hold "pane", such as the ssh one, and no "New window" row.
+func TestPaletteFindsWindowActionsByTmuxWords(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "")
+	term := startIn(t, base, startOpts{cols: 120, rows: 36})
+	waitBoot(t, term)
+	dir := artifactDir(t)
+	cases := []struct {
+		query string
+		rows  []string
+	}{
+		{"new pane", []string{"New window"}},
+		{"close pane", []string{"Close window"}},
+		{"split pane", []string{"Split horizontal", "Split vertical"}},
+	}
+	for _, tc := range cases {
+		sendKeys(t, term, tuitest.Ctrl('p'))
+		waitPaletteOpen(t, term, tc.query)
+		sendKeys(t, term, tc.query)
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			for _, row := range tc.rows {
+				if !paletteHasRow(s, row) {
+					return false
+				}
+			}
+			return true
+		}, uiTimeout); err != nil {
+			saveArtifact(t, term, dir, strings.ReplaceAll(tc.query, " ", "-")+"-failed")
+			t.Fatalf("%q does not find %q\n%s", tc.query, tc.rows, term.Snapshot())
+		}
+		if err := term.WaitStable(uiTimeout); err != nil {
+			t.Fatalf("%q: the palette never settled: %v", tc.query, err)
+		}
+		saveArtifact(t, term, dir, strings.ReplaceAll(tc.query, " ", "-"))
+		closePalette(t, term, tc.query)
+	}
+	alive(t, term, "after the tmux word searches")
+}

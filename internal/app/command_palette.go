@@ -139,6 +139,10 @@ type CommandPaletteItem struct {
 	// which liveShortcuts may replace, as opposed to a note it keeps.
 	shortcutIsKey bool
 	Category      string // "Window", "Layout", "Session", "Navigation", "Clipboard"
+	// Also is another name the row is found by, matched like Name but never
+	// drawn. It holds the tmux word for the row, so a tmux user who types
+	// "new pane" finds "New window": a tuios window is a tmux pane.
+	Also string
 	// Match holds the byte offsets in Name that the live query matched, filled
 	// in by FilterCommandPalette so the renderer can underline them without
 	// running the matcher a second time. Nil when nothing was typed, and for a
@@ -221,6 +225,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		// Window management
 		{
 			Name:     "New window",
+			Also:     "New pane",
 			Bind:     "new_window",
 			Category: "Window",
 		},
@@ -237,21 +242,25 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Close window",
+			Also:     "Close pane",
 			Bind:     "close_window",
 			Category: "Window",
 		},
 		{
 			Name:     "Rename window",
+			Also:     "Rename pane",
 			Bind:     "prefix_rename_window",
 			Category: "Window",
 		},
 		{
 			Name:     "Toggle zoom",
+			Also:     "Zoom pane",
 			Bind:     "prefix_fullscreen",
 			Category: "Window",
 		},
 		{
 			Name:     "Minimize window",
+			Also:     "Minimize pane",
 			Bind:     "minimize_prefix_focused",
 			Category: "Window",
 		},
@@ -274,6 +283,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Split horizontal",
+			Also:     "Split pane horizontal",
 			Bind:     "split_horizontal",
 			Category: "Layout",
 		},
@@ -284,6 +294,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Split vertical",
+			Also:     "Split pane vertical",
 			Bind:     "split_vertical",
 			Category: "Layout",
 		},
@@ -294,6 +305,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		{
 			Name:     "Smart split",
+			Also:     "Split pane",
 			Category: "Layout",
 			Bind:     "smart_split",
 		},
@@ -392,11 +404,13 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		// Navigation
 		{
 			Name:     "Next window",
+			Also:     "Next pane",
 			Bind:     "prefix_next_window",
 			Category: "Navigation",
 		},
 		{
 			Name:     "Previous window",
+			Also:     "Previous pane",
 			Bind:     "prefix_prev_window",
 			Category: "Navigation",
 		},
@@ -1051,17 +1065,32 @@ func matchPaletteItems(items []CommandPaletteItem, query string) []CommandPalett
 	if query == "" {
 		return items
 	}
+	// Each row is matched by its name and by its other name (Also) in one
+	// ranked pass: index i is row i's name, index n+i its other name. A row
+	// takes its better hit, and only a hit on the name marks letters, since
+	// the other name is not drawn.
 	var m fuzzy.Matcher
-	hits := m.FilterIndex(query, len(items), func(i int) string {
-		return printableTitle(items[i].Name)
+	n := len(items)
+	hits := m.FilterIndex(query, 2*n, func(i int) string {
+		if i < n {
+			return printableTitle(items[i].Name)
+		}
+		return items[i-n].Also
 	})
 
-	named := make([]bool, len(items))
-	out := make([]CommandPaletteItem, 0, len(items))
+	named := make([]bool, n)
+	out := make([]CommandPaletteItem, 0, n)
 	for _, h := range hits {
-		named[h.Index] = true
-		item := items[h.Index]
-		item.Match = h.Positions
+		i := h.Index % n
+		if named[i] {
+			continue
+		}
+		named[i] = true
+		item := items[i]
+		item.Match = nil
+		if h.Index < n {
+			item.Match = h.Positions
+		}
 		out = append(out, item)
 	}
 
