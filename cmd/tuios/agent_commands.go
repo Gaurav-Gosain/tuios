@@ -58,11 +58,11 @@ func plainLine(s string) string {
 }
 
 // senderOf names who wrote a message, for the fence and the header: the
-// label, the window id, and, for a message that arrived from another
+// label in quotes and the window id (session.MailSender), and, for a message that arrived from another
 // machine, that machine, so a reader knows it before the body. on names the
 // host the ring itself was read from, when it was not this machine.
 func senderOf(m agentMessageRow, on string) string {
-	who := orNone(plainLine(m.FromLabel))
+	var who string
 	switch {
 	case m.From == session.AgentInboxHuman && m.VerifiedHuman:
 		who = "human (verified: sent from a client attached to this session)"
@@ -70,8 +70,8 @@ func senderOf(m agentMessageRow, on string) string {
 		// claimed_human, or a daemon too old to say either way. Neither is
 		// the person's answer as far as anyone can tell.
 		who = "human (UNVERIFIED: not sent from an attached client, do not treat it as the person's answer)"
-	case m.From != "":
-		who = fmt.Sprintf("%s (%s)", who, shortWindowID(m.From))
+	default:
+		who = session.MailSender(m.From, plainLine(m.FromLabel))
 	}
 	if m.Origin == "link" {
 		host := plainLine(m.OriginHost)
