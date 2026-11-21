@@ -48,7 +48,6 @@ type Terminal struct {
 // TerminalSource is the Source field of the palettes Terminal builds.
 const TerminalSource = "terminal"
 
-// paletteQuery asks for the sixteen ANSI colours.
 var paletteQuery = func() string {
 	var b strings.Builder
 	for i := range 16 {
@@ -134,8 +133,6 @@ func (t *Terminal) Palette() swatch.Palette {
 	return p
 }
 
-// luminance is a colour's relative luminance on 0 to 1, by the sRGB weights
-// without linearisation, which is enough to tell light from dark.
 func luminance(c color.Color) float64 {
 	r, g, b, _ := c.RGBA()
 	return (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)) / 0xffff

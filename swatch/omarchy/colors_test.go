@@ -44,7 +44,6 @@ func TestResolveMatchesOmarchy(t *testing.T) {
 	}
 }
 
-// tsv prints c as omarchy-theme-color --all does.
 func tsv(c map[string]string) string {
 	keys := make([]string, 0, len(c))
 	for k := range c {
