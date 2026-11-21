@@ -204,10 +204,10 @@ would otherwise wipe out the kind and message of the program's own report.
 
 ## tuios inside a terminal that reads OSC 7501
 
-tuios is a program too. When it runs in Rex or another terminal that reads
-the protocol, it reports the agent states of its panes there. The
-terminal can then show that a pane in tuios waits for you while tuios is in
-another tab.
+tuios is a program too. When it runs in Rex, zellij 0.46 or another
+terminal that reads the protocol, it reports the agent states of its panes
+there. The terminal can then show that a pane in tuios waits for you while
+tuios is in another tab.
 
 - At start, each local or ssh client asks its terminal `OSC 7501 ; ?`. It
   reports only when the terminal answers.
@@ -250,6 +250,24 @@ host_program_status = "off"   # "session" is the default
 ```
 
 A browser client of `tuios-web` does not ask.
+
+### zellij
+
+zellij 0.46.0 reads the protocol. This was checked on Linux on 2026-11-21,
+with tuios attached to a session inside a zellij pane:
+
+- zellij answers the query with
+  `OSC 7501 ; ?:states=idle,working,done,blocked,error:kinds=permission,question,auth`.
+  tuios reads that as support.
+- A pane in the session waits for an approval. tuios sends
+  `state=blocked:id=<session>:kind=permission:app=tuios`. zellij puts a dot
+  on the tab of its pane, and its inbox shows `1 need you`.
+- The pane goes to working. tuios sends `state=working`. The dot and the
+  `need you` count go away.
+- The pane ends its state. tuios sends `state=clear` for the session.
+
+To try it, run `tuios attach` in a zellij pane and wait for an agent to ask
+for an approval.
 
 ## Limits
 

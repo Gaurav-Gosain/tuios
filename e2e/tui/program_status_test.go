@@ -394,7 +394,8 @@ func TestProgramStatusQueryStandalone(t *testing.T) {
 
 // TestProgramStatusReachesTheHostTerminal attaches from a stand-in host
 // terminal that supports OSC 7501, with host_program_status = "panes", and
-// reads what tuios reports to it for each pane.
+// reads what tuios reports to it for each pane. A host that answers the query
+// with more than the bare "?", as zellij 0.46 does, gets the same reports.
 //
 // How this could pass wrongly: the report could be the pane's own sequence
 // passed through. The pane reports id=evil; the host must see only tuios's
@@ -409,10 +410,15 @@ func TestProgramStatusReachesTheHostTerminal(t *testing.T) {
 		config  string
 		reports bool
 		queried bool
+		// more is what the host's answer carries after its "?".
+		more string
 	}{
-		{"supported", true, "[agents]\nhost_program_status = \"panes\"\n", true, true},
-		{"host does not answer", false, "", false, true},
-		{"off in the config", true, "[agents]\nhost_program_status = \"off\"\n", false, false},
+		{"supported", true, "[agents]\nhost_program_status = \"panes\"\n", true, true, ""},
+		// zellij 0.46 answers with the states and kinds it reads, as
+		// revision 0.4 of the protocol has it.
+		{"zellij 0.46 answer", true, "[agents]\nhost_program_status = \"panes\"\n", true, true, zellijProgramStatusMore},
+		{"host does not answer", false, "", false, true, ""},
+		{"off in the config", true, "[agents]\nhost_program_status = \"off\"\n", false, false, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
@@ -431,6 +437,9 @@ func TestProgramStatusReachesTheHostTerminal(t *testing.T) {
 			wrap := []string{host, "run", "-log", hostLog}
 			if tc.answer {
 				wrap = append(wrap, "-program-status")
+			}
+			if tc.more != "" {
+				wrap = append(wrap, "-program-status-more", tc.more)
 			}
 			term := startIn(t, base, startOpts{args: []string{"attach", session}, wrap: append(wrap, "--")})
 			if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
@@ -527,6 +536,10 @@ func TestProgramStatusReachesTheHostTerminal(t *testing.T) {
 		})
 	}
 }
+
+// zellijProgramStatusMore is what zellij 0.46.0 puts after the "?" of its
+// answer to the OSC 7501 query, read from a zellij pane on 2026-11-21.
+const zellijProgramStatusMore = ":states=idle,working,done,blocked,error:kinds=permission,question,auth"
 
 // TestProgramStatusSessionRollUp attaches from a stand-in host terminal that
 // supports OSC 7501, with no config, and reads the one record tuios keeps
