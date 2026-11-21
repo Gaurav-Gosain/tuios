@@ -1571,6 +1571,10 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 		m.ShowNotification("A live upgrade is answered in its own dialog, which every client attached here shows", "info", m.Settings.NotificationDuration)
 		return nil
 	}
+	if it.Secret != nil {
+		m.ShowNotification("A program asks for a secret. Go to its pane to answer in the dialog", "info", m.Settings.NotificationDuration)
+		return nil
+	}
 	if n < 1 || n > len(it.Options) {
 		m.ShowNotification("This question takes 1 to "+strconv.Itoa(len(it.Options)), "warning", m.Settings.NotificationDuration)
 		return nil

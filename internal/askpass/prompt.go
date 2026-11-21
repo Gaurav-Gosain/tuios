@@ -25,6 +25,12 @@ const (
 	KindPIN = "pin"
 	// KindSecret is any other prompt: the answer is hidden all the same.
 	KindSecret = "secret"
+	// KindConfirm is a yes or no question, such as ssh's about a host key
+	// it has not seen. The answer shows as it is typed.
+	KindConfirm = "confirm"
+	// KindUsername is a user name, such as git's for an https remote. The
+	// answer shows as it is typed.
+	KindUsername = "username"
 )
 
 // Prompt is what a dialog shows for one askpass prompt.
@@ -45,6 +51,10 @@ func Read(prompt string) Prompt {
 	lower := strings.ToLower(text)
 	p := Prompt{Text: text, Kind: KindSecret}
 	switch {
+	case strings.Contains(lower, "yes/no"):
+		p.Kind = KindConfirm
+	case strings.HasPrefix(lower, "username"):
+		p.Kind = KindUsername
 	case strings.Contains(lower, "passphrase"):
 		p.Kind = KindPassphrase
 	case strings.Contains(" "+lower+" ", " pin "):
@@ -167,10 +177,10 @@ func MaskCommandLine(args []string) string {
 	return strings.Join(out, " ")
 }
 
-// maskURLUserinfo replaces the password in every URL's userinfo in s, or the
-// whole userinfo when it has no colon, since that form is a token:
-// https://user:TOKEN@host gives https://user:***@host, and
-// https://TOKEN@host gives https://***@host.
+// maskURLUserinfo replaces the password in every URL's userinfo in s:
+// https://user:TOKEN@host gives https://user:***@host. A userinfo with no
+// colon is a token in an http or https URL, https://TOKEN@host gives
+// https://***@host, and a user name in any other, so ssh://git@host stays.
 func maskURLUserinfo(s string) string {
 	var b strings.Builder
 	for {
@@ -179,6 +189,7 @@ func maskURLUserinfo(s string) string {
 			b.WriteString(s)
 			return b.String()
 		}
+		scheme := strings.ToLower(s[strings.LastIndexAny(s[:i], " =:")+1 : i])
 		b.WriteString(s[:i+3])
 		s = s[i+3:]
 		end := strings.IndexAny(s, "/?# ")
@@ -186,11 +197,14 @@ func maskURLUserinfo(s string) string {
 			end = len(s)
 		}
 		if at := strings.LastIndexByte(s[:end], '@'); at >= 0 {
-			if user, _, ok := strings.Cut(s[:at], ":"); ok {
+			switch user, _, ok := strings.Cut(s[:at], ":"); {
+			case ok:
 				b.WriteString(user)
 				b.WriteString(":***")
-			} else {
+			case scheme == "http" || scheme == "https":
 				b.WriteString("***")
+			default:
+				b.WriteString(user)
 			}
 			s = s[at:]
 		}
