@@ -373,3 +373,43 @@ func TestScratchTerminalSurvivesCloseAndFocus(t *testing.T) {
 	t.Logf("after focus-window on the hidden scratch terminal:\n%s", term.Snapshot())
 	alive(t, term, "after esc and focus-window")
 }
+
+// TestSessionCloseNamesHiddenScratchPane covers a hidden scratch terminal with
+// and without an ordinary pane. Counting all panes as scratch would pass the
+// scratch-only case, so the mixed case must also identify both kinds.
+func TestSessionCloseNamesHiddenScratchPane(t *testing.T) {
+	base := t.TempDir()
+	term := startScratchOuter(t, base)
+	normal := paneIDs(t, base, "work")
+	if len(normal) != 1 {
+		t.Fatalf("ordinary panes at startup = %v, want one", normal)
+	}
+
+	toggleScratch(t, term)
+	scratch := waitScratch(t, term, base, false, false, "shown")
+	toggleScratch(t, term)
+	assertHiddenEverywhere(t, term, base, scratch.ID)
+
+	openClose := func(want string) {
+		t.Helper()
+		if err := term.SendKeys(tuitest.Ctrl('b'), "X"); err != nil {
+			t.Fatalf("open close-session confirmation: %v", err)
+		}
+		if err := term.WaitForText(want, uiTimeout); err != nil {
+			t.Fatalf("close-session confirmation lacks %q: %v\n%s", want, err, term.Snapshot())
+		}
+	}
+	openClose("1 pane + 1 scratch, no agent working")
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("cancel the confirmation: %v", err)
+	}
+	if _, err := tuiosCLI(t, base, "close-window", "--session", "work", normal[0]); err != nil {
+		t.Fatalf("close the ordinary pane: %v", err)
+	}
+	waitCount(t, term, 0, "with only the hidden scratch terminal left")
+	openClose("1 scratch pane, no agent working")
+	saveFrame(t, term, "close-session-hidden-scratch")
+	if dir := os.Getenv("TUIOS_E2E_FRAMES"); dir != "" {
+		savePNG(t, term.Screen(), hostPalette(t, ""), dir, "close-session-hidden-scratch")
+	}
+}

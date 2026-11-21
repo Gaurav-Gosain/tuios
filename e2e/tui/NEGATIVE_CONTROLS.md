@@ -19906,3 +19906,24 @@ editor, as dash does.
 | The `spPrompt` calls left out (the tree before the fix) | `TestPhoneStreamsAPaneAndAnswersTheInbox`, `TestStreamPaneHeldToTheLinkPolicy`, `TestStreamPaneLeaseChurn`, `TestStreamPaneFromAPane` | `no SZ- line showed`, with `sh-3.2$ SZ-22x78` on the screen | **caught** |
 | With the fix, the same forced runs | the 8 tests that use `limitsDaemon` or `spSize` | 8 of 8 pass | n/a |
 | With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |
+
+## Close-session confirmation names hidden scratch panes
+
+`TestSessionCloseNamesHiddenScratchPane` drives the close-session dialog
+through a real PTY. With one ordinary pane and one hidden scratch pane, the
+dialog names both. After the ordinary pane closes, it names the one scratch
+pane that would be lost.
+
+Ran on 2026-11-21 and 2026-11-22 on Linux with Go 1.27.4, real backend, on main
+at e41e32f with this change.
+
+| Control | Result | Verdict |
+| --- | --- | --- |
+| Main | The mixed case renders `2 panes, no agent working` | **caught** |
+| Cut the scratch count increment in `sessionToll` | The new test reaches the dialog and still sees `2 panes, no agent working` | **caught** |
+| This change | Both the mixed and scratch-only counts pass | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -v -run '^TestSessionCloseNamesHiddenScratchPane$' .
+```
