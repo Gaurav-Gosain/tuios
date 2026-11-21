@@ -179,6 +179,10 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// A draft takes it first, the mailbox's before the Inbox reply's as
 		// for keys: an empty paste or a path can attach an image, which is
 		// read off the update loop.
+		if o.AskpassOpen() {
+			o.AskpassPaste(msg.Content)
+			return o, nil
+		}
 		if o.ShowAgentMail && o.AgentMail.Composing {
 			return o, o.AgentMailPaste(msg.Content)
 		}
@@ -524,6 +528,12 @@ func routeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// See app/upgrade_confirm.go.
 	if o.UpgradeConfirmOpen() {
 		return o, o.UpgradeConfirmKey(msg.String())
+	}
+	// The secret dialog owns every key while it is up: what the person types
+	// is a passphrase, and no key of it may reach a pane. See
+	// app/askpass_dialog.go.
+	if o.AskpassOpen() {
+		return o, o.AskpassKey(msg)
 	}
 	// The task capture sheet owns every key while it is up. See
 	// app/task_capture.go.

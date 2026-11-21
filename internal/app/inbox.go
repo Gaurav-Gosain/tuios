@@ -66,6 +66,9 @@ type InboxState struct {
 	Unsupported bool
 	// Gen counts changes, for the rail's render cache.
 	Gen uint64
+	// anySecret is true while Items holds a secret prompt, so the check
+	// after every message (syncAskpass) costs nothing while none is open.
+	anySecret bool
 	// Filter narrows the overlay to one kind, empty for every kind.
 	Filter string
 	// Select narrows the overlay to the items a selector matches, empty for
@@ -731,6 +734,11 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 			if it.Upgrade != nil {
 				continue
 			}
+			// A secret prompt about the pane in front of the person opens
+			// its dialog (syncAskpass), which is alert enough.
+			if m.askpassShownFor(*it) {
+				continue
+			}
 			// A question about the pane in front of the person opens the
 			// Inbox on it, which is the popup: it needs no alert.
 			if ev.Action == session.AttentionOpened && m.inboxPopAsk(*it) {
@@ -773,6 +781,7 @@ func (m *OS) inboxItem(id string) (session.AttentionItem, bool) {
 // redraw.
 func (m *OS) inboxChanged() {
 	m.Inbox.Gen++
+	m.Inbox.anySecret = slices.ContainsFunc(m.Inbox.Items, func(it session.AttentionItem) bool { return it.Secret != nil })
 	m.clampInboxSelection()
 	m.sidebarCache.invalidate()
 	m.syncUpgradeConfirm()
