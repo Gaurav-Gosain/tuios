@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -112,34 +113,31 @@ func (m *OS) AskpassKey(msg tea.KeyPressMsg) tea.Cmd {
 		// person's, and type nothing.
 		return nil
 	}
-	if st.sent {
+	esc := msg.Code == tea.KeyEscape
+	switch {
+	case st.sent:
 		// An answer is on its way. Esc still gets the person out: it
 		// closes the dialog here, and the prompt waits in the Inbox.
-		if msg.String() == "esc" {
+		if esc {
 			clear(st.buf)
 			*st = askpassState{buf: st.buf[:0], hidden: st.open.RequestID}
 		}
-		return nil
-	}
-	switch msg.String() {
-	case "enter":
+	case esc:
+		st.holdPane, st.holdUntil = st.open.Window, time.Now().Add(askpassHold)
+		return m.askpassSend(true)
+	case msg.Code == tea.KeyEnter:
 		if len(st.buf) > 0 {
 			return m.askpassSend(false)
 		}
-	case "esc":
-		st.holdPane, st.holdUntil = st.open.Window, time.Now().Add(askpassHold)
-		return m.askpassSend(true)
-	case "backspace":
+	case msg.Code == tea.KeyBackspace:
 		_, n := utf8.DecodeLastRune(st.buf)
 		clear(st.buf[len(st.buf)-n:])
 		st.buf = st.buf[:len(st.buf)-n]
-	case "ctrl+u":
+	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
 		clear(st.buf)
 		st.buf = st.buf[:0]
-	default:
-		if msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper) == 0 {
-			m.AskpassPaste(msg.Text)
-		}
+	case msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper) == 0:
+		m.AskpassPaste(msg.Text)
 	}
 	return nil
 }
@@ -186,19 +184,29 @@ func (m *OS) askpassAnswered(msg InboxAskAnsweredMsg) {
 	}
 }
 
-// renderAskpass draws the dialog. The prompt and the program are never cut:
-// they wrap, since they are what the person decides on.
+// dialogWrapped appends text to body, wrapped to the dialog's width, one
+// dialogBodyLine per line.
+func dialogWrapped(body []string, text string, width int, ink, bg color.Color) []string {
+	for _, l := range wrapPlain(text, max(width-2, 1)) {
+		body = append(body, dialogBodyLine(l, width, ink, bg))
+	}
+	return body
+}
+
+// renderAskpass draws the dialog. It says which program in which pane asks,
+// and shows the command line, and never says a prompt can be trusted: a
+// process in a pane can run under a real ssh and ask anything. The prompt
+// and the command line are never cut: they wrap.
 func (m *OS) renderAskpass() (string, overlay.Geometry) {
 	st := &m.askpass
 	sec := st.open.Secret
 	pal := m.overlayUI()
 	width := overlay.DialogFitWidth(64, m.modalRoomWidth())
-	title, field := "Enter a secret", "Answer:"
-	// A yes or no question and a user name are not secrets: the person
-	// sees what they type.
-	shown := false
+	title, field, shown := "Enter a secret", "Answer:", false
 	switch sec.Kind {
 	case "confirm":
+		// A yes or no question and a user name are not secrets: the person
+		// sees what they type.
 		title, field, shown = "Answer a question", "Answer (yes or no):", true
 	case "username":
 		title, field, shown = "Enter a user name", "User name:", true
@@ -209,47 +217,37 @@ func (m *OS) renderAskpass() (string, overlay.Geometry) {
 	case "pin":
 		title, field = "Enter a PIN", "PIN:"
 	}
-	program, programInk := "Program: "+printableTitle(sec.Program), pal.FgDim
-	warn := ""
-	switch {
-	case sec.Program == "":
-		program, warn = "", "tuios cannot tell which program asks. Check before you answer."
-	case !sec.Known:
-		programInk, warn = pal.Fg, "tuios cannot check that this program asks. Check before you answer."
+	who := "A program"
+	if name, _, _ := strings.Cut(sec.Program, " "); name != "" {
+		who = filepath.Base(name)
 	}
-	note := "The answer goes to the program only. tuios does not keep it."
+	body := []string{dialogTitleLine(title, width-2, width, pal.Fg, pal.Canvas), ""}
+	body = dialogWrapped(body, who+" in pane "+inboxWho(*st.open)+" asks:", width, pal.FgDim, pal.Canvas)
+	for _, l := range strings.Split(sec.Prompt, "\n") {
+		body = dialogWrapped(body, "  "+printableTitle(l), width, pal.Fg, pal.Canvas)
+	}
+	if sec.Program != "" {
+		body = dialogWrapped(append(body, ""), "Command: "+printableTitle(sec.Program), width, pal.FgDim, pal.Canvas)
+	}
+	body = dialogWrapped(append(body, ""), field, width, pal.FgDim, pal.Canvas)
+	// The field is a band of the surface colour across the dialog, so it
+	// reads as a field when it is empty. A bar marks where text goes.
+	typed := strings.Repeat("•", utf8.RuneCount(st.buf))
+	if shown {
+		typed = printableTitle(string(st.buf))
+	}
+	note := "Check the command before you answer. The answer goes to that program only."
 	if st.sent {
 		note = "Sending your answer..."
 	}
-	type line struct {
-		text string
-		ink  color.Color
-	}
-	// A line with no ink is a gap. A line with ink and no text is left out.
-	lines := []line{{"", nil}, {inboxWho(*st.open) + " runs a program that asks:", pal.FgDim}}
-	for _, l := range strings.Split(sec.Prompt, "\n") {
-		lines = append(lines, line{"  " + printableTitle(l), pal.Fg})
-	}
-	lines = append(lines, line{"", nil}, line{program, programInk}, line{warn, pal.Warn}, line{"", nil}, line{field, pal.FgDim})
-
-	body := []string{dialogTitleLine(title, width-2, width, pal.Fg, pal.Canvas)}
-	for _, l := range lines {
-		if l.text == "" && l.ink != nil {
-			continue
-		}
-		for _, w := range wrapPlain(l.text, max(width-2, 1)) {
-			body = append(body, dialogBodyLine(w, width, l.ink, pal.Canvas))
+	body = append(body, dialogBodyLine(" "+fieldTail(typed, max(width-5, 1))+"▏", width, pal.Fg, pal.Surface), "")
+	body = dialogWrapped(body, note, width, pal.FgMute, pal.Canvas)
+	for i, l := range body {
+		if l == "" {
+			// A gap line, filled with the canvas.
+			body[i] = dialogBodyLine("", width, pal.FgDim, pal.Canvas)
 		}
 	}
-	// The field is a band of the surface colour across the dialog, so it
-	// reads as a field when it is empty. A bar marks where text goes.
-	text := strings.Repeat("•", utf8.RuneCount(st.buf))
-	if shown {
-		text = printableTitle(string(st.buf))
-	}
-	dots := fieldTail(text, max(width-5, 1))
-	body = append(body, dialogBodyLine(" "+dots+"▏", width, pal.Fg, pal.Surface),
-		dialogBodyLine("", width, pal.FgDim, pal.Canvas), dialogBodyLine(note, width, pal.FgMute, pal.Canvas))
 	hints := []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
 	return overlay.Dialog{Title: "secret", Width: width, Body: strings.Join(body, "\n"), Hints: hints}.Render(pal)
 }

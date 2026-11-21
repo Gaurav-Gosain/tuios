@@ -566,9 +566,10 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 	if p.RequestID == "" {
 		return nil, invalidParam("request_id", "request_id is required: the question's, from its Inbox item")
 	}
-	secret := d.attention.askIsSecret(p.RequestID)
-	if secret && (len(p.Secret) > askpassMaxSecret || (len(p.Secret) == 0 && !p.Cancel)) {
-		return nil, invalidParam("secret", "a secret prompt takes secret, at most 4096 bytes, or cancel")
+	// A secret prompt's answer is secret or cancel (askpass.go).
+	secret := len(p.Secret) > 0 || p.Cancel
+	if len(p.Secret) > askpassMaxSecret {
+		return nil, invalidParam("secret", "secret is at most 4096 bytes")
 	}
 	if !secret && p.Answer == "" {
 		return nil, invalidParam("answer", "answer is required: one of the question's options")
@@ -608,9 +609,9 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 		if cs != nil && cs.viaLink {
 			return nil, hintedVerbError(ErrVerbForbidden, "a secret prompt is answered only at a client attached on this machine", nil)
 		}
-		applied, reason, err := d.attention.answerSecret(p.RequestID, p.Secret, p.Cancel, by)
-		if err != nil {
-			return nil, invalidParam("request_id", "no question is open under request "+echoName(p.RequestID))
+		applied, reason, ok := d.attention.answerSecret(p.RequestID, p.Secret, p.Cancel, by)
+		if !ok {
+			return nil, invalidParam("request_id", "no secret prompt is open under request "+echoName(p.RequestID))
 		}
 		LogBasic("Secret prompt %s %s by %s", p.RequestID, reason, by)
 		return map[string]any{"type": "ask_answered", "request_id": p.RequestID, "applied": applied, "reason": reason}, nil
