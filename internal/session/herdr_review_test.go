@@ -46,6 +46,39 @@ func TestHerdrWorktreeOpenChecksTheCallerFirst(t *testing.T) {
 	}
 }
 
+// TestHerdrPluginStatsNeedsAdmin: plugin.stats is listed as herdrAdmin, and
+// herdrAllowed does not check that class, so the handler must. A pane
+// without admin is refused, as for plugin.log.list. A pane with admin and
+// the person outside every pane get the rows.
+//
+// Negative control: with the grant check cut from herdrPluginStats, the
+// pane that holds read gets the rows.
+func TestHerdrPluginStatsNeedsAdmin(t *testing.T) {
+	d, sp, a1, _, _ := scopeFixture(t)
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
+	for _, grants := range [][]string{{}, {"read"}} {
+		setStrict(d, grants...)
+		for _, method := range []string{"plugin.stats", "plugin.log.list"} {
+			params := map[string]any{}
+			if method == "plugin.log.list" {
+				params["plugin_id"] = "t.none"
+			}
+			if _, e := herdrCallAs(t, sp, method, params); !strings.HasPrefix(e, "forbidden") || !strings.Contains(e, "admin grant") {
+				t.Errorf("%s from a pane holding %v answered %q, want forbidden naming the admin grant", method, grants, e)
+			}
+		}
+	}
+	setStrict(d, "read", "admin")
+	if res, e := herdrCallAs(t, sp, "plugin.stats", map[string]any{}); e != "" || res["type"] != "plugin_stats" {
+		t.Errorf("plugin.stats from a pane holding admin answered %v %q, want the rows", res, e)
+	}
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
+	setStrict(d, "read")
+	if res, e := herdrCallAs(t, sp, "plugin.stats", map[string]any{}); e != "" || res["type"] != "plugin_stats" {
+		t.Errorf("plugin.stats from outside every pane answered %v %q, want the rows", res, e)
+	}
+}
+
 // herdrGoroutinesSettle waits until the goroutine count is below limit.
 func herdrGoroutinesSettle(limit int, within time.Duration) int {
 	deadline := time.Now().Add(within)

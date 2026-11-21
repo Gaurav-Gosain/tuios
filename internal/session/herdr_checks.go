@@ -30,8 +30,9 @@ const (
 	// herdrTrust changes which plugins run: only the person
 	// (herdrPluginTrust, in the handler).
 	herdrTrust
-	// herdrAdmin runs a plugin command or reads its log: a pane or a plugin
-	// needs admin (herdrPluginMayRun and the log check, in the handler).
+	// herdrAdmin runs a plugin command or reads its log or its stats: a pane
+	// or a plugin needs admin (herdrPluginMayRun, and the log and stats
+	// checks, in the handler).
 	herdrAdmin
 	// herdrReport reports for the caller's own pane (herdr_compat.go).
 	herdrReport
