@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -356,6 +357,22 @@ func sidebarDragMovesGroups(t *testing.T, base, repo, away string, term *tuitest
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), railPill) }, uiTimeout); err != nil {
 		t.Fatalf("esc did not leave the rail: %v\n%s", err, term.Snapshot())
 	}
+	// The rail draws a move at once and sends it to the daemon after (see
+	// internal/app/session_order.go). The client started below draws the
+	// daemon's order, so the daemon must hold the last move before this
+	// client goes. A client closed while a move was still out lost it, and
+	// the next client drew f/two above f/one.
+	waitUntil(t, "the daemon holds the order the keys made", uiTimeout, func() (bool, string) {
+		var order []string
+		for _, name := range sessionNames(t, base) {
+			for _, want := range []string{"bravo", "mainsess", "one", "two", "alpha", "zulu"} {
+				if strings.HasSuffix(name, want) {
+					order = append(order, want)
+				}
+			}
+		}
+		return slices.Equal(order, []string{"bravo", "mainsess", "one", "two", "alpha", "zulu"}), fmt.Sprintf("the daemon lists %v", order)
+	})
 
 	// With group_main on, the repository's own row moves the group, and the main
 	// checkout's row is one more row inside it.
