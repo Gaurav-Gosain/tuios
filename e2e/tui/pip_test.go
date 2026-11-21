@@ -230,19 +230,29 @@ func startPiPPanes(t *testing.T, base string, args []string, loop string) *tuite
 	return term
 }
 
-// toWindowMode leaves terminal mode when the dock says the client is in it.
-// A click on a pane starts typing into it, so a click leaves terminal mode on.
-func toWindowMode(t *testing.T, term *tuitest.Terminal) {
+// toWindowMode leaves terminal mode when the client under base is in it. A
+// click on a pane starts typing into it, so a click leaves terminal mode on.
+func toWindowMode(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
+	// A client attached to a daemon says its mode. A "Terminal mode" notice
+	// on the dock can outlive the mode it named: a workspace switch can leave
+	// the client in window mode while the notice still shows. A local session
+	// has no daemon to ask, so there the dock is read.
+	if mode := daemonClientMode(base); mode != "" {
+		if mode == "terminal" {
+			leaveTerminalMode(t, term)
+		}
+		return
+	}
 	if strings.Contains(dockRows(term.Screen()), "Terminal mode") {
 		leaveTerminalMode(t, term)
 	}
 }
 
 // pinWithKey presses p in window mode and waits for the dock to say so.
-func pinWithKey(t *testing.T, term *tuitest.Terminal, want string) {
+func pinWithKey(t *testing.T, term *tuitest.Terminal, base, want string) {
 	t.Helper()
-	toWindowMode(t, term)
+	toWindowMode(t, term, base)
 	if err := term.SendKeys("p"); err != nil {
 		t.Fatalf("send p: %v", err)
 	}
@@ -301,7 +311,7 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 	agentID := windowIDNamed(t, base, "agent")
 
 	// Pin the focused pane. It has the focus, so no view is drawn yet.
-	pinWithKey(t, term, "Pinned agent")
+	pinWithKey(t, term, base, "Pinned agent")
 	if _, ok := findPiPBox(term.Screen(), "agent"); ok {
 		t.Fatalf("the view is drawn while its own pane has the focus\n%s", term.Snapshot())
 	}
@@ -319,7 +329,7 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 
 	// Zoom the focused pane over the whole region. The view stays on top of
 	// it, and is now the only place the agent pane shows.
-	toWindowMode(t, term)
+	toWindowMode(t, term, base)
 	if err := term.SendKeys("z"); err != nil {
 		t.Fatalf("send z: %v", err)
 	}
@@ -395,7 +405,7 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 	watch.finish(t)
 
 	// p unpins from the other pane.
-	pinWithKey(t, term, "Unpinned agent")
+	pinWithKey(t, term, base, "Unpinned agent")
 	waitNoPiP(t, term, "agent", "after the unpin")
 
 	// tuios pip pins by name.
@@ -429,7 +439,7 @@ func TestPiPInALocalSession(t *testing.T) {
 	term := startPiPPanes(t, base, nil,
 		`i=0; while [ $i -lt 45 ]; do i=$((i+1)); echo PIPTICK-$i; sleep 0.2; done; exit`)
 
-	pinWithKey(t, term, "Pinned agent")
+	pinWithKey(t, term, base, "Pinned agent")
 	mouseClick(t, term, 20, 10, tuitest.MouseLeft, 0)
 	waitPiP(t, term, "agent", "after focusing the other pane")
 	assertLive(t, term, base, false)
@@ -459,7 +469,7 @@ func TestPiPDoesNotFreezeAcrossASessionSwitch(t *testing.T) {
 	}
 	term := startPiPPanes(t, base, []string{"new", "work"},
 		`i=0; while :; do i=$((i+1)); echo PIPTICK-$i; sleep 0.2; done`)
-	pinWithKey(t, term, "Pinned agent")
+	pinWithKey(t, term, base, "Pinned agent")
 	mouseClick(t, term, 20, 10, tuitest.MouseLeft, 0)
 	if out, err := tuiosCLI(t, base, "move-window", "2", "-w", "agent", "-s", "work"); err != nil {
 		t.Fatalf("move-window: %v\n%s", err, out)
@@ -542,7 +552,7 @@ func TestPiPSizeInPercentAtTheEdgeCentre(t *testing.T) {
 	writeConfig(t, base, "[pip]\nwidth = \"40%\"\nheight = \"25%\"\ncorner = \"bottom-center\"\n")
 	term := startPiPPanes(t, base, []string{"new", "work"},
 		`i=0; while :; do i=$((i+1)); echo PIPTICK-$i; sleep 0.2; done`)
-	pinWithKey(t, term, "Pinned agent")
+	pinWithKey(t, term, base, "Pinned agent")
 	mouseClick(t, term, 20, 10, tuitest.MouseLeft, 0)
 
 	var box pipBox
@@ -567,7 +577,7 @@ func TestPiPSizeInPercentAtTheEdgeCentre(t *testing.T) {
 
 	// 2. Type along the bottom row of the zoomed pane into the box.
 	watch := watchCursorWide(term, "agent", wide)
-	toWindowMode(t, term)
+	toWindowMode(t, term, base)
 	if err := term.SendKeys("z"); err != nil {
 		t.Fatalf("send z: %v", err)
 	}
