@@ -7,12 +7,10 @@ import (
 	"testing"
 )
 
-// pathEntry is a $PATH row as Scan would have produced it.
 func pathEntry(name, dir string) Entry {
 	return Entry{Name: name, Path: dir + "/" + name, Dir: dir, Source: SourcePath}
 }
 
-// desktopEntry is an application row as ScanDesktop would have produced it.
 func desktopEntry(id, name string, argv ...string) DesktopEntry {
 	return DesktopEntry{
 		ID:     id,

@@ -18,43 +18,27 @@ import (
 	"unicode/utf8"
 )
 
-// Scoring weights, taken from fzf so the ordering matches the tool most
-// people's muscle memory was trained on.
 const (
 	scoreMatch        = 16
 	scoreGapStart     = -3
 	scoreGapExtension = -1
 
-	// A character right after a boundary is worth half a match. Whitespace and
-	// explicit delimiters are stronger boundaries than plain punctuation.
 	bonusBoundary          = scoreMatch / 2
 	bonusBoundaryWhite     = bonusBoundary + 2
 	bonusBoundaryDelimiter = bonusBoundary + 1
 	bonusNonWord           = scoreMatch / 2
 	bonusCamel123          = bonusBoundary + scoreGapExtension
 
-	// Staying consecutive must be worth exactly what reopening a gap costs,
-	// otherwise the same characters spread out could beat an unbroken run.
 	bonusConsecutive = -(scoreGapStart + scoreGapExtension)
 
-	// The first character sets the tone of the match, so its bonus counts
-	// double. This is what lifts a prefix hit over a mid-word one.
 	bonusFirstCharMultiplier = 2
 
-	// bonusPrefix rewards an unbroken run starting at offset zero, and
-	// bonusExact stacks on top when the candidate is nothing but the pattern.
-	// fzf leaves both to its tiebreakers; a launcher ranking gcc against
-	// git-credential-cache for "gc" wants that margin in the score itself,
-	// because the caller doing the ranking may not tiebreak at all.
 	bonusPrefix = scoreMatch
 	bonusExact  = scoreMatch
 )
 
-// noScore marks a cell no alignment can reach. It sits far below any reachable
-// score and far above the point where accumulated gap penalties could overflow.
 const noScore = int32(-1 << 28)
 
-// charClass groups runes by the kind of boundary they create.
 type charClass uint8
 
 const (
@@ -67,9 +51,6 @@ const (
 	charNumber
 )
 
-// delimiters are the characters treated as explicit field separators. Keeping
-// fzf's default set means path-like and flag-like candidates rank here the way
-// they do there.
 const delimiters = "/,:;|"
 
 func classOf(r rune) charClass {
@@ -165,11 +146,11 @@ type Hit struct {
 // and overwrites on the next call. Copy them to keep them.
 type Matcher struct {
 	pat   []rune
-	patCS bool // pattern carries an uppercase rune, so match case-sensitively
+	patCS bool
 
 	text  []rune
-	ascii bool  // candidate is pure ASCII, so rune index and byte offset agree
-	offs  []int // byte offset of each rune plus a sentinel; empty when ascii
+	ascii bool
+	offs  []int
 
 	bonus []int32
 	h     []int32
@@ -235,9 +216,6 @@ func (m *Matcher) FilterIndex(pattern string, n int, text func(int) string) []Hi
 		}
 		hits = append(hits, Hit{Index: i, Text: s, Result: r})
 	}
-	// posBuf reallocates as it grows, so every hit is re-sliced against the
-	// final backing array once the sweep is done. Appends were in hit order, so
-	// the runs sit end to end.
 	off := 0
 	for i := range hits {
 		k := len(hits[i].Positions)
@@ -247,8 +225,6 @@ func (m *Matcher) FilterIndex(pattern string, n int, text func(int) string) []Hi
 		hits[i].Positions = posBuf[off : off+k : off+k]
 		off += k
 	}
-	// An empty pattern scores everything alike, and the caller's own order is
-	// more informative than anything the tiebreak could invent.
 	if pattern != "" {
 		Sort(hits)
 	}
@@ -329,8 +305,6 @@ func (m *Matcher) FindRun(pattern, text string, at int) (Result, bool) {
 			return Result{}, false
 		}
 	}
-	// A window exactly as wide as the pattern leaves the matrix one
-	// alignment: the diagonal.
 	return m.align(lo, hi), true
 }
 
@@ -343,8 +317,6 @@ func (m *Matcher) loadPattern(pattern string) {
 		}
 		m.pat = append(m.pat, r)
 	}
-	// Whether the pattern is case-sensitive is only known once it has been read
-	// through, so folding happens in a second pass rather than inline.
 	if !m.patCS {
 		for i, r := range m.pat {
 			m.pat[i] = fold(r)
@@ -352,13 +324,6 @@ func (m *Matcher) loadPattern(pattern string) {
 	}
 }
 
-// loadText decodes text into the scratch buffers, reporting false when the
-// candidate is shorter than the pattern and so cannot possibly match.
-//
-// Character classes are left to align, which only needs them inside the window,
-// and byte offsets are skipped entirely for ASCII candidates, where the rune
-// index already is the offset. Both passes were pure overhead on the great
-// majority of candidates, and this runs once per candidate per keystroke.
 func (m *Matcher) loadText(text string) bool {
 	m.text = m.text[:0]
 	m.offs = m.offs[:0]
@@ -380,8 +345,6 @@ func (m *Matcher) loadText(text string) bool {
 	return len(m.text) >= len(m.pat)
 }
 
-// byteOff maps a rune index to its byte offset. Index len(text) maps to the
-// length, so a match's exclusive end has an answer.
 func (m *Matcher) byteOff(i int) int {
 	if m.ascii {
 		return i
@@ -396,9 +359,6 @@ func (m *Matcher) eq(pi, ti int) bool {
 	return m.pat[pi] == fold(m.text[ti])
 }
 
-// window narrows the candidate to the tightest span that can hold the pattern:
-// greedy forward for the end, then greedy backward for the start. Everything
-// outside it is dead weight the matrix would otherwise pay for.
 func (m *Matcher) window() (lo, hi int, ok bool) {
 	pi := 0
 	for ti := range m.text {
@@ -441,8 +401,6 @@ func (m *Matcher) align(lo, hi int) Result {
 		prev = cur
 	}
 
-	// A one-character pattern has no gaps to weigh, so the strongest boundary
-	// wins outright and the matrix is not worth building.
 	if rows == 1 {
 		best, bestJ := noScore, 0
 		for j := range width {
@@ -486,9 +444,6 @@ func (m *Matcher) align(lo, hi int) Result {
 						run = diagRun + 1
 						if run > 1 {
 							first := m.bonus[j-int(run)+1]
-							// A stronger boundary here is worth more than the
-							// run that led into it, so let the run restart on
-							// this character instead.
 							if b >= bonusBoundary && b > first {
 								run = 1
 							} else {
@@ -500,8 +455,6 @@ func (m *Matcher) align(lo, hi int) Result {
 				}
 			}
 
-			// Carrying the row rightward under a gap penalty is what lets the
-			// next row read a diagonal that already priced the skip.
 			gap := noScore
 			if hasCarry {
 				if inGap {
@@ -529,9 +482,6 @@ func (m *Matcher) align(lo, hi int) Result {
 		}
 	}
 
-	// Walk back to the cells that actually held a match: a cell beat both its
-	// diagonal and its left neighbour exactly when one landed there. preferMatch
-	// keeps a consecutive run intact when the two tie.
 	m.pos = m.pos[:0]
 	i, j := rows-1, bestJ
 	preferMatch := true
@@ -562,9 +512,6 @@ func (m *Matcher) align(lo, hi int) Result {
 	return m.finish(int(best))
 }
 
-// finish applies the bonuses that depend on the shape of the whole alignment
-// rather than on any one character, then converts rune positions to the byte
-// offsets callers highlight with.
 func (m *Matcher) finish(score int) Result {
 	if len(m.pos) == 0 {
 		return Result{Score: score}

@@ -7,10 +7,6 @@ import (
 	"unicode/utf8"
 )
 
-// checkInvariants holds every match to the contract the callers rely on: one
-// position per pattern character, ascending, on rune boundaries, inside the
-// candidate, pointing at characters that actually match, and bracketed by
-// Start and End.
 func checkInvariants(t *testing.T, pattern, text string, r Result) {
 	t.Helper()
 	want := utf8.RuneCountInString(pattern)

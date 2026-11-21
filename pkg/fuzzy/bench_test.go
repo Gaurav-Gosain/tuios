@@ -6,10 +6,6 @@ import (
 	"strings"
 )
 
-// benchCorpus builds n plausible executable names: real ones from a typical
-// /usr/bin, padded out with generated names in the same shapes (dashed,
-// suffixed, versioned) so the matcher meets the character classes it will
-// actually see.
 func benchCorpus(n int) []string {
 	seed := []string{
 		"gcc", "g++", "git", "grep", "gzip", "gpg", "gawk", "gdb", "go", "gofmt",

@@ -56,14 +56,11 @@ func TestMatcherReuseIsClean(t *testing.T) {
 func TestFilterIndexIsAllocationLean(t *testing.T) {
 	corpus := benchCorpus(2000)
 	var m Matcher
-	// Warm the scratch buffers so the measurement sees steady state.
 	m.FilterIndex("sys", len(corpus), func(i int) string { return corpus[i] })
 
 	allocs := testing.AllocsPerRun(20, func() {
 		m.FilterIndex("sys", len(corpus), func(i int) string { return corpus[i] })
 	})
-	// The hit slice and the position buffer grow, so a handful of allocations
-	// is expected; anything proportional to the corpus is not.
 	if allocs > 40 {
 		t.Fatalf("FilterIndex allocated %.0f times over %d candidates", allocs, len(corpus))
 	}
@@ -95,8 +92,6 @@ func TestSortIsStableAcrossKeystrokes(t *testing.T) {
 	}
 }
 
-// rank returns the candidates ordered best first, which is the only property
-// the callers actually depend on.
 func rank(t *testing.T, pattern string, candidates ...string) []string {
 	t.Helper()
 	hits := Filter(pattern, candidates)

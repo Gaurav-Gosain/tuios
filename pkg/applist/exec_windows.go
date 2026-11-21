@@ -7,9 +7,6 @@ import (
 	"strings"
 )
 
-// executable reports whether the file is one Windows would run from a bare
-// name. There are no execute bits, so the extension is the whole test, and
-// %PATHEXT% is the list the shell itself consults.
 func executable(info fs.FileInfo) bool {
 	ext := strings.ToLower(filepath.Ext(info.Name()))
 	if ext == "" {
@@ -48,7 +45,6 @@ func pathExt() []string {
 // field is on Entry everywhere and an entry that carries one means it.
 func (e Entry) Argv() []string {
 	if len(e.Exec) > 0 {
-		// Copied for the reason the unix file gives: the entry outlives the call.
 		return append([]string(nil), e.Exec...)
 	}
 	switch strings.ToLower(filepath.Ext(e.Path)) {
@@ -83,9 +79,6 @@ func (e Entry) CommandLine() string {
 	return `"` + strings.ReplaceAll(e.Path, `"`, `""`) + `"`
 }
 
-// winQuote wraps s in double quotes when it holds a character a shell would
-// re-read, doubling any quote inside it. Double quotes are the one form
-// cmd.exe and PowerShell agree on.
 func winQuote(s string) string {
 	if s != "" && !strings.ContainsAny(s, " \t\"'&|<>^%!") {
 		return s

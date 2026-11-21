@@ -10,22 +10,14 @@ import (
 	"syscall"
 )
 
-// executable reports whether the calling process may exec the file.
-//
-// Testing the whole 0111 mask would offer programs that only root can run, and
-// a launcher row that reliably fails is worse than one that is not there. The
-// owner and group bits are therefore weighed against this process's own ids.
 func executable(info fs.FileInfo) bool {
 	mode := info.Mode().Perm()
 	st, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		// An unfamiliar FileInfo implementation is not worth failing closed
-		// over; fall back to "executable by somebody".
 		return mode&0o111 != 0
 	}
 
 	uid := os.Getuid()
-	// Root's exec check is the union of the bits, not the owner's alone.
 	if uid == 0 {
 		return mode&0o111 != 0
 	}
@@ -49,9 +41,6 @@ func executable(info fs.FileInfo) bool {
 // directly executable on unix, so it is the whole command.
 func (e Entry) Argv() []string {
 	if len(e.Exec) > 0 {
-		// Copied because the entry is held in a cached list that outlives this
-		// call, and a caller that trims or rewrites the argv it is given would
-		// otherwise be editing the list.
 		return append([]string(nil), e.Exec...)
 	}
 	return []string{e.Path}
@@ -79,8 +68,6 @@ func (e Entry) CommandLine() string {
 	return shellQuote(e.Path)
 }
 
-// shellLine writes an argv as one POSIX shell command line, quoting every
-// element that would not mean itself.
 func shellLine(argv []string) string {
 	var b strings.Builder
 	for i, arg := range argv {
@@ -96,11 +83,6 @@ func shellLine(argv []string) string {
 	return b.String()
 }
 
-// shellSafe reports whether s means itself to a POSIX shell.
-//
-// The set is allow-listed rather than deny-listed, so a character nobody
-// thought about gets quoted, which is merely ugly, instead of being handed to
-// the shell to interpret.
 func shellSafe(s string) bool {
 	if s == "" {
 		return false
@@ -116,9 +98,6 @@ func shellSafe(s string) bool {
 	return true
 }
 
-// shellQuote wraps s so a POSIX shell reads it as one literal word. The only
-// character a single-quoted string cannot hold is the single quote itself,
-// which is closed, escaped and reopened.
 func shellQuote(s string) string {
 	var b strings.Builder
 	b.Grow(len(s) + 2)

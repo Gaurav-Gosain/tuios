@@ -9,10 +9,6 @@ import (
 	"testing"
 )
 
-// mkTree builds a throwaway XDG data hierarchy, points the environment at it,
-// and returns the application directories to scan. Paths in files are relative
-// to the tree root, so "home/applications/x.desktop" lands in $XDG_DATA_HOME
-// and "sys1/..." in the first $XDG_DATA_DIRS entry.
 func mkTree(t *testing.T, files map[string]string) []string {
 	t.Helper()
 	root := t.TempDir()
@@ -179,7 +175,6 @@ func TestValueEscapes(t *testing.T) {
 	if e.Name != "a b\tc" {
 		t.Errorf("name = %q, want %q", e.Name, "a b\tc")
 	}
-	// "Space before and after the equals sign should be ignored".
 	if !slices.Equal(e.Argv, []string{"x"}) {
 		t.Errorf("argv = %q, want %q", e.Argv, []string{"x"})
 	}
@@ -239,8 +234,6 @@ func TestActions(t *testing.T) {
 	if a.Generic != "Web Browser" {
 		t.Errorf("action generic = %q, want the parent's GenericName", a.Generic)
 	}
-	// The spec gives an action group its own Icon key, so an action that does
-	// not set one has no icon of its own.
 	if a.Icon != "" {
 		t.Errorf("action icon = %q, want no inherited icon", a.Icon)
 	}
