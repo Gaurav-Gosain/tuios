@@ -18765,3 +18765,18 @@ Run on 2026-11-21 on Linux, real backend.
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestLauncherSaysWhenTheScanFoundNothing$' .
 ```
+
+## A project shell whose first prompt beat its client
+
+`TestAShellThatStartsInAProjectShowsItsTape` starts tuios in a project folder and opens a pane there. Its shell names the folder with OSC 7 at its first prompt. The knob `hold_pane_prime` holds a daemon client before it primes the pane, until the daemon shows the prompt. The OSC 7 then reaches the client only inside the daemon's copy of the screen.
+
+Run on 2026-11-21 on Linux, real backend.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Detection keyed on an OSC 7 the client parsed (the focus follow call removed) | `TestAShellThatStartsInAProjectShowsItsTape/daemon` | 3 of 3 runs: no tape badge in the dock | **caught** |
+| This change | `TestAShellThatStartsInAProjectShowsItsTape` | 6 of 6 runs pass, both subtests | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestAShellThatStartsInAProjectShowsItsTape$' .
+```

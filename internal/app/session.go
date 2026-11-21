@@ -5,11 +5,13 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
@@ -2136,6 +2138,17 @@ func (m *OS) wireDaemonPTY(window *terminal.Window, subscribe func()) {
 	})
 }
 
+// holdPanePrimeForTest lets the end-to-end tests hold a pane's priming. The
+// hold_pane_prime knob names a file, and while it exists the client waits here
+// before it takes the daemon's copy of the screen. A test uses it to put a
+// shell's first output into that copy rather than the live stream, the order a
+// fast shell gets by itself. Ordinary runs pay one map read per priming.
+func holdPanePrimeForTest() {
+	if hold := testknob.String("hold_pane_prime"); hold != "" {
+		testknob.WaitWhile(hold, 2*time.Millisecond, time.Minute)
+	}
+}
+
 // primePaneFromDaemon fills a pane's local emulator with the daemon's copy of
 // the screen and then starts the live stream, in that order.
 //
@@ -2152,6 +2165,7 @@ func (m *OS) primePaneFromDaemon(window *terminal.Window) {
 	if m.DaemonClient == nil || window.PTYID == "" {
 		return
 	}
+	holdPanePrimeForTest()
 
 	// Everything already queued for this emulator is applied before the
 	// snapshot is fetched, not thrown away. The pane is unsubscribed by the

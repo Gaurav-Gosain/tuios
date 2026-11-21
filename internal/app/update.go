@@ -1049,6 +1049,9 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.settleChrome()
 	// Focus reports for every path that moved the focus without FocusWindow.
 	m.reportFocusChange()
+	if tape := m.tapeFollowFocus(); tape != nil {
+		cmd = tea.Batch(cmd, tape)
+	}
 	m.reconcilePrevFocus()
 	// A session switch does not land in FocusWindow. By now a switch-then-focus
 	// route has focused its pane, so only the pane left in front is marked.
