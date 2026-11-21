@@ -328,6 +328,18 @@ hosts.
 | Palette: "Toggle multifocus on all panes" or action `toggle_multifocus_all` | Add every visible window on the workspace. When all of them are in the set, remove them from the set. Windows on other workspaces stay in the set |
 | Palette: "Clear multifocus" | Empty the set |
 
+kitty keeps `Ctrl+Shift+Click` for itself, so the click does not get to tuios.
+To give it to tuios, add these lines to `kitty.conf`, then reload the config
+with `Ctrl+Shift+F5`:
+
+```
+mouse_map ctrl+shift+left press grabbed
+mouse_map ctrl+shift+left release grabbed
+```
+
+The lines change the click only while a program reads the mouse. Outside
+tuios, `Ctrl+Shift+Click` still opens a link.
+
 The two actions have no default key. To bind them, add them to a
 `[keybindings]` section. For example, this puts them on `Ctrl+B y` and
 `Ctrl+B Y`:

@@ -455,6 +455,10 @@ a program reads the mouse. That is why `Ctrl+click` is the main click.
 | Windows Terminal | No. `Shift` bypasses mouse mode. | Yes | Yes, with `Ctrl+click` when it gets the click |
 | xterm | No. `Shift` bypasses mouse reporting. | Yes | No |
 
+kitty also keeps `Ctrl+Shift+click`, which tuios uses for multifocus. See
+[Multifocus](LAYOUT_MODES.md#multifocus) for the two `kitty.conf` lines that
+give it to tuios.
+
 `Cmd` is not part of the mouse protocol, so tuios never sees `Cmd+click`. On
 macOS, `Cmd+click` opens a link through the terminal, from the OSC 8 that
 tuios writes. In Ghostty, a program can ask for `Shift+click` with
