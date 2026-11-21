@@ -86,6 +86,11 @@ func TestLiveAppearanceKeepsTheScreen(t *testing.T) {
 			before := stableText(t, term)
 
 			setLive(t, base, c.path, c.value)
+			if c.changesFrame {
+				if err := term.WaitFor(func(s tuitest.Screen) bool { return !sameFrame(s.Text(), before) }, uiTimeout); err != nil {
+					t.Fatalf("%s=%s changed nothing on screen: %v\n%s", c.path, c.value, err, term.Snapshot())
+				}
+			}
 			after := stableText(t, term)
 			if c.changesFrame && sameFrame(after, before) {
 				t.Fatalf("%s=%s changed nothing on screen\n%s", c.path, c.value, after)
@@ -97,7 +102,6 @@ func TestLiveAppearanceKeepsTheScreen(t *testing.T) {
 			saveArtifact(t, term, artifactDir(t), "set")
 
 			setLive(t, base, c.path, c.restore)
-			_ = stableText(t, term)
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return sameFrame(s.Text(), before)
 			}, uiTimeout); err != nil {
@@ -250,14 +254,21 @@ func waitPanesDrawn(t *testing.T, term *tuitest.Terminal, noDock bool, when stri
 	}
 }
 
-// stableText is the screen's text once it has settled, with the dock's
-// notification area blanked, since a set-config raises a notice there.
+// stableText is the screen's text once all but the dock row has settled. A
+// set-config raises a notice on the dock, and its burn-down moves that row
+// for two seconds; sameFrame leaves the row out too. A caller that just
+// changed the screen waits for the change to show first.
 func stableText(t *testing.T, term *tuitest.Terminal) string {
 	t.Helper()
-	time.Sleep(500 * time.Millisecond)
-	if err := term.WaitStable(uiTimeout); err != nil {
-		t.Fatalf("the screen never settled: %v", err)
-	}
+	const quiet = 300 * time.Millisecond
+	last, since := "", time.Now()
+	waitUntil(t, "the screen settles below the dock", uiTimeout, func() (bool, string) {
+		text := term.Screen().Text()
+		if !sameFrame(text, last) {
+			last, since = text, time.Now()
+		}
+		return time.Since(since) >= quiet, text
+	})
 	return term.Screen().Text()
 }
 
