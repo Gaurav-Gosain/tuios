@@ -68,10 +68,16 @@ func waitLife(t *testing.T, base, session string, limit time.Duration, why strin
 
 // inPane runs a tuios command line from inside pane w, as its agent would,
 // and returns what it printed with its EXIT= line.
+//
+// The pane is a shell, and the daemon may be typing into it too: a mail wake
+// or a queued prompt is pasted and its Enter sent up to 300 ms later
+// (submitPastes). The command starts with the terminal's kill-line key
+// (Ctrl+U), so a line the daemon left half typed is erased, not run as the
+// start of this one.
 func inPane(t *testing.T, base, session, w, args string) string {
 	t.Helper()
 	out := filepath.Join(base, "pane-"+strconv.FormatInt(time.Now().UnixNano(), 36)+".out")
-	script := tuiosBin + " " + args + " > " + out + ".tmp 2>&1; echo EXIT=$? >> " + out + ".tmp; mv " + out + ".tmp " + out + "\n"
+	script := "\x15" + tuiosBin + " " + args + " > " + out + ".tmp 2>&1; echo EXIT=$? >> " + out + ".tmp; mv " + out + ".tmp " + out + "\n"
 	mustCLI(t, base, "send-text", "-s", session, "-w", w, script)
 	return waitForFileText(t, out, func(s string) bool { return strings.Contains(s, "EXIT=") }, "the pane never ran: "+args)
 }

@@ -433,6 +433,11 @@ func TestPullDispatchOffersAgainWhenTheSwitchesLift(t *testing.T) {
 	now := time.Now()
 	span := now.Add(-2*time.Minute).Format("15:04") + "-" + now.Add(time.Minute).Format("15:04")
 	note("%s", mustCLI(t, base, "task", "dispatch", "quiet", span))
+	// b has held t2 since the board was set to pull, so the daemon may wake
+	// it now: the mail wake pastes its line and sends Enter up to 300 ms
+	// later (submitPastes). A finish typed in that gap must still run on a
+	// line of its own, so b's pane is left with such a line half typed.
+	mustCLI(t, base, "send-text", "-s", sess, "-w", b, "You have 1 unread tuios message.")
 	finish(b, "t2", "quiet hours")
 	deadline := time.Now().Add(90 * time.Second)
 	for {
