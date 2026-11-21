@@ -5,14 +5,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// handleQuitMenuKey drives the open quit menu. The menu is modal while it is
-// up, so every key stops here.
-//
-// The accelerators address rows by what they do, not by position: d detaches,
-// s opens the switcher, x runs the kill row, w deletes a worktree session's
-// worktree and quits. A second q runs the first row,
-// which in a daemon session is Detach, so "qq" muscle memory detaches a
-// session rather than killing it.
 func handleQuitMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if listKey(o, commandKey(msg), true, listPage, o.QuitMenuMove) {
 		return o, nil
@@ -40,8 +32,6 @@ func handleQuitMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// runQuitMenuKind activates the first quit-menu row of any of the given kinds,
-// or does nothing when the current row set has none of them.
 func runQuitMenuKind(o *app.OS, kinds ...app.QuitMenuKind) (*app.OS, tea.Cmd) {
 	idx := o.QuitMenuIndexOfKind(kinds...)
 	if idx < 0 {

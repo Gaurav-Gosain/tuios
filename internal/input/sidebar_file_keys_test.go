@@ -11,13 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The rail's file keys share three of their letters with rail bindings that
-// already exist: r renames a pane, x opens a row's destructive menu, and a was
-// free. Which one answers is decided by the row under the cursor, and that is
-// what these drive, through the real key handler.
-
-// filesRailOS gives the rail the keyboard with the files section listing dir
-// and the cursor on name.
 func filesRailOS(t *testing.T, dir, name string) *app.OS {
 	t.Helper()
 	prev, prevActions := config.Global.SidebarEnabled, config.Global.SidebarFileActions
@@ -35,13 +28,12 @@ func filesRailOS(t *testing.T, dir, name string) *app.OS {
 	if !o.OpenFileView(dir) {
 		t.Fatal("the rail refused to open the files section")
 	}
-	// The listing arrives as a message, exactly as it does in the client.
 	if cmd := o.TakeSidebarCmd(); cmd != nil {
 		if _, c := o.Update(cmd()); c != nil {
 			_ = c
 		}
 	}
-	_ = o.View() // the rail publishes its rows as it draws
+	_ = o.View()
 	if name == "" {
 		return o
 	}
@@ -51,9 +43,6 @@ func filesRailOS(t *testing.T, dir, name string) *app.OS {
 	return o
 }
 
-// railCursorToFileRow parks the cursor on the listing row whose drawn text
-// holds name. The nav rows carry no file name, so the row is found through the
-// hit rectangles the render published, which is the same identity a click uses.
 func railCursorToFileRow(t *testing.T, o *app.OS, name string) bool {
 	t.Helper()
 	for i := range o.SidebarNav {
@@ -61,8 +50,6 @@ func railCursorToFileRow(t *testing.T, o *app.OS, name string) bool {
 		if !o.SidebarCursorOnFile() {
 			continue
 		}
-		// The cursor row is the one drawn with the rail's selection, so ask the
-		// model what it would act on instead of reading pixels.
 		if o.FileActionTargetNameForTest() == name {
 			return true
 		}
@@ -70,7 +57,6 @@ func railCursorToFileRow(t *testing.T, o *app.OS, name string) bool {
 	return false
 }
 
-// pressEnter is the return key.
 func pressEnter() tea.KeyPressMsg { return tea.KeyPressMsg{Code: tea.KeyEnter} }
 
 // TestTheDeleteKeyRaisesTheDialogAndNothingElse is the confirmation gate driven
@@ -115,7 +101,6 @@ func TestPressingTheDeleteKeyAgainDoesNotAnswerTheDialog(t *testing.T) {
 	if !o.FileConfirmOpen() {
 		t.Fatal("a repeated keypress closed the dialog")
 	}
-	// And "y" is not a yes either: the answer is a selection.
 	_, _ = HandleKeyPress(press("y"), o)
 	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err != nil {
 		t.Fatalf("\"y\" answered the dialog: %v", err)
@@ -195,7 +180,6 @@ func TestTheCreateKeyOpensThePromptAndTypingReachesIt(t *testing.T) {
 	if !o.FilePromptOpen() {
 		t.Fatal("a on a file row opened no create prompt")
 	}
-	// Every one of these is a rail binding. Inside the prompt they are text.
 	for _, key := range []string{"d", "a", "x", "y", "p", "s"} {
 		o, _ = HandleKeyPress(press(key), o)
 	}

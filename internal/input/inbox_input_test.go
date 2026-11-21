@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// inboxInputOS is a two-pane model with an Inbox holding a question for pane a
-// and an approval for pane b, in this client's own session.
 func inboxInputOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := twoPaneWM(t)

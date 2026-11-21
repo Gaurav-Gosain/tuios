@@ -10,15 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// guestWantsMotion reports whether a guest's own mouse mode would have had the
-// host report this motion to it. The host is held in all-motion tracking so
-// tuios can draw its own hover and follow focus, so this is the only thing
-// standing between a guest and motion it never asked for:
-//
-//   - 1003 (any-event): every motion.
-//   - 1002 (button-event): only motion with a button held.
-//   - 1000/1001 (normal): none. Motion delivered to these apps comes back as
-//     phantom keypresses (issue #78).
 func guestWantsMotion(term vt.Terminal, button tea.MouseButton) bool {
 	if term.HasAllMotionMode() {
 		return true
@@ -26,24 +17,11 @@ func guestWantsMotion(term vt.Terminal, button tea.MouseButton) bool {
 	return term.HasCellMotionMode() && button != tea.MouseNone
 }
 
-// handleMouseMotion handles mouse motion events
 func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	mouse := msg.Mouse()
 
-	// Kept on the screen: the motion filter compares the next raw event
-	// with it, and the beam and the labels are drawn where it says.
 	o.LastMouseX, o.LastMouseY = o.ScreenPoint(mouse.X, mouse.Y)
 
-	// The host is held in all-motion tracking so hover and focus-follows-mouse
-	// see the pointer, which means motion no longer implies a button is down.
-	// Everything below that means "drag" is routed off a flag a press set, so a
-	// release that went missing would keep the gesture alive against bare hover:
-	// the panel would follow the cursor, the rail would resize, the picker would
-	// repaint. Update already retires the window layer's drag and resize this
-	// way; this covers the gestures the chrome holds in flags of its own.
-	//
-	// Only the gesture routing is retired here. The hover paths below run either
-	// way, which is the whole point of asking for button-free motion.
 	if mouse.Button == tea.MouseNone {
 		o.EndPointerGrabs()
 		o.QuickLookBarRelease()
@@ -53,18 +31,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// A drag between panes over OSC 72 owns the pointer once the source
-	// program started it: the pane under the pointer hears of it through the
-	// protocol, not as mouse motion. Before that, this only watches for the
-	// gesture and the motion goes on to the pane. See dnd_drag.go.
 	if o.DnDMotion(mouse.X, mouse.Y, mouse.Button) {
 		return o, nil
 	}
 
-	// An open context menu tracks the pointer, so the row that would run on a
-	// click is the row the cursor is on. It also stops here rather than falling
-	// through: the pane underneath is behind a modal menu and has no business
-	// seeing motion over it.
 	if o.ContextMenuActive() {
 		o.ContextMenuHover(mouse.X, mouse.Y)
 		return o, nil
@@ -74,15 +44,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// A pressed or dragged sidebar session row owns the pointer until release:
-	// the motion either commits the press to a reorder drag or advances the
-	// drag, and nothing underneath may see it either way.
 	if o.SidebarDragActive() {
 		o.SidebarDragMotion(mouse.X, mouse.Y)
 		return o, nil
 	}
-	// A held row of the rail's files section owns the pointer the same way,
-	// on its way to the pane it is dropped on.
 	if o.FileDragActive() {
 		o.FileDragMotion(mouse.X, mouse.Y, mouse.Mod.Contains(tea.ModAlt))
 		return o, nil
@@ -91,50 +56,31 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarEdgeMotion(mouse.X, mouse.Y)
 		return o, nil
 	}
-	// The divider between the rail's sections owns the pointer the same way
-	// the edge rule does while it is being dragged.
 	if o.SidebarSplitActive() {
 		o.SidebarSplitMotion(mouse.X, mouse.Y)
 		return o, nil
 	}
 
-	// A pressed or dragged workspace pill owns the pointer until release, for
-	// the same reason a rail row does: the motion is what turns the press into a
-	// reorder, and a pill dragged across the dock must not also be hovering the
-	// controls it passes over.
 	if o.DockWorkspaceDragActive() {
 		o.DockWorkspaceDragMotion(mouse.X, mouse.Y)
 		return o, nil
 	}
 
-	// Overlay panels: keep dragging a grabbed panel, or highlight the row under
-	// the cursor so hover tracks the pointer in every overlay. Either way the
-	// motion is consumed; a pane behind an overlay panel never sees it. The
-	// hover paths (overlays and the sidebar band) yield while a window gesture
-	// is in progress, so a drag or resize that crosses them never stalls.
 	if o.OverlayDragActive() {
 		o.OverlayMouseMotion(mouse.X, mouse.Y)
 		return o, nil
 	}
-	// A press in a draft selects as the pointer moves, over the panel or
-	// past it.
 	if o.DraftDrag(mouse.X, mouse.Y) {
 		return o, nil
 	}
-	// Quick look is on top: the pointer over it is its own, so nothing under
-	// it hovers, takes the focus or hears the motion.
 	if o.QuickLookTakesMotion(mouse.X, mouse.Y) {
 		return o, nil
 	}
 	if !o.Dragging && !o.Resizing && !o.ScrollbarDragging {
-		// The surfaces below consume the motion before TrackLinkPointer runs,
-		// so each takes a pane link's underline and label with it.
 		if o.OverlayMouseMotion(mouse.X, mouse.Y) {
 			o.DropLinkHover()
 			return o, nil
 		}
-		// A docked session is a real pane, not a list of sidebar rows. Send
-		// tracking motion to its guest before the rail hover path consumes it.
 		if w := o.SidebarSessionPaneAt(mouse.X, mouse.Y); w != nil {
 			o.DropLinkHover()
 			if paneWantsMotion(o, w, mouse.Button) {
@@ -144,13 +90,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 			return o, nil
 		}
-		// The sidebar band tracks hover the same way the overlays do, and
-		// consumes motion over it so the pane it sits in front of never sees it.
-		// The consumed motion also never reaches the pointer-shape pass below,
-		// so a shape set over pane chrome (grab, resize) would ride across the
-		// whole rail and stick: a pointer crossing from a title bar to the rail
-		// stays a grab for as long as the rail owns the motion. The rail offers
-		// no pointer shape of its own, so the default is right while it does.
 		if o.SidebarActive() && o.SidebarMotion(mouse.X, mouse.Y) {
 			o.DropLinkHover()
 			o.ResetPointerShape()
@@ -158,48 +97,19 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// The dock's session controls track the pointer so the recessed one is only
-	// loud where a click would land, and so the glyph under it says what it does.
-	// The motion is not consumed: nothing else in the dock band reacts to it, and
-	// clearing the highlight and the label on the way out is the same call.
-	//
-	// This is also what times the label. There is no tick standing by to notice
-	// the pointer has rested; arriving motion is the clock, and the maintenance
-	// tick is held only across the delay window of a live gesture.
 	o.DockSessionHoverAt(mouse.X, mouse.Y)
 
-	// The button row lights the button under the pointer and names it.
 	o.DockButtonHoverAt(mouse.X, mouse.Y)
 
-	// The workspace strip is timed off the same arriving motion, for the pills
-	// that had to cut a name short. It runs after the session controls so a
-	// pointer crossing from one to the other hands the label over in one pass:
-	// each call clears only its own surface's hover.
 	o.DockWorkspaceHoverAt(mouse.X, mouse.Y)
 
-	// The message block holds its message while the pointer is on it, so a
-	// long one does not burn down while it is being read, and a cut one shows
-	// its first lines above the dock. Last of the three, so it can take over a
-	// label the other two have just dropped.
 	o.DockNotifHoverAt(mouse.X, mouse.Y)
 
-	// The window controls track the pointer for the same reason: the dots style
-	// draws three unlabelled discs, and hovering them is what names them. Like
-	// the dock's, the motion is not consumed, and clearing the reveal on the way
-	// out is the same call. It marks only the windows whose bar changed, so a
-	// pointer crossing a title bar does not redraw the frame.
 	o.WindowButtonHoverAt(mouse.X, mouse.Y)
 
-	// Ctrl-drag: an armed grab commits to a move once the pointer passes the
-	// drag threshold, then rides the same path as a title-bar drag (the block
-	// below moves the now-focused window). Ctrl let go before the grab commits
-	// is the ctrl+click the press deferred.
 	if o.CtrlDragPending {
 		if mouse.Mod&tea.ModCtrl == 0 {
 			o.CtrlDragPending = false
-			// Ctrl let go on a link: the press was a ctrl+click on it, and
-			// the release that would open it may now arrive without the
-			// grab pending.
 			if url := o.CtrlClickLink; url != "" {
 				o.CtrlClickLink = ""
 				return o, o.OpenLink(url)
@@ -213,74 +123,38 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.CtrlDragPending = false
 			o.CtrlClickLink = ""
 			o.CtrlDragging = true
-			// beginWindowDrag leaves window management on, which is right for a
-			// title-bar grab but not here: a ctrl-drag from a pane the user is
-			// typing in should hand typing back when the pane lands.
 			o.BeginCtrlDrag()
 			beginWindowDrag(o, o.CtrlDragIndex, o.DragStartX, o.DragStartY)
 		}
 	}
-	// A committed ctrl-drag drops the instant ctrl is no longer held, matching
-	// "on leaving ctrl it lets go".
 	if o.CtrlDragging && mouse.Mod&tea.ModCtrl == 0 {
 		return finalizeCtrlDrag(o, mouse.X, mouse.Y)
 	}
 
-	// Update pointer shape based on what we're hovering over (OSC 22)
 	o.UpdatePointerForPosition(mouse.X, mouse.Y)
 
-	// A link in pane content, which is the one hover that comes from what a
-	// program printed rather than from where the chrome is. It runs after the
-	// shape above so the border and corner shapes keep their cells, and before
-	// the guest forwarding below so a pane whose program is tracking the mouse
-	// is left alone: TrackLinkPointer applies that test itself.
 	o.TrackLinkPointer(mouse.X, mouse.Y)
 
-	// Focus follows the mouse when the user opted in: the pane under the cursor
-	// takes focus without a click and without entering terminal mode (clicking
-	// is what starts typing). Gestures in progress keep their window, chrome
-	// (overlays, menus, the sidebar band, the dock) never steals pane focus,
-	// and nothing happens unless the pane under the cursor actually differs
-	// from the focused one.
-	// It follows the mouse in terminal mode too: a setting called
-	// focus-follows-mouse that stops working wherever the user actually spends
-	// their time just reads as broken. Rail keyboard focus still suppresses it,
-	// since the rail owns the keyboard and a click is the way back to a pane.
-	// Inside a scratch group the hover finds only the group's panes: the
-	// backdrop is not the current workspace.
-	// The pause key (appearance.focus_follows_mouse_pause) holds focus where it
-	// is for as long as the report carries it. It is only read here: the guest
-	// forwarding below still sends the motion with the modifier on it.
 	if o.Settings.FocusFollowsMouse && !focusFollowsMousePaused(o.Settings.FocusFollowsMousePause, mouse.Mod) &&
 		!o.SidebarFocused &&
 		!o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
 		!o.AnyOverlayOpen() && !o.ContextMenuActive() &&
 		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {
-		// The picture-in-picture view is not a pane: a pointer resting on it
-		// is not over the tile underneath.
 		idx := findClickedWindow(mouse.X, mouse.Y, o)
 		if idx >= 0 && pipOwns(mouse.X, mouse.Y, o) {
 			idx = -1
 		}
 		if idx >= 0 && idx != o.FocusedWindow {
 			o.FocusWindow(idx)
-			// In the scrolling layout, bring the whole column on screen. Focus
-			// went through the least-scroll rule, which leaves a column that is
-			// already partly visible where it is, so hovering a column at the
-			// edge focused a pane the user could not see.
 			o.RevealHoveredColumn()
 		}
 	}
 
-	// Hover over the picture-in-picture view is over the view, not over the
-	// pane under it. A drag that started in the pane and crosses the view
-	// still reaches the pane.
 	if o.Mode == app.TerminalMode && (mouse.Button != tea.MouseNone || !pipOwns(mouse.X, mouse.Y, o)) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil && focusedWindow.Terminal != nil {
 			if paneWantsMotion(o, focusedWindow, mouse.Button) {
 				termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
-				// Check if motion is within terminal content area
 				if inContent {
 					adjustedMouse := uv.MouseMotionEvent{
 						X:      termX,
@@ -288,7 +162,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						Button: uv.MouseButton(mouse.Button),
 						Mod:    uv.KeyMod(mouse.Mod),
 					}
-					// Send to the terminal (uses PTY for daemon windows)
 					sendMouseToWindow(o, focusedWindow, adjustedMouse)
 					return o, nil
 				}
@@ -305,11 +178,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
 		if draggedWindow.CopyMode != nil && draggedWindow.CopyMode.Active {
-			// The pointer moved with the button down, so this gesture is a
-			// drag. Its release is unambiguous and copies at once, rather than
-			// waiting out a multi-click window that no longer applies. Cell
-			// motion is only reported when the cell actually changes, so this
-			// cannot be set by a stationary press.
 			o.SelectionDragged = true
 			scrollDir := HandleCopyModeMouseMotion(draggedWindow.CopyMode, draggedWindow, mouse.X, mouse.Y)
 			o.AutoScrollDir = scrollDir
@@ -327,7 +195,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if !o.Dragging && !o.Resizing {
-		// Always consume motion events to prevent leaking to terminals
 		return o, nil
 	}
 
@@ -340,36 +207,19 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.Dragging && o.InteractionMode {
-		// The pane the gesture holds is the one the press recorded, not the
-		// focused one. The two part company mid-gesture: a peer's state sync
-		// carries the peer's focus, so a sync landing during a drag handed the
-		// rest of the motion to whichever pane the peer had focused, and the
-		// drop left that pane parked at the pointer over the tiled layout.
 		if o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 			focusedWindow = o.Windows[o.DraggedWindowIndex]
 		}
-		// The pane follows the pointer in every layout, the scrolling strip
-		// included; the column swap happens on release.
-		//
-		// The pointer has moved with the button down, so this gesture really is
-		// a move and the pane can give up its shared-border allowance now. The
-		// press did not: see untilePaneForDrag.
 		untilePaneForDrag(focusedWindow)
-		// Calculate new position, allowing windows to go partially off-screen for edge snapping
 		newX := mouse.X - o.DragOffsetX
 		newY := mouse.Y - o.DragOffsetY
 
-		// Minimal bounds to prevent rendering issues and windows disappearing behind dock
-		// Keep at least some of the window visible (title bar area)
-		minVisibleX := 20 // Keep at least 20px visible on the right
-		minVisibleY := 3  // Keep at least title bar visible at bottom
+		minVisibleX := 20
+		minVisibleY := 3
 
-		// The visible sliver must stay inside the content region, so a drag can
-		// never park a pane wholly under a reserved sidebar band.
 		leftMargin := o.PaneLeft()
 		contentRight := leftMargin + o.PaneWidth()
 
-		// Prevent window from going too far left (causes ANSI rendering issues)
 		if newX < leftMargin-(focusedWindow.Width-minVisibleX) {
 			newX = leftMargin - (focusedWindow.Width - minVisibleX)
 		}
@@ -391,9 +241,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		focusedWindow.X = newX
 		focusedWindow.Y = newY
 		focusedWindow.MarkPositionDirty()
-		// Where a drop here would put the pane, for the highlight. The release
-		// asks the same question at the same point, and only past the same
-		// threshold.
 		if tiledDragDistance(o, mouse.X, mouse.Y) >= tiledDragThreshold {
 			return o, o.UpdateDropZone(mouse.X, mouse.Y)
 		}
@@ -402,22 +249,14 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.Resizing && o.InteractionMode {
-		// A right press that has moved past the threshold is a resize, wherever
-		// the release lands. The release alone cannot tell: a drag that came back
-		// to where it started read as a click there and opened the pane menu.
 		if o.RightClickPending && abs(mouse.X-o.RightPressX)+abs(mouse.Y-o.RightPressY) >= o.DragThreshold() {
 			o.RightClickPending = false
 		}
-		// A pane-border drag moves a single edge to the pointer, not a corner.
 		if o.BorderResizing {
 			applyBorderResize(o, mouse.X, mouse.Y)
 			return o, nil
 		}
 
-		// The pane the press grabbed, as in the drag above. A peer's sync
-		// can move the focus mid-gesture, and the rest of the resize then
-		// went to the focused pane with the grabbed pane's starting
-		// rectangle: a tiled pane took a floating pane's row and height.
 		if o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 			focusedWindow = o.Windows[o.DraggedWindowIndex]
 		}
@@ -430,12 +269,8 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		newWidth := focusedWindow.Width
 		newHeight := focusedWindow.Height
 
-		// A floating pane resizes alone even with tiling on. The tiling
-		// branches below hold edges on the screen boundary and move the
-		// tiled panes that share the dragged edge's line.
 		tiled := o.ResizesWithTiling(focusedWindow)
 
-		// In scrolling mode, only allow width resize (columns fill full height)
 		if tiled && o.UseScrollingLayout {
 			yOffset = 0
 		}
@@ -472,32 +307,24 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 
-		// Apply viewport bounds checking to prevent windows from going off-screen
-		// or under a reserved sidebar band. This is consistent with drag bounds
-		// checking and prevents layout issues.
 		leftMargin := o.PaneLeft()
 		contentRight := leftMargin + o.PaneWidth()
 
-		// Left edge: prevent X before the content region
 		if newX < leftMargin {
-			// If resizing from left, adjust width to compensate
 			if o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.BottomLeft {
-				newWidth += newX - leftMargin // Give the overshoot back to width
+				newWidth += newX - leftMargin
 			}
 			newX = leftMargin
 		}
 
-		// Top edge: prevent window from moving into dock area or above screen
 		topMargin := o.PaneTop()
 		if newY < topMargin {
-			// If resizing from top, adjust height to compensate
 			if o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.TopRight {
-				newHeight += newY - topMargin // Add the offset back to height
+				newHeight += newY - topMargin
 			}
 			newY = topMargin
 		}
 
-		// Right edge: prevent window from exceeding the content region
 		if newX+newWidth > contentRight {
 			if o.ResizeCorner == app.TopRight || o.ResizeCorner == app.BottomRight {
 				newWidth = contentRight - newX
@@ -506,8 +333,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 
-		// Bottom edge: prevent window from exceeding usable height (dock area)
-		// maxY is the absolute bottom boundary accounting for dock position
 		maxY := topMargin + o.PaneHeight()
 		if newY+newHeight > maxY {
 			if o.ResizeCorner == app.BottomLeft || o.ResizeCorner == app.BottomRight {
@@ -517,24 +342,19 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 
-		// Final safety check: ensure dimensions stay within bounds after all adjustments
 		newWidth = max(newWidth, config.DefaultWindowWidth)
 		newHeight = max(newHeight, config.DefaultWindowHeight)
 		newWidth = min(newWidth, contentRight-newX)
 		newHeight = min(newHeight, maxY-newY)
 
-		// In tiling mode (except scrolling), block resizing edges at the
-		// content-region boundaries
 		if tiled && !o.UseScrollingLayout {
-			const edgeTolerance = 2 // Small tolerance for detecting screen edges
+			const edgeTolerance = 2
 
-			// Check which edges are at content-region boundaries
 			atLeftEdge := focusedWindow.X <= leftMargin+edgeTolerance
 			atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (contentRight - edgeTolerance)
 			atTopEdge := focusedWindow.Y <= edgeTolerance
 			atBottomEdge := (focusedWindow.Y + focusedWindow.Height) >= (maxY - edgeTolerance)
 
-			// Block resizing edges that are at screen boundaries
 			switch o.ResizeCorner {
 			case app.TopLeft:
 				if atLeftEdge {
@@ -570,38 +390,24 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 			}
 
-			// In tiling mode, update visual state but defer PTY resize until drag completes
-			// Store pending resizes for all affected windows
 			treeInSync := o.AdjustTilingNeighborsVisual(focusedWindow, newX, newY, newWidth, newHeight)
-			// The separator overlay is drawn from the tree's ratios, so they have
-			// to catch up with the new geometry before the next frame. Mark it
-			// rather than syncing here: syncing walks every node in the tree and
-			// reapplies the layout, and motion events outnumber frames. A resize
-			// the BSP tree drove needs none of this: the ratios are already what
-			// the geometry was built from.
 			if o.SharedBorders && !treeInSync {
 				o.MarkBSPSyncPending()
 			}
 		} else if tiled && o.UseScrollingLayout {
-			// Scrolling mode: compute width from horizontal drag delta. All
-			// strip math runs against the content width beside the sidebar band,
-			// matching ScrollingSetPositions.
 			switch o.ResizeCorner {
 			case app.TopLeft, app.BottomLeft:
 				newWidth = o.PreResizeState.Width - xOffset
 			case app.TopRight, app.BottomRight:
 				newWidth = o.PreResizeState.Width + xOffset
 			}
-			// For a left-edge resize the right edge stays where it is.
 			keepRight := o.ResizeCorner == app.TopLeft || o.ResizeCorner == app.BottomLeft
 			o.ScrollingResizeColumnVisual(focusedWindow, newWidth, keepRight)
 		} else {
-			// In floating mode, apply visual resize only (defer PTY resize until drag completes)
 			focusedWindow.X = newX
 			focusedWindow.Y = newY
-			focusedWindow.ResizeVisual(newWidth, newHeight) // Visual resize only
+			focusedWindow.ResizeVisual(newWidth, newHeight)
 			focusedWindow.MarkPositionDirty()
-			// Store pending resize so PTY gets resized on mouse release
 			o.PendingResizes[focusedWindow.ID] = [2]int{newWidth, newHeight}
 		}
 
@@ -611,9 +417,6 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// focusFollowsMousePaused reports whether the configured pause key is held on
-// a motion report. The report is the only place the modifier state comes
-// from, so a release is seen on the first motion after it.
 func focusFollowsMousePaused(key string, mod tea.KeyMod) bool {
 	switch key {
 	case config.FocusFollowsMousePauseCtrl:

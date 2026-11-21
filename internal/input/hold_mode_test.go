@@ -10,8 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// holdOS is an OS in terminal mode with hold-to-window-mode bound to trigger and
-// a host that has agreed to report key releases.
 func holdOS(t *testing.T, trigger string) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -31,8 +29,6 @@ func holdOS(t *testing.T, trigger string) *app.OS {
 	return o
 }
 
-// leftAltPress is what a terminal in report-all-keys mode sends for the Option
-// key itself: a key event of its own, carrying the modifier it sets.
 func leftAltPress() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: tea.KeyLeftAlt, Mod: tea.ModAlt}
 }
@@ -79,8 +75,6 @@ func TestModeChosenWhileHeldSurvivesTheRelease(t *testing.T) {
 	o := holdOS(t, "leftalt")
 	o = feed(o, leftAltPress())
 
-	// Held, alt+esc is esc in window mode: enter_window_mode, a choice of
-	// window management.
 	o = feed(o, tea.KeyPressMsg{Code: tea.KeyEscape, Mod: tea.ModAlt})
 	o = feed(o, leftAltRelease())
 

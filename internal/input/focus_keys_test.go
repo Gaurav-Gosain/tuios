@@ -21,14 +21,6 @@ import (
 //     scrolling layout, which is what it did before: both rows of
 //     TestJKInAScrollingColumn and TestAltUpDownInAScrollingColumn fail.
 
-// spiral is four panes laid out the way the BSP tiler lays out four windows
-// on a 160x46 screen.
-//
-//	+--------+--------+
-//	|        |   1    |
-//	|   0    +---+----+
-//	|        | 2 | 3  |
-//	+--------+---+----+
 func spiral(t *testing.T, tiled bool) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -62,7 +54,6 @@ func TestWindowModeHJKLReachEveryPane(t *testing.T) {
 		{3, "h", 2},
 		{2, "k", 1},
 		{2, "h", 0},
-		// Edges stay put.
 		{0, "j", 0},
 		{0, "k", 0},
 		{1, "k", 1},
@@ -71,7 +62,7 @@ func TestWindowModeHJKLReachEveryPane(t *testing.T) {
 	for _, tiled := range []bool{true, false} {
 		for _, s := range steps {
 			if !tiled && (s.key == "h" || s.key == "l") {
-				continue // with tiling off h and l snap
+				continue
 			}
 			o := spiral(t, tiled)
 			o.FocusedWindow = s.from
@@ -84,8 +75,6 @@ func TestWindowModeHJKLReachEveryPane(t *testing.T) {
 	}
 }
 
-// scrollingColumn is two windows stacked in one column of the scrolling
-// layout, the top one focused.
 func scrollingColumn(t *testing.T) *app.OS {
 	t.Helper()
 	o := sideBySide(t, true)

@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// A verb the model can do and the keyboard cannot reach is a verb nobody has.
-// These are about the wiring, not about what the verb does.
-
 func unbindInputOS(t *testing.T) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -20,8 +17,6 @@ func unbindInputOS(t *testing.T) *app.OS {
 	return o
 }
 
-// ctrlKey is a control chord as the handler reads it: msg.String() returns
-// "ctrl+d" for Code 'd' with ModCtrl set.
 func ctrlKey(r rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: r, Mod: tea.ModCtrl}
 }
@@ -68,7 +63,7 @@ func TestCtrlDOnTheRecordTabFreesTheCapturedKey(t *testing.T) {
 	o.OpenKeybindManager()
 
 	o.KeybindArm()
-	o, _ = HandleKeyPress(ctrlKey('j'), o) // arming makes this data, not a command
+	o, _ = HandleKeyPress(ctrlKey('j'), o)
 	if key, _ := o.KeybindCaptured(); key == "" {
 		t.Fatal("the armed recorder did not capture the key")
 	}

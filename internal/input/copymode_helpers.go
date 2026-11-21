@@ -6,7 +6,6 @@ import (
 	vt "tuios.dev/vt"
 )
 
-// getAbsoluteY calculates the absolute Y position in the entire scrollback+screen
 func getAbsoluteY(cm *terminal.CopyMode, grid terminal.CopyGrid) int {
 	scrollbackLen := grid.ScrollbackLen()
 	if cm.ScrollOffset > 0 {
@@ -15,7 +14,6 @@ func getAbsoluteY(cm *terminal.CopyMode, grid terminal.CopyGrid) int {
 	return scrollbackLen + cm.CursorY
 }
 
-// isVimWordChar returns true if the rune is part of a vim "word" (alphanumeric or underscore)
 func isVimWordChar(r rune) bool {
 	return (r >= 'a' && r <= 'z') ||
 		(r >= 'A' && r <= 'Z') ||
@@ -23,24 +21,21 @@ func isVimWordChar(r rune) bool {
 		r == '_'
 }
 
-// getCharType returns the type of character: 0=whitespace, 1=word char, 2=punctuation
 func getCharType(content string) int {
 	if content == "" || content == " " || content == "\t" {
-		return 0 // whitespace
+		return 0
 	}
 	r := []rune(content)[0]
 	if isVimWordChar(r) {
-		return 1 // word character
+		return 1
 	}
-	return 2 // punctuation/special
+	return 2
 }
 
-// getCellAtCursor returns the cell at the current cursor position
 func getCellAtCursor(cm *terminal.CopyMode, grid terminal.CopyGrid) *uv.Cell {
 	return getCellAtCol(cm, grid, cm.CursorX)
 }
 
-// getCellAtCol returns the cell at column x of the cursor's row
 func getCellAtCol(cm *terminal.CopyMode, grid terminal.CopyGrid, x int) *uv.Cell {
 	absY := getAbsoluteY(cm, grid)
 	scrollbackLen := grid.ScrollbackLen()
@@ -57,8 +52,6 @@ func getCellAtCol(cm *terminal.CopyMode, grid terminal.CopyGrid, x int) *uv.Cell
 	return grid.Text().CellAt(x, screenY)
 }
 
-// firstNonBlankCol returns the column of the first nonblank character on the
-// cursor's row, the target of ^. A blank row gives column 0.
 func firstNonBlankCol(cm *terminal.CopyMode, grid terminal.CopyGrid) int {
 	for x := 0; x <= grid.LastContentCol(); x++ {
 		if cell := getCellAtCol(cm, grid, x); cell != nil && cell.Width > 0 && getCharType(cell.Content) != 0 {
@@ -68,10 +61,6 @@ func firstNonBlankCol(cm *terminal.CopyMode, grid terminal.CopyGrid) int {
 	return 0
 }
 
-// lastTextCol returns the column of the last nonblank character on the
-// cursor's row, the target of $, rather than the blank padding up to the pane
-// edge. A wide character answers with its first cell. A blank row gives
-// column 0.
 func lastTextCol(cm *terminal.CopyMode, grid terminal.CopyGrid) int {
 	for x := grid.LastContentCol(); x > 0; x-- {
 		if cell := getCellAtCol(cm, grid, x); cell != nil && cell.Width > 0 && getCharType(cell.Content) != 0 {
@@ -81,12 +70,9 @@ func lastTextCol(cm *terminal.CopyMode, grid terminal.CopyGrid) int {
 	return 0
 }
 
-// extractLineTextFromCells builds text string from cell array
 func extractLineTextFromCells(cells []uv.Cell) string {
 	var result []rune
 	for _, cell := range cells {
-		// Skip continuation cells (Width=0) of wide characters
-		// These are placeholder cells for emoji, CJK, nerd fonts, etc.
 		if cell.Width == 0 {
 			continue
 		}
@@ -101,14 +87,11 @@ func extractLineTextFromCells(cells []uv.Cell) string {
 	return string(result)
 }
 
-// extractScreenLineText builds text string from terminal screen line
 func extractScreenLineText(term terminal.CopyText, y int) string {
 	var result []rune
 	width := term.Width()
 	for x := range width {
 		cell := term.CellAt(x, y)
-		// Skip continuation cells (Width=0) of wide characters
-		// These are placeholder cells for emoji, CJK, nerd fonts, etc.
 		if cell != nil && cell.Width == 0 {
 			continue
 		}
@@ -123,7 +106,6 @@ func extractScreenLineText(term terminal.CopyText, y int) string {
 	return string(result)
 }
 
-// getScreenLineCells returns all cells for a screen line
 func getScreenLineCells(term terminal.CopyText, y int) []uv.Cell {
 	width := term.Width()
 	cells := make([]uv.Cell, width)
@@ -141,7 +123,6 @@ func getScreenLineCells(term terminal.CopyText, y int) []uv.Cell {
 	return cells
 }
 
-// isBlankLine returns true if a line contains only whitespace
 func isBlankLine(lineText string) bool {
 	for _, r := range lineText {
 		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {

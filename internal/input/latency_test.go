@@ -1,26 +1,5 @@
 package input
 
-// Local input latency: the keystroke tuios answers by itself.
-//
-// This is the floor of the whole audit. A key that switches pane never leaves
-// the process: no socket, no PTY, no guest, no coalescer. Whatever it costs is
-// what tuios adds to a keystroke before any of the distributed machinery is
-// involved, and the gap between this and the echo number in internal/app is
-// what the daemon and the guest are worth.
-//
-// It lives here rather than beside the other latency measurements because the
-// real key routing lives here, and internal/app cannot import it: input imports
-// app, so the handler reaches app only through SetInputHandler, and a test in
-// package app finds no handler registered at all.
-//
-// INCLUDES: HandleKeyPress routing, the action it dispatches, the per-key
-// SyncStateToDaemon that internal/input does on daemon sessions, and a full
-// composeFrame.
-// EXCLUDES: the host terminal, bubbletea's stdin decode, and the diff written
-// back to the tty.
-//
-//	go test ./internal/input/ -run TestLatencyLocal -v   (needs TUIOS_PERF=1)
-
 import (
 	"fmt"
 	"os"
@@ -38,9 +17,6 @@ const (
 	latencyEnv  = "TUIOS_PERF"
 	latencyRuns = 500
 
-	// latCols and latRows are the maintainer's real host size, the same one the
-	// render benchmarks and the e2e perf suite use. Compose cost scales with
-	// total cells, so measuring at the default would flatter this number.
 	latCols, latRows = 207, 55
 )
 
@@ -51,9 +27,6 @@ func latencyGate(t *testing.T) {
 	}
 }
 
-// latencyOS builds an n-pane client at the real host size with every pane
-// holding painted content, which is the state a frame is actually composed
-// from. A pane full of blanks would compose faster than any real one.
 func latencyOS(t *testing.T, n int) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -64,8 +37,6 @@ func latencyOS(t *testing.T, n int) *app.OS {
 	o.Width, o.Height = latCols, latRows
 	o.EffectiveWidth, o.EffectiveHeight = latCols, latRows
 
-	// A grid, so each pane is a realistic fraction of the screen rather than n
-	// copies of the whole thing.
 	cols := 1
 	for cols*cols < n {
 		cols++
@@ -109,8 +80,6 @@ func latencyOS(t *testing.T, n int) *app.OS {
 	return o
 }
 
-// frame composes and returns the client's frame, which is what bubbletea does
-// with the tea.View that View returns.
 func frame(t *testing.T, o *app.OS) string {
 	t.Helper()
 	v := o.View()
@@ -130,8 +99,6 @@ func TestLatencyLocal(t *testing.T) {
 	for _, panes := range []int{1, 4, 8} {
 		t.Run(fmt.Sprintf("panes%d", panes), func(t *testing.T) {
 			o := latencyOS(t, panes)
-			// One composed frame up front, so the first sample is not paying
-			// for caches every later sample finds warm.
 			_ = frame(t, o)
 
 			var d perf.Dist
@@ -180,8 +147,6 @@ func TestLatencyTypedKey(t *testing.T) {
 
 	o := latencyOS(t, 4)
 	o.Mode = app.TerminalMode
-	// The pane's writer is a sink: the wire and the guest are measured in
-	// internal/app, and this hop stops where the bytes leave the input layer.
 	o.Windows[0].DaemonWriteFunc = func([]byte) error { return nil }
 	_ = frame(t, o)
 

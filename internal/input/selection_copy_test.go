@@ -12,16 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// These tests drive the mouse and then check the selection through its
-// consumers: the context menu's enablement, and the copy action reached through
-// the dispatcher. Reading the selection back through extractVisualText, the
-// function the selection is made with, passes even when copying a selection
-// does nothing, because it never asks what the rest of the program asks: is
-// there a selection to copy, and what does the copy action produce.
-
-// clipboardText runs a command and returns the text it wrote to the clipboard,
-// or "" when it wrote nothing. tea's set-clipboard message is an unexported
-// string type, which is why this reads it as one rather than type-asserting.
 func clipboardText(t *testing.T, cmd tea.Cmd) string {
 	t.Helper()
 	if cmd == nil {
@@ -34,16 +24,12 @@ func clipboardText(t *testing.T, cmd tea.Cmd) string {
 	return fmt.Sprintf("%s", msg)
 }
 
-// copySelection runs the action the "Copy selection" row and the copy key both
-// dispatch, and returns what reached the clipboard.
 func copySelection(t *testing.T, o *app.OS) string {
 	t.Helper()
 	_, cmd := GetDispatcher().Dispatch("copy_selection", tea.KeyPressMsg{}, o)
 	return clipboardText(t, cmd)
 }
 
-// copyRowDim reports whether the pane menu built for windowIndex offers its
-// copy row greyed out. It opens the menu the way a right-click does.
 func copyRowDim(t *testing.T, o *app.OS, x, y int) bool {
 	t.Helper()
 	o.OpenContextMenu(x, y)
@@ -75,7 +61,6 @@ func TestCopySelectionWithNothingSelectedCopiesNothing(t *testing.T) {
 func TestMenuReadsTheSelectionOfThePaneItWasOpenedOn(t *testing.T) {
 	o, panes := selectTwoPanes(t, "alpha bravo charlie", "delta echo foxtrot")
 
-	// Select in the right-hand pane, then hand focus back to the left one.
 	pressAt2(o, panes[1], 0, 0)
 	dragTo2(o, panes[1], 10, 0)
 	release2(o, panes[1], 10, 0)
@@ -85,21 +70,16 @@ func TestMenuReadsTheSelectionOfThePaneItWasOpenedOn(t *testing.T) {
 		t.Error("copy is dimmed on the pane the menu was opened on, which holds a selection")
 	}
 	o.CloseContextMenu()
-	// The drag ends on the space after "echo", and a copy keeps a printed
-	// space.
 	if got, want := copySelection(t, o), "delta echo "; got != want {
 		t.Errorf("copy produced %q, want the targeted pane's selection %q", got, want)
 	}
 
-	// And the pane with nothing selected still says so.
 	o.FocusWindow(1)
 	if !copyRowDim(t, o, panes[0].X+5, 5) {
 		t.Error("copy is offered on a pane with no selection because another pane has one")
 	}
 }
 
-// selectTwoPanes builds two side-by-side panes, each with a line of text, in
-// terminal mode. Pane 0 is focused.
 func selectTwoPanes(t *testing.T, left, right string) (*app.OS, []*terminal.Window) {
 	t.Helper()
 	mk := func(line string, x int) *terminal.Window {
@@ -120,8 +100,6 @@ func selectTwoPanes(t *testing.T, left, right string) (*app.OS, []*terminal.Wind
 	return o, panes
 }
 
-// pressAt2, dragTo2 and release2 are the single-pane helpers with the pane's
-// own origin added, so a content cell is addressed the same way in either pane.
 func pressAt2(o *app.OS, win *terminal.Window, x, y int) {
 	handleMouseClick(tea.MouseClickMsg{Button: tea.MouseLeft, X: win.X + x + 1, Y: win.Y + y + 1}, o)
 }

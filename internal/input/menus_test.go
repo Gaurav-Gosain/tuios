@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// toggle_mouse flips OS.MouseOff and needs no window, so it is the action
-// these menus run: what a key did is read off one boolean.
 const menuConfig = `
 [keybindings]
 leader_key = "ctrl+b"

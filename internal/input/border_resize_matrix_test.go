@@ -10,15 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Tiling and shared borders are independent settings, so the division between
-// two panes lives in a different place in each of the four combinations: a
-// reserved separator cell under shared borders, and the border column a pane
-// draws for itself without them. Dragging it must resize in every cell, which
-// is the whole point of the division being somewhere else.
-
-// borderMatrixOS builds two side-by-side panes for one cell of the matrix and
-// registers the real input handler, so the gestures below go through OS.Update
-// exactly as a keypress from the terminal does.
 func borderMatrixOS(t *testing.T, tiling, shared bool) (*app.OS, *terminal.Window, *terminal.Window) {
 	t.Helper()
 	app.SetInputHandler(HandleInput)
@@ -34,16 +25,14 @@ func borderMatrixOS(t *testing.T, tiling, shared bool) (*app.OS, *terminal.Windo
 
 	const cols, rows = 120, 40
 	m := &app.OS{
-		Settings:         config.Global,
-		NumWorkspaces:    9,
-		CurrentWorkspace: 1,
-		WorkspaceFocus:   make(map[int]int),
-		Width:            cols,
-		Height:           rows,
-		AutoTiling:       true,
-		UseBSPLayout:     true,
-		// The layout reads the model's session-settled value, not the global;
-		// seed it from the global set above. NewOS does the same.
+		Settings:             config.Global,
+		NumWorkspaces:        9,
+		CurrentWorkspace:     1,
+		WorkspaceFocus:       make(map[int]int),
+		Width:                cols,
+		Height:               rows,
+		AutoTiling:           true,
+		UseBSPLayout:         true,
 		SharedBorders:        shared,
 		FocusedWindow:        0,
 		PendingResizes:       make(map[string][2]int),
@@ -74,8 +63,6 @@ func borderMatrixOS(t *testing.T, tiling, shared bool) (*app.OS, *terminal.Windo
 		m.Windows = append(m.Windows, win)
 	}
 	m.TileAllWindows()
-	// Tiling off keeps the rectangles it just produced, which is the route the
-	// user takes into that half of the matrix.
 	if !tiling {
 		m.ToggleAutoTiling()
 	}
@@ -90,9 +77,6 @@ func borderMatrixOS(t *testing.T, tiling, shared bool) (*app.OS, *terminal.Windo
 	return m, b, a
 }
 
-// dividerColumn is the cell a user grabs to move the division at a pane's right
-// edge: the pane's own border column when it draws one, and the reserved
-// separator cell one past it when the grid draws the borders.
 func dividerColumn(w *terminal.Window) int {
 	return w.X + w.Width - w.BorderOffset()
 }
@@ -193,8 +177,6 @@ func TestBorderDragHoldsAcrossSettingChanges(t *testing.T) {
 
 	drag("shared+tiled")
 
-	// Flipping the setting mid-test is what the settings panel does, and the
-	// panel writes the model; the global follows for anything still reading it.
 	config.Global.SharedBorders = false
 	m.SharedBorders = false
 	m.TileAllWindows()

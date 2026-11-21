@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// navKey builds the key a person presses for a movement name.
 func navKey(name string) tea.KeyPressMsg {
 	switch name {
 	case "home":
@@ -43,12 +42,11 @@ func listKeysOS(t *testing.T) *app.OS {
 // and stop at the end rather than wrapping, and up on the first row wraps.
 func TestEveryListTakesTheSameMovementKeys(t *testing.T) {
 	type list struct {
-		name   string
-		open   func(o *app.OS)
-		handle func(tea.KeyPressMsg, *app.OS) (*app.OS, tea.Cmd)
-		cursor func(o *app.OS) int
-		n      func(o *app.OS) int
-		// letters is whether the list reads g and G as well.
+		name    string
+		open    func(o *app.OS)
+		handle  func(tea.KeyPressMsg, *app.OS) (*app.OS, tea.Cmd)
+		cursor  func(o *app.OS) int
+		n       func(o *app.OS) int
 		letters bool
 	}
 	lists := []list{
@@ -142,7 +140,6 @@ func TestAFilteredListKeepsItsLetters(t *testing.T) {
 	}
 }
 
-// paletteQuery and paletteCursor read the open palette's filter and cursor.
 func paletteQuery(o *app.OS) string {
 	q, _ := o.ListPickerShows()
 	return q

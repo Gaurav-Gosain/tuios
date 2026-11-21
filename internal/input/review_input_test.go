@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// reviewInputOS is a client on a daemon session whose daemon answers
-// review-diff with one changed line, and records every verb it is sent.
 func reviewInputOS(t *testing.T) (*app.OS, *[]byte, *[]string) {
 	t.Helper()
 	o := reachOS(t)

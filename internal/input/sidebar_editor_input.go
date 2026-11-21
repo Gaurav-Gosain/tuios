@@ -5,20 +5,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// handleSectionEditorInput handles keyboard input for the rail layout editor.
-//
-// The keys are the dock editor's, so a person who has laid out the dock already
-// knows this panel: the arrows select, shifted arrows move the selected entry,
-// Enter puts a section on the rail or takes it off. The left and right arrows
-// are the one addition, and they walk the share.
 func handleSectionEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if listKey(o, msg.String(), true, listPage, o.SectionEditorMove) {
 		return o, nil
 	}
 	switch keyStr := msg.String(); keyStr {
 	case "esc":
-		// Closes, keeping the layout. Every edit here was applied and saved as
-		// it was made, so there is nothing pending for Esc to abandon.
 		o.CloseSectionEditor()
 	case "enter", "space":
 		return o, o.SectionEditorToggle()

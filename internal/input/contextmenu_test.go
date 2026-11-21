@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// ctxOS builds an OS with a registry, a visible pane and a minimized one, which
-// between them can reach every context menu target.
 func ctxOS(t *testing.T) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -27,7 +25,6 @@ func ctxOS(t *testing.T) *app.OS {
 	return o
 }
 
-// ctxMenuAnchors is one anchor per target.
 var ctxMenuAnchors = []struct {
 	name string
 	x, y int

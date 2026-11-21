@@ -14,10 +14,6 @@ import (
 // ActionHandler is a function that handles a specific action
 type ActionHandler func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 
-// Rail (sidebar keyboard scope) action names. These are the actions in the
-// [keybindings] sidebar config section, dispatched by HandleSidebarKey while the
-// rail owns the keyboard. Constants keep the routing switch and any future
-// callers typo-proof now that there are ~14 of them.
 const (
 	sidebarActCursorDown  = "cursor_down"
 	sidebarActCursorUp    = "cursor_up"
@@ -46,39 +42,21 @@ const (
 	sidebarActHelp        = "help"
 	sidebarActExit        = "exit"
 
-	// The files section's own six. They are resolved before the rail's other
-	// bindings while the cursor is on a file row, which is what lets "x" mean
-	// cut on a name and kill on a pane without either losing its key. See
-	// HandleSidebarKey.
-	sidebarActFileCreate    = "file_create"
-	sidebarActFileRename    = "file_rename"
-	sidebarActFileDelete    = "file_delete"
-	sidebarActFileDeleteAll = "file_delete_forever"
-	sidebarActFileCopy      = "file_copy"
-	sidebarActFileCut       = "file_cut"
-	sidebarActFilePaste     = "file_paste"
-	// file_open is not one of the six that touch the disk: it takes the row the
-	// way a click on it does, so a folder opens and a file's path goes to the
-	// clipboard. It exists as an action because the files context menu's first
-	// row needs one, and a menu row with no registry action behind it is a
-	// hardcoded key hint waiting to go stale.
-	sidebarActFileOpen = "file_open"
-	sidebarActFileEdit = "file_edit"
-	// file_copy_path copies the row's path whatever the row is. file_open
-	// copies a file's path too, but on a folder it opens the folder.
-	sidebarActFileCopyPath = "file_copy_path"
-	// sidebarActFileSend sends the row's file or folder to another machine.
-	sidebarActFileSend = "file_send"
-	// sidebarActFileInsertPath pastes the row's path into the focused pane.
+	sidebarActFileCreate     = "file_create"
+	sidebarActFileRename     = "file_rename"
+	sidebarActFileDelete     = "file_delete"
+	sidebarActFileDeleteAll  = "file_delete_forever"
+	sidebarActFileCopy       = "file_copy"
+	sidebarActFileCut        = "file_cut"
+	sidebarActFilePaste      = "file_paste"
+	sidebarActFileOpen       = "file_open"
+	sidebarActFileEdit       = "file_edit"
+	sidebarActFileCopyPath   = "file_copy_path"
+	sidebarActFileSend       = "file_send"
 	sidebarActFileInsertPath = "file_insert_path"
-	// sidebarActFileQuickLook opens and closes the preview of the row. It
-	// reads and changes nothing, so it is live while file actions are off.
-	sidebarActFileQuickLook = "file_quick_look"
-	// sidebarActFileOpenSystem opens the row with a program on the desktop:
-	// the first [[files.open]] rule that matches, or the system opener.
+	sidebarActFileQuickLook  = "file_quick_look"
 	sidebarActFileOpenSystem = "file_open_system"
-	// jump_1..jump_9 are matched by prefix; see HandleSidebarKey.
-	sidebarActJumpPrefix = "jump_"
+	sidebarActJumpPrefix     = "jump_"
 )
 
 // ActionDispatcher runs the actions of the action table that the dispatcher
@@ -96,9 +74,7 @@ func NewActionDispatcher() *ActionDispatcher {
 	return d
 }
 
-// registerHandlers registers all action handlers
 func (d *ActionDispatcher) registerHandlers() {
-	// Window Management actions
 	d.Register("new_window", handleNewWindow)
 	d.Register("selection_copy", handleSelectionCopy)
 	d.Register("selection_copy_markdown", handleSelectionCopyMarkdown)
@@ -114,13 +90,11 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("prev_window", handlePrevWindow)
 	d.Register("last_pane", handleLastPane)
 
-	// Window selection (1-9)
 	for i := 1; i <= 9; i++ {
-		idx := i - 1 // Convert to 0-based index
+		idx := i - 1
 		d.Register("select_window_"+string(rune('0'+i)), makeSelectWindowHandler(idx))
 	}
 
-	// Workspace switching (1-9)
 	for i := 1; i <= 9; i++ {
 		d.Register("switch_workspace_"+string(rune('0'+i)), makeSwitchWorkspaceHandler(i))
 		d.Register("move_and_follow_"+string(rune('0'+i)), makeMoveAndFollowHandler(i))
@@ -128,7 +102,6 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("next_workspace", handleNextWorkspace)
 	d.Register("prev_workspace", handlePrevWorkspace)
 
-	// Layout actions
 	d.Register("snap_left", handleSnapLeft)
 	d.Register("snap_right", handleSnapRight)
 	d.Register("focus_up", handleTerminalFocusDirection("up"))
@@ -153,27 +126,18 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("resize_height_shrink_top", handleResizeHeightShrinkTop)
 	d.Register("resize_height_grow_top", handleResizeHeightGrowTop)
 
-	// Percentage resizing of the focused pane: one action per
-	// ten-point step, so a user can bind exactly the percentages they use.
-	// resize_width_N sizes the width to N% of the content region,
-	// resize_height_N the height to N% of the usable height.
 	for pct := 10; pct <= 90; pct += 10 {
 		d.Register(fmt.Sprintf("resize_width_%d", pct), makeResizeWidthPercentHandler(pct))
 		d.Register(fmt.Sprintf("resize_height_%d", pct), makeResizeHeightPercentHandler(pct))
 	}
 
-	// Window actions
 	d.Register("toggle_zoom", handleToggleZoom)
 	d.Register("start_screensaver", handleStartScreensaver)
 
-	// Screenshot actions. Three, because the three things a person means by
-	// "take a screenshot" are different: pick one, take this window, take the
-	// lot. All three are reachable from run-command and from a custom keybind.
 	d.Register("screenshot", handleScreenshotPick)
 	d.Register("screenshot_window", handleScreenshotWindow)
 	d.Register("screenshot_screen", handleScreenshotScreen)
 
-	// Scrolling tiling actions (niri-like)
 	d.Register("scroll_focus_left", handleScrollFocusLeft)
 	d.Register("scroll_focus_right", handleScrollFocusRight)
 	d.Register("scroll_move_left", handleScrollMoveLeft)
@@ -183,7 +147,6 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("scroll_consume", handleScrollConsume)
 	d.Register("scroll_expel", handleScrollExpel)
 
-	// BSP tiling actions
 	d.Register("smart_split", handleSmartSplit)
 	d.Register("split_horizontal", handleSplitHorizontal)
 	d.Register("split_vertical", handleSplitVertical)
@@ -208,7 +171,6 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("preselect_up", handlePreselectUp)
 	d.Register("preselect_down", handlePreselectDown)
 
-	// Mode control actions
 	d.Register("enter_terminal_mode", handleEnterTerminalMode)
 	d.Register("enter_window_mode", handleEnterWindowMode)
 	d.Register("toggle_help", handleToggleHelp)
@@ -225,16 +187,8 @@ func (d *ActionDispatcher) registerHandlers() {
 	})
 	d.Register("quit", handleQuit)
 
-	// Enter the sidebar rail's keyboard scope (window mode "s"). The exit and the
-	// per-row keys are not dispatcher actions: they route through HandleSidebarKey
-	// only while SidebarFocused, so they cannot fire on a pane.
 	d.Register("focus_sidebar", handleFocusSidebar)
 
-	// Session navigation. Bound to chords, and allowed from terminal mode by
-	// config.TerminalSafeAction, so walking sessions does not first cost an Esc.
-	// The palette and the launcher. They are reachable from the global
-	// section, from a prefix and from window mode, so they are ordinary
-	// dispatcher actions rather than cases of a switch; see global_binds.go.
 	d.Register("command_palette", handleOpenCommandPalette)
 	d.Register("launcher", handleOpenLauncher)
 	d.Register("new_session", handleNewSession)
@@ -245,12 +199,10 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("next_agent", handleNextAgent)
 	d.Register("prev_agent", handlePrevAgent)
 
-	// Session switching (1-9), by the rail's own order
 	for i := 1; i <= 9; i++ {
 		d.Register("switch_session_"+string(rune('0'+i)), makeSwitchSessionHandler(i))
 	}
 
-	// Clipboard actions
 	d.Register("copy_selection", handleCopySelection)
 	d.Register("paste_clipboard", handlePasteClipboard)
 	d.Register("paste_image", handlePasteImage)
@@ -258,8 +210,6 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("choose_buffer", handleChooseBuffer)
 	d.Register("clear_selection", handleClearSelection)
 
-	// Session lifecycle actions (context menu rows; the quit menu's kill rows
-	// route through the same OS methods, so the two cannot drift apart)
 	d.Register("settings_sidebar", handleSettingsSidebar)
 	d.Register("rename_session", handleRenameSession)
 	d.Register("set_note", handleSetNote)
@@ -267,31 +217,16 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("kill_session", handleKillSession)
 	d.Register("kill_session_next", handleKillSessionNext)
 	d.Register("kill_session_quit", handleKillSessionQuit)
-	// The palette row, the rail's menu for this machine, or a key the
-	// person bound. See app/daemon_restart.go.
 	d.Register("restart_daemon", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.OpenDaemonRestart()
 		return o, nil
 	})
 
-	// The worktree dialog's two entry points. A session row's menu names a
-	// session and a repository header's menu names a repository, so they are
-	// two actions with two carries rather than one action guessing which.
-	// Both open the same dialog; see worktree_prompt.go for the verb behind it.
 	d.Register("session_new_worktree", handleSessionNewWorktree)
 	d.Register("repo_new_worktree", handleRepoNewWorktree)
-	// The third way in, by key: the repository of the focused pane's folder.
 	d.Register("new_worktree", handleNewWorktree)
 	d.Register("repo_toggle_fold", handleRepoToggleFold)
 
-	// The rail's file actions. They are dispatched by key from HandleSidebarKey,
-	// which reads its own scope, and they are registered here because the files
-	// context menu hands its rows to this dispatcher like every other menu. Both
-	// ways in run handleSidebarFileAction, so there is one body per action.
-	//
-	// Registering them here does not make them reachable from window mode: they
-	// live only in [keybindings.sidebar_files], which the window-mode lookup
-	// never reads.
 	for _, action := range []string{
 		sidebarActFileCreate, sidebarActFileRename, sidebarActFileDelete,
 		sidebarActFileDeleteAll, sidebarActFileCopy, sidebarActFileCut,
@@ -302,38 +237,25 @@ func (d *ActionDispatcher) registerHandlers() {
 		d.Register(action, makeSidebarFileHandler(action))
 	}
 
-	// The rail's two reorder actions. They are dispatched by key from
-	// HandleSidebarKey, which reads the rail's own scope, and they are
-	// registered here because a machine header's context menu hands its rows to
-	// this dispatcher like every other menu. Both ways in call
-	// SidebarReorderCursor, so there is one body per direction.
-	//
-	// Registering them does not put them on a window-mode key: they live in
-	// [keybindings.sidebar], which the window-mode lookup never reads. Reached
-	// with no rail cursor they move nothing.
 	d.Register(sidebarActReorderUp, makeSidebarReorderHandler(-1))
 	d.Register(sidebarActReorderDown, makeSidebarReorderHandler(1))
 
-	// System actions
 	d.Register("toggle_logs", handleToggleLogs)
 	d.Register("toggle_cache_stats", handleToggleCacheStats)
 	d.Register("toggle_spotlight", handleToggleSpotlight)
 	d.Register("toggle_pip", handleTogglePiP)
 	d.Register("focus_rail_pane", handleFocusRailPane)
 
-	// Multifocus actions (see multifocus_actions.go)
 	d.registerMultifocusHandlers()
 
 	d.Register("toggle_tape_manager", handleToggleTapeManager)
 	d.Register("stop_recording", handleStopRecording)
 	d.Register(config.ActionLeaveMode, handleLeaveMode)
 
-	// Restore minimized by index (shift+1-9)
 	for i := range 9 {
 		d.Register("restore_minimized_"+string(rune('1'+i)), makeRestoreMinimizedHandler(i))
 	}
 
-	// Prefix-chord and terminal-mode actions (see prefix_actions.go)
 	d.registerPrefixHandlers()
 	d.registerPaletteHandlers()
 }
@@ -348,24 +270,17 @@ func (d *ActionDispatcher) Register(action string, handler ActionHandler) {
 
 // Dispatch executes the handler for a given action
 func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// An older name (an alias) runs, records and is heard as the action's
-	// own name, so a tape, a crash note and Learn mode see one name.
 	action = config.CanonicalAction(action)
 	handler, ok := d.handlers.Lookup(action)
-	// A [[keybindings.command]] entry is an action of its own, named after
-	// the entry. It has no handler in the table: the entry says what to run.
 	if !ok && strings.HasPrefix(action, config.CommandActionPrefix) {
 		handler, ok = handleCommandBinding(action), true
 	}
-	// open_menu:NAME opens a declared menu, named in the action the same way.
 	if !ok && strings.HasPrefix(action, config.OpenMenuPrefix) {
 		handler, ok = handleOpenMenu(action), true
 	}
-	// enter_mode:NAME turns on a declared key mode.
 	if !ok && strings.HasPrefix(action, config.EnterModePrefix) {
 		handler, ok = handleEnterMode(action), true
 	}
-	// user:NAME runs an [[actions]] entry, or the command entry of that name.
 	if !ok && strings.HasPrefix(action, config.UserActionPrefix) {
 		handler, ok = handleUserAction(action), true
 	}
@@ -373,23 +288,13 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
 			o.TapeRecorder.RecordAction(action)
 		}
-		// And record it for a crash report, which needs the same fact and
-		// cannot ask the user to have been recording. This is the one choke
-		// point every keybinding, prefix chord and context menu row passes
-		// through, so one line here covers all three. Names only: see
-		// NoteAction.
 		o.NoteAction(action)
-		// The browser build's guided tour hears every action by name, and
-		// in Learn mode an action the demo cannot do shows a note instead.
 		if o.OnAction != nil {
 			o.OnAction(action)
 		}
 		if o.LearnBlocksAction(action) {
 			return o, nil
 		}
-		// Inside a scratch group a layout key acts on the group's panes, since
-		// the group's workspace is the current one. The few that would take a
-		// pane out of the group are refused by the OS methods they call.
 		return handler(msg, o)
 	}
 	return o, nil
@@ -402,8 +307,6 @@ func (d *ActionDispatcher) HasAction(action string) bool {
 		strings.HasPrefix(action, config.EnterModePrefix) || strings.HasPrefix(action, config.UserActionPrefix)
 }
 
-// handleUserAction runs the user action behind action, with the selection of
-// the focused pane, which only the input side reads.
 func handleUserAction(action string) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		extra := map[string]string{}
@@ -416,24 +319,18 @@ func handleUserAction(action string) ActionHandler {
 	}
 }
 
-// handleCommandBinding runs the [[keybindings.command]] entry behind action.
 func handleCommandBinding(action string) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.RunCommandBinding(action)
 	}
 }
 
-// Global action dispatcher instance
 var globalDispatcher = NewActionDispatcher()
 
 // GetDispatcher returns the global action dispatcher
 func GetDispatcher() *ActionDispatcher {
 	return globalDispatcher
 }
-
-// ============================================================================
-// Window Management Action Handlers
-// ============================================================================
 
 func handleNewWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarSessionFocused() {
@@ -448,8 +345,6 @@ func handleNewWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleNewWindowSSH opens a window that runs the focused pane's ssh, or an
-// ordinary one when that pane runs none.
 func handleNewWindowSSH(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarSessionFocused() {
 		o.NewSidebarSessionWindow()
@@ -459,8 +354,6 @@ func handleNewWindowSSH(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleRenameWorkspace opens the rename editor on the workspace the session
-// is showing now.
 func handleRenameWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.BeginRenameWorkspace(o.CurrentWorkspace)
 	return o, nil
@@ -473,15 +366,10 @@ func handleRenameWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// The editor is a centred dialog, so it carries its own frame and needs
-	// neither a title bar nor a rail row to land on.
 	o.BeginRenameWindow(o.GetFocusedWindow())
 	return o, nil
 }
 
-// handleSetAccent opens the accent swatches for the focused window. It backs the
-// context menu's "Accent color" row; the rail's own key targets the cursor row
-// instead, which need not be the focused pane.
 func handleSetAccent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if w := o.GetFocusedWindow(); w != nil {
 		o.OpenAccentPicker(w.ID)
@@ -489,11 +377,6 @@ func handleSetAccent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleSetSessionAccent opens the same picker on a session: the row's own
-// session when the action came from a rail menu, and the attached one when it
-// came from a key.
-// handleSetNote opens the note editor on the session whose row the menu was
-// opened on, else the attached session.
 func handleSetNote(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	name := o.TakeMenuSession()
 	if name == "" {
@@ -555,8 +438,6 @@ func handleLastPane(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return afterFocusCommand(o, prev, focusEnterTargeted)
 }
 
-// makeSelectWindowHandler creates a handler for selecting a window by index.
-// The index comes from the action name, so the binding can be any key.
 func makeSelectWindowHandler(idx int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		prev := o.FocusedWindow
@@ -564,10 +445,6 @@ func makeSelectWindowHandler(idx int) ActionHandler {
 		return afterFocusCommand(o, prev, focusEnterTargeted)
 	}
 }
-
-// ============================================================================
-// Workspace Action Handlers
-// ============================================================================
 
 func makeSwitchWorkspaceHandler(workspace int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -592,9 +469,6 @@ func makeMoveAndFollowHandler(workspace int) ActionHandler {
 	}
 }
 
-// next_workspace and prev_workspace cycle through the workspaces that hold
-// a pane. See OS.NextWorkspace.
-
 func handleNextWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.NextWorkspace()
 	return o, nil
@@ -605,16 +479,6 @@ func handlePrevWorkspace(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// ============================================================================
-// Layout Action Handlers
-// ============================================================================
-
-// snapOrFocus is what snap_left and snap_right do. With tiling off the focused
-// window snaps to that half of the screen. With tiling on there is nothing to
-// snap, and the key moves focus to the neighbour in that direction instead, so
-// h and l are not dead keys in the default layout; H and L swap in the same
-// directions and alt+h and alt+l preselect there. A step with no neighbour
-// that way does nothing, the way a column step at the end of the strip does.
 func snapOrFocus(o *app.OS, direction string) (*app.OS, tea.Cmd) {
 	if len(o.Windows) == 0 || o.FocusedWindow < 0 {
 		return o, nil
@@ -632,9 +496,6 @@ func handleSnapRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return snapOrFocus(o, "right")
 }
 
-// snapNeedsTilingOff says why a snap key did nothing. Fullscreen and unsnap
-// have no tiling meaning of their own: zoom is the tiled answer to the first
-// and the tiler owns every rectangle, which makes the second a no-op.
 func snapNeedsTilingOff(o *app.OS, what string) {
 	o.ShowNotification(what+" needs tiling off", "info", o.Settings.NotificationDuration)
 }
@@ -664,10 +525,6 @@ func handleUnsnap(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func makeSnapCornerHandler(corner app.SnapQuarter) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.AutoTiling {
-			// Corner snapping moves a floating window, so with tiling on there
-			// is nothing for it to move; saying so keeps the binding honest
-			// (the window-mode path and the layout chord both reach this
-			// handler now that the layout prefix routes through the dispatcher).
 			o.ShowNotification("Corner snapping needs tiling off", "info", o.Settings.NotificationDuration)
 			return o, nil
 		}
@@ -688,8 +545,6 @@ func handleToggleTiling(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleToggleFloating floats the focused pane or tiles it. A TML surface
-// moves between a popup and a tiled pane, and keeps its state.
 func handleToggleFloating(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ToggleFloating()
 	return o, nil
@@ -733,62 +588,60 @@ func handleSwapDown(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleResizeMasterShrink(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
-		o.ResizeFocusedWindowWidth(-4) // Shrink by 4 columns (split-line based)
+		o.ResizeFocusedWindowWidth(-4)
 	}
 	return o, nil
 }
 
 func handleResizeMasterGrow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
-		o.ResizeFocusedWindowWidth(4) // Grow by 4 columns (split-line based)
+		o.ResizeFocusedWindowWidth(4)
 	}
 	return o, nil
 }
 
 func handleResizeHeightShrink(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
-		o.ResizeFocusedWindowHeight(-2) // Shrink by 2 rows (faster)
+		o.ResizeFocusedWindowHeight(-2)
 	}
 	return o, nil
 }
 
 func handleResizeHeightGrow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
-		o.ResizeFocusedWindowHeight(2) // Grow by 2 rows (faster)
+		o.ResizeFocusedWindowHeight(2)
 	}
 	return o, nil
 }
 
 func handleResizeMasterShrinkLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
-		o.ResizeFocusedWindowWidthLeft(4) // Shrink from left by 4 columns
+		o.ResizeFocusedWindowWidthLeft(4)
 	}
 	return o, nil
 }
 
 func handleResizeMasterGrowLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
-		o.ResizeFocusedWindowWidthLeft(-4) // Grow from left by 4 columns (negative shrinks left edge)
+		o.ResizeFocusedWindowWidthLeft(-4)
 	}
 	return o, nil
 }
 
 func handleResizeHeightShrinkTop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
-		o.ResizeFocusedWindowHeightTop(2) // Shrink from top by 2 rows
+		o.ResizeFocusedWindowHeightTop(2)
 	}
 	return o, nil
 }
 
 func handleResizeHeightGrowTop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
-		o.ResizeFocusedWindowHeightTop(-2) // Grow from top by 2 rows (negative shrinks top edge)
+		o.ResizeFocusedWindowHeightTop(-2)
 	}
 	return o, nil
 }
 
-// makeResizeWidthPercentHandler returns a handler that sizes the focused
-// window's width to pct percent of the content region (issue #29).
 func makeResizeWidthPercentHandler(pct int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SetFocusedWindowWidthPercent(pct)
@@ -796,8 +649,6 @@ func makeResizeWidthPercentHandler(pct int) ActionHandler {
 	}
 }
 
-// makeResizeHeightPercentHandler returns a handler that sizes the focused
-// window's height to pct percent of the usable height (issue #29).
 func makeResizeHeightPercentHandler(pct int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SetFocusedWindowHeightPercent(pct)
@@ -805,22 +656,15 @@ func makeResizeHeightPercentHandler(pct int) ActionHandler {
 	}
 }
 
-// ============================================================================
-// BSP Tiling Action Handlers
-// ============================================================================
-
-// handleScreenshotPick opens capture mode so the user chooses what to take.
 func handleScreenshotPick(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.BeginCapture(false)
 	return o, nil
 }
 
-// handleScreenshotWindow takes the focused window with no further gesture.
 func handleScreenshotWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.ScreenshotFocusedWindow()
 }
 
-// handleScreenshotScreen takes the whole composed frame.
 func handleScreenshotScreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.ScreenshotScreen()
 }
@@ -846,7 +690,7 @@ func handleSmartSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarSessionFocused() {
-		o.NewSidebarSessionWindow() // rail panes always stack top to bottom
+		o.NewSidebarSessionWindow()
 		return o, nil
 	}
 	if o.FollowSSHOnNewWindow() {
@@ -861,7 +705,7 @@ func handleSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleSplitVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarSessionFocused() {
-		o.NewSidebarSessionWindow() // no horizontal subdivision of a narrow rail
+		o.NewSidebarSessionWindow()
 		return o, nil
 	}
 	if o.FollowSSHOnNewWindow() {
@@ -874,8 +718,6 @@ func handleSplitVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleSplitSSHHorizontal splits top/bottom and runs the focused pane's ssh
-// in the new pane, or a shell when that pane runs no ssh.
 func handleSplitSSHHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.SplitFocusedHorizontalSSH()
@@ -884,8 +726,6 @@ func handleSplitSSHHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleSplitSSHVertical splits left/right and runs the focused pane's ssh in
-// the new pane, or a shell when that pane runs no ssh.
 func handleSplitSSHVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.SplitFocusedVerticalSSH()
@@ -917,9 +757,6 @@ func handleCycleTilingScheme(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// makeSetTilingSchemeHandler returns a handler for set_tiling_scheme_<name>,
-// one per config.TilingSchemes entry, so a scheme can be bound directly
-// instead of stepped to with cycle_tiling_scheme.
 func makeSetTilingSchemeHandler(scheme string) ActionHandler {
 	parsed := layout.ParseAutoScheme(scheme)
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -937,9 +774,6 @@ func handleCycleMasterPosition(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	return o, nil
 }
 
-// makeSetMasterPositionHandler returns a handler for set_master_position_<side>,
-// one per config.MasterPositions entry, so a side can be bound directly
-// instead of stepped to with cycle_master_position.
 func makeSetMasterPositionHandler(pos string) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.SetMasterPosition(pos) {
@@ -1001,13 +835,6 @@ func handlePreselectDown(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// ============================================================================
-// Mode Control Action Handlers
-// ============================================================================
-
-// focusEnterKind is whether a focus command was walking the pane list or
-// picking one pane. targeted follows the mouse bargain (go there and type);
-// cycle does not, because Tab has to keep reaching a third pane.
 type focusEnterKind int
 
 const (
@@ -1015,18 +842,6 @@ const (
 	focusEnterTargeted
 )
 
-// afterFocusCommand is the tail of every keyboard command that moves focus:
-// next, previous, the four directions, and select-by-number, in window mode
-// and behind the prefix alike.
-//
-// It brings the newly focused column fully on screen in the scrolling layout.
-// Focus alone went through the least-scroll rule, which is for a focus that
-// moved for a reason the user did not ask for; a key that says "take me to the
-// next pane" is the other kind, and it was landing on panes still half off the
-// edge. See RevealFocusedColumn.
-//
-// Nothing happens when focus did not actually move, and nothing happens in any
-// layout but the scrolling one.
 func afterFocusCommand(o *app.OS, previousFocused int, kind focusEnterKind) (*app.OS, tea.Cmd) {
 	if o.FocusedWindow != previousFocused {
 		o.RevealFocusedColumn()
@@ -1034,14 +849,6 @@ func afterFocusCommand(o *app.OS, previousFocused int, kind focusEnterKind) (*ap
 	return maybeEnterTerminalOnFocusChange(o, previousFocused, kind)
 }
 
-// maybeEnterTerminalOnFocusChange enters terminal mode after a window-focus
-// command that actually moved focus, from window-management mode. Hover-focus
-// and click-to-type keep their own policies; this is only the keyboard (and
-// prefix) focus commands. A no-op that leaves the already-focused pane focused
-// does not change mode.
-//
-// The auto path is silent: a toast per Tab is noise. Explicit enter_terminal_mode
-// still notifies.
 func maybeEnterTerminalOnFocusChange(o *app.OS, previousFocused int, kind focusEnterKind) (*app.OS, tea.Cmd) {
 	if o.Mode != app.WindowManagementMode {
 		return o, nil
@@ -1076,7 +883,6 @@ func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.LogInfo("Entering terminal mode for window: %s", focusedWindow.Title())
 		}
 		o.ShowNotification("Terminal mode", "info", o.Settings.NotificationDuration)
-		// Enter terminal mode and start raw input reader
 		return o, o.EnterTerminalMode()
 	}
 	o.LogWarn("Cannot enter terminal mode: no focused window")
@@ -1100,7 +906,7 @@ func handleEnterWindowMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleToggleHelp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ShowHelp = !o.ShowHelp
 	if o.ShowHelp {
-		o.HelpScrollOffset = 0 // Reset scroll when opening
+		o.HelpScrollOffset = 0
 	}
 	return o, nil
 }
@@ -1113,29 +919,17 @@ func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return requestQuit(o)
 }
 
-// ============================================================================
-// System Action Handlers
-// ============================================================================
-
-// handleToggleSpotlight turns the beam on and off. It is B in window mode and
-// leader, B in either mode; the chord is the way out of the beam in terminal
-// mode, where esc belongs to the program in the pane. See
-// internal/app/spotlight_exit.go.
 func handleToggleSpotlight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	save := o.ToggleSpotlight()
 	o.AnnounceSpotlight()
 	return o, save
 }
 
-// handleTogglePiP pins the focused pane as the picture-in-picture view, or
-// unpins the pinned one. See internal/app/pip.go.
 func handleTogglePiP(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.TogglePiP()
 	return o, nil
 }
 
-// handleFocusRailPane gives the keyboard to the rail's pane section. With no
-// pane on the screen it says how to put one there.
 func handleFocusRailPane(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if !o.FocusRailPane() {
 		o.ShowNotification("The rail shows no pane. Add pane to appearance.sidebar.sections and set [appearance.sidebar.pane] command.",
@@ -1146,8 +940,6 @@ func handleFocusRailPane(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleToggleLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	wasShowing := o.ShowLogs
-	// Log before the toggle: the line itself moves the bottom of the buffer
-	// down by one, and the toggle lands the view on that new bottom.
 	if !wasShowing {
 		o.LogInfo("Log viewer opened")
 	}
@@ -1163,18 +955,6 @@ func handleToggleCacheStats(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleCopySelection copies the focused pane's selection to the system
-// clipboard.
-//
-// The text is derived from the selection now rather than read from a field
-// filled in earlier, so it is whatever is highlighted on screen at the moment
-// the user asks for it. It went the other way once, off Window.SelectedText,
-// and that field belonged to a selection system the mouse stopped using: a
-// drag-selected pane offered a copy that silently did nothing.
-//
-// The write goes through CopyToClipboard, which is also what a drag release
-// uses, so a copy asked for by menu or key and a copy-on-select land the same
-// way and say the same thing.
 func handleCopySelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	focusedWindow := o.GetFocusedWindow()
 	if focusedWindow == nil {
@@ -1188,23 +968,16 @@ func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
-			// Paste the clipboard's image when it holds only an image, and
-			// ask the terminal for its text otherwise. See app.RequestPaste.
 			return o, o.RequestPaste()
 		}
 	}
 	return o, nil
 }
 
-// handlePasteImage pastes the clipboard's image into the focused pane as the
-// path of a file on the pane's machine. See app.RequestImagePaste.
 func handlePasteImage(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.RequestImagePaste()
 }
 
-// handleClearSelection drops the focused window's text selection without
-// copying it. Offered on the terminal-mode selection menu, where the selection
-// is the only reason the menu opened at all.
 func handleClearSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	w := o.GetFocusedWindow()
 	if w == nil {
@@ -1217,7 +990,6 @@ func handleClearSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleNextSession and handlePrevSession walk the sessions in the rail's order.
 func handleNextSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.CycleSession(1)
 	return o, nil
@@ -1228,8 +1000,6 @@ func handlePrevSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleNextHost and handlePrevHost step to the next or previous machine:
-// this one first, then the [hosts] table, as the rail lists them.
 func handleNextHost(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.CycleHost(1)
 	return o, nil
@@ -1240,8 +1010,6 @@ func handlePrevHost(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleNextAgent and handlePrevAgent walk the agent panes in the order the
-// rail's agents section lists them, across sessions.
 func handleNextAgent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.CycleAgent(1)
 	return o, nil
@@ -1252,34 +1020,20 @@ func handlePrevAgent(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleOpenSettings opens the settings overlay. Bound to "," in mode_control,
-// which the default layout binds too; mode_control is consulted after layout, so
-// settings wins and `keybinds doctor` names the resize bind it shadows.
 func handleOpenSettings(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenSettings()
 	return o, nil
 }
 
-// handleSettingsSidebar opens the settings overlay on its Sidebar tab, so the
-// rail's context menu lands on the rows it is about.
 func handleSettingsSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenSettingsAt("Sidebar")
 	return o, nil
 }
 
-// handleKillSession kills the session whose row the menu was opened on, after
-// the confirmation names it. Reached by key rather than from a menu it means
-// the attached session, which is the only session a key can be about.
-//
-// The other two kill rows say what becomes of this client and so can only mean
-// the session it is in; this one is the row every other session's menu carries.
 func handleKillSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.OpenSessionCloseFor(o.TakeMenuSession())
 }
 
-// handleRenameSession opens the rename editor on the session whose row the menu
-// was opened on, the same carry the accent and kill rows use. Reached by key it
-// means the attached session, because a key names no row.
 func handleRenameSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	name := o.TakeMenuSession()
 	if name == "" {
@@ -1289,49 +1043,33 @@ func handleRenameSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleKillSessionNext kills the current session after switching this client
-// to the next one, in that order (see OS.KillSessionGoNext for why).
 func handleKillSessionNext(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.KillSessionGoNext(o.NextSessionName())
 }
 
-// handleSessionNewWorktree opens the worktree dialog on the session whose row
-// the menu was opened on, the same carry the rename and accent rows use.
 func handleSessionNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.BeginWorktreePromptForSession(o.TakeMenuSession())
 	return o, nil
 }
 
-// handleRepoNewWorktree opens the worktree dialog on the repository whose
-// group header the menu was opened on.
 func handleRepoNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.BeginWorktreePromptForRepo(o.TakeMenuRepo())
 	return o, nil
 }
 
-// handleNewWorktree opens the worktree dialog on the repository of the focused
-// pane's folder, or says why it cannot.
 func handleNewWorktree(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.BeginWorktreePromptForFocusedPane()
 	return o, nil
 }
 
-// handleRepoToggleFold folds or opens the repository's group the menu was
-// opened on.
 func handleRepoToggleFold(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.SidebarToggleRepoCollapsed(o.TakeMenuRepo())
 	return o, nil
 }
 
-// handleKillSessionQuit kills the current session and quits this client, the
-// same call the quit menu's kill-and-quit row makes.
 func handleKillSessionQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return quitSession(o)
 }
-
-// ============================================================================
-// Restore Minimized Window Handlers
-// ============================================================================
 
 func makeRestoreMinimizedHandler(index int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -1339,10 +1077,6 @@ func makeRestoreMinimizedHandler(index int) ActionHandler {
 		return o, nil
 	}
 }
-
-// ============================================================================
-// Tape Manager Action Handlers
-// ============================================================================
 
 func handleToggleTapeManager(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ToggleTapeManager()
@@ -1355,10 +1089,6 @@ func handleStopRecording(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	return o, nil
 }
-
-// ============================================================================
-// Scrolling Tiling Action Handlers (niri-like)
-// ============================================================================
 
 func handleScrollFocusLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	prev := o.FocusedWindow
@@ -1418,12 +1148,10 @@ func handleScrollExpel(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// handleStartScreensaver covers the screen on request rather than on a timer.
 func handleStartScreensaver(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.StartScreensaverNow()
 }
 
-// handleOpenCommandPalette opens the command palette.
 func handleOpenCommandPalette(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.OpenCommandPalette()
 }
@@ -1432,13 +1160,10 @@ func handleOpenFileSearch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.OpenFileSearch(false)
 }
 
-// handleOpenLauncher opens the app launcher.
 func handleOpenLauncher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.OpenLauncher()
 }
 
-// handleNewSession makes a session, asking which machine when there is more
-// than one and offering a global session alongside them.
 func handleNewSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenNewSessionPicker()
 	return o, nil

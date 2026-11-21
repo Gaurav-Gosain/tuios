@@ -9,19 +9,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// These pin issue #202: with a Ukrainian layout the key under the US I types
-// "ш", and bindings must still answer to the physical key. The events are what
-// Bubble Tea decodes from a Kitty keyboard report with alternate keys on, such
-// as CSI 1096::105 u: the produced code, and the US-layout key behind it in
-// BaseCode.
-
-// ukr is a key on the Ukrainian layout: the character it produces and the
-// US-layout key at the same position.
 func ukr(produced, base rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: produced, BaseCode: base, Text: string(produced)}
 }
 
-// ukrShift is the same key with Shift held.
 func ukrShift(produced, shifted, base rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: produced, ShiftedCode: shifted, BaseCode: base, Text: string(shifted), Mod: tea.ModShift}
 }
@@ -47,7 +38,6 @@ func TestShiftedBaseLayoutKeyRunsPrefixBinding(t *testing.T) {
 func TestBaseLayoutKeyRunsInboxBinding(t *testing.T) {
 	o := inboxInputOS(t)
 	o.OpenInbox("")
-	// esc and q close the Inbox. q is й on the Ukrainian layout.
 	o, _ = HandleKeyPress(ukr('й', 'q'), o)
 	if o.ShowInbox {
 		t.Fatal("й on the Q key did not close the Inbox")
@@ -183,8 +173,6 @@ func TestLeaderDropsLayoutKeyThatBeatTheFlags(t *testing.T) {
 	if len(pty.got) != 0 {
 		t.Fatalf("the pane got %q for a ш typed before the host switched", pty.got)
 	}
-	// The prefix stays pending, so the key can be typed again once the host
-	// has switched and reports its base-layout key.
 	if !o.PrefixActive {
 		t.Fatal("the dropped key ended the prefix")
 	}

@@ -8,15 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The keyboard height paths decide whether an edge is the content region's
-// boundary or a divider. They measured the top boundary as row 0 and the bottom
-// one as the usable height, which is right only while nothing is reserved above
-// the panes. With a top reserve, the top pane's edge was taken for a divider and
-// moved off the boundary, and a divider near the bottom was taken for the
-// boundary, so the key moved the pane's top edge instead of the divider.
-
-// reservedStack is two panes stacked in one column, laid out under a session
-// reserve of six rows at the top. ratio is the top pane's share.
 func reservedStack(t *testing.T, ratio float64) (m *app.OS, top, bottom func() (y, h int), topMargin int) {
 	t.Helper()
 	m = isoOS(t, 2)

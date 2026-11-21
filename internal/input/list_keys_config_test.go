@@ -33,7 +33,6 @@ func TestListKeysFromConfigMoveTheCommandPalette(t *testing.T) {
 	if paletteCursor(o) != 1 {
 		t.Fatalf("after ctrl+k the palette is on row %d, want 1", paletteCursor(o))
 	}
-	// ctrl+n was Down's default. The action names other keys now, so it is free.
 	press('n')
 	if paletteCursor(o) != 1 {
 		t.Fatalf("ctrl+n moved the palette to row %d, but list_down no longer binds it", paletteCursor(o))

@@ -12,7 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// testPane is a window with a real emulator.
 func testPane(t *testing.T, id string, x, y, w, h, ws int) *terminal.Window {
 	t.Helper()
 	em := vt.NewEmulator(w-2, h-2)
@@ -20,8 +19,6 @@ func testPane(t *testing.T, id string, x, y, w, h, ws int) *terminal.Window {
 	return &terminal.Window{ID: id, Terminal: em, X: x, Y: y, Width: w, Height: h, Workspace: ws}
 }
 
-// testOS is a local client of 100x42 with the given windows, focus on the
-// first, in window mode.
 func testOS(wins ...*terminal.Window) *app.OS {
 	return &app.OS{
 		Settings:             config.Global,
@@ -41,8 +38,6 @@ func testOS(wins ...*terminal.Window) *app.OS {
 	}
 }
 
-// scratchOverTile is one pane on workspace 1 with a scratch group of two
-// panes shown over it.
 func scratchOverTile(t *testing.T) (*app.OS, *terminal.Window, *terminal.Window, *terminal.Window) {
 	t.Helper()
 	tile := testPane(t, "tile", 0, 0, 100, 40, 1)
@@ -55,7 +50,6 @@ func scratchOverTile(t *testing.T) (*app.OS, *terminal.Window, *terminal.Window,
 	if !o.InScratchView() {
 		t.Fatal("the fixture did not show the group")
 	}
-	// The two panes side by side inside the box, as the tiler puts them.
 	box, _ := o.ScratchBox()
 	half := (box.W - 2) / 2
 	s1.X, s1.Y, s1.Width, s1.Height = box.X+1, box.Y+1, half, box.H-2

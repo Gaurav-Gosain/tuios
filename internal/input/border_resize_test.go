@@ -10,23 +10,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// twoPaneBSP builds a tiled BSP workspace of two daemon panes split vertically,
-// with shared borders on so a separator cell sits between them.
 func twoPaneBSP(t *testing.T) (*OS2, *terminal.Window, *terminal.Window) {
 	t.Helper()
 	const cols, rows = 120, 40
 
 	m := &app.OS{
-		Settings:         config.Global,
-		NumWorkspaces:    9,
-		CurrentWorkspace: 1,
-		WorkspaceFocus:   make(map[int]int),
-		Width:            cols,
-		Height:           rows,
-		AutoTiling:       true,
-		UseBSPLayout:     true,
-		// The layout reads the model's session-settled value, not the global;
-		// seed it from the global the caller just set. NewOS does the same.
+		Settings:             config.Global,
+		NumWorkspaces:        9,
+		CurrentWorkspace:     1,
+		WorkspaceFocus:       make(map[int]int),
+		Width:                cols,
+		Height:               rows,
+		AutoTiling:           true,
+		UseBSPLayout:         true,
 		SharedBorders:        config.Global.SharedBorders,
 		FocusedWindow:        0,
 		PendingResizes:       make(map[string][2]int),
@@ -70,8 +66,6 @@ func twoPaneBSP(t *testing.T) (*OS2, *terminal.Window, *terminal.Window) {
 	return (*OS2)(m), m.Windows[0], m.Windows[1]
 }
 
-// OS2 is app.OS under a local alias so the test can pass it to the unexported
-// handlers without importing app cosmetics.
 type OS2 = app.OS
 
 func leftPaneOf(a, b *terminal.Window) (left, right *terminal.Window) {

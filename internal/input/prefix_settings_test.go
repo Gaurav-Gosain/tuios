@@ -14,14 +14,9 @@ import (
 	"tuios.dev/vt"
 )
 
-// legacyConfig loads src as the user's config.toml. The XDG search paths are
-// resolved at package init, so the reload is what makes the redirect take.
 func legacyConfig(t *testing.T, src string) *config.UserConfig {
 	t.Helper()
 	dir := t.TempDir()
-	// Registered before t.Setenv so it runs after it: cleanups are LIFO, and a
-	// reload that ran first would leave the xdg globals pointing at the temp
-	// dir for the rest of the binary, after the directory is gone.
 	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	xdg.Reload()
@@ -38,9 +33,6 @@ func legacyConfig(t *testing.T, src string) *config.UserConfig {
 	return cfg
 }
 
-// osWithFocusedPane builds an OS with one focused pane whose PTY records what
-// reaches the guest, so a test can drive keys through the real HandleKeyPress
-// path and see both what the app did and what the shell was typed into.
 func osWithFocusedPane(t *testing.T, cfg *config.UserConfig, mode app.Mode) (*app.OS, *capturePty) {
 	t.Helper()
 	em := vt.NewEmulator(80, 24)
@@ -48,10 +40,6 @@ func osWithFocusedPane(t *testing.T, cfg *config.UserConfig, mode app.Mode) (*ap
 	pty := &capturePty{}
 	win := &terminal.Window{ID: "prefix-0001", Terminal: em, Pty: pty, X: 0, Y: 0, Width: 82, Height: 26}
 	o := app.NewOS(app.OSOptions{UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)})
-	// A screen big enough to hold the pane. Left at zero the dock band, which is
-	// the bottom DockHeight rows of it, starts above row 0 and swallows every
-	// mouse event before it can reach a pane. Keyboard tests do not notice, so
-	// this only ever bit the first mouse test built on the helper.
 	o.Width, o.Height = 120, 40
 	o.Windows = []*terminal.Window{win}
 	o.FocusedWindow = 0
@@ -60,9 +48,6 @@ func osWithFocusedPane(t *testing.T, cfg *config.UserConfig, mode app.Mode) (*ap
 	return o, pty
 }
 
-// pressLeaderThen runs the leader chord through the same entry point the
-// bubbletea Update loop uses. The bug this pins is in routing, so the keys have
-// to travel the whole path rather than reach a handler directly.
 func pressLeaderThen(t *testing.T, cfg *config.UserConfig, mode app.Mode, key string) (*app.OS, *capturePty) {
 	t.Helper()
 	o, pty := osWithFocusedPane(t, cfg, mode)
@@ -74,8 +59,6 @@ func pressLeaderThen(t *testing.T, cfg *config.UserConfig, mode app.Mode, key st
 	return o, pty
 }
 
-// legacyRenameConfig is a config from before "," moved from prefix_rename_window
-// to open_settings, which is what a long-lived config still holds.
 const legacyRenameConfig = "[keybindings]\nleader_key = \"ctrl+b\"\n\n" +
 	"[keybindings.prefix_mode]\nprefix_rename_window = [\",\", \"r\"]\nprefix_settings = [\",\"]\n"
 
@@ -119,8 +102,6 @@ func TestPrefixActionsDoNotLeakToGuest(t *testing.T) {
 		if len(keys) == 0 {
 			continue
 		}
-		// A pending action does nothing yet, so its chord is typed into the
-		// pane on purpose; TestPendingActionsStillDoNothing checks that.
 		if _, pending := pendingActions[action]; pending {
 			continue
 		}

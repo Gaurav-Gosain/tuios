@@ -13,37 +13,8 @@ import (
 	"tuios.dev/vt"
 )
 
-// The interval is mouse.double_click_ms (default 300 ms), read by o.DoubleClickWindow.
-// It is how long after a click a second one still counts as
-// part of the same gesture, and therefore how long a multi-click selection's
-// clipboard write waits before it can be trusted.
-//
-// It was 500ms, matching the Windows and macOS defaults, back when it only
-// decided how a click sequence was read. Now that it also gates the clipboard
-// it is a delay the user waits through, and half a second is past the point
-// where a response stops feeling immediate: the usual figure for that is
-// around 300ms, beyond which an interface reads as reacting rather than
-// responding.
-//
-// 300ms is chosen against both ends. Below it: measured inter-click intervals
-// for an unhurried double-click sit around 100-250ms, and xterm has shipped a
-// 250ms multiClickTime for decades without being thought broken, so 300ms
-// still admits a comfortably slow double-click. Above it: GTK and Qt both
-// default to 400ms, which would work but spends another tenth of a second on
-// every copy. The cost of being wrong is asymmetric but small either way, a
-// deliberate triple-click read as a double plus a single, and the user can see
-// what got selected before it lands.
-
-// multiClickSlop is how far the pointer may drift between clicks of one
-// gesture, in cells. Requiring the exact same cell reads as an intermittent
-// double-click on a real mouse: one cell is a handful of pixels, and the button
-// going down twice moves the pointer more than that often enough to notice.
 const multiClickSlop = 1
 
-// registerClick advances the multi-click counter for a press at a terminal cell
-// and returns how many clicks this one makes: 1, 2, or 3. A fourth click starts
-// a new gesture rather than continuing to climb, so click-click-click-click is
-// character, word, line, character.
 func registerClick(win *terminal.Window, termX, termY int, interval time.Duration) int {
 	near := termY == win.LastClickY && abs(termX-win.LastClickX) <= multiClickSlop
 	if !near || time.Since(win.LastClickTime) > interval || win.ClickCount >= 3 {
@@ -57,14 +28,6 @@ func registerClick(win *terminal.Window, termX, termY int, interval time.Duratio
 	return win.ClickCount
 }
 
-// beginMouseSelection starts a selection gesture in an active copy-mode session
-// at a screen position. clicks is what registerClick returned: one click starts
-// a character selection the caller can drag out, two selects the word under the
-// pointer, three selects the line.
-//
-// A line rather than a sentence for three clicks: terminal content is
-// line-oriented, and sentence detection over shell output, log lines and code
-// would be guesswork.
 func beginMouseSelection(cm *terminal.CopyMode, window *terminal.Window, screenX, screenY, clicks int, s *config.Settings) {
 	switch clicks {
 	case 2:
@@ -73,8 +36,6 @@ func beginMouseSelection(cm *terminal.CopyMode, window *terminal.Window, screenX
 			window.RLockIO()
 			defer window.RUnlockIO()
 			if !selectWordUnderCursor(cm, window, s) {
-				// Nothing word-shaped under the pointer. Leave the one-cell
-				// selection the drag started rather than inventing one.
 				cm.State = terminal.CopyModeNormal
 			}
 		}()
@@ -92,12 +53,6 @@ func beginMouseSelection(cm *terminal.CopyMode, window *terminal.Window, screenX
 	}
 }
 
-// selectWordUnderCursor puts a visual-character selection around the word the
-// copy-mode cursor sits in. It reports false when the cursor is not on a word
-// character, which is the caller's cue to leave the selection alone rather than
-// select a lone space.
-//
-// Callers must hold the window's I/O read lock.
 func selectWordUnderCursor(cm *terminal.CopyMode, window *terminal.Window, s *config.Settings) bool {
 	absY := getAbsoluteY(cm, window)
 	cells := copyModeLineCells(window, absY)
@@ -124,10 +79,6 @@ func selectWordUnderCursor(cm *terminal.CopyMode, window *terminal.Window, s *co
 	return true
 }
 
-// isSelectionWordChar reports whether a cell belongs to a double-click word.
-// Letters and digits always do; the punctuation that also does is
-// appearance.word_characters, so a path, a URL or a flag like --no-vm comes out
-// as one word instead of a handful of fragments.
 func isSelectionWordChar(cell uv.Cell, s *config.Settings) bool {
 	if cell.Content == "" || cell.Content == " " {
 		return false
@@ -142,8 +93,6 @@ func isSelectionWordChar(cell uv.Cell, s *config.Settings) bool {
 	return strings.ContainsRune(s.WordCharacters, r)
 }
 
-// copyModeLineCells returns the cells of an absolute line, from the scrollback
-// ring or from the live screen. Callers must hold the window's I/O read lock.
 func copyModeLineCells(window *terminal.Window, absY int) []uv.Cell {
 	scrollbackLen := window.ScrollbackLen()
 	if absY < scrollbackLen {
@@ -155,27 +104,6 @@ func copyModeLineCells(window *terminal.Window, absY int) []uv.Cell {
 	return getScreenLineCells(window.Terminal, absY-scrollbackLen)
 }
 
-// finishMouseSelection ends a mouse selection gesture and, when
-// appearance.copy_on_select is on, puts the selected text on the clipboard.
-//
-// Copying on release is what a graphical terminal does (X11's primary
-// selection, kitty's copy_on_select), and it is why a selection here does not
-// need a separate keystroke to be useful. It is a setting because a stray drag
-// overwriting the clipboard is a real annoyance for some people.
-//
-// A drag writes at once: the button coming up ended the gesture and nothing can
-// reinterpret it. A multi-click waits out the rest of its window first, because
-// a double-click is also the first two thirds of a triple-click; see
-// app/clipboard_copy.go.
-//
-// Two things it deliberately does not do. It does not copy a selection that
-// never moved, so an ordinary click cannot clobber the clipboard. And it leaves
-// the highlight up rather than clearing it, so the user can see what they got;
-// the next press clears it, as does typing.
-//
-// The clipboard path is the same tea.SetClipboard (OSC 52) that copy mode's y
-// uses, so it reaches exactly the same environments, including over SSH, and
-// no more.
 func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 	cm := window.CopyMode
 	if cm == nil || !cm.Active {
@@ -184,8 +112,6 @@ func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 
 	inVisual := cm.State.InVisual()
 	moved := cm.VisualStart != cm.VisualEnd
-	// A double or triple click is a selection even when it lands on a
-	// one-character word or an empty line, so the counter speaks for it.
 	deliberate := moved || window.ClickCount >= 2
 
 	if !inVisual || !deliberate {
@@ -204,17 +130,11 @@ func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 	}
 
 	if o.SelectionDragged || window.ClickCount < 2 {
-		// A copied selection is also kept as a paste buffer. The deferred
-		// write keeps it when it lands (app.HandlePendingCopy).
 		return tea.Batch(o.CopyToClipboard(text), o.SaveToPasteBuffers(text))
 	}
 	return o.DeferCopyToClipboard(text, remainingClickWindow(window, o.DoubleClickWindow()))
 }
 
-// selectionText is the text of a pane's current selection, or "" when it holds
-// none. It is the read half of Window.HasSelection: whoever offered the action
-// asked that question, and whoever runs it gets the text from here, so the two
-// cannot disagree about whether there was anything to copy.
 func selectionText(window *terminal.Window) string {
 	if !window.HasSelection() {
 		return ""
@@ -227,22 +147,10 @@ func selectionText(window *terminal.Window) string {
 	return vt.StripSixelMarkers(extractVisualText(window.CopyMode, window))
 }
 
-// remainingClickWindow is how much of the multi-click window is left, measured
-// from the last press rather than from this release.
-//
-// Anchoring it to the press is what makes the wait exactly as long as the
-// period in which another click could still join the gesture, whatever the
-// button was held for. Anchoring it to the release would add the hold time on
-// top, so a deliberate press-and-hold would sit there with a stale clipboard
-// for as long as the user leaned on the button.
 func remainingClickWindow(window *terminal.Window, interval time.Duration) time.Duration {
 	return interval - time.Since(window.LastClickTime)
 }
 
-// endImplicitSelection drops a copy-mode session that only existed to carry a
-// mouse gesture and has nothing left to show: no selection and nothing scrolled
-// back. Without it an ordinary click inside a pane would leave the session
-// hanging around until the next keystroke.
 func endImplicitSelection(window *terminal.Window) {
 	cm := window.CopyMode
 	if cm == nil || !cm.Active || !cm.Implicit {

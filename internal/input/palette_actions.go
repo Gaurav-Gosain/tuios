@@ -7,9 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// registerPaletteHandlers binds the actions that began as command palette
-// rows with code of their own. As actions they take a key and a tape line,
-// and the palette runs them by name like every other row.
 func (d *ActionDispatcher) registerPaletteHandlers() {
 	d.Register("new_window_on_host", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.OpenHostPicker()
@@ -44,7 +41,6 @@ func (d *ActionDispatcher) registerPaletteHandlers() {
 		o.DisableAllTiling()
 		return o, nil
 	})
-	// Go-to on the panes of this session, as the dock's overflow marker opens it.
 	d.Register("all_windows", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.OpenAggregateView()
 		return o, nil

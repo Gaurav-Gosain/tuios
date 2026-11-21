@@ -5,22 +5,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// remoteKeyBypassesCopyMode reports whether the key being handled came from a
-// remote sender (tuios send-keys, or a tape run from outside) rather than
-// from the person at this client.
-//
-// Copy mode, implicit or explicit, is that person's viewport: a scrolled view
-// they are reading, or a selection they are making. Their own keystroke ends
-// an implicit session because they have stopped reading, and drives an
-// explicit one because they asked for it. A remote key is neither. It goes
-// where it would go with no copy mode in progress (to the guest, or to the
-// binding it names), and the viewport stays where the person put it.
-// Otherwise an agent typing into the pane while the person reads its earlier
-// output would return the view to the bottom at a moment decided by another
-// process.
-//
-// The flag is set for the whole run of a remote key sequence or tape and
-// cleared when it is done, on the Update goroutine that dispatches both.
 func remoteKeyBypassesCopyMode(o *app.OS) bool {
 	return o.ProcessingRemoteKeys
 }
@@ -29,20 +13,12 @@ func remoteKeyBypassesCopyMode(o *app.OS) bool {
 func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	focusedWindow := o.GetFocusedWindow()
 
-	// A wheel scroll here leaves the pane in an implicit copy mode too, and a
-	// window-manager binding must not be swallowed by it. Any key the person
-	// presses ends the scrolled view and is then handled as the window-manager
-	// command it is. A remote key is not the person's: it leaves the view
-	// alone and is handled as the command it is. See remoteKeyBypassesCopyMode.
 	if focusedWindow != nil && focusedWindow.InImplicitCopyMode() && !remoteKeyBypassesCopyMode(o) {
 		focusedWindow.ExitCopyMode()
 	}
 
-	// A multi copy mode whose focused pane has left it has nothing driving
-	// the other panes: end it before the key is routed.
 	o.SettleMultiCopy()
 
-	// Handle copy mode (vim-style scrollback/selection), which takes priority
 	if focusedWindow.InCopyMode() && !remoteKeyBypassesCopyMode(o) {
 		return HandleCopyModeKey(msg, o, focusedWindow)
 	}
@@ -51,36 +27,20 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return HandleScrollbackBrowserKey(msg, o)
 	}
 
-	// The open panels, top first: each takes the keys while it is up.
 	if out, cmd, ok := routeOverlayKey(msg, o); ok {
 		return out, cmd
 	}
 
 	key := msg.String()
 
-	// The first start's welcome question takes 1, 2, 3 and esc while it is up.
 	if cmd, ok := o.WelcomeChoiceKey(key); ok {
 		return o, cmd
 	}
 
-	// Handle cache stats viewer (takes priority in window management mode)
 	if o.ShowCacheStats {
 		return handleCacheStatsKey(msg, o)
 	}
 
-	// Esc closes the focused popup.
-	//
-	// It reaches this function only in window mode, because the pane owns esc in
-	// terminal mode: fzf, gum and vim all quit on it, and taking it from them
-	// would break the programs a popup exists to run. So closing a popup from
-	// the keyboard is esc to leave the pane, then esc to close the box. A popup
-	// whose command exits closes itself and needs neither.
-	//
-	// It runs before the registry dispatch because esc is bound to
-	// enter_window_mode, which is what already has the key here and does nothing
-	// with it: this is window mode. So nothing is taken from the user, and to
-	// keep that true for a user who bound esc to something of their own, the
-	// claim is made only while that default binding is the one in force.
 	if key == "esc" && o.FocusedPopup() != nil {
 		action := ""
 		if o.KeybindRegistry != nil {
@@ -92,11 +52,6 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		}
 	}
 
-	// Esc turns the spotlight off. It comes after every overlay and the popup
-	// above, so an open dialog, menu or popup closes first, and it is claimed
-	// on the same terms as the popup's: only while esc still means
-	// enter_window_mode, which does nothing here. See
-	// internal/app/spotlight_exit.go.
 	if key == "esc" && o.SpotlightOn() {
 		action := ""
 		if o.KeybindRegistry != nil {
@@ -108,7 +63,6 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		}
 	}
 
-	// Try config-based dispatch first (if registry is available)
 	if o.KeybindRegistry != nil {
 		action := lookupAction(o, msg, o.KeybindRegistry.GetAction)
 		if action != "" {
@@ -119,33 +73,19 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		}
 	}
 
-	// The direct terminal-mode binds (window cycling) are honoured here too, so
-	// the same chord cycles windows in both modes.
 	if cmd, ok := runTerminalModeBinds(msg, o); ok {
 		return o, cmd
 	}
 
-	// The global scope (palette, launcher) acts here and in terminal mode alike.
 	if m, cmd, ok := handleGlobalBinds(msg, o); ok {
 		return m, cmd
 	}
 
-	// Ctrl+C is the last resort, and it is a fallback rather than an override:
-	// the registry dispatch above has already had the key, so a user who binds
-	// ctrl+c to something of their own gets it. What is not configurable is
-	// ctrl+c doing nothing, which is the point of keeping it.
 	switch key {
 	case "ctrl+c":
-		// Same routing as the quit keybinding, so in a daemon session it opens
-		// the quit menu (detach is the default) rather than silently killing
-		// anything.
 		return requestQuit(o)
 
 	default:
-		// All other keybindings are handled by the config system above
-		// Workspace switching (opt+1-9, opt+shift+1-9) is now fully configurable
-		// The KeyNormalizer handles macOS unicode character expansion (¡, ™, £, etc.)
-		// If a key isn't bound in the config, it does nothing (which is correct behavior)
 		return o, nil
 	}
 }

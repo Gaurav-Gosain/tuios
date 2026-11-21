@@ -12,7 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// multifocusPane is a daemon-mode pane whose PTY writes land in sent.
 func multifocusPane(t *testing.T, id string, bracketed bool, sent *strings.Builder) *terminal.Window {
 	t.Helper()
 	em := vt.NewEmulator(40, 20)
@@ -35,9 +34,6 @@ func multifocusPane(t *testing.T, id string, bracketed bool, sent *strings.Build
 	}
 }
 
-// multifocusHarness is three panes in terminal mode: a (focused, bracketed
-// paste on), b (bracketed paste off) and c. a and b are in the multifocus
-// set, c is not.
 func multifocusHarness(t *testing.T) (*app.OS, [3]*strings.Builder) {
 	t.Helper()
 	var sent [3]*strings.Builder
@@ -57,8 +53,6 @@ func multifocusHarness(t *testing.T) (*app.OS, [3]*strings.Builder) {
 		Width:         80,
 		Height:        30,
 	}
-	// The clipboard replies these tests send answer a read the paste key
-	// made. A reply nobody asked for is dropped (see ClaimPasteReply).
 	_ = o.RequestHostPaste()
 	return o, sent
 }

@@ -20,23 +20,15 @@ import (
 // the function terminal mode consults before forwarding anything, and its
 // return value is exactly "this key does not reach the pane".
 func TestSwallowSetMatchesTheInputPath(t *testing.T) {
-	// A spread that puts both predicates either side of their boundary: an
-	// action that survives into terminal mode on a reserved chord, the same
-	// action on a bare key, and an action that never survives on either.
 	o := osWithBindings(t, func(kb *config.KeybindingsConfig) {
 		kb.Workspaces["switch_workspace_1"] = []string{"alt+1", "f1"}
 		kb.Workspaces["switch_workspace_2"] = []string{"ctrl+alt+2"}
 		kb.WindowManagement["next_session"] = []string{"alt+shift+n"}
-		// A window verb on a reserved chord: reserved, but not terminal-safe,
-		// so it must reach the shell.
 		kb.WindowManagement["close_window"] = []string{"alt+q"}
 		kb.Workspaces["next_workspace"] = []string{"ctrl+alt+l"}
 	})
 
 	report := o.KeybindRegistry.Report(config.PaneFacts{})
-	// The report lists a key once, in the spelling of the first action that
-	// binds it, so the two sides are compared in canonical form: the default
-	// send_to_workspace_2 also holds ctrl+alt+2, spelt ctrl+opt+2 on macOS.
 	swallowed := map[string]bool{}
 	for _, s := range report.Swallowed {
 		swallowed[config.CanonicalKey(s.Key)] = true
@@ -50,19 +42,13 @@ func TestSwallowSetMatchesTheInputPath(t *testing.T) {
 		{"ctrl+alt+2", tea.KeyPressMsg{Code: '2', Mod: tea.ModCtrl | tea.ModAlt}},
 		{"alt+shift+n", tea.KeyPressMsg{Code: 'n', Mod: tea.ModAlt | tea.ModShift}},
 		{"ctrl+alt+l", tea.KeyPressMsg{Code: 'l', Mod: tea.ModCtrl | tea.ModAlt}},
-		// Bound to a workspace switch, but with no reserved modifier, so the
-		// router leaves it to the shell.
 		{"f1", tea.KeyPressMsg{Code: tea.KeyF1}},
-		// Reserved chord, but a window verb, so the router leaves it alone.
 		{"alt+q", tea.KeyPressMsg{Code: 'q', Mod: tea.ModAlt}},
-		// Plain typing, which must always reach the pane.
 		{"j", tea.KeyPressMsg{Code: 'j', Text: "j"}},
 		{"1", tea.KeyPressMsg{Code: '1', Text: "1"}},
 	}
 
 	for _, tc := range cases {
-		// A fresh model per case: dispatching an action mutates state, and a
-		// workspace switch changes what the next dispatch does.
 		fresh := osWithBindings(t, func(kb *config.KeybindingsConfig) {
 			kb.Workspaces["switch_workspace_1"] = []string{"alt+1", "f1"}
 			kb.Workspaces["switch_workspace_2"] = []string{"ctrl+alt+2"}

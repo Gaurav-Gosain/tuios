@@ -12,28 +12,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
-// Resizing a divider in a BSP layout may only move the two subtrees that
-// divider separates. Everything else on screen has to stay exactly where it
-// was, and it has to stay there through a retile as well, because a retile
-// rebuilds every pane from the tree's ratios and is triggered by ordinary
-// things: opening a window, closing one, switching workspace, a terminal
-// resize.
-//
-// These tests guard two ways to break that. Matching resizes to neighbours by
-// geometry, collecting every pane whose edge falls on the dragged line, makes a
-// divider in one column drag the identically-placed divider in another column
-// with it, and fresh splits are all 0.5, so dividers line up by default. A
-// keyboard resize that does not write its result back into the tree is
-// discarded by the next retile, which snaps every pane back.
-
-// isoOS builds an auto-tiling model with n real windows and no layout yet.
 func isoOS(tb testing.TB, n int) *app.OS {
 	tb.Helper()
 
-	// Snap animations apply their target over the following frames, so with them
-	// on a retile leaves geometry untouched at the instant it returns and the
-	// snap-back this test is looking for would land after the assertions rather
-	// than before them.
 	prevAnim := config.Global.Motion
 	config.Global.Motion = config.MotionNone
 	tb.Cleanup(func() { config.Global.Motion = prevAnim })
@@ -43,15 +24,13 @@ func isoOS(tb testing.TB, n int) *app.OS {
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
-		// The layout reads the model's session-settled value, not the global;
-		// seed it from the global the caller just set. NewOS does the same.
-		SharedBorders:  config.Global.SharedBorders,
-		Width:          160,
-		Height:         48,
-		AutoTiling:     true,
-		UseBSPLayout:   true,
-		FocusedWindow:  0,
-		PendingResizes: make(map[string][2]int),
+		SharedBorders:    config.Global.SharedBorders,
+		Width:            160,
+		Height:           48,
+		AutoTiling:       true,
+		UseBSPLayout:     true,
+		FocusedWindow:    0,
+		PendingResizes:   make(map[string][2]int),
 
 		WorkspaceHasCustom:   make(map[int]bool),
 		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
@@ -86,8 +65,6 @@ func isoOS(tb testing.TB, n int) *app.OS {
 	return m
 }
 
-// buildTree installs a hand-built topology, mapping the small integer IDs the
-// topology uses onto the model's windows in order, then lays it out.
 func buildTree(m *app.OS, build func(leaf func(int) *layout.TileNode) *layout.TileNode) {
 	tree := layout.NewBSPTree()
 	leaf := func(i int) *layout.TileNode {
@@ -119,22 +96,16 @@ func h(ratio float64, l, r *layout.TileNode) *layout.TileNode {
 }
 
 type isoCase struct {
-	name  string
-	count int
-	build func(leaf func(int) *layout.TileNode) *layout.TileNode
-	// pane and edge name the divider to drag, in 1-based topology IDs.
-	pane int
-	edge layout.ResizeEdge
-	// affected lists every pane the divider legitimately owns. Panes outside
-	// this set must not move by a single cell.
+	name     string
+	count    int
+	build    func(leaf func(int) *layout.TileNode) *layout.TileNode
+	pane     int
+	edge     layout.ResizeEdge
 	affected []int
 }
 
 var isoCases = []isoCase{
 	{
-		// A 2x2 grid: the two columns each have their own horizontal divider,
-		// and at the default 0.5 ratios the two sit on the same screen row.
-		// Dragging the left one must not touch the right column.
 		name:  "grid/left_column_divider",
 		count: 4,
 		build: func(leaf func(int) *layout.TileNode) *layout.TileNode {
@@ -153,9 +124,6 @@ var isoCases = []isoCase{
 		affected: []int{3, 4},
 	},
 	{
-		// The root divider does separate both columns, so every pane moving is
-		// correct here. This case guards the other direction: the fix must not
-		// have made resizes stop propagating.
 		name:  "grid/root_divider",
 		count: 4,
 		build: func(leaf func(int) *layout.TileNode) *layout.TileNode {
@@ -165,8 +133,6 @@ var isoCases = []isoCase{
 		affected: []int{1, 2, 3, 4},
 	},
 	{
-		// The maintainer's layout: one tall pane on the left, two stacked on
-		// the right.
 		name:  "tall_left/right_column_divider",
 		count: 3,
 		build: func(leaf func(int) *layout.TileNode) *layout.TileNode {
@@ -176,7 +142,6 @@ var isoCases = []isoCase{
 		affected: []int{2, 3},
 	},
 	{
-		// Three columns, each split in two, all dividers at the same rows.
 		name:  "three_columns/middle_divider",
 		count: 6,
 		build: func(leaf func(int) *layout.TileNode) *layout.TileNode {
@@ -197,8 +162,6 @@ var isoCases = []isoCase{
 		affected: []int{3, 4, 5, 6},
 	},
 	{
-		// A pane three levels down, so the divider's rectangle is narrowed by
-		// several ancestors before the ratio is derived against it.
 		name:  "deep_nest/innermost_divider",
 		count: 5,
 		build: func(leaf func(int) *layout.TileNode) *layout.TileNode {
@@ -219,8 +182,6 @@ func geomOf(m *app.OS) geom {
 	return g
 }
 
-// checkIsolation is the invariant: nothing outside the divider's own two
-// subtrees moved, and at least one pane inside them did.
 func checkIsolation(t *testing.T, label string, c isoCase, m *app.OS, before, after geom) {
 	t.Helper()
 
@@ -248,9 +209,6 @@ func checkIsolation(t *testing.T, label string, c isoCase, m *app.OS, before, af
 	}
 }
 
-// checkSurvivesRetile is the second half: a retile rebuilds every pane from the
-// tree's ratios, so anything the resize failed to write into the tree is thrown
-// away here.
 func checkSurvivesRetile(t *testing.T, label string, m *app.OS, after geom) {
 	t.Helper()
 
@@ -328,9 +286,6 @@ func TestMouseResizeMovesOnlyTheDividersSubtrees(t *testing.T) {
 				m.FocusedWindow = c.pane - 1
 
 				win := m.Windows[c.pane-1]
-				// Grab the corner that owns the edge under test, then move the
-				// pointer along that one axis only, so exactly one divider is
-				// dragged.
 				var startX, startY int
 				switch c.edge {
 				case layout.ResizeEdgeRight:
@@ -344,8 +299,6 @@ func TestMouseResizeMovesOnlyTheDividersSubtrees(t *testing.T) {
 				}
 				m.Resizing = true
 				m.InteractionMode = true
-				// The press records the pane it grabbed, and the motion
-				// resizes that pane.
 				m.DraggedWindowIndex = c.pane - 1
 				m.PreResizeState = terminal.Window{
 					ID: win.ID, X: win.X, Y: win.Y, Z: win.Z,
@@ -402,25 +355,15 @@ func TestResizeSurvivesAnInFlightSnapAnimation(t *testing.T) {
 			t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 			m := isoOS(t, 4)
-			// isoOS turns animations off for the other tests; this one is about
-			// what happens when they are on.
 			m.Settings.Motion = config.MotionFull
 			buildTree(m, func(leaf func(int) *layout.TileNode) *layout.TileNode {
 				return v(0.5, h(0.5, leaf(1), leaf(2)), h(0.5, leaf(3), leaf(4)))
 			})
 
-			// Nudge the panes off their tiled positions so the retile below has
-			// somewhere to animate from; a window already at its target gets no
-			// animation. The offset is deliberately small: displacing them to
-			// full screen would park the dragged edge on the screen boundary,
-			// where the resize is blocked outright and the test would pass
-			// without ever exercising a resize.
 			for _, w := range m.Windows {
 				w.X, w.Y = w.X+3, w.Y+2
 			}
 
-			// Retiling queues a snap animation per window, which is the state a
-			// user drags on top of when they resize right after a layout change.
 			m.TileAllWindows()
 			if !m.HasActiveAnimations() {
 				t.Fatal("no snap animations queued; this test needs some in flight to be meaningful")
@@ -438,11 +381,6 @@ func TestResizeSurvivesAnInFlightSnapAnimation(t *testing.T) {
 			}
 			m.ResizeStartX, m.ResizeStartY = startX, startY
 
-			// One motion event, deliberately. Asserting on geometry after a run
-			// of ticks would be a race against the animation's 300ms wall clock
-			// rather than a statement about the resize: on a slow enough run the
-			// animations finish on their own and the test passes for the wrong
-			// reason. Retiring them is the contract, so assert exactly that.
 			preDrag := geomOf(m)
 			_, _ = m.Update(motionAt(startX-6, startY))
 			if geomOf(m)[win.ID] == preDrag[win.ID] {
@@ -459,7 +397,6 @@ func TestResizeSurvivesAnInFlightSnapAnimation(t *testing.T) {
 				}
 			}
 
-			// And the user-visible consequence: ticking now moves nothing.
 			settled := geomOf(m)
 			for range 5 {
 				_, _ = m.Update(app.TickerMsg(time.Now()))

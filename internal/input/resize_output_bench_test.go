@@ -11,13 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
-// countDaemonResizes wires every window's daemon resize callback to a counter.
-//
-// The windows a benchmark builds are daemon windows with no daemon behind them,
-// so DaemonResizeFunc is nil and a resize that would be a socket round trip in
-// the real client costs a nil check here. That is precisely the gap that let a
-// per-frame PTY resize during shared-border drags ship unnoticed, so the drag
-// benchmarks below install a callback and report how often it fires.
 func countDaemonResizes(m *app.OS) *atomic.Int64 {
 	var n atomic.Int64
 	for _, win := range m.Windows {
@@ -58,8 +51,6 @@ func TestSharedBorderDragTracksPointerAndDoesNotAnimate(t *testing.T) {
 			focused := m.GetFocusedWindow()
 			startX, startY := m.ResizeStartX, m.ResizeStartY
 
-			// Retire what tiling the workspace left in flight, so what this
-			// loop observes was created by the drag.
 			m.Animations = nil
 
 			const maxTrackingSlack = 2
@@ -74,13 +65,6 @@ func TestSharedBorderDragTracksPointerAndDoesNotAnimate(t *testing.T) {
 					}
 				}
 
-				// The edge stays with the pointer. It does not land exactly on it:
-				// with shared borders the pointer is on the separator and the pane
-				// ends the cell before, and the layout rounds ratios to whole
-				// cells, so the gap breathes by a cell as the ratio crosses a
-				// boundary. What must not happen is the edge falling steadily
-				// behind, which is what easing toward a moving target looks like
-				// over a drag this long.
 				if offset := (startX + i) - (focused.X + focused.Width); offset < 0 || offset > maxTrackingSlack {
 					t.Fatalf("motion %d: edge is %d cells from the pointer, more than the %d cells grid rounding accounts for",
 						i, offset, maxTrackingSlack)
@@ -116,7 +100,6 @@ func TestResizeDragDefersPTYResizeUntilRelease(t *testing.T) {
 			for i := range 30 {
 				dx := i%6 - 3
 				_, _ = m.Update(motionAt(startX+dx, startY))
-				// PTY output forces a real compose, the way a busy terminal does.
 				_, _ = m.Update(app.PTYDataMsg{})
 				_ = m.View()
 			}
@@ -128,7 +111,6 @@ func TestResizeDragDefersPTYResizeUntilRelease(t *testing.T) {
 				t.Fatal("drag recorded no pending resizes, so release has nothing to apply")
 			}
 
-			// Release drains the pending resizes into one real resize per window.
 			_, _ = m.Update(releaseAt(startX, startY))
 			if got := resizes.Load(); got == 0 {
 				t.Fatal("release applied no PTY resize, so the drag result never reached the daemon")

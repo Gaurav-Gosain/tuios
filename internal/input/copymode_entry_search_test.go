@@ -11,11 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Copy mode entry position and directional search (discussion #233). The
-// window is a real emulator, so the cursor, the scrollback and the matches
-// are the cells a person would see.
-
-// entryOS is a client with one real pane holding raw output, focused.
 func entryOS(t *testing.T, output string) (*app.OS, *terminal.Window) {
 	t.Helper()
 	w := multiPaneWindow(t, "cm-entry", "shell")
@@ -26,8 +21,6 @@ func entryOS(t *testing.T, output string) (*app.OS, *terminal.Window) {
 	return o, w
 }
 
-// numberedOutput is n lines "row 00" to "row n-1", then a "$ " prompt with the
-// cursor after it. With 80 lines and a 22-row pane every "row 4x" line is in the scrollback.
 func numberedOutput(n int) string {
 	var b strings.Builder
 	for i := range n {
@@ -37,7 +30,6 @@ func numberedOutput(n int) string {
 	return b.String()
 }
 
-// cursorLine is the text of the buffer line the copy cursor is on.
 func cursorLine(t *testing.T, w *terminal.Window) string {
 	t.Helper()
 	w.RLockIO()
@@ -75,15 +67,9 @@ func TestCopyModeEntersAtTerminalCursor(t *testing.T) {
 		output string
 		x, y   int
 	}{
-		// A short session: the prompt is on row 3 (the fixture starts with an
-		// empty line), well above the middle.
 		{"prompt near the top", "one\r\ntwo\r\n$ ", 2, 3},
-		// A full screen: the prompt is on the last row.
 		{"prompt on the bottom row", numberedOutput(80), 2, 21},
-		// A program moved the cursor to the middle of the screen.
 		{"cursor mid-screen", "a\r\nb\r\n\x1b[8;15H", 14, 7},
-		// A full-screen program on the alternate screen: its cursor, not the
-		// shell's.
 		{"alternate screen", "one\r\n$ \x1b[?1049h\x1b[18;30H", 29, 17},
 	}
 	for _, tc := range tests {
@@ -118,7 +104,6 @@ func TestMultiCopyEntersEachPaneAtItsCursor(t *testing.T) {
 	if !o.EnterMultiCopyMode() {
 		t.Fatal("multi copy mode did not start")
 	}
-	// multiCopyOS writes 3, 4 and 3 lines, each ending in a newline.
 	for i, want := range []int{3, 4, 3} {
 		if got := ws[i].CopyMode.CursorY; got != want {
 			t.Errorf("pane %s starts on row %d, want its cursor row %d", ws[i].ID, got, want)
@@ -140,17 +125,14 @@ func TestCopyModeBackwardSearchFromPrompt(t *testing.T) {
 		t.Fatal("? did not record a backward search")
 	}
 
-	// n follows the search: up.
 	typeCopyKeys(o, w, "n")
 	if got := cursorLine(t, w); got != "row 48" {
 		t.Errorf("n after ? moves to %q, want %q", got, "row 48")
 	}
-	// N goes the other way: down.
 	typeCopyKeys(o, w, "N")
 	if got := cursorLine(t, w); got != "row 49" {
 		t.Errorf("N after ? moves to %q, want %q", got, "row 49")
 	}
-	// A count repeats n.
 	typeCopyKeys(o, w, "3n")
 	if got := cursorLine(t, w); got != "row 46" {
 		t.Errorf("3n after ? moves to %q, want %q", got, "row 46")
@@ -188,9 +170,9 @@ func TestCopyModeForwardSearchWrapsIntoScrollback(t *testing.T) {
 func TestCopyModeNextMatchRunsFromCursor(t *testing.T) {
 	o, w := entryOS(t, numberedOutput(80))
 	o.EnterCopyModeFocused()
-	typeCopyKeys(o, w, "?", "row 5", "enter") // lands on row 59
-	typeCopyKeys(o, w, "5k")                  // up to row 54
-	typeCopyKeys(o, w, "n")                   // up from row 54
+	typeCopyKeys(o, w, "?", "row 5", "enter")
+	typeCopyKeys(o, w, "5k")
+	typeCopyKeys(o, w, "n")
 	if got := cursorLine(t, w); got != "row 53" {
 		t.Errorf("n from row 54 after ? moves to %q, want %q", got, "row 53")
 	}
@@ -204,7 +186,7 @@ func TestCopyModeIncrementalSearchKeepsOrigin(t *testing.T) {
 	out := "cart\r\ncat\r\ncar\r\n$ "
 	for _, tc := range []struct{ prompt, want string }{
 		{"?", "car"},
-		{"/", "cart"}, // nothing below the prompt: wraps to the top
+		{"/", "cart"},
 	} {
 		o, w := entryOS(t, out)
 		o.EnterCopyModeFocused()
@@ -256,11 +238,10 @@ func TestCopyModeSearchActions(t *testing.T) {
 			if w.CopyMode.SearchBackward != tc.backward {
 				t.Errorf("%s opened a search with backward=%v", tc.action, w.CopyMode.SearchBackward)
 			}
-			// The next keys are the query.
 			typeCopyKeys(o, w, "error", "enter")
 			want := "error two"
 			if !tc.backward {
-				want = "error one" // nothing below the prompt: wraps to the top
+				want = "error one"
 			}
 			if got := cursorLine(t, w); got != want {
 				t.Errorf("the search lands on %q, want %q", got, want)
@@ -332,8 +313,6 @@ func TestCopyModeSearchLimitKeepsNewestMatches(t *testing.T) {
 	}
 }
 
-// borderlessOS is entryOS with the pane borderless, as a tiled pane is with
-// shared_borders on: the content fills every row and column of the pane.
 func borderlessOS(t *testing.T, output string) (*app.OS, *terminal.Window) {
 	t.Helper()
 	w := multiPaneWindow(t, "cm-borderless", "shell")
@@ -369,7 +348,6 @@ func TestCopyModeBorderlessSearchReachesLastRows(t *testing.T) {
 	if got := cursorLine(t, w); got != "row 78" {
 		t.Errorf("n after ? moves to %q, want %q", got, "row 78")
 	}
-	// / from above wraps down to the bottom rows as well.
 	typeCopyKeys(o, w, "/", "row 79", "enter")
 	if got := cursorLine(t, w); got != "row 79" {
 		t.Errorf("/row 79 lands on %q, want %q", got, "row 79")
@@ -510,7 +488,7 @@ func TestCopyModeSearchActionKeyInCopyMode(t *testing.T) {
 			HandleKeyPress(multiKey("enter"), o)
 			want := "line 50"
 			if tc.backward {
-				want = "line 59" // nothing above line 01: wraps to the bottom
+				want = "line 59"
 			}
 			if got := cursorLine(t, w); got != want {
 				t.Errorf("the search lands on %q, want %q", got, want)
@@ -519,5 +497,4 @@ func TestCopyModeSearchActionKeyInCopyMode(t *testing.T) {
 	}
 }
 
-// searchCap is the default appearance.copy_search_max_matches.
 const searchCap = config.SearchMaxMatchesDefault

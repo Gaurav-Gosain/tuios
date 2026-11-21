@@ -55,22 +55,18 @@ func TestKeysTypedRightAfterEnteringTerminalModeReachThePTY(t *testing.T) {
 // these glyphs (e.g. £, ⇥) are ordinary typed characters and must fall through
 // to the shell rather than being intercepted as workspace or window shortcuts.
 func TestMacOSOptionGlyphsAreReservedOnlyOnDarwin(t *testing.T) {
-	// £ is Option+3 on a US Mac layout, but Shift+3 on a UK layout.
 	if got := isReservedTerminalChord(tea.KeyPressMsg{Code: '£', Text: "£"}); got != runtimeIsDarwin() {
 		t.Errorf("isReservedTerminalChord(£) = %v, want %v", got, runtimeIsDarwin())
 	}
 
-	// ⇥ is Option+Tab on macOS, but an ordinary glyph elsewhere.
 	if got := isReservedTerminalChord(tea.KeyPressMsg{Code: '⇥', Text: "⇥"}); got != runtimeIsDarwin() {
 		t.Errorf("isReservedTerminalChord(⇥) = %v, want %v", got, runtimeIsDarwin())
 	}
 
-	// A real Alt chord is reserved on every platform.
 	if !isReservedTerminalChord(tea.KeyPressMsg{Code: '1', Mod: tea.ModAlt, Text: "1"}) {
 		t.Error("alt+1 should be a reserved chord on every platform")
 	}
 
-	// A bare letter never is, whatever it happens to be bound to.
 	if isReservedTerminalChord(tea.KeyPressMsg{Code: 'a', Text: "a"}) {
 		t.Error("a bare letter must reach the shell, not be treated as a chord")
 	}
@@ -86,15 +82,12 @@ func TestTerminalPrefixChordNotRecorded(t *testing.T) {
 	rec.Start()
 	o := &app.OS{Settings: config.Global, Mode: app.TerminalMode, TapeRecorder: rec}
 
-	// ctrl+b activates prefix mode and must not be recorded.
 	ctrlB := tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}
 	HandleTerminalModeKey(ctrlB, o)
 	if !o.PrefixActive {
 		t.Fatal("ctrl+b should activate prefix mode")
 	}
 
-	// The following prefix command key routes to the prefix dispatcher, not the
-	// PTY, and must not be recorded either.
 	esc := tea.KeyPressMsg{Code: tea.KeyEscape}
 	HandleTerminalModeKey(esc, o)
 
@@ -116,7 +109,6 @@ func TestRecordTerminalKeyClassification(t *testing.T) {
 	recordTerminalKey(o, tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	cmds := rec.GetCommands()
-	// "ls" accumulates into one Type command, flushed by the Enter KeyCombo.
 	if len(cmds) != 2 {
 		t.Fatalf("got %d commands, want 2: %+v", len(cmds), cmds)
 	}

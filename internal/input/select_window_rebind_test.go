@@ -10,15 +10,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// threePaneOS is three panes on one workspace, with select_window_N moved off
-// the digits so the handler cannot read the index back out of the key.
 func threePaneOS(t *testing.T, sel map[string][]string) *app.OS {
 	t.Helper()
 	o := osWithBindings(t, func(kb *config.KeybindingsConfig) {
 		maps.Copy(kb.WindowManagement, sel)
-		// The digits are snap_corner_N by default, and layout is consulted after
-		// window_management, so leaving them bound would shadow the rebind under
-		// test with corner snapping.
 		for _, action := range []string{"snap_corner_1", "snap_corner_2", "snap_corner_3", "snap_corner_4"} {
 			kb.Layout[action] = nil
 		}
@@ -62,7 +57,6 @@ func TestSelectWindowStillWorksOnItsDigit(t *testing.T) {
 func TestSelectWindowDoesNotFallBackToCornerSnap(t *testing.T) {
 	o := threePaneOS(t, map[string][]string{"select_window_1": {"z"}})
 	o.AutoTiling = false
-	// Geometry only: Window carries an atomic pointer, so it cannot be copied.
 	wantX, wantY := o.Windows[0].X, o.Windows[0].Y
 	wantW, wantH := o.Windows[0].Width, o.Windows[0].Height
 	o, _ = HandleWindowManagementModeKey(tea.KeyPressMsg{Code: 'z', Text: "z"}, o)

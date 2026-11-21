@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// withSidebarGlobals turns the sidebar on for a test and restores the previous
-// configuration afterwards.
 func withSidebarGlobals(t *testing.T, pos string) {
 	t.Helper()
 	pe, pp, pw := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
@@ -41,7 +39,6 @@ func TestSidebarBandClickNeverReachesPane(t *testing.T) {
 		FocusedWindow:    0,
 	}
 
-	// Click well inside the band (x < sidebar width) over the pane's rectangle.
 	handleMouseClick(tea.MouseClickMsg(tea.Mouse{X: 5, Y: 10, Button: tea.MouseLeft}), o)
 
 	if o.Dragging || o.Resizing || o.InteractionMode {
@@ -49,7 +46,6 @@ func TestSidebarBandClickNeverReachesPane(t *testing.T) {
 			o.Dragging, o.Resizing, o.InteractionMode)
 	}
 
-	// The same click just past the band is the pane's and starts a drag.
 	handleMouseClick(tea.MouseClickMsg(tea.Mouse{X: config.SidebarDefaultWidth + 2, Y: 10, Button: tea.MouseLeft}), o)
 	if !o.Dragging {
 		t.Errorf("click outside the band did not reach the pane")

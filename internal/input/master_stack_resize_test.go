@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// masterStackPair is borderMatrixOS switched to the master-stack layout, with
-// the master pane first.
 func masterStackPair(t *testing.T, shared bool) (*app.OS, *terminal.Window, *terminal.Window) {
 	t.Helper()
 	m, _, _ := borderMatrixOS(t, true, shared)

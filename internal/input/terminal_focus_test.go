@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// altArrow builds the event a terminal sends for an alt-modified arrow.
 func altArrow(dir string) tea.KeyPressMsg {
 	code := map[string]rune{
 		"left":  tea.KeyLeft,
@@ -20,15 +19,6 @@ func altArrow(dir string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: code, Mod: tea.ModAlt}
 }
 
-// focusLayout is the fixture the directional rule is stated against: one tall
-// pane on the left, two stacked on the right, so left/right is a move between
-// panes that do not line up and up/down only exists on one side.
-//
-//	+--------+--------+
-//	|        |   b    |
-//	|   a    +--------+
-//	|        |   c    |
-//	+--------+--------+
 func focusLayout(t *testing.T, override func(*config.KeybindingsConfig)) *app.OS {
 	t.Helper()
 	o := osWithBindings(t, override)
@@ -61,18 +51,14 @@ func TestAltArrowsMoveFocusByTheDocumentedRule(t *testing.T) {
 		want  string
 		moved bool
 	}{
-		// Panes that do not line up: from the tall left pane, both right-hand
-		// panes overlap its span at the same distance, so the earlier one wins.
 		{name: "into a stack picks the earlier pane", from: 0, dir: "right", want: "b", moved: true},
 		{name: "back out of the stack", from: 1, dir: "left", want: "a", moved: true},
 		{name: "down the stack", from: 1, dir: "down", want: "c", moved: true},
 		{name: "up the stack", from: 2, dir: "up", want: "b", moved: true},
-		// Edges: nothing that way, so focus stays. No wrap.
 		{name: "left edge does not wrap", from: 0, dir: "left", want: "a"},
 		{name: "right edge does not wrap", from: 1, dir: "right", want: "b"},
 		{name: "top edge does not wrap", from: 1, dir: "up", want: "b"},
 		{name: "bottom edge does not wrap", from: 2, dir: "down", want: "c"},
-		// The tall pane spans both rows, so neither up nor down leaves it.
 		{name: "no pane above the full-height pane", from: 0, dir: "up", want: "a"},
 		{name: "no pane below the full-height pane", from: 0, dir: "down", want: "a"},
 	}
@@ -100,7 +86,7 @@ func TestAltArrowsMoveFocusByTheDocumentedRule(t *testing.T) {
 // answer follows the order.
 func TestDirectionalTieGoesToTheEarlierPane(t *testing.T) {
 	o := focusLayout(t, func(*config.KeybindingsConfig) {})
-	o.Windows[1], o.Windows[2] = o.Windows[2], o.Windows[1] // c now precedes b
+	o.Windows[1], o.Windows[2] = o.Windows[2], o.Windows[1]
 	o.FocusedWindow = 0
 
 	o, _ = HandleKeyPress(altArrow("right"), o)
@@ -116,11 +102,8 @@ func TestDirectionalTieGoesToTheEarlierPane(t *testing.T) {
 func TestEachAltArrowIsDisabledIndependently(t *testing.T) {
 	for _, dir := range []string{"left", "right", "up", "down"} {
 		t.Run(dir, func(t *testing.T) {
-			// The tables hold each action by its own name: up and down are
-			// focus_up and focus_down, terminal_focus_up is an older name.
 			action := config.CanonicalAction("terminal_focus_" + dir)
 
-			// What the shell gets when nothing intercepts the key.
 			cfg := config.DefaultConfig()
 			cfg.Keybindings.TerminalMode[action] = []string{}
 			o, pty := osWithFocusedPane(t, cfg, app.TerminalMode)
@@ -138,7 +121,6 @@ func TestEachAltArrowIsDisabledIndependently(t *testing.T) {
 				t.Errorf("unbound alt+%s still moved focus to %q", dir, got)
 			}
 
-			// The bound key is intercepted and types nothing.
 			o2, pty2 := osWithFocusedPane(t, config.DefaultConfig(), app.TerminalMode)
 			o2, _ = HandleKeyPress(altArrow(dir), o2)
 			if len(pty2.got) != 0 {
@@ -175,13 +157,11 @@ func TestNvimNavigatorFocusRequestMustFollowForwardedKey(t *testing.T) {
 	active := true
 	o.Update(app.NvimNavigationMsg{WindowID: o.Windows[0].ID, State: &active})
 
-	// OSC alone cannot move focus.
 	o.Update(app.NvimNavigationMsg{WindowID: o.Windows[0].ID, Direction: "right"})
 	if got := focusedID(o); got != o.Windows[0].ID {
 		t.Fatalf("unsolicited OSC focused %q", got)
 	}
 
-	// The forwarded key arms the matching reply.
 	o, _ = HandleKeyPress(altArrow("right"), o)
 	if len(pty.got) == 0 {
 		t.Fatal("active Neovim pane did not receive alt+right")
@@ -252,7 +232,6 @@ func TestAltArrowsResolveInAConfigPredatingThem(t *testing.T) {
 			t.Errorf("alt+%s resolved to %q, want %q", dir, got, want)
 		}
 	}
-	// The user's own binding survives the fill.
 	if got := r.Action(config.TableTerminalMode, "alt+n"); got != "terminal_next_window" {
 		t.Errorf("alt+n resolved to %q, want terminal_next_window", got)
 	}

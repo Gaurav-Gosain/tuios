@@ -7,8 +7,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// pastedBody checks that sent is one bracketed paste whose body holds no ESC,
-// and returns the body.
 func pastedBody(t *testing.T, sent string) string {
 	t.Helper()
 	if !strings.HasPrefix(sent, "\x1b[200~") || !strings.HasSuffix(sent, "\x1b[201~") {

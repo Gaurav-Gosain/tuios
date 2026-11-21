@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// osWithBindings builds an OS whose keybind registry comes from the default
-// config with one section overridden, which is what a user editing config.toml
-// ends up with after the defaults are filled in.
 func osWithBindings(t *testing.T, override func(*config.KeybindingsConfig)) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -44,23 +41,18 @@ func press(key string) tea.KeyPressMsg {
 // key no longer does.
 func TestRebindingAPrefixKeyTakesEffect(t *testing.T) {
 	tests := []struct {
-		name string
-		// override installs the non-default binding.
-		override func(*config.KeybindingsConfig)
-		// arm puts the OS into the prefix state the key is pressed in.
-		arm func(*app.OS)
-		// route is the handler the routing layer would reach for that state.
-		route func(tea.KeyPressMsg, *app.OS) (*app.OS, tea.Cmd)
-		// newKey is the rebound key, oldKey the default it replaced.
+		name           string
+		override       func(*config.KeybindingsConfig)
+		arm            func(*app.OS)
+		route          func(tea.KeyPressMsg, *app.OS) (*app.OS, tea.Cmd)
 		newKey, oldKey string
-		// done reports whether the action ran.
-		done func(*app.OS) bool
+		done           func(*app.OS) bool
 	}{
 		{
 			name: "prefix_mode",
 			override: func(k *config.KeybindingsConfig) {
 				k.PrefixMode["toggle_help"] = []string{"g"}
-				delete(k.PrefixMode, "prefix_scrollback") // "s" would still be bound
+				delete(k.PrefixMode, "prefix_scrollback")
 			},
 			arm:    func(o *app.OS) { o.PrefixActive = true },
 			route:  HandlePrefixCommand,
@@ -183,8 +175,6 @@ func TestRebindingATerminalModeKeyTakesEffect(t *testing.T) {
 // never swallowed no matter what the main keybind section binds it to.
 func TestUnboundKeysStillReachTheShell(t *testing.T) {
 	o := osWithBindings(t, func(k *config.KeybindingsConfig) {
-		// A user who binds workspace switching to a bare letter must not lose
-		// that letter while typing.
 		k.Workspaces["switch_workspace_2"] = []string{"j"}
 	})
 	o.Mode = app.TerminalMode

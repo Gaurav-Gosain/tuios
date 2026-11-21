@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// rgb is a truecolor foreground, or ok false for any other foreground.
 type rgb struct {
 	r, g, b uint8
 	ok      bool
@@ -24,9 +23,6 @@ func rgbOf(c color.Color) rgb {
 	return rgb{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), true}
 }
 
-// frameFG walks one rendered frame and returns the truecolor foreground in
-// effect at every cell, indexed by row then column. Only foreground state is
-// tracked, which is all the separator check needs.
 func frameFG(frame string) []map[int]rgb {
 	var rows []map[int]rgb
 	for line := range strings.SplitSeq(frame, "\n") {
@@ -59,7 +55,6 @@ func frameFG(frame string) []map[int]rgb {
 	return rows
 }
 
-// applySGR folds one SGR parameter string into the running foreground state.
 func applySGR(fg rgb, params string) rgb {
 	if params == "" {
 		return rgb{}
@@ -89,9 +84,6 @@ func applySGR(fg rgb, params string) rgb {
 	return fg
 }
 
-// unfocusedColumns lists the columns of one row that carry the unfocused border
-// color. It only feeds the failure message, where the point is to show which
-// column the divider actually landed on when it was not the focused pane's edge.
 func unfocusedColumns(rows []map[int]rgb, y int, unfocused rgb) []int {
 	if y < 0 || y >= len(rows) {
 		return nil
@@ -143,7 +135,6 @@ func TestSharedBorderDragKeepsFocusedSeparatorHighlighted(t *testing.T) {
 	const steps = 24
 	for i := 1; i <= steps; i++ {
 		_, _ = m.Update(motionAt(startX-i, startY))
-		// Terminal output during the drag: a frame the drag did not ask for.
 		_, _ = m.Update(app.PTYDataMsg{})
 
 		frame := m.View().Content

@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// scrolledBackPane returns a tiled pane looking some way up its own history,
-// with a frame already composed: the grab rect input reads is recorded by the
-// renderer as it draws, so nothing is grabbable until something is drawn.
 func scrolledBackPane(t *testing.T) (*OS2, *terminal.Window, app.ScrollbarRect) {
 	t.Helper()
 	o, wa, wb := twoPaneBSP(t)
@@ -49,7 +46,6 @@ func scrolledBackPane(t *testing.T) (*OS2, *terminal.Window, app.ScrollbarRect) 
 func TestScrollbarTrackClickJumpsThenDragsWithoutASecondLeap(t *testing.T) {
 	o, win, rect := scrolledBackPane(t)
 
-	// A row on the track well clear of the thumb, on whichever side has room.
 	target := rect.TrackY + 1
 	if rect.OnThumb(target) {
 		target = rect.TrackY + rect.TrackH - 2
@@ -71,15 +67,12 @@ func TestScrollbarTrackClickJumpsThenDragsWithoutASecondLeap(t *testing.T) {
 			o.ScrollbarGrabOffset, want)
 	}
 
-	// The first motion event of the gesture, on the row the press landed on.
-	// Nothing moved between them, so nothing may move now.
 	handleMouseMotion(motionMsg(rect.X, target), o)
 	if got := app.ScrollbarThumbRow(win, &config.Global); got != jumped {
 		t.Errorf("the first motion event moved the thumb from row %d to %d: the bar leapt a second time",
 			jumped, got)
 	}
 
-	// And the drag proper tracks the pointer, holding the offset it grabbed.
 	handleMouseMotion(motionMsg(rect.X, target+2), o)
 	if got := app.ScrollbarThumbRow(win, &config.Global); got != jumped+2 {
 		t.Errorf("dragging two rows down moved the thumb to row %d, want %d", got, jumped+2)

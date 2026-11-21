@@ -6,8 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// The tape executor and run-command run actions by name through this, since
-// the handlers are here and the executor is in internal/app.
 func init() {
 	app.SetActionRunner(RunActionByName)
 }

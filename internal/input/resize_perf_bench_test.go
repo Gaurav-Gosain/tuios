@@ -16,9 +16,6 @@ const (
 	benchRows = 55
 )
 
-// benchResizeOS builds a tiled BSP workspace of n windows with painted content,
-// already in the middle of a bottom-right resize drag on the focused window.
-// This is the exact state the model is in between two motion events of a drag.
 func benchResizeOS(tb testing.TB, n int) *app.OS {
 	tb.Helper()
 
@@ -33,9 +30,7 @@ func benchResizeOS(tb testing.TB, n int) *app.OS {
 		UseBSPLayout:     true,
 		FocusedWindow:    0,
 		PendingResizes:   make(map[string][2]int),
-		// The layout reads the model's session-settled value, not the global;
-		// seed it from the global the caller just set. NewOS does the same.
-		SharedBorders: config.Global.SharedBorders,
+		SharedBorders:    config.Global.SharedBorders,
 	}
 
 	for i := range n {
@@ -85,8 +80,6 @@ func benchResizeOS(tb testing.TB, n int) *app.OS {
 		}
 	}
 
-	// Arm a bottom-right resize drag on the focused window, the way
-	// handleMouseClick would have on press.
 	focused := m.GetFocusedWindow()
 	m.Resizing = true
 	m.DraggedWindowIndex = m.FocusedWindow
@@ -106,7 +99,6 @@ func benchResizeOS(tb testing.TB, n int) *app.OS {
 	return m
 }
 
-// motionAt is the message bubbletea delivers for one pointer move during a drag.
 func motionAt(x, y int) tea.MouseMotionMsg {
 	return tea.MouseMotionMsg(uv.MouseMotionEvent{
 		X:      x,
@@ -115,9 +107,6 @@ func motionAt(x, y int) tea.MouseMotionMsg {
 	})
 }
 
-// sharedGap is the column the layout keeps between panes for the divider, on
-// the same terms app.OS.separatorGap does. benchResizeOS drives the layout
-// directly, so it answers the question the app would answer for it.
 func sharedGap() int {
 	if config.Global.SharedBorders {
 		return 1

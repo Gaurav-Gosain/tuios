@@ -4,10 +4,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Character search-related functions for copy mode (f/F/t/T and ;/,)
-
-// convertColumnToRuneIndex converts a column position to a rune index in the text
-// accounting for wide characters (emoji, nerd fonts, CJK, etc.)
 func convertColumnToRuneIndex(grid terminal.CopyGrid, absY int, col int) int {
 	scrollbackLen := grid.ScrollbackLen()
 	runeIndex := 0
@@ -19,7 +15,7 @@ func convertColumnToRuneIndex(grid terminal.CopyGrid, absY int, col int) int {
 			if currentCol >= col {
 				break
 			}
-			if cell.Width > 0 { // Skip continuation cells
+			if cell.Width > 0 {
 				for range cell.Content {
 					runeIndex++
 				}
@@ -33,7 +29,7 @@ func convertColumnToRuneIndex(grid terminal.CopyGrid, absY int, col int) int {
 				break
 			}
 			cell := grid.Text().CellAt(x, screenY)
-			if cell != nil && cell.Width > 0 { // Skip continuation cells
+			if cell != nil && cell.Width > 0 {
 				for range cell.Content {
 					runeIndex++
 				}
@@ -45,16 +41,13 @@ func convertColumnToRuneIndex(grid terminal.CopyGrid, absY int, col int) int {
 	return runeIndex
 }
 
-// findCharOnLine searches for a character across multiple lines
-// direction: 1 for forward, -1 for backward
-// till: true to stop before the character, false to land on it
 func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, direction int, till bool) {
 	startAbsY := getAbsoluteY(cm, grid)
 	scrollbackLen := grid.ScrollbackLen()
 	screenHeight := grid.Text().Height()
 	totalLines := scrollbackLen + screenHeight
 
-	maxIterations := 1000 // Prevent infinite loops
+	maxIterations := 1000
 
 	if direction > 0 {
 		for lineOffset := range maxIterations {
@@ -72,7 +65,6 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 
 			startCharIdx := 0
 			if lineOffset == 0 {
-				// On current line, get cursor's rune position and start from next rune
 				currentRuneIdx := convertColumnToRuneIndex(grid, absY, cm.CursorX)
 				startCharIdx = currentRuneIdx + 1
 			}
@@ -83,12 +75,10 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 					if till {
 						targetCharIdx = charIdx - 1
 						if targetCharIdx < 0 {
-							continue // Can't stop before first character
+							continue
 						}
 					}
 
-					// Move to the target line using step-by-step movement
-					// This ensures scroll offset is handled correctly
 					linesToMove := absY - startAbsY
 					for range linesToMove {
 						moveDown(cm, grid)
@@ -115,7 +105,6 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 
 			endCharIdx := len(runes) - 1
 			if lineOffset == 0 {
-				// On current line, get cursor's rune position and start from previous rune
 				currentRuneIdx := convertColumnToRuneIndex(grid, absY, cm.CursorX)
 				endCharIdx = currentRuneIdx - 1
 			}
@@ -126,12 +115,10 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 					if till {
 						targetCharIdx = charIdx + 1
 						if targetCharIdx >= len(runes) {
-							continue // Can't stop after last character
+							continue
 						}
 					}
 
-					// Move to the target line using step-by-step movement
-					// This ensures scroll offset is handled correctly
 					linesToMove := startAbsY - absY
 					for range linesToMove {
 						moveUp(cm, grid)
@@ -143,13 +130,11 @@ func findCharOnLine(cm *terminal.CopyMode, grid terminal.CopyGrid, char rune, di
 			}
 		}
 	}
-	// Character not found: no movement
 }
 
-// repeatCharSearch repeats the last character search
 func repeatCharSearch(cm *terminal.CopyMode, grid terminal.CopyGrid, reverse bool) {
 	if cm.LastCharSearch == 0 {
-		return // No previous character search
+		return
 	}
 
 	direction := cm.LastCharSearchDir
@@ -160,8 +145,6 @@ func repeatCharSearch(cm *terminal.CopyMode, grid terminal.CopyGrid, reverse boo
 	findCharOnLine(cm, grid, cm.LastCharSearch, direction, cm.LastCharSearchTill)
 }
 
-// convertRuneIndexToColumn converts a rune index in the text string to a column position
-// accounting for wide characters (emoji, nerd fonts, CJK, etc.)
 func convertRuneIndexToColumn(grid terminal.CopyGrid, absY int, runeIndex int) int {
 	scrollbackLen := grid.ScrollbackLen()
 
@@ -178,14 +161,13 @@ func convertRuneIndexToColumn(grid terminal.CopyGrid, absY int, runeIndex int) i
 			if runeCount >= runeIndex {
 				break
 			}
-			if cell.Width > 0 { // Skip continuation cells
+			if cell.Width > 0 {
 				for range cell.Content {
 					runeCount++
 					if runeCount > runeIndex {
 						return col
 					}
 				}
-				// Advance column by cell width (handles wide chars like CJK)
 				col += cell.Width
 			}
 		}
@@ -193,14 +175,13 @@ func convertRuneIndexToColumn(grid terminal.CopyGrid, absY int, runeIndex int) i
 		screenY := absY - scrollbackLen
 		for x := range grid.Text().Width() {
 			cell := grid.Text().CellAt(x, screenY)
-			if cell != nil && cell.Width > 0 { // Skip continuation cells
+			if cell != nil && cell.Width > 0 {
 				for range cell.Content {
 					runeCount++
 					if runeCount > runeIndex {
 						return col
 					}
 				}
-				// Advance column by cell width (handles wide chars like CJK)
 				col += cell.Width
 			}
 		}

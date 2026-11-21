@@ -7,11 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Corner snapping moved off the bare digits in window mode, where it shadowed
-// select_window_1 through _4, onto the layout chord. A binding the config
-// resolves and the dispatcher does not handle is a binding that silently does
-// nothing, which is the failure this family already had once.
-
 func layoutPrefixOS(t *testing.T) *app.OS {
 	t.Helper()
 	return osWithBindings(t, func(*config.KeybindingsConfig) {})

@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// osState is the part of the model the window-manager bindings under test move.
-// Comparing the whole struct means a key that fires anything at all is caught,
-// not only the three actions that were demonstrated on screen.
 type osState struct {
 	windows      int
 	focused      int
@@ -44,9 +41,6 @@ func snapshotOS(o *app.OS) osState {
 	}
 }
 
-// helpModalOS builds a window-management-mode model with the help overlay open
-// and two daemon-backed windows, which need no PTY and so let a key that does
-// reach the window manager close one without the test having spawned a shell.
 func helpModalOS(t *testing.T) *app.OS {
 	t.Helper()
 

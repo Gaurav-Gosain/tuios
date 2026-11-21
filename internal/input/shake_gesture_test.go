@@ -9,19 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The shake gesture is detected in Update, above every handler, so these drive
-// Update with the real handler registered. A test that called the detector
-// alone would enter the code below the wiring and say nothing about whether a
-// pointer can reach it, which is how a feature ships that passes every test it
-// has and cannot be triggered.
-//
-// The three that matter are the ones named after what they protect: a divider
-// drag, a window drag and a sweep across the screen. Each is a real pointer
-// gesture a person makes while working, played back through the same path a
-// terminal's events take.
-
-// shakeReady is the two-pane fixture with the gesture turned on and the beam
-// off, and the real input handler in place.
 func shakeReady(t *testing.T) *OS2 {
 	t.Helper()
 	app.SetInputHandler(HandleInput)
@@ -30,23 +17,16 @@ func shakeReady(t *testing.T) *OS2 {
 	o, _, _ := twoPaneBSP(t)
 	o.UserConfig = config.DefaultConfig()
 	o.UserConfig.Spotlight.Shake = true
-	// Nothing writes the config: the save is a command the test never runs.
 	o.ConfigReadOnly = true
 	return o
 }
 
-// hoverMsg is motion with no button held, which is what the host reports for a
-// pointer being moved about. motionMsg is the drag version.
 func hoverMsg(x, y int) tea.MouseMotionMsg {
 	return tea.MouseMotionMsg{Button: tea.MouseNone, X: x, Y: y}
 }
 
-// shakeTurns is comfortably more turns than the gesture asks for, so these
-// tests say nothing about the exact count: that number is pinned next to the
-// constant, in internal/app.
 const shakeTurns = 12
 
-// shakeAt plays turns left and right about x, through Update.
 func shakeAt(o *OS2, x, y, turns int) {
 	o.Update(hoverMsg(x, y))
 	at, dir := x, 1
@@ -126,8 +106,6 @@ func TestAWindowDragDoesNotToggleTheBeam(t *testing.T) {
 	}
 }
 
-// withSharedBorders turns shared borders on for a test and restores the
-// previous value after.
 func withSharedBorders(t *testing.T) {
 	t.Helper()
 	prev := config.Global.SharedBorders

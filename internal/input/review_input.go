@@ -8,37 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
-// handleReviewInput handles a key while the review overlay is open. It owns
-// every key, in either mode, wherever it was opened from: a key meant for the
-// diff must not reach a pane, the Inbox or the rail underneath.
-//
-// The keys are the overlay's own, not bindings, like the scrollback browser's,
-// except the hunk and file motions and the stage keys, which
-// [keybindings.review] binds:
-//
-//	j k, arrows      move by line (through the files with the list focused)
-//	] [              next and previous hunk (review_next_hunk, review_prev_hunk)
-//	} {              next and previous file (review_next_file, review_prev_file)
-//	a d              stage or unstage the hunk (review_stage_hunk, review_unstage_hunk)
-//	A D              stage or unstage the file (review_stage_file, review_unstage_file)
-//	z                undo the last stage or unstage (review_undo_stage)
-//	tab              the file list or the diff
-//	enter            in the file list: open that file
-//	c, C             a note on the line, or on the whole hunk
-//	e, x             edit or resolve the note under the cursor
-//	S                send the unsent notes to the pane's agent
-//	s                one column, or the two sides next to each other
-//	h l, left right  scroll the focused panel sideways: the code, or the paths
-//	u                since the base, or the uncommitted changes only
-//	b                change the base
-//	w                the compare view, for a pane in a fan
-//	r                read the diff again
-//	esc, q           close (or back to the compare view)
-//
-// In the compare view: j k move, enter reviews an attempt, m marks one, d
-// diffs the two marked, V runs a command in every attempt, K keeps one and
-// esc goes back. While a line is being typed every printable key is text,
-// enter saves it and esc drops it.
 func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
 	if o.ReviewEditing() {
@@ -62,14 +31,11 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-	// Past the editor the keys are commands. See commandKey.
 	key = commandKey(msg)
 	if o.ReviewConfirming() {
 		return o, o.ReviewCompareConfirm(key == "y" || key == "Y")
 	}
 	if o.ReviewCompareShown() {
-		// The attempts list moves on the list keys, letters included. Its
-		// own K (keep) is not a list key by default.
 		if listKey(o, key, true, listPage, o.ReviewCompareMove) {
 			return o, nil
 		}
@@ -116,8 +82,6 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.NoteAction(action)
 		return o, cmd
 	}
-	// The diff moves on the list keys, letters included; a page is the rows
-	// the panel shows.
 	switch o.ListKeys.Keys(key, true) {
 	case listnav.Up:
 		o.ReviewMove(-1)
@@ -139,7 +103,6 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	switch key {
-	// Half a page, as in vim and less, besides the list's page keys.
 	case "ctrl+d", "space":
 		o.ReviewPage(1)
 	case "ctrl+u":

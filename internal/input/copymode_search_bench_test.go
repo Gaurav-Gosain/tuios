@@ -9,8 +9,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// searchBenchWindow is a 207x55 pane whose 10000-line scrollback has wrapped
-// with build-log lines, the pane the copy-mode search figures are taken on.
 func searchBenchWindow(b *testing.B) *terminal.Window {
 	b.Helper()
 	em := vt.NewEmulator(207, 55)

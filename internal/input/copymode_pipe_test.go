@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Copy-pipe keys through the real copy-mode entry point: the command gets
-// the selection, and copy mode stays or ends by the entry's cancel.
-
 func pipeCopyOS(t *testing.T, multi bool) (*app.OS, []*terminal.Window) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -30,7 +27,6 @@ func pipeCopyOS(t *testing.T, multi bool) (*app.OS, []*terminal.Window) {
 	return o, w
 }
 
-// pipeDone runs a key's command and returns how the pipe ended.
 func pipeDone(t *testing.T, o *app.OS, key string) app.CopyPipeDoneMsg {
 	t.Helper()
 	cmd := mcPress(o, key)

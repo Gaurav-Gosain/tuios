@@ -10,7 +10,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// releaseAt is the message bubbletea delivers when the drag ends.
 func releaseAt(x, y int) tea.MouseReleaseMsg {
 	return tea.MouseReleaseMsg(uv.MouseReleaseEvent{
 		X:      x,
@@ -39,7 +38,6 @@ func TestResizeMotionRendersAreBoundedAndKeepFinalFrame(t *testing.T) {
 	m := benchResizeOS(t, 4)
 	startX, startY := m.ResizeStartX, m.ResizeStartY
 
-	// Prime the cache so the coalesced path has a frame to repeat.
 	prev := m.View().Content
 
 	const steps = 40
@@ -56,7 +54,6 @@ func TestResizeMotionRendersAreBoundedAndKeepFinalFrame(t *testing.T) {
 	elapsed := time.Since(start)
 
 	budget := time.Second / time.Duration(config.Global.NormalFPS)
-	// One frame of slack for the leading edge, one for scheduling jitter.
 	maxFrames := int(elapsed/budget) + 2
 	if composed > maxFrames {
 		t.Fatalf("drag composed %d frames in %v, more than the %d the %v interaction "+
@@ -68,7 +65,6 @@ func TestResizeMotionRendersAreBoundedAndKeepFinalFrame(t *testing.T) {
 	_, _ = m.Update(releaseAt(finalX, startY))
 	finalFrame := m.View().Content
 
-	// The geometry must reflect the last motion, not an earlier coalesced one.
 	focused := m.GetFocusedWindow()
 	if focused == nil {
 		t.Fatal("no focused window after drag")
@@ -77,8 +73,6 @@ func TestResizeMotionRendersAreBoundedAndKeepFinalFrame(t *testing.T) {
 		t.Fatalf("resized edge settled at %d, want the released pointer position %d", got, finalX)
 	}
 
-	// And that geometry must be what is on screen. Release is not a motion
-	// event, so it is never coalesced and always composes.
 	if finalFrame == prev {
 		t.Fatal("frame after mouse release repeated the cached mid-drag frame; " +
 			"the final position never reached the screen")
@@ -103,9 +97,6 @@ func TestResizeInteractionTickFlushesSkippedMotion(t *testing.T) {
 	afterSecond := m.View().Content
 
 	if afterSecond != afterFirst {
-		// The second event cleared the frame budget on its own and drew itself,
-		// so there is nothing pending for the tick to flush. That happens on
-		// slow builds where a frame costs more than the budget.
 		t.Skip("second motion event was not coalesced on this build; nothing to flush")
 	}
 
@@ -138,15 +129,11 @@ func TestSharedBorderResizeSettlesAtRelease(t *testing.T) {
 	midDrag := ""
 	for i := 1; i <= steps; i++ {
 		_, _ = m.Update(motionAt(startX-i, startY))
-		// A real drag is interleaved with interaction ticks, which is what
-		// flushes a motion whose draw was coalesced away.
 		if i%4 == 0 {
 			_, _ = m.Update(app.TickerMsg(time.Now()))
 		}
 		midDrag = m.View().Content
 	}
-	// The separator has to track the pointer while the drag is in flight, not
-	// only once it ends. That is the whole reason the sync runs during a drag.
 	if midDrag == before {
 		t.Fatal("no frame during the drag differed from the pre-drag frame; the layout did not follow the pointer")
 	}
@@ -164,9 +151,6 @@ func TestSharedBorderResizeSettlesAtRelease(t *testing.T) {
 	}
 	settled := focused.X + focused.Width
 
-	// Retiling reapplies the layout from the tree's ratios. If the drag's final
-	// sync ran, the geometry is already what the ratios describe and nothing
-	// moves; if it was skipped, the window snaps back to its pre-drag size.
 	geom := make(map[string][4]int, len(m.Windows))
 	for _, w := range m.Windows {
 		geom[w.ID] = [4]int{w.X, w.Y, w.Width, w.Height}
@@ -202,9 +186,6 @@ func TestSharedBorderMotionCostDoesNotScaleWithWindowCount(t *testing.T) {
 			_, _ = HandleInput(motionAt(startX+dx, startY), m)
 			i++
 		}
-		// The first pass over each size reflows text into the panes'
-		// history for the first time, which grows the history once. The
-		// cost per event is what follows.
 		for range 60 {
 			step()
 		}
@@ -212,14 +193,6 @@ func TestSharedBorderMotionCostDoesNotScaleWithWindowCount(t *testing.T) {
 	}
 
 	small, large := motionAllocs(4), motionAllocs(9)
-	// Slack for the honest per-window work a drag does: each pane whose size
-	// crosses a cell boundary this motion reflows its emulator, and a crowded
-	// workspace has more of them, so the geometry adjust is mildly proportional to
-	// window count by design. It grew when BSP tiles stopped being inflated to a
-	// fixed minimum: the smallest panes now hold their true size and reflow with
-	// the drag instead of sitting pinned (and overlapping). The regression this
-	// still catches is the whole-tree ratio sync running per motion, which more
-	// than quadrupled the count.
 	if large > small+8 {
 		t.Fatalf("motion event allocated %v times at 9 windows against %v at 4; "+
 			"per-event work is scaling with window count again", large, small)

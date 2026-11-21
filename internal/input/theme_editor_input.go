@@ -5,8 +5,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// handleThemeEditorInput handles a key while the theme editor is open. The
-// editor is modal: a key it does not use is dropped, not passed to the pane.
 func handleThemeEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
 	if _, typing := o.ThemeEditorTyping(); typing {
@@ -23,8 +21,6 @@ func handleThemeEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	if o.ThemeEditorHidden() {
-		// Hidden, the sheet waits for space or esc. Every other key is used up,
-		// so a key meant for the editor never reaches a pane.
 		if key == "space" || key == "esc" {
 			o.ThemeEditorToggleHidden()
 		}

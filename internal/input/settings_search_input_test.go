@@ -58,7 +58,6 @@ func TestSettingsTypingALetterSearches(t *testing.T) {
 	if !o.SettingsSearchOpen() || o.SettingsSearchQuery() != "pane" {
 		t.Errorf("typing pane gave search=%v query=%q, want a search for pane", o.SettingsSearchOpen(), o.SettingsSearchQuery())
 	}
-	// Down moves through the results, and a ctrl chord does not type.
 	o, _ = handleSettingsInput(tea.KeyPressMsg{Code: tea.KeyDown}, o)
 	if o.SettingsCursor() != 1 {
 		t.Errorf("down in the results left row %d", o.SettingsCursor())

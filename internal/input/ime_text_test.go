@@ -11,9 +11,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// typeFromHost decodes host the way Bubble Tea does, runs every key press it
-// holds through the input handler with a focused pane in terminal mode whose
-// emulator was fed paneFlags, and returns the bytes that reached the pane.
 func typeFromHost(t *testing.T, paneFlags, host string) string {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -29,7 +26,6 @@ func typeFromHost(t *testing.T, paneFlags, host string) string {
 	o.Windows = []*terminal.Window{{ID: "ime", Terminal: em, Pty: pty, Width: 82, Height: 26, Workspace: 1}}
 	o.CurrentWorkspace, o.FocusedWindow = 1, 0
 	o.Mode = app.TerminalMode
-	// A kitty host that sends releases itself, as one does under these flags.
 	o.KeyboardFlags = hostReportsEvents
 
 	var d uv.EventDecoder

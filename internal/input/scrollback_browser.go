@@ -15,9 +15,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// Bounds on the vim-style count prefix in the scrollback browser. maxVimCount
-// caps digit accumulation; maxHorizCount bounds horizontal and search motions,
-// which saturate at the line edge after a handful of steps.
 const (
 	maxVimCount   = 100000
 	maxHorizCount = 1000
@@ -47,7 +44,6 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		}
 	}
 
-	// Help overlay: toggle with ?, dismiss with esc/q/?
 	if browser.ShowHelp {
 		if keyStr == "?" || keyStr == "esc" || keyStr == "q" {
 			browser.ShowHelp = false
@@ -63,36 +59,29 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return handleBrowserOutputModeKey(msg, keyStr, browser, o)
 	}
 
-	// The list keys of [keybindings.lists] move the command list, letters
-	// included: the list has no filter on its keys, / opens the search.
 	if browserListKey(o, keyStr, browser) {
 		return o, nil
 	}
 
 	switch keyStr {
-	// Close
 	case "q", "esc":
 		o.ShowScrollbackBrowser = false
 		o.ScrollbackBrowser = nil
 		return o, nil
 
-	// Half a page, as in vim and less, besides the list's page keys.
 	case "ctrl+d":
 		browser.PageDown(listPage)
 	case "ctrl+u":
 		browser.PageUp(listPage)
 
-	// Enter output mode
 	case "l", "right":
 		browser.EnterOutputMode()
 
-	// Preview scroll
 	case "J", "ctrl+e":
 		browser.ScrollPreviewDown()
 	case "K", "ctrl+y":
 		browser.ScrollPreviewUp()
 
-	// Multi-select
 	case "space":
 		browser.ToggleSelect()
 		browser.Next()
@@ -110,7 +99,6 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	case "3":
 		browser.SetMode(scrollback.ModePaths)
 
-	// Copy output to clipboard
 	case "y":
 		text := browser.SelectedText()
 		if text != "" {
@@ -122,7 +110,6 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		}
 		o.ShowNotification("Nothing to copy", "warning", o.Settings.NotificationDuration)
 
-	// Copy command text to clipboard
 	case "c":
 		text := browser.SelectedCommandText()
 		if text != "" {
@@ -133,7 +120,6 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			return o, tea.SetClipboard(vt.StripSixelMarkers(text))
 		}
 
-	// Paste selected command back to terminal
 	case "enter":
 		text := browser.SelectedCommandText()
 		if text == "" {
@@ -147,8 +133,6 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.ShowScrollbackBrowser = false
 		o.ScrollbackBrowser = nil
 
-		// Send the text as a paste. The line came from pane output, so it
-		// goes through the same sanitizing as any other paste.
 		_ = focusedWindow.Paste(text)
 		o.ShowNotification(
 			fmt.Sprintf("Pasted: %s", truncateForNotif(text, 30)),
@@ -169,7 +153,6 @@ func OpenScrollbackBrowser(o *app.OS) {
 
 	term := focusedWindow.Terminal
 
-	// Log marker diagnostics
 	markers := term.SemanticMarkers()
 	if markers != nil {
 		o.Log("info", "Scrollback browser: %d OSC 133 markers found", markers.Len())
@@ -177,7 +160,6 @@ func OpenScrollbackBrowser(o *app.OS) {
 		o.Log("info", "Scrollback browser: no semantic marker list")
 	}
 
-	// Wire up debug logging so parser diagnostics appear in the log viewer
 	scrollback.DebugLogFunc = func(format string, args ...any) {
 		o.Log("debug", "[scrollback] "+format, args...)
 	}
@@ -233,8 +215,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 		return o, nil
 	}
 
-	// Count prefix: accumulate digits, capped so a long digit run cannot build
-	// an enormous multiplier that drives a multi-second motion loop below.
 	if len(keyStr) == 1 && keyStr[0] >= '1' && keyStr[0] <= '9' {
 		vim.PendingCount = min(vim.PendingCount*10+int(keyStr[0]-'0'), maxVimCount)
 		return o, nil
@@ -245,11 +225,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 	}
 
 	count := vim.ConsumeCount()
-	// Clamp the motion count before the per-motion loops. Every motion saturates
-	// at the buffer edge after a few steps, so a huge count only wastes work (and
-	// the word motions allocate a []rune per iteration). Vertical/line-spanning
-	// motions can repeat up to the line count; horizontal/search motions saturate
-	// far sooner, so a small constant bounds them.
 	vCount := count
 	if n := len(vim.Lines); n > 0 && vCount > n {
 		vCount = n
@@ -258,8 +233,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 	center := false
 	isVisual := vim.Mode == scrollback.VimVisualChar || vim.Mode == scrollback.VimVisualLine
 
-	// The g of gg. A pending g is for the very next key only, so g j g is
-	// not gg, as in copy mode.
 	finishesGG := vim.PendingG && time.Since(vim.LastGTime) < o.Settings.ChordTimeout()
 	vim.PendingG = false
 	if keyStr == "g" {
@@ -272,9 +245,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 		return o, nil
 	}
 
-	// The motions take copy mode's keys: the [keybindings.copy_mode] actions
-	// and the keys copy mode reads itself, so a key rebound there moves here
-	// too.
 	action := fixedCopyMotions[keyStr]
 	if action == "" {
 		action = copyModeAction(msg, o)
@@ -392,7 +362,6 @@ func handleBrowserOutputModeKey(msg tea.KeyPressMsg, keyStr string, browser *scr
 	return o, nil
 }
 
-// handleScrollbackBrowserMouseWheel handles mouse wheel events when the scrollback browser is open.
 func handleScrollbackBrowserMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	browser := o.ScrollbackBrowser
 	if browser == nil {
@@ -430,7 +399,6 @@ func handleScrollbackBrowserMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.O
 	return o, nil
 }
 
-// handleScrollbackBrowserMouseClick handles mouse click events when the scrollback browser is open.
 func handleScrollbackBrowserMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	browser := o.ScrollbackBrowser
 	if browser == nil {
@@ -441,18 +409,13 @@ func handleScrollbackBrowserMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.O
 		return o, nil
 	}
 
-	// Compute right pane screen bounds.
-	// Layout: border(1) + padding(2) + leftW + " │ "(3) + rightPane
 	rightPaneX := browser.LayoutLeftW + 6
-	// First output line: border(1) + padding(1) + header(2) + paneHeader(1) = 5
 	rightPaneY := 5
 	rightPaneW := browser.LayoutRightW
-	// Output rows = paneH - 1 (minus right pane header), minus 1 for scroll indicator if shown
 	rightPaneH := browser.LayoutPaneH - 1
 
-	// Left pane bounds.
-	leftPaneX := 3 // border(1) + padding(2)
-	leftPaneY := 4 // border(1) + padding(1) + header(2)
+	leftPaneX := 3
+	leftPaneY := 4
 	leftPaneH := browser.LayoutPaneH
 
 	x, y := msg.X, msg.Y
@@ -486,7 +449,6 @@ func handleScrollbackBrowserMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.O
 			}
 		}
 	} else {
-		// Not in output mode: click left pane to select, right pane to enter output
 		if x >= leftPaneX && x < leftPaneX+browser.LayoutLeftW && y >= leftPaneY && y < leftPaneY+leftPaneH {
 			relY := y - leftPaneY
 			idx := browser.ScrollOffset + relY
@@ -509,7 +471,6 @@ func handleScrollbackBrowserMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.O
 	return o, nil
 }
 
-// handleScrollbackBrowserMouseMotion handles mouse motion (drag) events.
 func handleScrollbackBrowserMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	browser := o.ScrollbackBrowser
 	if browser == nil || !browser.DragActive {
@@ -540,14 +501,12 @@ func handleScrollbackBrowserMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app
 		return o, nil
 	}
 
-	// Enter visual char mode on first drag motion (if not already visual)
 	if vim.Mode != scrollback.VimVisualChar && vim.Mode != scrollback.VimVisualLine {
 		vim.CursorY = browser.DragOriginY
 		vim.CursorX = browser.DragOriginX
 		vim.EnterVisualChar()
 	}
 
-	// Move cursor to current mouse position (extends visual selection)
 	vim.CursorY = lineIdx
 	runes := []rune(vim.Lines[lineIdx])
 	if relX >= len(runes) {
@@ -560,7 +519,6 @@ func handleScrollbackBrowserMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app
 	return o, nil
 }
 
-// handleScrollbackBrowserMouseRelease handles mouse release events.
 func handleScrollbackBrowserMouseRelease(o *app.OS) (*app.OS, tea.Cmd) {
 	browser := o.ScrollbackBrowser
 	if browser == nil {
@@ -570,9 +528,6 @@ func handleScrollbackBrowserMouseRelease(o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-// truncateForNotif shortens s to at most maxLen runes for a notification,
-// ending it with "..." when it was cut. It counts and cuts by rune, so a
-// command holding multi-byte text is never split inside a character.
 func truncateForNotif(s string, maxLen int) string {
 	if maxLen <= 0 {
 		return ""
@@ -581,15 +536,12 @@ func truncateForNotif(s string, maxLen int) string {
 		return s
 	}
 	runes := []rune(s)
-	// Too small to fit an ellipsis: hard-truncate on a rune boundary.
 	if maxLen <= 3 {
 		return string(runes[:maxLen])
 	}
 	return string(runes[:maxLen-3]) + "..."
 }
 
-// browserMotion is a copy-mode motion as the scrollback browser runs it on its
-// own text. steps says which count repeats it; byCount takes the count itself.
 type browserMotion struct {
 	move    func(*scrollback.VimState)
 	byCount func(v *scrollback.VimState, count int)
@@ -597,9 +549,6 @@ type browserMotion struct {
 	center  bool
 }
 
-// motionSteps is how a count repeats a motion: by lines, which a count may
-// repeat up to the line count, by columns, capped at maxHorizCount, or not
-// at all.
 type motionSteps uint8
 
 const (
@@ -608,8 +557,6 @@ const (
 	stepsHorizontal
 )
 
-// browserMotions are the scrollback browser's motions, by the copy-mode
-// action whose keys run them.
 var browserMotions = map[string]browserMotion{
 	config.ActionCopyModeLeft:            {move: (*scrollback.VimState).MoveLeft, steps: stepsHorizontal},
 	config.ActionCopyModeRight:           {move: (*scrollback.VimState).MoveRight, steps: stepsHorizontal},
@@ -649,8 +596,6 @@ var browserMotions = map[string]browserMotion{
 	}},
 }
 
-// browserListKey moves the scrollback browser's list for a key of
-// [keybindings.lists], and reports whether the key was one.
 func browserListKey(o *app.OS, key string, browser *scrollback.Browser) bool {
 	switch o.ListKeys.Keys(key, true) {
 	case listnav.None:
@@ -675,7 +620,6 @@ func browserListKey(o *app.OS, key string, browser *scrollback.Browser) bool {
 	return true
 }
 
-// browserListLen is how many rows the browser's list holds in its mode now.
 func browserListLen(browser *scrollback.Browser) int {
 	switch browser.Mode {
 	case scrollback.ModeJSON:

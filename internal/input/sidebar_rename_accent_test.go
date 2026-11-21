@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// railFocusedOS is a two-pane client with the rail holding the keyboard.
 func railFocusedOS(t *testing.T) *app.OS {
 	t.Helper()
 	prev := config.Global.SidebarEnabled

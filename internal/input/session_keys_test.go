@@ -19,11 +19,6 @@ import (
 // depending on what the host terminal speaks, and all of them have to find the
 // same action. The unshifted chords must survive the aliasing.
 func TestAltShiftKeysSpellWhatTheTerminalSends(t *testing.T) {
-	// alt+shift+<digit> is how the non-macOS defaults bind move_and_follow_N.
-	// The macOS defaults spell the same action opt+shift+N, so on a macOS
-	// machine the registry would hold no alt+ spelling of it. The subject here
-	// is the wire spellings of one chord, which is the same question on both
-	// platforms.
 	t.Cleanup(config.ForceMacOSHost(false))
 	registry := config.NewKeybindRegistry(config.DefaultConfig())
 

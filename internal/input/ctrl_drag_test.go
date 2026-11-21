@@ -30,7 +30,6 @@ func indexOf(o *OS2, w *terminal.Window) int {
 	return -1
 }
 
-// contentCell returns a cell well inside a pane's content area.
 func contentCell(w *terminal.Window) (int, int) {
 	return w.X + w.Width/2, w.Y + w.Height/2
 }
@@ -113,7 +112,6 @@ func TestCtrlDragDropsWhenCtrlReleased(t *testing.T) {
 		t.Fatal("ctrl-drag did not commit before the drop test")
 	}
 
-	// A motion whose modifiers no longer include ctrl finalizes the drop.
 	handleMouseMotion(motionMsg(cx+12, cy), o)
 	if o.CtrlDragging || o.Dragging {
 		t.Fatalf("ctrl release mid-drag did not drop (ctrlDragging=%v dragging=%v)", o.CtrlDragging, o.Dragging)
@@ -137,7 +135,6 @@ func TestCtrlDragFromTerminalModeGivesTypingBack(t *testing.T) {
 	if !o.CtrlDragging {
 		t.Fatal("the drag did not commit")
 	}
-	// Window management is correct while the pane is in hand.
 	if o.Mode != app.WindowManagementMode {
 		t.Fatalf("mid-drag mode = %v, want window management", o.Mode)
 	}

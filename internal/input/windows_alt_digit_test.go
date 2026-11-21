@@ -23,17 +23,10 @@ func TestWindowsAltDigitSwitchesWorkspaceInBothModes(t *testing.T) {
 		what string
 		msg  tea.KeyPressMsg
 	}{
-		// The console decoder, and win32-input-mode (CSI 50;3;50;1;2;1 _):
-		// the virtual key becomes the base code, and an Alt chord has no text.
 		{"win32 input record", tea.KeyPressMsg{Code: '2', BaseCode: '2', Mod: tea.ModAlt}},
-		// VT input without either protocol: ESC 2.
 		{"esc-prefixed", tea.KeyPressMsg{Code: '2', Mod: tea.ModAlt}},
-		// Kitty protocol, as tuios asks for it in terminal mode: CSI 50;3u.
 		{"kitty", tea.KeyPressMsg{Code: '2', Mod: tea.ModAlt}},
-		// Kitty protocol, as tuios asks for it in window mode, with all keys
-		// as escape codes and associated text: CSI 50;3;50u.
 		{"kitty with text", tea.KeyPressMsg{Code: '2', Text: "2", Mod: tea.ModAlt}},
-		// The same with Num Lock on: CSI 50;131;50u.
 		{"kitty with text and num lock", tea.KeyPressMsg{Code: '2', Text: "2", Mod: tea.ModAlt | tea.ModNumLock}},
 	} {
 		for name, mode := range map[string]app.Mode{"terminal": app.TerminalMode, "window": app.WindowManagementMode} {

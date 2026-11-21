@@ -10,7 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// queueRecorder answers the queue verbs the reply keys send and records them.
 type queueRecorder struct {
 	calls   []map[string]any
 	verbs   []string
@@ -34,7 +33,6 @@ func (q *queueRecorder) call(verb string, params map[string]any, _ time.Duration
 	return json.Marshal(map[string]any{})
 }
 
-// count is how many times verb was sent.
 func (q *queueRecorder) count(verb string) int {
 	n := 0
 	for _, v := range q.verbs {
@@ -45,7 +43,6 @@ func (q *queueRecorder) count(verb string) int {
 	return n
 }
 
-// lastText is the text of the last queue-prompt.
 func (q *queueRecorder) lastText() string {
 	for i, v := range slices.Backward(q.verbs) {
 		if v == "queue-prompt" {
@@ -56,8 +53,6 @@ func (q *queueRecorder) lastText() string {
 	return ""
 }
 
-// pressRun presses a key and runs the command it returns, handing its message
-// back to the model, as the program would.
 func pressRun(t *testing.T, o *app.OS, spec string) *app.OS {
 	t.Helper()
 	o, cmd := HandleKeyPress(keyEventFor(t, spec), o)
@@ -69,7 +64,6 @@ func pressRun(t *testing.T, o *app.OS, spec string) *app.OS {
 	return o
 }
 
-// replyRowOS is the rail's cursor on an agent row with a recording queue.
 func replyRowOS(t *testing.T) (*app.OS, *queueRecorder) {
 	t.Helper()
 	o := reachAgentsOS(t)

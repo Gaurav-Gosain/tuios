@@ -8,29 +8,12 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// handleMouseRelease handles mouse release events
 func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	// A button coming up ends any gesture it started, whoever else claims the
-	// event. Every branch below can return early, and each one that fired while
-	// a resize was live left it running. Deferred so it covers all of them, and
-	// idempotent so the cleanup at the bottom stays the normal way a gesture
-	// ends. See OS.EndStrayGesture. The mode the gesture or a ctrl-drag
-	// borrowed goes back the same way, for the same reason, once the drop has
-	// retiled.
-	//
-	// The announcement hold the press armed ends here too, and last of all: the
-	// drop has been laid out by then, so what each pane is told is the size it
-	// settled at. A drop that put a pane back in a slot the same size as the one
-	// it left tells it nothing, which is the point.
 	defer func() {
 		o.EndStrayGesture()
 		o.EndCtrlDrag()
 		o.EndPointerGesture()
 		o.ReleaseGestureAnnouncements()
-		// Last, because it moves the strip: everything above has to have
-		// finished laying the drop out against where the panes actually were.
-		// It does nothing unless a press focused a pane and the pointer never
-		// moved, which is what tells a click from the start of a drag.
 		o.ReleaseClickReveal(msg.X, msg.Y)
 	}()
 
@@ -38,43 +21,26 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// The end of a press in a draft: the selection it made stays.
 	if o.DraftRelease() {
 		o.OverlayMouseRelease()
 		return o, nil
 	}
 
-	// A press on the picture-in-picture view was the view's, and so is its
-	// release. Otherwise a click that jumped to the pinned pane would send that
-	// pane a release it never saw pressed.
 	if o.PiPPressed {
 		o.PiPPressed = false
 		return o, nil
 	}
 
-	// Armed by the cleanup below and returned from whichever branch gets there.
 	var settleCmd tea.Cmd
 
-	// End every overlay gesture before anything else. Both a grabbed panel and
-	// the accent picker's grab on its grid or hue strip end on this button, but
-	// only a panel drag consumes the release. End them together: the picker's
-	// grab must not wait for a panel drag, or the colour follows the pointer
-	// for the rest of the dialog's life.
-	// A selection in copy mode over quick look's text ends on the release,
-	// and copies.
-	// A press on quick look keeps its release, so the pane under the panel
-	// never hears a release it did not see pressed.
 	if taken, cmd := quickLookCopyRelease(o); o.QuickLookLetGo() || taken {
 		return o, cmd
 	}
 	if mouse := msg.Mouse(); o.ShowInbox {
-		// A selection in the thread ends on the release, and copies.
 		if taken, cmd := cockpitMouseRelease(o); taken {
 			o.OverlayMouseRelease()
 			return o, cmd
 		}
-		// A card dragged on the task board's columns drops on the column
-		// under the pointer.
 		if cmd, ok := o.CockpitRelease(mouse.X, mouse.Y); ok {
 			o.OverlayMouseRelease()
 			return o, cmd
@@ -88,25 +54,16 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	o.ResetPointerShape()
 
-	// The release of a drag between panes is the drop, wherever it lands: a
-	// drop on a rail session pane is refused, but the drag has to end here
-	// rather than stay started until the next motion without a button. The
-	// source program does not see the release, as it would not under kitty.
-	// See dnd_drag.go.
 	if mouse := msg.Mouse(); o.DnDRelease(mouse.X, mouse.Y) {
 		return o, nil
 	}
 
-	// A held files row drops on the pane under the pointer, or is a click on
-	// the row when it never left the rail.
 	if o.FileDragActive() {
 		mouse := msg.Mouse()
 		o.FileDragRelease(mouse.X, mouse.Y, mouse.Mod.Contains(tea.ModAlt))
 		return o, o.TakeSidebarCmd()
 	}
 
-	// A rail session's tracked mouse click needs its matching release. The
-	// center pane must not receive a release for a press it never saw.
 	if mouse := msg.Mouse(); mouse.Button != tea.MouseRight {
 		if w := o.SidebarSessionPaneAt(mouse.X, mouse.Y); w != nil {
 			if paneTakesMouse(o, w) {
@@ -118,12 +75,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// A sidebar session gesture resolves on release: commit a reorder drag, or
-	// deliver the plain click (switch / toggle) the press deferred.
 	if o.SidebarDragActive() {
 		mouse := msg.Mouse()
 		o.SidebarRelease(mouse.X, mouse.Y)
-		// A drag that moved a session sends the new order to the daemon.
 		return o, o.TakeSidebarCmd()
 	}
 	if o.SidebarSplitActive() {
@@ -134,14 +88,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarEdgeActive() {
 		mouse := msg.Mouse()
 		o.SidebarEdgeRelease(mouse.X, mouse.Y)
-		// The edge column's press resolves as a row activation here, and a row
-		// of the rail's file view can answer with a clipboard write. See
-		// SidebarClick for why it travels on the model rather than in a return.
 		return o, o.TakeSidebarCmd()
 	}
 
-	// A workspace pill gesture resolves here too: commit the arrangement the
-	// pointer built, or deliver the switch the press deferred.
 	if o.DockWorkspaceDragActive() {
 		mouse := msg.Mouse()
 		if _, cmd := o.DockWorkspaceDragRelease(mouse.X, mouse.Y); cmd != nil {
@@ -150,13 +99,8 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	// A ctrl+left press that never passed the drag threshold was a stray grab, not
-	// a move; clear it and stop. Multi-select lives on ctrl+shift+click, handled on
-	// press. A committed ctrl-drag falls through to the normal window-drop below.
 	if o.CtrlDragPending {
 		o.CtrlDragPending = false
-		// The press was on a link and nothing moved far enough to be a
-		// drag, so this was a ctrl+click on the link.
 		if url := o.CtrlClickLink; url != "" {
 			o.CtrlClickLink = ""
 			if o.CtrlDragIndex >= 0 && o.CtrlDragIndex < len(o.Windows) {
@@ -168,15 +112,6 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	o.CtrlDragging = false
 
-	// A plain right press on a pane arms a resize. Below the drag threshold it
-	// was a click: cancel the resize (restoring the few cells of jitter it may
-	// have applied) and open the pane menu at the press position. At or past
-	// the threshold the resize completes below.
-	//
-	// That holds over a pane whose app tracks the mouse too. Its right button
-	// is the app's only in terminal mode, where the press is forwarded and
-	// never arms this. A press that got here reached no app, and leaving the
-	// menu shut made the click do nothing at all.
 	if o.RightClickPending {
 		o.RightClickPending = false
 		mouse := msg.Mouse()
@@ -187,10 +122,6 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// A left press on a pane's content in window-management mode armed
-	// click-to-type. Decide now, while the press coordinates are still intact;
-	// the drag-completion branches below zero them. The mode switch itself
-	// happens at the end so a sub-threshold tiling drag still snaps back first.
 	enterTerminalOnRelease := false
 	if o.ClickToTypePending {
 		o.ClickToTypePending = false
@@ -200,19 +131,14 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			enterTerminalOnRelease = true
 		}
 	}
-	// A terminal-mode middle-button binding consumed the press, so its release
-	// is tuios's too. In particular, never send a mouse-tracking program an
-	// unmatched release after the paste binding took the press.
 	if terminalMouseBindingConsumesRelease(msg, o) {
 		return o, nil
 	}
-	// Forward mouse release to terminal if in terminal mode and window has mouse tracking
 	if o.Mode == app.TerminalMode {
 		focusedWindow := o.GetFocusedWindow()
 		if paneTakesMouse(o, focusedWindow) {
 			mouse := msg.Mouse()
 			termX, termY, inContent := focusedWindow.ScreenToTerminal(mouse.X, mouse.Y)
-			// Check if release is within terminal content area
 			if inContent {
 				adjustedMouse := uv.MouseReleaseEvent{
 					X:      termX,
@@ -238,12 +164,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	if o.Dragging && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
-		// A text selection never marks its pane as being moved; a move by the
-		// title bar does, and a pane in copy mode can be moved too. That move
-		// goes on to the drop below like any other.
 		if draggedWindow.InCopyMode() && !draggedWindow.IsBeingManipulated {
-			// Selection is complete: copy it if the user wants that, then clean
-			// up drag state and stop auto-scroll.
 			cmd := finishMouseSelection(o, draggedWindow)
 			draggedWindow.InvalidateCache()
 			o.Dragging = false
@@ -255,24 +176,16 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Handle window drop in tiling mode (drag-to-swap only, NOT resize)
 	if o.Dragging && o.AutoTiling && !o.Resizing && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		mouse := msg.Mouse()
 
-		// Calculate drag distance to determine if this was actually a drag or just a click
 		dragDistance := tiledDragDistance(o, mouse.X, mouse.Y)
 
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
 
-		// Floating windows: no snap-back
 		if draggedWindow.IsFloating {
 			o.DraggedWindowIndex = -1
 		} else if o.UseScrollingLayout {
-			// Scrolling mode: the pane followed the pointer, and the drop swaps
-			// its column with the one under the pointer. A drop that swaps
-			// nothing snaps the pane back into its slot, exactly as the BSP
-			// branch below does; the strip is only re-laid when the columns
-			// really changed, so a dropped pane never scrolls the strip.
 			swapped := false
 			if dragDistance >= tiledDragThreshold {
 				if target := o.DropTargetAt(mouse.X, mouse.Y); target >= 0 {
@@ -293,11 +206,6 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					if dragCol >= 0 && targetCol >= 0 && dragCol != targetCol {
 						sl.Columns[dragCol], sl.Columns[targetCol] = sl.Columns[targetCol], sl.Columns[dragCol]
 						sl.FocusedCol = targetCol
-						// The drop hands the pane back to the layout. With the
-						// manipulation mark still on it the strip would leave it
-						// at the pointer and only note its slot (see
-						// LiveWindowDrag); the cleanup below clears the mark on
-						// every pane in any case.
 						draggedWindow.IsBeingManipulated = false
 						o.ScrollingSetPositions()
 						swapped = true
@@ -309,36 +217,25 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 			o.DraggedWindowIndex = -1
 		} else if dragDistance >= tiledDragThreshold {
-			// This was an actual drag. In BSP a drop on a pane's edge splits
-			// it (see app.TiledDropAt); anywhere else on a pane swaps the two.
-			// An edge drop that would leave the tree as it is snaps back
-			// rather than falling through to the swap.
 			if drop, ok := o.TiledDropAt(mouse.X, mouse.Y); ok && drop.Dir != layout.PreselectionNone {
 				if !o.MoveWindowIntoSplit(draggedWindow, drop.Target, drop.Dir) {
 					snapBack(o, draggedWindow)
 				}
 			} else if target := o.DropTargetAt(mouse.X, mouse.Y); target >= 0 {
-				// Swap windows: dragged window goes to target's position, target goes to dragged window's original position
 				o.SwapWindowsWithOriginal(o.DraggedWindowIndex, target, o.TiledX, o.TiledY, o.TiledWidth, o.TiledHeight)
 			} else {
 				snapBack(o, draggedWindow)
 			}
 		} else {
-			// Drag distance below threshold: snap back to prevent layout corruption from micro-drags
-			// Even small mouse movements can displace the window during motion events
 			snapBack(o, draggedWindow)
 		}
 		o.DraggedWindowIndex = -1
 	}
 
-	// Handle window edge snapping in floating mode (non-tiling)
 	if o.Dragging && !o.AutoTiling && o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
 		mouse := msg.Mouse()
 		dragDistance := abs(mouse.X-o.DragStartX) + abs(mouse.Y-o.DragStartY)
 		if dragDistance >= o.DragThreshold() {
-			// Detect edge zones for snapping
-			// The zone rule lives with the bounds rule in internal/app, so the
-			// region the zones sit on and the region a snap fills cannot disagree.
 			snapTo := o.SnapZoneAt(mouse.X, mouse.Y)
 
 			if snapTo != app.NoSnap {
@@ -350,15 +247,12 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	if o.Dragging || o.Resizing {
 		wasResizing := o.Resizing
-		// Save the dragged/resized window index before anything clears it
 		resizedWindowIndex := o.DraggedWindowIndex
 		o.Dragging = false
 		o.Resizing = false
-		// A finished pane-border drag joins the same flush/sync cleanup below.
 		o.BorderResizing = false
 		o.BorderResizeEdge = app.BorderEdgeNone
 
-		// Apply all pending PTY resizes that were deferred during drag/resize
 		if wasResizing && len(o.PendingResizes) > 0 {
 			for i := range o.Windows {
 				if dimensions, exists := o.PendingResizes[o.Windows[i].ID]; exists {
@@ -369,17 +263,10 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.FlushPTYBuffersAfterResize()
 		}
 
-		// A resize of a floating pane leaves the tiling as it was: no column
-		// width to record and no layout to read back from the geometry.
 		tiledResize := wasResizing && resizedWindowIndex >= 0 && resizedWindowIndex < len(o.Windows) &&
 			o.ResizesWithTiling(o.Windows[resizedWindowIndex])
 
-		// In scrolling mode, capture resized width into the column BEFORE retiling
 		if tiledResize && o.UseScrollingLayout {
-			// Only when the width moved. A press and release with no motion
-			// between them is a click, and recording the width it left alone
-			// would turn a column sized as a share of the screen into a fixed
-			// one, which then stops following the screen's width.
 			if resizedWindowIndex >= 0 && resizedWindowIndex < len(o.Windows) &&
 				o.Windows[resizedWindowIndex].Width != o.PreResizeState.Width {
 				win := o.Windows[resizedWindowIndex]
@@ -396,10 +283,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 		}
 
-		// Mark layout as custom if resizing in tiling mode (BSP only)
 		if tiledResize && !o.UseScrollingLayout {
-			// Master-stack keeps its layout as ratios, so the drag is written
-			// into them before the retile below recomputes the rectangles.
 			o.SyncMasterStackFromGeometry()
 			o.MarkLayoutCustom()
 			o.SyncBSPTreeFromGeometry()
@@ -411,25 +295,16 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.Windows[i].CachedLayer = nil
 		}
 
-		// Re-tile / re-layout after drag or resize.
-		// For scrolling mode: only on actual resize (avoid viewport reset on click).
-		// For BSP shared borders: always re-tile to restore the Tiled flag that
-		// a drag cleared (untilePaneForDrag). A gesture that never moved never
-		// cleared it, and the retile then finds nothing to change.
 		if tiledResize && o.UseScrollingLayout {
 			o.ScrollingSetPositions()
 		} else if o.PanesBorderless() {
 			o.TileAllWindows()
 		}
 
-		// Announce the finished resize. Firing here rather than during the drag
-		// means one event per gesture carrying the size the window settled at,
-		// instead of one per mouse-motion event carrying intermediate sizes.
 		if wasResizing && resizedWindowIndex >= 0 && resizedWindowIndex < len(o.Windows) {
 			o.FireResized(o.Windows[resizedWindowIndex])
 		}
 
-		// Comprehensive state cleanup to prevent stale values from affecting subsequent operations
 		o.DragOffsetX = 0
 		o.DragOffsetY = 0
 		o.ResizeStartX = 0
@@ -439,35 +314,17 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.DraggedWindowIndex = -1
 		o.ClearDropZone()
 
-		// Clear interaction mode with a delay to allow shell prompts to fully redraw.
-		// This gives shells like bash/zsh/starship time to:
-		// 1. Receive SIGWINCH signal
-		// 2. Query new terminal dimensions
-		// 3. Recalculate and redraw the prompt for the new width
-		// 4. Write the new prompt to the PTY
-		// Without this delay, content polling resumes before the shell finishes,
-		// resulting in incomplete or stale prompt displays. The wait comes back
-		// through Update (InteractionSettledMsg) so the field is only ever
-		// written on the loop that owns it.
 		if wasResizing {
 			settleCmd = app.InteractionSettleCmd()
 		} else {
 			o.InteractionMode = false
 		}
 
-		// Sync state to daemon after drag/resize completes
-		// This ensures window positions persist across reconnects
 		o.SyncStateToDaemon()
 	} else {
-		// Even if we weren't dragging/resizing, clear interaction mode from click
 		o.InteractionMode = false
 	}
 
-	// Mouse edge snapping disabled: use keyboard shortcuts for snapping
-
-	// Click-to-type: the press was on a pane's content and never became a drag,
-	// so finish what a newcomer expects a click to do. The dispatcher runs the
-	// same handler the Enter keybinding runs, notification included.
 	if enterTerminalOnRelease {
 		next, cmd := GetDispatcher().Dispatch("enter_terminal_mode", tea.KeyPressMsg{}, o)
 		return next, tea.Batch(settleCmd, cmd)
@@ -476,29 +333,16 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, settleCmd
 }
 
-// tiledDragThreshold is how far, in cells, a tiled pane must move from where
-// the press was before its release counts as a drop rather than a click. The
-// drop-zone highlight uses it too, so it never shows a drop the release would
-// not make.
 const tiledDragThreshold = 5
 
-// tiledDragDistance is how far the pointer at x, y is from where the drag
-// started, the distance tiledDragThreshold is measured in.
 func tiledDragDistance(o *app.OS, x, y int) int {
 	return abs(x-o.DragStartX) + abs(y-o.DragStartY)
 }
 
-// snapBack puts a dragged tiled pane back in the slot the drag took it from,
-// at once, so a drop that moves nothing leaves the layout as it was.
 func snapBack(o *app.OS, win *terminal.Window) {
 	o.ReturnToDragSlot(win)
 }
 
-// cancelRightClickResize unwinds the resize a plain right press set up, so the
-// release can open the context menu instead. The press may have applied a few
-// cells of visual resize (motion events resize immediately); geometry is
-// restored from the state saved at press time, and in tiling mode the layout
-// is retiled only when something actually moved.
 func cancelRightClickResize(o *app.OS) {
 	idx := o.DraggedWindowIndex
 	o.Resizing = false
@@ -516,8 +360,6 @@ func cancelRightClickResize(o *app.OS) {
 			win.MarkPositionDirty()
 			win.InvalidateCache()
 			if o.AutoTiling && !o.UseScrollingLayout {
-				// Neighbors may have been nudged by the shared-border resize;
-				// retiling snaps every pane back to the tree's layout.
 				o.TileAllWindows()
 			}
 		}

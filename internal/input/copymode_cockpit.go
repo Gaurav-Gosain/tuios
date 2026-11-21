@@ -10,15 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// handleCockpitCopyKey runs a key in copy mode over the agents view's thread,
-// with the code that runs it over a pane. The thread's rows are held while
-// copy mode runs, so it takes no lock. Two things differ from a pane:
-//
-//   - A yank of a selection is the text as the agent wrote it
-//     (app.OS.CockpitCopyText): wrapped rows joined, the chrome and the
-//     shared indent taken off.
-//   - Y yanks the entries under the selection, or under the cursor, as
-//     Markdown (app.OS.CockpitCopyMarkdown).
 func handleCockpitCopyKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	cm, grid := o.CockpitCopy()
 	if cm == nil {
@@ -38,8 +29,6 @@ func handleCockpitCopyKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return fx.applyOver(o, o.CockpitCopyEnd)
 	}
-	// gx opens the link under the cursor, as it does in vim. The g before
-	// it is pending, so the x never reaches the copy mode keys.
 	if msg.String() == "x" && cm.Pending == terminal.CopyPendingG {
 		cm.Pending = terminal.CopyPendingNone
 		url, ok := o.CockpitCopyLink()

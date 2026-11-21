@@ -34,7 +34,6 @@ import (
 // along with it. The scrolling row pins that the strip follows, not which
 // road got it there.
 
-// sideBySide is two windows across a 100x30 screen, the left one focused.
 func sideBySide(t *testing.T, tiled bool) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()

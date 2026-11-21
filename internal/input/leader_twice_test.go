@@ -10,9 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// leaderTwice presses the leader twice in terminal mode against a focused
-// local-PTY window whose emulator was fed flagsSeq, and returns the bytes that
-// reached the PTY.
 func leaderTwice(t *testing.T, leader, flagsSeq string, msg tea.KeyPressMsg) string {
 	t.Helper()
 	em := vt.NewEmulator(80, 24)

@@ -10,48 +10,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// lockMods are the modifier bits a terminal reports for the lock keys. They say
-// nothing about which chord was struck and have to come off before a key event
-// is compared against a binding.
 const lockMods = tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
 
-// bindingKeys returns every spelling a binding for msg may be written as, most
-// literal first. One physical chord reaches tuios under several names depending
-// on what the host terminal negotiated, and a binding has to answer to all of
-// them:
-//
-//   - Key.String() is the text the key produced when there is one, so a binding
-//     on "!" matches whether the terminal sent the character or the chord.
-//   - Key.Keystroke() is the chord spelling.
-//   - baseLayoutKey is the US key at the same position, for a key whose
-//     produced character no binding can be spelled in (see usesBaseLayout).
-//   - shiftedKey is the chord spelled with the character Shift gave, when the
-//     Kitty protocol reports it: on AZERTY Option+Shift+& is alt+1.
-//
-// After those come the keys that only match under an assumption about the
-// keyboard, which the registry keeps in tiers of their own, so that a binding
-// written for the key itself always wins:
-//
-//   - The US-layout tier (config.USLayoutKey): the US spellings of a shifted
-//     digit. Asked only when the event does not contradict a US layout.
-//   - The Option-glyph tiers: the chord a macOS Option character stands for
-//     (see composedChords). config.OptionGlyphKey when the terminal reported
-//     the Alt bit, config.BareOptionGlyphKey when it reported no modifier.
-//     The bare tier answers under keybindings.option_glyphs = "bind", and
-//     under "auto" on a US Mac layout. Neither answers under "type" or
-//     keyboard_layout = "other". The character is then text for the pane.
-//
-// Last comes the ASCII character an Option chord typed on a layout that types
-// it with Option (see optionTypedKey): German | is Option and 7. It is last so
-// that a binding on the chord, such as opt+7 for workspace 7, still wins.
-//
-// base is the base-layout key the host sent with msg. The input path reads a
-// key without it (see readKey), so the caller hands it back here.
 func bindingKeys(msg tea.KeyPressMsg, base rune) []string {
-	// Keystroke() and String() spell a key from its base-layout code when it
-	// has one. The key produced is tried first, spelled without it, and the
-	// base-layout key last and only where usesBaseLayout allows it. Otherwise
-	// German Ctrl+Z matched only ctrl+y, and an unbound AZERTY "a" ran quit.
 	typed, typedOK := optionTypedKey(msg, base)
 	msg = withoutChordText(msg)
 	orig := msg
@@ -61,10 +22,6 @@ func bindingKeys(msg tea.KeyPressMsg, base rune) []string {
 	if stroke := msg.Keystroke(); stroke != key {
 		keys = append(keys, stroke)
 	}
-	// The base-layout key comes before the shifted one. For a non-Latin key
-	// it names the chord pressed, and Bubble Tea fills the shifted key from
-	// the base key when the report leaves it empty, so Option, Shift and 8
-	// composing ° would otherwise read as alt+8.
 	if pos, ok := baseLayoutKey(orig); ok && !slices.Contains(keys, pos) {
 		keys = append(keys, pos)
 	}
@@ -94,14 +51,6 @@ func bindingKeys(msg tea.KeyPressMsg, base rune) []string {
 	return keys
 }
 
-// composedChords returns the alt+ chords a character macOS composed for an
-// Option chord stands for, most specific first, or nil when msg is not such a
-// character. base is the base-layout key the host sent with msg.
-//
-// With the Alt bit set (Ghostty and kitty under the Kitty protocol), a base
-// key names the key that was pressed, so the chord is that key. Without one,
-// the US table is the only guide. With no Alt bit, a base key means the key
-// was typed without Option: AZERTY ç is the 9 key, not Option and c.
 func composedChords(msg tea.KeyPressMsg, base rune) []string {
 	chord, ok := macOptionChord(msg)
 	if !ok {
@@ -114,35 +63,16 @@ func composedChords(msg tea.KeyPressMsg, base rune) []string {
 		}
 		return []string{tea.Key{Code: base, Mod: mods}.Keystroke()}
 	}
-	// Four of the Option+letter chords (e, i, n, u) compose the same
-	// character shifted as unshifted, because unshifted they are dead keys
-	// whose accent only lands once a second key ends the composition. When
-	// the terminal reports the Shift bit the two are still tellable apart,
-	// and the shifted reading is the more specific one: alt+shift+n walks
-	// sessions while alt+n walks windows.
 	if mods&tea.ModShift != 0 && !strings.Contains(chord, "shift+") {
 		return []string{strings.Replace(chord, "alt+", "alt+shift+", 1), chord}
 	}
 	return []string{chord}
 }
 
-// optionGlyphsApply reports whether the config lets the composed Option
-// character in msg stand for its chord (see config.OptionGlyphRuns). A
-// character with no Alt bit does under option_glyphs = "bind", and under
-// "auto" on a US Mac layout. The registry applies the same rule. Call it only
-// for a composed character: under "auto" the first call reads the layout.
 func optionGlyphsApply(msg tea.KeyPressMsg, layout, glyphs string) bool {
 	return config.OptionGlyphRuns(layout, glyphs, msg.Mod&tea.ModAlt != 0)
 }
 
-// shiftedKey spells msg with the character Shift gave in place of the key and
-// the Shift modifier, when the terminal reported that character (the Kitty
-// protocol's shifted key). On AZERTY the digits are the shifted characters of
-// the number row, so Option+Shift and the & key is alt+1 here, the chord the
-// default opt+1 binding names.
-//
-// A letter is left out. Its capital is the same key, which the binding tables
-// already read case-blind, and alt+A would match a binding on alt+a.
 func shiftedKey(msg tea.KeyPressMsg) (string, bool) {
 	mods := msg.Mod &^ lockMods
 	if mods&tea.ModShift == 0 || msg.ShiftedCode == 0 || msg.ShiftedCode == msg.Code {
@@ -155,9 +85,6 @@ func shiftedKey(msg tea.KeyPressMsg) (string, bool) {
 	return k.Keystroke(), true
 }
 
-// lookupAction resolves msg against a registry lookup, trying each spelling in
-// turn. Returns "" when nothing is bound. o gives back the base-layout key the
-// host sent with msg; it may be nil when msg still carries its own.
 func lookupAction(o *app.OS, msg tea.KeyPressMsg, get func(string) string) string {
 	base := msg.BaseCode
 	if base == 0 && o != nil {
@@ -171,22 +98,6 @@ func lookupAction(o *app.OS, msg tea.KeyPressMsg, get func(string) string) strin
 	return ""
 }
 
-// tableAction is lookupAction over one of the registry's tables. Each prefix
-// and overlay reads its own table, so the same key can mean different things
-// in each.
-//
-// It is also where a declared menu opens over an overlay and hands its key's
-// action back to it (issue #1590, menus.go), for the tables
-// config.MenuOverlayTable names. Copy mode reads its table many times for one
-// key, in every window of a multi-pane copy, so it is not one of them.
-//
-// open_menu:NAME of a declared menu opens that menu over the overlay. While
-// that menu is open, every lookup of these tables returns actionMenuOpened,
-// which no overlay runs, so the rest of the handler does nothing more with
-// the key. While menus.go routes the menu's next key, every lookup of the
-// overlay's table returns the menu's action in place of the key's own: an
-// overlay can look up its table more than once for one key, as the rail's
-// files section does.
 func tableAction(o *app.OS, msg tea.KeyPressMsg, reg *config.KeybindRegistry, table config.Table) string {
 	if !config.MenuOverlayTable(table) {
 		return lookupAction(o, msg, func(key string) string { return reg.Action(table, key) })
@@ -207,27 +118,8 @@ func tableAction(o *app.OS, msg tea.KeyPressMsg, reg *config.KeybindRegistry, ta
 	return action
 }
 
-// actionMenuOpened is what tableAction returns for a key that opened a menu
-// over an overlay. No table binds it, so the overlay does nothing more.
 const actionMenuOpened = "menu_opened"
 
-// macOptionChord returns the alt+ chord a macOS Option press stands for when the
-// OS composed a character out of it on a US layout, and whether msg is such a
-// press.
-//
-// macOS treats Option as a compose key unless the terminal is told otherwise, so
-// Option+n arrives as the tilde it composed. Terminals differ in what they do
-// with the modifier: without the Kitty protocol the glyph arrives bare, and with
-// it the Alt bit is set but the code is still the composed character. Both are
-// recognised here; anything carrying Ctrl or Super is not a chord macOS
-// composes for and is left alone. Recognising one is not running it:
-// bindingKeys asks for the chord only in the tiers that hold under an
-// assumption, and a bare character is text unless keybindings.option_glyphs
-// is "bind", or "auto" on a US Mac layout.
-//
-// Darwin only. Every one of these glyphs is an ordinary typed character on some
-// other layout (£ is Shift+3 on a UK keyboard), so doing this anywhere else
-// would eat real input on its way to the shell.
 func macOptionChord(msg tea.KeyPressMsg) (string, bool) {
 	if !runtimeIsDarwin() {
 		return "", false
@@ -242,8 +134,6 @@ func macOptionChord(msg tea.KeyPressMsg) (string, bool) {
 	return config.MacOSOptionChord(r)
 }
 
-// chordRune is the single character a key event carries, from the key code when
-// it has one and from the text otherwise.
 func chordRune(msg tea.KeyPressMsg) rune {
 	if msg.Code != 0 && msg.Code != tea.KeyExtended {
 		return msg.Code
@@ -255,29 +145,11 @@ func chordRune(msg tea.KeyPressMsg) rune {
 	return runes[0]
 }
 
-// macRewrittenAltArrowKeys are the readline word motions a macOS terminal
-// sends in place of Option+Left and Option+Right, mapped to the chord the user
-// actually pressed.
-//
-// ESC b and ESC f are word-back and word-forward, and sending them for
-// Option+arrow is the macOS convention rather than a fault. It costs tuios the
-// two chords all the same, because what arrives says nothing about an arrow
-// key having been pressed.
 var macRewrittenAltArrowKeys = map[string]string{
 	"alt+b": "alt+left",
 	"alt+f": "alt+right",
 }
 
-// macRewrittenAltArrow reports whether a key press is one of those, and which
-// arrow chord it stands for.
-//
-// Only on darwin, and only for the plain chord: alt+b typed on a Linux box is
-// a user's own binding, and ctrl+alt+b is not something any terminal sends for
-// an arrow key.
-//
-// This does not rebind anything. The pair is genuinely ambiguous, since a
-// shell wants ESC b and ESC f for word movement, so tuios keeps its hands off
-// them and says what happened instead.
 func macRewrittenAltArrow(msg tea.KeyPressMsg) (got, arrow string, ok bool) {
 	if !runtimeIsDarwin() {
 		return "", "", false

@@ -10,17 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// A triple-click arrives as a double-click plus a third press, so copying on
-// each release wrote the word and then the line. Every triple-click clobbered
-// the clipboard with the wrong text on the way to the right one, and a paste
-// landing between the two got the word.
-//
-// The rule these tests hold to: the clipboard is written once per gesture, with
-// the gesture's final reading.
-
-// copyCount returns how many clipboard writes have been reported. Notification
-// and write are issued together and only together, so counting the messages
-// counts the writes.
 func copyCount(o *app.OS) int {
 	n := 0
 	for _, m := range notificationMessages(o) {
@@ -31,10 +20,6 @@ func copyCount(o *app.OS) int {
 	return n
 }
 
-// settle runs a deferred-copy timer to completion and applies it, returning the
-// clipboard command if the gesture was still the current one. Running the tick
-// really does wait out the multi-click window, so these tests exercise the same
-// delay the user sees.
 func settle(t *testing.T, o *app.OS, cmd tea.Cmd) tea.Cmd {
 	t.Helper()
 	if cmd == nil {
@@ -79,13 +64,6 @@ func TestASlowTripleClickStillResolvesToTheLine(t *testing.T) {
 	pressAt(o, 6, 0)
 	wordCopy := release(o, 6, 0)
 
-	// Late, but still inside the window. The delay is put on the clock rather
-	// than slept through: sleeping two thirds of the window and then requiring
-	// the press to land inside the remaining third is a race against whatever
-	// else the machine is doing, and this test would lose it by reporting that
-	// tuios mishandled a slow triple-click when all that happened is that the
-	// test was descheduled. Backdating asserts the same thing, and the interval
-	// tuios reads is then the one the test asked for.
 	win.LastClickTime = time.Now().Add(-testClickInterval * 2 / 3)
 
 	pressAt(o, 6, 0)

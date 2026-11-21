@@ -32,7 +32,6 @@ func TestRequestedClipboardReplyIsPasted(t *testing.T) {
 		t.Fatalf("PTY received %q, want the requested clipboard text", got)
 	}
 
-	// A second reply to the same request is not.
 	_, _ = HandleInput(tea.ClipboardMsg{Content: "echo again", Selection: 'c'}, o)
 	if got := sent.String(); got != "echo hi" {
 		t.Fatalf("a second reply to one request reached the pane: %q", got)

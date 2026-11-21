@@ -10,13 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The files section's context menu, driven end to end: the real mouse handler
-// opens it, the real dispatcher runs the row that was clicked. A menu row
-// carries an action ID and nothing else, so the only proof that clicking it does
-// anything is to click it.
-
-// runCmd drains a command the way the event loop does, so an operation that
-// runs off the update goroutine has finished before the assertion.
 func runCmd(o *app.OS, cmd tea.Cmd) {
 	if cmd == nil {
 		return
@@ -26,9 +19,6 @@ func runCmd(o *app.OS, cmd tea.Cmd) {
 	}
 }
 
-// fileRowCell is the screen cell of the listing row named name, read off the
-// rectangles the rail published as it drew. Nothing here works out where a row
-// is; it reads where the row was drawn.
 func fileRowCell(t *testing.T, o *app.OS, name string) (int, int) {
 	t.Helper()
 	for _, h := range o.SidebarHits {
@@ -40,8 +30,6 @@ func fileRowCell(t *testing.T, o *app.OS, name string) (int, int) {
 	return 0, 0
 }
 
-// rightClickRow opens the context menu at a listing row through the real click
-// handler, and returns the model it produced.
 func rightClickRow(t *testing.T, o *app.OS, name string) *app.OS {
 	t.Helper()
 	x, y := fileRowCell(t, o, name)
@@ -49,14 +37,10 @@ func rightClickRow(t *testing.T, o *app.OS, name string) *app.OS {
 	if !o.ContextMenuActive() {
 		t.Fatalf("a right press on %q opened no menu", name)
 	}
-	// The menu publishes its rectangle as it draws, and a click on a row is
-	// hit-tested against that rectangle. Nothing here works out where the rows
-	// landed.
 	o.View()
 	return o
 }
 
-// takeMenuRow clicks the row with the given label, through the real handler.
 func takeMenuRow(t *testing.T, o *app.OS, label string) (*app.OS, tea.Cmd) {
 	t.Helper()
 	cm := o.ContextMenu
@@ -144,7 +128,6 @@ func TestMenuDeleteGoesThroughTheDialog(t *testing.T) {
 		t.Fatalf("the file went without an answer: %v", err)
 	}
 
-	// Enter answers the dialog on the row it opened on, which is Cancel.
 	o, _ = HandleKeyPress(pressEnter(), o)
 	if o.FileConfirmOpen() {
 		t.Error("enter left the confirmation up")
@@ -166,16 +149,15 @@ func TestMenuDeleteDestroysTheRowThatWasClicked(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	o := filesRailOS(t, dir, "keep.txt") // the cursor is here
+	o := filesRailOS(t, dir, "keep.txt")
 
-	o = rightClickRow(t, o, "drop.txt") // the pointer is here
+	o = rightClickRow(t, o, "drop.txt")
 	o, cmd := takeMenuRow(t, o, "Delete for good")
 	runCmd(o, cmd)
 	if !o.FileConfirmOpen() {
 		t.Fatal("the permanent delete raised no confirmation")
 	}
 
-	// Move onto the destructive row and take it.
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: tea.KeyDown}, o)
 	o, cmd = HandleKeyPress(pressEnter(), o)
 	runCmd(o, cmd)
@@ -211,8 +193,6 @@ func TestTheRailMenuKeyReachesAFileRow(t *testing.T) {
 	}
 	o.View()
 
-	// It is the same menu the right-click opens, and it is fully operable from
-	// here: enter on the row it lands on runs that row.
 	labels := map[string]bool{}
 	for _, it := range o.ContextMenu.Items {
 		labels[it.Label] = true
@@ -223,7 +203,6 @@ func TestTheRailMenuKeyReachesAFileRow(t *testing.T) {
 		}
 	}
 
-	// Walk to Rename with the arrow keys and take it, all from the keyboard.
 	for range len(o.ContextMenu.Items) {
 		if o.ContextMenu.Items[o.ContextMenu.List.Cursor].Label == "Rename" {
 			break

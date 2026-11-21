@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// onDarwin puts the macOS-only key paths under test on whatever machine runs
-// them. The glyph tables are compiled in on every platform; only the guard that
-// consults them is platform-dependent.
 func onDarwin(t *testing.T) {
 	t.Helper()
 	prev := darwinHost
@@ -38,27 +35,12 @@ func TestMacOptionChordsReachTheirBinding(t *testing.T) {
 		main bool
 		want string
 	}{
-		// Option as Meta / Esc+: the terminal sends ESC n and nothing is composed.
 		{"esc-prefixed meta", tea.KeyPressMsg{Code: 'n', Mod: tea.ModAlt}, false, "terminal_next_window"},
-		// A bare composed glyph, with no modifier at all, is in
-		// TestBareOptionGlyphsFollowTheConfig: by default it is text.
-		// Kitty protocol, no alternate-key reporting: Ghostty and kitty set the
-		// Alt bit but still report the composed codepoint.
 		{"composed glyph with alt", tea.KeyPressMsg{Code: '˜', Mod: tea.ModAlt}, false, "terminal_next_window"},
-		// Kitty protocol with alternate-key reporting: the base-layout code says
-		// which key it really was.
 		{"composed glyph with base code", tea.KeyPressMsg{Code: '˜', BaseCode: 'n', Mod: tea.ModAlt}, false, "terminal_next_window"},
-		// Num Lock is on by default on most keyboards and the Kitty protocol
-		// reports it in the modifier field.
 		{"composed glyph with a lock modifier", tea.KeyPressMsg{Code: '˜', Mod: tea.ModAlt | tea.ModNumLock}, false, "terminal_next_window"},
 		{"option+p composes pi, with alt", tea.KeyPressMsg{Code: 'π', Mod: tea.ModAlt}, false, "terminal_prev_window"},
-		// Option+Shift+n composes the same tilde as the Option+n dead key. When
-		// the terminal reports the Shift bit they are still tellable apart, and
-		// the two are bound to different things.
 		{"option+shift+n", tea.KeyPressMsg{Code: '˜', Mod: tea.ModAlt | tea.ModShift}, true, "next_session"},
-		// An Option chord only stands in for a binding when Option is the only
-		// modifier involved. Ctrl+Alt+n is a different chord and macOS composes
-		// nothing for it.
 		{"ctrl+alt with a glyph", tea.KeyPressMsg{Code: '˜', Mod: tea.ModAlt | tea.ModCtrl}, false, ""},
 		{"super with a glyph", tea.KeyPressMsg{Code: '˜', Mod: tea.ModSuper}, false, ""},
 	} {
@@ -143,9 +125,6 @@ func TestBareOptionGlyphsFollowTheConfig(t *testing.T) {
 					tc.macUS, tc.layout, tc.glyphs, k.msg.String(), k.msg.Mod, got, runs)
 			}
 		}
-		// The leader follows the same rule: leader_key = "opt+1" on
-		// Terminal.app sends a bare ¡, and on a US Mac under "auto" that is
-		// the leader again.
 		s := &config.Settings{LeaderKey: "opt+1", KeyboardLayout: tc.layout, OptionGlyphs: tc.glyphs}
 		for _, l := range []struct {
 			msg  tea.KeyPressMsg
@@ -168,10 +147,6 @@ func TestComposedGlyphsAreNotChordsOffDarwin(t *testing.T) {
 	prev := darwinHost
 	darwinHost = false
 	t.Cleanup(func() { darwinHost = prev })
-	// The defaults and the key normalizer read the config package's own
-	// platform, not this one. On a macOS machine the registry would otherwise
-	// still be built from the macOS defaults, whose opt+ bindings expand to
-	// exactly the glyphs this test says mean nothing here.
 	t.Cleanup(config.ForceMacOSHost(false))
 
 	registry := config.NewKeybindRegistry(config.DefaultConfig())
@@ -218,7 +193,6 @@ func TestMacOptionGlyphsAreUnambiguous(t *testing.T) {
 	}
 }
 
-// twoWindowOS is an OS in terminal mode with two panes, focused on the first.
 func twoWindowOS(t *testing.T) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
