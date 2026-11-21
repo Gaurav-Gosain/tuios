@@ -31,11 +31,13 @@ func showMadeSession(host, name string) error {
 		return runDaemonSessionOn(host, name, false)
 	}
 	if err := runSwitchSession(name, host, "", "", false, "", false); err != nil {
-		target := name
+		// A second switch-session from this pane fails the same way, so the
+		// hint names the way that works: an attach outside tuios.
+		attach := "tuios attach " + name
 		if host != "" {
-			target = host + ":" + name
+			attach = "tuios attach --host " + host + " " + name
 		}
-		return errfmt.Errorf("session %s is ready, and the client did not switch to it: %w. Run 'tuios switch-session %s'", target, err, target)
+		return errfmt.Errorf("session %s is ready, and the client did not switch to it: %w. To show it, run '%s' in a terminal outside tuios", name, err, attach)
 	}
 	return nil
 }

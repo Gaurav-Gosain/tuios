@@ -147,7 +147,7 @@ repository is the one the current directory is in, found there by its
 origin URL, under the host's repos_root when [hosts.NAME] sets one. --clone
 clones it there when the host has no checkout. With --host, --repo names a
 directory on the host instead.`,
-		Example: `  # A new branch from HEAD, attached
+		Example: `  # A new branch from HEAD, attached, or shown in this client from a pane
   tuios worktree new feat/retry
 
   # A branch from main, headless, running Claude Code
@@ -291,8 +291,12 @@ the base commit. Otherwise the whole branch is sent. Nothing on the other
 machine is changed.
 
 The branch here has the same name as there, or the name --branch gives. A
-branch that already exists here is refused, so nothing is overwritten.`,
-		Example: `  # The second agent of a fan-out on build, attached here
+branch that already exists here is refused, so nothing is overwritten.
+
+The session attaches at once, or stays headless with --detach. In a tuios
+pane, the client that shows the pane switches to the session. No client is
+drawn inside the pane.`,
+		Example: `  # The second agent of a fan-out on build, attached, or shown in this client from a pane
   tuios worktree pull build:api-fan-add-retry-2
 
   # Under another branch name, headless

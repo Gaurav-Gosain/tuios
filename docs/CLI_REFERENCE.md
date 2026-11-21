@@ -926,7 +926,7 @@ tuios worktree pull <host>:<session> [--repo <dir>] [--branch <name>] [--name <s
 
 **Examples:**
 ```bash
-tuios worktree new feat/retry                          # A new branch from HEAD, attached
+tuios worktree new feat/retry                          # A new branch from HEAD, attached, or shown in this client from a pane
 tuios worktree new feat/retry --agent claude --detach  # Headless, running Claude Code
 tuios worktree new feat/retry --agent claude --detach --prompt 'Add a retry.'  # And give it its task
 tuios worktree new feat/retry --agent claude --setup 'pnpm i'  # Install, then start Claude Code
