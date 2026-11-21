@@ -3175,9 +3175,10 @@ askpass = "on"   # on (default), off
 ```
 
 With `on`, a pane starts with `SSH_ASKPASS` and `SSH_ASKPASS_REQUIRE=force`.
-A command that you type in a pane still asks in the pane. A pane keeps an
-`SSH_ASKPASS` that you set yourself. The daemon reads the value when it starts
-a pane. See [Passphrases and passwords](AGENT_STATE.md#passphrases-and-passwords).
+A command that you type in a pane still asks in the pane. A pane that already
+has `SSH_ASKPASS` or `SSH_ASKPASS_REQUIRE` gets neither. With the agent
+features off, no pane gets them. The daemon reads the value when it starts a
+pane. See [Passphrases and passwords](AGENT_STATE.md#passphrases-and-passwords).
 
 ## Harnesses that report to herdr
 

@@ -296,8 +296,14 @@ const (
 // NameHints is every value [agents] name_hint accepts.
 var NameHints = []string{NameHintOn, NameHintOff}
 
-// AskpassOff is [agents] askpass turned off. Any other value is on.
-const AskpassOff = "off"
+// [agents] askpass values. Any value other than off is on.
+const (
+	AskpassOn  = "on"
+	AskpassOff = "off"
+)
+
+// AskpassModes are the values [agents] askpass takes.
+var AskpassModes = []string{AskpassOn, AskpassOff}
 
 // NormalizeNameHint reads an [agents] name_hint value. Empty and anything
 // unrecognised mean the default, "on".

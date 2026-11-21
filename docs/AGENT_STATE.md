@@ -3999,8 +3999,31 @@ there, it cannot ask on a terminal. tuios asks you in the Inbox instead.
 - tuios keeps the answer only until the program has it. The answer is never
   written to a file, a log, an event or a message.
 
-A pane keeps an `SSH_ASKPASS` program that you set yourself, for example
-ksshaskpass. To turn the feature off, set this:
+- The dialog names the program that asks. tuios checks the whole chain:
+  its askpass program runs from a real ssh, git or gpg, and that program
+  names tuios's askpass program. If any part does not match, the dialog
+  shows a warning.
+- The dialog belongs to one pane. When you move to another pane, it closes
+  and the prompt waits in the Inbox. It opens again on its pane.
+- A yes or no question and a user name show as you type them.
+
+tuios keeps these rules, so that programs behave as they did before:
+
+- A pane that already has `SSH_ASKPASS` or `SSH_ASKPASS_REQUIRE` in its
+  environment, for example ksshaskpass, gets neither from tuios.
+- With the agent features off, panes get neither.
+- When `GIT_TERMINAL_PROMPT=0` is set, as `go mod download` sets it, the
+  askpass program asks nothing and fails at once.
+- git uses `SSH_ASKPASS` for an https user name or password only when
+  `GIT_ASKPASS` and `core.askPass` are not set and no credential helper
+  answers. tuios does not set `GIT_ASKPASS`.
+- An OpenSSH notice, such as "Confirm user presence" for a security key,
+  asks nothing.
+- On Windows, panes get neither variable.
+- On macOS, tuios cannot read the program that asks, so the dialog always
+  shows the warning.
+
+To turn the feature off, set this:
 
 ```toml
 [agents]
