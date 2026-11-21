@@ -9,10 +9,11 @@ package askpass
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
 // Kinds of prompt. They are wire values: the kind an Inbox item carries.
@@ -109,40 +110,6 @@ func Tidy(s string) string {
 	return s
 }
 
-// systemDirs are the folders a package manager installs ssh, git and gpg
-// in. A process in a pane cannot write to them.
-var systemDirs = []string{
-	"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin", "/opt/homebrew/bin",
-	"/usr/lib/git-core", "/usr/libexec/git-core", "/usr/local/libexec/git-core", "/opt/homebrew/libexec/git-core",
-}
-
-// KnownProgram reports whether exe, the resolved path of the program that
-// asks, is one that asks through an askpass program in the normal course of
-// its work: ssh, git or gpg by name, and found where that program lives. A
-// copy of any binary named ssh in a folder the pane can write does not count,
-// so its prompt shows a warning: it may fish for a password.
-//
-// A program lives in a system folder, or is the one the daemon's PATH finds
-// for its name.
-func KnownProgram(exe string) bool {
-	exe = strings.TrimSuffix(exe, " (deleted)")
-	name := filepath.Base(exe)
-	switch name {
-	case "ssh", "ssh-add", "ssh-keygen", "scp", "sftp", "git", "git-remote-http", "git-remote-https", "gpg", "gpg2":
-	default:
-		return false
-	}
-	if slices.Contains(systemDirs, filepath.Dir(exe)) {
-		return true
-	}
-	found, err := exec.LookPath(name)
-	if err != nil {
-		return false
-	}
-	found, err = filepath.EvalSymlinks(found)
-	return err == nil && found == exe
-}
-
 // credentialFlags are the flags whose value is a password or a token.
 var credentialFlags = []string{"--password", "--passwd", "--pass", "--passphrase", "--token", "--secret", "--api-key"}
 
@@ -177,36 +144,26 @@ func MaskCommandLine(args []string) string {
 	return strings.Join(out, " ")
 }
 
+// urlUserinfo matches a URL's scheme and userinfo: the user, and the
+// password when there is one.
+var urlUserinfo = lazyre.New(`([A-Za-z][A-Za-z0-9+.-]*)://([^/?#@\s:]*)(:[^/?#@\s]*)?@`)
+
 // maskURLUserinfo replaces the password in every URL's userinfo in s:
 // https://user:TOKEN@host gives https://user:***@host. A userinfo with no
 // colon is a token in an http or https URL, https://TOKEN@host gives
 // https://***@host, and a user name in any other, so ssh://git@host stays.
 func maskURLUserinfo(s string) string {
-	var b strings.Builder
-	for {
-		i := strings.Index(s, "://")
-		if i < 0 {
-			b.WriteString(s)
-			return b.String()
-		}
-		scheme := strings.ToLower(s[strings.LastIndexAny(s[:i], " =:")+1 : i])
-		b.WriteString(s[:i+3])
-		s = s[i+3:]
-		end := strings.IndexAny(s, "/?# ")
-		if end < 0 {
-			end = len(s)
-		}
-		if at := strings.LastIndexByte(s[:end], '@'); at >= 0 {
-			switch user, _, ok := strings.Cut(s[:at], ":"); {
-			case ok:
-				b.WriteString(user)
-				b.WriteString(":***")
-			case scheme == "http" || scheme == "https":
-				b.WriteString("***")
-			default:
-				b.WriteString(user)
-			}
-			s = s[at:]
-		}
+	if !strings.Contains(s, "@") {
+		return s
 	}
+	return urlUserinfo().ReplaceAllStringFunc(s, func(m string) string {
+		sub := urlUserinfo().FindStringSubmatch(m)
+		switch scheme := strings.ToLower(sub[1]); {
+		case sub[3] != "":
+			return sub[1] + "://" + sub[2] + ":***@"
+		case scheme == "http" || scheme == "https":
+			return sub[1] + "://***@"
+		}
+		return m
+	})
 }

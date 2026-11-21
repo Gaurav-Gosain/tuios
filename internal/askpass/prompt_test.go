@@ -2,8 +2,6 @@ package askpass
 
 import (
 	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 )
 
@@ -30,29 +28,6 @@ func TestRead(t *testing.T) {
 		got := Read(c.prompt)
 		if got.Kind != c.kind || got.Subject != c.subject {
 			t.Errorf("Read(%q) = kind %q subject %q, want %q %q", c.prompt, got.Kind, got.Subject, c.kind, c.subject)
-		}
-	}
-}
-
-// TestKnownProgram: a program counts as known by where it lives, not by its
-// name. A copy of a binary named ssh in a folder a pane can write is not ssh.
-func TestKnownProgram(t *testing.T) {
-	fake := filepath.Join(t.TempDir(), "ssh")
-	if err := os.WriteFile(fake, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if KnownProgram(fake) {
-		t.Errorf("a file named ssh in a temporary folder counts as ssh")
-	}
-	if KnownProgram("/usr/bin/python3") {
-		t.Errorf("python3 counts as a program that asks for passphrases")
-	}
-	if !KnownProgram("/usr/bin/ssh") {
-		t.Errorf("/usr/bin/ssh does not count as ssh")
-	}
-	if real, err := exec.LookPath("ssh-keygen"); err == nil {
-		if real, err = filepath.EvalSymlinks(real); err == nil && !KnownProgram(real) {
-			t.Errorf("the ssh-keygen PATH finds (%s) does not count", real)
 		}
 	}
 }

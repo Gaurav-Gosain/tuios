@@ -8,5 +8,5 @@ import "github.com/Gaurav-Gosain/tuios/internal/procinfo"
 func askpassParent(pid int) (int, bool) { return procinfo.ParentPID(pid) }
 
 // askingProgram cannot read another process's command line here: the dialog
-// shows the program as unknown.
-func askingProgram(int) (exe string, args []string) { return "", nil }
+// says it cannot tell which program asks.
+func askingProgram(int) []string { return nil }

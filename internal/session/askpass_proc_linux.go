@@ -14,16 +14,14 @@ import (
 // askpassParent is the parent of pid.
 func askpassParent(pid int) (int, bool) { return procinfo.ParentPID(pid) }
 
-// askingProgram reads the resolved executable of pid and its arguments from
-// the kernel. Either is empty when it cannot be read.
-func askingProgram(pid int) (exe string, args []string) {
-	dir := "/proc/" + strconv.Itoa(pid)
-	exe, _ = os.Readlink(dir + "/exe")
-	raw, err := os.ReadFile(dir + "/cmdline")
+// askingProgram reads the arguments of pid from the kernel, nil when they
+// cannot be read.
+func askingProgram(pid int) []string {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
 	if err != nil || len(raw) == 0 {
-		return exe, nil
+		return nil
 	}
-	return exe, strings.Split(strings.TrimRight(string(raw), "\x00"), "\x00")
+	return strings.Split(strings.TrimRight(string(raw), "\x00"), "\x00")
 }
 
 // pidfdOpen is unix.PidfdOpen, which a test replaces to stand for a kernel
