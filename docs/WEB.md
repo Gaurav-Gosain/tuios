@@ -39,9 +39,9 @@ tuios-web --host 0.0.0.0 --auto-tls --password-file ~/.config/tuios/web-password
 - A password from a file or from `TUIOS_WEB_PASSWORD` that is shorter than
   12 characters gets a warning at start, because tuios-web does not slow down
   wrong guesses. Use `--random-password`, or a longer password.
-- A host other than `localhost` needs a password. TLS encrypts the connection,
-  but it does not check who connects. Use `--no-auth` only on a network you
-  trust.
+- A host other than `localhost` needs a password too. TLS encrypts the
+  connection, but it does not check who connects. Use `--no-auth` only on a
+  network you trust.
 - `--no-auth` does not work with `--host 0.0.0.0` or `--host ::`. These
   addresses also listen on this machine. tuios-web checks the Host header only
   on a loopback host, so a web page in your browser can open a shell (DNS
@@ -49,9 +49,9 @@ tuios-web --host 0.0.0.0 --auto-tls --password-file ~/.config/tuios/web-password
 - tuios-web finds the address of a `--host` name once and binds that address.
   The rules above apply to the address, not to the name. tuios-web refuses a
   name that has both loopback and other addresses.
-- On `localhost`, the password is optional. With no password, other users on
-  this machine can connect, and tuios-web prints one line at start to say so.
-  Use `--random-password` to stop this.
+- On `localhost`, tuios-web also needs a password. Every user on this
+  machine can connect to a loopback port. Use `--no-auth` only when you are
+  the only user on this machine. `tuios ssh` has the same rule.
 - On `localhost`, tuios-web accepts a session only when the Host header names
   this machine. This stops DNS rebinding.
 - Only a page from tuios-web itself can show tuios-web in a frame. Other sites
