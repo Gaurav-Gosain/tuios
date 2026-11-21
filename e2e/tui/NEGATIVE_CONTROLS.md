@@ -18640,3 +18640,18 @@ Run on Linux on 2026-11-20. The branch was based on main at 466a7e9d2. Each cont
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -v -run '^(TestProtocolPaneReportsOwnWorkAfterATurn|TestProtocolPaneReportsOwnWorkTwice)$' .
 ```
+
+## A settings change and a quit right after it
+
+`TestASettingSurvivesAQuitRightAfterIt` runs `tuios set-config appearance.border_style double` against an attached client and closes the client as soon as set-config answers. The knob `settings_save_hold_ms=3000` holds the write on its way to config.toml, so the client always quits while the write is out. config.toml must hold the value after the client is gone.
+
+Run on 2026-11-21 on Linux, real backend.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| No write on the way out (main with the knob) | `TestASettingSurvivesAQuitRightAfterIt` | 3 of 3 runs: "config.toml has no border_style = \"double\" after the client quit: the write was lost" | **caught** |
+| This change | `TestASettingSurvivesAQuitRightAfterIt` | 8 of 8 runs pass | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestASettingSurvivesAQuitRightAfterIt$' .
+```

@@ -5,11 +5,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -263,7 +265,12 @@ func (m *OS) persistSettings() tea.Cmd {
 	// file this writes. See agents_off.go.
 	agents := m.applyAgentsSwitch()
 	write = m.queueSettingsSave(write)
+	hold := testknob.Millis("settings_save_hold_ms")
 	save := func() tea.Msg {
+		// A test holds the write on its way out, to quit while it is out.
+		if hold > 0 {
+			time.Sleep(hold)
+		}
 		note, err := write()
 		if err != nil {
 			return settingsSaveFailedMsg{err: err}

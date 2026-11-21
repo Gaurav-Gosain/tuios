@@ -2629,6 +2629,12 @@ func (m *OS) Cleanup() {
 		m.FireDetached()
 	}
 
+	// A settings change the person made just before the client went: its
+	// write waits in a command that would end with the client.
+	if m.settingsSaves != nil {
+		m.settingsSaves.flush()
+	}
+
 	m.stopSidebarSessions()
 	// The copy of an image the desktop viewer was given.
 	m.replyPreview.removeOpened()

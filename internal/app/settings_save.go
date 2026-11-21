@@ -83,6 +83,15 @@ func (q *settingsSaveQueue) run(seq uint64) (config.WriteNote, error) {
 	return r.note, r.err
 }
 
+// flush runs every write still waiting, so a change made just before the
+// client went is in the file.
+func (q *settingsSaveQueue) flush() {
+	q.mu.Lock()
+	seq := q.next
+	q.mu.Unlock()
+	_, _ = q.run(seq)
+}
+
 // settingsSaveKeep is how far behind the newest write a result waits for its
 // command before it is dropped.
 const settingsSaveKeep = 64
