@@ -12,30 +12,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/server"
 )
 
-// checkSSHAuth stops a bind that has no authorized keys and no --no-auth, and
-// answers with the commands that fix it. Loopback is refused too: see
-// server.PlanSSHAuth.
-//
-// Nothing here asks a question first: a prompt would make the same command do
-// different things depending on whether stdout is a terminal, and a server is
-// started by unit files at least as often as by hand.
 func checkSSHAuth(w io.Writer, f sshServerFlags) error {
 	_, err := server.PlanSSHAuth(f.host, f.authorizedKeys, f.noAuth)
 	if err == nil {
 		return nil
 	}
-	// A keys file that cannot be read is already a sentence that says what to
-	// do. The advice below answers one thing only: a network bind with nothing
-	// configured, which has several right answers.
 	if !errors.Is(err, server.ErrNoSSHAuth) {
 		return err
 	}
 
 	keyFile := filepath.Join(xdg.ConfigHome, server.ConfigAuthorizedKeys)
 
-	// Printed here rather than carried in the error: fang reflows an error into
-	// a paragraph, which would run the commands together and leave nothing to
-	// copy.
 	who := "anyone who reaches port " + f.port
 	noAuthNote := "Only on a network you trust."
 	if netutil.IsLoopbackHost(f.host) {

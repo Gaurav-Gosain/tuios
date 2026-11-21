@@ -106,9 +106,6 @@ given.`,
 				Stderr:   os.Stderr,
 				Getenv:   os.Getenv,
 				Dial: func() (verbCaller, error) {
-					// A failed dial returns a nil *VerbClient. Returning it as
-					// it is would put a typed nil in the interface, which a
-					// later io.Closer check takes for a live client.
 					c, err := session.DialVerbClientAs(version)
 					if err != nil {
 						return nil, err
@@ -132,6 +129,4 @@ given.`,
 	return cmd
 }
 
-// verbCaller is the one method a command needs from a verb client, so a test
-// can stand in for the daemon.
 type verbCaller = agenthook.Caller

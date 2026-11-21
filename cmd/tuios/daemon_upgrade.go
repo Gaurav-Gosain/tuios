@@ -26,12 +26,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// killServerCommand is the kill-server command for the daemon being upgraded.
-// On a named server it carries --server, since the bare command stops the
-// default daemon.
 func killServerCommand() string { return serverCommand("kill-server") }
 
-// serverCommand is the tuios command sub, for this command's server.
 func serverCommand(sub string) string {
 	if name := serverscope.Name(); name != "" {
 		return "tuios --server " + name + " " + sub
@@ -39,15 +35,8 @@ func serverCommand(sub string) string {
 	return "tuios " + sub
 }
 
-// adoptFDFlag is the daemon command's flag naming the descriptor a live
-// upgrade's manifest is on.
 const adoptFDFlag = "adopt-fd"
 
-// handoffArgs is the command line, after the program, a live upgrade execs
-// the next daemon image with: this daemon's own, which carries its server and
-// its log level, plus the manifest's descriptor. A flag left by an earlier
-// upgrade is dropped, and so is --cpuprofile in every form: the next image
-// would truncate the file this one is writing.
 func handoffArgs(manifestFD int) []string {
 	args := make([]string, 0, len(os.Args))
 	skipValue := false
@@ -71,20 +60,12 @@ func handoffArgs(manifestFD int) []string {
 	return append(args, "--"+adoptFDFlag+"="+strconv.Itoa(manifestFD))
 }
 
-// runAdoptingDaemon runs the daemon image a live upgrade execed: it takes
-// over the panes, sockets and lock its predecessor handed down, rather than
-// starting fresh. The socket is live, so the running-daemon check a fresh
-// start makes would find this very process.
 func runAdoptingDaemon(manifestFD int) error {
 	err := session.NewDaemon(foregroundDaemonConfig()).RunAdopted(manifestFD)
 	session.RemoveTempFolders()
 	return err
 }
 
-// handoffAcceptsCommand is the preflight a live upgrade runs on the binary it
-// is about to exec: it prints, as JSON, which handoff manifests this binary
-// reads and which protocols its daemon serves, and exits. Running it is also
-// the proof that the binary starts at all.
 func handoffAcceptsCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:    "handoff-accepts",
@@ -102,11 +83,6 @@ func handoffAcceptsCommand() *cobra.Command {
 	}
 }
 
-// handoffKeeperCommand is the keeper a live upgrade starts before it stops
-// the panes: it holds a copy of the descriptors the exec carries, and if the
-// new image dies before it is up, it execs the previous binary in its own
-// place to take the panes back. The daemon starts it; nobody else should. See
-// internal/session/handoff_keeper.go.
 func handoffKeeperCommand() *cobra.Command {
 	var hold string
 	cmd := &cobra.Command{
@@ -126,8 +102,6 @@ func handoffKeeperCommand() *cobra.Command {
 	return cmd
 }
 
-// daemonUpgradeCommand is `tuios daemon upgrade`: a live upgrade of the
-// running daemon to another binary, with every pane's program still running.
 func daemonUpgradeCommand() *cobra.Command {
 	var binary string
 	var asJSON, orRestart bool
@@ -181,11 +155,8 @@ upgrade a named daemon.`,
 	return cmd
 }
 
-// daemonUpgradeWait bounds how long daemon upgrade waits for the new image to
-// answer. A handoff of a busy daemon takes under a second.
 const daemonUpgradeWait = 60 * time.Second
 
-// What daemon upgrade did, as its JSON names it.
 const (
 	upgradeActionUpgraded  = "upgraded"
 	upgradeActionRestarted = "restarted"
@@ -195,48 +166,29 @@ const (
 	upgradeActionFailed    = "failed"
 )
 
-// upgradeOutcome is what daemon upgrade reports.
 type upgradeOutcome struct {
-	// Action is one of the upgradeAction names: upgraded live, restarted or
-	// started by --or-restart, fallback to the old binary, refused with
-	// nothing changed, or failed.
-	Action  string  `json:"action"`
-	PID     int     `json:"pid"`
-	From    string  `json:"from"`
-	To      string  `json:"to"`
-	Binary  string  `json:"binary"`
-	Panes   int     `json:"panes"`
-	Clients int     `json:"clients"`
-	Seconds float64 `json:"seconds"`
-	// ClosedRemote names the exited panes on other machines the upgrade
-	// closed: they have no terminal here to hand over.
-	ClosedRemote []string `json:"closed_remote,omitempty"`
-	Fallback     bool     `json:"fallback"`
-	// Recovered is a new image that died before it was up, after which the
-	// keeper started the previous binary under a pid of its own.
-	Recovered bool                  `json:"recovered"`
-	Instance  string                `json:"instance"`
-	Handoff   *session.HandoffStats `json:"handoff,omitempty"`
-	// Reason is why the daemon was not upgraded live.
-	Reason string `json:"reason,omitempty"`
-	// Unconfirmed is a refusal of the caller rather than of the binary: the
-	// call came from a pane of the daemon, and no Yes came in its dialog.
-	Unconfirmed bool `json:"unconfirmed,omitempty"`
-	// Error is the failure, when the command failed.
-	Error string `json:"error,omitempty"`
+	Action       string                `json:"action"`
+	PID          int                   `json:"pid"`
+	From         string                `json:"from"`
+	To           string                `json:"to"`
+	Binary       string                `json:"binary"`
+	Panes        int                   `json:"panes"`
+	Clients      int                   `json:"clients"`
+	Seconds      float64               `json:"seconds"`
+	ClosedRemote []string              `json:"closed_remote,omitempty"`
+	Fallback     bool                  `json:"fallback"`
+	Recovered    bool                  `json:"recovered"`
+	Instance     string                `json:"instance"`
+	Handoff      *session.HandoffStats `json:"handoff,omitempty"`
+	Reason       string                `json:"reason,omitempty"`
+	Unconfirmed  bool                  `json:"unconfirmed,omitempty"`
+	Error        string                `json:"error,omitempty"`
 }
 
-// notLiveError is a live upgrade that never started: nothing was changed, and
-// a running daemon runs as it did. --or-restart restarts the daemon instead.
 type notLiveError struct {
-	// reason is one line for the report.
-	reason string
-	// running says a daemon runs, so a restart has one to stop.
-	running bool
-	// from is the version of the running daemon, when it is known.
-	from string
-	// unconfirmed is the daemon refusing the caller, a pane with no Yes in
-	// the dialog: a restart would end that pane.
+	reason      string
+	running     bool
+	from        string
 	unconfirmed bool
 	err         error
 }
@@ -261,10 +213,6 @@ func runDaemonUpgrade(out io.Writer, binary string, asJSON, orRestart bool) erro
 	return err
 }
 
-// upgradeDaemon upgrades the daemon live, and with orRestart restarts it when
-// a live upgrade cannot start. Every path that installs a tuios and moves the
-// daemon onto it comes through here: the installers and hosts sync run this
-// command with --or-restart.
 func upgradeDaemon(say func(string, ...any), binary string, orRestart bool) (upgradeOutcome, error) {
 	if binary == "" {
 		exe, err := os.Executable()
@@ -286,9 +234,6 @@ func upgradeDaemon(say func(string, ...any), binary string, orRestart bool) (upg
 		return upgradeOutcome{Action: upgradeActionRefused, Binary: binary, From: notLive.from, Reason: notLive.reason, Unconfirmed: notLive.unconfirmed}, err
 	}
 	say("Not upgraded live: %s.\n", notLive.reason)
-	// From a pane, kill-server ends the pane and this command in it before
-	// start-server runs, which leaves no daemon at all. So whatever stopped
-	// the live upgrade, a running daemon is left as it is.
 	if notLive.unconfirmed || notLive.running && os.Getenv("TUIOS_PANE_ID") != "" {
 		say("The daemon was not restarted, because a restart would end the pane this command runs in. It still runs %s.\n", cmp.Or(notLive.from, "the old version"))
 		return upgradeOutcome{Action: upgradeActionRefused, Binary: binary, From: notLive.from, Reason: notLive.reason, Unconfirmed: notLive.unconfirmed}, err
@@ -296,13 +241,8 @@ func upgradeDaemon(say func(string, ...any), binary string, orRestart bool) (upg
 	return restartDaemonWith(say, binary, notLive)
 }
 
-// upgradeLive is the live upgrade itself. A *notLiveError means nothing was
-// changed.
 func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error) {
 	o := upgradeOutcome{Action: upgradeActionFailed, Binary: binary}
-	// The daemon's owner and mode check, made before anything runs the file.
-	// Its refusal is no notLiveError: --or-restart would run the same file
-	// for the restart, or the start where no daemon runs.
 	if err := session.CheckUpgradeBinary(binary); err != nil {
 		o.Action, o.Reason = upgradeActionRefused, err.Error()
 		return o, &diagnosticError{
@@ -341,9 +281,6 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 	_ = jsonx.Unmarshal(raw, &before)
 	o.From = before.Version
 
-	// The same run the daemon makes, made here first: it says what the
-	// binary is, and it pays a new file's first exec before the daemon
-	// pauses anything.
 	acc, err := handoffAcceptsOf(binary)
 	if err != nil {
 		_ = client.Close()
@@ -362,13 +299,10 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 	say("Checking %s (%s) accepts this daemon's state (handoff v%d)... ", binary, acc.Version, session.HandoffVersion)
 
 	started := time.Now()
-	// From a pane the daemon waits for the person's answer before it starts.
 	raw, err = client.CallWithTimeout("daemon-upgrade", map[string]any{"binary": binary}, session.UpgradeConfirmWait+daemonUpgradeWait)
 	_ = client.Close()
 	if err != nil {
 		var verr *session.VerbCallError
-		// A pane's upgrade that nobody said Yes to is refused as forbidden,
-		// and the binary was never what said no.
 		if errors.As(err, &verr) && verr.Code == session.ErrVerbForbidden {
 			say("not confirmed\n")
 		} else {
@@ -404,7 +338,6 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 	_ = jsonx.Unmarshal(raw, &accepted)
 	say("ok\n")
 	if n := len(accepted.ClosedRemote); n > 0 {
-		// Said before the new binary starts, and in the outcome.
 		say("Closed %d exited %s on other machines, which cannot be handed over: %s.\n",
 			n, plural.Word(n, "pane", "panes"), strings.Join(accepted.ClosedRemote, "; "))
 	}
@@ -456,18 +389,8 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 	return o, nil
 }
 
-// restartBudget bounds each step of a restart: kill-server waits up to 10 s
-// for the daemon to save its sessions, and start-server for the new one.
 const restartBudget = 60 * time.Second
 
-// restartDaemonWith puts the daemon on binary the way a restart does: it stops
-// the daemon, which saves every session, and starts binary's daemon, which
-// restores them with their layout and new shells. The programs in the panes
-// end. Both steps run as binary and inherit this process's server, so the
-// daemon that comes back is binary's and serves the same socket.
-//
-// binary runs by its path three times, so its file is pinned once and checked
-// before each run: a file put there between the runs is never run.
 func restartDaemonWith(say func(string, ...any), binary string, why *notLiveError) (upgradeOutcome, error) {
 	o := upgradeOutcome{Action: upgradeActionFailed, Binary: binary, From: why.from, Reason: why.reason}
 	notRun := func(err error) error {
@@ -481,7 +404,6 @@ func restartDaemonWith(say func(string, ...any), binary string, why *notLiveErro
 	if err != nil {
 		return o, notRun(err)
 	}
-	// A binary that does not run would stop the daemon and start nothing.
 	to, err := runBinary(binary, "--version")
 	if err != nil {
 		return o, &diagnosticError{
@@ -496,8 +418,6 @@ func restartDaemonWith(say func(string, ...any), binary string, why *notLiveErro
 		if err := pin.Unchanged(); err != nil {
 			return o, notRun(err)
 		}
-		// What the old daemon is, so the one that answers after the restart
-		// can be told from it. A daemon that does not say leaves it empty.
 		old, _ = reachDaemon()
 		say("Restarting the daemon with %s (%s), which ends the programs in its panes...\n", binary, cmp.Or(o.To, "unknown version"))
 		if out, err := runBinary(binary, "kill-server"); err != nil {
@@ -528,8 +448,6 @@ func restartDaemonWith(say func(string, ...any), binary string, why *notLiveErro
 			Fix:   "run '" + binary + " start-server' to see why. The sessions come back when it starts.",
 		}
 	}
-	// start-server returns once its daemon serves. Only an answer from a
-	// daemon other than the old one says the restart happened.
 	h, err := reachDaemon()
 	if err != nil {
 		return o, &diagnosticError{
@@ -558,8 +476,6 @@ func restartDaemonWith(say func(string, ...any), binary string, why *notLiveErro
 	return o, nil
 }
 
-// reachDaemon is the pid, instance and version of the daemon this command
-// reaches. A daemon of another control protocol still says its pid.
 func reachDaemon() (upgradedDaemon, error) {
 	client, err := dialVerb()
 	if err != nil {
@@ -577,7 +493,6 @@ func reachDaemon() (upgradedDaemon, error) {
 	return h, jsonx.Unmarshal(raw, &h)
 }
 
-// runBinary runs one tuios command as binary and returns what it printed.
 func runBinary(binary string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), restartBudget)
 	defer cancel()
@@ -592,7 +507,6 @@ func firstLine(s string) string {
 	return line
 }
 
-// upgradedDaemon is a hello answer after an upgrade.
 type upgradedDaemon struct {
 	PID      int                   `json:"pid"`
 	Instance string                `json:"instance"`
@@ -600,10 +514,6 @@ type upgradedDaemon struct {
 	Upgrade  *session.HandoffStats `json:"upgrade"`
 }
 
-// awaitUpgradedDaemon waits for a hello from an image other than old. Between
-// the old image dropping its clients and the new one serving, a call waits in
-// the socket's backlog. An answer from the old image means the exec failed and
-// the daemon carried on.
 func awaitUpgradedDaemon(old string, wait time.Duration) (upgradedDaemon, error) {
 	deadline := time.Now().Add(wait)
 	var last error
@@ -637,7 +547,6 @@ func awaitUpgradedDaemon(old string, wait time.Duration) (upgradedDaemon, error)
 	}
 }
 
-// handoffAcceptsOf runs binary's handoff-accepts.
 func handoffAcceptsOf(binary string) (session.HandoffAccepts, error) {
 	var acc session.HandoffAccepts
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

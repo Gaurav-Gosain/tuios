@@ -19,9 +19,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newCheckpointCommand builds `tuios checkpoint`: list the checkpoints the
-// daemon took of a pane's git work tree, read what one turn changed, and put
-// the work tree back to one.
 func newCheckpointCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "checkpoint",
@@ -48,7 +45,6 @@ in config.toml.`,
 	return cmd
 }
 
-// checkpointFlags are the flags every checkpoint subcommand takes.
 type checkpointFlags struct {
 	session, window string
 	json            bool
@@ -60,9 +56,6 @@ func (f *checkpointFlags) add(cmd *cobra.Command) {
 	addJSONFlag(cmd, &f.json)
 }
 
-// callCheckpointVerb calls verb on the pane the flags name, on this machine
-// only, as the review commands do. It returns the raw result, or nil after it
-// printed the JSON form.
 func callCheckpointVerb(f checkpointFlags, verb string, params map[string]any) (json.RawMessage, string, error) {
 	host, sess, _, err := resolveTarget(f.session, f.window)
 	if err != nil {
@@ -98,7 +91,6 @@ func callCheckpointVerb(f checkpointFlags, verb string, params map[string]any) (
 	return raw, t.on(), nil
 }
 
-// checkpointN reads a checkpoint number argument.
 func checkpointN(arg string) (int, error) {
 	n, err := strconv.Atoi(arg)
 	if err != nil || n < 1 {
@@ -107,7 +99,6 @@ func checkpointN(arg string) (int, error) {
 	return n, nil
 }
 
-// checkpointWhat is a checkpoint's label column: its label, or what it is.
 func checkpointWhat(cp worktree.Checkpoint) string {
 	switch {
 	case cp.Kind == worktree.CheckpointSafety && cp.Label != "":
@@ -120,7 +111,6 @@ func checkpointWhat(cp worktree.Checkpoint) string {
 	return "-"
 }
 
-// newCheckpointListCommand builds `tuios checkpoint list`.
 func newCheckpointListCommand() *cobra.Command {
 	var f checkpointFlags
 	cmd := &cobra.Command{
@@ -185,8 +175,6 @@ func printCheckpointList(w io.Writer, sess, window, root, on string, enabled boo
 	if err := tw.Flush(); err != nil {
 		return err
 	}
-	// The untracked files a checkpoint left out are not undone by a restore
-	// of it, so the list says which they are.
 	for _, cp := range list {
 		if cp.SkippedCount == 0 && len(cp.Skipped) == 0 {
 			continue
@@ -206,7 +194,6 @@ func printCheckpointList(w io.Writer, sess, window, root, on string, enabled boo
 	return nil
 }
 
-// newCheckpointDiffCommand builds `tuios checkpoint diff`.
 func newCheckpointDiffCommand() *cobra.Command {
 	var f checkpointFlags
 	var paths []string
@@ -267,7 +254,6 @@ N out for the newest checkpoint. Nothing in the repository changes.`,
 	return cmd
 }
 
-// newCheckpointRestoreCommand builds `tuios checkpoint restore`.
 func newCheckpointRestoreCommand() *cobra.Command {
 	var f checkpointFlags
 	var force bool

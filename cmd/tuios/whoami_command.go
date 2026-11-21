@@ -12,8 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newWhoamiCommand builds `tuios whoami`: where the caller runs, as the daemon
-// sees it now, and what the person sees.
 func newWhoamiCommand() *cobra.Command {
 	var jsonOutput bool
 	cmd := &cobra.Command{
@@ -48,23 +46,19 @@ Run outside every pane, it says so, and shows the daemon and the clients.`,
 	return cmd
 }
 
-// whoamiClient is one client attached to the caller's session.
 type whoamiClient struct {
 	ClientID string `json:"client_id"`
 	PID      int    `json:"pid"`
 	Session  string `json:"session"`
 }
 
-// whoamiDaemon is the daemon the command reached.
 type whoamiDaemon struct {
 	Version string `json:"version,omitempty"`
 	PID     int    `json:"pid,omitempty"`
 	Socket  string `json:"socket,omitempty"`
-	// Server is the name of a named daemon (--server), "" for the default one.
-	Server string `json:"server,omitempty"`
+	Server  string `json:"server,omitempty"`
 }
 
-// whoamiResult is what whoami reports. Every id in it comes from the daemon.
 type whoamiResult struct {
 	Success          bool           `json:"success"`
 	Message          string         `json:"message"`
@@ -82,9 +76,7 @@ type whoamiResult struct {
 	ClientsNote      string         `json:"clients_note,omitempty"`
 	Daemon           whoamiDaemon   `json:"daemon"`
 	Host             string         `json:"host,omitempty"`
-	// StaleEnv names the TUIOS_* variables of this process that no longer
-	// match what the daemon says.
-	StaleEnv []string `json:"stale_env"`
+	StaleEnv         []string       `json:"stale_env"`
 }
 
 func runWhoami(jsonOutput bool) error {
@@ -105,7 +97,6 @@ func runWhoami(jsonOutput bool) error {
 	return nil
 }
 
-// whoami asks the daemon where the caller runs and what its session shows.
 func whoami(client *session.VerbClient) (*whoamiResult, error) {
 	res := &whoamiResult{Success: true, Message: "whoami", Grants: []string{}, Clients: []whoamiClient{}, StaleEnv: []string{}}
 	if d := client.Daemon(); d != nil {
@@ -144,7 +135,6 @@ func whoami(client *session.VerbClient) (*whoamiResult, error) {
 		whoamiWindows(client, res)
 	}
 
-	// Clients need no pane: outside every pane they are all the attached ones.
 	if raw, err := client.Call("list-clients", nil); err != nil {
 		res.ClientsNote = plainLine(err.Error())
 	} else {
@@ -155,7 +145,6 @@ func whoami(client *session.VerbClient) (*whoamiResult, error) {
 			return nil, errfmt.Errorf("failed to parse list-clients: %w", err)
 		}
 		for _, c := range list.Clients {
-			// A connection with no session is a CLI call, this one among them.
 			if c.Session == "" || res.InPane && c.Session != res.Session {
 				continue
 			}
@@ -167,9 +156,6 @@ func whoami(client *session.VerbClient) (*whoamiResult, error) {
 	return res, nil
 }
 
-// whoamiWindows fills in the caller's pane name and workspace, and what the
-// session shows, from list-windows. A failure leaves them out: the ids from
-// pane-grants still stand.
 func whoamiWindows(client *session.VerbClient, res *whoamiResult) {
 	raw, err := client.Call("list-windows", map[string]any{"session": res.Session})
 	if err != nil {
@@ -200,8 +186,6 @@ func whoamiWindows(client *session.VerbClient, res *whoamiResult) {
 	}
 }
 
-// staleEnv names the TUIOS_* variables that disagree with what the daemon
-// said. A variable that is unset is not stale: it says nothing.
 func staleEnv(res *whoamiResult, getenv func(string) string) []string {
 	stale := []string{}
 	pane := res.WindowID
@@ -219,7 +203,6 @@ func staleEnv(res *whoamiResult, getenv func(string) string) []string {
 	return stale
 }
 
-// describeWhoami is the text whoami prints.
 func describeWhoami(res *whoamiResult) string {
 	var b strings.Builder
 	if res.InPane {

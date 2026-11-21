@@ -27,52 +27,32 @@ func newDoctorCommand() *cobra.Command {
 	return cmd
 }
 
-// agentPaneGap is an agent pane whose harness has an integration this machine
-// does not have installed, or has out of date. A pane without one has its
-// state rest on screen rules and silence. A pane with an out of date one
-// misses what the newer hooks report.
 type agentPaneGap struct {
-	Session string `json:"session"`
-	Window  string `json:"window_id"`
-	Name    string `json:"name"`
-	Harness string `json:"harness"`
-	// Integration is "not installed" or "out of date".
+	Session     string `json:"session"`
+	Window      string `json:"window_id"`
+	Name        string `json:"name"`
+	Harness     string `json:"harness"`
 	Integration string `json:"integration"`
 }
 
-// doctorAgentsReport is what tuios doctor agents prints.
 type doctorAgentsReport struct {
-	TuiosOnPath bool                 `json:"tuios_on_path"`
-	Harnesses   []integration.Status `json:"harnesses"`
-	// Panes lists running agents whose integration is not installed or out
-	// of date. It is empty when no daemon runs, and DaemonRunning says which.
-	DaemonRunning bool           `json:"daemon_running"`
-	Panes         []agentPaneGap `json:"panes_without_integration"`
-	// HostsUnknown lists the sessions whose agent panes were not checked,
-	// because the daemon could not say which run on another machine.
-	HostsUnknown []string `json:"sessions_not_checked,omitempty"`
-	// Unsupported lists the harnesses tuios recognises and has no
-	// integration for, with the reason, so none is silently left out.
-	Unsupported []integration.Unsupported `json:"without_integration"`
-	// ManifestDir is the user manifest directory, UserManifests the files in
-	// it that loaded, and ManifestErrors the ones that did not. A user file
-	// with a bundled id replaces the bundled manifest whole, which is worth
-	// seeing in the one place that says what is set up.
-	ManifestDir    string         `json:"manifest_dir"`
-	UserManifests  []userManifest `json:"user_manifests"`
-	ManifestErrors []string       `json:"manifest_errors"`
+	TuiosOnPath    bool                      `json:"tuios_on_path"`
+	Harnesses      []integration.Status      `json:"harnesses"`
+	DaemonRunning  bool                      `json:"daemon_running"`
+	Panes          []agentPaneGap            `json:"panes_without_integration"`
+	HostsUnknown   []string                  `json:"sessions_not_checked,omitempty"`
+	Unsupported    []integration.Unsupported `json:"without_integration"`
+	ManifestDir    string                    `json:"manifest_dir"`
+	UserManifests  []userManifest            `json:"user_manifests"`
+	ManifestErrors []string                  `json:"manifest_errors"`
 }
 
-// userManifest is one harness manifest loaded from the user directory.
 type userManifest struct {
 	ID              string `json:"id"`
 	Path            string `json:"path"`
 	ReplacesBundled bool   `json:"replaces_bundled"`
 }
 
-// userManifests loads the registry the daemon would load from dir and
-// reports what came from dir: each manifest in force and each file that
-// failed to load.
 func userManifests(dir string) ([]userManifest, []string) {
 	reg, errs := harness.Load(dir)
 	var out []userManifest
@@ -123,9 +103,6 @@ and the files there that failed to load.`,
 	return cmd
 }
 
-// agentPane is one row of list-agents, as doctor reads it. A row with
-// HostsUnknown set stands for a whole session whose panes were not checked,
-// because the daemon could not say which of them run on another machine.
 type agentPane struct {
 	Session      string
 	Window       string
@@ -134,8 +111,6 @@ type agentPane struct {
 	HostsUnknown bool
 }
 
-// livePanes lists every agent pane on the running daemon, and false when no
-// daemon runs.
 func livePanes() ([]agentPane, bool) {
 	if !session.DiagnoseDaemon().Running() {
 		return nil, false
@@ -175,15 +150,10 @@ func livePanes() ([]agentPane, bool) {
 		}
 		remote, ok := remoteWindows(client, s.Name)
 		if !ok {
-			// Which panes run on another machine is not known, and the
-			// local integration says nothing about those. The session is
-			// reported as not checked rather than checked wrongly.
 			out = append(out, agentPane{Session: s.Name, HostsUnknown: true})
 			continue
 		}
 		for _, a := range res.Agents {
-			// A pane on another machine runs that machine's harness, whose
-			// integration is not the one installed here.
 			if remote[a.WindowID] {
 				continue
 			}
@@ -193,8 +163,6 @@ func livePanes() ([]agentPane, bool) {
 	return out, true
 }
 
-// remoteWindows lists the windows of a session whose process runs on another
-// machine, by window id, and false when the daemon could not say.
 func remoteWindows(client *session.VerbClient, sessionName string) (map[string]bool, bool) {
 	raw, err := client.CallWithTimeout("list-windows", map[string]any{"session": sessionName}, 2*time.Second)
 	if err != nil {
@@ -218,9 +186,6 @@ func remoteWindows(client *session.VerbClient, sessionName string) (map[string]b
 	return out, true
 }
 
-// doctorAgents builds the report. The harness half is integration.BuildOverview,
-// which the settings page's Agents tab draws too. panes is injected so the
-// report can be tested without a daemon.
 func doctorAgents(env integration.Env, command string, panes func() ([]agentPane, bool)) doctorAgentsReport {
 	base := integration.BuildOverview(env, command)
 	r := doctorAgentsReport{TuiosOnPath: base.TuiosOnPath, Harnesses: base.Harnesses, Unsupported: base.Unsupported}
@@ -247,8 +212,6 @@ func doctorAgents(env integration.Env, command string, panes func() ([]agentPane
 	return r
 }
 
-// printPaneGaps lists the panes whose integration is in state, then the
-// command that fixes each harness they run. verb names what the command does.
 func printPaneGaps(w io.Writer, panes []agentPaneGap, state, verb string) {
 	var harnesses []string
 	for _, p := range panes {

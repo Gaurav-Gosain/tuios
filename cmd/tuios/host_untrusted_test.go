@@ -18,15 +18,15 @@ import (
 // TestAStyledCaptureFromAHostKeepsOnlySGR: --ansi or --resolved from another
 // machine keeps colour and style, and nothing else a terminal would act on.
 func TestAStyledCaptureFromAHostKeepsOnlySGR(t *testing.T) {
-	hostile := "a\x1b[31mred\x1b[0m" + // SGR, kept
-		"\x1b]52;c;ZXZpbA==\x07" + // OSC 52 clipboard write, BEL-terminated
-		"\x1b]8;;https://evil\x1b\\link\x1b]8;;\x1b\\" + // OSC 8 hyperlink, ST-terminated
-		"\x1b[2A\x1b[10;1H\x1b[2K" + // cursor up, cursor position, erase line
-		"\x1bP1$qm\x1b\\" + // DCS
-		"\x1b[?1049h" + // private mode
-		"\x1b[>4;1m" + // an m-final CSI that is not SGR
-		"\xc2\x9b2J" + // C1 CSI erase screen
-		"\x1b7\x1b8" + // save and restore cursor
+	hostile := "a\x1b[31mred\x1b[0m" +
+		"\x1b]52;c;ZXZpbA==\x07" +
+		"\x1b]8;;https://evil\x1b\\link\x1b]8;;\x1b\\" +
+		"\x1b[2A\x1b[10;1H\x1b[2K" +
+		"\x1bP1$qm\x1b\\" +
+		"\x1b[?1049h" +
+		"\x1b[>4;1m" +
+		"\xc2\x9b2J" +
+		"\x1b7\x1b8" +
 		"b\u202Egnp.exe\u200B\n"
 	raw, _ := json.Marshal(map[string]any{"content": hostile})
 	var buf bytes.Buffer
@@ -45,7 +45,6 @@ func TestAStyledCaptureFromAHostKeepsOnlySGR(t *testing.T) {
 	if !strings.Contains(out, "linkb") || !strings.Contains(out, "gnp.exe") {
 		t.Errorf("ASSERTION: the printable text was lost:\n%q", out)
 	}
-	// Every ESC left is the start of an SGR sequence.
 	for i := strings.Index(out, "\x1b"); i >= 0; i = strings.Index(out[i+1:], "\x1b") + i + 1 {
 		n, final, ok := scanCSI(out[i+2:])
 		if out[i+1] != '[' || !ok || final != 'm' || !sgrParams(out[i+2:i+2+n-1]) {
@@ -88,8 +87,6 @@ func TestAttachToAHostDecidesByTheFarStashRoot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "other.txt"), []byte("not named"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// A far root whose paths fail here with ENOTDIR: a regular file stands
-	// where the root's parent directory is.
 	blocker := filepath.Join(dir, "blocker")
 	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -99,8 +96,6 @@ func TestAttachToAHostDecidesByTheFarStashRoot(t *testing.T) {
 	if _, err := os.Stat(farNotDir); !errors.Is(err, syscall.ENOTDIR) {
 		t.Fatalf("setup: stat of the far path gave %v, want ENOTDIR", err)
 	}
-	// And a far path that exists here too, as it does when both daemons run
-	// on one machine. It must not be sent again.
 	farExists := filepath.Join(dir, "far", "def.png")
 	if err := os.MkdirAll(filepath.Dir(farExists), 0o700); err != nil {
 		t.Fatal(err)
@@ -141,12 +136,9 @@ func TestAttachToAHostDecidesByTheFarStashRoot(t *testing.T) {
 		t.Errorf("ASSERTION: a far path that also exists here was sent: %v %v %v", got, err, puts)
 	}
 
-	// A path outside the far root that is not a file here is refused, not
-	// passed on for the far side to guess at.
 	if _, err := stashAttachmentsWith([]string{filepath.Join(dir, "missing.txt")}, farRoot, "build", &notes, put); err == nil {
 		t.Error("ASSERTION: a path that is neither far nor here was accepted")
 	}
-	// A path that only looks inside the root is not.
 	if _, err := stashAttachmentsWith([]string{farRoot + "/../escape.txt"}, farRoot, "build", &notes, put); err == nil {
 		t.Error("ASSERTION: a path that climbs out of the far root passed through")
 	}
@@ -228,7 +220,6 @@ func TestAHostErrorIsMarkedUntrusted(t *testing.T) {
 	if _, ok := local["untrusted"]; ok {
 		t.Errorf("ASSERTION: a local error was marked untrusted: %v", local)
 	}
-	// The wrapper does not hide what it carries.
 	if _, ok := errors.AsType[*session.VerbCallError]((&verbTarget{host: "build"}).explain("capture-pane", far)); !ok {
 		t.Error("ASSERTION: the host error no longer unwraps to the verb error")
 	}

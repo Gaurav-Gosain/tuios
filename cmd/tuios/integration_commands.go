@@ -15,9 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// integrationTargets resolves the harness arguments of an integration
-// command. --all takes every harness whose configuration directory exists
-// when installing, and every harness when removing or reporting.
 func integrationTargets(env integration.Env, args []string, all, onlyPresent bool) ([]*integration.Target, error) {
 	if all {
 		if len(args) > 0 {
@@ -235,9 +232,6 @@ stays as it was. Uninstall puts your command back.`,
 	return cmd
 }
 
-// installStatusLineFor points the harness's status line at the wrapper and
-// says what it did. A status line of the person's own is refused with the
-// command that keeps it.
 func installStatusLineFor(stdout, stderr io.Writer, t *integration.Target, env integration.Env, command, then string) bool {
 	res, err := t.InstallStatusLine(env, command, then)
 	var owned *integration.StatusLineOwnedError
@@ -263,9 +257,6 @@ func installStatusLineFor(stdout, stderr io.Writer, t *integration.Target, env i
 	return true
 }
 
-// installSkillFor writes the skill stub for one harness and says what it did.
-// A tuios skill the person wrote is a note, not a failure: it is left alone
-// on purpose.
 func installSkillFor(t *integration.Target, env integration.Env) bool {
 	res, err := t.InstallSkill(env)
 	switch {
@@ -282,7 +273,6 @@ func installSkillFor(t *integration.Target, env integration.Env) bool {
 	return true
 }
 
-// installMCPFor registers the MCP server with one harness and says what it did.
 func installMCPFor(t *integration.Target, env integration.Env, command string, write bool) bool {
 	res, err := t.InstallMCP(env, command, write)
 	switch {
@@ -397,7 +387,6 @@ current install runs, for a tuios that is not on PATH.`,
 	return cmd
 }
 
-// printOtherPaths names the files an integration changed besides its main one.
 func printOtherPaths(res integration.Result) {
 	for _, p := range res.Paths {
 		if p != res.Path {
@@ -406,7 +395,6 @@ func printOtherPaths(res integration.Result) {
 	}
 }
 
-// integrationVerdict is a status in a few words.
 func integrationVerdict(s integration.Status) string {
 	v := integrationVerdictOnly(s)
 	if s.Reports == integration.ReportsSession {
@@ -417,8 +405,6 @@ func integrationVerdict(s integration.Status) string {
 
 func integrationVerdictOnly(s integration.Status) string { return s.Verdict() }
 
-// printRemovalStep says what one part of an uninstall did, and reports false
-// when it failed.
 func printRemovalStep(t *integration.Target, step integration.RemovalStep) bool {
 	prefix := t.Name + ": "
 	if step.Part != "" {
@@ -442,7 +428,6 @@ func printRemovalStep(t *integration.Target, step integration.RemovalStep) bool 
 	return true
 }
 
-// removalPartTag is how a failed part is named in the closing error.
 func removalPartTag(part string) string {
 	switch part {
 	case "status line":
@@ -480,8 +465,6 @@ func printIntegrationStatus(w io.Writer, statuses []integration.Status, asJSON b
 	return nil
 }
 
-// mcpVerdict says whether the MCP server is registered, "" when it is not and
-// nothing is in its way, so the report stays short for the common case.
 func mcpVerdict(s integration.Status) string {
 	m := s.MCP
 	if m == nil {
@@ -502,8 +485,6 @@ func mcpVerdict(s integration.Status) string {
 	return ""
 }
 
-// skillVerdict says whether the skill stub is in place. It says nothing for a
-// harness whose hooks are not installed either, so the report stays short.
 func skillVerdict(s integration.Status) string {
 	sk := s.Skill
 	switch {
@@ -525,8 +506,6 @@ func skillVerdict(s integration.Status) string {
 	return ""
 }
 
-// statusLineVerdict says whether the status line feed is installed, "" when it
-// is not: it is opt in, so its absence is the ordinary case and says nothing.
 func statusLineVerdict(s integration.Status) string {
 	sl := s.StatusLine
 	if sl == nil || !sl.Installed {

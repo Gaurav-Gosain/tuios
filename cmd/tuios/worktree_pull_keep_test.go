@@ -15,7 +15,6 @@ func TestKeepFailedPatchUsesAnUnpredictableFile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 
-	// A file planted at the old fixed name, readable by everyone.
 	planted := filepath.Join(tmp, "tuios-pull-feature.patch")
 	if err := os.WriteFile(planted, []byte("planted"), 0o666); err != nil {
 		t.Fatal(err)

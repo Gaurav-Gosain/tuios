@@ -24,10 +24,8 @@ import (
 	"golang.org/x/term"
 )
 
-// lookFetchTimeout bounds a look download, start to end.
 const lookFetchTimeout = 15 * time.Second
 
-// newLookCommand creates the look command.
 func newLookCommand() *cobra.Command {
 	lookCmd := &cobra.Command{
 		Use:   "look",
@@ -163,8 +161,6 @@ same questions as "tuios look apply". Esc closes the list.`,
 			}
 			err := runLookPick(cmd.OutOrStdout(), pickTakeOver)
 			if pickHold {
-				// The pane the palette opens closes with the program, so the
-				// result stays until the person has read it.
 				if err != nil {
 					fmt.Fprintln(cmd.OutOrStdout(), "Error:", err)
 				}
@@ -182,23 +178,17 @@ same questions as "tuios look apply". Esc closes the list.`,
 	return lookCmd
 }
 
-// lookPrompt is how a command asks before it writes.
 type lookPrompt struct {
 	yes      bool
 	takeOver bool
 	tty      bool
-	// in is one reader for every question, so an answer typed ahead is not
-	// lost in the buffer of an earlier question.
-	in *bufio.Reader
+	in       *bufio.Reader
 }
 
-// newLookPrompt asks on the terminal of stdin.
 func newLookPrompt(yes, takeOver bool) lookPrompt {
 	return lookPrompt{yes: yes, takeOver: takeOver, tty: term.IsTerminal(int(os.Stdin.Fd())), in: bufio.NewReader(os.Stdin)}
 }
 
-// confirmTakeOver asks whether the look may set the shadowed keys. --take-over
-// is a yes. --yes alone is a no, so a script that ran before keeps its config.
 func (p lookPrompt) confirmTakeOver(w io.Writer) (bool, error) {
 	switch {
 	case p.takeOver:
@@ -209,7 +199,6 @@ func (p lookPrompt) confirmTakeOver(w io.Writer) (bool, error) {
 	return lookPrompt{tty: true, in: p.in}.confirm(w, "Let the look set these keys? Your values are saved and come back when you remove the look.")
 }
 
-// confirm asks question and reports a yes. Without a terminal it needs --yes.
 func (p lookPrompt) confirm(w io.Writer, question string) (bool, error) {
 	if p.yes {
 		return true, nil
@@ -223,14 +212,11 @@ func (p lookPrompt) confirm(w io.Writer, question string) (bool, error) {
 	return answer == "y" || answer == "yes", nil
 }
 
-// runLookApply reads the look at source, shows the plan, asks, and applies it.
 func runLookApply(w io.Writer, source string, prompt lookPrompt) error {
 	data, shown, err := readLookSource(source)
 	if err != nil {
 		return err
 	}
-	// A look for a newer tuios stops here, before anything is written, and
-	// before a key this tuios does not know can fail the parse.
 	if err := checkLookRequires(data, version); err != nil {
 		return err
 	}
@@ -295,9 +281,6 @@ func runLookApply(w io.Writer, source string, prompt lookPrompt) error {
 	return nil
 }
 
-// lookTooNew reports whether a look that requires want is too new for the
-// running tuios. A build with no release version, such as a source build,
-// applies every look: it is newer than the release it came from.
 func lookTooNew(want, running string) bool {
 	need, ok := release.ParseVersion(want)
 	if want == "" || !ok {
@@ -307,8 +290,6 @@ func lookTooNew(want, running string) bool {
 	return ok && release.Compare(have, need) < 0
 }
 
-// checkLookRequires refuses a look that needs a newer tuios than running,
-// before anything is written.
 func checkLookRequires(data []byte, running string) error {
 	want, err := config.LookRequires(data)
 	if err != nil {
@@ -320,7 +301,6 @@ func checkLookRequires(data []byte, running string) error {
 	return nil
 }
 
-// runLookRemove shows what removing the look changes, asks, and removes it.
 func runLookRemove(w io.Writer, prompt lookPrompt) error {
 	mainPath, err := config.GetConfigPath()
 	if err != nil {
@@ -367,7 +347,6 @@ func runLookRemove(w io.Writer, prompt lookPrompt) error {
 	return nil
 }
 
-// runLookShow prints the installed look.
 func runLookShow(w io.Writer) error {
 	mainPath, err := config.GetConfigPath()
 	if err != nil {
@@ -407,7 +386,6 @@ func runLookShow(w io.Writer) error {
 	return nil
 }
 
-// printLookPlan prints what an apply or a remove changes.
 func printLookPlan(w io.Writer, p *config.LookPlan) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	if lk := p.Look; lk != nil {
@@ -505,8 +483,6 @@ func printLookPlan(w io.Writer, p *config.LookPlan) {
 	fmt.Fprintln(w)
 }
 
-// printLookChanges prints one line per change: the key, the old value and
-// the new value.
 func printLookChanges(w io.Writer, changes []config.LookChange) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, c := range changes {
@@ -515,7 +491,6 @@ func printLookChanges(w io.Writer, changes []config.LookChange) {
 	_ = tw.Flush()
 }
 
-// lookShown is a value for the change list. An empty value is shown as such.
 func lookShown(v string) string {
 	if v == "" {
 		return `""`
@@ -523,8 +498,6 @@ func lookShown(v string) string {
 	return v
 }
 
-// readLookSource returns the look at source and the source as the look file
-// records it.
 func readLookSource(source string) ([]byte, string, error) {
 	src, err := resolveLookSource(source, func(p string) bool {
 		_, err := os.Stat(p)
@@ -545,14 +518,11 @@ func readLookSource(source string) ([]byte, string, error) {
 	return data, src.where, err
 }
 
-// lookSource is where a look comes from.
 type lookSource struct {
 	remote bool
-	where  string // an https URL, or a file path
+	where  string
 }
 
-// resolveLookSource sorts a source into a URL or a file. exists reports
-// whether a local file is there.
 func resolveLookSource(source string, exists func(string) bool) (lookSource, error) {
 	s := strings.TrimSpace(source)
 	switch {
@@ -583,8 +553,6 @@ func resolveLookSource(source string, exists func(string) bool) (lookSource, err
 	return lookSource{}, errfmt.Errorf("%s is not a file, an https URL or a gallery id", s)
 }
 
-// validGalleryID reports whether id can be a gallery id: 1 to 64 of a-z, A-Z,
-// 0-9, '-' and '_'.
 func validGalleryID(id string) bool {
 	if id == "" || len(id) > 64 {
 		return false
@@ -599,7 +567,6 @@ func validGalleryID(id string) bool {
 	return true
 }
 
-// readLookFile reads a local look, with the size cap.
 func readLookFile(path string) ([]byte, error) {
 	f, err := os.Open(path) //nolint:gosec // the file the person named
 	if err != nil {
@@ -609,7 +576,6 @@ func readLookFile(path string) ([]byte, error) {
 	return readCapped(f)
 }
 
-// readCapped reads at most config.MaxLookBytes and fails past it.
 func readCapped(r io.Reader) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(r, config.MaxLookBytes+1))
 	if err != nil {
@@ -621,8 +587,6 @@ func readCapped(r io.Reader) ([]byte, error) {
 	return data, nil
 }
 
-// lookHTTP downloads looks: a timeout for the whole request, and a redirect
-// only to another https URL.
 var lookHTTP = &http.Client{
 	Timeout: lookFetchTimeout,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -636,7 +600,6 @@ var lookHTTP = &http.Client{
 	},
 }
 
-// fetchLook downloads the look at an https URL.
 func fetchLook(u string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {

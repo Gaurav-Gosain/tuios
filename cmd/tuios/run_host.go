@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// execResult is the exec verb's answer as the CLI reads it.
 type execResult struct {
 	Stdout        []byte `json:"stdout"`
 	Stderr        []byte `json:"stderr"`
@@ -26,13 +25,8 @@ type execResult struct {
 	DurationMS    int64  `json:"duration_ms"`
 }
 
-// runTimedOutStatus is the exit status of a command the timeout stopped, the
-// one timeout(1) uses.
 const runTimedOutStatus = 124
 
-// runLineOnHost is `tuios run --host`: one command line on a linked machine,
-// with no pane. It prints the command's stdout and stderr on its own and
-// exits with the command's status.
 func runLineOnHost(host, cwd string, args []string, timeout, lines int, jsonOutput bool) error {
 	line := strings.Join(args, " ")
 	if strings.TrimSpace(line) == "" {
@@ -81,8 +75,6 @@ func runLineOnHost(host, cwd string, args []string, timeout, lines int, jsonOutp
 	return hostRunStatus(res, timeout, os.Stderr)
 }
 
-// hostRunStatus is the exit status run --host ends with, and the note on
-// errs that says why when the command did not exit by itself.
 func hostRunStatus(res execResult, timeout int, errs io.Writer) error {
 	switch {
 	case res.TimedOut:
@@ -103,7 +95,6 @@ func hostRunStatus(res execResult, timeout int, errs io.Writer) error {
 	return nil
 }
 
-// lastLines keeps the last n lines of b.
 func lastLines(b []byte, n int) []byte {
 	trimmed := bytes.TrimSuffix(b, []byte("\n"))
 	idx := len(trimmed)

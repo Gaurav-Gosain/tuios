@@ -20,8 +20,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// tuios transfers: the copies the daemon runs, and control of them.
-
 func newTransfersCommand() *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
@@ -246,8 +244,6 @@ func runTransfersControl(verb, done string, ids []string, jsonOut bool) error {
 	return nil
 }
 
-// doneWord is what a control did, with what the row says when the copy had
-// ended before it.
 func doneWord(done string, r copyRow) string {
 	if r.ended() && !strings.Contains(done, "cancel") {
 		return "ended already (" + r.State + ")"

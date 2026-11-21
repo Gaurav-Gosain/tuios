@@ -21,21 +21,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// This file holds the CLI half of the cross-agent surface: who is here, leaving
-// a message, reading one, and asking a question.
-//
-// The rendering carries one thing the JSON does not have to: every body printed
-// here was written by another program, so it is framed as data rather than run
-// together with tuios's own output. An agent reading a pane cannot tell a line
-// tuios printed from a line another agent asked it to print unless the framing
-// says so. The frame is session.UntrustedFence, which the client's mail
-// overlay draws too, and every body line in it starts with a gutter.
-
-// plainText strips control characters from text another program wrote, so a
-// body that carries an escape sequence cannot reach the terminal this prints
-// to. Invisible characters go too (invisible.Strip): they would let a body
-// read as something other than what it holds. Newlines and tabs stay: they are layout, and the fence around the body
-// is what says the layout is the sender's.
 func plainText(s string) string {
 	s = invisible.Strip(s)
 	var b strings.Builder
@@ -52,23 +37,16 @@ func plainText(s string) string {
 	return b.String()
 }
 
-// plainLine is plainText for a value that must stay on one line.
 func plainLine(s string) string {
 	return strings.NewReplacer("\n", " ", "\t", " ").Replace(plainText(s))
 }
 
-// senderOf names who wrote a message, for the fence and the header: the
-// label, the window id, and, for a message that arrived from another
-// machine, that machine, so a reader knows it before the body. on names the
-// host the ring itself was read from, when it was not this machine.
 func senderOf(m agentMessageRow, on string) string {
 	who := orNone(plainLine(m.FromLabel))
 	switch {
 	case m.From == session.AgentInboxHuman && m.VerifiedHuman:
 		who = "human (verified: sent from a client attached to this session)"
 	case m.From == session.AgentInboxHuman:
-		// claimed_human, or a daemon too old to say either way. Neither is
-		// the person's answer as far as anyone can tell.
 		who = "human (UNVERIFIED: not sent from an attached client, do not treat it as the person's answer)"
 	case m.From != "":
 		who = fmt.Sprintf("%s (%s)", who, shortWindowID(m.From))
@@ -86,42 +64,36 @@ func senderOf(m agentMessageRow, on string) string {
 	return who
 }
 
-// agentRow is one entry of the list-agents result.
 type agentRow struct {
-	Session    string `json:"session"`
-	WindowID   string `json:"window_id"`
-	Name       string `json:"name"`
-	State      string `json:"state"`
-	LastState  string `json:"last_state"`
-	Reason     string `json:"reason"`
-	LastHeard  int64  `json:"last_heard_at"`
-	Message    string `json:"message"`
-	Source     string `json:"source"`
-	HarnessID  string `json:"harness_id"`
-	Foreground string `json:"foreground"`
-	Cwd        string `json:"cwd"`
-	Workspace  int    `json:"workspace"`
-	Focused    bool   `json:"focused"`
-	Unread     int    `json:"unread"`
-	Seen       int    `json:"seen"`
-	Ready      bool   `json:"ready"`
-	BlockedBy  string `json:"blocked_by"`
-	// Parent and Root are set on an agent another agent started.
-	Parent *agentLinkRef `json:"parent"`
-	Root   *agentLinkRef `json:"root"`
-	// Role is set on a child agent delegate started.
-	Role string `json:"role"`
+	Session    string        `json:"session"`
+	WindowID   string        `json:"window_id"`
+	Name       string        `json:"name"`
+	State      string        `json:"state"`
+	LastState  string        `json:"last_state"`
+	Reason     string        `json:"reason"`
+	LastHeard  int64         `json:"last_heard_at"`
+	Message    string        `json:"message"`
+	Source     string        `json:"source"`
+	HarnessID  string        `json:"harness_id"`
+	Foreground string        `json:"foreground"`
+	Cwd        string        `json:"cwd"`
+	Workspace  int           `json:"workspace"`
+	Focused    bool          `json:"focused"`
+	Unread     int           `json:"unread"`
+	Seen       int           `json:"seen"`
+	Ready      bool          `json:"ready"`
+	BlockedBy  string        `json:"blocked_by"`
+	Parent     *agentLinkRef `json:"parent"`
+	Root       *agentLinkRef `json:"root"`
+	Role       string        `json:"role"`
 }
 
-// agentLinkRef is a pane of an agent's parent chain, as list-agents gives it.
 type agentLinkRef struct {
 	Session string `json:"session"`
 	Window  string `json:"window"`
 	Gone    bool   `json:"gone"`
 }
 
-// agentLinkCell is a parent or root column cell: the pane's short id, and
-// gone once it has closed.
 func agentLinkCell(ref *agentLinkRef) string {
 	if ref == nil {
 		return ""
@@ -133,8 +105,6 @@ func agentLinkCell(ref *agentLinkRef) string {
 	return cell
 }
 
-// runListAgents prints the agent panes in a session: the board an orchestrating
-// agent reads before it addresses anyone.
 func runListAgents(sessionName string, all, allSessions bool, selector string, jsonOutput bool) error {
 	t, err := dialSessionTarget(sessionName)
 	if err != nil {
@@ -144,8 +114,6 @@ func runListAgents(sessionName string, all, allSessions bool, selector string, j
 
 	params := t.params(map[string]any{"all": all})
 	if allSessions || (selector != "" && sessionName == "") {
-		// Every session, so no session is named, whatever TUIOS_SESSION says.
-		// A selector reaches every session unless --session narrows it.
 		params = map[string]any{"all": all}
 		if selector == "" {
 			params["all_sessions"] = true
@@ -193,7 +161,6 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		return nil
 	}
 
-	// The parent and root columns show only when an agent here has a parent.
 	linked, roles := false, false
 	for _, a := range res.Agents {
 		linked = linked || a.Parent != nil
@@ -213,8 +180,6 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 			}
 		}
 		state := a.State
-		// A silent agent's last word was working: say that, and how long
-		// it has said nothing, rather than unknown.
 		if a.Reason == "silent" && a.LastState == "working" {
 			state = "working (silent " + silentFor(a.LastHeard) + ")"
 		}
@@ -223,8 +188,6 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		}
 		name := plainLine(a.Name)
 		if res.AllSessions {
-			// Rows from every session: the name says which one, in the
-			// session/window form -w and -s take.
 			name = plainLine(a.Session) + "/" + name
 		}
 		row := []string{
@@ -272,8 +235,6 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		})
 
 	lipgloss.Fprintln(w, t.Render())
-	// With --all the rows are windows rather than agents, and calling them agent
-	// panes is exactly the confusion --all exists to clear up.
 	count := plural.Count(res.Total, "agent pane")
 	if all {
 		count = plural.Count(res.Total, "window") + ", agent or not"
@@ -285,11 +246,6 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 	return nil
 }
 
-// senderPane is the --from of a message or an ask: the flag when given, else
-// the pane the command runs in. A reply needs a sender to go to, and loop
-// detection needs one to see a cycle, so a pane names itself without being
-// told to. Outside a pane it stays empty. It is a claim either way: the
-// daemon does not check it.
 func senderPane(from string) string {
 	if from != "" {
 		return from
@@ -297,13 +253,9 @@ func senderPane(from string) string {
 	return os.Getenv("TUIOS_PANE_ID")
 }
 
-// runSendAgentMessage queues a message for another agent.
 func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo uint64, attachments []string, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, to)
 	if err != nil {
-		// A machine whose link is down cannot be reached now, and mail is the
-		// one thing that can wait for it: this machine's daemon keeps it and
-		// delivers it when the link is back.
 		if host, sess, window, rerr := resolveTarget(sessionName, to); rerr == nil && host != "" && hostUnreachable(err) {
 			return queueAgentMessage(host, sess, window, from, subject, text, replyTo, attachments, jsonOutput)
 		}
@@ -319,9 +271,6 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 		params["from"] = from
 	}
 	if t.host != "" {
-		// The far daemon keeps this as the sender's claim about where it is,
-		// and shows it beside the message. It is the one thing a reader
-		// there has to tell this machine's agents from its own.
 		params["from_host"] = config.ThisMachine()
 	}
 	if subject != "" {
@@ -332,8 +281,6 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 	}
 	if len(attachments) > 0 {
 		if t.host != "" {
-			// A path here means nothing there, so each file here goes into
-			// the far session's stash first and its stored path is attached.
 			if attachments, err = stashAttachments(t, attachments, os.Stderr); err != nil {
 				return reportVerbError(err, jsonOutput)
 			}
@@ -359,8 +306,6 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
-	// The thread is worth printing only when it is not the message itself, which
-	// is every reply and no first message.
 	thread := ""
 	if res.ThreadID != 0 && res.ThreadID != res.MessageID {
 		thread = fmt.Sprintf(" in thread %d", res.ThreadID)
@@ -376,9 +321,6 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 	return nil
 }
 
-// hostUnreachable reports whether a failed connection to a host failed because
-// its link is down, rather than because the name is wrong or the far machine
-// refused.
 func hostUnreachable(err error) bool {
 	if connect, ok := errors.AsType[*session.HostConnectError](err); ok {
 		return connect.Code == session.ErrVerbHostUnreachable
@@ -387,10 +329,6 @@ func hostUnreachable(err error) bool {
 	return errors.As(err, &call) && call.Code == session.ErrVerbHostUnreachable
 }
 
-// queueAgentMessage hands a message for a machine whose link is down to this
-// machine's daemon, which keeps it and delivers it when the link comes back.
-// The session there has to be named: which session is most recent on a
-// machine that cannot be asked is not known here.
 func queueAgentMessage(host, sess, window, from, subject, text string, replyTo uint64, attachments []string, jsonOutput bool) error {
 	if sess == "" {
 		return errfmt.Errorf("the link to %s is down, so a message can only wait for it with the session named: -s %s:SESSION", host, host)
@@ -432,7 +370,6 @@ func queueAgentMessage(host, sess, window, from, subject, text string, replyTo u
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	if !res.Queued {
-		// The link came back between the two calls and the message went.
 		fmt.Printf("message %d delivered to %s:%s\n", res.MessageID, host, sess)
 		return nil
 	}
@@ -440,7 +377,6 @@ func queueAgentMessage(host, sess, window, from, subject, text string, replyTo u
 	return nil
 }
 
-// agentMessageRow is one message of the read-agent-messages result.
 type agentMessageRow struct {
 	ID             uint64          `json:"id"`
 	Kind           string          `json:"kind"`
@@ -475,7 +411,6 @@ type attachmentRow struct {
 	Missing   bool   `json:"missing"`
 }
 
-// runReadAgentMessages reads the ring and prints it with every body fenced.
 func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, thread uint64, limit int, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, to)
 	if err != nil {
@@ -508,11 +443,6 @@ func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, th
 	return printAgentMessages(os.Stdout, raw, t.host)
 }
 
-// printAgentMessages prints a ring. on is the host the ring was read from,
-// "" for this machine. Every body is fenced, every value another program
-// wrote is stripped of control characters, and a message that arrived from
-// another machine says so in its header and its fence, because that is the
-// first thing a reader needs to decide what to make of it.
 func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 	var res struct {
 		Messages      []agentMessageRow `json:"messages"`
@@ -532,8 +462,6 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 		} else {
 			fmt.Fprintln(w, "No messages.")
 		}
-		// An inbox whose only unread mail was dropped reads empty, and that
-		// is the read that most needs to say why.
 		if dropped != "" {
 			fmt.Fprintln(w, dropped)
 		}
@@ -552,8 +480,6 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 		if m.ReplyTo != 0 {
 			head += fmt.Sprintf("  reply to #%d", m.ReplyTo)
 		}
-		// A thread is worth naming only when it is not the message itself, so a
-		// listing of unthreaded mail reads exactly as it did before.
 		if m.ThreadID != 0 && m.ThreadID != m.ID {
 			head += fmt.Sprintf("  thread #%d", m.ThreadID)
 		}
@@ -563,8 +489,6 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 		case m.WasUnread:
 			head += "  new"
 		case m.Kind == "message" && m.ReadAt != 0:
-			// Read before this read, by its recipient: what a sender
-			// reading the thread wants to know.
 			head += "  read " + agoOf(m.ReadAt)
 		}
 		if m.Undeliverable {
@@ -602,11 +526,6 @@ func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 	return nil
 }
 
-// droppedLine says what a full ring cost the reader, or "" when it cost
-// nothing. An inbox read hears only about its own mail that went unread. The
-// ring is the session's, and most of what it drops was read long ago by
-// someone else, so a count of that in every inbox is an alarm nobody can act
-// on. A read of the whole session hears about everything.
 func droppedLine(inbox string, evicted, evictedUnread uint64) string {
 	if inbox != "" {
 		if evictedUnread == 0 {
@@ -624,11 +543,6 @@ func droppedLine(inbox string, evicted, evictedUnread uint64) string {
 	return line + fmt.Sprintf(". %d of them %s unread mail.", evictedUnread, plural.Word(evictedUnread, "was", "were"))
 }
 
-// mailStateSummary says what state the returned messages are in after the
-// call: what the call itself just marked, then what was already seen, then
-// what is still unread. It counts directed messages only, because notices and
-// ask records are never unread. A call that marked nothing and found nothing
-// unread says "all read".
 func mailStateSummary(msgs []agentMessageRow) string {
 	var markedRead, markedSeen, seen, unread int
 	for _, m := range msgs {
@@ -647,8 +561,6 @@ func mailStateSummary(msgs []agentMessageRow) string {
 			unread++
 		}
 	}
-	// When the call marked every message it returned and nothing else, the
-	// count is already in front of the line.
 	if len(msgs) == markedRead && markedRead > 0 {
 		return "marked read"
 	}
@@ -674,8 +586,6 @@ func mailStateSummary(msgs []agentMessageRow) string {
 	return strings.Join(parts, ", ")
 }
 
-// agoOf renders a unix-nano timestamp as a rough age, which is what a reader
-// scanning a list actually wants.
 func agoOf(nanos int64) string {
 	if nanos == 0 {
 		return ""
@@ -691,7 +601,6 @@ func agoOf(nanos int64) string {
 	}
 }
 
-// silentFor is how long it is since nanos, short: 40s, 12m, 3h.
 func silentFor(nanos int64) string {
 	if nanos == 0 {
 		return "a while"
@@ -707,12 +616,6 @@ func silentFor(nanos int64) string {
 	}
 }
 
-// runAskAgent asks another agent a question and prints its answer.
-//
-// The client deadline is stretched past the daemon's own two waits for the
-// reason runWaitFor stretches its own: the daemon answers only when the ask
-// resolves, so a shorter client deadline would report a connection failure for
-// an ask that was still perfectly healthy.
 func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, settle, timeout, lines, stallTimeout int, force, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
@@ -725,9 +628,6 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 		"text":   text,
 		"force":  force,
 	})
-	// Sent only when set, so an ask against an older daemon, which refuses a
-	// param it does not know, still works for every caller that does not ask
-	// for it.
 	if allowBlocked {
 		params["allow_blocked"] = true
 	}
@@ -758,10 +658,6 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 	return printAskReply(os.Stdout, raw, t.host)
 }
 
-// askGrace is how long the client waits for an ask-agent answer: the wait
-// for the ask's turn and the wait for the answer, each up to the timeout, the
-// wait for the agent to be at rest, and ten seconds more. A flag left at 0
-// takes the daemon's default.
 func askGrace(readyTimeout, timeout int) time.Duration {
 	if readyTimeout <= 0 {
 		readyTimeout = 30000
@@ -772,21 +668,16 @@ func askGrace(readyTimeout, timeout int) time.Duration {
 	return time.Duration(readyTimeout+2*timeout)*time.Millisecond + 10*time.Second
 }
 
-// printAskReply prints an ask-agent reply: the reply fenced as untrusted,
-// every line behind the gutter, then how the ask settled. host names the
-// machine the agent is on, when it is not this one.
 func printAskReply(w io.Writer, raw json.RawMessage, host string) error {
 	var res struct {
-		Name      string `json:"name"`
-		Window    string `json:"window"`
-		SettledBy string `json:"settled_by"`
-		State     string `json:"state"`
-		Reply     string `json:"reply"`
-		Truncated bool   `json:"truncated"`
-		// QueuedBehind is how many asks of the agent were ahead of this one,
-		// and WaitedTurnMS how long it waited for them.
-		QueuedBehind int   `json:"queued_behind"`
-		WaitedTurnMS int64 `json:"waited_turn_ms"`
+		Name         string `json:"name"`
+		Window       string `json:"window"`
+		SettledBy    string `json:"settled_by"`
+		State        string `json:"state"`
+		Reply        string `json:"reply"`
+		Truncated    bool   `json:"truncated"`
+		QueuedBehind int    `json:"queued_behind"`
+		WaitedTurnMS int64  `json:"waited_turn_ms"`
 	}
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)

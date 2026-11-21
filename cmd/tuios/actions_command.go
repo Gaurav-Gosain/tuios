@@ -20,9 +20,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newActionsCommand builds `tuios actions`: the actions a program outside
-// tuios offers, such as Rex's command palette, and the user actions of
-// config.toml, listed, explained and run.
 func newActionsCommand() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
@@ -72,39 +69,22 @@ entries of config.toml, each the action user:NAME. See KEYBINDINGS.md,
 	return cmd
 }
 
-// outsideList is tuios actions --json.
 type outsideList struct {
-	Actions   []outsideAction  `json:"actions"`
-	Harnesses []outsideHarness `json:"harnesses"`
-	// ConfigNote says why the person's own actions are missing: config.toml
-	// could not be read. The built-in actions are there all the same, so a
-	// launcher still loads.
-	ConfigNote string `json:"config_note,omitempty"`
+	Actions    []outsideAction  `json:"actions"`
+	Harnesses  []outsideHarness `json:"harnesses"`
+	ConfigNote string           `json:"config_note,omitempty"`
 }
 
-// outsideAction is one action a launcher outside tuios offers.
 type outsideAction struct {
-	// Name is the action as run-command's Action takes it.
-	Name string `json:"name"`
-	// Title is the command palette's row, Category its section.
-	Title    string `json:"title"`
-	Category string `json:"category"`
-	// Description is the action table's line for it, or what a user action
-	// runs.
+	Name        string `json:"name"`
+	Title       string `json:"title"`
+	Category    string `json:"category"`
 	Description string `json:"description"`
-	// User marks an action of the person's config.toml, named user:NAME.
-	User bool `json:"user,omitempty"`
+	User        bool   `json:"user,omitempty"`
 }
 
-// userCategory is the section the person's own actions are listed under.
 const userCategory = "Your actions"
 
-// userOutsideActions are the person's own actions, as a launcher offers
-// them: each [[actions]] and [[keybindings.command]] entry tuios uses, named
-// user:NAME. An action offered only on a card, a file or another thing that
-// is not a pane is left out, since a launcher runs it on the focused pane.
-// The labels and commands are the person's own text, so each is made one
-// plain line. note says why there are none when config.toml has an error.
 func userOutsideActions() (out []outsideAction, note string) {
 	cfg, err := config.LoadExistingUserConfig()
 	if err != nil {
@@ -123,17 +103,12 @@ func userOutsideActions() (out []outsideAction, note string) {
 	return out, ""
 }
 
-// outsideHarness is one agent tuios start-agent knows by its manifest.
 type outsideHarness struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Command string `json:"command"`
 }
 
-// outsideActions are the command palette's static rows that the dispatcher
-// runs, in the palette's order, one per action. A row that opens a view's
-// own key (RunView) or names nothing in the action table is left out, since
-// run-command cannot run it from outside the view.
 func outsideActions() []outsideAction {
 	seen := map[string]bool{}
 	var out []outsideAction
@@ -156,7 +131,6 @@ func outsideActions() []outsideAction {
 	return out
 }
 
-// outsideHarnesses are the bundled and the person's harness manifests.
 func outsideHarnesses() []outsideHarness {
 	out := []outsideHarness{}
 	reg, _ := harness.Load(harness.UserDir())
@@ -170,7 +144,6 @@ func outsideHarnesses() []outsideHarness {
 	return out
 }
 
-// actionRow is one action as tuios actions list gives it.
 type actionRow struct {
 	Name    string   `json:"name"`
 	Action  string   `json:"action"`
@@ -182,7 +155,6 @@ type actionRow struct {
 	Targets []string `json:"targets,omitempty"`
 }
 
-// loadActions reads config.toml and gives its actionRows.
 func loadActions() ([]actionRow, *config.UserConfig, error) {
 	cfg, err := config.LoadUserConfig()
 	if err != nil {
@@ -191,8 +163,6 @@ func loadActions() ([]actionRow, *config.UserConfig, error) {
 	return actionRows(cfg), cfg, nil
 }
 
-// actionRows is every user action of cfg: the [[actions]] entries, then the
-// command entries no [[actions]] entry shadows.
 func actionRows(cfg *config.UserConfig) []actionRow {
 	var rows []actionRow
 	seen := map[string]bool{}
@@ -212,7 +182,6 @@ func actionRows(cfg *config.UserConfig) []actionRow {
 	return rows
 }
 
-// actionRuns says what a runs, in one line.
 func actionRuns(a config.UserAction) string {
 	switch a.Body() {
 	case "action":
@@ -225,8 +194,6 @@ func actionRuns(a config.UserAction) string {
 	return ""
 }
 
-// showArgs shows each argument so its edges read: an argument with a space
-// or nothing in it is quoted.
 func showArgs(args []string) []string {
 	out := make([]string, len(args))
 	for i, a := range args {
@@ -284,7 +251,6 @@ func newActionsListCommand() *cobra.Command {
 	return cmd
 }
 
-// cmpOrRows is rows, or an empty list.
 func cmpOrRows(rows []actionRow) []actionRow {
 	if rows == nil {
 		return []actionRow{}
@@ -292,7 +258,6 @@ func cmpOrRows(rows []actionRow) []actionRow {
 	return rows
 }
 
-// findAction is the row called name, with or without user:.
 func findAction(rows []actionRow, name string) (actionRow, bool) {
 	name = strings.TrimPrefix(name, config.UserActionPrefix)
 	for _, r := range rows {
@@ -303,8 +268,6 @@ func findAction(rows []actionRow, name string) (actionRow, bool) {
 	return actionRow{}, false
 }
 
-// actionNotFound is the error for a name no action has, with the problem
-// tuios found in an entry of that name when there is one.
 func actionNotFound(cfg *config.UserConfig, name string) error {
 	name = strings.TrimPrefix(name, config.UserActionPrefix)
 	if res := config.ValidateConfig(cfg); res != nil {
@@ -403,8 +366,6 @@ exit status is that of tuios prompt: 1 cancelled, 2 timeout, 3 no client,
 	return cmd
 }
 
-// typedArgs are values as JSON takes them: a number as a number, a bool as
-// a bool.
 func typedArgs(a config.UserAction, values map[string]string) map[string]any {
 	out := map[string]any{}
 	for k, v := range values {
@@ -419,8 +380,6 @@ func typedArgs(a config.UserAction, values map[string]string) map[string]any {
 	return out
 }
 
-// actionAskEnded reports an ask step that got no answer, with the exit
-// status tuios prompt gives.
 func actionAskEnded(ended *config.ErrActionAskEnded, r actionRow, jsonOut bool) error {
 	if jsonOut {
 		outputJSON(map[string]any{"success": false, "action": r.Action, "status": ended.Status, "arg": ended.Name})
@@ -430,9 +389,6 @@ func actionAskEnded(ended *config.ErrActionAskEnded, r actionRow, jsonOut bool) 
 	return &statusError{code: promptExitCode(ended.Status)}
 }
 
-// dryRunAction prints what r would run on the pane window names, with the
-// values given, else the defaults. A value an ask step would ask for shows
-// as <NAME>.
 func dryRunAction(f taskFlags, window string, cfg *config.UserConfig, r actionRow, given map[string]string) error {
 	a, ok := cfg.UserActionFor(r.Action)
 	if !ok || a.Body() != "run" {
@@ -473,7 +429,6 @@ func dryRunAction(f taskFlags, window string, cfg *config.UserConfig, r actionRo
 	if !found {
 		return errors.New("no pane matches; name one with -w")
 	}
-	// The selection is the client's; a dry run shows where it would go.
 	facts["selection"] = "<selection>"
 	for _, n := range a.ArgNames() {
 		facts[n] = "<" + n + ">"

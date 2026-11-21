@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// runResult is the run verb's result as the CLI reads it.
 type runResult struct {
 	Window     string `json:"window"`
 	Cmdline    string `json:"cmdline"`
@@ -25,8 +24,6 @@ type runResult struct {
 	CommandSeq uint64 `json:"command_seq"`
 }
 
-// runInPane is `tuios run`: it types one command line at a pane's prompt,
-// waits for it, prints what it printed and exits with its status.
 func runInPane(sessionName, windowTarget string, args []string, timeout, lines int, jsonOutput bool) error {
 	command := strings.Join(args, " ")
 	if strings.TrimSpace(command) == "" {
@@ -63,10 +60,6 @@ func runInPane(sessionName, windowTarget string, args []string, timeout, lines i
 	return printRunResult(os.Stdout, os.Stderr, raw)
 }
 
-// printRunResult writes the command's output to out and returns its status as
-// the process's, so `tuios run` composes in a script the way the command
-// itself would. A shell that sent no status is said on errs, and the run
-// exits 0.
 func printRunResult(out, errs io.Writer, raw json.RawMessage) error {
 	var res runResult
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
@@ -88,7 +81,6 @@ func printRunResult(out, errs io.Writer, raw json.RawMessage) error {
 	return nil
 }
 
-// newRunCommand is `tuios run`.
 func newRunCommand() *cobra.Command {
 	var sessionName, windowTarget, host, cwd string
 	var timeout, lines int

@@ -46,8 +46,6 @@ func TestStartsOnAConsoleWithNoTerm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Not t.TempDir: a daemon that takes a moment to exit still holds the
-	// executable, and a folder left behind on a runner is not a test failure.
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	bin := filepath.Join(dir, "tuios.exe")
@@ -71,9 +69,6 @@ func TestStartsOnAConsoleWithNoTerm(t *testing.T) {
 		env = append(env, kv)
 	}
 
-	// The refused run starts the daemon too, so this waits for both subtests.
-	// With nothing at the test's own socket there is no daemon of its own to
-	// stop, and kill-server is not worth the risk of reaching another one.
 	t.Cleanup(func() {
 		if _, err := os.Lstat(sock); errors.Is(err, fs.ErrNotExist) {
 			t.Logf("no daemon at %s, so kill-server does not run", sock)
@@ -108,12 +103,8 @@ func TestStartsOnAConsoleWithNoTerm(t *testing.T) {
 	})
 }
 
-// ownDaemonSocket returns the socket a tuios started by this test reaches, or
-// stops the test if that socket could be a daemon the developer is using.
 func ownDaemonSocket(t *testing.T) string {
 	t.Helper()
-	// testutil.RunIsolated moves USERPROFILE and LOCALAPPDATA to one throwaway
-	// tree. If they differ, this binary still has the developer's folders.
 	if local, home := os.Getenv("LOCALAPPDATA"), os.Getenv("USERPROFILE"); !strings.EqualFold(filepath.Clean(local), filepath.Clean(home)) {
 		t.Fatalf("LOCALAPPDATA is %q and the isolated tree is %q, so a daemon here could be the developer's", local, home)
 	}
@@ -129,7 +120,6 @@ func ownDaemonSocket(t *testing.T) string {
 	return sock
 }
 
-// console is a program on a pseudo console, and all it has written so far.
 type console struct {
 	pty xpty.Pty
 
@@ -159,7 +149,6 @@ func openConsole(t *testing.T, bin string, env []string, args ...string) *consol
 			c.mu.Lock()
 			c.seen = append(c.seen, buf[:n]...)
 			c.mu.Unlock()
-			// The pseudo console asks once at startup, and waits for the answer.
 			if bytes.Contains(buf[:n], []byte("\x1b[c")) {
 				_, _ = pty.Write([]byte("\x1b[?62;4;22c"))
 			}
@@ -171,15 +160,12 @@ func openConsole(t *testing.T, bin string, env []string, args ...string) *consol
 	return c
 }
 
-// shown is what the console has written, with the escape sequences removed.
 func (c *console) shown() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return ansi.Strip(string(c.seen))
 }
 
-// wait returns what the console has shown once any of the markers is on it. A
-// console stays open after its program ends, so the wait has a deadline.
 func (c *console) wait(t *testing.T, markers ...string) string {
 	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)

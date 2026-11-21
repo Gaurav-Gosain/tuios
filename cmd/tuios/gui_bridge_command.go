@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guibridge"
 )
 
-// newGUIBridgeCommand is `tuios gui-bridge`, the process a native renderer
-// (tuios-gpui) starts to reach a session. It speaks the frame format in
-// internal/guibridge on stdin and stdout. It is not for running by hand.
 func newGUIBridgeCommand() *cobra.Command {
 	var opts guibridge.Options
 	var resume string
@@ -20,12 +17,8 @@ func newGUIBridgeCommand() *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			// The protocol owns stdout. Anything else that prints, such as the
-			// note that the daemon is starting, goes to stderr instead.
 			proto := os.Stdout
 			os.Stdout = os.Stderr
-			// The renderer starts this process with a fixed command line,
-			// so a profile of it is asked for in the environment.
 			if pprofAddr == "" {
 				pprofAddr = os.Getenv("TUIOS_GUI_BRIDGE_PPROF")
 			}

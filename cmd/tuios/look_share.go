@@ -22,7 +22,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// newLookExportCommand creates `tuios look export`.
 func newLookExportCommand() *cobra.Command {
 	var out, name, author string
 	var all bool
@@ -75,7 +74,6 @@ The author is your GitHub login when gh is signed in. Use --author to set it.`,
 	return cmd
 }
 
-// newLookShareCommand creates `tuios look share`.
 func newLookShareCommand() *cobra.Command {
 	var name, author, sessionName string
 	var printOnly bool
@@ -129,7 +127,6 @@ Use --print to write the comment to stdout. tuios then opens nothing.`,
 	return cmd
 }
 
-// loadLookConfig reads the config in force from disk.
 func loadLookConfig() (*config.UserConfig, error) {
 	mainPath, err := config.GetConfigPath()
 	if err != nil {
@@ -138,7 +135,6 @@ func loadLookConfig() (*config.UserConfig, error) {
 	return config.LoadLookConfig(mainPath)
 }
 
-// buildLookComment exports the look on disk and writes the comment.
 func buildLookComment(name, author string) (string, *config.LookExport, error) {
 	cfg, err := loadLookConfig()
 	if err != nil {
@@ -151,7 +147,6 @@ func buildLookComment(name, author string) (string, *config.LookExport, error) {
 	return lookshare.Comment(name, lookshare.Summary(cfg), ex.Text), ex, nil
 }
 
-// lookShareResult is what a share did.
 type lookShareResult struct {
 	Path    string `json:"path"`
 	Opened  bool   `json:"opened"`
@@ -159,7 +154,6 @@ type lookShareResult struct {
 	TooLong bool   `json:"too_long"`
 }
 
-// lines are what the command prints: at most three lines in the usual case.
 func (r lookShareResult) lines() []string {
 	var out []string
 	if r.Copied {
@@ -181,11 +175,8 @@ func (r lookShareResult) lines() []string {
 	return out
 }
 
-// errNoShareClient says no tuios client can run the share.
 var errNoShareClient = errors.New("no tuios client is attached")
 
-// routeLookShare asks the attached client to run the share. It returns
-// errNoShareClient when there is no daemon or no client.
 func routeLookShare(sessionName, name, author string) (lookShareResult, error) {
 	if requireDaemon() != nil {
 		return lookShareResult{}, errNoShareClient
@@ -214,8 +205,6 @@ func routeLookShare(sessionName, name, author string) (lookShareResult, error) {
 		return lookShareResult{}, errNoShareClient
 	}
 	if !result.Success {
-		// With no client attached, or no session, the share runs here.
-		// Any other failure is the client's answer, and it is the error.
 		if strings.Contains(result.Message, "requires an attached client") || result.Message == "session not found" {
 			return lookShareResult{}, errNoShareClient
 		}
@@ -229,9 +218,6 @@ func routeLookShare(sessionName, name, author string) (lookShareResult, error) {
 	return res, err
 }
 
-// shareLookHere runs the share in this process, when no client can: the
-// clipboard write goes to this terminal and the native clipboard, the daemon
-// captures the focused pane when it can, and the browser opens here.
 func shareLookHere(name, author string) (lookShareResult, error) {
 	comment, ex, err := buildLookComment(name, author)
 	if err != nil {
@@ -250,8 +236,6 @@ func shareLookHere(name, author string) (lookShareResult, error) {
 	return res, nil
 }
 
-// copyCommentHere writes the comment to the clipboard through this terminal
-// (OSC 52) and the native clipboard tool, and reports whether either ran.
 func copyCommentHere(text string) bool {
 	copied := false
 	if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
@@ -269,8 +253,6 @@ func copyCommentHere(text string) bool {
 	return copied
 }
 
-// shotHere asks the daemon for a picture of the focused pane, and returns
-// its path, or "" when there is no daemon or no pane.
 func shotHere() string {
 	if requireDaemon() != nil {
 		return ""
@@ -297,8 +279,6 @@ func shotHere() string {
 	return res.Path
 }
 
-// viewerOverSSH reports whether the person reached this machine over ssh, so
-// a browser or a clipboard tool here is not theirs.
 func viewerOverSSH() bool {
 	for _, key := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
 		if os.Getenv(key) != "" {

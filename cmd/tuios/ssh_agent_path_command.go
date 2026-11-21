@@ -7,8 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newSSHAgentPathCmd is tuios ssh-agent-path: print the session's ssh agent
-// link, for a shell rc. See internal/session/ssh_agent_follow.go.
 func newSSHAgentPathCmd() *cobra.Command {
 	var (
 		sessionName string

@@ -16,13 +16,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// The opt-in explorers: tuios help -i, tuios config browse and tuios keybinds
-// browse. Each opens only when asked for by that flag or subcommand, never
-// because stdout is a terminal: an agent in a pane has a terminal too, and a
-// command it runs for text must not turn into a program it cannot leave.
-// Each shows only what the plain command also prints with --json.
-
-// addExplorers wires the explorers into the command tree.
 func addExplorers(root *cobra.Command) {
 	root.SetHelpCommand(newHelpCommand())
 	if cfg, _, err := root.Find([]string{"config"}); err == nil && cfg != root {
@@ -33,28 +26,20 @@ func addExplorers(root *cobra.Command) {
 	}
 }
 
-// commandDoc is one command as tuios help --json prints it.
 type commandDoc struct {
-	Path    string    `json:"path"`
-	Use     string    `json:"use"`
-	Short   string    `json:"short"`
-	Long    string    `json:"long,omitempty"`
-	Example string    `json:"example,omitempty"`
-	Aliases []string  `json:"aliases,omitempty"`
-	Flags   []flagDoc `json:"flags,omitempty"`
-	Depth   int       `json:"depth"`
-	// Platform is the one GOOS the command runs on, such as darwin, for a
-	// command that platformAnnotation marks. Empty means every platform.
-	Platform string `json:"platform,omitempty"`
+	Path     string    `json:"path"`
+	Use      string    `json:"use"`
+	Short    string    `json:"short"`
+	Long     string    `json:"long,omitempty"`
+	Example  string    `json:"example,omitempty"`
+	Aliases  []string  `json:"aliases,omitempty"`
+	Flags    []flagDoc `json:"flags,omitempty"`
+	Depth    int       `json:"depth"`
+	Platform string    `json:"platform,omitempty"`
 }
 
-// platformAnnotation marks a command that help hides on every platform but
-// one, and names that GOOS. help --json lists such a command on every
-// platform, with its platform, so the reference of each platform is the
-// same.
 const platformAnnotation = "tuios.platform"
 
-// flagDoc is one flag of a command.
 type flagDoc struct {
 	Name      string `json:"name"`
 	Shorthand string `json:"shorthand,omitempty"`
@@ -63,9 +48,6 @@ type flagDoc struct {
 	Usage     string `json:"usage"`
 }
 
-// commandDocs lists c and every command under it that help lists, in the
-// order help lists them. With allPlatforms it also lists a command that is
-// hidden here only because platformAnnotation names another platform.
 func commandDocs(c *cobra.Command, allPlatforms bool) []commandDoc {
 	var out []commandDoc
 	base := strings.Count(c.CommandPath(), " ")
@@ -106,9 +88,6 @@ func commandDocs(c *cobra.Command, allPlatforms bool) []commandDoc {
 	return out
 }
 
-// newHelpCommand is cobra's help command with two opt-in additions:
-// --json prints the command tree, and -i opens it in an explorer. With
-// neither, it does exactly what cobra's own help command does.
 func newHelpCommand() *cobra.Command {
 	var interactive, jsonOut bool
 	cmd := &cobra.Command{
@@ -175,7 +154,6 @@ with its platform.
 	return cmd
 }
 
-// helpExplorer is the explorer config for the command tree.
 func helpExplorer(docs []commandDoc) explore.Config {
 	items := make([]explore.Item, 0, len(docs))
 	for _, d := range docs {
@@ -223,15 +201,12 @@ func helpExplorer(docs []commandDoc) explore.Config {
 	return explore.Config{Title: title, Items: items, NameWidth: 30}
 }
 
-// configOption is one option as config browse shows it: the list-options
-// row and the get-config answer.
 type configOption struct {
 	optionRow
 	Value  string `json:"value"`
 	Source string `json:"source"`
 }
 
-// newConfigBrowseCommand opens the settable options in an explorer.
 func newConfigBrowseCommand() *cobra.Command {
 	var sessionName string
 	cmd := &cobra.Command{
@@ -260,8 +235,6 @@ It needs a running daemon. Press q or esc to leave it.`,
 	return cmd
 }
 
-// loadConfigOptions reads every option and its value in effect over one
-// connection: list-options, then get-option for each path.
 func loadConfigOptions(sessionName string) ([]configOption, error) {
 	client, err := dialVerb()
 	if err != nil {
@@ -293,8 +266,6 @@ func loadConfigOptions(sessionName string) ([]configOption, error) {
 	return out, nil
 }
 
-// readConfigValue is get-config --json's value and source for path, or
-// empty strings when the daemon does not answer.
 func readConfigValue(call func(string, any) (json.RawMessage, error), sessionName, path string) (string, string) {
 	raw, err := call("get-option", map[string]any{"session": sessionName, "key": path})
 	if err != nil {
@@ -308,7 +279,6 @@ func readConfigValue(call func(string, any) (json.RawMessage, error), sessionNam
 	return v.Value, v.Source
 }
 
-// configItem is the explorer row of one option.
 func configItem(o configOption) explore.Item {
 	value := o.Value
 	if value == "" {
@@ -351,7 +321,6 @@ func configItem(o configOption) explore.Item {
 	}
 }
 
-// configExplorer is the explorer config for the options.
 func configExplorer(sessionName string, opts []configOption) explore.Config {
 	byPath := map[string]configOption{}
 	var groups []string
@@ -399,7 +368,6 @@ func configExplorer(sessionName string, opts []configOption) explore.Config {
 	}
 }
 
-// newKeybindsBrowseCommand opens the keybinding list in an explorer.
 func newKeybindsBrowseCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "browse [search]",
@@ -425,7 +393,6 @@ tab to show one scope. Press q or esc to leave it.`,
 	}
 }
 
-// keybindsExplorer is the explorer config for the keybinding rows.
 func keybindsExplorer(rows []keybindRow) explore.Config {
 	var groups []string
 	items := make([]explore.Item, 0, len(rows))
@@ -473,8 +440,6 @@ func keybindsExplorer(rows []keybindRow) explore.Config {
 	return explore.Config{Title: "tuios keybindings", Items: items, Groups: groups, NameWidth: 28}
 }
 
-// runExplorer runs an explorer that moves by the [keybindings.lists] keys of
-// the person's config, or by the default keys when it cannot be read.
 func runExplorer(c explore.Config) error {
 	if cfg, err := config.LoadUserConfig(); err == nil {
 		c.Lists = config.ListKeymap(cfg)

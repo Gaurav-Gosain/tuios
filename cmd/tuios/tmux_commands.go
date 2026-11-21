@@ -18,21 +18,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The tmux compatibility shim. See internal/tmuxcompat for the mapping and
-// docs/TMUX_SHIM.md for the person's view of it.
-//
-// Three entry points:
-//
-//   - tuios tmux-shim [-- command]: the opt-in. It runs one command with a
-//     `tmux` link to this binary first on PATH and TMUX naming the shim.
-//   - tmux ...: this binary run through that link. A call for the shim is
-//     answered; any other (TMUX unset or naming a real server, or -L or -S
-//     naming one) is handed to the next tmux on PATH, so the link never
-//     breaks a real tmux.
-//   - tuios tmux ...: the shim, asked for by name.
-
-// tmuxShimDir is the shim's runtime directory, beside the daemon socket, so it
-// is private to the user in the same way.
 func tmuxShimDir() (string, error) {
 	sock, err := session.GetSocketPath()
 	if err != nil {
@@ -41,13 +26,11 @@ func tmuxShimDir() (string, error) {
 	return filepath.Join(filepath.Dir(sock), "tmux"), nil
 }
 
-// isTmuxName reports whether the binary was run by the name tmux.
 func isTmuxName(arg0 string) bool {
 	base := strings.ToLower(filepath.Base(arg0))
 	return base == "tmux" || base == "tmux.exe"
 }
 
-// selfExe is this binary with its links resolved.
 func selfExe() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -59,7 +42,6 @@ func selfExe() string {
 	return exe
 }
 
-// runAsTmux answers a call made through the `tmux` link.
 func runAsTmux(args []string) int {
 	dir, err := tmuxShimDir()
 	if err != nil {
@@ -72,9 +54,6 @@ func runAsTmux(args []string) int {
 	} else {
 		ours = dir != "" && tmuxcompat.SocketFromTmux(os.Getenv("TMUX")) == tmuxcompat.SocketPath(dir)
 	}
-	// A call that names a socket in the shim's directory is the shim's, even
-	// when the shim cannot parse it. A real tmux given that path would start
-	// a server on it.
 	if !ours && dir != "" && tmuxcompat.InShimDir(tmuxcompat.ExplicitSocket(args), dir) {
 		ours = true
 	}
@@ -98,12 +77,8 @@ func runAsTmux(args []string) int {
 	return 0
 }
 
-// lazyCaller dials the daemon on the first verb call, so -V and has-session
-// answer without one.
 type lazyCaller struct {
 	client *session.VerbClient
-	// socket is the shim's socket, named in the error tmux prints when no
-	// server runs. Empty keeps the daemon's own explanation.
 	socket string
 }
 
@@ -111,15 +86,10 @@ func (l *lazyCaller) Call(verb string, params any) (json.RawMessage, error) {
 	return l.CallWithTimeout(verb, params, 0)
 }
 
-// CallWithTimeout is Call waiting up to timeout for the answer, for a verb
-// that holds its answer until something happens (display-popup waits for
-// the popup to close). 0 is the client's default.
 func (l *lazyCaller) CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error) {
 	if l.client == nil {
 		c, err := dialVerb()
 		if err != nil {
-			// tmux's words for a server that is not there, which tools
-			// driving tmux read as "not reachable".
 			if de, ok := errors.AsType[*diagnosticError](err); ok && de.Status == noDaemonStatus && l.socket != "" {
 				return nil, errfmt.Errorf("no server running on %s", l.socket)
 			}
@@ -146,7 +116,6 @@ func (l *lazyCaller) close() {
 	}
 }
 
-// runTmuxShim runs one tmux invocation through the shim.
 func runTmuxShim(args []string, dir string) int {
 	caller := &lazyCaller{}
 	if dir != "" {
@@ -166,11 +135,8 @@ func runTmuxShim(args []string, dir string) int {
 	}
 	sess, window := os.Getenv("TUIOS_SESSION"), os.Getenv("TUIOS_PANE_ID")
 	shim := &tmuxcompat.Shim{
-		Caller:  caller,
-		Session: sess,
-		// A caller in no pane and naming no session is the person, or a
-		// tool they run outside tuios. It sees every session, as a tmux
-		// client sees every session of its server.
+		Caller:      caller,
+		Session:     sess,
 		AllSessions: sess == "" && window == "",
 		Window:      window,
 		Shell:       os.Getenv("SHELL"),
@@ -196,14 +162,11 @@ func runTmuxShim(args []string, dir string) int {
 	return shim.Run(args)
 }
 
-// verbStream is a verb connection that has subscribed: an event stream.
 type verbStream struct{ client *session.VerbClient }
 
 func (v verbStream) Next() ([]byte, error) { return v.client.ReadEventLine(0) }
 func (v verbStream) Close() error          { return v.client.Close() }
 
-// subscribeVerb opens an event stream on a connection of its own, for the
-// shim's control mode.
 func subscribeVerb(params map[string]any) (tmuxcompat.EventStream, error) {
 	c, err := dialVerb()
 	if err != nil {
@@ -216,7 +179,6 @@ func subscribeVerb(params map[string]any) (tmuxcompat.EventStream, error) {
 	return verbStream{c}, nil
 }
 
-// newTmuxCommand is `tuios tmux`: the shim, asked for by name.
 func newTmuxCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "tmux [tmux arguments]",
@@ -271,7 +233,6 @@ fails and is recorded in the shim log.`,
 	}
 }
 
-// newTmuxShimCommand is the opt-in launcher.
 func newTmuxShimCommand() *cobra.Command {
 	var logPath string
 	var logAll bool
@@ -340,16 +301,12 @@ available on Windows.`,
 			return tmuxcompat.ExecCommand(args, env)
 		},
 	}
-	// Flags after the command are the command's: tuios tmux-shim claude
-	// --resume passes --resume to claude.
 	cmd.Flags().SetInterspersed(false)
 	cmd.Flags().StringVar(&logPath, "log", "", "record shim calls in this file instead of $XDG_STATE_HOME/tuios/tmux-shim.log")
 	cmd.Flags().BoolVar(&logAll, "log-all", false, "record every tmux call, not only the ones the shim could not fully answer")
 	return cmd
 }
 
-// newTmuxPaneCommand is the pane holder the shim runs in every pane it opens.
-// It is internal, so it is hidden.
 func newTmuxPaneCommand() *cobra.Command {
 	var dir string
 	var env []string
@@ -369,10 +326,6 @@ func newTmuxPaneCommand() *cobra.Command {
 				Command: args,
 				Env:     env,
 				Shell:   os.Getenv("SHELL"),
-				// The holder's socket can be dialled without the shim, so the
-				// holder asks the daemon about the caller itself. A fresh
-				// connection each time: a request is rare, and a connection
-				// kept open could outlive a daemon restart.
 				Authorize: func(peerPID int, peerStart uint64) error {
 					caller := &lazyCaller{}
 					defer caller.close()

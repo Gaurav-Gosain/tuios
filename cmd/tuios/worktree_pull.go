@@ -17,18 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// tuios worktree pull HOST:SESSION: a worktree session's work on another
-// machine, brought into a new worktree session on this one.
-//
-// The far daemon's bundle-worktree hands over the commits as a git bundle and
-// the uncommitted work as a patch, in chunks over this command's one
-// connection. Here, the bundle is fetched into a branch that did not exist,
-// the worktree is made by this machine's daemon the way worktree new makes
-// one, and the patch is applied in it. Nothing on either machine is
-// overwritten: a branch that exists here is refused, and the far side is only
-// read.
-
-// bundleReply is a bundle-worktree reply as this command reads it.
 type bundleReply struct {
 	Token       string `json:"token"`
 	Content     string `json:"content"`
@@ -48,11 +36,8 @@ type bundleReply struct {
 	SHA256      string `json:"sha256"`
 }
 
-// bundleCallTimeout bounds one bundle-worktree call. The first one runs git
-// bundle on the far side, which for a whole history takes a while.
 const bundleCallTimeout = 3 * time.Minute
 
-// openTransfer makes a transfer on the far daemon and returns its first reply.
 func openTransfer(t *verbTarget, session string, full bool) (bundleReply, error) {
 	var first bundleReply
 	raw, err := t.client.CallWithTimeout("bundle-worktree", map[string]any{"session": session, "full": full}, bundleCallTimeout)
@@ -65,7 +50,6 @@ func openTransfer(t *verbTarget, session string, full bool) (bundleReply, error)
 	return first, nil
 }
 
-// releaseTransfer ends a transfer that will not be read to its end.
 func releaseTransfer(t *verbTarget, r bundleReply) {
 	if r.Done || r.Token == "" {
 		return
@@ -73,8 +57,6 @@ func releaseTransfer(t *verbTarget, r bundleReply) {
 	_, _ = t.client.Call("bundle-worktree", map[string]any{"token": r.Token, "release": true})
 }
 
-// readTransfer reads a transfer from its first reply to its end, and checks
-// its length and hash against what the first reply promised.
 func readTransfer(t *verbTarget, first bundleReply) ([]byte, error) {
 	var data bytes.Buffer
 	reply := first
@@ -155,8 +137,6 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 			Fix:   "run the pull inside a checkout of " + first.OriginURL + ", or pass --repo with one.",
 		}, jsonOutput)
 	}
-	// A thin bundle needs the commit it starts from. Without it here, the
-	// whole branch is asked for instead.
 	if !first.Full && first.BaseCommit != "" && !worktree.HasCommit(root, first.BaseCommit) {
 		releaseTransfer(t, first)
 		if first, err = openTransfer(t, sessName, true); err != nil {
@@ -164,9 +144,6 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 		}
 	}
 
-	// What the far side said is data. The branch goes into a refspec and the
-	// head into a git command line, so both are checked for shape before
-	// either is used, and the size is held to the cap the far side keeps.
 	if err := checkTransferShape(first); err != nil {
 		releaseTransfer(t, first)
 		return reportVerbError(errfmt.Errorf("%s answered with a transfer this tuios will not use: %w", host, err), jsonOutput)
@@ -206,8 +183,6 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 	if err != nil {
 		return err
 	}
-	// The setup runs async here: the work is applied after the call, and a
-	// sync setup that failed first would take the worktree from under it.
 	params := map[string]any{"repo": root, "branch": localBranch, "setup_async": true}
 	if name != "" {
 		params["name"] = name
@@ -271,13 +246,6 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 	return showMadeSession("", made.Session)
 }
 
-// landBranch makes localBranch in the repository at root from a transfer:
-// fetched from the bundle, or made at the head when there were no commits to
-// carry. It then checks the branch is at the head the far side reported.
-//
-// localBranch did not exist when the pull began, so on any failure here the
-// branch is deleted again. A failed pull leaves nothing behind and can be run
-// again without a 'branch already exists' refusal.
 func landBranch(root, tmp, host, localBranch string, first bundleReply, data []byte) (err error) {
 	defer func() {
 		if err != nil && worktree.BranchExists(root, localBranch) {
@@ -301,12 +269,8 @@ func landBranch(root, tmp, host, localBranch string, first bundleReply, data []b
 	return nil
 }
 
-// pullMaxBytes is the largest transfer a pull reads, the same cap the far
-// daemon keeps.
 const pullMaxBytes = 512 << 20
 
-// checkTransferShape refuses a first reply whose branch, head or sizes could
-// not have come from bundle-worktree.
 func checkTransferShape(r bundleReply) error {
 	if err := worktree.ValidBranch(r.Branch); err != nil {
 		return err
@@ -326,7 +290,6 @@ func checkTransferShape(r bundleReply) error {
 	return nil
 }
 
-// isCommitHash reports whether s is a full SHA-1 or SHA-256 commit hash.
 func isCommitHash(s string) bool {
 	if len(s) != 40 && len(s) != 64 {
 		return false
@@ -335,7 +298,6 @@ func isCommitHash(s string) bool {
 	return err == nil
 }
 
-// shortCommit is a commit hash cut to the length git prints.
 func shortCommit(sha string) string {
 	if len(sha) > 12 {
 		return sha[:12]
@@ -343,13 +305,6 @@ func shortCommit(sha string) string {
 	return sha
 }
 
-// keepFailedPatch saves a patch that did not apply, so the user can apply it
-// by hand, and returns where it went.
-//
-// The name is random. The temporary directory is shared with every user on
-// the machine, and a fixed name there let another user make the file first,
-// then read the patch or change it before the user ran git apply on it.
-// os.CreateTemp opens the file with O_EXCL and mode 0600.
 func keepFailedPatch(branch string, patch []byte) (string, error) {
 	f, err := os.CreateTemp("", "tuios-pull-"+worktree.Slug(branch)+"-*.patch")
 	if err != nil {

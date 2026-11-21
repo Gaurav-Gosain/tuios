@@ -24,7 +24,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version information (set by goreleaser)
 var (
 	version = "dev"
 	commit  = "none"
@@ -32,7 +31,6 @@ var (
 	builtBy = "unknown"
 )
 
-// Global flags
 var (
 	debugMode      bool
 	serverName     string
@@ -42,58 +40,36 @@ var (
 	previewTheme   string
 	skillTopic     string
 	standaloneMode bool
-	// interfaceFlags is the appearance and interface flags, shared by every
-	// command that renders the TUI. See registerInterfaceFlags.
 	interfaceFlags cliflags.Interface
 )
 
 func main() {
-	// A plugin command's reaper does nothing else (internal/herdrplugin,
-	// reaper.go).
 	if len(os.Args) > 1 && os.Args[1] == herdrplugin.ReaperArg {
 		os.Exit(herdrplugin.RunReaper(os.Args[2:]))
 	}
-	// Run as the executable of the TUIOS Daemon app, this binary only starts
-	// the daemon (daemon_app.go).
 	if isDaemonAppLauncher() {
 		os.Exit(runDaemonAppLauncher())
 	}
-	// The build identity, handed to every package that reports it before
-	// anything can crash or open a pane. A crash report that cannot say which
-	// build produced it cannot be placed against a commit.
 	applyBuildIdentity()
-	// The process globals a client reads. A test that runs a client in
-	// process makes the same call.
 	procsetup.Setup(procsetup.Options{Reaper: procsetup.Reaper(), Releases: updateReleases{}})
 
-	// The server a pane's daemon was started for reaches every tuios run in
-	// that pane through TUIOS_SERVER, the tmux and herdr links included, so it
-	// is applied before either can take over. --server replaces it later.
 	if err := serverscope.ApplyEnv(); err != nil {
 		fmt.Fprintf(os.Stderr, "tuios: %v.\n", err)
 		os.Exit(1)
 	}
 
-	// Run through the `tmux` link that tuios tmux-shim installs, this binary
-	// is tmux: the shim answers, or hands the call to the real tmux.
 	if isTmuxName(os.Args[0]) {
 		os.Exit(runAsTmux(os.Args[1:]))
 	}
-	// Run through the herdr link the daemon makes, this binary is herdr's
-	// command line, as tools built for herdr call it. See herdr_commands.go.
 	if isHerdrName(os.Args[0]) {
 		os.Exit(runAsHerdr(os.Args[1:]))
 	}
 
-	// This machine's agent switch governs an agent call to another machine.
 	session.HostCallGuard = refuseAgentCallHere
 
 	rootCmd := newRootCommand()
 	rootCmd.SetArgs(skillArgs(rootCmd, os.Args[1:]))
 
-	// Command failures are printed here rather than by fang, which would query
-	// the terminal for its background color first and stall for seconds when
-	// nothing answers. See errorStyles.
 	var cmdErr error
 	interceptErrors(rootCmd, &cmdErr)
 
@@ -103,7 +79,6 @@ func main() {
 		fang.WithVersion(versionReport()),
 		fang.WithErrorHandler(diagnosticErrorHandler),
 	); err != nil {
-		// A command may say what a wrong flag exits with (tuios cp exits 2).
 		var coded interface{ ExitStatus() int }
 		if errors.As(err, &coded) {
 			os.Exit(coded.ExitStatus())
@@ -115,9 +90,6 @@ func main() {
 	}
 }
 
-// newRootCommand builds the whole command tree. It is separate from main so a
-// test can resolve a command line against the real tree rather than against a
-// second description of it that would drift.
 func newRootCommand() *cobra.Command {
 	rootCmd := newRootCommandBase()
 
@@ -151,9 +123,6 @@ In interactive mode, you can see the automation happening in real-time
 in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			// Playback runs the interface for as long as the tape lasts;
-			// --pprof is a persistent flag that tape play used to accept and
-			// ignore.
 			startPprofServer()
 			if err := startCPUProfile(); err != nil {
 				return err
@@ -266,9 +235,6 @@ the remote client. See 'tuios hosts --help'.`,
 			if attachHost != "" {
 				return runAttachOnHost(attachHost, name, createIfMissing, attachHold, attachSSH)
 			}
-			// A failure is held on the screen with --hold for the reason a
-			// host attach holds it: a pane that runs this command closes when
-			// it exits, and a popup that runs tuios attach is such a pane.
 			return holdAfter(runAttach(name, createIfMissing), attachHold)
 		},
 	}
@@ -280,10 +246,8 @@ the remote client. See 'tuios hosts --help'.`,
 	attachCmd.Flags().BoolVarP(&attachDetachOthers, "detach-others", "d", false, "Detach every other client of the session, as tmux attach -d does")
 	attachCmd.Flags().BoolVar(&attachTerminalMode, "terminal-mode", false, "Start in terminal mode, whatever startup.start_in_terminal_mode says")
 	attachCommand = attachCmd
-	// Set by the client a restart from the app starts. See restart_reattach.go.
 	attachCmd.Flags().BoolVar(&attachAfterRestart, "after-restart", false, "Say that the daemon restarted when the client starts")
 	_ = attachCmd.Flags().MarkHidden("after-restart")
-	// Set by the client that follows a live upgrade. See restart_reattach.go.
 	attachCmd.Flags().StringVar(&attachAfterUpgrade, "after-upgrade", "", "Say that this client follows a live upgrade to this version")
 	_ = attachCmd.Flags().MarkHidden("after-upgrade")
 	registerHostNameCompletion(attachCmd, "host")
@@ -369,9 +333,6 @@ sessions that 'tuios ls' and the sidebar list together.`,
 				return runNewSessionInSpace(name, newSpace, newDetach)
 			}
 			if newGlobal {
-				// A global session is created with no windows whether or not
-				// --detach was asked for: its first window names a machine,
-				// and there is nothing here to ask.
 				return runNewGlobalSessionDetached(name)
 			}
 			if newDetach {
@@ -424,9 +385,6 @@ Debug log levels:
 			if daemonLogLevel != "" {
 				session.SetDebugLevel(session.ParseDebugLevel(daemonLogLevel))
 			}
-			// The daemon owns every emulator and scrollback ring, so it is
-			// the process a memory question is about. --pprof is a
-			// persistent flag, so it has to be honoured here too.
 			startPprofServer()
 			if err := startCPUProfile(); err != nil {
 				return err
@@ -443,12 +401,8 @@ Debug log levels:
 	}
 	daemonCmd.Flags().StringVar(&daemonLogLevel, "log-level", "", "Debug log level: off, errors, basic, messages, verbose, trace")
 	daemonCmd.Flags().BoolVar(&daemonNoRestore, "no-restore", false, "Do not auto-restore saved sessions on start (use 'tuios resurrect' to restore on demand)")
-	// Set only by a live upgrade, which execs the next daemon image with the
-	// descriptor of the manifest its predecessor wrote. See daemon_upgrade.go.
 	daemonCmd.Flags().IntVar(&daemonAdoptFD, adoptFDFlag, 0, "Adopt the panes a live upgrade handed over on this descriptor")
 	_ = daemonCmd.Flags().MarkHidden(adoptFDFlag)
-	// Set only by the service that install-service writes. A live upgrade
-	// keeps it, since handoffArgs keeps the daemon's own arguments.
 	daemonCmd.Flags().BoolVar(&daemonService, "service", false, "A service manager started this daemon")
 	_ = daemonCmd.Flags().MarkHidden("service")
 	daemonCmd.AddCommand(handoffAcceptsCommand(), handoffKeeperCommand(), daemonUpgradeCommand(),
@@ -456,7 +410,6 @@ Debug log levels:
 
 	killDaemonCmd := newKillDaemonCommand()
 
-	// Remote control commands
 	var sendKeysSession string
 	var sendKeysLiteral bool
 	var sendKeysRaw bool
@@ -536,7 +489,6 @@ it matched.`,
 	addJSONFlag(sendKeysCmd, &sendKeysJSON)
 	sendKeysCmd.Flags().BoolVar(&sendKeysAllowBlocked, "allow-blocked", false, "From a pane, send keys into a pane that waits on a prompt. Read the prompt first")
 
-	// Add completion for send-keys
 	sendKeysCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
 			return getSendKeysCompletions(toComplete), cobra.ShellCompDirectiveNoFileComp
@@ -596,13 +548,10 @@ exists: get-window and list-windows read windows with the read grant.`,
 	runCommandCmd.Flags().BoolVar(&runCommandList, "list", false, "List all available commands")
 	addJSONFlag(runCommandCmd, &runCommandJSON, "Output result as JSON (for scripting)")
 
-	// Add completion for run-command
 	runCommandCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
-			// First argument: command name
 			return getRunCommandCompletions(toComplete), cobra.ShellCompDirectiveNoFileComp
 		}
-		// Second+ arguments depend on the command
 		return getRunCommandArgCompletions(args[0], len(args), toComplete), cobra.ShellCompDirectiveNoFileComp
 	}
 
@@ -786,9 +735,6 @@ popup. Omit it to follow the config (default: 0); --dim 0 disables dimming.`,
 	popupCmd.Flags().BoolVar(&popupCapture, "capture-stdout", false, "Print the command's standard output here instead of in the popup (implies --wait)")
 	popupCmd.Flags().IntVar(&popupTimeout, "timeout", 0, "With --wait: milliseconds to wait (default: as long as the popup is open)")
 	addSessionFlag(popupCmd, &popupSession)
-	// Spelled out, with no shorthands. -w is the window selector in every other
-	// tuios command and -h is cobra's help, so both of the short forms a reader
-	// would reach for already mean something else here.
 	popupCmd.Flags().StringVar(&popupWidth, "width", "", "Popup width in cells or percent (default: 80%)")
 	popupCmd.Flags().StringVar(&popupHeight, "height", "", "Popup height in cells or percent (default: 60%)")
 	popupCmd.Flags().IntVar(&popupDim, "dim", 0, "Dim the background by 0 to 90 percent (default: appearance.popup_dim; 0 disables)")
@@ -924,14 +870,11 @@ directory holds only the colours that are different from its base.`,
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	// Add completion for set-config
 	setConfigCmd.ValidArgsFunction = func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
-			// First argument: config path
 			return getConfigPathCompletions(toComplete), cobra.ShellCompDirectiveNoFileComp
 		}
 		if len(args) == 1 {
-			// Second argument: value (depends on the path)
 			return getConfigValueCompletions(args[0], toComplete), cobra.ShellCompDirectiveNoFileComp
 		}
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -964,7 +907,6 @@ For single tape commands, use: tuios run-command <Command> [args...]`,
 	addSessionFlag(tapeExecCmd, &tapeExecSession)
 	tapeExecCmd.Flags().DurationVar(&tapeExecTimeout, "timeout", 30*time.Minute, "How long to wait for the tape to end")
 
-	// Add exec to tape command group
 	tapeCmd.AddCommand(tapeExecCmd)
 
 	logsCmd := newLogsCommand()
@@ -977,7 +919,6 @@ For single tape commands, use: tuios run-command <Command> [args...]`,
 
 	listVerbsCmd := newListVerbsCommand()
 
-	// Layout template commands
 	layoutCmd := &cobra.Command{
 		Use:   "layout",
 		Short: "Manage layout templates",
@@ -1073,9 +1014,6 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 	addJSONFlag(layoutListCmd, &layoutListJSON)
 	layoutCmd.AddCommand(layoutListCmd, newLayoutSaveCommand(), newLayoutLoadCommand(), layoutDeleteCmd, layoutDirCmd, layoutExportCmd)
 
-	// The interface flags ride only the commands that draw the interface. They
-	// were persistent on the root once, which buried a read command's few real
-	// flags under twenty appearance ones in its help.
 	registerInterfaceFlags(rootCmd, attachCmd, newCmd, sshCmd, tapePlayCmd)
 
 	listAgentsCmd := newListAgentsCommand()
@@ -1124,7 +1062,6 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 	rootCmd.AddCommand(newMermaidCommand())
 	rootCmd.AddCommand(newTMLCommand())
 
-	// The tutor heads the help: it is the first thing a new person needs.
 	rootCmd.AddGroup(&cobra.Group{ID: groupGettingStarted, Title: "getting started"})
 	rootCmd.AddCommand(newTutorCommand())
 
@@ -1134,12 +1071,6 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 	return rootCmd
 }
 
-// rejectUnknownSubcommands makes every group command below the root (a
-// command with subcommands and nothing of its own to run) fail on a word
-// that names none of its subcommands. Cobra checks that only for the root.
-// Below it, a command with no Run returns flag.ErrHelp before it looks at
-// the args, so "tuios plugins uninstal" printed the help and exited 0. A
-// bare group, or one given only "help", still prints its help.
 func rejectUnknownSubcommands(cmd *cobra.Command) {
 	for _, sub := range cmd.Commands() {
 		rejectUnknownSubcommands(sub)
@@ -1158,19 +1089,12 @@ func rejectUnknownSubcommands(cmd *cobra.Command) {
 	}
 }
 
-// registerInterfaceFlags registers the appearance and interface flags on each
-// command that renders the TUI: the bare root, attach, new, ssh, and tape
-// playback. Every registration binds the same interfaceFlags, so the run paths
-// keep reading one set of values while commands that only talk to the daemon
-// stop inheriting flags that mean nothing to them. tuios-web registers the same
-// set through the same cliflags package.
 func registerInterfaceFlags(cmds ...*cobra.Command) {
 	for _, cmd := range cmds {
 		interfaceFlags.Register(cmd.Flags())
 	}
 }
 
-// findLayoutTemplate returns the saved layout template called name.
 func findLayoutTemplate(name string) (app.LayoutTemplate, error) {
 	templates, err := app.LoadLayoutTemplates()
 	if err != nil {

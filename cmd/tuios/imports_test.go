@@ -6,16 +6,6 @@ import (
 	"testing"
 )
 
-// The fuzzer is test-only, and the binary users install must not carry it. That
-// is the whole reason visual mode is a separate command rather than a
-// `tuios fuzz` subcommand: a subcommand would link the engine, the observer,
-// the display and the whole action alphabet into the shipped program, where
-// none of it can ever run.
-//
-// Nothing enforces that except this test. The check is on the import graph
-// rather than on the linked binary because that is where the decision is made:
-// one import added anywhere under internal/app pulls the lot back in, and a
-// human reading the diff would not see it.
 var forbidden = []string{
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz",
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz/vis",
@@ -57,8 +47,6 @@ func depsOf(t *testing.T, pkg string) map[string]bool {
 	return deps
 }
 
-// why names a package inside tuios that imports the forbidden one, so a failure
-// points at the edge to cut rather than at the whole graph.
 func why(t *testing.T, bad string) string {
 	t.Helper()
 	out, err := exec.Command("go", "list", "-f",

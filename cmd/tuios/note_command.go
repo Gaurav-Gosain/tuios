@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newNoteCommand builds `tuios note`: the return note of a session or a pane.
 func newNoteCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "note",
@@ -39,7 +38,6 @@ one pane.`,
 	return cmd
 }
 
-// noteFlags adds the -s and -w flags every note command takes.
 func noteFlags(cmd *cobra.Command, sessionName, window *string) {
 	addSessionFlag(cmd, sessionName)
 	addWindowFlag(cmd, window, "A pane by name or id, for the pane's note (default: the session's note)")
@@ -99,7 +97,6 @@ func newNoteClearCommand() *cobra.Command {
 	return cmd
 }
 
-// noteParams is the verb's params: the window key only for a pane's note.
 func noteParams(sessionName, window string) map[string]any {
 	p := map[string]any{"session": sessionName}
 	if window != "" {
@@ -108,7 +105,6 @@ func noteParams(sessionName, window string) map[string]any {
 	return p
 }
 
-// runSetNote sets or, with an empty note, clears a note.
 func runSetNote(sessionName, window, note string, jsonOutput bool) error {
 	p := noteParams(sessionName, window)
 	p["note"] = note
@@ -144,7 +140,6 @@ func runSetNote(sessionName, window, note string, jsonOutput bool) error {
 	return nil
 }
 
-// runGetNote prints a note, and nothing when there is none.
 func runGetNote(sessionName, window string, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, window)
 	if err != nil {

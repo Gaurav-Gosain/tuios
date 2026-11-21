@@ -17,14 +17,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// runCommand executes a tape command in a running TUIOS session.
 func runCommand(sessionName, command string, args []string, jsonOutput bool) error {
 	return runCommandRendered(sessionName, command, args, jsonOutput, nil)
 }
 
-// runCommandRendered is runCommand with a printer for the human output. A
-// command that answers with data, rather than only succeeding, passes one so the
-// answer is shown instead of thrown away; render is nil for the rest.
 func runCommandRendered(sessionName, command string, args []string, jsonOutput bool, render resultRenderer) error {
 	if err := requireDaemon(); err != nil {
 		return err
@@ -41,7 +37,6 @@ func runCommandRendered(sessionName, command string, args []string, jsonOutput b
 
 	requestID := uuid.New().String()
 
-	// Send the execute command
 	msg, err := session.NewMessage(session.MsgExecuteCommand, &session.ExecuteCommandPayload{
 		SessionName: sessionName,
 		CommandType: command,
@@ -59,9 +54,6 @@ func runCommandRendered(sessionName, command string, args []string, jsonOutput b
 	return nil
 }
 
-// runTapeExec plays a tape file in a running TUIOS session and returns when
-// the tape has ended. A tape that fails returns the failure, placed at the
-// file and line it came from.
 func runTapeExec(sessionName, filePath string, timeout time.Duration) error {
 	if err := requireDaemon(); err != nil {
 		return err
@@ -92,8 +84,6 @@ func runTapeExec(sessionName, filePath string, timeout time.Duration) error {
 
 	requestID := uuid.New().String()
 
-	// The tape goes with its Source lines resolved: the session cannot read
-	// the files they name.
 	msg, err := session.NewMessage(session.MsgExecuteCommand, &session.ExecuteCommandPayload{
 		SessionName: sessionName,
 		TapeScript:  script.Text,
@@ -132,12 +122,8 @@ func runTapeExec(sessionName, filePath string, timeout time.Duration) error {
 	}
 }
 
-// runCommandCatalog is what 'tuios run-command --list' prints. A closed set of
-// values is spelled from the list the executor checks against, so the listing
-// cannot offer a value the command refuses.
 func runCommandCatalog() []runCommandEntry {
 	return []runCommandEntry{
-		// Window management
 		{"NewWindow [name]", "Create a new terminal window", "tuios run-command NewWindow \"My Terminal\""},
 		{"CloseWindow [name]", "Close window(s) - all matching if name given", "tuios run-command CloseWindow \"Build\""},
 		{"NextWindow", "Focus the next window", "tuios run-command NextWindow"},
@@ -147,11 +133,9 @@ func runCommandCatalog() []runCommandEntry {
 		{"MinimizeWindow [name]", "Minimize focused or named window", "tuios run-command MinimizeWindow \"Server\""},
 		{"RestoreWindow [name]", "Restore focused or named window", "tuios run-command RestoreWindow \"Server\""},
 
-		// Mode switching
 		{"TerminalMode", "Switch to terminal mode", "tuios run-command TerminalMode"},
 		{"WindowManagementMode", "Switch to window management mode", "tuios run-command WindowManagementMode"},
 
-		// Tiling
 		{"ToggleTiling", "Toggle tiling mode", "tuios run-command ToggleTiling"},
 		{"EnableTiling", "Enable tiling mode", "tuios run-command EnableTiling"},
 		{"DisableTiling", "Disable tiling mode", "tuios run-command DisableTiling"},
@@ -159,7 +143,6 @@ func runCommandCatalog() []runCommandEntry {
 		{"SnapRight", "Snap focused window to right", "tuios run-command SnapRight"},
 		{"SnapFullscreen", "Snap focused window to fullscreen", "tuios run-command SnapFullscreen"},
 
-		// BSP Tiling
 		{"Split horizontal", "Split focused window horizontally", "tuios run-command Split horizontal"},
 		{"Split vertical", "Split focused window vertically", "tuios run-command Split vertical"},
 		{"RotateSplit", "Rotate the split direction", "tuios run-command RotateSplit"},
@@ -168,7 +151,6 @@ func runCommandCatalog() []runCommandEntry {
 		{"SetMultifocus [window...]", "Put exactly these windows in multifocus, or clear it", "tuios run-command SetMultifocus build tests"},
 		{"Screenshot", "Save the focused window as an image", "tuios run-command Screenshot"},
 
-		// Master-stack
 		{"SetMasterPosition " + strings.Join(config.MasterPositions, "|"), "Put the master panes on one side of the workspace", "tuios run-command SetMasterPosition center"},
 		{"SetMasterCount 1-9", "Set how many panes are master panes", "tuios run-command SetMasterCount 2"},
 		{"CycleMasterPosition", "Move the master panes to the next side", "tuios run-command CycleMasterPosition"},
@@ -177,28 +159,23 @@ func runCommandCatalog() []runCommandEntry {
 		{"SwapWithMaster", "Swap the focused pane with the master pane", "tuios run-command SwapWithMaster"},
 		{"FocusMaster", "Focus the master pane", "tuios run-command FocusMaster"},
 
-		// Workspace
 		{"SwitchWorkspace 1-9", "Switch to workspace N", "tuios run-command SwitchWorkspace 2"},
 		{"MoveToWorkspace 1-9", "Move focused window to workspace N", "tuios run-command MoveToWorkspace 3"},
 
-		// Animations
 		{"EnableAnimations", "Enable UI animations", "tuios run-command EnableAnimations"},
 		{"DisableAnimations", "Disable UI animations", "tuios run-command DisableAnimations"},
 		{"ToggleAnimations", "Toggle UI animations", "tuios run-command ToggleAnimations"},
 
-		// Config commands
 		{"SetDockbarPosition " + strings.Join(config.DockbarPositions, "|"), "Change dockbar position", "tuios run-command SetDockbarPosition top"},
 		{"SetBorderStyle style", "Change window border style", "tuios run-command SetBorderStyle rounded"},
 		{"SetTheme themename", "Change the color theme", "tuios run-command SetTheme dracula"},
 		{"ShowNotification message [type]", "Show a notification", "tuios run-command ShowNotification \"Hello!\" info"},
 
-		// Any keybinding action, and keys through tuios's own key handling
 		{"<action>", "Run a keybinding action by name (tuios keybinds list prints them)", "tuios run-command toggle_spotlight"},
 		{"Action <action>", "The same, spelled as a tape writes it", "tuios run-command Action toggle_scratch"},
 		{"Press <keys>", "Press keys as a person would: prefixes, copy mode, dialogs", "tuios run-command Press \"ctrl+b ?\""},
 		{"Run <command line>", "Type a command line into the focused window and press Enter", "tuios run-command Run \"make test\""},
 
-		// Inspection commands
 		{"ListWindows", "List all windows (use --json)", "tuios list-windows --json"},
 		{"GetWindow [id-or-name]", "Get window info (use --json)", "tuios get-window --json"},
 		{"GetSessionInfo", "Get session info (use --json)", "tuios session-info --json"},
@@ -206,7 +183,6 @@ func runCommandCatalog() []runCommandEntry {
 	}
 }
 
-// listAvailableCommands lists all available tape commands that can be executed remotely.
 func listAvailableCommands() {
 	commands := runCommandCatalog()
 
@@ -230,21 +206,16 @@ func listAvailableCommands() {
 	}
 }
 
-// fixedCompletions completes a flag whose values are a closed set the daemon
-// will reject anything outside of, so the shell can offer them all.
 func fixedCompletions(values ...string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return values, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 
-// getSendKeysCompletions returns completions for send-keys key names.
 func getSendKeysCompletions(toComplete string) []string {
 	keys := []string{
-		// Special tokens
 		"$PREFIX\tConfigured leader/prefix key",
 		"PREFIX\tConfigured leader/prefix key",
-		// Special keys
 		"Enter\tPress Enter/Return",
 		"Return\tPress Enter/Return",
 		"Space\tPress Space",
@@ -253,18 +224,15 @@ func getSendKeysCompletions(toComplete string) []string {
 		"Esc\tPress Escape",
 		"Backspace\tPress Backspace",
 		"Delete\tPress Delete",
-		// Arrow keys
 		"Up\tPress Up arrow",
 		"Down\tPress Down arrow",
 		"Left\tPress Left arrow",
 		"Right\tPress Right arrow",
-		// Navigation
 		"Home\tPress Home",
 		"End\tPress End",
 		"PageUp\tPress Page Up",
 		"PageDown\tPress Page Down",
 		"Insert\tPress Insert",
-		// Function keys
 		"F1\tPress F1",
 		"F2\tPress F2",
 		"F3\tPress F3",
@@ -277,7 +245,6 @@ func getSendKeysCompletions(toComplete string) []string {
 		"F10\tPress F10",
 		"F11\tPress F11",
 		"F12\tPress F12",
-		// Common key combos
 		"ctrl+b\tPrefix key (default)",
 		"ctrl+c\tInterrupt/cancel",
 		"ctrl+d\tEOF/logout",
@@ -285,7 +252,6 @@ func getSendKeysCompletions(toComplete string) []string {
 		"alt+1\tWorkspace 1",
 		"alt+2\tWorkspace 2",
 		"alt+3\tWorkspace 3",
-		// Mode keys
 		"i\tEnter terminal mode",
 		"n\tNew window (in window mode)",
 		"q\tQuit (in window mode)",
@@ -305,7 +271,6 @@ func getSendKeysCompletions(toComplete string) []string {
 	return filtered
 }
 
-// getRunCommandCompletions returns completions for run-command command names.
 func getRunCommandCompletions(toComplete string) []string {
 	commands := []string{
 		"NewWindow\tCreate a new terminal window",
@@ -360,7 +325,6 @@ func getRunCommandCompletions(toComplete string) []string {
 	return filtered
 }
 
-// getRunCommandArgCompletions returns completions for run-command arguments.
 func getRunCommandArgCompletions(command string, argIndex int, toComplete string) []string {
 	switch command {
 	case "Split":
@@ -400,14 +364,12 @@ func getRunCommandArgCompletions(command string, argIndex int, toComplete string
 			return getConfigPathCompletions(toComplete)
 		}
 		if argIndex == 2 {
-			// Would need the first arg to determine values
 			return nil
 		}
 	}
 	return nil
 }
 
-// runGetLogs retrieves and displays daemon logs.
 func runGetLogs(count int, clear bool, follow bool) error {
 	if err := requireDaemon(); err != nil {
 		return err
@@ -423,18 +385,13 @@ func runGetLogs(count int, clear bool, follow bool) error {
 	defer func() { _ = client.Close() }()
 
 	if follow {
-		// Follow mode: continuously poll for new logs
 		return followLogs(client, count)
 	}
 
-	// Single retrieval
 	_, err := displayLogs(client, count, clear)
 	return err
 }
 
-// displayLogs fetches and displays logs once.
-// displayLogs prints up to count entries and returns the newest timestamp shown
-// (0 when none), which follow mode uses to seed its poll cursor.
 func displayLogs(client *session.Client, count int, clear bool) (int64, error) {
 	msg, err := session.NewMessage(session.MsgGetLogs, &session.GetLogsPayload{
 		Count: count,
@@ -489,10 +446,7 @@ func displayLogs(client *session.Client, count int, clear bool) (int64, error) {
 	return newest, nil
 }
 
-// followLogs continuously polls for new logs.
 func followLogs(client *session.Client, initialCount int) error {
-	// First, display existing logs and seed the poll cursor from the newest one
-	// shown, so the first tick does not reprint what we just displayed.
 	lastTimestamp, err := displayLogs(client, initialCount, false)
 	if err != nil {
 		return err
@@ -503,7 +457,6 @@ func followLogs(client *session.Client, initialCount int) error {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
-	// Handle Ctrl+C
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt)
 
@@ -513,9 +466,8 @@ func followLogs(client *session.Client, initialCount int) error {
 			fmt.Println("\nStopped following logs")
 			return nil
 		case <-ticker.C:
-			// Fetch new logs
 			msg, err := session.NewMessage(session.MsgGetLogs, &session.GetLogsPayload{
-				Count: 100, // Fetch last 100 entries to check for new ones
+				Count: 100,
 				Clear: false,
 			})
 			if err != nil {
@@ -536,7 +488,6 @@ func followLogs(client *session.Client, initialCount int) error {
 				continue
 			}
 
-			// Display only new entries
 			for _, entry := range logsData.Entries {
 				if entry.Timestamp > lastTimestamp {
 					ts := time.UnixMilli(entry.Timestamp)

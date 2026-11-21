@@ -13,8 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newTaskDispatchCommand builds `tuios task dispatch`: each board's dispatch
-// mode and the switches that stop dispatch.
 func newTaskDispatchCommand() *cobra.Command {
 	var f taskFlags
 	var project string
@@ -127,7 +125,6 @@ verify is refused from every pane.`,
 	return cmd
 }
 
-// runTaskDispatch calls verb and prints the status it returns.
 func runTaskDispatch(w io.Writer, f taskFlags, verb string, params map[string]any) error {
 	t, err := dialSessionTarget(f.session)
 	if err != nil {
@@ -151,7 +148,6 @@ func runTaskDispatch(w io.Writer, f taskFlags, verb string, params map[string]an
 	return printDispatch(w, st)
 }
 
-// printDispatch writes the status as a person reads it.
 func printDispatch(w io.Writer, st session.DispatchStatus) error {
 	var b strings.Builder
 	switch {
@@ -204,7 +200,6 @@ func printDispatch(w io.Writer, st session.DispatchStatus) error {
 	return err
 }
 
-// hasBoard reports whether rows has board.
 func hasBoard(rows []session.DispatchBoardRow, board string) bool {
 	for _, r := range rows {
 		if r.Board == board {

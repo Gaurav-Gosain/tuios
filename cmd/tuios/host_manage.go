@@ -21,22 +21,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// `tuios hosts add`, `remove` and `test`: the three commands that made a host
-// something a person can manage instead of a table they hand-edit.
-//
-// Two rules shape all three.
-//
-// The file is the source of truth, not the daemon. Every one of these reads and
-// writes the config file directly, so they work before a daemon has ever run,
-// and the running daemon picks the change up from the file. There is no verb
-// that writes a host, and adding one would put the config file behind a
-// control protocol for no gain.
-//
-// Only the [hosts.NAME] table is touched. The rest of the file, comments
-// included, is left exactly as the user wrote it. See internal/config's
-// hosts_edit.go.
-
-// hostAddFlags are the optional parts of a host, as flags.
 type hostAddFlags struct {
 	command    string
 	timeout    int
@@ -45,7 +29,6 @@ type hostAddFlags struct {
 	reposRoot  string
 }
 
-// newHostsSubcommands builds add, remove and test.
 func newHostsSubcommands() []*cobra.Command {
 	var add hostAddFlags
 
@@ -167,7 +150,6 @@ down. It needs the daemon and the link up.`,
 	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand(), newHostsSyncCommand(), newHostsSigninCommand(), newHostsSetupCommand()}
 }
 
-// runHostAdd writes one [hosts.NAME] table.
 func runHostAdd(name, addr string, flags hostAddFlags) error {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -178,9 +160,6 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 	}
 	addr = strings.TrimSpace(addr)
 	if flags.tailnet {
-		// The name the user typed is a decision, so the filters that decide
-		// what to suggest do not apply: a machine they named by hand is added
-		// even if it is one the suggestion list would have left out.
 		found, ok := tailnetAddrFor(name)
 		if !ok {
 			return errfmt.Errorf("no machine called %q on your tailnet.\nRun 'tuios hosts tailnet' to see what is there", name)
@@ -212,16 +191,11 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 		ConnectTimeout: flags.timeout,
 		SSHOptions:     flags.sshOptions,
 		ReposRoot:      flags.reposRoot,
-		// A Headscale origin is not a flag here, so a new address keeps it.
 		TailscaleLogin: prev.TailscaleLogin,
-		// What that machine may do here is not what this command sets, so a
-		// new address keeps it.
-		Allow:       prev.Allow,
-		HoldMail:    prev.HoldMail,
-		HostedGrace: prev.HostedGrace,
+		Allow:          prev.Allow,
+		HoldMail:       prev.HoldMail,
+		HostedGrace:    prev.HostedGrace,
 	}
-	// repos_root says where the host's checkouts are, not how to reach it,
-	// so pointing a host at a new address keeps it unless a new one is given.
 	if entry.ReposRoot == "" {
 		entry.ReposRoot = prev.ReposRoot
 	}
@@ -243,16 +217,8 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 	return nil
 }
 
-// hostAddProbeTimeout bounds the dial 'tuios hosts add' makes right after the
-// write. It is shorter than a host's own connect timeout on purpose: the add
-// must not sit on a machine that is asleep, and a machine that is awake
-// answers well inside this.
 const hostAddProbeTimeout = 5 * time.Second
 
-// probeAddedHost dials the host that was just added and prints what happened,
-// so a tuios that cannot be found, or a key ssh refuses, is seen now rather
-// than the first time a listing is wanted. The host is added whatever the
-// result: a machine that is merely off is still a machine the person named.
 func probeAddedHost(name string) {
 	host, err := resolveConfiguredHost(name)
 	if err != nil {
@@ -271,15 +237,6 @@ func probeAddedHost(name string) {
 	}
 }
 
-// runHostRemove deletes one [hosts.NAME] table, and the authorized_keys
-// lines tuios added for NAME: a key that tuios hosts setup --both-ways
-// allowed, and the key of a device that tuios pair added.
-//
-// The key lines go first. A key whose name has no table gets [hosts."*"] or
-// the built-in default, so the table is never removed while its key stays:
-// when the key cannot be removed, the table stays too and the command fails.
-// A name with key lines and no table, a device removed before this order
-// existed, gets its lines removed.
 func runHostRemove(name string) error {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -307,15 +264,10 @@ func runHostRemove(name string) error {
 	return nil
 }
 
-// hostTestBudget bounds one test. It is the dial timeout plus room for the
-// handshake, so a machine that is off is reported rather than waited on.
 const hostTestBudget = 20 * time.Second
 
-// hostTestGrace is the room a bounded dial gets past its connect timeout for
-// the probe and the handshake.
 const hostTestGrace = 3 * time.Second
 
-// hostTestOptions are the flags of `tuios hosts test`.
 type hostTestOptions struct {
 	speed  bool
 	start  bool
@@ -323,22 +275,14 @@ type hostTestOptions struct {
 	json   bool
 }
 
-// hostTestResult is the JSON of `tuios hosts test`: the report of the last
-// dial, and what --start did.
 type hostTestResult struct {
 	federation.HostReport
-	// Before is the status before --start started the daemon. It is empty
-	// when nothing was started.
-	Before federation.Status `json:"before,omitempty"`
-	// Action is what --start did, or with --dry-run what it would do.
-	Action string `json:"action,omitempty"`
-	// StartCommand is the command that starts the daemon on the host, as a
-	// person types it there.
-	StartCommand string `json:"start_command,omitempty"`
-	Error        string `json:"error,omitempty"`
+	Before       federation.Status `json:"before,omitempty"`
+	Action       string            `json:"action,omitempty"`
+	StartCommand string            `json:"start_command,omitempty"`
+	Error        string            `json:"error,omitempty"`
 }
 
-// The actions --start reports.
 const (
 	testActionStarted   = "daemon started"
 	testActionWould     = "would start daemon"
@@ -346,12 +290,6 @@ const (
 	testActionStartFail = "start failed"
 )
 
-// runHostTest dials one host and prints what happened. With --start it starts
-// the daemon there when it does not run, and dials again.
-//
-// The dial is this process's own, not the daemon's. That is what makes the
-// command useful before a daemon has ever started, and what makes it a test of
-// the host rather than a reading of a link that came up minutes ago.
 func runHostTest(name string, opts hostTestOptions) error {
 	host, err := resolveConfiguredHost(name)
 	if err != nil {
@@ -408,8 +346,6 @@ func runHostTest(name string, opts hostTestOptions) error {
 	return err
 }
 
-// startHostDaemon is --start: it starts the daemon on a host that has tuios
-// and no running daemon, and fills res with the dial after the start.
 func startHostDaemon(host federation.Host, res *hostTestResult, dryRun bool) error {
 	switch res.Status {
 	case federation.StatusUp:
@@ -422,8 +358,6 @@ func startHostDaemon(host federation.Host, res *hostTestResult, dryRun bool) err
 			Fix:  fmt.Sprintf("run 'tuios hosts sync %s --start' to install tuios and start the daemon", res.Host),
 		}
 	default:
-		// The host cannot be reached, or its daemon cannot be used. There is
-		// nothing to start, and the report says what is wrong.
 		return nil
 	}
 	arg, ok := hostsync.CommandArg(res.Command)
@@ -445,8 +379,6 @@ func startHostDaemon(host federation.Host, res *hostTestResult, dryRun bool) err
 	}
 	res.Action = testActionStarted
 	res.Before = res.Status
-	// The daemon answers once start-server returns. A second dial is the
-	// proof, and a few are allowed for a slow machine.
 	var after federation.HostReport
 	for range 3 {
 		var err error
@@ -466,8 +398,6 @@ func startHostDaemon(host federation.Host, res *hostTestResult, dryRun bool) err
 	return nil
 }
 
-// remoteStartCommand is the command that starts the daemon on a host, with the
-// binary the link runs there.
 func remoteStartCommand(binary string) string {
 	if binary == "" {
 		binary = "tuios"
@@ -475,28 +405,19 @@ func remoteStartCommand(binary string) string {
 	return binary + " start-server"
 }
 
-// dialHostOnce opens one link to the host in this process, waits for its
-// first attempt to settle, and returns the report.
 func dialHostOnce(host federation.Host, budget time.Duration) (federation.HostReport, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	return hostsetup.DialOnce(ctx, host, version)
 }
 
-// printHostTest prints one dial's result and fails the command when the host is
-// not usable, so a script can act on it.
 func printHostTest(r federation.HostReport) error {
 	return writeHostTest(os.Stdout, r, false)
 }
 
-// writeHostTest is printHostTest to w. starting says the command was run with
-// --start, so the advice does not tell the person to add it.
 func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 	fmt.Fprintf(w, "%s  %s  %s\n", r.Host, r.Addr, r.Status)
 	if r.Status == federation.StatusApproval {
-		// The link of this command stops when the command does, so the
-		// person approves and runs the command again. The reason the link
-		// gives says it waits, which is true only of the daemon's link.
 		gate := federation.SSHGate{Kind: federation.GateTailscaleCheck, URL: r.ApprovalURL}
 		fmt.Fprintln(w, gate.Sentence())
 		return errfmt.Errorf("host %s waits for a Tailscale approval", r.Host)
@@ -505,8 +426,6 @@ func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 		fmt.Fprintln(w, r.Reason)
 	}
 	if r.Detail != "" {
-		// The detail comes from ssh or from the other machine. It is labelled
-		// so a reader cannot mistake it for something tuios said.
 		fmt.Fprintf(w, "  the link reported: %s\n", r.Detail)
 	}
 	switch r.Status {
@@ -528,8 +447,6 @@ func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 			fmt.Fprintf(w, "  tuios hosts test %s --start\n", r.Host)
 		}
 	case federation.StatusNoBinary:
-		// The whole reason this state exists: the person sees at once that
-		// their install is somewhere unusual, and what to type about it.
 		fmt.Fprintln(w, "The link looked on the PATH, in a login shell, and at these paths:")
 		for _, c := range federation.RemoteBinaryCandidates() {
 			fmt.Fprintf(w, "  %s\n", c)
@@ -539,8 +456,6 @@ func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 	case federation.StatusIncompatible:
 		fmt.Fprintln(w, "Upgrade tuios on one of the two machines.")
 	default:
-		// A class of ssh failure has its own fix. A policy refusal is
-		// already said in full. Anything else is said best by ssh itself.
 		if r.Fix != "" {
 			fmt.Fprintln(w, r.Fix)
 		} else if g := federation.ParseSSHGate(r.Detail); g == nil || g.Kind != federation.GateTailscalePolicy {
@@ -553,12 +468,6 @@ func writeHostTest(w io.Writer, r federation.HostReport, starting bool) error {
 	return errfmt.Errorf("host %s is %s", r.Host, r.Status)
 }
 
-// addrHelp is what to type for an address, with the ssh_config aliases this
-// machine already has as candidates.
-//
-// Nothing is added from this list. It is read so a person does not have to
-// remember what they called a machine, and only the Host names are read: no key
-// file and no known_hosts is ever opened. See internal/federation's sshalias.go.
 func addrHelp() string {
 	var b strings.Builder
 	b.WriteString("An address is anything ssh understands, for example user@machine.")
@@ -574,8 +483,6 @@ func addrHelp() string {
 	return b.String()
 }
 
-// completeHostAddArgs completes the address argument with the ssh_config
-// aliases, which is where the shell can offer them without the user asking.
 func completeHostAddArgs(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 	if len(args) != 1 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -587,8 +494,6 @@ func completeHostAddArgs(_ *cobra.Command, args []string, _ string) ([]string, c
 	return candidates, cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeConfiguredHosts completes a host name with the names in the config
-// file.
 func completeConfiguredHosts(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 	if len(args) != 0 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -609,12 +514,6 @@ func completeConfiguredHosts(_ *cobra.Command, args []string, _ string) ([]strin
 	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
-// applyHostNow asks a running daemon to apply the entry of host name from
-// config.toml, and nothing else in the file: a change another process wrote
-// there, such as a wider [agents.permissions], is not applied with it. It
-// reports false only when a running daemon kept the change for the person.
-// With no daemon running there is nothing to apply, and the next start reads
-// the file.
 func applyHostNow(name string) bool {
 	if applyHost(name) {
 		return true
@@ -623,8 +522,6 @@ func applyHostNow(name string) bool {
 	return false
 }
 
-// applyHost is applyHostNow with nothing printed, for a caller that draws the
-// terminal itself and says the change waits in its own view.
 func applyHost(name string) bool {
 	client, err := dialVerb()
 	if err != nil {
@@ -635,12 +532,8 @@ func applyHost(name string) bool {
 	return err == nil
 }
 
-// configWaitsNote is what a command says when the daemon keeps a change for
-// the person.
 const configWaitsNote = "The running daemon applies this change after tuios config apply from a terminal outside tuios, or a daemon restart."
 
-// describeConfigApplied is what tuios config apply prints: each change, then
-// the grant mode in force.
 func describeConfigApplied(raw []byte) string {
 	var res struct {
 		Mode          string   `json:"mode"`
@@ -682,7 +575,6 @@ func describeConfigApplied(raw []byte) string {
 	return b.String()
 }
 
-// runHostSpeed measures the daemon's link to a host with host-speed-test.
 func runHostSpeed(name string, jsonOut bool) error {
 	if err := requireDaemon(); err != nil {
 		return reportVerbError(err, jsonOut)

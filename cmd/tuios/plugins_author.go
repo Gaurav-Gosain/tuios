@@ -18,10 +18,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The tools of a plugin author: new makes a folder from plugins/template,
-// check reads a manifest as tuios would and says what is wrong, and dev runs
-// a folder and reloads it when a file changes.
-
 func newPluginsNewCommand() *cobra.Command {
 	var id string
 	cmd := &cobra.Command{
@@ -51,7 +47,6 @@ func newPluginsNewCommand() *cobra.Command {
 	return cmd
 }
 
-// writeTemplate copies the template to dir with the id and name put in.
 func writeTemplate(dir, id, name string) error {
 	return fs.WalkDir(plugins.Template, "template", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -94,7 +89,6 @@ func newPluginsCheckCommand() *cobra.Command {
 	}
 }
 
-// checkPlugin is tuios plugins check.
 func checkPlugin(out io.Writer, dir string) error {
 	p, perr := herdrplugin.Load(dir)
 	if perr != nil {
@@ -108,7 +102,6 @@ func checkPlugin(out io.Writer, dir string) error {
 				problems = append(problems, fmt.Sprintf("the program %s is not in the folder", prog))
 			}
 		}
-		// sh script.sh: the script must be there.
 		if (prog == "sh" || prog == "bash") && len(argv) > 1 && !strings.HasPrefix(argv[1], "-") {
 			if _, err := os.Stat(filepath.Join(p.PluginRoot, argv[1])); err != nil {
 				problems = append(problems, fmt.Sprintf("the script %s is not in the folder", argv[1]))
@@ -146,7 +139,6 @@ func checkPlugin(out io.Writer, dir string) error {
 	return nil
 }
 
-// pluginCommands are the argv of every command p runs.
 func pluginCommands(p *herdrplugin.Plugin) [][]string {
 	var out [][]string
 	for _, b := range p.Build {
@@ -209,8 +201,6 @@ A changed manifest needs a new approval. dev gives it, for the folder you named 
 				seen = now
 				fmt.Fprintf(out, "%s A file changed. Reloading.\n", time.Now().Format("15:04:05"))
 				if err := checkPlugin(io.Discard, dir); err != nil {
-					// The folder is used in place, so the daemon reads the
-					// broken manifest too, and the plugin stops until it loads.
 					fmt.Fprintf(out, "The plugin cannot load, and it does not run: %v. Fix the folder. dev reloads it when it loads. Run tuios plugins check %s to see why\n", err, args[0])
 					continue
 				}
@@ -222,8 +212,6 @@ A changed manifest needs a new approval. dev gives it, for the folder you named 
 	}
 }
 
-// folderStamp is the newest change time and the count of the files in dir,
-// outside .git. It changes when a file is written, added or removed.
 func folderStamp(dir string) string {
 	var newest time.Time
 	n := 0

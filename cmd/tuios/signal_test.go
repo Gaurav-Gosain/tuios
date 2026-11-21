@@ -7,15 +7,6 @@ import (
 	"time"
 )
 
-// The signal policy exists because a quit can be asked for and never carried
-// out: a force-killed ssh client leaves a pty nobody drains, the frame write
-// that fills it wedges the event loop, and the quit sitting in the message
-// channel is never read. These drive the policy directly, without a program or
-// a real signal, by passing the channel, the ask and the exit in.
-
-// shortGrace stands in for signalQuitGrace where a test waits for it to elapse.
-// The grace is a parameter rather than a variable the tests overwrite, so the
-// policy goroutine never reads a value a test's cleanup is writing.
 const shortGrace = 30 * time.Millisecond
 
 func TestSignalQuitAsksThenExitsWhenTheQuitIsNotCarriedOut(t *testing.T) {
@@ -45,15 +36,12 @@ func TestSignalQuitAsksThenExitsWhenTheQuitIsNotCarriedOut(t *testing.T) {
 }
 
 func TestSignalQuitExitsAtOnceOnASecondSignal(t *testing.T) {
-	// A grace long enough that only the second signal can end it, so the test
-	// fails if the second signal is not what did.
 	sigs := make(chan os.Signal, 2)
 	done := make(chan struct{})
 	asked := make(chan struct{})
 	release := make(chan struct{})
 	exited := make(chan int, 1)
 
-	// The ask blocks, standing in for a Send that the event loop never reads.
 	go runSignalQuit(sigs, done, time.Hour, func() { close(asked); <-release }, func(code int) { exited <- code })
 
 	sigs <- syscall.SIGTERM

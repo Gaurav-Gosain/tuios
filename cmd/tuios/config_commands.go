@@ -16,7 +16,6 @@ import (
 	"golang.org/x/term"
 )
 
-// newConfigCommand creates the config command for managing TUIOS configuration.
 func newConfigCommand() *cobra.Command {
 	configCmd := &cobra.Command{
 		Use:   "config",
@@ -24,7 +23,6 @@ func newConfigCommand() *cobra.Command {
 		Long:  `Manage TUIOS configuration file and settings`,
 	}
 
-	// Register the config subcommands.
 	configCmd.AddCommand(
 		newConfigPathCommand(),
 		newConfigEditCommand(),
@@ -38,8 +36,6 @@ func newConfigCommand() *cobra.Command {
 	return configCmd
 }
 
-// newConfigPathCommand creates the command that prints the path to the
-// TUIOS configuration file.
 func newConfigPathCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "path",
@@ -51,8 +47,6 @@ func newConfigPathCommand() *cobra.Command {
 	}
 }
 
-// newConfigEditCommand creates the command that opens the TUIOS
-// configuration file in the user's preferred editor.
 func newConfigEditCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "edit",
@@ -67,8 +61,6 @@ like vim, vi, nano, and emacs in that order.`,
 	}
 }
 
-// newConfigResetCommand creates the command that resets the main TUIOS
-// configuration file to its default state while preserving its include list.
 func newConfigResetCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "reset",
@@ -82,8 +74,6 @@ This will overwrite your existing configuration after confirmation.`,
 	}
 }
 
-// newConfigApplyCommand creates the command that asks the running TUIOS
-// daemon to apply configuration changes that require explicit activation.
 func newConfigApplyCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "apply",
@@ -104,12 +94,6 @@ The daemon applies a change to the file at once only where it gives less. A chan
 	}
 }
 
-// askClientsToApply tells every client on this machine to apply the file as it
-// stands. Each client's config watcher follows a stamp in the config directory,
-// the way tuios theme reload reaches them, so this needs no protocol of its own.
-// The stamp stays in place: kqueue sees a new file only by listing the directory.
-// The daemon has already applied the file, so a failure here costs only the
-// clients, and the command says so.
 func askClientsToApply() {
 	path, err := config.GetConfigPath()
 	if err == nil {
@@ -121,8 +105,6 @@ func askClientsToApply() {
 	}
 }
 
-// newConfigFilesCommand creates the command that lists the configuration
-// files loaded by TUIOS in precedence order, with an optional JSON output.
 func newConfigFilesCommand() *cobra.Command {
 	var configFilesJSON bool
 	configFilesCmd := &cobra.Command{
@@ -144,9 +126,6 @@ that names a missing file or makes a cycle.`,
 	return configFilesCmd
 }
 
-// newConfigOriginCommand creates the command that reports which
-// configuration files define each effective setting, optionally filtered
-// by key and formatted as JSON.
 func newConfigOriginCommand() *cobra.Command {
 	var configOriginJSON bool
 	configOriginCmd := &cobra.Command{
@@ -174,9 +153,6 @@ value.`,
 	return configOriginCmd
 }
 
-// newConfigPruneCommand creates the command that removes default-valued
-// keys from the main configuration file so that included configuration
-// files can take effect, with optional dry-run and confirmation bypass.
 func newConfigPruneCommand() *cobra.Command {
 	var configPruneDryRun, configPruneYes bool
 	configPruneCmd := &cobra.Command{
@@ -205,7 +181,6 @@ include list. Use --dry-run to see the keys first.`,
 	return configPruneCmd
 }
 
-// printConfigPath prints the path to the TUIOS configuration file.
 func printConfigPath() error {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -215,8 +190,6 @@ func printConfigPath() error {
 	return nil
 }
 
-// editConfigFile opens the TUIOS configuration file in the user's preferred
-// editor, creating a default configuration file if one does not exist.
 func editConfigFile() error {
 	configPath, err := config.GetConfigPath()
 	if err != nil {
@@ -258,9 +231,6 @@ func editConfigFile() error {
 	return nil
 }
 
-// resetConfigToDefaults resets the main configuration file to its default
-// state after confirmation, preserving its include list and reporting any
-// other configuration files that continue to apply.
 func resetConfigToDefaults() error {
 	configPath, err := config.GetConfigPath()
 	if err != nil {
@@ -282,17 +252,12 @@ func resetConfigToDefaults() error {
 		}
 	}
 
-	// The reset file holds no settings, so every key has its default and
-	// every file the config includes applies. The include list stays: it is
-	// where the rest of the config is, not a setting.
 	if err := config.ResetConfig(configPath); err != nil {
 		return errfmt.Errorf("failed to write config file: %w", err)
 	}
 	fmt.Printf("Configuration reset to defaults\n")
 	fmt.Printf("  Location: %s\n", configPath)
 	fmt.Println("\nYou can customize it with: tuios config edit")
-	// The reset is of config.toml alone. Say which other files still set
-	// keys, so a setting that did not go back is not a surprise.
 	if lc, err := config.LoadLayered(configPath); err == nil {
 		var others []string
 		for _, l := range lc.Layers {
@@ -311,8 +276,6 @@ func resetConfigToDefaults() error {
 	return nil
 }
 
-// previewThemeColors initializes the named theme and prints its normal and
-// bright ANSI colors with their RGB values and hexadecimal representations.
 func previewThemeColors(themeName string) error {
 	if !slices.Contains(theme.AvailableThemes(), themeName) {
 		return errfmt.Errorf("no theme named %q. Run 'tuios list-themes' to see the themes", themeName)

@@ -8,11 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/skills"
 )
 
-// A skill that documents a command the binary does not have is worse than no
-// skill: an agent follows it, the command fails, and the agent has no way to
-// tell a typo in the document from a broken tuios. These tests hold the skill to
-// the CLI it describes.
-
 // TestSkillCommandsResolve parses every tuios command the skill shows, in the
 // core and in every topic, and resolves it against the real command tree: the
 // subcommand must exist, its flags must exist, and its argument count must be
@@ -81,9 +76,6 @@ func TestSkillTableCommandsResolve(t *testing.T) {
 	}
 }
 
-// tuiosSpansIn extracts every `tuios ...` inline code span outside the shell
-// fences. A span may be a bare command name with its arguments left out, so
-// only the command and its flags are checked, not the argument count.
 func tuiosSpansIn(doc string) [][]string {
 	var found [][]string
 	inFence := false
@@ -98,8 +90,6 @@ func tuiosSpansIn(doc string) [][]string {
 		parts := strings.Split(line, "`")
 		for i := 1; i < len(parts); i += 2 {
 			for _, words := range shellCalls(parts[i]) {
-				// tuios --skill TOPIC is a root flag that takes a topic,
-				// which Find would read as a command.
 				if len(words) >= 2 && words[0] == "tuios" && words[1] != "--skill" {
 					found = append(found, words[1:])
 				}
@@ -109,8 +99,6 @@ func tuiosSpansIn(doc string) [][]string {
 	return found
 }
 
-// tuiosCommandsIn extracts every `tuios ...` invocation from the skill's shell
-// code fences.
 func tuiosCommandsIn(doc string) [][]string {
 	var found [][]string
 	for _, block := range shellBlocks(doc) {
@@ -123,7 +111,6 @@ func tuiosCommandsIn(doc string) [][]string {
 	return found
 }
 
-// shellBlocks returns the contents of the skill's ```sh fences.
 func shellBlocks(doc string) []string {
 	var blocks []string
 	var current strings.Builder
@@ -144,10 +131,6 @@ func shellBlocks(doc string) []string {
 	return blocks
 }
 
-// shellCalls splits a shell snippet into argument lists the way a shell would:
-// quotes group words and may span lines, and an unquoted newline, pipe or
-// semicolon ends the call. It is not a shell parser, it is enough of one to read
-// the commands a skill shows.
 func shellCalls(block string) [][]string {
 	var (
 		calls     [][]string
@@ -204,8 +187,6 @@ func shellCalls(block string) [][]string {
 	return calls
 }
 
-// skillText returns what `tuios --skill <topic>` prints, failing the test for
-// a topic that does not exist.
 func skillText(t *testing.T, topic string) string {
 	t.Helper()
 	text, err := skills.Lookup(topic)

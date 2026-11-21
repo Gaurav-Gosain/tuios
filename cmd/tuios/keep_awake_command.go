@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// keepAwakeStatus is what get-keep-awake and set-keep-awake answer.
 type keepAwakeStatus struct {
 	Mode      string `json:"mode"`
 	Held      bool   `json:"held"`
@@ -23,8 +22,6 @@ type keepAwakeStatus struct {
 	SaveError string `json:"save_error,omitempty"`
 }
 
-// newKeepAwakeCmd is tuios keep-awake: show or set [daemon] keep_awake. See
-// internal/session/keep_awake.go.
 func newKeepAwakeCmd() *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
@@ -79,7 +76,6 @@ func runKeepAwake(w io.Writer, args []string, jsonOut bool) error {
 	return nil
 }
 
-// writeKeepAwake prints the status in a few plain lines.
 func writeKeepAwake(w io.Writer, st keepAwakeStatus) {
 	fmt.Fprintf(w, "Mode:     %s\n", st.Mode)
 	agents := fmt.Sprintf("%d agents work", st.Working)
@@ -97,8 +93,6 @@ func writeKeepAwake(w io.Writer, st keepAwakeStatus) {
 	fmt.Fprintf(w, "Agents:   %s on this machine\n", agents)
 }
 
-// newDoctorKeepAwakeCommand is tuios doctor keep-awake: check that this
-// machine can be held awake, and show what the daemon does now.
 func newDoctorKeepAwakeCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "keep-awake",

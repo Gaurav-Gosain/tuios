@@ -21,26 +21,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// loadAndApplyConfig loads the user config (falling back to defaults on error)
-// and resolves the Settings the client starts from: this terminal's glyph
-// environment, the file, then the CLI flags. Every run path bootstraps through
-// here, so standalone, daemon (tuios new), and ssh all honor the same
-// overrides instead of each wiring its own set and drifting apart.
 func loadAndApplyConfig() (*config.UserConfig, *config.Settings) {
 	return localclient.LoadConfig(os.Getenv, flagOverrides())
 }
 
-// flagOverrides collects every interface CLI flag into one Overrides value, so
-// each entrypoint that layers flags over the config applies the same set. The
-// SSH server hands it to StartSSHServer, which applies it after the appearance
-// baseline; applying it here first would only be undone by that baseline.
 func flagOverrides() config.Overrides {
 	return interfaceFlags.Overrides()
 }
 
 func runLocal() error {
-	// The same check every other way into the TUI makes: a screen that cannot
-	// host it is far harder to diagnose once the TUI has taken it.
 	if err := checkTerminal(); err != nil {
 		return err
 	}
@@ -50,11 +39,6 @@ func runLocal() error {
 		fmt.Println("Debug mode enabled")
 	}
 
-	// The interactive TUI draws to this terminal. Go's standard log writes to
-	// stderr, so the client/daemon [DEBUG] lines would share the screen with the
-	// rendered UI and corrupt it. When internal debugging is on, divert the log
-	// stream to a file so the screen stays clean; the external daemon subprocess
-	// already discards its own output, so this covers the in-process client.
 	if debuglog.Enabled() {
 		if lf, lerr := debuglog.Open(debuglog.Path); lerr == nil {
 			log.SetOutput(lf)
@@ -63,28 +47,12 @@ func runLocal() error {
 
 	userConfig, settings := loadAndApplyConfig()
 
-	// A session should outlive the terminal window it was started in, without
-	// anybody typing "tuios attach" every time. The decision sits here, after
-	// the config is loaded and before anything has drawn, so neither path is
-	// ever half-entered.
-	//
-	// It affects bare "tuios" only. Every subcommand already says which mode it
-	// wants, and a session already running is a separate process this cannot
-	// reach, so the setting never disturbs one.
 	if useDaemonByDefault(userConfig) {
-		// startup.session names the session a bare "tuios" opens, made when it
-		// is gone, as "tuios attach NAME -c" does. Empty keeps the most recent.
 		name := userConfig.Startup.Session
 		if name != "" {
 			attachFocusWindow = userConfig.Startup.Window
 		}
 		err := runAttach(name, true)
-		// A daemon that will not start must not leave the user with no
-		// terminal. This route was not asked for on the command line: it is
-		// what the shipped default does, so the standalone session it replaced
-		// is still the right answer when the daemon is the thing that is
-		// broken. "tuios attach" keeps reporting the failure, because there the
-		// daemon is what the user asked for.
 		if !errors.Is(err, errDaemonUnreachable) {
 			return err
 		}
@@ -118,14 +86,8 @@ func runLocal() error {
 		IsDaemonSession: isDaemonSession,
 	}, nil)
 
-	// A quit the event loop cannot carry out still has to end the process: a
-	// force-killed ssh client leaves a pty nobody drains, and the frame write
-	// that fills it is what wedges the loop. finish runs once the cleanup
-	// below is done, so a Ctrl+C during it cannot leave the terminal raw. See
-	// armSignalQuit.
 	runReturned, finish := armSignalQuit(c.Program)
 
-	// See withoutHardTabs: tmux drops the background under a tab.
 	restoreTabs := withoutHardTabs()
 	finalModel, err := c.Run()
 	runReturned()
@@ -147,26 +109,20 @@ func runLocal() error {
 	return nil
 }
 
-// sshServerFlags is the `tuios ssh` command line, gathered so the runner reads
-// as one thing rather than as seven positional arguments.
 type sshServerFlags struct {
-	host           string
-	port           string
-	keyPath        string
-	defaultSession string
-	authorizedKeys string
-	ephemeral      bool
-	noAuth         bool
-	// The limit flags. Nil means the flag was not given, and the [ssh]
-	// section of the config file decides.
+	host             string
+	port             string
+	keyPath          string
+	defaultSession   string
+	authorizedKeys   string
+	ephemeral        bool
+	noAuth           bool
 	handshakeTimeout *time.Duration
 	idleTimeout      *time.Duration
 	maxHandshakes    *int
 	maxSessions      *int
 }
 
-// checkLimits refuses a negative limit flag. 0 turns a limit off, so a
-// negative value is a mistake and not a way to say "no limit".
 func (f sshServerFlags) checkLimits() error {
 	for _, d := range []struct {
 		name string
@@ -193,11 +149,6 @@ func runSSHServer(f sshServerFlags) error {
 		fmt.Println("Debug mode enabled")
 	}
 
-	// Decided before anything starts, and before the daemon is touched.
-	// StartSSHServer makes the same call and refuses the same binds; this one
-	// exists so the refusal can be answered with the flags this command has,
-	// which is the same reason cmd/tuios-web decides TLS in the command rather
-	// than leaving it to sip.
 	if err := checkSSHAuth(os.Stderr, f); err != nil {
 		return err
 	}
@@ -221,7 +172,6 @@ func runSSHServer(f sshServerFlags) error {
 		<-c
 		log.Println("Shutting down SSH server...")
 		cancel()
-		// Stop in-process daemon if we started one
 		session.StopInProcessDaemon()
 	}()
 
@@ -239,11 +189,7 @@ func runSSHServer(f sshServerFlags) error {
 		Version:            version,
 		Ephemeral:          f.ephemeral,
 		ShowKeys:           interfaceFlags.ShowKeys,
-		// The full flag set, not a subset: `tuios ssh` registers the same
-		// interface flags as every other run command, and the server applies
-		// them over the appearance baseline it loads. Applying them here
-		// instead would run before that baseline, which would clobber them.
-		Overrides: flagOverrides(),
+		Overrides:          flagOverrides(),
 	}
 	if err := server.StartSSHServer(ctx, cfg); err != nil {
 		return errfmt.Errorf("SSH server error: %w", err)
@@ -251,18 +197,9 @@ func runSSHServer(f sshServerFlags) error {
 	return nil
 }
 
-// useDaemonByDefault reports whether a bare "tuios" should attach to a
-// daemon-backed session rather than run standalone.
-//
-// Both overrides exist because the setting lives in the config file and the
-// thing it turns on is the daemon: a daemon that will not start would otherwise
-// leave the user with no way to open a terminal except to edit the file that is
-// causing it. The flag is for one run, the environment variable for a shell that
-// has to keep working.
 func useDaemonByDefault(cfg *config.UserConfig) bool {
 	if standaloneMode || os.Getenv("TUIOS_NO_DAEMON") == "1" {
 		return false
 	}
-	// A start session lives in the daemon, so naming one asks for it.
 	return cfg != nil && (cfg.Startup.Daemon || cfg.Startup.Session != "")
 }

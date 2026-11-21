@@ -45,9 +45,6 @@ func runTapeInteractive(tapeFile string) error {
 		userConfig = config.DefaultConfig()
 	}
 
-	// The config's appearance, so tape playback honors the user's borders,
-	// dock and the rest. Animations are forced off below for deterministic
-	// playback.
 	settings := config.Resolve(userConfig, config.Overrides{})
 
 	if err := theme.Initialize(interfaceFlags.ThemeName); err != nil {
@@ -58,17 +55,10 @@ func runTapeInteractive(tapeFile string) error {
 
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
-	// Force animations off for deterministic playback of hand-written tapes,
-	// matching recorded tapes (the recorder prepends DisableAnimations). Tapes
-	// can still re-enable them explicitly with EnableAnimations.
 	settings.Motion = config.MotionNone
 
 	player := tape.NewPlayer(commands)
 
-	// The factory, the same as every other client, so the tape's model has
-	// what a session has: capabilities, passthroughs, hooks, channels. It used
-	// to be a struct literal that named a dozen fields by hand and had none of
-	// the rest.
 	initialOS := app.NewOS(app.OSOptions{
 		Client:          app.ClientLocal,
 		KeybindRegistry: keybindRegistry,
@@ -84,8 +74,6 @@ func runTapeInteractive(tapeFile string) error {
 	p := tea.NewProgram(initialOS, app.ProgramOptions()...)
 	initialOS.BindProgram(p)
 
-	// A quit the event loop cannot carry out still has to end the process;
-	// finish runs once the cleanup below is done. See armSignalQuit.
 	runReturned, finish := armSignalQuit(p)
 
 	finalModel, err := p.Run()
@@ -121,7 +109,6 @@ func validateTapeFile(tapeFile string) error {
 	commands, parseErrors := script.Commands, script.Errors
 	if len(parseErrors) > 0 {
 		fmt.Fprintf(os.Stderr, "Parsing errors found:\n")
-		// file:line, column: the shape an editor's error list can jump to.
 		for _, err := range parseErrors {
 			fmt.Fprintf(os.Stderr, "  ✗ %s: %s\n", tapeFile, err)
 		}

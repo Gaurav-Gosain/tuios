@@ -55,7 +55,6 @@ func TestKeybindsListCoversEveryActionAndDefault(t *testing.T) {
 				jsonCells[k] = append(jsonCells[k], strings.Join(r.Keys, ", "))
 			}
 
-			// Every described action has a row.
 			for action := range config.ActionDescriptions {
 				if !hasAction(textCells, action) {
 					t.Errorf("text list has no row for action %q", action)
@@ -65,8 +64,6 @@ func TestKeybindsListCoversEveryActionAndDefault(t *testing.T) {
 				}
 			}
 
-			// Every default key of every section is on its action's row, in
-			// the scope the section belongs to, with the scope's chord.
 			scopeOf := map[string]config.Scope{}
 			for _, s := range config.Scopes(leader) {
 				for _, sec := range s.Sections {
@@ -102,8 +99,6 @@ func TestKeybindsListCoversEveryActionAndDefault(t *testing.T) {
 	}
 }
 
-// keybindingSectionTags is the toml name of every key table in
-// KeybindingsConfig, read from the struct so a new table is covered.
 func keybindingSectionTags(t *testing.T) []string {
 	t.Helper()
 	var out []string
@@ -130,9 +125,6 @@ func hasAction(cells map[[2]string][]string, action string) bool {
 	return false
 }
 
-// cellsHold reports whether one of the Keys cells lists press. A cell joins
-// keys with ", ", and a key can itself be ",", so the match is on the
-// separators around it.
 func cellsHold(cells []string, press string) bool {
 	for _, c := range cells {
 		if strings.Contains(", "+c+", ", ", "+press+", ") {
@@ -147,8 +139,6 @@ var (
 	titleChord = regexp.MustCompile(` \(.*\)$`)
 )
 
-// parseKeybindTables reads the text list into its Keys cells, by table title
-// and action.
 func parseKeybindTables(t *testing.T, text string) map[[2]string][]string {
 	t.Helper()
 	cells := map[[2]string][]string{}
@@ -179,8 +169,6 @@ func parseKeybindTables(t *testing.T, text string) map[[2]string][]string {
 	return cells
 }
 
-// captureLargeStdout is captureStdout for output larger than a pipe holds: it
-// reads while fn writes.
 func captureLargeStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	orig := os.Stdout

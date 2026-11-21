@@ -12,16 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// tuios plugins update: move installed plugins to the newest commit of the
-// ref they follow. It shares the install path: a new build folder, so a
-// failed build changes nothing that runs, then the state file, the lock file
-// and a restart.
-//
-// The person sees the commits, and answers again, also with --yes, when the
-// trust surface changed, the history of the branch was rewritten or a tag
-// moved or is gone. docs/PLUGINS.md says the same.
-
-// maxUpdateCommits bounds the commits an update shows.
 const maxUpdateCommits = 20
 
 func newPluginsUpdateCommand() *cobra.Command {
@@ -41,7 +31,6 @@ A plugin installed from a folder has no update. A plugin pinned to a commit stay
 			if inPane() {
 				return errFromPane("update")
 			}
-			// An update keeps a plugin as it is: on stays on, off stays off.
 			o.noEnable = true
 			return updatePlugins(cmd, args, o, check)
 		},
@@ -53,10 +42,8 @@ A plugin installed from a folder has no update. A plugin pinned to a commit stay
 	return cmd
 }
 
-// errSourceUnreachable marks a failed fetch, which is not a failed update.
 var errSourceUnreachable = errors.New("the source cannot be reached")
 
-// updatePlugins is tuios plugins update.
 func updatePlugins(cmd *cobra.Command, ids []string, o installOpts, check bool) error {
 	in, release, err := newInstaller(cmd, o)
 	if err != nil {
@@ -106,7 +93,6 @@ func updatePlugins(cmd *cobra.Command, ids []string, o installOpts, check bool) 
 	return nil
 }
 
-// updateOne updates one lock file entry, or shows what that would do.
 func (in *installer) updateOne(e herdrplugin.LockEntry, check bool) error {
 	if err := herdrplugin.CheckLockEntry(e); err != nil {
 		return err
@@ -153,8 +139,6 @@ func (in *installer) updateOne(e herdrplugin.LockEntry, check bool) error {
 	return in.finish(next, p, fetched)
 }
 
-// fetchHistory gets the newest commit of what e follows into a new fetch
-// folder, with its history and without the file contents of old commits.
 func (in *installer) fetchHistory(e herdrplugin.LockEntry) (string, *herdrplugin.LockEntry, *herdrplugin.Plugin, error) {
 	in.history = true
 	defer func() { in.history = false }()
@@ -165,9 +149,6 @@ func (in *installer) fetchHistory(e herdrplugin.LockEntry) (string, *herdrplugin
 	return work, got, p, err
 }
 
-// recordTag writes into plugins.lock that the up-to-date plugin id follows
-// a tag, for a lock entry written before the lock kept that. Only the Tag
-// field changes. A failure only warns: the plugin is still up to date.
 func (in *installer) recordTag(id string) {
 	err := herdrplugin.UpdateLock(in.dirs.LockPath(), func(l *herdrplugin.Lock) {
 		if x := l.Find(id); x != nil {
@@ -179,18 +160,6 @@ func (in *installer) recordTag(id string) {
 	}
 }
 
-// updateReason says why this update needs a fresh answer whatever the
-// manifest says, "" for an ordinary update. It asks again when the tag the
-// plugin follows moved or is gone; docs/PLUGINS.md says the same. got is the
-// fetched entry: its Tag says whether the ref is a tag now.
-//
-// e.Tag is what the lock says the ref was. A lock entry written before the
-// lock kept Tag reads as a branch until an update finds it up to date at a
-// tag, which records the tag. A tuios before this change that rewrites
-// plugins.lock (a lock shared in dotfiles, or a downgrade) drops the tag key
-// from every entry, which the next up-to-date update records again. A tag
-// already replaced by a branch before that update is never seen as a tag,
-// so that update goes on as for a branch.
 func updateReason(work string, e herdrplugin.LockEntry, got *herdrplugin.LockEntry) string {
 	switch {
 	case got.Tag:
@@ -204,9 +173,6 @@ func updateReason(work string, e herdrplugin.LockEntry, got *herdrplugin.LockEnt
 	return ""
 }
 
-// commitRange lists the commits of the update, newest first and at most
-// maxUpdateCommits, for the plugin's folder only. Each subject is the
-// author's text, so a character that does not print is quoted.
 func commitRange(work string, e herdrplugin.LockEntry, commit string, rewritten bool) string {
 	if rewritten {
 		if _, err := git(work, "merge-base", "--is-ancestor", e.Commit, commit); err != nil {
@@ -232,8 +198,6 @@ func commitRange(work string, e herdrplugin.LockEntry, commit string, rewritten 
 	return b.String()
 }
 
-// trustDiff shows what the new manifest runs or asks for that the running
-// one does not, and the reverse. It is "" when the approved hash still holds.
 func (in *installer) trustDiff(e herdrplugin.LockEntry, p *herdrplugin.Plugin) string {
 	if herdrplugin.TrustHash(e.Source, p, p.Grants) == e.Approved {
 		return ""
@@ -260,7 +224,6 @@ func (in *installer) trustDiff(e herdrplugin.LockEntry, p *herdrplugin.Plugin) s
 	return b.String()
 }
 
-// trustLines are the parts of a manifest a person approves, one per line.
 func trustLines(p *herdrplugin.Plugin) []string {
 	var out []string
 	for _, g := range p.Grants {
@@ -281,9 +244,6 @@ func trustLines(p *herdrplugin.Plugin) []string {
 	return append(out, herdrplugin.RunsLines(&herdrplugin.Plugin{Startup: p.Startup})...)
 }
 
-// updateRelease moves a first-party plugin to the release this tuios came
-// from. The update asks again, also with --yes, when the trust surface
-// changed.
 func (in *installer) updateRelease(e herdrplugin.LockEntry, check bool) error {
 	tag, err := runningTag()
 	if err != nil {

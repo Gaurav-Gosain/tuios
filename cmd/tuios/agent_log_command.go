@@ -19,10 +19,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// `tuios agent-log`: what the agent in a pane has been doing, read from the
-// activity ring the daemon keeps from its hooks, or a recap of it.
-
-// agentLogOptions are the flags of tuios agent-log.
 type agentLogOptions struct {
 	session string
 	window  string
@@ -32,24 +28,21 @@ type agentLogOptions struct {
 	json    bool
 }
 
-// agentLogEntry is one entry of the agent-activity result.
 type agentLogEntry struct {
-	Seq    uint64   `json:"seq"`
-	At     int64    `json:"at"`
-	Kind   string   `json:"kind"`
-	Tool   string   `json:"tool"`
-	Target string   `json:"target"`
-	Files  []string `json:"files"`
-	OK     *bool    `json:"ok"`
-	Exit   *int     `json:"exit"`
-	Text   string   `json:"text"`
-	// Outcome, DurationMS and Tools say how a stopped subagent ended.
-	Outcome    string `json:"outcome"`
-	DurationMS int64  `json:"duration_ms"`
-	Tools      int    `json:"tools"`
+	Seq        uint64   `json:"seq"`
+	At         int64    `json:"at"`
+	Kind       string   `json:"kind"`
+	Tool       string   `json:"tool"`
+	Target     string   `json:"target"`
+	Files      []string `json:"files"`
+	OK         *bool    `json:"ok"`
+	Exit       *int     `json:"exit"`
+	Text       string   `json:"text"`
+	Outcome    string   `json:"outcome"`
+	DurationMS int64    `json:"duration_ms"`
+	Tools      int      `json:"tools"`
 }
 
-// agentLogRecap is the recap of the agent-activity result.
 type agentLogRecap struct {
 	Since      int64    `json:"since"`
 	Turns      uint64   `json:"turns"`
@@ -65,7 +58,6 @@ type agentLogRecap struct {
 	State    string `json:"state"`
 }
 
-// agentLogResult is the agent-activity result, decoded for printing.
 type agentLogResult struct {
 	Entries []agentLogEntry `json:"entries"`
 	LastSeq uint64          `json:"last_seq"`
@@ -113,7 +105,6 @@ what the agent last said, and its state now. The test commands are
 	return cmd
 }
 
-// agentLogParams are the agent-activity params for o at now.
 func agentLogParams(o agentLogOptions, now time.Time) (map[string]any, error) {
 	if o.since < 0 {
 		return nil, errors.New("--since is a length of time, such as 30m")
@@ -159,8 +150,6 @@ func runAgentLog(o agentLogOptions, w io.Writer) error {
 	return printAgentLog(w, raw)
 }
 
-// printAgentLog prints the entries, one line each: the time, what happened,
-// and on what.
 func printAgentLog(w io.Writer, raw json.RawMessage) error {
 	var res agentLogResult
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
@@ -176,7 +165,6 @@ func printAgentLog(w io.Writer, raw json.RawMessage) error {
 	return nil
 }
 
-// agentLogLabel is the word an entry's line leads with.
 func agentLogLabel(e agentLogEntry) string {
 	switch e.Kind {
 	case session.ActivityToolDone:
@@ -187,7 +175,6 @@ func agentLogLabel(e agentLogEntry) string {
 	case session.ActivityToolFailed:
 		return "failed"
 	case session.ActivityTurnEnd:
-		// A turn can end with nothing said: an older harness sends no text.
 		if e.Text == "" {
 			return "finished"
 		}
@@ -200,15 +187,9 @@ func agentLogLabel(e agentLogEntry) string {
 	return plainLine(e.Kind)
 }
 
-// agentLogDetail is what an entry's line says after its label. Every string
-// in it was written by the agent or its shell, so each is kept to one plain
-// line.
 func agentLogDetail(e agentLogEntry) string {
 	switch e.Kind {
 	case session.ActivitySubagentStart, session.ActivitySubagentStop:
-		// "Research tmux (general-purpose) started": the subagent, then
-		// what it did. A stop says how it ended, "done after 3m, 14 tools",
-		// and from a daemon before outcomes just "stopped".
 		did := "started"
 		if e.Kind == session.ActivitySubagentStop {
 			did = subagentEnd(e)
@@ -218,7 +199,6 @@ func agentLogDetail(e agentLogEntry) string {
 		}
 		return plainLine(e.Text) + " " + did
 	case session.ActivitySessionStart:
-		// How the conversation started: startup, resume or clear.
 		if e.Text == "" {
 			return "started"
 		}
@@ -250,7 +230,6 @@ func agentLogDetail(e agentLogEntry) string {
 	return b.String()
 }
 
-// subagentEnd is how a subagent_stop entry says its subagent ended.
 func subagentEnd(e agentLogEntry) string {
 	did := "stopped"
 	switch e.Outcome {
@@ -273,7 +252,6 @@ func subagentEnd(e agentLogEntry) string {
 	return did + " " + strings.Join(parts, ", ")
 }
 
-// shortSpan is a length of time in its largest unit: 4s, 3m, 2h10m.
 func shortSpan(d time.Duration) string {
 	switch {
 	case d < time.Minute:
@@ -288,7 +266,6 @@ func shortSpan(d time.Duration) string {
 	return strconv.Itoa(h) + "h" + strconv.Itoa(m) + "m"
 }
 
-// listFiles names up to show of files, and how many more of total there are.
 func listFiles(files []string, total, show int) string {
 	names := make([]string, 0, show)
 	for _, f := range files {
@@ -306,13 +283,6 @@ func listFiles(files []string, total, show int) string {
 	return strings.Join(names, "")
 }
 
-// printAgentRecap prints the recap as a few short lines:
-//
-//	Since 14:02 (42m ago)
-//	3 turns. 6 files: api/retry.go, api/retry_test.go, api/backoff.go and 3 more
-//	11 commands. Tests: go test ./... passed 2m ago
-//	Last said: Added retry with backoff and tests.
-//	Now: done
 func printAgentRecap(w io.Writer, raw json.RawMessage, now time.Time) error {
 	var res agentLogResult
 	if err := jsonx.Unmarshal(raw, &res); err != nil {

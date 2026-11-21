@@ -18,9 +18,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// runSendKeys sends keystrokes to a running TUIOS session over the verb
-// protocol, and says where they went: the window the daemon wrote them to, or
-// the attached client. repeat 0 or 1 sends the sequence once.
 func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string, repeat int, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
@@ -35,8 +32,6 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 		"literal": literal,
 		"raw":     raw,
 	}
-	// Sent only when asked for, so a daemon from before repeat existed still
-	// takes a call that does not use it.
 	if repeat > 1 {
 		params["repeat"] = repeat
 	}
@@ -57,14 +52,12 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 		Keys     int    `json:"keys"`
 	}
 	if err := jsonx.Unmarshal(raw2, &res); err != nil || res.SentTo == "" {
-		// An older daemon answers {"type":"ok"} and nothing else.
 		return nil
 	}
 	fmt.Println(sendKeysSummary(res.SentTo, res.WindowID, res.Window, res.Keys))
 	return nil
 }
 
-// sendKeysSummary is the line send-keys prints: how many keys went where.
 func sendKeysSummary(sentTo, windowID, window string, keys int) string {
 	noun := "keys"
 	if keys == 1 {
@@ -79,8 +72,6 @@ func sendKeysSummary(sentTo, windowID, window string, keys int) string {
 	return fmt.Sprintf("sent %d %s to window %s (%s)", keys, noun, window, shortWindowID(windowID))
 }
 
-// runNewWindow opens a window in a session and reports its id, which is the
-// handle every later call needs.
 func runNewWindow(o newWindowOptions) error {
 	client, err := dialVerb()
 	if err != nil {
@@ -122,8 +113,6 @@ func runNewWindow(o newWindowOptions) error {
 		if o.timeout > 0 {
 			params["timeout"] = o.timeout
 		}
-		// The daemon answers when the program exits. With no timeout there
-		// is no bound worth guessing, so the call waits a day.
 		callTimeout := 24 * time.Hour
 		if o.timeout > 0 {
 			callTimeout = time.Duration(o.timeout)*time.Millisecond + 10*time.Second
@@ -154,9 +143,6 @@ func runNewWindow(o newWindowOptions) error {
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
-	// A daemon older than v0.8.0 ignores keep_open and wait, and opens an
-	// ordinary window. Say so, because the window closes on exit and the
-	// call did not wait.
 	if (o.keepOpen && !res.KeepOpen) || (o.wait && res.ExitCode == nil) {
 		if o.wait {
 			return reportVerbError(errStaleNewWindow, o.jsonOut)
@@ -172,13 +158,10 @@ func runNewWindow(o newWindowOptions) error {
 	if o.wait {
 		return newWindowExitStatus(true, res.ExitCode, res.Signal)
 	}
-	// The full id and nothing else, for id=$(tuios new-window --print-id).
 	if o.printID {
 		fmt.Println(res.WindowID)
 		return nil
 	}
-	// The machine is printed only when it is not this one, so the ordinary
-	// line keeps the shape every script that already reads it expects.
 	if res.Host != "" {
 		fmt.Printf("%s  %s  on %s\n", shortWindowID(res.WindowID), res.Name, res.Host)
 		return nil
@@ -187,15 +170,12 @@ func runNewWindow(o newWindowOptions) error {
 	return nil
 }
 
-// staleNewWindowParam reports whether err is that refusal.
 func staleNewWindowParam(err error) bool {
 	call, ok := errors.AsType[*session.VerbCallError](err)
 	return ok && call.Code == session.ErrVerbInvalidParams && call.Hint != nil &&
 		(call.Hint.Param == "keep_open" || call.Hint.Param == "wait" || call.Hint.Param == "timeout")
 }
 
-// newWindowExitStatus is how new-window --wait exits: with the program's own
-// status, or 128 plus the signal that ended it, as a shell reports it.
 func newWindowExitStatus(wait bool, code *int, signal int) error {
 	if !wait || code == nil {
 		return nil
@@ -211,9 +191,6 @@ func newWindowExitStatus(wait bool, code *int, signal int) error {
 	return nil
 }
 
-// runFocusWindow moves the focus and says where it landed. A relative or
-// directional move does not name its pane in advance, so echoing the request
-// would confirm nothing.
 func runFocusWindow(sessionName, windowTarget, relative, direction string, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
@@ -248,8 +225,6 @@ func runFocusWindow(sessionName, windowTarget, relative, direction string, jsonO
 	return nil
 }
 
-// runMoveWindow moves a window to another workspace, or with toSession to
-// another session.
 func runMoveWindow(sessionName, windowTarget, toSession string, workspace int, follow, jsonOutput bool) error {
 
 	params := map[string]any{
@@ -288,9 +263,6 @@ func runMoveWindow(sessionName, windowTarget, toSession string, workspace int, f
 	return nil
 }
 
-// runSetWindow changes a window's name or its minimized state. Both are
-// pointers because an unset one is left alone, and an empty name is a request
-// to clear it rather than a request to do nothing.
 func runSetWindow(sessionName, windowTarget string, name *string, minimized *bool, jsonOutput bool) error {
 
 	params := map[string]any{
@@ -323,9 +295,6 @@ func runSetWindow(sessionName, windowTarget string, name *string, minimized *boo
 	return nil
 }
 
-// runSendText writes text verbatim to a pane's PTY. Unlike send-keys it parses
-// nothing, so a trailing newline in the argument is the Enter that submits the
-// line, and one call is enough to type and run a command.
 func runSendText(sessionName, windowTarget, text string, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
@@ -338,7 +307,6 @@ func runSendText(sessionName, windowTarget, text string, allowBlocked, jsonOutpu
 		"window":  windowTarget,
 		"text":    text,
 	}
-	// Sent only when set, so a call without it works against an older daemon.
 	if allowBlocked {
 		params["allow_blocked"] = true
 	}
@@ -372,8 +340,6 @@ func runCapturePane(o captureOptions) error {
 		"palette":    o.palette,
 		"lines":      o.lines,
 	}
-	// Sent only when asked for, so a capture against an older daemon keeps
-	// working: it would refuse a source it does not know.
 	if o.lastCommand {
 		params["source"] = "last-command-output"
 	}
@@ -401,10 +367,6 @@ func runCapturePane(o captureOptions) error {
 	return printCapture(os.Stdout, raw, t.host, t.window, o.ansi || o.resolved)
 }
 
-// captureCapNote is the stderr line for a scrollback capture the default cap
-// or --commands shortened, or "" when it left nothing out. A daemon from
-// before lines_omitted does not say how many lines it left out, so a capture
-// of exactly the cap is reported without a count.
 func captureCapNote(raw json.RawMessage, explicit bool) string {
 	var res struct {
 		Content           string            `json:"content"`
@@ -454,11 +416,6 @@ func captureCapNote(raw json.RawMessage, explicit bool) string {
 	return ""
 }
 
-// printCapture writes a capture-pane result. A capture from this machine is
-// the content as it is. A capture from host is fenced with
-// session.UntrustedFence, with control and invisible format characters
-// removed (plainText). keepEscapes says the
-// caller asked for escape codes, and then SGR alone is kept (hostStyledText).
 func printCapture(w io.Writer, raw json.RawMessage, host, window string, keepEscapes bool) error {
 	var res struct {
 		Content string `json:"content"`
@@ -478,13 +435,10 @@ func printCapture(w io.Writer, raw json.RawMessage, host, window string, keepEsc
 	if keepEscapes {
 		content = hostStyledText(res.Content)
 	}
-	// The gutter on every line keeps a line the far pane printed, the close
-	// line included, inside the fence.
 	fmt.Fprintln(w, session.UntrustedFence(who, strings.TrimRight(content, "\n")))
 	return nil
 }
 
-// queryWindows queries the window list over the verb protocol (no TUI required).
 func queryWindows(sessionName string, jsonOutput, rail bool) error {
 	t, err := dialSessionTarget(sessionName)
 	if err != nil {
@@ -506,10 +460,6 @@ func queryWindows(sessionName string, jsonOutput, rail bool) error {
 	return printWindowList(raw, t.on())
 }
 
-// queryWindow describes one window with the get-window verb, so tuios
-// get-window is a read that a pane holding the read grant may make, like
-// list-windows. The JSON keeps the shape the client protocol's GetWindow
-// gave it: success and message, then the window's fields.
 func queryWindow(sessionName string, args []string, jsonOutput bool) error {
 	window := ""
 	if len(args) > 0 {
@@ -539,9 +489,6 @@ func queryWindow(sessionName string, args []string, jsonOutput bool) error {
 	return printWindowDetail(data)
 }
 
-// printWindowList renders the window list as a table. Without this the command
-// printed only that it had succeeded, which told a reader nothing they asked
-// for and made --json the only way to see a window.
 func printWindowList(raw json.RawMessage, on string) error {
 	var res struct {
 		Windows []windowRow `json:"windows"`
@@ -604,8 +551,6 @@ func printWindowList(raw json.RawMessage, on string) error {
 	return nil
 }
 
-// windowLabel is the name to show for a window: the name it was given, else
-// whatever its shell set as the title.
 func windowLabel(w windowRow) string {
 	switch {
 	case w.CustomName != "":
@@ -617,9 +562,6 @@ func windowLabel(w windowRow) string {
 	}
 }
 
-// shortWindowID trims a window uuid to the prefix that addresses it. The verb
-// protocol resolves a window from 8 or more leading characters, so this is the
-// shortest form that can be pasted back into another command.
 func shortWindowID(id string) string {
 	const prefix = 8
 	if len(id) <= prefix {
@@ -628,7 +570,6 @@ func shortWindowID(id string) string {
 	return id[:prefix]
 }
 
-// printWindowDetail renders one window as labelled lines.
 func printWindowDetail(data map[string]any) error {
 	encoded, err := jsonx.Marshal(data)
 	if err != nil {

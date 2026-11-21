@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newNotifyCommand is tuios notify: the [notify] push notifications.
 func newNotifyCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "notify",
@@ -44,7 +43,6 @@ environment. The output never shows a token or a full address.`,
 	return cmd
 }
 
-// notifyTestResult is one provider's result.
 type notifyTestResult struct {
 	Provider string `json:"provider"`
 	Host     string `json:"host,omitempty"`
@@ -52,7 +50,6 @@ type notifyTestResult struct {
 	Error    string `json:"error,omitempty"`
 }
 
-// errNotifyTestFailed makes the command exit non-zero after it printed why.
 var errNotifyTestFailed = errors.New("a provider failed. The result for each provider is above")
 
 func runNotifyTest(ctx context.Context, w io.Writer, jsonOutput bool) error {
@@ -107,7 +104,6 @@ func runNotifyTest(ctx context.Context, w io.Writer, jsonOutput bool) error {
 	return nil
 }
 
-// upperFirst starts a sentence with a capital letter.
 func upperFirst(s string) string {
 	if s == "" || s[0] < 'a' || s[0] > 'z' {
 		return s
@@ -115,7 +111,6 @@ func upperFirst(s string) string {
 	return string(s[0]-'a'+'A') + s[1:]
 }
 
-// trimStop drops a final full stop, so a line does not end in two.
 func trimStop(s string) string {
 	for len(s) > 0 && s[len(s)-1] == '.' {
 		s = s[:len(s)-1]

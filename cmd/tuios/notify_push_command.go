@@ -14,8 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newNotifyPushCommand is tuios notify push: the phones registered for Web
-// Push, through register-push, list-push and remove-push.
 func newNotifyPushCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "push",
@@ -108,8 +106,6 @@ an object with endpoint, p256dh and auth.`,
 	return cmd
 }
 
-// runPushVerb calls a push verb as the person: with the nonce given, or with
-// the nonce of a presence held on the same connection.
 func runPushVerb(w io.Writer, verb string, params map[string]any, nonce string, jsonOutput bool, text func(io.Writer, map[string]any)) error {
 	client, err := session.DialVerbClientAs(version)
 	if err != nil {
@@ -146,7 +142,6 @@ func runPushVerb(w io.Writer, verb string, params map[string]any, nonce string, 
 	return nil
 }
 
-// joinAny joins a JSON list of strings with commas.
 func joinAny(v any) string {
 	list, _ := v.([]any)
 	parts := make([]string, 0, len(list))
@@ -156,11 +151,8 @@ func joinAny(v any) string {
 	return strings.Join(parts, ", ")
 }
 
-// pushSubscriptionMax bounds the subscription file. An endpoint is at most
-// 2048 bytes, and the keys are short.
 const pushSubscriptionMax = 16 << 10
 
-// pushSubscription is the subscription register reads.
 type pushSubscription struct {
 	Endpoint string `json:"endpoint"`
 	P256dh   string `json:"p256dh"`
@@ -171,9 +163,6 @@ type pushSubscription struct {
 	} `json:"keys"`
 }
 
-// readPushSubscription reads a subscription from path, or from stdin when
-// path is "-". It takes the shape of PushSubscription.toJSON(), with the keys
-// under "keys", and the flat shape of register-push.
 func readPushSubscription(stdin io.Reader, path string) (pushSubscription, error) {
 	src := stdin
 	if path != "-" {

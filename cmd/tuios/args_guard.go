@@ -8,14 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// refuseUnreadArgs gives every leaf command that declares no argument rule
-// and names no argument in its Use line a rule that refuses arguments.
-//
-// cobra accepts any positional argument on a leaf with no Args rule, and a
-// command that does not read them drops them in silence. So `tuios
-// capture-pane -s work 3f2a` captured the focused pane, not pane 3f2a, and
-// said nothing. A command that reads arguments names them in its Use line
-// (`attach [session-name]`) or sets Args itself, and keeps them.
 func refuseUnreadArgs(root *cobra.Command) {
 	var walk func(*cobra.Command)
 	walk = func(c *cobra.Command) {
@@ -33,7 +25,6 @@ func refuseUnreadArgs(root *cobra.Command) {
 	walk(root)
 }
 
-// noArgsWithHint is cobra.NoArgs with words that say what to do instead.
 func noArgsWithHint(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil

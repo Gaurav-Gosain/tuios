@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// sentReceipts is the agent-message-receipts answer as the CLI reads it.
 type sentReceipts struct {
 	Receipts []struct {
 		ID            uint64 `json:"id"`
@@ -40,8 +39,6 @@ type sentReceipts struct {
 	} `json:"unreachable"`
 }
 
-// runReadSentMessages is read-agent-messages --sent: the mail window sent and
-// whether each was seen or read.
 func runReadSentMessages(window string, limit int, jsonOutput bool) error {
 	if window == "" {
 		return errors.New("--sent needs the sending window: run it in a pane, or pass -w with the window id")
@@ -65,8 +62,6 @@ func runReadSentMessages(window string, limit int, jsonOutput bool) error {
 	return nil
 }
 
-// printSentReceipts writes one line per message, and a line for each machine
-// that could not be asked.
 func printSentReceipts(w io.Writer, res sentReceipts) {
 	if len(res.Receipts) == 0 && len(res.Waiting) == 0 && len(res.Unreachable) == 0 {
 		fmt.Fprintln(w, "No mail from this window is held now.")

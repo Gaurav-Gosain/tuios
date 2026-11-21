@@ -12,10 +12,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// delegateMaxWait is the most --wait takes, the daemon's bound too.
 const delegateMaxWait = 10 * time.Minute
 
-// newDelegateCommand builds `tuios delegate`.
 func newDelegateCommand() *cobra.Command {
 	var sessionName, agent, role, isolation, name, cwd, parent string
 	var env, grants []string
@@ -129,7 +127,6 @@ From outside every pane, name the parent agent with --parent, or pass --wait.`,
 	return cmd
 }
 
-// delegateResult is the part of the delegate answer the CLI prints.
 type delegateResult struct {
 	WindowID     string `json:"window_id"`
 	Name         string `json:"name"`
@@ -169,8 +166,6 @@ func runDelegate(session string, params map[string]any, wait time.Duration, read
 	if ready <= 0 {
 		ready = 2 * time.Minute
 	}
-	// The daemon waits for the child to be ready, types the task, and with
-	// --wait waits for the outcome, so the client waits past all three.
 	raw, err := t.client.CallWithTimeout("delegate", params, ready+wait+5*time.Minute)
 	if err != nil {
 		return reportVerbError(explainHostedVerb(t, "delegate", err), jsonOutput)
@@ -192,7 +187,6 @@ func runDelegate(session string, params map[string]any, wait time.Duration, read
 	return nil
 }
 
-// printDelegate prints a delegate answer for a person or an agent to read.
 func printDelegate(res delegateResult, on string) {
 	who := fmt.Sprintf("%s (%s)", orNone(plainLine(res.Name)), shortWindowID(res.WindowID))
 	if !res.Delegated {

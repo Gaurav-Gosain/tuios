@@ -21,59 +21,46 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The worktree commands are thin: every decision is the daemon's, made in the
-// worktree verbs, so a person at a shell and an agent on the socket get the
-// same refusals for the same reasons. What lives here is the argument shapes
-// and the sentences. fan keep is the daemon's keep-fan; against a daemon from
-// before that verb it is composed here, as remove-worktree over every sibling
-// but one.
-
-// worktreeRow is one entry of list-worktrees as the CLI reads it.
 type worktreeRow struct {
-	Session      string   `json:"session"`
-	Repo         string   `json:"repo"`
-	RepoRoot     string   `json:"repo_root"`
-	Branch       string   `json:"branch"`
-	Path         string   `json:"path"`
-	Base         string   `json:"base"`
-	Group        string   `json:"group"`
-	FanID        string   `json:"fan_id"`
-	Main         bool     `json:"main"`
-	Managed      bool     `json:"managed"`
-	Gone         bool     `json:"gone"`
-	State        string   `json:"state"`
-	Harness      string   `json:"harness"`
-	Windows      int      `json:"windows"`
-	Attached     bool     `json:"attached"`
-	PromptStatus string   `json:"prompt_status"`
-	PromptNote   string   `json:"prompt_note"`
-	ReadyBy      string   `json:"prompt_ready_by"`
-	Agent        string   `json:"agent"`
-	Changes      *int     `json:"changes"`
-	Ahead        *int     `json:"ahead"`
-	Merged       bool     `json:"merged"`
-	MergedInto   string   `json:"merged_into,omitempty"`
-	PR           *ghpr.PR `json:"pr,omitempty"`
-	// Setup is the worktree's setup record, nil when it ran none.
-	Setup *session.WorktreeSetup `json:"setup,omitempty"`
+	Session      string                 `json:"session"`
+	Repo         string                 `json:"repo"`
+	RepoRoot     string                 `json:"repo_root"`
+	Branch       string                 `json:"branch"`
+	Path         string                 `json:"path"`
+	Base         string                 `json:"base"`
+	Group        string                 `json:"group"`
+	FanID        string                 `json:"fan_id"`
+	Main         bool                   `json:"main"`
+	Managed      bool                   `json:"managed"`
+	Gone         bool                   `json:"gone"`
+	State        string                 `json:"state"`
+	Harness      string                 `json:"harness"`
+	Windows      int                    `json:"windows"`
+	Attached     bool                   `json:"attached"`
+	PromptStatus string                 `json:"prompt_status"`
+	PromptNote   string                 `json:"prompt_note"`
+	ReadyBy      string                 `json:"prompt_ready_by"`
+	Agent        string                 `json:"agent"`
+	Changes      *int                   `json:"changes"`
+	Ahead        *int                   `json:"ahead"`
+	Merged       bool                   `json:"merged"`
+	MergedInto   string                 `json:"merged_into,omitempty"`
+	PR           *ghpr.PR               `json:"pr,omitempty"`
+	Setup        *session.WorktreeSetup `json:"setup,omitempty"`
 }
 
-// setupFlags are --setup and --setup-async, which new and fan share. A flag
-// left out sends nothing, so the daemon's [worktree] setup applies.
 type setupFlags struct {
 	command string
 	async   bool
 	set     func(name string) bool
 }
 
-// add puts the flags on cmd.
 func (f *setupFlags) add(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.command, "setup", "", "Run this shell command in each new worktree before the agent starts. An empty value runs none (default: [worktree] setup)")
 	cmd.Flags().BoolVar(&f.async, "setup-async", false, "Start the agent at once while the setup runs (default: [worktree] setup_async)")
 	f.set = func(name string) bool { return cmd.Flags().Changed(name) }
 }
 
-// params adds what was passed to the call's params.
 func (f *setupFlags) params(params map[string]any) {
 	if f.set == nil {
 		return
@@ -86,7 +73,6 @@ func (f *setupFlags) params(params map[string]any) {
 	}
 }
 
-// newWorktreeCommand builds `tuios worktree` and its subcommands.
 func newWorktreeCommand() *cobra.Command {
 	worktreeCmd := &cobra.Command{
 		Use:   "worktree",
@@ -316,7 +302,6 @@ drawn inside the pane.`,
 	return worktreeCmd
 }
 
-// newFanCommand builds `tuios fan` and `tuios fan keep`.
 func newFanCommand() *cobra.Command {
 	var fanAgents, fanEnv, fanPrompts, fanGrants []string
 	var fanRepo, fanBase, fanName, fanHost, fanJoin, fanTask, fanTaskSession string
@@ -500,7 +485,6 @@ its siblings there.`,
 	return fanCmd
 }
 
-// repoArg is the repo parameter: the flag, or the directory the person is in.
 func repoArg(repo string) (string, error) {
 	if repo != "" {
 		return repo, nil
@@ -508,8 +492,6 @@ func repoArg(repo string) (string, error) {
 	return os.Getwd()
 }
 
-// resolveAgentCommand turns the name a person types for an agent into the
-// program that starts it, refusing a name no harness manifest knows.
 func resolveAgentCommand(agent string) (string, error) {
 	reg, _ := harness.Load(harness.UserDir())
 	_, command, ok := reg.Resolve(agent)
@@ -557,8 +539,6 @@ func runWorktreeNew(branch, repo, base, name, agent, host, prompt string, clone,
 	if err != nil {
 		return err
 	}
-	// A clone on another machine can take minutes, and the daemon there
-	// bounds it at four, so the call waits a little longer than that.
 	raw, err := t.client.CallWithTimeout("new-worktree", params, 5*time.Minute)
 	t.Close()
 	if err != nil {
@@ -581,8 +561,6 @@ func runWorktreeNew(branch, repo, base, name, agent, host, prompt string, clone,
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
-	// A prompt that was not taken fails the command, as it fails
-	// start-agent. One a sync setup holds is still on its way.
 	promptFailed := res.PromptStatus != "" && res.PromptStatus != "sent" && res.PromptStatus != "pending"
 	if jsonOutput {
 		if err := printVerbResultOn(t, raw, true); err != nil {
@@ -639,12 +617,10 @@ func runWorktreeNew(branch, repo, base, name, agent, host, prompt string, clone,
 	return showMadeSession(t.host, res.Session)
 }
 
-// listWorktrees calls list-worktrees on this machine and decodes the rows.
 func listWorktrees(repo, group string, changes bool) ([]worktreeRow, error) {
 	return listWorktreesOn("", repo, group, changes)
 }
 
-// listWorktreesOn calls list-worktrees on host, "" for this machine.
 func listWorktreesOn(host, repo, group string, changes bool) ([]worktreeRow, error) {
 	t, err := dialHost(host)
 	if err != nil {
@@ -692,8 +668,6 @@ func runWorktreeList(host, repo, group string, jsonOutput bool, changes bool) er
 	return nil
 }
 
-// renderWorktreeTable draws the worktree listing in the same table the
-// session listing uses, so the two read alike.
 func renderWorktreeTable(rows []worktreeRow) string {
 	cells := make([][]string, 0, len(rows))
 	for _, r := range rows {
@@ -737,8 +711,6 @@ func renderWorktreeTable(rows []worktreeRow) string {
 	return renderTable([]string{"SESSION", "REPO", "BRANCH", "AGENT", "CHANGES", "MERGED", "PROMPT", "SETUP", "PR", "STATUS"}, cells)
 }
 
-// setupCell is the SETUP column: the state, with the exit status of a
-// setup that failed.
 func setupCell(s *session.WorktreeSetup) string {
 	if s == nil {
 		return "-"
@@ -749,8 +721,6 @@ func setupCell(s *session.WorktreeSetup) string {
 	return s.State
 }
 
-// setupStartedLine says what a new worktree's setup does next, "" when it
-// runs none.
 func setupStartedLine(s *session.WorktreeSetup, setupErr string) string {
 	switch {
 	case setupErr != "":
@@ -764,8 +734,6 @@ func setupStartedLine(s *session.WorktreeSetup, setupErr string) string {
 	}
 }
 
-// renderTable draws a listing with the border and colours of the session
-// table, for any set of columns.
 func renderTable(headers []string, rows [][]string) string {
 	return table.New().
 		Border(lipgloss.RoundedBorder()).
@@ -811,25 +779,21 @@ func runWorktreeRemove(target string, stash, force, keepSession, jsonOutput bool
 	return nil
 }
 
-// removedWorktree is the result of remove-worktree as the CLI reads it.
 type removedWorktree struct {
-	Session       string `json:"session"`
-	Branch        string `json:"branch"`
-	Path          string `json:"path"`
-	Changes       int    `json:"changes"`
-	Ignored       int    `json:"ignored"`
-	Stashed       bool   `json:"stashed"`
-	StashMessage  string `json:"stash_message"`
-	Discarded     bool   `json:"discarded"`
-	SessionKilled bool   `json:"session_killed"`
-	// ClientsSwitched counts the clients moved to another session before
-	// the kill.
+	Session         string `json:"session"`
+	Branch          string `json:"branch"`
+	Path            string `json:"path"`
+	Changes         int    `json:"changes"`
+	Ignored         int    `json:"ignored"`
+	Stashed         bool   `json:"stashed"`
+	StashMessage    string `json:"stash_message"`
+	Discarded       bool   `json:"discarded"`
+	SessionKilled   bool   `json:"session_killed"`
 	ClientsSwitched int    `json:"clients_switched"`
 	Gone            bool   `json:"gone"`
 	Note            string `json:"note"`
 }
 
-// sentences says what was removed, what was kept, and where the changes went.
 func (r removedWorktree) sentences() string {
 	var b strings.Builder
 	if r.Gone {
@@ -844,8 +808,6 @@ func (r removedWorktree) sentences() string {
 		fmt.Fprintf(&b, "%d uncommitted %s %s discarded.\n", r.Changes, plural.Word(r.Changes, "change", "changes"), plural.Word(r.Changes, "was", "were"))
 	}
 	if r.Ignored > 0 {
-		// The part nothing saves: git never stashes ignored files, and the
-		// removal deleted them without --force.
 		fmt.Fprintf(&b, "%d ignored %s deleted, and git never stashes ignored files.\n", r.Ignored, plural.Word(r.Ignored, "file was", "files were"))
 	}
 	if r.ClientsSwitched > 0 {
@@ -914,35 +876,22 @@ func runWorktreeDiff(name string, stat bool) error {
 	return nil
 }
 
-// fanOptions is what `tuios fan` sends.
 type fanOptions struct {
-	// host is the machine to fan out on, "" for this one.
-	host    string
-	clone   bool
-	count   int
-	agents  []string
-	prompt  string
-	prompts []string
-	env     map[string]string
-	// explicitEnv says the person passed --env, so a daemon that cannot take
-	// env is an error rather than a reason to send without it.
-	explicitEnv      bool
-	repo, base, name string
-	// join is a session of the fan to add attempts to.
-	join string
-	// grants is --grants, nil when it was not passed.
-	grants []string
-	// task and taskSession are --task and --task-session: the card the fan
-	// works on.
+	host              string
+	clone             bool
+	count             int
+	agents            []string
+	prompt            string
+	prompts           []string
+	env               map[string]string
+	explicitEnv       bool
+	repo, base, name  string
+	join              string
+	grants            []string
 	task, taskSession string
-	// setup is --setup and --setup-async, nil from a caller with neither.
-	setup *setupFlags
+	setup             *setupFlags
 }
 
-// fanCallerEnv builds the environment fan sends: PATH always, so the daemon
-// finds the agents where this shell does, and each --env: NAME takes this
-// process's value, NAME=VALUE sets one. A NAME this process does not have is
-// an error, not an empty variable.
 func fanCallerEnv(flags []string, getenv func(string) string, environ []string) (map[string]string, error) {
 	env := map[string]string{}
 	if path := getenv("PATH"); path != "" {
@@ -972,7 +921,6 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 		return err
 	}
 	if o.host == hostAny {
-		// This machine's daemon picks the machine for every attempt.
 		if len(o.agents) > 1 || o.task != "" || o.repo != "" {
 			return errors.New("--host any places one --agent, in this repository, with no --task or --repo. Name the host instead")
 		}
@@ -995,9 +943,6 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 		}
 	}
 	if o.host != "" && o.host != "local" {
-		// The daemon on another machine refuses env from a link, and this
-		// machine's PATH means nothing there: the host looks the agents up
-		// on its own.
 		if o.explicitEnv {
 			return errors.New("--env passes this shell's variables to agents on this machine, and a call to another machine may not carry any. Set them in the host's environment instead")
 		}
@@ -1010,7 +955,6 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 	if o.count > 0 {
 		params["count"] = o.count
 	}
-	// One agent goes as agent, which every daemon takes; several as agents.
 	if len(o.agents) == 1 {
 		params["agent"] = o.agents[0]
 	} else {
@@ -1050,9 +994,6 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 		return err
 	}
 	raw, err := t.client.CallWithTimeout("fan", params, 5*time.Minute)
-	// A daemon from before env refuses it. The PATH the CLI sends on its own
-	// is a convenience, so the call is made again without it, as it always
-	// was; an --env the person asked for is not dropped quietly.
 	var callErr *session.VerbCallError
 	if err != nil && !o.explicitEnv && errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams &&
 		callErr.Hint != nil && callErr.Hint.Param == "env" && params["env"] != nil {
@@ -1145,9 +1086,6 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 	return nil
 }
 
-// waitFanPrompts polls the group until no prompt is pending or held. The
-// daemon's own wait bounds it: a waiting prompt turns into not_sent when the
-// ready timeout ends, so this loop always finishes.
 func waitFanPrompts(host, group string) ([]worktreeRow, error) {
 	for {
 		rows, err := listWorktreesOn(host, "", group, false)
@@ -1167,22 +1105,17 @@ func waitFanPrompts(host, group string) ([]worktreeRow, error) {
 	}
 }
 
-// fanKeepOutcome is one sibling of a fan keep, as the CLI reports it.
 type fanKeepOutcome struct {
 	Session string `json:"session"`
 	Removed bool   `json:"removed"`
 	Note    string `json:"note"`
 }
 
-// fanKeepMerge is the --merge of fan keep.
 type fanKeepMerge struct {
 	on         bool
 	mode, into string
 }
 
-// runFanKeep keeps one session of a fan with the daemon's keep-fan. A daemon
-// from before the verb gets the loop the CLI ran before it, with the same
-// output.
 func runFanKeep(target string, stash, force, jsonOutput bool, merge fanKeepMerge) error {
 	host, winner := splitHostSession(target)
 	t, err := dialHost(host)
@@ -1246,8 +1179,6 @@ func runFanKeep(target string, stash, force, jsonOutput bool, merge fanKeepMerge
 	return reportFanKeep(t, res.Kept, res.Branch, res.Group, outcomes, res.Left, res.Merge, jsonOutput)
 }
 
-// reportFanKeep prints what a fan keep did, and exits 1 when a sibling was
-// left in place.
 func reportFanKeep(t *verbTarget, winner, branch, group string, outcomes []fanKeepOutcome, left int, merge *shipMergeResult, jsonOutput bool) error {
 	if jsonOutput {
 		out := map[string]any{"kept": winner, "group": group, "siblings": outcomes, "left": left}
@@ -1272,7 +1203,6 @@ func reportFanKeep(t *verbTarget, winner, branch, group string, outcomes []fanKe
 	return nil
 }
 
-// completeWorktreeSessions offers the worktree session names to the shell.
 func completeWorktreeSessions(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	rows, err := listWorktrees("", "", false)
 	if err != nil {

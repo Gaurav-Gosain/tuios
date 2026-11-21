@@ -19,8 +19,6 @@ import (
 	"golang.org/x/term"
 )
 
-// newShipCommand builds `tuios ship`: commit an agent's work in its worktree,
-// merge the branch into its base, push it, and open a pull request.
 func newShipCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ship",
@@ -50,7 +48,6 @@ command runs inside a tuios pane, you must also allow it in the Inbox.`,
 	return cmd
 }
 
-// shipFlags are the flags every ship subcommand takes.
 type shipFlags struct {
 	session, window string
 	json            bool
@@ -62,7 +59,6 @@ func (f *shipFlags) add(cmd *cobra.Command) {
 	addJSONFlag(cmd, &f.json)
 }
 
-// dialShip connects for a ship verb, on this machine only.
 func dialShip(f shipFlags) (*verbTarget, error) {
 	host, sess, _, err := resolveTarget(f.session, f.window)
 	if err != nil {
@@ -78,7 +74,6 @@ func dialShip(f shipFlags) (*verbTarget, error) {
 	return dialTarget(f.session, f.window)
 }
 
-// shipParams is the parameter map with the target's session and window.
 func shipParams(t *verbTarget, params map[string]any) map[string]any {
 	if params == nil {
 		params = map[string]any{}
@@ -91,9 +86,6 @@ func shipParams(t *verbTarget, params map[string]any) map[string]any {
 	return params
 }
 
-// shipFailed reports a failed ship verb: the daemon's hint as text, or under
-// --json an object with the code and the files a conflict or a dirty
-// checkout names.
 func shipFailed(t *verbTarget, verb string, err error, jsonOutput bool) error {
 	if !jsonOutput {
 		return t.explain(verb, err)
@@ -111,7 +103,6 @@ func shipFailed(t *verbTarget, verb string, err error, jsonOutput bool) error {
 	return nil
 }
 
-// newShipCommitCommand builds `tuios ship commit`.
 func newShipCommitCommand() *cobra.Command {
 	var f shipFlags
 	var message string
@@ -170,7 +161,6 @@ prompt. Use --force to commit then.`,
 	return cmd
 }
 
-// shortHash is the first seven characters of a commit hash.
 func shortHash(sha string) string {
 	if len(sha) > 7 {
 		return sha[:7]
@@ -178,7 +168,6 @@ func shortHash(sha string) string {
 	return sha
 }
 
-// mergeMode reads --squash and --ff-only.
 func mergeMode(squash, ffOnly bool) (string, error) {
 	switch {
 	case squash && ffOnly:
@@ -191,7 +180,6 @@ func mergeMode(squash, ffOnly bool) (string, error) {
 	return "", nil
 }
 
-// shipMergeResult is what ship-merge returns, and keep-fan in its merge field.
 type shipMergeResult struct {
 	Session     string `json:"session"`
 	Branch      string `json:"branch"`
@@ -205,7 +193,6 @@ type shipMergeResult struct {
 	Uncommitted int    `json:"uncommitted"`
 }
 
-// sentences says what a merge did.
 func (r shipMergeResult) sentences() string {
 	var b strings.Builder
 	switch {
@@ -222,7 +209,6 @@ func (r shipMergeResult) sentences() string {
 	return b.String()
 }
 
-// newShipMergeCommand builds `tuios ship merge`.
 func newShipMergeCommand() *cobra.Command {
 	var f shipFlags
 	var into, message string
@@ -289,7 +275,6 @@ worktree are not merged. Commit them first with 'tuios ship commit'.`,
 	return cmd
 }
 
-// outboundFlags are the flags of ship push and ship pr.
 type outboundFlags struct {
 	shipFlags
 	remote  string
@@ -306,7 +291,6 @@ func (f *outboundFlags) add(cmd *cobra.Command) {
 	cmd.Flags().DurationVar(&f.wait, "wait", 2*time.Minute, "How long to wait for an answer in the Inbox, when one is needed")
 }
 
-// shipConfirm is how an outbound ship command asks before it sends.
 type shipConfirm struct {
 	yes bool
 	in  io.Reader
@@ -318,11 +302,6 @@ func newShipConfirm(yes bool) shipConfirm {
 	return shipConfirm{yes: yes, in: os.Stdin, tty: term.IsTerminal(int(os.Stdin.Fd())), out: os.Stderr}
 }
 
-// callOutbound calls ship-push or ship-pr. The first call carries no token,
-// so the daemon answers confirm_required with what it would send. That is
-// printed, and the call is made again with the token when the person says
-// yes or passed --yes. A change between the two calls is refused by the
-// daemon and reported, never retried.
 func callOutbound(t *verbTarget, verb, action string, params map[string]any, f outboundFlags, c shipConfirm) (json.RawMessage, error) {
 	if f.remote != "" {
 		params["remote"] = f.remote
@@ -337,12 +316,10 @@ func callOutbound(t *verbTarget, verb, action string, params map[string]any, f o
 	timeout := f.wait + 4*time.Minute
 	raw, err := t.client.CallWithTimeout(verb, params, timeout)
 	if err == nil {
-		// The daemon asked for no confirmation.
 		return raw, nil
 	}
 	callErr, ok := errors.AsType[*session.VerbCallError](err)
 	if !ok || callErr.Code != session.ErrVerbConfirmRequired || callErr.Hint == nil || callErr.Hint.Confirm == "" {
-		// Nothing to confirm: a refusal before anything would be sent.
 		return nil, err
 	}
 	fmt.Fprintf(c.out, "tuios ship will:\n")
@@ -368,7 +345,6 @@ func callOutbound(t *verbTarget, verb, action string, params map[string]any, f o
 	return t.client.CallWithTimeout(verb, params, timeout)
 }
 
-// newShipPushCommand builds `tuios ship push`.
 func newShipPushCommand() *cobra.Command {
 	var f outboundFlags
 	cmd := &cobra.Command{
@@ -417,7 +393,6 @@ Inbox. The command waits for it (--wait).`,
 	return cmd
 }
 
-// newShipPRCommand builds `tuios ship pr`.
 func newShipPRCommand() *cobra.Command {
 	var f outboundFlags
 	var base, title, body string
@@ -500,7 +475,6 @@ The rail shows the pull request and its checks on the agent's row, and
 	return cmd
 }
 
-// newShipStatusCommand builds `tuios ship status`.
 func newShipStatusCommand() *cobra.Command {
 	var f shipFlags
 	var refresh bool

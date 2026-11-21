@@ -12,19 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Running the worktree and agent commands on another machine.
-//
-// fan, worktree new, worktree ls and start-agent take --host (start-agent
-// takes -s HOST:SESSION, like every session verb), and worktree rm, fan keep
-// and worktree pull take HOST:SESSION. Each dials the host's daemon through
-// this machine's daemon and its link, and sends the same verb a local call
-// sends. The one parameter that changes is the repository: a directory here
-// means nothing there, so it is sent as this checkout's origin URL, and the
-// host finds its own checkout of that repository, under [hosts.NAME]
-// repos_root when that is set.
-
-// dialHost connects to the daemon on host, or to this machine's for "" or
-// "local".
 func dialHost(host string) (*verbTarget, error) {
 	if host == federation.LocalHostName {
 		host = ""
@@ -49,8 +36,6 @@ func dialHost(host string) (*verbTarget, error) {
 	return t, nil
 }
 
-// splitHostSession reads a HOST:SESSION argument. A name with no host is on
-// this machine, and local:NAME is too.
 func splitHostSession(arg string) (host, name string) {
 	st := federation.ParseSessionTarget(arg)
 	host = st.Host
@@ -60,11 +45,6 @@ func splitHostSession(arg string) (host, name string) {
 	return host, st.Session
 }
 
-// repoParams is the repository part of a worktree or agent call. On this
-// machine it is the directory, --repo or the current one. On a host it is
-// --repo as a directory on the host, or else the origin URL of the
-// repository the current directory is in, with the host's repos_root and
-// clone.
 func repoParams(host, repo string, clone bool) (map[string]any, error) {
 	if host == "" {
 		if clone {
@@ -96,8 +76,6 @@ func repoParams(host, repo string, clone bool) (map[string]any, error) {
 	return params, nil
 }
 
-// originHere is the origin URL of the repository the current directory is
-// in, the name a host knows it by.
 func originHere() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -121,9 +99,6 @@ func originHere() (string, error) {
 	return url, nil
 }
 
-// explainHostedVerb is t.explain with the two refusals a host adds to the
-// worktree and agent verbs: a daemon too old to find a repository by its
-// origin, and a repository it has no checkout of.
 func explainHostedVerb(t *verbTarget, verb string, err error) error {
 	var call *session.VerbCallError
 	if t.host != "" && errors.As(err, &call) {

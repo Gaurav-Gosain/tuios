@@ -9,11 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The target grammar as the flags see it, and what the CLI prints for mail
-// that came from another machine. The grammar itself is pinned in the
-// federation package; this holds the flag-level rules: which of -s and -w
-// wins, when they must agree, and that local folds to this machine.
-
 func TestResolveTargetFlags(t *testing.T) {
 	cases := []struct {
 		s, w               string
@@ -28,9 +23,7 @@ func TestResolveTargetFlags(t *testing.T) {
 		{"build:api", "build:api:0", "build", "api", "0", false},
 		{"local:api", "0", "", "api", "0", false},
 		{"", "local::https://x", "", "", "https://x", false},
-		// A plain window title that only looks qualified stays a window here.
 		{"", "https://example.com", "", "", "https://example.com", false},
-		// Disagreement is refused rather than guessed.
 		{"api", "build:api:0", "", "", "", true},
 		{"build:api", "other:api:0", "", "", "", true},
 		{"build:api", "build:ci:0", "", "", "", true},
@@ -79,8 +72,6 @@ func TestPrintedMailCannotReachTheTerminal(t *testing.T) {
 		}
 	}
 
-	// The agent listing prints names other programs chose, and gets the
-	// same treatment.
 	raw, _ = json.Marshal(map[string]any{
 		"agents": []map[string]any{{"window_id": "abcdefgh1234", "name": "ed\x1b[2Jitor", "state": "idle", "message": "\x1b]0;x\x07note"}},
 		"total":  1,
@@ -89,8 +80,6 @@ func TestPrintedMailCannotReachTheTerminal(t *testing.T) {
 	if err := printAgentList(&buf, raw, false, ""); err != nil {
 		t.Fatal(err)
 	}
-	// The table itself may carry styling escapes, so the check is for the
-	// sequences the names carried, not for any escape at all.
 	for _, bad := range []string{"\x1b[2J", "\x1b]0;", "\x07"} {
 		if strings.Contains(buf.String(), bad) {
 			t.Fatalf("ASSERTION: the sequence %q from a window name reached the agent listing:\n%q", bad, buf.String())

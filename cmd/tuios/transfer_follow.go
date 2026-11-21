@@ -24,21 +24,6 @@ import (
 	"golang.org/x/term"
 )
 
-// Following copies the daemon runs: tuios cp and tuios transfers wait.
-//
-// A copy is a job in the daemon, so the command only watches it. It
-// subscribes to the transfer events before it starts anything, so no change
-// is missed, and reads the job's row from each event. A caller that may not
-// subscribe (a pane without the read grant) reads transfer-list instead,
-// twice a second.
-//
-// What it prints depends on where the output goes. On a terminal a block on
-// stderr is drawn again in place: the copy, its bars, the rate and the time
-// left. Elsewhere one line per change of state and at most one progress line
-// each ten seconds. With --json, one JSON object per line on stdout, the
-// events of the copy.
-
-// copyRow is the part of a transfer row the CLI reads.
 type copyRow struct {
 	ID               string                 `json:"id"`
 	Name             string                 `json:"name"`
@@ -80,13 +65,10 @@ func (r copyRow) ended() bool {
 	return r.State == "done" || r.State == "failed" || r.State == "cancelled"
 }
 
-// shownName is the copy's name, safe to print (see shown).
 func (r copyRow) shownName() string { return shown(r.Name) }
 
-// shownWhere is where, safe to print.
 func (r copyRow) shownWhere() string { return shown(r.where()) }
 
-// where is the copy's destination as a person writes it.
 func (r copyRow) where() string {
 	p := r.Final
 	if p == "" {
@@ -108,8 +90,6 @@ func (r copyRow) host() string {
 	return r.Dst.Host
 }
 
-// The exit codes of tuios cp and tuios transfers wait. They are stable: the
-// errors skill topic lists them.
 const (
 	exitCopyFailed    = 1
 	exitCopyUsage     = 2
@@ -120,7 +100,6 @@ const (
 	exitCopyCancelled = 130
 )
 
-// exitForCode is the exit code of a copy that failed with a daemon error code.
 func exitForCode(code string) int {
 	switch code {
 	case session.ErrVerbForbidden:
@@ -135,8 +114,6 @@ func exitForCode(code string) int {
 	return exitCopyFailed
 }
 
-// rowExit is the exit code one finished copy gives. explicit says the person
-// chose the conflict policy, so files it skipped are what they asked for.
 func rowExit(r copyRow, explicit bool) int {
 	switch r.State {
 	case "done":
@@ -150,8 +127,6 @@ func rowExit(r copyRow, explicit bool) int {
 	return exitForCode(r.Code)
 }
 
-// worseExit is the exit code that says more of two: a cancel, then any
-// failure (the first one found), then a partial copy, then success.
 func worseExit(a, b int) int {
 	rank := func(c int) int {
 		switch c {
@@ -170,7 +145,6 @@ func worseExit(a, b int) int {
 	return a
 }
 
-// copyOutput is how the follower prints.
 type copyOutput int
 
 const (
@@ -180,7 +154,6 @@ const (
 	outQuiet
 )
 
-// follower watches some copies to their end.
 type follower struct {
 	ctl      *session.VerbClient
 	ids      []string
@@ -189,11 +162,8 @@ type follower struct {
 	stdout   io.Writer
 	stderr   io.Writer
 	explicit bool
-	// files are the files a copy skipped or could not copy, by copy id, for
-	// the summary.
-	files map[string][]fileNote
-	// ask answers conflicts on the terminal.
-	ask func(r copyRow) bool
+	files    map[string][]fileNote
+	ask      func(r copyRow) bool
 
 	mu        sync.Mutex
 	events    chan json.RawMessage
@@ -215,7 +185,6 @@ type fileNote struct {
 	rel, state, code, msg string
 }
 
-// newFollower sets up the output for the given mode.
 func newFollower(ctl *session.VerbClient, out copyOutput, explicit bool) *follower {
 	f := &follower{
 		ctl: ctl, rows: map[string]copyRow{}, out: out, explicit: explicit,
@@ -236,8 +205,6 @@ func newFollower(ctl *session.VerbClient, out copyOutput, explicit bool) *follow
 	return f
 }
 
-// subscribe opens the event stream on a connection of its own, before any
-// copy starts. A caller that may not subscribe polls instead.
 func (f *follower) subscribe() {
 	ev, err := dialVerb()
 	if err == nil {
@@ -263,7 +230,6 @@ func (f *follower) subscribe() {
 	}()
 }
 
-// add follows a copy from its first row.
 func (f *follower) add(r copyRow) {
 	f.mu.Lock()
 	f.ids = append(f.ids, r.ID)
@@ -279,10 +245,6 @@ func (f *follower) emit(v map[string]any) {
 	_, _ = fmt.Fprintln(f.stdout, jsonSafe(string(line)))
 }
 
-// jsonSafe escapes the code points encoding/json writes raw that a terminal
-// still acts on: DEL and the C1 controls (U+0080 to U+009F, where U+009B is
-// a CSI). They can only be inside strings, so the escape keeps the JSON
-// valid and the value the same.
 func jsonSafe(line string) string {
 	if !strings.ContainsFunc(line, func(r rune) bool { return r == 0x7f || (r >= 0x80 && r <= 0x9f) }) {
 		return line
@@ -298,12 +260,6 @@ func jsonSafe(line string) string {
 	return b.String()
 }
 
-// shown makes a string that came from the daemon or a far host safe to print
-// on a terminal. A file name may hold any byte but NUL and /, so a name on a
-// host can carry an escape sequence that sets the title, moves the cursor or
-// writes to the clipboard of whoever copies it. Each control character, each
-// byte that is not UTF-8, and each bidirectional override is written as a
-// visible escape instead: \x1b, \xff, \u202e.
 func shown(s string) string {
 	if !strings.ContainsFunc(s, func(r rune) bool { return r == utf8.RuneError || unsafeRune(r) }) {
 		return s
@@ -326,8 +282,6 @@ func shown(s string) string {
 	return b.String()
 }
 
-// unsafeRune is a code point a terminal acts on instead of drawing: C0, DEL,
-// C1, and the bidirectional controls that reorder what follows them.
 func unsafeRune(r rune) bool {
 	switch {
 	case r < 0x20, r >= 0x7f && r <= 0x9f:
@@ -338,7 +292,6 @@ func unsafeRune(r rune) bool {
 	return false
 }
 
-// allEnded reports whether every copy followed has ended.
 func (f *follower) allEnded() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -350,7 +303,6 @@ func (f *follower) allEnded() bool {
 	return true
 }
 
-// event takes one line of the event stream.
 func (f *follower) event(line json.RawMessage) {
 	var ev struct {
 		Type     string                `json:"type"`
@@ -385,7 +337,6 @@ func (f *follower) event(line json.RawMessage) {
 	}
 }
 
-// update takes a new row of a copy.
 func (f *follower) update(r copyRow) {
 	f.mu.Lock()
 	old, mine := f.rows[r.ID]
@@ -397,8 +348,6 @@ func (f *follower) update(r copyRow) {
 	was := f.lastState[r.ID]
 	f.lastState[r.ID] = r.State
 	if r.Rate > 0 {
-		// The daemon's rate is over five seconds. A little more smoothing
-		// keeps the number readable while bytes come in bursts.
 		if e := f.ratesEMA[r.ID]; e > 0 {
 			f.ratesEMA[r.ID] = e*0.7 + r.Rate*0.3
 		} else {
@@ -450,8 +399,6 @@ func (f *follower) jsonRow(r copyRow, was string) {
 
 func (f *follower) plainRow(r copyRow, was string) {
 	if r.State != was && !r.ended() && r.State != "queued" && r.State != "verifying" {
-		// "copies" is said once: a copy goes back to running after each
-		// check, wait or answer, and that is no news.
 		f.mu.Lock()
 		key := r.ID + "\x00" + r.State
 		said := r.State == "running" && f.said[key]
@@ -474,7 +421,6 @@ func (f *follower) plainRow(r copyRow, was string) {
 	}
 }
 
-// stateWords says a copy's state as a person reads it.
 func stateWords(r copyRow) string {
 	switch r.State {
 	case "queued":
@@ -512,8 +458,6 @@ func (f *follower) rateText(r copyRow) string {
 	return s
 }
 
-// run follows every copy to its end, drawing as it goes. It returns when they
-// have all ended, or when stop says so.
 func (f *follower) run(stop <-chan struct{}) {
 	tick := time.NewTicker(200 * time.Millisecond)
 	defer tick.Stop()
@@ -540,7 +484,6 @@ func (f *follower) run(stop <-chan struct{}) {
 			return
 		}
 	}
-	// Events that came with the end, such as the last files.
 	for {
 		select {
 		case line, ok := <-f.events:
@@ -557,7 +500,6 @@ func (f *follower) run(stop <-chan struct{}) {
 	f.draw(true)
 }
 
-// refresh reads every followed copy's row from transfer-list.
 func (f *follower) refresh() {
 	f.mu.Lock()
 	ids := append([]string(nil), f.ids...)
@@ -576,7 +518,6 @@ func (f *follower) refresh() {
 	}
 }
 
-// answerConflicts asks the person about a copy that waits on conflicts.
 func (f *follower) answerConflicts() {
 	if f.ask == nil {
 		return
@@ -596,7 +537,6 @@ func (f *follower) answerConflicts() {
 	for _, r := range waiting {
 		f.clear()
 		if f.ask(r) {
-			// The answers changed the row; read it again.
 			if raw, err := f.ctl.Call("transfer-list", map[string]any{"id": r.ID}); err == nil {
 				var out struct {
 					Transfers []copyRow `json:"transfers"`
@@ -609,7 +549,6 @@ func (f *follower) answerConflicts() {
 	}
 }
 
-// clear takes the drawn block away, so a question or a line can be printed.
 func (f *follower) clear() {
 	if f.out != outTerminal || f.drawn == 0 {
 		return
@@ -624,8 +563,6 @@ func (f *follower) clear() {
 	f.drawn = 0
 }
 
-// draw draws the block again on a terminal, at most ten times a second.
-// final takes the block away for the summary.
 func (f *follower) draw(final bool) {
 	if f.out != outTerminal || f.paused.Load() {
 		return
@@ -641,8 +578,6 @@ func (f *follower) draw(final bool) {
 	if w, _, err := term.GetSize(int(os.Stderr.Fd())); err == nil && w > 20 {
 		f.width = w
 	}
-	// The rows are taken under the lock and drawn after it: block reads the
-	// smoothed rate, which takes the lock itself.
 	f.mu.Lock()
 	var rows []copyRow
 	waiting := 0
@@ -665,8 +600,6 @@ func (f *follower) draw(final bool) {
 	if waiting > 0 {
 		lines = append(lines, f.dim(fmt.Sprintf("  %d more %s %s.", waiting, plural.Word(waiting, "copy", "copies"), plural.Word(waiting, "waits", "wait"))))
 	}
-	// The block moves up by its line count to draw again, which is right
-	// only while no line wraps: each one is cut to the width of the terminal.
 	for i, l := range lines {
 		lines[i] = overlay.Truncate(l, f.width-1)
 	}
@@ -698,7 +631,6 @@ func (f *follower) style(c color.Color) lipgloss.Style {
 
 func (f *follower) dim(s string) string { return f.style(f.pal.FgDim).Render(s) }
 
-// block is the lines of one copy on a terminal.
 func (f *follower) block(r copyRow) []string {
 	pal := f.pal
 	name := r.shownName()
@@ -707,9 +639,6 @@ func (f *follower) block(r copyRow) []string {
 	}
 	head := f.style(pal.Fg).Bold(true).Render(name) + f.dim("  to "+r.shownWhere())
 	lines := []string{head}
-	// The rest of a bar line, at its longest, is about 64 cells: the label,
-	// the percent, both sizes, the rate and the time left. draw cuts what
-	// is still too long.
 	barW := max(min(f.width-66, 44), 10)
 	switch r.State {
 	case "waiting":
@@ -746,8 +675,6 @@ func (f *follower) rateLine(r copyRow) string {
 	return "  " + s
 }
 
-// bar is a progress bar of width cells. The filled part is #, the rest -, so
-// it reads with no colour; the colours are the accent and a muted track.
 func (f *follower) bar(done, size int64, width int) string {
 	fill := 0
 	if size > 0 {
@@ -758,7 +685,6 @@ func (f *follower) bar(done, size int64, width int) string {
 	return "[" + f.style(f.pal.Accent).Render(strings.Repeat("#", fill)) + f.style(f.pal.FgMute).Render(strings.Repeat("-", width-fill)) + "]"
 }
 
-// summary prints how each copy ended and returns the exit code.
 func (f *follower) summary() int {
 	code := 0
 	f.mu.Lock()
@@ -779,8 +705,6 @@ func (f *follower) summary() int {
 		case "failed":
 			_, _ = fmt.Fprintf(f.stderr, "The copy of %s to %s failed: %s\n", r.shownName(), r.shownWhere(), copyFailText(r))
 		default:
-			// The command stopped following a copy that has not ended, after
-			// --timeout: it goes on in the daemon.
 			why := ""
 			if r.Error != "" {
 				why = " " + shown(r.Error)
@@ -796,7 +720,6 @@ func (f *follower) summary() int {
 	return code
 }
 
-// notes lists what a copy left out, under its summary line.
 func (f *follower) notes(r copyRow) {
 	files := f.files[r.ID]
 	var skipped, left, failed []fileNote
@@ -841,8 +764,6 @@ func (f *follower) notes(r copyRow) {
 		list(f.stdout, fmt.Sprintf("%s %s not files or folders, so %s not copied:", commas(r.Skipped), plural.Word(r.Skipped, "item is", "items are"), plural.Word(r.Skipped, "it was", "they were")), items, r.Skipped)
 	}
 	if r.Denied > 0 {
-		// The source machine does not name them: their names are part of
-		// what a linked machine may not read.
 		_, _ = fmt.Fprintf(f.stdout, "%s %s not copied. A linked machine may not read keys, credentials or shell start files.\n", commas(r.Denied), plural.Word(r.Denied, "item was", "items were"))
 	}
 	if len(failed) > 1 {
@@ -850,7 +771,6 @@ func (f *follower) notes(r copyRow) {
 	}
 }
 
-// doneLine is the one line a finished copy prints on stdout.
 func doneLine(r copyRow) string {
 	copied := r.FilesDone - r.Same
 	check := ""
@@ -876,7 +796,6 @@ func doneLine(r copyRow) string {
 	return line
 }
 
-// copyFailText is why a copy failed and what to do.
 func copyFailText(r copyRow) string {
 	msg := shown(r.Error)
 	if msg == "" {
@@ -899,9 +818,6 @@ func copyFailText(r copyRow) string {
 	return msg
 }
 
-// farRefusal reports whether a forbidden message came from the far side of a
-// link. The refusals a host gives name what it lets other machines do and
-// the setting that changes it. A refusal by the pane's grants names neither.
 func farRefusal(msg string) bool {
 	for _, w := range []string{"files_roots", "files_read_roots", "linked machine", "other machines", "another machine"} {
 		if strings.Contains(msg, w) {
@@ -910,8 +826,6 @@ func farRefusal(msg string) bool {
 	}
 	return false
 }
-
-// ---- words and numbers ------------------------------------------------------
 
 func capitalize(s string) string {
 	if s == "" {
@@ -927,7 +841,6 @@ func percent(done, size int64) int {
 	return int(min(done, size) * 100 / size)
 }
 
-// commas writes n with a comma every three digits: 1,204.
 func commas(n int) string {
 	s := fmt.Sprint(n)
 	if n < 0 {
@@ -943,7 +856,6 @@ func commas(n int) string {
 	return b.String()
 }
 
-// errCode is the daemon's error code in err, or "".
 func errCode(err error) string {
 	if call, ok := errors.AsType[*session.VerbCallError](err); ok {
 		return call.Code

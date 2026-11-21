@@ -14,8 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The exit statuses of tuios prompt, so a script can tell why it got no
-// answer.
 const (
 	promptExitCancelled = 1
 	promptExitTimeout   = 2
@@ -23,7 +21,6 @@ const (
 	promptExitBusy      = 4
 )
 
-// promptOptions is what tuios prompt was given.
 type promptOptions struct {
 	kind, title          string
 	placeholder, def     string
@@ -34,7 +31,6 @@ type promptOptions struct {
 	jsonOut              bool
 }
 
-// promptCLIResult is the prompt result the CLI reads.
 type promptCLIResult struct {
 	Status string   `json:"status"`
 	Value  string   `json:"value"`
@@ -42,8 +38,6 @@ type promptCLIResult struct {
 	Other  string   `json:"other"`
 }
 
-// promptItemsOf builds a pick's rows from --item and --items. A --item is
-// "id=title" or a title that is its own id.
 func promptItemsOf(o promptOptions, stdin io.Reader) ([]session.PromptItem, error) {
 	var items []session.PromptItem
 	if o.itemsJSON != "" {
@@ -114,9 +108,6 @@ func runPrompt(o promptOptions) error {
 	return printPrompt(os.Stdout, os.Stderr, raw, o.jsonOut)
 }
 
-// printPrompt prints the answer alone on out, one id or value per line, so
-// it can be captured, and anything else on errs. The exit status says why
-// there is no answer. With --json the result goes to out as it came.
 func printPrompt(out, errs io.Writer, raw json.RawMessage, jsonOut bool) error {
 	var res promptCLIResult
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
@@ -153,8 +144,6 @@ func printPrompt(out, errs io.Writer, raw json.RawMessage, jsonOut bool) error {
 	return &statusError{code: promptExitCode(res.Status)}
 }
 
-// promptExitCode is the exit status of a prompt that ended with status and
-// no answer.
 func promptExitCode(status string) int {
 	switch status {
 	case session.PromptTimeout:
@@ -167,7 +156,6 @@ func promptExitCode(status string) int {
 	return promptExitCancelled
 }
 
-// promptNoAnswerText says why a prompt got no answer and what to do next.
 func promptNoAnswerText(status string) string {
 	switch status {
 	case session.PromptCancelled:
@@ -182,7 +170,6 @@ func promptNoAnswerText(status string) string {
 	return "The prompt ended without an answer: " + strings.ReplaceAll(status, "_", " ")
 }
 
-// newPromptCommand is `tuios prompt`.
 func newPromptCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "prompt",

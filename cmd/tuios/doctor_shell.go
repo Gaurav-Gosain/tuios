@@ -15,43 +15,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// shellPane is one pane as tuios doctor shell reports it.
 type shellPane struct {
-	Session  string `json:"session"`
-	Window   string `json:"window_id"`
-	Name     string `json:"name"`
-	Marks    bool   `json:"marks_commands"`
-	AtPrompt bool   `json:"at_prompt"`
-	Commands uint64 `json:"command_seq"`
-	// CommandMarkSeen says the shell has sent the C mark that starts a
-	// command. nil means the daemon did not say, which an older one does not.
-	CommandMarkSeen *bool `json:"command_mark_seen,omitempty"`
-	// PromptOnly says a command ran with no C mark: the shell marks its
-	// prompts only, and run refuses the pane.
-	PromptOnly bool `json:"prompt_marks_only,omitempty"`
+	Session         string `json:"session"`
+	Window          string `json:"window_id"`
+	Name            string `json:"name"`
+	Marks           bool   `json:"marks_commands"`
+	AtPrompt        bool   `json:"at_prompt"`
+	Commands        uint64 `json:"command_seq"`
+	CommandMarkSeen *bool  `json:"command_mark_seen,omitempty"`
+	PromptOnly      bool   `json:"prompt_marks_only,omitempty"`
 }
 
-// doctorShellReport is what tuios doctor shell prints.
 type doctorShellReport struct {
 	DaemonRunning bool        `json:"daemon_running"`
 	Panes         []shellPane `json:"panes"`
-	// Shell is the name of the shell new panes run, from
-	// appearance.preferred_shell or $SHELL, and Setup the lines that turn its
-	// OSC 133 marks on. Setup is empty for a shell with no recipe, and for a
-	// shell tuios sets up itself.
-	Shell string `json:"shell"`
-	Setup string `json:"setup,omitempty"`
-	// Integration is [shell] integration: auto or off. SetUpByTuios is true
-	// when it is auto and tuios turns the marks on in Shell by itself, so a
-	// new pane needs no setup lines.
-	Integration  string `json:"integration"`
-	SetUpByTuios bool   `json:"set_up_by_tuios"`
+	Shell         string      `json:"shell"`
+	Setup         string      `json:"setup,omitempty"`
+	Integration   string      `json:"integration"`
+	SetUpByTuios  bool        `json:"set_up_by_tuios"`
 }
 
-// shellSetups are the lines that make each shell mark its commands with OSC
-// 133: A where the prompt starts, B where the input starts, C when a command
-// runs and D with its status when it finishes. They go at the end of the
-// shell's rc file.
 var shellSetups = map[string]string{
 	"zsh": `# ~/.zshrc: mark commands for tuios run (OSC 133)
 autoload -Uz add-zsh-hook
@@ -66,8 +49,6 @@ PS1+=$'%{\e]133;B\a%}'`,
 PROMPT_COMMAND='printf "\e]133;D;%s\a\e]133;A;redraw=last\a" "$?"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}
 PS0='\e]133;C\a'
 PS1+='\[\e]133;B\a\]'`,
-	// fish 4 sends the marks itself, and a second set from config.fish would
-	// only double them, so the advice is the upgrade.
 	"fish": `# fish 4 and newer mark their commands by themselves. Upgrade fish:
 #   brew upgrade fish, or your system's package manager`,
 }
@@ -113,8 +94,6 @@ once a command has run there, and run refuses it.`,
 	return cmd
 }
 
-// liveShellPanes lists the panes of the running daemon with whether each
-// shell marks its commands, and false when no daemon runs.
 func liveShellPanes(only string) ([]shellPane, bool) {
 	if !session.DiagnoseDaemon().Running() {
 		return nil, false
@@ -164,8 +143,6 @@ func liveShellPanes(only string) ([]shellPane, bool) {
 		}
 		for _, w := range res.Windows {
 			p := shellPane{Session: name, Window: w.ID, Name: w.Name}
-			// The facts are present only for a pane whose shell has sent a
-			// mark, so their presence is the answer.
 			if w.AtPrompt != nil {
 				p.Marks, p.AtPrompt = true, *w.AtPrompt
 			}
@@ -179,8 +156,6 @@ func liveShellPanes(only string) ([]shellPane, bool) {
 	return out, true
 }
 
-// doctorShell builds the report. panes is injected so it can be tested
-// without a daemon.
 func doctorShell(only string, panes func(string) ([]shellPane, bool), loginShell, integration string) doctorShellReport {
 	r := doctorShellReport{Shell: filepath.Base(loginShell), Integration: integration}
 	if loginShell == "" {
@@ -189,9 +164,6 @@ func doctorShell(only string, panes func(string) ([]shellPane, bool), loginShell
 	r.SetUpByTuios = config.ShellIntegrationOn(integration) && shellinteg.Shell(loginShell) != ""
 	r.Panes, r.DaemonRunning = panes(only)
 	for _, p := range r.Panes {
-		// A pane tuios set up and that still has no marks runs a shell
-		// the integration cannot reach, such as bash before 4.4, or started
-		// before the integration did. The lines are the way out of the first.
 		if !p.Marks || p.PromptOnly {
 			r.Setup = shellSetups[r.Shell]
 			break

@@ -19,20 +19,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 )
 
-// Nothing here touches the network. The release lookup is behind
-// release.Source, and every case below supplies a fake built in memory: a test
-// that reached api.github.com would fail on a plane, fail behind a proxy, and
-// fail once the hourly limit was spent, which are three ways to make a real
-// regression indistinguishable from the weather.
-
-// fakeSource is a release and its assets, served from memory.
 type fakeSource struct {
-	rel    release.Release
-	bodies map[string][]byte
-	// err, when set, is what Latest returns instead of a release.
-	err error
-	// fetched records what was downloaded, in order, so a case can assert that
-	// nothing was fetched at all.
+	rel     release.Release
+	bodies  map[string][]byte
+	err     error
 	fetched []string
 }
 
@@ -52,9 +42,6 @@ func (f *fakeSource) Fetch(_ context.Context, url string) (io.ReadCloser, error)
 	return io.NopCloser(bytes.NewReader(body)), nil
 }
 
-// buildRelease makes a release whose archives really contain the named
-// binaries, with a checksums.txt that really matches them. Building it properly
-// is what lets the checksum case below alter one byte and mean something.
 func buildRelease(t *testing.T, tag string, binaries map[string]string) *fakeSource {
 	t.Helper()
 	src := &fakeSource{
@@ -102,8 +89,6 @@ func tarGzOne(t *testing.T, name, body string) []byte {
 	return buf.Bytes()
 }
 
-// installedTree lays out a directory the way the curl script leaves one, and
-// returns the facts a binary in it would report.
 func installedTree(t *testing.T, currentVersion string, withWeb bool) (dir string, facts *release.Facts) {
 	t.Helper()
 	dir = t.TempDir()
@@ -147,8 +132,6 @@ func TestABadChecksumInstallsNothing(t *testing.T) {
 		"tuios":     "new tuios",
 		"tuios-web": "new tuios-web",
 	})
-	// Alter the tuios archive after its digest was published, which is what a
-	// corrupted download or a tampering proxy looks like from here.
 	name, err := release.AssetName("tuios", "v0.8.0", runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Skip(err)
@@ -180,7 +163,6 @@ func TestABadChecksumInstallsNothing(t *testing.T) {
 func TestAMissingChecksumFileIsRefused(t *testing.T) {
 	dir, facts := installedTree(t, "v0.7.0", false)
 	src := buildRelease(t, "v0.8.0", map[string]string{"tuios": "new tuios"})
-	// Drop the checksum asset, as an incompletely uploaded release would.
 	var kept []release.Asset
 	for _, a := range src.rel.Assets {
 		if a.Name != release.ChecksumFile {
@@ -310,8 +292,6 @@ func TestRefusalHappensBeforeTheNetwork(t *testing.T) {
 // this fails: the source build downloads and installs a release over itself.
 func TestANonReleaseBuildIsNotToldItIsOutOfDate(t *testing.T) {
 	dir, facts := installedTree(t, "dev+abc123def456", false)
-	// Still stamped goreleaser, so provenance passes and only the version
-	// comparison stands between this and an install.
 	src := buildRelease(t, "v0.8.0", map[string]string{"tuios": "new tuios"})
 
 	err := runUpdate(updateOptions{source: src, facts: facts, out: io.Discard})

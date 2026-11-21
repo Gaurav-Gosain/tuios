@@ -14,7 +14,6 @@ import (
 	"tuios.dev/progstatus"
 )
 
-// statusOptions are the flags of tuios status.
 type statusOptions struct {
 	kind     string
 	progress int
@@ -26,10 +25,6 @@ type statusOptions struct {
 	stdout   bool
 }
 
-// newStatusCommand is tuios status: it writes one OSC 7501 report (the
-// Program Status Protocol) for a script. It works in any terminal that reads
-// the protocol, tuios or not, and needs the daemon only in a tuios pane with
-// no terminal to write to.
 func newStatusCommand() *cobra.Command {
 	var o statusOptions
 	cmd := &cobra.Command{
@@ -92,8 +87,6 @@ report goes to standard output.`,
 	return cmd
 }
 
-// statusSequence builds the sequence for one tuios status call, and refuses
-// anything the protocol would make a terminal discard.
 func statusSequence(state string, o statusOptions) (string, error) {
 	r := progstatus.Report{ID: o.id, Progress: progstatus.NoProgress}
 	switch {
@@ -151,16 +144,12 @@ func statusSequence(state string, o statusOptions) (string, error) {
 		return "", err
 	}
 	seq := progstatus.Sequence(r)
-	// The terminal reads it back with the same parser; a report it would
-	// discard is refused here instead.
 	if _, ok := progstatus.Parse([]byte(session.ProgramStatusBody(seq)), len(seq)); !ok {
 		return "", errors.New("the report is not valid")
 	}
 	return seq, nil
 }
 
-// statusText checks a free-text value: UTF-8, no control characters, at most
-// limit bytes.
 func statusText(flag, s string, limit int) (string, error) {
 	if !utf8.ValidString(s) {
 		return "", errfmt.Errorf("%s is not valid UTF-8", flag)
@@ -176,12 +165,6 @@ func statusText(flag, s string, limit int) (string, error) {
 	return s, nil
 }
 
-// writeStatusSequence writes the report to the controlling terminal. With no
-// terminal to open, a process in a tuios pane sends it to the daemon for its
-// pane (TUIOS_PANE_ID): an agent's shell tool has no terminal and captures
-// standard output, so a sequence written there never reaches the pane. The
-// report goes to w when toStdout is set, outside every pane, and when the
-// daemon does not take it.
 func writeStatusSequence(w, errw io.Writer, seq string, toStdout bool) error {
 	if !toStdout {
 		if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
@@ -201,12 +184,8 @@ func writeStatusSequence(w, errw io.Writer, seq string, toStdout bool) error {
 	return err
 }
 
-// statusDaemonTimeout bounds the call to the daemon, so a script never waits
-// long on a report.
 const statusDaemonTimeout = 5 * time.Second
 
-// reportStatusToDaemon sends one report to the daemon for the caller's pane,
-// with report-program-status. The daemon holds a pane to reports about itself.
 func reportStatusToDaemon(pane, sessionName, seq string) error {
 	client, err := session.DialVerbClientAs(version)
 	if err != nil {

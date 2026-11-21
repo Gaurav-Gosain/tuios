@@ -17,31 +17,18 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// tuios call sends one verb and prints the daemon's reply as JSON. It is for
-// a program that can start a process but cannot write to a unix socket, such
-// as a Tern plugin, and for trying a verb from a shell. The daemon checks the
-// call as it checks any other: a pane is held to its grants, and the verbs
-// only the person may call stay refused from a pane.
-
-// streamCommands names the command that handles a verb which keeps its
-// connection after the reply, when there is one. Which verbs keep it is read
-// from the verb table (session.VerbDoc.HoldsConnection).
 var streamCommands = map[string]string{
 	"subscribe": "tuios subscribe",
 }
 
-// Exit statuses of tuios call.
 const (
-	callExitVerb      = 1 // the daemon answered with an error
-	callExitInput     = 2 // the command line or the params are wrong
-	callExitTransport = 3 // the daemon could not be reached, or did not answer
+	callExitVerb      = 1
+	callExitInput     = 2
+	callExitTransport = 3
 )
 
-// callDefaultTimeout bounds a call to a verb that names no wait of its own.
 const callDefaultTimeout = 30 * time.Second
 
-// callTimeoutMargin is added to the wait a verb's own timeout param asks for,
-// so the reply that wait ends with is still read.
 const callTimeoutMargin = 10 * time.Second
 
 func newCallCommand() *cobra.Command {
@@ -94,8 +81,6 @@ type callOptions struct {
 	timeout time.Duration
 }
 
-// callFail ends tuios call with status and, under --json, prints err as JSON
-// with code.
 func callFail(out io.Writer, o callOptions, status int, code string, err error) error {
 	if o.json {
 		writeCallJSON(out, map[string]any{"error": map[string]any{"code": code, "message": err.Error()}}, o.pretty)
@@ -104,7 +89,6 @@ func callFail(out io.Writer, o callOptions, status int, code string, err error) 
 	return &callError{err: err, status: status}
 }
 
-// callError is an error printed as text with a status of its own.
 type callError struct {
 	err    error
 	status int
@@ -174,9 +158,6 @@ func runCall(out io.Writer, in io.Reader, verb, rawParams string, o callOptions)
 	return err
 }
 
-// callTimeoutFor is the wait for a call with these params: the verb's own
-// timeout (milliseconds, as wait-for, run and respond take it) and a margin,
-// or the default.
 func callTimeoutFor(params map[string]any) time.Duration {
 	for _, key := range []string{"timeout", "timeout_ms"} {
 		if v, ok := params[key].(float64); ok && v > 0 {

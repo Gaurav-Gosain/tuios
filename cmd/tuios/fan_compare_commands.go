@@ -20,13 +20,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// tuios fan compare, diff and verify: the attempts of a fan side by side, what
-// two of them did differently, and one check run in all of them. compare and
-// verify are the daemon's compare-fan and verify-fan, so they work the same
-// on another machine. diff runs git here, like worktree diff, because it
-// reads the worktrees' files.
-
-// fanCompareResult is compare-fan as the CLI reads it.
 type fanCompareResult struct {
 	Group string          `json:"group"`
 	Repo  string          `json:"repo"`
@@ -34,7 +27,6 @@ type fanCompareResult struct {
 	Rows  []fanCompareRow `json:"rows"`
 }
 
-// fanCompareRow is one attempt of a compare-fan result.
 type fanCompareRow struct {
 	Session      string             `json:"session"`
 	Branch       string             `json:"branch"`
@@ -110,8 +102,6 @@ func runFanCompare(target string, changes, jsonOutput bool) error {
 	return nil
 }
 
-// renderFanCompare draws compare-fan as aligned lines, the way a person reads
-// a short list, and the two commands that come next.
 func renderFanCompare(res fanCompareResult, on string, now time.Time) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s in %s%s, %d %s against %s\n", res.Group, res.Repo, on, len(res.Rows), plural.Word(len(res.Rows), "attempt", "attempts"), res.Base)
@@ -144,7 +134,6 @@ func renderFanCompare(res fanCompareResult, on string, now time.Time) string {
 			case i == len(row)-1:
 				b.WriteString(cell)
 			case i == 3 || i == 4:
-				// Counts line up on the right.
 				b.WriteString(strings.Repeat(" ", widths[i]-len(cell)))
 				b.WriteString(cell)
 			default:
@@ -160,8 +149,6 @@ func renderFanCompare(res fanCompareResult, on string, now time.Time) string {
 	return b.String()
 }
 
-// fanCheckText says what the last check found: the verify-fan check when one
-// ran, else the last command a shell in the attempt finished.
 func fanCheckText(r fanCompareRow, now time.Time) string {
 	if v := r.Verify; v != nil {
 		switch v.State {
@@ -196,7 +183,6 @@ func fanCheckText(r fanCompareRow, now time.Time) string {
 	return "no check yet"
 }
 
-// agoFrom is a unix-nano time as "14m ago".
 func agoFrom(ns int64, now time.Time) string {
 	if ns == 0 {
 		return ""
@@ -313,9 +299,6 @@ func newFanVerifyCommand() *cobra.Command {
 	var jsonOut, noWait bool
 	var timeout time.Duration
 	cmd := &cobra.Command{
-		// No brackets before the end: the help renderer moves every bracketed
-		// part to the end of the usage line, which printed the host after the
-		// command. The host form is in the text instead.
 		Use:   "verify <session> -- <command>...",
 		Short: "Run one check in every attempt of a fan-out",
 		Long: `Run a command in every attempt of a fan-out, in a window named verify in
@@ -350,15 +333,8 @@ returns once they are started. 'tuios fan compare' shows how they end.`,
 	return cmd
 }
 
-// fanVerifyRun is runFanVerify, replaced in tests.
 var fanVerifyRun = runFanVerify
 
-// fanVerifyCommandLine is the shell line for the words after --. One word is
-// a shell line as it stands, so 'make lint && make test' keeps its &&. Several
-// are argv: each is quoted for the shell where it needs it, so a pattern such
-// as 'TestA|TestB' reaches the command as one argument instead of becoming a
-// pipe. A word with nothing the shell reads specially is left bare, so a plain
-// command reads the same, and still runs under cmd.exe on a Windows host.
 func fanVerifyCommandLine(words []string) string {
 	if len(words) == 1 {
 		return words[0]
@@ -381,8 +357,6 @@ func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutpu
 	if timeout > 0 {
 		params["timeout_ms"] = timeout.Milliseconds()
 	}
-	// The check finds its tools where this shell does. A host looks them up
-	// on its own, and refuses variables from here.
 	if path := os.Getenv("PATH"); path != "" && t.host == "" {
 		params["env"] = map[string]string{"PATH": path}
 	}
@@ -454,7 +428,6 @@ func runFanVerify(target, command string, timeout time.Duration, wait, jsonOutpu
 	return nil
 }
 
-// fanVerifyOutcome is one attempt's check as a clause.
 func fanVerifyOutcome(v *session.FanVerify) string {
 	if v == nil {
 		return "no check recorded"
@@ -475,8 +448,6 @@ func fanVerifyOutcome(v *session.FanVerify) string {
 	}
 }
 
-// waitFanVerify polls compare-fan until the check in every session it
-// started has ended. The daemon ends each one: it passes, fails, or times out.
 func waitFanVerify(t *verbTarget, anySession string, sessions []string) ([]fanCompareRow, error) {
 	want := map[string]bool{}
 	for _, s := range sessions {
@@ -509,7 +480,6 @@ func waitFanVerify(t *verbTarget, anySession string, sessions []string) ([]fanCo
 	}
 }
 
-// newFanVerdictCommand is tuios fan verdict: how a judge reports its pick.
 func newFanVerdictCommand() *cobra.Command {
 	var pick, summary string
 	var reasons, notes []string

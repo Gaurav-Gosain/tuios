@@ -14,11 +14,6 @@ import (
 	"tuios.dev/tml"
 )
 
-// tml show, close and validate: TML surfaces from the command line. The
-// daemon holds a surface and every attached client draws it; see
-// internal/session/tml_surface.go.
-
-// tmlShowOptions is the `tuios tml show` command line.
 type tmlShowOptions struct {
 	session   string
 	pane      bool
@@ -110,9 +105,6 @@ patch or tuios tml replace. That makes the script the surface's owner.`,
 	return cmd
 }
 
-// readTMLSource reads a document from a file or, for -, from stdin, up to
-// the person's document limit and one byte more, so an over-long document is
-// refused with the limit named.
 func readTMLSource(name string, stdin io.Reader) ([]byte, error) {
 	limit := tml.PersonLimits().DocBytes
 	r := stdin
@@ -134,8 +126,6 @@ func readTMLSource(name string, stdin io.Reader) ([]byte, error) {
 	return data, nil
 }
 
-// checkTMLSource validates a document and prints its problems to w. It
-// returns an error when the document has errors.
 func checkTMLSource(name string, src []byte, w io.Writer) error {
 	lim := tml.PersonLimits()
 	_, problems, err := tml.Check(src, &tml.ValidateOptions{Limits: &lim})
@@ -290,8 +280,6 @@ needs no daemon.`,
 	}
 }
 
-// streamTMLEvents prints the answer of a tml-open with events, then each
-// event line, and returns after the close event.
 func streamTMLEvents(client *session.VerbClient, raw json.RawMessage, stdout io.Writer) error {
 	fmt.Fprintln(stdout, string(raw))
 	for {
@@ -309,7 +297,6 @@ func streamTMLEvents(client *session.VerbClient, raw json.RawMessage, stdout io.
 	}
 }
 
-// tmlCall runs one verb and prints its result as JSON.
 func tmlCall(verb string, params map[string]any) error {
 	raw, err := localVerb(verb, params, 0, false)
 	if err != nil {
@@ -319,7 +306,6 @@ func tmlCall(verb string, params map[string]any) error {
 	return nil
 }
 
-// readTMLArg reads an argument that is the value itself, or - for stdin.
 func readTMLArg(arg string) ([]byte, error) {
 	if arg != "-" {
 		return []byte(arg), nil

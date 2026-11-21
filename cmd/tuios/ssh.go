@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// newSSHCommand creates a new "ssh" Cobra command for running TUIOS as an SSH server with configurable options.
 func newSSHCommand() *cobra.Command {
 	var sshPort, sshHost, sshKeyPath, sshDefaultSession, sshAuthorizedKeys string
 	var sshEphemeral, sshNoAuth bool
@@ -73,10 +72,6 @@ at the same time, and how many sessions may be open. Set the limits in the
   # Close a connection after 30 minutes with no traffic
   tuios ssh --idle-timeout 30m`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// This process holds every connection's emulator, compositor and
-			// frame buffers and, in daemon mode, the daemon itself, so it is the
-			// process a memory question is about. --pprof is a persistent flag
-			// that ssh used to accept and ignore.
 			startPprofServer()
 			f := sshServerFlags{
 				host:           sshHost,
@@ -87,8 +82,6 @@ at the same time, and how many sessions may be open. Set the limits in the
 				ephemeral:      sshEphemeral,
 				noAuth:         sshNoAuth,
 			}
-			// A limit flag replaces the [ssh] value only when it is given, so
-			// the flag defaults never hide the file.
 			flags := cmd.Flags()
 			if flags.Changed("handshake-timeout") {
 				f.handshakeTimeout = &sshHandshakeTimeout

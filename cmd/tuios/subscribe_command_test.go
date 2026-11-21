@@ -8,13 +8,8 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// startSubscribeDaemon runs a real daemon in this process, on its own socket
-// and with its state in a temp directory, so creating sessions cannot touch
-// the developer's own saved sessions.
 func startSubscribeDaemon(t *testing.T) *session.VerbClient {
 	t.Helper()
-	// Registered before the Setenv calls so it runs after they are undone,
-	// and xdg reads the developer's directories back.
 	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Setenv("XDG_STATE_HOME", t.TempDir())

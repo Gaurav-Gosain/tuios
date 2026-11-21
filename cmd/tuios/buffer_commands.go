@@ -20,21 +20,11 @@ import (
 	"golang.org/x/term"
 )
 
-// The paste buffer commands, after tmux's: list-buffers, show-buffer,
-// set-buffer, delete-buffer and paste-buffer. The buffers live in this
-// machine's daemon, which every client and session shares. A yank in copy
-// mode adds one. See internal/session/verb_buffers.go.
-
-// maxSetBufferInput bounds what set-buffer reads from standard input. The
-// daemon's byte cap is the real limit; this only stops an endless pipe.
 const maxSetBufferInput = 64 << 20
 
-// bufferGrantsNote is the part of each command's help that says what a pane
-// needs.
 const bufferGrantsNote = `Run from inside a pane, reading the buffers needs the read grant, and
 changing them needs the write grant. See 'tuios pane-grants'.`
 
-// newBufferCommands builds the five paste buffer commands.
 func newBufferCommands() []*cobra.Command {
 	return []*cobra.Command{
 		newListBuffersCommand(), newShowBufferCommand(), newSetBufferCommand(),
@@ -129,8 +119,6 @@ is yours. A buffer a pane without admin sets is that pane's own.
 				if len(args) == 0 && term.IsTerminal(int(os.Stdin.Fd())) {
 					return errors.New("set-buffer: give the text as an argument, or pipe it in: echo hi | tuios set-buffer")
 				}
-				// One byte past the limit says the input was longer, so it
-				// is refused and never stored cut short.
 				data, err := io.ReadAll(io.LimitReader(os.Stdin, maxSetBufferInput+1))
 				if err != nil {
 					return errfmt.Errorf("read the standard input: %w", err)
@@ -218,7 +206,6 @@ and types it. A pane does not paste into another pane that waits on a prompt
 	return cmd
 }
 
-// bufferListing is the list-buffers result.
 type bufferListing struct {
 	Buffers []struct {
 		Name   string `json:"name"`
@@ -228,7 +215,6 @@ type bufferListing struct {
 	} `json:"buffers"`
 }
 
-// completeBufferNames completes --buffer from the daemon's buffers.
 func completeBufferNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	client, err := dialVerb()
 	if err != nil {
@@ -250,7 +236,6 @@ func completeBufferNames(_ *cobra.Command, _ []string, _ string) ([]string, cobr
 	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
-// callBufferVerb makes one buffer verb call on this machine's daemon.
 func callBufferVerb(verb string, params map[string]any) (json.RawMessage, error) {
 	raw, err := localVerb(verb, params, 0, false)
 	if err != nil {
@@ -259,7 +244,6 @@ func callBufferVerb(verb string, params map[string]any) (json.RawMessage, error)
 	return raw, nil
 }
 
-// bufferNameParams is the params of a call that names a buffer, or the newest.
 func bufferNameParams(name string) map[string]any {
 	if name == "" {
 		return map[string]any{}
@@ -284,7 +268,6 @@ func runListBuffers(jsonOutput bool) error {
 		return nil
 	}
 	for _, b := range res.Buffers {
-		// The daemon escaped the sample already, so it is printed as it is.
 		line := fmt.Sprintf("%s: %s: \"%s\"", plainLine(b.Name), plural.Count(b.Bytes, "byte"), plainLine(b.Sample))
 		if b.Pane != "" {
 			line += " (set by pane " + plainLine(b.Pane) + ")"
@@ -294,8 +277,6 @@ func runListBuffers(jsonOutput bool) error {
 	return nil
 }
 
-// bufferContent is the content of a show-buffer result: every byte from
-// data_b64, or the text of a daemon that sends no data_b64.
 func bufferContent(raw json.RawMessage) (name, data string, version uint64, err error) {
 	var res struct {
 		Name    string `json:"name"`
@@ -337,8 +318,6 @@ func runShowBuffer(name string, jsonOutput bool) error {
 	return err
 }
 
-// setBufferPart is how many bytes one set-buffer call carries. A larger
-// content goes as an upload, which the daemon sets once, from all parts.
 const setBufferPart = 768 << 10
 
 func runSetBuffer(name, text string, appendTo, jsonOutput bool) error {
@@ -420,8 +399,6 @@ func runPasteBuffer(name, sessionName, window string, del, rawText, allowBlocked
 		}
 		return nil
 	}
-	// The buffers are this machine's, and the pane is on another one: the
-	// text goes there as a paste.
 	params := bufferNameParams(name)
 	params["encoding"] = "base64"
 	raw, err := callBufferVerb("show-buffer", params)
@@ -437,7 +414,6 @@ func runPasteBuffer(name, sessionName, window string, del, rawText, allowBlocked
 		return reportVerbError(t.explain("send-text", err), jsonOutput)
 	}
 	if del {
-		// Only the text that was pasted: a buffer set again meanwhile stays.
 		params := bufferNameParams(bufName)
 		params["version"] = version
 		if _, err := callBufferVerb("delete-buffer", params); err != nil {

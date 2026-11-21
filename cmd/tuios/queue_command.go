@@ -13,8 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newQueueCommand builds `tuios queue`: leave a message for an agent, typed
-// as a prompt when it comes to rest, and list or drop what waits.
 func newQueueCommand() *cobra.Command {
 	var sessionName, window string
 	var jsonOutput bool
@@ -66,7 +64,6 @@ reads ls or rm, put -- before it.`,
 	return cmd
 }
 
-// newQueueListCommand builds `tuios queue ls`.
 func newQueueListCommand() *cobra.Command {
 	var sessionName, window string
 	var jsonOutput bool
@@ -88,7 +85,6 @@ link:HOST), its age, the pane, and the first line of the message.`,
 	return cmd
 }
 
-// newQueueRemoveCommand builds `tuios queue rm`.
 func newQueueRemoveCommand() *cobra.Command {
 	var sessionName, window string
 	var all, jsonOutput bool
@@ -153,7 +149,6 @@ func runQueuePrompt(sessionName, window, text string, jsonOutput bool) error {
 	return nil
 }
 
-// describeQueued is the line queue prints.
 func describeQueued(id, window string, position int, delivering bool) string {
 	target := "the focused pane"
 	if window != "" {
@@ -169,7 +164,6 @@ func describeQueued(id, window string, position int, delivering bool) string {
 	}
 }
 
-// queueRow is one entry of list-queued.
 type queueRow struct {
 	ID      string `json:"id"`
 	Window  string `json:"window"`
@@ -208,8 +202,6 @@ func runQueueList(w io.Writer, sessionName, window string, jsonOutput bool) erro
 	return printQueueRows(w, res.Session+t.on(), res.Entries)
 }
 
-// printQueueRows writes list-queued's entries as a table. Every field but the
-// id and state came from a caller, so each is kept to one plain line.
 func printQueueRows(w io.Writer, where string, rows []queueRow) error {
 	if len(rows) == 0 {
 		_, err := fmt.Fprintf(w, "Nothing is queued in session %s.\n", plainLine(where))

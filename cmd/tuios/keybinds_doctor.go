@@ -10,25 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// keybindsDoctor prints the same analysis the keybind overlay draws.
-//
-// It exists because a conflict report that only exists as pixels is useless to
-// an agent configuring tuios: it would have to drive the overlay and read a
-// screenshot to learn something the config already determines. The overlay and
-// this share one implementation, so what an agent reads and what a human sees
-// cannot drift apart.
-//
-// guest names a program to treat as the one running in the pane. From a
-// terminal there is no pane to read, so the observed tier is empty here and the
-// report says nothing about a pane rather than making something up; naming a
-// program marks the rows that would be live if it were running, without
-// promoting them out of the reference tier.
 func keybindsDoctor(asJSON bool, guest string) error {
-	// The config as the running app has it: the keys tuios cannot read are
-	// dropped and the defaults are back, so the leader, the conflicts and the
-	// keys taken from the pane match what the app does. The dropped keys are
-	// the report's key problems. Only a file that does not parse at all falls
-	// back to the defaults.
 	userConfig := loadKeybindConfig()
 	registry := config.NewKeybindRegistry(userConfig)
 	report := registry.Report(config.PaneFacts{Command: guest})
@@ -42,13 +24,6 @@ func keybindsDoctor(asJSON bool, guest string) error {
 	return nil
 }
 
-// printKeybindReport writes the report as plain text.
-//
-// Deliberately unstyled, unlike `keybinds list`: this output is read by agents
-// and pasted into issues at least as often as it is looked at, and colour codes
-// in a pasted report are noise. Every finding carries its tier in the text,
-// because a reader who only sees this has nowhere else to learn that a third of
-// it is a curated list.
 func printKeybindReport(rep config.KeybindReport) {
 	fmt.Printf("tuios keybinds: %s\n", rep.Summary())
 	if rep.LeaderReadAs != "" {
@@ -160,10 +135,6 @@ func printKeybindReport(rep config.KeybindReport) {
 		fmt.Printf("  %-14s %-32s %s%s\n", c.Key, c.Program, c.ProgramUse, live)
 	}
 
-	// Listed because "not mentioned" and "deliberately removed" are different
-	// states of the same action and only one of them survives a reload. A
-	// reader comparing this against the defaults has no other way to tell which
-	// they are looking at.
 	var unbound []config.Binding
 	for _, b := range rep.Bindings {
 		if b.Unbound {
@@ -215,7 +186,6 @@ func printKeybindReport(rep config.KeybindReport) {
 			case r.Use != "":
 				use += fmt.Sprintf(" To keep the keys, bind them to %s.", r.Use)
 			}
-			// Quoted, a key such as "," stands out from the punctuation around it.
 			keys := make([]string, len(r.Keys))
 			for i, k := range r.Keys {
 				keys[i] = strconv.Quote(k)
@@ -233,8 +203,6 @@ func printKeybindReport(rep config.KeybindReport) {
 	fmt.Println()
 }
 
-// keybindsExplain prints everything tuios does with one key: the recorder's
-// answer, for a caller that cannot press anything.
 func keybindsExplain(key string, asJSON bool, guest string) error {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {

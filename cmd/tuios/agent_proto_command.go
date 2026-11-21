@@ -20,11 +20,8 @@ import (
 	"golang.org/x/term"
 )
 
-// agentProtoHoldMax bounds the wait on one Inbox hold. The daemon ends every
-// hold within 300 seconds; this only guards against one that stops answering.
 const agentProtoHoldMax = 305 * time.Second
 
-// agentProtoOptions are the flags of tuios agent-proto.
 type agentProtoOptions struct {
 	protocol   string
 	harness    string
@@ -78,8 +75,6 @@ app-server subcommand for you.`,
   tuios agent-proto --protocol acp -- opencode acp`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
-			// The agent session keeps this process running; --pprof is a
-			// persistent flag that agent-proto used to accept and ignore.
 			startPprofServer()
 			if err := startCPUProfile(); err != nil {
 				return err
@@ -101,7 +96,6 @@ app-server subcommand for you.`,
 	return cmd
 }
 
-// runAgentProto runs the session and returns the exit code.
 func runAgentProto(o agentProtoOptions, argv []string) int {
 	if err := agentproto.CheckProtocol(o.protocol); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -122,7 +116,6 @@ func runAgentProto(o agentProtoOptions, argv []string) int {
 			defer func() { _ = term.Restore(stdinFd, old) }()
 		}
 	}
-	// Bracketed paste, so a prompt tuios types arrives as one paste.
 	_, _ = io.WriteString(os.Stdout, "\x1b[?2004h")
 	defer func() { _, _ = io.WriteString(os.Stdout, "\x1b[?2004l\r\n") }()
 
@@ -174,13 +167,6 @@ func runAgentProto(o agentProtoOptions, argv []string) int {
 	return s.Run(ctx)
 }
 
-// paneReporter reports the session's state for the pane it runs in, and its
-// metadata and activity.
-//
-// State reports are made on the pane's loop and wait for the daemon, in
-// order. Metadata and activity come from the session's feed goroutine and go
-// on a connection of their own, so a slow call of theirs never holds a state
-// report, and through it the pane's input and render loop.
 type paneReporter struct {
 	session, window, harness string
 	dial                     func() (*session.VerbClient, error)
@@ -188,15 +174,11 @@ type paneReporter struct {
 	mu     sync.Mutex
 	client *session.VerbClient
 
-	// feedMu guards feedClient and activity, used only by the feed.
 	feedMu     sync.Mutex
 	feedClient *session.VerbClient
-	// activity is whether the daemon's set-agent-state takes activity:
-	// unknown until it has been asked, once.
-	activity activitySupport
+	activity   activitySupport
 }
 
-// activitySupport is what the daemon was found to take.
 type activitySupport int
 
 const (
@@ -205,11 +187,8 @@ const (
 	activityNo
 )
 
-// protoMetaSource is the set-agent-meta source a protocol pane writes under.
 const protoMetaSource = "protocol"
 
-// activityIfState is the if_state an activity report carries: its state
-// part applies only to a pane whose state is none.
 const activityIfState = "none"
 
 func (r *paneReporter) close() {
@@ -227,8 +206,6 @@ func (r *paneReporter) close() {
 	r.feedMu.Unlock()
 }
 
-// Report sends set-agent-state on a connection kept for reports, dialled
-// again after a failure.
 func (r *paneReporter) Report(ctx context.Context, state, kind, message, ifState string) error {
 	params := map[string]any{"session": r.session, "window": r.window, "state": state, "harness": r.harness}
 	for k, v := range map[string]string{"kind": kind, "message": message, "if_state": ifState} {
@@ -254,8 +231,6 @@ func (r *paneReporter) Report(ctx context.Context, state, kind, message, ifState
 	return nil
 }
 
-// feedCall runs one verb on the feed's connection, dialled again after a
-// failure. Callers hold r.feedMu.
 func (r *paneReporter) feedCall(ctx context.Context, verb string, params map[string]any) (json.RawMessage, error) {
 	if r.feedClient == nil {
 		c, err := r.dial()
@@ -268,7 +243,6 @@ func (r *paneReporter) feedCall(ctx context.Context, verb string, params map[str
 	raw, err := r.feedClient.CallWithTimeout(verb, params, timeout)
 	if err != nil {
 		if _, ok := errors.AsType[*session.VerbCallError](err); !ok {
-			// The connection itself failed: dial again next time.
 			_ = r.feedClient.Close()
 			r.feedClient = nil
 		}
@@ -277,13 +251,9 @@ func (r *paneReporter) feedCall(ctx context.Context, verb string, params map[str
 	return raw, nil
 }
 
-// SetMeta writes the agent's model, context use, cost and plan progress to
-// the pane's metadata, under the protocol source. set-agent-meta is scoped to
-// the caller's own pane.
 func (r *paneReporter) SetMeta(ctx context.Context, tokens map[string]string) error {
 	r.feedMu.Lock()
 	defer r.feedMu.Unlock()
-	// An empty value is a value the agent cleared: null removes the key.
 	values := make(map[string]any, len(tokens))
 	for k, v := range tokens {
 		if v == "" {
@@ -301,20 +271,12 @@ func (r *paneReporter) SetMeta(ctx context.Context, tokens map[string]string) er
 	return err
 }
 
-// ReportActivity sends one activity with set-agent-state. set-agent-state
-// needs a state, and this one's is the state the pane last reported, with
-// if_state none: the daemon records the activity and refuses the state part
-// on every pane that has a state, so the call restamps nothing and pushes no
-// state. Only a pane whose state was lost mid-turn (none) gets it back. A
-// daemon whose set-agent-state does not list activity is sent nothing: an
-// older daemon would ignore the field and apply the report.
 func (r *paneReporter) ReportActivity(ctx context.Context, a agentproto.Activity) error {
 	r.feedMu.Lock()
 	defer r.feedMu.Unlock()
 	if r.activity == activityUnknown {
 		raw, err := r.feedCall(ctx, "list-verbs", map[string]any{"verb": "set-agent-state"})
 		if _, ok := errors.AsType[*session.VerbCallError](err); ok {
-			// A daemon that answers but cannot say is taken not to.
 			r.activity = activityNo
 			return nil
 		}
@@ -353,7 +315,6 @@ func (r *paneReporter) ReportActivity(ctx context.Context, a agentproto.Activity
 	return err
 }
 
-// listsParam reports whether a list-verbs answer lists param for verb.
 func listsParam(raw json.RawMessage, verb, param string) bool {
 	var res struct {
 		Verbs []struct {
@@ -379,9 +340,6 @@ func listsParam(raw json.RawMessage, verb, param string) bool {
 	return false
 }
 
-// Hold calls request-approval on a connection of its own, which is closed
-// when ctx ends: the daemon reads that as the caller gone and ends the hold
-// with no decision.
 func (r *paneReporter) Hold(ctx context.Context, line string, options []string) (string, string, error) {
 	client, err := r.dial()
 	if err != nil {
@@ -422,7 +380,6 @@ func (r *paneReporter) Hold(ctx context.Context, line string, options []string) 
 	return res.Decision, res.AnsweredBy, nil
 }
 
-// deadlineOr is ctx's deadline, or now plus d when it has none.
 func deadlineOr(ctx context.Context, d time.Duration) time.Time {
 	if dl, ok := ctx.Deadline(); ok {
 		return dl

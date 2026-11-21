@@ -12,9 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sockpath"
 )
 
-// liveDaemonSockets lists the sockets of this user's daemons that accept a
-// connection: the default server and each named one, in the socket folder
-// and in the other folder an older tuios may have used.
 func liveDaemonSockets() []string {
 	var bases []string
 	for _, b := range []string{sockpath.BaseDir(), sockpath.OtherDir()} {

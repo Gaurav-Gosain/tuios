@@ -15,13 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// runImportTheme converts a terminal's colour scheme into a tuios theme.
-//
-// It runs in this process rather than over the socket because the file it reads
-// is the caller's, at the caller's path, and a daemon on the other end of a
-// socket has no business opening it. What it writes lands in the themes
-// directory, which the daemon re-reads on demand, so the imported theme is
-// selectable straight afterwards without a restart.
 func runImportTheme(path, id string, jsonOutput bool) error {
 	t, format, err := theme.Import(path, id)
 	if err != nil {
@@ -56,8 +49,6 @@ func runImportTheme(path, id string, jsonOutput bool) error {
 	return nil
 }
 
-// toCLISwatches converts the theme package's rows into the shape the printer
-// shares with the socket path, which decodes them from JSON.
 func toCLISwatches(in []theme.Swatch) []themeSwatch {
 	out := make([]themeSwatch, len(in))
 	for i, s := range in {
@@ -66,7 +57,6 @@ func toCLISwatches(in []theme.Swatch) []themeSwatch {
 	return out
 }
 
-// themeSwatch is one measured colour of a theme as list-themes reports it.
 type themeSwatch struct {
 	Name   string  `json:"name"`
 	Hex    string  `json:"hex"`
@@ -75,7 +65,6 @@ type themeSwatch struct {
 	Passes bool    `json:"passes"`
 }
 
-// themePalette is the described theme.
 type themePalette struct {
 	ID          string        `json:"id"`
 	DisplayName string        `json:"display_name"`
@@ -85,12 +74,6 @@ type themePalette struct {
 	Illegible   []string      `json:"illegible"`
 }
 
-// runListThemes lists the registered themes and, with a name, describes one.
-//
-// The human form prints the contrast beside each colour rather than the hex
-// alone, because the number is the only part a reader cannot get by looking at
-// the theme in a picker, and it is the part that says whether the palette is
-// going to be readable.
 func runListThemes(sessionName, themeName, filter string, jsonOutput bool) error {
 	raw, err := localVerb("list-themes", map[string]any{
 		"session": sessionName,
@@ -130,8 +113,6 @@ func runListThemes(sessionName, themeName, filter string, jsonOutput bool) error
 		printThemePalette(w, res.Palette)
 		fmt.Fprintln(w)
 	}
-	// The verb sends the roster only when the roster was the question, so its
-	// absence is the answer here rather than an empty result to report.
 	if themeName == "" || filter != "" {
 		printThemeList(w, res.Themes, res.Matched, res.Total, res.Truncated)
 	}
@@ -162,7 +143,6 @@ func runListThemes(sessionName, themeName, filter string, jsonOutput bool) error
 	return nil
 }
 
-// printThemeList writes the matching ids in columns.
 func printThemeList(w io.Writer, themes []string, matched, total int, truncated bool) {
 	if len(themes) == 0 {
 		fmt.Fprintf(w, "No theme matches that filter. %d are registered.\n", total)
@@ -191,8 +171,6 @@ func printThemeList(w io.Writer, themes []string, matched, total int, truncated 
 	}
 }
 
-// printThemePalette writes one theme's colours with what each measures against
-// its own background.
 func printThemePalette(w io.Writer, p themePalette) {
 	kind := "light"
 	if p.Dark {
@@ -224,13 +202,6 @@ func printThemePalette(w io.Writer, p themePalette) {
 	}
 }
 
-// runThemeReload reads the theme and glyph files again in every tuios client
-// on this machine. Each client's config watcher follows the stamp file in the
-// config directory, so writing it reaches clients of every kind, the ssh and
-// web servers' included, with no protocol of its own. The stamp is left in
-// place and written with the time: kqueue (macOS, the BSDs) sees a new file
-// only by listing the directory, and one removed at once is gone before the
-// listing. The files are read here too, so the command can say which ones fail.
 func runThemeReload(jsonOutput bool) error {
 	loaded, problems := theme.ReloadCustomThemes()
 	path, err := config.GetConfigPath()
@@ -257,7 +228,6 @@ func runThemeReload(jsonOutput bool) error {
 	return nil
 }
 
-// runThemeExport prints a theme as a theme file or a base16 scheme.
 func runThemeExport(id, format string, full bool) error {
 	var out []byte
 	var err error
