@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuitest"
@@ -139,6 +138,9 @@ func chromeClient(t *testing.T, r chromeRun) (*tuitest.Terminal, string) {
 	if r.look.theme != "" {
 		cfg += "theme = \"" + r.look.theme + "\"\n"
 	}
+	// A notice lasts one second: each step waits for a still screen, and
+	// a notice's burn-down keeps it moving for its whole time.
+	cfg += "\n[notifications]\nduration = 1\n"
 	cfg += "\n[agents.approvals]\nenabled = [\"claude-code\"]\nhold_seconds = 300\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
@@ -472,10 +474,12 @@ func checkPaletteCount(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, c
 // rail's text fades toward it; on the dark look the text is turned down.
 func checkScrim(t *testing.T, term *tuitest.Terminal, base string, look chromeLook, host *shot.Palette) {
 	t.Helper()
+	// The client takes the dim a moment after set-config returns. The wait
+	// below for the rail's text to change behind the palette covers that:
+	// with the dim at 0 the palette changes nothing there.
 	if o, err := tuiosCLI(t, base, "set-config", "appearance.modal_dim", "30"); err != nil {
 		t.Fatalf("set the modal dim: %v\n%s", err, o)
 	}
-	time.Sleep(time.Second)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
 	}
