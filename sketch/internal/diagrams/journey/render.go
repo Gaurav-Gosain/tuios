@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/journey/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package journey
 
 import (
@@ -50,7 +48,6 @@ func face(b *strings.Builder, x, y float64, mood string) {
 		`</g>`)
 }
 
-// mood is the face a score shows.
 func mood(score float64) string {
 	if score > 3 {
 		return "happy"
@@ -103,14 +100,12 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 	tasks := model.tasks
 	n := len(tasks)
 
-	// `Task: 5:` names an actor with no name; Mermaid gives it a dot and an empty legend row.
 	names := nonEmpty(journeyActors(tasks))
 	actor := make(map[string]int, len(names))
 	for i, name := range names {
 		actor[name] = i
 	}
 
-	// Cards widen, up to a point, for a word that would not fit; past that the word is cut.
 	textW := float64(MIN_TEXT)
 	labels := make([]text.Label, n)
 	for i, task := range tasks {
@@ -176,7 +171,6 @@ func draw(model *JourneyDb, _ types.Config, options types.RenderOptions, down bo
 	left := pad + (width-bodyW)/2 + GUTTER
 	top := pad + titleH
 
-	// A band covers a run of tasks that share a section, as in Mermaid; a section with no tasks draws nothing.
 	var runs []run
 	bandH := 0.0
 	for i := 0; i < n; {
@@ -421,7 +415,6 @@ func verticalJourney(model *JourneyDb, options types.RenderOptions) types.Render
 	}
 }
 
-// geometryOf is the journey as lists, for sketch/text.
 func geometryOf(model *JourneyDb, title text.Label, labels []text.Label, runs []run, width, height float64) *types.Geometry {
 	g := &types.GeoJourney{Title: title.Plain()}
 	for _, r := range runs {

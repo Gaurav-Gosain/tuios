@@ -12,7 +12,6 @@ import (
 // machine: under 40 for plainTracks, over 100 for the quadratic loop.
 func TestPlainTracksStayLinear(t *testing.T) {
 	shapes := map[string]func(n int) (from, to []float64){
-		// Every piece crosses most others, and each needs a track of its own: n/2 tracks.
 		"crossing": func(n int) (from, to []float64) {
 			for i := range n {
 				from = append(from, float64(20*i))
@@ -20,7 +19,6 @@ func TestPlainTracksStayLinear(t *testing.T) {
 			}
 			return from, to
 		},
-		// Every piece leaves from one point, so all share one track.
 		"fan": func(n int) (from, to []float64) {
 			for i := range n {
 				from = append(from, 0)
@@ -28,7 +26,6 @@ func TestPlainTracksStayLinear(t *testing.T) {
 			}
 			return from, to
 		},
-		// Fans of eight pieces that cross each other.
 		"fans": func(n int) (from, to []float64) {
 			for i := range n {
 				from = append(from, float64(160*(i/8)))

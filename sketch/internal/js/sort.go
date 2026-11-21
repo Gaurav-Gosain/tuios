@@ -29,7 +29,6 @@ func Sort[T any](a []T, cmp func(x, y T) float64) {
 		sort.SliceStable(a, func(i, j int) bool { return order(a[i], a[j]) < 0 })
 		return
 	}
-	// CountAndMakeRun: the run at the start, reversed when it is strictly descending.
 	run := 2
 	descending := order(a[1], a[0]) < 0
 	previous := a[1]
@@ -48,7 +47,6 @@ func Sort[T any](a []T, cmp func(x, y T) float64) {
 	if descending {
 		slices.Reverse(a[:run])
 	}
-	// BinaryInsertionSort of the rest into the run.
 	for start := run; start < n; start++ {
 		left, right := 0, start
 		pivot := a[start]

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/venn/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package venn
 
 import (
@@ -10,9 +8,6 @@ import (
 const STATEMENT = "'EOF', 'NEWLINE', 'TITLE', 'SET', 'UNION', 'TEXT', 'INDENT_TEXT', 'STYLE'"
 const VALUE = "'NUMERIC', 'IDENTIFIER', 'STRING', 'HEXCOLOR', 'RGBCOLOR', 'RGBACOLOR'"
 
-// parseVenn ports Mermaid's venn grammar. A token is read only when the grammar has to look at one to
-// decide, because the lexer asks the model whether an indented `text` continues a set, and the
-// statements are what tell the model so.
 func parseVenn(src string, db *VennDb) {
 	lexer := &VennLexer{src: src, host: db}
 	typ := -1
@@ -79,7 +74,6 @@ func parseVenn(src string, db *VennDb) {
 		db.setIndentMode(true)
 	}
 
-	// text reads the id of a text, and the label in brackets that an id which is not a number may carry.
 	text := func(sets func() []string) {
 		kind := peek()
 		if kind != T_IDENTIFIER && kind != T_STRING && kind != T_NUMERIC {

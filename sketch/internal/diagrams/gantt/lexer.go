@@ -1,10 +1,3 @@
-// Ported from pele src/diagrams/gantt/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// As in the other lexers, the port reads UTF-8 bytes: code() decodes the character at a
-// byte offset, and a step past a character that may not be ASCII steps the whole
-// character. pele's closures are methods of a lexer here. The sticky regular expressions
-// are written out as hand matchers.
-
 package gantt
 
 import (
@@ -34,13 +27,12 @@ const (
 
 var DAYS = [7]string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
 
-// A statement that starts with a keyword: the keyword, lower case, and what may follow it.
 const (
-	kwBoundary = iota // the keyword then \b
-	kwValue           // \s[^#\n;]+
-	kwMarker          // \s[^\n;]+
-	kwLine            // \s[^\n]+
-	kwTitle           // [^\S\r\n][^\n]+
+	kwBoundary = iota
+	kwValue
+	kwMarker
+	kwLine
+	kwTitle
 )
 
 type keywordRule struct {
@@ -75,8 +67,6 @@ func KEYWORDS(c rune) []keywordRule {
 	return nil
 }
 
-// codeAt decodes the character at a byte offset: -1 past the end, 0xfffe for a broken
-// sequence, and 0xd800 for a character outside the BMP, which pele reads as a surrogate.
 func codeAt(src string, q int) rune {
 	if q < 0 || q >= len(src) {
 		return -1
@@ -95,7 +85,6 @@ func codeAt(src string, q int) rune {
 	return r
 }
 
-// sizeAt is the length in bytes of the character at q.
 func sizeAt(src string, q int) int {
 	if q >= len(src) || src[q] < utf8.RuneSelf {
 		return 1
@@ -104,7 +93,6 @@ func sizeAt(src string, q int) int {
 	return s
 }
 
-// hasFold is whether a lower-case ASCII word is at q, ignoring case.
 func hasFold(s string, q int, word string) bool {
 	if q < 0 || q+len(word) > len(s) {
 		return false
@@ -157,7 +145,6 @@ func (l *lexer) skipWs(q int) int {
 	return q
 }
 
-// space matches one \s at q and returns its end, or -1.
 func (l *lexer) space(q int) int {
 	if q < l.n && util.IsSpace(l.code(q)) {
 		return q + sizeAt(l.src, q)
@@ -165,11 +152,8 @@ func (l *lexer) space(q int) int {
 	return -1
 }
 
-// boundary is \b after a word character at q-1.
 func (l *lexer) boundary(q int) bool { return !util.IsWord(l.code(q)) }
 
-// accAt matches /accTitle\s*:\s*/iy and its siblings at p: a word, spaces, the mark and
-// spaces. Returns the end of the match, or -1.
 func (l *lexer) accAt(word string, mark byte) int {
 	if !hasFold(l.src, l.p, word) {
 		return -1
@@ -181,7 +165,6 @@ func (l *lexer) accAt(word string, mark byte) int {
 	return l.skipWs(q + 1)
 }
 
-// spaced matches /word\s+/iy at p and returns its end, or -1.
 func (l *lexer) spaced(word string) int {
 	if !hasFold(l.src, l.p, word) || l.space(l.p+len(word)) < 0 {
 		return -1
@@ -189,7 +172,6 @@ func (l *lexer) spaced(word string) int {
 	return l.skipWs(l.p + len(word))
 }
 
-// RE_HREF: /href\s+"/iy.
 func (l *lexer) atHref() int {
 	q := l.spaced("href")
 	if q < 0 || q >= l.n || l.src[q] != '"' {
@@ -198,7 +180,6 @@ func (l *lexer) atHref() int {
 	return q + 1
 }
 
-// RE_EMPTY_CALL: /\(\s*\)/y.
 func (l *lexer) atEmptyCall() int {
 	if l.code(l.p) != 40 {
 		return -1
@@ -210,7 +191,6 @@ func (l *lexer) atEmptyCall() int {
 	return q + 1
 }
 
-// RE_DATE: /\d\d\d\d-\d\d-\d\d\b/y.
 func (l *lexer) atDate() int {
 	p := l.p
 	for i, c := range "dddd-dd-dd" {
@@ -229,7 +209,6 @@ func (l *lexer) atDate() int {
 	return p + 10
 }
 
-// One of KEYWORDS' patterns at p. Returns the end of the match, or -1.
 func (l *lexer) atRule(rule keywordRule) int {
 	if !hasFold(l.src, l.p, rule.word) {
 		return -1
@@ -262,8 +241,6 @@ func (l *lexer) atRule(rule keywordRule) int {
 	return e
 }
 
-// bareTitle matches /title[^\S\r\n]*(?=[\r\n]|$)/iy at p: a title with no text, which
-// pele skips. Returns the end of the match, or -1.
 func (l *lexer) bareTitle() int {
 	if !hasFold(l.src, l.p, "title") {
 		return -1
@@ -386,7 +363,6 @@ func tokenize(src string) Tokens {
 
 		switch l.state {
 		case S_INITIAL:
-			// The UTF-16 unit after c: the low surrogate when c is outside the BMP.
 			d := rune(0xdc00)
 			if c != 0xd800 {
 				d = l.code(p + sizeAt(src, p))
@@ -399,7 +375,6 @@ func tokenize(src string) Tokens {
 					}
 					l.p = e
 				} else if l.code(p+2) == 123 {
-					// The grammar enters a lexer state it never defines, so nothing can follow.
 					l.emit(T_open_directive, p, p+3)
 					l.emit(T_ERROR, p, p)
 					return l.toks

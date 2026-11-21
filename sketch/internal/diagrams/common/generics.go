@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/common/generics.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package common
 
 import "strings"
@@ -8,7 +6,6 @@ func tildes(text string) int {
 	return strings.Count(text, "~")
 }
 
-// Pairs tildes from the outside in: the first with the last, the second with the one before it.
 func pairTildes(text string) string {
 	count := tildes(text)
 	if count <= 1 {
@@ -38,7 +35,6 @@ func ParseGenericTypes(input string) string {
 	if !strings.Contains(input, "~") {
 		return input
 	}
-	// input.split(/(,)/): the parts with the commas kept between them.
 	parts := strings.Split(input, ",")
 	sets := make([]string, 0, 2*len(parts)-1)
 	for k, part := range parts {

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/class/graph.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package class
 
 import "strconv"
@@ -54,8 +52,6 @@ func marker(typ RelationEnd) EndMarker {
 	return "none"
 }
 
-// Resolves a parsed class diagram into the nodes and edges that are drawn. With `hierarchical`
-// off, only namespaces the source declares are kept and each is labeled with its full name.
 func buildClassGraph(model *ClassDb, hierarchical bool) ClassGraph {
 	var nodes []*GraphNode
 	var edges []*GraphEdge
@@ -158,7 +154,6 @@ func buildClassGraph(model *ClassDb, hierarchical bool) ClassGraph {
 		nodes = append(nodes, &GraphNode{ID: note.ID, Label: note.Text, Shape: "note", ParentID: parentId, Parent: group(parentId), ColorIndex: -1})
 	}
 
-	// Mermaid leaves every lollipop interface outside the namespaces. Here it stays beside its class.
 	for _, item := range model.Interfaces {
 		parent := -1
 		if owner, ok := classAt[item.ClassID]; ok {
@@ -172,7 +167,6 @@ func buildClassGraph(model *ClassDb, hierarchical bool) ClassGraph {
 	for _, relation := range model.Relations {
 		count++
 		type1, type2 := relation.Relation.Type1, relation.Relation.Type2
-		// addRelation swaps in an interface for the lollipop end of a relation with no other marker.
 		startInterface := type1 == RELATION_TYPE_LOLLIPOP && type2 == NONE
 		endInterface := !startInterface && type2 == RELATION_TYPE_LOLLIPOP && type1 == NONE
 		startAt, endAt := classAt, classAt

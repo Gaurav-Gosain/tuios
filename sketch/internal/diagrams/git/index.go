@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/git/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package git draws Mermaid's gitGraph: commits on branch lanes, with merges,
 // cherry-picks and tags.
 package git

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/block/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package block draws Mermaid's block diagram: blocks in a grid of columns, nested
 // in composite blocks, with edges between them.
 package block

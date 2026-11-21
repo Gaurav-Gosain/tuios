@@ -1,6 +1,3 @@
-// Ported from pele tests/render/break-hints.test.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-// The last case, which renders a sequence diagram, is covered by testdata/extra in the root package.
-
 package text
 
 import (
@@ -81,8 +78,6 @@ func TestBreakHints(t *testing.T) {
 		}
 	})
 
-	// pele bounds the time. The bound here is on bytes allocated, which does not
-	// depend on the speed of the machine: a quadratic wrap copies gigabytes.
 	t.Run("wraps many pieces without width in linear time", func(t *testing.T) {
 		for _, hint := range []string{shy, zwsp} {
 			raw := strings.Repeat("a", 22) + strings.Repeat("̀"+hint, 24000) + "i xx"

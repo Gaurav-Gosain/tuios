@@ -1,8 +1,5 @@
 package sketch
 
-// Ported from pele tests/render/palette.test.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac:
-// the palette theme variables, the colors they may hold and the label colors on them.
-
 import (
 	"encoding/json"
 	"maps"

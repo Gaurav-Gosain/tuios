@@ -1,5 +1,3 @@
-// Ported from pele src/errors.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package types
 
 import (
@@ -117,10 +115,6 @@ type Origin interface {
 	Find(offset int) (source string, at int)
 }
 
-// origins holds the Origin of each text being parsed. pele keeps one in a module
-// variable while it parses; a key per text lets parses on other goroutines run at
-// the same time. The key is the string's data and length, which stands for
-// JavaScript's === on the parsed text: the parsers pass that very string.
 var origins struct {
 	sync.Mutex
 	m map[originKey]Origin
@@ -165,7 +159,6 @@ func Written(src string, offset int) (string, int) {
 
 // Locate finds the line and column of a byte offset. Columns count UTF-16 units, as pele's do.
 func Locate(src string, offset int) Location {
-	// Keep EOF errors on the last content line.
 	if end := len(js.TrimEnd(src)); end > 0 && offset >= end {
 		_, size := utf8.DecodeLastRuneInString(src[:end])
 		src, offset = Written(src, end-size)

@@ -13,7 +13,6 @@ func TestTreemapText(t *testing.T) {
 │                         │        │                 │
 └─────────────────────────┴────────┴─────────────────┘
 `)
-	// Narrower than every label needs: the labels are shortened.
 	drawPinned(t, src, 30, `
 ┌─ Fruit  40 ──────┬─ Veg ───┐
 ├─────────────┬────┼─────────┤
@@ -23,7 +22,6 @@ func TestTreemapText(t *testing.T) {
 │             │    │         │
 └─────────────┴────┴─────────┘
 `)
-	// Too narrow for the boxes: the tree.
 	drawPinned(t, src, 16, `
 Fruit  40
 ├ Apple  30

@@ -29,7 +29,6 @@ func FuzzRender(f *testing.F) {
 			f.Add(template("a&b"))
 		}
 	}
-	// The extra cases reach label markup, entities and layouts the corpus does not.
 	extras, _ := filepath.Glob("testdata/extra/*.json")
 	for _, file := range extras {
 		data, err := os.ReadFile(file)
@@ -46,7 +45,6 @@ func FuzzRender(f *testing.F) {
 			f.Add(c.Src)
 		}
 	}
-	// $$...$$ labels, which FuzzRender also draws with a resolver.
 	for _, typ := range mathTypes {
 		for _, template := range typ.templates {
 			f.Add(template("a $$" + PAYLOADS[1] + "$$ $$x^2$$ $$none$$"))
@@ -57,7 +55,6 @@ func FuzzRender(f *testing.F) {
 		f.Add(template(`"a&b"`, "a&b"))
 	}
 	f.Fuzz(func(t *testing.T, src string) {
-		// Large inputs only slow the search down; the limits cover them.
 		if len(src) > 4096 {
 			return
 		}

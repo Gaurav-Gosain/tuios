@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/railroad/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package railroad
 
 import (
@@ -32,11 +30,8 @@ type Box struct {
 	up    float64
 	down  float64
 	kids  []*Box
-	// A leaf's text, or a loop's count.
-	text string
-	// The name a non-terminal refers to.
-	id string
-	// How far a bypass rises above the baseline, or a loop drops below it.
+	text  string
+	id    string
 	reach float64
 }
 
@@ -45,10 +40,9 @@ type Metrics struct {
 	size     float64
 	padding  float64
 	height   float64
-	// Space between elements in a sequence, and between stacked branches.
-	gap float64
-	sep float64
-	arc float64
+	gap      float64
+	sep      float64
+	arc      float64
 }
 
 const (
@@ -67,8 +61,6 @@ func option(config types.Config, key string, fallback, max float64) float64 {
 	return fallback
 }
 
-// shown: text is literal here: a terminal such as "<br>" or "*" is itself, not markup. Mermaid's `#35;`
-// codes still stand for characters, and escapes that would be invisible are written out.
 func shown(t string) string {
 	s := t
 	if strings.Contains(t, "¶ß") {
@@ -124,7 +116,6 @@ func count(min, max float64) string {
 	return str(min) + "–" + str(max) + "×"
 }
 
-// below is where the next branch of a choice sits below the baseline, given the one above it.
 func below(offset float64, above, branch *Box, m *Metrics) float64 {
 	return math.Max(offset+above.down+m.sep+branch.up, float64(2*m.arc))
 }
@@ -134,7 +125,6 @@ func bypass(kid *Box, m *Metrics) *Box {
 	return &Box{kind: KindBypass, width: kid.width + float64(4*m.arc), up: reach, down: kid.down, kids: []*Box{kid}, reach: reach}
 }
 
-// allSpaces is /^ +$/.
 func allSpaces(s string) bool {
 	return s != "" && strings.Trim(s, " ") == ""
 }
@@ -151,7 +141,6 @@ func measure(root *RailroadNode, m *Metrics, room float64) *Box {
 		for i := 0; i < len(pending); i++ {
 			node, width := pending[i].node, pending[i].width
 			budgets[node] = width
-			// A sequence that folds puts its rows inside rails, so its parts are sized for those rows.
 			around := 0.0
 			switch node.typ {
 			case "choice", "optional":
@@ -252,7 +241,6 @@ func measure(root *RailroadNode, m *Metrics, room float64) *Box {
 		case "optional":
 			return bypass(kids[0], m)
 		}
-		// repetition
 		min, max := node.min, node.max
 		kid := kids[0]
 		if min == 1 && max == 1 {
@@ -439,7 +427,6 @@ func draw(model *RailroadDb, config types.Config, options types.RenderOptions, t
 					boxes = append(boxes, kid)
 					at = append(at, ky, kx)
 				}
-				// Reversed, so that the branches come off the stack top to bottom.
 				reverseBoxes(boxes, from)
 				reverseFloats(at, 2*from)
 			case KindBypass:
@@ -555,7 +542,6 @@ func draw(model *RailroadDb, config types.Config, options types.RenderOptions, t
 	return rendered
 }
 
-// geoNode is a rule's tree for a drawing in text, with its texts as the SVG shows them. Not part of pele.
 func geoNode(root *RailroadNode) *types.GeoRailNode {
 	return fold(root, modelParts, func(node *RailroadNode, kids []*types.GeoRailNode) *types.GeoRailNode {
 		out := &types.GeoRailNode{Kind: node.typ, Kids: kids, Min: node.min, Max: node.max}

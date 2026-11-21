@@ -2,13 +2,6 @@ package text
 
 import sketch "tuios.dev/sketch/internal/engine"
 
-// Mindmaps: a tree with the root at the top and each branch drawn with box
-// characters, as tree(1) draws folders. Each branch from the root takes a
-// series colour, as pele's do, for its lines and its brackets. A node keeps
-// the brackets of its shape: [square], (rounded), ((circle)) and
-// {{hexagon}}. A cloud and a bang are rounded: their source brackets,
-// )cloud( and ))bang((, read as a typo in text.
-
 var mindBrackets = map[string][2]string{
 	"rect":    {"[", "]"},
 	"rounded": {"(", ")"},
@@ -27,15 +20,12 @@ func drawMindmap(l *sketch.Layout, opt Options) (*canvas, error) {
 	depth := make([]int, len(nodes))
 	deepest := 0
 	for i, n := range nodes {
-		// Nodes come after their parent; anything else is not a tree.
 		if i > 0 && n.Parent >= 0 && n.Parent < i {
 			children[n.Parent] = append(children[n.Parent], i)
 			depth[i] = depth[n.Parent] + 1
 			deepest = max(deepest, depth[i])
 		}
 	}
-	// Each level sets the text in by four cells. Refuse before the prefixes
-	// are built: a deep chain would need megabytes of them.
 	if opt.Cols > 0 && 4*deepest+12 > opt.Cols {
 		return nil, ErrTooWide
 	}
@@ -48,13 +38,10 @@ func drawMindmap(l *sketch.Layout, opt Options) (*canvas, error) {
 		role   uint8
 		open   string
 		close  string
-		// branch is the child of the root the node is under, -1 for the
-		// root, and top says the line is the first of that child.
 		branch int
 		top    bool
 	}
 	var lines []line
-	// The walk is iterative: a deep chain of nodes must not grow the stack.
 	type item struct {
 		node   int
 		indent string
@@ -89,7 +76,6 @@ func drawMindmap(l *sketch.Layout, opt Options) (*canvas, error) {
 		if it.node == 0 {
 			role = roleTitle
 		}
-		// Lines under the first are set in to where the text starts.
 		pad := ""
 		for range width(br[0]) {
 			pad += " "
@@ -131,8 +117,6 @@ func drawMindmap(l *sketch.Layout, opt Options) (*canvas, error) {
 		return nil, err
 	}
 	for y, ln := range lines {
-		// The first four cells of a prefix are the root's lines, but for
-		// the head of a child of the root. The rest are the branch's.
 		branch := uint8(roleBox)
 		if ln.branch >= 0 {
 			branch = seriesRole(ln.branch)

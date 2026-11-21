@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/mindmap/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package mindmap
 
 import (
@@ -15,24 +13,19 @@ type MindmapNode struct {
 	typ      int
 	children []*MindmapNode
 	isRoot   bool
-	// Index of the first-level branch the node belongs to, wrapping after eleven as in Mermaid.
-	// The root has none, which reads as 0.
-	section int
-	// "" for none.
-	class string
-	icon  string
+	section  int
+	class    string
+	icon     string
 }
 
 const SECTIONS = 11
 
 type MindmapDb struct {
 	title string
-	// In source order, which is depth-first. The first node is the root.
 	nodes []*MindmapNode
 
 	baseLevel int
-	// The chain of nodes that can still take children, with strictly increasing levels.
-	open []*MindmapNode
+	open      []*MindmapNode
 }
 
 func (db *MindmapDb) GetType(start, end string) int { return common.GetType(start, end) }
@@ -44,7 +37,6 @@ func (db *MindmapDb) AddNode(level int, id, descr string, typ int, _ *string) {
 	}
 	level -= db.baseLevel
 
-	// Mermaid's parent is the last node with a smaller indentation, wherever it is in the tree.
 	open := db.open
 	depth := len(open)
 	for depth > 0 && open[depth-1].level >= level {

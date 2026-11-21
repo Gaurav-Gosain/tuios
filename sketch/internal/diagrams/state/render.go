@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/state/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package state
 
 import (
@@ -35,8 +33,6 @@ const (
 
 var mermaidClassNames = [...]string{"state", "cluster-alt", "cluster", "note"}
 
-// MERMAID_CLASSES: /(?:^| )statediagram-(?:state|cluster-alt|cluster|note)(?= |$)/g. Go's regexp
-// has no lookahead, so the match is written out.
 func stripMermaidClasses(s string) string {
 	matchFrom := func(start int) int {
 		if !strings.HasPrefix(s[start:], "statediagram-") {
@@ -117,7 +113,6 @@ var CLASSES = [...]string{
 }
 
 type view struct {
-	// nil for the unseen helpers the layout needs.
 	node   *StateNode
 	kind   K
 	style  *svg.ResolvedStyle
@@ -140,7 +135,6 @@ func numberOption(config types.Config, key string, fallback float64) float64 {
 	return fallback
 }
 
-// Mermaid keeps the quotes of a click statement's strings and strips them when it draws.
 func unquote(text string) string {
 	from := 0
 	to := len(text)
@@ -184,10 +178,8 @@ func renderState(db *StateDb, config types.Config, options types.RenderOptions) 
 	return common.TurnToFit(options, func(down bool) types.Rendered { return draw(db, config, options, down) })
 }
 
-// draw: `turned` draws a diagram that runs across as one that runs down.
 func draw(db *StateDb, config types.Config, options types.RenderOptions, turned bool) types.Rendered {
 	graph := db.Graph
-	// State diagrams follow the flowchart curve.
 	flow, _ := config["flowchart"].(map[string]any)
 	curve, _ := flow["curve"].(string)
 	size := types.Or(options.FontSize, 16)
@@ -248,8 +240,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		}
 		logical = append(logical, parent)
 	}
-	// Composites that are redeclared inside each other form a ring with no way in from the root.
-	// One member of each ring moves to the root, which leaves a tree.
 	{
 		kids := make([][]int, states)
 		var queue []int
@@ -309,9 +299,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		logical[i] = logical[owner]
 	}
 
-	// As in Mermaid, a composite that sets no direction runs top to bottom whatever surrounds it.
 	innerDir := func(composite int) layout.Dir { return layout.Direction(views[composite].node.Dir) }
-	// Whether the flow around a state runs top to bottom or bottom to top.
 	across := func(i int) bool {
 		if logical[i] == -1 {
 			return vertical(rootDir)
@@ -321,8 +309,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 
 	degree := make([]int, states)
 	noted := make([]bool, states)
-	// When each state first takes part in a transition. Layout follows this order rather than
-	// the order of declaration, so a state declared up front does not become the top of the flow.
 	appear := make([]float64, states)
 	for i := range appear {
 		appear[i] = math.Inf(1)
@@ -430,7 +416,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		if c == nil {
 			c = layout.Cnode(v.w, v.h, -1)
 		}
-		// The transitions on one side of a state's box spread along it, clear of its corners.
 		if v.kind == K_State || v.kind == K_Described {
 			if across(i) {
 				c.Span = v.w - 24
@@ -444,12 +429,9 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 	var cedges []*layout.CEdge
 	var edgeLabels []text.Label
 	var drawn []StateEdge
-	// The transitions each state makes to itself: how many, their widest label, and their labels' height.
 	loopCount := make([]int, states)
 	loopWidth := make([]float64, states)
 	loopHeight := make([]float64, states)
-	// A transition between a composite and a state inside it runs between that state and a point
-	// just inside the composite, and is then drawn on to the composite's border.
 	anchors := map[int]int{}
 	encloses := func(composite, item int) bool {
 		if !cnodes[composite].IsGroup {
@@ -500,14 +482,11 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		cedges = append(cedges, &layout.CEdge{Src: src, Dst: dst, Minlen: 1, LabelW: labelW, LabelH: labelH, Route: []float64{}})
 	}
 
-	// A state with notes, or a composite with self-transitions, sits in an unseen group of its
-	// own: the notes go beside the state, across the flow, without disturbing its transitions.
 	for i := 0; i < states; i++ {
 		if owners[i] != -1 {
 			continue
 		}
 		item := cnodes[i]
-		// Loops hang off the right, or below when the flow is horizontal, with their labels beyond them.
 		room := 0.0
 		if loopCount[i] > 0 {
 			reach := float64(LOOP + (loopCount[i]-1)*8)
@@ -548,8 +527,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 	}
 
 	{
-		// Numbers the tree so that, at every level, initial states come first and the rest follow
-		// in the order the transitions introduce them.
 		members := make([][]int, len(cnodes))
 		var top []int
 		for i := 0; i < len(cnodes); i++ {
@@ -609,7 +586,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 	height := math.Ceil(lay.Height + float64(2*pad))
 	var links []types.LinkInfo
 
-	// Route points by rounded y, to find the edges that cross a composite's title bar.
 	crossings := map[float64][]float64{}
 	for _, e := range cedges {
 		route := e.Route
@@ -636,9 +612,7 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 
 	var clusters, dividers, nodesOut, notesOut strings.Builder
 	var fills []svg.Fill
-	// A state takes about 230 bytes of markup and a transition about 300.
 	nodesOut.Grow(len(cnodes) * 232)
-	// Draws the dashed lines between the regions among a composite's members.
 	divide := func(items []int, left, top, right, bottom float64) {
 		var regions []int
 		for _, i := range items {
@@ -692,7 +666,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 			}
 			return
 		}
-		// Regions that sit neither side by side nor in a stack each get an outline.
 		for _, i := range regions {
 			c := cnodes[i]
 			dividers.WriteString(rect(c.X-c.W/2+pad, c.Y-c.H/2+pad, c.W, c.H, ` class="pele-divider" rx="`+js.Int(CORNER)+`"`))
@@ -764,7 +737,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 			at := PAD_Y - h/2 + v.label.Height
 			body += `<path d="M` + svg.Num(-w/2) + `,` + svg.Num(at+6) + `H` + svg.Num(w/2) + `"` + RULE + style.Line + `/>` + svg.LabelSvg(v.label, 0, at-v.label.Height/2, labelAttrs, icons)
 			at += 14
-			// One Builder, not a += per line: Go copies the string on each +=, where JavaScript ropes do not.
 			var lines strings.Builder
 			lines.WriteString(body)
 			for _, line := range v.lines {
@@ -775,7 +747,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		}
 
 		if link, ok := db.Links[node.ID]; ok {
-			// Entity codes are resolved first, so the URL is checked in the form a browser would follow.
 			tooltip := text.DecodeEntities(unquote(link.Tooltip))
 			if tooltip != "" {
 				body = `<title>` + svg.Esc(tooltip) + `</title>` + body
@@ -793,7 +764,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		}
 	}
 
-	// Moves a route end from the layout box onto the drawn shape, and spreads the ends along a bar.
 	attach := func(route []float64, at int, i int) {
 		c := cnodes[i]
 		if c.IsGroup {
@@ -805,7 +775,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 		if at == 0 {
 			other = 3
 		}
-		// 0 is the x axis and 1 the y axis; the end sits on a side that faces along `axis`.
 		for _, axis := range [...]int{1, 0} {
 			extent, drawnExtent, breadth, center, cross := c.W, v.w, v.h, c.X+pad, c.Y+pad
 			if axis == 1 {
@@ -849,7 +818,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 			v := views[ce.Src]
 			k := float64(loopSeen[ce.Src])
 			loopSeen[ce.Src]++
-			// The loop hangs off a side the flow does not use: the right, or below when the flow is horizontal.
 			side := across(ce.Src)
 			w, h := v.w, v.h
 			if a.IsGroup {
@@ -864,7 +832,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 			spread := math.Max(math.Min(spreadBase, 8+float64(k*6)), 2)
 			reach := LOOP + float64(k*8)
 			trim := svg.MarkerTrim(endType) / js.Or(js.Hypot(reach, spread), 1)
-			// Offsets are given for a loop on the right and turned a quarter for one below.
 			px := func(dx, dy float64) float64 {
 				if side {
 					return a.X + pad + (out + dx)
@@ -888,7 +855,6 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 			length := js.Or(js.Hypot(path.Edx, path.Edy), 1)
 			path.Edx /= length
 			path.Edy /= length
-			// Labels stack beyond the outermost loop, in the order of their transitions.
 			furthest := float64(LOOP + (loopCount[ce.Src]-1)*8)
 			below := loopText[ce.Src] + l.Height/2
 			loopText[ce.Src] += l.Height
@@ -1000,11 +966,9 @@ func draw(db *StateDb, config types.Config, options types.RenderOptions, turned 
 	return rendered
 }
 
-// geoShapes name each kind of state for the geometry: sketch/text draws by them.
 var geoShapes = [...]string{K_State: "state", K_Described: "state", K_Start: "state-start", K_End: "state-end", K_Choice: "choice",
 	K_Fork: "fork", K_Join: "fork", K_Note: "note", K_Composite: "composite", K_Region: "region", K_Hidden: "hidden"}
 
-// stateGeometry is the layout in SVG units, before the padding, for drawing the diagram some other way.
 func stateGeometry(db *StateDb, views []*view, cnodes []*layout.CNode, cedges []*layout.CEdge, drawn []StateEdge, edgeLabels []text.Label,
 	lay layout.CompoundResult, measurer text.TextMeasurer, size float64) *types.Geometry {
 	g := &types.Geometry{Width: lay.Width, Height: lay.Height, Title: svg.TitleLabel(db.Title, measurer, size, 4000).Plain()}
@@ -1037,7 +1001,6 @@ func stateGeometry(db *StateDb, views []*view, cnodes []*layout.CNode, cedges []
 	return g
 }
 
-// endSide is svg.EndSide, and -1 off the ends of a route, as pele's reads of undefined give.
 func endSide(route []float64, at int, c *layout.CNode) int {
 	if at < 0 || at+1 >= len(route) {
 		return -1
@@ -1045,7 +1008,6 @@ func endSide(route []float64, at int, c *layout.CNode) int {
 	return svg.EndSide(route, at, c)
 }
 
-// Picks where a composite's title sits in its title bar so that edges entering from above do not cross it.
 func titleX(c *layout.CNode, width float64, crossings map[float64][]float64) float64 {
 	xs, ok := crossings[js.Round(c.Y-c.H/2)]
 	if !ok || width == 0 {

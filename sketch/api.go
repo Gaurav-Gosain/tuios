@@ -2,10 +2,6 @@ package sketch
 
 import "tuios.dev/sketch/internal/engine"
 
-// The API, from the engine every entry point shares. A type here is the
-// engine's own, so a Diagram from tuios.dev/sketch and one from
-// tuios.dev/sketch/core are the same type.
-
 type (
 	Type          = engine.Type
 	MermaidType   = engine.MermaidType

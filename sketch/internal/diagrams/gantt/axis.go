@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/gantt/axis.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele's Calendar is an object of closures, and `every` wraps one in another. The port
-// keeps a Calendar as a struct: the unit and the step say which floor and offset apply.
-// pele's `range` is tickRange, and its `pad` is padFill, as dates.go has a pad of its own.
-
 package gantt
 
 import (
@@ -14,9 +8,6 @@ import (
 
 	"tuios.dev/sketch/internal/js"
 )
-
-// Time axis support, following d3-time and d3-time-format (English locale, local time), which Mermaid uses:
-// the `axisFormat` specifiers, tick intervals with d3's `every` rule, and its choice of automatic ticks.
 
 const (
 	SECOND = 1000
@@ -44,15 +35,12 @@ const (
 var tickUnitNames = [...]string{"millisecond", "second", "minute", "hour", "day", "week", "month", "year"}
 
 type Calendar struct {
-	unit TickUnit
-	// The step `every` was given; 1 for the unit's own calendar.
+	unit      TickUnit
 	step      float64
 	weekStart float64
-	// For weeks taken several at a time: the first week start at or before the epoch.
-	epoch js.Date
-	// How many values `field` cycles through, which bounds how far apart filtered ticks can be.
-	cycle float64
-	ms    float64
+	epoch     js.Date
+	cycle     float64
+	ms        float64
 }
 
 func startOfDay(d *js.Date) {
@@ -130,7 +118,6 @@ func (c *Calendar) baseOffset(d *js.Date, step float64) {
 	}
 }
 
-// The value d3 tests against a step: a tick falls where it is a multiple of the step.
 func (c *Calendar) field(d js.Date) float64 {
 	switch c.unit {
 	case second:
@@ -167,7 +154,6 @@ func (c *Calendar) floor(d *js.Date) {
 		c.baseFloor(d)
 		c.baseOffset(d, -mod(span(c.epoch, *d, WEEK), step))
 	default:
-		// Date overflow makes field(d) NaN, which can never match the interval.
 		for c.baseFloor(d); finite(*d) && !c.test(*d); c.baseFloor(d) {
 			d.SetTime(d.T - 1)
 		}
@@ -197,7 +183,6 @@ func (c *Calendar) offset(d *js.Date, n float64) {
 	}
 }
 
-// Whole units between two floored dates, discounting a change of UTC offset between them.
 func span(start, end js.Date, unit float64) float64 {
 	return math.Floor((end.T - start.T - float64((end.TimezoneOffset()-start.TimezoneOffset())*MINUTE)) / unit)
 }
@@ -206,7 +191,6 @@ func mod(a, b float64) float64 {
 	return math.Mod(math.Mod(a, b)+b, b)
 }
 
-// The interval d3's `unit.every(step)` gives.
 func every(unit TickUnit, step float64, weekStart float64, loc *time.Location) Calendar {
 	var base Calendar
 	if unit == week {
@@ -226,7 +210,6 @@ func every(unit TickUnit, step float64, weekStart float64, loc *time.Location) C
 	return base
 }
 
-// Ticks from start to stop inclusive, or nil and false when there would be more than `limit`.
 func tickRange(calendar *Calendar, start, stop float64, limit int, loc *time.Location) ([]float64, bool) {
 	d := js.NewDate(start-1, loc)
 	calendar.floor(&d)
@@ -288,7 +271,6 @@ var AUTO = [...]autoTick{
 	{year, 1, YEAR},
 }
 
-// About `count` ticks at round times, chosen the way d3's time scale chooses them.
 func autoTicks(start, stop float64, count int, loc *time.Location) []float64 {
 	target := (stop - start) / float64(count)
 	i := 0
@@ -316,8 +298,6 @@ func autoTicks(start, stop float64, count int, loc *time.Location) []float64 {
 
 var WEEK_STARTS = [7]string{"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
 
-// RE_INTERVAL: /^([1-9]\d*)(millisecond|second|minute|hour|day|week|month)$/. Returns the step and
-// the unit, or false.
 func matchInterval(interval string) (float64, TickUnit, bool) {
 	q := 0
 	for q < len(interval) && interval[q] >= '0' && interval[q] <= '9' {
@@ -334,7 +314,6 @@ func matchInterval(interval string) (float64, TickUnit, bool) {
 	return 0, 0, false
 }
 
-// Ticks for a `tickInterval` such as `1week`, or false when it is not one or asks for more than `limit`.
 func intervalTicks(interval, weekday string, start, stop float64, limit int, loc *time.Location) ([]float64, bool) {
 	step, unit, ok := matchInterval(interval)
 	if !ok {
@@ -373,14 +352,12 @@ func floored(date js.Date, calendar Calendar) js.Date {
 	return d
 }
 
-// Weeks since the last `weekStart` day before the year began, which is d3's %U and %W.
 func weekOfYear(date js.Date, weekStart float64) float64 {
 	wk := weekCalendar(weekStart)
 	yearStart := floored(date, CALENDARS(year))
 	return span(floored(js.NewDate(yearStart.T-1, date.Loc), wk), floored(date, wk), WEEK)
 }
 
-// The Thursday that decides which ISO week and ISO year a date belongs to.
 func isoThursday(date js.Date) js.Date {
 	thursday := weekCalendar(4)
 	dd := date.Day()
@@ -409,7 +386,6 @@ func PADS(c string) (string, bool) {
 	return "", false
 }
 
-// charAt is specifier.charAt(i) for a byte offset: the character there, or "" past the end.
 func charAt(s string, i int) string {
 	if i >= len(s) {
 		return ""
@@ -418,7 +394,6 @@ func charAt(s string, i int) string {
 	return s[i : i+size]
 }
 
-// Formats a date with a d3 time format specifier such as `%Y-%m-%d`.
 func timeFormat(specifier string, date js.Date) string {
 	var out strings.Builder
 	from := 0
@@ -447,8 +422,6 @@ func timeFormat(specifier string, date js.Date) string {
 	return out.String()
 }
 
-// nameAt is names[i], cut to n characters when n > 0. An invalid date has no name; pele
-// fails there with a TypeError, and the port gives "".
 func nameAt(names []string, i float64, n int) string {
 	if !(i >= 0 && i < float64(len(names))) {
 		return ""

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/block/layout.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package block
 
 import (
@@ -11,27 +9,22 @@ import (
 
 type Cell struct {
 	children []*Cell
-	// Grid width of this container: a positive count, or -1 to put every child on one row.
-	columns float64
-	span    float64
-	space   bool
-	// Height reserved above a container's grid for its title.
-	head float64
-	// Size the content needs. Set by the caller for leaves, computed here for containers.
-	nw float64
-	nh float64
-	// Placement: grid position, then center and size in pixels.
-	col     float64
-	row     int
-	cols    float64
-	heights []float64
-	// Extra space after each row or column. nil is pele's shared NO_GAPS.
-	rowGaps []float64
-	colGaps []float64
-	x       float64
-	y       float64
-	w       float64
-	h       float64
+	columns  float64
+	span     float64
+	space    bool
+	head     float64
+	nw       float64
+	nh       float64
+	col      float64
+	row      int
+	cols     float64
+	heights  []float64
+	rowGaps  []float64
+	colGaps  []float64
+	x        float64
+	y        float64
+	w        float64
+	h        float64
 }
 
 const MAX_SPAN = 1000
@@ -53,9 +46,6 @@ func calculateBlockPosition(columns, position float64) (px, py float64) {
 	return math.Mod(position, columns), math.Floor(position / columns)
 }
 
-// measure puts each child in its grid cell and sizes the container. Every column is as wide as the widest
-// block needs. Every row that holds a plain block is as tall as the tallest block in the container,
-// as in Mermaid; a row of nothing but containers is only as tall as they need.
 func measure(box *Cell, gap, inset float64) {
 	columns := box.columns
 	var heights []float64
@@ -66,7 +56,6 @@ func measure(box *Cell, gap, inset float64) {
 	for _, child := range box.children {
 		px, fy := calculateBlockPosition(columns, position)
 		py := int(fy)
-		// Mermaid lets a block wider than the rest of its row stick out of the grid. Here it stops at the last column.
 		span := 1.0
 		if child.span >= 1 {
 			span = math.Min(child.span, MAX_SPAN)
@@ -113,7 +102,6 @@ func measure(box *Cell, gap, inset float64) {
 	box.nh = height + float64(2*inset) + box.head
 }
 
-// arrange gives each child its cell, sharing out any room the container has beyond what it needs.
 func arrange(box *Cell, gap, inset float64) {
 	cols, heights, rowGaps, colGaps := box.cols, box.heights, box.rowGaps, box.colGaps
 	rows := float64(len(heights))
@@ -160,7 +148,6 @@ func total(gaps []float64) float64 {
 	return sum
 }
 
-// gapAt is TS `gaps[i] ?? 0`: a gap past the end of the list, or a hole in it, is 0. Not in pele.
 func gapAt(gaps []float64, i int) float64 {
 	if i < 0 || i >= len(gaps) {
 		return 0
@@ -168,7 +155,6 @@ func gapAt(gaps []float64, i int) float64 {
 	return gaps[i]
 }
 
-// layout lays out a tree of cells in place. The root has no border, so its grid starts at the origin.
 func layout(root *Cell, gap float64) (width, height float64) {
 	order := []*Cell{root}
 	for i := 0; i < len(order); i++ {

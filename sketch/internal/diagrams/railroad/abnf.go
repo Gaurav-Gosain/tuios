@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/railroad/abnf.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package railroad
 
 import (
@@ -9,8 +7,6 @@ import (
 	"tuios.dev/sketch/internal/diagrams/common"
 	"tuios.dev/sketch/internal/js"
 )
-
-// `railroad-abnf-beta`: ABNF as in RFC 5234, with each rule closed by a semicolon.
 
 const (
 	AB_keyword = iota
@@ -39,7 +35,6 @@ func isHexByte(c byte) bool {
 	return isDigitByte(c) || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')
 }
 
-// /[A-Za-z][A-Za-z0-9-]*/y
 func matchRuleName(src string, p int) int {
 	if !isLetterByte(src[p]) {
 		return -1
@@ -51,7 +46,6 @@ func matchRuleName(src string, p int) int {
 	return q
 }
 
-// /;[^\n\r]*/y
 func matchAbnfComment(src string, p int) int {
 	if src[p] != ';' {
 		return -1
@@ -63,7 +57,6 @@ func matchAbnfComment(src string, p int) int {
 	return q
 }
 
-// /"[^"]*"/y
 func matchAbnfString(src string, p int) int {
 	if src[p] != '"' {
 		return -1
@@ -81,7 +74,6 @@ func hexRun(src string, q int) int {
 	return q
 }
 
-// /%[xXdDbB][0-9A-Fa-f]+(?:-[0-9A-Fa-f]+|\.[0-9A-Fa-f]+)*/y
 func matchNumVal(src string, p int) int {
 	if src[p] != '%' || p+1 >= len(src) || strings.IndexByte("xXdDbB", src[p+1]) < 0 {
 		return -1
@@ -100,7 +92,6 @@ func matchNumVal(src string, p int) int {
 	return q
 }
 
-// /[0-9]*\*[0-9]*/y
 func matchRepeat(src string, p int) int {
 	q := p
 	for q < len(src) && isDigitByte(src[q]) {
@@ -116,7 +107,6 @@ func matchRepeat(src string, p int) int {
 	return q
 }
 
-// /[0-9]+/y
 func matchDigits(src string, p int) int {
 	q := p
 	for q < len(src) && isDigitByte(src[q]) {
@@ -141,7 +131,6 @@ func ABNF_TOKENS() []*common.TokenType {
 		abnfTokens = []*common.TokenType{
 			opening("railroad-abnf-beta", name),
 			literal("="),
-			// A semicolon closes a rule only at the end of its line; with anything after it, it starts a comment.
 			literal(";", comment),
 			literal("/"),
 			literal("("),
@@ -163,15 +152,13 @@ func ABNF_TOKENS() []*common.TokenType {
 	return abnfTokens
 }
 
-// abnfFrame is one open bracket, or the rule itself at the bottom of the stack.
 type abnfFrame struct {
 	alternation   *astNode
 	concatenation *astNode
-	// The bracket's node, its closing token, and the repeat written before it.
-	node      *astNode
-	close     int
-	repeat    string
-	hasRepeat bool
+	node          *astNode
+	close         int
+	repeat        string
+	hasRepeat     bool
 }
 
 func newAbnfFrame(node, alternation *astNode, close int, repeat string, hasRepeat bool) *abnfFrame {
@@ -287,7 +274,6 @@ func abnfNode(part *astNode, kids []*RailroadNode) *RailroadNode {
 
 func abnfRules(ast *Grammar) []RailroadRule { return toRules(ast, abnfNode) }
 
-// abnfTitle is text.slice(1, -1): a lone quote, as in `title "`, gives "".
 func abnfTitle(text string) string {
 	if len(text) < 2 {
 		return ""

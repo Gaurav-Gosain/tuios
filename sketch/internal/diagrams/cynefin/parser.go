@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/cynefin/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package cynefin
 
 import (
@@ -21,7 +19,6 @@ const (
 	T_newline
 )
 
-// matchDomain answers as /complex|complicated|clear|chaotic|confusion/y.
 func matchDomain(src string, p int) int {
 	for _, word := range [...]string{"complex", "complicated", "clear", "chaotic", "confusion"} {
 		if strings.HasPrefix(src[p:], word) {

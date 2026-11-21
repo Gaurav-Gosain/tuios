@@ -1,7 +1,3 @@
-// Ported from pele src/diagrams/mindmap/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele's closures over the layout arrays are methods of a struct here.
-
 package mindmap
 
 import (
@@ -37,7 +33,6 @@ const (
 	ROW_GAP = 10
 )
 
-// A label with each line starting at `left`, for an outline, where centered lines would look ragged.
 func leftLabel(label text.Label, left, cy float64, icons types.IconResolver) string {
 	if len(label.Lines) < 2 {
 		return svg.LabelSvg(label, left+label.Width/2, cy, ` class="pele-label"`, icons)
@@ -54,7 +49,6 @@ func renderMindmap(model *MindmapDb, config types.Config, options types.RenderOp
 	return common.TurnToFit(options, func(down bool) types.Rendered { return draw(model, config, options, down) })
 }
 
-// The layout arrays that pele's `stack` closure works on.
 type bands struct {
 	extent  []float64
 	rel     []float64
@@ -63,7 +57,6 @@ type bands struct {
 	stacked float64
 }
 
-// Stacks subtrees top to bottom and returns the height at which their parent's anchor belongs.
 func (b *bands) stack(list []*MindmapNode, from, to int, gap float64) float64 {
 	y := 0.0
 	last := 0.0
@@ -84,7 +77,6 @@ func (b *bands) stack(list []*MindmapNode, from, to int, gap float64) float64 {
 	return (b.rel[a] + b.own[a] + b.anchor[a] + b.rel[z] + b.own[z] + b.anchor[z]) / 2
 }
 
-// The branch being drawn, flushed into the output as one group.
 type branch struct {
 	out   string
 	edges string
@@ -102,8 +94,6 @@ func (g *branch) flush(section int) {
 	g.body = ""
 }
 
-// `down` draws the map as an outline: the root at the top, and each level set in under its parent.
-// It is far narrower than branches spreading to both sides, and as tall as it needs to be.
 func draw(model *MindmapDb, config types.Config, options types.RenderOptions, down bool) types.Rendered {
 	num := svg.Num
 	size := types.Or(options.FontSize, 16)
@@ -131,7 +121,6 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 			depth[child.id] = depth[i] + 1
 		}
 	}
-	// An outline has the width the host gives it, less what its level is set in.
 	room := math.Inf(1)
 	if down && options.MaxWidth != nil && *options.MaxWidth > 0 {
 		room = *options.MaxWidth - float64(2*pad)
@@ -141,9 +130,7 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 	w := make([]float64, n)
 	h := make([]float64, n)
 	dy := make([]float64, n)
-	// Where links meet the node, measured down from its top: its middle.
 	anchor := make([]float64, n)
-	// Whether the host has the node's icon. One it does not have takes no room.
 	drawn := make([]bool, n)
 
 	for i := 0; i < n; i++ {
@@ -171,15 +158,11 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 		if shape == "" && i == 0 {
 			shape = ROOT_SHAPE
 		}
-		// In an outline the root heads a column, and the trunk drops from under its left end. A circle
-		// or a cloud would stand wide of that, so the root is a pill there unless it is a box already.
 		if down && i == 0 && shape != "rect" && shape != "rounded" {
 			shape = ROOT_SHAPE
 		}
 		shapes[i] = shape
 		if shape == "" {
-			// A node with no shape of its own is plain text when it ends a branch, and text in a
-			// tinted pill when the branch goes on from it, which sets the levels apart.
 			pill := len(node.children) > 0
 			if pill {
 				w[i] = tw + 2*PILL_PAD
@@ -198,13 +181,10 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 		}
 	}
 
-	// Each subtree takes a band of height `extent`. `rel` is a subtree's offset among its siblings,
-	// `own` the node's offset inside its band, and `kids` the offset of its children's bands.
 	b := &bands{extent: make([]float64, n), rel: make([]float64, n), own: make([]float64, n), anchor: anchor}
 	extent, rel, own := b.extent, b.rel, b.own
 	kids := make([]float64, n)
 
-	// Nodes are in depth-first order, so going backwards visits children before their parent.
 	for i := n - 1; i > 0; i-- {
 		children := nodes[i].children
 		if len(children) == 0 {
@@ -222,11 +202,9 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 	y := make([]float64, n)
 	band := make([]float64, n)
 	side := make([]int8, n)
-	// Running down: how far the trunk under each node has been drawn.
 	trunk := make([]float64, n)
 
 	if down {
-		// Nodes are in depth-first order, which is the order of an outline's rows.
 		row := 0.0
 		for i := 0; i < n; i++ {
 			if i > 0 && parent[i] == 0 {
@@ -237,7 +215,6 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 			row += h[i] + ROW_GAP
 		}
 	} else if n > 0 {
-		// The first branches go right and the rest left, split where the two sides are closest in height.
 		branches := nodes[0].children
 		count := len(branches)
 		total := 0.0
@@ -289,7 +266,6 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 	maxY := 0.0
 	g := &branch{}
 
-	// The root is drawn last, on top of the links that leave it.
 	for k := 1; k <= n; k++ {
 		i := k % n
 		node := nodes[i]
@@ -310,9 +286,6 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 				g.color = svg.SeriesColor(node.section)
 			}
 			p := parent[i]
-			// The link drops from under its parent and turns in to the node's left. It starts where
-			// the link to the sibling above turned in, so each stretch of a shared trunk has one color.
-			// Under the root's rounded end, the trunk starts where that end has come down to the bottom.
 			stem := float64(STEM)
 			if p == 0 {
 				stem = math.Min(math.Max(STEM, h[0]/2), INDENT-BEND)
@@ -326,7 +299,6 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 			}
 			y2 := top + anchor[i]
 			bend := math.Max(0, math.Min(BEND, math.Min(x2-x1, y2-y1)))
-			// The next link carries on from where this one leaves the trunk, so the trunk has no gap.
 			trunk[p] = y2 - bend
 			g.edges += `<path class="pele-edge" d="M` + num(x1) + `,` + num(y1) + `V` + num(y2-bend) + `Q` + num(x1) + `,` + num(y2) + ` ` + num(x1+bend) + `,` + num(y2) + `H` + num(x2) + `"/>`
 		} else if i > 0 {
@@ -356,9 +328,6 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 		}
 
 		pill := shape == "" && len(node.children) > 0
-		// Every node off the root is filled with a tint of its branch's color and outlined in it,
-		// whether its shape was given in the source or is the pill of a node that branches.
-		// The root is neutral.
 		tint := ` fill="` + g.color + `" fill-opacity="` + js.Num(TINT) + `" stroke="` + g.color + `"`
 		inner := ""
 		if shape != "" {
@@ -428,7 +397,6 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 	if options.Geometry != nil {
 		geo := &types.Geometry{Width: totalWidth, Height: totalHeight, Title: title.Plain(), Mindmap: make([]types.GeoMindNode, n)}
 		for i, node := range nodes {
-			// The shape the source gives, not the one the root takes by default.
 			shape := ""
 			if node.typ >= 0 && node.typ < len(SHAPES) {
 				shape = SHAPES[node.typ]
@@ -437,7 +405,6 @@ func draw(model *MindmapDb, config types.Config, options types.RenderOptions, do
 			if i > 0 {
 				p = int(parent[i])
 			}
-			// The label unwrapped: a text drawing wraps it to the columns it has.
 			label := text.LayoutLabel(node.descr, true, measurer, size, 1e9, 0)
 			geo.Mindmap[i] = types.GeoMindNode{Label: label.Plain(), Shape: shape, Parent: p}
 		}

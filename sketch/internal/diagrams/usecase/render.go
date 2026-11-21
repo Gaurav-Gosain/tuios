@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/usecase/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package usecase
 
 import (
@@ -47,13 +45,12 @@ type View struct {
 	style      svg.ResolvedStyle
 	label      text.Label
 	stereotype text.Label
-	// The size of what is drawn; the layout box is larger when the node carries a self-relationship.
-	w     float64
-	h     float64
-	rows  [][2]text.Label
-	keyW  float64
-	headH float64
-	loops int
+	w          float64
+	h          float64
+	rows       [][2]text.Label
+	keyW       float64
+	headH      float64
+	loops      int
 }
 
 func numberOption(config types.Config, key string, fallback float64) float64 {
@@ -64,8 +61,6 @@ func numberOption(config types.Config, key string, fallback float64) float64 {
 	return fallback
 }
 
-// literal: a plain label is shown as written: no tags, no markdown, no `\n` breaks. Its markup characters
-// are handed to the label parser as character references, which it turns back into characters.
 func literal(s string) string {
 	if !strings.ContainsAny(s, `&<>\`) {
 		return s
@@ -89,8 +84,6 @@ func textLabel(raw string, markdown bool, measurer text.TextMeasurer, size, wrap
 	return text.LayoutLabel(raw, markdown, measurer, size, wrap, base)
 }
 
-// anchor is the point of a node's outline on one of its four sides (0 top, 1 right, 2 bottom, 3 left),
-// `along` away from the middle of that side. Lines meet an actor at its figure, not at its label.
 func anchor(view *View, c *layout.CNode, side int, along float64) (float64, float64) {
 	sign := -1.0
 	if side == 1 || side == 2 {
@@ -123,7 +116,6 @@ func anchor(view *View, c *layout.CNode, side int, along float64) (float64, floa
 	return c.X + along, c.Y + float64(sign*reach)
 }
 
-// sideLength is how much of a side edges may spread over.
 func sideLength(view *View, side int) float64 {
 	upright := side == 1 || side == 3
 	if view.kind == kActor {
@@ -143,18 +135,13 @@ func sideLength(view *View, side int) float64 {
 }
 
 type End struct {
-	// key is the node and side: index*4 + side.
 	key    int
 	route  []float64
 	at     int
 	toward float64
 }
 
-// attachEnds: the layout brings every edge that ends on one side of a node to the middle of that side. This
-// spaces them along the side in the order they fan out, and puts each on the node's outline.
 func attachEnds(cedges []*layout.CEdge, cnodes []*layout.CNode, views []View) {
-	// The ends of all sides in one list, sorted by side and then, stably, by where they head;
-	// pele keeps a list for each side and sorts each.
 	ends := make([]End, 0, 2*len(cedges))
 	add := func(index int, route []float64, at int, next int) {
 		c := cnodes[index]
@@ -222,7 +209,6 @@ func attachEnds(cedges []*layout.CEdge, cnodes []*layout.CNode, views []View) {
 	}
 }
 
-// extension is the hollow triangle of a generalization, with its tip at (x, y).
 func extension(x, y, dx, dy float64, color string) string {
 	bx := x - float64(dx*EXTENSION)
 	by := y - float64(dy*EXTENSION)
@@ -238,7 +224,6 @@ func trim(typ string) float64 {
 	return svg.MarkerTrim(typ)
 }
 
-// mark draws a marker; stroke "" leaves the filled markers unstroked.
 func mark(typ string, x, y, dx, dy float64, color, stroke string) string {
 	if typ == "extension" {
 		return extension(x, y, dx, dy, color)
@@ -277,7 +262,6 @@ func figure(view *View, icons text.IconResolver) string {
 		out = `<circle cy="-21" r="9"` + SHAPE_ATTRS + shape + `/><path d="M0,-12V10M-14,-3H14M0,10L-12,30M0,10L12,30"` + line + `/>`
 	}
 	if node.business {
-		// The slash of a business actor: a chord across the lower right of the head.
 		out += `<path class="pele-business" d="M` + svg.Num(0.12*radius) + `,` + svg.Num(head+float64(0.99*radius)) + `L` + svg.Num(0.92*radius) + `,` +
 			svg.Num(head-float64(0.39*radius)) + `"` + line + `/>`
 	}
@@ -291,7 +275,6 @@ func renderUsecase(model *UsecaseModel, config types.Config, options types.Rende
 	return common.TurnToFit(options, func(down bool) types.Rendered { return draw(model, config, options, down) })
 }
 
-// trimDefault is classes.replace(/^default\s?/, ”).
 func trimDefault(classes string) string {
 	if !strings.HasPrefix(classes, "default") {
 		return classes
@@ -299,7 +282,6 @@ func trimDefault(classes string) string {
 	return dropSpace(classes[len("default"):])
 }
 
-// dropSpace drops one whitespace character at the start, as \s? does.
 func dropSpace(s string) string {
 	if s == "" {
 		return s
@@ -311,7 +293,6 @@ func dropSpace(s string) string {
 	return s
 }
 
-// trimRelationship is classes.replace(/^default relationship relationship-\S+\s?/, ”).
 func trimRelationship(classes string) string {
 	const prefix = "default relationship relationship-"
 	if !strings.HasPrefix(classes, prefix) {
@@ -332,7 +313,6 @@ func trimRelationship(classes string) string {
 	return dropSpace(rest[k:])
 }
 
-// draw: `turned` draws a diagram that runs across as one that runs down.
 func draw(model *UsecaseModel, config types.Config, options types.RenderOptions, turned bool) types.Rendered {
 	graph := buildUsecaseGraph(model)
 	size := types.Or(options.FontSize, 16)
@@ -416,7 +396,6 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 					valueW = math.Max(valueW, value.Width)
 					view.h += math.Max(math.Max(key.Height, value.Height), js.Round(small*1.5)) + ROW_PAD
 				}
-				// The root of an empty object has a value and no key, and then there is no key column.
 				if view.keyW > 0 {
 					view.keyW += 2 * CELL_PAD
 				}
@@ -444,7 +423,6 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 				switch {
 				case node.shape == "usecaseEllipse" || node.shape == "usecaseBusiness":
 					view.kind = kEllipse
-					// An oval needs more room around its text than a box, and a business oval room for its slash.
 					extra := 4.0
 					if node.business {
 						extra = 16
@@ -496,7 +474,6 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 		}
 		label := textLabel(raw, edge.labelType == "markdown", measurer, small, 200, 0)
 		if src == dst {
-			// A self-relationship loops out across the flow, and the node's box grows to hold it.
 			views[src].loops++
 			if sideways {
 				room := 0.0
@@ -543,7 +520,6 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 	width := math.Ceil(inner + float64(2*pad))
 	height := math.Ceil(lay.Height + titleHeight + float64(2*pad))
 
-	// Where edges cross each boundary's top border, so that a title can keep out of their way.
 	crossings := svg.Crossings{}
 	for _, e := range cedges {
 		svg.MarkCrossings(crossings, e.Route)
@@ -632,7 +608,6 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 				kind = "pele-usecase"
 				outline = `<ellipse rx="` + svg.Num(w/2) + `" ry="` + svg.Num(h/2) + `"` + SHAPE_ATTRS + shape + `/>`
 				if node.business {
-					// The slash of a business use case, cutting off the right end of the oval beside the text.
 					from := w/2 - 15
 					to := w/2 - 5
 					arc := func(at float64) float64 {
@@ -702,7 +677,6 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 			}
 			st := trim(startType)
 			et := trim(endType)
-			// Both ends leave the node leaning away from each other, and the curve joins them outside it.
 			out := func(x, y, sign, far float64) string {
 				f := 0.0
 				if far != 0 {
@@ -759,7 +733,6 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 			bg := "var(--_bg)"
 			casings.WriteString(svg.Casing(path.D, mark(startType, path.Sx, path.Sy, path.Sdx, path.Sdy, bg, bg)+mark(endType, path.Ex, path.Ey, path.Edx, path.Edy, bg, bg), line, false))
 		}
-		// Mermaid animates these dashes. A still picture keeps the dashes.
 		dashes := ""
 		switch {
 		case edge.internal:
@@ -829,8 +802,6 @@ func draw(model *UsecaseModel, config types.Config, options types.RenderOptions,
 	return types.Rendered{SVG: out, Width: width, Height: height, Links: []types.LinkInfo{}, Geometry: geo}
 }
 
-// titleX: a boundary's title sits in the middle of its top edge. Where edges enter through that edge it
-// moves into the stretch between them that is nearest the middle, or the widest if none has room.
 func titleX(c *layout.CNode, width float64, crossings svg.Crossings) float64 {
 	xs, ok := crossings[js.Round(c.Y-c.H/2)]
 	if width == 0 || !ok {
@@ -878,8 +849,6 @@ func leftLabel(label text.Label, x, cy float64, attrs string, icons text.IconRes
 	return out.String()
 }
 
-// actorEnd moves the end of a route at an actor from its figure to the side of the box
-// sketch/text draws around the actor and its name, which is w wide. Not in pele.
 func actorEnd(route []float64, at int, view *View, c *layout.CNode, w float64) {
 	if view.kind != kActor {
 		return
@@ -894,8 +863,6 @@ func actorEnd(route []float64, at int, view *View, c *layout.CNode, w float64) {
 	}
 }
 
-// textMarker is the marker sketch/text draws for an end: a generalization's hollow triangle
-// is drawn as an arrow head.
 func textMarker(typ string) string {
 	if typ == "extension" {
 		return "arrow_point"
@@ -903,9 +870,6 @@ func textMarker(typ string) string {
 	return typ
 }
 
-// geometry gives the actors, use cases, notes and JSON tables as flowchart nodes and the
-// boundaries as groups, so that sketch/text draws the diagram as it draws a flowchart.
-// The edges are added as they are drawn. Not in pele.
 func geometry(views []View, cnodes []*layout.CNode, width, height float64) *types.Geometry {
 	g := &types.Geometry{Width: width, Height: height}
 	for i := range views {
@@ -919,8 +883,6 @@ func geometry(views []View, cnodes []*layout.CNode, width, height float64) *type
 			n.W, n.H = c.W, c.H
 			n.Label = view.label.Plain()
 		case kActor:
-			// A stick figure in text, with no box. The room a box would take around the
-			// name is added, so that the actor does not set a coarser scale than a box does.
 			n.Shape = "actor"
 			n.W += 32
 			n.Label = append(append([]string{" o ", "/|\\", "/ \\"}, stereotype...), view.label.Plain()...)
@@ -928,7 +890,6 @@ func geometry(views []View, cnodes []*layout.CNode, width, height float64) *type
 			n.Shape = "ellipse"
 			n.Label = append(stereotype, view.label.Plain()...)
 		case kJson:
-			// A row reads "key: value", two characters longer than the table's columns.
 			n.W += 16
 			n.Label = view.label.Plain()
 			for _, row := range view.rows {

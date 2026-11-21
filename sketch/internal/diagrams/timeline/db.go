@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/timeline/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package timeline
 
 import (
@@ -11,11 +9,9 @@ import (
 )
 
 type TimelinePeriod struct {
-	text   string
-	events []string
-	// Name of the section in force when the period was declared, "" before the first one.
-	section string
-	// Index into `sections` of that section, -1 before the first one.
+	text         string
+	events       []string
+	section      string
 	sectionIndex int
 }
 
@@ -23,7 +19,7 @@ type TimelineDb struct {
 	title     string
 	accTitle  string
 	accDescr  string
-	direction string // "LR" or "TD"
+	direction string
 	sections  []string
 	periods   []TimelinePeriod
 
@@ -61,7 +57,6 @@ func (db *TimelineDb) addTask(period string, _ int, event string) {
 }
 
 func (db *TimelineDb) addEvent(event string) {
-	// Mermaid fails here too, with a TypeError.
 	if len(db.periods) == 0 {
 		types.Throw("An event needs a time period before it.", types.CodeSemantic, types.ErrorInfo{Type: "timeline"})
 	}
@@ -69,7 +64,6 @@ func (db *TimelineDb) addEvent(event string) {
 	period.events = append(period.events, event)
 }
 
-// joinLines is text.replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	if !strings.Contains(text, "\n") {
 		return text

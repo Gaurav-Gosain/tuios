@@ -1,6 +1,3 @@
-// Ported from pele tests/render/flowchart.test.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13:
-// the cases v1.8.0 added. The rest of that file is covered by the goldens.
-
 package sketch
 
 import (

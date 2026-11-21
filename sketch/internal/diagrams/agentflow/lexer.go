@@ -1,10 +1,3 @@
-// Ported from pele src/diagrams/agentflow/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele reads UTF-16 code units with charCodeAt. The port reads the UTF-8 bytes:
-// code() decodes the character at a byte offset, and where pele steps one unit
-// past a character that may not be ASCII, the port steps the whole character.
-// Token starts are byte offsets; the columns of locs count UTF-16 units, as pele's do.
-
 package agentflow
 
 import (
@@ -20,9 +13,7 @@ type Tokens struct {
 	types  []int
 	texts  []string
 	starts []int
-	// Four numbers per token, counted the way Jison counts them:
-	// first line, first column, last line, last column. Lines start at 1, columns at 0.
-	locs []int
+	locs   []int
 }
 
 // Lexer states.
@@ -55,7 +46,6 @@ var NODE_CHAR = func() [128]uint8 {
 
 const sp = `[` + js.S + `]`
 
-// sticky compiles a pattern that pele runs with the y flag: it must match at the position.
 func sticky(pattern string) *lazyre.Regexp { return lazyre.New(`^(?:` + pattern + `)`) }
 
 var (
@@ -79,7 +69,6 @@ var (
 	RE_BR         = lazyre.New(`\n` + sp + `*`)
 )
 
-// lexer is the state of one run of tokenize: the tokens so far, the mode stack and the read position.
 type lexer struct {
 	src    string
 	n      int
@@ -108,8 +97,6 @@ type lexer struct {
 	noArrow    int
 }
 
-// code is the character at byte q, as charCodeAt would give it, or -1 past the end.
-// A byte inside a character gives 0xfffe, which no test matches.
 func (l *lexer) code(q int) rune {
 	if q < 0 || q >= l.n {
 		return -1
@@ -123,13 +110,11 @@ func (l *lexer) code(q int) rune {
 		return 0xfffe
 	}
 	if r > 0xffff {
-		// A high surrogate, as charCodeAt gives for the first unit.
 		return 0xd800
 	}
 	return r
 }
 
-// size is how many bytes the character at q takes: one step of pele's.
 func (l *lexer) size(q int) int {
 	if q >= l.n || l.src[q] < utf8.RuneSelf {
 		return 1
@@ -138,7 +123,6 @@ func (l *lexer) size(q int) int {
 	return s
 }
 
-// units is how many UTF-16 units src[a:b] holds.
 func (l *lexer) units(a, b int) int {
 	u := 0
 	for k := a; k < b; {
@@ -161,8 +145,6 @@ func (l *lexer) units(a, b int) int {
 //go:noinline
 func (l *lexer) isSpace(c rune) bool { return util.IsSpace(c) }
 
-// advance moves over one match. Jison counts \r\n, \r and \n as one line break each, and after a
-// break its column stops at the first U+2028 or U+2029.
 func (l *lexer) advance(e int) {
 	brk := -1
 	for k := l.p; k < e; k++ {
@@ -203,7 +185,6 @@ func (l *lexer) emit(typ int, e int) {
 	l.locs = append(l.locs, l.line, l.col)
 }
 
-// emitFlat is for a token that cannot hold a line break.
 func (l *lexer) emitFlat(typ int, e int) {
 	l.types = append(l.types, typ)
 	l.texts = append(l.texts, l.src[l.p:e])
@@ -214,7 +195,6 @@ func (l *lexer) emitFlat(typ int, e int) {
 	l.locs = append(l.locs, l.line, l.col)
 }
 
-// emitChars is for a run that Jison matches one character at a time, where \r\n counts as two line breaks.
 func (l *lexer) emitChars(typ int, e int) {
 	l.types = append(l.types, typ)
 	l.texts = append(l.texts, l.src[l.p:e])
@@ -273,7 +253,6 @@ func (l *lexer) kw(word string) bool {
 	return strings.HasPrefix(l.src[l.p:], word) && !util.IsWord(l.code(l.p+len(word)))
 }
 
-// wsEnd is the end of the run of whitespace starting at q. The last run is kept, so asking again from inside it costs nothing.
 func (l *lexer) wsEnd(q int) int {
 	if q >= l.wsFrom && q <= l.wsTo {
 		return l.wsTo
@@ -304,7 +283,6 @@ func (l *lexer) blankEnd(q int) int {
 	return j
 }
 
-// arrowEnd is the end of `\s*--+[x>]\s*` starting at q, or -1.
 func (l *lexer) arrowEnd(q int) int {
 	j := l.wsEnd(q)
 	if j == l.noArrow || l.code(j) != 45 || l.code(j+1) != 45 {
@@ -355,7 +333,6 @@ func (l *lexer) link() bool {
 	return false
 }
 
-// commentEnd: `%%` not followed by `{`, through the end of the line.
 func (l *lexer) commentEnd(q int) int {
 	if l.code(q) != 37 || l.code(q+1) != 37 || l.code(q+2) == 123 {
 		return -1
@@ -583,7 +560,6 @@ func (l *lexer) initial(c rune) bool {
 		}
 		if l.dirNext != -1 {
 			if l.lineEnd < l.p {
-				// /[\n\r  ]/g from p.
 				l.lineEnd = l.n
 				for k := l.p; k < l.n; k += l.size(k) {
 					if r := l.code(k); r == 10 || r == 13 || r == 0x2028 || r == 0x2029 {
@@ -599,13 +575,11 @@ func (l *lexer) initial(c rune) bool {
 						return true
 					}
 				}
-				// No direction statement starts anywhere in the rest of this line either.
 				l.dirFailed = l.lineEnd
 			}
 		}
 	}
 
-	// A link id is a run of non-space characters up to its last `@` that is not followed by `{` or `"`.
 	if l.atNext != -1 && c != 34 && !l.isSpace(c) {
 		if l.p >= l.runEnd {
 			if l.atNext < l.p {
@@ -762,7 +736,6 @@ func (l *lexer) initial(c rune) bool {
 
 func tokenize(src string) Tokens {
 	n := len(src)
-	// About one token for every three bytes.
 	guess := n/3 + 8
 	l := &lexer{
 		src:        src,
@@ -935,7 +908,6 @@ func tokenize(src string) Tokens {
 				l.pop()
 				l.emitFlat(T_DIAMOND_STOP, l.p+1)
 			case 37:
-				// Jison drops the lone `%` from Mermaid's text pattern, so only a comment may start with one.
 				if e := l.commentEnd(l.p); e >= 0 {
 					l.advance(e)
 				} else {

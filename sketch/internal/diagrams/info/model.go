@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/info/model.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package info
 
 import (
@@ -29,7 +27,6 @@ func buildInfo(ast *InfoAst, title string) *InfoModel {
 	return model
 }
 
-// joinLines is .replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {

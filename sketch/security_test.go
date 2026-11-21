@@ -1,8 +1,5 @@
 package sketch
 
-// Ported from pele tests/support/inert.ts, tests/support/xml.ts and the flowchart
-// part of tests/render/security.test.ts, and the internal links of tests/util/url.test.ts, at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 import (
 	"errors"
 	"fmt"
@@ -29,7 +26,6 @@ var (
 	reDecRef  = regexp.MustCompile(`&#(\d+);`)
 )
 
-// badAmp reports an & that does not start a character reference.
 func badAmp(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] == '&' && !reEntOK.MatchString(s[i+1:]) {
@@ -39,7 +35,6 @@ func badAmp(s string) bool {
 	return false
 }
 
-// assertWellFormed checks that a string is well-formed XML: balanced tags, quoted attributes, escaped text.
 func assertWellFormed(xml string) error {
 	if i := strings.IndexFunc(xml, func(r rune) bool {
 		return r <= 0x08 || r == 0x0b || r == 0x0c || (r >= 0x0e && r <= 0x1f) || r == 0x7f || r == 0xfffe || r == 0xffff
@@ -105,7 +100,6 @@ func codePointOf(v float64) string {
 	return string(rune(int(math.Min(v, 0x10ffff))))
 }
 
-// decodeAttr is an attribute value as a browser reads it, with character references turned into their characters.
 func decodeAttr(value string) string {
 	value = reHexRef.ReplaceAllStringFunc(value, func(m string) string {
 		v, _ := strconv.ParseUint(reHexRef.FindStringSubmatch(m)[1], 16, 64)
@@ -147,18 +141,14 @@ func setOf(list ...string) map[string]bool {
 	return m
 }
 
-// pele's output is inserted into pages as markup, so it must be inert whatever the diagram says:
-// only drawing elements, only presentation attributes, no script-capable URLs, no way to load a stylesheet.
 var (
 	inertElements = setOf("svg", "g", "rect", "circle", "ellipse", "polygon", "path", "text", "tspan", "a", "title", "desc", "image",
-		// The gradients of sankey links, with an idPrefix (pele 1.9.0).
 		"defs", "linearGradient", "stop")
 	inertAttrs = setOf("xmlns", "class", "viewBox", "width", "height", "style", "font-family", "font-size", "font-weight", "font-style",
 		"fill", "fill-opacity", "opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin",
 		"role", "aria-roledescription", "aria-labelledby", "aria-describedby", "id", "data-id", "data-icon", "data-href",
 		"transform", "x", "y", "rx", "ry", "r", "cx", "cy", "d", "points", "text-anchor", "xml:space",
 		"href", "target", "rel", "preserveAspectRatio", "pointer-events",
-		// <sub>, <sup>, <u> and <ins> in labels, and sankey gradients (pele 1.9.0).
 		"baseline-shift", "text-decoration", "gradientUnits", "x1", "x2", "offset", "stop-color")
 	styleProps = setOf("fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-dashoffset", "stroke-linecap",
 		"stroke-linejoin", "stroke-opacity", "opacity", "rx", "ry", "font-size", "font-family", "font-weight", "font-style",
@@ -167,13 +157,11 @@ var (
 	reRootFont   = regexp.MustCompile(`^font:\d+(?:\.\d+)?(?:e[-+]?\d+)?px sans-serif$`)
 	reRootSeries = regexp.MustCompile(`^--pele-series-[1-8]$`)
 	numericAttrs = setOf("x", "y", "width", "height", "r", "cx", "cy", "rx", "ry", "x1", "x2", "offset")
-	// The only values pele writes for the label attributes of pele 1.9.0.
-	fixedValues = map[string]map[string]bool{
+	fixedValues  = map[string]map[string]bool{
 		"baseline-shift":  setOf("sub", "super"),
 		"text-decoration": setOf("underline"),
 		"gradientUnits":   setOf("userSpaceOnUse"),
 	}
-	// A sankey link points at its gradient with a fragment in this document, then a fallback colour.
 	reGradientFill = regexp.MustCompile(`^url\(#([\w-]+)\) `)
 
 	reNumber      = regexp.MustCompile(`^(?:-?\d+(?:\.\d+)?(?:e[-+]?\d+)?|100%)$`)
@@ -182,18 +170,15 @@ var (
 	reBadHead     = regexp.MustCompile(`(?i)^(?:[\\/]{2}|[a-z][a-z0-9+.-]*:)`)
 	reTarget      = regexp.MustCompile(`^_(?:self|blank|parent|top)$`)
 	reUnsafeStyle = regexp.MustCompile(`(?i)url[` + js.S + `]*\(|expression|@import|javascript:|[<>{}\\]`)
-	// A backslash is refused too: a CSS escape such as \75 rl( spells url(.
 	reUnsafePaint = regexp.MustCompile(`(?i)url[` + js.S + `]*\(|javascript:|\\`)
 	reTabsBreaks  = regexp.MustCompile(`[\t\n\r]`)
 	reLeadCtrl    = regexp.MustCompile(`^[\x00-\x20]+`)
 )
 
-// inertProblem is the first thing about the markup that is not inert, or "" when there is none.
 func inertProblem(svg string) string {
 	if err := assertWellFormed(svg); err != nil {
 		return err.Error()
 	}
-	// A gradient comes before the links that fill with it.
 	gradientIDs := map[string]bool{}
 	for _, el := range xmlElements(svg) {
 		if !inertElements[el.name] {
@@ -215,7 +200,6 @@ func inertProblem(svg string) string {
 				if reScriptURL.MatchString(value) {
 					return fmt.Sprintf("href=%q can run script", value)
 				}
-				// What a browser makes of the value: tabs and line breaks dropped, then leading spaces and controls.
 				seen := reLeadCtrl.ReplaceAllString(reTabsBreaks.ReplaceAllString(value, ""), "")
 				if !reAllowedHead.MatchString(seen) && reBadHead.MatchString(seen) {
 					return fmt.Sprintf("href=%q has a scheme that is not allowed", value)
@@ -271,7 +255,6 @@ func inertProblem(svg string) string {
 	return ""
 }
 
-// PAYLOADS is text an attacker might put anywhere a diagram accepts a string.
 var PAYLOADS = []string{
 	"<script>alert(1)</script>",
 	`"><script>alert(1)</script>`,
@@ -303,8 +286,6 @@ var PAYLOADS = []string{
 	"]]><script>alert(1)</script>",
 	"--><script>alert(1)</script>",
 	"\u0000\u0001\u0008\u000b\u001f",
-	// pele writes lone surrogates here. Go strings hold UTF-8, so the port takes the bytes
-	// of an encoded surrogate, which are not valid UTF-8 and become U+FFFD on the way in.
 	"a\ufffeb\uffffc\xed\xa0\x80d\xed\xb0\x80e#65534;f",
 	"u\u0001rl(//evil.example/x)",
 	"u\ufffeRL(//evil.example/x)",
@@ -384,8 +365,6 @@ var flowchartTemplates = []func(p string) string{
 	func(p string) string { return "flowchart TD\n  %% " + p + "\n  A --> B" },
 }
 
-// checkInert renders src and reports output that is not inert. A diagram that does not
-// parse is fine, as long as it fails with a PeleError rather than a panic in the port.
 func checkInert(t *testing.T, src string, opt RenderOptions) {
 	t.Helper()
 	out, err := Render(src, opt)
@@ -417,10 +396,8 @@ func TestFlowchartOutputIsInert(t *testing.T) {
 	}
 }
 
-// labelTags are the inline tags a label styles since pele 1.9.0, with the two it had before.
 var labelTags = []string{"b", "i", "sub", "sup", "code", "kbd", "samp", "tt", "u", "ins", "var", "cite", "dfn"}
 
-// labelTagTemplates put a label with inline HTML in each kind of place that lays one out.
 var labelTagTemplates = []func(p string) string{
 	func(p string) string { return "flowchart TD\n  A[\"" + p + "\"] --> B" },
 	func(p string) string { return "flowchart TD\n  A[\"`" + p + "`\"] --> B" },
@@ -466,7 +443,6 @@ func TestLabelTagsAreInert(t *testing.T) {
 			checkInert(t, template(label), RenderOptions{})
 		}
 	}
-	// Text shaped like a tag that is not HTML is text: it comes out escaped.
 	for _, label := range []string{"<svg onload=alert(1)>", "<foo onload=alert(1)>", "List<T>", "<T>"} {
 		out, err := Render("flowchart TD\n  A[\""+label+"\"]", RenderOptions{})
 		if err != nil {
@@ -539,7 +515,6 @@ func TestPercentEscapes(t *testing.T) {
 }
 
 func TestFlowchartLimits(t *testing.T) {
-	// One short line asks for 100 x 100 edges; the default limit is 5,000.
 	var starts, ends []string
 	for i := range 100 {
 		starts = append(starts, "a"+strconv.Itoa(i))
@@ -561,11 +536,6 @@ func TestFlowchartLimits(t *testing.T) {
 	longRunsStayLinear(t)
 }
 
-// longRunsStayLinear renders statements of 200,000 characters, past the
-// default limit, that a parser reads as one long run of tokens or lines. JavaScript
-// ropes make s += token linear in pele. In Go each += copies the string, so a
-// run built that way allocates gigabytes. The bound is on bytes allocated, which
-// does not depend on the speed of the machine.
 func longRunsStayLinear(t *testing.T) {
 	const n = 200_000
 	const bound = 512 << 20
@@ -592,18 +562,12 @@ func longRunsStayLinear(t *testing.T) {
 	}
 }
 
-// cherryPickChain is a gitGraph of about n characters in which each commit
-// cherry-picks the one before it, between two branches in turn. pele names each
-// pick "cherry-picked <message of the source> into <branch>", so the names nest.
-// The chain is twice as long as the other cases: at 200,000 characters the
-// nested names cost about 250 MB, under the bound.
 func cherryPickChain(n int) string {
 	var b strings.Builder
 	b.WriteString("gitGraph\n commit id: \"c\"\n branch a\n commit\n branch b\n commit\n")
 	prev, seq := "c", 3
 	for i := 0; b.Len() < n; i++ {
 		b.WriteString(" checkout " + string(rune('a'+i%2)) + "\n cherry-pick id: \"" + prev + "\"\n")
-		// The id gitBuilder.nextId gives the pick.
 		h := strconv.FormatUint(uint64(uint32(seq+1)*0x9e3779b1), 16)
 		prev = strconv.Itoa(seq) + "-" + (strings.Repeat("0", max(0, 8-len(h))) + h)[:7]
 		seq++

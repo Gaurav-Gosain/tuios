@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/packet/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package packet
 
 import (
@@ -21,8 +19,6 @@ const (
 	T_newline
 )
 
-// matchInt answers as /0|[1-9][0-9]*(?!\.)/y does: a run of digits gives back its last digit
-// when a dot follows it.
 func matchInt(src string, p int) int {
 	if p >= len(src) {
 		return -1
@@ -49,7 +45,6 @@ func matchInt(src string, p int) int {
 var PACKET_TOKENS = []*common.TokenType{
 	{Name: "packet-beta", Pattern: "packet-beta"},
 	common.Keyword("packet"),
-	// A front matter block also starts with dashes, so Langium lets it win over a dash.
 	{Name: "-", Pattern: "-", Longer: []*common.TokenType{common.YAML}},
 	{Name: "+", Pattern: "+"},
 	{Name: ":", Pattern: ":"},

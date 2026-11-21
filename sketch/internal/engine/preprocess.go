@@ -1,8 +1,3 @@
-// Ported from pele src/preprocess.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// RE_DIRECTIVE uses a lookahead, which Go's regexp lacks: matchDirective is a
-// hand-written matcher that takes the same text.
-
 package engine
 
 import (
@@ -21,17 +16,14 @@ import (
 type Config = types.Config
 
 type preprocessed struct {
-	text string
-	// title is nil for none.
-	title  *string
-	config Config
-	// The text before its comment lines are removed, and the number of front matter lines before it.
+	text         string
+	title        *string
+	config       Config
 	withComments string
 	lineOffset   int
 }
 
 var (
-	// /^\s*%%(?!{)[^\n]+\n?/gm
 	reComment  = lazyre.New(`(?m)^[` + js.S + `]*%%[^{\n][^\n]*\n?`)
 	reHTMLTag  = lazyre.New(`<(\w+)([^>]*)>`)
 	reAttr     = lazyre.New(`="([^"]*)"`)
@@ -39,8 +31,6 @@ var (
 	unsafeKeys = map[string]bool{"__proto__": true, "constructor": true, "prototype": true}
 )
 
-// steps records the edits of each step when it is not nil, so an offset in the
-// output maps back to the input (types.InputOffset).
 type steps = *[][]types.Edit
 
 func record(st steps, edits []types.Edit) {
@@ -74,7 +64,6 @@ func normalizeLineBreaks(text string) string {
 
 func isLineBreak(ch rune) bool { return ch == '\n' || ch == '\r' }
 
-// runeAt is the character at byte i, or -1 past the end.
 func runeAt(s string, i int) (rune, int) {
 	if i < 0 || i >= len(s) {
 		return -1, 1
@@ -88,7 +77,6 @@ type frontMatter struct {
 	length int
 }
 
-// lastIndexFrom is text.lastIndexOf(needle, from).
 func lastIndexFrom(text, needle string, from int) int {
 	end := from + len(needle)
 	if end > len(text) {
@@ -100,7 +88,6 @@ func lastIndexFrom(text, needle string, from int) int {
 	return strings.LastIndex(text[:end], needle)
 }
 
-// indexFrom is text.indexOf(needle, from).
 func indexFrom(text, needle string, from int) int {
 	if from < 0 {
 		from = 0
@@ -115,7 +102,6 @@ func indexFrom(text, needle string, from int) int {
 	return from + i
 }
 
-// Finds a `---` fenced YAML block at the start of the text the way Mermaid's front matter regex does.
 func matchFrontMatter(text string) (frontMatter, bool) {
 	cursor := 0
 	for cursor < len(text) {
@@ -222,9 +208,8 @@ func merge(target, source Config) Config {
 
 type directive struct {
 	start, end int
-	// type is group 1 or 2; args is group 4.
-	typ  string
-	args string
+	typ        string
+	args       string
 }
 
 func isWordByte(c byte) bool {
@@ -242,8 +227,6 @@ func skipSpace(s string, i int) int {
 	return i
 }
 
-// matchDirectiveAt matches
-// /%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).|\r?\n)*))?\s*(?:}%{2})?/ at i.
 func matchDirectiveAt(s string, i int) (directive, bool) {
 	if !strings.HasPrefix(s[i:], "%%{") {
 		return directive{}, false
@@ -311,8 +294,6 @@ func findDirectives(s string) []directive {
 	return out
 }
 
-// parseJSON is JSON.parse. encoding/json rejects a number too large for a float64, such as
-// 1e999, where JavaScript reads it as Infinity, and the whole directive was lost.
 func parseJSON(text string) (any, bool) {
 	dec := json.NewDecoder(strings.NewReader(text))
 	dec.UseNumber()
@@ -326,7 +307,6 @@ func parseJSON(text string) (any, bool) {
 	return numbers(args), true
 }
 
-// numbers turns each json.Number into a float64, out of range ones into an infinity or a zero.
 func numbers(v any) any {
 	switch v := v.(type) {
 	case json.Number:
@@ -354,7 +334,6 @@ func directives(text string, config Config, st steps) string {
 		if typ == "wrap" {
 			config["wrap"] = true
 		} else if (typ == "init" || typ == "initialize") && match.args != "" {
-			// Mermaid ignores an init directive whose body is not valid JSON.
 			if args, ok := parseJSON(js.Trim(match.args)); ok {
 				if m, ok := args.(map[string]any); ok {
 					merge(config, m)
@@ -375,11 +354,8 @@ func directives(text string, config Config, st steps) string {
 	return out.String()
 }
 
-// preprocess reads the front matter and directives. st, when not nil, records the
-// edits from the normalized source to withComments.
 func preprocess(source string, st steps) preprocessed {
 	text := normalizeLineBreaks(source)
-	// A tag needs a closing bracket, so nothing after the last one can match.
 	lastClose := -1
 	if strings.Contains(text, "<") {
 		lastClose = strings.LastIndexByte(text, '>')
@@ -444,7 +420,6 @@ var (
 	reIntEnt = lazyre.New(`^\+?\d+$`)
 )
 
-// lineEndFrom is the index of the first line terminator at or after from, or len(text).
 func lineEndFrom(text string, from int) (int, int) {
 	for i := from; i < len(text); {
 		r, size := runeAt(text, i)
@@ -456,9 +431,6 @@ func lineEndFrom(text string, from int) (int, int) {
 	return len(text), 0
 }
 
-// Does what Mermaid's `text.replace(/keyword.*:\S*#.*;/g, drop the last character)` does:
-// on a line where the keyword is followed by a colon, a color-like `#`, and later a semicolon,
-// the last semicolon goes. Mermaid's regex backtracks without bound; this is one pass.
 func dropColorSemicolons(text, keyword string, st steps) string {
 	var edits []types.Edit
 	defer func() { record(st, edits) }()
@@ -506,7 +478,6 @@ func dropColorSemicolons(text, keyword string, st steps) string {
 	return out.String() + text[last:]
 }
 
-// Mermaid hides `#name;` entity codes behind placeholder characters so `#` and `;` survive parsing.
 func encodeEntities(text string, st steps) string {
 	if !strings.Contains(text, "#") {
 		return text

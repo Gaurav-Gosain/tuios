@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/sequence/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package sequence
 
 import (
@@ -51,9 +49,6 @@ func extractWrap(raw string) *SeqText {
 	return &SeqText{Text: js.Trim(t), Wrap: wrap}
 }
 
-// splitBox splits a box line into a leading color and the rest, as Mermaid's
-// /^((?:rgba?|hsla?)\s*\(.*\)|\w*)(.*)$/ does. `.` stops at a line terminator, so a line that
-// holds one outside the gap before the parenthesis does not match at all.
 func splitBox(str string) ([2]string, bool) {
 	if fn := reBoxFunction.FindString(str); fn != "" {
 		close := strings.LastIndexByte(str, ')')
@@ -71,7 +66,6 @@ func splitBox(str string) ([2]string, bool) {
 	return [2]string{word, str[len(word):]}, true
 }
 
-// entries lists a JSON value as key, value pairs, as Object.entries does.
 func entries(value any) [][2]any {
 	var out [][2]any
 	switch t := value.(type) {
@@ -200,7 +194,6 @@ type actorDescription struct {
 	wrap *bool
 }
 
-// addActor takes pele's optional arguments as nil pointers.
 func (db *SeqDb) addActor(id, name string, description *actorDescription, typ *string, metadata *string) {
 	assignedBox := db.currentBox
 	var doc map[string]any
@@ -242,7 +235,6 @@ func (db *SeqDb) addActor(id, name string, description *actorDescription, typ *s
 			return
 		}
 	}
-	// A participant that is only mentioned in a message has no kind and takes its name as its label.
 	if description == nil || typ == nil {
 		description = &actorDescription{text: name}
 	}
@@ -276,7 +268,6 @@ func (db *SeqDb) addActor(id, name string, description *actorDescription, typ *s
 	db.prevActor = id
 }
 
-// boxName is `${box.name}`: "undefined" for a box with no name.
 func boxName(b *SeqBox) string {
 	if b.Name == nil {
 		return "undefined"
@@ -286,9 +277,7 @@ func boxName(b *SeqBox) string {
 
 func strp(s string) *string { return &s }
 
-// addSignal takes "" for pele's undefined from and to, and nil for no message.
 func (db *SeqDb) addSignal(from, to *string, message *SeqText, typ int, activate bool, centralConnection int) {
-	// Mermaid recounts every earlier message here. A running count per participant says the same.
 	if typ == LINETYPE_ACTIVE_END {
 		count := 0
 		if from != nil && *from != "" {
@@ -347,8 +336,6 @@ func (db *SeqDb) addNote(actor []string, placement int, message *SeqText) {
 	})
 }
 
-// addLinks: Mermaid logs and ignores menu text that is not valid JSON. It also undoes the `&amp;` and
-// `&equals;` its sanitizer writes; Pele has no sanitizer, and a `;` cannot occur in the text.
 func (db *SeqDb) addLinks(actorID string, text *SeqText) {
 	actor, ok := db.Actors.Get(actorID)
 	if !ok {
@@ -370,7 +357,6 @@ func (db *SeqDb) addALink(actorID string, text *SeqText) {
 	}
 	t := text.Text
 	sep := strings.IndexByte(t, '@')
-	// slice(0, sep - 1) with sep = -1 is slice(0, -2): all but the last two characters.
 	end := sep - 1
 	if end < 0 {
 		end = len(t) + end
@@ -395,7 +381,6 @@ func (db *SeqDb) addProperties(actorID string, text *SeqText) {
 	}
 }
 
-// addDetails: Mermaid reads the properties and links from a page element with this id. Pele keeps the id.
 func (db *SeqDb) addDetails(actorID string, text *SeqText) {
 	if actor, ok := db.Actors.Get(actorID); ok {
 		actor.Details = text.Text

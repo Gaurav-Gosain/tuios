@@ -8,13 +8,11 @@ import (
 
 type pt struct{ x, y float64 }
 
-// matrix is an affine transform: x' = a*x + c*y + e, y' = b*x + d*y + f.
 type matrix struct{ a, b, c, d, e, f float64 }
 
 var identity = matrix{1, 0, 0, 1, 0, 0}
 
 func (m matrix) mul(n matrix) matrix {
-	// m then... returns m ∘ n: apply n first, then m.
 	return matrix{
 		a: m.a*n.a + m.c*n.b,
 		b: m.b*n.a + m.d*n.b,
@@ -29,7 +27,6 @@ func (m matrix) apply(p pt) pt {
 	return pt{m.a*p.x + m.c*p.y + m.e, m.b*p.x + m.d*p.y + m.f}
 }
 
-// scale is how much the transform scales lengths, for stroke widths.
 func (m matrix) scale() float64 {
 	return math.Sqrt(math.Abs(m.a*m.d - m.b*m.c))
 }
@@ -42,7 +39,6 @@ func rotate(deg float64) matrix {
 	return matrix{c, s, -s, c, 0, 0}
 }
 
-// parseTransform reads translate, rotate, scale, skewX, skewY and matrix.
 func parseTransform(s string) matrix {
 	m := identity
 	for {
@@ -90,8 +86,6 @@ func parseTransform(s string) matrix {
 	}
 }
 
-// numberScanner reads SVG numbers: signs, decimals, exponents, and numbers
-// that run together such as "1.5.5" or "-1-2".
 type numberScanner struct {
 	s string
 	i int
@@ -151,7 +145,6 @@ func (n *numberScanner) number() (float64, bool) {
 	return v, true
 }
 
-// flag reads an arc flag, which may run into what follows it.
 func (n *numberScanner) flag() (float64, bool) {
 	n.skipSep()
 	if n.i < len(n.s) && (n.s[n.i] == '0' || n.s[n.i] == '1') {
@@ -174,8 +167,6 @@ func numbers(s string) []float64 {
 	}
 }
 
-// path is a list of subpaths, each a list of points with curves already
-// turned into cubic Bézier segments.
 type segKind uint8
 
 const (
@@ -201,11 +192,8 @@ func (p *path) quadTo(from, ctl, to pt) {
 		pt{to.x + 2.0/3*(ctl.x-to.x), to.y + 2.0/3*(ctl.y-to.y)}, to)
 }
 
-// maxPathSegments bounds the work one path can ask for.
 const maxPathSegments = 200000
 
-// parsePath reads SVG path data. An error in the data ends the path there, as
-// browsers do.
 func parsePath(d string) path {
 	var p path
 	sc := numberScanner{s: d}
@@ -248,7 +236,6 @@ func parsePath(d string) path {
 			cur = at(x, y)
 			start = cur
 			p.moveTo(cur)
-			// Pairs after a moveto are linetos.
 			if rel {
 				cmd = 'l'
 			} else {
@@ -349,8 +336,6 @@ func parsePath(d string) path {
 	return p
 }
 
-// arcTo adds an elliptical arc as cubic Béziers, by the endpoint to center
-// conversion of the SVG specification (appendix B.2.4).
 func arcTo(p *path, from pt, rx, ry, rotDeg float64, large, sweep bool, to pt) {
 	if from == to {
 		return
@@ -402,7 +387,6 @@ func arcTo(p *path, from pt, rx, ry, rotDeg float64, large, sweep bool, to pt) {
 	k := 4.0 / 3 * math.Tan(step/4)
 	point := func(t float64) (pt, pt) {
 		s, c := math.Sincos(t)
-		// The point and the derivative direction on the unit circle, mapped to the ellipse.
 		px, py := rx*c, ry*s
 		dx, dy := -rx*s, ry*c
 		return pt{cosPhi*px - sinPhi*py + cx, sinPhi*px + cosPhi*py + cy},
@@ -422,14 +406,11 @@ func arcTo(p *path, from pt, rx, ry, rotDeg float64, large, sweep bool, to pt) {
 	}
 }
 
-// polyline is one flattened subpath in device space.
 type polyline struct {
 	pts    []pt
 	closed bool
 }
 
-// flatten turns a path into polylines in device space, curves split until
-// they stay within tol pixels of the true curve.
 func flatten(p path, m matrix, tol float64) []polyline {
 	var out []polyline
 	var cur *polyline
@@ -462,14 +443,12 @@ func flatten(p path, m matrix, tol float64) []polyline {
 			if cur != nil {
 				cur.closed = true
 				first := cur.pts[0]
-				// A path that goes on after a close starts again where the subpath started.
 				out = append(out, polyline{pts: []pt{first}})
 				cur = &out[len(out)-1]
 				last = first
 			}
 		}
 	}
-	// Drop the empty starts left by close and move.
 	kept := out[:0]
 	for _, pl := range out {
 		if len(pl.pts) > 1 || pl.closed {
@@ -480,7 +459,6 @@ func flatten(p path, m matrix, tol float64) []polyline {
 }
 
 func appendCubic(dst []pt, p0, p1, p2, p3 pt, tol float64) []pt {
-	// The number of pieces from the size of the second differences.
 	dd := math.Max(math.Hypot(p0.x-2*p1.x+p2.x, p0.y-2*p1.y+p2.y), math.Hypot(p1.x-2*p2.x+p3.x, p1.y-2*p2.y+p3.y))
 	n := int(math.Ceil(math.Sqrt(0.75 * dd / tol)))
 	if n < 1 {
@@ -498,9 +476,6 @@ func appendCubic(dst []pt, p0, p1, p2, p3 pt, tol float64) []pt {
 	return dst
 }
 
-// Shapes as paths.
-
-// kappa places the handles of a cubic that draws a quarter circle.
 const kappa = 0.5522847498307936
 
 func ellipsePath(cx, cy, rx, ry float64) path {

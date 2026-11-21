@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/block/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele's statement is a block or a list of them, and it flattens the lists when it
-// builds the hierarchy. Here a list of statements is flat from the start; only a
-// composite's header remembers whether it was a list.
-
 package block
 
 import (
@@ -21,7 +15,6 @@ type nodeInfo struct {
 type openFrame struct {
 	list   []*Block
 	header []*Block
-	// isList: the header was a link statement, which pele spreads into an object with no id.
 	isList bool
 }
 
@@ -70,7 +63,6 @@ func parseBlock(src string, db *BlockDb) {
 		return nodeInfo{id: id}
 	}
 
-	// nodeStatement gives a block, or a list of them for a statement with links.
 	nodeStatement := func() (stmt []*Block, isList bool) {
 		first := node()
 		size := 1.0
@@ -99,7 +91,6 @@ func parseBlock(src string, db *BlockDb) {
 			arrowTypeStart := edgeStrToEdgeStartData(link)
 			thickness := edgeStrToThickness(link)
 			pattern := edgeStrToPattern(link)
-			// Mermaid keeps only the last link of `A --> B --> C` and loses its start. Here every link counts.
 			if chain == nil {
 				head := newBlock()
 				head.id, head.label, head.typ, head.directions = from.id, from.label, from.typ, from.directions
@@ -128,7 +119,6 @@ func parseBlock(src string, db *BlockDb) {
 	}
 
 	expect(T_KEY)
-	// Composites nest without recursion: each open one keeps the statement list of its parent.
 	var open []openFrame
 	var list []*Block
 	for {

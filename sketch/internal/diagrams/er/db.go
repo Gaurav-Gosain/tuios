@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/er/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package er
 
 import (
@@ -56,7 +54,6 @@ func (db *ErDb) addEntity(name string, alias string) *ErEntity {
 	return entity
 }
 
-// The grammar builds the list back to front, so the last attribute written comes first.
 func (db *ErDb) addAttributes(name string, attributes []*ParsedAttribute) {
 	entity := db.addEntity(name, "")
 	for i := len(attributes) - 1; i >= 0; i-- {
@@ -116,7 +113,6 @@ func (db *ErDb) addClass(ids []string, styles []string) {
 func (db *ErDb) setClass(ids []string, classNames []string) {
 	for _, id := range ids {
 		if entity, ok := db.entities.Get(id); ok {
-			// One concatenation per entity, not a += per name: Go copies the string on each +=.
 			if len(classNames) > 0 {
 				entity.cssClasses += " " + strings.Join(classNames, " ")
 			}
@@ -142,7 +138,6 @@ func (db *ErDb) addSubGraph(idText string, list []DocItem, titleText string) str
 			continue
 		}
 		seen[trimmed] = true
-		// A node belongs to the first subgraph that lists it.
 		if !db.claimed[item.value] {
 			nodes = append(nodes, item.value)
 		}
@@ -166,7 +161,6 @@ func (db *ErDb) setAccTitle(text string) {
 	db.accTitle = js.TrimStart(text)
 }
 
-// setAccDescription is text.replace(/\n\s+/g, '\n').
 func (db *ErDb) setAccDescription(text string) {
 	var b strings.Builder
 	for i := 0; i < len(text); {

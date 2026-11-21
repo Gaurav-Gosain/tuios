@@ -1,10 +1,3 @@
-// Ported from pele src/diagrams/gantt/dates.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// A JavaScript Date is a js.Date, which reads and sets its fields in the local time of
-// its location. pele caches the last compiled format in module state; the port keeps
-// that cache in a formatCache the caller owns, so that renders can run in parallel.
-// DAY and WEEK are axis.go's.
-
 package gantt
 
 import (
@@ -15,11 +8,6 @@ import (
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/lazyre"
 )
-
-// The parts of dayjs 1.11 that Mermaid's gantt code relies on, with the plugins it loads (custom parse format,
-// advanced format, ISO week) and the English locale: strict parsing against a format, formatting, and calendar
-// arithmetic, all in local time. Quirks are kept, because a date is accepted only when formatting the parsed
-// result gives back the input.
 
 var MONTHS = [12]string{
 	"January",
@@ -97,7 +85,6 @@ func daysInMonth(date js.Date) float64 {
 	return last.Date()
 }
 
-// Sets the month or the year, keeping the day of the month unless the new month is shorter.
 func setCalendar(date js.Date, month bool, value float64) js.Date {
 	next := date
 	next.SetDate(1)
@@ -159,8 +146,6 @@ var (
 
 const DEFAULT_FORMAT = "YYYY-MM-DDTHH:mm:ssZ"
 
-// Returns false for the week-of-year and time zone name tokens, which need dayjs plugins Mermaid
-// does not load and so fail there.
 func format(date js.Date, template string) (string, bool) {
 	if !isValid(date) {
 		return "Invalid Date", true
@@ -305,11 +290,9 @@ type Fields struct {
 	milliseconds float64
 	week         float64
 	offset       float64
-	// -1 when not given.
-	afternoon int
+	afternoon    int
 }
 
-// Readers, by the token they read.
 const (
 	rNone = iota
 	rAfternoonUpper
@@ -409,7 +392,6 @@ func readOffset(fields *Fields, input string) bool {
 		fields.offset = 0
 		return true
 	}
-	// input is a sign, two digits, maybe a colon, and maybe two digits more.
 	minutes := float64(js.Number(input[1:3]) * 60)
 	if rest := strings.TrimPrefix(input[3:], ":"); len(rest) == 2 {
 		minutes += js.Number(rest)
@@ -470,7 +452,6 @@ func read(f *Fields, kind int, input string) bool {
 		if digits == "" {
 			return false
 		}
-		// dayjs keeps the digits as a string here, so even "0" counts as a day having been given.
 		f.day = js.Number(digits)
 		f.dayGiven = true
 		for i := 1; i <= 31; i++ {
@@ -508,7 +489,6 @@ func boolInt(b bool) int {
 	return 0
 }
 
-// formatCache is pele's compiledFormat and compiledSteps.
 type formatCache struct {
 	compiledFormat string
 	compiled       bool
@@ -524,7 +504,6 @@ func (c *formatCache) compile(template string) []Step {
 	c.compiled = true
 	c.compiledFormat = template
 	c.compiledSteps = nil
-	// dayjs expands localized tokens through a locale table the English locale does not have, and fails.
 	if reLocalized.MatchString(RE_LITERAL.ReplaceAllString(template, "")) {
 		return nil
 	}
@@ -571,7 +550,6 @@ func loose(input, template string, now js.Date, cache *formatCache) (js.Date, bo
 		if match == "" || !read(&f, step.read, match) {
 			return js.Date{}, false
 		}
-		// dayjs drops the first occurrence of the matched text, wherever it is, and does not move `start`.
 		rest = strings.Replace(rest, match, "", 1)
 	}
 	if f.afternoon != -1 && !math.IsNaN(f.hours) {
@@ -616,14 +594,12 @@ func loose(input, template string, now js.Date, cache *formatCache) (js.Date, bo
 	if !math.IsNaN(f.offset) {
 		return js.NewDate(js.DateUTC(year, month, day, hours, minutes, seconds, ms+float64(f.offset*60000)), now.Loc), true
 	}
-	// Applying a week number needs a dayjs plugin Mermaid does not load.
 	if truthy(f.week) {
 		return js.Date{}, false
 	}
 	return js.LocalDate(now.Loc, year, month, day, hours, minutes, seconds, ms), true
 }
 
-// Parses the way `dayjs(input, format, true)` does. `now` supplies the fields the format leaves out.
 func parseStrict(input, template string, now js.Date, cache *formatCache) (js.Date, bool) {
 	date, ok := loose(input, template, now, cache)
 	if !ok || !isValid(date) {
@@ -635,7 +611,6 @@ func parseStrict(input, template string, now js.Date, cache *formatCache) (js.Da
 	return date, true
 }
 
-// location is the zone dates are read in: the host's, as JavaScript reads the process's.
 func location(loc *time.Location) *time.Location {
 	if loc == nil {
 		return time.Local

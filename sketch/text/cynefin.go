@@ -8,20 +8,11 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// A Cynefin diagram is drawn as its 2×2 grid: complex and complicated above, chaotic and clear
-// below, each domain with its name, its decision model, its kind of practice and its items.
-// The line between chaotic and clear is heavy, for the cliff. Confusion is a box over the middle
-// of the grid with its first three items, and the transitions are listed under the grid. When
-// two columns of at least 14 cells do not fit, the domains are listed one after another.
-
-// styled is one line of text in a role.
 type styled struct {
 	text string
 	role uint8
 }
 
-// cynefinLines are a domain's lines at a width: its name, its description, and its items,
-// each wrapped. With most set, it shows that many items and counts the rest.
 func cynefinLines(d types.GeoDomain, w, most int) []styled {
 	var out []styled
 	add := func(s string, role uint8, indent string) {
@@ -78,7 +69,6 @@ func drawCynefin(l *sketch.Layout, opt Options) (*canvas, error) {
 	if opt.Cols > 0 && widest(title) > opt.Cols {
 		title = wrapCells(strings.Join(title, " "), opt.Cols, 1000)
 	}
-	// Each half of the grid is as wide as its widest domain, or half the columns.
 	natural := 0
 	for _, d := range cy.Domains[:4] {
 		natural = max(natural, styledWidth(cynefinLines(d, 1<<20, 0)))
@@ -98,7 +88,6 @@ func drawCynefin(l *sketch.Layout, opt Options) (*canvas, error) {
 	confusion := cynefinLines(cy.Domains[4], min(2*half-6, max(natural, styledWidth(cynefinLines(cy.Domains[4], 1<<20, 3)))), 3)
 	boxW := styledWidth(confusion) + 4
 	boxH := len(confusion) + 2
-	// Blank rows on each side of the middle line leave room for the confusion box.
 	gap := (boxH + 1) / 2
 	topH := max(len(quad[0]), len(quad[1])) + gap
 	bottomH := max(len(quad[2]), len(quad[3])) + gap
@@ -135,7 +124,6 @@ func drawCynefin(l *sketch.Layout, opt Options) (*canvas, error) {
 	c.vline(0, top, bottom, light, roleFrame)
 	c.vline(edge, top, bottom, light, roleFrame)
 	c.vline(half+1, top, mid, light, roleFrame)
-	// The cliff between chaotic and clear.
 	c.vline(half+1, mid, bottom, heavy, roleLine)
 	for i, lines := range quad {
 		x := 2 + (i%2)*(half+1)
@@ -155,7 +143,6 @@ func drawCynefin(l *sketch.Layout, opt Options) (*canvas, error) {
 		}
 	}
 	c.box(bx, by, boxW, boxH, nil, roleBox, roleText)
-	// Join the grid's lines to the box.
 	c.stroke(bx, mid, left, light, roleFrame)
 	c.stroke(bx+boxW-1, mid, right, light, roleFrame)
 	c.stroke(half+1, by, up, light, roleFrame)
@@ -171,7 +158,6 @@ func drawCynefin(l *sketch.Layout, opt Options) (*canvas, error) {
 	return c, nil
 }
 
-// cynefinList lists the domains one after another, for a width that has no room for the grid.
 func cynefinList(cy *types.GeoCynefin, title, transitions []string, opt Options) (*canvas, error) {
 	w := 1 << 20
 	if opt.Cols > 0 {

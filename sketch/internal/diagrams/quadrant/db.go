@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/quadrant/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package quadrant
 
 import (
@@ -12,8 +10,7 @@ import (
 
 type QuadrantText struct {
 	text string
-	// "text" or "markdown".
-	typ string
+	typ  string
 }
 
 // PointStyle holds the styles a point or a class sets. A field left unset is nil.
@@ -32,10 +29,9 @@ type QuadrantPoint struct {
 }
 
 type QuadrantDb struct {
-	title    string
-	accTitle string
-	accDescr string
-	// Quadrants 1 to 4: top right, top left, bottom left, bottom right.
+	title       string
+	accTitle    string
+	accDescr    string
 	quadrants   [4]*QuadrantText
 	xAxisLeft   *QuadrantText
 	xAxisRight  *QuadrantText
@@ -89,7 +85,6 @@ func invalid(style, value, kind string) {
 	types.Throw("value for "+style+" "+value+" is invalid, please use a valid "+kind, types.CodeSemantic, types.ErrorInfo{Type: "quadrantChart"})
 }
 
-// keyValue gives the first two parts of Mermaid's `style.trim().split(/\s*:\s*/)`, found in one pass.
 func keyValue(style string) (string, string) {
 	s := js.Trim(style)
 	colon := strings.IndexByte(s, ':')
@@ -170,7 +165,6 @@ func (db *QuadrantDb) setAccTitle(text string) { db.accTitle = js.TrimStart(text
 
 func (db *QuadrantDb) setAccDescription(text string) { db.accDescr = joinLines(text) }
 
-// joinLines is text.replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	if !strings.Contains(text, "\n") {
 		return text

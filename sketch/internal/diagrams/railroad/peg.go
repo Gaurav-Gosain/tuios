@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/railroad/peg.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package railroad
 
 import (
@@ -7,8 +5,6 @@ import (
 
 	"tuios.dev/sketch/internal/diagrams/common"
 )
-
-// `railroad-peg-beta`: parsing expression grammars.
 
 const (
 	PG_keyword = iota
@@ -30,7 +26,6 @@ const (
 	PG_string
 )
 
-// /#[^\n\r]*/y
 func matchHashComment(src string, p int) int {
 	if src[p] != '#' {
 		return -1
@@ -76,11 +71,9 @@ func PEG_TOKENS() []*common.TokenType {
 	return pegTokens
 }
 
-// pegFrame is one open group, or the rule itself at the bottom of the stack.
 type pegFrame struct {
-	choice   *astNode
-	sequence *astNode
-	// The group's node and the predicate written before it.
+	choice      *astNode
+	sequence    *astNode
 	node        *astNode
 	operator    string
 	hasOperator bool
@@ -158,7 +151,6 @@ func parsePeg(src string) *Grammar {
 	})
 }
 
-// pegLabel is what a predicate shows of the expression it looks ahead for.
 func pegLabel(node *RailroadNode) string {
 	switch node.typ {
 	case "terminal":

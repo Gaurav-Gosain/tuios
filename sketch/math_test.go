@@ -1,10 +1,3 @@
-// Ported from pele tests/render/math.test.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele's resolver returns null or a malformed object for "nothing". A Go
-// resolver reports false, or gives a width or height that is not a positive
-// number. A resolver that throws makes pele's render throw; in sketch it
-// panics and Render returns an error.
-
 package sketch
 
 import (
@@ -34,7 +27,6 @@ func (r *mathRecorder) math(tex string, size float64) (MathMarkup, bool) {
 	return r.markup(tex, size)
 }
 
-// recorder records what it is asked. With no markup it draws a path as wide as the TeX, in a box of 30 by 18.
 func recorder(markup func(tex string, size float64) (MathMarkup, bool)) *mathRecorder {
 	if markup == nil {
 		markup = func(tex string, _ float64) (MathMarkup, bool) {
@@ -387,7 +379,6 @@ func TestMathInOtherTypes(t *testing.T) {
 			if !slices.Equal(got, c.want) {
 				t.Errorf("asked %v", got)
 			}
-			// Ignore attributes: IDs retain the TeX source.
 			if strings.Contains(reAttrValue.ReplaceAllString(svg, `""`), "$$") {
 				t.Error(svg)
 			}

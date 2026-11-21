@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/flowchart/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package flowchart
 
 import (
@@ -80,12 +78,8 @@ func RenderFlowchart(db *FlowDb, config types.Config, options types.RenderOption
 	return fitted(false)
 }
 
-// edgeClasses are the classes every edge has, which the drawing leaves out.
 var edgeClasses = [...]string{"edge-thickness-normal", "edge-pattern-solid", "flowchart-link"}
 
-// withoutEdgeClasses is /edge-thickness-normal|edge-pattern-solid|flowchart-link/g
-// replaced with "": from left to right, each match is cut, and the scan goes on
-// after it.
 func withoutEdgeClasses(classes string) string {
 	var b []byte
 	last := 0
@@ -116,7 +110,6 @@ func withoutEdgeClasses(classes string) string {
 	return string(append(b, classes[last:]...))
 }
 
-// withoutDefault is /^default\s?/ replaced with "".
 func withoutDefault(classes string) string {
 	rest, ok := strings.CutPrefix(classes, "default")
 	if !ok {
@@ -128,7 +121,6 @@ func withoutDefault(classes string) string {
 	return rest
 }
 
-// draw: `turned` draws a flowchart that runs across as one that runs down. `tight` sets nodes closer together.
 func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant FlowVariant, turned bool, tight bool) types.Rendered {
 	groupPad := float64(GROUP_PAD)
 	if tight {
@@ -284,7 +276,6 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 		}
 		return dir == "LR" || dir == "RL"
 	}
-	// The edges on one side of a node spread along it; a picture or an icon keeps them at its middle.
 	for i, view := range views {
 		if view.node.IsGroup {
 			cnodes[i].Span = math.Inf(1)
@@ -304,7 +295,6 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 		}
 		label := text.LayoutLabel(edge.Label, edge.LabelType == "markdown", measurer, edgeSize, wrapWidth, 0)
 		if src == dst {
-			// A self-loop sits beside the node, across the flow, and the node's box grows to hold it.
 			views[src].loops++
 			if flowsSideways(src) {
 				extra := 0.0
@@ -395,7 +385,6 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 
 	var clusters, struckTitles, nodesOut strings.Builder
 	var fills []svg.Fill
-	// A node takes about 270 bytes of markup and an edge about 200.
 	nodesOut.Grow(len(views) * 272)
 	for i, view := range views {
 		c := cnodes[i]
@@ -420,7 +409,6 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 			titleX := svg.ClusterTitleX(c, view.label.Width, crossings, groupPad)
 			titleY := y - c.H/2 + 8 + view.label.Height/2
 			struck := svg.TitleCrossed(c, view.label.Width, titleX, crossings)
-			// A title drawn over the edges sits on a halo in the theme's colors.
 			titleFill := ` fill="var(--_m)"`
 			if !struck {
 				titleFill = svg.InkFill(view.style, "var(--_m)")
@@ -500,10 +488,8 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 		}
 
 		label := svg.LabelSvg(view.label, 0, view.dy, ` class="pele-label"`+ink+view.style.Text, icons)
-		// / internal-link(?: |$)/ on classes + " ".
 		internal := strings.Contains(classes+" ", " internal-link ")
 		if internal && deref(node.Label) != "" && !(options.Links != nil && !*options.Links) {
-			// The label is a note name, but it still ends up in an href, so it gets the same check as a URL.
 			name := text.DecodeEntities(*node.Label)
 			safe := util.InternalLink(name, options)
 			target := svg.Esc(name)
@@ -514,7 +500,6 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 			label = `<a class="internal-link"` + href + ` data-href="` + target + `">` + label + `</a>`
 			links = append(links, types.LinkInfo{ID: node.ID, Href: name, Internal: true})
 		}
-		// A plain node's body is its shape and its label, written one after the other.
 		body := ""
 		plain := true
 		if (node.Tooltip != nil && *node.Tooltip != "") || (node.Link != nil && *node.Link != "") {
@@ -672,8 +657,6 @@ func draw(db *FlowDb, config types.Config, options types.RenderOptions, variant 
 	return rendered
 }
 
-// halfOpacity is the fill-opacity of a group's wash: none where the author sets the fill, which
-// is then drawn at full opacity.
 func halfOpacity(shape string) string {
 	if svg.SetsFill(shape) {
 		return ""

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/sankey/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package sankey
 
 import (
@@ -23,8 +21,6 @@ func isBlank(c rune) bool {
 		c == 0x202f || c == 0x205f || c == 0x3000 || c == 0xfeff
 }
 
-// trimRows strips blanks at the end of the text and at the start and end of each row, outside
-// quoted fields. It lists each run it removes in edits.
 func trimRows(text string, edits *[]types.Edit) string {
 	end := len(text)
 	for end > 0 {
@@ -73,7 +69,6 @@ func trimRows(text string, edits *[]types.Edit) string {
 				p = int(text[i-1])
 			}
 			q := at(j)
-			// Preserve blank first fields, which Mermaid accepts as empty names.
 			if i == 0 || q == 10 || q == 13 || ((p == 10 || p == 13) && q != 44) {
 				out.WriteString(text[kept:i])
 				*edits = append(*edits, types.Edit{From: i, To: j})
@@ -91,9 +86,6 @@ func trimRows(text string, edits *[]types.Edit) string {
 	return out.String()
 }
 
-// prepareTextForParsing is Mermaid's sankeyUtils, but unlike it, it also trims row edges
-// outside quoted fields. Then it collapses runs of line breaks so that no row is empty.
-// When st is not nil it records the edits of each step, so an offset maps back to text.
 func prepareTextForParsing(text string, st *[][]types.Edit) string {
 	var edits []types.Edit
 	rows := trimRows(text, &edits)
@@ -113,8 +105,6 @@ func prepareTextForParsing(text string, st *[][]types.Edit) string {
 	return trimmed
 }
 
-// collapseBreaks is .replace(/[\n\r]+/g, '\n'). It lists each run it replaces in edits
-// when edits is not nil.
 func collapseBreaks(text string, edits *[]types.Edit) string {
 	if edits == nil && !strings.ContainsAny(text, "\r") && !strings.Contains(text, "\n\n") {
 		return text
@@ -139,8 +129,6 @@ func collapseBreaks(text string, edits *[]types.Edit) string {
 	return out.String()
 }
 
-// invalidXML is RE_INVALID_XML.test(text): /[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]/u.
-// Valid UTF-8 holds no surrogate, and DecodeEntities makes none.
 func invalidXML(text string) bool {
 	for _, r := range text {
 		if r <= 0x08 || r == 0x0b || r == 0x0c || (r >= 0x0e && r <= 0x1f) || r == 0xfffe || r == 0xffff {
@@ -150,7 +138,6 @@ func invalidXML(text string) bool {
 	return false
 }
 
-// parseSankey reports errors in source, the text before prepareTextForParsing.
 func parseSankey(src string, db *SankeyDb, source string) {
 	toks := tokenize(src)
 	typ := func(i int) int {
@@ -166,7 +153,6 @@ func parseSankey(src string, db *SankeyDb, source string) {
 		if source != src {
 			prepareTextForParsing(source, &st)
 		}
-		// Map EOF before the trimmed trailing blanks.
 		offset := types.InputOffset(st, at)
 		if at > 0 && at >= len(src) {
 			offset = types.InputOffset(st, len(src)-1) + 1
@@ -223,7 +209,6 @@ func parseSankey(src string, db *SankeyDb, source string) {
 			start = toks.starts[i]
 		}
 		name := strings.ReplaceAll(js.Trim(field()), `""`, `"`)
-		// Entity codes can encode characters excluded by the lexer.
 		if invalidXML(text.DecodeEntities(name)) {
 			fail(start, "Invalid XML character in node name")
 		}
@@ -241,7 +226,6 @@ func parseSankey(src string, db *SankeyDb, source string) {
 		if i < len(toks.starts) {
 			start = toks.starts[i]
 		}
-		// Keep Mermaid's numeric prefixes, but reject non-finite values.
 		value := js.ParseFloat(js.Trim(field()))
 		if math.IsNaN(value) || math.IsInf(value, 0) {
 			fail(start, "Expecting a number")

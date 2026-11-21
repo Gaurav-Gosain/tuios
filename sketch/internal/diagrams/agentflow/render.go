@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/agentflow/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package agentflow
 
 import (
@@ -30,7 +28,6 @@ const (
 	COLLAPSED = "collapsed"
 )
 
-// flowEnd is the side a flow runs toward, with sides numbered clockwise from the top.
 func flowEnd(dir layout.Dir) int {
 	switch dir {
 	case "RL":
@@ -43,7 +40,6 @@ func flowEnd(dir layout.Dir) int {
 	return 2
 }
 
-// agentGraph builds the graph once per model. Building it also records the model's shape and containment diagnostics.
 func agentGraph(db *AgentflowDb, config types.Config) *AgentGraph {
 	if db.graph == nil {
 		curve := ""
@@ -65,10 +61,8 @@ func numberOption(config types.Config, key string, fallback float64) float64 {
 	return fallback
 }
 
-// hasFill is setsFill: /[";]fill:/.test(shape).
 func hasFill(shape string) bool { return svg.SetsFill(shape) }
 
-// tints caches tint, by slot, wash and fill.
 type tints map[int]string
 
 func (t tints) of(slot int, wash string, style svg.ResolvedStyle) string {
@@ -87,8 +81,6 @@ func (t tints) of(slot int, wash string, style svg.ResolvedStyle) string {
 	return s
 }
 
-// tint is a palette color as an outline with a light wash of the same color inside.
-// A fill the author set replaces the wash and stays opaque.
 func tint(slot int, wash string, style svg.ResolvedStyle) string {
 	color := svg.SeriesColor(slot)
 	if hasFill(style.Shape) {
@@ -119,7 +111,6 @@ func renderAgentflow(db *AgentflowDb, config types.Config, options types.RenderO
 	return common.TurnToFit(options, func(down bool) types.Rendered { return draw(db, config, options, down) })
 }
 
-// trimDefault is classes.replace(/^default\s?/, ”).
 func trimDefault(classes string) string {
 	if !strings.HasPrefix(classes, "default") {
 		return classes
@@ -137,7 +128,6 @@ func trimDefault(classes string) string {
 
 var edgeClassWords = [...]string{"edge-thickness-normal", "edge-pattern-solid", "flowchart-link"}
 
-// trimEdgeClasses is classes.replace(/edge-thickness-normal|edge-pattern-solid|flowchart-link/g, ”).
 func trimEdgeClasses(classes string) string {
 	var b strings.Builder
 	for i := 0; i < len(classes); {
@@ -170,7 +160,6 @@ type heldEdge struct {
 	src, dst int
 }
 
-// draw: `turned` draws a diagram that runs across as one that runs down.
 func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, turned bool) types.Rendered {
 	graph := agentGraph(db, config)
 	size := types.Or(options.FontSize, 16)
@@ -236,7 +225,6 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 		default:
 			shape := flowchart.CanonicalShape(node.Shape)
 			label := text.LayoutLabel(deref(node.Label), markdown, measurer, fontSize, wrapWidth, textStyle)
-			// A diamond grows twice as fast as its label, so it keeps the label's own width.
 			tw := math.Max(label.Width, minWidth)
 			if shape == "diam" {
 				tw = label.Width
@@ -272,7 +260,6 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 	if turned {
 		rootDir = "TB"
 	}
-	// flowOf is the direction of the level a node sits in.
 	flowOf := func(i int) layout.Dir {
 		var dir layout.Dir
 		for p, hops := cnodes[i].Parent, 0; p >= 0 && dir == "" && hops < 10000; p, hops = cnodes[p].Parent, hops+1 {
@@ -320,8 +307,6 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 	cedges := make([]*layout.CEdge, 0, len(graph.Edges))
 	edgeLabels := make([]text.Label, 0, len(graph.Edges))
 	drawn := make([]*GraphEdge, 0, len(graph.Edges))
-	// Edges between a node and a container around it. The layout has no place for them, so they
-	// are drawn afterwards, between the node and the container's border.
 	var held []heldEdge
 	for _, edge := range graph.Edges {
 		src, ok1 := index[edge.Start]
@@ -335,7 +320,6 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 			continue
 		}
 		if src == dst {
-			// A self-loop sits beside the node, across the flow, and the node's box grows to hold it.
 			views[src].loops++
 			if flowsSideways(src) {
 				room := 0.0
@@ -389,9 +373,6 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 
 	shapeView := func(i int) svg.ShapeView { return svg.ShapeView{Shape: views[i].shape, W: views[i].w, H: views[i].h} }
 
-	// An edge between a node and a container around it runs straight between the node and the
-	// container's border: out along the flow, or in against it. If another node is in the way it
-	// takes a side instead, and failing that the far end.
 	heldPaths := make([]svg.EdgePath, 0, len(held))
 	heldLabels := make([]float64, 0, 2*len(held))
 	heldRoutes := make([][]float64, 0, len(held))
@@ -536,10 +517,8 @@ func draw(db *AgentflowDb, config types.Config, options types.RenderOptions, tur
 			ink = svg.InkFill(view.style, "")
 		}
 		label := svg.LabelSvg(view.label, 0, view.dy, ` class="pele-label"`+ink+view.style.Text, icons)
-		// / internal-link(?: |$)/ on classes + " ".
 		internal := strings.Contains(classes+" ", " internal-link ")
 		if internal && deref(node.Label) != "" && !(options.Links != nil && !*options.Links) {
-			// The label is a note name, but it still ends up in an href, so it gets the same check as a URL.
 			name := text.DecodeEntities(*node.Label)
 			safe := util.InternalLink(name, options)
 			target := svg.Esc(name)
@@ -678,11 +657,8 @@ func dot(x, y float64) string {
 	return `M` + svg.Num(x-1.75) + `,` + svg.Num(y) + `a1.75,1.75 0 1 0 3.5,0a1.75,1.75 0 1 0 -3.5,0Z`
 }
 
-// textShapes are the shapes sketch/text knows for the shapes agentflow draws.
 var textShapes = map[string]string{"rounded": "rounded", "fr-rect": "rect", "lean-r": "rect", "diam": "diam", "lin-doc": "rect", "hex": "hex", "collapsed": "rect"}
 
-// geometry gives the nodes as flowchart nodes and the flows as groups, so that sketch/text
-// draws the diagram as it draws a flowchart. The edges are added as they are drawn. Not in pele.
 func geometry(views []NodeView, cnodes []*layout.CNode, width, height float64) *types.Geometry {
 	g := &types.Geometry{Width: width, Height: height}
 	for i := range views {

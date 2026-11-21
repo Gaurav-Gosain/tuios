@@ -35,11 +35,6 @@ func over(fg, bg color.NRGBA) color.NRGBA {
 	return color.NRGBA{m(fg.R, bg.R), m(fg.G, bg.G), m(fg.B, bg.B), 255}
 }
 
-// backdrop is the commonest colour in a box of the image, from a grid of at
-// most 16 by 8 samples. A pixel not yet painted over in full is read over
-// ground: an image drawn without a background is shown on the diagram's
-// background colour, and read as the black of its clear pixels a theme's dark
-// text would turn white on a light theme.
 func backdrop(img *image.RGBA, b box, ground color.NRGBA) (color.NRGBA, bool) {
 	r := image.Rect(int(b.x0), int(b.y0), int(math.Ceil(b.x1)), int(math.Ceil(b.y1))).Intersect(img.Bounds())
 	if r.Empty() {
@@ -51,8 +46,6 @@ func backdrop(img *image.RGBA, b box, ground color.NRGBA) (color.NRGBA, bool) {
 	for y := r.Min.Y; y < r.Max.Y; y += sy {
 		for x := r.Min.X; x < r.Max.X; x += sx {
 			c := img.RGBAAt(x, y)
-			// RGBA is premultiplied, so the ground adds its share of what
-			// the pixel leaves uncovered.
 			left := 255 - uint32(c.A)
 			k := color.NRGBA{
 				uint8(uint32(c.R) + uint32(ground.R)*left/255),
@@ -69,9 +62,6 @@ func backdrop(img *image.RGBA, b box, ground color.NRGBA) (color.NRGBA, bool) {
 	return best, true
 }
 
-// readableText picks the colour for a run of theme-coloured text over what is
-// already drawn: its own colour when that clears TextFloor, else the theme's
-// text or background colour, else near-black or white.
 func (r *renderer) readableText(p path, st state) state {
 	c, ok := st.paintColor(st.fill, st.fillOpacity)
 	if !ok || st.fill.current || len(p) == 0 {
@@ -92,8 +82,6 @@ func (r *renderer) readableText(p path, st state) state {
 		return st
 	}
 	best, bestRatio := c, ratio(over(c, bg), bg)
-	// The theme's own colours first; plain near-black and white only where
-	// neither of those reads, on a fill of middle lightness.
 	for _, v := range []string{"var(--_fg)", "var(--_bg)", "#111111", "#ffffff"} {
 		if bestRatio >= TextFloor {
 			break

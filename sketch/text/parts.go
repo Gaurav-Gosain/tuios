@@ -5,10 +5,6 @@ import (
 	"unicode/utf8"
 )
 
-// Parts the drawings of state, class, ER, pie, mindmap and gantt diagrams share.
-
-// frame draws a box's border in a role, with rounded or square corners, and
-// clears what is inside it.
 func frame(c *canvas, b rect, role uint8, round bool) {
 	for y := b.y0; y <= b.y1; y++ {
 		for x := b.x0; x <= b.x1; x++ {
@@ -33,7 +29,6 @@ func frame(c *canvas, b rect, role uint8, round bool) {
 	c.put(b.x1, b.y1, br, role)
 }
 
-// rule draws a line across a box at row y, joined to its sides.
 func rule(c *canvas, b rect, y int, role uint8) {
 	c.put(b.x0, y, '├', role)
 	for x := b.x0 + 1; x < b.x1; x++ {
@@ -42,14 +37,10 @@ func rule(c *canvas, b rect, y int, role uint8) {
 	c.put(b.x1, y, '┤', role)
 }
 
-// centred writes a line centred between x0 and x1, ends included.
 func centred(c *canvas, x0, x1, y int, s string, role uint8) {
 	c.text(x0+(x1-x0+1-width(s))/2, y, s, role)
 }
 
-// wrap breaks a line at spaces and at break hints, so that each piece is at
-// most w cells wide. A soft hyphen where a line breaks shows as "-". A word
-// longer than w is cut. w of 0 or less leaves the line whole.
 func wrap(s string, w int) []string {
 	if w <= 0 || width(s) <= w {
 		return []string{s}
@@ -58,20 +49,15 @@ func wrap(s string, w int) []string {
 	line := ""
 	for _, field := range strings.Fields(s) {
 		pieces := hintPieces(field)
-		// rest is the width of the pieces of the word from this one on.
 		rest := width(field)
 		for k, word := range pieces {
 			glue := ""
 			if k == 0 && line != "" {
 				glue = " "
 			}
-			// ww is the width of what is left of the word. It goes down by the
-			// width of each cut, so a long word is measured once, not once a cut.
 			ww := width(word)
 			fits := width(line)+len(glue)+ww <= w
 			if strings.HasSuffix(word, "\u00ad") && k < len(pieces)-1 {
-				// A piece that ends in a soft hyphen fits if its "-" does, or if
-				// the rest of the word does, which hides the hyphen.
 				fits = width(line)+len(glue)+ww+1 <= w || width(line)+len(glue)+rest <= w
 			}
 			rest -= ww
@@ -93,7 +79,6 @@ func wrap(s string, w int) []string {
 					n += runeWidth(r)
 				}
 				if cut == 0 {
-					// A wide character in one column: it goes on a line of its own.
 					var r rune
 					r, cut = utf8.DecodeRuneInString(word)
 					n = runeWidth(r)
@@ -111,7 +96,6 @@ func wrap(s string, w int) []string {
 	return out
 }
 
-// hintPieces splits a word after each break hint in it.
 func hintPieces(word string) []string {
 	if !strings.ContainsRune(word, 0x200b) && !strings.ContainsRune(word, 0xad) {
 		return []string{word}
@@ -131,8 +115,6 @@ func hintPieces(word string) []string {
 	return out
 }
 
-// broken is a line that ends where wrap breaks it: a soft hyphen at its end
-// shows as "-".
 func broken(line string) string {
 	if strings.HasSuffix(line, "\u00ad") {
 		return strings.TrimSuffix(line, "\u00ad") + "-"
@@ -140,8 +122,6 @@ func broken(line string) string {
 	return line
 }
 
-// withTitle puts the title over a drawing, centred, with a blank line under
-// it. Lines wider than cols are wrapped.
 func withTitle(c *canvas, title []string, cols int) (*canvas, error) {
 	var lines []string
 	for _, l := range title {

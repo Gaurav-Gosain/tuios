@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/sequence/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package sequence
 
 import (
@@ -60,10 +58,8 @@ type frame struct {
 	kind      int
 	text      string
 	startType int
-	// list is the current section's statements. Slot 0 of a block's first section is kept for its start entry.
-	list []SeqItem
-	// sections are the finished sections, each followed by the divider text that ended it.
-	sections []sectionEnd
+	list      []SeqItem
+	sections  []sectionEnd
 }
 
 type sectionEnd struct {
@@ -93,7 +89,6 @@ const SIGNAL_TOKENS = "'SOLID_OPEN_ARROW', 'DOTTED_OPEN_ARROW', 'SOLID_ARROW', '
 func parseSequence(src string, db *SeqDb) {
 	tk := tokenize(src)
 	typesT, texts, starts := tk.types, tk.texts, tk.starts
-	// pele reads past the last token as undefined. Padding with END keeps the port's reads in range.
 	for k := 0; k < 4; k++ {
 		typesT = append(typesT, T_END)
 		texts = append(texts, "")
@@ -273,8 +268,6 @@ func parseSequence(src string, db *SeqDb) {
 		return node
 	}
 
-	// fold folds the sections of an alt, par, or critical block from the last one back, as the grammar's
-	// right recursion does, so the texts reach the model builder in the same order.
 	fold := func(f *frame, divider string, key string, signalType int) []SeqItem {
 		list := f.list
 		for k := len(f.sections) - 1; k >= 0; k-- {
@@ -407,7 +400,6 @@ func parseSequence(src string, db *SeqDb) {
 				f.list = append(f.list, &SeqStatement{Type: "activeEnd", SignalType: LINETYPE_ACTIVE_END, Actor: who.Actor})
 			}
 		case T_title, T_legacy_title:
-			// The token is "title", then ":" for the legacy form, then one space.
 			s := texts[i][5:]
 			if t == T_legacy_title {
 				s = s[1:]

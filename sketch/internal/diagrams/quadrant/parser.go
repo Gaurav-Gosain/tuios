@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/quadrant/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package quadrant
 
 import (
@@ -26,7 +24,6 @@ var (
 
 const TEXT_TOKENS = "'STR', 'MD_STR', 'ALPHA', 'NUM', 'UNICODE_TEXT', 'PUNCTUATION'"
 
-// in reports whether t is set in a flag table; -1, past the end of the tokens, is in none.
 func in(table *[T_EOF + 1]bool, t int) bool { return t >= 0 && table[t] }
 
 type parser struct {
@@ -35,7 +32,6 @@ type parser struct {
 	i    int
 }
 
-// typ is types[i], or -1 past the end, which pele reads as undefined.
 func (p *parser) typ(i int) int {
 	if i < 0 || i >= len(p.toks.types) {
 		return -1
@@ -48,7 +44,6 @@ func (p *parser) take() string {
 	return p.toks.texts[p.i-1]
 }
 
-// join returns the texts of the tokens from start up to the current one, in one allocation.
 func (p *parser) join(start int) string {
 	return strings.Join(p.toks.texts[start:p.i], "")
 }
@@ -86,7 +81,6 @@ func (p *parser) text() QuadrantText {
 	for t := p.typ(p.i); in(&WORD, t) || t == T_SPACE || t == T_MINUS; t = p.typ(p.i) {
 		p.i++
 	}
-	// One join, not a += per token: Go copies the string on each +=, where JavaScript ropes do not.
 	s := p.join(start)
 	typ := "text"
 	if first == T_MD_STR {

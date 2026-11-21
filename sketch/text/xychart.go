@@ -8,16 +8,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// An XY chart is drawn from its lists with tuios.dev/plot: bars as eighth
-// blocks and lines as braille dots, on axes drawn here. Bars and lines share the
-// value range of the SVG, and the points of a line sit at the middle of the
-// slots the bars stand in. When the columns are too few for a slot per
-// category, the chart turns: categories run down as rows, with bars across and
-// the values of a line as dots on their rows.
-
-// plotRows is the height of the plot of a chart with columns: from 10 to 16
-// rows, the count that puts the ticks nearest to whole rows, so that they are
-// evenly spaced.
 func plotRows(ticks []types.GeoMark) int {
 	best, worst := 12, math.Inf(1)
 	for rows := 10; rows <= 16; rows++ {
@@ -26,7 +16,6 @@ func plotRows(ticks []types.GeoMark) int {
 			v := t.At * float64(rows)
 			off = math.Max(off, math.Abs(v-math.Round(v)))
 		}
-		// A taller plot must be clearly better.
 		if off < worst-0.05 {
 			best, worst = rows, off
 		}
@@ -47,7 +36,6 @@ func drawXY(l *sketch.Layout, opt Options) (*canvas, error) {
 	return xyAcross(g, opt)
 }
 
-// canvasRole maps a role of tuios.dev/plot to a role of the canvas.
 func canvasRole(r plot.Role) uint8 {
 	for i := range seriesRoles {
 		if r == plot.SeriesRole(i) {
@@ -61,7 +49,6 @@ func canvasRole(r plot.Role) uint8 {
 	return roleLine
 }
 
-// strokeOf is the strokes of each light box-drawing glyph.
 var strokeOf = func() map[rune]uint8 {
 	m := map[rune]uint8{}
 	for mask := len(joins) - 1; mask > 0; mask-- {
@@ -73,8 +60,6 @@ var strokeOf = func() map[rune]uint8 {
 	return m
 }()
 
-// paste copies a grid of tuios.dev/plot into the canvas from x0, y0: each
-// cell's text, its role and its ground.
 func (c *canvas) paste(g *plot.Grid, x0, y0 int) {
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {
@@ -84,8 +69,6 @@ func (c *canvas) paste(g *plot.Grid, x0, y0 int) {
 			}
 			r := []rune(cell.Text)[0]
 			if mask, ok := strokeOf[r]; ok && cell.Bg == plot.None {
-				// A line as strokes, so it joins the canvas's own lines and
-				// rows of plain vertical lines still close up.
 				c.stroke(x0+x, y0+y, mask, light, canvasRole(cell.Role))
 				continue
 			}
@@ -98,8 +81,6 @@ func (c *canvas) paste(g *plot.Grid, x0, y0 int) {
 	}
 }
 
-// xyLegend is the legend in lines of at most w cells: a mark in the colour of
-// each named series and its name.
 type legendItem struct {
 	x, y  int
 	mark  rune
@@ -141,8 +122,6 @@ func (c *canvas) legend(items []legendItem, x0, y0 int) {
 	}
 }
 
-// slotValues are the values of a series by slot, as fractions of the value
-// axis, NaN where a slot has none.
 func slotValues(g *types.GeoXY, s types.GeoSeries) []float64 {
 	vals := make([]float64, g.Slots)
 	for i := range vals {
@@ -155,8 +134,6 @@ func slotValues(g *types.GeoXY, s types.GeoSeries) []float64 {
 	return vals
 }
 
-// barParts splits fractions of the value axis at the base into the length of
-// each bar past the base and short of it, each as a fraction of that side.
 func barParts(vals []float64, base float64) (up, down []float64) {
 	up = make([]float64, len(vals))
 	down = make([]float64, len(vals))
@@ -173,7 +150,6 @@ func barParts(vals []float64, base float64) (up, down []float64) {
 	return up, down
 }
 
-// barGlyph reports whether r is a block a bar is drawn with.
 func barGlyph(r rune) bool {
 	return (r >= '▀' && r <= '█') || r == '▔' || r == '▐' || r == '▕' || (r >= '▉' && r <= '▏')
 }
@@ -208,7 +184,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 			bars++
 		}
 	}
-	// The tick labels, right-aligned left of the axis.
 	lw := 0
 	for _, t := range g.Ticks {
 		lw = max(lw, width(t.Label))
@@ -218,8 +193,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 		axisX = 0
 	}
 	px0 := axisX + 1
-	// Each slot is wide enough for its bars side by side with a cell to spare,
-	// and for its label when there is room.
 	least := max(bars, 1) + 1
 	if bars > 1 {
 		least = 2*bars + 1
@@ -228,8 +201,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 	for _, m := range g.Marks {
 		label = max(label, width(m.Label))
 	}
-	// Point labels of a line ask for wider slots too, and the label of the
-	// last point for room past the plot.
 	point := 0
 	for _, s := range g.Series {
 		for _, p := range s.Points {
@@ -294,8 +265,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 		c.text(0, valueTitleY, fit(g.ValueTitle, wd), roleHead)
 	}
 
-	// The axes, the ticks and their labels. A tick marks the top edge of its
-	// row: the low end of the range is the row of the axis.
 	c.vline(axisX, top, axisY, light, roleLine)
 	c.hline(axisX, px0+pw-1, axisY, light, roleLine)
 	used := map[int]bool{}
@@ -344,10 +313,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 		c.text(px0+(pw-width(line))/2, labelY+1+i, line, roleHead)
 	}
 
-	// The bars of each series side by side in the middle of their slots.
-	// A value stands at the middle of a row, as its tick label does, so a
-	// bar grows from the middle of the row of the base: its first cell is
-	// a half block, and the axis line runs on into it.
 	thick := max(1, int(math.Round(float64(slotW)*0.7))/max(bars, 1))
 	group := thick * bars
 	rb := int(math.Round(math.Min(math.Max(g.Base, 0), 1) * float64(xyRows)))
@@ -359,8 +324,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 		}
 		role := plot.SeriesRole(si)
 		up, down := barParts(slotValues(g, s), g.Base)
-		// tuios.dev/plot's columns, a column a slot, measured from the middle
-		// of the base row: up from it, and down from it, drawn up and turned.
 		upG := plot.Bar{Values: up, Min: 0, Max: 1, Role: role, Half: true}.Draw(g.Slots, xyRows-rb+1, plot.Braille)
 		var downG *plot.Grid
 		if rb > 0 {
@@ -387,8 +350,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 		k++
 	}
 
-	// Lines over the bars. Each run of points without a gap is drawn into a
-	// grid from its first point to its last, so the points sit on their slots.
 	col := func(a float64) int {
 		if g.Band || bars > 0 {
 			return center(min(max(int(a*float64(g.Slots)), 0), g.Slots-1))
@@ -408,10 +369,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 			for i, p := range run {
 				vals[i] = p.Value
 			}
-			// The grid takes the axis row as well, and its range runs past 0
-			// and 1 by a dot and a half, so that 0 falls in the middle of the
-			// axis row and 1 in the middle of the top row, where their
-			// ticks are.
 			d := float64(4 * xyRows)
 			lg := plot.Line{Series: []plot.Series{{Values: vals, Role: plot.SeriesRole(si)}}, Min: -1.5 / d, Max: (d + 1.5) / d}.Draw(c1-c0+1, xyRows+1, plot.Braille)
 			for y := 0; y < lg.H; y++ {
@@ -426,19 +383,13 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 						continue
 					}
 					if p.r == '█' && p.role >= roleSeries && r >= 0x2800 && r <= 0x28ff {
-						// A line crosses a bar: its dots on the bar's colour.
 						c.putBg(c0+x, top+y, r, canvasRole(cell.Role), p.role)
 						continue
 					}
 					if barGlyph(p.r) {
-						// A line passes behind the end of a bar: a dot in place
-						// of the bar's last block would change the height the
-						// bar shows.
 						continue
 					}
 					if p.r >= 0x2800 && p.r <= 0x28ff && p.role == canvasRole(cell.Role) {
-						// Two runs of one series meet: keep the dots of both.
-						// Another series takes the cell, in its own colour.
 						r |= p.r
 					}
 					c.put(c0+x, top+y, r, canvasRole(cell.Role))
@@ -447,11 +398,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 		}
 	}
 
-	// Labels last, where they cover nothing: the value above the end of
-	// each bar, and the label of a line point next to the point: above it,
-	// beside it or below it.
-	// A label with no room is left out. Labels may use the free row above the
-	// plot, not the axis or the rows below it.
 	k = 0
 	for _, s := range g.Series {
 		if !s.Bar {
@@ -463,7 +409,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 			}
 			i := min(max(int(p.At*float64(g.Slots)), 0), g.Slots-1)
 			x0 := center(i) - group/2 + k*thick
-			// The row past the end of the bar, up from the base or down from it.
 			step := -1
 			y := top + xyRows - rb - 1
 			if p.Value < g.Base {
@@ -498,9 +443,6 @@ func xyColumns(g *types.GeoXY, opt Options) (*canvas, error) {
 	return c, nil
 }
 
-// turnedDown is the block a bar that hangs down from its base shows for the
-// block plot draws for a bar that stands up: the same length from the
-// other end of the cell.
 func turnedDown(r rune) rune {
 	switch {
 	case r == '▀':
@@ -511,8 +453,6 @@ func turnedDown(r rune) rune {
 	return r
 }
 
-// turnedLeft is the block a bar that runs left from its base shows for the
-// block plot draws for a bar that runs right.
 func turnedLeft(r rune) rune {
 	switch {
 	case r == '▐':
@@ -525,14 +465,11 @@ func turnedLeft(r rune) rune {
 	return r
 }
 
-// bar reports whether the cell at x, y holds a block of a bar.
 func (c *canvas) bar(x, y int) bool {
 	p := c.at(x, y)
 	return p != nil && barGlyph(p.r)
 }
 
-// blank reports whether the cells from x to x+w-1 of row y are in the canvas
-// and empty: no character, no stroke, no braille dots.
 func (c *canvas) blank(x, y, w int) bool {
 	for i := x; i < x+w; i++ {
 		p := c.at(i, y)
@@ -543,9 +480,6 @@ func (c *canvas) blank(x, y, w int) bool {
 	return true
 }
 
-// label writes s at the first spot, from rows y0 to y1-1, where it covers
-// nothing and has a free cell or the edge on each side, so that it does not
-// run into other text. It reports whether s has a place.
 func (c *canvas) label(s string, y0, y1 int, spots ...[2]int) bool {
 	w := width(s)
 	edge := func(x, y int) bool { return c.at(x, y) == nil || c.blank(x, y, 1) }
@@ -560,8 +494,6 @@ func (c *canvas) label(s string, y0, y1 int, spots ...[2]int) bool {
 	return false
 }
 
-// widen gives a chart w cells wide room for its title and legend on one line,
-// within the columns there are.
 func widen(w int, g *types.GeoXY, opt Options) int {
 	want := widest(g.Title)
 	legend := 0
@@ -577,7 +509,6 @@ func widen(w int, g *types.GeoXY, opt Options) int {
 	return max(w, want)
 }
 
-// runs splits the points of a line where a value is missing.
 func runs(points []types.GeoPoint) [][]types.GeoPoint {
 	var out [][]types.GeoPoint
 	start := 0
@@ -593,8 +524,6 @@ func runs(points []types.GeoPoint) [][]types.GeoPoint {
 	return out
 }
 
-// xyAcross draws the categories down the left, one slot of rows each: a row per
-// bar series, and a row for the values of the lines as dots.
 func xyAcross(g *types.GeoXY, opt Options) (*canvas, error) {
 	if g.Slots <= 0 {
 		return nil, ErrUnsupported
@@ -612,8 +541,6 @@ func xyAcross(g *types.GeoXY, opt Options) (*canvas, error) {
 		rows++
 	}
 	rows = max(rows, 1)
-	// A blank row between categories, so bars on rows next to each other
-	// stay apart.
 	sep := 1
 	label := 0
 	for _, m := range g.Marks {
@@ -708,9 +635,6 @@ func xyAcross(g *types.GeoXY, opt Options) (*canvas, error) {
 		c.text(px0+(pw-width(line))/2, labelY+1+i, line, roleHead)
 	}
 
-	// A value stands at the middle of a column, as its tick does, and a bar
-	// grows from the middle of the column of the base: its first cell is a
-	// half block over the axis line.
 	cb := int(math.Round(math.Min(math.Max(g.Base, 0), 1) * float64(pw)))
 	baseX := axisX + cb
 	k := 0
@@ -720,9 +644,6 @@ func xyAcross(g *types.GeoXY, opt Options) (*canvas, error) {
 		}
 		role := plot.SeriesRole(si)
 		up, down := barParts(slotValues(g, s), g.Base)
-		// tuios.dev/plot's bars across, a row a slot, measured from the middle
-		// of the base column: right from it, and left from it, drawn right and
-		// turned.
 		none := func(float64) string { return "" }
 		rightG := plot.Bar{Values: up, Min: 0, Max: 1, Role: role, Horizontal: true, Format: none, Half: true}.Draw(pw-cb+1, g.Slots, plot.Braille)
 		var leftG *plot.Grid
@@ -760,9 +681,6 @@ func xyAcross(g *types.GeoXY, opt Options) (*canvas, error) {
 		}
 	}
 
-	// Labels last, where they cover nothing: the value past the end of each
-	// bar, and the label of a line point beside its dot. A label with no room
-	// is left out.
 	k = 0
 	for _, s := range g.Series {
 		if !s.Bar {
@@ -780,7 +698,6 @@ func xyAcross(g *types.GeoXY, opt Options) (*canvas, error) {
 				for x >= axisX && c.bar(x, ry) {
 					x--
 				}
-				// Past the end of the bar, or else on the other side of the base.
 				c.label(p.Label, top, axisY, [2]int{x - lw, ry}, [2]int{baseX + 2, ry})
 			} else {
 				x := baseX

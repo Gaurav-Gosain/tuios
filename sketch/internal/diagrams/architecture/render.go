@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/architecture/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package architecture
 
 import (
@@ -32,7 +30,6 @@ func setting(config types.Config, key string, fallback, lo, hi float64) float64 
 	return fallback
 }
 
-// rank maps the grid lines in use to consecutive indexes, so empty rows and columns take no room.
 func rank(values []int) map[int]int {
 	slices.Sort(values)
 	out := make(map[int]int, len(values))
@@ -64,8 +61,6 @@ func iconSlot(b *strings.Builder, name string, x, y, side float64, icons text.Ic
 	svg.WriteStrings(b, inner, `</svg>`)
 }
 
-// prefixEnd is the byte length of text.slice(0, units) for measuring: a cut inside a
-// surrogate pair keeps the whole character, which pele measures the same as its high half.
 func prefixEnd(s string, units int) int {
 	n := 0
 	for i, r := range s {
@@ -77,7 +72,6 @@ func prefixEnd(s string, units int) int {
 	return len(s)
 }
 
-// fit cuts a label down to a box, ending what is left with an ellipsis.
 func fit(label text.Label, maxWidth float64, maxLines int, measurer text.TextMeasurer) text.Label {
 	cut := len(label.Lines) > maxLines
 	if !cut && label.Width <= maxWidth {
@@ -110,7 +104,6 @@ func fit(label text.Label, maxWidth float64, maxLines int, measurer text.TextMea
 							hi = mid - 1
 						}
 					}
-					// A cut inside a surrogate pair steps back before the pair.
 					end := prefixEnd(span.Text, lo)
 					if end > 0 && unitsTo(span.Text, end) > lo {
 						_, size := utf8.DecodeLastRuneInString(span.Text[:end])
@@ -137,28 +130,23 @@ func fit(label text.Label, maxWidth float64, maxLines int, measurer text.TextMea
 	return out
 }
 
-// unitsTo is the UTF-16 length of s[:end].
 func unitsTo(s string, end int) int {
 	return js.Len(s[:end])
 }
 
 type Port struct {
-	x  float64
-	y  float64
-	dx float64
-	dy float64
-	// The box the route has to stay out of when it cannot leave straight.
-	x0 float64
-	y0 float64
-	x1 float64
-	y1 float64
-	// How far short of the port an arrowhead stops: the radius of a junction's dot.
-	gap float64
-	// Set where a junction is reached through the border of its group: the line carries on to the junction.
+	x    float64
+	y    float64
+	dx   float64
+	dy   float64
+	x0   float64
+	y0   float64
+	x1   float64
+	y1   float64
+	gap  float64
 	wire bool
 }
 
-// route is an orthogonal route from one port to another, each left along its side's normal.
 func route(s, e *Port) []float64 {
 	sx, sy, sdx, sdy := s.x, s.y, s.dx, s.dy
 	ex, ey, edx, edy := e.x, e.y, e.dx, e.dy
@@ -190,7 +178,6 @@ func route(s, e *Port) []float64 {
 			if math.Abs(offset) < 0.5 {
 				return []float64{sx, sy, ex, ey}
 			}
-			// Turn midway between the two boxes, which is clear of both titles, when there is such a place.
 			if sideways {
 				lo, hi := e.x1, s.x0
 				if sdx > 0 {
@@ -226,7 +213,6 @@ func route(s, e *Port) []float64 {
 		}
 		return []float64{sx, sy, sx, y, ex, y, ex, ey}
 	}
-	// The straight way is blocked by one of the two nodes: go between them, or around both.
 	if sideways {
 		var lane float64
 		switch {
@@ -251,7 +237,6 @@ func route(s, e *Port) []float64 {
 	return []float64{sx, sy, sx, s1y, lane, s1y, lane, e1y, ex, e1y, ex, ey}
 }
 
-// simplify drops repeated points and joins runs that continue in a straight line.
 func simplify(p []float64) []float64 {
 	out := make([]float64, 2, len(p))
 	out[0], out[1] = p[0], p[1]
@@ -360,7 +345,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		index[node.id] = i
 	}
 
-	// A service is its icon square with the title beneath; a junction takes the same room.
 	labels := make([]text.Label, N)
 	boxW := make([]float64, N)
 	boxH := make([]float64, N)
@@ -433,7 +417,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		rowH[r] = math.Max(rowH[r], half)
 	}
 
-	// An edge label needs the gap its edge crosses to be wide enough to hold it.
 	E := len(model.edges)
 	edgeLabels := make([]text.Label, E)
 	ends := make([]int, E*2)
@@ -465,9 +448,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		}
 	}
 
-	// Room around each group, kept on the rows and columns at its edges. A group that shares an
-	// edge with a group inside it stands that much further out. Children come after their parents,
-	// so walking backwards settles every group before the one that holds it.
 	groupLabels := make([]text.Label, G)
 	c0 := make([]int, G)
 	c1 := make([]int, G)
@@ -569,7 +549,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 			innerH += gapY[r]
 		}
 	}
-	// What is drawn, which an edge that has to go around a node can push past the grid.
 	minX := 0.0
 	minY := 0.0
 	maxX := innerW
@@ -632,7 +611,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		geo = &types.Geometry{}
 	}
 	var edgesOut, labelsOut strings.Builder
-	// Vertical runs of the edges, to keep group titles out from under them.
 	var runs []float64
 	trimLength := svg.MarkerTrim("arrow_point")
 	for k, edge := range model.edges {
@@ -644,7 +622,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		s := port(a, sideIndex(edge.lhsDir), edge.lhsGroup)
 		e := port(b, sideIndex(edge.rhsDir), edge.rhsGroup)
 		if s.x == e.x && s.y == e.y && s.dx == e.dx {
-			// An edge from a side back to the same side: part the two ends so it shows as a loop.
 			s.x -= float64(8 * math.Abs(s.dy))
 			s.y -= float64(8 * math.Abs(s.dx))
 			e.x += float64(8 * math.Abs(s.dy))
@@ -717,7 +694,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 			y := (points[at+1] + points[at+3]) / 2
 			w := label.Width + 8
 			upright := math.Abs(points[at]-points[at+2]) < 0.01
-			// On a short run next to a node the label would land on the node, so it moves off to the side.
 			for _, p := range [2]*Port{&s, &e} {
 				if x+w/2 <= p.x0 || x-w/2 >= p.x1 || y+label.Height/2 <= p.y0 || y-label.Height/2 >= p.y1 {
 					continue
@@ -763,7 +739,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		svg.WriteNum(&clusters, bottom(g)-y)
 		svg.WriteStrings(&clusters, `" fill="var(--_a)" fill-opacity="0.5" stroke="var(--_b)"`, svg.ROUNDED, `/>`)
 		if headW[g] > 0 {
-			// The title starts at the left, or after the edges that come down through that corner.
 			band := y + headH[g] + 12
 			crossings = crossings[:0]
 			for i := 0; i < len(runs); i += 3 {
@@ -864,7 +839,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 	out := svg.SvgDocument("architecture", width, height, size, options, svg.Accessible{AccTitle: model.accTitle, AccDescr: model.accDescr}, parts...)
 	rendered := types.Rendered{SVG: out, Width: width, Height: height, Links: []types.LinkInfo{}}
 	if geo != nil {
-		// Everything above is placed before the body's translate.
 		geo.Width, geo.Height = width, height
 		for g, group := range groups {
 			x, y := left(g), top(g)
@@ -889,7 +863,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 		}
 		for k := range geo.Edges {
 			e := &geo.Edges[k]
-			// A junction's ports are its centre: a step along the leg tells which side the edge leaves by.
 			last := len(e.Route) - 3
 			if nodes[e.From].typ == "junction" {
 				nudge(e.Route[0:2], e.Route[3:5])
@@ -911,7 +884,6 @@ func draw(model *ArchitectureDb, config types.Config, options types.RenderOption
 	return rendered
 }
 
-// nudge moves the point p one unit toward q.
 func nudge(p, q []float64) {
 	dx, dy := q[0]-p[0], q[1]-p[1]
 	if l := js.Hypot(dx, dy); l > 0 {
@@ -920,9 +892,6 @@ func nudge(p, q []float64) {
 	}
 }
 
-// geoEdgeOf gives an edge as sketch/text reads it: a route of x, y, axis triples, where an
-// axis of 0 marks a leg that runs down. The groups come before the nodes, so the caller
-// moves From and To past them. Not in pele.
 func geoEdgeOf(edge ArchEdge, a, b int, points []float64) types.GeoEdge {
 	e := types.GeoEdge{From: a, To: b, Stroke: "normal"}
 	if edge.lhsInto {

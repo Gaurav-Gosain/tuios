@@ -1,5 +1,3 @@
-// Ported from pele src/layout/lanes.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package layout
 
 import (
@@ -9,10 +7,6 @@ import (
 	"tuios.dev/sketch/internal/js"
 )
 
-// Layout for swimlanes. Every top-level group is a lane: a band that runs the length of the
-// diagram along the flow. Ranks are shared by all lanes, so a step sits level with the steps
-// that happen at the same time in other lanes, and each node stays inside its own lane.
-
 const (
 	laneHead = 34
 	// LanePad is the room a lane keeps around its items unless the caller asks for less.
@@ -21,26 +15,20 @@ const (
 	laneDummies = 20000
 	laneHops    = 10000
 	routeBudget = 2000000
-	// Parallel lines closer than this are drawn as one.
-	laneNear   = 4
-	laneRounds = 3
-	laneRelay  = 8
-	laneTurn   = 20
-	// The room a lane keeps beside a handoff along its margin, and how much of it is between the
-	// handoff and the lane's items.
-	laneMargin = 20
-	laneLeg    = 14
-	laneClose  = 3
+	laneNear    = 4
+	laneRounds  = 3
+	laneRelay   = 8
+	laneTurn    = 20
+	laneMargin  = 20
+	laneLeg     = 14
+	laneClose   = 3
 )
 
-// laneArena hands out the scratch slices of one placing of the lanes, from a few large
-// blocks that the next placing reuses. Not in pele.
 type laneArena struct {
 	ints, intBlock     []int
 	floats, floatBlock []float64
 }
 
-// reset starts handing out the blocks again, made at least this large.
 func (a *laneArena) reset(ints, floats int) {
 	if len(a.intBlock) < ints {
 		a.intBlock = make([]int, ints)
@@ -91,7 +79,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 	sideways := dir == "LR" || dir == "RL"
 	flipped := dir == "BT" || dir == "RL"
 
-	// Lanes in the order they were written. The graph lists groups last-declared first.
 	var lanes []int
 	for i := n - 1; i >= 0; i-- {
 		if nodes[i].Parent < 0 && nodes[i].IsGroup {
@@ -109,7 +96,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			hasChild[nodes[i].Parent] = 1
 		}
 	}
-	// Room a lane keeps around its items, so that the groups drawn around them stay inside it.
 	lanePads := make([]float64, laneCount)
 	for k := range lanePads {
 		lanePads[k] = lanePad
@@ -134,7 +120,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		return lane
 	}
 
-	// What gets ranked and placed: nodes, and groups that are empty and so act as nodes.
 	itemOf := fillInt(n, -1)
 	var real []int
 	for i := 0; i < n; i++ {
@@ -159,7 +144,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		return c.W
 	}
 
-	// The nodes and edges of the ranking, each held in one block.
 	lnodes := make([]*LNode, len(real))
 	nodeBlock := make([]LNode, len(real))
 	for k, i := range real {
@@ -200,8 +184,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 	for k, i := range real {
 		itemLane[k] = laneOf(i)
 	}
-	// Lays the ranked items out and routes the relations. A plain relation is a handoff that takes
-	// a simple route of its own, and so keeps no room through the ranks it passes.
 	var arena laneArena
 	var pts, way []float64
 	place := func(plain []uint8, margins []uint8) lanePlaced {
@@ -215,7 +197,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		for _, v := range lnodes {
 			ranks = max(ranks, v.Rank+1)
 		}
-		// Every placing takes its scratch from the blocks the first one made, sized for it.
 		items := len(real) + dummies
 		arena.reset(9*items+7*m+2*n+ranks+8, 7*items+4*n+3*ranks+3*laneCount+8)
 		pad := arena.float(laneCount)
@@ -227,7 +208,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			}
 		}
 		used := make([]uint8, laneCount)
-		// Items: the real ones, then a dummy for every rank an edge passes through.
 		dummies = 0
 		span := arena.int(m)
 		for k := 0; k < m; k++ {
@@ -289,7 +269,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 					d := next
 					next++
 					RANK[d] = r
-					// The edge crosses from its first lane to its last one evenly along the way.
 					LANE[d] = LANE[a] + int(js.Round(float64((LANE[b]-LANE[a])*(r-ra))/float64(rb-ra)))
 					DUMMY[d] = 1
 					if r == labelRank {
@@ -329,10 +308,8 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			}
 		}
 
-		// Order within each rank: by lane first, then by where the item's neighbours sit.
 		rows := make([][]int, maxRank+1)
 		{
-			// The items of each rank, in order, as slices of one block.
 			count := arena.int(maxRank + 2)
 			for i := 0; i < total; i++ {
 				count[RANK[i]+1]++
@@ -395,7 +372,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			}
 		}
 
-		// The items of one rank that share a lane sit side by side as a run.
 		gap := func(a, b int) float64 {
 			if DUMMY[a] != 0 || DUMMY[b] != 0 {
 				return opt.EdgeSep
@@ -421,7 +397,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			return size
 		}
 
-		// Lane breadth: enough for its fullest rank, and for its title.
 		breadth := arena.float(laneCount)
 		head := 0.0
 		if len(lanes) > 0 {
@@ -447,8 +422,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			laneStart[k+1] = laneStart[k] + breadth[k] + float64(2*pad[k])
 		}
 
-		// Across the flow: each lane's items start centered, then line up with their neighbours in
-		// the same lane as far as the lane and the items beside them allow.
 		C := arena.float(total)
 		want := arena.float(total)
 		center := func(row []int, from, to int) {
@@ -512,12 +485,8 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			}
 		}
 
-		// Along the flow: one band per rank, after the lane titles.
 		bandStart := arena.float(maxRank + 1)
 		bandEnd := arena.float(maxRank + 1)
-		// The room after a rank is for the relations that turn there or are only as long as they
-		// were asked to be. Where just plain handoffs and straight lines pass, the ranks close up,
-		// as far as the label of a handoff between them leaves it a line to sit on.
 		full := opt.RankSep / float64(step)
 		sep := arena.float(maxRank + 1)
 		for r := range sep {
@@ -626,7 +595,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			lane.PadTop = head
 		}
 
-		// Groups inside a lane are drawn around their members, deepest first.
 		depthOf := arena.int(n)
 		inner := arena.int(n)[:0]
 		for i := 0; i < n; i++ {
@@ -690,7 +658,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 		for _, e := range edges {
 			e.Route = []float64{}
 		}
-		// The routes of a placing are slices of one block: at most two points a rank.
 		routeRoom := 0
 		for k := 0; k < m; k++ {
 			routeRoom += 3 * (2 + 2*max(span[k]-1, 0))
@@ -738,7 +705,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			}
 		}
 
-		// An edge that starts or ends at a lane or a group runs straight to its border.
 		for _, e := range edges {
 			if len(e.Route) > 0 || e.Src == e.Dst {
 				continue
@@ -756,10 +722,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 			e.LabelY = (ay + by) / 2
 		}
 
-		// A handoff can leave towards the other lane, then arrive along the flow (or vice versa).
-		// In particular, a decision's return branch must not leave through its incoming side and
-		// retrace the path past the preceding step. Try the two single-corner routes, keeping the
-		// ranked route when a node or another label blocks them.
 		routed := make([]uint8, m)
 		routePoints := 0
 		for _, edge := range edges {
@@ -786,7 +748,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 					}
 				}
 				for i, e := range edges {
-					// A step's own loop keeps its label inside the step's box, and has no place here.
 					if i == ei || e.LabelW <= 0 || e.Src == e.Dst {
 						continue
 					}
@@ -800,8 +761,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 				}
 				return true
 			}
-			// How many other relations have a stretch inside a box. A stretch's whole box counts,
-			// including its curve.
 			crossings := func(x0, y0, x1, y1 float64, ei int) int {
 				count := 0
 				for i := range edges {
@@ -833,8 +792,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 				}
 				return count
 			}
-			// Two relations drawn along one line read as a single path. Those that leave the same step
-			// or arrive at the same step may share a trunk; any other pair must not.
 			retraces := func(x0, y0, x1, y1 float64, ei int) bool {
 				upright := math.Abs(x1-x0) < 0.5
 				lo, hi, line := math.Min(x0, x1), math.Max(x0, x1), y0
@@ -897,12 +854,9 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 							if cc-cw/2 < 0 || cc+cw/2 > breadthTotal || ca-ah/2 < 0 || ca+ah/2 > length {
 								continue
 							}
-							// Include the ends here: the label must clear both shapes it connects.
 							if !clear(cc-cw/2, ca-ah/2, cc+cw/2, ca+ah/2, -1, -1, ei) {
 								continue
 							}
-							// A label moved onto a handoff must not cover a return path that keeps its
-							// ranked route. A segment's whole box is kept clear, including its curve.
 							lx, ly := px(cc, ca), py(cc, ca)
 							if crossings(lx-out.LabelW/2, ly-out.LabelH/2, lx+out.LabelW/2, ly+out.LabelH/2, ei) > 0 {
 								continue
@@ -913,8 +867,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 							return false
 						}
 					}
-					// A point short of each corner and one past it keep the turn close to the corner, so
-					// that the line stays under its label and the handoff takes little room.
 					way = append(way[:0], pts[0], pts[1])
 					for p := 2; p < len(pts); p += 2 {
 						dx, dy := pts[p]-pts[p-2], pts[p+1]-pts[p-1]
@@ -964,10 +916,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 				if attempt([]float64{ac, aa + float64(da*DEPTH[a]/2), ac, ba, bc - float64(dc*SIZE[b]/2), ba}, 2) {
 					continue
 				}
-				// With both corners blocked, as for a return past the steps between, the handoff goes
-				// around: out to the margin of a lane, along it, and back in level with its end. It
-				// takes the margin that crosses the fewest other relations and shares the fewest ends
-				// with them, then the shortest way.
 				if work > routeBudget/laneRelay {
 					continue
 				}
@@ -982,7 +930,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 					order = []int{LANE[b], LANE[a]}
 				}
 				for _, lane := range order {
-					// A lane that keeps no margin yet has less room there, and the handoff stays inside it.
 					inset := math.Max(pad[lane]-laneLeg, math.Min(pad[lane]/2, laneMargin-laneLeg))
 					for _, ch := range []float64{laneStart[lane] + inset, laneStart[lane+1] - inset} {
 						if math.Abs(ch-ac) < SIZE[a]/2+4 || math.Abs(ch-bc) < SIZE[b]/2+4 {
@@ -1018,9 +965,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 	plain := make([]uint8, m)
 	margins := make([]uint8, laneCount)
 	placed := place(plain, margins)
-	// A handoff that was given a simple route needs no room kept for it through the ranks it
-	// passes, so the lanes are laid out again without it. A handoff that then loses its route
-	// goes back to the ranked one. Routing is most of the work, so a large graph is laid out once.
 	for round := 0; round < laneRounds && placed.work <= routeBudget/laneRelay; round++ {
 		next := placed.routed
 		if round != 0 {
@@ -1045,8 +989,6 @@ func LaneLayout(nodes []*CNode, edges []*CEdge, dir Dir, opt LayeredOptions, lan
 	return CompoundResult{Width: placed.width, Height: placed.height}
 }
 
-// laneBorder is the point where the line from one box's center to another's leaves the first box. When the
-// other center is inside the box, the point is on the nearest side instead.
 func laneBorder(from, to *CNode) (float64, float64) {
 	dx := to.X - from.X
 	dy := to.Y - from.Y

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/ishikawa/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package ishikawa
 
 import (
@@ -34,17 +32,13 @@ var LENGTH = js.Hypot(SLANT, 1)
 // Bone is a cause below a category. Bones at even depths run level, from the slanted bone above them
 // toward the tail; bones at odd depths slant away from the spine, from the level bone above them.
 type Bone struct {
-	label  text.Label
-	depth  int
-	parent int
-	// Its place among its siblings, counted from the spine outward.
-	slot int
-	kids int
-	// How far its row is from the spine.
-	rise float64
-	// Where it meets its parent, measured level from the category's bone: 0 on it, negative toward the tail.
-	at float64
-	// Where its text ends.
+	label   text.Label
+	depth   int
+	parent  int
+	slot    int
+	kids    int
+	rise    float64
+	at      float64
 	textEnd float64
 }
 
@@ -54,9 +48,7 @@ type Category struct {
 	boxW  float64
 	boxH  float64
 	bones []Bone
-	// The length of its bone, as distance from the spine.
-	rise float64
-	// How far its causes reach toward the tail, measured level from its bone.
+	rise  float64
 	reach float64
 }
 
@@ -65,21 +57,15 @@ type Frame struct {
 	depth  int
 	parent int
 	slot   int
-	// Set when the bone was made and only its row is still to come.
-	bone int
+	bone   int
 }
 
-// arrange gives every cause of a category a row of its own, so that no two texts can meet, and measures
-// how far the whole of it reaches. A level bone takes the row nearest the spine and its twigs the
-// rows beyond; a slanted twig takes the row beyond everything that hangs off it. The outline may
-// be nested as deep as its indentation goes, so the walk keeps a stack of its own.
 func arrange(node *IshikawaNode, up bool, measurer text.TextMeasurer, size, small float64) Category {
 	label := text.LayoutLabel(node.text, false, measurer, size, 180, 0)
 	lineHeight := js.Round(float64(small * 1.5))
 	var bones []Bone
 	var rows []int
 	var stack []Frame
-	// Above the spine the first cause goes farthest out, so that the causes read from the top down.
 	push := func(children []*IshikawaNode, depth, parent int) {
 		n := len(children)
 		for slot := n - 1; slot >= 0; slot-- {
@@ -135,7 +121,6 @@ func arrange(node *IshikawaNode, up bool, measurer text.TextMeasurer, size, smal
 			}
 			bone.textEnd = bone.at - step - TEXT_GAP
 		} else {
-			// Twigs stand along their level bone, the one nearest the spine nearest the tail.
 			parent := &bones[bone.parent]
 			bone.at = parent.at - float64(float64(parent.kids-bone.slot)*TWIG_STEP)
 			bone.textEnd = bone.at - TEXT_GAP
@@ -177,13 +162,10 @@ func draw(model *IshikawaDb, _ types.Config, options types.RenderOptions, down b
 		for i, node := range root.children {
 			categories[i] = arrange(node, i%2 == 0, measurer, size, small)
 		}
-		// Even a category without causes has a bone long enough to carry its name clear of the head.
 		for i := range categories {
 			categories[i].rise = math.Max(categories[i].rise, headH/2+14)
 		}
 
-		// Categories meet the spine in pairs, one above and one below, each pair as far toward the
-		// tail from the one before as the wider of the two needs.
 		var xs []float64
 		x := float64(-HEAD_GAP)
 		for i := 0; i < len(categories); i += 2 {
@@ -224,7 +206,6 @@ func draw(model *IshikawaDb, _ types.Config, options types.RenderOptions, down b
 			px := func(at, rise float64) float64 { return ax + at - float64(rise*SLANT) }
 			endX := px(0, category.rise)
 			endY := float64(sign * category.rise)
-			// The bone stops short of the spine to leave its arrowhead a clean point.
 			trim := float64(svg.ARROW - 1)
 			var d strings.Builder
 			svg.WriteStrings(&d, "M", svg.Num(ax-float64((SLANT/LENGTH)*trim)), ",", svg.Num((sign*trim)/LENGTH), "L", svg.Num(endX), ",", svg.Num(endY))
@@ -399,7 +380,6 @@ func verticalCauses(model *IshikawaDb, options types.RenderOptions) types.Render
 	return rendered
 }
 
-// geometry is the outline as lists, for a drawing in text. Not part of pele.
 func geometry(model *IshikawaDb, title text.Label, measurer text.TextMeasurer) *types.GeoIshikawa {
 	geo := &types.GeoIshikawa{Title: title.Plain()}
 	plain := func(node *IshikawaNode) string {

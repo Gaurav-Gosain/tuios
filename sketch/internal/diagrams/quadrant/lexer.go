@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/quadrant/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// As in the other lexers, the port reads UTF-8 bytes: code() decodes the character at a
-// byte offset, and a step past a character that may not be ASCII steps the whole
-// character. pele's closures are methods of a lexer here.
-
 package quadrant
 
 import (
@@ -65,7 +59,6 @@ var SINGLE = func() (out [128]uint8) {
 	return
 }()
 
-// codeAt decodes the character at a byte offset: -1 past the end.
 func codeAt(src string, q int) rune {
 	if q < 0 || q >= len(src) {
 		return -1
@@ -78,7 +71,6 @@ func codeAt(src string, q int) rune {
 	return r
 }
 
-// sizeAt is the length in bytes of the character at q.
 func sizeAt(src string, q int) int {
 	if q >= len(src) || src[q] < utf8.RuneSelf {
 		return 1
@@ -88,13 +80,12 @@ func sizeAt(src string, q int) int {
 }
 
 type lexer struct {
-	src   string
-	n     int
-	toks  Tokens
-	stack []int
-	state int
-	p     int
-	// The last run scanned of each kind, so that a long run is not scanned again from each of its characters.
+	src                string
+	n                  int
+	toks               Tokens
+	stack              []int
+	state              int
+	p                  int
 	spaceFrom, spaceTo int
 	dashFrom, dashTo   int
 	wsFrom, wsTo       int
@@ -146,7 +137,6 @@ func (l *lexer) run(q int) int {
 	return q
 }
 
-// coordinate is Mermaid's `(1)|(0(.\d+)?)`, where the dot is any character within a line.
 func (l *lexer) coordinate(q int) int {
 	c := l.code(q)
 	if c == 49 {
@@ -156,7 +146,6 @@ func (l *lexer) coordinate(q int) int {
 		return -1
 	}
 	e := q + 1
-	// The dot is one UTF-16 unit: a character outside the BMP is two, and the second is no digit.
 	if size := sizeAt(l.src, e); e < l.n && size < 4 && !util.IsLineEnd(l.code(e)) && util.IsDigit(l.code(e+size)) {
 		e += size + 1
 		for util.IsDigit(l.code(e)) {
@@ -175,7 +164,6 @@ lexing:
 		p := l.p
 		c := l.code(p)
 		size := sizeAt(src, p)
-		// The UTF-16 unit after c: a low surrogate after a character outside the BMP.
 		next := l.code(p + size)
 		if size == 4 {
 			next = 0xdc00
@@ -307,7 +295,6 @@ lexing:
 			}
 		}
 
-		// Axis, quadrant and chart keywords and the axis arrow take the spaces around them.
 		j := p
 		if c == 32 {
 			if p < l.spaceFrom || p >= l.spaceTo {
@@ -372,7 +359,6 @@ lexing:
 			l.push(S_class_name)
 			continue
 		}
-		// A point's `: [`, with any whitespace before, between and after, line breaks included.
 		if c == 58 || util.IsSpace(c) {
 			k := p
 			if c != 58 {
@@ -433,7 +419,6 @@ lexing:
 		t.starts = append(t.starts, l.p)
 		return *t
 	}
-	// Jison tries the rules of the current state once more against the empty rest of the input.
 	if l.state < len(AT_END) {
 		t.types = append(t.types, AT_END[l.state])
 		t.texts = append(t.texts, "")

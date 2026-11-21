@@ -1,8 +1,3 @@
-// Ported from pele src/text/label.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele keeps the expressions of the label being laid out in module state
-// (`marks`). The port passes them down as an argument.
-
 package text
 
 import (
@@ -40,7 +35,6 @@ const LINE_HEIGHT = 1.5
 // Lines of one wrapped label sit closer, so the label reads as one block.
 const WRAPPED_LINE_HEIGHT = 1.3
 
-// snug is the line height of a label with the given number of lines.
 func snug(lines int, size, lineHeight float64) float64 {
 	if lines > 1 {
 		return js.Round(size * WRAPPED_LINE_HEIGHT)
@@ -68,8 +62,6 @@ var tagStyles = map[string]int{
 
 const shift = Sub | Sup
 
-// htmlTags are the tags a label drops while it keeps their text. Anything else
-// shaped like a tag, such as the type in List<T>, is text.
 var htmlTags = func() map[string]bool {
 	out := map[string]bool{}
 	for _, tag := range strings.Fields("a abbr address article aside audio b bdi bdo big blockquote body br button caption center cite code col " +
@@ -91,22 +83,17 @@ var (
 	reCRLF  = lazyre.New(`\r\n?`)
 )
 
-// Break between any two Chinese or Japanese characters. Hangul is left out: Korean puts spaces between words.
 const (
 	cjk      = `\x{2e80}-\x{9fff}\x{f900}-\x{faff}\x{ff00}-\x{ff60}`
 	cjkClose = `、。，．：；！？）］｝」』】〕〉》〙〗ー…‥・ゝゞぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ,.:;!?)\]}`
 	cjkOpen  = `（［｛「『【〔〈《〘〖(\[{`
-	// Break hints: a zero-width space, and a soft hyphen, which shows as '-' where a line breaks.
-	hint = `\x{200b}\x{00ad}`
+	hint     = `\x{200b}\x{00ad}`
 )
 
-// hasHint is RE_HINT.test(text).
 func hasHint(text string) bool {
 	return strings.ContainsRune(text, 0x200b) || strings.ContainsRune(text, 0xad)
 }
 
-// hasCJK is /[CJK]/.test(text). The ranges are all in the BMP, so a rune
-// compares as the UTF-16 unit it is in JavaScript.
 func hasCJK(text string) bool {
 	for _, r := range text {
 		if r >= 0x2e80 && r <= 0x9fff || r >= 0xf900 && r <= 0xfaff || r >= 0xff00 && r <= 0xff60 {
@@ -127,11 +114,8 @@ type marks struct {
 	math []*MathMarkup
 }
 
-// isMark is /[\ue000-\uf8ff]/ for one character. The range is in the BMP, so a
-// rune compares as the UTF-16 unit it is in JavaScript.
 func isMark(r rune) bool { return r >= 0xe000 && r <= 0xf8ff }
 
-// hasMark is RE_MARK.test(text).
 func hasMark(text string) bool {
 	for _, r := range text {
 		if isMark(r) {
@@ -141,11 +125,8 @@ func hasMark(text string) bool {
 	return false
 }
 
-// isLineEnd is a character `.` does not match in a JavaScript regular expression.
 func isLineEnd(r rune) bool { return r == '\n' || r == '\r' || r == 0x2028 || r == 0x2029 }
 
-// mathEnd is where the lazy `(.+?)\$\$` of RE_MATH (/\$\$(.+?)\$\$/g) stops for
-// TeX starting at from: the index of the closing $$, or -1.
 func mathEnd(raw string, from int) int {
 	p := from
 	for first := true; ; first = false {
@@ -163,8 +144,6 @@ func mathEnd(raw string, from int) int {
 	}
 }
 
-// markMath is raw.replace(RE_MATH, ...): each $$tex$$ becomes a placeholder
-// character, up to MAX_MARKS of them. It gives raw itself when there is none.
 func markMath(raw string, found *marks) string {
 	var b strings.Builder
 	last := 0
@@ -197,7 +176,6 @@ func markMath(raw string, found *marks) string {
 
 var EMPTY = Label{}
 
-// leading is the number of characters of whitespace a line starts with, and their length in bytes.
 func leading(line string) (int, int) {
 	n := 0
 	for i, r := range line {
@@ -230,7 +208,6 @@ func dedent(text string) string {
 		if indent < cut {
 			cut = indent
 		}
-		// Whitespace is all in the BMP, so characters are UTF-16 units here.
 		at := 0
 		for k := 0; k < cut; k++ {
 			_, size := utf8.DecodeRuneInString(line[at:])
@@ -254,12 +231,6 @@ func pushText(line *[]Span, text string, style int, found *marks) {
 		return
 	}
 	if found != nil && hasMark(text) {
-		// pele decodes each piece of text between expressions, and the TeX of each
-		// expression it could not typeset, on its own, and each joins the span
-		// before it. Go would copy the span's text for each piece, so the decoded
-		// pieces are joined here first. A Mermaid placeholder (ﬂ°…¶ß) can span a
-		// $$ boundary, so the pieces are decoded one by one, not joined and then
-		// decoded.
 		var pending strings.Builder
 		from := 0
 		for i, r := range text {
@@ -314,7 +285,6 @@ func pushIcons(line *[]Span, text string, style int, m TextMeasurer, found *mark
 		if IconMarkup(m, icon) != "" {
 			*line = append(*line, Span{Style: style, Icon: icon})
 		} else if last < len(text) && text[last] == ' ' {
-			// An icon the host does not have leaves no gap, nor the space that set it off from the text.
 			last++
 		} else if last == len(text) {
 			l := *line
@@ -330,14 +300,11 @@ func isWordRune(r rune) bool {
 	return r < 128 && (r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r == '_')
 }
 
-// openTags is the HTML emphasis open across the lines of a label.
 type openTags struct {
-	style int
-	// Sub/sup stack; only the innermost tag shifts text.
+	style  int
 	shifts []int
 }
 
-// Splits inline HTML and, for markdown labels, emphasis markers into styled spans.
 func inline(line *[]Span, source string, markdown bool, base int, open *openTags, m TextMeasurer, found *marks) {
 	style := open.style
 	marked := 0
@@ -383,8 +350,6 @@ func inline(line *[]Span, source string, markdown bool, base int, open *openTags
 						style = style | bit
 					}
 				}
-				// Other HTML tags are dropped and their text kept. Anything else shaped like a tag, such
-				// as the type in List<T>, is text.
 				if bit != 0 || htmlTags[tag] {
 					i += loc[1]
 					continue
@@ -452,11 +417,6 @@ func measureSpans(line []Span, measurer TextMeasurer, size float64) float64 {
 func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, widths *[]float64) {
 	var current []Span
 	width := 0.0
-	// tail holds the text of the last span of current while pieces are added to it.
-	// pele adds each piece with +=, which JavaScript ropes make linear. In Go each +=
-	// copies the string, so a run of pieces without width, which never breaks the
-	// line, would take quadratic time. The span's Text is written from tail when it
-	// is read: by a measure, a commit, or a span after it.
 	var tail []byte
 	stale := false
 	sync := func() {
@@ -502,9 +462,6 @@ func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, 
 			continue
 		}
 		pieces := rePiece.FindAllString(span.Text, -1)
-		// A piece ending in a soft hyphen fits if its '-' does, or if the rest of the word does, which
-		// hides the hyphen. The line only grows along a word, so no later hyphen in it fits either,
-		// and the remaining width of each word makes this one check.
 		soft := strings.ContainsRune(span.Text, 0xad)
 		var own, rest []float64
 		if soft {
@@ -512,14 +469,12 @@ func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, 
 			own = make([]float64, n)
 			rest = make([]float64, n+1)
 			for q := n - 1; q >= 0; q-- {
-				// A soft hyphen before a space is no break of its own: the space is.
 				shy := strings.HasSuffix(pieces[q], "\u00ad")
 				end := js.TrimEnd(pieces[q])
 				if shy {
 					end = strings.TrimSuffix(end, "\u00ad")
 				}
 				own[q] = measurer.Width(end, size, span.Style)
-				// Word width beyond this span is unknown.
 				switch {
 				case !shy:
 					rest[q] = own[q]
@@ -548,7 +503,6 @@ func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, 
 				fits = width+measurer.Width(strings.TrimSuffix(part, "\u00ad")+"-", size, span.Style) <= max || width+rest[p] <= max
 			}
 			if width > 0 && !fits {
-				// Breaking at whitespace leaves a preceding soft hyphen hidden.
 				trimmed := js.TrimStart(part)
 				commit(trimmed == part)
 				part = trimmed
@@ -560,7 +514,6 @@ func wrap(line []Span, measurer TextMeasurer, size, max float64, out *[][]Span, 
 				}
 				tail = append(tail, part...)
 				stale = true
-				// Remeasuring for each zero-width piece would take quadratic time.
 				if partWidth > 0 || js.TrimEnd(part) != part {
 					sync()
 					before := last.Width
@@ -603,7 +556,6 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 		text := js.Trim(raw)
 		width := measurer.Width(text, size, base)
 		if width <= maxWidth || !(strings.Contains(text, " ") || hasCJK(text) || hasHint(text)) {
-			// One span on one line: its slices share one allocation.
 			one := &struct {
 				lines  [1][]Span
 				spans  [1]Span
@@ -636,8 +588,6 @@ func LayoutLabel(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 	return layoutLines(raw, markdown, measurer, size, maxWidth, base, lineHeight, nil)
 }
 
-// layoutLines is pele's layoutMarkup and layoutLines in one: found, when not
-// nil, holds the expressions raw has placeholders for.
 func layoutLines(raw string, markdown bool, measurer TextMeasurer, size, maxWidth float64, base int, lineHeight float64, found *marks) Label {
 	var source string
 	if markdown {
@@ -648,7 +598,6 @@ func layoutLines(raw string, markdown bool, measurer TextMeasurer, size, maxWidt
 	var lines [][]Span
 	var widths []float64
 	width := 0.0
-	// HTML tags can span explicit breaks; Markdown emphasis stays local to each line.
 	open := &openTags{style: base}
 	for _, part := range reBreak.Split(source, -1) {
 		var line []Span
@@ -737,7 +686,6 @@ func LabelLine(label Label, i int) Label {
 	if label.Heights != nil {
 		height = label.Heights[i]
 	}
-	// The line shares the label's slices: nothing writes to them.
 	line := Label{Lines: label.Lines[i : i+1], Widths: label.Widths[i : i+1], Width: width, Height: height, Size: label.Size, LineHeight: label.LineHeight}
 	if height != label.LineHeight {
 		line.Heights = []float64{height}
@@ -745,8 +693,6 @@ func LabelLine(label Label, i int) Label {
 	return line
 }
 
-// hasMarkup is /[<\\\n*_]|fa[bklrs]?:fa-/: whether raw may hold a break, a tag, an
-// escape, emphasis or an icon.
 func hasMarkup(raw string) bool {
 	if strings.ContainsAny(raw, "<\\\n*_") {
 		return true
@@ -800,8 +746,6 @@ func scriptTable(from, to string) map[rune]rune {
 	return table
 }
 
-// shifted writes text in the characters of table, or after mark when one of
-// its characters has none: in parentheses when it is longer than one character.
 func shifted(text string, table map[rune]rune, mark string) string {
 	var b strings.Builder
 	for _, r := range text {

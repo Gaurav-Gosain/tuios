@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/treeview/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package treeview
 
 import (
@@ -31,7 +29,6 @@ func setting(config types.Config, key string, fallback, min, max float64) float6
 
 type treeSettingsOf struct{ paddingX, paddingY, rowIndent, lineThickness float64 }
 
-// treeSettings are Mermaid's layout options, with Pele's defaults.
 func treeSettings(config types.Config) treeSettingsOf {
 	return treeSettingsOf{
 		paddingX:      setting(config, "paddingX", 5, 0, 100),
@@ -119,7 +116,6 @@ func draw(model *TreeViewModel, config types.Config, options types.RenderOptions
 		titleHeight = title.Height + 12
 	}
 
-	// Siblings line up: when one entry of a folder has an icon, the others leave room for one.
 	hasIcon := func(list []*TreeNode) bool {
 		for _, child := range list {
 			if getNodeIcon(child, icons) != "" {
@@ -129,7 +125,6 @@ func draw(model *TreeViewModel, config types.Config, options types.RenderOptions
 		return false
 	}
 	rows := make([]Row, 0, model.count)
-	// rowOf holds each node's row by its id.
 	rowOf := make([]int, model.count)
 	var pending []pendingNode
 	push := func(list []*TreeNode, depth int) {

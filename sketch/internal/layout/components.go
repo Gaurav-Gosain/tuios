@@ -1,5 +1,3 @@
-// Ported from pele src/layout/components.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package layout
 
 import "math"
@@ -44,7 +42,6 @@ func WrapComponents(nodes []*CNode, edges []*CEdge, width, gap float64) (Compoun
 		join(e.Src, e.Dst)
 	}
 
-	// The parts in the order their first node appears, as a JavaScript Map keeps them.
 	var parts []*part
 	index := map[int]int{}
 	for i, c := range nodes {

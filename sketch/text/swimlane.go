@@ -7,11 +7,6 @@ import (
 	sketch "tuios.dev/sketch/internal/engine"
 )
 
-// drawSwimlane draws a swimlane diagram as a flowchart whose lanes are frames.
-// A box in cells can be longer than its node in the layout, and a frame grows
-// around what it holds. So that the lanes stay one band each, of one length,
-// every lane first takes the length along the flow that its longest member
-// needs in cells.
 func drawSwimlane(l *sketch.Layout, opt Options, squeeze bool) (*canvas, error) {
 	var lanes []int
 	for i, n := range l.Nodes {
@@ -22,8 +17,6 @@ func drawSwimlane(l *sketch.Layout, opt Options, squeeze bool) (*canvas, error) 
 	if len(lanes) == 0 {
 		return drawFlowchart(l, opt, squeeze)
 	}
-	// The lanes of a flow that runs across are bands one above the other, all
-	// at the same x.
 	across, down := len(lanes) == 1, len(lanes) == 1
 	for _, i := range lanes[1:] {
 		if math.Abs(l.Nodes[i].X-l.Nodes[lanes[0]].X) < 0.5 {
@@ -46,8 +39,6 @@ func drawSwimlane(l *sketch.Layout, opt Options, squeeze bool) (*canvas, error) 
 		if n.Group || n.W <= 0 {
 			continue
 		}
-		// The box drawFlowchart draws, and the room a frame keeps around it:
-		// two cells each side, two rows above and one below.
 		dw, dh := shapeRoom(n.Shape, len(n.Label), len(n.Label)+2)
 		w := float64(widest(n.Label) + 4 + dw)
 		w = math.Max(w/sx, n.W) / 2

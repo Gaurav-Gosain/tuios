@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/flowchart/types.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// An optional string of pele is "" here where pele never tells it from an
-// empty one, and a pointer where it does.
-
 // Package flowchart parses and draws Mermaid flowcharts.
 package flowchart
 
@@ -89,7 +84,6 @@ type DocItem struct {
 	IsList bool
 }
 
-// orderedMap is a Map that keeps insertion order.
 type orderedMap[V any] struct {
 	keys []string
 	m    map[string]V

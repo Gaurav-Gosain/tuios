@@ -10,16 +10,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// A radar chart is drawn in braille dots: a spoke for each axis from twelve
-// o'clock clockwise, as pele draws them, the graticule rings, and each curve
-// as a closed polygon in its series colour, with the axis labels outside
-// the rim and a legend under the chart.
-//
-// Without colour the curves cannot be told apart, and in 40 columns or fewer
-// the chart is too small to read, so it is drawn as a table instead: each
-// axis is a heading, and under it each curve is a bar as long as its value
-// from the chart's minimum to its maximum, with the value after it.
-
 func number(v float64) string {
 	if math.Abs(v) >= 1e21 || math.IsNaN(v) || math.IsInf(v, 0) {
 		return strconv.FormatFloat(v, 'g', -1, 64)
@@ -27,7 +17,6 @@ func number(v float64) string {
 	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
-// radarMaxAxes is the most axes the polar drawing has room to label.
 const radarMaxAxes = 16
 
 func drawRadar(l *sketch.Layout, opt Options) (*canvas, error) {
@@ -46,8 +35,6 @@ func drawRadar(l *sketch.Layout, opt Options) (*canvas, error) {
 	return radarTable(r, opt)
 }
 
-// radarFraction is how far v is from the centre to the rim, from 0 to 1. A
-// missing value is at the centre.
 func radarFraction(r *types.GeoRadar, v float64) float64 {
 	if math.IsNaN(v) || !(r.Max > r.Min) {
 		return 0
@@ -55,16 +42,11 @@ func radarFraction(r *types.GeoRadar, v float64) float64 {
 	return (math.Min(math.Max(v, r.Min), r.Max) - r.Min) / (r.Max - r.Min)
 }
 
-// radarPolar draws the chart with tuios.dev/plot's radar, in braille dots,
-// with the legend under it.
 func radarPolar(r *types.GeoRadar, opt Options) (*canvas, error) {
 	labelW := 0
 	for _, a := range r.Axes {
 		labelW = max(labelW, min(width(a), 20))
 	}
-	// The chart is 15 rows tall, 17 when there are columns to spare, and
-	// down to 9 when they are few. Its width in cells is what makes it
-	// round: a cell is pieAspect times as tall as it is wide.
 	rows := 15
 	if opt.Cols == 0 || opt.Cols >= 110 {
 		rows = 17
@@ -116,7 +98,6 @@ func radarPolar(r *types.GeoRadar, opt Options) (*canvas, error) {
 	return withTitle(c, r.Title, opt.Cols)
 }
 
-// cut shortens s to at most w cells, ending in … when it had to.
 func cut(s string, w int) string {
 	return fit(s, w)
 }
@@ -134,8 +115,6 @@ type radarItem struct {
 	label           string
 }
 
-// radarLegend lays out the legend in lines of at most w cells: a mark in
-// each curve's colour and its label, then the range from centre to rim.
 func radarLegend(r *types.GeoRadar, w int) [][]radarItem {
 	var out [][]radarItem
 	var line []radarItem
@@ -161,8 +140,6 @@ func radarLegend(r *types.GeoRadar, w int) [][]radarItem {
 	return out
 }
 
-// radarTable draws the chart as a table: each axis a heading, each curve a
-// line under it in its own colour, a blank line between axes.
 func radarTable(r *types.GeoRadar, opt Options) (*canvas, error) {
 	labelW, valueW := 0, 0
 	for _, curve := range r.Curves {
@@ -177,7 +154,6 @@ func radarTable(r *types.GeoRadar, opt Options) (*canvas, error) {
 	}
 	barW := 30
 	if opt.Cols > 0 {
-		// Two cells of indent, the label, the bar and the value, a space between each.
 		labelW = min(labelW, max(8, opt.Cols/3))
 		barW = min(barW, opt.Cols-2-labelW-1-1-valueW)
 		if barW < 4 {
@@ -219,8 +195,6 @@ func radarTable(r *types.GeoRadar, opt Options) (*canvas, error) {
 	return c, nil
 }
 
-// gaugeLine is a line of n cells, heavy to the fraction f and dotted after:
-// lines on rows next to each other stay apart, as blocks would not.
 func gaugeLine(f float64, n int) string {
 	if math.IsNaN(f) || f < 0 {
 		f = 0

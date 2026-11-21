@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/er/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package er
 
 import (
@@ -10,7 +8,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// cardinality is CARDINALITY.get(t): "" for a token that is no cardinality.
 func cardinality(t int) Cardinality {
 	switch t {
 	case T_ZERO_OR_ONE:
@@ -38,9 +35,7 @@ const LINE = "'EOF', 'NEWLINE', 'title', 'acc_title', 'acc_descr', 'acc_descr_mu
 type Frame struct {
 	id    string
 	title string
-	// What Mermaid's grammar hands to addSubGraph: the value of every statement inside. Besides entity
-	// names that includes accessibility text and the keywords `style`, `class` and `classDef`.
-	list []DocItem
+	list  []DocItem
 }
 
 type parser struct {
@@ -85,7 +80,6 @@ func isName(t int) bool {
 	return t == T_UNICODE_TEXT || t == T_ENTITY_NAME || t == T_NUM || t == T_DECIMAL_NUM || t == T_ENTITY_ONE
 }
 
-// unquote is text.slice(1, -1) for a token that opens and closes with a quote.
 func unquote(text string) string {
 	if len(text) < 2 {
 		return ""
@@ -184,7 +178,6 @@ func (ps *parser) isChar(ch string) bool {
 	return ps.types[ps.i] == T_CHAR && ps.texts[ps.i] == ch
 }
 
-// Returns the attributes last to first, as Mermaid's right-recursive rule builds them.
 func (ps *parser) attributes() []*ParsedAttribute {
 	var list []*ParsedAttribute
 	for {
@@ -223,7 +216,6 @@ func (ps *parser) attributes() []*ParsedAttribute {
 	return list
 }
 
-// Parses an optional `{ ... }` block; nil when there is none or it is empty.
 func (ps *parser) block() []*ParsedAttribute {
 	if ps.types[ps.i] != T_BLOCK_START {
 		return nil
@@ -301,8 +293,6 @@ func (ps *parser) entityStatement() []string {
 
 func parseEr(src string, db *ErDb) {
 	toks := tokenize(src)
-	// The token arrays end in END, or in ERROR, which no rule takes; the padding keeps
-	// every look past the last token in bounds.
 	for k := 0; k < 4; k++ {
 		toks.types = append(toks.types, T_END)
 		toks.texts = append(toks.texts, "")
@@ -315,7 +305,6 @@ func parseEr(src string, db *ErDb) {
 func (ps *parser) run() {
 	db := ps.db
 	ps.expect(T_ER_DIAGRAM)
-	// Subgraphs nest on this stack rather than on the call stack; the first frame is the diagram itself.
 	frames := []*Frame{{}}
 	frame := frames[0]
 	nested := false
@@ -349,7 +338,6 @@ func (ps *parser) run() {
 			title := id
 			if ps.types[ps.i] == T_SQS {
 				ps.i++
-				// One join, not a += per name: Go copies the string on each +=, where JavaScript ropes do not.
 				words := []string{ps.entityName()}
 				for isName(ps.types[ps.i]) {
 					words = append(words, ps.entityName())

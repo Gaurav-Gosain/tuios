@@ -5,13 +5,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// Class diagrams: a class is a box with its name, its attributes and its
-// methods, each under a rule. Relations end in UML marks: △ for
-// inheritance, ◆ for composition, ◇ for aggregation, an arrowhead for a
-// dependency and ○ for a lollipop. Cardinalities sit beside the ends.
-
-// classSections are a class's sections without the empty ones at the end:
-// in text, a rule over nothing only adds a line.
 func classSections(n *types.GeoNode) [][]string {
 	s := n.Sections
 	for len(s) > 0 && len(s[len(s)-1]) == 0 {
@@ -49,7 +42,6 @@ var classKind = graphKind{
 			if k == len(n.Label)-1 && n.Shape == "class" {
 				r = roleTitle
 			} else if n.Shape == "class" {
-				// The annotations above the name.
 				r = roleNote
 			}
 			centred(c, b.x0, b.x1, y, l, r)

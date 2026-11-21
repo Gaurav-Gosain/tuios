@@ -34,7 +34,7 @@ const (
 
 type dateToken struct {
 	tag    int
-	value  int // number, symbol or keyword value
+	value  int
 	length int
 	kwType int
 }
@@ -313,7 +313,6 @@ func (z *zoneComposer) IsExpecting(n int) bool {
 	return z.hour != dpNone && z.minute == dpNone && isMinute(n)
 }
 
-// Write gives the offset in seconds, or ok and none when no zone was given.
 func (z *zoneComposer) Write() (offset int, none, ok bool) {
 	if z.sign == dpNone {
 		return 0, true, true
@@ -356,8 +355,6 @@ func readMilliseconds(t dateToken) int {
 	return n
 }
 
-// parseES5 reads the ECMAScript date time string format. It returns the first token it
-// does not handle, an end token when it read the whole text, or an invalid token.
 func parseES5(sc *dateScanner, day *dayComposer, tm *timeComposer, tz *zoneComposer) dateToken {
 	if sc.Peek().isSign() {
 		signTok := sc.Next()
@@ -453,7 +450,6 @@ func parseES5(sc *dateScanner, day *dayComposer, tm *timeComposer, tz *zoneCompo
 			return dateToken{tag: tokInvalid}
 		}
 	}
-	// Date-only forms are UTC and date-time forms local, when no offset is given.
 	if tz.IsEmpty() && tm.IsEmpty() {
 		tz.Set(0)
 	}
@@ -526,8 +522,6 @@ func parseDate(s string, loc *time.Location) float64 {
 			} else if token.kwType == kwZone && hasReadNumber {
 				tz.Set(token.value)
 			} else {
-				// Garbage words are illegal once a number has been read, and the first
-				// number has to be kept apart from them.
 				if hasReadNumber || sc.Peek().isNumber() {
 					return math.NaN()
 				}

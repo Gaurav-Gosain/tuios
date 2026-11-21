@@ -31,7 +31,6 @@ Events                         ┌ 03 ────┐
 │ checks stock  │
 └───────────────┘
 `)
-	// The lanes, tighter: lane names on the rules.
 	drawPinned(t, src, 30, `
 ┄┄ UI/Automation ┄┄┄┄┄┄┄┄┄┄┄┄
 
@@ -59,7 +58,6 @@ Events                         ┌ 03 ────┐
 │ checks stock  │
 └───────────────┘
 `)
-	// Narrower still: the list.
 	drawPinned(t, src, 24, `
 UI/Automation
 ┌ 01 ──┐

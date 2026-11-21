@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/wardley/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package wardley
 
 import (
@@ -62,8 +60,6 @@ func digits(src string, from int) int {
 	return i
 }
 
-// numberScanner answers as WARDLEY_NUMBER's pattern does. The pattern reads a whole run of digits before it
-// finds there is no fraction, and would do so again from every digit of a long run.
 func numberScanner() common.Scanner {
 	from, end := 0, 0
 	return func(src string, p int) int {
@@ -82,7 +78,6 @@ func numberScanner() common.Scanner {
 	}
 }
 
-// /->/y
 func matchArrow(src string, p int) int {
 	if strings.HasPrefix(src[p:], "->") {
 		return p + 2
@@ -90,7 +85,6 @@ func matchArrow(src string, p int) int {
 	return -1
 }
 
-// /-->|-\.->|>|\+'[^']*'<>|\+'[^']*'<|\+'[^']*'>/y
 func matchLinkArrow(src string, p int) int {
 	rest := src[p:]
 	switch {
@@ -116,7 +110,6 @@ func matchLinkArrow(src string, p int) int {
 	return -1
 }
 
-// /\+<>|\+>|\+</y
 func matchLinkPort(src string, p int) int {
 	rest := src[p:]
 	switch {
@@ -128,7 +121,6 @@ func matchLinkPort(src string, p int) int {
 	return -1
 }
 
-// /;[^\n\r]+/y
 func matchLinkLabel(src string, p int) int {
 	if src[p] != ';' {
 		return -1
@@ -156,7 +148,6 @@ func either(words ...string) common.Scanner {
 
 func isLetter(c byte) bool { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') }
 
-// nameRun is (?:[A-Za-z0-9_()&]|-(?!>))* from q.
 func nameRun(src string, q int) int {
 	for q < len(src) {
 		c := src[q]
@@ -171,8 +162,6 @@ func nameRun(src string, q int) int {
 	return q
 }
 
-// matchName answers as
-// /(?!title\s|accTitle|accDescr)[A-Za-z](?:[A-Za-z0-9_()&]|-(?!>))*(?:[ \t]+[A-Za-z(](?:[A-Za-z0-9_()&]|-(?!>))*)*/y.
 func matchName(src string, p int) int {
 	rest := src[p:]
 	if strings.HasPrefix(rest, "accTitle") || strings.HasPrefix(rest, "accDescr") {
@@ -199,7 +188,6 @@ func matchName(src string, p int) int {
 	}
 }
 
-// /0|[1-9][0-9]*(?!\.)/y: a run of digits gives back its last digit when a dot follows it.
 func matchInt(src string, p int) int {
 	if src[p] == '0' {
 		return p + 1
@@ -217,7 +205,6 @@ func matchInt(src string, p int) int {
 	return -1
 }
 
-// /[\w]([-\w]*\w)?/y: the run of word characters and dashes, up to its last word character.
 func matchID(src string, p int) int {
 	if !util.IsWord(rune(src[p])) {
 		return -1
@@ -231,7 +218,6 @@ func matchID(src string, p int) int {
 	return end
 }
 
-// /[ \t]+/y
 func matchBlanks(src string, p int) int {
 	q := p
 	for q < len(src) && (src[q] == ' ' || src[q] == '\t') {
@@ -255,8 +241,6 @@ var (
 	WARDLEY_TOKENS []*common.TokenType
 )
 
-// wardleyTokens is the token table, made on the first parse so that a program that draws no
-// wardley map pays nothing for it at start.
 func wardleyTokens() []*common.TokenType {
 	tokensOnce.Do(func() { WARDLEY_TOKENS = buildTokens() })
 	return WARDLEY_TOKENS

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/railroad/types.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package railroad
 
 import "math"
@@ -8,14 +6,13 @@ import "math"
 // or repetition.
 type RailroadNode struct {
 	typ          string
-	value        string // terminal
-	name         string // nonterminal
-	text         string // special
+	value        string
+	name         string
+	text         string
 	elements     []*RailroadNode
 	alternatives []*RailroadNode
 	element      *RailroadNode
-	// max is +Inf when the count has no upper bound.
-	min, max float64
+	min, max     float64
 }
 
 type RailroadRule struct {

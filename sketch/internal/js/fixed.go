@@ -5,13 +5,6 @@ import (
 	"strings"
 )
 
-// ToFixed, ToExponential and ToPrecision are Number.prototype.toFixed, toExponential and
-// toPrecision for a finite x and a digit count from 0 to 100 (1 to 100 for toPrecision).
-// They round the exact value of x half up, where Go's strconv rounds half to even: 0.5
-// is "1" to JavaScript and "0" to strconv, and 1.125 to two places is "1.13" against "1.12".
-
-// exact is the exact decimal value of x > 0: digits without trailing zeros, and the power of
-// ten of the first digit. A double has at most 767 significant decimal digits.
 func exact(x float64) (digits []byte, exp int) {
 	var buf [800]byte
 	s := strconv.AppendFloat(buf[:0], x, 'e', 767, 64)
@@ -26,9 +19,6 @@ func exact(x float64) (digits []byte, exp int) {
 	return digits, exp
 }
 
-// roundDigits keeps the first n digits of digits (n may be 0 or past the end), rounding half
-// up. It returns the n digits and whether rounding carried into a new leading digit, in
-// which case the digits are 1 followed by zeros.
 func roundDigits(digits []byte, n int) ([]byte, bool) {
 	out := make([]byte, n)
 	for i := range out {
@@ -72,7 +62,6 @@ func ToFixed(x float64, f int) string {
 		whole = []byte{'0'}
 	} else {
 		digits, exp := exact(x)
-		// The digits kept: those before the point and f after it.
 		n := exp + 1 + f
 		if n < 0 {
 			whole = []byte{'0'}
@@ -90,7 +79,6 @@ func ToFixed(x float64, f int) string {
 			whole = kept
 		}
 	}
-	// whole is x times 10^f as an integer: put the point f digits from the right.
 	for len(whole) < f+1 {
 		whole = append([]byte{'0'}, whole...)
 	}

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/radar/model.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package radar
 
 import (
@@ -27,11 +25,10 @@ type RadarCurve struct {
 type RadarOptions struct {
 	showLegend bool
 	ticks      float64
-	// max is NaN for null: the largest value of the curves.
-	max       float64
-	hasMax    bool
-	min       float64
-	graticule string
+	max        float64
+	hasMax     bool
+	min        float64
+	graticule  string
 }
 
 type RadarModel struct {
@@ -49,7 +46,6 @@ func invalid(message string) {
 	types.Throw(message, types.CodeSemantic, types.ErrorInfo{Type: "radar"})
 }
 
-// joinLines is .replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {

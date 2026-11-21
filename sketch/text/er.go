@@ -5,12 +5,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// ER diagrams: an entity is a box with its name over a table of its
-// attributes: type, name, keys and comment. Each end of a relationship says
-// its cardinality: 1, 0..1, 1..* or 0..*. A non-identifying relationship is a
-// dotted line.
-
-// erCardinality is the text for each crow's foot marker.
 var erCardinality = map[string]string{
 	"only_one":     "1",
 	"zero_or_one":  "0..1",
@@ -18,8 +12,6 @@ var erCardinality = map[string]string{
 	"zero_or_more": "0..*",
 }
 
-// erColumns is the width of each column of an entity's table, 0 for a column
-// no row fills.
 func erColumns(table [][4]string) [4]int {
 	var w [4]int
 	for _, row := range table {
@@ -64,7 +56,6 @@ var erKind = graphKind{
 		rule(c, b, y, roleBox)
 		y++
 		cols := erColumns(n.Table)
-		// Type and keys are quieter than the name, as in the SVG.
 		roles := [4]uint8{roleLine, roleText, roleNote, roleLine}
 		for _, row := range n.Table {
 			x := b.x0 + 2

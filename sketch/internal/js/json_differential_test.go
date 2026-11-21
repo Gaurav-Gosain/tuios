@@ -22,7 +22,6 @@ const out = texts.map((t) => { try { return 'V:' + JSON.stringify(JSON.parse(t))
 fs.writeFileSync(output, JSON.stringify(out));
 `
 
-// stringify is JSON.stringify of a value ParseJSON gives.
 func stringify(b *strings.Builder, v any) {
 	switch t := v.(type) {
 	case nil:
@@ -89,8 +88,6 @@ func quote(b *strings.Builder, s string) {
 	b.WriteByte('"')
 }
 
-// jsonInputs are JSON texts and mutations of them, short ones and long ones, so that
-// every message and every form of the context in one is reached.
 func jsonInputs() []string {
 	seeds := []string{`{}`, `{"a":1}`, `{"a": [1, 2, {"b": null}], "c": true, "d": false}`, `{"name": "x", "nested": {"deep": {"deeper": [1.5, -2e3, 0.25E-2]}}}`,
 		`{"2": "b", "1": "a", "x": 1, "1": "c", "10": 0, "4294967295": 1, "01": 2}`, `{"s": "a\"b\\c\/d\b\f\n\r\t\u00e9\u0041"}`, `[1, [2, [3]]]`, `"str"`, `-0`, `12345678901234567890`,

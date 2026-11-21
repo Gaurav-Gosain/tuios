@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/class/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package class
 
 import (
@@ -69,7 +67,6 @@ func (ps *parser) expect(typ int) string {
 	return ps.texts[ps.i-1]
 }
 
-// text takes the current token's text.
 func (ps *parser) text() string {
 	ps.i++
 	return ps.texts[ps.i-1]
@@ -83,8 +80,6 @@ func (ps *parser) alphaNum() string {
 }
 
 func (ps *parser) name(generic bool) string {
-	// A name of one token, the usual case, is that token's text. A longer one is built in a
-	// Builder: Go copies the string on each +=, where JavaScript ropes do not.
 	first := ""
 	var more strings.Builder
 	parts := 0
@@ -143,7 +138,6 @@ func (ps *parser) members() []string {
 		list = append(list, ps.text())
 	}
 	ps.expect(T_STRUCT_STOP)
-	// The grammar collects members last to first, and addMembers turns them back.
 	slices.Reverse(list)
 	return list
 }
@@ -198,7 +192,6 @@ func (ps *parser) noteStatement() string {
 	return ps.db.addNote(ps.expect(T_STR), &id)
 }
 
-// Namespaces nest, so they are parsed with a stack of open ones.
 func (ps *parser) namespaceStatement() {
 	db := ps.db
 	var open []*Frame
@@ -320,7 +313,6 @@ func (ps *parser) styles() []string {
 		for STYLE_PART[ps.types[ps.i]] == 1 {
 			ps.i++
 		}
-		// One join, not a += per token: Go copies the string on each +=, where JavaScript ropes do not.
 		out = append(out, strings.Join(ps.texts[start:ps.i], ""))
 		if ps.types[ps.i] != T_COMMA {
 			return out
@@ -446,7 +438,6 @@ func (ps *parser) statement() {
 
 func parseClassDiagram(src string, db *ClassDb) {
 	tokens := tokenize(src)
-	// Padding past the end token, so that a look ahead never runs off the arrays.
 	ps := &parser{
 		src:    src,
 		db:     db,
@@ -455,7 +446,6 @@ func parseClassDiagram(src string, db *ClassDb) {
 		starts: append(tokens.starts, len(src), len(src)),
 	}
 
-	// Mermaid's grammar also accepts statements with no `classDiagram` line before them.
 	header := ps.types[ps.i] == T_CLASS_DIAGRAM
 	if header {
 		ps.i++

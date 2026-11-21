@@ -7,23 +7,13 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// An event model is drawn as its swimlanes: one band a lane, named at the left, and the frames
-// as boxes in time order from left to right, each with its frame number on its top edge. A frame
-// in a new lane starts under the end of the one before it, as in the SVG, so the arrow between
-// them drops straight down. Notes and specifications follow as boxes under the lanes. When the
-// lanes do not fit the columns, they are drawn tighter: each lane's name goes on its rule, a
-// frame in a new lane starts a few cells after the one before it, and data wraps narrower. When that does not fit either, the
-// frames are listed one under another with their lanes.
-
 const emDataWidth = 28
 
-// emBox is a frame's box in cells.
 type emBox struct {
 	x, y, w, h int
 	lines      []styled
 }
 
-// emLines are the lines inside a frame's box: its name and its data, each at most w cells.
 func emLines(f types.GeoFrame, w int) []styled {
 	out := []styled{}
 	for _, part := range wrapCells(f.Name, w, 1000) {
@@ -40,7 +30,6 @@ func emLines(f types.GeoFrame, w int) []styled {
 	return out
 }
 
-// emRole is the colour of a frame's box by its kind.
 func emRole(kind string) uint8 {
 	switch kind {
 	case "event":
@@ -51,7 +40,6 @@ func emRole(kind string) uint8 {
 	return roleBox
 }
 
-// drawEmBox draws a box with its frame number on the top edge.
 func drawEmBox(c *canvas, b emBox, f types.GeoFrame) {
 	role := emRole(f.Kind)
 	c.box(b.x, b.y, b.w, b.h, nil, role, roleText)
@@ -81,7 +69,6 @@ func drawEventModel(l *sketch.Layout, opt Options) (*canvas, error) {
 	return emList(em, opt)
 }
 
-// emCards are the notes and specifications as boxes at most w cells wide.
 func emCards(em *types.GeoEventModel, w int) [][]styled {
 	var out [][]styled
 	for _, card := range em.Notes {
@@ -129,8 +116,6 @@ func emLanes(em *types.GeoEventModel, opt Options, tight bool) *canvas {
 			if em.Boxes[i-1].Lane == f.Lane {
 				x = laneRight[f.Lane] + 3
 			} else if tight {
-				// Far enough along for the arrow from the frame before to
-				// drop straight down, and no further.
 				x = max(prev.x+4, laneRight[f.Lane]+3)
 			} else {
 				x = max(prev.x+max(prev.w/2, prev.w-8), laneRight[f.Lane]+3)
@@ -141,10 +126,8 @@ func emLanes(em *types.GeoEventModel, opt Options, tight bool) *canvas {
 		laneH[f.Lane] = max(laneH[f.Lane], h)
 		right = max(right, x+w)
 	}
-	// Each lane is a blank row, its boxes, and a blank row, under a rule.
 	left := labelW + 1
 	if tight {
-		// The lane's name goes on its rule, so the boxes start at the left.
 		left = 1
 	}
 	w := left + right + 1
@@ -188,7 +171,6 @@ func emLanes(em *types.GeoEventModel, opt Options, tight bool) *canvas {
 		boxes[i].x += left
 		boxes[i].y = laneY[em.Boxes[i].Lane] + 2
 	}
-	// Arrows go first, so the boxes draw over a line that passes behind them.
 	for _, rel := range em.Relations {
 		s, t := boxes[rel[0]], boxes[rel[1]]
 		if rel[0] == rel[1] {
@@ -220,8 +202,6 @@ func emLanes(em *types.GeoEventModel, opt Options, tight bool) *canvas {
 		if down {
 			sy, ty, head = s.y+s.h, t.y-1, '▼'
 		}
-		// An S: along the source's column to the blank row beside the target's boxes, across,
-		// and into the target.
 		lane := em.Boxes[rel[1]].Lane
 		turn := laneY[lane] + 1
 		if !down {
@@ -256,8 +236,6 @@ func emLanes(em *types.GeoEventModel, opt Options, tight bool) *canvas {
 	return c
 }
 
-// emList lists the frames one under another, each under the name of its lane when the lane
-// changes. An arrow joins a frame to the next one it feeds; other sources are named in the box.
 func emList(em *types.GeoEventModel, opt Options) (*canvas, error) {
 	w := 1 << 20
 	if opt.Cols > 0 {

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/venn/layout.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package venn
 
 import (
@@ -24,12 +22,8 @@ type Spot struct {
 
 const TAU = math.Pi * 2
 
-// setsKey is one key for a list of ids. An id never holds a double quote.
 func setsKey(ids []string) string { return "\"" + strings.Join(ids, "\"") }
 
-// ensurePairwiseSubsets: for every overlap of three or more sets, adds the pairwise overlaps it implies and the diagram
-// does not state, a quarter of the smaller set each, so that the circles are drawn overlapping.
-// Returns the list it was given when there is nothing to add.
 func ensurePairwiseSubsets(subsets []VennSubset) []VennSubset {
 	present := map[string]bool{}
 	sizes := map[string]float64{}
@@ -74,7 +68,6 @@ func ensurePairwiseSubsets(subsets []VennSubset) []VennSubset {
 	return subsets
 }
 
-// lensArea is the area two circles share when their centers are d apart.
 func lensArea(r1, r2, d float64) float64 {
 	if d >= r1+r2 {
 		return 0
@@ -89,8 +82,6 @@ func lensArea(r1, r2, d float64) float64 {
 	return a1 + a2 - a3
 }
 
-// distanceForOverlap is how far apart two circles sit for their overlap to have the given area. The area falls as the
-// distance grows, so bisection finds it.
 func distanceForOverlap(r1, r2, area float64) float64 {
 	low := math.Abs(r1 - r2)
 	high := r1 + r2
@@ -112,8 +103,6 @@ func distanceForOverlap(r1, r2, area float64) float64 {
 	return (low + high) / 2
 }
 
-// margin is how far a point is from the nearest outline it must stay within or without. Gives up, with
-// some value below `floor`, as soon as the point cannot reach `floor`.
 func margin(circles []Circle, inside, outside []int, x, y, floor float64) float64 {
 	best := math.Inf(1)
 	for _, i := range inside {
@@ -143,9 +132,6 @@ func margin(circles []Circle, inside, outside []int, x, y, floor float64) float6
 	return best
 }
 
-// findSpot finds the roomiest point of a region by sampling the smallest of its circles on a grid and then
-// walking uphill from the best sample. Ties go to the point nearest the middle of the region, so
-// a symmetric arrangement gets symmetric labels.
 func findSpot(circles []Circle, inside, outside []int) Spot {
 	cx, cy := 0.0, 0.0
 	smallest := circles[inside[0]]
@@ -202,9 +188,6 @@ func findSpot(circles []Circle, inside, outside []int) Spot {
 	return Spot{x, y, best}
 }
 
-// layoutCircles places one circle per set, with areas in proportion to the sizes of the sets and each pair as
-// far apart as its overlap asks: one, two and three sets exactly, more by relaxing a ring of
-// circles toward those distances. Lengths are in units of the square root of a size.
 func layoutCircles(subsets []VennSubset) []Circle {
 	var ids []string
 	sizes := map[string]float64{}
@@ -238,7 +221,6 @@ func layoutCircles(subsets []VennSubset) []Circle {
 	for _, id := range ids {
 		size := sizes[id]
 		index[id] = len(circles)
-		// A set too small to hold its name, or with no size at all, still gets a circle that shows.
 		r := 0.0
 		if finite(size) && size > 0 {
 			r = math.Sqrt(size / math.Pi)
@@ -250,7 +232,6 @@ func layoutCircles(subsets []VennSubset) []Circle {
 		return circles
 	}
 
-	// The overlap each pair was given, by the indexes of its circles.
 	overlaps := map[int]float64{}
 	var overlapOrder []int
 	for _, subset := range ensurePairwiseSubsets(subsets) {
@@ -267,7 +248,6 @@ func layoutCircles(subsets []VennSubset) []Circle {
 			overlaps[key] = subset.size
 		}
 	}
-	// How far apart each overlapping pair should be. Pairs that do not overlap only have to keep a gap.
 	wanted := map[int]float64{}
 	for _, key := range overlapOrder {
 		wanted[key] = distanceForOverlap(circles[key/n].r, circles[key%n].r, overlaps[key])
@@ -286,8 +266,6 @@ func layoutCircles(subsets []VennSubset) []Circle {
 	}
 
 	if n == 3 {
-		// Two sets side by side and the third below, the corners of a triangle whose sides are the
-		// three distances. An overlap of all three has to exist, so the triangle shrinks until it does.
 		ab := distance(0, 1)
 		ac := distance(0, 2)
 		bc := distance(1, 2)
@@ -335,7 +313,6 @@ func layoutCircles(subsets []VennSubset) []Circle {
 			circles[i].y = float64(float64(i/columns) * cell)
 		}
 	}
-	// Each pair's wanted distance, NaN for none, in a table when there is room for one.
 	var dense []float64
 	if n*n <= 1<<16 {
 		dense = make([]float64, n*n)
@@ -399,7 +376,6 @@ func layoutCircles(subsets []VennSubset) []Circle {
 	return circles
 }
 
-// distinct is new Set(list).size.
 func distinct(list []string) int {
 	n := 0
 	for i, s := range list {
@@ -415,7 +391,6 @@ type corner struct {
 	a, b *Circle
 }
 
-// regionPath is the outline of the region all the given circles share, as an SVG path, or "" if they share none.
 func regionPath(circles []*Circle, format func(float64) string) string {
 	whole := func(c *Circle) string {
 		r := format(c.r)
@@ -433,7 +408,6 @@ func regionPath(circles []*Circle, format func(float64) string) string {
 		}
 		return true
 	}
-	// The corners of the region: where two outlines cross inside all the other circles.
 	var corners []corner
 	for i := 0; i < len(circles); i++ {
 		for j := i + 1; j < len(circles); j++ {
@@ -457,7 +431,6 @@ func regionPath(circles []*Circle, format func(float64) string) string {
 		}
 	}
 	if len(corners) < 2 {
-		// No corners: either one circle lies inside all the others, or there is nothing shared.
 		smallest := circles[0]
 		for _, c := range circles {
 			if c.r < smallest.r {
@@ -485,8 +458,6 @@ func regionPath(circles []*Circle, format func(float64) string) string {
 		if i == 0 {
 			d.WriteString("M" + format(from.x) + "," + format(from.y))
 		}
-		// The side between two corners is an arc of a circle that passes through both; of those, the
-		// one whose arc stays inside the others.
 		var arc *Circle
 		large := 0
 		narrowest := math.Inf(1)

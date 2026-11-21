@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/flowchart/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package flowchart
 
 import (
@@ -52,7 +50,6 @@ func parseFlowchart(source string, db *FlowDb) {
 	}
 	tk := tokenize(src)
 	typesT, texts, starts := tk.types, tk.texts, tk.starts
-	// pele reads past the last token as undefined. Padding with END keeps the port's reads in range.
 	for k := 0; k < 4; k++ {
 		typesT = append(typesT, T_END)
 		texts = append(texts, "")
@@ -552,7 +549,6 @@ func parseFlowchart(source string, db *FlowDb) {
 		return &frame{id: id, title: title}
 	}
 
-	// statement returns the item it adds to an open subgraph's list, and false for none.
 	statement := func(collect bool) (DocItem, bool) {
 		t := typesT[i]
 		switch t {
@@ -616,7 +612,6 @@ func parseFlowchart(source string, db *FlowDb) {
 		}
 	}
 
-	// Subgraphs nest without recursion: each open one keeps the list and collect flag of its parent.
 	document := func() {
 		var open []*frame
 		var list []DocItem

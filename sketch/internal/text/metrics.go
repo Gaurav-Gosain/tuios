@@ -1,5 +1,3 @@
-// Ported from pele src/text/metrics.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package text
 
 // Advance widths of printable ASCII in thousandths of an em, two base-36 digits each.

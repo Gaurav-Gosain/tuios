@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/timeline/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The port reads UTF-8 bytes. Where pele steps one unit past a whitespace character
-// that ends a keyword, the port steps the whole character.
-
 package timeline
 
 import (
@@ -51,7 +46,6 @@ var TOKEN_NAMES = [...]string{
 	"event",
 }
 
-// codeAt decodes the character at a byte offset: -1 past the end.
 func codeAt(src string, q int) rune {
 	if q < 0 || q >= len(src) {
 		return -1
@@ -64,7 +58,6 @@ func codeAt(src string, q int) rune {
 	return r
 }
 
-// sizeAt is the length in bytes of the character at q.
 func sizeAt(src string, q int) int {
 	if q >= len(src) || src[q] < utf8.RuneSelf {
 		return 1
@@ -73,7 +66,6 @@ func sizeAt(src string, q int) int {
 	return s
 }
 
-// spaceAt is the length in bytes of the whitespace character at q, or 0 if there is none.
 func spaceAt(src string, q int) int {
 	if util.IsSpace(codeAt(src, q)) {
 		return sizeAt(src, q)
@@ -127,7 +119,6 @@ func tokenize(src string) common.ScanTokens {
 			}
 		}
 		if common.KeywordAt(src, p, "title") {
-			// Unlike Mermaid, ignore bare titles.
 			e = p + 5
 			for codeAt(src, e) != 10 && util.IsSpace(codeAt(src, e)) {
 				e += sizeAt(src, e)
@@ -146,7 +137,6 @@ func tokenize(src string) common.ScanTokens {
 			p = e
 			continue
 		}
-		// Like Mermaid, a bare section uses the next line as its name.
 		if s := spaceAt(src, p+7); common.KeywordAt(src, p, "section") && s > 0 {
 			from := p + 7 + s
 			e = from
@@ -166,7 +156,6 @@ func tokenize(src string) common.ScanTokens {
 			emit(T_period, e)
 			continue
 		}
-		// An event runs to the end of the line or to a colon that is followed by whitespace.
 		if s := spaceAt(src, p+1); s > 0 {
 			from := p + 1 + s
 			for e = from; e < n; e++ {
@@ -183,8 +172,6 @@ func tokenize(src string) common.ScanTokens {
 		emit(T_INVALID, p+1)
 	}
 
-	// Jison marks its lexer done when a rule runs on empty input, so an accessibility value that
-	// matches nothing at the very end of the text is followed by no EOF token.
 	if len(out.Starts) == 0 || out.Starts[len(out.Starts)-1] < n {
 		emit(T_EOF, n)
 	}

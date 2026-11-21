@@ -1,9 +1,3 @@
-// Ported from pele src/text/math.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele keeps the resolver of the render in progress in module state. The port
-// carries it on the measurer instead (WithMath), as it does the icons, so that
-// renders can run at the same time.
-
 package text
 
 import (
@@ -66,7 +60,6 @@ func valid(size float64) bool {
 	return !math.IsNaN(size) && !math.IsInf(size, 0) && size > 0
 }
 
-// typeset is the resolver's markup for tex at size, or nil.
 func typeset(m TextMeasurer, tex string, size float64) *MathMarkup {
 	h, ok := m.(hosted)
 	if !ok || h.math == nil {

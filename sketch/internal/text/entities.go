@@ -1,5 +1,3 @@
-// Ported from pele src/text/entities.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package text
 
 import (
@@ -49,8 +47,6 @@ func lookup(name string) (string, bool) {
 	return v, ok
 }
 
-// codePoint is String.fromCodePoint(n) for a valid scalar, else the fallback.
-// n is a float because Number() of a long digit string can exceed any int.
 func codePoint(n float64, fallback string) string {
 	if n > 0 && n <= 0x10ffff && (n < 0xd800 || n > 0xdfff) && n == float64(int(n)) {
 		return string(rune(int(n)))
@@ -65,14 +61,11 @@ const (
 	CLOSE = "¶ß"
 )
 
-// Mermaid's placeholders run from `ﬂ°` to `¶ß`, with a second `°` marking a numeric code. Like Mermaid, turn them
-// back into entities, so that each code is decoded once.
 func restorePlaceholders(text string) string {
 	var out strings.Builder
 	last := 0
 	from := strings.Index(text, OPEN)
 	for from != -1 {
-		// `from + 2` in UTF-16 units is past the two characters of OPEN.
 		bodyAt := from + len(OPEN)
 		rel := strings.Index(text[bodyAt:], "¶")
 		if rel == -1 {

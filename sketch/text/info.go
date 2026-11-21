@@ -6,8 +6,6 @@ import (
 	sketch "tuios.dev/sketch/internal/engine"
 )
 
-// An info diagram is its line of text, under its title when it has one. A title wider than the
-// columns wraps.
 func drawInfo(l *sketch.Layout, opt Options) (*canvas, error) {
 	info := l.Info
 	if info == nil {

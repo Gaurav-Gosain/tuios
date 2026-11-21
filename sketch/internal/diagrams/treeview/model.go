@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/treeview/model.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package treeview
 
 import (
@@ -13,11 +11,10 @@ import (
 type NodeType string
 
 type TreeNode struct {
-	id       int
-	level    int
-	name     string
-	nodeType NodeType
-	// An icon name as written (`pack:name`, `file`, `folder`), or `none` to hide the icon.
+	id          int
+	level       int
+	name        string
+	nodeType    NodeType
 	icon        string
 	cssClass    string
 	description string
@@ -28,9 +25,8 @@ type TreeViewModel struct {
 	title    string
 	accTitle string
 	accDescr string
-	// A directory named `/` at level -1 that holds the top-level entries.
-	root  *TreeNode
-	count int
+	root     *TreeNode
+	count    int
 }
 
 // TreeViewDb is Mermaid's treeView database: nodes arrive in source order with their indentation.
@@ -79,11 +75,8 @@ func populate(ast *TreeViewAst, db *TreeViewDb) {
 	}
 }
 
-// readTreeView reads the source to a syntax tree, accepting box-drawing input. Errors name lines of the original text.
 func readTreeView(source string) *TreeViewAst {
 	pre := preprocessBoxDrawing(source)
-	// The parser already located errors in unchanged text. It locates them in the source
-	// as written only when it reads that very string, as pele's === finds it.
 	if pre.text == source {
 		return parseTreeView(source)
 	}
@@ -147,7 +140,6 @@ func buildTreeView(ast *TreeViewAst, title string) *TreeViewModel {
 	return model
 }
 
-// joinLines is .replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {

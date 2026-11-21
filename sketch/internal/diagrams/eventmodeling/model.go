@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/eventmodeling/model.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package eventmodeling
 
 import (
@@ -18,8 +16,6 @@ type EntityKind = string
 type LaneGroup = string
 
 type EmLane struct {
-	// Mermaid's ordering key: 0 for UI/Automation, 100 for Command/Read Model, 200 for Events,
-	// and the next free number after those for each namespace.
 	index     int
 	label     string
 	group     LaneGroup
@@ -27,7 +23,6 @@ type EmLane struct {
 }
 
 type EmBox struct {
-	// The frame number as written, such as "01".
 	id        string
 	kind      EntityKind
 	entity    string
@@ -35,9 +30,8 @@ type EmBox struct {
 	namespace string
 	reset     bool
 	lane      *EmLane
-	// Example data from the frame or from the data block it refers to.
-	data     string
-	dataType string
+	data      string
+	dataType  string
 }
 
 type EmRelation struct {
@@ -56,11 +50,10 @@ type EmSpecification struct {
 }
 
 type EventModelingModel struct {
-	title    string
-	accTitle string
-	accDescr string
-	boxes    []*EmBox
-	// Sorted from top to bottom.
+	title          string
+	accTitle       string
+	accDescr       string
+	boxes          []*EmBox
 	lanes          []*EmLane
 	relations      []EmRelation
 	notes          []EmNote
@@ -82,7 +75,6 @@ func kindOf(entityType string) EntityKind {
 	return "event"
 }
 
-// group is [first index, label, label prefix for a namespace].
 func group(g LaneGroup) (int, string, string) {
 	switch g {
 	case "trigger":
@@ -103,7 +95,6 @@ func groupOf(kind EntityKind) LaneGroup {
 	return "state"
 }
 
-// blockText is the text between the outer braces, without the indentation its lines share.
 func blockText(raw string) string {
 	open := strings.IndexByte(raw, '{')
 	close := strings.LastIndexByte(raw, '}')
@@ -111,7 +102,6 @@ func blockText(raw string) string {
 	if open != -1 && close > open {
 		inner = raw[open+1 : close]
 	} else if open == -1 && js.Len(raw) >= 2 {
-		// The text between its quotes, which are one unit each.
 		inner = raw[1 : len(raw)-1]
 	}
 	lines := strings.Split(strings.ReplaceAll(inner, "\r", ""), "\n")
@@ -121,7 +111,6 @@ func blockText(raw string) string {
 	for len(lines) > 0 && js.Trim(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
 	}
-	// Leading white space is counted in characters: every one of them is one UTF-16 unit.
 	indent := math.MaxInt
 	for _, line := range lines {
 		if js.Trim(line) == "" {
@@ -161,7 +150,6 @@ func buildEventModel(ast *EventModelAst, title string) *EventModelingModel {
 		}
 	}
 
-	// One lane per group, and one more per namespace within a group.
 	laneOf := map[string]*EmLane{}
 	var laneOrder []*EmLane
 	next := map[LaneGroup]int{}
@@ -194,7 +182,6 @@ func buildEventModel(ast *EventModelAst, title string) *EventModelingModel {
 	var boxes []*EmBox
 	var relations []EmRelation
 	for index, frame := range ast.frames {
-		// Only a two-part name has a namespace.
 		parts := strings.Split(frame.entityIdentifier, ".")
 		hasNamespace := len(parts) == 2
 		namespace, name := "", frame.entityIdentifier
@@ -216,7 +203,6 @@ func buildEventModel(ast *EventModelAst, title string) *EventModelingModel {
 		boxes = append(boxes, box)
 
 		if len(frame.sourceFrames) > 0 {
-			// Sources connect in frame order, and only frames that already have a box.
 			wanted := func(id string) bool { return slices.Contains(frame.sourceFrames, id) }
 			if len(frame.sourceFrames) > 8 {
 				set := make(map[string]bool, len(frame.sourceFrames))
@@ -231,7 +217,6 @@ func buildEventModel(ast *EventModelAst, title string) *EventModelingModel {
 				}
 			}
 		} else if index > 0 && !box.reset {
-			// Otherwise the nearest earlier frame in another lane feeds this one.
 			for i := index - 1; i >= 0; i-- {
 				if boxes[i].lane != box.lane {
 					relations = append(relations, EmRelation{boxes[i], box})
@@ -265,7 +250,6 @@ func buildEventModel(ast *EventModelAst, title string) *EventModelingModel {
 	return model
 }
 
-// joinLines is .replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {

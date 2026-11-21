@@ -38,21 +38,19 @@ func emptyBox() box { return box{math.Inf(1), math.Inf(1), math.Inf(-1), math.In
 type object struct {
 	key   string
 	n     *node
-	chain []*node // the ancestors, root first
-	box   box     // the shapes, in root user space
+	chain []*node
+	box   box
 	edge  bool
-	main  *node // an edge's line
-	line  []pt  // an edge's line, resampled, in root user space
+	main  *node
+	line  []pt
 	marks []mark
 }
 
 type mark struct {
 	n   *node
-	end bool // at the end of the line, not the start
+	end bool
 }
 
-// samples is the number of points an edge's line is resampled to, so that two
-// lines of different shapes can be blended point by point.
 const samples = 48
 
 // ParseScene reads an SVG that sketch wrote.
@@ -153,7 +151,6 @@ func (s *Scene) addObject(n *node, id string, m matrix, chain []*node) {
 	s.byKey[key] = o
 }
 
-// elementPath is the outline of a shape element.
 func elementPath(n *node) (path, bool) {
 	switch n.name {
 	case "path":
@@ -177,7 +174,6 @@ func elementPath(n *node) (path, bool) {
 	return nil, false
 }
 
-// shapesBox adds the bounds of the shapes under n, text left out.
 func shapesBox(n *node, m matrix, b *box, depth int) {
 	if depth > maxDepth {
 		return
@@ -204,7 +200,6 @@ func shapesBox(n *node, m matrix, b *box, depth int) {
 	}
 }
 
-// textBox adds the anchors of the text under n, for a group with no shapes.
 func textBox(n *node, m matrix, b *box, depth int) {
 	if depth > maxDepth {
 		return
@@ -227,7 +222,6 @@ func textBox(n *node, m matrix, b *box, depth int) {
 
 func dist(a, b pt) float64 { return math.Hypot(a.x-b.x, a.y-b.y) }
 
-// resample spaces n points evenly along a polyline.
 func resample(pts []pt, n int) []pt {
 	cum := make([]float64, len(pts))
 	for i := 1; i < len(pts); i++ {
@@ -254,20 +248,15 @@ func resample(pts []pt, n int) []pt {
 func lerp(a, b, t float64) float64 { return a + (b-a)*t }
 func lerpPt(a, b pt, t float64) pt { return pt{lerp(a.x, b.x, t), lerp(a.y, b.y, t)} }
 
-// pose is where an object is drawn in one frame.
 type pose struct {
 	box     box
 	line    []pt
-	reveal  float64 // the part of an edge's line drawn, 0 to 1
+	reveal  float64
 	opacity float64
 }
 
 func (o *object) target() pose { return pose{box: o.box, line: o.line, reveal: 1, opacity: 1} }
 
-// enter is the pose an object comes in from: a little smaller, transparent,
-// and for an edge, not drawn yet. kx and ky scale its place toward the origin
-// by how much the drawing grows, so an object that comes in at the far edge
-// starts inside the old drawing and moves out with the rest.
 func (o *object) enter(ox, oy, kx, ky float64) pose {
 	c := o.box.center()
 	c = pt{ox + (c.x-ox)*kx, oy + (c.y-oy)*ky}
@@ -309,8 +298,6 @@ type Motion struct {
 	fromW, fromH float64
 }
 
-// ghost is an object of an earlier scene that is not in the new one. It fades
-// out where it was.
 type ghost struct {
 	obj      *object
 	pose     pose
@@ -343,9 +330,6 @@ func NewMotion(prev *Motion, at float64, to *Scene) *Motion {
 	for _, o := range prev.to.objects {
 		cur[o.key] = prev.poseOf(o, e)
 	}
-	// An object keeps its pose by key. One whose id changed while it was typed
-	// (I, Id, Ide; L_I_B_0, L_Ide_B_0) takes the pose of an unmatched one of
-	// the same class whose id it contains, or that contains it.
 	matched := map[string]bool{}
 	var loose []*object
 	for _, o := range to.objects {
@@ -392,8 +376,6 @@ func NewMotion(prev *Motion, at float64, to *Scene) *Motion {
 	return m
 }
 
-// fit makes a pose from another object usable for o: an edge needs a line of
-// the same length.
 func fit(p pose, o *object) pose {
 	if o.edge && len(p.line) != len(o.line) {
 		p.line = o.line
@@ -401,7 +383,6 @@ func fit(p pose, o *object) pose {
 	return p
 }
 
-// subsequence reports whether every byte of a appears in b, in order.
 func subsequence(a, b string) bool {
 	if a == "" {
 		return false
@@ -516,8 +497,6 @@ func (m *Motion) Draw(dst *image.RGBA, p float64, opt FrameOptions) error {
 				r.setPose(o, cur, cur.opacity, base)
 			}
 		}
-		// Ghosts are drawn first, under the scene. Their state is the one their
-		// ancestors in the earlier scene gave them.
 		for _, g := range m.ghosts {
 			gst := st
 			for _, a := range g.obj.chain {
@@ -535,7 +514,6 @@ func (m *Motion) Draw(dst *image.RGBA, p float64, opt FrameOptions) error {
 	return nil
 }
 
-// setPose records the overrides that draw o at pose p.
 func (r *renderer) setPose(o *object, p pose, opacity float64, base matrix) {
 	inv := base.inverse()
 	dev := func(a matrix) matrix { return base.mul(a).mul(inv) }
@@ -587,8 +565,6 @@ func (r *renderer) setPose(o *object, p pose, opacity float64, base matrix) {
 	ov.m = dev(a)
 }
 
-// lineEnd is the point at one end of a line and the direction the line runs
-// there, outward.
 func lineEnd(line []pt, end bool) (pt, pt) {
 	n := len(line)
 	k := min(3, n-1)
@@ -600,7 +576,6 @@ func lineEnd(line []pt, end bool) (pt, pt) {
 	return b, pt{b.x - a.x, b.y - a.y}
 }
 
-// prefix is the first part f of a line, by length.
 func prefix(line []pt, f float64) []pt {
 	if f <= 0 {
 		return nil
@@ -625,14 +600,10 @@ func prefix(line []pt, f float64) []pt {
 	return out
 }
 
-// override is what a motion frame changes about one element.
 type override struct {
 	opacity float64
-	// m, when hasM is set, moves the element: it maps where the element is in
-	// the target scene to where it is in this frame, in device space.
-	hasM bool
-	m    matrix
-	// replace draws path in place of the element, in root user space.
+	hasM    bool
+	m       matrix
 	replace bool
 	path    path
 }

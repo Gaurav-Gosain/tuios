@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/kanban/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package kanban
 
 import (
@@ -42,8 +40,6 @@ func PRIORITY(priority string) (string, bool) {
 	return "", false
 }
 
-// priorityKey is priority.trim().toLowerCase(). Go lowers U+0130 to "i" where JavaScript
-// gives "i" and a combining dot; a key with one matches no priority either way.
 func priorityKey(priority string) string {
 	if strings.ContainsRune(priority, 'İ') {
 		return "İ"
@@ -51,8 +47,6 @@ func priorityKey(priority string) string {
 	return strings.ToLower(js.Trim(priority))
 }
 
-// fitLabel lays out text for a fixed width. A word too long for a line is broken between characters,
-// because a card cannot grow sideways to hold it.
 func fitLabel(raw string, markdown bool, measurer text.TextMeasurer, size, max float64, base int) text.Label {
 	label := text.LayoutLabel(raw, markdown, measurer, size, max, base)
 	if label.Width <= max {
@@ -117,7 +111,6 @@ func fitLabel(raw string, markdown bool, measurer text.TextMeasurer, size, max f
 	return label
 }
 
-// textBlock writes a label with every line starting at x, or ending there, and the first line's box starting at y.
 func textBlock(b *strings.Builder, label text.Label, x, y float64, attrs string, icons text.IconResolver, end bool) {
 	for i, line := range label.Lines {
 		cy := y + text.LineMiddle(label, i)
@@ -143,9 +136,8 @@ type Card struct {
 	label    text.Label
 	ticket   text.Label
 	assigned text.Label
-	// Height of the rows under the text that hold the ticket and the assignee.
-	meta   float64
-	height float64
+	meta     float64
+	height   float64
 }
 
 func renderKanban(model *KanbanDb, config types.Config, options types.RenderOptions) types.Rendered {
@@ -163,7 +155,6 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 	has := func(name string) bool { return name != "" && text.IconMarkup(measurer, name) != "" }
 	conf, _ := config["kanban"].(map[string]any)
 	glyph := float64(small * 1.25)
-	// Math can't break across lines, so columns widen to hold the widest expression.
 	mathWidth := 0.0
 	holds := func(raw string, fontSize, reserved float64) {
 		if raw == "" || !strings.Contains(raw, "$$") {
@@ -200,8 +191,6 @@ func renderKanban(model *KanbanDb, config types.Config, options types.RenderOpti
 		ownWidth = math.Min(math.Max(sectionWidth, 80), 2000)
 	}
 	ownWidth = math.Max(ownWidth, math.Ceil(mathWidth))
-	// A board wider than the width the host has is folded into rows of columns, which then
-	// share the row between them.
 	room := math.Inf(1)
 	if options.MaxWidth != nil && *options.MaxWidth > 0 {
 		room = *options.MaxWidth - float64(2*pad)

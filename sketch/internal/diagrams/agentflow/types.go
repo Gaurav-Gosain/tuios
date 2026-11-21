@@ -1,10 +1,3 @@
-// Ported from pele src/diagrams/agentflow/types.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele's model also records where each statement sits and a semantic model for tools that
-// read a diagram's meaning. Nothing in sketch reads them, so the port leaves them out; the
-// diagnostics stay, without their positions. An optional text field is "" for none, and a
-// *string is nil for none where pele tells "" from undefined.
-
 package agentflow
 
 // Metadata is a parsed metadata block: map keys are YAML keys, values as util.ParseYaml gives them.

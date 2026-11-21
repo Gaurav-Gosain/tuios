@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/xychart/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// As in the other lexers, the port reads UTF-8 bytes: code() decodes the character at a
-// byte offset, and a step past a character that may not be ASCII steps the whole
-// character. pele's closures are methods of a lexer here.
-
 package xychart
 
 import (
@@ -67,7 +61,6 @@ var SINGLE = func() (out [128]uint8) {
 	return
 }()
 
-// codeAt decodes the character at a byte offset: -1 past the end.
 func codeAt(src string, q int) rune {
 	if q < 0 || q >= len(src) {
 		return -1
@@ -80,7 +73,6 @@ func codeAt(src string, q int) rune {
 	return r
 }
 
-// sizeAt is the length in bytes of the character at q.
 func sizeAt(src string, q int) int {
 	if q >= len(src) || src[q] < utf8.RuneSelf {
 		return 1
@@ -184,7 +176,6 @@ func tokenize(src string) Tokens {
 			continue
 		}
 
-		// The UTF-16 unit after c: a low surrogate after a character outside the BMP.
 		size := sizeAt(src, p)
 		next := l.code(p + size)
 		if size == 4 {
@@ -195,8 +186,6 @@ func tokenize(src string) Tokens {
 			continue
 		}
 		if c == 10 || c == 13 {
-			// Only a line break that directly follows an axis or a series ends it; one after spaces is skipped
-			// with them, and the state carries on to the next line.
 			if (l.state == S_axis_data || l.state == S_data) && (c == 10 || next == 10) {
 				if c == 10 {
 					l.emit(T_NEWLINE, p, p+1)
@@ -367,7 +356,6 @@ func tokenize(src string) Tokens {
 		t.starts = append(t.starts, l.p)
 		return *t
 	}
-	// Jison tries the rules of the current state once more against the empty rest of the input.
 	t.types = append(t.types, AT_END[l.state], T_END)
 	t.texts = append(t.texts, "", "")
 	t.starts = append(t.starts, n, n)

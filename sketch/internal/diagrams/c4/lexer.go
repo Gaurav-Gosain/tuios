@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/c4/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The port reads UTF-8 bytes, and offsets are byte offsets. Every character the lexer
-// matches is ASCII, except whitespace and line ends, which are read as whole characters.
-// RE_DIRECTION and RE_LINE_END are hand matchers.
-
 package c4
 
 import (
@@ -32,7 +26,6 @@ const (
 	S_acc_descr_multiline
 )
 
-// keyword is KEYWORDS.get(word), or -1.
 func keyword(word string) int {
 	switch word {
 	case "C4Context":
@@ -128,9 +121,6 @@ func keyword(word string) int {
 // DIRECTIONS are the words of RE_DIRECTION, in the order they are tried.
 var DIRECTIONS = [4]string{"TB", "BT", "RL", "LR"}
 
-// spaceAt is the length in bytes of the whitespace character at q, or 0 if there is none.
-// bareTitle matches /title[^\S\r\n]*(?=[\r\n]|$)\s*/y at p and returns its end, or -1. It
-// takes the line breaks too, because the grammar rejects blank statements.
 func bareTitle(src string, p int) int {
 	if !strings.HasPrefix(src[p:], "title") {
 		return -1
@@ -169,7 +159,6 @@ func spaceAt(src string, q int) int {
 	return 0
 }
 
-// lineEndAt is the length in bytes of the line terminator at q (\n, \r, U+2028, U+2029), or 0.
 func lineEndAt(src string, q int) int {
 	switch {
 	case q >= len(src):
@@ -182,8 +171,6 @@ func lineEndAt(src string, q int) int {
 	return 0
 }
 
-// direction is the end of /.*direction\s+WORD[^\n]*/y at p, or -1. lineEnd is where the line
-// of p ends, which `.*` cannot cross. `.*` is greedy, so the last start in the line wins.
 func direction(src string, p, lineEnd int, word string) int {
 	for q := lineEnd - len("direction"); q >= p; q-- {
 		if !strings.HasPrefix(src[q:], "direction") {
@@ -210,8 +197,6 @@ func direction(src string, p, lineEnd int, word string) int {
 	return -1
 }
 
-// tokenize follows the lexer Jison compiles from c4Diagram.jison: its rule order, its start conditions,
-// and what it returns once the input runs out in each of them.
 func tokenize(src string) Tokens {
 	n := len(src)
 	var toks Tokens
@@ -219,7 +204,6 @@ func tokenize(src string) Tokens {
 	accValue := T_acc_title_value
 	p := 0
 	done := false
-	// Where the next `direction` is; -2 until the first search.
 	dirNext := -2
 	lineEnd := -1
 	dirFailed := 0
@@ -255,7 +239,6 @@ func tokenize(src string) Tokens {
 		}
 		return from + q
 	}
-	// `word\s[^#\n;]+`
 	statement := func(word string, typ int) bool {
 		q := p + len(word)
 		if !strings.HasPrefix(src[p:], word) {
@@ -282,8 +265,6 @@ func tokenize(src string) Tokens {
 	}
 
 	for {
-		// Jison notes the end of input one call before it reports it, so a rule that matches
-		// nothing gets one last turn.
 		if done {
 			emit(T_END, n, n)
 			break
@@ -326,7 +307,6 @@ func tokenize(src string) Tokens {
 						if matched {
 							continue
 						}
-						// No direction statement starts anywhere in the rest of this line either.
 						dirFailed = lineEnd
 					}
 				}
@@ -367,7 +347,6 @@ func tokenize(src string) Tokens {
 				}
 			}
 			if c == 37 && at(p+1) == 37 {
-				// A comment takes the line breaks after it, so no NEWLINE follows.
 				q := upTo('\n', p+2)
 				for q < n && (src[q] == 10 || src[q] == 13) {
 					q++
@@ -478,7 +457,6 @@ func tokenize(src string) Tokens {
 					p = q + 1
 					state = S_string_kv
 				} else {
-					// An unquoted value runs to the next comma, through closing parentheses and line breaks.
 					emit(T_STR, p, upTo(',', p))
 				}
 			}

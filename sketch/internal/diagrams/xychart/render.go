@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/xychart/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package xychart
 
 import (
@@ -47,7 +45,6 @@ func dimension(value any, fallback float64) float64 {
 	return fallback
 }
 
-// finite is a value clamped to ±LIMIT, and false for NaN, which stands for undefined, and the infinities.
 func finite(value float64) (float64, bool) {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return 0, false
@@ -63,8 +60,6 @@ func widest(marks []Mark) float64 {
 	return width
 }
 
-// aligned writes a label with its left edge, center or right edge at x. A plain one-line label keeps
-// its place when the text is wider or narrower than measured.
 func aligned(b *strings.Builder, label text.Label, x, y float64, anchor string) {
 	if len(label.Lines) == 1 {
 		line := label.Lines[0]
@@ -102,15 +97,12 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 	pad := types.Or(options.Padding, 8)
 	natural := dimension(chart["width"], 700)
 	width := common.CapWidth(options, natural, 240, 0)
-	// A narrower chart is not as much shorter, so that the plot keeps room for its marks.
 	height := js.Round(dimension(chart["height"], 500) * math.Max(0.6, width/natural))
 	orientation := any(model.orientation)
 	if model.orientation == "" {
 		orientation = chart["chartOrientation"]
 	}
 	horizontal := orientation == "horizontal"
-	// The value of a bar is always written past its end, which is what showDataLabelOutsideBar asks
-	// for in Mermaid. Inside, whether it fits changes from bar to bar and with the width of the chart.
 	showValues := on(chart, "showDataLabel", false)
 	x := &model.xAxis
 	band := x.typ == "band"
@@ -152,8 +144,6 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		legendSpace = legendWidth + LEGEND_GAP
 	}
 
-	// The value range: as written, or taken from the data, where bars stand on zero and the
-	// range grows to whole steps.
 	bars := 0
 	for _, plot := range plots {
 		if plot.typ == "bar" {
@@ -217,8 +207,6 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		return marks
 	}
 
-	// Places along the category axis are fractions of its length. Categories and bars sit in the
-	// middle of equal slots; the points of a line on a numeric axis run from end to end.
 	count := 1
 	if band {
 		count = max(len(x.categories), 1)
@@ -304,7 +292,6 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		categoryHeight = math.Max(categoryHeight, l.Height)
 	}
 
-	// The labelled places of the category axis. Labels that would run into each other are thinned out.
 	categoryMarks := func(length float64) []Mark {
 		var marks []Mark
 		if band {
@@ -337,7 +324,6 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		return marks
 	}
 
-	// Room past the end of the value axis for what is written beside a point or a bar.
 	pointLabelWidth := 0.0
 	valueWidth := 0.0
 	for _, plot := range plots {
@@ -441,7 +427,6 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 	scale := func(value float64) float64 { return (value - lo) / (hi - lo) }
 	clamp := func(v float64) float64 { return math.Min(math.Max(v, 0), 1) }
 
-	// rule is a line across the plot at a place on the value axis.
 	rule := func(b *strings.Builder, v float64) {
 		if horizontal {
 			svg.WriteStrings(b, "M", num(px(0, v)), ",", num(top), "V", num(bottom))
@@ -500,14 +485,10 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		gap = math.Min(2, thickness*0.2)
 	}
 	base := clamp(scale(0))
-	// Bars that go both ways get a line to stand on.
 	if bars > 0 && base > 0 && base < 1 {
 		rule(&axis, base)
 	}
-	// Lines are drawn over the bars wherever they were declared, as a bar would hide part of one
-	// under it. A series keeps the color of its place in the source.
 	var series, lines, outside, pointLabels strings.Builder
-	// Not part of pele: the point labels as plain text, by series and value, for the text drawing.
 	var pointText [][]string
 	bar := 0
 	for index, plot := range plots {
@@ -516,7 +497,6 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 		if plot.title != "" {
 			id = ` data-id="` + svg.EscText(plot.title) + `"`
 		}
-		// A series declared before the categories can hold more values than there are categories.
 		n := plot.length
 		if band {
 			n = min(plot.length, count)
@@ -552,7 +532,6 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 				}
 				valueLabel := js.Num(value)
 				w := measurer.Width(valueLabel, tiny, 0)
-				// Towards the end of the bar: 1 when it runs up or right from the baseline, -1 the other way.
 				out := -1.0
 				if v >= base {
 					out = 1
@@ -587,7 +566,6 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 			continue
 		}
 
-		// A line is cut where it leaves the value range, so it stays inside the plot.
 		var d, dots strings.Builder
 		pen := false
 		pc := 0.0
@@ -745,8 +723,6 @@ func renderXyChart(model *XyChartDb, config types.Config, options types.RenderOp
 	}
 }
 
-// Not part of pele: the chart as lists, for a text drawing (sketch/text).
-
 func plainLabel(l text.Label) string { return strings.Join(l.Plain(), " ") }
 
 func valueMarksOf(horizontal bool, leftMarks, bottomMarks []Mark) []types.GeoMark {
@@ -761,8 +737,6 @@ func valueMarksOf(horizontal bool, leftMarks, bottomMarks []Mark) []types.GeoMar
 	return out
 }
 
-// categoryMarksOf gives every category of a band axis, where the SVG thins them
-// out by its own measure, and the ticks of a numeric axis.
 func categoryMarksOf(horizontal, band bool, leftMarks, bottomMarks []Mark, categories []text.Label, slot float64) []types.GeoMark {
 	if band {
 		out := make([]types.GeoMark, len(categories))

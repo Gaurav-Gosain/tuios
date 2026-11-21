@@ -8,14 +8,12 @@ import (
 	"tuios.dev/sketch/internal/text"
 )
 
-// tenPerRune measures every rune as ten units wide, so a room of n*10 holds n runes.
 type tenPerRune struct{}
 
 func (tenPerRune) Width(s string, _ float64, _ int) float64 {
 	return float64(utf8.RuneCountInString(s)) * 10
 }
 
-// proportional measures i as 3, a hyphen as 4, W as 12 and every other rune as 8.
 type proportional struct{}
 
 func (proportional) Width(s string, _ float64, _ int) float64 {

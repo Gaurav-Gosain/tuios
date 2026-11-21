@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/class/members.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package class
 
 import (
@@ -29,8 +27,6 @@ type ClassMember struct {
 
 func NewClassMember(input string, memberType string) *ClassMember {
 	m := &ClassMember{MemberType: memberType}
-	// Mermaid throws a TypeError for a method with no opening parenthesis, such as `run)`.
-	// It is kept here as an attribute, so it is shown as written.
 	if memberType != "method" || !m.parseMethod(input) {
 		m.parseAttribute(input)
 	}
@@ -42,7 +38,6 @@ func NewClassMember(input string, memberType string) *ClassMember {
 	return m
 }
 
-// lineEndAt is the length in bytes of the line end at q, or 0 where there is none: isLineEnd over UTF-8.
 func lineEndAt(input string, q int) int {
 	c := input[q]
 	if c == '\n' || c == '\r' {
@@ -54,8 +49,6 @@ func lineEndAt(input string, q int) int {
 	return 0
 }
 
-// The same split as Mermaid's /([#+~-])?(.+)\((.*)\)([\s$*])?(.*)([$*])?/, found in one pass:
-// the first line with an opening parenthesis after its first character and a closing one later.
 func (m *ClassMember) parseMethod(input string) bool {
 	n := len(input)
 	for start := 0; start < n; {
@@ -91,7 +84,6 @@ func (m *ClassMember) parseMethod(input string) bool {
 					classifier = string(next)
 					rest++
 				} else if next != utf8.RuneError && js.IsSpace(next) {
-					// next.trim() === '': a whitespace character, which trims to nothing.
 					rest += size
 				}
 			}

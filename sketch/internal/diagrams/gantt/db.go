@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/gantt/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// A Date that pele leaves undefined is a nil *js.Date. getTasks takes the location dates
-// are read in besides the time, as pele reads them in the process's time zone.
-
 package gantt
 
 import (
@@ -19,7 +14,6 @@ type GanttDbOptions struct {
 	warn func(message string)
 }
 
-// RE_NUMERIC_FORMAT: /^[YMDHhmsSZXx\-/.:, T]*$/.
 func numericFormat(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if !strings.ContainsRune("YMDHhmsSZXx-/.:, T", rune(s[i])) {
@@ -29,7 +23,6 @@ func numericFormat(s string) bool {
 	return true
 }
 
-// RE_TAG: /^\s*(active|done|crit|milestone|vert)\s*$/. Returns the tag, or "".
 func matchTag(s string) string {
 	switch t := js.Trim(s); t {
 	case "active", "done", "crit", "milestone", "vert":
@@ -42,7 +35,6 @@ func isRefChar(c byte) bool {
 	return util.IsWord(rune(c)) || c == '-' || c == ' '
 }
 
-// RE_AFTER and RE_UNTIL: /^after\s+([\d\w- ]+)/. Returns the group, or false.
 func matchRef(str, keyword string) (string, bool) {
 	if !strings.HasPrefix(str, keyword) {
 		return "", false
@@ -62,7 +54,6 @@ func matchRef(str, keyword string) (string, bool) {
 	if e > q1 {
 		return str[q1:e], true
 	}
-	// The group needs a character: `\s+` gives back the last space it took that leaves it one.
 	for k := q1 - 1; k > q0; k-- {
 		if str[k] == ' ' {
 			return " ", true
@@ -71,7 +62,6 @@ func matchRef(str, keyword string) (string, bool) {
 	return "", false
 }
 
-// RE_DURATION: /^(\d+(?:\.\d+)?)([Mdhmswy]|ms)$/. Returns the number and the unit, or false.
 func matchDuration(s string) (string, Unit, bool) {
 	q := 0
 	for q < len(s) && util.IsDigit(rune(s[q])) {
@@ -94,7 +84,6 @@ func matchDuration(s string) (string, Unit, bool) {
 	return "", "", false
 }
 
-// RE_DIGITS: /^\d+$/.
 func allDigits(s string) bool {
 	if s == "" {
 		return false
@@ -107,7 +96,6 @@ func allDigits(s string) bool {
 	return true
 }
 
-// DAY_NAMES.has(name).
 func isDayName(name string) bool {
 	for _, day := range WEEKDAYS {
 		if strings.ToLower(day) == name {
@@ -126,7 +114,6 @@ const (
 	FORMAT_STEP = 400
 )
 
-// The one place the current time is read.
 func clock(now time.Time) float64 {
 	if now.IsZero() {
 		return float64(time.Now().UnixMilli())
@@ -142,7 +129,6 @@ func parseDuration(str string) (float64, Unit) {
 	return js.ParseFloat(number), unit
 }
 
-// RE_TOKEN_SPLIT: /[\s,]+/.
 func isTokenSplit(r rune) bool { return r == ',' || js.IsSpace(r) }
 
 func mergeTokens(existing []string, txt string) []string {
@@ -166,7 +152,6 @@ func contains(list []string, s string) bool {
 
 func ptr(d js.Date) *js.Date { return &d }
 
-// val is +date, NaN for undefined.
 func val(d *js.Date) float64 {
 	if d == nil {
 		return math.NaN()
@@ -187,12 +172,11 @@ type GanttDb struct {
 	inclusiveEndDates bool
 	topAxis           bool
 	displayMode       string
-	// "" when the chart names no weekday.
-	weekday  string
-	weekend  string
-	sections []string
-	links    map[string]string
-	tasks    []*GanttTask
+	weekday           string
+	weekend           string
+	sections          []string
+	links             map[string]string
+	tasks             []*GanttTask
 
 	byId           map[string]*GanttTask
 	currentSection string
@@ -302,7 +286,6 @@ func (db *GanttDb) addTask(descr, dataStr string) {
 		}
 		data = data[1:]
 	}
-	// Mermaid fails with a TypeError on both of these.
 	if len(data) == 0 {
 		types.Throw(`Task "`+js.Trim(descr)+`" needs a duration or an end date.`, types.CodeSemantic, types.ErrorInfo{Type: "gantt"})
 	}
@@ -345,7 +328,6 @@ func (db *GanttDb) setLink(ids, link string) {
 	db.setClass(ids, "clickable")
 }
 
-// Callbacks are recognized and never run; the task is only marked clickable, as in Mermaid.
 func (db *GanttDb) setClickEvent(ids, _functionName string, _functionArgs *string) {
 	db.setClass(ids, "clickable")
 }
@@ -358,8 +340,6 @@ func (db *GanttDb) setClass(ids, className string) {
 	}
 }
 
-// Resolves every task's start and end, from scratch on each call. A task may refer to tasks defined
-// after it, so, like Mermaid, this makes up to eleven passes, each of which schedules every task again.
 func (db *GanttDb) getTasks(now float64, loc *time.Location) []*GanttTask {
 	db.now = now
 	db.loc = loc
@@ -386,8 +366,6 @@ func (db *GanttDb) getTasks(now float64, loc *time.Location) []*GanttTask {
 		}
 		db.excludedDays[day] = (weekends && (iso == weekendStart || iso == weekendStart+1)) || db.excludeSet[strings.ToLower(name)]
 	}
-	// A date written with only these tokens and separators can never read as a weekday name, so when
-	// nothing else is excluded or included there is no need to format each day.
 	db.datedTokens = len(db.includes) > 0 || !numericFormat(js.Trim(db.dateFormat))
 	for _, token := range db.excludes {
 		if token != "weekends" && !isDayName(token) {
@@ -408,8 +386,6 @@ func (db *GanttDb) getTasks(now float64, loc *time.Location) []*GanttTask {
 	return db.tasks
 }
 
-// Whether a day is excluded. A day matches a token by its weekday name, by its date as YYYY-MM-DD,
-// or by its date written in the chart's own format.
 func (db *GanttDb) isInvalidDate(date js.Date) bool {
 	weekday := false
 	if d := date.Day(); d >= 0 && d < 7 {
@@ -469,7 +445,6 @@ func (db *GanttDb) compileTasks() bool {
 func (db *GanttDb) compileTask(task *GanttTask) {
 	start := task.raw.start
 	if start == nil {
-		// Mermaid fails with a TypeError when the first task has no start. It starts today here.
 		var previous *GanttTask
 		if task.prevTaskId != nil {
 			previous = db.byId[*task.prevTaskId]
@@ -545,7 +520,6 @@ func (db *GanttDb) getStartDate(raw string) *js.Date {
 		return &parsed
 	}
 
-	// What does not fit the format gets a second chance with the JavaScript date parser, as in Mermaid.
 	date := js.ParseDate(str, db.loc)
 	if !isValid(date) || date.FullYear() < -10000 || date.FullYear() > 10000 {
 		types.Throw("Invalid date:"+str, types.CodeSemantic, types.ErrorInfo{Type: "gantt"})
@@ -599,7 +573,6 @@ func (db *GanttDb) getEndDate(startTime js.Date, raw string) *js.Date {
 	return ptr(startTime)
 }
 
-// Pushes the end of a task out by one day for every excluded day it covers.
 func (db *GanttDb) checkTaskDates(task *GanttTask) {
 	if len(db.excludes) == 0 || task.manualEndTime {
 		return

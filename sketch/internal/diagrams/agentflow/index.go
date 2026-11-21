@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/agentflow/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package agentflow draws agentflow diagrams: the steps, tools, decisions and documents of
 // AI agents, in flows that nest, joined by sequence, reference and failure edges.
 package agentflow
@@ -11,7 +9,6 @@ var Agentflow = &types.Diagram{
 	Type:         "agentflow",
 	KeepComments: true,
 	Parse: func(source string, config types.Config, title *string, lineOffset int, limits types.ParseLimits) any {
-		// Mermaid reads this setting from the flowchart section for agentflow too.
 		flow, _ := config["flowchart"].(map[string]any)
 		inherit, _ := flow["inheritDir"].(bool)
 		direction, _ := config["direction"].(string)

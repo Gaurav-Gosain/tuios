@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/c4/layout.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package c4
 
 import (
@@ -31,8 +29,6 @@ const HEAD_TOP = 10
 
 // FORMS: shape keywords Mermaid accepts in $shape, $sprite or $tags, as names of the shared shapes.
 func FORMS(name string) string {
-	// toLowerCase(): Go lowers U+0130 to "i" where JavaScript gives "i" and a combining
-	// dot; a name with one matches no keyword in JavaScript.
 	if strings.ContainsRune(name, 'İ') {
 		return ""
 	}
@@ -51,8 +47,7 @@ func FORMS(name string) string {
 
 type Node struct {
 	Box
-	shape *C4Shape
-	// Type, name, technology, description.
+	shape  *C4Shape
 	labels [4]text.Label
 	textH  float64
 }
@@ -62,15 +57,13 @@ type Group struct {
 	boundary *C4Boundary
 	kids     []*Group
 	nodes    []*Node
-	// Name, type, description.
-	labels []text.Label
-	head   float64
-	headW  float64
-	headX  float64
+	labels   []text.Label
+	head     float64
+	headW    float64
+	headX    float64
 }
 
 type Layout struct {
-	// The boundaries that are drawn, parents before children. The first is the unnamed top level.
 	order []*Group
 	boxes map[*C4Element]*Box
 }
@@ -146,12 +139,9 @@ func measure(shape *C4Shape, measurer text.TextMeasurer, size, small, width floa
 	}
 }
 
-// rows places boxes left to right in rows of `perRow`, from (0, 0), and returns the width and height the rows take.
-// Shapes are stretched to the height of their row; boundaries keep their own.
 func rows(boxes []*Box, perRow float64, gapX, gapY float64, stretch bool) (float64, float64) {
 	width := 0.0
 	y := 0.0
-	// perRow is a whole number of at least 1; past the count of boxes, every count is one row.
 	step := len(boxes)
 	if perRow < float64(step) {
 		step = int(perRow)
@@ -182,8 +172,6 @@ func rows(boxes []*Box, perRow float64, gapX, gapY float64, stretch bool) (float
 	return width, 0
 }
 
-// layoutC4 is Mermaid's grid: in each boundary, its shapes in rows of c4ShapeInRow, then the boundaries inside it
-// in rows of c4BoundaryInRow, each sized around its own content. room < 0 stands for undefined.
 func layoutC4(db *C4Db, measurer text.TextMeasurer, size, small, room, gap float64) Layout {
 	loose := room < 0
 	groupPad := 12.0
@@ -232,7 +220,6 @@ func layoutC4(db *C4Db, measurer text.TextMeasurer, size, small, room, gap float
 			}
 		}
 	}
-	// A boundary that ends up inside itself is not reachable from the top, as in Mermaid.
 	order := []*Group{root}
 	depths := map[*C4Boundary]int{root.boundary: 0}
 	for i := 0; i < len(order); i++ {

@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/usecase/json.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The text is read as UTF-16 units, as pele reads it, so that offsets in messages agree.
-// JSON.parse is js.ParseJSON, a port of V8's parser with its messages.
-
 package usecase
 
 import (
@@ -20,10 +15,6 @@ type OrderedJson struct {
 	propertyOrder *keyOrder
 }
 
-// keyOrder is pele's Map from JSON Pointer to keys. A pointer is a node of a tree of its
-// segments, which hold no '/', so two pointers are equal when their nodes are. pele builds
-// each pointer by adding to its parent's, which JavaScript's ropes make cheap; Go would copy
-// the whole pointer at every level of a deep text. The root, "", is node 0. Not in pele.
 type keyOrder struct {
 	nodes map[segment]int
 	order map[int][]string
@@ -38,7 +29,6 @@ func newKeyOrder() *keyOrder {
 	return &keyOrder{nodes: map[segment]int{}, order: map[int][]string{}}
 }
 
-// child is the pointer parent + "/" + text, made if it is new.
 func (o *keyOrder) child(parent int, text string) int {
 	key := segment{parent, text}
 	if id, ok := o.nodes[key]; ok {
@@ -49,7 +39,6 @@ func (o *keyOrder) child(parent int, text string) int {
 	return id
 }
 
-// lookup is the pointer parent + "/" + text, or -1 when no key order was kept for it or below it.
 func (o *keyOrder) lookup(parent int, text string) int {
 	if parent < 0 {
 		return -1
@@ -60,7 +49,6 @@ func (o *keyOrder) lookup(parent int, text string) int {
 	return -1
 }
 
-// get is order.get(pointer).
 func (o *keyOrder) get(pointer int) ([]string, bool) {
 	keys, ok := o.order[pointer]
 	return keys, ok
@@ -68,18 +56,16 @@ func (o *keyOrder) get(pointer int) ([]string, bool) {
 
 type jsonObject = js.JSONObject
 
-// walkError is thrown with the offset of the first character that is not valid JSON.
 type walkError struct{ offset int }
 
 type frame struct {
 	object  bool
 	pointer int
 	keys    *[]string
-	// For each key read so far, the stretch of `created` its value added.
-	ranges map[string][2]int
-	key    string
-	from   int
-	index  int
+	ranges  map[string][2]int
+	key     string
+	from    int
+	index   int
 }
 
 const (
@@ -92,9 +78,6 @@ func pointerKey(key string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(key, "~", "~0"), "/", "~1")
 }
 
-// propertyOrder walks JSON text that JSON.parse has accepted, to recover the order its keys were written in,
-// which JSON.parse loses for integer-like keys. On text JSON.parse rejected it finds where.
-// Nesting is kept on a stack of its own, so depth is limited by memory and not by the call stack.
 func propertyOrder(text []uint16) *keyOrder {
 	tree := newKeyOrder()
 	order := map[int]*[]string{}
@@ -274,7 +257,6 @@ func propertyOrder(text []uint16) *keyOrder {
 				panic(walkError{at})
 			}
 			key := readString(true)
-			// A repeated key keeps its first place in the order and takes the nested order of its last value.
 			if r, ok := f.ranges[key]; !ok {
 				*f.keys = append(*f.keys, key)
 			} else {
@@ -365,13 +347,10 @@ func locationAt(text []uint16, offset float64, line, column float64) (float64, f
 	return line, column
 }
 
-// wordByte is a character of `\w`.
 func wordByte(c byte) bool {
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
 }
 
-// findNumbers finds /\b<words> (\d+)<more> (\d+)\b/ as the regexp does: the first place where
-// each pattern piece matches, with the word boundaries. more is "" for one number.
 func findNumbers(message, words, more string) (a, b string, ok bool) {
 	digits := func(s string, k int) int {
 		d := k
@@ -390,7 +369,6 @@ func findNumbers(message, words, more string) (a, b string, ok bool) {
 			continue
 		}
 		if more == "" {
-			// \d+ then \b: backing off a digit leaves a digit after it, so only the longest run can match.
 			if d < len(message) && wordByte(message[d]) {
 				continue
 			}
@@ -409,7 +387,6 @@ func findNumbers(message, words, more string) (a, b string, ok bool) {
 	return "", "", false
 }
 
-// locationFromMessage: engines word JSON.parse errors differently: some give an offset, some a line and column.
 func locationFromMessage(message string, text []uint16, line, column float64) (float64, float64, bool) {
 	if position, _, ok := findNumbers(message, "position ", ""); ok {
 		n, _ := strconv.ParseFloat(position, 64)
@@ -446,7 +423,6 @@ func jsonError(message string, line, column float64) *types.PeleError {
 	return types.NewPeleError(message+" (line "+js.Num(line)+", column "+js.Num(column)+")", types.CodeSyntax, types.ErrorInfo{Type: "usecase", Line: int(line), Column: int(column)})
 }
 
-// walkOffset is where propertyOrder stops on text it rejects, or 0.
 func walkOffset(text []uint16) (offset int) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -461,13 +437,11 @@ func walkOffset(text []uint16) (offset int) {
 	return 0
 }
 
-// parseOrderedJson parses the body of a `json` node. `origin` gives the line and column the text starts at in the diagram.
 func parseOrderedJson(source string, origin func() (int, int)) OrderedJson {
 	text := js.UTF16(source)
 	parsed, err := js.ParseJSON(text)
 	if err != nil {
 		message := err.Error()
-		// Reparse restored entity codes so error messages and positions match the source.
 		shown := text
 		if written := sktext.WrittenCodes(source); written != source {
 			shown = js.UTF16(written)

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/eventmodeling/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package eventmodeling
 
 import (
@@ -14,7 +12,6 @@ import (
 func isIDStart(c byte) bool { return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
 func isIDPart(c byte) bool  { return isIDStart(c) || (c >= '0' && c <= '9') }
 
-// /[_a-zA-Z][\w_]*/y
 func matchID(src string, p int) int {
 	if !isIDStart(src[p]) {
 		return -1
@@ -26,7 +23,6 @@ func matchID(src string, p int) int {
 	return q
 }
 
-// /\d{1,3}/y
 func matchFrameID(src string, p int) int {
 	q := p
 	for q < len(src) && q-p < 3 && src[q] >= '0' && src[q] <= '9' {
@@ -38,7 +34,6 @@ func matchFrameID(src string, p int) int {
 	return q
 }
 
-// lineEnd is where /./ stops matching from q: the first line terminator, or the end.
 func lineEnd(src string, q int) int {
 	for q < len(src) {
 		switch src[q] {
@@ -54,7 +49,6 @@ func lineEnd(src string, q int) int {
 	return q
 }
 
-// /\{(.*)\}|"(.*)"|'(.*)'/y: from the opener to the last closer on its line.
 func matchInline(src string, p int) int {
 	closer := byte(0)
 	switch src[p] {
@@ -72,7 +66,6 @@ func matchInline(src string, p int) int {
 	return -1
 }
 
-// (?:\r?\n|(?!\S))
 func lineBreakOrSpace(src string, q int) int {
 	if strings.HasPrefix(src[q:], "\r\n") {
 		return q + 2
@@ -89,7 +82,6 @@ func lineBreakOrSpace(src string, q int) int {
 	return -1
 }
 
-// \}(?:\r?\n|(?!\S))
 func closeBlock(src string, q int) int {
 	if q >= len(src) || src[q] != '}' {
 		return -1
@@ -97,7 +89,6 @@ func closeBlock(src string, q int) int {
 	return lineBreakOrSpace(src, q+1)
 }
 
-// /\{[\t ]*\r?\n(?:[\S\s]*?\r?\n)?\}(?:\r?\n|(?!\S))/y
 func matchBlock(src string, p int) int {
 	if src[p] != '{' {
 		return -1
@@ -113,7 +104,6 @@ func matchBlock(src string, p int) int {
 	} else {
 		return -1
 	}
-	// The optional group is tried first, with its lazy body growing to each line break in turn.
 	for c := q; c < len(src); c++ {
 		if src[c] != '\n' {
 			continue
@@ -125,7 +115,6 @@ func matchBlock(src string, p int) int {
 	return closeBlock(src, q)
 }
 
-// /\s+/y
 func matchSpace(src string, p int) int {
 	q := p
 	for q < len(src) {
@@ -141,7 +130,6 @@ func matchSpace(src string, p int) int {
 	return q
 }
 
-// /\/\*[\s\S]*?\*\//y
 func matchBlockComment(src string, p int) int {
 	if !strings.HasPrefix(src[p:], "/*") {
 		return -1
@@ -152,7 +140,6 @@ func matchBlockComment(src string, p int) int {
 	return -1
 }
 
-// /\/\/[^\n\r]*/y
 func matchLineComment(src string, p int) int {
 	if !strings.HasPrefix(src[p:], "//") {
 		return -1
@@ -166,7 +153,6 @@ func matchLineComment(src string, p int) int {
 
 var EM_ID = &common.TokenType{Name: "EM_ID", Match: matchID}
 
-// word: Langium gives every keyword that is also an identifier the identifier as a longer alternative.
 func word(text string) *common.TokenType {
 	return &common.TokenType{Name: text, Pattern: text, Longer: []*common.TokenType{EM_ID}}
 }
@@ -184,7 +170,6 @@ var WORDS = []string{
 	"text", "data", "note", "when", "then", "rmo", "cmd", "evt", "pcr", "uri",
 }
 
-// buildTokens makes the token table. It runs on the first parse, not at init.
 func buildTokens() []*common.TokenType {
 	keyword := *common.Keyword("eventmodeling")
 	keyword.Longer = []*common.TokenType{EM_ID}
@@ -219,7 +204,6 @@ func buildTokens() []*common.TokenType {
 	)
 }
 
-// kindSet is a set of token kinds.
 type kindSet []int
 
 func (s kindSet) has(kind int) bool {
@@ -235,8 +219,6 @@ type tokenKinds struct {
 	keyword, arrow, open, close, tick, dot, id, frameID, inline, block, accDescr, accTitle, title, entity, data, note, gwt, given, when, then int
 }
 
-// lexicon is the token table with the kinds the parser looks for, made once on first use so
-// that a program that draws no event model pays nothing for it at start.
 type lexicon struct {
 	tokens                                      []*common.TokenType
 	T                                           tokenKinds
@@ -294,8 +276,7 @@ type EmFrame struct {
 	dataType         string
 	dataInlineValue  string
 	hasInline        bool
-	// Offset of the frame in the source, for error messages.
-	offset int
+	offset           int
 }
 
 type EmDataEntity struct {
@@ -316,7 +297,6 @@ type EmGwt struct {
 }
 
 type EventModelAst struct {
-	// The whole token, keyword included: the grammar's own terminals get no value conversion.
 	title         string
 	accTitle      string
 	accDescr      string

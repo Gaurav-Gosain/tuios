@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/wardley/builder.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package wardley
 
 type SourceStrategy = string
@@ -7,10 +5,9 @@ type Flow = string
 
 // WardleyNode: coordinates are percentages: x is evolution, y is visibility.
 type WardleyNode struct {
-	id    string
-	label string
-	x, y  float64
-	// 'anchor', 'component', or 'pipeline-component'
+	id               string
+	label            string
+	x, y             float64
 	className        string
 	labelOffsetX     *float64
 	labelOffsetY     *float64
@@ -54,8 +51,7 @@ type WardleyForce struct {
 }
 
 type WardleyAxesConfig struct {
-	stages []string
-	// Right edge of each stage, from 0 to 1.
+	stages          []string
 	stageBoundaries []float64
 	hasBoundaries   bool
 }
@@ -96,8 +92,6 @@ func newWardleyBuilder() *WardleyBuilder {
 	return &WardleyBuilder{nodes: map[string]*WardleyNode{}, trends: map[string]int{}, pipelines: map[string]*WardleyPipeline{}}
 }
 
-// nodeInput is what addNode is given. setsTraits says the caller passes inertia and a source
-// strategy, which then replace the node's own even when unset, as an object spread does.
 type nodeInput struct {
 	id, label    string
 	x, y         float64
@@ -109,7 +103,6 @@ type nodeInput struct {
 	strategy     SourceStrategy
 }
 
-// addNode: a node added again keeps its class and label offsets unless the new one sets them.
 func (b *WardleyBuilder) addNode(node nodeInput) {
 	existing, ok := b.nodes[node.id]
 	merged := WardleyNode{id: node.id, label: node.label}
@@ -167,8 +160,6 @@ func (b *WardleyBuilder) addPipelineComponent(pipelineNodeID, componentID string
 
 func (b *WardleyBuilder) getNode(id string) *WardleyNode { return b.nodes[id] }
 
-// resolveNodeId: a name is a node id, or else the label of the first node that has it. Pipeline components
-// have ids like "Parent_Child" and are linked by label.
 func (b *WardleyBuilder) resolveNodeId(name string) string {
 	if _, ok := b.nodes[name]; ok {
 		return name
@@ -189,7 +180,6 @@ func (b *WardleyBuilder) resolveNodeId(name string) string {
 }
 
 func (b *WardleyBuilder) build() WardleyBuildResult {
-	// pele throws for a node without coordinates. addNode is always given both, so none lacks them.
 	nodes := make([]*WardleyNode, 0, len(b.order))
 	for _, id := range b.order {
 		nodes = append(nodes, b.nodes[id])

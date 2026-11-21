@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/common/tokens.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The port reads UTF-8 bytes, and offsets are byte offsets. pele's sticky regular
-// expressions use lookaround, which Go's regexp lacks, so each pattern is a hand matcher
-// (Match) here. A type with a literal pattern keeps it in Pattern.
-
 package common
 
 import (
@@ -14,10 +8,6 @@ import (
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/types"
 )
-
-// Tokenizer for the diagram types Mermaid defines with Langium grammars. Token types are tried
-// in order and the first match wins, as in Chevrotain; the tables in each diagram's folder are
-// checked against Mermaid's generated lexers by the tests.
 
 type TokenType struct {
 	Name string
@@ -55,7 +45,6 @@ type Tokens struct {
 }
 
 type table struct {
-	// For each ASCII character, the token types that can start with it, in matching order.
 	starting [128][]int
 	every    []int
 	longer   [][]int
@@ -104,7 +93,6 @@ type tokenizer struct {
 	types    []*TokenType
 	dead     []bool
 	scanners []Scanner
-	// The last visible token's type index, or -1 at the start.
 	previous int
 }
 
@@ -191,7 +179,6 @@ scan:
 	return Tokens{kinds, starts, ends, src}
 }
 
-// The character at a byte offset, as the patterns test it: -1 past the end.
 func runeAt(src string, q int) rune {
 	if q < 0 || q >= len(src) {
 		return -1
@@ -210,7 +197,6 @@ func byteAt(src string, q int) int {
 	return int(src[q])
 }
 
-// [\t ]*
 func blanks(src string, q int) int {
 	for q < len(src) && (src[q] == ' ' || src[q] == '\t') {
 		q++
@@ -218,7 +204,6 @@ func blanks(src string, q int) int {
 	return q
 }
 
-// [^\n\r]*
 func lineEnd(src string, q int) int {
 	for q < len(src) && src[q] != '\n' && src[q] != '\r' {
 		q++
@@ -226,7 +211,6 @@ func lineEnd(src string, q int) int {
 	return q
 }
 
-// [^\n\r]*?(?=%%)|[^\n\r]*
 func toCommentOrLineEnd(src string, q int) int {
 	end := lineEnd(src, q)
 	if at := strings.Index(src[q:end], "%%"); at >= 0 {
@@ -235,7 +219,6 @@ func toCommentOrLineEnd(src string, q int) int {
 	return end
 }
 
-// (?:\r?\n|(?!\S))
 func lineBreakOrSpace(src string, q int) int {
 	if strings.HasPrefix(src[q:], "\r\n") {
 		return q + 2
@@ -249,7 +232,6 @@ func lineBreakOrSpace(src string, q int) int {
 	return -1
 }
 
-// /[\t ]*accDescr(?:[\t ]*:([^\n\r]*?(?=%%)|[^\n\r]*)|\s*{([^}]*)})/y
 func matchAccDescr(src string, p int) int {
 	q := blanks(src, p)
 	if !strings.HasPrefix(src[q:], "accDescr") {
@@ -275,7 +257,6 @@ func matchAccDescr(src string, p int) int {
 	return -1
 }
 
-// /[\t ]*accTitle[\t ]*:(?:[^\n\r]*?(?=%%)|[^\n\r]*)/y
 func matchAccTitle(src string, p int) int {
 	q := blanks(src, p)
 	if !strings.HasPrefix(src[q:], "accTitle") {
@@ -288,7 +269,6 @@ func matchAccTitle(src string, p int) int {
 	return toCommentOrLineEnd(src, q+1)
 }
 
-// /[\t ]*title(?:[\t ][^\n\r]*?(?=%%)|[\t ][^\n\r]*|)/y
 func matchTitle(src string, p int) int {
 	q := blanks(src, p)
 	if !strings.HasPrefix(src[q:], "title") {
@@ -345,7 +325,6 @@ func RunEndsIn(in, end string) func(src string, q int) bool {
 	}
 }
 
-// /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/y
 func matchString(src string, p int) int {
 	quote := src[p]
 	if quote != '"' && quote != '\'' {
@@ -369,7 +348,6 @@ func matchString(src string, p int) int {
 	return -1
 }
 
-// /\r?\n/y
 func matchNewline(src string, p int) int {
 	if src[p] == '\n' {
 		return p + 1
@@ -380,7 +358,6 @@ func matchNewline(src string, p int) int {
 	return -1
 }
 
-// /[\t ]+/y
 func matchWhitespace(src string, p int) int {
 	if q := blanks(src, p); q > p {
 		return q
@@ -388,7 +365,6 @@ func matchWhitespace(src string, p int) int {
 	return -1
 }
 
-// /---[\t ]*\r?\n/y
 func openYaml(src string, p int) int {
 	if !strings.HasPrefix(src[p:], "---") {
 		return -1
@@ -403,7 +379,6 @@ func openYaml(src string, p int) int {
 	return -1
 }
 
-// ---(?:\r?\n|(?!\S))
 func closeYaml(src string, q int) int {
 	if !strings.HasPrefix(src[q:], "---") {
 		return -1
@@ -411,13 +386,11 @@ func closeYaml(src string, q int) int {
 	return lineBreakOrSpace(src, q+3)
 }
 
-// /---[\t ]*\r?\n(?:[\S\s]*?\r?\n)?---(?:\r?\n|(?!\S))/y
 func matchYaml(src string, p int) int {
 	q := openYaml(src, p)
 	if q < 0 {
 		return -1
 	}
-	// The optional group is tried first, with its lazy body growing to each line break in turn.
 	for c := q; c < len(src); c++ {
 		if src[c] != '\n' {
 			continue
@@ -429,7 +402,6 @@ func matchYaml(src string, p int) int {
 	return closeYaml(src, q)
 }
 
-// /[\t ]*%%{/y
 func openDirective(src string, p int) int {
 	q := blanks(src, p)
 	if strings.HasPrefix(src[q:], "%%{") {
@@ -438,7 +410,6 @@ func openDirective(src string, p int) int {
 	return -1
 }
 
-// /[\t ]*%%{[\S\s]*?}%%(?:\r?\n|(?!\S))/y
 func matchDirective(src string, p int) int {
 	q := openDirective(src, p)
 	if q < 0 {
@@ -457,7 +428,6 @@ func matchDirective(src string, p int) int {
 	}
 }
 
-// /[\t ]*%%[^\n\r]*/y
 func matchComment(src string, p int) int {
 	q := blanks(src, p)
 	if !strings.HasPrefix(src[q:], "%%") {
@@ -478,7 +448,6 @@ var SINGLE_LINE_COMMENT = &TokenType{Name: "SINGLE_LINE_COMMENT", Match: matchCo
 
 type keywordMatcher string
 
-// word(?:(?=%%)|(?!\S))
 func (word keywordMatcher) match(src string, p int) int {
 	if !strings.HasPrefix(src[p:], string(word)) {
 		return -1
@@ -498,7 +467,6 @@ func Keyword(word string) *TokenType {
 	return &TokenType{Name: word, Match: keywordMatcher(word).match, First: word[:1]}
 }
 
-// /title([\t ][^\n\r]*|)/ on a TITLE token: the text after the keyword.
 func afterWord(text, word string) string {
 	at := strings.Index(text, word)
 	if at < 0 {
@@ -507,7 +475,6 @@ func afterWord(text, word string) string {
 	return text[at+len(word):]
 }
 
-// [\t ]{2,} as one space, as the m-flagged replace does.
 func collapseBlanks(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {
@@ -548,7 +515,6 @@ func AccTitleValue(text string) string {
 
 func isLineTerminator(c rune) bool { return c == '\n' || c == '\r' || c == 0x2028 || c == 0x2029 }
 
-// .replace(/^\s*/gm, ”): the whitespace at the start of each line, line breaks included.
 func trimLineStarts(text string) string {
 	var out strings.Builder
 	start := true
@@ -565,8 +531,6 @@ func trimLineStarts(text string) string {
 	return out.String()
 }
 
-// .replace(/\s+$/gm, ”): a run of whitespace up to the last line break inside it, or all of a
-// run that ends the text.
 func trimLineEnds(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {
@@ -601,7 +565,6 @@ func trimLineEnds(text string) string {
 	return out.String()
 }
 
-// .replace(/[\n\r]{2,}/gm, '\n')
 func collapseBreaks(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {
@@ -746,7 +709,6 @@ func (r *Reader) Fail(expected string) {
 	src, starts, ends := r.Tokens.Src, r.Tokens.Starts, r.Tokens.Ends
 	at := starts[i]
 	if r.Kind() == -1 {
-		// Locate EOF errors after the last token, before trailing line breaks and hidden comments.
 		k := i
 		for k > 0 && js.Trim(src[starts[k-1]:ends[k-1]]) == "" {
 			k--

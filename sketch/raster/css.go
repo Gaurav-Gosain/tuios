@@ -8,9 +8,6 @@ import (
 	"sync"
 )
 
-// resolveVars replaces each var(--name, fallback) with the variable's value, or
-// the fallback when it is not set. Values may refer to other variables; the
-// depth is bounded so that a cycle ends.
 func resolveVars(value string, env map[string]string) string {
 	for depth := 0; depth < 8 && strings.Contains(value, "var("); depth++ {
 		var b strings.Builder
@@ -23,7 +20,6 @@ func resolveVars(value string, env map[string]string) string {
 			}
 			at += i
 			b.WriteString(value[i:at])
-			// Find the matching close paren.
 			level := 0
 			end := -1
 			for k := at + 3; k < len(value); k++ {
@@ -56,7 +52,6 @@ func resolveVars(value string, env map[string]string) string {
 	return value
 }
 
-// declarations splits a CSS declaration list into name, value pairs.
 func declarations(style string) [][2]string {
 	var out [][2]string
 	level := 0
@@ -89,7 +84,6 @@ func declarations(style string) [][2]string {
 	return out
 }
 
-// paint is a fill or stroke: none, the current colour, or a colour.
 type paint struct {
 	none    bool
 	current bool
@@ -104,8 +98,6 @@ func parsePaint(s string) (paint, bool) {
 	case "currentcolor":
 		return paint{current: true}, true
 	}
-	// A paint server, such as a sankey link's gradient, is not drawn: the colour
-	// after it is the fallback, as SVG has it.
 	if strings.HasPrefix(strings.ToLower(s), "url(") {
 		if end := strings.IndexByte(s, ')'); end > 0 {
 			return parsePaint(s[end+1:])
@@ -165,7 +157,6 @@ func parseHex(h string) (color.NRGBA, bool) {
 	return color.NRGBA{}, false
 }
 
-// splitArgs splits function arguments on commas, or on spaces and a slash.
 func splitArgs(args string) []string {
 	if strings.Contains(args, ",") {
 		parts := strings.Split(args, ",")
@@ -239,7 +230,6 @@ func parseHSL(args string) (color.NRGBA, bool) {
 	return color.NRGBA{clamp255(hue(h+1.0/3) * 255), clamp255(hue(h) * 255), clamp255(hue(h-1.0/3) * 255), a}, true
 }
 
-// parseMix reads color-mix(in srgb, A [p%], B [q%]).
 func parseMix(args string) (color.NRGBA, bool) {
 	var parts []string
 	level, start := 0, 0
@@ -287,7 +277,6 @@ func parseMix(args string) (color.NRGBA, bool) {
 		return color.NRGBA{}, false
 	}
 	wa, wb := pa/total, pb/total
-	// Mix premultiplied, as CSS does.
 	aa, ab := float64(a.A)/255*wa, float64(b.A)/255*wb
 	alpha := aa + ab
 	if alpha == 0 {
@@ -321,7 +310,6 @@ func buildNamed() {
 	namedTable = t
 }
 
-// The CSS named colours.
 const cssNames = "aliceblue:f0f8ff,antiquewhite:faebd7,aqua:00ffff,aquamarine:7fffd4,azure:f0ffff,beige:f5f5dc,bisque:ffe4c4,black:000000," +
 	"blanchedalmond:ffebcd,blue:0000ff,blueviolet:8a2be2,brown:a52a2a,burlywood:deb887,cadetblue:5f9ea0,chartreuse:7fff00," +
 	"chocolate:d2691e,coral:ff7f50,cornflowerblue:6495ed,cornsilk:fff8dc,crimson:dc143c,cyan:00ffff,darkblue:00008b,darkcyan:008b8b," +

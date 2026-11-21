@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/radar/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele keeps the state of matchNumber and matchAccDescr in module variables and resets them
-// for each text. Here they are scanners, which the tokenizer makes once per text.
-
 package radar
 
 import (
@@ -55,9 +50,6 @@ func digits(src string, at int) int {
 	return end
 }
 
-// newNumberScanner answers as the NUMBER pattern /(?:[0-9]+\.[0-9]+(?!\.))|(?:0|[1-9][0-9]*(?!\.))/y
-// does, without its backtracking. As a regular expression it reads to the end of a run of
-// digits from every position in the run, which is quadratic for a long run of zeros.
 func newNumberScanner() common.Scanner {
 	runFrom, runEnd := 0, 0
 	return func(src string, at int) int {
@@ -93,7 +85,6 @@ func newNumberScanner() common.Scanner {
 	}
 }
 
-// blockAt is the end of /[\t ]*accDescr\s*{/y at at, or -1.
 func blockAt(src string, at int) int {
 	q := at
 	for q < len(src) && (src[q] == '\t' || src[q] == ' ') {
@@ -120,9 +111,6 @@ func blockAt(src string, at int) int {
 	return -1
 }
 
-// newAccDescrScanner: in the other grammars an `accDescr {` that never closes ends the lexing.
-// Here `accDescr` is also a name and `{` a token, so each unclosed one would read to the end of
-// the text again.
 func newAccDescrScanner() common.Scanner {
 	lastBrace := -2
 	return func(src string, at int) int {
@@ -138,7 +126,6 @@ func newAccDescrScanner() common.Scanner {
 	}
 }
 
-// matchID answers as /[\w]([-\w]*\w)?/y: the run of word characters and dashes, up to its last word character.
 func matchID(src string, p int) int {
 	if p >= len(src) || !util.IsWord(rune(src[p])) {
 		return -1
@@ -152,7 +139,6 @@ func matchID(src string, p int) int {
 	return end
 }
 
-// either matches the first of words at p.
 func either(words ...string) common.Scanner {
 	return func(src string, p int) int {
 		for _, w := range words {
@@ -166,7 +152,6 @@ func either(words ...string) common.Scanner {
 
 var nameRest = common.RunEndsIn("-", "")
 
-// optionValue gives way to a longer name, except right after its option, as in `graticule polygonaxis`.
 func optionValue(match common.Scanner, option int) func(src string, at, previous int) int {
 	return func(src string, at, previous int) int {
 		end := match(src, at)
@@ -234,7 +219,6 @@ type AxisAst struct {
 }
 
 type EntryAst struct {
-	// axis is the reference's text: Langium leaves the reference unresolved; Mermaid reads only its text.
 	axis    string
 	hasAxis bool
 	value   float64

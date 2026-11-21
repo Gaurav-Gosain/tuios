@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/railroad/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package railroad draws Mermaid's railroad diagrams: each rule of a grammar as a track that
 // runs through its terminals and nonterminals, in Mermaid's own notation, EBNF, ABNF or PEG.
 package railroad

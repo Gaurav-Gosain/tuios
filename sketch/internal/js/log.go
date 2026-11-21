@@ -5,25 +5,20 @@ import (
 	"strconv"
 )
 
-// Log and Log10 are Math.log and Math.log10 as V8 computes them: fdlibm's e_log.c and
-// e_log10.c, ported from V8's src/base/ieee754.cc. Go's math.Log10 is math.Log(x) times
-// 1/ln 10, which differs in the last bit for many inputs. Products are converted to
-// float64 so that the compiler does not fuse them into FMA instructions.
-
 const (
-	ln2Hi     = 6.93147180369123816490e-01 // 3fe62e42 fee00000
-	ln2Lo     = 1.90821492927058770002e-10 // 3dea39ef 35793c76
-	two54     = 1.80143985094819840000e+16 // 43500000 00000000
-	lg1       = 6.666666666666735130e-01   // 3FE55555 55555593
-	lg2       = 3.999999999940941908e-01   // 3FD99999 9997FA04
-	lg3       = 2.857142874366239149e-01   // 3FD24924 94229359
-	lg4       = 2.222219843214978396e-01   // 3FCC71C5 1D8E78AF
-	lg5       = 1.818357216161805012e-01   // 3FC74664 96CB03DE
-	lg6       = 1.531383769920937332e-01   // 3FC39A09 D078C69F
-	lg7       = 1.479819860511658591e-01   // 3FC2F112 DF3E5244
+	ln2Hi     = 6.93147180369123816490e-01
+	ln2Lo     = 1.90821492927058770002e-10
+	two54     = 1.80143985094819840000e+16
+	lg1       = 6.666666666666735130e-01
+	lg2       = 3.999999999940941908e-01
+	lg3       = 2.857142874366239149e-01
+	lg4       = 2.222219843214978396e-01
+	lg5       = 1.818357216161805012e-01
+	lg6       = 1.531383769920937332e-01
+	lg7       = 1.479819860511658591e-01
 	ivln10    = 4.34294481903251816668e-01
-	log10_2hi = 3.01029995663611771306e-01 // 3FD34413 509F6000
-	log10_2lo = 3.69423907715893078616e-13 // 3D59FEF3 11F12B36
+	log10_2hi = 3.01029995663611771306e-01
+	log10_2lo = 3.69423907715893078616e-13
 )
 
 func words(x float64) (hx int32, lx uint32) {
@@ -39,15 +34,15 @@ func fromWords(hx int32, lx uint32) float64 {
 func Log(x float64) float64 {
 	hx, lx := words(x)
 	k := int32(0)
-	if hx < 0x00100000 { // x < 2**-1022
+	if hx < 0x00100000 {
 		if (hx&0x7fffffff)|int32(lx) == 0 {
-			return math.Inf(-1) // log(+-0) = -inf
+			return math.Inf(-1)
 		}
 		if hx < 0 {
-			return math.NaN() // log(-#) = NaN
+			return math.NaN()
 		}
 		k -= 54
-		x = float64(x * two54) // subnormal number, scale up x
+		x = float64(x * two54)
 		hx, _ = words(x)
 	}
 	if hx >= 0x7ff00000 {
@@ -57,10 +52,10 @@ func Log(x float64) float64 {
 	hx &= 0x000fffff
 	i := (hx + 0x95f64) & 0x100000
 	_, lx = words(x)
-	x = fromWords(hx|(i^0x3ff00000), lx) // normalize x or x/2
+	x = fromWords(hx|(i^0x3ff00000), lx)
 	k += i >> 20
 	f := x - 1.0
-	if (0x000fffff & (2 + hx)) < 3 { // -2**-20 <= f < 2**-20
+	if (0x000fffff & (2 + hx)) < 3 {
 		if f == 0 {
 			if k == 0 {
 				return 0
@@ -102,22 +97,22 @@ func Log(x float64) float64 {
 func Log10(x float64) float64 {
 	hx, lx := words(x)
 	k := int32(0)
-	if hx < 0x00100000 { // x < 2**-1022
+	if hx < 0x00100000 {
 		if (hx&0x7fffffff)|int32(lx) == 0 {
-			return math.Inf(-1) // log(+-0) = -inf
+			return math.Inf(-1)
 		}
 		if hx < 0 {
-			return math.NaN() // log(-#) = NaN
+			return math.NaN()
 		}
 		k -= 54
-		x = float64(x * two54) // subnormal number, scale up x
+		x = float64(x * two54)
 		hx, lx = words(x)
 	}
 	if hx >= 0x7ff00000 {
 		return x + x
 	}
 	if hx == 0x3ff00000 && lx == 0 {
-		return 0 // log(1) = +0
+		return 0
 	}
 	k += (hx >> 20) - 1023
 	i := int32(uint32(k) & 0x80000000 >> 31)
@@ -141,7 +136,7 @@ func Pow10(k int) float64 {
 		return 1.0000000000000001e+210
 	}
 	if k >= 0 && k <= 22 {
-		return math.Pow10(k) // a table of exact values
+		return math.Pow10(k)
 	}
 	f, _ := strconv.ParseFloat("1e"+strconv.Itoa(k), 64)
 	return f

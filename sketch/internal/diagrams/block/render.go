@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/block/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package block
 
 import (
@@ -29,7 +27,6 @@ const SQRT1_2 = 0.7071067811865476
 
 var DEFAULT_CLASS = []string{"default"}
 
-// shapeName is pele's SHAPES map. It is a switch rather than a map, which would allocate at init.
 func shapeName(typ string) (string, bool) {
 	switch typ {
 	case "square":
@@ -64,12 +61,10 @@ func shapeName(typ string) (string, bool) {
 	return "", false
 }
 
-// isFixed: shapes that keep their own size in a larger cell, where the others stretch to fill it.
 func isFixed(shape string) bool {
 	return shape == "circle" || shape == "dbl-circ" || shape == "diam"
 }
 
-// isWide: shapes that only widen, because their slants and curves are set by their height.
 func isWide(shape string) bool {
 	switch shape {
 	case "stadium", "hex", "odd", "lean-r", "lean-l", "trap-b", "trap-t":
@@ -89,10 +84,9 @@ const (
 
 type View struct {
 	Cell
-	block *Block
-	kind  Kind
-	index int
-	// parent is the index in the render order of the composite that holds the view. Not in pele: sketch/text reads it.
+	block  *Block
+	kind   Kind
+	index  int
 	parent int
 	shape  string
 	label  text.Label
@@ -100,9 +94,8 @@ type View struct {
 	mask   int
 	dx     float64
 	dy     float64
-	// Size as drawn, which for a fixed shape is smaller than its cell.
-	bw float64
-	bh float64
+	bw     float64
+	bh     float64
 }
 
 // Box is pele's Box: a position and size as drawn. Here a title's box is a View with only those set,
@@ -110,8 +103,7 @@ type View struct {
 type Box = View
 
 type Route struct {
-	edge *Block
-	// Two points for a straight line, three for a bend, none for a self-loop.
+	edge   *Block
 	points []float64
 	loop   int
 	label  text.Label
@@ -119,10 +111,6 @@ type Route struct {
 	ly     float64
 }
 
-// spanLabel is the label of a block drawn in its cell. A label that wraps in a block that spans
-// columns and is drawn wider than it needs wraps again in the room the cell gives, without
-// changing the size of the block or the routes worked out from it. A fixed shape keeps its
-// label.
 func spanLabel(v *View, measurer text.TextMeasurer) text.Label {
 	if v.span <= 1 || v.label.Width <= 0 || len(v.label.Lines) <= 1 || v.bw <= v.nw || v.kind != Arrow && isFixed(v.shape) {
 		return v.label
@@ -141,7 +129,6 @@ func isRound(v *View) bool {
 	return v.kind == Leaf && (v.shape == "circle" || v.shape == "dbl-circ")
 }
 
-// edgeY is where a vertical line at x meets the outline, below the center (sign 1) or above it (sign -1).
 func edgeY(v *View, x, sign float64) float64 {
 	hw := v.bw / 2
 	hh := v.bh / 2
@@ -163,7 +150,6 @@ func edgeY(v *View, x, sign float64) float64 {
 	return v.y + float64(sign*reach)
 }
 
-// edgeX is where a horizontal line at y meets the outline, right of the center (sign 1) or left of it (sign -1).
 func edgeX(v *View, y, sign float64) float64 {
 	hw := v.bw / 2
 	hh := v.bh / 2
@@ -185,7 +171,6 @@ func edgeX(v *View, y, sign float64) float64 {
 	return v.x + float64(sign*reach)
 }
 
-// border is where the line from the center toward (tx, ty) leaves the outline.
 func border(v *View, tx, ty float64, out []float64) []float64 {
 	dx := tx - v.x
 	dy := ty - v.y
@@ -223,7 +208,6 @@ func crossesBox(x1, y1, x2, y2 float64, v *View) bool {
 	if x1 == x2 || y1 == y2 {
 		return true
 	}
-	// The segment is diagonal and its bounding box overlaps: the box is hit unless all four corners are on one side.
 	dx := x2 - x1
 	dy := y2 - y1
 	side := func(x, y float64) float64 { return js.Sign(float64(dx*(y-y1)) - float64(dy*(x-x1))) }
@@ -247,7 +231,6 @@ func hits(points []float64, s, t *View, obstacles []*View) int {
 	return count
 }
 
-// routeEdge: a straight line where the two blocks share a row or a column, otherwise one bend between facing sides.
 func routeEdge(s, t *View, shift float64, obstacles []*View, check bool) []float64 {
 	sl := s.x - s.bw/2
 	sr := s.x + s.bw/2
@@ -265,7 +248,6 @@ func routeEdge(s, t *View, shift float64, obstacles []*View, check bool) []float
 	overY := y2-y1 > 6
 
 	if overX && overY {
-		// One block is inside the other: join the inner one to the nearest side of the outer one.
 		inner, outer := t, s
 		if s.bw*s.bh <= t.bw*t.bh {
 			inner, outer = s, t
@@ -347,7 +329,6 @@ func routeEdge(s, t *View, shift float64, obstacles []*View, check bool) []float
 	return best
 }
 
-// trace builds the path through two or three points, rounding the bend and leaving room for markers.
 func trace(p []float64, startTrim, endTrim float64) svg.EdgePath {
 	n := len(p)
 	sx := p[0]
@@ -398,8 +379,6 @@ func trace(p []float64, startTrim, endTrim float64) svg.EdgePath {
 	return svg.EdgePath{D: d.String(), Sx: sx, Sy: sy, Sdx: -ax, Sdy: -ay, Ex: ex, Ey: ey, Edx: bx, Edy: by}
 }
 
-// loopArc: a self-loop is an arc around the top right corner of the block, or around the matching point on a
-// round or diamond outline. Gives the arc's center and radius and the angles where it leaves and returns.
 func loopArc(v *View, k int) (px, py, r, a1, a2 float64) {
 	hw := v.bw / 2
 	hh := v.bh / 2
@@ -436,7 +415,6 @@ func loopPath(v *View, k int, startTrim, endTrim float64) svg.EdgePath {
 	sy := py + float64(r*js.Sin(a1))
 	ex := px + float64(r*js.Cos(a2))
 	ey := py + float64(r*js.Sin(a2))
-	// Each marker lies along the chord it covers, so it follows the curve instead of the tangent at its tip.
 	sl := js.Hypot(sx-x1, sy-y1)
 	el := js.Hypot(ex-x2, ey-y2)
 	large := "0"
@@ -465,7 +443,6 @@ func loopPath(v *View, k int, startTrim, endTrim float64) svg.EdgePath {
 
 var SPOTS = [...]float64{0.5, 0.3, 0.7, 0.15, 0.85}
 
-// labelSpot picks the point on a leg where a label of the given size covers no block other than the two it joins.
 func covers(x, y, w, h float64, s, t *View, obstacles []*Box, check bool) bool {
 	if !check {
 		return false
@@ -478,7 +455,6 @@ func covers(x, y, w, h float64, s, t *View, obstacles []*Box, check bool) bool {
 	return false
 }
 
-// labelSpot picks the point on a leg where a label of the given size covers no block other than the two it joins.
 func labelSpot(p []float64, at int, w, h float64, s, t *View, obstacles []*View, check bool) float64 {
 	if !check {
 		return 0.5
@@ -493,8 +469,6 @@ func labelSpot(p []float64, at int, w, h float64, s, t *View, obstacles []*View,
 	return 0.5
 }
 
-// stackLabels stacks overlapping labels along their shared line, if they fit between its markers and cover no other block or title.
-// Returns the extra length needed to fit the labels.
 func stackLabels(stack []int, routes []Route, legs [][]float64, s, t *View, obstacles []*Box, check bool) float64 {
 	vertical := legs[stack[0]][0] == legs[stack[0]][2]
 	lo := math.Inf(-1)
@@ -564,14 +538,11 @@ func stackLabels(stack []int, routes []Route, legs [][]float64, s, t *View, obst
 	return 0
 }
 
-// gapsKey names one gap list for widen's base. pele keys the map by the array itself. Not in pele.
 type gapsKey struct {
 	box      *View
 	vertical bool
 }
 
-// widen widens the gap in the blocks' nearest shared container.
-// `base` keeps the gaps as they were when the labels were measured.
 func widen(parents []*View, s, t *View, vertical bool, short float64, base map[gapsKey][]float64) bool {
 	parentOf := func(v *View) *View {
 		if v.index >= len(parents) {
@@ -661,7 +632,6 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 
 	styleOf := func(block *Block) svg.ResolvedStyle {
 		var declarations []string
-		// A style list is split on commas only, so one entry can still hold several declarations.
 		add := func(styles []string) {
 			for _, style := range styles {
 				declarations = append(declarations, strings.Split(style, ";")...)
@@ -744,7 +714,6 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			v.label = text.LayoutLabel(block.label, false, measurer, fontSize, wrap, textStyle)
 			s := svg.ShapeSizeOf(shape, v.label.Width, v.label.Height)
 			v.nw = s.W
-			// A cylinder's caps deepen as it widens, so it is sized for the deepest ones.
 			v.nh = s.H
 			if shape == "cyl" {
 				v.nh = math.Max(s.H, v.label.Height+40)
@@ -789,7 +758,6 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 
 	var obstacles []*View
 	var titles []*Box
-	// Layout keeps the widest a container has been, so each run starts from the widths it needs.
 	widths := make([]float64, len(order))
 	for _, v := range order {
 		widths[v.index] = v.nw
@@ -834,7 +802,6 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 	}
 	contentWidth, contentHeight := place()
 
-	// Edges between the same two blocks are spread apart instead of drawn on top of each other.
 	pairs := map[int]int{}
 	labelled := map[int]bool{}
 	var ends [][2]*View
@@ -858,7 +825,6 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 	}
 	check := len(drawn)*len(obstacles) <= OBSTACLE_BUDGET
 	routes := make([]Route, 0, len(drawn))
-	// stacks is pele's Map; stackKeys keeps its insertion order.
 	stacks := map[int][]int{}
 	var stackKeys []int
 	legs := make([][]float64, len(drawn))
@@ -890,7 +856,6 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 				}
 				points = routeEdge(s, t, float64((float64(k)-float64(total-1)/2)*step), obstacles, check)
 				n := len(points)
-				// The label goes on the longer leg.
 				firstLeg := math.Abs(points[2]-points[0]) + math.Abs(points[3]-points[1])
 				lastLeg := math.Abs(points[n-2]-points[n-4]) + math.Abs(points[n-1]-points[n-3])
 				at := 0
@@ -935,7 +900,6 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			s, t := ends[stack[0]][0], ends[stack[0]][1]
 			short := stackLabels(stack, routes, legs, s, t, blocked, check)
 			vertical := legs[stack[0]][0] == legs[stack[0]][2]
-			// Keep columns narrow to fit the host in tight layouts.
 			if grow && short > 0 && (vertical || !tight) && widen(parents, s, t, vertical, math.Ceil(short), base) {
 				grown = true
 			}
@@ -977,7 +941,6 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 			maxY = y + h/2
 		}
 	}
-	// bound finds the drawing's extent and gives its width.
 	bound := func() float64 {
 		minX = 0
 		minY = 0
@@ -998,13 +961,11 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 	if settle(len(drawn)*len(drawn) <= OBSTACLE_BUDGET) {
 		before := overlap()
 		narrow := bound()
-		// A container stretched by its row gives some of a new gap back, so the gap may take a few rounds.
 		grown := true
 		for round := 0; round < 3 && grown; round++ {
 			contentWidth, contentHeight = place()
 			grown = settle(round < 2)
 		}
-		// The drawing only grows if that leaves less of the labels covering each other, and within maxWidth.
 		wide := bound()
 		room := math.Inf(1)
 		if options.MaxWidth != nil && *options.MaxWidth > 0 {
@@ -1162,8 +1123,6 @@ func draw(model *BlockDb, config types.Config, options types.RenderOptions, tigh
 	return rendered
 }
 
-// arrowLabel puts the directions of a block arrow before its label, as arrows, for a drawing
-// that has no arrow shape. Not in pele.
 func arrowLabel(mask int, label []string) []string {
 	glyphs := ""
 	switch {
@@ -1191,8 +1150,6 @@ func arrowLabel(mask int, label []string) []string {
 	return append([]string{glyphs + " " + label[0]}, label[1:]...)
 }
 
-// geometry gives the blocks as flowchart nodes, the composites as groups, and the edges as
-// routes, so that sketch/text draws a block diagram as it draws a flowchart. Not in pele.
 func geometry(order []*View, routes []Route, ends [][2]*View, ox, oy, width, height float64) *types.Geometry {
 	g := &types.Geometry{Width: width, Height: height}
 	node := make([]int, len(order))
@@ -1218,7 +1175,6 @@ func geometry(order []*View, routes []Route, ends [][2]*View, ox, oy, width, hei
 		if r.edge.pattern == "dotted" {
 			e.Stroke = "dotted"
 		}
-		// The points were moved into place when the SVG was written. A leg's axis is 0 where it runs down.
 		for k := 0; k < len(r.points); k += 2 {
 			axis := 1.0
 			if k > 0 && math.Abs(r.points[k+1]-r.points[k-1]) > math.Abs(r.points[k]-r.points[k-2]) {

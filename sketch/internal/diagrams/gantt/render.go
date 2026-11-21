@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/gantt/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele's `text` is textSetting here, as the package text is imported. Dates are read in
-// options.Location, or in the host's zone when it is nil.
-
 package gantt
 
 import (
@@ -43,7 +38,6 @@ func setting(config types.Config, key string, min, max float64) (float64, bool) 
 	return math.Min(max, math.Max(min, value)), true
 }
 
-// settingOr is `setting(config, key, min, max) ?? def`.
 func settingOr(config types.Config, key string, min, max, def float64) float64 {
 	if v, ok := setting(config, key, min, max); ok {
 		return v
@@ -61,7 +55,6 @@ func flag(config types.Config, key string) bool {
 	return ok && value
 }
 
-// A task label sits on one row, so only its first line is kept.
 func oneLine(raw string, measurer text.TextMeasurer, size float64) text.Label {
 	label := text.LayoutLabel(RE_BREAK.ReplaceAllString(raw, " "), false, measurer, size, 4000, 0)
 	if len(label.Lines) <= 1 {
@@ -76,12 +69,10 @@ func oneLine(raw string, measurer text.TextMeasurer, size float64) text.Label {
 
 func isFinite(x float64) bool { return !math.IsNaN(x) && !math.IsInf(x, 0) }
 
-// Whether scheduling gave the task a start and an end. One that waits on a task that never resolves has neither.
 func scheduled(task *GanttTask) bool {
 	return isFinite(val(task.startTime)) && isFinite(val(task.endTime))
 }
 
-// Mermaid's compact mode: within a section, a task goes on the first row that is free when it starts.
 func packRows(tasks []*GanttTask, offset int, rowOf map[*GanttTask]int) int {
 	var sorted []*GanttTask
 	for _, task := range tasks {
@@ -281,8 +272,6 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 		headHeight += tickHeight
 	}
 	plotTop := math.Max(headHeight, topPadding)
-	// Mermaid starts its grid lines above the first row by the difference between these two settings.
-	// Here that only uses room a larger `topPadding` leaves free.
 	gridLead := 0.0
 	if hasTopPadding && hasGridStart {
 		gridLead = math.Max(0, math.Min(topPadding-gridStart, plotTop-headHeight))
@@ -290,7 +279,6 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 	plotHeight := float64(float64(max(rowCount, 1)) * rowHeight)
 	plotBottom := plotTop + plotHeight
 
-	// Bars and where their labels go: inside when they fit, otherwise beside the bar on the side with room.
 	bars := make([]Bar, 0, len(rowTasks))
 	extent := right + rightPadding
 	for _, task := range rowTasks {
@@ -360,7 +348,6 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 		grid.WriteString("M" + num(tx) + "," + num(plotTop-gridLead) + "V" + num(plotBottom))
 		label := tickLabel(t)
 		width := measurer.Width(label, tickSize, 0)
-		// A label is skipped when it would run into the one before it or only repeat it; its grid line stays.
 		if tx-width/2 < lastRight+8 || label == lastLabel {
 			continue
 		}
@@ -374,7 +361,6 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 		}
 	}
 
-	// Vertical markers take no row. Their labels go under the axis, on as many lines as it takes to keep them apart.
 	var vertLines, vertLabels strings.Builder
 	var vertEnds []float64
 	vertTop := plotBottom + tickHeight + 4
@@ -414,7 +400,6 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 	}
 	height := math.Ceil(plotBottom + tickHeight + vertHeight + pad)
 
-	// Section bands, one per run of rows that share a section, shaded on alternate sections.
 	var bands, sectionOut strings.Builder
 	for row := 0; row < rowCount; {
 		section := rowSection[row]
@@ -437,10 +422,7 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 		row = end
 	}
 
-	// Excluded days, as Mermaid marks them: a day at a time from the first task's start, and not at all
-	// when the chart spans more than five years.
 	var excluded strings.Builder
-	// The excluded spans as times, for the geometry.
 	var excludedSpans [][2]float64
 	if (len(model.excludes) > 0 || len(model.includes) > 0) && add(js.NewDate(start, loc), 6, "y").T > stop {
 		var from, to *js.Date
@@ -506,8 +488,6 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 			classes += " pele-unscheduled"
 			textFill = ` fill="var(--_m)"`
 		} else {
-			// A critical task takes the critical color in place of the accent. Done, it keeps the fill
-			// of finished work and only its border is in that color.
 			color := "var(--_c)"
 			if task.crit {
 				color = svg.CRITICAL
@@ -574,7 +554,6 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 	if excluded.Len() > 0 {
 		content = append(content, `<g class="pele-excluded" fill="var(--_a)">`, excluded.String(), `</g>`)
 	}
-	// The grid's path data sits inside a tag, so it joins the strings around it.
 	content = append(content, `<g class="pele-grid" fill="none"><path d="`+grid.String()+`" stroke="var(--_b)" stroke-dasharray="1 3"/><path d="`+axisLine+`" stroke="var(--_b)"/></g>`)
 	if vertLines.Len() > 0 {
 		content = append(content, `<g class="pele-verts" fill="none" stroke="var(--_l)" stroke-width="1.5" stroke-dasharray="4 3">`, vertLines.String(), `</g>`)
@@ -595,7 +574,6 @@ func renderGantt(model *GanttDb, config types.Config, options types.RenderOption
 	return rendered
 }
 
-// ganttGeometry is the chart as lists, for drawing it some other way.
 func ganttGeometry(title text.Label, start, stop float64, rows []string, bars []Bar, ticks []float64, tickLabel func(float64) string,
 	verts []*GanttTask, now float64, today bool, width, height float64) *types.Geometry {
 	g := &types.GeoGantt{Title: title.Plain(), Start: start, Stop: stop, Today: math.NaN()}
@@ -608,8 +586,6 @@ func ganttGeometry(title text.Label, start, stop float64, rows []string, bars []
 			Milestone: task.milestone, Crit: task.crit, Done: task.done, Active: task.active}
 		if t.Scheduled {
 			end := task.endTime
-			// A milestone sits where the SVG puts it, at the middle of its own
-			// times; a bar runs to where excluded days pushed its end.
 			if task.renderEndTime != nil && !task.milestone {
 				end = task.renderEndTime
 			}

@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/venn/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// Offsets are byte offsets. pele reads UTF-16 code units; every test here is of an ASCII
-// character, so a byte stands for a unit, except where JavaScript white space outside ASCII
-// can stand: there the port reads the whole character.
-
 package venn
 
 import (
@@ -63,12 +57,10 @@ var KEYWORDS = [...]struct {
 // VennLexer reads tokens one at a time, as Mermaid's Jison lexer for venn diagrams does: every rule
 // ignores case, the first rule that matches wins, and a keyword must end at a word boundary.
 type VennLexer struct {
-	src  string
-	host IndentHost
-	// The text and position of the token `next` returned last.
-	text  string
-	start int
-	// titleSkip is the length of `title` and the white space character after it, for a TITLE.
+	src       string
+	host      IndentHost
+	text      string
+	start     int
 	titleSkip int
 	at        int
 	lineStart bool
@@ -82,7 +74,6 @@ func (l *VennLexer) charAt(i int) int {
 	return int(l.src[i])
 }
 
-// spaceAt reports whether a JavaScript white space character starts at i, and its length.
 func (l *VennLexer) spaceAt(i int) (bool, int) {
 	if i < 0 || i >= len(l.src) {
 		return false, 0
@@ -112,7 +103,6 @@ func (l *VennLexer) keyword(at int, word string) bool {
 
 func isDigitAt(c int) bool { return c >= 48 && c <= 57 }
 
-// color is the end of `rgb(1, 2, 3)` or `rgba(1, 2, 3, 0.5)` whose parenthesis opens at `at`, or -1.
 func (l *VennLexer) color(at int, parts int) int {
 	i := at + 1
 	skip := func() {
@@ -186,7 +176,6 @@ func (l *VennLexer) next() int {
 			continue
 		}
 		if l.lineStart && l.word(i, "title") && l.afterLineFeed(i) && js.Trim(src[min(i+5, n):l.lineEnd(i+5)]) == "" {
-			// Skip a bare title like a comment, so it doesn't end indented text.
 			j := l.lineEnd(i + 5)
 			for l.charAt(j) == 10 || l.charAt(j) == 13 {
 				j++
@@ -202,7 +191,6 @@ func (l *VennLexer) next() int {
 				}
 				l.at = j
 				if l.keyword(j, "text") && l.host.getIndentMode() {
-					// The word `text` itself is dropped; the indentation stands for it.
 					l.at = j + 4
 					l.lineStart = false
 					l.text = src[i:j]
@@ -255,7 +243,6 @@ func (l *VennLexer) next() int {
 				}
 			}
 			for _, kw := range KEYWORDS {
-				// A hyphen continues a name, as in `set-theory`.
 				if l.keyword(i, kw.word) && l.charAt(i+len(kw.word)) != 45 {
 					return l.token(kw.typ, i+len(kw.word))
 				}

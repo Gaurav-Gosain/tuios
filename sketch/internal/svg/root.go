@@ -1,5 +1,3 @@
-// Ported from pele src/svg/root.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package svg
 
 import (
@@ -18,8 +16,6 @@ var WEIGHTS = [...][2]string{
 	{"w", "bold"},
 }
 
-// usedNames are the root variables pele's RE_USED, /var\(--_(r|tw|hw|w)\)/g,
-// finds; the radius first, then WEIGHTS in order.
 var usedNames = [...]string{"r", "tw", "hw", "w"}
 
 type Accessible struct {
@@ -27,8 +23,6 @@ type Accessible struct {
 	AccDescr string
 }
 
-// usedVars marks in used each name of var(--_name) that content holds, as
-// content.matchAll(RE_USED) does in one pass over it.
 func usedVars(content string, used *[len(usedNames)]bool) {
 	for i := 0; ; {
 		at := strings.Index(content[i:], "var(--_")
@@ -46,8 +40,6 @@ func usedVars(content string, used *[len(usedNames)]bool) {
 	}
 }
 
-// varByte reports whether c can be part of a var(--_...) that RE_USED
-// matches, so a match may run across the end of a part that ends in c.
 func varByte(c byte) bool {
 	return strings.IndexByte("var(-_thw", c) >= 0
 }
@@ -76,7 +68,6 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 	for i, part := range parts {
 		total += len(part)
 		usedVars(part, &used)
-		// A match may run across the end of a part that ends inside one.
 		across = across || i < len(parts)-1 && part != "" && varByte(part[len(part)-1])
 	}
 	if across {
@@ -101,10 +92,6 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 			WriteStrings(&b, ";--_", pair[0], ":var(--pele-", pair[1], "-weight,bold)")
 		}
 	}
-	// The fonts the labels were measured in are the ones they are drawn
-	// in, unless the page names others. The rest of what text inherits
-	// is pinned, as none of it was measured. Esc works byte by byte, so
-	// the font lists are escaped on their own.
 	WriteStrings(&b, ";--_fm:var(--pele-font-mono,", Esc(families(options.FontFamilyMono, "monospace")), ");font:")
 	writeJSNum(&b, fontSize)
 	WriteStrings(&b, "px sans-serif;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;font-family:var(--pele-font,",
@@ -118,12 +105,9 @@ func SvgDocument(typ string, width, height, fontSize float64, options types.Rend
 	return b.String()
 }
 
-// writeJSNum writes js.Num(x) to b.
-//
 //go:noinline
 func writeJSNum(b *strings.Builder, x float64) {
 	if x != 0 && x == math.Trunc(x) && math.Abs(x) < 1e21 {
-		// js.Num formats a whole number with FormatFloat(x, 'f', -1).
 		var buf [32]byte
 		b.Write(strconv.AppendFloat(buf[:0], x, 'f', -1, 64))
 		return

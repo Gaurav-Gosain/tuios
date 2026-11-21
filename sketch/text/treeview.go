@@ -7,20 +7,12 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// A tree view is drawn as the tree command draws a folder: each entry on its own line, under its
-// parent, joined to it by ├── and └── branches. A folder name ends in a slash and is bold. Descriptions line
-// up in a column after the names. When that does not fit, a description follows its name, then
-// the branches grow narrower, and last names and descriptions wrap under themselves.
-
-// treeLine is one line of the drawing: the branches before the text, and the text.
 type treeLine struct {
 	prefix string
 	text   string
 	role   uint8
-	// desc is a description that follows the text on the same line.
-	desc string
-	// depth is the depth of the row the line is part of.
-	depth int
+	desc   string
+	depth  int
 }
 
 func drawTreeView(l *sketch.Layout, opt Options) (*canvas, error) {
@@ -28,7 +20,6 @@ func drawTreeView(l *sketch.Layout, opt Options) (*canvas, error) {
 	if tv == nil {
 		return nil, ErrUnsupported
 	}
-	// A folder's name ends in a slash.
 	rows := make([]types.GeoTreeRow, len(tv.Rows))
 	for i, row := range tv.Rows {
 		rows[i] = row
@@ -37,7 +28,6 @@ func drawTreeView(l *sketch.Layout, opt Options) (*canvas, error) {
 		}
 	}
 	last, deepest := treeLast(rows)
-	// Every line carries the branches of its depth.
 	if int64(deepest+1)*4*int64(len(rows)) > MaxCells {
 		return nil, ErrTooLarge
 	}
@@ -96,16 +86,12 @@ func treeWidth(lines []treeLine, title []string) int {
 	return w
 }
 
-// treeLines lays the rows out with branches `unit` cells wide, a directory's name in bold. With
-// aligned set, descriptions start in one column. With cols set, a name or description wider than
-// the room left wraps, and a description goes on the lines under its name.
 func treeLines(rows []types.GeoTreeRow, last []bool, unit, cols int, aligned bool) []treeLine {
 	branch := "├" + strings.Repeat("─", unit-2) + " "
 	corner := "└" + strings.Repeat("─", unit-2) + " "
 	pipe := "│" + strings.Repeat(" ", unit-1)
 	blank := strings.Repeat(" ", unit)
 	var out []treeLine
-	// open[k]: the entry at depth k on the way down has a sibling still to come.
 	var open []bool
 	descCol := 0
 	start := len(out)
@@ -129,7 +115,6 @@ func treeLines(rows []types.GeoTreeRow, last []bool, unit, cols int, aligned boo
 				under += pipe
 			}
 		}
-		// Lines under the name keep the guide down to the children.
 		if i+1 < len(rows) && rows[i+1].Depth > row.Depth {
 			under += pipe
 		} else {
@@ -180,8 +165,6 @@ func treeLines(rows []types.GeoTreeRow, last []bool, unit, cols int, aligned boo
 	return out
 }
 
-// treeLast reports for each row whether no later sibling follows it, and the deepest depth. seen[d]
-// is the latest row at depth d under the current parent; a row at depth d gives it a later sibling.
 func treeLast(rows []types.GeoTreeRow) ([]bool, int) {
 	last := make([]bool, len(rows))
 	var seen []int

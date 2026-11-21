@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/gantt/tokens.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package gantt parses and draws Mermaid gantt charts.
 package gantt
 

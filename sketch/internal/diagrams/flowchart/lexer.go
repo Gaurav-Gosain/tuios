@@ -1,10 +1,3 @@
-// Ported from pele src/diagrams/flowchart/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele reads UTF-16 code units with charCodeAt. The port reads the UTF-8 bytes:
-// code() decodes the character at a byte offset, and where pele steps one unit
-// past a character that may not be ASCII, the port steps the whole character.
-// Positions are byte offsets; types.Locate turns them into lines and columns.
-
 package flowchart
 
 import (
@@ -54,7 +47,6 @@ var NODE_CHAR = func() [128]uint8 {
 
 const sp = `[` + js.S + `]`
 
-// sticky compiles a pattern that pele runs with the y flag: it must match at the position.
 func sticky(pattern string) *lazyre.Regexp { return lazyre.New(`^(?:` + pattern + `)`) }
 
 var (
@@ -84,7 +76,6 @@ var (
 	RE_BR           = lazyre.New(`\n` + sp + `*`)
 )
 
-// skipJSSpace returns where the run of JavaScript whitespace from q ends.
 func skipJSSpace(src string, q int) int {
 	for q < len(src) {
 		r, size := utf8.DecodeRuneInString(src[q:])
@@ -96,7 +87,6 @@ func skipJSSpace(src string, q int) int {
 	return q
 }
 
-// linkEnd is RE_LINK, /\s*[xo<]?--+[-xo>]\s*/y, at p: where the link ends, or -1.
 func linkEnd(src string, p int) int {
 	q := skipJSSpace(src, p)
 	if q < len(src) && (src[q] == 'x' || src[q] == 'o' || src[q] == '<') {
@@ -110,15 +100,12 @@ func linkEnd(src string, p int) int {
 	case dashes >= 2 && j < len(src) && (src[j] == 'x' || src[j] == 'o' || src[j] == '>'):
 		j++
 	case dashes >= 3:
-		// The last dash is the [-xo>].
 	default:
 		return -1
 	}
 	return skipJSSpace(src, j)
 }
 
-// startLinkEnd is RE_START_LINK, /\s*[xo<]?--\s*/y, at p: where the start of
-// a link with text ends, or -1.
 func startLinkEnd(src string, p int) int {
 	q := skipJSSpace(src, p)
 	if q < len(src) && (src[q] == 'x' || src[q] == 'o' || src[q] == '<') {
@@ -130,8 +117,6 @@ func startLinkEnd(src string, p int) int {
 	return skipJSSpace(src, q+2)
 }
 
-// newlineRun is /(?:\r?\n)+/y at p: where the run of line ends from p ends, or
-// -1 if there is none.
 func newlineRun(src string, p int) int {
 	q := p
 	for q < len(src) {
@@ -149,8 +134,6 @@ func newlineRun(src string, p int) int {
 	return q
 }
 
-// spaceRun is /[^\S\n\r]+/y at p: where the run of whitespace other than \n
-// and \r from p ends, or -1 if there is none.
 func spaceRun(src string, p int) int {
 	q := p
 	for q < len(src) {
@@ -166,7 +149,6 @@ func spaceRun(src string, p int) int {
 	return q
 }
 
-// lexer is the state of one run of tokenize: the tokens so far, the mode stack and the read position.
 type lexer struct {
 	src    string
 	n      int
@@ -188,8 +170,6 @@ type lexer struct {
 	wsTo       int
 }
 
-// code is the character at byte q, as charCodeAt would give it, or -1 past the end.
-// A byte inside a character gives 0xfffe, which no test matches.
 func (l *lexer) code(q int) rune {
 	if q < 0 || q >= l.n {
 		return -1
@@ -203,13 +183,11 @@ func (l *lexer) code(q int) rune {
 		return 0xfffe
 	}
 	if r > 0xffff {
-		// A high surrogate, as charCodeAt gives for the first unit.
 		return 0xd800
 	}
 	return r
 }
 
-// size is how many bytes the character at q takes: one step of pele's.
 func (l *lexer) size(q int) int {
 	if q >= l.n || l.src[q] < utf8.RuneSelf {
 		return 1
@@ -265,7 +243,6 @@ func (l *lexer) skipSpace(j int) int {
 	return j
 }
 
-// First character after any run of whitespace starting at q, skipping one optional x, o or <.
 func (l *lexer) linkChar(q int) rune {
 	j := q
 	if q >= l.wsFrom && q <= l.wsTo {
@@ -584,13 +561,11 @@ func (l *lexer) initial(c rune) bool {
 						return true
 					}
 				}
-				// No direction statement starts anywhere in the rest of this line either.
 				l.dirFailed = l.lineEnd
 			}
 		}
 	}
 
-	// A link id is a run of non-space characters up to its last `@` that is not followed by `{` or `"`.
 	if l.atNext != -1 && c != 34 && !l.isSpace(c) {
 		if l.p >= l.runEnd {
 			if l.atNext < l.p {
@@ -778,7 +753,6 @@ func (l *lexer) edgeText(c rune, linkRe *lazyre.Regexp, a, b rune) bool {
 
 func tokenize(src string) Tokens {
 	n := len(src)
-	// About one token for every three bytes of a flowchart.
 	guess := n/3 + 8
 	l := &lexer{
 		src:        src,
@@ -1150,7 +1124,6 @@ func tokenize(src string) Tokens {
 	return Tokens{l.types, l.texts, l.starts}
 }
 
-// indexFrom is s.indexOf(sub, from).
 func indexFrom(s, sub string, from int) int {
 	if from > len(s) {
 		return -1

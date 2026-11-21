@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/pie/model.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package pie
 
 import (
@@ -15,12 +13,10 @@ type PieModel struct {
 	accTitle string
 	accDescr string
 	showData bool
-	// A Map in pele: labels in the order they were first given.
-	labels []string
-	values map[string]float64
+	labels   []string
+	values   map[string]float64
 }
 
-// .replace(/\n\s+/g, '\n')
 func joinLines(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {

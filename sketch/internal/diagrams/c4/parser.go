@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/c4/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package c4
 
 import (
@@ -55,7 +53,6 @@ func isDiagram(t int) bool {
 	return t >= T_PERSON && t <= T_UPDATE_LAYOUT_CONFIG
 }
 
-// insertAt is attrs.splice(at, 0, value): past the end, it appends.
 func insertAt(attrs []C4Attr, at int, value C4Attr) []C4Attr {
 	at = min(at, len(attrs))
 	attrs = append(attrs, C4Attr{})
@@ -64,14 +61,10 @@ func insertAt(attrs []C4Attr, at int, value C4Attr) []C4Attr {
 	return attrs
 }
 
-// cutLeading is text.substring(k) where the text starts with k-1 ASCII characters and one
-// whitespace character.
 func cutLeading(s string, ascii int) string {
 	return s[ascii+spaceAt(s, ascii):]
 }
 
-// parseC4 accepts what the parser Jison generates from c4Diagram.jison accepts, and calls the model
-// builder in the order its semantic actions do. Boundaries nest through a counter, not recursion.
 func parseC4(src string, db *C4Db) {
 	toks := tokenize(src)
 	typs, starts, ends := toks.types, toks.starts, toks.ends
@@ -93,7 +86,6 @@ func parseC4(src string, db *C4Db) {
 	}
 
 	attributes := func() []C4Attr {
-		// Room for every slot a statement has, and one inserted.
 		attrs := make([]C4Attr, 0, 11)
 		for {
 			t := typs[i]
@@ -136,7 +128,6 @@ func parseC4(src string, db *C4Db) {
 				if typs[i] != T_acc_title_value {
 					fail("'acc_title_value'")
 				}
-				// The grammar hands `accTitle:` to setTitle, so it becomes the visible title.
 				db.setTitle(js.Trim(text(i)))
 				i++
 			} else {
@@ -149,7 +140,6 @@ func parseC4(src string, db *C4Db) {
 		}
 	}
 
-	// diagram reports whether the statement opens a boundary.
 	diagram := func(t int) bool {
 		i++
 		attrs := attributes()
@@ -188,7 +178,6 @@ func parseC4(src string, db *C4Db) {
 			}
 			return true
 		} else if t <= T_REL_INDEX {
-			// RelIndex takes a sequence number first, which Mermaid ignores.
 			if t == T_REL_INDEX {
 				attrs = attrs[1:]
 			}

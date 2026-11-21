@@ -43,7 +43,6 @@ func Num(x float64) string {
 	if x == math.Trunc(x) && x < 1e21 {
 		return strconv.FormatFloat(x, 'f', -1, 64)
 	}
-	// Shortest digits and exponent, then ECMAScript's Number::toString layout.
 	e := strconv.FormatFloat(x, 'e', -1, 64)
 	mant, expStr, _ := strings.Cut(e, "e")
 	digits := strings.Replace(mant, ".", "", 1)
@@ -145,7 +144,6 @@ func ParseFloat(s string) float64 {
 	}
 	v, err := strconv.ParseFloat(s[:end], 64)
 	if err != nil {
-		// Out of range still parses to ±Inf, as JavaScript does.
 		if ne, ok := err.(*strconv.NumError); ok && ne.Err == strconv.ErrRange {
 			return v
 		}
@@ -154,7 +152,6 @@ func ParseFloat(s string) float64 {
 	return v
 }
 
-// decimalPrefix returns the length of the StrDecimalLiteral at the start of s, or 0.
 func decimalPrefix(s string) int {
 	i := 0
 	if i < len(s) && (s[i] == '+' || s[i] == '-') {
@@ -381,8 +378,6 @@ func ParseIntPrefix(s string, radix int) float64 {
 	if n == 0 {
 		return math.NaN()
 	}
-	// V8 reads a decimal run of digits as a decimal literal, rounded once, where the sum above
-	// rounds at every digit past 2^53.
 	if radix == 10 && v >= 1<<53 {
 		v, _ = strconv.ParseFloat(s[:n], 64)
 	}
@@ -404,7 +399,6 @@ func Compare(a, b string) int {
 	if i == len(a) || i == len(b) {
 		return len(a) - len(b)
 	}
-	// Back up to the start of the character that differs.
 	for i > 0 && !utf8.RuneStart(a[i]) {
 		i--
 	}
@@ -413,11 +407,9 @@ func Compare(a, b string) int {
 	if ua, ub := unit(ra), unit(rb); ua != ub {
 		return int(ua) - int(ub)
 	}
-	// Two characters with the same high surrogate: the low ones follow the code points.
 	return int(ra) - int(rb)
 }
 
-// unit is the first UTF-16 code unit of r.
 func unit(r rune) rune {
 	if r > 0xffff {
 		return 0xd800 + (r-0x10000)>>10

@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/gantt/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// GanttBuilder is the GanttDb itself here. pele's WEEKDAYS here is the lexer's DAYS, the same
-// list, as dates.go has a WEEKDAYS of its own.
-
 package gantt
 
 import (
@@ -46,7 +41,6 @@ var STARTS_LINE = func() (starts [T_EOF + 1]bool) {
 	return
 }()
 
-// sliceFrom is text.slice(n): the text after its first n UTF-16 units.
 func sliceFrom(text string, n int) string {
 	q := 0
 	for n > 0 && q < len(text) {
@@ -77,8 +71,6 @@ func (ps *parser) fail(expected string) {
 	panic(types.SyntaxError("gantt", ps.src, ps.starts[ps.i], "Expecting "+expected+", got '"+got+"'", false))
 }
 
-// Mermaid's parser runs a statement's action only after seeing that the next token can follow it.
-//
 //go:noinline
 func (ps *parser) end(also string) {
 	if !STARTS_LINE[ps.types[ps.i]] {
@@ -88,7 +80,6 @@ func (ps *parser) end(also string) {
 
 func parseGantt(src string, db *GanttDb) {
 	toks := tokenize(src)
-	// Padding, so that a look past the last token reads the end.
 	ps := &parser{src: src, types: append(toks.types, T_END, T_END), texts: append(toks.texts, "", ""), starts: append(toks.starts, len(src), len(src))}
 
 	if ps.types[ps.i] != T_gantt {

@@ -9,8 +9,6 @@ import (
 	"tuios.dev/sketch"
 )
 
-// The tests of this package draw every diagram type, the rare ones too, so
-// they add the rare types' drawers before any test runs.
 func init() { Rare() }
 
 // TestRareAddsTheRareTypes draws without the rare types' drawers, where a

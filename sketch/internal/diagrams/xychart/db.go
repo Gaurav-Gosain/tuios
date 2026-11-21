@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/xychart/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package xychart
 
 import (
@@ -12,8 +10,7 @@ import (
 
 type XyText struct {
 	text string
-	// "text" or "markdown".
-	typ string
+	typ  string
 }
 
 type DataPoint struct {
@@ -23,7 +20,7 @@ type DataPoint struct {
 
 // Axis is pele's BandAxis or LinearAxis, told apart by typ.
 type Axis struct {
-	typ        string // "band" or "linear"
+	typ        string
 	title      string
 	categories []string
 	min, max   float64
@@ -33,18 +30,13 @@ type Axis struct {
 // with no value has NaN, which stands for pele's `undefined`. pele also keeps each
 // place's name as text, which nothing reads; the port leaves it out.
 type Plot struct {
-	typ   string // "line" or "bar"
-	title string
-	data  []float64
-	// length is the series length pele works with: on a band axis, the count of
-	// categories when the series was added. data stops at the last value given,
-	// and at reads the rest as NaN, so a source cannot ask for one value per
-	// category for each of thousands of series.
+	typ         string
+	title       string
+	data        []float64
 	length      int
 	pointLabels []string
 }
 
-// at is value i of the series, NaN past the values given.
 func (p *Plot) at(i int) float64 {
 	if i < len(p.data) {
 		return p.data[i]
@@ -56,11 +48,10 @@ type XyChartDb struct {
 	title       string
 	accTitle    string
 	accDescr    string
-	orientation string // "vertical", "horizontal" or "" for unset
+	orientation string
 	xAxis       Axis
 	yAxis       Axis
 	hasSetXAxis bool
-	// False while the y range comes from the data and not from a `y-axis` statement.
 	hasSetYAxis bool
 	plots       []Plot
 }
@@ -111,7 +102,6 @@ func (db *XyChartDb) plotData(values []float64) ([]float64, int) {
 	if len(values) == 0 {
 		return nil, 0
 	}
-	// The first series fixes the x range when no x-axis statement did.
 	if !db.hasSetXAxis {
 		db.setXAxisRangeData(1, float64(len(values)))
 	}
@@ -132,7 +122,6 @@ func (db *XyChartDb) plotData(values []float64) ([]float64, int) {
 		db.yAxis = Axis{typ: "linear", title: db.yAxis.title, min: min, max: max}
 	}
 	if x.typ == "band" {
-		// pele pads the series with NaN to the count of categories; Plot.at does that on read.
 		return values, len(x.categories)
 	}
 	return values, len(values)
@@ -145,7 +134,6 @@ func (db *XyChartDb) addPlot(typ string, title XyText, data []DataPoint) {
 	}
 	plot := Plot{typ: typ, title: js.Trim(title.text)}
 	plot.data, plot.length = db.plotData(values)
-	// Mermaid accepts labels on the points of a bar series and ignores them.
 	if typ == "line" {
 		for _, d := range data {
 			if js.Trim(d.label) != "" {
@@ -170,7 +158,6 @@ func (db *XyChartDb) setAccTitle(text string) { db.accTitle = js.TrimStart(text)
 
 func (db *XyChartDb) setAccDescription(text string) { db.accDescr = joinLines(text) }
 
-// joinLines is text.replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	if !strings.Contains(text, "\n") {
 		return text

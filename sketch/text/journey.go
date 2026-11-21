@@ -7,11 +7,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// A user journey is drawn from its lists: the tasks run across as boxes, under
-// the bands of their sections, with a chart of the scores below them. When that
-// is wider than the columns, the tasks run down instead, each with its score as
-// a row of dots.
-
 func drawJourney(l *sketch.Layout, opt Options) (*canvas, error) {
 	j := l.Journey
 	if j == nil {
@@ -23,9 +18,6 @@ func drawJourney(l *sketch.Layout, opt Options) (*canvas, error) {
 	return journeyDown(j, opt)
 }
 
-// taskLines are the lines inside a task's box: its label, then the people on
-// it, as many names to a line as fit in w cells. A name wider than w has a line
-// of its own.
 func taskLines(t types.GeoStep, w int) []string {
 	lines := append([]string{}, t.Label...)
 	line := ""
@@ -46,8 +38,6 @@ func taskLines(t types.GeoStep, w int) []string {
 	return lines
 }
 
-// textWidth is the width of the text in a task's box: its label, or 12 cells,
-// whichever is wider, so that a few names fit on a line.
 func textWidth(t types.GeoStep) int {
 	w := max(widest(t.Label), 12)
 	for _, name := range t.People {
@@ -57,8 +47,6 @@ func textWidth(t types.GeoStep) int {
 }
 
 func journeyAcross(j *types.GeoJourney, opt Options) (*canvas, error) {
-	// The scale of the chart takes the first two columns. Each task's score is a
-	// dot in the chart, under the middle of its box.
 	const gutter = 2
 	cols := make([]int, len(j.Tasks))
 	lines := make([][]string, len(j.Tasks))
@@ -75,7 +63,6 @@ func journeyAcross(j *types.GeoJourney, opt Options) (*canvas, error) {
 			continue
 		}
 		band = max(band, len(s.Label)+2)
-		// A band is as wide as its tasks, and its name widens the last of them.
 		span := -1
 		for _, i := range s.Periods {
 			span += cols[i] + 1
@@ -139,23 +126,18 @@ func journeyAcross(j *types.GeoJourney, opt Options) (*canvas, error) {
 			c.text(x[i]+2, cardsY+1+k, line, role)
 		}
 		cx := x[i] + cols[i]/2
-		// The score is drawn at the nearest whole level.
 		y := chartY + 5 - int(t.Level+0.5)
 		c.put(cx, y, '●', roleTitle)
 	}
 	return c, nil
 }
 
-// scoreDots is a score as five dots, as many of them filled as the level.
 func scoreDots(level float64) string {
 	n := int(level + 0.5)
 	return strings.Repeat("●", n) + strings.Repeat("○", 5-n)
 }
 
 func journeyDown(j *types.GeoJourney, opt Options) (*canvas, error) {
-	// pele wraps a label to the width of a box across. Down the page there
-	// is room for a longer line, up to 40 cells, so each label is wrapped
-	// again.
 	room := 40
 	if opt.Cols > 0 {
 		room = min(room, opt.Cols-10)
@@ -177,7 +159,6 @@ func journeyDown(j *types.GeoJourney, opt Options) (*canvas, error) {
 		lines[i] = taskLines(t, w)
 		boxW = max(boxW, w+4)
 	}
-	// The score is right of the box: a space, then five dots.
 	wd := max(boxW+6, widest(j.Title))
 	height := 0
 	if len(j.Title) > 0 {

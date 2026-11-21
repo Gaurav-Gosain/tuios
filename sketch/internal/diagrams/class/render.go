@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/class/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package class
 
 import (
@@ -64,22 +62,19 @@ type View struct {
 	fontSize    float64
 }
 
-// annotation is pele's `string | Label`: the text, and the label when it holds typeset math.
 type annotation struct {
 	text  string
 	label *text.Label
 }
 
 type End struct {
-	// The edge whose route this end is on.
 	edge   int
 	at     int
 	toward float64
 	order  int
 	room   float64
 	side   int
-	// Whether the text of this end goes on the right of, or below, its line.
-	after bool
+	after  bool
 }
 
 func memberLine(member *ClassMember, measurer text.TextMeasurer, size float64, mono bool) Line {
@@ -95,7 +90,6 @@ func memberLine(member *ClassMember, measurer text.TextMeasurer, size float64, m
 	return Line{text: txt, width: measurer.Width(txt, size, style), classifier: member.Classifier}
 }
 
-// stripDefault is cssClasses.replace(/^default\s?/, ”).
 func stripDefault(s string) string {
 	if !strings.HasPrefix(s, "default") {
 		return s
@@ -107,7 +101,6 @@ func stripDefault(s string) string {
 	return s
 }
 
-// keptStyles is a Map from property to declaration that keeps insertion order.
 type keptStyles struct {
 	keys []string
 	vals map[string]string
@@ -135,8 +128,6 @@ func renderClass(db *ClassDb, config types.Config, options types.RenderOptions) 
 	return fitted(false)
 }
 
-// draw: `turned` draws a diagram that runs across as one that runs down. `tight` gives up the room
-// that keeps a namespace's name clear of an edge coming in beside it.
 func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned bool, tight bool) types.Rendered {
 	conf, _ := config["class"].(map[string]any)
 	hierarchical := true
@@ -145,7 +136,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	}
 	graph := buildClassGraph(db, hierarchical)
 	monospaced := options.HasMonospace(types.MonospaceMembers)
-	// Explicit class fonts override monospace.
 	mono := func(style svg.ResolvedStyle) bool { return monospaced && !svg.Declares(style.Text, "font-family") }
 	hideEmpty := false
 	if v, ok := conf["hideEmptyMembersBox"].(bool); ok && v {
@@ -160,7 +150,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		measurer = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)
 	}
 	pad := types.Or(options.Padding, 8)
-	// Keep annotations and cardinalities literal unless math is typeset.
 	mathText := func(raw string, fontSize float64) *text.Label {
 		if !strings.Contains(raw, "$$") {
 			return nil
@@ -189,8 +178,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	icons := options.Icons
 	num := svg.Num
 
-	// A class may carry the declarations of many classDefs many times over. Each distinct declaration
-	// is checked once, and only the last value of each property that has an effect is resolved.
 	effect := map[string]string{}
 	type pair struct{ prop, decl string }
 	fromDefs := map[string][]pair{}
@@ -204,7 +191,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			} else {
 				end := strings.IndexByte(decl, ':')
 				if end == -1 {
-					// slice(0, -1) drops the last character.
 					_, size := utf8.DecodeLastRuneInString(decl)
 					end = len(decl) - size
 				}
@@ -259,7 +245,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		}
 	}
 
-	// Namespaces that an edge may cross into are made wide enough for the title to sit beside it.
 	crossed := make([]uint8, len(graph.Nodes))
 	for _, edge := range graph.Edges {
 		if edge.Source < 0 || edge.Target < 0 {
@@ -297,7 +282,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		}
 		memberSize := js.Round(fontSize * 0.875)
 		lineHeight := js.Round(memberSize * 1.5)
-		// The generic type is escaped so that `<T>` is not read as a tag.
 		generic := ""
 		if cls.Type != "" {
 			g := common.ParseGenericTypes(cls.Type)
@@ -415,8 +399,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	var edgeLabels []text.Label
 	var startRoom []float64
 	var endRoom []float64
-	// Edges leave one side of a class and arrive at the other, so a class with many of them
-	// is widened until they, and the text at their ends, fit side by side.
 	crowd := make([]float64, len(views)*4)
 	meet := func(item, slot int, room float64) {
 		crowd[item*4+slot]++
@@ -486,7 +468,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	if lettered {
 		rankSep = RANK_SEP + 16
 	}
-	// Cardinalities at both ends of a vertical edge need room for their height between the ranks.
 	tallCards := 0.0
 	if rootDir == "TB" || rootDir == "BT" {
 		cardHeight := func(raw string) float64 {
@@ -511,10 +492,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		Apart:   true,
 	})
 
-	// Every edge reaches the middle of a side. Where several share a side they are spread along it,
-	// in the order of where they come from. An end with text runs straight for the length of the text,
-	// which sits beside it on the side the line then bends toward, away from the neighbors that bend
-	// the other way. Neighbors are set apart far enough for the text between them.
 	sides := map[int][]*End{}
 	var sideKeys []int
 	type cardItem struct {
@@ -566,7 +543,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 			ends[i] = attach(i, len(ce.Route)-3, ce.Dst, endRoom[i], i)
 		}
 	}
-	// Whether a point lies on the border of one of the namespaces around a class.
 	onBorder := func(item int, x, y float64) bool {
 		for g, hops := cnodes[item].Parent, 0; g >= 0 && hops < 10000; g, hops = cnodes[g].Parent, hops+1 {
 			c := cnodes[g]
@@ -640,8 +616,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 		for j := 0; j < len(list); j++ {
 			route := cedges[list[j].edge].Route
 			end := list[j].at
-			// An edge that crosses the border of the class's namespace close by runs straight to it:
-			// the point where it crosses moves into line with its end.
 			step := -3
 			if end == 0 {
 				step = 3
@@ -905,7 +879,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	}
 
 	var clusters, struckTitles, nodesOut strings.Builder
-	// A class takes about 500 bytes of markup and a relation about 400.
 	nodesOut.Grow(len(views) * 512)
 	for i, view := range views {
 		c := cnodes[i]
@@ -957,7 +930,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 
 	var geometry *types.Geometry
 	if options.Geometry != nil {
-		// Taken before the routes move by the offset below.
 		geometry = classGeometry(db, graph, views, cnodes, cedges, drawn, edgeLabels, hideEmpty, measurer, size, maxX-minX, maxY-minY)
 	}
 
@@ -1053,7 +1025,6 @@ func draw(db *ClassDb, config types.Config, options types.RenderOptions, turned 
 	return types.Rendered{SVG: out, Width: titled.Width, Height: titled.Height, Links: links, Geometry: geometry}
 }
 
-// classGeometry is the layout in SVG units, for drawing the diagram some other way.
 func classGeometry(db *ClassDb, graph ClassGraph, views []*View, cnodes []*layout.CNode, cedges []*layout.CEdge, drawn []*GraphEdge, edgeLabels []text.Label,
 	hideEmpty bool, measurer text.TextMeasurer, size, width, height float64) *types.Geometry {
 	g := &types.Geometry{Width: width, Height: height, Title: svg.TitleLabel(db.Title, measurer, size, 4000).Plain()}
@@ -1101,7 +1072,6 @@ func classGeometry(db *ClassDb, graph ClassGraph, views []*View, cnodes []*layou
 	return g
 }
 
-// endSide is svg.EndSide, and -1 off the ends of a route, as pele's reads of undefined give.
 func endSide(route []float64, at int, c *layout.CNode) int {
 	if at < 0 || at+1 >= len(route) {
 		return -1

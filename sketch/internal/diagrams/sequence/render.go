@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/sequence/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package sequence
 
 import (
@@ -25,9 +23,8 @@ const (
 )
 
 type LineStyle struct {
-	dotted bool
-	head   int
-	// Where the heads are: at the receiver, at the sender only (the reverse arrows), or at both.
+	dotted  bool
+	head    int
 	atStart bool
 	atEnd   bool
 	bottom  bool
@@ -95,10 +92,8 @@ const (
 )
 
 type Numbering struct {
-	// index is the number each message line carries, whether or not it is shown. NaN for everything else.
-	index []float64
-	shown []bool
-	// visible says whether numbers are on after the last statement.
+	index   []float64
+	shown   []bool
 	visible bool
 }
 
@@ -107,7 +102,6 @@ func isLineMessage(typ int) bool {
 	return ok
 }
 
-// numberMessages counts message lines the way Mermaid's renderer does while it draws.
 func numberMessages(messages []*SeqMessage, always bool) Numbering {
 	index := make([]float64, len(messages))
 	shown := make([]bool, len(messages))
@@ -199,7 +193,6 @@ func half(x, y, dir, up float64, stick bool, color string) string {
 	return `<path class="pele-marker" d="M` + svg.Num(x) + `,` + svg.Num(y) + `L` + bx + `,` + svg.Num(y+float64(up*4.5)) + `V` + svg.Num(y) + `Z" fill="` + color + `" stroke="none"/>`
 }
 
-// head draws the head whose tip is at (x, y) and points along dir. `up` is the side a half head sits on.
 func head(typ int, x, y, dir, up float64, color string) string {
 	switch typ {
 	case Head_Arrow:
@@ -237,7 +230,6 @@ func deref(s *string) string {
 	return *s
 }
 
-// monoMeasurer measures text in the monospace font.
 type monoMeasurer struct{ text.TextMeasurer }
 
 func (m monoMeasurer) Width(t string, s float64, style int) float64 {
@@ -287,7 +279,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		wrapLimit = math.Max(32, (maxW-float64(2*pad))/math.Max(1, float64(db.Actors.Len()))-actorMargin-24)
 	}
 	wrapW := math.Min(option(conf, "width", 160), wrapLimit)
-	// Mermaid's default of 35 corresponds to Pele's default gap. Other values move it by the difference.
 	msgGap := math.Max(4, 14+option(conf, "messageMargin", 35)-35)
 	notePad := math.Min(option(conf, "noteMargin", 10), tightOr(6))
 	boxPad := math.Min(option(conf, "boxMargin", 10), tightOr(6))
@@ -389,7 +380,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	}
 	last := len(cols) - 1
 
-	// Widths between lifelines. Every message and note says how far apart the lifelines it touches must be.
 	var needKeys []int
 	needs := map[int]float64{}
 	need := func(lo, hi int, width float64) {
@@ -506,7 +496,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		}
 		gaps[i] = math.Max(left.size.W/2+right.size.W/2+actorMargin+boxed, needs[i*len(cols)+i+1])
 	}
-	// A message across several lifelines widens each gap it crosses by an equal share of what is missing.
 	var spans [][3]float64
 	for _, key := range needKeys {
 		lo := key / len(cols)
@@ -587,7 +576,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			extend(boxEdges(run))
 		}
 
-		// Horizontal extents of every block, from what it holds.
 		var open []*seqFrame
 		spanAll := func() (float64, float64) {
 			if last < 0 {
@@ -624,7 +612,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 				}
 				if fr.kind != "rect" {
 					fr.tabW = measurer.Width(fr.kind, tiny, text.Bold) + 14
-					// A block grows to the right to give its texts up to FRAME_TEXT of width before they wrap.
 					for k, d := range fr.dividers {
 						raw := messages[d].Message
 						tab := 0.0
@@ -706,7 +693,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	}
 	layout()
 
-	// Widen gaps only if it reduces message wrapping.
 	grown := false
 	uneven := false
 	if tight && options.MaxWidth != nil {
@@ -772,9 +758,7 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			for _, w := range want {
 				missing += w
 			}
-			// Allow for rounding error.
 			needsShare := func(g int) float64 { return float64(want[g]*(spare-0.01)) / missing }
-			// Reducing wrapping requires at least one gap wider than the even split.
 			some := false
 			for g := range gaps {
 				if needsShare(g) > even(g) {
@@ -803,7 +787,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		}
 	}
 
-	// Vertical placement, top to bottom, drawing as it goes.
 	boxTitleH := 0.0
 	for _, run := range runs {
 		boxTitleH = math.Max(boxTitleH, run.title.Height)
@@ -831,7 +814,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	for i, col := range cols {
 		xs[i] = col.x
 	}
-	// crosses is whether a lifeline runs between two x positions, where text would be struck through.
 	crosses := func(x0, x1 float64) bool {
 		lo, hi := 0, len(xs)
 		for lo < hi {
@@ -846,7 +828,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	}
 	var stack []*seqFrame
 	inks := map[string]string{}
-	// inkOf is "" for TS undefined.
 	inkOf := func(fill string) string {
 		if fill == "" {
 			return ""
@@ -865,7 +846,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		}
 		return ""
 	}
-	// Prefer the innermost rect's fill, then a containing box's.
 	fillUnder := func(l, r float64) string {
 		for k := len(stack) - 1; k >= 0; k-- {
 			if stack[k].kind == "rect" {
@@ -918,11 +898,8 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 		return col.x
 	}
 
-	// Shaded blocks and activations close from the inside out. They are written in reverse, so that
-	// the inner ones end up on top.
 	var rectsOut, activationsOut []string
 	var framesOut, edgesOut, labelsOut, notesOut, actorsOut, crossesOut strings.Builder
-	// A message takes about 300 bytes of markup.
 	edgesOut.Grow(len(views) * 304)
 	endActivation := func(col *column, end float64) float64 {
 		start := col.activations[len(col.activations)-1]
@@ -934,7 +911,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			`" width="10" height="`+svg.Num(bottom-start)+`" rx="2"/>`)
 		return bottom
 	}
-	// destroy: the lifeline of a destroyed participant ends in a cross a little below the message that ends it.
 	destroy := func(col *column, lineY float64) float64 {
 		cx := col.x
 		cy := lineY + 16
@@ -1070,7 +1046,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 			b := cols[v.b]
 			label := v.label
 			bw := badgeWidth(i)
-			// The activation a `+` starts belongs to this message, so the arrow stops at its edge.
 			starting := 0
 			for k := i + 1; k < count; k++ {
 				t := messages[k].Type
@@ -1134,7 +1109,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 						x0 += bw / 2
 					}
 				}
-				// The loop leaves to the right and comes back heading left, which turns a half head over.
 				heads := ""
 				if st.atStart {
 					heads += head(st.head, x0, top, -1, up, color)
@@ -1167,7 +1141,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					gMessages = append(gMessages, types.GeoMessage{From: v.a, To: v.b, Y: top, Y2: bottom, X0: x0, X1: x1, Self: true, Dotted: st.dotted,
 						HeadStart: headOf(st.head, st.atStart), HeadEnd: headOf(st.head, st.atEnd), Label: label.Plain(), LabelX: out + 8 + label.Width/2, LabelY: (top + bottom) / 2})
 				}
-				// A label taller than the loop reaches below it, so the next row starts under the label.
 				lineY = math.Max(bottom, (top+bottom)/2+label.Height/2)
 			} else {
 
@@ -1216,7 +1189,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 					x1 = b.x - float64(dir*CENTRAL_R)
 				}
 				if bw > 0 {
-					// The number sits on the lifeline at the tail of the arrow, past a connection circle if there is one.
 					if tailAtEnd {
 						cx := x1
 						if circleTo {
@@ -1377,7 +1349,6 @@ func draw(db *SeqDb, config types.Config, options types.RenderOptions, tight boo
 	}
 
 	width := math.Ceil(maxX - minX + float64(2*pad))
-	// Retry with equal shares or room for activation notes and rounding.
 	if grown && width > *options.MaxWidth {
 		next := hold
 		if !uneven {

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/radar/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package radar
 
 import (
@@ -32,14 +30,12 @@ func option(config types.Config, key string, fallback, min, max float64) float64
 func relativeRadius(value, min, max, radius float64) float64 {
 	clipped := math.Min(math.Max(value, min), max)
 	scaled := radius * (clipped - min)
-	// Keep the original rounding unless multiplication overflows.
 	if !math.IsInf(scaled, 0) && !math.IsNaN(scaled) {
 		return scaled / (max - min)
 	}
 	return radius * ((clipped - min) / (max - min))
 }
 
-// closedRoundCurve is a closed Catmull-Rom spline through the points, as cubic Bézier segments.
 func closedRoundCurve(points []Point, tension float64) string {
 	num := svg.Num
 	n := len(points)
@@ -75,7 +71,6 @@ func renderRadar(model *RadarModel, config types.Config, options types.RenderOpt
 	})
 }
 
-// draw: `tight` is set when the chart does not fit the width it has with its legend beside it.
 func draw(model *RadarModel, config types.Config, options types.RenderOptions, width, height float64, tight bool) types.Rendered {
 	size := types.Or(options.FontSize, 16)
 	small := js.Round(size * 0.875)
@@ -111,7 +106,6 @@ func draw(model *RadarModel, config types.Config, options types.RenderOptions, w
 		}
 	}
 
-	// The chart is drawn around the origin. Margins reserve space; labels and the legend widen it.
 	x0 := -width/2 - option(config, "marginLeft", 16, 0, 2000)
 	x1 := width/2 + option(config, "marginRight", 16, 0, 2000)
 	y0 := -height/2 - option(config, "marginTop", 16, 0, 2000)
@@ -137,7 +131,6 @@ func draw(model *RadarModel, config types.Config, options types.RenderOptions, w
 		svg.WriteStrings(&spokes, "M0,0L", svg.Num(u.x*reach), ",", svg.Num(u.y*reach))
 		label := text.LayoutLabel(axes[i].label, false, measurer, small, 4000, 0)
 		at := float64(radius*labelFactor) + 6
-		// Each label hangs off its axis on the side away from the center.
 		cx := float64(u.x * at)
 		if u.x > 0.01 {
 			cx += label.Width / 2
@@ -163,7 +156,6 @@ func draw(model *RadarModel, config types.Config, options types.RenderOptions, w
 
 	var shapes strings.Builder
 	for index, curve := range curves {
-		// Mermaid leaves out a curve that does not have a value for every axis.
 		if len(curve.entries) != len(axes) {
 			continue
 		}
@@ -272,8 +264,6 @@ func draw(model *RadarModel, config types.Config, options types.RenderOptions, w
 	return rendered
 }
 
-// radarTicks is the count of graticule rings for a text drawing: the ticks
-// option, from 0 to 20.
 func radarTicks(ticks float64) int {
 	if !(ticks >= 1) {
 		return 0

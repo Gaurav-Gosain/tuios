@@ -99,17 +99,14 @@ func yearFromTime(t float64) float64 {
 }
 
 func inLeapYear(y float64) bool {
-	// A whole year in int64 range: the same test without math.Mod, which is slow.
 	if i := int64(y); float64(i) == y && y > -1e18 && y < 1e18 {
 		return i%4 == 0 && (i%100 != 0 || i%400 == 0)
 	}
 	return math.Mod(y, 4) == 0 && (math.Mod(y, 100) != 0 || math.Mod(y, 400) == 0)
 }
 
-// The first day of each month in a common year, and one past the last.
 var monthStart = [13]float64{0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365}
 
-// monthDate gives the month (0 to 11) and the day of the month of a time value.
 func monthDate(t float64) (float64, float64) {
 	y := yearFromTime(t)
 	dayInYear := day(t) - dayFromYear(y)
@@ -142,7 +139,6 @@ func makeTime(h, m, s, ms float64) float64 {
 	return float64(toInteger(h)*msPerHour) + float64(toInteger(m)*msPerMinute) + float64(toInteger(s)*msPerSecond) + toInteger(ms)
 }
 
-// makeDay is MakeDay with V8's bounds on the year and the month.
 func makeDay(year, month, date float64) float64 {
 	if math.IsNaN(year) || math.IsInf(year, 0) || math.IsNaN(month) || math.IsInf(month, 0) || math.IsNaN(date) || math.IsInf(date, 0) {
 		return math.NaN()
@@ -172,7 +168,6 @@ func makeDate(d, t float64) float64 {
 	return float64(d*msPerDay) + t
 }
 
-// offsetAt is the zone's offset from UTC in milliseconds at a time value.
 func offsetAt(t float64, loc *time.Location) float64 {
 	if math.IsNaN(t) || loc == nil {
 		return 0
@@ -185,8 +180,6 @@ func localTime(t float64, loc *time.Location) float64 {
 	return t + offsetAt(t, loc)
 }
 
-// utc is UTC(t) for a local time value. A local time that a change of offset skips or
-// repeats takes the offset in force before the change, as V8 does.
 func utc(t float64, loc *time.Location) float64 {
 	if math.IsNaN(t) || math.IsInf(t, 0) || loc == nil {
 		return t

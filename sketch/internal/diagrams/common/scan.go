@@ -1,7 +1,3 @@
-// Ported from pele src/diagrams/common/scan.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The port reads UTF-8 bytes. A step past a character steps the whole character.
-
 package common
 
 import (
@@ -10,9 +6,6 @@ import (
 
 	"tuios.dev/sketch/internal/util"
 )
-
-// Lexer rules that Mermaid's journey and timeline grammars have in common, ported from the
-// compiled Jison rules: comments, whitespace, and the accTitle and accDescr statements.
 
 // ScanTokens are the tokens of a lexer built on these rules: a type, the text and the
 // byte offset where it starts.
@@ -48,7 +41,6 @@ func KeywordAt(src string, p int, word string) bool {
 	return true
 }
 
-// sizeAt is the length in bytes of the character at q.
 func sizeAt(src string, q int) int {
 	if q >= len(src) || src[q] < utf8.RuneSelf {
 		return 1

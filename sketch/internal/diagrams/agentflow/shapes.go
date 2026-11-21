@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/agentflow/shapes.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package agentflow
 
 import "tuios.dev/sketch/internal/diagrams/flowchart"
@@ -40,12 +38,10 @@ func resolveShapeAlias(shape string) string {
 	return shape
 }
 
-// isValidShape: Mermaid looks a shape name up with `in` on a plain object, so `constructor` passes there too.
 func isValidShape(name string) bool {
 	return flowchart.IsValidShape(name) || name == "constructor"
 }
 
-// normaliseNodeShapes reduces every node's shape to one agentflow draws, reporting the removed and unsupported ones.
 func normaliseNodeShapes(nodes []*GraphNode, db *AgentflowDb) {
 	for _, node := range nodes {
 		if node.IsGroup {

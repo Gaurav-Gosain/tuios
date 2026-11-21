@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/journey/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package journey
 
 import (
@@ -11,8 +9,6 @@ import (
 
 const STATEMENT = "'EOF', 'SPACE', 'NEWLINE', 'title', 'acc_title', 'acc_descr', 'acc_descr_multiline_value', 'section', 'taskName'"
 
-// substring is text.substring(k) for a text that starts with ASCII and one whitespace
-// character: k counts UTF-16 units, and the character the cut falls after is in the BMP.
 func substring(text string, k int) string {
 	i := 0
 	for ; k > 0 && i < len(text); k-- {

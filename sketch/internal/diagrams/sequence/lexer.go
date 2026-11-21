@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/sequence/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// As in the flowchart lexer, the port reads UTF-8 bytes: code() decodes the
-// character at a byte offset, and a step past a character that may not be
-// ASCII steps the whole character.
-
 package sequence
 
 import (
@@ -149,7 +143,6 @@ func tokenize(src string) Tokens {
 		}
 		return true
 	}
-	// ci matches a lowercase literal without regard to the case of the source.
 	ci := func(q int, word string) bool {
 		for k := 0; k < len(word); k++ {
 			w := rune(word[k])
@@ -206,7 +199,6 @@ func tokenize(src string) Tokens {
 		}
 		return true
 	}
-	// menu: the actor menu keywords count only when spaces and the start of a name follow.
 	menu := func(lit string, typ int) bool {
 		if !ci(p, lit) {
 			return false
@@ -526,7 +518,6 @@ func tokenize(src string) Tokens {
 		}
 	}
 
-	// id: a participant name, up to an alias, a config object, or the end of the statement.
 	id := func() bool {
 		if skipSameLine() {
 			return true
@@ -562,7 +553,6 @@ func tokenize(src string) Tokens {
 		}
 		if b > p {
 			end := code(b)
-			// Before any other delimiter the name must be followed by a comment, so it ends at the last one.
 			cut := b
 			if b < n && end != 10 && end != 59 {
 				cut--
@@ -674,7 +664,6 @@ func tokenize(src string) Tokens {
 		}
 	}
 
-	// Mermaid's lexer tries its rules once more on the empty remainder before reporting the end.
 	switch state {
 	case S_INITIAL, S_ALIAS:
 		emit(T_NEWLINE, n, n)
@@ -693,7 +682,6 @@ func tokenize(src string) Tokens {
 	return Tokens{types, texts, starts}
 }
 
-// indexFrom is s.indexOf(sub, from).
 func indexFrom(s, sub string, from int) int {
 	if from > len(s) {
 		return -1

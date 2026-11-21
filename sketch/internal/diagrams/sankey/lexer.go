@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/sankey/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The port reads UTF-8 bytes. Every character the lexer takes is ASCII, so a byte offset
-// stands for pele's unit offset, except in the keyword test: see keywordLength.
-
 package sankey
 
 import (
@@ -49,7 +44,6 @@ const (
 	S_escaped_text
 )
 
-// isTextData is RFC 4180 TEXTDATA extended to Unicode, excluding controls and invalid XML characters.
 func isTextData(c int) bool {
 	return (c >= 32 && c <= 126 && c != 34 && c != 44) ||
 		(c >= 0xa0 && c <= 0xd7ff) ||
@@ -57,8 +51,6 @@ func isTextData(c int) bool {
 		(c >= 0x10000 && c <= 0x10ffff)
 }
 
-// runeAt is src.codePointAt(q) and its length in bytes. The source is valid UTF-8, so a
-// surrogate, which codePointAt can give, never appears.
 func runeAt(src string, q int) (int, int) {
 	if c := src[q]; c < utf8.RuneSelf {
 		return int(c), 1
@@ -74,10 +66,6 @@ func byteAt(src string, q int) int {
 	return int(src[q])
 }
 
-// keywordLength is the length in bytes of `word` at p, if src.slice(p, p + word.length).toLowerCase()
-// is word and no word character follows, or 0. word is lowercase ASCII. The only character
-// outside ASCII that toLowerCase turns into an ASCII letter is the Kelvin sign, U+212A, which
-// becomes k.
 func keywordLength(src string, p int, word string) int {
 	q := p
 	for i := 0; i < len(word); i++ {
@@ -185,7 +173,6 @@ func tokenize(src string) Tokens {
 			}
 			emit(T_NON_ESCAPED_TEXT, p, q)
 		}
-		// A character outside the CSV alphabet matches as empty text and is never consumed.
 		if q == start {
 			emit(T_STUCK, p, p)
 			return out

@@ -14,26 +14,11 @@ import (
 	"tuios.dev/sketch"
 )
 
-// Text floors, as WCAG contrast ratios. Every label in every golden, drawn in
-// every named theme, is measured against the pixels behind it. Labels in the
-// theme's text colour need FloorText, labels in any other theme colour
-// (muted text, text on a series colour) FloorOther. Labels whose own colour
-// the diagram sets are the author's choice and are skipped.
-//
-// The goldens that set no colours at all are measured as pele draws them, on
-// the theme's grounds (background, surfaces and their blends), so a theme
-// text colour that does not read fails. pele also writes its background
-// colour on series fills, which pele's own default series fail. Every golden is then measured
-// again with Options.Readable, which must lift theme text off any fill the
-// diagram sets, and once more with Readable and no Background, as the picture
-// is shown on a terminal of the theme's background colour.
 const (
 	FloorText  = 4.5
 	FloorOther = 3.0
 )
 
-// onGround reports whether c is one of the theme's grounds, or a blend of
-// the background with one, as a translucent cluster gives.
 func onGround(c color.NRGBA, grounds []color.NRGBA) bool {
 	d := func(a, b color.NRGBA, t float64) float64 {
 		x := func(p, q, v uint8) float64 { return float64(p) + (float64(q)-float64(p))*t - float64(v) }
@@ -49,7 +34,6 @@ func onGround(c color.NRGBA, grounds []color.NRGBA) bool {
 	return false
 }
 
-// reAuthored finds a colour a diagram sets itself.
 var reAuthored = regexp.MustCompile(`(?i)(fill|stroke|color)\s*[:=]\s*"?\s*(#|rgb|hsl)`)
 
 type finding struct {
@@ -127,9 +111,6 @@ func hexOf(c color.NRGBA) string {
 	return string([]byte{'#', d[c.R>>4], d[c.R&15], d[c.G>>4], d[c.G&15], d[c.B>>4], d[c.B&15]})
 }
 
-// checkContrast draws svg in a theme and calls see for each run of text with
-// its colour and the colour behind it. With clear the image has no background
-// and is measured as shown on the theme's background colour.
 func checkContrast(t *testing.T, svg string, th *sketch.Theme, readable, clear bool, see func(c, bg color.NRGBA, authored bool)) {
 	t.Helper()
 	if err := loadFaces(); err != nil {

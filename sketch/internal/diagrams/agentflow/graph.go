@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/agentflow/graph.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package agentflow
 
 import (
@@ -56,7 +54,6 @@ type AgentGraph struct {
 	Edges []*GraphEdge
 }
 
-// orderedSet is a JavaScript Set of strings: it iterates in the order things were added. Not in pele.
 type orderedSet struct {
 	order []string
 	has   map[string]bool
@@ -71,9 +68,6 @@ func (s *orderedSet) add(k string) {
 
 func viewOf(m Metadata) any { return m["view"] }
 
-// buildAgentGraph resolves a parsed agentflow into the nodes and edges that are drawn: flow membership, collapsed
-// flows, shapes reduced to the ones agentflow has, class styles and palette slots. Shape and
-// containment problems are reported on the model as diagnostics.
 func buildAgentGraph(db *AgentflowDb, paletteLength int, defaultCurve string) *AgentGraph {
 	nodes := make([]*GraphNode, 0, len(db.Subgraphs)+len(db.Nodes.keys))
 	edges := make([]*GraphEdge, 0, len(db.Edges))
@@ -95,10 +89,6 @@ func buildAgentGraph(db *AgentflowDb, paletteLength int, defaultCurve string) *A
 		return out
 	}
 
-	// Everything inside a collapsed flow is hidden, and stands for its outermost collapsed flow.
-	// Mermaid walks the whole inside of each collapsed flow, in the order the flows closed, and the
-	// last walk to reach a thing wins. A thing has one container, so a later walk can only enter an
-	// earlier one through its root: it stops there, and the root's owner is followed afterwards.
 	hidden := orderedSet{has: map[string]bool{}}
 	owner := map[string]string{}
 	walked := map[string]bool{}
@@ -158,10 +148,8 @@ func buildAgentGraph(db *AgentflowDb, paletteLength int, defaultCurve string) *A
 		position[sg.ID] = i
 	}
 
-	// Two flows can each name the other. The nesting that would close the loop is dropped.
 	parentOf := map[string]string{}
 	closesLoop := func(childID, parentID string, at int) bool {
-		// Only a flow handled earlier in this pass can already be above the parent.
 		childAt, ok := position[childID]
 		if !ok || childAt < at {
 			return false
@@ -245,7 +233,6 @@ func buildAgentGraph(db *AgentflowDb, paletteLength int, defaultCurve string) *A
 		if into, ok := collapsedInto[end]; ok {
 			end = into
 		}
-		// An edge between two things inside one collapsed flow has nothing left to connect.
 		if start == end && raw.Start != raw.End {
 			continue
 		}
@@ -286,8 +273,6 @@ func buildAgentGraph(db *AgentflowDb, paletteLength int, defaultCurve string) *A
 
 	normaliseNodeShapes(nodes, db)
 
-	// Containers are numbered in the order they were written: a walk of the nesting, parents first.
-	// `subgraphs` itself is in the order the blocks closed, with a nested flow before its parent.
 	children := map[string][]string{}
 	for _, sg := range subgraphs {
 		parent, ok := parentOf[sg.ID]

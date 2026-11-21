@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/xychart/ticks.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package xychart
 
 import (
@@ -8,7 +6,6 @@ import (
 	"tuios.dev/sketch/internal/js"
 )
 
-// pow10 is 10 ** y for a y that Math.floor gave: whole, or infinite, or NaN.
 func pow10(y float64) float64 {
 	switch {
 	case math.IsNaN(y):
@@ -21,9 +18,6 @@ func pow10(y float64) float64 {
 	return js.Pow10(int(y))
 }
 
-// tickStep is a step of 1, 2 or 5 times a power of ten that divides `span` into about `count` parts.
-// A step below one comes back as the negative of its inverse, which is a whole number, so that
-// tick values are found by division and print without rounding noise (0.3, not 0.30000000000000004).
 func tickStep(span, count float64) float64 {
 	raw := span / math.Max(count, 1)
 	power := math.Floor(js.Log10(raw))
@@ -56,7 +50,6 @@ func tickValue(step, index float64) float64 {
 	return index / -step
 }
 
-// ticksBetween gives the multiples of a step from `lo` to `hi`, both included.
 func ticksBetween(lo, hi, step float64) []float64 {
 	first := js.Round(tickIndex(step, lo))
 	if tickValue(step, first) < lo {

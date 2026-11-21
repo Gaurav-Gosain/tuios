@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/common/outline.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The port reads UTF-8 bytes: offsets are byte offsets, and a character that may not be
-// ASCII is decoded where a pattern tells it apart. The tokenizer's closures are methods of
-// a struct, and the sticky regular expressions are hand matchers.
-
 package common
 
 import (
@@ -14,9 +8,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 	"tuios.dev/sketch/internal/util"
 )
-
-// The indented outline grammar that Mermaid's mindmap and kanban diagrams share.
-// Kanban adds `@{ ... }` metadata after a node and keeps `@` out of node ids.
 
 const (
 	T_END = iota
@@ -126,7 +117,6 @@ const (
 	S_DATA_STR
 )
 
-// The character at a byte offset, as charCodeAt reads it: -1 past the end.
 func codeAt(src string, q int) rune {
 	if q < 0 || q >= len(src) {
 		return -1
@@ -138,8 +128,6 @@ func codeAt(src string, q int) rune {
 	return r
 }
 
-// Jison's case-insensitive flag folds ASCII letters only.
-//
 //go:noinline
 func letters(src string, p int, word string) bool {
 	for k := 0; k < len(word); k++ {
@@ -184,7 +172,6 @@ func (l *outlineLexer) upTo(ch byte) int {
 	return l.p + e
 }
 
-// /\s+/y
 func reSpace(src string, from int) int {
 	q := from
 	for q < len(src) {
@@ -200,7 +187,6 @@ func reSpace(src string, from int) int {
 	return q
 }
 
-// /.+/y
 func reLine(src string, from int) int {
 	q := from
 	for {
@@ -221,8 +207,6 @@ func reLine(src string, from int) int {
 	return q
 }
 
-// A sticky match of a run of bytes outside `stop`, which holds ASCII characters only.
-//
 //go:noinline
 func reNot(src string, from int, stop string) int {
 	q := from
@@ -243,7 +227,6 @@ const (
 	RE_DATA      = "}^\""
 )
 
-// .replace(/\n\s*/g, '<br/>')
 func replaceBreaks(text string) string {
 	if strings.IndexByte(text, '\n') < 0 {
 		return text
@@ -277,7 +260,6 @@ func TokenizeOutline(src string, kanban bool) OutlineTokens {
 	for l.p < n {
 		p := l.p
 		c := codeAt(src, p)
-		// d is compared only when c is ASCII, where the next byte starts the next character.
 		d := codeAt(src, p+1)
 		var e int
 		switch l.state {
@@ -339,7 +321,6 @@ func TokenizeOutline(src string, kanban bool) OutlineTokens {
 			} else if (c == 125 && d == 125) || (c == 45 && d == 41) {
 				l.emit(T_NODE_DEND, p+2, S_INITIAL)
 			} else if c == 125 {
-				// A lone closing brace takes the rest of its line as text.
 				l.emit(T_NODE_DESCR, reLine(src, p), S_NODE)
 			} else {
 				l.emit(T_NODE_DESCR, reNot(src, p, RE_DESCR), S_NODE)
@@ -429,7 +410,6 @@ type outlineParser struct {
 	i       int
 }
 
-// The type of token i. Past the end, which the parser never reads, it is the end of input.
 func (o *outlineParser) typ(i int) int {
 	if i >= len(o.tokens.Types) {
 		return T_END
@@ -529,7 +509,6 @@ func ParseOutline(src string, db OutlineDb, kanban bool) {
 				nodeId = *id
 			}
 			if o.typ(o.i) == T_SHAPE_DATA {
-				// One Builder, not a += per token: Go copies the string on each +=, where JavaScript ropes do not.
 				var shape strings.Builder
 				shape.WriteString(o.text(o.i))
 				o.i++

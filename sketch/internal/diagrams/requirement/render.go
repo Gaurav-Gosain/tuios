@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/requirement/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package requirement
 
 import (
@@ -54,8 +52,6 @@ type NodeView struct {
 	h          float64
 }
 
-// restyle adds bold or italic to a whole label after its markdown is read, since emphasis markers only
-// toggle styles the label does not start with.
 func restyle(label text.Label, bits int, measurer text.TextMeasurer) text.Label {
 	if bits == 0 || len(label.Lines) == 0 {
 		return label
@@ -90,7 +86,6 @@ func restyle(label text.Label, bits int, measurer text.TextMeasurer) text.Label 
 	return out
 }
 
-// startText writes a measured label with its lines starting at x, the first line's box starting at top.
 func startText(b *strings.Builder, label text.Label, x, top float64, attrs string) {
 	shared := svg.SharedStyle(label)
 	var body, mathOut strings.Builder
@@ -124,7 +119,6 @@ func startText(b *strings.Builder, label text.Label, x, top float64, attrs strin
 	b.WriteString(mathOut.String())
 }
 
-// containsMarker is the containment mark: a circled plus whose rim touches (x, y), where (dx, dy) points at the node.
 func containsMarker(b *strings.Builder, x, y, dx, dy float64) {
 	r := float64(CONTAINS_RADIUS)
 	cx := x - float64(dx*r)
@@ -152,7 +146,6 @@ func containsMarker(b *strings.Builder, x, y, dx, dy float64) {
 	b.WriteString(`"/>`)
 }
 
-// arrowMarker is an open arrowhead with its tip at (x, y), pointing along (dx, dy).
 func arrowMarker(b *strings.Builder, x, y, dx, dy float64) {
 	bx := x - float64(dx*ARROW_LENGTH)
 	by := y - float64(dy*ARROW_LENGTH)
@@ -177,8 +170,6 @@ type end struct {
 	toward float64
 }
 
-// spreadEnds: the layout attaches every edge to the middle of a node's side. Ends that share a side are
-// spread along it, in the order of where they head, so their markers do not sit on each other.
 func spreadEnds(cnodes []*layout.CNode, cedges []*layout.CEdge, views []NodeView) {
 	sides := map[int][]end{}
 	var keys []int
@@ -253,7 +244,6 @@ func renderRequirement(model *RequirementDb, config types.Config, options types.
 	return common.TurnToFit(options, func(down bool) types.Rendered { return draw(model, config, options, down) })
 }
 
-// withoutDefault is classes.replace(/^default\s?/, ”).
 func withoutDefault(classes string) string {
 	if !strings.HasPrefix(classes, "default") {
 		return classes
@@ -268,7 +258,6 @@ func withoutDefault(classes string) string {
 	return rest
 }
 
-// draw: `turned` draws a diagram that runs across as one that runs down.
 func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, turned bool) types.Rendered {
 	graph := buildRequirementGraph(model)
 	size := types.Or(options.FontSize, 16)
@@ -344,7 +333,6 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 		if len(rows) > 0 {
 			w = math.Max(w, keyWidth+COLUMN_GAP+valueWidth+2*PAD_X)
 		}
-		// A requirement and an element may share a name; relationships then go to the requirement.
 		if _, ok := index[node.id]; !ok {
 			index[node.id] = len(views)
 		}
@@ -374,7 +362,6 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 		}
 		label := text.LayoutLabel("«"+edge.typ+"»", false, measurer, small, 4000, 0)
 		if src == dst {
-			// A self-loop sits beside the node, across the flow, and the node's box grows to hold it.
 			if sideways {
 				cnodes[src].H += float64(2 * (LOOP + label.Height + 8))
 			} else {
@@ -486,7 +473,6 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 			}
 			spread := math.Min(half-4, 12+float64(float64(k)*6))
 			reach := LOOP + float64(float64(k)*8)
-			// Local frame: `out` points away from the node, `along` runs along its side.
 			at := func(b *strings.Builder, out, along float64) {
 				if sideways {
 					svg.WriteNum(b, cx+along)
@@ -498,7 +484,6 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 					svg.WriteNum(b, cy+along)
 				}
 			}
-			// A cubic whose control points are this far out peaks at `reach`.
 			pull := reach / 0.75
 			var d strings.Builder
 			d.WriteByte('M')
@@ -567,9 +552,6 @@ func draw(model *RequirementDb, _ types.Config, options types.RenderOptions, tur
 	return types.Rendered{SVG: out, Width: width, Height: height, Links: []types.LinkInfo{}, Geometry: geo}
 }
 
-// geometry gives the requirements and elements as flowchart nodes, each with its stereotype, name
-// and fields as lines, so that sketch/text draws the diagram as it draws a flowchart. The edges
-// are added as they are drawn. Not in pele.
 func geometry(views []NodeView, cnodes []*layout.CNode, ox, oy, width, height float64) *types.Geometry {
 	g := &types.Geometry{Width: width, Height: height}
 	for i := range views {

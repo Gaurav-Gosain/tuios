@@ -1,10 +1,5 @@
 package sketch
 
-// Ported from pele tests/render/{sequence,state,class,er,gantt,mindmap,xychart,timeline,quadrant,journey,kanban,git,sankey,block,architecture,requirement,c4,packet,radar,treemap,info,treeview,ishikawa,cynefin,eventmodeling,venn,wardley,railroad,usecase,agentflow}-security.test.ts,
-// the inert parts of tests/render/pie.test.ts and tests/render/swimlane.test.ts, and tests/support/corpus.ts at
-// 3a2f075ee0c3d914f0fad3545fc0f193693975ac. The template lists are in
-// security_templates_test.go, written by scripts/security-templates.py.
-
 import (
 	"bytes"
 	"encoding/json"
@@ -20,7 +15,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// jsonText is JSON.stringify of a string: no HTML escaping, as in JavaScript.
 func jsonText(s string) string {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -37,9 +31,6 @@ const (
 
 var reNaN = regexp.MustCompile(`NaN|Infinity`)
 
-// inertTry renders src and fails the test on output that is not inert. It
-// reports whether the source rendered: a source that does not parse is fine
-// when it fails with an Error, not a panic in the port.
 func inertTry(t *testing.T, src string, opt RenderOptions, noNaN bool) bool {
 	t.Helper()
 	out, err := Render(src, opt)
@@ -66,7 +57,6 @@ func trimSrc(s string) string {
 	return s
 }
 
-// corpusOf is the documentation corpus of one diagram type.
 func corpusOf(t *testing.T, name string) []string {
 	var out []string
 	for _, c := range loadGoldens(t) {
@@ -80,7 +70,6 @@ func corpusOf(t *testing.T, name string) []string {
 	return out
 }
 
-// lcg is random() of pele's tests/support/corpus.ts.
 func lcg(seed uint32) func() float64 {
 	state := seed
 	return func() float64 {
@@ -89,8 +78,6 @@ func lcg(seed uint32) func() float64 {
 	}
 }
 
-// mutator is mutator() of pele's tests/support/corpus.ts, on UTF-16 units as in
-// JavaScript; a cut through a surrogate pair gives U+FFFD, which is harmless here.
 func mutator(corpus []string, fragments []string, rnd func() float64) func() string {
 	units := func(s string) []uint16 { return utf16Of(s) }
 	pickS := func(list []string) string { return list[int(math.Floor(rnd()*float64(len(list))))] }
@@ -160,7 +147,6 @@ func stringOf(u []uint16) string {
 	return b.String()
 }
 
-// mutate checks count mutated sources of the corpus, each at most 4,000 units.
 func mutate(t *testing.T, corpus, fragments []string, seed uint32, count int, opt RenderOptions, noNaN bool) int {
 	t.Helper()
 	if testing.Short() {
@@ -177,8 +163,6 @@ func mutate(t *testing.T, corpus, fragments []string, seed uint32, count int, op
 	return rendered
 }
 
-// hostile renders every template with every payload and wants more than min
-// of them to render.
 func hostile(t *testing.T, templates []func(string) string, minimum int, opt RenderOptions, noNaN bool, variants ...func(string) string) {
 	t.Helper()
 	rendered := 0
@@ -199,7 +183,6 @@ func hostile(t *testing.T, templates []func(string) string, minimum int, opt Ren
 	}
 }
 
-// noLinks renders src and wants neither an <a> element nor a link.
 func noLinks(t *testing.T, src string, opt RenderOptions) {
 	t.Helper()
 	out, err := Render(src, opt)
@@ -261,7 +244,6 @@ func TestStateOutputIsInert(t *testing.T) {
 	hostileOptions(t, "stateDiagram-v2\n  accTitle: t\n  a --> b")
 	mutate(t, corpusOf(t, "state"), []string{"\"", ":", ":::", "\n", "{", "}", "--", "-->", "[*]", "state \"", "\" as ",
 		"note right of ", "end note", "click a \"", "style a fill:", "classDef c ", "class a ", "<<fork>>", "<<choice>>", "direction LR"}, 3, 4000, RenderOptions{}, false)
-	// The last two spell characters as Mermaid entity codes, which are resolved before the check.
 	for _, url := range []string{"javascript:alert(1)", " JaVaScRiPt:alert(1)", "data:text/html,x", "vbscript:x", "jav#9;ascript:alert(1)", "#106;avascript#colon;alert(1)"} {
 		noLinks(t, "stateDiagram-v2\n  a --> b\n  click a \""+url+"\" \"t\"\n", RenderOptions{})
 	}
@@ -338,7 +320,6 @@ func TestGanttOutputIsInert(t *testing.T) {
 			t.Fatal("hostile id prefix and font: did not render")
 		}
 	}
-	// Hostile times: the edges of the JavaScript Date range and far past them.
 	for _, now := range []time.Time{
 		time.UnixMilli(8.64e15), time.UnixMilli(-8.64e15), time.UnixMilli(8.64e15 + 1), time.UnixMilli(-8.64e15 - 1),
 		time.Unix(0, 0), time.Unix(math.MaxInt64/4, 0), time.Unix(math.MinInt64/4, 0),
@@ -358,7 +339,6 @@ func TestGanttOutputIsInert(t *testing.T) {
 }
 
 func TestMindmapOutputIsInert(t *testing.T) {
-	// A host with an icon for every name, so that each name a diagram gives reaches the output.
 	opt := RenderOptions{Icons: func(string) string { return `<path d="M0,0"/>` }}
 	rendered := 0
 	for _, src := range corpusOf(t, "mindmap") {
@@ -478,7 +458,6 @@ func TestXyChartOutputIsInert(t *testing.T) {
 	}
 	mutate(t, corpusOf(t, "xychart"), []string{"\"", "[", "]", ",", "\n", " --> ", "line ", "bar ", "x-axis ", "y-axis ", "title ",
 		"-", ".", "9999999999"}, 3, 4000, RenderOptions{}, false)
-	// pele checks that these leave Object.prototype alone. Go has no prototypes; they must render.
 	for _, src := range []string{
 		"xychart\n  x-axis \"__proto__\" [\"__proto__\", \"constructor\", \"toString\"]\n  bar \"__proto__\" [1, 2, 3]\n  line \"constructor\" [3 \"__proto__\", 2, 1]",
 		"---\nconfig:\n  xyChart:\n    __proto__:\n      polluted: true\n    constructor: 1\n---\nxychart\n  line [1, 2]",
@@ -518,7 +497,6 @@ func TestTimelineOutputIsInert(t *testing.T) {
 		" TD", "#", "%%"}, 3, 4000, RenderOptions{}, true); n <= count/10 {
 		t.Fatalf("%d of %d mutated timelines rendered", n, count)
 	}
-	// pele checks that these leave Object.prototype alone. Go has no prototypes; they must render.
 	for _, src := range []string{
 		"timeline\n  section __proto__\n  __proto__ : constructor : toString\n  constructor : __proto__\n  section constructor\n  hasOwnProperty",
 		"---\nconfig:\n  timeline:\n    __proto__:\n      polluted: true\n---\ntimeline\n  2001 : a",
@@ -565,8 +543,6 @@ func TestQuadrantOutputIsInert(t *testing.T) {
 	}
 	mutate(t, corpusOf(t, "quadrant"), []string{"\"", "`", ":", ":::", ": [", "]", "\n", ", ", "classDef ", "color: #", "radius: ",
 		"-->"}, 3, 4000, RenderOptions{}, false)
-	// pele checks that class names like __proto__ leave Object.prototype alone and find no
-	// class that was not defined.
 	out, err := Render("quadrantChart\n  __proto__:::__proto__: [0.5, 0.5]\n  constructor:::constructor: [0.1, 0.1]\n  toString:::toString: [0.2, 0.2]\n"+
 		"  classDef constructor radius: 3\n  classDef hasOwnProperty color: #f00", RenderOptions{})
 	if err != nil || strings.Count(out.Data, "<circle") != 3 || strings.Count(out.Data, ` r="3"`) != 1 {
@@ -583,7 +559,6 @@ func TestJourneyOutputIsInert(t *testing.T) {
 			t.Fatalf("%q did not render", trimSrc(src))
 		}
 	}
-	// A semicolon is a syntax error in a journey, so hostile text is also tried with its semicolons removed.
 	noSemicolons := func(p string) string { return strings.ReplaceAll(p, ";", "") }
 	hostile(t, journeyTemplates, 500, RenderOptions{}, true, noSemicolons)
 	out, err := Render("journey\n  title <script>alert(1)</script>\n  section \"><img src=x onerror=alert(1)>\n  <svg onload=alert(1)>: 5: </text><script>x</script>, \"onload=\"alert(1)", RenderOptions{})
@@ -612,7 +587,6 @@ func TestJourneyOutputIsInert(t *testing.T) {
 	if n := mutate(t, corpus, fragments, 3, 4000, RenderOptions{}, true); n <= count/20 {
 		t.Fatalf("%d of %d mutated journeys rendered", n, count)
 	}
-	// pele checks that these leave Object.prototype alone. Go has no prototypes; they must render.
 	out, err = Render("journey\n  section __proto__\n  constructor: 5: __proto__, constructor, toString, hasOwnProperty\n  __proto__: 1: valueOf\n", RenderOptions{})
 	if err != nil || strings.Count(out.Data, `class="pele-legend-item"`) != 5 || !strings.Contains(out.Data, `data-id="__proto__"`) {
 		t.Fatalf("names like __proto__: %v\n%s", err, out.Data)
@@ -623,7 +597,6 @@ func TestJourneyOutputIsInert(t *testing.T) {
 }
 
 func TestKanbanOutputIsInert(t *testing.T) {
-	// A host with an icon for every name, so that each name a diagram gives reaches the output.
 	opt := RenderOptions{Icons: func(string) string { return `<path d="M0,0"/>` }}
 	for _, src := range corpusOf(t, "kanban") {
 		if !inertTry(t, src, opt, false) {
@@ -669,7 +642,6 @@ func TestKanbanOutputIsInert(t *testing.T) {
 	}
 	mutate(t, corpusOf(t, "kanban"), []string{"\"", "[", "]", "(", ")", "\n", "\n    ", ":::", "::icon(", "@{ ", " }", "@{ ticket: \"",
 		"@{ label: \"", "assigned: ", "priority: High", ", "}, 3, 4000, opt, false)
-	// pele checks that these leave Object.prototype alone. Go has no prototypes; they must render.
 	for _, src := range []string{
 		"kanban\n  __proto__\n    constructor@{ __proto__: [polluted], constructor: 1, label: x }\n    :::__proto__\n    toString[hasOwnProperty]",
 		"kanban\n  todo\n    a@{\n      __proto__:\n        polluted: 1\n    }",
@@ -680,14 +652,11 @@ func TestKanbanOutputIsInert(t *testing.T) {
 	}
 }
 
-// gitStrip is p.replace(/["\\\n]/g, ”), for a commit id in double quotes.
 func gitStrip(p string) string {
 	return strings.NewReplacer(`"`, "", `\`, "", "\n", "").Replace(p)
 }
 
 func TestGitOutputIsInert(t *testing.T) {
-	// A string in double quotes cannot hold a double quote or a line break, so the payload is tried
-	// as written, in single quotes, and with its quotes escaped.
 	quoted := func(p string) []string {
 		return []string{`"` + p + `"`, `'` + p + `'`, `"` + strings.NewReplacer(`"`, `\"`, `\`, `\\`).Replace(p) + `"`}
 	}
@@ -769,7 +738,6 @@ func TestSankeyOutputIsInert(t *testing.T) {
 	if n := mutate(t, corpus, []string{"\"", "\"\"", ",", "\n", "a,b,1", "1e308", "-1", "NaN", "sankey\n", "linkColor: ", "prefix: "}, 3, 3000, RenderOptions{}, false); n <= count/8 {
 		t.Fatalf("%d of %d mutated sankey diagrams rendered", n, count)
 	}
-	// pele checks that these leave Object.prototype alone. Go has no prototypes; it must render.
 	if !inertTry(t, "---\nconfig:\n  sankey:\n    nodeColors:\n      __proto__: red\n      constructor: blue\n---\nsankey\n__proto__,constructor,1\nconstructor,toString,2\nhasOwnProperty,__proto__,3\n", RenderOptions{}, false) {
 		t.Fatal("names like __proto__ did not render")
 	}
@@ -798,7 +766,6 @@ func TestBlockOutputIsInert(t *testing.T) {
 	if rendered <= 700 {
 		t.Fatalf("%d hostile sources rendered, want more than 700", rendered)
 	}
-	// These positions take only digits or direction words, or hold text the grammar always rejects.
 	want := []string{
 		"block\n  a<[\"x\"]>(#)",
 		"block\n  a[\"`#`\"]",
@@ -824,7 +791,6 @@ func TestBlockOutputIsInert(t *testing.T) {
 		"classDef a ", "class a ", "block:", "end", "space:9", "columns 2"}, 3, 4000, RenderOptions{}, true); n <= count/20 {
 		t.Fatalf("%d of %d mutated block diagrams rendered", n, count)
 	}
-	// Coordinates stay finite when blocks have no size.
 	zero := "---\nconfig:\n  block:\n    padding: 0\n---\n"
 	for _, body := range []string{
 		"block\n  columns 1\n  block:g\n    classDef x fill:red\n  end\n  a\n  g --> a\n  a --> g\n  g --> g",
@@ -840,7 +806,6 @@ func TestBlockOutputIsInert(t *testing.T) {
 	if err != nil || strings.Contains(out.Data, "<script") || strings.Contains(out.Data, "url(") || !strings.Contains(out.Data, "stroke:red") {
 		t.Fatalf("block markup is not escaped: %v\n%s", err, out.Data)
 	}
-	// pele checks that these leave Object.prototype alone. Go has no prototypes; they must render.
 	for _, src := range []string{
 		"block\n  __proto__ constructor toString\n  classDef __proto__ fill:red\n  class constructor,__proto__ __proto__\n  style __proto__ fill:blue\n  __proto__ --> constructor",
 		"block\n  class __proto__ polluted\n  style constructor fill:red\n  a",
@@ -876,7 +841,6 @@ func TestArchitectureOutputIsInert(t *testing.T) {
 	}
 	mutate(t, corpus, []string{"\"", "[", "]", "(", ")", "\n", " in ", "{group}", ":R --> L:", "service ", "group ", "junction ", "title ", "-[", "]-"},
 		3, 4000, RenderOptions{}, false)
-	// Ids that name object internals are plain ids.
 	out, err := Render(archHead+"group __proto__(cloud)[P]\ngroup constructor[C] in __proto__\nservice toString(server)[A] in __proto__\n"+
 		"service hasOwnProperty[B] in constructor\njunction valueOf\ntoString:R -- L:hasOwnProperty\nhasOwnProperty:B -- T:valueOf\n"+
 		"align row toString hasOwnProperty", RenderOptions{})
@@ -916,7 +880,6 @@ func TestRequirementOutputIsInert(t *testing.T) {
 		3, 4000, RenderOptions{}, false); n <= count/20 {
 		t.Fatalf("%d of %d mutated requirement diagrams rendered", n, count)
 	}
-	// pele checks that this leaves Object.prototype alone. Go has no prototypes; it must render.
 	if !inertTry(t, "requirementDiagram\nrequirement __proto__ {\nid: constructor\n}\nelement constructor {\ntype: toString\n}\n"+
 		"__proto__ - contains -> constructor\nclassDef __proto__ fill:red\nclass __proto__,constructor __proto__,toString\n"+
 		"__proto__:::constructor\nstyle __proto__ fill:red\n", RenderOptions{}, false) {
@@ -1269,7 +1232,6 @@ func TestSwimlaneOutputIsInert(t *testing.T) {
 	hostileOptions(t, "swimlane-beta LR\n  accTitle: t\n  subgraph L[\"Lane\"]\n    a --> b\n  end\n  subgraph M\n    c\n  end\n  b -- x --> c")
 	mutate(t, corpus, []string{"\"", "[", "]", "\n", "subgraph L\n", "end\n", " --> ", " -- x --> ", "direction LR\n", ":::", "style a fill:", "click a \"", "swimlane-beta LR\n"},
 		3, 4000, RenderOptions{}, true)
-	// Lane names that are object keys in JavaScript are plain names.
 	for _, name := range []string{"__proto__", "constructor", "toString", "hasOwnProperty"} {
 		out, err := Render("swimlane-beta TD\n  subgraph "+name+"\n    a --> b\n  end\n  subgraph other\n    c\n  end\n  b --> c", RenderOptions{})
 		if err != nil || len(reLane.FindAllString(out.Data, -1)) != 2 {

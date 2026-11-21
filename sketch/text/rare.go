@@ -2,8 +2,6 @@ package text
 
 import sketch "tuios.dev/sketch/internal/engine"
 
-// more draws the types that draw does not name. It is nil until Rare is called,
-// so a program that never draws those types does not link their drawers.
 var more func(d *sketch.Diagram, layout *sketch.Layout, opt Options, ro sketch.RenderOptions, squeeze bool) (*canvas, error)
 
 // Rare adds the text drawers of the diagram types sketch/core does not parse. A

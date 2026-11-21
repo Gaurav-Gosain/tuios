@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/block/arrows.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package block
 
 import (
@@ -23,14 +21,12 @@ const MAX_DEPTH = 20
 const NUB = 12
 
 type ArrowSize struct {
-	w float64
-	h float64
-	// Shift of the label from the center, away from the heads.
+	w  float64
+	h  float64
 	dx float64
 	dy float64
 }
 
-// arrowMask: Mermaid compares directions exactly, so `( up )` draws no arrow there. Here spaces are ignored.
 func arrowMask(directions []string) int {
 	mask := 0
 	for _, direction := range directions {
@@ -59,8 +55,6 @@ func bit(mask, flag int) float64 {
 	return 0
 }
 
-// arrowAxis: an arrow along one axis has a shaft and heads wider than it. One that points along both axes
-// is a box with a small point on each side it names.
 func arrowAxis(mask int) byte {
 	if mask != 0 && mask&(UP|DOWN) == 0 {
 		return 'x'

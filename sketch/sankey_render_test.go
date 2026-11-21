@@ -1,6 +1,3 @@
-// Ported from pele tests/render/sankey.test.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac:
-// the parse cases v1.9.0 added. The drawings are covered by testdata/extra/sankey-1-9.json.
-
 package sketch
 
 import (
@@ -45,7 +42,6 @@ func TestSankeyUnicodeNames(t *testing.T) {
 		for _, row := range []string{"Доход,Расходы", "Доход,Расходы,1,2", "\"Доход,Расходы,1", "\"Доход\"x,Расходы,1", "Доход,,1"} {
 			fails(keyword + "\n" + row + "\n")
 		}
-		// pele also rejects lone surrogates, which a Go string cannot hold.
 		for _, c := range []string{"\x00", "\x01", "\t", "\x1f", "\x7f", "\u0080", "\u009f", "￾", "￿"} {
 			for _, name := range []string{"a" + c + "b", `"a` + c + `b"`} {
 				fails(keyword + "\n" + name + ",c,1\n")

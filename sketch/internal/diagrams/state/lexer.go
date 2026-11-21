@@ -1,11 +1,3 @@
-// Ported from pele src/diagrams/state/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// As in the flowchart lexer, the port reads UTF-8 bytes: code() decodes the
-// character at a byte offset, and a step past a character that may not be
-// ASCII steps the whole character. pele's regular expressions are written out
-// as hand matchers, since Go's case folding (?i) also folds the Kelvin sign
-// into k.
-
 package state
 
 import (
@@ -20,12 +12,9 @@ type Tokens struct {
 	types  []int
 	texts  []string
 	starts []int
-	// Set when lexing stopped on the grammar's own error rather than on unrecognized text. "" for none.
-	error string
+	error  string
 }
 
-// add appends a token. It is kept out of line, as the lexer emits from many places.
-//
 //go:noinline
 func (t *Tokens) add(typ int, text string, start int) {
 	t.types = append(t.types, typ)
@@ -71,12 +60,6 @@ func indexFrom(s, sub string, from int) int {
 	return from + i
 }
 
-// The helpers below are kept out of line: the lexer calls them from many places, and
-// inlining each copy doubles its size in the binary.
-
-// codeAt decodes the character at a byte offset: -1 past the end, 0xfffe for a broken
-// sequence, and 0xd800 for a character outside the BMP, which pele reads as a surrogate.
-//
 //go:noinline
 func codeAt(src string, q int) rune {
 	if q < 0 || q >= len(src) {
@@ -96,7 +79,6 @@ func codeAt(src string, q int) rune {
 	return r
 }
 
-// sizeAt is the length in bytes of the character at q.
 func sizeAt(src string, q int) int {
 	if q >= len(src) || src[q] < utf8.RuneSelf {
 		return 1
@@ -105,8 +87,6 @@ func sizeAt(src string, q int) int {
 	return s
 }
 
-// wsEndAt is the end of the whitespace at q.
-//
 //go:noinline
 func wsEndAt(src string, q int) int {
 	j := q
@@ -116,8 +96,6 @@ func wsEndAt(src string, q int) int {
 	return j
 }
 
-// ciAt matches a lowercase ASCII literal at q without regard to case, as the /i flag does for ASCII.
-//
 //go:noinline
 func ciAt(src string, q int, w string) bool {
 	if q < 0 || q+len(w) > len(src) {
@@ -133,7 +111,6 @@ func ciAt(src string, q int, w string) bool {
 	return true
 }
 
-// RE_DIRECTION: /direction/gi.
 func reDirection(src string, from int) int {
 	for i := max(from, 0); i+9 <= len(src); i++ {
 		if src[i]|32 == 'd' && ciAt(src, i, "direction") {
@@ -143,7 +120,6 @@ func reDirection(src string, from int) int {
 	return -1
 }
 
-// RE_STEREOTYPE: /<<(?:fork|join|choice)>>|\[\[(?:fork|join|choice)\]\]/gi.
 func reStereotype(src string, from int) int {
 	for i := max(from, 0); i+8 <= len(src); i++ {
 		var close string
@@ -164,7 +140,6 @@ func reStereotype(src string, from int) int {
 	return -1
 }
 
-// RE_LINE_END: /[\n\r  ]/g.
 func reLineEnd(src string, from int) int {
 	for i := max(from, 0); i < len(src); i++ {
 		c := src[i]
@@ -178,8 +153,6 @@ func reLineEnd(src string, from int) int {
 	return -1
 }
 
-// Finds the next match of a pattern at or after a position, remembering the answer so that
-// asking at each token costs one scan of the text in total.
 func finder(match func(src string, from int) int, src string) func(q int) int {
 	from := 0
 	next := -2
@@ -210,12 +183,10 @@ func tokenize(src string) Tokens {
 	nextPercent := finder(func(s string, from int) int { return indexFrom(s, "%%", from) }, src)
 	nextBrace := finder(func(s string, from int) int { return indexFrom(s, "{", from) }, src)
 
-	// The last `direction <dir>` of each kind on the line being lexed, and where its keyword ends.
 	dirFrom := -1
 	dirTo := -1
 	dirAt := [4]int{-1, -1, -1, -1}
 	dirEnd := [4]int{}
-	// The same for <<fork>>, <<join>>, <<choice>> and their [[ ]] spellings.
 	stereoFrom := -1
 	stereoTo := -1
 	stereoAt := [6]int{-1, -1, -1, -1, -1, -1}
@@ -243,7 +214,6 @@ func tokenize(src string) Tokens {
 			stack = stack[:len(stack)-1]
 		}
 	}
-	// Case-insensitive match of a lowercase ASCII word, as the grammar's /i flag gives.
 	word := func(w string, q int) bool { return ciAt(src, q, w) }
 	wsEnd := func(q int) int { return wsEndAt(src, q) }
 	wordEnd := func(q int) int {
@@ -268,8 +238,6 @@ func tokenize(src string) Tokens {
 		return k
 	}
 
-	// Rules `.*direction\s+TB[^\n]*` and its three siblings: the first kind, in grammar order,
-	// found between q and the end of its line.
 	direction := func(q int) int {
 		if q < dirFrom || q > dirTo {
 			first := nextDirection(q)
@@ -345,7 +313,6 @@ func tokenize(src string) Tokens {
 		return -1
 	}
 
-	// The grammar's processId(): an id ends at an inline `%%`, and a text that starts with one is dropped.
 	emitId := func(s, e int) bool {
 		at := nextPercent(s)
 		if at == -1 || at+2 > e {
@@ -368,7 +335,6 @@ func tokenize(src string) Tokens {
 
 	for {
 		if p >= n {
-			// Jison tries the current state's rules once more on the empty remainder.
 			switch state {
 			case S_INITIAL:
 				emit(T_NL, n, n)
@@ -879,8 +845,6 @@ func tokenize(src string) Tokens {
 					j += size(j)
 				}
 				if j > q+1 {
-					// Mermaid drops two characters here, expecting " :"; with no space before the colon
-					// the first character of the note goes too.
 					from := p + size(p)
 					from += size(from)
 					text := ""

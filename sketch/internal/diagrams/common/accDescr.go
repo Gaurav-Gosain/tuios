@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/common/accDescr.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package common
 
 import (
@@ -9,9 +7,6 @@ import (
 	"tuios.dev/sketch/internal/js"
 )
 
-// matchAccDescrHead answers as
-// /[\t ]*accDescr(?:[\t ]*:(?:[^\n\r]*?(?=%%)|[^\n\r]*)|\s*({))/y: the end of the match, or -1, and
-// whether the braced form matched.
 func matchAccDescrHead(src string, at int) (int, bool) {
 	q := blanks(src, at)
 	if !strings.HasPrefix(src[q:], "accDescr") {
@@ -34,8 +29,6 @@ func matchAccDescrHead(src string, at int) (int, bool) {
 	return q + 1, true
 }
 
-// The braced form scans for its closing brace. Once none is found there is none further on,
-// so later braced descriptions fail without scanning the rest of the text again.
 func accDescrScanner() Scanner {
 	unclosed := false
 	return func(src string, at int) int {

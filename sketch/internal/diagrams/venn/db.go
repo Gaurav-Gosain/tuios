@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/venn/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package venn
 
 import (
@@ -10,7 +8,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// normalizeText: Mermaid takes one pair of quotes off an id, label or style value.
 func normalizeText(text string) string {
 	trimmed := js.Trim(text)
 	if js.Len(trimmed) >= 2 && strings.HasPrefix(trimmed, "\"") && strings.HasSuffix(trimmed, "\"") {
@@ -37,8 +34,7 @@ type VennDb struct {
 	known      map[string]bool
 	current    []string
 	hasCurrent bool
-	// Whether an indented `text` line belongs to the set or union before it. The lexer reads this.
-	indent bool
+	indent     bool
 }
 
 func newVennDb() *VennDb { return &VennDb{known: map[string]bool{}} }
@@ -47,7 +43,6 @@ func (db *VennDb) setDiagramTitle(title string) {
 	db.title, db.hasTitle = title, true
 }
 
-// addSubsetData: a set without a size gets 10, and an overlap of n sets 10 / n².
 func (db *VennDb) addSubsetData(ids []string, label string, hasLabel bool, size float64, hasSize bool) {
 	sets := normalizeIds(ids)
 	db.current, db.hasCurrent = sets, true
@@ -81,7 +76,6 @@ func (db *VennDb) addStyleData(ids []string, data [][2]string) {
 		if value != "" {
 			value = normalizeText(value)
 		}
-		// A later value for a key replaces the earlier one in its place, as Map.set does.
 		if k, ok := at[kv[0]]; ok {
 			styles[k][1] = value
 		} else {

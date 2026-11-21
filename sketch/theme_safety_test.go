@@ -28,8 +28,6 @@ func TestThemeStaysInert(t *testing.T) {
 			if err != nil {
 				t.Fatalf("font %q radius %v: %v", font, radius, err)
 			}
-			// inertProblem refuses the --pele-* tokens a theme sets, so the
-			// root style is checked here on its own.
 			if err := assertWellFormed(out.Data); err != nil {
 				t.Fatalf("font %q radius %v: %v", font, radius, err)
 			}

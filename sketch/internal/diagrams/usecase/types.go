@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/usecase/types.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// Spans are byte offsets into the source, where pele's are UTF-16 offsets. Every place
-// that shows an offset to the reader turns it into UTF-16 units first. An optional text
-// field is "" for none.
-
 package usecase
 
 type Span [2]int
@@ -61,14 +55,13 @@ type Relationship struct {
 	target     string
 	typ        string
 	arrowType  int
-	// label is nil for none.
-	label     *string
-	labelType string
-	minlen    int
-	classes   []string
-	styles    []string
-	animate   bool
-	animation string
+	label      *string
+	labelType  string
+	minlen     int
+	classes    []string
+	styles     []string
+	animate    bool
+	animation  string
 }
 
 type UsecaseNote struct {
@@ -79,9 +72,8 @@ type UsecaseNote struct {
 }
 
 type UsecaseJsonNode struct {
-	id    string
-	value *jsonObject
-	// The keys of each object in the order they were written, by JSON Pointer.
+	id            string
+	value         *jsonObject
 	propertyOrder *keyOrder
 	classes       []string
 	styles        []string
@@ -100,10 +92,9 @@ type MetadataOccurrence struct {
 }
 
 type NodeOccurrence struct {
-	id     string
-	span   Span
-	idSpan Span
-	// labelSpan is the label's place, where hasLabel says there is one.
+	id             string
+	span           Span
+	idSpan         Span
 	labelSpan      Span
 	hasLabel       bool
 	defines        bool
@@ -146,28 +137,23 @@ type UsecaseModel struct {
 	jsonNodes        omap[*UsecaseJsonNode]
 	classDefs        omap[*ClassDef]
 	direction        string
-	// title is nil for none.
-	title    *string
-	accTitle string
-	accDescr string
-	// The accessible description as written, before the indentation of its lines is dropped.
-	accDescription string
-	source         string
-	headerSpan     Span
-	statements     []*GraphStatement
+	title            *string
+	accTitle         string
+	accDescr         string
+	accDescription   string
+	source           string
+	headerSpan       Span
+	statements       []*GraphStatement
 }
 
 func emptyModel() *UsecaseModel {
 	return &UsecaseModel{direction: "LR"}
 }
 
-// omap is a JavaScript Map with string keys: it keeps the order keys were first set in,
-// and a key deleted and set again goes to the end. Not in pele.
 type omap[V any] struct {
 	entries []omapEntry[V]
 	size    int
-	// at indexes entries by key once there are more than a few; below that a scan is cheaper.
-	at map[string]int
+	at      map[string]int
 }
 
 type omapEntry[V any] struct {
@@ -245,7 +231,6 @@ func (m *omap[V]) clear() {
 	m.at = nil
 }
 
-// values are the values in the map's order.
 func (m *omap[V]) values() []V {
 	out := make([]V, 0, m.size)
 	for i := range m.entries {
@@ -256,7 +241,6 @@ func (m *omap[V]) values() []V {
 	return out
 }
 
-// clone is new Map(m).
 func (m *omap[V]) clone() *omap[V] {
 	out := &omap[V]{entries: make([]omapEntry[V], 0, m.size)}
 	for i := range m.entries {

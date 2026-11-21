@@ -88,15 +88,11 @@ Ship    ┆         ┆         ┆         ┆         ┆
 
 ░ done  ▓ critical  ◆ milestone
 `},
-		// Cardinalities on a short edge across: the edge is long enough for
-		// both, apart.
 		{"er across", "erDiagram\n  direction LR\n  B }|..|o C : s", 80, `
   ┌─────────────┐ 1..*   0..1 ┌─────────────┐
   │      B      │┄┄┄┄┄ s ┄┄┄┄┄│      C      │
   └─────────────┘             └─────────────┘
 `},
-		// Cardinalities on edges down that turn next to the box: a label
-		// goes on the side of its line that has room.
 		{"class down", "classDiagram\n  A \"1\" --> \"many\" B\n  A \"1\" --> \"*\" C\n  A --> D", 80, `
              ┌─────────┐
              │    A    │
@@ -110,8 +106,6 @@ Ship    ┆         ┆         ┆         ┆         ┆
 │   B   │     │  C   │     │  D   │
 └───────┘     └──────┘     └──────┘
 `},
-		// Critical tasks that are done or active keep a glyph of their own,
-		// and excluded days are dotted.
 		{"gantt states", "gantt\n  dateFormat YYYY-MM-DD\n  axisFormat %m-%d\n  excludes weekends\n  section S\n  A :done, crit, a, 2024-01-01, 6d\n  B :active, crit, b, after a, 3d\n  C :crit, c, after b, 2d\n  M :milestone, m, after c, 0d", 60, `
 S    ┆      ┆      ┆   ···┆····  ┆       ┆      ┆······┆
   A  □□□□□□□□□□□□□□□□□□□□□□□□□□□□□       ┆      ┆······┆

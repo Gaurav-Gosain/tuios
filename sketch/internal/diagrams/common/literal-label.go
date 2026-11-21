@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/common/literal-label.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package common
 
 import (
@@ -178,17 +176,8 @@ func BreakLabel(label text.Label, measurer text.TextMeasurer, room float64) text
 	return out
 }
 
-// isBreakHyphen reports a hyphen a line may break after. U+2011, the
-// non-breaking hyphen, is not one.
 func isBreakHyphen(r rune) bool { return r == '-' || r == '\u2010' }
 
-// splitAtBreak cuts the line's last span at its last space or at its last
-// hyphen that follows a letter or digit, so a line too wide for its room
-// breaks there rather than inside a word (tuios issue 1032; pele breaks after
-// the last character that fits). A hyphen after a space or at the start, as
-// in a flag or a minus sign, is not a break. The hyphen stays, the space is
-// dropped, and the rest comes back to start the next line. It reports false
-// when the span is an icon or math, has no break, or ends on one.
 func splitAtBreak(line []text.Span, measurer text.TextMeasurer, size float64) (text.Span, bool) {
 	last := &line[len(line)-1]
 	if last.Icon != "" || last.Math != nil {

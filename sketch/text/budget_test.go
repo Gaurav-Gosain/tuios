@@ -52,17 +52,6 @@ func TestLongWordStaysLinear(t *testing.T) {
 	}
 }
 
-// growth is how much longer src(n) takes to draw than src(n/8), divided by 8.
-// Linear work gives about 1 and quadratic work about 8, so a bound of 3 tells
-// them apart with room on both sides.
-//
-// A single wall-clock sample of a draw of a millisecond or two is mostly noise
-// on a busy machine: one preemption or one GC cycle can double it. So each
-// sample of the small input draws it 8 times, and takes about as long as one
-// draw of the large input; both sizes then meet the same scheduler and timer
-// granularity. The two sizes are sampled in turn after a warm-up, with a GC
-// before each sample, and the fastest of five samples of each counts. Noise
-// only ever adds time, so the fastest sample is the closest to the real cost.
 func growth(t *testing.T, src func(n int) string, n, cols int) (ratio float64, small, large time.Duration) {
 	t.Helper()
 	const rounds, scale = 5, 8
@@ -74,7 +63,6 @@ func growth(t *testing.T, src func(n int) string, n, cols int) (ratio float64, s
 		return d
 	}
 	ds, dl := parse(src(n/scale)), parse(src(n))
-	// Draw errors are fine: the time is what counts.
 	draw := func(d *sketch.Diagram, times int) time.Duration {
 		runtime.GC()
 		start := time.Now()
@@ -93,7 +81,6 @@ func growth(t *testing.T, src func(n int) string, n, cols int) (ratio float64, s
 	return float64(large) / float64(small), small, large
 }
 
-// checkGrowth fails t when drawing src grows faster than linearly in n.
 func checkGrowth(t *testing.T, src func(n int) string, n, cols int) {
 	t.Helper()
 	const bound = 3

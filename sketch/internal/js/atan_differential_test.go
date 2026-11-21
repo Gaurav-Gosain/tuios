@@ -11,10 +11,6 @@ import (
 	"testing"
 )
 
-// The node script reads float64 inputs and writes Math.asin and Math.atan of each, then
-// reads pairs and writes Math.atan2 of each pair. It runs every function twice, the
-// second time after the loop is hot, so that the optimizing compiler's code is checked
-// as well.
 const atanScript = `
 const fs = require('fs');
 const [,, input, pairs, output, atan2Output] = process.argv;
@@ -39,7 +35,6 @@ for (let round = 0; round < 2; round++) {
 fs.writeFileSync(atan2Output, Buffer.from(at.buffer));
 `
 
-// randomBits gives a double of any exponent and sign, not NaN.
 func randomBits(rng *rand.Rand) float64 {
 	for {
 		if x := math.Float64frombits(rng.Uint64()); !math.IsNaN(x) {
@@ -51,11 +46,9 @@ func randomBits(rng *rand.Rand) float64 {
 func atanInputs() []float64 {
 	rng := rand.New(rand.NewPCG(3, 4))
 	var xs []float64
-	// Every exponent, any mantissa.
 	for range 300_000 {
 		xs = append(xs, randomBits(rng))
 	}
-	// The domain of asin, evenly, and near its ends.
 	for range 400_000 {
 		xs = append(xs, 2*rng.Float64()-1)
 	}
@@ -63,7 +56,6 @@ func atanInputs() []float64 {
 		d := math.Ldexp(rng.Float64(), -rng.IntN(60))
 		xs = append(xs, 1-d, d-1)
 	}
-	// A few units in the last place either way of every bound fdlibm branches on.
 	for _, b := range []float64{
 		0.5, 0.975, 1, 0.4375, 11.0 / 16, 19.0 / 16, 39.0 / 16, math.Ldexp(1, -27), math.Ldexp(1, 66),
 		math.Float64frombits(0x3fef333300000000), math.Float64frombits(0x3fdc000000000000),
@@ -76,7 +68,6 @@ func atanInputs() []float64 {
 			lo, hi = math.Nextafter(lo, 0), math.Nextafter(hi, math.Inf(1))
 		}
 	}
-	// What a diagram asks for: ratios of coordinates.
 	for range 200_000 {
 		xs = append(xs, float64(rng.IntN(4000)-2000)/float64(1+rng.IntN(500)))
 	}
@@ -90,14 +81,12 @@ func atan2Inputs() []float64 {
 	for range 300_000 {
 		ps = append(ps, randomBits(rng), randomBits(rng))
 	}
-	// Coordinate differences in a drawing, whole and fractional.
 	for range 400_000 {
 		ps = append(ps, float64(rng.IntN(2001)-1000), float64(rng.IntN(2001)-1000))
 	}
 	for range 400_000 {
 		ps = append(ps, 1000*(2*rng.Float64()-1), 1000*(2*rng.Float64()-1))
 	}
-	// Ratios past 2^60 either way.
 	for range 20_000 {
 		y := math.Ldexp(rng.Float64(), rng.IntN(200)-100)
 		ps = append(ps, y, math.Ldexp(y, rng.IntN(140)-70)*float64(1-2*rng.IntN(2)))

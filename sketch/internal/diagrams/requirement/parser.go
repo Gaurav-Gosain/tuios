@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/requirement/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package requirement
 
 import (
@@ -45,7 +43,6 @@ func parseRequirement(src string, db *RequirementDb) {
 	var fields []int
 	var values []string
 
-	// fail fails with Jison's wording, naming the token types `from` to `to` and any others as expected.
 	fail := func(from, to int, others ...int) {
 		t := typs[i]
 		if t == T_ERROR {
@@ -79,7 +76,6 @@ func parseRequirement(src string, db *RequirementDb) {
 		return texts[i-1]
 	}
 
-	// keyword is the value of the next token if it is a keyword in the given range of token types.
 	keyword := func(from, to int) string {
 		t := typs[i]
 		if t < from || t > to {
@@ -140,7 +136,6 @@ func parseRequirement(src string, db *RequirementDb) {
 			style := texts[i]
 			i++
 			if isStylePart(typs[i]) {
-				// A builder keeps a long run linear; pele's += is linear only through V8 ropes.
 				var b strings.Builder
 				b.WriteString(style)
 				for isStylePart(typs[i]) {
@@ -173,8 +168,6 @@ func parseRequirement(src string, db *RequirementDb) {
 		return classes
 	}
 
-	// body reads a body up to its closing brace. The grammar is right recursive, so Mermaid applies
-	// the fields last to first and the first of two repeated fields wins.
 	body := func(requirement bool) {
 		fields = fields[:0]
 		values = values[:0]

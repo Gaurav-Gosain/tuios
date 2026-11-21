@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/venn/types.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package venn
 
 // VennSubset is a set (one id) or an overlap of sets (two or more ids, sorted), with its relative area.

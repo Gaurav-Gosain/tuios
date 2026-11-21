@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/sequence/actors.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package sequence
 
 import (
@@ -35,7 +33,6 @@ func actorKind(typ string) string {
 	return "participant"
 }
 
-// isFigure: a figure stands above its label. The other kinds hold the label inside.
 func isFigure(kind string) bool {
 	return FIGURES[kind]
 }
@@ -86,8 +83,6 @@ func figure(kind string, cx, top float64) string {
 		`<path d="M` + l + `,` + y(7) + `A14,5 0 0 0 ` + r + `,` + y(7) + `"` + LINE + `/>`
 }
 
-// drawActor draws a participant whose bounding box has its top center at (cx, top).
-// ink is the fill attribute for a figure's label, which sits on whatever is behind the figure.
 func drawActor(kind string, cx, top float64, size ActorSize, label text.Label, icons text.IconResolver, ink string) string {
 	w, h := size.W, size.H
 	const txt = ` class="pele-label"`

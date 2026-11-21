@@ -13,8 +13,6 @@ import (
 	"testing"
 )
 
-// The node script reads float64 inputs and writes, for each, toFixed, toExponential and
-// Number(toPrecision) at the digit count given with it.
 const fixedScript = `
 const fs = require('fs');
 const [,, input, output] = process.argv;
@@ -28,8 +26,6 @@ for (let i = 0; i < xs.length; i += 2) {
 fs.writeFileSync(output, JSON.stringify(out));
 `
 
-// fixedInputs are pairs of a value and a digit count from 0 to 20. Ties sit on short binary
-// fractions, so many values are multiples of a power of two, scaled by a power of ten.
 func fixedInputs() []float64 {
 	rng := rand.New(rand.NewPCG(5, 6))
 	var xs []float64

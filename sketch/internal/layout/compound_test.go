@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// The cases pele 1.8.0 added to tests/layout/compound.test.ts: route crossings and the
-// order of groups and their ports from a layout of the whole drawing. pele 1.13.0 added the
-// cases on border ports and bends that bring an edge into line.
-
 var testOptions = LayeredOptions{NodeSep: 40, EdgeSep: 16, RankSep: 48, PortSep: 20}
 
 func testEdge(src, dst int) *CEdge {
@@ -35,7 +31,6 @@ func testGroup(seq int) *CNode {
 	return node
 }
 
-// Issue #3: two chains in separate groups feed a store in a third group.
 func fanIn() ([]*CNode, []*CEdge) {
 	nodes := []*CNode{testGroup(100), testGroup(101), testGroup(102), Cnode(80, 60, 2)}
 	var edges []*CEdge
@@ -54,7 +49,6 @@ func fanIn() ([]*CNode, []*CEdge) {
 }
 
 func TestRouteCrossingsSkipFans(t *testing.T) {
-	// counts where routes cross, but not where edges that meet at one node fan out from it
 	nodes := []*CNode{Cnode(40, 40, -1), Cnode(40, 40, -1), Cnode(40, 40, -1), Cnode(40, 40, -1)}
 	for i, node := range nodes {
 		node.X = float64(100 * (i % 2))
@@ -75,7 +69,6 @@ func TestRouteCrossingsSkipFans(t *testing.T) {
 }
 
 func TestRouteCrossingsSkipJoinedRuns(t *testing.T) {
-	// does not count edges that join one straight run into the node they meet at as crossing
 	nodes := []*CNode{Cnode(40, 40, -1), Cnode(40, 40, -1), Cnode(40, 40, -1)}
 	nodes[1].X = 100
 	nodes[2].X = 50
@@ -96,7 +89,6 @@ func TestRouteCrossingsSkipJoinedRuns(t *testing.T) {
 }
 
 func TestRouteCrossingsFollowTheDrawing(t *testing.T) {
-	// counts crossings where the drawing has them, round its corners or at its steps
 	nodes := []*CNode{Cnode(40, 40, -1), Cnode(40, 40, -1), Cnode(40, 40, -1), Cnode(40, 40, -1)}
 	nodes[0].Y = -20
 	nodes[1].X = 120
@@ -105,7 +97,6 @@ func TestRouteCrossingsFollowTheDrawing(t *testing.T) {
 	nodes[2].Y = 170
 	nodes[3].X = 5
 	nodes[3].Y = 40
-	// Rounding the corner clears the other edge.
 	corner := []*CEdge{testEdge(0, 1), testEdge(2, 3)}
 	corner[0].Route = []float64{0, 0, 0, 0, 100, 0, 100, 100, 1}
 	corner[1].Route = []float64{5, 150, 0, 5, 60, 0}
@@ -125,8 +116,6 @@ func TestRouteCrossingsFollowTheDrawing(t *testing.T) {
 }
 
 func TestFarPortsFollowTheirEdges(t *testing.T) {
-	// orders the ports on the far side of a group by where their edges go, so that a fan into
-	// one node does not cross between groups
 	for _, dir := range []Dir{"TB", "LR"} {
 		nodes := []*CNode{testGroup(100), testGroup(101), testGroup(102), Cnode(80, 40, 2)}
 		var edges []*CEdge
@@ -186,7 +175,6 @@ func TestFarPortsFollowTheirEdges(t *testing.T) {
 }
 
 func TestRowOfGroupsIsOrderedAsOne(t *testing.T) {
-	// orders the nodes of a row of groups as one drawing, so that the edges between them do not cross
 	nodes := []*CNode{testGroup(100), testGroup(101), testGroup(102)}
 	stage := func(g int) []int {
 		var ids []int
@@ -211,12 +199,9 @@ func TestRowOfGroupsIsOrderedAsOne(t *testing.T) {
 	}
 }
 
-// closeTo is vitest's toBeCloseTo(want, 5).
 func closeTo(got, want float64) bool { return math.Abs(got-want) < 0.5e-5 }
 
 func TestEdgeRunsStraightAcrossTheBorderGap(t *testing.T) {
-	// pele 6043f6c: runs an edge straight across the gap between a group border and the node
-	// it meets inside
 	for _, dir := range []Dir{"TB", "LR"} {
 		nodes := []*CNode{testGroup(100), testGroup(101)}
 		var from, to []int
@@ -276,7 +261,6 @@ func TestEdgeRunsStraightAcrossTheBorderGap(t *testing.T) {
 }
 
 func TestEdgesStayStraightWhenEndsAreLessThanATwinApart(t *testing.T) {
-	// pele 52a4521: keeps edges straight when their ends on a node are less than a twin apart
 	nodes := []*CNode{testGroup(100), Cnode(48, 48, 0), Cnode(70, 66, 0), Cnode(48, 48, -1)}
 	for i := 1; i < len(nodes); i++ {
 		nodes[i].Seq = i
@@ -304,7 +288,6 @@ func TestEdgesStayStraightWhenEndsAreLessThanATwinApart(t *testing.T) {
 }
 
 func TestEdgeIntoAGroupRunsStraightWhenOnlyItsBendsMove(t *testing.T) {
-	// pele bdbad5d: runs an edge into a group straight when only its bends need to move
 	nodes := []*CNode{testGroup(100), testGroup(101)}
 	leaf := func(parent int) int {
 		v := len(nodes)
