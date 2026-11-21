@@ -186,6 +186,9 @@ type cockpitState struct {
 	// from [agents] fold_working (ckGroupFolded). The choices are kept in
 	// the state file (sidebar_state.go).
 	folded, opened, foldSet [ckGroups]bool
+	// pins are the agents the person pinned with P, by ckPinKey. A pinned
+	// row comes first in its group. The pins are kept in the state file.
+	pins map[string]bool
 	// needsOnly is the f filter: the Needs you group alone, which is the
 	// old flat Inbox.
 	needsOnly bool
@@ -711,7 +714,7 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	var bands []ckBand
 	ck.groupN = [ckGroups]int{}
 	for g := range ckGroups {
-		items := m.ckGatherFans(groups[g], list)
+		items := ck.ckPinFirst(m.ckGatherFans(groups[g], list), list)
 		if len(items) == 0 || itemsOnly && g != ckNeeds && g != ckSnoozed && g != ckReview {
 			continue
 		}
@@ -1266,6 +1269,114 @@ func (m *OS) CockpitFold() {
 	}
 	m.cockpitTouch()
 	m.cockpitReplyFollow()
+}
+
+// ckPinKey names an agent's pane for a pin: its pane id, after its
+// machine for a pane on another machine.
+func ckPinKey(e sidebarAgentEntry) string {
+	if e.Host != "" {
+		return e.Host + "/" + e.WindowID
+	}
+	return e.WindowID
+}
+
+// ckPinned reports whether row r is a pinned agent's row.
+func (ck *cockpitState) ckPinned(r ckRow, list []sidebarAgentEntry) bool {
+	return len(ck.pins) > 0 && r.kind == ckRowAgent && r.agent >= 0 && r.agent < len(list) &&
+		list[r.agent].WindowID != "" && ck.pins[ckPinKey(list[r.agent])]
+}
+
+// ckPinFirst moves the pinned rows of a group to its top, each kind of row
+// in the order it had.
+func (ck *cockpitState) ckPinFirst(items []ckRow, list []sidebarAgentEntry) []ckRow {
+	if len(ck.pins) == 0 {
+		return items
+	}
+	out := make([]ckRow, 0, len(items))
+	for _, r := range items {
+		if ck.ckPinned(r, list) {
+			out = append(out, r)
+		}
+	}
+	if len(out) == 0 {
+		return items
+	}
+	for _, r := range items {
+		if !ck.ckPinned(r, list) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// CockpitPin is P: it pins the agent under the cursor to the top of its
+// group, or unpins it. The cursor stays on the agent's row.
+func (m *OS) CockpitPin() {
+	ck := &m.Inbox.ck
+	r, ok := m.cockpitSelected()
+	if !ok || ck.board || r.kind != ckRowAgent || r.agent < 0 || r.agent >= len(ck.agents) || ck.agents[r.agent].WindowID == "" {
+		m.ShowNotification("Move the cursor to an agent to pin it.", "info", m.Settings.NotificationDuration)
+		return
+	}
+	e := ck.agents[r.agent]
+	k := ckPinKey(e)
+	if ck.pins == nil {
+		ck.pins = map[string]bool{}
+	}
+	if ck.pins[k] {
+		delete(ck.pins, k)
+	} else {
+		ck.pins[k] = true
+	}
+	m.ckPrunePins()
+	m.saveSidebarState()
+	m.cockpitTouchRows()
+	m.cockpitRows()
+	m.cockpitSelectKey(r.key)
+	m.cockpitTouch()
+}
+
+// ckPrunePins drops the pins of the panes on this machine that are gone,
+// so the state file does not keep them. It reads the whole list only: a
+// search or a selector hides panes that are still there.
+func (m *OS) ckPrunePins() {
+	ck := &m.Inbox.ck
+	if m.Inbox.Select != "" || m.Inbox.agents.query != "" || m.Inbox.Filter != "" {
+		return
+	}
+	live := map[string]bool{}
+	for _, e := range ck.agents {
+		live[ckPinKey(e)] = true
+	}
+	for k := range ck.pins {
+		if !strings.Contains(k, "/") && !live[k] {
+			delete(ck.pins, k)
+		}
+	}
+}
+
+// ckPinsToFile is the pins as the state file holds them, sorted.
+func (ck *cockpitState) ckPinsToFile() []string {
+	if len(ck.pins) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(ck.pins))
+	for k := range ck.pins {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// ckPinsFromFile sets the pins from the state file.
+func (ck *cockpitState) ckPinsFromFile(pins []string) {
+	ck.pins = nil
+	for _, k := range pins {
+		if ck.pins == nil {
+			ck.pins = map[string]bool{}
+		}
+		ck.pins[k] = true
+	}
 }
 
 // chipKeeps reports whether the header chip in force keeps group g in the
@@ -1908,6 +2019,9 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return nil, true
 	case config.ActionInboxFold:
 		m.CockpitFold()
+		return nil, true
+	case config.ActionInboxPin:
+		m.CockpitPin()
 		return nil, true
 	case config.ActionInboxExpand:
 		if t := m.cockpitThread(); t != nil {

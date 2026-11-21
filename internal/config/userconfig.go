@@ -2050,6 +2050,9 @@ const (
 	ActionInboxTabNext = "inbox_tab_next"
 	ActionInboxExpand  = "inbox_expand"
 	ActionInboxFold    = "inbox_fold"
+	// ActionInboxPin pins the agent under the cursor to the top of its
+	// group, or unpins it.
+	ActionInboxPin = "inbox_pin"
 	// Wrap the long lines of the thread's code blocks, or cut them again.
 	ActionInboxCodeWrap = "inbox_code_wrap"
 	// ActionInboxCodeLeft and ActionInboxCodeRight scroll the lowest code
@@ -2191,11 +2194,12 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxTabNext:       {"]"},
 		ActionInboxExpand:        {"e"},
 		ActionInboxFold:          {"F"},
+		ActionInboxPin:           {"P"},
 		ActionInboxCodeWrap:      {"W"},
 		ActionInboxCodeLeft:      {"("},
 		ActionInboxCodeRight:     {")"},
 		ActionInboxCodeCopy:      {"C"},
-		ActionInboxBlockSource:   {"P"},
+		ActionInboxBlockSource:   {"V"},
 		ActionInboxBlockPicture:  {"T"},
 		// [ and ] step the tabs, so the prompt jumps take the braces.
 		ActionInboxPromptPrev: {"{"},
@@ -3950,8 +3954,10 @@ var yieldingDefaults = map[string]bool{
 	"inbox_code_right": true,
 	"inbox_code_copy":  true,
 	"inbox_child":      true,
-	// P, new with the rich blocks.
+	// V, new with the rich blocks (it was P until the pins took P).
 	"inbox_block_source": true,
+	// P, new with the pins.
+	"inbox_pin": true,
 	// T, new with the Mermaid pictures.
 	"inbox_block_picture": true,
 	// ctrl+o, new with the message cards.

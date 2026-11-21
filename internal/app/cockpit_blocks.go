@@ -198,7 +198,7 @@ func (m *OS) ToggleBlock(key string) {
 	m.blocksChanged()
 }
 
-// CockpitBlockToggle is P: the lowest rich block on screen shows its source,
+// CockpitBlockToggle is V: the lowest rich block on screen shows its source,
 // or its picture again. With pic it is T: the lowest Mermaid block on screen
 // that can be a picture is drawn as a picture, or as text. A block whose
 // header scrolled off the top counts when its lines reach the top row.

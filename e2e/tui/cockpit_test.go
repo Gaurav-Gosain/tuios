@@ -291,13 +291,17 @@ func cockpitUnseenMarks(t *testing.T, term *tuitest.Terminal, base string) {
 // TestCockpitNarrowFoldsRows opens the cockpit at 100x30: the fleet's rows are
 // one line and the focus is beside them. At 16 colours the cursor row is
 // reverse video. F folds Working from one of its rows and opens it from the
-// folded heading, and a new client opens the view with the fold kept. With
+// folded heading, and a new client opens the view with the fold kept. P pins
+// the last Working agent to the top of Working, a new client keeps the pin,
+// and P again unpins it. With
 // [agents] fold_working on, Working opens folded, and a group the person
 // opens stays open when the view opens again.
 //
 // Negative controls, recorded in NEGATIVE_CONTROLS.md: with the fold not
 // saved, the new client check fails; with the folded heading not taking the
-// cursor, F cannot open the group again.
+// cursor, F cannot open the group again; with the pins not put first, P
+// does not move the row; with the pins not saved, the new client check of
+// the pin fails.
 func TestCockpitNarrowFoldsRows(t *testing.T) {
 	for _, d := range []chromeDepth{{name: "truecolor", env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}}, chromeDepths[0]} {
 		t.Run(d.name, func(t *testing.T) {
@@ -331,6 +335,38 @@ func TestCockpitNarrowFoldsRows(t *testing.T) {
 		if err := term.WaitFor(workingFolded, uiTimeout); err != nil {
 			t.Fatalf("ASSERTION: Working was not folded in a new client: %v\n%s", err, term.Snapshot())
 		}
+	})
+
+	// P pins the last Working agent to the top of Working, a new client
+	// keeps the pin, and P again puts the row back in its place.
+	t.Run("pin", func(t *testing.T) {
+		env := []string{"TERM=xterm-256color", "COLORTERM=truecolor"}
+		term, base, _, _ := startCockpitFleet(t, 100, 30, env)
+		const last = "migrate-c"
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return firstWorking(s) == cockpitWorking[0] }, uiTimeout); err != nil {
+			t.Fatalf("Working does not start with %s: %v\n%s", cockpitWorking[0], err, term.Snapshot())
+		}
+		cursorTo(t, term, func(line string) bool { return strings.Contains(line, last) })
+		sendKeys(t, term, "P")
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return firstWorking(s) == last }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: P did not pin %s to the top of Working: %v\n%s", last, err, term.Snapshot())
+		}
+		saveCockpitFrames(t, term, "cockpit-100x30-pinned")
+
+		// A new client opens the view with the pin kept.
+		if err := term.Close(); err != nil {
+			t.Fatalf("close the client: %v", err)
+		}
+		term = openCockpitClient(t, base, 100, 30, env)
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return firstWorking(s) == last }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: the pin did not outlive the client: %v\n%s", err, term.Snapshot())
+		}
+		cursorTo(t, term, func(line string) bool { return strings.Contains(line, last) })
+		sendKeys(t, term, "P")
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return firstWorking(s) == cockpitWorking[0] }, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: P again did not unpin %s: %v\n%s", last, err, term.Snapshot())
+		}
+		saveCockpitFrames(t, term, "cockpit-100x30-unpinned")
 	})
 
 	// With [agents] fold_working on, the view opens with Working folded.
@@ -387,6 +423,21 @@ func workingFolded(s tuitest.Screen) bool {
 		head = head || strings.Contains(col, "Working  6")
 	}
 	return head
+}
+
+// firstWorking is the Working agent drawn highest in the fleet column, or
+// "" when none is drawn.
+func firstWorking(s tuitest.Screen) string {
+	_, rows := s.Size()
+	for r := range rows {
+		col := fleetCol(s, r)
+		for _, name := range cockpitWorking {
+			if strings.Contains(col, name) {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // workingOpen reports an open Working group: every agent in the fleet

@@ -187,6 +187,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "inbox_block_source", Desc: "Agents view: show the lowest diagram on screen as its source, or as the diagram again", Run: RunView},
 	{Name: "inbox_block_picture", Desc: "Agents view: draw the lowest Mermaid diagram on screen as a picture, or as text", Run: RunView},
 	{Name: "inbox_fold", Desc: "Agents view: fold or open the group of the row under the cursor", Run: RunView},
+	{Name: "inbox_pin", Desc: "Agents view: pin the agent under the cursor to the top of its group, or unpin it", Run: RunView},
 	{Name: "inbox_prompt_prev", Desc: "Agents view: show the thread's previous prompt at the top", Run: RunView},
 	{Name: "inbox_prompt_next", Desc: "Agents view: show the thread's next prompt at the top", Run: RunView},
 	{Name: "inbox_child", Desc: "Agents view: select the next agent a card in the thread started or sent mail to. Enter opens its thread", Run: RunView},
