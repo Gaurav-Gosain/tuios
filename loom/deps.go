@@ -10,10 +10,6 @@ import (
 	"tuios.dev/tml"
 )
 
-// depGraph records which nodes read which state paths, so a renderer recomputes
-// only the nodes a patch touches. Build it once per tree with buildDeps.
-// Nodes are named by their JSON Pointer in the tree. A text run counts
-// toward the component that holds it.
 type depGraph struct {
 	nodes []nodeDeps
 	clock []string
@@ -21,13 +17,9 @@ type depGraph struct {
 
 type nodeDeps struct {
 	ptr   string
-	paths []string // JSON Pointers into the state
+	paths []string
 }
 
-// buildDeps walks a tree and records the state paths each node reads: its
-// bindings, its data attributes, if and show. Inside each, list and a table,
-// a path through the element name (item.x) counts as the whole array, since
-// a change to any element can move the others.
 func buildDeps(doc *tml.Node) *depGraph {
 	d := &depGraph{}
 	d.walk(doc, "", map[string]string{})
@@ -40,8 +32,6 @@ func (d *depGraph) walk(n *tml.Node, ptr string, scope map[string]string) {
 	}
 	var paths []string
 	clock := false
-	// A form's fields are form.NAME: they read the paths the fields bind
-	// and their values read.
 	if n.Type == "form" {
 		scope = withFormPaths(scope, formPaths(n, scope))
 	}
@@ -69,7 +59,6 @@ func (d *depGraph) walk(n *tml.Node, ptr string, scope map[string]string) {
 		}
 	}
 
-	// each binds its alias for the node itself, and list for its children.
 	inner := scope
 	if each, ok := n.Attr("each"); ok && each.Kind == tml.KindString {
 		if base, ok := dataPointer(each.Str, scope); ok {
@@ -149,7 +138,6 @@ func withAlias(scope map[string]string, alias, base string) map[string]string {
 	return out
 }
 
-// dataPointer resolves a data attribute's path to a state pointer.
 func dataPointer(s string, scope map[string]string) (string, bool) {
 	root, ptr, err := tml.SplitPath(s)
 	if err != nil {
@@ -175,7 +163,6 @@ func appendUnique(list []string, s string) []string {
 	return append(list, s)
 }
 
-// Of returns the state pointers the node at ptr reads.
 func (d *depGraph) Of(ptr string) []string {
 	for _, n := range d.nodes {
 		if n.ptr == ptr {
@@ -185,7 +172,6 @@ func (d *depGraph) Of(ptr string) []string {
 	return nil
 }
 
-// Nodes returns the pointer of every node that reads state.
 func (d *depGraph) Nodes() []string {
 	out := make([]string, len(d.nodes))
 	for i, n := range d.nodes {
@@ -194,14 +180,8 @@ func (d *depGraph) Nodes() []string {
 	return out
 }
 
-// Clock returns the nodes that call ago(), which need a minute tick while
-// visible. When it is empty, the surface needs no timer for its bindings.
 func (d *depGraph) Clock() []string { return d.clock }
 
-// Affected returns the nodes that read any of the changed state pointers, in
-// tree order. A change affects a node when one path is the other or lies
-// below it: a change to /failures/0/ms affects a node that reads /failures,
-// and a change to /failures affects one that reads /failures/0/ms.
 func (d *depGraph) Affected(changed []string) []string {
 	var out []string
 	for _, n := range d.nodes {
@@ -225,8 +205,6 @@ func overlaps(a, b string) bool {
 	return strings.HasPrefix(b, a+"/") || strings.HasPrefix(a, b+"/")
 }
 
-// formKey holds a form's field paths in the scope, joined by newlines. No
-// alias can have this name: a newline is not a name character.
 const formKey = "\nform"
 
 func withFormPaths(scope map[string]string, paths []string) map[string]string {
@@ -243,8 +221,6 @@ func splitFormPaths(scope map[string]string) []string {
 	return nil
 }
 
-// formPaths returns the state paths a form's fields read: each bind path,
-// and the paths their value bindings read.
 func formPaths(form *tml.Node, scope map[string]string) []string {
 	var out []string
 	form.Walk(func(c *tml.Node, _ string) bool {

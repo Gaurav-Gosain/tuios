@@ -11,16 +11,12 @@ import (
 	sketchtext "tuios.dev/sketch/text"
 )
 
-// mermaidWidget is a Mermaid diagram drawn by tuios.dev/sketch as text
-// cells, fitted to the width there is. A diagram taller than its box scrolls
-// with the wheel. A source sketch cannot draw shows as code under a one-line
-// note that says why.
 type mermaidWidget struct {
 	src  string
-	code *codeWidget // the source, for a diagram sketch cannot draw
+	code *codeWidget
 
-	content int // rows of the last drawing painted
-	view    int // the rows it had to show them
+	content int
+	view    int
 	over    bool
 }
 
@@ -29,28 +25,22 @@ func (s *Surface) buildMermaid(b *box, vars map[string]any) widget {
 	return &mermaidWidget{src: strings.Join(code.lines, "\n"), code: code}
 }
 
-// mermaidDrawing is one drawing of a diagram at one width.
 type mermaidDrawing struct {
 	rows  [][]sketchtext.Cell
-	w     int    // the widest row
-	cut   bool   // the diagram is wider than the width: the rows run past it
-	fail  string // why sketch cannot draw the diagram, "" when it can
-	width int    // the width asked for
+	w     int
+	cut   bool
+	fail  string
+	width int
 }
 
-// sketchCache keeps the parsed diagrams and their drawings across renders,
-// so a redraw, a state change elsewhere in the document or a measure at a
-// width seen before does no layout. It is bounded: a document that keeps
-// changing its diagrams starts the cache again.
 type sketchCache struct {
 	parsed   map[string]*parsedDiagram
 	drawings map[sketchKey]*mermaidDrawing
 }
 
 type parsedDiagram struct {
-	d   *sketch.Diagram
-	err error
-	// missing is a diagram type sketch knows and this build does not draw.
+	d       *sketch.Diagram
+	err     error
 	missing string
 }
 
@@ -78,23 +68,19 @@ type Hooks struct {
 // SetHooks sets what the surface tells its host about its diagrams.
 func (s *Surface) SetHooks(h Hooks) { s.hooks = h }
 
-// The states of an external drawing.
 const (
 	externalPending = iota
 	externalDone
 	externalFailed
 )
 
-// externalDrawing is one answer of Hooks.External, or the wait for it.
 type externalDrawing struct {
 	state int
 	rows  [][]sketchtext.Cell
 	cut   bool
-	fail  string // why External could not draw it
+	fail  string
 }
 
-// externals holds the external drawings of every surface, by source and
-// width, so two surfaces of one diagram run the program once.
 var externals = struct {
 	sync.Mutex
 	m map[sketchKey]*externalDrawing
@@ -118,8 +104,6 @@ func RetryExternal() bool {
 	return forgot
 }
 
-// external is the drawing of src at width w, and starts it when nothing has.
-// fail is why it failed.
 func external(src string, w int, h Hooks) (rows [][]sketchtext.Cell, cut bool, state int, fail string) {
 	k := sketchKey{src, w}
 	externals.Lock()
@@ -154,7 +138,6 @@ type sketchKey struct {
 	w   int
 }
 
-// sketchCacheMax bounds each map of the cache.
 const sketchCacheMax = 64
 
 func (s *Surface) drawMermaid(src string, w int) *mermaidDrawing {
@@ -187,7 +170,6 @@ func (s *Surface) drawMermaid(src string, w int) *mermaidDrawing {
 		rows, cut, state, fail := external(src, w, s.hooks)
 		switch state {
 		case externalPending:
-			// Not kept: the next frame after the drawing comes in asks again.
 			out.fail = "the sketch plugin is drawing this diagram"
 			out.fail = oneLine(out.fail)
 			return out
@@ -197,8 +179,6 @@ func (s *Surface) drawMermaid(src string, w int) *mermaidDrawing {
 				out.w = max(out.w, len(r))
 			}
 		default:
-			// Not kept either: after RetryExternal the next frame asks
-			// again. external answers from its own map until then.
 			out.fail = oneLine(cmp.Or(fail, "the sketch plugin draws "+p.missing+" diagrams"))
 			return out
 		}
@@ -209,8 +189,6 @@ func (s *Surface) drawMermaid(src string, w int) *mermaidDrawing {
 	default:
 		rows, err := sketchtext.DrawCells(p.d, sketchtext.Options{Cols: w})
 		if errors.Is(err, sketchtext.ErrTooWide) {
-			// Even the narrowest layout is too wide: draw it at its own
-			// width and show what fits.
 			rows, err = sketchtext.DrawCells(p.d, sketchtext.Options{})
 			out.cut = err == nil
 		}
@@ -237,8 +215,6 @@ func (s *Surface) drawMermaid(src string, w int) *mermaidDrawing {
 	return out
 }
 
-// oneLine shortens a parse error to one line: its first line, which says
-// where, and its last, which says what was expected.
 func oneLine(msg string) string {
 	lines := strings.Split(strings.TrimSpace(msg), "\n")
 	first := strings.TrimSuffix(strings.TrimSpace(lines[0]), ":")
@@ -249,7 +225,6 @@ func oneLine(msg string) string {
 	return first + ". " + last
 }
 
-// note is the line over a diagram that is cut or not drawn, or "".
 func (d *mermaidDrawing) note() (string, string) {
 	switch {
 	case d.fail != "":
@@ -304,7 +279,6 @@ func (w *mermaidWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	for i := 0; i < draw.Dy() && off+i < len(d.rows); i++ {
 		row := d.rows[off+i]
 		y := draw.Min.Y + i
-		// Write runs of one style at a time.
 		var run strings.Builder
 		var runSt style
 		runX := draw.Min.X
@@ -317,7 +291,6 @@ func (w *mermaidWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 		}
 		for x, cell := range row {
 			if cell.Rune == 0 {
-				// Covered by the wide character before it.
 				continue
 			}
 			if cell.Rune == ' ' && cell.Bg == sketchtext.RoleNone {
@@ -342,7 +315,6 @@ func (w *mermaidWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	}
 }
 
-// mermaidStyle is the theme role of a sketch cell role.
 func mermaidStyle(r sketchtext.Role) style {
 	switch r {
 	case sketchtext.RoleLine:
@@ -364,8 +336,6 @@ func mermaidStyle(r sketchtext.Role) style {
 	return style{fg: "fg"}
 }
 
-// asciiRune maps the box drawing, block and arrow characters of a drawing
-// to ASCII, for the ASCII depth.
 func asciiRune(r rune) rune {
 	switch r {
 	case '─', '━', '┄', '┅', '╌', '╍', '═', '╴', '╶', '╸', '╺', '▔', '▁':

@@ -9,11 +9,7 @@ import (
 	"tuios.dev/tml"
 )
 
-// view opens the document full screen until the person quits or the
-// document closes. closed says a close action ended it, with value.
 func view(doc *tml.Node, depth loom.Depth) (value any, closed bool, err error) {
-	// esc quits, as it closes a popup, so the document reads its placement
-	// as one.
 	s, err := loom.New(doc, &loom.Options{Palette: loom.DefaultPalette(depth), Placement: "popup"})
 	if err != nil {
 		return nil, false, err
@@ -41,7 +37,6 @@ func view(doc *tml.Node, depth loom.Depth) (value any, closed bool, err error) {
 	if err := draw(); err != nil {
 		return nil, false, err
 	}
-	// A document that shows ago() changes with the clock.
 	var tick <-chan time.Time
 	if s.NeedsClock() {
 		tk := time.NewTicker(time.Minute)
@@ -97,8 +92,6 @@ func view(doc *tml.Node, depth loom.Depth) (value any, closed bool, err error) {
 					_, _ = scr.WriteString(ansi.SetSystemClipboard(text))
 				}
 			}
-			// emit, open, pane and link need a host that owns the document,
-			// such as tuios. Here they do nothing.
 		}
 		if err := draw(); err != nil {
 			return nil, false, err
@@ -106,7 +99,6 @@ func view(doc *tml.Node, depth loom.Depth) (value any, closed bool, err error) {
 	}
 }
 
-// mouse turns a terminal mouse event into a loom one.
 func mouse(ev uv.MouseEvent) (loom.Mouse, bool) {
 	m := ev.Mouse()
 	out := loom.Mouse{X: m.X, Y: m.Y}
@@ -135,7 +127,6 @@ func mouse(ev uv.MouseEvent) (loom.Mouse, bool) {
 	return out, true
 }
 
-// paint copies a loom buffer onto the screen.
 func paint(scr *uv.TerminalScreen, b *loom.Buffer) {
 	for y := 0; y < b.Height(); y++ {
 		for x := 0; x < b.Width(); x++ {

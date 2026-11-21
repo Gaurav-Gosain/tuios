@@ -58,7 +58,6 @@ const (
 	RoleHeat5 = string(plot.Heat5)
 )
 
-// roleNames is every role a palette holds: the TML roles, then loom's own.
 var roleNames = append(tml.Roles(), RoleTrack, RoleCursor, RolePill, RoleHeat1, RoleHeat2, RoleHeat3, RoleHeat4, RoleHeat5)
 
 func roleIndex(name string) int {
@@ -78,10 +77,8 @@ func roleIndex(name string) int {
 // Every colour loom draws comes from a palette, so the host keeps one look
 // and its contrast rules across every surface.
 type Palette struct {
-	Depth  Depth
-	colors []color.Color
-	// fades holds the faded roles, such as "series1/2", built on the first
-	// lookup of one, so a palette that draws no fade spends nothing on them.
+	Depth     Depth
+	colors    []color.Color
 	fades     map[string]color.Color
 	fadesOnce sync.Once
 }
@@ -116,11 +113,6 @@ func NewPalette(d Depth, roles map[string]color.Color) *Palette {
 	return p
 }
 
-// makeFades derives every faded role plot can name, such as "series1/2":
-// the base colour mixed toward the ground by a fifth for each step, at
-// truecolor and 256 colours. At 16 colours a fade of 2 or 3 takes the
-// normal slot of a bright base colour, so the bands of a chart still differ;
-// fade 1, and a base that is not a bright slot, keep the base colour.
 func (p *Palette) makeFades() map[string]color.Color {
 	ground := p.colors[roleIndex("panel")]
 	if ground == nil {
@@ -139,7 +131,6 @@ func (p *Palette) makeFades() map[string]color.Color {
 	return out
 }
 
-// fade is base faded k steps toward ground at depth d.
 func fade(d Depth, base, ground color.Color, k int) color.Color {
 	if d == Color16 {
 		if b, ok := base.(ansi.BasicColor); ok && k >= 2 && b >= 9 && b <= 14 {
@@ -178,15 +169,12 @@ func (p *Palette) Color(role string) color.Color {
 	return p.fades[role]
 }
 
-// grounded reports whether the palette paints grounds. At 16 colours and in
-// ASCII it does not.
 func (p *Palette) grounded() bool { return p.Color("panel") != nil }
 
 func rgb(v uint32) color.RGBA {
 	return color.RGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 255}
 }
 
-// mixRGB blends a toward b by t in OKLab, as the tuios chrome does.
 func mixRGB(a, b color.RGBA, t float64) color.RGBA {
 	al, aa, ab := toOKLab(a)
 	bl, ba, bb := toOKLab(b)
@@ -233,8 +221,6 @@ func fromOKLab(l, a, b float64) color.RGBA {
 	}
 }
 
-// The default roles: the tuios chrome palette with no theme (charmtone), for
-// a surface on the panel ground.
 var defaultRGB = func() map[string]color.RGBA {
 	canvas, panel, surface, card := rgb(0x201F26), rgb(0x2D2C36), rgb(0x3A3943), rgb(0x4D4C57)
 	fg, dim, mute := rgb(0xFFFAF1), rgb(0xBFBCC8), rgb(0x858392)
@@ -256,16 +242,14 @@ var defaultRGB = func() map[string]color.RGBA {
 		RoleTrack:  mixRGB(panel, mute, 0.30),
 		RoleCursor: surface,
 		RolePill:   fg,
-		// From the ground through the info blue to the accent.
-		RoleHeat1: mixRGB(panel, info, 0.22),
-		RoleHeat2: mixRGB(panel, info, 0.48),
-		RoleHeat3: info,
-		RoleHeat4: mixRGB(info, bright, 0.55),
-		RoleHeat5: bright,
+		RoleHeat1:  mixRGB(panel, info, 0.22),
+		RoleHeat2:  mixRGB(panel, info, 0.48),
+		RoleHeat3:  info,
+		RoleHeat4:  mixRGB(info, bright, 0.55),
+		RoleHeat5:  bright,
 	}
 }()
 
-// The default roles at 16 colours: ANSI slots only, and no grounds.
 var default16 = map[string]int{
 	"fg": 15, "dim": 7, "mute": 8, "edge": 8, RoleTrack: 8,
 	"accent": 5, "accent-bright": 13, RolePill: 0,
@@ -297,8 +281,6 @@ func DefaultPalette(d Depth) *Palette {
 	return NewPalette(d, roles)
 }
 
-// nearest256 returns the xterm 256 colour nearest to c, from the colour cube
-// and the grey ramp, by distance in OKLab.
 func nearest256(c color.RGBA) uint8 {
 	levels := [6]uint8{0, 95, 135, 175, 215, 255}
 	l, a, b := toOKLab(c)

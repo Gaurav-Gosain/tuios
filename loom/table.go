@@ -8,12 +8,9 @@ import (
 	"tuios.dev/tml"
 )
 
-// tableWidget shows rows of a state array in columns. Sorting, filtering,
-// the cursor and scrolling are view state and run locally. Only the rows in
-// view are formatted, so a table of 50,000 rows costs what its height does.
 type tableWidget struct {
 	cols       []tableCol
-	rows       []any // after the filter and the sort
+	rows       []any
 	keyField   string
 	sort       SortSpec
 	selectable bool
@@ -22,9 +19,9 @@ type tableWidget struct {
 	onSelect   []tml.Action
 	vars       map[string]any
 
-	widths, xs []int // at the last place
-	widthsFor  int   // the width the widths were shared for
-	bodyTop    int   // the screen row of the first data row
+	widths, xs []int
+	widthsFor  int
+	bodyTop    int
 }
 
 type tableCol struct {
@@ -35,12 +32,8 @@ type tableCol struct {
 	size     size
 	format   *tml.Expr
 	sortable bool
-	// path says the sampled cells are slash paths (some read as a path and
-	// none holds a space), which a narrow column cuts from the left, keeping
-	// the last segment: "…/session".
-	path bool
-	// tailW is the widest cut cell of a path column, "…/session".
-	tailW int
+	path     bool
+	tailW    int
 }
 
 func (s *Surface) buildTable(b *box, vars map[string]any) widget {
@@ -93,7 +86,6 @@ func (s *Surface) buildTable(b *box, vars map[string]any) widget {
 	return w
 }
 
-// rowKey is the identity of a row: its key field, or its index.
 func (w *tableWidget) rowKey(i int) string {
 	if w.keyField != "" && i < len(w.rows) {
 		if m, ok := w.rows[i].(map[string]any); ok {
@@ -105,7 +97,6 @@ func (w *tableWidget) rowKey(i int) string {
 	return "i:" + strconv.Itoa(i)
 }
 
-// find returns the index of the row with the given identity, or 0.
 func (w *tableWidget) find(key string) int {
 	if strings.HasPrefix(key, "i:") {
 		i, _ := strconv.Atoi(key[2:])
@@ -130,8 +121,6 @@ func (w *tableWidget) margin() int {
 	return 0
 }
 
-// cell returns the text of one cell: the column's format of the value, or
-// the value as text.
 func (s *Surface) tableCell(w *tableWidget, col *tableCol, row any) string {
 	m, _ := row.(map[string]any)
 	v := m[col.field]
@@ -147,17 +136,7 @@ func (s *Surface) tableCell(w *tableWidget, col *tableCol, row any) string {
 	return tml.Stringify(out)
 }
 
-// columnWidths shares the width among the columns: fixed and percent
-// widths, then auto columns at their widest text in the first rows, then
-// fill weights.
-//
-// When the columns do not fit, they give way in steps, each only as far as
-// it must: a column wider than anything in it first gives back the room it
-// does not use; then a column of paths gives way down to its last segments,
-// which say the most; then every column in proportion.
 func (s *Surface) columnWidths(w *tableWidget, total int) []int {
-	// Sampling the rows has its own budget, so a wide table cannot starve
-	// the rows on the screen.
 	frame := s.budget
 	s.budget = &tml.Budget{Steps: s.boxSteps}
 	defer func() { s.budget = frame }()
@@ -170,7 +149,7 @@ func (s *Surface) columnWidths(w *tableWidget, total int) []int {
 		col := &w.cols[i]
 		natural[i] = width(col.title)
 		if col.field == w.sort.Field && w.sort.Field != "" {
-			natural[i] += 2 // a space and the arrow
+			natural[i] += 2
 		}
 		slash, spaced := false, false
 		for r := 0; r < min(len(w.rows), 100); r++ {
@@ -210,28 +189,21 @@ func (s *Surface) columnWidths(w *tableWidget, total int) []int {
 		}
 		return t
 	}
-	// Room a column does not use.
 	for i := range items {
 		if over := sum() - avail; over > 0 && items[i].base > natural[i] {
 			items[i].base -= min(over, items[i].base-natural[i])
 		}
 	}
-	// A path column down to its last segments.
 	for i, col := range w.cols {
 		if over := sum() - avail; over > 0 && col.path {
 			floor := max(min(tail[i]-2, items[i].base), items[i].lo)
 			items[i].base -= min(over, max(items[i].base-floor, 0))
-			// Its last segment stays whole while other columns can give.
 			items[i].lo = floor
 		}
 	}
 	return distribute(avail, items)
 }
 
-// isPathLike reports whether text reads as a slash path: it holds a slash
-// and a segment with a letter in it. A ratio or a date, 412/417 or
-// 2026/10/21, does not, and cutting it from the left would change what it
-// says.
 func isPathLike(text string) bool {
 	if !strings.Contains(text, "/") {
 		return false
@@ -246,8 +218,6 @@ func isPathLike(text string) bool {
 	return false
 }
 
-// pathTail is the last segment of a slash path, with a mark that more came
-// before it: "…/session".
 func pathTail(p string) string {
 	i := strings.LastIndex(p, "/")
 	if i < 0 {
@@ -256,8 +226,6 @@ func pathTail(p string) string {
 	return "…" + p[i:]
 }
 
-// cutPath shortens a slash path to n cells from the left, keeping as many
-// whole last segments as fit, then the last one cut at its end.
 func cutPath(p string, n int, ellipsis string) string {
 	if width(p) <= n {
 		return p
@@ -278,8 +246,6 @@ func cutPath(p string, n int, ellipsis string) string {
 }
 
 func (w *tableWidget) place(s *Surface, b *box, in Rect) {
-	// The widths depend only on the rows and the width, and the widget is
-	// built again when its rows change.
 	if w.widths == nil || w.widthsFor != in.Dx() {
 		w.widths = s.columnWidths(w, in.Dx())
 		w.widthsFor = in.Dx()
@@ -307,8 +273,6 @@ func (w *tableWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	if len(w.widths) != len(w.cols) || r.Dy() <= 0 {
 		return
 	}
-	// The rows in view format on a budget of their own, the same at every
-	// paint.
 	frame := s.budget
 	s.budget = &tml.Budget{Steps: s.boxSteps}
 	defer func() { s.budget = frame }()
@@ -318,8 +282,6 @@ func (w *tableWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 		st := style{fg: "mute"}
 		l := line{{text: t, st: st}}
 		if col.field == w.sort.Field && w.sort.Field != "" {
-			// The sorted column's title is a step brighter than the rest,
-			// and the title gives way to the arrow, which says the order.
 			arrow := g.sortUp
 			if w.sort.Desc {
 				arrow = g.sortDown
@@ -365,9 +327,6 @@ func (w *tableWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 			}
 			text := s.tableCell(w, col, w.rows[ri])
 			if col.path && width(text) > w.widths[i] {
-				// One form for the whole column: the last segments
-				// after a mark, or, when even the widest of those does
-				// not fit, the last segment alone.
 				if w.widths[i] >= col.tailW {
 					text = cutPath(text, w.widths[i], g.ellipsis)
 				} else {
@@ -379,7 +338,6 @@ func (w *tableWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	}
 }
 
-// colAt returns the column under screen column x, or -1.
 func (w *tableWidget) colAt(x int) int {
 	for i, cx := range w.xs {
 		if x >= cx && x < cx+w.widths[i]+2 {

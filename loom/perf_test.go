@@ -9,8 +9,6 @@ import (
 	"tuios.dev/tml"
 )
 
-// bigTable is a 200-row table under a stats row, the shape of a results
-// surface, with a format on one column.
 func bigTable() string {
 	var rows []string
 	for i := range 200 {
@@ -87,9 +85,7 @@ func TestRenderBudget(t *testing.T) {
 	t.Logf("redraw after a one-binding patch: %d µs/op, %d B/op, %d allocs/op", patch.NsPerOp()/1000, patch.AllocedBytesPerOp(), patch.AllocsPerOp())
 	apply := testing.Benchmark(BenchmarkStoreApply)
 	t.Logf("the patch in tml.Store.Apply:     %d µs/op, %d B/op (not loom's; it copies the 200-row state)", apply.NsPerOp()/1000, apply.AllocedBytesPerOp())
-	const fullBudget, patchBudget = 4_000_000, 100_000 // ns, about 7 times what a desktop measures
-	// The race detector costs far more than the margin in the budgets, so a time
-	// says nothing under it. The work counters below hold the claim either way.
+	const fullBudget, patchBudget = 4_000_000, 100_000
 	if !raceEnabled {
 		if ns := full.NsPerOp(); ns > fullBudget {
 			t.Errorf("a full render took %d µs, the budget is %d µs", ns/1000, fullBudget/1000)
@@ -119,7 +115,6 @@ func TestRenderBudget(t *testing.T) {
 // and within tml's depth limit, to a render budget. Without the measure
 // cache each row measured its child twice, so the chain cost 2^depth measures.
 func TestDeepRowChainBudget(t *testing.T) {
-	// The deepest chain tml.Check accepts.
 	var s *Surface
 	depth := 0
 	for n := 32; n > 0 && s == nil; n-- {
@@ -144,9 +139,6 @@ func TestDeepRowChainBudget(t *testing.T) {
 	}
 }
 
-// motionSurfaceAt is the 200-row results surface with its body fading in,
-// the whole surface, with the clock held in the middle of the effect, so
-// every Render draws a frame of it.
 func motionSurfaceAt(tb testing.TB, attr string) *Surface {
 	tb.Helper()
 	src := strings.Replace(bigTable(), `<col gap="1">`, `<col gap="1" `+attr+`>`, 1)

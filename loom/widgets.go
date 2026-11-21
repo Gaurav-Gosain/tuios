@@ -11,8 +11,6 @@ import (
 	"tuios.dev/tml"
 )
 
-// inline turns the children of a text-like node into styled spans: text
-// runs with their bindings, and b, i, u, s, code, c, kbd and a.
 func (s *Surface) inline(n *tml.Node, vars map[string]any, base style) []span {
 	var out []span
 	var walk func(n *tml.Node, st style)
@@ -71,7 +69,6 @@ func (s *Surface) inline(n *tml.Node, vars map[string]any, base style) []span {
 	return out
 }
 
-// plainText returns the text of a node's children without styles.
 func (s *Surface) plainText(n *tml.Node, vars map[string]any) string {
 	var b strings.Builder
 	for _, sp := range s.inline(n, vars, style{}) {
@@ -80,13 +77,10 @@ func (s *Surface) plainText(n *tml.Node, vars map[string]any) string {
 	return b.String()
 }
 
-// validRole reports whether a document may name r: a TML role. loom's own
-// roles (track, cursor, pill, heat1 to heat5) are for its own marks.
 func validRole(r string) bool { return r != "" && slices.Contains(docRoles, r) }
 
 var docRoles = tml.Roles()
 
-// roleOr returns the role attribute when it is valid, else def.
 func (s *Surface) roleOr(n *tml.Node, vars map[string]any, def string) string {
 	if r := s.str(n, "role", vars); validRole(r) {
 		return r
@@ -94,7 +88,6 @@ func (s *Surface) roleOr(n *tml.Node, vars map[string]any, def string) string {
 	return def
 }
 
-// buildLeaf builds the widget of a component with no child boxes.
 func (s *Surface) buildLeaf(b *box, vars map[string]any) widget {
 	n := b.src
 	switch n.Type {
@@ -143,8 +136,6 @@ func (s *Surface) buildLeaf(b *box, vars map[string]any) widget {
 	case "bar", "line", "area", "sparkline", "gauge", "progress", "histogram", "heatmap", "map", "pie":
 		return s.buildChart(b, vars)
 	}
-	// A component loom does not draw yet, or an unknown one: its name, so
-	// the gap is visible and never silent.
 	return &textWidget{spans: []span{{text: "<" + n.Type + ">", st: style{fg: "mute"}}}, wrap: wrapNone}
 }
 
@@ -168,12 +159,11 @@ func alignOf(s string) textAlign {
 	return alignLeft
 }
 
-// textWidget is a paragraph of styled spans.
 type textWidget struct {
 	spans []span
 	wrap  wrapMode
 	align textAlign
-	rule  bool // a hairline after the text to the right edge (heading 2)
+	rule  bool
 	press []tml.Action
 
 	cacheW int
@@ -203,9 +193,6 @@ func (t *textWidget) measure(_ *Surface, _ *box, maxW int) (int, int) {
 func (t *textWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	lines := t.linesFor(r.Dx())
 	if len(lines) > r.Dy() && r.Dy() > 0 {
-		// Too little height: the rows that fit, the last one cut with an
-		// ellipsis. One row shows the text unwrapped, so it reads from the
-		// start.
 		if r.Dy() == 1 {
 			lines = wrap(t.spans, r.Dx(), wrapNone)[:1]
 		} else {
@@ -238,11 +225,10 @@ func (s *Surface) buildHeading(b *box, vars map[string]any) widget {
 	return &textWidget{spans: s.inline(n, vars, st), wrap: wrapWord, rule: level == 2}
 }
 
-// badgeWidget is a short tag on a tint of its role, or a toast.
 type badgeWidget struct {
 	label string
 	role  string
-	block bool // a toast: the tint takes the whole width
+	block bool
 	press []tml.Action
 }
 
@@ -278,9 +264,6 @@ func (w *badgeWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	c.drawLine(r.Min.X, r.Min.Y, r.Dx(), plainLine(w.text(s), st), alignLeft)
 }
 
-// statWidget is the KPI tile: a number with a label, and a change. On one
-// row it reads "412 passed +12". Given two rows or more it is a tile: a
-// role bar, the label, then the number.
 type statWidget struct {
 	label, value, delta, role string
 	press                     []tml.Action
@@ -324,14 +307,12 @@ func tileBar(s *Surface) string {
 	return "▎"
 }
 
-// kvWidget is key and value pairs in two aligned columns. A long value
-// wraps onto more rows under its value column.
 type kvWidget struct {
 	keys, vals []string
 	roles      []string
 
 	cacheW int
-	lines  [][]line // each value wrapped at the value column of cacheW
+	lines  [][]line
 }
 
 func (s *Surface) buildKV(b *box, vars map[string]any) widget {
@@ -359,7 +340,6 @@ func (w *kvWidget) keyW() int {
 	return n + 2
 }
 
-// linesFor wraps each value in the value column of a widget w cells wide.
 func (w *kvWidget) linesFor(width int) (int, [][]line) {
 	kw := min(w.keyW(), width/2)
 	if w.lines == nil || w.cacheW != width {
@@ -403,7 +383,6 @@ func (w *kvWidget) paint(_ *Surface, _ *box, c *canvas, r Rect) {
 	}
 }
 
-// codeWidget is preformatted text: code, and for now markdown and diff.
 type codeWidget struct {
 	lines  []string
 	from   int
@@ -470,7 +449,6 @@ func (w *codeWidget) paint(_ *Surface, _ *box, c *canvas, r Rect) {
 	}
 }
 
-// buttonWidget is a button: the key in a cap, then the label.
 type buttonWidget struct {
 	label, key      string
 	primary, danger bool
@@ -481,7 +459,6 @@ type buttonWidget struct {
 func (w *buttonWidget) spans(s *Surface) line {
 	if !s.pal.grounded() {
 		if w.primary && !w.disabled {
-			// Reverse video carries the accent ground at 16 colours.
 			st := style{fg: "accent", attrs: attrReverse | attrBold}
 			if w.key == "" {
 				return line{{text: " " + w.label + " ", st: st}}
@@ -498,8 +475,6 @@ func (w *buttonWidget) spans(s *Surface) line {
 		}
 		return append(l, span{text: w.label, st: style{fg: ink}}, span{text: "]", st: style{fg: "mute"}})
 	}
-	// The key and the label share one ground, so the button reads as one
-	// object; the key is told apart by its colour and weight.
 	keyBg, keyFg, labelBg, labelFg := "surface", "accent-bright", "surface", "fg"
 	switch {
 	case w.disabled:
@@ -524,22 +499,16 @@ func (w *buttonWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	c.drawLine(r.Min.X, r.Min.Y, r.Dx(), w.spans(s), alignLeft)
 }
 
-// statusWidget is the tuios agent state glyph and word, or a spinner.
 type statusWidget struct {
 	state, label string
 }
 
 var statusLook = map[string][4]string{
-	// state: unicode glyph, ascii glyph, role, word. The glyphs are the
-	// Unicode forms the tuios cockpit uses, which common monospace fonts
-	// have; ◐ is in neither JetBrains Mono nor Geist Mono.
-	"working":     {"»", "~", "busy", "working"},
-	"needs_input": {"●", "!", "attention", "needs input"},
-	"idle":        {"○", "o", "mute", "idle"},
-	"done":        {"✓", "v", "success", "done"},
-	"errored":     {"✕", "x", "error", "errored"},
-	// Stopped on the harness's usage or rate limit: it waits on a clock,
-	// not on a person, so it takes the warn role and no attention.
+	"working":       {"»", "~", "busy", "working"},
+	"needs_input":   {"●", "!", "attention", "needs input"},
+	"idle":          {"○", "o", "mute", "idle"},
+	"done":          {"✓", "v", "success", "done"},
+	"errored":       {"✕", "x", "error", "errored"},
 	"limit_reached": {"▼", "=", "warning", "limit reached"},
 	"spinner":       {"⠹", "*", "accent-bright", ""},
 }
@@ -572,17 +541,13 @@ func (w *statusWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	c.drawLine(r.Min.X, r.Min.Y, r.Dx(), w.line(s), alignLeft)
 }
 
-// fieldWidget draws a form field. An input or a textarea takes typed
-// text: see field_edit.go.
 type fieldWidget struct {
 	kind, label, value, placeholder string
 	on, disabled                    bool
 	num, lo, hi                     float64
 	rows                            int
-	// key names the field's view state, bind the state path it writes,
-	// and caret is where the next typed text goes, in runes.
-	key, bind string
-	caret     int
+	key, bind                       string
+	caret                           int
 }
 
 const fieldLabelW = 14
@@ -647,7 +612,6 @@ func (w *fieldWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	x := r.Min.X
 	focused := w.editable() && s.focused() == b
 	if w.kind == "checkbox" {
-		// The box goes before its label, next to it, as a checklist reads.
 		mark := "[ ]"
 		if w.on {
 			mark = "[x]"
@@ -718,11 +682,6 @@ func (w *fieldWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	}
 }
 
-// paintText draws an input or a textarea from column x to right: a field
-// of its own on each of its rows, so the person sees where to type on any
-// ground. With grounds the field is a box in the surface role with a rule
-// under its last row. At 16 colours and in ASCII, which have no grounds,
-// each row is ruled. The rule is mute, and accent on the focused field.
 func (w *fieldWidget) paintText(s *Surface, c *canvas, x, right int, r Rect, focused bool, ink string) {
 	grounded := s.pal.grounded()
 	rule := "mute"
@@ -774,7 +733,6 @@ func (w *fieldWidget) paintText(s *Surface, c *canvas, x, right int, r Rect, foc
 	}
 }
 
-// treeWidget is a tree of nested state objects, open to a depth.
 type treeWidget struct {
 	rows []treeRow
 }

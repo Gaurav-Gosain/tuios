@@ -9,13 +9,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// nextGraphemeBySegmenter is nextGrapheme as it was when every character
-// went through the grapheme segmenter. It is the reference nextGrapheme is
-// held to.
 func nextGraphemeBySegmenter(s *string) (string, int) {
 	g, w := ansi.FirstGraphemeCluster(*s, ansi.GraphemeWidth)
 	if g == "" {
-		// Defensive: never loop on input the segmenter cannot cut.
 		_, size := utf8.DecodeRuneInString(*s)
 		*s = (*s)[max(size, 1):]
 		return "", 0
@@ -40,18 +36,15 @@ func nextGraphemeBySegmenter(s *string) (string, int) {
 // join a character before them, and seeded random strings that mix them.
 func TestNextGraphemeAgreesWithTheSegmenter(t *testing.T) {
 	nonASCII := []string{
-		"\u0301",     // combining acute accent
-		"\u200D",     // zero width joiner
-		"\uFE0F",     // variation selector 16
-		"\u4E2D",     // CJK ideograph
-		"\U0001F600", // emoji
-		"\u0E31",     // Thai MAI HAN-AKAT
-		"\u1100",     // Hangul choseong
-		"\u0085",     // next line, a C1 control
+		"\u0301",
+		"\u200D",
+		"\uFE0F",
+		"\u4E2D",
+		"\U0001F600",
+		"\u0E31",
+		"\u1100",
+		"\u0085",
 	}
-	// check consumes input with both functions and reports the first step
-	// at which they differ. It stops after len(input)+1 steps, so a
-	// function that never advances fails rather than hangs.
 	check := func(t *testing.T, input string) bool {
 		t.Helper()
 		got, want := input, input
@@ -159,8 +152,6 @@ func TestNextGraphemeBudget(t *testing.T) {
 	}
 	text := line.String()
 	sink := 0
-	// consume cuts the whole line with next and reports whether it reached
-	// the end within len(text)+1 steps.
 	consume := func(next func(*string) (string, int)) bool {
 		s := text
 		for range len(text) + 1 {

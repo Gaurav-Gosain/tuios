@@ -6,7 +6,6 @@ import (
 	"tuios.dev/tml"
 )
 
-// buildChildren builds the component children of n.
 func (s *Surface) buildChildren(n *tml.Node, ptr string, sc *scope, parent *box) []*box {
 	var out []*box
 	for i, c := range n.Children {
@@ -19,8 +18,6 @@ func (s *Surface) buildChildren(n *tml.Node, ptr string, sc *scope, parent *box)
 	return out
 }
 
-// build turns a node into boxes: none when if is false, one per element
-// with each, else one.
 func (s *Surface) build(n *tml.Node, ptr string, sc *scope, parent *box) []*box {
 	each, ok := n.Attr("each")
 	if !ok {
@@ -53,12 +50,7 @@ func (s *Surface) build(n *tml.Node, ptr string, sc *scope, parent *box) []*box 
 	return out
 }
 
-// buildOne builds the box of one node in a scope, or nil when its if is
-// false.
 func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box {
-	// Each box spends its share of the frame's step budget (shareFor), so
-	// it evaluates to the same result in a full render and when it is
-	// built again alone.
 	frame := s.budget
 	s.budget = &tml.Budget{Steps: s.boxSteps}
 	defer func(b *tml.Budget) {
@@ -89,8 +81,6 @@ func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box
 	b.pad = parsePad(n.AttrString("pad"))
 	b.gap = s.count(n, "gap", vars, 0, 0, 100)
 	if _, set := n.Attr("gap"); !set && n.Type == "form" {
-		// A form's fields stand a row apart, so two text fields read as
-		// two boxes, not one.
 		b.gap = 1
 	}
 	b.grow = s.count(n, "grow", vars, 0, 0, 100)
@@ -98,8 +88,6 @@ func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box
 	b.justify = n.AttrString("justify")
 
 	if n.Type == "form" {
-		// form.NAME reads a field's value. Editing comes with the input
-		// wave; until then a field holds its first value.
 		sc = sc.with("form", s.formValues(n, ptr, vars), 0)
 		sc.ident = ""
 		b.scope = sc
@@ -117,8 +105,6 @@ func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box
 	case "tabs":
 		b.w = s.buildTabs(b, vars)
 	case "modal":
-		// A closed modal takes no space. An open one draws in place; the
-		// host floats it in wave 3.
 		if !s.flag(n, "open", vars, false) {
 			return nil
 		}
@@ -133,8 +119,6 @@ func (s *Surface) buildOne(n *tml.Node, ptr string, sc *scope, parent *box) *box
 
 func clampInt(v, lo, hi int) int { return max(lo, min(hi, v)) }
 
-// formValues returns the value of each field of a form, by name: the state
-// a field binds, what was typed into it, or its first value.
 func (s *Surface) formValues(form *tml.Node, formPtr string, vars map[string]any) map[string]any {
 	out := map[string]any{}
 	form.Walk(func(n *tml.Node, rel string) bool {
@@ -168,23 +152,15 @@ func (s *Surface) formValues(form *tml.Node, formPtr string, vars map[string]any
 	return out
 }
 
-// The frame's step budget for bindings, shared by the boxes that evaluate.
 const (
 	frameSteps  = 1_000_000
 	minBoxSteps = 100
 )
 
-// shareFor is one box's share of the frame budget among at most n boxes:
-// frameSteps/n, and at least minBoxSteps.
 func shareFor(n int) int {
 	return max(minBoxSteps, frameSteps/max(n, 1))
 }
 
-// maxBoxes bounds the boxes a document can build: one per component, and,
-// when it repeats anything with each or list, the copies its Each limit
-// allows. tml.StoreFor refuses a patch that would pass that limit, so the
-// bound holds for every state the surface can reach, and the share stays
-// the same across patches: a full and an incremental render agree.
 func maxBoxes(doc *tml.Node, lim *tml.Limits) int {
 	n, repeats := 0, false
 	doc.Walk(func(x *tml.Node, _ string) bool {

@@ -55,8 +55,6 @@ type options struct {
 	depth               string
 }
 
-// version is set by the release build. go install leaves it empty, and the
-// module version comes from the build info.
 var version string
 
 func versionString() string {
@@ -96,7 +94,6 @@ func run(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) (int
 	fs.IntVar(&o.height, "height", 0, "Height in cells, 0 for the terminal height (24 when it is not a terminal)")
 	fs.StringVar(&o.depth, "depth", "auto", "Colour depth: auto, truecolor, 256, 16 or ascii")
 	showVersion := fs.Bool("version", false, "Print the version and exit")
-	// Flags may come before or after FILE.
 	var files []string
 	for {
 		if err := fs.Parse(args); err != nil {
@@ -146,7 +143,6 @@ func run(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) (int
 		return 0, printOnce(doc, depth, o, stdout, tty)
 	}
 	if name == "-" {
-		// Keys come from the terminal, and standard input held the document.
 		return 2, errors.New("a document from standard input can only be printed: add --print, or give a file")
 	}
 	value, closed, err := view(doc, depth)
@@ -163,9 +159,6 @@ func run(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) (int
 	return 0, nil
 }
 
-// readSource reads a document from a file, or from standard input for -, up
-// to the document limit and one byte more, so a long document is refused
-// with the limit named.
 func readSource(name string, stdin io.Reader) ([]byte, error) {
 	limit := tml.PersonLimits().DocBytes
 	r := stdin
@@ -187,9 +180,6 @@ func readSource(name string, stdin io.Reader) ([]byte, error) {
 	return data, nil
 }
 
-// pickDepth is the colour depth: the flag, or the one the terminal and its
-// environment give. A file or a pipe takes 256 colours, unless NO_COLOR is
-// set.
 func pickDepth(flagValue string, out *os.File, tty bool) (loom.Depth, error) {
 	switch strings.ToLower(flagValue) {
 	case "truecolor", "24bit":
@@ -222,7 +212,6 @@ func pickDepth(flagValue string, out *os.File, tty bool) (loom.Depth, error) {
 	return loom.ASCII, nil
 }
 
-// printOnce draws the document at one size and writes it.
 func printOnce(doc *tml.Node, depth loom.Depth, o options, out *os.File, tty bool) error {
 	w, h := 80, 24
 	if tty {
@@ -236,13 +225,11 @@ func printOnce(doc *tml.Node, depth loom.Depth, o options, out *os.File, tty boo
 	if o.height > 0 {
 		h = o.height
 	}
-	// The text sits on the terminal's own background, as other output does.
 	s, err := loom.New(doc, &loom.Options{Palette: loom.DefaultPalette(depth), Ground: loom.GroundNone})
 	if err != nil {
 		return err
 	}
 	buf := s.Render(w, h)
-	// Row by row, so the blank rows under the document can be left out.
 	var lines []string
 	last := -1
 	for y := 0; y < buf.Height(); y++ {
@@ -272,8 +259,6 @@ func printOnce(doc *tml.Node, depth loom.Depth, o options, out *os.File, tty boo
 	return err
 }
 
-// safe drops the characters a terminal would act on from text that came
-// from the document, such as a file name or a problem that quotes it.
 func safe(s string) string {
 	return strings.Map(func(r rune) rune {
 		if (r < 0x20 && r != '\t' && r != '\n') || r == 0x7f || (r >= 0x80 && r <= 0x9f) {

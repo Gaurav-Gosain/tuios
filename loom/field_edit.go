@@ -8,31 +8,12 @@ import (
 	"tuios.dev/tml"
 )
 
-// Text fields: input and textarea take typed text.
-//
-// A field with bind writes the state path it names, so the host sends the
-// change on as any state change. A field without bind keeps its text in the
-// view, keyed like the rest of the view state, and form.NAME reads it. The
-// caret is view state too.
-//
-// While a text field has the focus it takes every key that types or edits:
-// a printable key, space, backspace, delete, the arrows along the line, home
-// and end, and the readline keys ctrl+a, ctrl+e, ctrl+b, ctrl+f, ctrl+u,
-// ctrl+k, ctrl+w and alt+backspace. A button's key does not fire while a
-// field has the focus, so a letter goes into the field. tab, shift+tab and
-// esc keep their meaning. enter submits the field's form in an input, and
-// starts a new line in a textarea. esc leaves the field for the first
-// control that is not a text field.
-
-// maxFieldRunes bounds the text of one field.
 const maxFieldRunes = 4096
 
-// editable reports whether a field takes typed text.
 func (w *fieldWidget) editable() bool {
 	return (w.kind == "input" || w.kind == "textarea") && !w.disabled
 }
 
-// textField is the focused box when it is an editable text field.
 func (s *Surface) textField() (*box, *fieldWidget) {
 	b := s.focused()
 	if b == nil {
@@ -44,7 +25,6 @@ func (s *Surface) textField() (*box, *fieldWidget) {
 	return nil, nil
 }
 
-// typedText is the text a key types, or "" for a key that types nothing.
 func typedText(key string) string {
 	if key == "space" {
 		return " "
@@ -59,8 +39,6 @@ func typedText(key string) string {
 	return key
 }
 
-// fieldKey handles a key on a focused text field. ok reports that the field
-// took it.
 func (s *Surface) fieldKey(b *box, w *fieldWidget, key string) (Result, bool, error) {
 	text := []rune(w.value)
 	caret := clampInt(w.caret, 0, len(text))
@@ -70,9 +48,6 @@ func (s *Surface) fieldKey(b *box, w *fieldWidget, key string) (Result, bool, er
 	}
 	switch key {
 	case "esc":
-		// esc leaves the field for the first control that is not one, so
-		// a second esc reaches the host, which may close a popup. The text
-		// stays.
 		for _, o := range s.focus {
 			if ow, ok := o.w.(*fieldWidget); (!ok || !ow.editable()) && visible(o) {
 				s.setFocus(o)
@@ -146,8 +121,6 @@ func (s *Surface) Paste(text string) (Result, error) {
 	}
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	if w.kind == "input" {
-		// One line: the line break a copied line ends with goes, and the
-		// others become spaces.
 		text = strings.ReplaceAll(strings.TrimRight(text, "\n"), "\n", " ")
 	}
 	text = strings.Map(func(r rune) rune {
@@ -159,7 +132,6 @@ func (s *Surface) Paste(text string) (Result, error) {
 	return s.fieldInsert(b, w, text)
 }
 
-// fieldInsert puts t at the caret.
 func (s *Surface) fieldInsert(b *box, w *fieldWidget, t string) (Result, error) {
 	text := []rune(w.value)
 	caret := clampInt(w.caret, 0, len(text))
@@ -174,7 +146,6 @@ func (s *Surface) fieldInsert(b *box, w *fieldWidget, t string) (Result, error) 
 	return s.setField(b, w, next, caret+len(add))
 }
 
-// moveCaret puts the caret at i.
 func (s *Surface) moveCaret(b *box, w *fieldWidget, i int) Result {
 	i = clampInt(i, 0, utf8.RuneCountInString(w.value))
 	if i == w.caret {
@@ -186,8 +157,6 @@ func (s *Surface) moveCaret(b *box, w *fieldWidget, i int) Result {
 	return Result{View: true}
 }
 
-// setField writes a field's new text: into the state path it binds, or into
-// the view. on-change runs with event.value set to the text.
 func (s *Surface) setField(b *box, w *fieldWidget, text string, caret int) (Result, error) {
 	res := Result{View: true}
 	w.value, w.caret = text, caret
@@ -202,7 +171,6 @@ func (s *Surface) setField(b *box, w *fieldWidget, text string, caret int) (Resu
 	} else {
 		s.view.Text[w.key] = text
 	}
-	// A form reads its fields when it is built, so form.NAME follows.
 	s.full = true
 	if acts := s.actionsOf(b.src, "on-change"); len(acts) > 0 {
 		r2, err := s.run(b, acts, map[string]any{"value": text})
@@ -213,9 +181,6 @@ func (s *Surface) setField(b *box, w *fieldWidget, text string, caret int) (Resu
 	return res, nil
 }
 
-// submit runs the on-submit of the form around b, with form set to the
-// values of its fields as they are now. A form with a required field that
-// is empty does not submit.
 func (s *Surface) submit(b *box) (Result, error) {
 	form := b
 	for form != nil && form.kind != "form" {
@@ -255,13 +220,10 @@ func (s *Surface) submit(b *box) (Result, error) {
 	return res, err
 }
 
-// isSubmit reports whether a button submits its form.
 func isSubmit(b *box) bool {
 	return b.src != nil && b.src.AttrString("submit") == "true"
 }
 
-// press runs a button: its on-press, then the submit of its form when it
-// is a submit button.
 func (s *Surface) press(b *box, acts []tml.Action) (Result, error) {
 	res, err := s.run(b, acts, nil)
 	if err != nil || !isSubmit(b) {
@@ -308,9 +270,6 @@ func wordEnd(t []rune, i int) int {
 	return i
 }
 
-// caretLine draws a field's text on one row of w cells with the caret: the
-// part of the text around the caret that fits, and the caret's cell in
-// reverse video.
 func caretLine(text []rune, caret, w int, ink style) line {
 	if w <= 0 {
 		return nil
