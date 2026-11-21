@@ -2,12 +2,14 @@ package session
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/askpass"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/shimlink"
 )
 
 // Secrets a program in a pane asks the person for.
@@ -79,6 +81,28 @@ func askpassPromptShown(s string) bool {
 		}
 	}
 	return true
+}
+
+// AskpassLinkName is the name tuios's askpass program runs by: a link to the
+// tuios binary, which main runs as the askpass program when it is called by
+// this name.
+const AskpassLinkName = "tuios-askpass"
+
+// installAskpassLink makes the tuios-askpass link beside the daemon socket
+// and points every new pane's SSH_ASKPASS at it. OpenSSH runs SSH_ASKPASS as
+// one path with the prompt as its argument, so the program is chosen by the
+// link's name, not by an argument.
+func (d *Daemon) installAskpassLink(socketPath string) {
+	exe, err := d.agentProtoExecutable()
+	if err != nil {
+		return
+	}
+	link, err := shimlink.Install(filepath.Join(filepath.Dir(socketPath), "askpass"), AskpassLinkName, exe)
+	if err != nil {
+		LogBasic("The askpass link could not be made: %v. Programs in panes ask for passphrases on their terminal only.", err)
+		return
+	}
+	d.manager.SetAskpassBin(link)
 }
 
 // askpassRefused is askpass's refusal, with nothing asked.

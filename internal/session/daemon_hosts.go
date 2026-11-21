@@ -131,6 +131,7 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.manager.SetShellIntegration(cfg.Shell.Integration)
 	d.manager.SetShellLogin(cfg.Shell.Login)
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
+	d.manager.SetAskpass(cfg.Agents.Askpass)
 	// The ACP version shapes only the protocol panes started from now on,
 	// and either version offers the agent nothing, so a file change applies
 	// both ways.

@@ -79,6 +79,11 @@ func main() {
 	if isTmuxName(os.Args[0]) {
 		os.Exit(runAsTmux(os.Args[1:]))
 	}
+	// Run through the tuios-askpass link the daemon makes, this binary is
+	// the askpass program ssh runs for a passphrase. See askpass.go.
+	if isAskpassName(os.Args[0]) {
+		os.Exit(runAsAskpass(os.Args[1:]))
+	}
 	// Run through the herdr link the daemon makes, this binary is herdr's
 	// command line, as tools built for herdr call it. See herdr_commands.go.
 	if isHerdrName(os.Args[0]) {

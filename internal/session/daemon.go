@@ -1027,6 +1027,9 @@ type DaemonConfig struct {
 	// HerdrProtocol is [agents] herdr_protocol: which panes are told about
 	// the herdr protocol socket. See Manager.HerdrEnv.
 	HerdrProtocol string
+	// Askpass is [agents] askpass: whether panes get tuios's SSH_ASKPASS.
+	// See Manager.AskpassEnv.
+	Askpass string
 	// ACPVersion is [agents] acp_version. See Daemon.acpVersion.
 	ACPVersion int
 	// StayOnEmptyWorkspace is workspaces.return_when_empty turned off: the
@@ -1293,6 +1296,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetShellIntegration(cfg.ShellIntegration)
 	d.manager.SetShellLogin(cfg.ShellLogin)
 	d.manager.SetHerdrProtocol(cfg.HerdrProtocol)
+	d.manager.SetAskpass(cfg.Askpass)
 	d.acpVersion.Store(int32(cfg.ACPVersion))
 	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
 	d.manager.SetDragAndDrop(cfg.DragAndDrop)
@@ -1790,6 +1794,7 @@ func (d *Daemon) Start() error {
 	if l := listenHerdrSocket(HerdrSocketPath(socketPath)); l != nil {
 		d.serveHerdrOn(l, socketPath)
 	}
+	d.installAskpassLink(socketPath)
 
 	if err := d.writePidFile(); err != nil {
 		_ = listener.Close()
