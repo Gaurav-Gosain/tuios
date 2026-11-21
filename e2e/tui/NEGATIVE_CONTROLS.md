@@ -18586,3 +18586,18 @@ Run on 2026-11-19 on Linux, sim backend, against main at 61507834e. The control 
 TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -v -run '^(TestScreenshotRegionDragOpensThePreview|TestScreenshotTwoCapturesInOneSecondKeepBothFiles)$' .
 ```
+
+## clear keeps the scrollback
+
+`TestClearKeepsScrollback` prints 200 rows in a daemon pane, then writes the bytes clear prints: ED 2, then ED 3. With the default, copy mode at the top and the daemon's capture must still show row-1. With `appearance.scrollback_keep_on_clear = false`, the history must go.
+
+Run on 2026-11-21 on Linux, real backend, against main at 6419a7d9f.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Main | `TestClearKeepsScrollback/keep` | "the capture of e2e-clear-keep never matched": the history was gone | **caught** |
+| Main | `TestClearKeepsScrollback/drop` | passes: main always drops the history | not a control |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^(TestClearKeepsScrollback|TestClearScrollback)$' .
+```
