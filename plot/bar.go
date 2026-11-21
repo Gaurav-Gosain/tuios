@@ -2,7 +2,6 @@ package plot
 
 import "math"
 
-// The eighth blocks, from empty to full.
 var (
 	eighthsUp    = [...]string{" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
 	eighthsRight = [...]string{" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"}
@@ -60,7 +59,6 @@ func (b Bar) format() func(float64) string {
 	return Compact
 }
 
-// rng returns the range of the bars.
 func (b Bar) rng() (lo, hi float64) {
 	if (b.Min != 0 || b.Max != 0) && finite(b.Min) && finite(b.Max) && b.Max > b.Min {
 		return b.Min, b.Max
@@ -70,8 +68,6 @@ func (b Bar) rng() (lo, hi float64) {
 		return 0, 1
 	}
 	if !b.Horizontal && vlo > 0 && vlo > vhi/2 {
-		// Columns that cluster far from zero: start from a round base
-		// under the smallest value, so the differences show.
 		lo, hi := niceRange(vlo-(vhi-vlo)*0.3, vhi, 4)
 		if lo < 0 {
 			lo = 0
@@ -98,8 +94,6 @@ func (b Bar) Draw(w, h int, m Mode) *Grid {
 	lo, hi := b.rng()
 	if b.Axis {
 		labels := xLabels(b.Labels, len(b.Values))
-		// The axis is as wide as the columns, so the first and last labels
-		// sit under the first and last column.
 		labelW := 0
 		for _, t := range []float64{lo, hi, (lo + hi) / 2} {
 			labelW = max(labelW, width(b.format()(t)))
@@ -133,9 +127,6 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 		}
 		valueW = max(valueW, width(format(b.Values[i])))
 	}
-	// The values never clip. The labels take their width next, up to half
-	// the row, and the bars take what is left: a bar still reads shorter,
-	// where a cut label no longer says what it measures.
 	valueW = min(valueW, max(g.W-4, 0))
 	labelW = min(labelW, g.W/2, max(g.W-valueW-4, 0))
 	x0 := 0
@@ -163,7 +154,6 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 		}
 		x := x0
 		if b.Half && m != ASCII && finite(v) && v > base && cells > 0 {
-			// The half block is the first half cell of the length.
 			g.set(x, i, "▐", b.role(i))
 			x++
 			units = max(units-4, 0)
@@ -202,10 +192,6 @@ func (b Bar) drawRows(g *Grid, m Mode) {
 	}
 }
 
-// drawThin draws row i as a thin bar: lower half blocks, a lower left
-// quadrant for a half cell, and a hairline track after it when Guide is
-// on. A value
-// above the base always shows at least a half cell.
 func (b Bar) drawThin(g *Grid, i, x0, cells int, v, base, top float64) {
 	halves := 0
 	if finite(v) {
@@ -225,16 +211,12 @@ func (b Bar) drawThin(g *Grid, i, x0, cells int, v, base, top float64) {
 		x++
 	}
 	if b.Guide {
-		// The track is a hairline on the bar's base, so it guides the eye
-		// to the value without drawing a second bar.
 		for ; x < x0+cells; x++ {
 			g.set(x, i, "▁", Track)
 		}
 	}
 }
 
-// drawColumns draws one column per value between lo and hi. With labels,
-// and three rows or more, the bottom row names each column that has room.
 func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
 	vals, labels, roles := b.Values, b.Labels, b.Roles
 	rows := g.H
@@ -245,7 +227,6 @@ func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
 	if rows <= 0 || g.W <= 0 {
 		return
 	}
-	// More values than cells: the most recent ones.
 	if len(vals) > g.W {
 		drop := len(vals) - g.W
 		vals = vals[drop:]
@@ -253,16 +234,12 @@ func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
 		roles = shift(roles, drop)
 	}
 	n := len(vals)
-	// Every column has the same width and gap, so the spacing is even.
 	step := max(1, g.W/n)
 	gap := 0
 	if step > 1 {
 		gap = max(1, step/4)
 	}
 	colW := min(max(1, step-gap), 8)
-	// In ASCII, columns of different roles take the legend's marks: the
-	// first role seen is *, the next +, and so on, as DrawLegend numbers
-	// them.
 	markOf := map[Role]string{}
 	for _, r := range roles {
 		if _, ok := markOf[r]; !ok && r != None {
@@ -282,7 +259,7 @@ func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
 			}
 			units = int(math.Round(unit(v, lo, hi) * float64(scale)))
 			if v > lo && units == 0 && !b.Half {
-				units = 1 // a value above the base always shows
+				units = 1
 			}
 		}
 		role := b.Role
@@ -298,10 +275,7 @@ func (b Bar) drawColumns(g *Grid, m Mode, lo, hi float64, withLabels bool) {
 		}
 		first := 0
 		if b.Half && m != ASCII {
-			// The half block is the first half cell of the length.
 			units = max(units-4, 0)
-			// The first row is the upper half of the cell the axis runs
-			// through.
 			if finite(v) && v > lo {
 				for k := 0; k < colW && x+k < g.W; k++ {
 					g.set(x+k, rows-1, "▀", role)
@@ -351,7 +325,6 @@ func shiftS(r []string, n int) []string {
 	return r[n:]
 }
 
-// block picks the glyph for the mode: the unicode one, or the ASCII one.
 func block(m Mode, uni, ascii string) string {
 	if m == ASCII {
 		return ascii
@@ -405,7 +378,6 @@ func (s Sparkline) Draw(w, h int, m Mode) *Grid {
 		if !finite(v) {
 			continue
 		}
-		// The lowest value keeps one eighth, so the line never vanishes.
 		k := 1 + int(math.Round(unit(v, lo, hi)*float64(levels-1)))
 		if hi-lo <= 0 {
 			k = levels / 2
@@ -478,7 +450,6 @@ func (gg Gauge) Draw(w, h int, m Mode) *Grid {
 	default:
 		label = Percent(f)
 	}
-	// The label keeps its cells while the gauge has a few for the bar.
 	label = truncate(label, max(g.W/2, g.W-3, 0), "")
 	cells := g.W
 	if label != "" {
@@ -511,8 +482,6 @@ func (gg Gauge) Draw(w, h int, m Mode) *Grid {
 	}
 	if gg.Style == GaugeLine {
 		n := int(math.Round(f * float64(cells)))
-		// A gauge short of full leaves a cell of track, so 98.8% does not
-		// read as done.
 		if f < 1 && n >= cells && cells > 1 {
 			n = cells - 1
 		}
@@ -540,7 +509,6 @@ func (gg Gauge) Draw(w, h int, m Mode) *Grid {
 	return g
 }
 
-// maxBins bounds a histogram's bins.
 const maxBins = 1000
 
 // Histogram counts values into equal bins and draws the counts as columns,
@@ -585,7 +553,6 @@ func (hg Histogram) Draw(w, h int, m Mode) *Grid {
 	if bins <= 0 {
 		bins = min(20, max(1, g.W/2))
 	}
-	// More bins than cells cannot show, and the count sizes an allocation.
 	bins = min(bins, max(g.W, 1), maxBins)
 	counts, lo, hi := hg.Counts(bins)
 	if counts == nil {
@@ -599,7 +566,6 @@ func (hg Histogram) Draw(w, h int, m Mode) *Grid {
 	a := drawAxes(g, 0, top, func(v float64) string { return Compact(math.Round(v)) },
 		[3]string{format(lo), "", format(hi)}, m)
 	p := a.sub()
-	// Columns touch, as a histogram's bins do, and fill the width.
 	colW := max(1, p.W/len(counts))
 	for i, c := range counts {
 		units := int(math.Round(unit(c, 0, top) * float64(p.H*8)))
@@ -627,7 +593,6 @@ func (hg Histogram) Draw(w, h int, m Mode) *Grid {
 				role = Series1
 			}
 			for k := range colW {
-				// Wide bins keep a one-cell gap, so they read apart.
 				if colW > 2 && k == colW-1 {
 					continue
 				}

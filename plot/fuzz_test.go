@@ -33,15 +33,12 @@ func FuzzCharts(f *testing.F) {
 		W, H := int(w%160), int(h%48)
 		labels := make([]string, len(vals))
 		for i := range labels {
-			// Labels are ASCII here so the ASCII-mode check holds; the
-			// golden cases cover wide and invalid text.
 			b := []byte(string(raw[i*8 : i*8+min(8, len(raw)-i*8)]))
 			for k := range b {
 				b[k] = ' ' + b[k]%95
 			}
 			labels[i] = string(b)
 			if i == 1 {
-				// One wide label, for the wide-grapheme paths.
 				labels[i] = "日本" + labels[i]
 			}
 		}
@@ -87,7 +84,6 @@ func FuzzCharts(f *testing.F) {
 		case 11:
 			g = Bar{Values: vals, Labels: labels, Axis: true}.Draw(W, H, m)
 		case 12:
-			// The name is in the series role, so it stays ASCII here.
 			name := ""
 			if len(labels) > 0 {
 				name = labels[0]

@@ -168,7 +168,6 @@ func (g *Grid) At(x, y int) Cell {
 	return g.Cells[y*g.W+x]
 }
 
-// set puts a one-cell glyph at x, y. Outside the grid it does nothing.
 func (g *Grid) set(x, y int, text string, role Role) {
 	if x < 0 || y < 0 || x >= g.W || y >= g.H {
 		return
@@ -177,7 +176,6 @@ func (g *Grid) set(x, y int, text string, role Role) {
 	g.Cells[y*g.W+x] = Cell{Text: text, Width: 1, Role: role}
 }
 
-// setBg puts a one-cell glyph with a background role at x, y.
 func (g *Grid) setBg(x, y int, text string, role, bg Role) {
 	if x < 0 || y < 0 || x >= g.W || y >= g.H {
 		return
@@ -186,7 +184,6 @@ func (g *Grid) setBg(x, y int, text string, role, bg Role) {
 	g.Cells[y*g.W+x] = Cell{Text: text, Width: 1, Role: role, Bg: bg}
 }
 
-// clearWide blanks the other half of a wide grapheme that x, y is part of.
 func (g *Grid) clearWide(x, y int) {
 	c := g.Cells[y*g.W+x]
 	if c.Width == 0 && x > 0 {
@@ -258,7 +255,6 @@ func (g *Grid) String() string {
 	return b.String()
 }
 
-// width returns the width of s in cells, as Grid.Text counts it.
 func width(s string) int {
 	n := 0
 	for s != "" {
@@ -271,7 +267,6 @@ func width(s string) int {
 	return n
 }
 
-// truncate cuts s to at most n cells. A cut string ends in tail.
 func truncate(s string, n int, tail string) string {
 	if width(s) <= n {
 		return s

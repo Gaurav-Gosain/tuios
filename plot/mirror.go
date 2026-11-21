@@ -40,10 +40,9 @@ type Mirror struct {
 	Format func(float64) string
 }
 
-// half is one side of a mirror, as Draw lays it out.
 type half struct {
-	vals   []float64 // the values drawn, newest last
-	offset int       // the column of the first value, in values
+	vals   []float64
+	offset int
 	top    float64
 	ramp   []Role
 	role   Role
@@ -72,7 +71,6 @@ func (mr Mirror) role(down bool) Role {
 
 func defaultRamp(r Role) []Role { return []Role{Fade(r, 2), Fade(r, 1), r} }
 
-// peakOf returns the largest finite value and its index, or -1.
 func peakOf(vals []float64) (float64, int) {
 	best, at := 0.0, -1
 	for i, v := range vals {
@@ -104,7 +102,7 @@ func (mr Mirror) Draw(w, h int, m Mode) *Grid {
 	rows := g.H - headUp - headDown - 2*peaks
 	upRows, downRows := (rows+1)/2, rows/2
 
-	per := 1 // values per cell
+	per := 1
 	if m == Braille {
 		per = 2
 	}
@@ -162,7 +160,6 @@ func b2i(b bool) int {
 	return 0
 }
 
-// rampRole returns the role of band b of n, counting from the baseline.
 func (hf half) rampRole(b, n int) Role {
 	k := len(hf.ramp) - 1
 	if n > 1 {
@@ -171,7 +168,6 @@ func (hf half) rampRole(b, n int) Role {
 	return hf.ramp[max(0, min(len(hf.ramp)-1, k))]
 }
 
-// level returns the height of value i in units of a full height of n.
 func (hf half) level(i, n int) int {
 	if i < 0 || i >= len(hf.vals) {
 		return 0
@@ -180,18 +176,13 @@ func (hf half) level(i, n int) int {
 	if !finite(v) || v <= 0 || hf.top <= 0 {
 		return 0
 	}
-	// A value above zero always shows.
 	return max(1, int(math.Round(math.Min(v, hf.top)/hf.top*float64(n))))
 }
 
-// draw draws the half's columns on rows y to y+rows-1. Up grows from the
-// bottom row and Down from the top row. Where a column is empty the row on
-// the baseline shows a dotted track, so the baseline reads across gaps.
 func (hf half) draw(g *Grid, y, rows, per int, m Mode) {
 	if rows <= 0 {
 		return
 	}
-	// row returns the grid row of band b, counting from the baseline.
 	row := func(b int) int {
 		if hf.down {
 			return y + b
@@ -208,7 +199,6 @@ func (hf half) draw(g *Grid, y, rows, per int, m Mode) {
 				var bits uint8
 				for dx, hgt := range hs {
 					for dy := range 4 {
-						// d is the dot's distance from the baseline.
 						d := b*4 + 3 - dy
 						if hf.down {
 							d = b*4 + dy
@@ -240,8 +230,6 @@ func (hf half) draw(g *Grid, y, rows, per int, m Mode) {
 			case lv <= 0:
 				continue
 			case m == ASCII:
-				// A partial cell is ":", so a small value reads apart from
-				// the "." of an empty baseline.
 				glyph = "#"
 				if lv < 4 {
 					glyph = ":"
@@ -251,8 +239,6 @@ func (hf half) draw(g *Grid, y, rows, per int, m Mode) {
 			case !hf.down:
 				glyph = eighthsUp[lv]
 			case lv <= 2:
-				// Only the upper eighth and the upper half hang from the
-				// top of a cell.
 				glyph = "▔"
 			case lv <= 5:
 				glyph = "▀"
@@ -274,8 +260,6 @@ func (hf half) track(m Mode) string {
 	return "▁"
 }
 
-// peak writes the half's peak marker on row y: a dot over the peak's
-// column and the value beside it, at the right of the dot when it fits.
 func (mr Mirror) peak(g *Grid, y int, hf half, per int, m Mode) {
 	v, i := peakOf(hf.vals)
 	if i < 0 || v <= 0 {
@@ -298,9 +282,6 @@ func (mr Mirror) peak(g *Grid, y int, hf half, per int, m Mode) {
 	}
 }
 
-// corner writes the half's name at the left of row y and, with Stats,
-// peak, average and total at the right, leaving out from the right the
-// parts that do not fit.
 func (mr Mirror) corner(g *Grid, y int, name string, hf half, m Mode) {
 	name = truncate(name, g.W, ellipsis(m))
 	end := g.Text(0, y, name, hf.role, true)

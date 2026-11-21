@@ -65,8 +65,6 @@ type options struct {
 	log, noHeader                            bool
 }
 
-// version is set by the release build. go install leaves it empty, and the
-// module version comes from the build info.
 var version string
 
 func versionString() string {
@@ -113,7 +111,6 @@ func run(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) erro
 	fs.BoolVar(&o.log, "log", false, "With --kind map, shade by the logarithm of the values")
 	fs.BoolVar(&o.noHeader, "no-header", false, "The first row is data, not names")
 	showVersion := fs.Bool("version", false, "Print the version and exit")
-	// Flags may come before or after FILE.
 	var files []string
 	for {
 		if err := fs.Parse(args); err != nil {
@@ -191,8 +188,6 @@ func run(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) erro
 		width = cols
 	}
 	if !color && !modeSet && needsColor(t, o.kind) {
-		// Without colour, the shades, slices and series of these charts look
-		// the same. ASCII gives each its own mark.
 		mode = plot.ASCII
 	}
 	g, err := draw(t, o, mode, width, rows)
@@ -206,7 +201,6 @@ func run(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) erro
 	return err
 }
 
-// maxInput bounds what tplot reads: far more data than a terminal can show.
 const maxInput = 64 << 20
 
 func parseMode(s string) (plot.Mode, error) {
@@ -221,8 +215,6 @@ func parseMode(s string) (plot.Mode, error) {
 	return 0, fmt.Errorf("unknown mode %q: use braille, blocks or ascii", s)
 }
 
-// useColor says whether to write colours: always, never, or for a terminal
-// when NO_COLOR is not set and TERM is not dumb.
 func useColor(s string, out *os.File) (bool, error) {
 	switch strings.ToLower(s) {
 	case "always":
@@ -235,8 +227,6 @@ func useColor(s string, out *os.File) (bool, error) {
 	return false, fmt.Errorf("unknown colour setting %q: use auto, always or never", s)
 }
 
-// termSize is the terminal's size, or 80 by 24 when the output is not a
-// terminal.
 func termSize(out *os.File) (cols, rows int) {
 	if w, h, err := term.GetSize(int(out.Fd())); err == nil && w > 0 && h > 0 {
 		return w, h
@@ -244,7 +234,6 @@ func termSize(out *os.File) (cols, rows int) {
 	return 80, 24
 }
 
-// draw picks the chart and draws it at a height that fits the data.
 func draw(t *table, o options, m plot.Mode, w, termRows int) (*plot.Grid, error) {
 	kind := strings.ToLower(o.kind)
 	if kind == "" {
@@ -276,7 +265,6 @@ func draw(t *table, o options, m plot.Mode, w, termRows int) (*plot.Grid, error)
 		if len(legend) == 0 {
 			return l.Draw(w, h, m), nil
 		}
-		// The legend takes the first row.
 		return withLegend(l.Draw(w, max(h-1, 2), m), legend, m), nil
 	case "spark", "sparkline":
 		h := 1
@@ -299,7 +287,6 @@ func draw(t *table, o options, m plot.Mode, w, termRows int) (*plot.Grid, error)
 		for _, s := range t.series {
 			hm.ColLabels = append(hm.ColLabels, s.name)
 		}
-		// A row per value row, the column labels and the scale.
 		return hm.Draw(w, fit(n+3), m), nil
 	case "pie", "donut":
 		p := plot.Pie{Values: first.values, Labels: t.labels, Donut: kind == "donut"}
@@ -330,15 +317,12 @@ func draw(t *table, o options, m plot.Mode, w, termRows int) (*plot.Grid, error)
 				mp.Values[code] = max(mp.Values[code], v)
 			}
 		}
-		// The map keeps its shape: about 2.2 cells of width per row.
 		h := fit(int(math.Round(float64(w) * 144 / 360 / 2.2 * 2)))
 		return withLegend(mp.Draw(w, max(h-1, 2), m), mp.Legend(m), m), nil
 	}
 	return nil, fmt.Errorf("unknown kind %q: use bar, column, line, area, spark, hist, heatmap, pie, donut, gauge or map", o.kind)
 }
 
-// needsColor says whether a chart tells its parts apart only by colour in
-// braille and block glyphs.
 func needsColor(t *table, kind string) bool {
 	kind = strings.ToLower(kind)
 	if kind == "" {
@@ -353,7 +337,6 @@ func needsColor(t *table, kind string) bool {
 	return false
 }
 
-// withLegend puts a legend row above g.
 func withLegend(g *plot.Grid, items []plot.LegendItem, m plot.Mode) *plot.Grid {
 	out := plot.NewGrid(g.W, g.H+1)
 	plot.DrawLegend(out, 0, 0, items, m)

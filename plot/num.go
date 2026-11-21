@@ -6,11 +6,8 @@ import (
 	"strings"
 )
 
-// finite reports whether v is a usable number.
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 
-// extent returns the smallest and largest finite values, and false when
-// there is none.
 func extent(vals ...[]float64) (lo, hi float64, ok bool) {
 	lo, hi = math.Inf(1), math.Inf(-1)
 	for _, vs := range vals {
@@ -23,12 +20,10 @@ func extent(vals ...[]float64) (lo, hi float64, ok bool) {
 	return lo, hi, lo <= hi
 }
 
-// unit maps v from [lo, hi] to [0, 1], clamped. A flat range maps to 0.5.
 func unit(v, lo, hi float64) float64 {
 	if !finite(v) {
 		return 0
 	}
-	// Halves first, so a range such as [-1e308, 1e308] does not overflow.
 	span := hi/2 - lo/2
 	if span <= 0 || !finite(span) {
 		return 0.5
@@ -142,8 +137,6 @@ func Downsample(vals []float64, n int) []float64 {
 	return append(out, clean[len(clean)-1])
 }
 
-// buckets averages vals into n buckets, keeping missing values out. A bucket
-// with no value is NaN.
 func buckets(vals []float64, n int) []float64 {
 	out := make([]float64, n)
 	for i := range out {

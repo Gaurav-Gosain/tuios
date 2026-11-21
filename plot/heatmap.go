@@ -14,7 +14,6 @@ type Heatmap struct {
 	Format   func(float64) string
 }
 
-// asciiShades are the heat levels in ASCII, lightest first.
 var asciiShades = [...]string{".", ":", "+", "#", "@"}
 
 func (hm Heatmap) level(v, lo, hi float64) int {
@@ -54,7 +53,6 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 	if labelW > 0 {
 		x0 = labelW + 1
 	}
-	// The bottom rows: column labels, then the scale and its labels.
 	foot := 0
 	if g.H >= 5 {
 		foot = 2
@@ -70,8 +68,6 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 	} else {
 		rows = min(rows, area)
 	}
-	// A value is two cells wide when there is room: a cell is about twice
-	// as tall as it is wide, so two cells read about square.
 	cellW := 1
 	if (g.W-x0)/cols >= 2 {
 		cellW = 2
@@ -114,7 +110,6 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 			for c := 0; c < cols; c++ {
 				v := at(y, c)
 				if !finite(v) {
-					// No data: a faint dot, distinct from the lowest value.
 					for k := 0; k < cellW; k++ {
 						g.set(x0+c*cellW+k, y, block(m, "·", " "), Edge)
 					}
@@ -140,14 +135,11 @@ func (hm Heatmap) Draw(w, h int, m Mode) *Grid {
 		n := len(hm.ColLabels)
 		g.Text(x0, y, truncate(hm.ColLabels[0], max(cols*cellW/2-1, 0), ""), Mute, false)
 		if n >= cols && cols > 1 {
-			// The right label names the column at the right edge.
 			g.TextRight(x0+cols*cellW, y, truncate(hm.ColLabels[cols-1], max(cols*cellW/2-1, 0), ""), Mute, false)
 		}
 		y++
 	}
 	if foot >= 2 && y+1 < g.H {
-		// The scale: three cells of each shade, with the low value, the
-		// middle and the high value under it.
 		sw := 3
 		for i, r := range heat {
 			for k := range sw {

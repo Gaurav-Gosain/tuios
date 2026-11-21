@@ -16,7 +16,6 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden files")
 
-// chartCase is one chart at one size, drawn in every mode.
 type chartCase struct {
 	name string
 	w, h int
@@ -77,7 +76,7 @@ var cases = []chartCase{
 	}},
 	{"text-edge", 7, 2, func(w, h int, m Mode) *Grid {
 		g := NewGrid(w, h)
-		g.Text(6, 0, "日本", Fg, false) // the first wide grapheme does not fit
+		g.Text(6, 0, "日本", Fg, false)
 		g.Text(0, 1, "ab日本語", Dim, false)
 		return g
 	}},
@@ -151,16 +150,12 @@ var cases = []chartCase{
 		}.Draw(w, h, m)
 	}},
 	{"mirror-small", 6, 4, func(w, h int, m Mode) *Grid {
-		// A small value next to an empty one: in ASCII the small one is
-		// ":" and the empty baseline ".". All negative values give a peak
-		// that is negative, not 0.
 		return Mirror{Up: Series{Values: []float64{0, 1, 10, 0, 1, 10}}, Down: Series{Values: []float64{-3, -1, -2}}}.Draw(w, h, m)
 	}},
 	{"mirror-stats-negative", 30, 4, func(w, h int, m Mode) *Grid {
 		return Mirror{Up: Series{Values: []float64{-3, -1, -2}}, Stats: true}.Draw(w, h, m)
 	}},
 	{"mirror-short", 30, 3, func(w, h int, m Mode) *Grid {
-		// Too short for the peaks and the corners: only the columns.
 		return Mirror{
 			Up:    Series{Name: "in", Values: runSecs},
 			Down:  Series{Name: "out", Values: runSecs[:10]},
@@ -168,7 +163,6 @@ var cases = []chartCase{
 		}.Draw(w, h, m)
 	}},
 	{"inline-bars", 12, 6, func(w, h int, m Mode) *Grid {
-		// One bar per row, as in a table: the same Max for every row.
 		g := NewGrid(w, h)
 		for i, v := range []float64{30, 12.4, 3.1, 0.84, 0, math.NaN()} {
 			row := InlineBar{Value: v, Max: 30, Track: i%2 == 0}.Draw(w, 1, m)
@@ -185,7 +179,6 @@ var cases = []chartCase{
 		return g
 	}},
 	{"inline-bars-blocks", 12, 6, func(w, h int, m Mode) *Grid {
-		// One bar per row, as in a table: the same Max for every row.
 		g := NewGrid(w, h)
 		for i, v := range []float64{30, 12.4, 3.1, 0.84, 0, math.NaN()} {
 			row := InlineBar{Value: v, Max: 30, Track: i%2 == 0, Style: InlineBlocks}.Draw(w, 1, m)
@@ -202,7 +195,6 @@ var cases = []chartCase{
 		return g
 	}},
 	{"diverging-equal", 11, 3, func(w, h int, m Mode) *Grid {
-		// Equal values draw equal sides, with and without a track.
 		g := NewGrid(w, h)
 		for i, f := range []float64{13.0 / 16, 5.0 / 16, 2.0 / 16} {
 			row := DivergingBar{Left: f, Right: f, Max: 1, Style: InlineBlocks}.Draw(w, 1, m)
@@ -211,8 +203,6 @@ var cases = []chartCase{
 		return g
 	}},
 	{"inline-subnormal", 8, 2, func(w, h int, m Mode) *Grid {
-		// A Max so small that half of it is 0: a value of 0 still draws
-		// nothing.
 		g := NewGrid(w, h)
 		copy(g.Cells[:w], InlineBar{Value: 0, Max: 5e-324, Style: InlineBlocks}.Draw(w, 1, m).Cells)
 		copy(g.Cells[w:], DivergingBar{Left: 0, Right: 5e-324, Style: InlineBlocks}.Draw(w, 1, m).Cells)
@@ -226,12 +216,9 @@ var cases = []chartCase{
 		}.Draw(w, h, m)
 	}},
 	{"map-small", 30, 6, func(w, h int, m Mode) *Grid {
-		// Countries too small to win a cell show when they have a value.
 		return Map{Values: map[string]float64{"SG": 1, "MT": 1, "BH": 1, "FR": 1, "NO": 1}}.Draw(w, h, m)
 	}},
 	{"map-narrow-range", 44, 4, func(w, h int, m Mode) *Grid {
-		// A range so narrow that rounding would merge the bounds: the
-		// shades keep the exact bounds, and US at 100.3 is in shade 2.
 		mp := Map{Values: map[string]float64{"US": 100.3, "de": 1, "DE": 101}, Min: 100, Max: 101}
 		g := NewGrid(w, h)
 		_, rows := mp.Fit(w, h-1, m)
@@ -283,8 +270,6 @@ func TestGolden(t *testing.T) {
 	}
 }
 
-// dump writes the text of a grid, framed so trailing blanks show, then the
-// role of each cell as a letter with a legend.
 func dump(g *Grid) string {
 	var b strings.Builder
 	letters := map[Role]byte{}
@@ -337,8 +322,6 @@ func dump(g *Grid) string {
 	return b.String()
 }
 
-// checkGrid asserts the invariants every chart keeps: the size asked for,
-// rows that are exactly W cells wide, and glyphs the mode allows.
 func checkGrid(t *testing.T, g *Grid, w, h int, m Mode) {
 	t.Helper()
 	w, h = max(w, 0), max(h, 0)
@@ -362,8 +345,6 @@ func checkGrid(t *testing.T, g *Grid, w, h int, m Mode) {
 			default:
 				t.Fatalf("row %d col %d: width %d", y, x, c.Width)
 			}
-			// Labels and values are the caller's text; the marks plot draws
-			// itself have the other roles.
 			if m == ASCII && c.Role != Fg && c.Role != Dim && c.Role != Mute {
 				for _, r := range c.Text {
 					if r > 0x7e || r < 0x20 {
@@ -414,8 +395,6 @@ func TestMapBudget(t *testing.T) {
 	if wd.w != 720 || wd.h != 288 {
 		t.Errorf("the map is %dx%d cells", wd.w, wd.h)
 	}
-	// Every country with a code that Natural Earth 5.1.1 has between 84 N
-	// and 60 S: 236. A smaller count means worldgen lost one.
 	if len(wd.codes) != 236 {
 		t.Errorf("the map has %d countries, want 236", len(wd.codes))
 	}
@@ -471,8 +450,6 @@ func TestMapLegendGrid(t *testing.T) {
 			t.Errorf("width %d: the legend is %d wide", c.w, g.W)
 		}
 	}
-	// Every shade keeps its own colour in the narrow form, and ASCII keeps the
-	// mark Draw gives that shade.
 	g := mp.LegendGrid(15, ASCII)
 	for i, want := range mapRamp {
 		if cell := g.At(i, 0); cell.Role != want || cell.Text != asciiMarks[i] {
