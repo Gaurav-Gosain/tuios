@@ -30,11 +30,11 @@ go build -o tuios-web ./cmd/tuios-web
 
 # Run directly
 go run ./cmd/tuios
-go run ./cmd/tuios-web
+go run ./cmd/tuios-web --random-password
 
 # Run with debug logging
 go run ./cmd/tuios --debug
-go run ./cmd/tuios-web --debug
+go run ./cmd/tuios-web --random-password --debug
 
 # Run the unit tests of every module. ./... stops at each library's go.mod,
 # so the libraries are named one by one. `just test` runs this line under the
