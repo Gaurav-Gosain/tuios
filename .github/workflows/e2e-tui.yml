@@ -628,7 +628,11 @@ jobs:
             ) &
             pids+=("$!")
           done
-          wait "${pids[@]}"
+          # A bare wait would also wait for vmstat, which never ends, so the
+          # alone shard, which starts no lane here, waits for nothing.
+          if [ "${#pids[@]}" -gt 0 ]; then
+            wait "${pids[@]}"
+          fi
           # Lane 0: the tests in e2e/tui/shardplan/alone.txt, one at a time.
           # Only the alone shard has them, and it has no other lane.
           if [ -s "$RUNNER_TEMP/names-0.txt" ]; then
