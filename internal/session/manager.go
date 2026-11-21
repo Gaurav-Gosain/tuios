@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -289,7 +290,10 @@ func (m *Manager) SetAskpassBin(path string) {
 // link.
 func (m *Manager) AskpassEnv() []string {
 	p := m.askpassBin.Load()
-	if p == nil || *p == "" || m.askpassOff.Load() {
+	// On Windows the program cannot tell a person's ssh at a terminal from
+	// an agent's, so a shell pane's ssh would ask in a dialog. It is off
+	// there until that is solved.
+	if p == nil || *p == "" || m.askpassOff.Load() || runtime.GOOS == "windows" {
 		return nil
 	}
 	return []string{"SSH_ASKPASS=" + *p, "SSH_ASKPASS_REQUIRE=force"}
