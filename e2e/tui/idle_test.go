@@ -375,7 +375,7 @@ func minimizedTMLPatched(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
 	tmlPaneAtIdle(t, term, base)
 	surface, _ := tmlSurfaceOf(t, base, "")
-	toWindowMode(t, term)
+	toWindowMode(t, term, base)
 	if err := term.SendKeys("m"); err != nil {
 		t.Fatalf("send m: %v", err)
 	}

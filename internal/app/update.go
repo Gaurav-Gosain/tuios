@@ -2605,9 +2605,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					// Only TML surfaces came or went. A program put them on
 					// the screen, and the person did not make a window.
 				} else if newWindowCount > oldWindowCount {
-					m.ShowNotification(fmt.Sprintf("Window created (%d total)", newWindowCount), "info", 2*time.Second)
+					m.showAmbientNotification(fmt.Sprintf("Window created (%d total)", newWindowCount), "info", 2*time.Second)
 				} else if newWindowCount < oldWindowCount {
-					m.ShowNotification(fmt.Sprintf("Window closed (%d remaining)", newWindowCount), "info", 2*time.Second)
+					m.showAmbientNotification(fmt.Sprintf("Window closed (%d remaining)", newWindowCount), "info", 2*time.Second)
 				}
 
 				// Workspace change notification. A scratch group shown or
@@ -3002,7 +3002,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// (e.g., when window was already at target position but PTY had stale dimensions)
 			m.SyncDaemonPTYDimensions()
 			if sizeChanged {
-				m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
+				m.showAmbientNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
 			}
 		} else if m.DaemonClient.SessionSizedBySelf() {
 			// The box stayed and this client sets the size now. No retile

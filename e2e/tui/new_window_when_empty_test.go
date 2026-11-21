@@ -89,16 +89,38 @@ func clientMode(t *testing.T, base string) string {
 	if err != nil {
 		t.Fatalf("GetSessionInfo: %v\n%s", err, out)
 	}
+	mode, err := sessionInfoMode(out)
+	if err != nil {
+		t.Fatalf("GetSessionInfo json: %v\n%s", err, out)
+	}
+	return mode
+}
+
+// daemonClientMode is clientMode for a caller that also runs local
+// sessions: it is empty when no daemon answers, or no client does.
+func daemonClientMode(base string) string {
+	out, err := tuiosOut(base, "run-command", "--json", "GetSessionInfo")
+	if err != nil {
+		return ""
+	}
+	if mode, _ := sessionInfoMode(out); mode != "unknown" {
+		return mode
+	}
+	return ""
+}
+
+// sessionInfoMode reads the client's mode from GetSessionInfo's JSON.
+func sessionInfoMode(out string) (string, error) {
 	var res map[string]any
 	if err := json.Unmarshal([]byte(out), &res); err != nil {
-		t.Fatalf("GetSessionInfo json: %v\n%s", err, out)
+		return "", err
 	}
 	info := res
 	if d, ok := res["data"].(map[string]any); ok {
 		info = d
 	}
 	mode, _ := info["mode"].(string)
-	return mode
+	return mode, nil
 }
 
 // cwdOnWorkspace waits for a pane on workspace ws of session sess to report
@@ -224,7 +246,7 @@ func TestEmptyWorkspaceOpensAPane(t *testing.T) {
 			moved = r.ID
 		}
 	}
-	toWindowMode(t, term)
+	toWindowMode(t, term, base)
 	sendKeys(t, term, tuitest.Alt("m"))
 	waitShowing(t, base, sess, 6, "", term)
 	exactlyPanesOn(t, term, base, sess, 6, 1, "move_and_follow to workspace 7")
@@ -297,7 +319,7 @@ func TestEmptyWorkspaceOpensOnePaneForTwoClients(t *testing.T) {
 		t.Fatalf("the second client does not show the session: %v\n%s", err, second.Snapshot())
 	}
 
-	toWindowMode(t, term)
+	toWindowMode(t, term, base)
 	sendKeys(t, term, tuitest.Alt("2"))
 	waitShowing(t, base, sess, 2, "", term)
 	exactlyPanesOn(t, term, base, sess, 2, 1, "the switch to workspace 2 with two clients")
@@ -377,7 +399,7 @@ func TestEmptyWorkspaceFastSwitches(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "setup")
-	toWindowMode(t, term)
+	toWindowMode(t, term, base)
 
 	// run sends keys as one write while the daemon holds each pane request
 	// for a second, which is far longer than the client takes to read the
@@ -468,7 +490,7 @@ func startHeld(t *testing.T, base, sess, hold string) *tuitest.Terminal {
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "setup")
-	toWindowMode(t, term)
+	toWindowMode(t, term, base)
 	return term
 }
 
@@ -510,8 +532,8 @@ func TestEmptyWorkspaceTwoClientsSwitchAtOnce(t *testing.T) {
 	hold := filepath.Join(base, "hold-pane")
 	term := startHeld(t, base, sess, hold)
 	second := attachIn(t, base, sess, startOpts{cols: 120, rows: 40, env: holdEnv(hold)})
+	// attachIn left the second client in window mode.
 	waitWindowCount(t, second, 1, "the second client")
-	toWindowMode(t, second)
 
 	setHold(t, hold, "2000")
 	sendKeys(t, term, tuitest.Alt("2"))

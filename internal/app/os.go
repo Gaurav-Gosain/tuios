@@ -2321,6 +2321,11 @@ type Notification struct {
 	// Source names where the message came from, resolved when it was raised.
 	// Empty means tuios itself. See notifSourceName.
 	Source string
+
+	// Ambient marks a notice tuios raises on its own about what changed
+	// around this client. It never covers a live message that is not
+	// ambient. See queueNotification.
+	Ambient bool
 }
 
 // NotifTarget names the pane a message came from. The workspace is deliberately
