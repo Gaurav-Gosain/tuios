@@ -11,8 +11,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -325,4 +327,36 @@ func TestAskpassDialogLetsGoWhenFocusMoves(t *testing.T) {
 	}
 	askpassResult(t, out, "ASKPASS=cancelled")
 	alive(t, term, "after the focus moved away from a prompt and back")
+}
+
+// TestAskpassEndsWhenTheAskingProgramDies kills the program that asks, and
+// only it, as an agent stops its ssh: OpenSSH leaves its askpass program
+// running. The prompt closes at once rather than wait out its timeout, and
+// the askpass program is told it was cancelled.
+//
+// Negative control: with the watch on the askpass program's parent cut, the
+// dialog stays open and the test fails.
+func TestAskpassEndsWhenTheAskingProgramDies(t *testing.T) {
+	term, base := attachClientBase(t)
+	bin, out := askpassHelper(t)
+	line := bin + " spawn " + out + " \"Enter passphrase for key '/tmp/e2e/id_kill': \"\n"
+	if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, b)
+	}
+	dialog := func(s tuitest.Screen) bool { return screenHas(s, "Unlock a key", "id_kill") }
+	if err := term.WaitFor(dialog, uiTimeout); err != nil {
+		t.Fatalf("the dialog never opened: %v\n%s", err, term.Snapshot())
+	}
+	raw := waitFileHas(t, out+".pid", "the asking program wrote its pid", uiTimeout, func(s string) bool { return s != "" })
+	pid, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		t.Fatalf("pid %q: %v", raw, err)
+	}
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+		t.Fatalf("kill the asking program: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !dialog(s) }, uiTimeout); err != nil {
+		t.Fatalf("the dialog stayed open after the program that asks was killed: %v\n%s", err, term.Snapshot())
+	}
+	askpassResult(t, out, "ASKPASS=cancelled")
 }
