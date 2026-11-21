@@ -110,16 +110,18 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	}
 	LogBasic("Execute command: found session %s (ID=%s)", session.Name(), session.ID)
 
-	if why := d.refuseTapeTyping(cs, &payload); why != "" {
-		return d.sendCommandResult(cs, payload.RequestID, false, "run-command is refused for this pane: "+why)
-	}
-
 	if payload.TapeScript == "" {
 		canonical, args, ok := resolveCommandName(payload.CommandType, payload.Args)
 		if !ok {
 			return d.sendCommandResult(cs, payload.RequestID, false, unknownCommandMessage(payload.CommandType))
 		}
 		payload.CommandType, payload.Args = canonical, args
+	}
+	// The check runs on the resolved command, as in verbRunCommand. A keymap
+	// action name (paste_buffer, user:NAME) is not a tape name, so checked
+	// before resolution it passed, and then ran as an Action, which types.
+	if why := d.refuseTapeTyping(cs, &payload); why != "" {
+		return d.sendCommandResult(cs, payload.RequestID, false, "run-command is refused for this pane: "+why)
 	}
 	var newWindowEnv []string
 	if payload.SSHFrom != "" && payload.CommandType == "NewWindow" && len(payload.Args) <= 1 {

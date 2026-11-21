@@ -612,10 +612,13 @@ func TestAPaneSendKeysNeverDrivesTheClient(t *testing.T) {
 // TestAPaneRunCommandCannotType: run-command sends tape to the attached
 // client, which types into whatever pane is focused when each command runs.
 // From a pane without respond, admin included, a tape that types or presses
-// keys is refused. One that does not is passed on.
+// keys is refused. One that does not is passed on. A keymap action name
+// (paste_buffer) resolves to an Action, which types, and is refused on both
+// paths too.
 //
 // Negative control: with refuseTapeTyping cut from handleExecuteCommand, the
-// script goes to the client and no refusal comes back. With it cut from
+// script goes to the client and no refusal comes back. With it run there
+// before resolveCommandName, paste_buffer goes to the client. With it cut from
 // verbRunCommand, the verb's Type goes to the client.
 func TestAPaneRunCommandCannotType(t *testing.T) {
 	d, sp, a1, _, _ := scopeFixture(t)
@@ -651,6 +654,7 @@ func TestAPaneRunCommandCannotType(t *testing.T) {
 		{SessionName: "a", TapeScript: "NextWindow\nType \"1\"\nEnter\n", RequestID: "r1"},
 		{SessionName: "a", CommandType: "Enter", RequestID: "r2"},
 		{SessionName: "a", CommandType: "LoadLayout", Args: []string{"x"}, RequestID: "r3"},
+		{SessionName: "a", CommandType: "paste_buffer", RequestID: "r4"},
 	} {
 		res := run(p)
 		if res == nil || res.Success || !strings.Contains(res.Message, "respond grant") {
@@ -663,6 +667,7 @@ func TestAPaneRunCommandCannotType(t *testing.T) {
 		{"session": "a", "command": "Type", "args": []string{"1"}},
 		{"session": "a", "command": "Enter"},
 		{"session": "a", "command": "KeyCombo", "args": []string{"ctrl+b"}},
+		{"session": "a", "command": "paste_buffer"},
 	} {
 		resp := callP(c, t, "run-command", params)
 		wantForbidden(t, fmt.Sprint("run-command verb ", params["command"]), resp)
