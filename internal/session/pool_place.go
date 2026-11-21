@@ -17,79 +17,29 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Machines as one pool: "Any machine" placement.
-//
-// place-agent picks the machine a new agent starts on: this one or a linked
-// one. Each machine answers for itself through agent-readiness: whether the
-// agent is installed and signed in there, whether it hit a usage limit there,
-// whether it has a checkout of the repository, its load now, its cap, and its
-// name for this daemon (a far agent needs a link back to claim a card here).
-// This daemon asks every machine whose link is up at once, then decides.
-//
-// The rule, in order:
-//
-//  1. Gate. A machine is out when its link is not up or refuses the call, the
-//     agent is not installed, signed out or usage limited there, the
-//     repository has no checkout there (and clone is off) or more than one,
-//     its memory is 95% used, it is at its [tasks] machine_cap, or the agent
-//     would work on a card the machine cannot reach.
-//  2. Load. Spare cores: the cores (held to poolCoresMax) times the share the
-//     one-minute load leaves free, less half a core per busy agent (working,
-//     starting, or picked here and not started yet). Memory over 80% used
-//     scales it down. A machine with no known load ranks after every known
-//     one, by fewest busy agents.
-//  3. Locality. Spares within one core are a tie: the machine with the
-//     checkout wins, then this machine, then the first name.
-//
-// A pick reserves the machine: it counts as one more busy agent there until
-// that machine reports a start, or for poolHold. Two callers on this daemon
-// pick one at a time, so the second sees the first's reservation. Two
-// daemons that pick for one far machine at once can both pick it: the far
-// answer counts an agent as starting as soon as its pane exists, which is
-// after the other caller's start lands.
-//
-// Nothing here polls. A pick costs one agent-readiness call to each machine,
-// bounded by poolAskTimeout.
-
 // ErrVerbNoMachine reports a placement that no machine passed.
 const ErrVerbNoMachine = "no_machine"
 
-// Placement bounds.
 const (
-	// poolAskTimeout bounds one machine's answer. The signed-in check is
-	// held to 2 seconds there.
 	poolAskTimeout = 5 * time.Second
-	// poolHold is how long a pick reserves its machine, and how long a
-	// started agent that is not working yet counts as starting.
-	poolHold = 90 * time.Second
-	// poolCoresMax bounds the cores a machine is ranked by, so a machine
-	// cannot win by claiming more.
-	poolCoresMax = 256
-	// poolTie is how many spare cores apart two machines tie.
-	poolTie = 1.0
-	// poolMemFull is the memory use, in percent, that gates a machine, and
-	// poolMemHigh where its score starts to go down.
-	poolMemFull = 95
-	poolMemHigh = 80
+	poolHold       = 90 * time.Second
+	poolCoresMax   = 256
+	poolTie        = 1.0
+	poolMemFull    = 95
+	poolMemHigh    = 80
 )
 
-// poolLoad is a machine's load as agent-readiness says it.
 type poolLoad struct {
-	Cores  int     `json:"cores"`
-	Load1  float64 `json:"load1"`
-	LoadOK bool    `json:"load_ok"`
-	MemPct float64 `json:"mem_pct,omitempty"`
-	// Working is the agents working now, and Starting the agents started
-	// in the last poolHold that are not working yet.
-	Working  int `json:"working"`
-	Starting int `json:"starting"`
-	// Started counts the agents started since this daemon started, and
-	// Instance names the run, so a caller can tell its reservation landed.
-	Started  int    `json:"started"`
-	Instance string `json:"instance"`
+	Cores    int     `json:"cores"`
+	Load1    float64 `json:"load1"`
+	LoadOK   bool    `json:"load_ok"`
+	MemPct   float64 `json:"mem_pct,omitempty"`
+	Working  int     `json:"working"`
+	Starting int     `json:"starting"`
+	Started  int     `json:"started"`
+	Instance string  `json:"instance"`
 }
 
-// bounded holds an answer from another machine to what a machine reports.
 func (l poolLoad) bounded() poolLoad {
 	l.Cores = min(max(l.Cores, 0), 1<<16)
 	l.Load1 = min(max(l.Load1, 0), 1<<20)
@@ -106,38 +56,27 @@ func (l poolLoad) bounded() poolLoad {
 	return l
 }
 
-// poolState is this daemon's placement state.
 type poolState struct {
-	// pick serializes the decision and its reservation.
 	pick sync.Mutex
 
-	mu sync.Mutex
-	// reserved are the picks not started yet, by host ("" is this
-	// machine).
-	reserved map[string][]poolReservation
-	// started are the agents start-agent started here in the last
-	// poolHold, and startedTotal every one since the daemon started.
+	mu           sync.Mutex
+	reserved     map[string][]poolReservation
 	started      []poolStart
 	startedTotal int
 }
 
-// poolReservation is one pick: when, and the machine's started count and
-// run then.
 type poolReservation struct {
 	at       time.Time
 	started  int
 	instance string
 }
 
-// poolStart is one agent start-agent started here.
 type poolStart struct {
 	sess   *Session
 	window string
 	at     time.Time
 }
 
-// noteAgentStarted records an agent start, so this machine's answer counts
-// it as starting until it works or poolHold passes.
 func (d *Daemon) noteAgentStarted(sess *Session, window string) {
 	p := &d.pool
 	p.mu.Lock()
@@ -146,7 +85,6 @@ func (d *Daemon) noteAgentStarted(sess *Session, window string) {
 	p.startedTotal++
 }
 
-// poolLoadNow is this machine's load, with its starting agents.
 func (d *Daemon) poolLoadNow() poolLoad {
 	ml := machineLoad(d.manager.ListSessions())
 	l := poolLoad{Cores: ml.Cores, Load1: ml.Load1, LoadOK: ml.Known(), MemPct: ml.MemPct, Working: ml.Working, Instance: d.instance}
@@ -164,8 +102,6 @@ func (d *Daemon) poolLoadNow() poolLoad {
 	return l
 }
 
-// dropOldStarts is p.started without the starts older than poolHold. p.mu
-// is held.
 func (p *poolState) dropOldStarts(now time.Time) []poolStart {
 	kept := p.started[:0]
 	for _, s := range p.started {
@@ -176,8 +112,6 @@ func (p *poolState) dropOldStarts(now time.Time) []poolStart {
 	return kept
 }
 
-// pending is how many picks for host have not landed: reservations younger
-// than poolHold, less the starts the machine reported since the oldest.
 func (p *poolState) pending(host string, l poolLoad, now time.Time) int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -201,7 +135,6 @@ func (p *poolState) pending(host string, l poolLoad, now time.Time) int {
 	return max(len(list)-landed, 0)
 }
 
-// reserve notes a pick of host.
 func (p *poolState) reserve(host string, l poolLoad, now time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -211,8 +144,6 @@ func (p *poolState) reserve(host string, l poolLoad, now time.Time) {
 	p.reserved[host] = append(p.reserved[host], poolReservation{at: now, started: l.Started, instance: l.Instance})
 }
 
-// repoPresence is found, none or many: this machine's checkouts of url,
-// looked for as start-agent looks.
 func (d *Daemon) repoPresence(url, reposRoot string) (string, *verbError) {
 	roots := worktree.DefaultSearchRoots(userHome())
 	if reposRoot != "" {
@@ -231,15 +162,12 @@ func (d *Daemon) repoPresence(url, reposRoot string) (string, *verbError) {
 	return poolRepoNone, nil
 }
 
-// What agent-readiness says of a repository.
 const (
 	poolRepoFound = "found"
 	poolRepoNone  = "none"
 	poolRepoMany  = "many"
 )
 
-// backName is this machine's [hosts] name for the daemon run instance, when
-// its link is up.
 func (d *Daemon) backName(instance string) string {
 	if d.federation == nil {
 		return ""
@@ -254,8 +182,6 @@ func (d *Daemon) backName(instance string) string {
 	return ""
 }
 
-// usageLimitedHarnesses are the harnesses with a pane here that stopped on a
-// usage limit.
 func (d *Daemon) usageLimitedHarnesses() map[string]bool {
 	out := map[string]bool{}
 	for _, sess := range d.manager.AllSessions() {
@@ -272,17 +198,12 @@ func (d *Daemon) usageLimitedHarnesses() map[string]bool {
 	return out
 }
 
-// placeParams are what place-agent takes.
 type placeParams struct {
-	Agent     string `json:"agent"`
-	RepoURL   string `json:"repo_url"`
-	ReposRoot string `json:"repos_root"`
-	Clone     bool   `json:"clone"`
-	// LocalOrigin is the origin URL of the caller's folder on this machine.
-	// When it names the same repository as repo_url, this machine has a
-	// checkout, wherever it is.
-	LocalOrigin string `json:"local_origin"`
-	// Task and TaskSession name a card of this daemon the agent is to take.
+	Agent       string            `json:"agent"`
+	RepoURL     string            `json:"repo_url"`
+	ReposRoot   string            `json:"repos_root"`
+	Clone       bool              `json:"clone"`
+	LocalOrigin string            `json:"local_origin"`
 	Task        string            `json:"task"`
 	TaskSession string            `json:"task_session"`
 	Reserve     *bool             `json:"reserve"`
@@ -325,7 +246,6 @@ type PlaceAnswer struct {
 	Machines []PlaceMachine `json:"machines"`
 }
 
-// verbPlaceAgent answers place-agent.
 func (d *Daemon) verbPlaceAgent(cs *connState, params json.RawMessage) (any, *verbError) {
 	if cs != nil && cs.viaLink {
 		return nil, newVerbError(ErrVerbForbidden, "place-agent is refused over the link: each machine places its own agents")
@@ -341,14 +261,10 @@ func (d *Daemon) verbPlaceAgent(cs *connState, params json.RawMessage) (any, *ve
 	return ans, nil
 }
 
-// placeAgent is place-agent's decision. When no machine passes, the answer
-// still lists every machine with its reason.
 func (d *Daemon) placeAgent(cs *connState, p placeParams) (PlaceAnswer, *verbError) {
 	if len(p.Exclude) > 64 {
 		return PlaceAnswer{}, invalidParam("exclude", "exclude names at most 64 machines")
 	}
-	// The card, when one is named: its agent and repository are the
-	// defaults, and a card of the session only stays here.
 	sessionCard := false
 	if p.Task != "" {
 		sess, verr := d.resolveVerbSession(cs, p.TaskSession)
@@ -420,7 +336,6 @@ func (d *Daemon) placeAgent(cs *connState, p placeParams) (PlaceAnswer, *verbErr
 		}
 		return PlaceAnswer{Machines: machines}, newVerbError(ErrVerbNoMachine, why)
 	}
-	// The listing: the pick first, then the others in their order.
 	pick := machines[best]
 	copy(machines[1:best+1], machines[:best])
 	machines[0] = pick
@@ -435,8 +350,6 @@ func (d *Daemon) placeAgent(cs *connState, p placeParams) (PlaceAnswer, *verbErr
 	return ans, nil
 }
 
-// askPool asks this machine and every linked one for its readiness, at
-// once. A machine that cannot answer comes back with OK false and why.
 func (d *Daemon) askPool(cs *connState, p placeParams, id string, sessionCard bool) []PlaceMachine {
 	out := []PlaceMachine{{Name: cmp.Or(localHostLabel(), "this machine"), OK: true}}
 	var reports []federation.HostReport
@@ -459,7 +372,6 @@ func (d *Daemon) askPool(cs *connState, p placeParams, id string, sessionCard bo
 			mc.OK, mc.Why = false, r.Host+": the link is not up."
 		}
 		if r.LoadKnown() || r.Cores > 0 {
-			// The hello's load, until the machine answers with its own.
 			ok := r.LoadKnown()
 			mc.load = poolLoad{Cores: r.Cores, Load1: r.Load1, LoadOK: ok, MemPct: r.MemPct, Working: r.AgentsWorking}.bounded()
 			mc.known = ok
@@ -523,8 +435,6 @@ func (d *Daemon) askPool(cs *connState, p placeParams, id string, sessionCard bo
 	return out
 }
 
-// hostReposRoots is [hosts.NAME] repos_root by host, from this machine's
-// config file, read at each placement.
 func hostReposRoots() map[string]string {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -543,8 +453,6 @@ func hostReposRoots() map[string]string {
 	return out
 }
 
-// poolAskFailed says in words why a machine did not answer. Its own text is
-// not repeated: the far daemon is untrusted.
 func poolAskFailed(err error) string {
 	if rerr, ok := errors.AsType[*federation.RemoteError](err); ok {
 		switch rerr.Code {
@@ -564,7 +472,6 @@ func poolAskFailed(err error) string {
 	return "the link went down."
 }
 
-// poolTake puts a machine's answer on mc.
 func poolTake(mc *PlaceMachine, ans readinessAnswer, id string) {
 	if ans.Load != nil {
 		mc.load, mc.known = *ans.Load, ans.Load.LoadOK && ans.Load.Cores > 0
@@ -595,8 +502,6 @@ func poolTake(mc *PlaceMachine, ans readinessAnswer, id string) {
 	}
 }
 
-// poolGate applies the gates that need the busy count, and turns a gate
-// poolTake found into its line. cmd is the agent's program.
 func poolGate(mc *PlaceMachine, cmd string, p placeParams) {
 	gate := ""
 	switch {
@@ -622,7 +527,6 @@ func poolGate(mc *PlaceMachine, cmd string, p placeParams) {
 	}
 }
 
-// poolScore is mc's spare cores.
 func poolScore(mc *PlaceMachine) float64 {
 	l := mc.load
 	cores := max(l.Cores, 1)
@@ -634,7 +538,6 @@ func poolScore(mc *PlaceMachine) float64 {
 	return s
 }
 
-// poolBetter reports whether a is a better pick than b.
 func poolBetter(a, b PlaceMachine) bool {
 	if a.known != b.known {
 		return a.known
@@ -646,7 +549,6 @@ func poolBetter(a, b PlaceMachine) bool {
 	} else if d := a.score - b.score; d > poolTie || d < -poolTie {
 		return d > 0
 	}
-	// A tie: the checkout, then this machine, then the name.
 	if ar, br := a.Repo == poolRepoFound, b.Repo == poolRepoFound; ar != br {
 		return ar
 	}
@@ -656,8 +558,6 @@ func poolBetter(a, b PlaceMachine) bool {
 	return a.Name < b.Name
 }
 
-// poolWhy is the one line that says why mc fits: "arch-btw: 16 cores, 0
-// working, the repo is there."
 func poolWhy(mc *PlaceMachine, clone bool) string {
 	w := mc.Name + ": "
 	if mc.load.Cores > 0 {

@@ -6,13 +6,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// canPeekExit says this platform can wait for a child's exit without reaping
-// it, which a live handoff needs (see pty_reap.go).
 const canPeekExit = true
 
-// peekExit blocks until the child pid has exited and leaves it a zombie, so
-// its status is still there for whoever reaps it. ECHILD means it is not a
-// child of this process, or was already reaped.
 func peekExit(pid int) error {
 	var info unix.Siginfo
 	for {
@@ -24,9 +19,6 @@ func peekExit(pid int) error {
 	}
 }
 
-// waitForeignExit blocks until pid, a process that is not this one's child,
-// has exited. Linux tells a non-child that a process ended, through a pidfd,
-// but not how: the code is -1, as for a status that is lost.
 func waitForeignExit(pid int) (code, sig int) {
 	fd, err := unix.PidfdOpen(pid, 0)
 	if err != nil {

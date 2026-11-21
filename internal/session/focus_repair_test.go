@@ -22,7 +22,6 @@ func TestOlderClientSyncKeepsDaemonFocusHistory(t *testing.T) {
 		t.Fatalf("seeding focus history: %v", err)
 	}
 
-	// Older clients omit FocusHistory.
 	oldClientPush := clientSnapshot(sess)
 	oldClientPush.FocusHistory = nil
 	if !sess.UpdateState(oldClientPush) {
@@ -139,17 +138,11 @@ func TestDaemonFocusRepairAfterClose(t *testing.T) {
 	}
 
 	cases := []struct {
-		name string
-		// windows in slice order, before the close.
-		windows []window
-		focused string
-		// close is the ID of the window to remove.
-		close string
-		// wantFocus is the ID expected to hold focus afterwards; "" means no
-		// window should be focused.
-		wantFocus string
-		// wantWorkspaceFocus is the expected WorkspaceFocus entry for the closed
-		// window's workspace; "" means the entry must be absent.
+		name               string
+		windows            []window
+		focused            string
+		close              string
+		wantFocus          string
 		wantWorkspaceFocus string
 		workspace          int
 		history            []string
@@ -189,10 +182,6 @@ func TestDaemonFocusRepairAfterClose(t *testing.T) {
 			wantFocus: "", wantWorkspaceFocus: "", workspace: 1,
 		},
 		{
-			// This is the case where the daemon used to disagree with the TUI: it
-			// took the first remaining window on the workspace whether or not it
-			// was minimized, so closing a window could focus one sitting in the
-			// dock while a visible window went unfocused.
 			name:      "a minimized window is skipped in favour of a visible one",
 			windows:   []window{{id: "a", workspace: 1}, {id: "b", workspace: 1, minimized: true}, {id: "c", workspace: 1}},
 			focused:   "a",
@@ -219,13 +208,9 @@ func TestDaemonFocusRepairAfterClose(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sess := newTestSession(t)
 
-			// Build the window set directly: these cases are about the repair
-			// rule, not about PTY lifecycle, so no PTYs are spawned.
 			if err := sess.mutateState(func(state *SessionState) error {
 				state.Windows = nil
 				state.WorkspaceFocus = make(map[int]string)
-				// The repair rule alone: a workspace that empties stays on
-				// screen. See empty_workspace.go for the switch.
 				state.Options = map[string]string{optionReturnWhenEmpty: "false"}
 				for _, w := range tc.windows {
 					state.Windows = append(state.Windows, WindowState{

@@ -5,13 +5,6 @@ import (
 	"fmt"
 )
 
-// escapeC1 is a JSON line with DEL and the C1 control characters (U+0080 to
-// U+009F) written as \u escapes. encoding/json escapes the C0 controls and
-// leaves these raw, and a terminal reads U+009B as CSI and U+009D as OSC. A
-// name from another machine reaches the daemon's replies and events (a copy's
-// file names, its errors), and a script may print those lines as they come,
-// so the daemon escapes them before any consumer sees them. Outside a JSON
-// string these runes never occur, so the line stays valid JSON.
 func escapeC1(line []byte) []byte {
 	if bytes.IndexByte(line, 0x7f) < 0 && bytes.IndexByte(line, 0xc2) < 0 {
 		return line

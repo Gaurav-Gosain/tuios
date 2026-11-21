@@ -14,41 +14,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// Hot reload for the [hosts] table.
-//
-// The daemon follows the config file, so adding a machine does not mean
-// restarting the daemon that holds every running session. A save that adds a
-// host opens a link, a save that removes one closes it, and a save that changes
-// an address dials the new one. Nothing else in the file is looked at here, and no other part of the
-// daemon's configuration changes under it.
-//
-// The watcher is only started when a config path is set, which
-// DaemonConfigFromUser fills for every real starter. A daemon built from a
-// hand-made DaemonConfig, which is every test, follows no file.
-//
-// A file that does not parse changes nothing. The links that are up stay up,
-// and the reason is logged, for the same reason the client keeps its running
-// settings: a half-written file caught between an editor's two writes must not
-// tear down a working link.
-
-// startHostsWatch begins following the config file for changes to the [hosts]
-// table. A watcher that cannot be opened is logged once, and the table then
-// stays what it was at start.
 func (d *Daemon) startHostsWatch() {
 	if d.configPath == "" {
 		return
 	}
-	// The watch is on the directory, not the file (see internal/config's
-	// watcher.go), so the directory has to exist. On a machine that has never
-	// saved a setting it does not, and that is the machine where the first host
-	// is added.
 	if err := os.MkdirAll(filepath.Dir(d.configPath), 0o750); err != nil {
 		log.Printf("[FEDERATION] The daemon cannot watch the config file. A host change needs a restart: %v", err)
 		return
 	}
 	w, err := config.NewWatcherWithOptions(d.configPath, d.onConfigReload, config.WatcherOptions{
-		// The settings page writes the config from a client that can share this
-		// process, and its write is the change this watcher exists to see.
 		DeliverSelfWrites: true,
 		DeliverUnchanged:  true,
 	})
@@ -61,7 +35,6 @@ func (d *Daemon) startHostsWatch() {
 	d.federationMu.Unlock()
 }
 
-// stopHostsWatch ends the config watch and returns its inotify descriptor.
 func (d *Daemon) stopHostsWatch() {
 	d.federationMu.Lock()
 	w := d.hostsWatcher
@@ -72,18 +45,6 @@ func (d *Daemon) stopHostsWatch() {
 	}
 }
 
-// onConfigReload runs on the watcher goroutine. It applies the [hosts] table,
-// [notify], appearance.preferred_shell, [shell] integration,
-// workspaces.return_when_empty,
-// [paste_buffers], [agents] enabled, herdr_protocol and acp_version, [daemon] keep_awake,
-// single_client and ssh_agent, the
-// [agents.approvals], [agents.permissions] and [agents.queue] tables and
-// [agents.recap] test_patterns, and reads nothing else out of the file. A new
-// approval policy applies to the next request, except a risk rule it drops or
-// a panes_may_allow it sets, which wait (narrowApprovalPolicy); a hold
-// already running keeps the length it started with. A new permission default that narrows applies
-// to the next call from every pane that holds the default; one that widens
-// waits for a restart (reloadPanePermissions).
 func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
 	if err != nil {
 		log.Printf("[FEDERATION] The config file has an error, so the hosts did not change: %v", err)
@@ -92,79 +53,30 @@ func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
 	d.applyUserConfig(cfg, false)
 }
 
-// applyUserConfig applies what the daemon reads from config.toml while it
-// runs. The file is the user's, and a process in a pane runs as the user and
-// can write it. So from a file change (byPerson false) the parts that bound
-// panes and links apply only where they narrow: [agents.permissions], the
-// risk rules of [agents.approvals], the link policies of [hosts], and the hosts the daemon dials, since ssh runs
-// what a host entry or ~/.ssh/config says as the daemon's child. What widens
-// waits for tuios config apply from outside every pane (byPerson true), or a
-// daemon restart.
 func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
-	// The agent switch applies from a file change too, in both directions.
-	// Off is the stricter state (see agents_switch.go), and on is the state
-	// every daemon runs in by default, so neither widens what a pane may do
-	// beyond what the shipped daemon allows.
 	d.SetAgentsEnabled(cfg.Agents.On())
-	// The offer to add a machine changes what the dock shows and nothing a
-	// pane may do, so a file change applies it both ways.
 	d.SetMachineOffer(cfg.Notifications.MachineOfferOn())
-	// It narrows who is attached and widens nothing, so a file change
-	// applies it at once.
 	d.singleClient.Store(cfg.Daemon.SingleClient)
-	// The link only ever names a socket of the person's own client, so
-	// following it widens nothing a pane may do, and a file change applies.
 	d.SetSSHAgent(cfg.Daemon.SSHAgent)
-	// The display only ever comes from the person's own local client, so a
-	// file change applies at once, like the agent.
 	d.SetDisplay(cfg.Daemon.Display)
-	// Keeping the machine awake gives a pane nothing, so a file change
-	// applies it in both directions.
 	d.SetKeepAwake(cfg.Daemon.KeepAwake)
-	// [hosts] or ~/.ssh/config may forward the agent differently now, and a
-	// host that left the table leaves no agent link behind.
 	d.forgetHostForwards()
 	d.agentPruneHosts(HostsFromConfig(cfg))
 	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
-	// The marks change what a new shell prints and nothing a pane may do,
-	// so a file change applies both ways.
 	d.manager.SetShellIntegration(cfg.Shell.Integration)
 	d.manager.SetShellLogin(cfg.Shell.Login)
 	d.manager.SetHerdrProtocol(cfg.Agents.HerdrProtocol)
-	// The ACP version shapes only the protocol panes started from now on,
-	// and either version offers the agent nothing, so a file change applies
-	// both ways.
 	d.acpVersion.Store(int32(cfg.Agents.ACPVersionOr()))
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())
 	d.manager.SetDragAndDrop(cfg.Panes.DragAndDrop)
-	// The history depth and where a new pane starts shape only the panes made
-	// from now on, and widen nothing a pane may do, so a file change applies
-	// both ways.
 	d.manager.SetScrollbackLines(cfg.Appearance.ScrollbackLines)
 	d.manager.SetNewWindowInheritCwd(newWindowInheritCwd(cfg))
-	// These are fixed when the daemon starts and wait for a restart:
-	//   - agent_auto_detect, agent_detect_seconds and agent_binaries set up
-	//     the agent detector.
-	//   - resume_agents, window_size and files.open_copy_keep_days.
-	//   - respond_from_shell lets a shell answer for an agent, and
-	//     persist_scrollback keeps what panes printed on disk. Both widen
-	//     what is kept or allowed, so neither may follow a file that a
-	//     process in a pane can write.
-	// Where a new worktree goes widens nothing a pane may do: a pane that can
-	// write the file can already run git worktree add itself.
 	d.SetWorktreePath(cfg.Worktree.Path)
-	// The setup runs a command as the daemon's child, like a hook, so a file
-	// change applies only when it clears the command or keeps it. A new
-	// command waits for the person.
 	d.setups.waiting.Store(!d.setups.applyConfig(cfg.Worktree.Setup, cfg.Worktree.SetupAsync, byPerson))
-	// [hooks] runs commands as the daemon's child too: a file change only
-	// removes hooks, and a new one waits for the person.
 	d.reloadHooks(cfg, byPerson)
 	if d.buffers != nil {
 		d.buffers.SetLimits(cfg.PasteBuffers.Resolved())
 	}
-	// The risk rules and panes_may_allow bound what a pane may allow, so a
-	// file change only narrows them, like [agents.permissions].
 	approvals, approvalsWait := ApprovalPolicyFromConfig(cfg.Agents.Approvals), false
 	if !byPerson {
 		approvals, approvalsWait = narrowApprovalPolicy(d.approvalPolicy(), approvals)
@@ -176,21 +88,13 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.approvalsWaiting.Store(approvalsWait)
 	d.SetRecapTestPatterns(cfg.Agents.Recap.Resolved().TestPatterns)
 	d.SetQueueMax(cfg.Agents.Queue.MaxEntries())
-	// It changes only what a pane is shown as, so a file change applies.
 	d.SetAgentSilentAfter(resolveSilentAfter(silentAfterFromConfig(cfg.Agents)))
-	// A file change only turns the wake off. A process in a pane can write
-	// the file, and the wake types into panes, so turning it on waits for
-	// tuios config apply from outside tuios, or a daemon restart, as a wider
-	// [agents.permissions] does.
 	wake := cfg.Agents.Mail.WakeOn()
 	if wake && !byPerson && !d.mailWake.on.Load() {
 		wake = false
 		log.Printf("[agents.mail] wake = true in the file waits for tuios config apply from outside tuios, or a daemon restart. The wake stays off.")
 	}
 	d.SetMailWake(wake)
-	// The same holds for a child's question: sending it to the parent agent
-	// first shows the parent what the child asks, so turning that on waits
-	// for the person too. Turning it off applies at once.
 	toParent := cfg.Agents.Mail.QuestionsToParentOn()
 	if toParent && !byPerson && d.attention != nil && !d.attention.parentFirst.Load() {
 		toParent = false
@@ -200,23 +104,16 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.SetCheckpoints(cfg.Agents.Checkpoints)
 	d.SetAgentPresets(cfg.Agents.Presets)
 	d.replyMarkers.Store(cfg.Agents.ReplyMarkersOn())
-	// Moving cards types nothing and runs nothing, so a file change applies
-	// either way.
 	d.taskAutoOff.Store(!cfg.Tasks.AutoStageOn())
 	d.lifecycleOff.Store(!cfg.Tasks.LifecycleOn())
 	d.machineCap.Store(int64(max(cfg.Tasks.MachineCap, 0)))
 	d.setAttachLimits(cfg.Tasks)
-	// A new notification destination waits like a new host does.
 	d.notify.reload(cfg.Notify, byPerson)
 	perms := PanePermissionsFromConfig(cfg.Agents.Permissions)
-	// A plugin put on the enabled list waits for the person, like a new
-	// host. One taken off stops now. See plugin_host.go.
 	pluginsWait := d.plugins != nil && d.plugins.apply(cfg.Plugins, byPerson)
 	d.pluginsWaiting.Store(pluginsWait)
 	if byPerson {
 		d.manager.SetPanePermissions(perms)
-		// A policy change applies to the next call on every link, including
-		// links already open, so tightening it does not wait for a reconnect.
 		d.SetLinkPolicies(cfg.Hosts)
 		d.ApplyHosts(HostsFromConfig(cfg))
 		d.hostsWaiting.Store(false)
@@ -231,8 +128,6 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.noteConfigWaiting()
 }
 
-// noteConfigWaiting opens the Inbox item that says a change waits for the
-// person, or closes it when nothing waits.
 func (d *Daemon) noteConfigWaiting() {
 	if d.configWaiting() {
 		d.attention.noteConfigNotice(configWaitsNotice, configWaitsNote)
@@ -241,15 +136,10 @@ func (d *Daemon) noteConfigWaiting() {
 	d.attention.closeConfigNotice(configWaitsNotice)
 }
 
-// configWaiting reports whether config.toml holds a change that widens what
-// panes or links may do and waits for tuios config apply or a restart.
 func (d *Daemon) configWaiting() bool {
 	return d.manager.grants.restartNeeded.Load() || d.hostsWaiting.Load() || d.notify.waitingApply() || d.pluginsWaiting.Load() || d.approvalsWaiting.Load() || d.setups.waiting.Load() || d.hooksWaiting.Load()
 }
 
-// reloadHosts applies a changed host table only where it dials less: a host
-// that is gone is dropped, and a host that is new or dials another way waits.
-// The host keeps its current entry until then.
 func (d *Daemon) reloadHosts(hosts []federation.Host) (waits bool) {
 	if d.federation == nil {
 		d.ApplyHosts(hosts)
@@ -283,9 +173,6 @@ func (d *Daemon) reloadHosts(hosts []federation.Host) (waits bool) {
 	return true
 }
 
-// reloadLinkPolicies applies changed link policies only where they give a
-// machine less. For every machine the tables name, and for any other, the
-// policy in force becomes what both the old and the new table allow.
 func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bool) {
 	var cur linkPolicyTable
 	if t := d.linkPolicies.Load(); t != nil {
@@ -334,7 +221,6 @@ func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bo
 		if now.FilesMinFree < was.FilesMinFree {
 			widened = true
 		}
-		// files_max_entries 0 is no bound, the widest value.
 		bound := func(n int64) int64 {
 			if n <= 0 {
 				return math.MaxInt64
@@ -352,7 +238,6 @@ func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bo
 		merged[key] = h
 	}
 	d.storeLinkPolicies(merged, next)
-	// A machine that lost relay or files stops the copies it started here.
 	if d.transfers != nil {
 		d.transfers.failRevoked()
 	}
@@ -362,9 +247,6 @@ func (d *Daemon) reloadLinkPolicies(next map[string]config.HostConfig) (waits bo
 	return widened
 }
 
-// narrowFilesRoots is the write roots both policies allow: each root of one
-// that lies inside a root of the other. widens reports whether now names a
-// folder that was not allowed before, which waits for tuios config apply.
 func narrowFilesRoots(was, now config.LinkPolicy) (roots []string, widens bool) {
 	a, b := linkRootPaths(was), linkRootPaths(now)
 	roots = []string{}
@@ -388,9 +270,6 @@ func narrowFilesRoots(was, now config.LinkPolicy) (roots []string, widens bool) 
 	return roots, widens
 }
 
-// narrowReadRoots is the read roots both policies allow. Nil is no limit, so
-// a limit that was not there before applies at once, and dropping one waits
-// for tuios config apply like any other widening.
 func narrowReadRoots(was, now config.LinkPolicy) (roots []string, widens bool) {
 	switch {
 	case now.FilesReadRoots == nil && was.FilesReadRoots == nil:
@@ -445,8 +324,6 @@ func (d *Daemon) ApplyHosts(hosts []federation.Host) {
 		return
 	}
 	change := d.federation.SetTable(table)
-	// A host that left the table takes its Inbox items and its cached rows
-	// with it, and a host that now names another machine starts over.
 	d.fleet.reconcile(table.Names(), change.Redialed)
 	if !change.Changed() && len(problems) == 0 {
 		return
@@ -460,19 +337,6 @@ func (d *Daemon) ApplyHosts(hosts []federation.Host) {
 	}
 }
 
-// broadcastHostsChanged tells every attached TUI client, whatever session it is
-// on, that the host table changed.
-//
-// It exists because the client's poll for hosts stops for good once the daemon
-// reports none, which is the default install, and a host added from the
-// command line while a client is attached would otherwise stay invisible in
-// that client until it reattached. The push costs nothing while the table is
-// still: it runs from ApplyHosts and only on a change.
-//
-// It is also how the fleet (host_fleet.go) tells the clients that what a host
-// holds changed, with the hosts named in changed, which is what lets the rail
-// stop polling a host the daemon streams. An older client reads the push the
-// way it always has, as a reason to list the hosts once.
 func (d *Daemon) broadcastHostsChanged(change federation.TableChange, changed []string) {
 	payload := &HostsChangedPayload{Added: change.Added, Removed: change.Removed, Redialed: change.Redialed, Changed: changed}
 	msg, err := NewMessage(MsgHostsChanged, payload)
@@ -493,7 +357,6 @@ func (d *Daemon) broadcastHostsChanged(change federation.TableChange, changed []
 	}
 }
 
-// configProblems is the dropped-entry list a listing reports.
 func (d *Daemon) configProblems() []string {
 	d.federationMu.Lock()
 	defer d.federationMu.Unlock()
@@ -505,12 +368,10 @@ func (d *Daemon) configProblems() []string {
 	return out
 }
 
-// hasHosts reports whether any host is configured right now.
 func (d *Daemon) hasHosts() bool {
 	return d.federation != nil && d.federation.Table().Len() > 0
 }
 
-// describeTableChange is the log line for one reconcile.
 func describeTableChange(c federation.TableChange) string {
 	parts := make([]string, 0, 3)
 	if len(c.Added) > 0 {
@@ -525,12 +386,8 @@ func describeTableChange(c federation.TableChange) string {
 	return strings.Join(parts, "; ")
 }
 
-// hostProblemsNotice names the Inbox item about host entries that were ignored.
 const hostProblemsNotice = "config.toml hosts"
 
-// noteHostProblems opens the Inbox item that says which host entries were
-// ignored and why, or closes it when none was. A host dropped for an ssh
-// option that is refused is otherwise only in the log and in tuios hosts.
 func (d *Daemon) noteHostProblems(problems []string) {
 	if len(problems) == 0 {
 		d.attention.closeConfigNotice(hostProblemsNotice)

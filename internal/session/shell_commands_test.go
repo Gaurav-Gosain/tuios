@@ -107,9 +107,6 @@ func TestShellTrackFollowsMarks(t *testing.T) {
 			wantLast:   "true",
 		},
 		{
-			// fish 4 marks its commands itself, and an rc file that also
-			// does sends a second C at the same place. Counting it as a new
-			// command finished the real one at once with no output.
 			name:       "a second C at the same place is the same command",
 			marks:      []vt.SemanticMarker{mark(vt.MarkerPromptStart), cmd("make"), cmd("make"), done(0)},
 			wantEvents: []string{EventPrompt, EventCommandStarted, EventCommandFinished},
@@ -118,10 +115,6 @@ func TestShellTrackFollowsMarks(t *testing.T) {
 			wantExit:   new(0),
 			wantLast:   "make",
 		},
-		// A mark that repeats the state the shell is in changes nothing. Two
-		// integrations at once (a shell's own, an rc file's, a terminal's
-		// injected script) send each mark twice, and tuios.bash sends C from
-		// PS0 even when another hook may send it too.
 		{
 			name:       "a doubled A is the same prompt",
 			marks:      []vt.SemanticMarker{mark(vt.MarkerPromptStart), mark(vt.MarkerPromptStart)},
@@ -225,7 +218,7 @@ func TestShellTrackTellsPromptMarksOnly(t *testing.T) {
 	}
 	type step struct {
 		mark   vt.SemanticMarker
-		expect bool // run types a line before this mark
+		expect bool
 	}
 	tests := []struct {
 		name         string
@@ -233,7 +226,7 @@ func TestShellTrackTellsPromptMarksOnly(t *testing.T) {
 		wantOnly     bool
 		wantPrompt   bool
 		wantCommands bool
-		wantEvents   int // prompt events
+		wantEvents   int
 	}{
 		{
 			name:       "a typed line comes back to a new prompt with no C",

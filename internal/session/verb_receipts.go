@@ -12,29 +12,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// Read receipts: the sender's view of its own mail.
-//
-// The recipient's copy of a message has always recorded when it was seen
-// (SeenAt) and read (ReadAt). Nothing showed the sender, whose own session
-// does not hold the message, so a worker whose reports were read and acted on
-// saw only its send's answer and mailed again to ask whether they arrived.
-//
-// agent-message-receipts answers for one sender window: every message that
-// window sent that a ring on this daemon still holds, with its state. On this
-// machine it also asks every linked machine the same question and gives the
-// machines it could not ask. Over a link it answers only for messages that
-// arrived on that same link (OriginLink is the caller's link peer) and that
-// claim that sender, and only with ids, recipients and times: a machine learns
-// the read state of the mail it sent, and nothing else.
-
 const (
 	receiptsDefaultLimit = 20
 	receiptsMaxLimit     = 200
-	// receiptsHostBudget bounds the far calls. One slow machine costs its own
-	// line and no more.
-	receiptsHostBudget = 4 * time.Second
-	// receiptsPreview is how much of a local message's own text a row shows.
-	receiptsPreview = 60
+	receiptsHostBudget   = 4 * time.Second
+	receiptsPreview      = 60
 )
 
 func receiptVerbs() map[string]verbEntry {
@@ -60,7 +42,6 @@ func receiptVerbs() map[string]verbEntry {
 	}
 }
 
-// mailReceipt is one row of agent-message-receipts.
 type mailReceipt struct {
 	ID            uint64 `json:"id"`
 	Host          string `json:"host,omitempty"`
@@ -118,7 +99,6 @@ func (d *Daemon) verbAgentMessageReceipts(cs *connState, params json.RawMessage)
 	}
 
 	if cs.viaLink {
-		// Only mail that came on this link, from the window it names.
 		peer := cs.linkPeer
 		rows := d.agents.receipts(func(m *AgentMessage) bool {
 			return m.Origin == AgentOriginLink && peer != "" && m.OriginLink == peer && m.FromLabel == p.Window
@@ -151,8 +131,6 @@ func (d *Daemon) verbAgentMessageReceipts(cs *connState, params json.RawMessage)
 				continue
 			}
 			for _, r := range far.Receipts {
-				// The far machine's words are a claim: keep what a row needs,
-				// cut to size.
 				res.Receipts = append(res.Receipts, mailReceipt{
 					ID: r.ID, Host: a.Host, Session: printableClaim(r.Session, agentMsgMaxSubject),
 					To: printableClaim(r.To, agentMsgMaxSubject), ToLabel: printableClaim(r.ToLabel, agentMsgMaxSubject),
@@ -169,8 +147,6 @@ func (d *Daemon) verbAgentMessageReceipts(cs *connState, params json.RawMessage)
 	return res, nil
 }
 
-// receipts is the rows of the directed messages every ring holds that match,
-// oldest first, at most limit of the newest. It marks nothing.
 func (b *agentBus) receipts(match func(*AgentMessage) bool, live map[string]bool, limit int, preview bool) []mailReceipt {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -197,7 +173,6 @@ func (b *agentBus) receipts(match func(*AgentMessage) bool, live map[string]bool
 	return rows
 }
 
-// waitingFrom is the mail window sent that waits here for a link.
 func (o *hostOutbox) waitingFrom(window string) []receiptWaiting {
 	if o == nil {
 		return nil

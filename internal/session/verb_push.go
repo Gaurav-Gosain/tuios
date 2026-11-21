@@ -12,34 +12,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/pushnotify"
 )
 
-// register-push, list-push and remove-push: the person's phones for Web Push
-// (daemon_webpush.go).
-//
-// A registered phone gets the Inbox's lines off the machine, so only the
-// person may register one, list them or remove one: a live human_nonce, and
-// over a link the respond capability. An agent in a pane can do none of it.
-//
-// Nonce scope (human_sender.go): a phone gets the Inbox of every session, so
-// a phone is an act in no one session. The nonce of an attach, or of a
-// presence made with no session, covers it. A presence made for one session
-// covers only what that session could see, and that is not a phone, so it
-// can not register, list or remove one.
-//
-// Every registration opens an Inbox item that names the phone, and a new
-// registration in place of one with the same name says so, so a phone the
-// person did not add does not stay hidden. Over a link, a registration may
-// not take the place of a phone already registered: a linked machine can add
-// a phone the person then sees, but it can not swap the person's phone for
-// its own.
-
-// pushMaxDeviceName bounds a phone's name, in bytes.
 const pushMaxDeviceName = 64
 
-// pushPushableKinds are the kinds a phone may ask for: every Inbox kind.
 var pushPushableKinds = AttentionKindNames
 
-// requirePushPerson is the person check every push verb makes: a live nonce
-// that covers an act in no one session.
 func (d *Daemon) requirePushPerson(cs *connState, verb, nonce string) *verbError {
 	if !d.humanNonceHeld(nonce, cs) {
 		return hintedVerbError(ErrVerbNotHuman, verb+" is for the person at an attached client", &VerbHint{
@@ -53,8 +29,6 @@ func (d *Daemon) requirePushPerson(cs *connState, verb, nonce string) *verbError
 	return nil
 }
 
-// validDeviceName reports whether a phone's name is 1 to 64 bytes of
-// printable text with no line break.
 func validDeviceName(s string) bool {
 	if s == "" || len(s) > pushMaxDeviceName || !utf8.ValidString(s) || strings.TrimSpace(s) != s {
 		return false
@@ -62,8 +36,6 @@ func validDeviceName(s string) bool {
 	return !strings.ContainsFunc(s, func(r rune) bool { return !unicode.IsPrint(r) })
 }
 
-// pushNotifierOf is the daemon's web pusher, or nil in a daemon built
-// without one.
 func (d *Daemon) pushNotifierOf() *webPusher {
 	if d.notify == nil {
 		return nil
@@ -71,7 +43,6 @@ func (d *Daemon) pushNotifierOf() *webPusher {
 	return d.notify.web
 }
 
-// verbRegisterPush registers a phone's push subscription.
 func (d *Daemon) verbRegisterPush(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Endpoint   string   `json:"endpoint"`
@@ -166,8 +137,6 @@ func (d *Daemon) verbRegisterPush(cs *connState, params json.RawMessage) (any, *
 	}, nil
 }
 
-// verbListPush lists the registered phones. An endpoint is shown only as its
-// origin: the whole address lets anyone send to the phone.
 func (d *Daemon) verbListPush(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		HumanNonce string `json:"human_nonce"`
@@ -211,7 +180,6 @@ func (d *Daemon) verbListPush(cs *connState, params json.RawMessage) (any, *verb
 	}, nil
 }
 
-// verbRemovePush removes a registered phone.
 func (d *Daemon) verbRemovePush(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Device     string `json:"device"`
@@ -245,8 +213,6 @@ func (d *Daemon) verbRemovePush(cs *connState, params json.RawMessage) (any, *ve
 			Verb:      "list-push",
 		})
 	}
-	// The person's own remove closes the phone's item. A remove over a
-	// link opens one: a linked machine stopped the person's pushes.
 	if cs != nil && cs.viaLink {
 		LogBasic("Phone %q removed from push by the link from %s", p.Device, linkPeerLabel(cs))
 		d.attention.notePhone(p.Device, "Removed from Web Push by the link from "+linkPeerLabel(cs)+". It gets no pushes now.")
@@ -257,11 +223,8 @@ func (d *Daemon) verbRemovePush(cs *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"type": "push_removed", "device": p.Device, "removed": true}, nil
 }
 
-// errPushExists is a register-push over a link with the name of a phone
-// already registered.
 var errPushExists = errors.New("a phone of that name is registered")
 
-// linkPeerLabel names the machine at the other end of a link connection.
 func linkPeerLabel(cs *connState) string {
 	if cs == nil || cs.linkPeer == "" {
 		return "another machine"
@@ -269,8 +232,6 @@ func linkPeerLabel(cs *connState) string {
 	return cs.linkPeer
 }
 
-// phoneRegisteredNote is the summary of the Inbox item a registration opens.
-// The item's name names the phone.
 func phoneRegisteredNote(service, by string, replaced bool) string {
 	if replaced {
 		return "Registered again for Web Push (" + service + ") by " + by + ", in place of the phone of that name. Did you do this? If not, remove it."
@@ -278,17 +239,12 @@ func phoneRegisteredNote(service, by string, replaced bool) string {
 	return "Registered for Web Push (" + service + ") by " + by + ". Did you do this? If not, remove it with tuios notify push rm."
 }
 
-// phoneNoticeName is the Name of the Inbox item about a phone.
 func phoneNoticeName(device string) string { return "phone " + device }
 
-// notePhone opens or updates the Inbox item about a registered phone: an
-// errored item about the daemon itself, as noteConfigNotice opens one, which
-// the person dismisses.
 func (a *attentionStore) notePhone(device, summary string) {
 	a.noteConfigNotice(phoneNoticeName(device), summary)
 }
 
-// closePhone closes the Inbox item about a phone.
 func (a *attentionStore) closePhone(device string) {
 	a.closeConfigNotice(phoneNoticeName(device))
 }

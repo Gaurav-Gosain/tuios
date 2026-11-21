@@ -12,79 +12,29 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
-// The agent switch: [agents] enabled = false.
-//
-// It is for a person who wants the multiplexer and nothing else. With the
-// agent features off the daemon:
-//
-//   - reads nothing to find an agent: the detection tick and the stall tick
-//     do nothing, an OSC 9;4 or desktop notification a pane prints is
-//     dropped, and no screen, title or transcript is read;
-//   - refuses every agent verb (agentOnlyVerbs) with agents_disabled, the
-//     herdr socket and a pane on another machine included;
-//   - fires no agent hook and delivers no queued message;
-//   - offers to resume no agent conversation after a restart.
-//
-// Turning it off clears what the daemon held: every window's agent state,
-// harness and notes, every transcript join, and every Inbox item. Closing an
-// item that held an approval hands the prompt back to the harness. Turning it
-// on starts the readers again and makes one detection pass at once.
-//
-// The respond grant. A pane without respond may not type into another pane
-// that waits on a prompt, since the keys would answer it (typingRefusal).
-// "Waits on a prompt" is agent state, and with the features off nothing keeps
-// it: a check that read it would find every pane at rest, and any pane could
-// answer another pane's permission prompt. So with the features off the rule
-// fails closed, with two exceptions where no agent can hold a prompt the
-// keys would answer (offTypingAllowed):
-//
-//   - the target pane's own shell holds its terminal, at its prompt;
-//   - the calling pane opened the target pane, which is what the tmux shim
-//     and an agent team's split-and-send do.
-//
-// Every other pane is refused to a pane without respond. The person's own
-// keys, and a command run from a shell outside every pane, are not held to
-// it. A pane that must type into other panes is given respond through
-// [agents.permissions].
-
 // ErrVerbAgentsDisabled is the error code of a verb that is an agent feature
 // while the agent features are off. The message is config.AgentsOffMessage.
 const ErrVerbAgentsDisabled = "agents_disabled"
 
-// agentOnlyVerbs are the verbs that are agent features. Each one is refused
-// with agents_disabled while the features are off. wait-for is not here: it
-// waits for windows and commands too, and only its agent conditions are
-// refused (agentWaitConditions).
 var agentOnlyVerbs = []string{
-	// Agents and fleets.
 	"start-agent", "agent-preset", "agent-readiness", "place-agent", "delegate", "fan", "compare-fan", "verify-fan", "keep-fan", "set-fan-verdict", "judge-fan",
 	"list-agents", "list-host-agents", "resume-agent", "ask-agent",
 	"explain-agent-detect", "explain-agent-screen",
-	// Agent state, as a pane reports it and as a reader reads it.
 	"set-agent-state", "set-agent-session", "set-agent-meta", "set-agent-quiet",
 	"get-agent-state", "report-agent-activity", "agent-activity", "agent-hook-event", "agent-statusline-event",
 	"agent-transcript",
-	// Mail.
 	"send-agent-message", "release-agent-message", "read-agent-messages", "agent-mail-notice",
-	// The Inbox, attention and approvals.
 	"list-attention", "dismiss-attention", "mark-attention",
 	"peek-prompt", "respond", "request-approval", "reply-approval",
 	"get-approval", "ask-human", "answer-ask",
-	// The queue, and the review sent to an agent.
 	"queue-prompt", "list-queued", "cancel-queued", "send-review",
-	// The person's reply history.
 	"reply-history", "add-reply-history",
 }
 
-// agentWaitConditions are the wait-for conditions that read agent state or
-// agent mail.
 var agentWaitConditions = []string{"agent-state", "agent-message"}
 
-// errAgentsUnchanged ends a state mutation that would change nothing.
 var errAgentsUnchanged = errors.New("no agent state to clear")
 
-// agentsDisabledError is the refusal of an agent feature while the features
-// are off.
 func agentsDisabledError() *verbError {
 	return newVerbError(ErrVerbAgentsDisabled, config.AgentsOffVerbMessage)
 }
@@ -110,12 +60,8 @@ func AgentOnlyCall(verb string, params any) bool {
 	return jsonx.Unmarshal(raw, &p) == nil && slices.Contains(agentWaitConditions, p.Condition)
 }
 
-// agentsEnabled reports whether the agent features are on.
 func (d *Daemon) agentsEnabled() bool { return !d.agentsOff.Load() }
 
-// agentsOffRefusal refuses a call that is an agent feature while the features
-// are off. It is nil for every other call, and for every call while they are
-// on.
 func (d *Daemon) agentsOffRefusal(verb string, params json.RawMessage) *verbError {
 	if !d.agentsOff.Load() {
 		return nil
@@ -126,7 +72,6 @@ func (d *Daemon) agentsOffRefusal(verb string, params json.RawMessage) *verbErro
 	return nil
 }
 
-// isAgentEvent reports whether a session event is about an agent.
 func isAgentEvent(eventType string) bool {
 	switch eventType {
 	case EventAgentState, EventAgentMessage, EventAgentActivity, EventTranscript:
@@ -143,7 +88,6 @@ func (d *Daemon) SetAgentsEnabled(on bool) {
 	if d.agentsOff.Swap(!on) == !on {
 		return
 	}
-	// With the features off no agent works, so none keeps the machine awake.
 	defer d.awake.agentEvent()
 	if on {
 		LogBasic("Agent features are on")
@@ -156,9 +100,6 @@ func (d *Daemon) SetAgentsEnabled(on bool) {
 	d.clearAgentsForOff()
 }
 
-// clearAgentsForOff drops what the daemon holds for agents: every pane's
-// agent state, every queued message, and every Inbox item. Closing an item
-// that held an approval hands the prompt back to its harness.
 func (d *Daemon) clearAgentsForOff() {
 	for _, s := range d.manager.AllSessions() {
 		s.clearAllAgentState()
@@ -167,9 +108,6 @@ func (d *Daemon) clearAgentsForOff() {
 	d.attention.closeAll(AttentionClosedAgentsDisabled)
 }
 
-// dropAllQueued empties every pane's delivery queue. A message queued while
-// the features were on was for an agent that may be gone when they come
-// back, and typing it then would type it into whatever holds the pane.
 func (d *Daemon) dropAllQueued() {
 	q := &d.queue
 	var touched []string
@@ -189,10 +127,6 @@ func (d *Daemon) dropAllQueued() {
 	}
 }
 
-// noteSessionScanned undoes a detection pass that raced the switch going
-// off: a pass that read the flag before it changed can write agent state
-// after the clear. Called after each session's pass; it reports whether the
-// features are off, so the caller stops.
 func (d *Daemon) noteSessionScanned(s *Session) bool {
 	if !d.agentsOff.Load() {
 		return false
@@ -203,8 +137,6 @@ func (d *Daemon) noteSessionScanned(s *Session) bool {
 	return true
 }
 
-// notePaneCreator records that the pane calling on cs opened window. The
-// typing rule reads it while the agent features are off (offTypingAllowed).
 func (d *Daemon) notePaneCreator(cs *connState, window string) {
 	if cs == nil || window == "" {
 		return
@@ -215,8 +147,6 @@ func (d *Daemon) notePaneCreator(cs *connState, window string) {
 	d.noteStartedBy(cs, window)
 }
 
-// callerPaneRef is the pane the caller on cs runs in, nil when it runs in no
-// pane of this daemon, cannot be placed, or calls over a link.
 func (d *Daemon) callerPaneRef(cs *connState) *PaneRef {
 	pa := d.paneAuthority(cs)
 	if pa == nil || pa.hosted || pa.window == "" || pa.window == unplacedWindow {
@@ -229,11 +159,6 @@ func (d *Daemon) callerPaneRef(cs *connState) *PaneRef {
 	return &PaneRef{Session: sess.Name(), Window: pa.window}
 }
 
-// callerWorkspaceIn is the workspace of the pane the caller on cs runs in,
-// when that pane is in sess and on an ordinary workspace. It is 0 otherwise,
-// which leaves the window on the workspace the session shows. An agent in a
-// pane on workspace 3 that opens a window wants it beside itself, not on
-// whatever workspace the person happens to be looking at (#1494).
 func (d *Daemon) callerWorkspaceIn(cs *connState, sess *Session) int {
 	ref := d.callerPaneRef(cs)
 	if ref == nil || sess == nil || ref.Session != sess.Name() {
@@ -250,11 +175,6 @@ func (d *Daemon) callerWorkspaceIn(cs *connState, sess *Session) int {
 	return 0
 }
 
-// callerCwd is the folder of the process on cs, when it runs in a pane of
-// this machine: the folder the caller would pass as --cwd "$PWD". It falls
-// back to the folder of the caller's pane, where the process cannot be read
-// (native Windows). It is "" for a caller in no pane, which keeps the focused
-// pane's folder as the default.
 func (d *Daemon) callerCwd(cs *connState) string {
 	ref := d.callerPaneRef(cs)
 	if ref == nil {
@@ -273,8 +193,6 @@ func (d *Daemon) callerCwd(cs *connState) string {
 	return ""
 }
 
-// noteStartedBy records on window the pane the caller on cs runs in, as the
-// pane that started it. It records nothing for a caller in no pane.
 func (d *Daemon) noteStartedBy(cs *connState, window string) {
 	if cs == nil || window == "" {
 		return
@@ -288,9 +206,6 @@ func (d *Daemon) noteStartedBy(cs *connState, window string) {
 	}
 }
 
-// offTypingAllowed reports whether a pane without respond may type into
-// target while the agent features are off: target's shell is at its prompt,
-// or the caller opened target. See the file comment.
 func (d *Daemon) offTypingAllowed(pa *paneAuth, target WindowState) bool {
 	if creator, ok := d.paneCreators.Load(target.ID); ok && creator == pa.window {
 		return true
@@ -306,10 +221,6 @@ func (d *Daemon) offTypingAllowed(pa *paneAuth, target WindowState) bool {
 	return false
 }
 
-// rescanAgents makes one detection pass over every pane, with a look at each
-// pane's screen, right after the features come back on. Without it a pane
-// that sits on a prompt and prints nothing would read as at rest until it
-// printed again, and a pane without respond could answer it.
 func (d *Daemon) rescanAgents() {
 	if d.agentDetectInterval <= 0 {
 		return
@@ -333,8 +244,6 @@ func (d *Daemon) rescanAgents() {
 	}
 }
 
-// clearAllAgentState drops every window's agent state, harness, notes and
-// claims, and every transcript join, for the switch to off.
 func (s *Session) clearAllAgentState() {
 	var windows []string
 	_ = s.mutateState(func(st *SessionState) error {

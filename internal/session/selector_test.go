@@ -57,8 +57,6 @@ func TestSelectorMatch(t *testing.T) {
 		{"task:t* stage:todo", false, false},
 		{"session:api-fan-*", true, false},
 		{"group:fan/*", true, false},
-		// A glob does not cross a slash, and a target with no group never
-		// matches a group term, not even one that matches everything.
 		{"group:*", false, false},
 		{"group:*/*", true, false},
 		{"host:local", true, false},
@@ -66,10 +64,8 @@ func TestSelectorMatch(t *testing.T) {
 		{"name:rev*", true, false},
 		{"cwd:~/src", true, false},
 		{"cwd:~/src/api", true, false},
-		// A prefix is on a path boundary: /home/me/src/a is not /home/me/src/api.
 		{"cwd:~/src/a", false, false},
 		{"cwd:/", true, true},
-		// Terms are AND.
 		{"harness:codex state:needs_input", false, false},
 		{"harness:codex session:api-*", true, false},
 	} {

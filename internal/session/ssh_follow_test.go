@@ -29,8 +29,6 @@ func TestParseRemoteLogin(t *testing.T) {
 	t.Cleanup(func() { lookPath = old })
 
 	const cd = `exec sh -c 'cd "/srv/a b" 2>/dev/null; exec "$SHELL" -l'`
-	// ssh is the replayed ssh line: the binary, the kept options, the
-	// ControlMaster=no every ssh line gets, then the rest.
 	ssh := func(opts []string, rest ...string) []string {
 		out := append([]string{"/path/ssh"}, opts...)
 		out = append(out, "-o", "ControlMaster=no")
@@ -41,7 +39,7 @@ func TestParseRemoteLogin(t *testing.T) {
 		name string
 		argv []string
 		dir  string
-		want []string // nil: not followed
+		want []string
 	}{
 		{"plain", []string{"ssh", "host"}, "", ssh(none, "host")},
 		{"binary from the process is not used", []string{"./ssh", "host"}, "", ssh(none, "host")},

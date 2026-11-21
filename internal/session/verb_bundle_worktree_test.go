@@ -31,7 +31,6 @@ func TestBundleWorktreeIsReadOnlyByTheConnectionThatMadeIt(t *testing.T) {
 		t.Errorf("another connection read the transfer: code = %q", code)
 	}
 
-	// The owner going away ends the transfer and removes its files.
 	var dir string
 	d.bundles.mu.Lock()
 	for _, tr := range d.bundles.open {
@@ -42,10 +41,6 @@ func TestBundleWorktreeIsReadOnlyByTheConnectionThatMadeIt(t *testing.T) {
 		t.Fatal("no transfer is open")
 	}
 	_ = owner.conn.Close()
-	// Polled without a pause, so the files are checked the moment the
-	// transfer leaves the store: that is when a caller can see it gone, and
-	// the files have to be gone by then too. With a pause between polls the
-	// check only failed when the removal happened to be slow.
 	deadline := time.Now().Add(5 * time.Second)
 	for d.bundles.count() != 0 {
 		if time.Now().After(deadline) {
@@ -58,8 +53,6 @@ func TestBundleWorktreeIsReadOnlyByTheConnectionThatMadeIt(t *testing.T) {
 	}
 }
 
-// readWholeBundle reads a transfer to its end and returns the first reply and
-// the bytes.
 func readWholeBundle(t *testing.T, c *verbConn, session string, full bool) (map[string]any, []byte) {
 	t.Helper()
 	first := result(t, c.call(t, `{"id":1,"verb":"bundle-worktree","params":`+jsonParams(map[string]any{"session": session, "full": full})+`}`))
@@ -118,8 +111,6 @@ func TestBundleWorktreeCarriesTheBranchTheAgentSwitchedTo(t *testing.T) {
 		t.Fatalf("first reply names branch %v at %v, want feat/agent-own at %s", first["branch"], first["head"], head)
 	}
 
-	// What a pull does with it: the named branch is in the bundle and ends
-	// at the reported head.
 	nb := int(first["bundle_bytes"].(float64))
 	bundle := filepath.Join(t.TempDir(), "b")
 	if err := os.WriteFile(bundle, data[:nb], 0o600); err != nil {

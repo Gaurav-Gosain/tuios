@@ -14,38 +14,6 @@ import (
 	"time"
 )
 
-// A new pane is resized several times in its first milliseconds, because
-// every attached client announces the layout it drew. Each size change is a
-// TIOCSWINSZ and so a SIGWINCH for the guest. macOS /bin/bash is bash 3.2.
-// While it starts, readline sets LINES and COLUMNS through malloc, and the
-// shell's SIGWINCH handler sets them again, also through malloc. A signal
-// that lands in that moment deadlocks the shell on its own allocator lock,
-// libplatform aborts it ("Trying to recursively lock an os_unfair_lock") and
-// the kernel kills it. The pane dies a few milliseconds after it opened.
-//
-// The PTY now coalesces a burst of resizes: the first one reaches the kernel
-// at once, and the rest reach it as one write of the last size once the shell
-// has had time to start.
-//
-// The ways this could fail, written before the change:
-//
-//  1. The burst still reaches the guest as one SIGWINCH per resize, and bash
-//     3.2 dies (the bug). Measured by counting shells killed by a signal.
-//  2. The coalesced write never happens, so the guest keeps a size from the
-//     middle of the burst while the emulator and every client use the last.
-//  3. The first resize is held back, so a pane spawned at the wrong size waits
-//     for the burst to end before its guest hears the right one.
-//  4. Input typed after a resize reaches the guest before the held size does,
-//     so `stty size` run straight after a resize prints the old size.
-//  5. The held write fires after Close, against a closed pty.
-//  6. Two clients resizing at once race the held size (run under -race).
-//
-// 1 is TestResizeBurstAtStartupLeavesBash32Alive. 2, 3 and 4 are
-// TestResizeBurstReachesTheGuestFirstAndLast. 5 and 6 are the Close after
-// each burst and the concurrent resizers in both tests.
-
-// bash32 returns the path of a bash 3.x, the one whose SIGWINCH handling is not
-// async-signal-safe, or "" when this machine has none.
 func bash32() string {
 	for _, path := range []string{"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"} {
 		if _, err := os.Stat(path); err != nil {
@@ -59,16 +27,11 @@ func bash32() string {
 	return ""
 }
 
-// signalled reports whether the pane's process was ended by a signal, which
-// ExitStatus reports as -1.
 func signalled(p *PTY) bool {
 	code, exited := p.ExitStatus()
 	return exited && code == -1
 }
 
-// resizeBurst resizes p the way a pane is resized as it opens: clients
-// announcing sizes that disagree by a cell, several of them at once, for as
-// long as span, gap apart. It returns the size the burst ended on.
 func resizeBurst(p *PTY, clients int, span, gap time.Duration) (int, int) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -137,8 +100,6 @@ func TestResizeBurstAtStartupLeavesBash32Alive(t *testing.T) {
 				return
 			}
 			resizeBurst(p, 3, 100*time.Millisecond, 0)
-			// Long enough for the shell to finish starting and for a held
-			// size to be written, so a signal it sends is counted too.
 			time.Sleep(winsizeStartup + 50*time.Millisecond)
 			if signalled(p) {
 				killed.Add(1)
@@ -165,7 +126,6 @@ func TestResizeBurstReachesTheGuestFirstAndLast(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = p.Close() })
 
-	// 3: the first resize reaches the kernel before Resize returns.
 	if err := p.Resize(50, 14); err != nil {
 		t.Fatalf("Resize: %v", err)
 	}
@@ -173,7 +133,6 @@ func TestResizeBurstReachesTheGuestFirstAndLast(t *testing.T) {
 		t.Fatalf("ASSERTION: the first resize was held back: the guest sees %dx%d, want 50x14", ws.Col, ws.Row)
 	}
 
-	// 2: the rest of a burst lands, as its last size.
 	lastW, lastH := resizeBurst(p, 3, 20*time.Millisecond, time.Millisecond)
 	if w, h := p.Size(); w != lastW || h != lastH {
 		t.Fatalf("the pane records %dx%d, want the burst's last %dx%d", w, h, lastW, lastH)
@@ -190,8 +149,6 @@ func TestResizeBurstReachesTheGuestFirstAndLast(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	// 4: input written after a resize finds the guest at that size. Two
-	// resizes back to back, so the second is one a burst holds.
 	_ = p.Resize(30, 9)
 	_ = p.Resize(31, 10)
 	if _, err := p.Write([]byte("stty size\n")); err != nil {

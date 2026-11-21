@@ -7,24 +7,10 @@ import (
 	"tuios.dev/vt"
 )
 
-// The other half of the snapshot's cost: what the client pays to read it.
-//
-// BenchmarkWireTerminalState prices building and encoding a snapshot on the
-// daemon. Every one of those bytes is then decoded on the client and applied
-// cell by cell into an emulator, and that side had no number. It runs on the
-// client's UI goroutine during a workspace switch, so it is paid once per pane
-// on the target workspace while the user waits.
-
-// wirePTYTruecolor is wirePTY painted in RGB the way a syntax-highlighting
-// editor or an agent harness paints: a new colour every run of eight cells.
-// The palette form is the cheap one on the wire: a truecolor cell carries a
-// seven-byte hex string each way.
 func wirePTYTruecolor(tb testing.TB, cols, rows, scrollback int) *PTY {
 	return wirePTYRGB(tb, cols, rows, scrollback, 8)
 }
 
-// wirePTYGradient is the worst case for any style table: every cell its own
-// colour, which is what an image viewer or a gradient banner leaves behind.
 func wirePTYGradient(tb testing.TB, cols, rows, scrollback int) *PTY {
 	return wirePTYRGB(tb, cols, rows, scrollback, 1)
 }
@@ -110,8 +96,6 @@ func BenchmarkWireTerminalStateApply(b *testing.B) {
 				if err := decodePayload(data, &payload); err != nil {
 					b.Fatal(err)
 				}
-				// The check TUIClient.GetTerminalState runs on receipt, so
-				// this is the client's whole cost.
 				if err := payload.State.CheckPacked(); err != nil {
 					b.Fatal(err)
 				}

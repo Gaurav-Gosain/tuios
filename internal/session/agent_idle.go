@@ -5,27 +5,6 @@ import (
 	"time"
 )
 
-// Positive idle evidence, held until it has been seen enough times to trust.
-//
-// A title or screen rule that says idle is reading a prompt box or a rest
-// glyph, and those are on screen in the gaps of a turn too: Claude Code keeps
-// its prompt box under the spinner the whole time it works, and a harness that
-// redraws can show a frame with no spinner for a moment. Publishing the first
-// such frame flaps the pane from working to idle and back, and every flap is a
-// finished turn to anything counting them.
-//
-// So a pane that is working moves to idle only when the idle reading holds on
-// idleConfirmCount further looks spaced at least idleConfirmInterval apart, or
-// when it has held for idleConfirmCap, whichever comes first. The gate
-// schedules those looks itself, because a pane at rest emits nothing that
-// would trigger one. Any look that reads something other than idle cancels the
-// wait. A pane that was not working is at no risk of a flap, so its idle is
-// published at once.
-//
-// A harness that has only just been seen in a pane is also given
-// agentStartupGrace before any idle reading counts: a starting TUI paints its
-// frame in pieces, and a half-painted frame can look like an empty prompt box.
-// These are herdr's numbers.
 const (
 	idleConfirmInterval = 100 * time.Millisecond
 	idleConfirmCount    = 3
@@ -33,23 +12,17 @@ const (
 	agentStartupGrace   = 3 * time.Second
 )
 
-// idlePending is one window's idle reading waiting to be confirmed.
 type idlePending struct {
 	started       time.Time
 	last          time.Time
 	confirmations int
 }
 
-// harnessSeen is when the idle gate first saw a harness in a window, the start
-// of its startup grace.
 type harnessSeen struct {
 	harness string
 	at      time.Time
 }
 
-// idleGate holds the per-window confirmation state. It has its own lock, like
-// agentHolds, because it is consulted around ApplyAgentReport, which takes
-// stateMu itself.
 type idleGate struct {
 	mu      sync.Mutex
 	pending map[string]*idlePending
@@ -57,8 +30,6 @@ type idleGate struct {
 	timers  map[string]*time.Timer
 }
 
-// noteHarnessSeen records the first look at harness in a window, which starts
-// its startup grace. A new harness in the same window starts a new grace.
 func (g *idleGate) noteHarnessSeen(windowID, harness string, now time.Time) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -72,9 +43,6 @@ func (g *idleGate) noteHarnessSeen(windowID, harness string, now time.Time) {
 	delete(g.pending, windowID)
 }
 
-// admit decides whether an idle reading on a window may be published now.
-// current is the window's state. When it may not, recheck is how long until
-// another look is worth taking, or 0 when none is.
 func (g *idleGate) admit(windowID string, current AgentState, now time.Time) (publish bool, recheck time.Duration) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -115,8 +83,6 @@ func (g *idleGate) admit(windowID string, current AgentState, now time.Time) (pu
 	return false, max(wait, time.Millisecond)
 }
 
-// cancel drops a window's pending idle reading and its scheduled look: the
-// pane read as something other than idle, so the wait is over.
 func (g *idleGate) cancel(windowID string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -127,8 +93,6 @@ func (g *idleGate) cancel(windowID string) {
 	}
 }
 
-// schedule arms the look that confirms or cancels a pending reading, replacing
-// any look already armed for the window.
 func (g *idleGate) schedule(windowID string, after time.Duration, look func()) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -141,7 +105,6 @@ func (g *idleGate) schedule(windowID string, after time.Duration, look func()) {
 	g.timers[windowID] = time.AfterFunc(after, look)
 }
 
-// forget drops everything held for a window that has gone away.
 func (g *idleGate) forget(windowID string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -153,7 +116,6 @@ func (g *idleGate) forget(windowID string) {
 	}
 }
 
-// stop disarms every scheduled look, for a session being stopped.
 func (g *idleGate) stop() {
 	g.mu.Lock()
 	defer g.mu.Unlock()

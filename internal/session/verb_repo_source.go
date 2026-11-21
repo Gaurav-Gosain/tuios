@@ -9,46 +9,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Naming a repository to a daemon that may be on another machine.
-//
-// new-worktree, fan and start-agent all take a repository. On one machine the
-// caller names it by a directory, repo. From another machine a directory
-// means nothing, so the caller names it by its origin URL, repo_url, and this
-// daemon finds its own checkout of that repository: under repos_root when the
-// caller names one, else under the usual source directories of this
-// machine's home. With clone and no checkout found, it clones one.
-//
-// What this lets a caller do that it could not before: read which of this
-// machine's directories hold a checkout of a URL it already knows, and, with
-// clone, make git fetch a network URL into a new directory. Both are less
-// than what the same caller can already do with new-window and a command, so
-// neither widens a link or pane caller's reach. clone is still checked
-// against the link policy's open capability below.
-
 // ErrVerbRepoNotFound reports a repo_url that matches no checkout on this
 // machine, and no clone was asked for. Its remedy is clone, a repos_root, or
 // a directory, which is why it does not share a code with git_failed.
 const ErrVerbRepoNotFound = "repo_not_found"
 
-// Link capabilities the repository and worktree verbs check at the point they
-// act, on top of the check every verb gets before its handler runs
-// (link_policy.go). A clone starts a program, git, so it is open, the
-// capability that starts sessions and windows. Reading a worktree's files
-// out is write: a machine that may type into a shell here can read every one
-// of them already, and list, which only reads screens, must not.
 const (
-	linkCapSpawn = config.LinkAllowOpen
-	// linkCapReadOut is write, not files: bundle-worktree reads a whole
-	// worktree out, which a machine that may type into a shell here can do
-	// already. files is the file verbs' own capability.
+	linkCapSpawn   = config.LinkAllowOpen
 	linkCapReadOut = config.LinkAllowWrite
 )
 
-// checkLinkPolicy holds a call from another machine to that machine's link
-// policy for one capability. A call that did not come over a link passes.
-// The verbs that reach it also name a link policy on their entry, so the check before
-// the handler already covers them; this one stays at the point of the action,
-// so a verb that gains a path to it later cannot skip it.
 func (d *Daemon) checkLinkPolicy(cs *connState, capability, verb string) *verbError {
 	if cs == nil || !cs.viaLink {
 		return nil
@@ -56,8 +26,6 @@ func (d *Daemon) checkLinkPolicy(cs *connState, capability, verb string) *verbEr
 	return d.checkLinkCaps(cs, verb, []string{capability})
 }
 
-// repoSource is the repository parameters new-worktree, fan and start-agent
-// share.
 type repoSource struct {
 	Repo      string `json:"repo"`
 	RepoURL   string `json:"repo_url"`
@@ -65,25 +33,16 @@ type repoSource struct {
 	Clone     bool   `json:"clone"`
 }
 
-// named reports whether the caller named a repository at all.
 func (r repoSource) named() bool {
 	return strings.TrimSpace(r.Repo) != "" || strings.TrimSpace(r.RepoURL) != ""
 }
 
-// repoSourceParams are the verb table entries for repo_url, repos_root and
-// clone, shared by every verb that takes them.
 var repoSourceParams = []verbParam{
 	{Name: "repo_url", Type: "string", Description: "The repository by its origin URL, for a caller on another machine. This daemon finds its own checkout whose origin is the same repository. Pass repo or repo_url, not both."},
 	{Name: "repos_root", Type: "string", Description: "With repo_url, the directory on this machine to look under, and to clone into. Absolute, or starting with ~/. Omit to look under ~/src, ~/dev, ~/code, ~/projects, ~/repos, ~/git, ~/work, ~/go/src, the home directory itself and tuios's own clone directory."},
 	{Name: "clone", Type: "bool", Description: "With repo_url, clone the repository when no checkout is found. Only https, ssh and git URLs are cloned.", Default: "false"},
 }
 
-// resolveRepoSource turns the repository parameters into the main checkout on
-// this machine. cloned says the checkout was made by this call.
-//
-// beforeClone, when not nil, runs just before a clone and can refuse it: it
-// is where a verb checks the rest of its call, so a call that would fail
-// anyway does not clone first.
 func (d *Daemon) resolveRepoSource(cs *connState, verb string, src repoSource, beforeClone func() *verbError) (root string, cloned bool, verr *verbError) {
 	repo := strings.TrimSpace(src.Repo)
 	url := strings.TrimSpace(src.RepoURL)
@@ -150,8 +109,6 @@ func (d *Daemon) resolveRepoSource(cs *connState, verb string, src repoSource, b
 	return root, true, verr
 }
 
-// reposRootParam checks repos_root: an absolute directory, or one under the
-// daemon's home written with ~/.
 func reposRootParam(dir string) (string, *verbError) {
 	dir = strings.TrimSpace(dir)
 	if strings.HasPrefix(dir, "~/") || dir == "~" {
@@ -166,7 +123,6 @@ func reposRootParam(dir string) (string, *verbError) {
 	return filepath.Clean(dir), nil
 }
 
-// userHome is the daemon's home directory, or "" when it cannot be read.
 func userHome() string {
 	home, err := os.UserHomeDir()
 	if err != nil {

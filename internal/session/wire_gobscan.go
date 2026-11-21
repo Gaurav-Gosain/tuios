@@ -6,68 +6,22 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// A bound on how deeply any gob payload nests, checked on the raw bytes
-// before encoding/gob sees them.
-//
-// wire_bounds.go keeps a client or linked peer from overflowing the daemon's
-// stack with two message types. The same hazard runs the other way: a client
-// reads daemon frames of up to 16 MB of any type, and the daemon on the other
-// end may be another machine's (tuios attach through a host). A state sync or
-// an attach reply carrying a layout tree nested a few million deep, or a
-// command result whose data nests maps as deep, overflows the client's stack
-// during gob's decode, which is fatal before any check after the decode can
-// run. A per-type frame limit does not fit the client: what a daemon sends
-// includes pane contents and daemon-side fields and has no small ceiling.
-//
-// A second way in needs no deep value at all. gob compiles a decoder for each
-// type a stream defines, by recursion over the type's elements, and a stream
-// may define a chain of types (a slice of a slice of a slice, each its own
-// definition) in a field the receiver does not have and would skip. So the
-// number of type definitions in one payload is bounded as well.
-//
-// checkGobNesting walks a payload the way the gob decoder reads it, without
-// recursion and without building the values, and refuses one that nests values
-// deeper than maxGobNesting or defines more than maxGobTypes types. It follows
-// the decoder rather than the encoder: every byte it reads is one gob would
-// read in the same place, so the shape it checks is the shape gob would
-// decode. A payload it cannot follow is refused, never passed through: a real
-// encoder does not produce one, and gob would fail on it anyway.
-//
-// Every payload goes through decodePayload, so this holds for the client and
-// the daemon alike. The wire does not change.
-
 const (
-	// maxGobNesting is how many levels of structs, slices, arrays, maps and
-	// interfaces a payload may nest, counting the payload itself as one. The
-	// deepest real payload is a state carrying a layout tree at maxBSPDepth,
-	// about 262 levels. The worst level measured costs about 2.2 KB of decode
-	// stack, so this bound holds a payload to a few megabytes of stack.
 	maxGobNesting = 1024
 
-	// maxGobTypes is how many type definitions one payload may carry. The
-	// largest real payload defines a few dozen.
 	maxGobTypes = 1024
 
-	// gobFirstUserID is the lowest type id a stream may define. The ids below
-	// it are gob's own.
 	gobFirstUserID = 64
 
-	// gobTooBig is gob's own ceiling on a message length (tooBig in
-	// encoding/gob) on 64-bit systems. A frame is 16 MB at most, so the
-	// 32-bit ceiling does not matter.
 	gobTooBig = 1 << 30
 )
 
-// Errors for what the scan refuses. errGobNested and errGobTypes are the
-// bounds; errGobMalformed is a stream the scan cannot follow.
 var (
 	errGobNested    = errfmt.Errorf("payload nests deeper than %d levels", maxGobNesting)
 	errGobTypes     = errfmt.Errorf("payload defines more than %d types", maxGobTypes)
 	errGobMalformed = errors.New("payload is not a well-formed gob value")
 )
 
-// The builtin type ids a payload may use in a value. Ids 9 to 63 are gob's
-// own reserved and bootstrap types, which no payload of this package holds.
 const (
 	gobBool      = 1
 	gobInt       = 2
@@ -79,7 +33,6 @@ const (
 	gobInterface = 8
 )
 
-// gobKind is the shape of a type the stream defined.
 type gobKind uint8
 
 const (
@@ -87,29 +40,22 @@ const (
 	gobSlice
 	gobStruct
 	gobMap
-	gobOpaque // GobEncoder, BinaryMarshaler or TextMarshaler: length and bytes
+	gobOpaque
 )
 
-// gobType is a type definition from the stream, cut down to what the scan
-// needs to find where each value ends.
 type gobType struct {
 	kind   gobKind
-	elem   int   // array, slice and map element type
-	key    int   // map key type
-	length int   // array length
-	fields []int // struct field types, by field number
-	flat   int8  // struct: 1 when every field is a basic type, -1 when not, 0 before the first look
+	elem   int
+	key    int
+	length int
+	fields []int
+	flat   int8
 }
 
-// isBasic reports whether id is one of gob's basic types other than an
-// interface: a value of it holds nothing nested.
 func isBasic(id int) bool {
 	return id >= gobBool && id <= gobComplex
 }
 
-// isFlat reports whether t is a struct of basic fields only, which the scan
-// reads in one loop without a frame. A cell of a terminal state is one, and
-// there are hundreds of thousands in a pane with its scrollback.
 func (t *gobType) isFlat() bool {
 	if t.flat == 0 {
 		t.flat = 1
@@ -123,32 +69,25 @@ func (t *gobType) isFlat() bool {
 	return t.flat == 1
 }
 
-// gobFrame is one composite value the scan is inside.
 type gobFrame struct {
 	t     *gobType
 	depth int
-	left  uint64 // elements (array, slice) or keys and elements (map) still to read
-	field int    // struct: the last field number read, -1 before the first
+	left  uint64
+	field int
 }
 
-// gobDenseIDs is how many type ids after gobFirstUserID the scan keeps in a
-// slice. An encoder numbers types from gobFirstUserID up, so a real payload's
-// ids fall here; one past it goes in a map.
 const gobDenseIDs = 4096
 
-// gobScan reads one payload. pos is the next byte; lim is the end of the
-// gob message pos is in, past which no value may read.
 type gobScan struct {
 	data   []byte
 	pos    int
 	lim    int
-	dense  []*gobType // by id - gobFirstUserID
+	dense  []*gobType
 	sparse map[int]*gobType
 	ntypes int
 	stack  []gobFrame
 }
 
-// typeOf is the definition of id, or nil when the stream has not defined it.
 func (s *gobScan) typeOf(id int) *gobType {
 	if i := id - gobFirstUserID; i >= 0 && i < len(s.dense) {
 		return s.dense[i]
@@ -156,7 +95,6 @@ func (s *gobScan) typeOf(id int) *gobType {
 	return s.sparse[id]
 }
 
-// setType records the definition of id.
 func (s *gobScan) setType(id int, t *gobType) {
 	i := id - gobFirstUserID
 	if i >= gobDenseIDs {
@@ -172,9 +110,6 @@ func (s *gobScan) setType(id int, t *gobType) {
 	s.dense[i] = t
 }
 
-// checkGobNesting refuses a payload that nests deeper than maxGobNesting or
-// defines more than maxGobTypes types. It reads the first value in data, as
-// one Decode would.
 func checkGobNesting(data []byte) error {
 	s := &gobScan{data: data}
 	id, err := s.typeSequence(false)
@@ -190,22 +125,12 @@ func checkGobNesting(data []byte) error {
 	return s.run()
 }
 
-// boundedByType reports whether every value of type id nests within
-// maxGobNesting whatever its bytes, so the value need not be walked: its type
-// reaches no interface and no type that contains itself, and the longest
-// chain of types below it is short enough. A pane's terminal state is such a
-// type, and the largest payload there is. A type that reaches an interface or
-// a recursive type, or one the stream has not defined, is walked.
-//
-// Every type the payload needs is defined before its value unless an
-// interface brings more, and a type that reaches an interface is walked, so
-// what is checked here is all gob will decode.
 func (s *gobScan) boundedByType(id int) bool {
-	const visiting = -1    // on the walk's path: reaching it again is a cycle
-	depth := map[int]int{} // id to the most levels a value of it nests
+	const visiting = -1
+	depth := map[int]int{}
 	type step struct {
 		id   int
-		next int // index of the next child to visit
+		next int
 	}
 	children := func(t *gobType) []int {
 		switch t.kind {
@@ -246,8 +171,6 @@ func (s *gobScan) boundedByType(id int) bool {
 			}
 			continue
 		}
-		// Every child is done: this type nests one level more than its
-		// deepest composite child.
 		most := 0
 		for _, child := range kids {
 			if !isBasic(child) && depth[child] > most {
@@ -263,9 +186,6 @@ func (s *gobScan) boundedByType(id int) bool {
 	return true
 }
 
-// topValue starts a value as gob's decodeValue does: a struct's fields
-// follow at once, and anything else is a singleton, a zero field delta and
-// then the value.
 func (s *gobScan) topValue(id, parentDepth int) error {
 	if t := s.typeOf(id); t != nil && t.kind == gobStruct {
 		return s.value(id, parentDepth)
@@ -280,14 +200,12 @@ func (s *gobScan) topValue(id, parentDepth int) error {
 	return s.value(id, parentDepth)
 }
 
-// run reads the composite values on the stack until none is left.
 func (s *gobScan) run() error {
 	for len(s.stack) > 0 {
 		f := &s.stack[len(s.stack)-1]
 		var next int
 		switch f.t.kind {
 		case gobStruct:
-			// gob stops a struct at a zero delta or at the end of the message.
 			if s.pos == s.lim {
 				s.stack = s.stack[:len(s.stack)-1]
 				continue
@@ -324,15 +242,12 @@ func (s *gobScan) run() error {
 			}
 			f.left--
 		}
-		// Most values in a real payload are basic: read those here rather
-		// than through value.
 		if isBasic(next) {
 			if err := s.basic(next); err != nil {
 				return err
 			}
 			continue
 		}
-		// value may grow the stack, so f is not used past here.
 		if err := s.value(next, f.depth); err != nil {
 			return err
 		}
@@ -340,8 +255,6 @@ func (s *gobScan) run() error {
 	return nil
 }
 
-// value reads a value of type id whose container is at parentDepth. A basic
-// value is read whole; a composite one is pushed for run to read.
 func (s *gobScan) value(id, parentDepth int) error {
 	if isBasic(id) {
 		return s.basic(id)
@@ -384,8 +297,6 @@ func (s *gobScan) value(id, parentDepth int) error {
 	return nil
 }
 
-// flatStruct reads a struct of basic fields, with the same delta rules run
-// applies to any struct.
 func (s *gobScan) flatStruct(t *gobType) error {
 	field := -1
 	for s.pos < s.lim {
@@ -407,7 +318,6 @@ func (s *gobScan) flatStruct(t *gobType) error {
 	return nil
 }
 
-// basic reads a value of a basic type other than an interface.
 func (s *gobScan) basic(id int) error {
 	switch id {
 	case gobBytes, gobString:
@@ -421,10 +331,6 @@ func (s *gobScan) basic(id int) error {
 	return err
 }
 
-// iface reads an interface value as gob's decodeInterface does: the concrete
-// type's name (empty for nil), any type definitions it needs, its id, a byte
-// count gob does not use, and the value. The interface counts as a level of
-// its own, because the decoder recurses through it.
 func (s *gobScan) iface(parentDepth int) error {
 	n, err := s.uint()
 	if err != nil {
@@ -451,10 +357,6 @@ func (s *gobScan) iface(parentDepth int) error {
 	return s.topValue(id, depth)
 }
 
-// typeSequence reads type definitions up to the id of a value, as gob's
-// decodeTypeSequence does, and returns that id. At the top of a payload each
-// definition is a message of its own; inside an interface a definition may
-// share the message and is then followed by a count gob skips.
 func (s *gobScan) typeSequence(inInterface bool) (int, error) {
 	for {
 		if s.pos == s.lim {
@@ -483,7 +385,6 @@ func (s *gobScan) typeSequence(inInterface bool) (int, error) {
 	}
 }
 
-// nextMessage starts the next gob message: a length, then that many bytes.
 func (s *gobScan) nextMessage() error {
 	s.lim = len(s.data)
 	n, err := s.uint()
@@ -497,10 +398,6 @@ func (s *gobScan) nextMessage() error {
 	return nil
 }
 
-// defineType reads a wireType for type id. Exactly one of its seven kinds
-// must be set. An encoder never sets more than one, and the scan does not
-// guess which of several gob would use, so a stream that sets more is
-// refused.
 func (s *gobScan) defineType(id int64) error {
 	if id < gobFirstUserID || id >= 1<<31 || s.typeOf(int(id)) != nil {
 		return errGobMalformed
@@ -515,7 +412,7 @@ func (s *gobScan) defineType(id int64) error {
 			return errGobMalformed
 		}
 		switch field {
-		case 0: // ArrayT: CommonType, Elem, Len
+		case 0:
 			t = &gobType{kind: gobArray}
 			return s.fields(3, func(f int) error {
 				switch f {
@@ -534,7 +431,7 @@ func (s *gobScan) defineType(id int64) error {
 				t.length = int(n)
 				return nil
 			})
-		case 1: // SliceT: CommonType, Elem
+		case 1:
 			t = &gobType{kind: gobSlice}
 			return s.fields(2, func(f int) error {
 				if f == 0 {
@@ -542,7 +439,7 @@ func (s *gobScan) defineType(id int64) error {
 				}
 				return s.typeID(&t.elem)
 			})
-		case 2: // StructT: CommonType, Field []fieldType{Name, Id}
+		case 2:
 			t = &gobType{kind: gobStruct}
 			return s.fields(2, func(f int) error {
 				if f == 0 {
@@ -565,7 +462,7 @@ func (s *gobScan) defineType(id int64) error {
 				}
 				return nil
 			})
-		case 3: // MapT: CommonType, Key, Elem
+		case 3:
 			t = &gobType{kind: gobMap}
 			return s.fields(3, func(f int) error {
 				switch f {
@@ -576,7 +473,7 @@ func (s *gobScan) defineType(id int64) error {
 				}
 				return s.typeID(&t.elem)
 			})
-		default: // GobEncoderT, BinaryMarshalerT, TextMarshalerT: CommonType
+		default:
 			t = &gobType{kind: gobOpaque}
 			return s.fields(1, func(int) error { return s.commonType() })
 		}
@@ -591,7 +488,6 @@ func (s *gobScan) defineType(id int64) error {
 	return nil
 }
 
-// commonType reads a CommonType: Name string, Id int.
 func (s *gobScan) commonType() error {
 	return s.fields(2, func(f int) error {
 		if f == 0 {
@@ -602,7 +498,6 @@ func (s *gobScan) commonType() error {
 	})
 }
 
-// typeID reads a type id field.
 func (s *gobScan) typeID(dst *int) error {
 	n, err := s.int()
 	if err != nil {
@@ -615,9 +510,6 @@ func (s *gobScan) typeID(dst *int) error {
 	return nil
 }
 
-// fields reads a struct of one of gob's own fixed types, calling read for
-// each field present. These nest a fixed few levels deep, so the recursion
-// through read is bounded by the schema, not the input.
 func (s *gobScan) fields(n int, read func(field int) error) error {
 	field := -1
 	for s.pos < s.lim {
@@ -639,9 +531,6 @@ func (s *gobScan) fields(n int, read func(field int) error) error {
 	return nil
 }
 
-// count reads an element count and refuses one the rest of the message
-// cannot hold at minBytes an element. A real encoder writes at least one byte
-// for every element, so this only refuses what gob would fail on or spin on.
 func (s *gobScan) count(minBytes uint64) (uint64, error) {
 	n, err := s.uint()
 	if err != nil {
@@ -653,8 +542,6 @@ func (s *gobScan) count(minBytes uint64) (uint64, error) {
 	return n, nil
 }
 
-// skipCounted skips a length and that many bytes: a string, a byte slice or
-// an opaque encoded value.
 func (s *gobScan) skipCounted() error {
 	n, err := s.uint()
 	if err != nil {
@@ -667,10 +554,6 @@ func (s *gobScan) skipCounted() error {
 	return nil
 }
 
-// uint reads one gob unsigned integer: a byte under 0x80 is its own value;
-// otherwise the byte is the negated count of big-endian bytes that follow.
-// The one byte case is split out so it inlines: most integers in a real
-// payload are one byte.
 func (s *gobScan) uint() (uint64, error) {
 	if s.pos < s.lim && s.data[s.pos] <= 0x7f {
 		s.pos++
@@ -679,7 +562,6 @@ func (s *gobScan) uint() (uint64, error) {
 	return s.uintLong()
 }
 
-// uintLong reads an integer of more than one byte.
 func (s *gobScan) uintLong() (uint64, error) {
 	if s.pos >= s.lim {
 		return 0, errGobMalformed
@@ -698,8 +580,6 @@ func (s *gobScan) uintLong() (uint64, error) {
 	return x, nil
 }
 
-// int reads one gob signed integer: an unsigned one with the sign in the low
-// bit.
 func (s *gobScan) int() (int64, error) {
 	u, err := s.uint()
 	if err != nil {

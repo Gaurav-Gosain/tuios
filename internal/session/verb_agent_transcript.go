@@ -12,26 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// agent-transcript: the agent's conversation, for the person.
-//
-// The transcript a pane is joined to (agent_transcript.go) holds the whole
-// conversation: the prompts, the file contents the agent read and the output
-// of every command it ran. Until this verb the daemon read only a turn state
-// out of it. This verb reads the content, so it is held to the strictest rule
-// the daemon has: only the person may call it. That is the reply-approval
-// check, a live human_nonce that verifies for this caller and covers the
-// session of the pane (humanNonceFor, "Nonce scope"), so a process in a
-// pane and a link stream the hub did not vouch for get not_human. A
-// restricted connection is automation and is refused outright (conn_scope.go),
-// and a link needs transcripts (link_policy.go). The default policy gives it,
-// so the person's own client attached over a link reads what it reads here.
-// respond includes it.
-//
-// The path comes from the join, in daemon memory. The caller names a window,
-// never a file. The decoding is internal/transcriptview, which nothing else
-// calls.
-
-// verbAgentTranscript reads a page of a pane's conversation.
 func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session    string `json:"session"`
@@ -53,8 +33,6 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 	}
 	limit := 0
 	if p.Limit != nil {
-		// An omitted limit is the default. A limit given must be one: 0 is
-		// not a page size, so it is refused rather than read as the default.
 		if *p.Limit < 1 || *p.Limit > transcriptview.MaxLimit {
 			return nil, invalidParam("limit", "limit must be between 1 and "+strconv.Itoa(transcriptview.MaxLimit))
 		}
@@ -70,8 +48,6 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 	if verr != nil {
 		return nil, verr
 	}
-	// Nonce scope (human_sender.go): a presence made for one session reads
-	// only that session's transcripts.
 	if _, ok := d.humanNonceFor(p.HumanNonce, sess.ID, cs); !ok {
 		return nil, nonceScopeError("agent-transcript")
 	}
@@ -127,8 +103,6 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 		if errors.Is(err, transcriptview.ErrPiTree) {
 			return nil, newVerbError(ErrVerbInternal, "the Pi session tree is invalid or unavailable")
 		}
-		// The error would name the file, which is the person's project and
-		// session, so it is not passed on.
 		return nil, newVerbError(ErrVerbInternal, "could not read the transcript")
 	}
 	entries := withFileImages(page.Entries, d.pasteDir())
@@ -150,15 +124,11 @@ func (d *Daemon) verbAgentTranscript(cs *connState, params json.RawMessage) (any
 	return out, nil
 }
 
-// transcriptImage reads the data of an image a page named, by its entry id.
-// It reaches only the file of the pane's join, as a page read does.
 func (d *Daemon) transcriptImage(sess *Session, window, path, format, id string, opts transcriptview.Options) (any, *verbError) {
 	var mediaType string
 	var data []byte
 	var err error
 	if strings.HasPrefix(id, fileImagePrefix) {
-		// An image file an entry names: the entry is found again in the
-		// newest page, and the path is the one it names.
 		opts.After, opts.Before, opts.Limit = "", "", transcriptview.MaxLimit
 		var page transcriptview.Page
 		if page, err = transcriptview.Read(path, opts); err == nil {
@@ -186,7 +156,6 @@ func (d *Daemon) transcriptImage(sess *Session, window, path, format, id string,
 	}, nil
 }
 
-// pasteDir is this daemon's paste folder, "" when it has none.
 func (d *Daemon) pasteDir() string {
 	if d.pastes == nil {
 		return ""
@@ -198,23 +167,17 @@ func (d *Daemon) pasteDir() string {
 	return dir
 }
 
-// unsupportedHarnessError refuses a pane whose harness has no transcript this
-// daemon can read.
 func unsupportedHarnessError(harnessID string) *verbError {
 	return hintedVerbError(ErrVerbUnsupportedHarness, "the transcript of "+echoName(harnessID)+" cannot be read", &VerbHint{
 		Detail: "agent-transcript reads the transcripts of Claude Code, Codex, Gemini CLI, Qwen Code, Copilot CLI and Amp. Read the pane with capture-pane or stream-pane instead.",
 	})
 }
 
-// transcriptJoinOf returns the file a window is joined to, its harness and
-// its format.
 func (s *Session) transcriptJoinOf(windowID string) (path, harnessID, format, session string, ok bool) {
 	path, harnessID, format, session, _, ok = s.transcriptViewOf(windowID)
 	return
 }
 
-// transcriptViewOf snapshots identity and selection together, so a concurrent
-// session replacement never pairs one file with another conversation's leaf.
 func (s *Session) transcriptViewOf(windowID string) (path, harnessID, format, session string, leaf *string, ok bool) {
 	s.transcripts.mu.Lock()
 	defer s.transcripts.mu.Unlock()
@@ -229,15 +192,10 @@ func (s *Session) transcriptViewOf(windowID string) (path, harnessID, format, se
 	return j.reader.Path(), j.harness, j.format, j.session, leaf, true
 }
 
-// noteTranscriptGrowth raises a transcript event when the joined file grew
-// since the last one. The event carries the cursor a read to the end would
-// return now, and nothing of the file.
 func (s *Session) noteTranscriptGrowth(windowID string, j *transcriptJoin) {
 	s.announceTranscript(windowID, j, j.reader.Offset())
 }
 
-// announceTranscript raises the transcript event for a join whose last whole
-// record ends at off, when off moved since the last event.
 func (s *Session) announceTranscript(windowID string, j *transcriptJoin, off int64) {
 	s.transcripts.mu.Lock()
 	grew := off > 0 && off != j.announced
@@ -255,14 +213,8 @@ func (s *Session) announceTranscript(windowID string, j *transcriptJoin, off int
 	s.emit(SessionEvent{Type: EventTranscript, Window: windowID, Cursor: cursor})
 }
 
-// transcriptText makes the agent's text safe to show and keeps its lines:
-// escape sequences and control characters other than newline and tab are removed, and so are the
-// bidirectional controls that make text read in another order than it runs.
-// Likely secrets are masked as attentionText masks them.
 func transcriptText(s string) string {
 	s = strings.ToValidUTF8(s, "�")
-	// A command's output keeps its colours in the transcript. The escape
-	// sequences go whole, so no "[31m" is left where the escape was.
 	if strings.ContainsRune(s, 0x1b) || strings.ContainsRune(s, 0x9b) {
 		s = ansi.Strip(s)
 	}
@@ -292,22 +244,6 @@ func transcriptText(s string) string {
 	return s
 }
 
-// maskSecretLines masks the secrets that span lines, in place, and reports
-// whether it masked any. attentionSecret sees one line at a time, so it
-// misses these:
-//
-//   - A PEM private key: every line from its BEGIN line to its END line, or to
-//     the last line when the END is not there, becomes [redacted]. The BEGIN
-//     and END lines stay, so the person sees that a key was there.
-//   - The body of a key whose BEGIN line is not in view, as in a diff hunk in
-//     the middle of a key: a run of two or more lines of base64 alone, each
-//     of 40 characters or more.
-//   - An .env style block: a run of two or more KEY=VALUE lines with an upper
-//     case key and no space before the "=". The value of each becomes
-//     [redacted] and the key stays.
-//
-// A diff's lines are masked in the order the hunk shows them, so a key that
-// is removed and added again is masked on both sides.
 func maskSecretLines(lines []string) bool {
 	masked := false
 	inKey := false
@@ -332,11 +268,8 @@ func maskSecretLines(lines []string) bool {
 	return masked
 }
 
-// secretMask is what a masked secret reads as.
 const secretMask = "[redacted]"
 
-// maskRuns replaces each line of every run of two or more lines that match,
-// and reports whether it replaced any.
 func maskRuns(lines []string, match func(string) bool, mask func(string) string) bool {
 	masked := false
 	for i := 0; i < len(lines); {
@@ -355,8 +288,6 @@ func maskRuns(lines []string, match func(string) bool, mask func(string) string)
 	return masked
 }
 
-// isBase64Line reports a line of 40 or more base64 characters and nothing
-// else, the body of a PEM block.
 func isBase64Line(l string) bool {
 	l = strings.TrimSpace(l)
 	if len(l) < 40 {
@@ -371,8 +302,6 @@ func isBase64Line(l string) bool {
 	return true
 }
 
-// isEnvLine reports a KEY=VALUE line as an .env file writes it: an optional
-// export, an upper case key, "=" with no space before it, and a value.
 func isEnvLine(l string) bool {
 	l = strings.TrimSpace(l)
 	l = strings.TrimPrefix(l, "export ")
@@ -392,7 +321,6 @@ func isEnvLine(l string) bool {
 	return true
 }
 
-// isBidiControl reports the embedding, override and isolate controls.
 func isBidiControl(r rune) bool {
 	return (r >= 0x202A && r <= 0x202E) || (r >= 0x2066 && r <= 0x2069)
 }

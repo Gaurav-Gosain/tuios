@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// errorOf extracts the error object from a response, failing when the response
-// carried a result instead.
 func errorOf(t *testing.T, resp map[string]any) map[string]any {
 	t.Helper()
 	e, ok := resp["error"].(map[string]any)
@@ -31,7 +29,6 @@ func TestHintsAreOmittedWhenEmpty(t *testing.T) {
 		t.Errorf("an empty hint must be omitted, got %s", data)
 	}
 
-	// And the legacy constructor must keep producing a hint-free envelope.
 	data, err = json.Marshal(newVerbError(ErrVerbInternal, "boom"))
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -41,8 +38,6 @@ func TestHintsAreOmittedWhenEmpty(t *testing.T) {
 	}
 }
 
-// hintOf extracts the hint object from an error envelope, failing when there is
-// none. Every degraded state covered here is expected to name its remedy.
 func hintOf(t *testing.T, e map[string]any) map[string]any {
 	t.Helper()
 	h, ok := e["hint"].(map[string]any)
@@ -52,7 +47,6 @@ func hintOf(t *testing.T, e map[string]any) map[string]any {
 	return h
 }
 
-// hintStrings reads a string-list field off a hint.
 func hintStrings(t *testing.T, hint map[string]any, field string) []string {
 	t.Helper()
 	raw, ok := hint[field].([]any)
@@ -84,7 +78,6 @@ func TestVerbErrorHints(t *testing.T) {
 	}
 	sess.SetOption("appearance.border_style", "rounded")
 
-	// An empty session exercises the no-windows state without disturbing "work".
 	if _, err := d.manager.CreateSession("empty", &SessionConfig{}, 80, 24); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
@@ -93,12 +86,9 @@ func TestVerbErrorHints(t *testing.T) {
 		name string
 		req  string
 
-		wantCode string
-		// wantMessage are substrings the human message must contain.
-		wantMessage []string
-		// wantHint are exact string fields the hint must carry.
-		wantHint map[string]string
-		// wantAccepted and wantAvailable are membership checks on list fields.
+		wantCode      string
+		wantMessage   []string
+		wantHint      map[string]string
 		wantAccepted  []string
 		wantAvailable []string
 	}{
@@ -168,11 +158,7 @@ func TestVerbErrorHints(t *testing.T) {
 			wantCode:    ErrVerbInvalidParams,
 			wantMessage: []string{"recent-unwrapped"},
 			wantHint: map[string]string{
-				"param": "source",
-				// did_you_mean here proves the retired-value branch ran: the
-				// edit distance from "recent-unwrapped" to "recent" is far
-				// outside closestMatch's tolerance, so the generic path could
-				// never suggest it.
+				"param":        "source",
 				"did_you_mean": "recent",
 				"detail":       retiredCaptureSources["recent-unwrapped"],
 			},
@@ -196,10 +182,6 @@ func TestVerbErrorHints(t *testing.T) {
 			wantAvailable: []string{"work", "scratch", "empty"},
 		},
 		{
-			// get-option answers an option that exists but was never set on this
-			// session with its default, so only a key that names no option at all
-			// is an error now, and the remedy for that is to go and look at what
-			// does exist.
 			name:        "a misspelled option says what the options are",
 			req:         `{"id":1,"verb":"get-option","params":{"session":"work","key":"appearance.border_styl"}}`,
 			wantCode:    ErrVerbOptionNotFound,
@@ -231,8 +213,6 @@ func TestVerbErrorHints(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// A fresh connection per row: some rows leave connection state
-			// (subscriptions) behind, and rows must not influence each other.
 			c := dialVerb(t, socketPath)
 			resp := c.call(t, tc.req)
 			e := errorOf(t, resp)

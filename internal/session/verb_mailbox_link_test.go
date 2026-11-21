@@ -9,17 +9,6 @@ import (
 	"testing"
 )
 
-// Mail from another machine.
-//
-// The proxy on this machine dials the daemon's link socket for every stream a
-// hub opens, so a send that arrived on that socket was written on another
-// machine. That is the one fact the daemon has, and everything below is what
-// it does with it: it marks the message, keeps the sender's names as claims,
-// refuses paths it did not hand out, and bounds what a link can leave here.
-// The body itself is stored and read back as data and nothing else, which is
-// what the last test proves by handing the daemon the worst body it can.
-
-// dialLink is dialVerb on the daemon's link socket: what the proxy does.
 func dialLink(t *testing.T, socketPath string) *verbConn {
 	t.Helper()
 	return dialVerb(t, LinkSocketPath(socketPath))
@@ -34,7 +23,6 @@ func sendJSON(t *testing.T, c *verbConn, id int, params map[string]any) map[stri
 	return c.call(t, fmt.Sprintf(`{"id":%d,"verb":"send-agent-message","params":%s}`, id, raw))
 }
 
-// mustRefuse fails with an ASSERTION when resp is not an error with this code.
 func mustRefuse(t *testing.T, resp map[string]any, code, why string) {
 	t.Helper()
 	e, ok := resp["error"].(map[string]any)
@@ -77,7 +65,6 @@ func TestASendOnTheLinkSocketIsMarkedAsFromAnotherMachine(t *testing.T) {
 	if res["origin"] != AgentOriginLink || res["origin_host"] != "buildbox" {
 		t.Fatalf("ASSERTION: a send on the link socket is not marked as from another machine: origin=%v origin_host=%v", res["origin"], res["origin_host"])
 	}
-	// The sender is not a window here, so its name is a label and no id.
 	if res["from"] != "" {
 		t.Errorf("ASSERTION: a sender on another machine resolved to a window here: %v", res["from"])
 	}
@@ -131,15 +118,12 @@ func TestAnotherMachineCanAttachOnlyAStashedFile(t *testing.T) {
 	sess := makeSessionWithWindow(t, d, "work")
 	link := dialLink(t, sp)
 
-	// A file that exists here, which a local sender may attach.
 	secret := filepath.Join(t.TempDir(), "id_ed25519")
 	if err := os.WriteFile(secret, []byte("private"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	resp := sendJSON(t, link, 1, map[string]any{"session": "work", "text": "look", "attachments": []string{secret}})
 	mustRefuse(t, resp, ErrVerbInvalidParams, "a path from another machine was accepted as an attachment")
-	// And one that does not: the answer must be the same, so existence is
-	// not leaked through the refusal.
 	resp2 := sendJSON(t, link, 2, map[string]any{"session": "work", "text": "look", "attachments": []string{filepath.Join(t.TempDir(), "nothing")}})
 	msg1, _ := resp["error"].(map[string]any)["message"].(string)
 	msg2, _ := resp2["error"].(map[string]any)["message"].(string)
@@ -149,7 +133,6 @@ func TestAnotherMachineCanAttachOnlyAStashedFile(t *testing.T) {
 		}
 	}
 
-	// A stashed file is what a sender on another machine may name.
 	src := filepath.Join(t.TempDir(), "flame.png")
 	if err := os.WriteFile(src, []byte("png"), 0o600); err != nil {
 		t.Fatal(err)
@@ -168,7 +151,6 @@ func TestAnotherMachineCanAttachOnlyAStashedFile(t *testing.T) {
 		t.Errorf("ASSERTION: the stashed attachment did not read back as stashed: %v", atts)
 	}
 
-	// The local sender is not fenced this way: it may attach any file here.
 	local := dialVerb(t, sp)
 	result(t, sendJSON(t, local, 4, map[string]any{"session": "work", "text": "mine", "attachments": []string{secret}}))
 }
@@ -177,8 +159,6 @@ func TestWhatAnotherMachineCanQueueIsBounded(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	makeSessionWithWindow(t, d, "work")
 
-	// Each send names a fresh sender, so the per-sender rate cap never
-	// fires and the queue cap is the only bound in play.
 	for i := range agentLinkMaxQueued {
 		link := dialLink(t, sp)
 		result(t, sendJSON(t, link, i+1, map[string]any{"session": "work", "to": "human", "from": fmt.Sprintf("s%d", i), "text": "hi"}))
@@ -191,15 +171,12 @@ func TestWhatAnotherMachineCanQueueIsBounded(t *testing.T) {
 		t.Errorf("the refusal does not say what is full: %q", msg)
 	}
 
-	// Local mail is not bounded by it.
 	local := dialVerb(t, sp)
 	result(t, sendJSON(t, local, 101, map[string]any{"session": "work", "to": "human", "text": "local still works"}))
 
-	// Reading is what makes room.
 	result(t, local.call(t, `{"id":102,"verb":"read-agent-messages","params":{"session":"work","to":"human","limit":256}}`))
 	result(t, sendJSON(t, link, 103, map[string]any{"session": "work", "to": "human", "from": "one-more", "text": "hi"}))
 
-	// Notices from a link are bounded on their own.
 	for i := range agentLinkMaxQueued {
 		c := dialLink(t, sp)
 		result(t, sendJSON(t, c, 200+i, map[string]any{"session": "work", "from": fmt.Sprintf("n%d", i), "text": "notice"}))
@@ -251,7 +228,6 @@ func TestAHostileBodyFromAnotherMachineReachesNothing(t *testing.T) {
 		t.Fatalf("ASSERTION: the body opened an ask: %v", edges)
 	}
 
-	// The body is stored as the bytes it was, marked, and nothing more.
 	msgs := readAll(t, dialVerb(t, sp), "work")
 	if len(msgs) != 1 {
 		t.Fatalf("the ring holds %d messages, want the one hostile message", len(msgs))
@@ -262,8 +238,6 @@ func TestAHostileBodyFromAnotherMachineReachesNothing(t *testing.T) {
 	if msgs[0]["origin"] != AgentOriginLink || msgs[0]["origin_host"] != "evil" {
 		t.Errorf("ASSERTION: the hostile message reads back without its origin: %v", msgs[0])
 	}
-	// The verb line inside the body was not run as a request: the ids the
-	// daemon answered are the ones this test sent, and the session is here.
 	if d.manager.GetSession("work") == nil {
 		t.Fatalf("ASSERTION: the kill-session inside the body was run")
 	}

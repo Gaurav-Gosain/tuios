@@ -19,50 +19,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// The Inbox: one daemon-owned queue of everything waiting for the person.
-//
-// Attention used to be spread over the rail's counts, title glyphs, the dock
-// (for the attached session only), the newest-message jump and the mail
-// overlay, and a pane in a session nobody was attached to raised nothing at
-// all. The daemon already sees every transition in every session, so it keeps
-// the one list here and every surface reads it: list-attention answers it, and
-// every change to it is an attention event on the resumable stream.
-//
-// An item is derived from facts the daemon already owns, and it closes when the
-// fact that opened it stops being true:
-//
-//   - approval and question: a pane on needs_input, split by blocked_by. It
-//     closes when the pane leaves needs_input.
-//   - errored: a pane on errored. It closes when the pane leaves errored.
-//   - finished: a pane's completion_seq went up while it came to rest. It
-//     closes when an attached client focuses the pane (the same rule as
-//     finished_unread), when the agent starts another turn, or on dismiss.
-//   - mail: a message to human in one thread. It closes when the ring says the
-//     person's mail in that thread is read.
-//   - resume: a pane a restore brought back with an agent conversation that
-//     can be resumed (agent_resume.go). It closes when the conversation is
-//     resumed, when an agent starts working in the pane, or on dismiss.
-//
-// Every item is keyed by what it is about (session, window and class, or
-// session and thread for mail), so a pane flapping, a harness repeating itself
-// or sixteen agents in a fan finishing together update one row each rather
-// than adding rows, and an update that changes nothing publishes nothing.
-//
-// Items survive a daemon restart, within reason. finished and errored describe
-// something that happened and has not been looked at, and that is still true
-// after a restart. approval and question describe a prompt on a screen, and the
-// process that painted it does not survive the restart, so they are dropped on
-// load rather than shown as a question nobody is asking any more. mail is
-// dropped too: it points into the message ring, which does not survive, and
-// thread ids start again from 1, so a saved item would be merged into whatever
-// unrelated thread next took its id. resume is dropped on load as well, because
-// the restore that follows every start opens it again from the window's
-// recorded conversation, which is where the fact lives.
-//
-// A live handoff is not a restart. The pane's process goes on, and the prompt is
-// still on its screen, so loadHandoff keeps approval, plan and question items for a
-// pane that still waits. Nothing new happened, so they raise no alert.
-
 // Attention kinds. They are wire values: the kind field of an item and the
 // kind filter of list-attention.
 const (
@@ -143,18 +99,10 @@ const (
 	AttentionClosed  = "close"
 )
 
-// attentionMaxItems bounds the queue. One item per pane per class and one per
-// mail thread is already bounded by the panes and the ring, so this is only a
-// backstop against a pathological number of sessions.
 const attentionMaxItems = 1024
 
-// attentionMaxSummary bounds an item's summary, in bytes. The summary is what a
-// dock line and an Inbox row show, and it is written to disk and sent to every
-// subscriber, so it is kept to a line.
 const attentionMaxSummary = 160
 
-// attentionSaveDelay is how long a change waits before the queue is written,
-// so a burst of transitions costs one write.
 const attentionSaveDelay = 500 * time.Millisecond
 
 // AttentionItem is one thing waiting for the person.
@@ -286,112 +234,52 @@ type AttentionItem struct {
 	// See attention_children.go.
 	WithParentUntil int64 `json:"with_parent_until,omitempty"`
 
-	// remoteSeq is the Seq the machine the item came from gave it, for an
-	// item mirrored from a linked host. It orders that machine's changes,
-	// which can reach this daemon out of order around a relisting.
 	remoteSeq uint64
 }
 
-// attentionStore is the daemon's queue. Its lock is its own and nothing is
-// called under it but the event hub, whose lock is a leaf, so the session event
-// sink may call into it with the session's state lock held.
 type attentionStore struct {
-	mu sync.Mutex
-	// undoWindow is agents.undo_window_seconds. NewDaemon sets it before
-	// the store is used; zero is attentionUndoWindow.
-	undoWindow time.Duration
-	// heldDismissed is, per machine, the held-mail count the person
-	// dismissed. The item stays closed until the count changes.
+	mu            sync.Mutex
+	undoWindow    time.Duration
 	heldDismissed map[string]int
 	items         map[string]*AttentionItem
 	byKey         map[string]string
 	nextID        uint64
 	rev           uint64
 
-	// publish delivers an attention event. It is called with mu held, so the
-	// order of events on the stream is the order of changes to the queue.
-	publish func(streamEvent)
-	// currentSeq reads the hub's last seq, for a listing's resume point.
+	publish    func(streamEvent)
 	currentSeq func() uint64
 
-	// path is where the queue is saved, empty for a store that is never saved.
 	path      string
 	saveTimer *time.Timer
-	// frozen stops every change from being saved, from the moment the daemon's
-	// final save is taken. Shutdown closes panes after it, and those closes must
-	// not reach the file as if the person had dealt with the items.
-	frozen bool
+	frozen    bool
 
-	// holds are the approval requests a hook is waiting on, by request id, and
-	// settled remembers how the most recent ones ended so a second reply is
-	// answered with the first one's result. Both live under mu with the items
-	// they point at, so an item and its hold never disagree. See approvals.go.
-	holds   map[string]*approvalHold
-	settled map[string]approvalOutcome
-	// settledOrder is settled's ids oldest first, for its bound.
+	holds        map[string]*approvalHold
+	settled      map[string]approvalOutcome
 	settledOrder []string
 
-	// asks are the questions ask-human put to the person, by request id, and
-	// askSettled how the most recent ones ended, for a caller that comes back
-	// for the answer. They live under mu with their items for the reason holds
-	// do. See ask_human.go.
 	asks            map[string]*askHold
 	askSettled      map[string]askOutcome
 	askSettledOrder []string
 
-	// hostItems are the items mirrored from linked hosts, keyed by their id
-	// here, which is the host's name, a colon and the host's own id. They are
-	// kept apart from items so nothing a host sends can evict an item of this
-	// machine, and they are never saved: the host keeps its own queue. See
-	// attention_hosts.go.
-	hostItems map[string]*AttentionItem
-	// hostHidden are host items the person dismissed here, with the host's
-	// revision of the item at the time. The item stays hidden until the host
-	// changes it again.
+	hostItems  map[string]*AttentionItem
 	hostHidden map[string]uint64
 
-	// snoozed are the items the person snoozed, by id, each with
-	// SnoozedUntil set, and snoozedKey finds one by what it is about, the way
-	// byKey finds an open item. An item is in items or in snoozed, never both.
-	// See attention_lifecycle.go.
-	snoozed    map[string]*AttentionItem
-	snoozedKey map[string]string
-	// hostSnoozed are host items the person snoozed here, with the host's
-	// revision kept on the copy. Like a dismiss, a snooze of another
-	// machine's item marks nothing on that machine.
-	hostSnoozed map[string]*AttentionItem
-	// wakeTimer wakes the snoozed items whose time has come. There is one,
-	// for the earliest, and only while a snooze with a time is running;
-	// wakeAt is when it fires.
-	wakeTimer *time.Timer
-	wakeAt    int64
-	// wakeGen counts the timers set, so a timer that fires after it was
-	// replaced can tell (see armWakeLocked).
-	wakeGen uint64
-	// undo is the person's last closes, newest last, for restore.
-	undo []attentionUndo
-	// now is the clock, replaced in tests.
-	now func() time.Time
-	// beforeRestore, set only by tests, runs once as restore starts, before
-	// it takes mu for the reopen: the moment a pane's transition could slip
-	// through. Read and cleared under mu.
+	snoozed       map[string]*AttentionItem
+	snoozedKey    map[string]string
+	hostSnoozed   map[string]*AttentionItem
+	wakeTimer     *time.Timer
+	wakeAt        int64
+	wakeGen       uint64
+	undo          []attentionUndo
+	now           func() time.Time
 	beforeRestore func()
 
-	// parentFirst says a delegated child's question goes to its parent agent
-	// first ([agents.mail] questions_to_parent). parentTimer releases the
-	// held questions whose time has come: there is one, for the earliest,
-	// and only while a question is held. parentAt is when it fires, and
-	// parentGen counts the timers set, as wakeGen does. parentHold is the
-	// wait, replaced by an E2E test. See attention_children.go.
 	parentFirst atomic.Bool
 	parentTimer *time.Timer
 	parentAt    int64
 	parentGen   uint64
 	parentHold  time.Duration
 
-	// risk are the rules that mark an approval risky, set from the approval
-	// policy. It is read under mu and replaced whole, so a reload never
-	// changes a set a match is reading. See approval_risk.go.
 	risk atomic.Pointer[riskSet]
 }
 
@@ -407,14 +295,10 @@ func newAttentionStore(publish func(streamEvent), currentSeq func() uint64) *att
 	}
 }
 
-// attentionPath is where the queue is saved: beside the session state, in a
-// directory of its own so the session listing never reads it as a session.
 func attentionPath() string {
 	return filepath.Join(getResurrectionDir(), "attention", "items.json")
 }
 
-// attentionKey names what an item is about. A pane has at most one blocking
-// item, one errored item and one finished item; a thread has one mail item.
 func attentionKey(kind, session, window string, thread uint64) string {
 	class := kind
 	switch kind {
@@ -426,10 +310,6 @@ func attentionKey(kind, session, window string, thread uint64) string {
 	return class + "\x00" + session + "\x00" + window
 }
 
-// attentionItemKey is the key an item is held under. An outbox item is about
-// a machine rather than a pane, so it is keyed by that. An ask is keyed by its
-// request rather than its pane, since a script outside every pane asks with no
-// pane at all. Everything else is attentionKey.
 func attentionItemKey(it *AttentionItem) string {
 	switch it.Kind {
 	case AttentionOutbox:
@@ -440,16 +320,12 @@ func attentionItemKey(it *AttentionItem) string {
 		return "ask\x00" + it.Session + "\x00" + it.RequestID
 	case AttentionErrored:
 		if it.Session == "" && it.Window == "" {
-			// A notice about the daemon itself, such as config.toml,
-			// keyed by its name (noteConfigNotice).
 			return "notice\x00" + it.Name
 		}
 	}
 	return attentionKey(it.Kind, it.Session, it.Window, it.Thread)
 }
 
-// noteOutbox opens, updates or closes the outbox item for host: how many
-// messages wait for it and what it refused. With neither, the item closes.
 func (a *attentionStore) noteOutbox(host string, waiting int, fails []outboxFailure, since int64, why string) {
 	if a == nil {
 		return
@@ -477,15 +353,9 @@ func (a *attentionStore) noteOutbox(host string, waiting int, fails []outboxFail
 	a.upsertLocked(it)
 }
 
-// attentionEvent is the stream event for one change. Session and Window are
-// copied to the top level so a subscriber's session and window filters apply
-// to attention events exactly as to every other event.
 func attentionEvent(action string, it AttentionItem) streamEvent {
 	return streamEvent{
-		Type: EventAttention,
-		// Set for an item mirrored from a linked host, so a subscriber that
-		// filters by session does not read the host's session name as one on
-		// this machine.
+		Type:      EventAttention,
 		Host:      it.Host,
 		Session:   it.Session,
 		Window:    it.Window,
@@ -494,24 +364,12 @@ func attentionEvent(action string, it AttentionItem) streamEvent {
 	}
 }
 
-// upsertLocked opens the item named by next's key or updates the one already
-// open, and publishes what changed. The caller holds mu. An update keeps the
-// open item's id and Since, so it does not reset the wait.
 func (a *attentionStore) upsertLocked(next AttentionItem) {
 	key := attentionItemKey(&next)
 	if id, ok := a.byKey[key]; ok {
 		cur := a.items[id]
 		next.ID, next.Since = cur.ID, cur.Since
 		next.Seq = cur.Seq
-		// A hold belongs to the approval it was asked for, and the item
-		// shows that approval's line for as long as the hold runs, since
-		// that line is what an answer approves. A new message on the same
-		// pane, a second call reported before its hook opens its own hold or
-		// a notification's generic text, is kept for when the hold ends and
-		// does not replace it: the text and the request id an answer
-		// carries never come from two different calls. The block turning
-		// into a question means the prompt the hook holds is not the one on
-		// the screen any more, so the hold ends.
 		if cur.RequestID != "" && next.RequestID == "" {
 			if next.Kind == AttentionApproval {
 				if h := a.holds[cur.RequestID]; h != nil {
@@ -519,18 +377,12 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 				}
 				next.RequestID, next.Options, next.Expires = cur.RequestID, cur.Options, cur.Expires
 				next.AlwaysScope, next.Summary = cur.AlwaysScope, cur.Summary
-				// So is what the hold marked on it: a plan stays a plan, and
-				// the risk is the held call's, not the newer line's.
 				next.Kind, next.Risk, next.DenyMessage = cur.Kind, cur.Risk, cur.DenyMessage
 				next.PlanLines, next.PlanSHA = cur.PlanLines, cur.PlanSHA
 			} else {
 				a.endHoldLocked(cur.RequestID, approvalOutcome{Reason: approvalEndResolved}, false)
 			}
 		}
-		// The mark lasts as long as the prompt: while the item is open a new
-		// report may add rules to it and never take one off. The report is
-		// the pane's own, and a pane could otherwise clear the mark on a
-		// risky call before it answers. A new prompt opens a new item.
 		next.Risk = stickyRisk(cur.Risk, next.Risk)
 		if attentionSame(*cur, next) {
 			return
@@ -542,8 +394,6 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 		a.changedLocked()
 		return
 	}
-	// A snoozed item whose fact changed wakes with its id and since. A
-	// report that says what the item already said leaves it asleep.
 	if a.wakeOnChangeLocked(key, next) {
 		return
 	}
@@ -564,8 +414,6 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 	a.changedLocked()
 }
 
-// attentionSame reports whether two versions of one item say the same thing,
-// so a repeated report publishes nothing.
 func attentionSame(a, b AttentionItem) bool {
 	return a.Kind == b.Kind && a.Workspace == b.Workspace && a.Harness == b.Harness &&
 		a.Name == b.Name && a.Summary == b.Summary && a.Count == b.Count && a.Seen == b.Seen &&
@@ -580,15 +428,10 @@ func attentionSame(a, b AttentionItem) bool {
 		a.WithParentUntil == b.WithParentUntil && a.AgentSessionID == b.AgentSessionID
 }
 
-// closeLocked closes the item with this id, if it is open. The caller holds mu.
 func (a *attentionStore) closeLocked(id, reason string) bool {
 	return a.closeWithLocked(id, reason, nil)
 }
 
-// closeWithLocked is closeLocked with a chance to fill in the closing copy of
-// the item before it is published: an answered approval names its answer. An
-// item a hook was holding ends the hold, with the close reason as the reason
-// the hook gets no answer.
 func (a *attentionStore) closeWithLocked(id, reason string, fill func(*AttentionItem)) bool {
 	it, ok := a.items[id]
 	if !ok {
@@ -618,8 +461,6 @@ func (a *attentionStore) closeWithLocked(id, reason string, fill func(*Attention
 	return true
 }
 
-// closeKeyLocked closes the item open under key, if any. A snoozed item
-// under key is dropped for the same reason: what it was about is over.
 func (a *attentionStore) closeKeyLocked(key, reason string) {
 	if id, ok := a.byKey[key]; ok {
 		a.closeLocked(id, reason)
@@ -629,8 +470,6 @@ func (a *attentionStore) closeKeyLocked(key, reason string) {
 	}
 }
 
-// evictOldestLocked makes room by closing the oldest item, finished items
-// first, since they are the ones nothing is waiting on.
 func (a *attentionStore) evictOldestLocked() {
 	first := func(it, than *AttentionItem) bool {
 		itDone, thanDone := it.Kind == AttentionFinished, than.Kind == AttentionFinished
@@ -650,9 +489,6 @@ func (a *attentionStore) evictOldestLocked() {
 	}
 }
 
-// noteSessionEvent folds one session event into the queue. It runs on the
-// session's event sink with the session's state lock held, so it reads nothing
-// but the event.
 func (a *attentionStore) noteSessionEvent(sessionName string, ev SessionEvent) {
 	if a == nil {
 		return
@@ -671,9 +507,6 @@ func (a *attentionStore) noteSessionEvent(sessionName string, ev SessionEvent) {
 	}
 }
 
-// noteAgentState is the agent half of the queue: needs_input opens an approval
-// or question item, errored opens an errored item, a finished turn opens a
-// finished item, and leaving a state closes what it opened.
 func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -685,8 +518,6 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 		Harness:   ev.hookHarness,
 		Name:      attentionText(ev.hookTitle, attentionMaxSummary),
 	}
-	// A title that already holds the id, such as the default "Terminal
-	// 1a83230c", is not named twice.
 	if id := shortWindowID(ev.Window); ev.hookProgram && !strings.Contains(base.Name, id) {
 		base.Name += " [" + id + "]"
 	}
@@ -701,16 +532,10 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 	if state != AgentStateErrored.Name() {
 		a.closeKeyLocked(attentionKey(AttentionErrored, sessionName, ev.Window, 0), AttentionClosedResolved)
 	}
-	// A new turn, a new question or a failure is newer news than a turn that
-	// finished before it, so the finished item goes. An agent that finished
-	// and then left the pane (none) did still finish, so that one stays.
 	switch state {
 	case AgentStateWorking.Name(), AgentStateNeedsInput.Name(), AgentStateErrored.Name(), AgentStateLimitReached.Name():
 		a.closeKeyLocked(attentionKey(AttentionFinished, sessionName, ev.Window, 0), AttentionClosedResolved)
 	}
-	// An agent at work in a restored pane is the pane in use again, by a
-	// resume typed some other way or by a new agent, so the offer to resume
-	// is spent. A pane settling to idle or none says nothing either way.
 	switch state {
 	case AgentStateWorking.Name(), AgentStateNeedsInput.Name():
 		a.closeKeyLocked(attentionKey(AttentionResume, sessionName, ev.Window, 0), AttentionClosedResolved)
@@ -718,36 +543,23 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 
 	switch state {
 	case AgentStateNeedsInput.Name():
-		// A quiet pane's question stays out of the queue. An approval or a login
-		// does not, since the pane cannot move until a person acts.
 		if ev.agentQuiet && !AgentKindReachesPerson(ev.hookKind) {
 			key := attentionKey(AttentionQuestion, sessionName, ev.Window, 0)
 			cur, open := a.items[a.byKey[key]]
 			if !open || cur.Kind != AttentionQuestion {
-				// The prompt it replaced has gone. Without this, an approval
-				// followed by a question stayed open and said the wrong thing.
 				if open && cur.Kind == AttentionApproval {
 					a.closeKeyLocked(key, AttentionClosedResolved)
 				}
 				break
 			}
-			// A question item is already open: a login the pane has moved on from,
-			// or a question a pane could not close (see closeQuiet). It follows
-			// what the pane says now, so it does not go stale.
 		}
 		if a.askShownLocked(sessionName, ev.Window, ev.hookMessage) {
-			// The pane shows its own open ask-human question as its state
-			// (ask_human_state.go). The ask item is the row for it, with
-			// the answers, so a question item beside it would only repeat
-			// the question without them.
 			break
 		}
 		it := base
 		it.Kind = AttentionQuestion
 		if ev.hookKind == "approval" {
 			it.Kind = AttentionApproval
-			// An approval nobody holds is marked from the line its pane
-			// reported. A held one keeps what its hold marked (upsertLocked).
 			it.Risk = risk.Names(a.riskOfLine(ev.hookMessage, ev.hookRoot, ev.hookRunDir))
 		}
 		it.Summary = attentionText(ev.hookMessage, attentionMaxSummary)
@@ -781,13 +593,10 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 	}
 }
 
-// noteCompletionSeen closes a pane's finished item once a client has focused
-// the pane with the item's turn counted.
 func (a *attentionStore) noteCompletionSeen(sessionName, window string, seen uint64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	key := attentionKey(AttentionFinished, sessionName, window, 0)
-	// A snoozed finished turn the person has now looked at is seen too.
 	if id, ok := a.snoozedKey[key]; ok && a.snoozed[id].CompletionSeq <= seen {
 		a.dropSnoozedLocked(id, AttentionClosedSeen)
 	}
@@ -798,8 +607,6 @@ func (a *attentionStore) noteCompletionSeen(sessionName, window string, seen uin
 	a.closeLocked(id, AttentionClosedSeen)
 }
 
-// closeWindow closes the items about a pane that closed. Mail is kept: the
-// message is still unread, and the ring still holds it.
 func (a *attentionStore) closeWindow(sessionName, window string) {
 	if window == "" {
 		return
@@ -809,9 +616,7 @@ func (a *attentionStore) closeWindow(sessionName, window string) {
 	for _, kind := range []string{AttentionApproval, AttentionErrored, AttentionFinished, AttentionResume} {
 		a.closeKeyLocked(attentionKey(kind, sessionName, window, 0), AttentionClosedWindow)
 	}
-	// A child's question held for this pane has nobody to wait for now.
 	a.releaseChildrenOfLocked(window)
-	// An ask from the pane has nobody to hand the answer to any more.
 	for _, id := range a.sortedIDsLocked() {
 		if it := a.items[id]; it.Kind == AttentionAsk && it.Session == sessionName && it.Window == window {
 			a.closeLocked(id, AttentionClosedWindow)
@@ -819,8 +624,6 @@ func (a *attentionStore) closeWindow(sessionName, window string) {
 	}
 }
 
-// windowWorkspace gives the items about a pane the workspace it moved to, which is
-// also how they follow a renumber of the workspaces.
 func (a *attentionStore) windowWorkspace(sessionName, window string, workspace int) {
 	if window == "" || workspace < 1 {
 		return
@@ -839,8 +642,6 @@ func (a *attentionStore) windowWorkspace(sessionName, window string, workspace i
 	}
 }
 
-// openResume opens the resume item for a restored pane, or updates the one
-// already open for it.
 func (a *attentionStore) openResume(it AttentionItem) {
 	if a == nil {
 		return
@@ -851,17 +652,8 @@ func (a *attentionStore) openResume(it AttentionItem) {
 	a.upsertLocked(it)
 }
 
-// heldPromptSummary is the summary of the item that says an agent the daemon
-// started is not ready for its first prompt.
 const heldPromptSummary = "waiting at a screen tuios does not recognise: look at the pane and answer it"
 
-// openHeldPrompt opens a question item for a pane the daemon started an agent
-// in, which has not been ready for its first prompt for a while (see
-// waitAgentStart), and returns the summary it carries, which is what
-// closeHeldPrompt closes by. It is a question because the pane needs the person
-// to answer whatever is on its screen, most often a first-run choice. It shares
-// the pane's blocking key, so the pane's next state change closes it like any
-// question, and a needs_input the pane reaches replaces it with the real one.
 func (a *attentionStore) openHeldPrompt(sessionName string, w WindowState) string {
 	if a == nil {
 		return ""
@@ -880,9 +672,6 @@ func (a *attentionStore) openHeldPrompt(sessionName string, w WindowState) strin
 	return heldPromptSummary
 }
 
-// closeHeldPrompt closes the item openHeldPrompt opened, if it still says what
-// it said then. An item on the same key that says something else is the pane's
-// own question, and it is left alone.
 func (a *attentionStore) closeHeldPrompt(sessionName, window, summary string) {
 	if a == nil {
 		return
@@ -904,7 +693,6 @@ func (a *attentionStore) closeHeldPrompt(sessionName, window, summary string) {
 	}
 }
 
-// closeResume closes a pane's resume item, if one is open.
 func (a *attentionStore) closeResume(sessionName, window, reason string) {
 	if a == nil {
 		return
@@ -914,9 +702,6 @@ func (a *attentionStore) closeResume(sessionName, window, reason string) {
 	a.closeKeyLocked(attentionKey(AttentionResume, sessionName, window, 0), reason)
 }
 
-// closeResumesOf closes every resume item, open or snoozed, for the
-// conversation a pane reported just now: y on it would start the
-// conversation a second time. A harness given on both sides must match.
 func (a *attentionStore) closeResumesOf(harnessID, conversation string) {
 	if a == nil || conversation == "" {
 		return
@@ -939,7 +724,6 @@ func (a *attentionStore) closeResumesOf(harnessID, conversation string) {
 	}
 }
 
-// closeSession closes every item in a session that ended.
 func (a *attentionStore) closeSession(sessionName string) {
 	if a == nil {
 		return
@@ -958,8 +742,6 @@ func (a *attentionStore) closeSession(sessionName string) {
 	}
 }
 
-// sortedIDsLocked returns the open ids in a stable order, so a sweep that
-// closes several publishes them in the same order every time.
 func (a *attentionStore) sortedIDsLocked() []string {
 	ids := make([]string, 0, len(a.items))
 	for id := range a.items {
@@ -971,8 +753,6 @@ func (a *attentionStore) sortedIDsLocked() []string {
 	return ids
 }
 
-// noteMail opens or updates the mail item for the thread a message to the
-// person landed in.
 func (a *attentionStore) noteMail(msg AgentMessage) {
 	if a == nil || msg.Kind != agentMsgDirect || msg.To != AgentInboxHuman || msg.From == AgentInboxHuman {
 		return
@@ -1011,13 +791,9 @@ func (a *attentionStore) noteMail(msg AgentMessage) {
 		cur := a.items[id]
 		it.Count = cur.Count + 1
 		it.Seen = cur.Seen
-		// The newest message names the thread's latest word, but the row is
-		// still the thread the person has not read.
 		if it.Window == "" {
 			it.Window = cur.Window
 		}
-		// A held message stays offered for release until it is released,
-		// whatever arrives after it in the thread.
 		if it.HeldID == 0 {
 			it.HeldID, it.HeldFor = cur.HeldID, cur.HeldFor
 		}
@@ -1025,8 +801,6 @@ func (a *attentionStore) noteMail(msg AgentMessage) {
 	a.upsertLocked(it)
 }
 
-// noteMailSeen records how many of a thread's messages for the person have
-// been seen and not read, so the Inbox row and list-attention can say so.
 func (a *attentionStore) noteMailSeen(sessionName string, thread uint64, seen int) {
 	if a == nil {
 		return
@@ -1042,8 +816,6 @@ func (a *attentionStore) noteMailSeen(sessionName string, thread uint64, seen in
 	a.upsertLocked(it)
 }
 
-// noteMailRead closes a thread's mail item once nothing in it is unread for
-// the person.
 func (a *attentionStore) noteMailRead(sessionName string, thread uint64) {
 	if a == nil {
 		return
@@ -1053,11 +825,6 @@ func (a *attentionStore) noteMailRead(sessionName string, thread uint64) {
 	a.closeKeyLocked(attentionKey(AttentionMail, sessionName, "", thread), AttentionClosedRead)
 }
 
-// dismiss closes one item and returns what it was. A snoozed item can be
-// dismissed too. The person can restore what they dismissed for a moment
-// after (see attention_lifecycle.go), except mail waiting for another machine,
-// which a dismiss discards, and a question put with ask-human, whose asker is
-// told it was dismissed.
 func (a *attentionStore) dismiss(id string) (AttentionItem, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -1092,21 +859,13 @@ func (a *attentionStore) dismiss(id string) (AttentionItem, bool) {
 	return out, true
 }
 
-// attentionQuery narrows a listing.
 type attentionQuery struct {
 	session string
 	kinds   map[string]bool
-	// snoozed also lists the snoozed items, after the open ones. They are
-	// not in the counts, which are what is waiting.
 	snoozed bool
-	// host is empty for every machine, federation.LocalHostName for this one,
-	// or a linked host's name. A session with no host names a session on this
-	// machine, which is what session meant before items from other machines
-	// were listed.
-	host string
+	host    string
 }
 
-// matchHost reports whether an item's machine is the one the query names.
 func (q attentionQuery) matchHost(itemHost string) bool {
 	switch {
 	case q.host == "":
@@ -1118,14 +877,8 @@ func (q attentionQuery) matchHost(itemHost string) bool {
 	}
 }
 
-// localAttentionHost is the host filter that names this machine. It is the
-// name the listings and the rail give it.
 const localAttentionHost = "local"
 
-// list returns the open items in Inbox order, the counts per kind over the
-// whole queue, and the hub seq the listing is current to. The seq is read under
-// the store lock, which every attention event is published under, so every
-// event at or below it is reflected in the listing and every later one is not.
 func (a *attentionStore) list(q attentionQuery) ([]AttentionItem, map[string]int, uint64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -1135,7 +888,6 @@ func (a *attentionStore) list(q attentionQuery) ([]AttentionItem, map[string]int
 	}
 	out := make([]AttentionItem, 0, len(a.items)+len(a.hostItems))
 	add := func(it *AttentionItem) {
-		// A question held for a parent agent is not the person's yet.
 		if it.WithParentUntil == 0 {
 			counts[it.Kind]++
 		}
@@ -1199,7 +951,6 @@ func AttentionKindRank(kind string) int {
 	return len(AttentionKindNames)
 }
 
-// attentionFile is the on-disk form of the queue.
 type attentionFile struct {
 	Version int             `json:"version"`
 	NextID  uint64          `json:"next_id"`
@@ -1207,7 +958,6 @@ type attentionFile struct {
 	Items   []AttentionItem `json:"items"`
 }
 
-// changedLocked schedules a save. The caller holds mu.
 func (a *attentionStore) changedLocked() {
 	if a.path == "" || a.frozen {
 		return
@@ -1227,18 +977,13 @@ func (a *attentionStore) changedLocked() {
 	})
 }
 
-// encodeLocked serialises the queue. The caller holds mu.
 func (a *attentionStore) encodeLocked() []byte {
 	f := attentionFile{Version: 1, NextID: a.nextID, Rev: a.rev, Items: make([]AttentionItem, 0, len(a.items)+len(a.snoozed))}
 	for _, id := range a.sortedIDsLocked() {
-		// An upgrade's confirm never outlives the call that waits on it.
 		if a.items[id].Upgrade == nil {
 			f.Items = append(f.Items, *a.items[id])
 		}
 	}
-	// A snoozed item is saved with snoozed_until, and load puts it back to
-	// sleep. An older daemon reading the file lists it as open, which is
-	// what the item was before the snooze.
 	for _, id := range a.snoozedIDsLocked() {
 		f.Items = append(f.Items, *a.snoozed[id])
 	}
@@ -1249,9 +994,6 @@ func (a *attentionStore) encodeLocked() []byte {
 	return data
 }
 
-// writeAttentionFile writes the queue atomically, readable by the owner only:
-// summaries are what agents said, and nobody else on the machine has any
-// business reading them.
 func writeAttentionFile(path string, data []byte) {
 	if data == nil {
 		return
@@ -1261,9 +1003,6 @@ func writeAttentionFile(path string, data []byte) {
 	}
 }
 
-// saveNow writes the queue as it stands and goes on saving. A handoff takes it
-// before the exec: a save still on its timer would be lost with this image, and
-// the next one would load a queue from before it.
 func (a *attentionStore) saveNow() {
 	if a == nil {
 		return
@@ -1281,8 +1020,6 @@ func (a *attentionStore) saveNow() {
 	}
 }
 
-// saveNowAndFreeze writes the queue as it stands and stops saving from then
-// on. It is the daemon's final save, taken before shutdown closes any pane.
 func (a *attentionStore) saveNowAndFreeze() {
 	if a == nil {
 		return
@@ -1301,29 +1038,10 @@ func (a *attentionStore) saveNowAndFreeze() {
 	}
 }
 
-// load reads the queue a previous daemon saved and keeps what is still true:
-// items in a session that came back, about a pane that came back, and never
-// an approval or a question, since the prompt died with the process that
-// painted it, nor mail, since its thread id means nothing to the new ring.
-// live reports whether a session is live, and whether a window is
-// in it when window is not empty. The ids and revision carry on from the file,
-// so an id is never reused on this machine.
-//
-// The file read and the live checks run with no lock held. live reads session
-// state under the session's stateMu, and the event sink takes the locks the
-// other way round (stateMu, then mu), so holding mu across live could
-// deadlock with a restored pane that exits while the Inbox loads. mu is taken
-// only to merge the survivors in.
-//
-// Items opened before load keep their ids and win over a saved item with the
-// same key. A saved item whose id one of them already holds gets a fresh id,
-// so byKey and items always agree.
 func (a *attentionStore) load(path string, live func(session, window string) bool) {
 	a.loadKeeping(path, live, nil)
 }
 
-// loadHandoff is load after a live handoff. waiting reports whether a pane still
-// waits on a person.
 func (a *attentionStore) loadHandoff(path string, live, waiting func(session, window string) bool) {
 	a.loadKeeping(path, live, waiting)
 }
@@ -1348,9 +1066,6 @@ func (a *attentionStore) loadKeeping(path string, live, waiting func(session, wi
 			if waiting == nil || it.ID == "" || !waiting(it.Session, it.Window) {
 				continue
 			}
-			// A hold is a hook's connection, and it did not cross the handoff.
-			// The item stays open as long as the pane is blocked, as it does
-			// when any hold ends.
 			it.RequestID, it.Options, it.AlwaysScope, it.Expires = "", nil, nil, 0
 		default:
 			continue
@@ -1382,8 +1097,6 @@ func (a *attentionStore) loadKeeping(path string, live, waiting func(session, wi
 			a.nextID++
 			item.ID = strconv.FormatUint(a.nextID, 10)
 		}
-		// A snooze survives the restart. Its time may have passed while
-		// the daemon was down, and armWakeLocked below wakes it then.
 		if item.SnoozedUntil != 0 {
 			a.putSnoozedLocked(&item)
 			continue
@@ -1392,28 +1105,16 @@ func (a *attentionStore) loadKeeping(path string, live, waiting func(session, wi
 		a.byKey[key] = item.ID
 	}
 	a.armWakeLocked()
-	// A question held for a parent agent keeps its time across a live
-	// upgrade: the wait began when the child asked, and the handoff is no
-	// new question. One whose time passed meanwhile is released now.
 	a.armParentLocked()
-	// An item opened before load had no path to be saved to.
 	if opened {
 		a.changedLocked()
 	}
 }
 
-// attentionSecret matches the shapes a command line leaks a credential in:
-// a key=value or key: value whose key names a secret, and an Authorization
-// bearer token. It is a net for the common case, not a guarantee, which is why
-// the summary is also kept short.
 var attentionSecret = lazyre.New(`(?i)\b((?:[a-z0-9_]*(?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|credential)s?)\s*[=:]\s*|bearer\s+)("[^"]*"|'[^']*'|[^\s"']+)`)
 
-// attentionSecretWords are the words attentionSecret keys on, lower case. A
-// summary with none of them cannot match, and most summaries have none, so the
-// regular expression only runs on the ones that might.
 var attentionSecretWords = []string{"token", "secret", "passw", "key", "credential", "bearer"}
 
-// attentionMaySecret reports whether s holds any of attentionSecretWords.
 func attentionMaySecret(s string) bool {
 	lower := strings.ToLower(s)
 	for _, w := range attentionSecretWords {
@@ -1424,8 +1125,6 @@ func attentionMaySecret(s string) bool {
 	return false
 }
 
-// attentionText is text an agent reported, made safe to show and to keep: one
-// line, no control characters, likely secrets masked, at most limit bytes.
 func attentionText(s string, limit int) string {
 	var b strings.Builder
 	b.Grow(min(len(s), limit+8))
@@ -1461,9 +1160,6 @@ func attentionText(s string, limit int) string {
 	return strings.TrimSpace(out[:cut])
 }
 
-// renameSession moves every item of the session named old to newName, open
-// and snoozed alike, so a rename leaves the queue pointing at the session it
-// was about. The keys are worked out again because they hold the name.
 func (a *attentionStore) renameSession(old, newName string) {
 	if a == nil || old == newName {
 		return
@@ -1493,8 +1189,6 @@ func (a *attentionStore) renameSession(old, newName string) {
 		a.snoozedKey[attentionItemKey(it)] = id
 		moved = true
 	}
-	// The held questions and approvals are matched by session name when
-	// they are answered, so they move too.
 	for _, h := range a.asks {
 		if h.session == old {
 			h.session = newName
@@ -1511,8 +1205,6 @@ func (a *attentionStore) renameSession(old, newName string) {
 	}
 }
 
-// closeAll closes every item and drops every snoozed one with reason. A hold
-// on an item ends with it, so its harness asks in its pane.
 func (a *attentionStore) closeAll(reason string) {
 	if a == nil {
 		return

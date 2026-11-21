@@ -8,24 +8,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// The waitid constants of darwin's <sys/wait.h>. x/sys/unix has no Waitid on
-// darwin, and release builds have no cgo, so the call is made by number.
 const (
-	darwinSysWaitid = 173
-	darwinPPID      = 1
-	darwinWEXITED   = 0x4
-	darwinWNOWAIT   = 0x20
-	// darwinSiginfoSize is sizeof(siginfo_t), 104 bytes, rounded up.
+	darwinSysWaitid   = 173
+	darwinPPID        = 1
+	darwinWEXITED     = 0x4
+	darwinWNOWAIT     = 0x20
 	darwinSiginfoSize = 128
 )
 
-// canPeekExit says this platform can wait for a child's exit without reaping
-// it, which a live handoff needs (see pty_reap.go).
 const canPeekExit = true
 
-// peekExit blocks until the child pid has exited and leaves it a zombie, so
-// its status is still there for whoever reaps it. ECHILD means it is not a
-// child of this process, or was already reaped.
 func peekExit(pid int) error {
 	var info [darwinSiginfoSize]byte
 	for {
@@ -42,10 +34,6 @@ func peekExit(pid int) error {
 	}
 }
 
-// waitForeignExit blocks until pid, a process that is not this one's child,
-// has exited, and returns its code and signal as monitorExit records them.
-// kqueue reports a non-child's real wait status with NOTE_EXITSTATUS. A
-// process already gone cannot be registered (ESRCH), and its status is lost.
 func waitForeignExit(pid int) (code, sig int) {
 	kq, err := unix.Kqueue()
 	if err != nil {

@@ -4,9 +4,6 @@ import (
 	"testing"
 )
 
-// feedVT writes bytes to a PTY's daemon-side emulator the way its output reader
-// would, so a test can hand a window the escape sequence an application uses to
-// set its title.
 func feedVT(t *testing.T, p *PTY, data string) {
 	t.Helper()
 	p.terminalMu.Lock()
@@ -41,8 +38,6 @@ func TestListingReportsTheLiveWindowTitle(t *testing.T) {
 		t.Errorf("listed title = %q, want the live %q", windows[0].Title, "vim")
 	}
 
-	// A reattach restores from the session state, so it must carry the live title
-	// too or the pane comes back wearing an old name.
 	state := sess.GetState()
 	if len(state.Windows) != 1 || state.Windows[0].Title != "vim" {
 		t.Errorf("state title = %q, want the live %q", state.Windows[0].Title, "vim")

@@ -15,14 +15,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// The preflight: before anything is paused, the new binary is run once, on
-// the very file the exec will use, and asked which manifests it reads. A
-// binary that cannot run, or reads another version, is refused with nothing
-// changed. The run also pays the cost of a first exec of a new file (0.3 to
-// 0.5 s on macOS) outside the pause, and proves that the new binary starts at
-// all: package init and flag parsing are the code that runs first after the
-// exec. See docs/design/live-handoff.md, section 2.1.
-
 // HandoffAccepts is what a tuios binary says about the handoffs it can take,
 // as `tuios daemon handoff-accepts` prints it.
 type HandoffAccepts struct {
@@ -43,54 +35,34 @@ func LocalHandoffAccepts(version string) HandoffAccepts {
 	}
 }
 
-// handoffPreflightTimeout bounds the preflight run. A first exec of a new
-// file is slow on macOS, and a machine under load slower still.
 const handoffPreflightTimeout = 30 * time.Second
 
-// handoffBinary is a binary a preflight ran: its path and the file it was
-// when it ran, which the exec must still find there.
 type handoffBinary struct {
-	path string
-	file fileID
-	// open is the file the checks read. On Linux the preflight and the exec
-	// run it by descriptor. Elsewhere its bytes are copied to copy, which
-	// they run. Either way no rename over the path after the checks can
-	// change what runs.
-	open *os.File
-	// copy is the private copy the copy route runs, nil on the others.
-	copy *binaryCopy
-	// script is a binary that starts with #!, which runs by its path.
+	path     string
+	file     fileID
+	open     *os.File
+	copy     *binaryCopy
 	script   bool
 	accepts  HandoffAccepts
 	duration time.Duration
 }
 
-// fileID names a file by device and inode, and pins its content by size,
-// modification and change time. A rename over the path changes the inode; a
-// write in place keeps it, but changes the size or a time. The change time
-// cannot be set back without root, where it is read.
 type fileID struct {
 	dev, ino     uint64
 	size         int64
 	mtime, ctime int64
 }
 
-// withoutChange is f without its change time.
 func (f fileID) withoutChange() fileID {
 	f.ctime = 0
 	return f
 }
 
-// preflightOpts are the test-only parts of a preflight.
 type preflightOpts struct {
-	// afterCheck, when not nil, runs between the checks and the run.
 	afterCheck func()
-	// copy takes the copy route on Linux too, so its tests run there.
-	copy bool
+	copy       bool
 }
 
-// preflightBinary runs path's handoff-accepts and checks it reads the
-// manifest this build writes.
 func preflightBinary(path string, opts preflightOpts) (handoffBinary, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -151,9 +123,6 @@ func preflightBinary(path string, opts preflightOpts) (handoffBinary, error) {
 	return bin, nil
 }
 
-// preflightOpen checks the binary at abs. It opens it first and checks the
-// open file. On Linux the preflight and the exec then run that file; on the
-// copy route they run a private copy of it.
 func preflightOpen(abs string, copyRoute bool) (handoffBinary, error) {
 	open := openBinary
 	if copyRoute {
@@ -193,8 +162,6 @@ func preflightOpen(abs string, copyRoute bool) (handoffBinary, error) {
 	return bin, nil
 }
 
-// current is the identity of the file the preflight ran: the open file for
-// a binary run through it, the file at the path otherwise.
 func (b handoffBinary) current() (fileID, error) {
 	if b.open == nil || b.script {
 		return statFileID(b.path)
@@ -206,7 +173,6 @@ func (b handoffBinary) current() (fileID, error) {
 	return fileIDOf(info), nil
 }
 
-// close lets go of the open file, and removes the copy.
 func (b handoffBinary) close() {
 	if b.open != nil {
 		_ = b.open.Close()
@@ -214,7 +180,6 @@ func (b handoffBinary) close() {
 	b.copy.remove()
 }
 
-// clip is b cut to at most n bytes.
 func clip(b []byte, n int) []byte {
 	if len(b) > n {
 		return b[:n]
@@ -272,9 +237,6 @@ func (b UpgradeBinary) Unchanged() error {
 	return checkBinaryInfo(b.path, info)
 }
 
-// checkBinaryInfo refuses a binary someone else could have put there: one
-// owned by neither this user nor root, or one its group or others can write.
-// The daemon runs it with every pane it holds.
 func checkBinaryInfo(path string, info os.FileInfo) error {
 	if uid, ok := fileUID(info); ok && uid != 0 && uid != os.Getuid() {
 		return errfmt.Errorf("%s is owned by user %d, not by you or root, so this daemon will not run it. Install it as yourself or as root", path, uid)
@@ -285,8 +247,6 @@ func checkBinaryInfo(path string, info os.FileInfo) error {
 	return nil
 }
 
-// stillThere reports whether the binary's path still names the file the
-// preflight ran, and the copy, when there is one, is still the copy it ran.
 func (b handoffBinary) stillThere() bool {
 	id, err := statFileID(b.path)
 	return err == nil && id == b.file && b.copy.unchanged()
@@ -294,13 +254,10 @@ func (b handoffBinary) stillThere() bool {
 
 var errNotAnExecutable = errors.New("not a regular executable file")
 
-// errBinaryReplaced refuses a confirmed binary whose file changed after the
-// person said yes to it.
 func errBinaryReplaced(path string) error {
 	return errfmt.Errorf("%s was changed after the upgrade to it was confirmed. Ask again to upgrade to the file there now", path)
 }
 
-// statFileID is the identity of the executable at path.
 func statFileID(path string) (fileID, error) {
 	info, err := os.Stat(path)
 	if err != nil {

@@ -12,68 +12,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
-// Following a pane into ssh.
-//
-// A person ssh'd into a machine who splits the pane usually wants the new pane
-// on that machine too (discussion #468, and tmux-ssh-split before it). The
-// daemon can see what the pane runs: the foreground process group of the
-// pane's terminal, and the members of that group under it. When one of them is
-// an ssh or mosh client, its argument vector says where it connected and how,
-// and the new pane runs the same client with the same destination and options.
-//
-// The daemon runs what it read, so what it reads is held to a narrow shape:
-//
-//   - The program is never taken from the process. The daemon looks ssh or
-//     mosh up on its own PATH. A ./ssh in a project folder, or any binary that
-//     calls itself ssh, is not run.
-//   - A line is followed only when every -o keyword is in sshAllowConfig, a
-//     list of connection options that neither run nor load a program, and
-//     no option or value holds a control character. -F, -I, and mosh's
-//     --ssh, --client and --server are refused for the same reason.
-//   - A line with an option that is not a session (-G, -V, -Q, -O) is not
-//     followed, and neither is a line with an option this file does not know.
-//   - The client must have been started by the pane's shell. ssh run by scp,
-//     rsync, git, sftp or sshfs is a transfer, not a login, and is not
-//     followed. Through shells and known wrappers (sshpass, autossh) any
-//     session line is followed. Through any other program (a person's own
-//     helper, such as `tt ssh box`) only an interactive login is: no remote
-//     command, and none of -s, -N, -T or -W.
-//   - Only a process owned by the user the daemon runs as is read.
-//
-// What is kept and what is dropped from a line that is followed:
-//
-//   - The destination and the options that say how to reach it are kept: the
-//     port, the identity, the jump host, the login name, the -o options.
-//   - The remote command is dropped. The new pane is for a shell.
-//   - Options that make the client something other than an interactive session
-//     are dropped: -N, -f, -n, -T, -t, -s, -M, and the same things spelt as -o
-//     options (RemoteCommand, SessionType, ControlMaster, and so on).
-//   - Port forwards (-L, -R, -D, -W, -w) are dropped. The first client already
-//     holds those ports, and a second bind fails.
-//
-// The argv is never given to a shell on this machine. It is exec'd as it is,
-// the way every pane command is.
-//
-// When the remote shell reported its folder with OSC 7 and the host in the
-// report is the destination's host, the new pane starts there. The remote
-// login shell can be anything (csh, fish, nushell), so the command it is given
-// is only `exec sh -c '...'`, and the cd runs in sh. A cd that fails (the
-// folder is gone) leaves the person in their home folder rather than ending
-// the connection.
-
-// sshFollowWalkLimit and sshFollowWalkDepth bound the walk of the foreground
-// group. A wrapper (sshpass, a shell running ssh, autossh) puts the client a
-// few levels down at most.
 const (
 	sshFollowWalkLimit = 32
 	sshFollowWalkDepth = 6
 )
 
-// sshAncestryLimit bounds the walk up from a candidate to the pane's shell.
 const sshAncestryLimit = 64
 
-// lookPath finds a client program on the daemon's own PATH. A variable so the
-// parser tests can name a fixed path.
 var lookPath = exec.LookPath
 
 // SSHFollowArgv returns the argv that opens a new session to where the ssh or
@@ -110,18 +55,6 @@ func SSHFollowArgv(shellPID int, reportHost, reportDir string) (argv, env []stri
 	return login.argv(dir), env, "", true
 }
 
-// ownedSocket reports whether path is an absolute path to a Unix socket, not
-// a link, owned by the user the daemon runs as, where no other user can put a
-// socket of their own in its place. It returns the path it checked: the
-// socket's folder resolved once with filepath.EvalSymlinks, joined with the
-// socket's name. A caller hands on that path and never the one it was given,
-// so nothing after the check goes back through a link someone else could
-// repoint. macOS's /var, a symlink to /private/var, sits in every standard
-// temp path there, and without resolving it first the walk below would reject
-// every socket under it, not just a suspicious one. Every folder from there up
-// to the root is then checked, as OpenSSH's safe_path does: each must be owned
-// by this user or by root, and no other user may write to it, unless it is
-// sticky (/tmp), where nobody can remove or rename what another user made.
 func ownedSocket(path string) (string, bool) {
 	if !filepath.IsAbs(path) || hasControl(path) {
 		return "", false
@@ -150,17 +83,11 @@ func ownedSocket(path string) (string, bool) {
 	}
 }
 
-// stillOwnedSocket reports whether a socket path that already passed
-// ownedSocket, and so is already resolved, still does.
 func stillOwnedSocket(path string) bool {
 	_, ok := ownedSocket(path)
 	return ok
 }
 
-// safeFolder reports whether dir is a real folder, owned by me or by root,
-// that no other user can write to unless it is sticky. Every symlink in dir
-// is already resolved by the time this is called, so Lstat here still
-// rejects anything that is not a plain directory.
 func safeFolder(dir string, me int) bool {
 	fi, err := os.Lstat(dir)
 	if err != nil || !fi.IsDir() {
@@ -173,13 +100,6 @@ func safeFolder(dir string, me int) bool {
 	return fi.Mode().Perm()&0o022 == 0 || fi.Mode()&os.ModeSticky != 0
 }
 
-// findRemoteClient finds the ssh or mosh client in the foreground of the
-// pane whose shell is shellPID: the group leader first, then the members
-// under it. The first client found decides: when it is not one to follow,
-// nothing is. seen says whether a client was there at all, followed or not:
-// one that cannot be read (an option this file does not know, -F, a
-// transfer) is still a sign the pane is on another machine. why says, for
-// the person, why a client that was seen is not followed.
 func findRemoteClient(shellPID int) (login remoteLogin, ok, seen bool, why string) {
 	if shellPID <= 0 {
 		return remoteLogin{}, false, false, ""
@@ -198,7 +118,6 @@ func findRemoteClient(shellPID int) (login remoteLogin, ok, seen bool, why strin
 		l, why = checkRemoteClient(pid, shellPID, argv)
 		return l, why == ""
 	}
-	// The first client seen decides: when it is not one to follow, nothing is.
 	if login, ok = try(leader); ok || seen {
 		return login, ok, seen, why
 	}
@@ -213,8 +132,6 @@ func findRemoteClient(shellPID int) (login remoteLogin, ok, seen bool, why strin
 	return login, ok, seen, why
 }
 
-// The reasons a client that was seen is not followed, as the dock shows them.
-// The reason comes first: the dock cuts a long line short.
 const (
 	sshWhyStart    = "tuios cannot read how the ssh in this pane started. The new pane runs a local shell."
 	sshWhyTransfer = "The ssh in this pane is part of a file transfer. The new pane runs a local shell."
@@ -223,8 +140,6 @@ const (
 	sshWhyNoLogin  = "The ssh in this pane does not open a login shell. The new pane runs a local shell."
 )
 
-// checkRemoteClient reads the client pid, whose argv is argv, and returns the
-// line to follow, or why it is not followed.
 func checkRemoteClient(pid, shellPID int, argv []string) (remoteLogin, string) {
 	wrapped, why := clientStart(pid, shellPID, os.Geteuid())
 	if why != "" {
@@ -234,9 +149,6 @@ func checkRemoteClient(pid, shellPID int, argv []string) (remoteLogin, string) {
 	if !ok {
 		return remoteLogin{}, sshWhyOptions
 	}
-	// A program this file does not know started the client. It may be a
-	// transfer under another name, so only a line that is a login and
-	// nothing else is followed.
 	if wrapped && login.command {
 		return remoteLogin{}, sshWhyCommand
 	}
@@ -247,9 +159,6 @@ func checkRemoteClient(pid, shellPID int, argv []string) (remoteLogin, string) {
 	return login, ""
 }
 
-// clientStart walks from the client pid up to the pane's shell. Every process
-// on the way must be owned by uid, and none may be a transfer program.
-// wrapped says a program on the way is neither a shell nor a known wrapper.
 func clientStart(pid, shellPID, uid int) (wrapped bool, why string) {
 	for i := range sshAncestryLimit {
 		if pid <= 1 {
@@ -274,38 +183,26 @@ func clientStart(pid, shellPID, uid int) (wrapped bool, why string) {
 	return false, sshWhyStart
 }
 
-// sshLaunchers are the programs that may stand between the pane's shell and
-// a client whose line is followed whatever session it asks for.
 var sshLaunchers = map[string]bool{
 	"sh": true, "bash": true, "dash": true, "zsh": true, "ksh": true,
 	"mksh": true, "fish": true, "tcsh": true, "csh": true,
 	"sshpass": true, "autossh": true, "mosh": true,
 }
 
-// sshTransfers run ssh for a transfer, never for a login. A client under one
-// is not followed, whatever its line says. git's helpers (git-upload-pack,
-// git-remote-ext) are matched by their prefix.
 var sshTransfers = map[string]bool{
 	"scp": true, "sftp": true, "rsync": true, "git": true, "sshfs": true,
 }
 
-// scriptInterpreters are the programs a client script can run under. mosh is a
-// perl script, and a wrapper named ssh can be a shell script.
 var scriptInterpreters = map[string]bool{
 	"sh": true, "bash": true, "dash": true, "zsh": true, "ksh": true,
 	"perl": true, "python": true, "python3": true,
 }
 
-// programName is the name of what a process runs: its argv[0], or for a
-// script run by an interpreter, the script. An interpreter running code given
-// on its command line (-c, -e, -m) is the interpreter.
 func programName(argv []string) string {
 	_, name, _ := splitScript(argv)
 	return name
 }
 
-// splitScript returns the program's arguments after its name, its name, and
-// whether it is a script run by an interpreter.
 func splitScript(argv []string) (args []string, name string, script bool) {
 	if len(argv) == 0 {
 		return nil, "", false
@@ -315,8 +212,6 @@ func splitScript(argv []string) (args []string, name string, script bool) {
 	if !scriptInterpreters[name] {
 		return args, name, false
 	}
-	// The kernel runs a script as: interpreter, its own options, the
-	// script's path, the script's arguments.
 	i := 0
 	for i < len(args) && i < 2 && strings.HasPrefix(args[i], "-") {
 		if strings.ContainsAny(strings.TrimLeft(args[i], "-"), "cem") {
@@ -330,8 +225,6 @@ func splitScript(argv []string) (args []string, name string, script bool) {
 	return args[i+1:], filepath.Base(args[i]), true
 }
 
-// remoteClientName is "ssh", "mosh" or "mosh-client" when argv runs one, and
-// "" otherwise.
 func remoteClientName(argv []string) string {
 	switch name := programName(argv); name {
 	case "ssh", "mosh", "mosh-client":
@@ -340,45 +233,22 @@ func remoteClientName(argv []string) string {
 	return ""
 }
 
-// remoteLogin is a parsed ssh or mosh command line.
 type remoteLogin struct {
-	// bin is the program to run, found on the daemon's PATH.
-	bin string
-	// mosh says the client is mosh, which takes its remote command after --
-	// and execs it rather than handing it to a shell.
-	mosh bool
-	// opts are the kept options, in their original order.
-	opts []string
-	// dest is the destination as it was given.
-	dest string
-	// pid is the client process the line was read from.
-	pid int
-	// tunnel says the line carries no session that reads the pane's keys:
-	// -N, or a client in the background (-f), one that reads no keys (-n) or
-	// a stdio forward (-W) with no tty asked for (-t). A remote command is
-	// not a tunnel: tmux or a shell over there reads what is typed. A split
-	// still follows the line, as a shell.
-	tunnel bool
-	// tty says the line asked for a tty with -t.
-	tty bool
-	// forward is -f, -n or -W, or the -o settings that do the same.
-	forward bool
-	// command says the line runs a remote command: words after the
-	// destination, or a RemoteCommand -o that is not none.
-	command bool
-	// notLogin says the line asks for no login shell: -s, -N, -T, or a
-	// SessionType or RequestTTY -o that does the same.
+	bin      string
+	mosh     bool
+	opts     []string
+	dest     string
+	pid      int
+	tunnel   bool
+	tty      bool
+	forward  bool
+	command  bool
 	notLogin bool
 }
 
-// argv builds the command line for the new pane. dir, when not empty, is the
-// remote folder to start in.
 func (l remoteLogin) argv(dir string) []string {
 	out := append([]string{l.bin}, l.opts...)
 	if !l.mosh {
-		// The new pane neither becomes a control master nor shares one: the
-		// line's control socket is dropped, and one from ~/.ssh/config is
-		// not made by a pane the person did not start.
 		out = append(out, "-o", "ControlMaster=no")
 	}
 	dir = safeRemoteDir(dir)
@@ -387,8 +257,6 @@ func (l remoteLogin) argv(dir string) []string {
 		script = `cd "` + dir + `" 2>/dev/null; exec "$SHELL" -l`
 	}
 	if script != "" && !l.mosh {
-		// A remote command makes ssh skip the terminal unless asked for one,
-		// and a RemoteCommand in ~/.ssh/config would refuse to run beside it.
 		out = append(out, "-t", "-o", "RemoteCommand=none")
 	}
 	if strings.HasPrefix(l.dest, "-") {
@@ -399,29 +267,17 @@ func (l remoteLogin) argv(dir string) []string {
 		return out
 	}
 	if l.mosh {
-		// mosh-server execs the command itself, so the shell is named.
 		return append(out, "--", "sh", "-c", script)
 	}
-	// ssh hands the remote command to the remote user's login shell, which
-	// only has to run sh with one single-quoted word.
 	return append(out, "exec sh -c '"+script+"'")
 }
 
-// hostMatches reports whether the host an OSC 7 report named is the
-// destination's host. The whole name must match: a report from a further hop
-// that shares a first label must not move the new pane.
 func (l remoteLogin) hostMatches(reported string) bool {
 	host := destHost(l.dest)
 	reported = strings.ToLower(strings.TrimSpace(reported))
 	return host != "" && host == reported
 }
 
-// reportMatches is hostMatches, and then a match against the host name ssh
-// resolves the destination to. A shell reports its machine's own name, and a
-// destination is often an alias in ~/.ssh/config: "prod" whose HostName is
-// box.example.com. The whole resolved name matches, and a report with no dot
-// may match its first label, because that is what most machines call
-// themselves.
 func (l remoteLogin) reportMatches(reported string) bool {
 	if l.hostMatches(reported) {
 		return true
@@ -437,7 +293,6 @@ func (l remoteLogin) reportMatches(reported string) bool {
 	if reported == resolved {
 		return true
 	}
-	// An address has no first label to compare.
 	if strings.Trim(resolved, "0123456789.") == "" || strings.Contains(resolved, ":") {
 		return false
 	}
@@ -445,12 +300,8 @@ func (l remoteLogin) reportMatches(reported string) bool {
 	return !strings.Contains(reported, ".") && dotted && reported == first
 }
 
-// sshResolveTimeout bounds ssh -G, which reads config files and nothing else.
 const sshResolveTimeout = 2 * time.Second
 
-// resolveSSHHostName is the HostName ssh -G gives for the line, run with the
-// line's kept options only, or "" when it cannot say. A variable so the tests
-// can stand in for ssh.
 var resolveSSHHostName = func(l remoteLogin) string {
 	ctx, cancel := context.WithTimeout(context.Background(), sshResolveTimeout)
 	defer cancel()
@@ -460,9 +311,6 @@ var resolveSSHHostName = func(l remoteLogin) string {
 	}
 	cmd := childproc.CommandContext(ctx, l.bin, append(args, l.dest)...)
 	cmd.Stdin = nil
-	// A Match exec in ~/.ssh/config runs a child that can outlive ssh and
-	// hold its output open. ssh gets a process group of its own, the whole
-	// group is killed at the timeout, and the wait for the pipes is bounded.
 	killGroupOnCancel(cmd)
 	cmd.WaitDelay = 500 * time.Millisecond
 	out, err := cmd.Output()
@@ -477,8 +325,6 @@ var resolveSSHHostName = func(l remoteLogin) string {
 	return ""
 }
 
-// destHost is the host part of an ssh destination, lower case: the user, the
-// scheme, the port and IPv6 brackets are removed.
 func destHost(dest string) string {
 	d := strings.TrimPrefix(dest, "ssh://")
 	if i := strings.LastIndexByte(d, '@'); i >= 0 {
@@ -494,14 +340,6 @@ func destHost(dest string) string {
 	return strings.ToLower(strings.TrimSuffix(d, "/"))
 }
 
-// safeRemoteDir returns dir when it is an absolute path that can sit inside
-// the double quotes of the cd, inside the single quotes around the sh script,
-// in any login shell. It returns "" otherwise, and the new pane then starts in
-// the home folder. The folder came from bytes the remote shell printed.
-//
-// A path that starts with // is refused too. That is a UNC folder reported by
-// a Windows shell (file://winbox//srv/share), and a Windows ssh server has no
-// sh to run the cd through, so the new pane would die at once.
 func safeRemoteDir(dir string) string {
 	if !strings.HasPrefix(dir, "/") || strings.HasPrefix(dir, "//") || len(dir) > 4096 {
 		return ""
@@ -514,7 +352,6 @@ func safeRemoteDir(dir string) string {
 	return dir
 }
 
-// parseRemoteLogin reads an ssh or mosh client's command line.
 func parseRemoteLogin(argv []string) (remoteLogin, bool) {
 	args, name, _ := splitScript(argv)
 	var l remoteLogin
@@ -539,43 +376,18 @@ func parseRemoteLogin(argv []string) (remoteLogin, bool) {
 	return l, true
 }
 
-// sshValueOpts are the ssh options that take a value, and sshFlagOpts the ones
-// that do not, from ssh(1). An option outside both makes the line unreadable,
-// and the pane is then not followed: a guess could replay the wrong thing.
 const (
 	sshValueOpts = "BbcDEeFIiJLlmOoPpQRSWw"
 	sshFlagOpts  = "46AaCfGgKkMNnqsTtVvXxYy"
-	// sshDropValue and sshDropFlag are the ones the new pane does not get:
-	// forwards, sessions that are not a shell, the control socket (-S), and
-	// agent and X11 forwarding (-A, -X, -Y). The user's ~/.ssh/config still
-	// applies the last two where the user chose them.
 	sshDropValue = "DLRSWw"
 	sshDropFlag  = "AfMNnsTtXY"
-	// sshRefuse are the ones that make the line not followed: -F and -I can
-	// run code on this machine, -E appends to a file the line names, and -G,
-	// -V, -Q and -O are not a session.
-	sshRefuse = "EFIGVQO"
+	sshRefuse    = "EFIGVQO"
 )
 
-// sshTunnelConfig are the -o keywords, and the values, that make an ssh line
-// carry no session or read no keys.
 var sshTunnelConfig = map[string]string{
 	"sessiontype": "none", "stdinnull": "yes", "forkafterauthentication": "yes",
 }
 
-// sshAllowConfig are the -o keywords a followed line may carry, lower case,
-// and whether the new pane keeps the option. A keyword outside this table
-// makes the line not followed. A refusal list missed ProxyCommand split by a
-// newline and XAuthLocation, so the table names what is safe instead: each
-// keyword was checked against ssh_config(5) to neither run nor load a program
-// named by its value.
-//
-// The kept ones are what it takes to reach the same host as the same user.
-// The new pane drops the rest without refusing the line: forwards, which the
-// first client holds; sessions that are not a shell; and the settings that
-// choose files, sockets, environment or forwarding (known hosts files, the
-// control path, the agent, X11). The user's ~/.ssh/config still applies those
-// where the user chose them, and a line read from a process does not get to.
 var sshAllowConfig = map[string]bool{
 	"port": true, "user": true, "hostname": true,
 	"identityfile": true, "identitiesonly": true, "certificatefile": true,
@@ -601,16 +413,12 @@ var sshAllowConfig = map[string]bool{
 	"forwardagent": false, "forwardx11": false, "forwardx11trusted": false,
 }
 
-// parseSSHArgs reads ssh's arguments the way ssh does: options, the
-// destination, more options, then the remote command, with -- ending the
-// options at either place.
 func parseSSHArgs(args []string) (remoteLogin, bool) {
 	var l remoteLogin
 	terminated := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if l.dest != "" && (terminated || a == "--" || !strings.HasPrefix(a, "-")) {
-			// The remote command starts here, and it is dropped.
 			l.command = l.command || a != "--" || i+1 < len(args)
 			break
 		}
@@ -680,7 +488,6 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 			continue
 		}
 		if l.dest != "" {
-			// The remote command starts here.
 			l.command = true
 			break
 		}
@@ -700,8 +507,6 @@ func parseSSHArgs(args []string) (remoteLogin, bool) {
 	return l, true
 }
 
-// sshValueVerdict says whether an option with a value goes to the new pane,
-// and whether it makes the line not followed.
 func sshValueVerdict(c byte, val string) (keep, refuse bool) {
 	if strings.IndexByte(sshDropValue, c) >= 0 {
 		return false, false
@@ -723,10 +528,6 @@ func sshValueVerdict(c byte, val string) (keep, refuse bool) {
 	return keep, false
 }
 
-// sshConfigKeyword is the lower-case keyword of an -o value, read the way ssh
-// reads a config line: leading space and a quote are skipped, and the keyword
-// ends at =, space or a quote. A value with a control character never gets
-// here: ssh splits a line at \r and \n too, so parseSSHArgs refuses it.
 func sshConfigKeyword(val string) string {
 	v := strings.TrimSpace(val)
 	v = strings.TrimLeft(v, `"'`)
@@ -736,8 +537,6 @@ func sshConfigKeyword(val string) string {
 	return strings.ToLower(v)
 }
 
-// sshConfigValue is the value of an -o option: what follows the keyword and
-// the space or = after it.
 func sshConfigValue(val string) string {
 	v := strings.TrimLeft(strings.TrimSpace(val), `"'`)
 	if i := strings.IndexAny(v, "= \t\"'"); i >= 0 {
@@ -749,10 +548,6 @@ func sshConfigValue(val string) string {
 	return strings.TrimRight(v, `"'`)
 }
 
-// validJumpHosts reports whether a ProxyJump value is a comma-separated list
-// of hops, each [user@]host[:port] or ssh://[user@]host[:port], spelt with
-// letters, digits and ._:@[]- only and not starting with -. ssh builds a
-// command line from the hops, so anything else is not followed.
 func validJumpHosts(v string) bool {
 	if v == "" {
 		return false
@@ -773,9 +568,6 @@ func validJumpHosts(v string) bool {
 	return true
 }
 
-// moshValueOpts are the mosh options that take a value. moshFlagOpts are the
-// ones that do not. moshRefuseOpts name a program mosh runs on this machine,
-// so a line with one is not followed.
 var (
 	moshValueOpts = map[string]bool{
 		"predict": true, "port": true, "p": true, "family": true,
@@ -790,10 +582,6 @@ var (
 	moshRefuseOpts = map[string]bool{"ssh": true, "client": true, "server": true}
 )
 
-// parseMoshArgs reads mosh's arguments: options, the destination, then the
-// remote command after --. strict refuses a line with anything after the
-// destination, for a line rebuilt from mosh-client's, where the remote command
-// and the destination cannot be told apart.
 func parseMoshArgs(args []string, strict bool) (remoteLogin, bool) {
 	l := remoteLogin{mosh: true}
 	for i := 0; i < len(args); i++ {
@@ -862,8 +650,6 @@ func parseMoshArgs(args []string, strict bool) (remoteLogin, bool) {
 	return l, true
 }
 
-// longMoshName spells a short value option the long way, so it can carry its
-// value after =.
 func longMoshName(name string) string {
 	if name == "p" {
 		return "port"
@@ -871,12 +657,6 @@ func longMoshName(name string) string {
 	return name
 }
 
-// parseMoshClientArgs reads the line mosh leaves behind once it has connected:
-// it execs mosh-client with "-# ARGS |", where ARGS are its own arguments
-// joined by spaces. Arguments that held spaces cannot be split back apart, so
-// the line must read back as options and exactly one destination, with no
-// quotes, no remote command, and none of the options whose values could hold
-// spaces.
 func parseMoshClientArgs(args []string) (remoteLogin, bool) {
 	if len(args) == 0 || !strings.HasPrefix(args[0], "-#") {
 		return remoteLogin{}, false
@@ -896,8 +676,6 @@ func parseMoshClientArgs(args []string) (remoteLogin, bool) {
 	return parseMoshArgs(fields, true)
 }
 
-// redactSSHArgv is argv with the value of every -o option replaced, for a log
-// line. A -o value can carry a password or a token for a proxy.
 func redactSSHArgv(argv []string) []string {
 	out := make([]string, len(argv))
 	copy(out, argv)
@@ -914,9 +692,6 @@ func redactSSHArgv(argv []string) []string {
 	return out
 }
 
-// sshFollowArgv is SSHFollowArgv for one of the session's windows, named by
-// id or name. It is false for a window on another machine: its processes are
-// not on this one to read.
 func (s *Session) sshFollowArgv(window string) (argv, env []string, why string, ok bool) {
 	state := s.GetState()
 	idx, err := findWindowStateIndex(state.Windows, window)
@@ -934,8 +709,6 @@ func (s *Session) sshFollowArgv(window string) (argv, env []string, why string, 
 	return SSHFollowArgv(pty.ShellPID(), host, dir)
 }
 
-// hasControl reports whether s holds a control character. ssh reads an -o
-// value as a config line, and a line break in it starts a second line.
 func hasControl(s string) bool {
 	for _, r := range s {
 		if r < 0x20 || r == 0x7f {
@@ -945,8 +718,6 @@ func hasControl(s string) bool {
 	return false
 }
 
-// takesValue reports whether an ssh argument is an option cluster that ends in
-// an option with its value in the next argument.
 func takesValue(a string) bool {
 	if len(a) < 2 || a[0] != '-' || a == "--" {
 		return false

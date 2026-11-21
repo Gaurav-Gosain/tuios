@@ -27,14 +27,11 @@ func TestUnknownParamIsRefused(t *testing.T) {
 	if hint["param"] != "nonesuch" {
 		t.Errorf("hint.param = %v, want nonesuch", hint["param"])
 	}
-	// The hint has to name what the verb does take, so a caller can recover
-	// without a second round trip.
 	accepted, _ := hint["accepted"].([]any)
 	if len(accepted) == 0 {
 		t.Error("hint listed no accepted parameters")
 	}
 
-	// And nothing was created: a refused call must not half-run.
 	res := result(t, c.call(t, `{"id":2,"verb":"list-windows","params":{"session":"strict"}}`))
 	if res["total"] != float64(1) {
 		t.Errorf("window count = %v, want the one window the session started with", res["total"])
@@ -75,9 +72,6 @@ func TestEveryVerbIsDocumentedWellEnoughToCall(t *testing.T) {
 				}
 			}
 		}
-		// A verb that changes something has to say what came back, or a caller
-		// cannot tell what it did. The read verbs that answer with a documented
-		// shape are covered by the same rule.
 		if len(entry.returns) == 0 {
 			switch name {
 			case "hello", "list-verbs", "unsubscribe", "subscribe", "list-sessions",
@@ -85,10 +79,6 @@ func TestEveryVerbIsDocumentedWellEnoughToCall(t *testing.T) {
 				"send-keys", "send-text", "capture-pane", "wait-for",
 				"set-session-name", "set-session-accent", "set-workspace-name",
 				"set-workspace-order", "set-agent-state", "explain-agent-screen":
-				// Verbs that predate the returns field. They are documented in the
-				// skill and their shapes are pinned by their own tests; listing them
-				// here keeps the guard honest about what is not covered yet rather
-				// than quietly passing everything.
 			default:
 				t.Errorf("verb %s documents no result shape", name)
 			}

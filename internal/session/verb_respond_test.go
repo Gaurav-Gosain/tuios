@@ -12,14 +12,6 @@ import (
 	"time"
 )
 
-// fakeAgentScript is a stand-in for an agent blocked on a prompt, run in a
-// real pane. Its first argument picks what it does, and every key or line it
-// reads is appended to the file named by its second, so a test can say
-// exactly what reached the agent.
-//
-//	approve   Claude Code's permission menu; one key, then the working footer
-//	stubborn  the same menu; every key is read and the menu stays as it was
-//	text      a question answered in words, read as a line
 const fakeAgentScript = `#!/bin/sh
 out=$2
 menu() {
@@ -50,8 +42,6 @@ text)
 esac
 `
 
-// blockedAgent is a pane running the fake agent on a prompt, attributed to a
-// harness, and the file its input lands in.
 type blockedAgent struct {
 	d      *Daemon
 	sp     string
@@ -61,8 +51,6 @@ type blockedAgent struct {
 	got    string
 }
 
-// startBlockedAgent runs the fake agent in mode, in a pane attributed to
-// harnessID, and waits for the screen tier to put the pane on needs_input.
 func startBlockedAgent(t *testing.T, d *Daemon, sp, sessName, harnessID, mode string) *blockedAgent {
 	t.Helper()
 	sess, a, b := twoWindowSession(t, d, sessName)
@@ -72,8 +60,6 @@ func startBlockedAgent(t *testing.T, d *Daemon, sp, sessName, harnessID, mode st
 		t.Fatal(err)
 	}
 	got := filepath.Join(dir, "got")
-	// The pane is attributed the way the detector would, so the screen tier
-	// runs the harness's rules on it.
 	if _, _, err := sess.ApplyAgentReport(a, AgentReport{State: AgentStateWorking, Source: AgentSourceScreen, Harness: harnessID}); err != nil {
 		t.Fatal(err)
 	}
@@ -88,13 +74,11 @@ func startBlockedAgent(t *testing.T, d *Daemon, sp, sessName, harnessID, mode st
 	return &blockedAgent{d: d, sp: sp, sess: sess, window: a, other: b, got: got}
 }
 
-// received is what the agent has read so far.
 func (b *blockedAgent) received() string {
 	data, _ := os.ReadFile(b.got)
 	return string(data)
 }
 
-// call makes one verb call on c and returns the raw response.
 func callVerb(t *testing.T, c *verbConn, verb string, params map[string]any) map[string]any {
 	t.Helper()
 	raw, err := json.Marshal(params)
@@ -175,7 +159,6 @@ func TestPeekAndRespondAnswerAClaudeApproval(t *testing.T) {
 		t.Errorf("the agent read %q, want 1", got)
 	}
 
-	// Answered, the pane is no longer blocked, and a peek says so.
 	after := peek(t, c, "resp", ag.window)
 	if after["blocked"] != false || after["found"] != false || after["answerable"] != false {
 		t.Errorf("peek after the answer: %v", after)
@@ -266,7 +249,6 @@ func TestRespondSlotsStayBounded(t *testing.T) {
 	}
 }
 
-// runInPane types a command into a pane's shell.
 func runInPane(t *testing.T, d *Daemon, sess *Session, window, line string) {
 	t.Helper()
 	pty, err := d.resolvePTYForTarget(sess, window)

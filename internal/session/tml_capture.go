@@ -10,22 +10,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
 )
 
-// capture-pane on a TML window. The window's PTY runs only the placeholder
-// line for a client that cannot draw TML, so reading it tells a program
-// nothing about what the person sees. The daemon holds the surface's tree
-// and state, so it draws the surface itself with loom, as a client does, at
-// the size of the window's content box. It needs no attached client, and
-// what it draws does not depend on which client asks.
-//
-// The open tab, the cursor rows and the scroll places are view state, which
-// each client keeps. A client reports its view with tml-input when it
-// changes, and the draw uses the last report. Typed text that binds no
-// state path is never reported, and dropped if a client sends it.
-
-// tmlMaxView bounds the view one tml-input reports.
 const tmlMaxView = 16 << 10
 
-// tmlDecodeView decodes a reported view, or returns nil.
 func tmlDecodeView(raw json.RawMessage) *loom.View {
 	if len(raw) == 0 {
 		return nil
@@ -38,7 +24,6 @@ func tmlDecodeView(raw json.RawMessage) *loom.View {
 	return &v
 }
 
-// tmlSurfaceForWindow returns the open surface drawn in a window, or nil.
 func (d *Daemon) tmlSurfaceForWindow(windowID string) *tmlSurface {
 	d.tml.mu.Lock()
 	defer d.tml.mu.Unlock()
@@ -50,9 +35,6 @@ func (d *Daemon) tmlSurfaceForWindow(windowID string) *tmlSurface {
 	return nil
 }
 
-// captureTMLWindow draws the surface in window w, cols by rows cells, as a
-// client draws it in that content box. ok is false when no surface is open
-// in the window.
 func (d *Daemon) captureTMLWindow(w WindowState, cols, rows int, styled bool) (content string, s *tmlSurface, err error) {
 	s = d.tmlSurfaceForWindow(w.ID)
 	if s == nil {
@@ -81,9 +63,6 @@ func (d *Daemon) captureTMLWindow(w WindowState, cols, rows int, styled bool) (c
 	return content, s, err
 }
 
-// captureTMLPane is capture-pane on a TML window: the surface drawn at the
-// window's size. It returns nil and no error when no surface is open in the
-// window, and capture-pane then reads the PTY as for any window.
 func (d *Daemon) captureTMLPane(w WindowState, pty *PTY, styled, resolved bool, palette []string, trim bool, start, end, lines int) (map[string]any, *verbError) {
 	cols, rows := pty.Size()
 	content, s, err := d.captureTMLWindow(w, cols, rows, styled)

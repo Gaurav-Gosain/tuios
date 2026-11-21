@@ -8,18 +8,12 @@ import (
 	"strings"
 )
 
-// portsSupported says list-ports can read listening sockets here.
 const portsSupported = true
 
-// paneTrees maps every process under each pane's program to its pane.
 func paneTrees(roots map[int]paneProc) map[int]paneProc {
 	return walkProcTree(roots, readChildren)
 }
 
-// listeningSockets finds the listening TCP sockets of the processes in
-// owner. /proc/net/tcp and tcp6 name each LISTEN socket by inode, and a
-// process holds the socket when one of its /proc/PID/fd links reads
-// socket:[inode].
 func listeningSockets(owner map[int]paneProc) []listenHit {
 	byInode := map[uint64]procNetListen{}
 	for _, name := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {

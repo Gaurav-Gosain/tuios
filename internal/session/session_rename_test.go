@@ -45,8 +45,6 @@ func TestRenameSessionChangesTheNameEverywhere(t *testing.T) {
 		t.Error("the new name does not find the session")
 	}
 
-	// The state file moved with the name, so a daemon restart brings back one
-	// session called work and no session called test.
 	if _, err := os.Stat(testStatePath("test")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the old state file is still there: %v", err)
 	}
@@ -58,8 +56,6 @@ func TestRenameSessionChangesTheNameEverywhere(t *testing.T) {
 		t.Errorf("the saved state is named %q, want work", loaded.Name)
 	}
 
-	// A pane started before the rename keeps TUIOS_SESSION=test, and a verb
-	// it sends by that name still reaches the session.
 	info := result(t, c.call(t, `{"id":2,"verb":"session-info","params":{"session":"test"}}`))
 	if info["session_name"] != "work" {
 		t.Errorf("session-info by the old name answered for %v, want work", info["session_name"])
@@ -184,7 +180,6 @@ func TestGrantedPaneReachesItsSessionByTheOldName(t *testing.T) {
 	if st := d.manager.GetSession("renamed").GetState(); st.Windows[0].AgentState != AgentStateWorking {
 		t.Errorf("the pane's report by the old name did not land: %v", st.Windows[0].AgentState)
 	}
-	// The old name reaches only the renamed session, never another one.
 	wantForbidden(t, "list-windows of b", callP(c, t, "list-windows", map[string]any{"session": "b"}))
 }
 

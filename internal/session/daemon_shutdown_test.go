@@ -7,10 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// startShutdownTestDaemon starts a daemon like startTestDaemon but hands back
-// the resurrection directory too, so a test can watch what has been written at
-// the moment shutdown reports itself complete. It deliberately does not register
-// a Stop cleanup, because these tests drive shutdown themselves.
 func startShutdownTestDaemon(t *testing.T) (*Daemon, string, string) {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
@@ -47,7 +43,6 @@ func TestListenerCloseDoesNotUnlinkTheSocket(t *testing.T) {
 		t.Fatalf("socket not present while the daemon runs: %v", err)
 	}
 
-	// The first thing shutdown does, in isolation.
 	if err := d.listener.Close(); err != nil {
 		t.Fatalf("listener.Close: %v", err)
 	}
@@ -55,7 +50,6 @@ func TestListenerCloseDoesNotUnlinkTheSocket(t *testing.T) {
 		t.Fatalf("closing the listener unlinked the socket; state saved after this point is invisible to a waiting kill-server: %v", err)
 	}
 
-	// The full shutdown still removes it, at the end.
 	d.Stop()
 	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
 		t.Fatalf("socket still present after shutdown finished: %v", err)

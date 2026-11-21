@@ -11,40 +11,10 @@ import (
 	"time"
 )
 
-// This file holds the agent mailbox: a bounded, in-memory, per-session ring of
-// messages agents leave for each other, plus the loop guards that keep two
-// agents holding each other's address from running away.
-//
-// The daemon already has an event hub, so the first question was whether it
-// already did this. It does not, and the reason is worth writing down: the hub
-// delivers only to connections subscribed at the instant of publish and keeps no
-// backfill, while an agent drives tuios through one-shot CLI calls and is almost
-// never subscribed. Store-and-forward is the single thing the hub cannot do.
-// Everything around it, delivery, filtering and blocking reads, is still the
-// hub's, which is why this is a ring and four verbs rather than a broker.
-//
-// What it deliberately is not: durable. A message dies with the daemon. A
-// restored session brings back panes whose shells are new, so a queued
-// instruction surviving into one would be addressed to an agent that no longer
-// exists and no longer holds the context the instruction assumed. Delivering it
-// then is a bug, not a feature.
-
 const (
-	// agentMsgDirect is a message addressed to one window's inbox. It has a
-	// recipient and a read state.
 	agentMsgDirect = "message"
-	// agentMsgNotice is addressed to the session rather than to anyone. It is
-	// the notification half of the surface: everyone can read it, nobody owns
-	// it, and it is never unread for a particular reader. One store and two
-	// addressing modes, rather than two subsystems that drift apart.
 	agentMsgNotice = "notice"
-	// agentMsgAsk is the record of one ask-agent call: the question in the
-	// subject, what the pane printed in answer in the text, and SettledBy saying
-	// which signal ended the wait. It is written after the ask has finished, so
-	// it changes nothing about how an ask works; it exists so the person at the
-	// client can see the exchanges that happen between two agents' keyboards,
-	// which were otherwise visible to nobody.
-	agentMsgAsk = "ask"
+	agentMsgAsk    = "ask"
 )
 
 // AgentInboxHuman is the reserved inbox id of the person at the attached
@@ -53,43 +23,19 @@ const (
 // from it. It cannot be asked, because there is no keyboard behind it.
 const AgentInboxHuman = "human"
 
-// Caps. Every one of these exists because an unread queue with no bound is a
-// memory leak with a friendly name.
 const (
-	// agentMsgMaxText bounds one message body: bigger than a paragraph, smaller
-	// than a file. A message that wants to carry a file attaches it instead.
-	agentMsgMaxText = 8 << 10
-	// agentMsgMaxSubject bounds the one-line summary a reader scans.
-	agentMsgMaxSubject = 120
-	// agentMsgMaxAttachments bounds how many references one message carries.
-	agentMsgMaxAttachments = 8
-	// agentMailboxMaxMessages bounds a session's ring by count.
+	agentMsgMaxText         = 8 << 10
+	agentMsgMaxSubject      = 120
+	agentMsgMaxAttachments  = 8
 	agentMailboxMaxMessages = 256
-	// agentMailboxMaxBytes bounds the same ring by the text it holds, so a full
-	// ring of maximum-sized messages still cannot cost more than this.
-	agentMailboxMaxBytes = 512 << 10
-	// agentReadDefaultLimit is how many messages a read answers with when the
-	// caller names no limit.
-	agentReadDefaultLimit = 20
-	// agentSendBurst is how many sends one sender may make back to back.
-	agentSendBurst = 10
-	// agentSendPerMinute is the sustained rate one sender's bucket refills at.
-	agentSendPerMinute = 30
-	// agentMaxBuckets bounds the send buckets one ring keeps, whatever name a
-	// sender claims. Past it a sender on another machine shares one bucket.
-	agentMaxBuckets = 256
-	// agentOverflowBucket is the key of that shared bucket.
-	agentOverflowBucket = queueByLinkPrefix + "*"
-	// agentLinkMaxQueued bounds what other machines can leave in one ring at
-	// once: unread direct messages that arrived over a link, and notices
-	// that did, counted separately. A message from another machine was
-	// written by a program this machine's owner does not run, so it gets a
-	// smaller share of the ring than local traffic, and reading is what
-	// makes room. Notices are never read, so the bound on them is on how
-	// many are held.
-	agentLinkMaxQueued = 32
-	// agentMsgMaxHostName bounds the name a sender claims for its machine.
-	agentMsgMaxHostName = 64
+	agentMailboxMaxBytes    = 512 << 10
+	agentReadDefaultLimit   = 20
+	agentSendBurst          = 10
+	agentSendPerMinute      = 30
+	agentMaxBuckets         = 256
+	agentOverflowBucket     = queueByLinkPrefix + "*"
+	agentLinkMaxQueued      = 32
+	agentMsgMaxHostName     = 64
 )
 
 // AgentOriginLink is the Origin of a message that arrived over a link. It is
@@ -252,9 +198,6 @@ type AgentMessage struct {
 	ReleasedFrom uint64 `json:"released_from,omitempty"`
 }
 
-// takeHeld marks a held message released and read, and returns it. It
-// reports false for an id that is not a held message the ring still holds, or
-// one already released.
 func (b *agentBus) takeHeld(session string, id uint64) (AgentMessage, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -273,43 +216,24 @@ func (b *agentBus) takeHeld(session string, id uint64) (AgentMessage, bool) {
 	return *m, true
 }
 
-// agentBus is the daemon's whole cross-agent surface: the per-session rings and
-// the in-flight ask graph. One field on the daemon rather than two.
 type agentBus struct {
 	mu     sync.Mutex
 	boxes  map[string]*agentMailbox
 	nextID uint64
 
-	// asks records the ask edges open right now, so a cycle can be refused
-	// before it is created rather than noticed after it has spun.
 	asks map[string]map[string]int
 
-	// noticed is the newest message id announced to each pane, by window
-	// id. See mail_notice.go.
-	noticed map[string]noticeMark
-	// leaseSeq numbers the leases of takeNotice.
+	noticed  map[string]noticeMark
 	leaseSeq uint64
 }
 
-// agentMailbox is one session's ring.
 type agentMailbox struct {
-	msgs  []*AgentMessage
-	bytes int
-	// evicted is every entry the ring has dropped, of any kind, read or not.
-	evicted uint64
-	// evictedUnread is, per inbox, the mail the ring dropped before its
-	// recipient read it. It is the number an inbox read reports, because it
-	// is the one that says the reader lost something.
-	evictedUnread map[string]uint64
-	// evictedUnreadGone is the evictedUnread of the panes that closed. A
-	// closed pane's key is dropped, so the map does not grow with every
-	// short-lived pane, and its count moves here, so the session's total
-	// stays the same.
+	msgs              []*AgentMessage
+	bytes             int
+	evicted           uint64
+	evictedUnread     map[string]uint64
 	evictedUnreadGone uint64
-	// buckets is one token bucket per claimed sender, at most agentMaxBuckets
-	// of them. Past the bound a sender on another machine is charged on the
-	// shared agentOverflowBucket.
-	buckets map[string]*sendBucket
+	buckets           map[string]*sendBucket
 }
 
 type sendBucket struct {
@@ -324,7 +248,6 @@ func newAgentBus() *agentBus {
 	}
 }
 
-// box returns the session's ring, creating it on first use. Callers hold b.mu.
 func (b *agentBus) box(session string) *agentMailbox {
 	mb := b.boxes[session]
 	if mb == nil {
@@ -334,8 +257,6 @@ func (b *agentBus) box(session string) *agentMailbox {
 	return mb
 }
 
-// forget drops a session's ring. A session that is gone has no agents left to
-// address, so keeping its mail would be keeping a leak.
 func (b *agentBus) forget(session string) {
 	if b == nil {
 		return
@@ -346,8 +267,6 @@ func (b *agentBus) forget(session string) {
 	b.forgetNotices(session, "")
 }
 
-// forgetInbox drops the count of unread mail the ring lost for a pane that
-// closed, and keeps it in the session's total.
 func (b *agentBus) forgetInbox(session, window string) {
 	if b == nil || window == "" {
 		return
@@ -364,13 +283,6 @@ func (b *agentBus) forgetInbox(session, window string) {
 	}
 }
 
-// allow charges one send against the sender's token bucket, reporting whether
-// there was a token to charge. An unclaimed sender shares one bucket keyed by
-// the empty string, which is the right default: an anonymous flood is a flood.
-// The table of buckets is bounded: when it is full, buckets that have refilled
-// are dropped, a sender on another machine then shares one bucket, and a local
-// sender takes the place of another machine's sender's bucket, or, failing
-// that, another local sender's (never the anonymous one).
 func (mb *agentMailbox) allow(sender string, now time.Time) bool {
 	bk := mb.buckets[sender]
 	if bk == nil {
@@ -390,9 +302,6 @@ func (mb *agentMailbox) allow(sender string, now time.Time) bool {
 	return true
 }
 
-// makeBucket returns a bucket to charge a sender that has none, keeping the
-// table within agentMaxBuckets, or nil when a send from another machine finds
-// no room.
 func (mb *agentMailbox) makeBucket(sender string, now time.Time) *sendBucket {
 	fresh := func(key string) *sendBucket {
 		bk := &sendBucket{tokens: agentSendBurst, last: now}
@@ -435,16 +344,6 @@ func (mb *agentMailbox) makeBucket(sender string, now time.Time) *sendBucket {
 	return fresh(sender)
 }
 
-// append adds m to the ring and evicts until both caps hold. Evictions are
-// counted rather than silent: a reader is told how many messages it will never
-// see, the discipline the hub's gap marker follows.
-//
-// What goes first is what nobody is waiting to read: read mail, ask records
-// and notices, oldest first. Unread mail goes only when everything older than m
-// is unread mail, so the caps still hold, and each one is counted against the
-// inbox it was for. A count for the whole session cannot tell a reader whether
-// it lost anything, and a reader that is told it did when it did not learns to
-// ignore the one line that matters.
 func (mb *agentMailbox) append(m *AgentMessage) {
 	mb.msgs = append(mb.msgs, m)
 	mb.bytes += len(m.Text)
@@ -463,11 +362,6 @@ func (mb *agentMailbox) append(m *AgentMessage) {
 	}
 }
 
-// victim is the index of the entry append evicts next: the oldest one nobody
-// is waiting to read, or the oldest of all when every entry before the newest
-// is unread mail. The newest is never the victim while anything is older. It
-// is the message being sent, and dropping it would answer the send with an id
-// the ring no longer holds.
 func (mb *agentMailbox) victim() int {
 	for i, m := range mb.msgs[:len(mb.msgs)-1] {
 		if !waitsToBeRead(m) {
@@ -477,15 +371,10 @@ func (mb *agentMailbox) victim() int {
 	return 0
 }
 
-// waitsToBeRead reports whether m is mail its recipient has not read: the one
-// kind of entry whose eviction loses something nobody has seen. A notice and
-// an ask record are never unread for anyone.
 func waitsToBeRead(m *AgentMessage) bool {
 	return m.Kind == agentMsgDirect && m.ReadAt == 0
 }
 
-// send records a message and returns the stored copy, so a caller can report the
-// id without reaching back into the ring.
 func (b *agentBus) send(session string, m AgentMessage) AgentMessage {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -500,63 +389,34 @@ func (b *agentBus) send(session string, m AgentMessage) AgentMessage {
 	return *stored
 }
 
-// checkRate reports whether sender may send into session right now.
 func (b *agentBus) checkRate(session, sender string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.box(session).allow(sender, time.Now())
 }
 
-// readQuery selects which messages a read returns.
 type readQuery struct {
-	// inbox is the recipient window id whose mail is wanted. Empty reads
-	// everything in the session and then marks nothing: a read that did not name
-	// an inbox must not consume someone else's mail as a side effect.
-	inbox string
-	// unreadOnly restricts to directed messages nobody has read.
+	inbox      string
 	unreadOnly bool
-	// notices includes session-wide notices in an inbox read. They have no
-	// recipient, so an inbox read leaves them out unless this is set.
-	notices bool
-	// peek reads without marking anything read.
-	peek bool
-	// markSeen makes a peek of one inbox mark the unread messages it returns
-	// seen. The verb sets it only for a peek whose caller is the inbox's
-	// reader (callerReadsInbox).
-	markSeen bool
-	// thread restricts the answer to one thread, by its id. Zero means every
-	// thread. A thread the ring no longer holds anything from matches nothing,
-	// which is the same answer an empty inbox gives: the ring forgets, so an
-	// unknown thread and a forgotten one cannot be told apart.
-	thread uint64
-	// limit bounds the answer to the newest n. Zero means the default.
-	limit int
-	// live reports whether a window id still exists, for the undeliverable flag.
-	live func(windowID string) bool
+	notices    bool
+	peek       bool
+	markSeen   bool
+	thread     uint64
+	limit      int
+	live       func(windowID string) bool
 }
 
-// readResult is one read of a session's ring.
 type readResult struct {
-	Messages []AgentMessage
-	Unread   int
-	// Seen is how many of the Unread were already seen. MarkedRead and
-	// MarkedSeen are what this read changed.
-	Seen       int
-	MarkedRead int
-	MarkedSeen int
-	Total      int
-	Evicted    uint64
-	// EvictedUnread is the mail the ring dropped before it was read: the
-	// named inbox's when the read names one, the whole session's when not.
+	Messages      []AgentMessage
+	Unread        int
+	Seen          int
+	MarkedRead    int
+	MarkedSeen    int
+	Total         int
+	Evicted       uint64
 	EvictedUnread uint64
 }
 
-// read answers a query against a session's ring, marking the returned directed
-// messages read unless the query peeks or named no inbox.
-//
-// Attachments are resolved after the lock is dropped. Stat is a syscall against
-// whatever filesystem the sender chose, and holding the bus through it would
-// let one slow path block every other agent's mail.
 func (b *agentBus) read(session string, q readQuery) readResult {
 	res := b.collect(session, q)
 	for i := range res.Messages {
@@ -565,8 +425,6 @@ func (b *agentBus) read(session string, q readQuery) readResult {
 	return res
 }
 
-// collect is read's critical section: pick the matching messages, copy them out,
-// and mark what this read consumed.
 func (b *agentBus) collect(session string, q readQuery) readResult {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -594,9 +452,6 @@ func (b *agentBus) collect(session string, q readQuery) readResult {
 				continue
 			}
 		case agentMsgAsk:
-			// An ask record is about the pane that was asked, so an inbox read
-			// of that pane sees it; it is never unread, so an unread read does
-			// not.
 			if q.unreadOnly || (q.inbox != "" && m.To != q.inbox) {
 				continue
 			}
@@ -651,10 +506,6 @@ func (b *agentBus) collect(session string, q readQuery) readResult {
 	return res
 }
 
-// resolveAttachments copies a message's references and stats each one, so the
-// answer says whether the file the reference names is still there. The copy
-// matters: the stored message must not gain a Missing flag that was only true
-// for one read.
 func resolveAttachments(in []AgentAttachment) []AgentAttachment {
 	if len(in) == 0 {
 		return nil
@@ -669,9 +520,6 @@ func resolveAttachments(in []AgentAttachment) []AgentAttachment {
 	return out
 }
 
-// linkQueued counts what other machines have left in a session's ring that
-// nobody has dealt with: unread direct messages that arrived over a link, and
-// link notices, which are never read and so are counted while they are held.
 func (b *agentBus) linkQueued(session string) (unread, notices int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -691,8 +539,6 @@ func (b *agentBus) linkQueued(session string) (unread, notices int) {
 	return unread, notices
 }
 
-// unreadCounts returns the unread count for every inbox in a session in one
-// pass, so listing n agents does not take n locks.
 func (b *agentBus) unreadCounts(session string) map[string]int {
 	counts := map[string]int{}
 	if b == nil {
@@ -708,9 +554,6 @@ func (b *agentBus) unreadCounts(session string) map[string]int {
 	return counts
 }
 
-// seenCounts returns, for every inbox in a session, how many of its unread
-// messages have been seen. A seen message is still unread, so this is a part
-// of unreadCounts and never an addition to it.
 func (b *agentBus) seenCounts(session string) map[string]int {
 	counts := map[string]int{}
 	if b == nil {
@@ -726,8 +569,6 @@ func (b *agentBus) seenCounts(session string) map[string]int {
 	return counts
 }
 
-// threadSeen counts the messages in one thread that sit in an inbox seen and
-// not read.
 func (b *agentBus) threadSeen(session, inbox string, thread uint64) int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -740,17 +581,12 @@ func (b *agentBus) threadSeen(session, inbox string, thread uint64) int {
 	return n
 }
 
-// highestID is the id of the newest message the bus has recorded. A wait that
-// names no inbox uses it as a baseline, so it matches what arrives after it
-// started rather than returning at once because the ring is not empty.
 func (b *agentBus) highestID() uint64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.nextID
 }
 
-// newerThan returns the oldest message in the session's ring past baseline,
-// restricted to one thread when thread is not zero.
 func (b *agentBus) newerThan(session string, baseline, thread uint64) (AgentMessage, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -765,8 +601,6 @@ func (b *agentBus) newerThan(session string, baseline, thread uint64) (AgentMess
 	return AgentMessage{}, false
 }
 
-// firstUnread returns the oldest unread message for one inbox, restricted to one
-// thread when thread is not zero.
 func (b *agentBus) firstUnread(session, inbox string, thread uint64) (AgentMessage, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -781,19 +615,6 @@ func (b *agentBus) firstUnread(session, inbox string, thread uint64) (AgentMessa
 	return AgentMessage{}, false
 }
 
-// The threading block. A thread id is a message id: the id of the message the
-// thread started from. Everything below turns one id into another and holds one
-// rule, which is that a reply belongs to the same thread as the message it
-// answers, however deep the chain and whatever the ring has since dropped.
-//
-// A thread means something in one session's ring and nowhere else. Ids are
-// issued by one daemon and the rings do not cross sessions, so a thread id is
-// not an address, does not travel, and nothing that leaves this host carries
-// one. list-host-agents reports counts, never ids, and that is deliberate.
-
-// find returns the message with this id, or nil when the ring no longer holds
-// it. Callers hold b.mu. The ring is capped at 256, so a scan is the right
-// shape: an index would be a second structure to keep true through eviction.
 func (mb *agentMailbox) find(id uint64) *AgentMessage {
 	for _, m := range mb.msgs {
 		if m.ID == id {
@@ -803,18 +624,6 @@ func (mb *agentMailbox) find(id uint64) *AgentMessage {
 	return nil
 }
 
-// threadFor answers which thread a new message with this id and this reply_to
-// belongs to, and whether the parent had already aged out.
-//
-// Three cases, and the middle one is the one the bound forces:
-//   - No reply_to: the message starts its own thread, so the thread is its id.
-//   - The parent is in the ring: its thread, which is what makes a reply to a
-//     reply land where the first reply did.
-//   - The parent has been evicted: the parent's own id, because it is the one
-//     stable name left for it. Every reply to that same parent still lands
-//     together, and the id is unique and monotonic so it can never collide with
-//     a live thread. What is lost is only the older root, and ReplyToMissing
-//     says so rather than leaving the reader to guess.
 func (mb *agentMailbox) threadFor(id, replyTo uint64) (uint64, bool) {
 	if replyTo == 0 {
 		return id, false
@@ -825,10 +634,6 @@ func (mb *agentMailbox) threadFor(id, replyTo uint64) (uint64, bool) {
 	return replyTo, true
 }
 
-// resolveThread turns any message id into the thread it belongs to, so a filter
-// can be given the id of a reply rather than only the id of the root. An id the
-// ring no longer holds resolves to itself, which is the same rule threadFor
-// follows and keeps a filter matching the replies to an evicted parent.
 func (b *agentBus) resolveThread(session string, id uint64) uint64 {
 	if id == 0 {
 		return 0
@@ -841,14 +646,6 @@ func (b *agentBus) resolveThread(session string, id uint64) uint64 {
 	return id
 }
 
-// openAsk records an in-flight ask edge from -> to, refusing it when it would
-// close a cycle. Two agents holding each other's address is the failure mode
-// this feature invents, so the graph is checked before the edge is added rather
-// than after the loop has run.
-//
-// The graph is keyed on claimed window ids, so it is exactly as trustworthy as
-// the claim. That is enough for what it is for: an orchestrator wiring A to B to
-// A by mistake is stopped, and nothing here pretends to stop a caller that lies.
 func (b *agentBus) openAsk(from, to string) bool {
 	if from == "" || to == "" {
 		return true
@@ -865,7 +662,6 @@ func (b *agentBus) openAsk(from, to string) bool {
 	return true
 }
 
-// closeAsk releases an edge openAsk took.
 func (b *agentBus) closeAsk(from, to string) {
 	if from == "" || to == "" {
 		return
@@ -884,9 +680,6 @@ func (b *agentBus) closeAsk(from, to string) {
 	}
 }
 
-// reaches reports whether src can get to dst by following open ask edges.
-// Callers hold b.mu. The graph holds one node per agent currently blocked in an
-// ask, so it is tiny and a plain walk is the right shape.
 func (b *agentBus) reaches(src, dst string) bool {
 	if src == dst {
 		return true
@@ -909,8 +702,6 @@ func (b *agentBus) reaches(src, dst string) bool {
 	return false
 }
 
-// openAskEdges renders every open edge, for the message on a refusal. A caller
-// told only that something would loop has to go and find the loop itself.
 func (b *agentBus) openAskEdges() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -924,8 +715,6 @@ func (b *agentBus) openAskEdges() []string {
 	return out
 }
 
-// shortWindowID renders a window id the way list-windows does, so an error
-// message and a listing name the same pane the same way.
 func shortWindowID(id string) string {
 	if len(id) > 8 {
 		return id[:8]
@@ -933,10 +722,6 @@ func shortWindowID(id string) string {
 	return id
 }
 
-// classifyAttachment fills in the kind, media type and size of a referenced
-// file, refusing anything that is not an existing absolute path. Refusing at
-// send time is the point: a reference the reader cannot resolve is a message
-// that looks delivered and is not.
 func classifyAttachment(path string) (AgentAttachment, error) {
 	if !filepath.IsAbs(path) {
 		return AgentAttachment{}, errAttachNotAbsolute
@@ -956,10 +741,6 @@ func classifyAttachment(path string) (AgentAttachment, error) {
 	return AgentAttachment{Kind: kind, Path: path, MediaType: media, Bytes: info.Size()}, nil
 }
 
-// mediaTypeFor names an attachment's type from its extension. The stdlib table
-// is deliberately not consulted: it varies with the host's mime.types file, and
-// an attachment that classified as an image on one machine and a file on another
-// would make the closed kind set a lie.
 func mediaTypeFor(path string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".png":
@@ -983,8 +764,6 @@ func mediaTypeFor(path string) string {
 	}
 }
 
-// rename moves a session's ring to its new name, so the mail its agents sent
-// and got stays readable after the session is renamed.
 func (b *agentBus) rename(old, newName string) {
 	if b == nil || old == newName {
 		return

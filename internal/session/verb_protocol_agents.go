@@ -7,49 +7,21 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 )
 
-// The verbs of the agent work: reviewing what an agent changed and sending it
-// notes, comparing the attempts of a fan, the Inbox's snooze and undo, an
-// agent's activity, the delivery queue, and reading a held approval whole.
-//
-// They are registered here, in one place, together with their scope
-// (conn_scope.go), their link capability (link_policy.go) and, for the two that
-// type into a pane, their place in typingVerbs (pane_grants.go), so the tests
-// that hold those tables to the registry pass from the start and no later
-// change has to touch them. The handlers live in the files named beside each
-// verb.
-
-// Accepted values of the parameters below, named once so list-verbs and the
-// handlers read the same list.
 var (
-	// reviewNoteActions are what review-note does.
-	reviewNoteActions = []string{"add", "edit", "remove", "list", "clear"}
-	// reviewIndexModes are the index diffs review-diff reads.
-	reviewIndexModes = []string{"unstaged", "staged"}
-	// reviewStageActions are what review-stage does.
-	reviewStageActions = []string{"stage", "unstage", "undo"}
-	// reviewNoteSides are the sides of a diff a note can sit on.
-	reviewNoteSides = []string{"new", "old"}
-	// markAttentionActions are what mark-attention does to an item.
+	reviewNoteActions    = []string{"add", "edit", "remove", "list", "clear"}
+	reviewIndexModes     = []string{"unstaged", "staged"}
+	reviewStageActions   = []string{"stage", "unstage", "undo"}
+	reviewNoteSides      = []string{"new", "old"}
 	markAttentionActions = []string{"snooze", "wake", "unread", "restore", "settle", "unsettle"}
-	// approvalKinds are the kinds of hold request-approval takes.
-	approvalKinds = []string{AttentionApproval, AttentionPlan}
-	// activityEvents are the entries set-agent-state's activity reports.
-	activityEvents = []string{ActivityPrompt, ActivityTool, ActivityToolDone, ActivityToolFailed, ActivityTurnEnd}
-	// reportActivityEvents are the entries report-agent-activity takes: the
-	// same, and the events no state report carries, which set-agent-state
-	// predates.
+	approvalKinds        = []string{AttentionApproval, AttentionPlan}
+	activityEvents       = []string{ActivityPrompt, ActivityTool, ActivityToolDone, ActivityToolFailed, ActivityTurnEnd}
 	reportActivityEvents = slices.Concat(activityEvents, []string{ActivitySubagentStart, ActivitySubagentStop, ActivitySessionStart, ActivitySubagentUpdate})
 )
 
-// agentWorkVerbs are the registry entries of the verbs above.
 func agentWorkVerbs() map[string]verbEntry {
 	humanNonce := verbParam{Name: "human_nonce", Type: "string", Description: "The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's."}
 	return map[string]verbEntry{
-		// verb_agent_hook.go
 		"agent-hook-event": {
-			// It reports for the caller's own pane, through the same
-			// set-agent-state and report-agent-activity calls a hook makes, each
-			// checked on this connection.
 			scope:       scopeSelf,
 			link:        needWrite,
 			description: "Run one harness hook event in the daemon, as tuios agent-hook runs it in a process of its own: the payload is read, the event mapped to the state it reports, and the report made for the pane the caller runs in. The pane is found from the process that sent the call (its TUIOS_PANE_ID, or its terminal session and ancestors), never from a param. The result holds what the hook would print for the harness to read. A call that waits on the Inbox for a permission prompt answers when the person does, or when the hold ends.",
@@ -72,8 +44,6 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbAgentHookEvent,
 		},
 		"agent-statusline-event": {
-			// It writes the caller's own pane's agent metadata, with the same
-			// set-agent-meta call tuios agent-statusline makes.
 			scope:       scopeSelf,
 			link:        needWrite,
 			description: "Run one status line payload in the daemon, as tuios agent-statusline runs it without --then: the model, context use and cost it names go to the pane the caller runs in, as agent metadata, at most once every 15 seconds while they change. The pane is found from the process that sent the call, never from a param. It prints nothing; a caller with a status line of its own runs that itself.",
@@ -97,15 +67,8 @@ func agentWorkVerbs() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbAgentStatusLineEvent,
 		},
-		// verb_agent_transcript.go
 		"agent-transcript": {
-			// The conversation is the person's to read. A restricted connection is
-			// automation, never the person.
-			scope: scopeDeny,
-			// The conversation holds the prompts, file contents and command output.
-			// Only the person reads it: the handler needs the nonce of a person's
-			// attach (human_sender.go). transcripts is in the default policy and
-			// respond includes it. See config.LinkAllowTranscripts.
+			scope:       scopeDeny,
 			link:        needTranscripts,
 			description: "Read the conversation of the agent in a pane, for a client that shows it to the person: prompts, answers, thinking, tool calls with their status, diffs of edits, plans and todo lists, decoded from the transcript the pane is joined to. Readers include Claude Code, Codex, Gemini CLI, Qwen Code, Copilot CLI, Amp, OpenCode, Cursor Agent and Pi. Only the person can read it, with a live human_nonce, as reply-approval checks it. Every string is the agent's or its tools', with control characters removed and likely secrets masked, so the reply is marked untrusted.",
 			params: []verbParam{
@@ -138,15 +101,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbAgentTranscript,
 		},
-		// verb_review.go
 		"review-diff": {
-			// From the agent review, triage, queue and approval work
-			// (verb_protocol_agents.go). Reads of one session and its fan group: a
-			// pane's diff, a fan's comparison, an agent's activity, its queue and a
-			// held approval. Writes: review notes, the queue, and sending notes,
-			// which types. verify-fan starts a window in each attempt, which is a
-			// launch. keep-fan removes worktrees and mark-attention is the person's
-			// act on the Inbox, so neither is for a restricted caller.
 			scope:       scopeRead,
 			link:        needWrite,
 			description: "Read what the agent in a pane changed: the diff of its worktree against the base it was made from, or for a plain repository against the upstream merge base, untracked files included (one larger than max_untracked_mb is listed as skipped and not read) and ignored files left out. Nothing in the repository, its index or its working tree is changed. The text is the repository's, so it is marked untrusted.",
@@ -187,12 +142,8 @@ func agentWorkVerbs() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbReviewDiff,
 		},
-		// verb_review_stage.go
 		"review-stage": {
-			// review-stage writes the index of a pane's worktree. It is the person's
-			// tool, so a restricted caller has no use for it.
-			scope: scopeDeny,
-			// review-stage writes the index, as a commit does.
+			scope:       scopeDeny,
 			link:        needWrite,
 			description: "Stage or unstage a change in the worktree of a pane. Name a whole file, one hunk, or some lines of a hunk. Only the index changes. The working files do not change. Every result carries an undo object. Send it back with action undo to undo the call. The undo result carries its own undo object, which redoes the call.",
 			params: []verbParam{
@@ -280,17 +231,8 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbSendReview,
 		},
 
-		// verb_fan_compare.go
 		"compare-fan": {
-			scope: scopeRead,
-			// The agent review, triage, queue and approval work. compare-fan,
-			// agent-activity, list-queued and get-approval return states, counts and
-			// text an agent wrote, which list reaches. review-diff returns file
-			// contents, which write already reaches through a shell and list must
-			// not, as bundle-worktree does. compare-fan's detail carries changed
-			// lines, so its handler asks write for it. verify-fan opens a window and runs a
-			// command in it, so it needs open and write. mark-attention is the
-			// person's act, like dismiss-attention.
+			scope:       scopeRead,
 			link:        needList,
 			description: "Compare the attempts of a fan: one row per sibling session with its branch, agent, state, changed files and lines against the base (committed and uncommitted work, untracked files included), the last verify-fan check and the last command its shells finished. A sibling the caller could not name itself is left out.",
 			params: []verbParam{
@@ -335,9 +277,6 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbVerifyFan,
 		},
 		"set-fan-verdict": {
-			// set-fan-verdict writes a judge's pick on the fan's attempts. It needs
-			// the fan grant, and the handler takes it only from the fan's judge pane
-			// or from outside every pane.
 			scope:       scopeLaunch,
 			link:        needWrite,
 			description: "Record a judge's pick among the attempts of a fan: the attempt it recommends, the verdict, its reasons and notes on each attempt. Only the judge pane judge-fan started for the fan, or a call from outside every pane, records one: a pane of an attempt is refused. The daemon records which of the two it was as by. It is written on every attempt, and compare-fan and the agents view show it. A later call replaces it. Nothing is kept or removed: keep-fan does that.",
@@ -360,7 +299,6 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbSetFanVerdict,
 		},
 		"judge-fan": {
-			// judge-fan starts an agent, which is a launch.
 			scope:       scopeLaunch,
 			link:        needOpen | needWrite,
 			description: "Start an agent that judges the attempts of a fan. It runs in a new session of its own, named after the fan with -judge, in the repository's main checkout, with the read grant alone. Once its pane exists, the attempts name that pane, and that pane alone reads them: it cannot type into them, run commands in their sessions or start agents there. Its first prompt, typed then, asks it to read the attempts and report its pick with set-fan-verdict. Only the person or a pane with admin starts a judge. The record is cleared when the judge's session ends. It answers once the agent is ready, as start-agent does.",
@@ -413,7 +351,6 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbKeepFan,
 		},
 
-		// attention_lifecycle.go
 		"mark-attention": {
 			scope:       scopeDeny,
 			link:        needRespond,
@@ -442,7 +379,6 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbMarkAttention,
 		},
 
-		// agent_activity.go
 		"agent-activity": {
 			scope:       scopeRead,
 			link:        needList,
@@ -468,7 +404,6 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbAgentActivity,
 		},
 
-		// verb_queue.go
 		"queue-prompt": {
 			scope:       scopeWrite,
 			link:        needWrite,
@@ -497,7 +432,6 @@ func agentWorkVerbs() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbQueuePrompt,
 		},
-		// reply_history.go
 		"reply-history": {
 			scope:       scopeDeny,
 			link:        needRespond,
@@ -569,7 +503,6 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbCancelQueued,
 		},
 
-		// verb_approval_ext.go
 		"get-approval": {
 			scope:       scopeRead,
 			link:        needList,

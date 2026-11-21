@@ -13,22 +13,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The speed test of a link: what a copy to a host can get.
-//
-// host-speed-test runs here and measures one host: the round trip of a small
-// call, then speedTestDefault bytes up and the same down, each on a bulk
-// stream, the kind a copy uses, so the window and the priority behind typing
-// are the copy's too. speed-test is the far end: it pings, takes bytes and
-// drops them, or sends bytes. The bytes are random, so a link that compresses
-// gets no help, and they are no file's.
-
 const (
 	speedTestDefault = 64 << 20
 	speedTestMax     = 1 << 30
 	speedTestPings   = 5
 )
 
-// verbSpeedTest is the far end of a speed test.
 func (d *Daemon) verbSpeedTest(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Mode  string `json:"mode"`
@@ -78,7 +68,6 @@ func (d *Daemon) verbSpeedTest(cs *connState, params json.RawMessage) (any, *ver
 	return map[string]any{"mode": p.Mode, "bytes": p.Bytes}, nil
 }
 
-// verbHostSpeedTest measures the link to one host.
 func (d *Daemon) verbHostSpeedTest(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Host  string `json:"host"`
@@ -143,7 +132,6 @@ func (d *Daemon) verbHostSpeedTest(_ *connState, params json.RawMessage) (any, *
 	}, nil
 }
 
-// speedUp sends n bytes to host and returns how long they took to arrive.
 func (d *Daemon) speedUp(ctx context.Context, host string, n int64) (time.Duration, error) {
 	c, err := d.dialHostFiles(ctx, host, true)
 	if err != nil {
@@ -182,7 +170,6 @@ func (d *Daemon) speedUp(ctx context.Context, host string, n int64) (time.Durati
 	return time.Since(start), nil
 }
 
-// speedDown asks host for n bytes and returns how long they took.
 func (d *Daemon) speedDown(ctx context.Context, host string, n int64) (time.Duration, error) {
 	c, err := d.dialHostFiles(ctx, host, true)
 	if err != nil {
@@ -208,10 +195,8 @@ func (d *Daemon) speedDown(ctx context.Context, host string, n int64) (time.Dura
 func speedVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"speed-test": {
-			stream: &verbStream{Param: "mode", Values: []string{"sink", "source"}},
-			scope:  scopeDeny,
-			// A speed test moves bytes that are no file's, and it is how a person
-			// learns what a copy would get.
+			stream:      &verbStream{Param: "mode", Values: []string{"sink", "source"}},
+			scope:       scopeDeny,
 			link:        needFiles,
 			description: "The far end of a link speed test. ping answers at once. sink takes bytes after the reply and drops them, then answers one line {bytes, ms}. source sends bytes of random data after the reply, then closes.",
 			params: []verbParam{

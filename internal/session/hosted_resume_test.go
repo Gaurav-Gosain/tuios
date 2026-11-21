@@ -13,11 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// A pane this machine runs for another machine, outliving a dropped link. See
-// hosted_resume.go for the far half and remotePane.reconnect for the near one.
-
-// droppableFederation is socketFederation with a link that can be cut: drop
-// closes every connection it opened and refuses new ones until up.
 type droppableFederation struct {
 	socketFederation
 	mu    sync.Mutex
@@ -138,7 +133,7 @@ func TestClosingAResumablePaneEndsItAtOnce(t *testing.T) {
 func TestReplayIsWhatWasMissedOrTheWholeRing(t *testing.T) {
 	hp := &hostedPane{}
 	hp.ring = []byte("0123456789")
-	hp.outSeq = 110 // the ring holds bytes 100 to 109
+	hp.outSeq = 110
 	for _, tc := range []struct {
 		from int64
 		want string

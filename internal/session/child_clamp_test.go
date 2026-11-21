@@ -15,11 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// A child never gets wider grants or a wider permission mode than the pane
-// that starts it. This is a security boundary: a prompt-injected agent that
-// could start a helper wider than itself would get, through the helper, what
-// the person did not give it. See child_clamp.go.
-
 // TestAChildNeverHoldsGrantsItsParentLacks starts panes from a pane the person
 // gave admin alone, under a default that gives every pane on it respond. A
 // child that names no grants used to hold the default, respond included, which
@@ -38,7 +33,6 @@ func TestAChildNeverHoldsGrantsItsParentLacks(t *testing.T) {
 		return true, a1
 	})
 
-	// launchGrants is what start-agent, fan and worktree fan decide with.
 	cs := &connState{}
 	g, verr := d.launchGrants(cs, nil)
 	if verr != nil {
@@ -48,8 +42,6 @@ func TestAChildNeverHoldsGrantsItsParentLacks(t *testing.T) {
 		t.Errorf("a child of an admin pane holds %v, with respond its parent lacks", held)
 	}
 
-	// The verbs that open a pane through addWindowFor, called by a process
-	// in the pane.
 	out := callAsChildProcess(t, sp, "pane",
 		map[string]any{"verb": "new-window", "params": map[string]any{"session": "a", "focus": false}},
 		map[string]any{"verb": "new-session", "params": map[string]any{"name": "child-of-admin"}},
@@ -65,8 +57,6 @@ func TestAChildNeverHoldsGrantsItsParentLacks(t *testing.T) {
 		}
 	}
 
-	// The person, outside every pane, is not held: the new pane keeps the
-	// default the person configured.
 	c := dialVerb(t, sp)
 	res := result(t, callP(c, t, "new-window", map[string]any{"session": "a", "focus": false}))
 	if held, explicit := d.manager.grants.effective(res["window_id"].(string)); explicit || !held.Has(GrantRespond) {
@@ -150,14 +140,12 @@ func TestAChildAgentNeverRunsWiderThanItsParent(t *testing.T) {
 		}
 	}
 
-	// A parent that runs with every check off may start a child the same.
 	out = callAsChildProcess(t, sp, "claude --dangerously-skip-permissions",
 		start("claude", "--permission-mode", "bypassPermissions"))
 	if _, ok := out[0]["result"].(map[string]any); !ok {
 		t.Errorf("a parent in bypass mode could not start a child in bypass mode: %v", out[0])
 	}
 
-	// The person, outside every pane, is never held.
 	c := dialVerb(t, sp)
 	res := result(t, callP(c, t, "start-agent", map[string]any{
 		"session": "a", "agent": "claude --dangerously-skip-permissions", "env": env, "ready_timeout": 200,
@@ -167,7 +155,6 @@ func TestAChildAgentNeverRunsWiderThanItsParent(t *testing.T) {
 	}
 }
 
-// grantsOrDefault is what a pane given g holds: g, or the default for nil.
 func grantsOrDefault(d *Daemon, g *Grants) Grants {
 	if g != nil {
 		return *g
@@ -175,8 +162,6 @@ func grantsOrDefault(d *Daemon, g *Grants) Grants {
 	return d.manager.grants.defaults()
 }
 
-// fakeAgentBin is a directory where claude and codex are this test binary,
-// which TestMain turns into a wait (or a caller, see callAsChildProcess).
 func fakeAgentBin(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "bin")
@@ -198,19 +183,12 @@ func fakeAgentBin(t *testing.T) string {
 	return bin
 }
 
-// callAsChildProcess runs this test binary as another process, under the name
-// and with the arguments of command, and has it send calls over the daemon
-// socket. It returns one response per call. The process is the caller the
-// daemon sees, so the daemon reads its name and arguments from the process
-// table as it would read a real agent's.
 func callAsChildProcess(t *testing.T, sp, command string, calls ...map[string]any) []map[string]any {
 	t.Helper()
 	words := strings.Fields(command)
 	bin := fakeAgentBin(t)
 	name := words[0]
 	if name == "pane" {
-		// A plain process in the pane, no agent: run under a name no
-		// manifest knows.
 		self, _ := os.Executable()
 		name = filepath.Join(bin, fakeCallerName)
 		if err := os.Symlink(self, name); err != nil {
@@ -248,16 +226,10 @@ func callAsChildProcess(t *testing.T, sp, command string, calls ...map[string]an
 	return out
 }
 
-// fakeParentNames are the names the test binary runs under as an agent. As
-// such it waits, or with TUIOS_TEST_CALL_SOCKET set calls the daemon.
 var fakeParentNames = []string{"claude", "codex"}
 
-// fakeCallerName is the name it runs under as a plain process that calls the
-// daemon.
 const fakeCallerName = "plain-caller"
 
-// runFakeCaller is the test binary as a caller: it sends each line of
-// TUIOS_TEST_CALL_LINES to the daemon and prints each response line.
 func runFakeCaller(socket string) int {
 	conn, err := net.DialTimeout("unix", socket, 3*time.Second)
 	if err != nil {

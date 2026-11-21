@@ -20,68 +20,29 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// Web Push to the person's phones: the daemon's half.
-//
-// A phone registers a push subscription with register-push, which only the
-// person can call (verb_push.go). From then on, when an Inbox item of a kind
-// the phone asked for opens, the daemon encrypts a small JSON payload for the
-// phone and posts it to the phone's push service, and when the item closes it
-// posts a close, so the phone can remove the notification. The phone holds no
-// connection to tuios for this: its push service, or its UnifiedPush
-// distributor, wakes it.
-//
-// Nothing here blocks the daemon. The notifier hands each push to a queue per
-// phone, and one goroutine per phone sends them in order, with retries. A
-// phone whose push service answers 404 or 410 is dropped. The [notify] quiet,
-// cooldown and trigger settings are for the other providers. A phone chose
-// its kinds when it registered, and a close takes back what an open said, so
-// the only limit here is max_per_hour, counted per phone, on opens.
-
-// pushDefaultKinds are the kinds a phone gets when it names none: the items
-// that wait for the person.
 var pushDefaultKinds = []string{AttentionApproval, AttentionPlan, AttentionAsk, AttentionQuestion}
 
-// pushMaxDevices bounds the registered phones.
 const pushMaxDevices = 16
 
-// pushDeviceQueue bounds the pushes waiting for one phone. A burst past it
-// drops the oldest open first; the newest state is what matters.
 const pushDeviceQueue = 64
 
-// pushRetryDelays are the waits between attempts. Every wait together stays
-// well inside the TTL, since a push the phone gets later than that is stale.
 var pushRetryDelays = []time.Duration{time.Second, 4 * time.Second, 15 * time.Second}
 
-// pushTTLWaiting is the TTL of the open and the close of an item that waits
-// for the person: approval, plan, ask and question. Such an item stays
-// answerable while it is open, which is often longer than the hook's hold (at
-// most 300 seconds), because the prompt stays on the pane, and an ask lives
-// until it is answered. A phone in Doze can get even a high-urgency push some
-// minutes late, so 120 seconds lost real prompts. A stale open does not
-// outlive its item: the close goes under the same Topic with the same TTL,
-// and a push service replaces the open it still holds with the close.
 const pushTTLWaiting = 3600
 
-// pushTTLOther is the TTL of every other push: an item that does not wait
-// for an answer is news only for a short time.
 const pushTTLOther = pushnotify.PushTTL
 
-// pushDevice is one registered phone, as it is kept on disk.
 type pushDevice struct {
 	Device string   `json:"device"`
 	Kinds  []string `json:"kinds"`
 	pushnotify.Subscription
-	Created int64 `json:"created"`
-	// LastOK is when a push last reached the push service, unix seconds.
-	LastOK int64 `json:"last_ok,omitempty"`
-	// LastError is the last failure, with no address beyond the host.
+	Created   int64  `json:"created"`
+	LastOK    int64  `json:"last_ok,omitempty"`
 	LastError string `json:"last_error,omitempty"`
 }
 
-// wants reports whether the phone asked for this kind.
 func (p *pushDevice) wants(kind string) bool { return slices.Contains(p.Kinds, kind) }
 
-// pushPayload is the JSON a phone decrypts.
 type pushPayload struct {
 	V         int      `json:"v"`
 	Type      string   `json:"type"`
@@ -97,17 +58,14 @@ type pushPayload struct {
 	RequestID string   `json:"request_id,omitempty"`
 	Options   []string `json:"options,omitempty"`
 	Machine   string   `json:"machine"`
-	// Truncated is true when a text field was cut to fit MaxPayload.
-	Truncated bool `json:"truncated,omitempty"`
+	Truncated bool     `json:"truncated,omitempty"`
 }
 
-// Payload types.
 const (
 	pushOpen  = "open"
 	pushClose = "close"
 )
 
-// pushJob is one push for one phone.
 type pushJob struct {
 	payload []byte
 	urgency string
@@ -117,7 +75,6 @@ type pushJob struct {
 	typ     string
 }
 
-// webPusher sends the Inbox to the registered phones.
 type webPusher struct {
 	n *pushNotifier
 
@@ -125,10 +82,7 @@ type webPusher struct {
 	devices map[string]*pushDevice
 	loaded  bool
 	key     *pushnotify.VAPIDKey
-	// sent is what each open item last went out as, by id, so an update
-	// that changes nothing a phone shows is not sent again.
-	sent map[string]string
-	// hour are each phone's open sends in the last hour.
+	sent    map[string]string
 	hour    map[string][]time.Time
 	workers map[string]*pushWorker
 	ctx     context.Context
@@ -136,7 +90,6 @@ type webPusher struct {
 	wg      sync.WaitGroup
 }
 
-// pushWorker is one phone's queue and the goroutine that empties it.
 type pushWorker struct {
 	ch chan pushJob
 }
@@ -154,17 +107,10 @@ func newWebPusher(n *pushNotifier) *webPusher {
 	}
 }
 
-// pushDir is where the phones and the VAPID key are kept.
 func pushDir() string { return filepath.Join(getResurrectionDir(), "push") }
 
-// pushChmodWarn makes the warning about a push folder that cannot be narrowed
-// appear once per daemon, not once per save.
 var pushChmodWarn sync.Once
 
-// writePushFile writes data to path, 0600, in a folder made 0700. A folder
-// that already exists and cannot be narrowed to 0700 (one on a file system
-// with no Unix modes, or owned by someone else) is warned about once and the
-// write goes on: the file itself is still 0600.
 func writePushFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -179,7 +125,6 @@ func writePushFile(path string, data []byte) error {
 func pushDevicesPath() string { return filepath.Join(pushDir(), "subscriptions.json") }
 func pushKeyPath() string     { return filepath.Join(pushDir(), "vapid.pem") }
 
-// loadLocked reads the phones from disk once. The caller holds mu.
 func (w *webPusher) loadLocked() {
 	if w.loaded {
 		return
@@ -191,8 +136,6 @@ func (w *webPusher) loadLocked() {
 	}
 	var list []*pushDevice
 	if err := jsonx.Unmarshal(data, &list); err != nil {
-		// The next register would write over it with only the new phone.
-		// Keep it beside, so the phones in it can be got back by hand.
 		bad := pushDevicesPath() + ".bad"
 		if rerr := os.Rename(pushDevicesPath(), bad); rerr != nil {
 			log.Printf("[NOTIFY] cannot read the registered phones (%v), and cannot move the file aside: %v", err, rerr)
@@ -208,7 +151,6 @@ func (w *webPusher) loadLocked() {
 	}
 }
 
-// saveLocked writes the phones to disk. The caller holds mu.
 func (w *webPusher) saveLocked() error {
 	list := make([]*pushDevice, 0, len(w.devices))
 	for _, d := range w.devices {
@@ -222,8 +164,6 @@ func (w *webPusher) saveLocked() error {
 	return writePushFile(pushDevicesPath(), data)
 }
 
-// keyLocked is the VAPID key, made and saved on first use. The caller holds
-// mu.
 func (w *webPusher) keyLocked() (*pushnotify.VAPIDKey, error) {
 	if w.key != nil {
 		return w.key, nil
@@ -253,7 +193,6 @@ func (w *webPusher) keyLocked() (*pushnotify.VAPIDKey, error) {
 	return k, nil
 }
 
-// publicKey is the VAPID public key, base64url, made on first use.
 func (w *webPusher) publicKey() (string, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -264,8 +203,6 @@ func (w *webPusher) publicKey() (string, error) {
 	return k.PublicKey(), nil
 }
 
-// register adds a phone, or replaces the one of the same name when
-// mayReplace. Without it, a phone of that name is errPushExists.
 func (w *webPusher) register(d pushDevice, mayReplace bool) (replaced bool, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -293,10 +230,8 @@ func (w *webPusher) register(d pushDevice, mayReplace bool) (replaced bool, err 
 	return replaced, nil
 }
 
-// errPushFull is a register-push past pushMaxDevices.
 var errPushFull = errors.New("too many phones")
 
-// remove drops a phone and reports whether it was there.
 func (w *webPusher) remove(device string) (bool, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -308,7 +243,6 @@ func (w *webPusher) remove(device string) (bool, error) {
 	return true, w.saveLocked()
 }
 
-// list is a copy of the phones, by name.
 func (w *webPusher) list() []pushDevice {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -321,24 +255,16 @@ func (w *webPusher) list() []pushDevice {
 	return out
 }
 
-// pushSignature is what an open item shows on a phone that can change while
-// it stays open: a new hold gives it a request id, options and risk to answer
-// with. A summary that changes under the same prompt is not sent again.
 func pushSignature(it AttentionItem) string {
 	return it.Kind + "\x00" + it.RequestID + "\x00" + strings.Join(it.Options, ",") + "\x00" + strings.Join(it.Risk, ",")
 }
 
-// note folds one attention event in. It never blocks.
 func (w *webPusher) note(action string, it AttentionItem) {
 	cfg := w.n.cfg.Load()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.loadLocked()
 	if action == AttentionClosed {
-		// A close goes to every phone that wants the kind, even with
-		// notifications off and for an item this run did not push: the
-		// open may have gone before a restart. It only takes back what a
-		// phone shows.
 		delete(w.sent, it.ID)
 		w.enqueueLocked(it, pushClose)
 		return
@@ -354,8 +280,6 @@ func (w *webPusher) note(action string, it AttentionItem) {
 	w.enqueueLocked(it, pushOpen)
 }
 
-// enqueueLocked builds the payload once and queues it for every phone that
-// wants the kind. The caller holds mu.
 func (w *webPusher) enqueueLocked(it AttentionItem, typ string) {
 	if len(w.devices) == 0 {
 		return
@@ -367,7 +291,6 @@ func (w *webPusher) enqueueLocked(it AttentionItem, typ string) {
 		Risk: it.Risk, RequestID: it.RequestID, Options: it.Options, Machine: machine,
 	}
 	if typ == pushClose {
-		// A close needs only what names the item.
 		p = pushPayload{V: 1, Type: typ, ID: it.ID, Kind: it.Kind, Session: it.Session, Window: it.Window, Host: it.Host, Machine: machine}
 	}
 	data, cut := fitPayload(p)
@@ -409,14 +332,6 @@ func (w *webPusher) enqueueLocked(it AttentionItem, typ string) {
 	}
 }
 
-// fitPayload marshals p within MaxPayload and reports whether it had to cut
-// it. It never drops the push: it cuts the summary first, then the risk,
-// then halves every text field until the payload fits. It does not cut the
-// options or the request id, which an answer must give back as they are. They
-// are short (an ask takes at most 9 options of 60 bytes), and so are the id,
-// the kind and the type, so the payload always fits. A payload is
-// marshalled with no HTML escaping: a phone reads JSON, not HTML, and the
-// escapes made "<" six bytes.
 func fitPayload(p pushPayload) ([]byte, bool) {
 	marshal := func(p pushPayload) []byte {
 		var buf bytes.Buffer
@@ -449,7 +364,6 @@ func fitPayload(p pushPayload) ([]byte, bool) {
 	}
 }
 
-// put queues a job, dropping the oldest when the queue is full.
 func (pw *pushWorker) put(j pushJob) {
 	for {
 		select {
@@ -464,8 +378,6 @@ func (pw *pushWorker) put(j pushJob) {
 	}
 }
 
-// workerLocked is the phone's worker, started on first use. The caller holds
-// mu.
 func (w *webPusher) workerLocked(device string) *pushWorker {
 	if pw, ok := w.workers[device]; ok {
 		return pw
@@ -477,7 +389,6 @@ func (w *webPusher) workerLocked(device string) *pushWorker {
 	return pw
 }
 
-// run sends one phone's pushes in order until the daemon stops.
 func (w *webPusher) run(device string, pw *pushWorker) {
 	defer w.wg.Done()
 	for {
@@ -490,7 +401,6 @@ func (w *webPusher) run(device string, pw *pushWorker) {
 	}
 }
 
-// deliver sends one push, with retries, and records how it went.
 func (w *webPusher) deliver(device string, j pushJob) {
 	for attempt := 0; ; attempt++ {
 		w.mu.Lock()
@@ -548,8 +458,6 @@ func (w *webPusher) deliver(device string, j pushJob) {
 	}
 }
 
-// record keeps how the last push to a phone went. It is not saved at once:
-// the next register or remove writes it.
 func (w *webPusher) record(device, errText string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -562,7 +470,6 @@ func (w *webPusher) record(device, errText string) {
 	}
 }
 
-// hostOfEndpoint is the host of an endpoint, the one part of it a log names.
 func hostOfEndpoint(raw string) string {
 	if origin, err := pushnotify.CheckEndpoint(raw, true); err == nil {
 		_, host, _ := strings.Cut(origin, "://")
@@ -571,7 +478,6 @@ func hostOfEndpoint(raw string) string {
 	return "?"
 }
 
-// stop ends the workers. Pushes still queued are dropped.
 func (w *webPusher) stop() {
 	w.cancel()
 	w.wg.Wait()

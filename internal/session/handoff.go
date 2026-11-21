@@ -16,21 +16,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// Live handoff: the daemon execs a new image of itself, and every pane's
-// process keeps running under it with the same pid, the same terminal and the
-// same screen. See docs/design/live-handoff.md.
-//
-// The daemon's pid does not change, so it stays the parent of every pane and
-// the listening sockets are never closed: a caller that dials during the swap
-// waits in the kernel's backlog and is answered by the new image. What crosses
-// the exec is descriptors (every pane's PTY master, the sockets, the start
-// lock) and a manifest on one more descriptor saying what they are.
-//
-// The order matters. Everything that can fail (stopping the readers, writing
-// the manifest) comes before the clients are told, and a failure there puts
-// every part back as it was. After the clients are closed only the exec is
-// left, and an exec that fails puts the daemon back too, minus its clients.
-
 // HandoffVersion is the manifest version this build writes, and
 // MinHandoffVersion the oldest it reads. A change to what a record means, or
 // to a field a record carries, moves HandoffVersion.
@@ -59,47 +44,27 @@ func (handoffUnsupported) Error() string {
 }
 
 var (
-	errHandoffBusy     = errors.New("a live upgrade is already running")
-	errHandoffEmbedded = errors.New("this daemon runs inside another program (tuios-web or the SSH server), and replacing its image would replace that program")
-	// errHandoffHostedOpen is an open-pane that arrives during an upgrade.
+	errHandoffBusy       = errors.New("a live upgrade is already running")
+	errHandoffEmbedded   = errors.New("this daemon runs inside another program (tuios-web or the SSH server), and replacing its image would replace that program")
 	errHandoffHostedOpen = errors.New("a live upgrade of this daemon is running. Try again once it is done")
 )
 
-// handoffQuiesceTimeout bounds how long the panes may take to stop.
 const handoffQuiesceTimeout = 10 * time.Second
 
-// handoffCommitTimeout is how long a prepared handoff waits for the reply
-// that announced it to be written before it gives up and puts everything back.
 const handoffCommitTimeout = 5 * time.Second
 
-// handoffWorkers bounds how many panes are stopped and written at once.
 const handoffWorkers = 8
 
-// handoffRequest is one handoff.
 type handoffRequest struct {
-	// binary is the image to exec. The preflight runs it first.
-	binary string
-	// pinned, when set, is the file the person confirmed binary as. A file
-	// put there since is refused, not run.
-	pinned *fileID
-	// shownExited, when not nil, is the exited panes on other machines the
-	// confirm dialog told the person the upgrade closes. Only those are
-	// closed. Nil, from a terminal outside tuios, closes every exited one
-	// and the result names them.
-	shownExited []string
-	// holdAfterWrite, inWindow and afterCheck are for tests: a wait after
-	// the manifest is written, a function run while the descriptors are
-	// exposed, and one run between the preflight's checks and its run.
+	binary         string
+	pinned         *fileID
+	shownExited    []string
 	holdAfterWrite time.Duration
 	inWindow       func()
 	afterCheck     func()
-	// copyRoute runs a private copy of the binary on Linux too, as other
-	// systems do, so a test there covers that route. Only a test sets it.
-	copyRoute bool
+	copyRoute      bool
 }
 
-// handoffRun is a handoff that has stopped the daemon's parts, holding what it
-// needs to put each one back.
 type handoffRun struct {
 	d    *Daemon
 	req  handoffRequest
@@ -107,20 +72,17 @@ type handoffRun struct {
 	prev *prevBinary
 	file *os.File
 	fds  []int
-	// undo puts back what has been stopped, last first.
 	undo []func()
 
 	mu    sync.Mutex
-	state int // 0 prepared, 1 committing, 2 abandoned
+	state int
 	timer *time.Timer
 
-	// What the run measured, for the caller and for the next image.
 	panes         int
 	manifestBytes int64
-	// closedRemote names the exited panes on other machines the run closed.
-	closedRemote []string
-	started      time.Time
-	stats        HandoffStats
+	closedRemote  []string
+	started       time.Time
+	stats         HandoffStats
 }
 
 // HandoffStats is what a live handoff measured. The image that hands off
@@ -162,21 +124,16 @@ type HandoffStats struct {
 	Recovered bool `json:"recovered,omitempty"`
 }
 
-// handoffPaneRef is a pane the manifest carries.
 type handoffPaneRef struct {
 	sess   *Session
 	pty    *PTY
 	window string
 }
 
-// handoffDir is where the manifest is made on a platform without memfd.
 func handoffDir() string {
 	return filepath.Join(getResurrectionDir(), "handoff")
 }
 
-// prepareHandoff stops the daemon at a point where nothing of a pane is in
-// its hands, and writes the manifest. On error nothing has changed. On success
-// the daemon is stopped until commit or abandon.
 func (d *Daemon) prepareHandoff(req handoffRequest) (*handoffRun, error) {
 	if err := d.handoffRefusal(); err != nil {
 		return nil, err
@@ -186,8 +143,6 @@ func (d *Daemon) prepareHandoff(req handoffRequest) (*handoffRun, error) {
 	}
 	run := &handoffRun{d: d, req: req, started: time.Now()}
 	run.stats.From = d.version
-	// Both checks run before anything is paused, so a refusal changes
-	// nothing.
 	prev, err := d.checkPrevBinary()
 	if err != nil {
 		d.handoffMu.Unlock()
@@ -222,16 +177,9 @@ func (d *Daemon) prepareHandoff(req handoffRequest) (*handoffRun, error) {
 func (r *handoffRun) prepare() error {
 	d := r.d
 
-	// New callers wait in the backlog from here on.
 	d.pauseAccepting()
 	r.undo = append(r.undo, d.resumeAccepting)
 
-	// The daemon's other children go before the panes stop. Each would stay
-	// this pid's child across the exec, cut off from the pipes it talks over
-	// and never waited for, and the new image starts its own: a second copy
-	// of every plugin, and an ssh link per host that nothing reads.
-	// A card's verify goes first, before the links its far runs use: the
-	// new image runs it again (loadStores).
 	d.verifies.hold(verifyWaitDelay + time.Second)
 	r.undo = append(r.undo, func() {
 		d.verifies.release()
@@ -244,13 +192,7 @@ func (r *handoffRun) prepare() error {
 	if d.federation != nil {
 		d.federation.Stop()
 	}
-	// The keep awake holder is a child too. The new image takes the hold
-	// again once its panes are in place (serve).
 	d.awake.stop()
-	// A hook that started since the refusal check is waited for here. One
-	// fired later either holds a pipe when the holds shut below, and the
-	// handoff is refused, or waits on them: a put-back starts it, and the
-	// exec ends it before it ran (handoff_refuse.go).
 	if d.hooks != nil {
 		d.hooks.WaitTimeout(hookDrainTimeout)
 	}
@@ -263,8 +205,6 @@ func (r *handoffRun) prepare() error {
 		d.awake.start(d.ctx)
 	})
 
-	// The reaps first: a reap in progress runs the pane's exit, which may
-	// close the pane, and that needs paneLife.
 	shut := map[*PTY]bool{}
 	shutAll := func() {
 		for _, sess := range d.manager.AllSessions() {
@@ -284,35 +224,20 @@ func (r *handoffRun) prepare() error {
 	})
 	d.manager.paneLife.Lock()
 	r.undo = append(r.undo, d.manager.paneLife.Unlock)
-	// A pane started between the two is in now, and its gate shuts too.
 	shutAll()
-	// Asked again with no pane able to start: a check or a popup takes its
-	// pipe hold before it waits on paneLife, so one asked for after the first
-	// answer holds a pipe by now.
 	if err := d.handoffRefusal(); err != nil {
 		return err
 	}
-	// A hook or a plugin command does not wait on paneLife: from here one
-	// that starts waits, or is refused, until the handoff is put back.
 	if what := d.pipes.shut(); what != "" {
 		return pipeRefusal(what)
 	}
 	r.undo = append(r.undo, d.pipes.open)
 
-	// handoffRefusal counted the hosted panes, but an open-pane from a link
-	// does not wait on paneLife, so the count and the shut are one step.
 	if n := d.shutHostedPanes(); n > 0 {
 		return hostedRefusal(n)
 	}
 	r.undo = append(r.undo, d.openHostedPanes)
 
-	// Every refusal has passed, so the exited panes on other machines go
-	// now, the last change before the sessions are written down. A pane on
-	// another machine has no master here; once its process has exited there
-	// is nothing to hand over, and its window would come back with no pane.
-	// A recording holds an open file and a subscription the new image does
-	// not get, so it ends here, with a marker that says why. Its file is
-	// complete. A handoff put back does not start it again.
 	d.stopRecordings("daemon upgrade")
 
 	closed, err := closeExitedRemotes(d.manager.AllSessions(), r.req.shownExited)
@@ -322,8 +247,6 @@ func (r *handoffRun) prepare() error {
 	r.closedRemote = closed
 
 	sessions := d.manager.AllSessions()
-	// Before any pane stops, so the record of each session names the colours
-	// its emulators were given.
 	for _, sess := range sessions {
 		sess.holdReportColors()
 	}
@@ -343,8 +266,6 @@ func (r *handoffRun) prepare() error {
 				continue
 			}
 			if p.host != "" {
-				// handoffRefusal checked before the gates shut; a pane
-				// opened on another machine since is named with the rest.
 				return remotePaneRefusal(sessions)
 			}
 			refs = append(refs, handoffPaneRef{sess: sess, pty: p, window: w.ID})
@@ -352,9 +273,6 @@ func (r *handoffRun) prepare() error {
 	}
 	r.panes = len(refs)
 
-	// The manifest's descriptor is made now and written once the panes have
-	// stopped, so the keeper can hold a copy of it from the start. The keeper
-	// starts before any pane stops, and its start is no part of the pause.
 	f, err := newHandoffFile(handoffDir())
 	if err != nil {
 		return errfmt.Errorf("making the handoff manifest: %w", err)
@@ -408,13 +326,10 @@ func (r *handoffRun) prepare() error {
 	return nil
 }
 
-// msSince is the milliseconds since t.
 func msSince(t time.Time) float64 {
 	return float64(time.Since(t).Microseconds()) / 1000
 }
 
-// writeManifest writes every record and collects the descriptors the exec
-// keeps.
 func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) error {
 	d := r.d
 	mw, err := newManifestWriter(r.file)
@@ -435,8 +350,6 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 			return err
 		}
 	}
-	// The panes are captured and encoded handoffWorkers at a time, and
-	// written in order, so at most that many records are in memory at once.
 	t0 := time.Now()
 	recs := make([][]byte, len(refs))
 	fds := make([]int, len(refs))
@@ -494,8 +407,6 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 		dr.LockFD = fdNum(d.startLock)
 		r.fds = append(r.fds, dr.LockFD)
 	}
-	// The daemon's end of the keeper's socket crosses the exec: it closes
-	// only when the daemon's process is gone.
 	if dr.Keeper = d.keeperRecord(); dr.Keeper.PID > 0 {
 		r.fds = append(r.fds, dr.Keeper.FD)
 	}
@@ -517,10 +428,6 @@ func (r *handoffRun) writeManifest(sessions []*Session, refs []handoffPaneRef) e
 	return nil
 }
 
-// shutHostedPanes refuses new hosted panes and reports how many run. A
-// hosted pane's master is not among the descriptors the exec keeps, so the
-// exec would close its terminal and end the pane on the machine that opened
-// it. When some run, nothing is shut, and the handoff is refused.
 func (d *Daemon) shutHostedPanes() int {
 	d.hostedPanesMu.Lock()
 	defer d.hostedPanesMu.Unlock()
@@ -531,16 +438,12 @@ func (d *Daemon) shutHostedPanes() int {
 	return 0
 }
 
-// openHostedPanes lets hosted panes open again.
 func (d *Daemon) openHostedPanes() {
 	d.hostedPanesMu.Lock()
 	d.hostedPanesShut = false
 	d.hostedPanesMu.Unlock()
 }
 
-// keptDescriptors is every descriptor the exec carries, which the keeper
-// holds a copy of: the manifest, each pane's master, the sockets, the start
-// lock and, last, the previous binary where it is a descriptor.
 func (r *handoffRun) keptDescriptors(refs []handoffPaneRef) []int {
 	d := r.d
 	out := []int{fdNum(r.file)}
@@ -559,7 +462,6 @@ func (r *handoffRun) keptDescriptors(refs []handoffPaneRef) []int {
 	return out
 }
 
-// namedListeners is every listening socket, by the name the manifest gives it.
 func (d *Daemon) namedListeners() map[string]net.Listener {
 	out := map[string]net.Listener{}
 	for name, l := range map[string]net.Listener{
@@ -572,8 +474,6 @@ func (d *Daemon) namedListeners() map[string]net.Listener {
 	return out
 }
 
-// commit closes every client and execs the new image. It returns only if
-// the exec failed, after putting the daemon back.
 func (r *handoffRun) commit() error {
 	r.mu.Lock()
 	if r.state != 0 {
@@ -589,8 +489,6 @@ func (r *handoffRun) commit() error {
 		time.Sleep(r.req.holdAfterWrite)
 	}
 	d.attention.saveNow()
-	// A binary replaced since the preflight is a file the preflight did not
-	// run: run it again, and pay its first exec here rather than after it.
 	if !r.bin.stillThere() {
 		if r.req.pinned != nil {
 			r.bin.close()
@@ -611,12 +509,7 @@ func (r *handoffRun) commit() error {
 
 	argv := append([]string{r.bin.path}, d.handoffArgs(fdNum(r.file))...)
 	log.Printf("Live upgrade: exec %s with %d panes (manifest %d bytes, stopped %s)", r.bin.path, r.panes, r.manifestBytes, time.Since(r.started).Round(time.Millisecond))
-	// A binary runs from the file the preflight ran: on Linux its
-	// descriptor, which stays close-on-exec, and elsewhere its private copy.
-	// A script runs by its path, as its interpreter opens it.
 	path := r.bin.execTarget()
-	// No deferred call survives the exec: a checkpoint that runs now would
-	// leave its temporary index folder in the temp dir.
 	worktree.RemoveTemp(tempRemoveWait)
 	err := execHandoff(path, argv, withOldCopies(withoutEnv(os.Environ(), handoffFallbackEnv)), r.fds, r.req.inWindow)
 	LogError("Live upgrade: exec %s failed, the daemon carries on: %v", r.bin.path, err)
@@ -626,8 +519,6 @@ func (r *handoffRun) commit() error {
 	return errfmt.Errorf("exec %s: %w", r.bin.path, err)
 }
 
-// abandon puts back a prepared run that was never committed. It reports
-// whether it did.
 func (r *handoffRun) abandon() bool {
 	r.mu.Lock()
 	if r.state != 0 {
@@ -642,7 +533,6 @@ func (r *handoffRun) abandon() bool {
 	return true
 }
 
-// putBack undoes every step taken, last first.
 func (r *handoffRun) putBack() {
 	for i := len(r.undo) - 1; i >= 0; i-- {
 		r.undo[i]()
@@ -650,7 +540,6 @@ func (r *handoffRun) putBack() {
 	r.undo = nil
 }
 
-// handoffRecord is the session as the next image rebuilds it.
 func (s *Session) handoffRecord() handoffSession {
 	st := s.GetState()
 	rec := handoffSession{
@@ -670,8 +559,6 @@ func (s *Session) handoffRecord() handoffSession {
 	return rec
 }
 
-// handoffRecord is the pane as the next image adopts it, and false for a pane
-// whose bytes do not come from a descriptor here. The pane is quiesced.
 func (p *PTY) handoffRecord(sess *Session, window string) (handoffPane, bool) {
 	rec := handoffPane{ID: p.ID, Session: sess.ID, Window: window, FD: -1, TTY: p.TTYName(), KeepOpen: p.keepOpen != nil}
 	if !ptyspawn.ControlMaster(p.pty, func(fd int) { rec.FD = fd }) || rec.FD < 0 {
@@ -690,7 +577,6 @@ func (p *PTY) handoffRecord(sess *Session, window string) (handoffPane, bool) {
 	return rec, true
 }
 
-// allPTYs is every pane the session holds.
 func (s *Session) allPTYs() []*PTY {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
@@ -701,8 +587,6 @@ func (s *Session) allPTYs() []*PTY {
 	return out
 }
 
-// forEachBounded runs fn for 0..n-1 on at most workers goroutines and returns
-// the first error.
 func forEachBounded(n, workers int, fn func(i int) error) error {
 	var (
 		wg    sync.WaitGroup

@@ -10,42 +10,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// The fallback of a live handoff.
-//
-// The image that adopts the panes is the only process left holding them: the
-// one that handed them over has been replaced by the exec, and the command
-// that asked for the upgrade holds no descriptor. So when adoption fails,
-// panics or hangs, this image re-execs the binary the previous image ran (kept
-// at its start, see handoff_prev.go) with the same manifest, the same
-// command line and the same environment. That binary reads the manifest it
-// wrote and adopts the panes as it would have.
-//
-// The fallback is possible only until the panes are read and the sockets
-// served, which is why adoption disarms it just before. An image started as a
-// fallback does not fall back again: it carries handoffFallbackEnv, and on
-// failure it ends, and the panes hang up as they would in a crash.
-
-// handoffFallbackEnv marks an image started as a fallback.
 const handoffFallbackEnv = "TUIOS_HANDOFF_FALLBACK"
 
-// adoptWatchdogDefault is how long adoption may take before the fallback
-// runs. An adoption takes well under a second.
 const adoptWatchdogDefault = 30 * time.Second
 
-// adoptFallback is the fallback of one adoption.
 type adoptFallback struct {
 	mu         sync.Mutex
-	state      int // 0 armed, 1 disarmed, 2 falling back
+	state      int
 	manifestFD int
 	path       string
 	fds        []int
-	// held keeps every wrapper around an inherited descriptor reachable: an
-	// os.File that is collected closes its descriptor, and the fallback
-	// needs every one of them.
-	held []any
+	held       []any
 }
 
-// prepare records what the fallback re-execs and hands on, from the manifest.
 func (f *adoptFallback) prepare(m *handoffManifest) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -63,22 +40,17 @@ func (f *adoptFallback) prepare(m *handoffManifest) {
 	for _, p := range m.Panes {
 		f.fds = append(f.fds, p.FD)
 	}
-	// The keeper's socket crosses this exec too. Closed by it, it would tell
-	// the keeper the daemon is gone while the fallback image runs.
 	if m.Daemon.Keeper.PID > 0 && m.Daemon.Keeper.FD >= 0 {
 		f.fds = append(f.fds, m.Daemon.Keeper.FD)
 	}
 }
 
-// keep holds v for as long as the fallback may run.
 func (f *adoptFallback) keep(v any) {
 	f.mu.Lock()
 	f.held = append(f.held, v)
 	f.mu.Unlock()
 }
 
-// disarm passes the point of no return. It reports false when the fallback
-// has already started.
 func (f *adoptFallback) disarm() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -90,25 +62,16 @@ func (f *adoptFallback) disarm() bool {
 	return true
 }
 
-// watch runs the fallback if adoption has not disarmed it within d.
 func (f *adoptFallback) watch(d time.Duration) (stop func()) {
 	t := time.AfterFunc(d, func() {
 		LogError("Live upgrade: adopting the panes took longer than %s", d)
 		if f.reexec(errors.New("the adoption watchdog fired")) {
-			// The adoption is still stuck, and can no longer pass the point
-			// of no return. Ending here hangs the panes up, rather than
-			// leaving a daemon that holds them and serves nothing.
 			os.Exit(1)
 		}
 	})
 	return func() { t.Stop() }
 }
 
-// reexec execs the previous binary to adopt the panes. It returns only when
-// that cannot be done, with every descriptor where it was, and reports
-// whether it took the adoption over: false when the adoption was disarmed or
-// another reexec ran first. Once it has, the adoption never completes, and
-// the caller ends the process.
 func (f *adoptFallback) reexec(why error) bool {
 	f.mu.Lock()
 	if f.state != 0 {
@@ -139,7 +102,6 @@ func (f *adoptFallback) reexec(why error) bool {
 	return true
 }
 
-// withoutEnv is env without key.
 func withoutEnv(env []string, key string) []string {
 	out := env[:0:0]
 	for _, kv := range env {
@@ -151,7 +113,6 @@ func withoutEnv(env []string, key string) []string {
 	return out
 }
 
-// adoptWatchdogTimeout is adoptWatchdogDefault, or the test's override.
 func adoptWatchdogTimeout() time.Duration {
 	if handoffTestOn() {
 		if d := testknob.Millis("handoff_watchdog_ms"); d > 0 {
@@ -161,9 +122,6 @@ func adoptWatchdogTimeout() time.Duration {
 	return adoptWatchdogDefault
 }
 
-// handoffTestFailure fails an adoption on purpose when a test asks, in the
-// image a handoff execs but never in its fallback: the handoff_fail knob is
-// error, hang or panic.
 func handoffTestFailure() error {
 	if !handoffTestOn() || os.Getenv(handoffFallbackEnv) != "" {
 		return nil
@@ -179,27 +137,17 @@ func handoffTestFailure() error {
 	return nil
 }
 
-// How this image was started, read before adoption clears the variables
-// that say so, for handoffTestCrash's points after that.
 var (
 	startedAsFallback = os.Getenv(handoffFallbackEnv) != ""
 	startedByKeeper   = os.Getenv(handoffKeptEnv) != ""
 )
 
-// The points of an adoption a test can end the new image at.
 const (
 	crashAtStart       = "start"
 	crashWhileAdopting = "adopt"
 	crashServing       = "serve"
 )
 
-// handoffTestCrash ends this image hard when a test asks, as a fatal runtime
-// error or the out-of-memory killer would, with no recover and no fallback
-// able to run: the handoff_crash knob names the point, start, adopt or
-// serve, and handoff_crash_mode is kill (SIGKILL, the default) or
-// panic (in a goroutine of its own). It fires in the image a handoff execs;
-// fallback fires at the adopt point of the fallback image instead. It never
-// fires in an image a keeper started.
 func handoffTestCrash(point string) {
 	if !handoffTestOn() || startedByKeeper {
 		return

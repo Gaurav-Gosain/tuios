@@ -13,10 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// These tests pin the queue's parts: the wire form the client sends, and the
-// files the daemon writes for them, which must stay in the paste folder,
-// never go through a link, and go on the sweep.
-
 // TestQueuePartsWire: the parts as the client puts them on the wire, and every
 // message the daemon must refuse before it queues anything.
 func TestQueuePartsWire(t *testing.T) {
@@ -80,7 +76,6 @@ func TestQueuedReplyFilesStayInThePasteFolder(t *testing.T) {
 		t.Errorf("mode %v, want %v", info.Mode().Perm(), pasteFilePerm)
 	}
 
-	// Past an image's hour it stays. Past a day the sweep takes it.
 	*now = now.Add(2 * time.Hour)
 	s.sweep()
 	if _, err := os.Stat(path); err != nil {
@@ -92,7 +87,6 @@ func TestQueuedReplyFilesStayInThePasteFolder(t *testing.T) {
 		t.Errorf("the sweep kept a reply file past a day: %v", err)
 	}
 
-	// A link where the folder goes is refused, and its target gets nothing.
 	s2, dir2, _ := newTestPasteStore(t)
 	target := t.TempDir()
 	if err := os.MkdirAll(filepath.Dir(dir2), 0o700); err != nil {
@@ -178,8 +172,6 @@ func TestALongMessageKeepsEveryFileItWrites(t *testing.T) {
 func TestPasteFilesOfTheSameSecondGoInTheOrderTheyWereWritten(t *testing.T) {
 	s, dir, _ := newTestPasteStore(t)
 	s.maxFiles = 3
-	// Every file already on disk gets the same time, later than any new
-	// file's, so the cap can tell them apart by nothing but their names.
 	same := time.Now().Add(time.Hour)
 	var paths []string
 	for i := range 10 {
@@ -203,7 +195,6 @@ func TestPasteFilesOfTheSameSecondGoInTheOrderTheyWereWritten(t *testing.T) {
 	}
 }
 
-// nineImages is one image more than a message takes.
 func nineImages() []queuePart {
 	out := make([]queuePart, queueMaxImages+1)
 	for i := range out {

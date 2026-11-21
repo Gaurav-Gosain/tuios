@@ -16,18 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// awakeHolder holds the machine awake with a child process: on Linux
-// systemd-inhibit, which takes logind's inhibitor lock on idle and sleep, and
-// on macOS caffeinate, which takes a power assertion against idle sleep and,
-// on AC power, system sleep. Each runs cat as its command, and cat reads a
-// pipe whose write end only the daemon has. The lock lasts as long as cat
-// runs, so it ends when the daemon closes the pipe: on release, and on its
-// own when the daemon exits or execs a new image, since Go opens the pipe
-// close-on-exec. No signal is needed and nothing is left behind.
-//
-// The idea and the systemd-inhibit and caffeinate arguments come from Kero
-// (github.com/egoist/kero, awake_linux.go and awake_darwin.go, MIT). See
-// NOTICE.
 type awakeHolder struct {
 	cur *awakeProc
 }
@@ -39,7 +27,6 @@ type awakeProc struct {
 	exited   chan struct{}
 }
 
-// awakeCommand is the holder's command line, cat excluded.
 func awakeCommand(why string) (string, []string) {
 	if runtime.GOOS == "darwin" {
 		return "/usr/bin/caffeinate", []string{"-i", "-s"}
@@ -47,7 +34,6 @@ func awakeCommand(why string) (string, []string) {
 	return "systemd-inhibit", []string{"--what=idle:sleep", "--who=tuios", "--why=" + why, "--mode=block"}
 }
 
-// awakeMethod names the holder for status and doctor output.
 func awakeMethod() string {
 	if runtime.GOOS == "darwin" {
 		return "caffeinate"
@@ -55,8 +41,6 @@ func awakeMethod() string {
 	return "systemd-inhibit"
 }
 
-// awakeHoldStartWait is how long take waits for a holder that fails at once,
-// such as systemd-inhibit refused by logind, to say so.
 const awakeHoldStartWait = 300 * time.Millisecond
 
 func (h *awakeHolder) take(why string, lost chan<- error) error {
@@ -82,7 +66,6 @@ func (h *awakeHolder) take(why string, lost chan<- error) error {
 		_ = w.Close()
 		return err
 	}
-	// The child has its copy of the read end.
 	_ = r.Close()
 	p := &awakeProc{cmd: cmd, w: w, exited: make(chan struct{})}
 	waitErr := make(chan error, 1)
@@ -98,16 +81,12 @@ func (h *awakeHolder) take(why string, lost chan<- error) error {
 		}
 		waitErr <- errfmt.Errorf("%s stopped: %s", name, msg)
 	}()
-	// A holder the system refuses exits at once. Wait a short time for that,
-	// so the caller can say why instead of reporting a hold that is not
-	// there. A holder that runs is not waited for.
 	select {
 	case err := <-waitErr:
 		_ = w.Close()
 		return err
 	case <-time.After(awakeHoldStartWait):
 	}
-	// From here an exit that release did not ask for is a hold lost.
 	go func() {
 		err := <-waitErr
 		if p.released.Load() {
@@ -129,7 +108,6 @@ func (h *awakeHolder) release() {
 		return
 	}
 	p.released.Store(true)
-	// Closing the pipe ends cat, and with it the holder and its lock.
 	_ = p.w.Close()
 	select {
 	case <-p.exited:

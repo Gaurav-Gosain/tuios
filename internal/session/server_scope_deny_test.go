@@ -27,9 +27,6 @@ func TestLinkDenyCoversEveryServersState(t *testing.T) {
 	resetDenyKeysCache(t)
 	base := serverscope.BaseStateHome()
 	t.Cleanup(func() { _ = serverscope.Apply("") })
-	// The isolated test tree points every XDG folder at one place, which would
-	// let the config folder's deny entry stand in for the state folder's. Each
-	// gets a folder of its own inside the tree here.
 	config, data := xdg.ConfigHome, xdg.DataHome
 	xdg.ConfigHome, xdg.DataHome = filepath.Join(config, "config-home"), filepath.Join(data, "data-home")
 	t.Cleanup(func() { xdg.ConfigHome, xdg.DataHome = config, data })
@@ -115,9 +112,6 @@ func TestLinkDenyCoversEveryServersSockets(t *testing.T) {
 	}
 }
 
-// resetDenyKeysCache empties the prepared deny lists before and after a test
-// that moves the folders they are built from, since a list is reused for a
-// couple of seconds and its key does not name those folders.
 func resetDenyKeysCache(t *testing.T) {
 	reset := func() {
 		denyKeysCache.Lock()

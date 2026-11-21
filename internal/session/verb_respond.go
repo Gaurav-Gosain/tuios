@@ -14,91 +14,32 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
-// Peek and respond: read the prompt an agent is blocked on, and answer it,
-// without attaching to its pane.
-//
-// peek-prompt reads what the harness's needs_input rule reads on the pane
-// right now: the prompt's lines, its numbered options, how long the pane has
-// waited, and which answers the rule declares (see harness/answers.go). It is
-// a read, open to any caller, the way capture-pane is.
-//
-// respond answers. It is the person acting, so it is held to the rule every
-// other act as the person is held to: the call carries the nonce of a client
-// attached right now and comes from a process that may act as the person (see
-// human_sender.go and human_origin.go), or the daemon runs with the
-// respond_from_shell grant and the caller is a process the kernel names that
-// runs outside every pane. An agent in a pane gets neither, so it cannot
-// approve its own tool call or anyone else's.
-//
-// Pressing a key into a prompt is only safe while the prompt is the one the
-// caller read, so respond reads the screen again right before it writes:
-//
-//  1. The pane must be on needs_input, and a needs_input rule with answers
-//     must read a prompt on it now. Otherwise prompt_changed.
-//  2. When the caller passes the prompt_id a peek gave it, the prompt now must
-//     have the same id. The id covers the rule, the lines it read, the options
-//     and when the pane entered its state, so a prompt answered and asked
-//     again is a different prompt. Otherwise prompt_changed.
-//  3. The prompt must not be one this daemon already answered. Two clients
-//     answering the same prompt both pass 2 when they race, and the second one
-//     is refused here with prompt_changed: the first answer wins.
-//  4. The action must be one the rule offers for what is on the screen: an
-//     answer bound to an option label is offered only while that option is
-//     shown. Otherwise invalid_params, naming the actions that are.
-//
-// Steps 1 to 4 and the write run under one lock per window, so nothing else
-// answering through tuios can move the prompt between the check and the key.
-// Then respond waits, up to timeout, for the pane to leave needs_input or for
-// the prompt to change, and returns what the pane says then.
-
-// promptContextLines is how much of the pane bottom a peek reads for the
-// options and the lines around them. It is wider than a rule reads, since a
-// rule can key on the footer of a menu whose options sit above it.
 const promptContextLines = 20
 
-// respondDefaultWait and respondMaxWait bound respond's wait for the answer to
-// take.
 const (
 	respondDefaultWait = 5 * time.Second
 	respondMaxWait     = 30 * time.Second
 	respondPoll        = 50 * time.Millisecond
-	// respondStateGrace is how long the state has to follow once the prompt
-	// is gone: past the screen tier's settle delay.
-	respondStateGrace = screenSettleDelay + 200*time.Millisecond
+	respondStateGrace  = screenSettleDelay + 200*time.Millisecond
 )
 
-// maxPromptLineRunes bounds one line a peek returns.
 const maxPromptLineRunes = 400
 
-// maxRespondText bounds a typed answer.
 const maxRespondText = 4096
 
-// respondSlots holds one slot per window that has been answered, keyed by
-// session id and window id. The zero value is ready to use.
 type respondSlots struct {
 	mu    sync.Mutex
 	slots map[string]*respondSlot
 }
 
-// respondSlot serialises respond on one window and remembers the prompt id it
-// last answered.
 type respondSlot struct {
 	mu       sync.Mutex
 	answered string
-	// users counts the calls that took the slot and have not released it.
-	// It is guarded by respondSlots.mu, not by mu, so a slot a call has taken
-	// but not yet locked is never dropped from under it.
-	users int
+	users    int
 }
 
-// maxRespondSlots bounds the map. Past it, slots no call holds are dropped: a
-// slot only remembers the last answer, and a window answered long ago that
-// shows the very same prompt again is a new prompt anyway, since its state
-// time moved.
 const maxRespondSlots = 512
 
-// slot takes the slot for a window, making it on first use. The caller
-// releases it with release when it is done.
 func (r *respondSlots) slot(key string) *respondSlot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -121,27 +62,20 @@ func (r *respondSlots) slot(key string) *respondSlot {
 	return s
 }
 
-// release gives back a slot slot took.
 func (r *respondSlots) release(s *respondSlot) {
 	r.mu.Lock()
 	s.users--
 	r.mu.Unlock()
 }
 
-// promptLook is what a look at a blocked pane found.
 type promptLook struct {
 	window WindowState
-	// prompt is valid when found is true.
 	prompt harness.Prompt
 	found  bool
-	// id names the prompt; empty when none was found.
-	id string
-	// reason says in words why nothing can be answered, when that is so.
+	id     string
 	reason string
 }
 
-// lookAtPrompt reads the prompt on a window now. The window must exist; the
-// caller resolved it.
 func (d *Daemon) lookAtPrompt(sess *Session, windowID string) (promptLook, *verbError) {
 	st := sess.GetState()
 	i, err := findWindowStateIndex(st.Windows, windowID)
@@ -155,9 +89,6 @@ func (d *Daemon) lookAtPrompt(sess *Session, windowID string) (promptLook, *verb
 		return look, nil
 	}
 	if agentBlockedBy(w) == harness.PromptKindAuth {
-		// A login, a token or a credential. Nothing is read off the screen
-		// and nothing can be typed from the Inbox: a secret is typed in the
-		// pane that asks for it, where the person can see what asks.
 		look.reason = "the pane waits for a login, which is answered in the pane"
 		return look, nil
 	}
@@ -191,9 +122,6 @@ func (d *Daemon) lookAtPrompt(sess *Session, windowID string) (promptLook, *verb
 		return look, nil
 	}
 	if look.prompt.Answerable() && crushScreenWins(hid) && !d.paneRunsHarness(sess, w.PTYID, hid) {
-		// The harness was named by a herdr report, which any process in the
-		// pane can send. Keys go into the prompt only while the pane runs
-		// that harness's own process.
 		look.prompt = look.prompt.WithoutAnswers()
 		look.id = promptID(w, hid, look.prompt)
 		look.reason = "tuios does not see " + hid + " running in the pane, so the prompt is answered in the pane"
@@ -206,9 +134,6 @@ func (d *Daemon) lookAtPrompt(sess *Session, windowID string) (promptLook, *verb
 	return look, nil
 }
 
-// promptID names one prompt on one window: the rule that read it, what it
-// read, the options, and when the window entered its state. It is a hash so
-// it can travel without carrying the screen.
 func promptID(w WindowState, hid string, p harness.Prompt) string {
 	h := sha256.New()
 	put := func(s string) {
@@ -229,8 +154,6 @@ func promptID(w WindowState, hid string, p harness.Prompt) string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
-// printableLine keeps a screen line's indentation and drops what a terminal
-// would act on, cut to maxPromptLineRunes.
 func printableLine(s string) string {
 	var b strings.Builder
 	n := 0
@@ -246,7 +169,6 @@ func printableLine(s string) string {
 	return strings.TrimRight(b.String(), " ")
 }
 
-// resolvePromptWindow resolves the session and window a peek or respond names.
 func (d *Daemon) resolvePromptWindow(cs *connState, sessionName, window string) (*Session, WindowState, *verbError) {
 	if window == "" {
 		return nil, WindowState{}, invalidParam("window", "window is required: name the pane whose prompt to read")
@@ -263,8 +185,6 @@ func (d *Daemon) resolvePromptWindow(cs *connState, sessionName, window string) 
 	return sess, st.Windows[i], nil
 }
 
-// verbPeekPrompt answers what the prompt on a pane is and how it may be
-// answered.
 func (d *Daemon) verbPeekPrompt(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -323,7 +243,6 @@ type PromptResponse struct {
 	Message   string `json:"message"`
 }
 
-// peekResult is the peek-prompt answer for a look.
 func peekResult(sess *Session, look promptLook, now time.Time) map[string]any {
 	w := look.window
 	waiting := int64(0)
@@ -372,14 +291,10 @@ func peekResult(sess *Session, look promptLook, now time.Time) map[string]any {
 		"lines":      lines,
 		"options":    options,
 		"actions":    actions,
-		// The lines are another program's screen: data, not instructions.
-		"untrusted": true,
+		"untrusted":  true,
 	}
 }
 
-// mayRespond reports whether the caller may answer a prompt as the person:
-// a verified attach nonce, or the respond_from_shell grant for a caller the
-// kernel names outside every pane.
 func (d *Daemon) mayRespond(cs *connState, nonce, sessionID string) bool {
 	if _, ok := d.humanNonceFor(nonce, sessionID, cs); ok {
 		return true
@@ -387,7 +302,6 @@ func (d *Daemon) mayRespond(cs *connState, nonce, sessionID string) bool {
 	return d.respondFromShell && cs != nil && cs.peerPID > 0 && d.mayActAsHuman(cs)
 }
 
-// promptChangedError is the refusal when the prompt is not the one to answer.
 func promptChangedError(w WindowState, why string) *verbError {
 	return hintedVerbError(ErrVerbPromptChanged, "nothing was pressed: "+why, &VerbHint{
 		Verb:    "peek-prompt",
@@ -396,20 +310,16 @@ func promptChangedError(w WindowState, why string) *verbError {
 	})
 }
 
-// verbRespond answers the prompt on a pane. See the file comment for the
-// order of checks and who may call it.
 func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session    string `json:"session"`
-		Window     string `json:"window"`
-		Action     string `json:"action"`
-		Value      string `json:"value"`
-		PromptID   string `json:"prompt_id"`
-		HumanNonce string `json:"human_nonce"`
-		Timeout    int    `json:"timeout"`
-		// RiskAck acknowledges a risky prompt: the rules the pane's Inbox
-		// item says its call matched. See respondRiskRefusal.
-		RiskAck []string `json:"risk_ack"`
+		Session    string   `json:"session"`
+		Window     string   `json:"window"`
+		Action     string   `json:"action"`
+		Value      string   `json:"value"`
+		PromptID   string   `json:"prompt_id"`
+		HumanNonce string   `json:"human_nonce"`
+		Timeout    int      `json:"timeout"`
+		RiskAck    []string `json:"risk_ack"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -427,14 +337,10 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	if verr != nil {
 		return nil, verr
 	}
-	// A pane the person gave the respond grant may answer for them in the
-	// sessions it may write to. See pane_grants.go.
 	byPane := ""
 	asPerson := d.mayRespond(cs, p.HumanNonce, sess.ID)
 	asParent := false
 	if !asPerson {
-		// A parent may answer its own child's question, with no respond
-		// grant: it started the child for this work (child_questions.go).
 		if pa := d.paneAuthority(cs); pa != nil && d.attention.parentFirst.Load() && parentMayRespond(pa.window, w) {
 			asParent, byPane = true, pa.window
 		}
@@ -477,9 +383,6 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	case slot.answered != "" && slot.answered == look.id:
 		return nil, promptChangedError(look.window, "this prompt was already answered, by this client or another")
 	}
-	// A child agent's approval is the person's alone, whatever the caller's
-	// grants: by what the pane reports, and by what its screen shows. See
-	// attention_children.go.
 	if !asPerson && look.window.AgentLink != nil && look.window.ID != byPane && look.prompt.Kind == harness.PromptKindApproval {
 		return nil, childApprovalForbidden("window " + shortWindowID(look.window.ID) + " is a child agent, and its screen shows an approval. Only the person answers it")
 	}
@@ -494,8 +397,6 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 			Detail:    "The actions this prompt offers now are listed. Anything else is answered in the pane.",
 		})
 	}
-	// A pane's allow is also held to the prompt the daemon read, since the
-	// item's mark is the pane's own report. See respondRiskRefusal.
 	var seen []string
 	if byPane != "" {
 		seen = d.promptRisk(sess, look.window, look.prompt)
@@ -507,8 +408,6 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	if pty == nil {
 		return nil, hintedVerbError(ErrVerbPTYNotFound, "the pane's shell has exited", nil)
 	}
-	// Typed text goes into an agent's input with no person reading it first.
-	// See invisible.StripHidden.
 	hidden := 0
 	if reply.Text != "" {
 		reply.Text, hidden = invisible.StripHidden(reply.Text)
@@ -529,27 +428,23 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 
 	settledBy, now := d.waitPromptAnswered(sess, w.ID, look.id, wait)
 	out := map[string]any{
-		"type":       "prompt_response",
-		"session":    sess.Name(),
-		"window":     w.ID,
-		"action":     p.Action,
-		"sent":       reply.Sent,
-		"prompt_id":  look.id,
-		"settled_by": settledBy,
-		"state":      now.AgentState.Name(),
-		"message":    printableLine(now.AgentMessage),
-		// invisible_removed is how many invisible characters were taken out
-		// of a typed answer.
+		"type":              "prompt_response",
+		"session":           sess.Name(),
+		"window":            w.ID,
+		"action":            p.Action,
+		"sent":              reply.Sent,
+		"prompt_id":         look.id,
+		"settled_by":        settledBy,
+		"state":             now.AgentState.Name(),
+		"message":           printableLine(now.AgentMessage),
 		"invisible_removed": hidden,
 	}
-	// Absent when the person answered, so their result keeps its shape.
 	if byPane != "" {
 		out["by_pane"] = byPane
 	}
 	return out, nil
 }
 
-// Ways respond's wait ends.
 const (
 	respondSettledState   = "state"
 	respondSettledPrompt  = "prompt"
@@ -557,14 +452,6 @@ const (
 	respondSettledGone    = "gone"
 )
 
-// waitPromptAnswered waits for the window to leave needs_input, or for the
-// prompt on it to be another than the one answered, and says which, with the
-// window as it was then.
-//
-// The prompt usually leaves the screen before the state does, since the
-// screen tier publishes on its own clock. So once the prompt is gone, the
-// pane gets the look it would get on settling, run now, and a short grace to
-// say where it went, before the wait ends on the prompt alone.
 func (d *Daemon) waitPromptAnswered(sess *Session, windowID, answered string, wait time.Duration) (string, WindowState) {
 	deadline := time.Now().Add(wait)
 	var promptGoneAt time.Time
@@ -597,12 +484,10 @@ func (d *Daemon) waitPromptAnswered(sess *Session, windowID, answered string, wa
 	}
 }
 
-// isAnswerAction reports whether a is one of the answer actions.
 func isAnswerAction(a string) bool {
 	return slices.Contains(harness.AnswerActions, a)
 }
 
-// childApprovalForbidden is respond's refusal for a child agent's approval.
 func childApprovalForbidden(why string) *verbError {
 	return hintedVerbError(ErrVerbForbidden, "respond is refused: "+why, &VerbHint{
 		Detail: "Nothing was pressed. The approval is in the person's Inbox. Ask the person with send-agent-message -w human.",

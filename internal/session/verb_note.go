@@ -9,14 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// Return notes.
-//
-// A note is one short line on a session or a pane that says what it is for
-// or what comes next, for the person (or agent) who comes back to it later.
-// A preserved layout says where things were; it does not say what you meant
-// to do next. Only set-note writes a note, the merge keeps it through every
-// client sync (see retainDaemonExclusive), and it is saved with the session.
-
 // NoteMaxBytes is the longest note the daemon keeps. A note is a line, not a
 // document: it has to fit a rail row and a dock message.
 const NoteMaxBytes = 200

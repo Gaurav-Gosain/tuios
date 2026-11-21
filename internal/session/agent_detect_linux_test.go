@@ -18,8 +18,6 @@ func TestForegroundGroupStaysInTheGroup(t *testing.T) {
 	if _, err := os.Stat("/proc/self/task"); err != nil {
 		t.Skip("no procfs")
 	}
-	// The leader is its own process group leader, with one child in the group
-	// and one that setsid moved out of it.
 	cmd := exec.Command("sh", "-c", "sleep 1000 & setsid sleep 1000 & wait")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
@@ -35,12 +33,6 @@ func TestForegroundGroupStaysInTheGroup(t *testing.T) {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 	})
-	// Each child starts as a fork of the shell, a shell in the leader's group,
-	// and becomes sleep when it execs. The second also moves out of the group
-	// through setsid. Counting one child in the group and one outside is not
-	// enough: the one in the group can still be the shell, before its exec.
-	// Wait for the tree to settle into an in-group sleep and one child
-	// outside the group.
 	settled := func() (bool, string) {
 		var in []string
 		out := 0

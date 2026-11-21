@@ -17,57 +17,24 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// record-pane: one pane written to an asciicast v2 file.
-//
-// A recording is a stream-pane subscriber whose sink is a file. It starts
-// from a snapshot taken under the lock that reads the stream position, so the
-// first event paints the screen the pane showed, its history included, and
-// the output that follows continues exactly from there. Each output chunk is
-// an "o" event at the time the daemon took it, each resize an "r" event, and
-// mark-recording adds an "m" event. The format is the one asciinema, agg and
-// reel read: a JSON header line, then one JSON array per event.
-//
-// The daemon writes the file, because a detached session has no client. The
-// caller names the file. The person's own clients may write anywhere the user
-// may, as with the file verbs; a call over a link is held to the file verbs'
-// write rules (linkWriteFS). The file is the caller's and only theirs: mode
-// 0600, never through a symbolic link, never over an existing file unless
-// asked.
-//
-// A recording holds everything the pane printed while it ran, so nothing
-// records unless a caller asks. The input typed into the pane is not
-// recorded.
-//
-// It ends on stop-recording, at its duration, at its size cap, when the pane
-// ends, when the daemon stops and before a live upgrade hands the panes over.
-// The file is complete at every end: the last event is a whole line.
-
 const (
-	// recordDefaultMaxBytes is the size cap of a recording that names none.
 	recordDefaultMaxBytes = 64 << 20
-	// recordMaxBytes is the largest cap a caller may ask for.
-	recordMaxBytes = 1 << 30
-	// maxRecordings bounds the recordings one daemon runs at once.
-	maxRecordings = 16
-	// recordScrollback is how many history rows the first event carries.
-	recordScrollback = paneStreamScrollback
-	// recordFlushEvery is how often the file is flushed while output comes.
-	recordFlushEvery = time.Second
-	// maxRecordLabel bounds a marker's label.
-	maxRecordLabel = 200
+	recordMaxBytes        = 1 << 30
+	maxRecordings         = 16
+	recordScrollback      = paneStreamScrollback
+	recordFlushEvery      = time.Second
+	maxRecordLabel        = 200
 )
 
 // ErrVerbNoRecording is the code of stop-recording or mark-recording on a
 // pane that is not being recorded.
 const ErrVerbNoRecording = "no_recording"
 
-// recordings is the daemon's table of running recordings, by PTY id.
 type recordings struct {
 	mu sync.Mutex
 	m  map[string]*paneRecorder
 }
 
-// paneRecorder is one running recording.
 type paneRecorder struct {
 	d      *Daemon
 	pty    *PTY
@@ -78,15 +45,12 @@ type paneRecorder struct {
 	pos    int64
 	cols   int
 	rows   int
-	// snap is the snapshot subscribe took, until writeSnap writes it.
-	snap *TerminalState
+	snap   *TerminalState
 
 	f    *os.File
 	w    *bufio.Writer
 	t0   time.Time
 	last float64
-	// held is the start of a UTF-8 sequence the last chunk cut, written
-	// with the next output.
 	held []byte
 
 	maxBytes int64
@@ -94,17 +58,13 @@ type paneRecorder struct {
 	events   int
 	started  time.Time
 
-	// marks carries mark-recording labels to the recorder goroutine, which
-	// alone writes the file. stop asks it to end with a reason.
-	marks chan string
-	stop  chan string
-	done  chan struct{}
-	// reason says why the recording ended. Set before done closes.
+	marks  chan string
+	stop   chan string
+	done   chan struct{}
 	reason string
 	err    error
 }
 
-// recordSummary is what stop-recording and list-recordings report.
 func (r *paneRecorder) summary() map[string]any {
 	out := map[string]any{
 		"path":       r.path,
@@ -122,7 +82,6 @@ func (r *paneRecorder) summary() map[string]any {
 	return out
 }
 
-// verbRecordPane starts a recording.
 func (d *Daemon) verbRecordPane(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session    string `json:"session"`
@@ -172,8 +131,6 @@ func (d *Daemon) verbRecordPane(cs *connState, params json.RawMessage) (any, *ve
 	}
 	defer fsys.Close()
 
-	// The table is held from the check to the insert, so two starts on one
-	// pane cannot both pass.
 	d.recordings.mu.Lock()
 	defer d.recordings.mu.Unlock()
 	if d.recordings.m == nil {
@@ -244,8 +201,6 @@ func (d *Daemon) verbRecordPane(cs *connState, params json.RawMessage) (any, *ve
 		return nil, fileError("record-pane", p.Out, err)
 	}
 	d.recordings.m[pty.ID] = r
-	// The flag is set before the answer, so a list-windows right after the
-	// start says recording. run pushes it to the clients.
 	pty.recording.Store(true)
 	go r.run(time.Duration(p.DurationMS) * time.Millisecond)
 	LogBasic("Recording pane %s to %s", shortWindowID(win.ID), p.Out)
@@ -259,8 +214,6 @@ func (d *Daemon) verbRecordPane(cs *connState, params json.RawMessage) (any, *ve
 	}, nil
 }
 
-// recordTarget is the window target names in sess, the focused one when
-// target is empty, and its live PTY.
 func (d *Daemon) recordTarget(sess *Session, target string) (WindowState, *PTY, *verbError) {
 	state := sess.GetState()
 	if target == "" {
@@ -281,8 +234,6 @@ func (d *Daemon) recordTarget(sess *Session, target string) (WindowState, *PTY, 
 	return state.Windows[idx], pty, nil
 }
 
-// recorderFor is the recording of the pane target names in the session, or
-// the error to answer with.
 func (d *Daemon) recorderFor(cs *connState, session, target, verb string) (*paneRecorder, *verbError) {
 	sess, verr := d.resolveVerbSession(cs, session)
 	if verr != nil {
@@ -303,7 +254,6 @@ func (d *Daemon) recorderFor(cs *connState, session, target, verb string) (*pane
 	return r, nil
 }
 
-// verbStopRecording stops a recording and answers once the file is closed.
 func (d *Daemon) verbStopRecording(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -323,7 +273,6 @@ func (d *Daemon) verbStopRecording(cs *connState, params json.RawMessage) (any, 
 	return out, nil
 }
 
-// verbMarkRecording writes a marker into a recording.
 func (d *Daemon) verbMarkRecording(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -350,7 +299,6 @@ func (d *Daemon) verbMarkRecording(cs *connState, params json.RawMessage) (any, 
 	return map[string]any{"type": "recording_marked", "path": r.path, "window": r.window, "label": p.Label}, nil
 }
 
-// verbListRecordings lists the recordings that run.
 func (d *Daemon) verbListRecordings(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct{}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -368,8 +316,6 @@ func (d *Daemon) verbListRecordings(_ *connState, params json.RawMessage) (any, 
 	return map[string]any{"type": "recordings", "recordings": list}, nil
 }
 
-// stopRecordings ends every recording with reason and waits for the files to
-// close. The daemon calls it as it stops and before a live upgrade.
 func (d *Daemon) stopRecordings(reason string) {
 	d.recordings.mu.Lock()
 	all := make([]*paneRecorder, 0, len(d.recordings.m))
@@ -389,7 +335,6 @@ func (d *Daemon) stopRecordings(reason string) {
 	}
 }
 
-// end asks the recorder to stop with reason. The first reason wins.
 func (r *paneRecorder) end(reason string) {
 	select {
 	case r.stop <- reason:
@@ -397,8 +342,6 @@ func (r *paneRecorder) end(reason string) {
 	}
 }
 
-// subscribe takes the snapshot and subscribes from its position, as
-// paneStream.snapshotSubscribe does, and keeps the snapshot for writeSnap.
 func (r *paneRecorder) subscribe() *verbError {
 	for attempt := 0; ; attempt++ {
 		st := r.pty.GetTerminalState(recordScrollback, 0)
@@ -423,8 +366,6 @@ func (r *paneRecorder) subscribe() *verbError {
 	}
 }
 
-// writeSnap writes the snapshot the recorder holds as one output event. A
-// resync after a gap resets the player first, and says so with a marker.
 func (r *paneRecorder) writeSnap(resync bool) error {
 	st := r.snap
 	r.snap = nil
@@ -442,9 +383,6 @@ func (r *paneRecorder) writeSnap(resync bool) error {
 	return r.output(body)
 }
 
-// run copies the subscription into the file until the recording ends. It
-// tells the clients at the start and the end, so the rail marks the pane
-// while it records.
 func (r *paneRecorder) run(duration time.Duration) {
 	r.publish()
 	reason := r.loop(duration)
@@ -452,16 +390,12 @@ func (r *paneRecorder) run(duration time.Duration) {
 	r.publish()
 }
 
-// publish pushes the pane's recording flag to the session's clients. A pane
-// that has left its session has no one to tell.
 func (r *paneRecorder) publish() {
 	if s := r.pty.owner(); s != nil {
 		s.PublishLiveFacts()
 	}
 }
 
-// recordedPanes is the set of panes, by PTY id, that record-pane writes to a
-// file now.
 func (s *Session) recordedPanes() map[string]bool {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
@@ -477,7 +411,6 @@ func (s *Session) recordedPanes() map[string]bool {
 	return out
 }
 
-// loop is run's body. It returns why the recording ended.
 func (r *paneRecorder) loop(duration time.Duration) string {
 	tick := time.NewTicker(recordFlushEvery)
 	defer tick.Stop()
@@ -535,14 +468,10 @@ func (r *paneRecorder) loop(duration time.Duration) string {
 	}
 }
 
-// drain writes what the queue holds now, for a stop that must not lose the
-// output the pane wrote just before it.
 func (r *paneRecorder) drain() {
 	_, _ = r.takeAll()
 }
 
-// takeAll writes every chunk queued. closed reports the queue was closed:
-// the pane is gone.
 func (r *paneRecorder) takeAll() (closed bool, err error) {
 	for {
 		c, ok, isClosed := r.sub.out.pop()
@@ -558,8 +487,6 @@ func (r *paneRecorder) takeAll() (closed bool, err error) {
 	}
 }
 
-// take writes one chunk: a resize event, or the output past what the
-// recording holds.
 func (r *paneRecorder) take(c ptyChunk) error {
 	if c.isResize() {
 		if c.width == r.cols && c.height == r.rows {
@@ -587,8 +514,6 @@ func (r *paneRecorder) take(c ptyChunk) error {
 	return r.output(data)
 }
 
-// output writes data as an "o" event. A UTF-8 sequence cut at the end is held
-// for the next event, so no event carries half a character.
 func (r *paneRecorder) output(data []byte) error {
 	if len(r.held) > 0 {
 		data = append(r.held, data...)
@@ -605,15 +530,13 @@ func (r *paneRecorder) output(data []byte) error {
 	return r.event("o", string(data))
 }
 
-// incompleteTail is how many bytes at the end of b start a UTF-8 sequence
-// that b does not finish, 0 when b ends on a whole character.
 func incompleteTail(b []byte) int {
 	for i := 1; i <= 3 && i <= len(b); i++ {
 		c := b[len(b)-i]
 		if c < 0x80 {
 			return 0
 		}
-		if c >= 0xC0 { // the lead byte of a sequence
+		if c >= 0xC0 {
 			if utf8.FullRune(b[len(b)-i:]) {
 				return 0
 			}
@@ -623,11 +546,10 @@ func incompleteTail(b []byte) int {
 	return 0
 }
 
-// event writes one [time, code, data] line at the time now.
 func (r *paneRecorder) event(code, data string) error {
 	t := time.Since(r.t0).Seconds()
 	if r.events == 0 {
-		t = 0 // the snapshot: what the pane showed at the start
+		t = 0
 	}
 	if t < r.last {
 		t = r.last
@@ -640,7 +562,6 @@ func (r *paneRecorder) event(code, data string) error {
 	return nil
 }
 
-// writeLine writes v as one JSON line.
 func (r *paneRecorder) writeLine(v any) error {
 	b, err := jsonx.Marshal(v)
 	if err != nil {
@@ -652,8 +573,6 @@ func (r *paneRecorder) writeLine(v any) error {
 	return err
 }
 
-// recoverGap rebuilds a subscription that fell out of its queue: from the
-// ring when it still holds the position, from a new snapshot otherwise.
 func (r *paneRecorder) recoverGap() error {
 	r.pty.unsubscribeSub(r.subID, r.sub)
 	if sub, ok := r.pty.subscribeAt(r.subID, r.pos, false); ok {
@@ -667,13 +586,11 @@ func (r *paneRecorder) recoverGap() error {
 	return r.writeSnap(true)
 }
 
-// failed is the reason for a write that failed.
 func (r *paneRecorder) failed(err error) string {
 	r.err = err
 	return "write failed"
 }
 
-// exitReason says why the pane's stream ended, as stream-pane says it.
 func (r *paneRecorder) exitReason() string {
 	if r.pty.ctx.Err() != nil {
 		return "closed"
@@ -687,12 +604,8 @@ func (r *paneRecorder) exitReason() string {
 	return "closed"
 }
 
-// finish closes the file, drops the subscription and the table entry, and
-// tells the waiters.
 func (r *paneRecorder) finish(reason string) {
 	if len(r.held) > 0 {
-		// A cut sequence the pane never finished is written as it is; JSON
-		// turns it into U+FFFD.
 		held := r.held
 		r.held = nil
 		_ = r.event("o", string(held))
@@ -709,8 +622,6 @@ func (r *paneRecorder) finish(reason string) {
 	r.d.recordings.mu.Lock()
 	if r.d.recordings.m[r.pty.ID] == r {
 		delete(r.d.recordings.m, r.pty.ID)
-		// Cleared under the table's lock, so a start that takes the slot
-		// next sets it after this.
 		r.pty.recording.Store(false)
 	}
 	r.d.recordings.mu.Unlock()
@@ -723,12 +634,9 @@ func (r *paneRecorder) finish(reason string) {
 	close(r.done)
 }
 
-// recordVerbs is the recording verb family.
 func recordVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"record-pane": {
-			// A recording reads a pane and writes a file: a restricted
-			// caller gets neither from one verb.
 			scope:       scopeDeny,
 			link:        needFiles,
 			description: "Record a pane to an asciicast v2 file (.cast) that asciinema, agg and reel play. The first event paints the screen the pane shows now, its history included; then every output chunk and resize is an event at its real time. Input is not recorded. The recording runs until stop-recording, duration_ms, max_bytes or the pane's end. The file holds everything the pane prints while it runs.",
@@ -769,8 +677,6 @@ func recordVerbs() map[string]verbEntry {
 			handler:  (*Daemon).verbStopRecording,
 		},
 		"mark-recording": {
-			// A label in a recording the person started. Under scope own, only
-			// the caller's own pane.
 			scope:       scopeSelf,
 			link:        needFiles,
 			description: "Write a marker (an m event) into a pane's recording at the current time, so a player can jump to the moment.",

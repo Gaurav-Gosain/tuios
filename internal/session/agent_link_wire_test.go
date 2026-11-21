@@ -6,13 +6,6 @@ import (
 	"testing"
 )
 
-// The agent link rides the state sync and the session listing, both gob. A
-// client from before the link, and a daemon from before it, must read the
-// other side's frames as they always did: gob drops a field the reader does
-// not have and leaves a field the writer did not send at its zero value.
-// These pin both directions, and that a new peer gets the whole link.
-
-// preLinkWindow is a window as a build before the agent link decodes it.
 type preLinkWindow struct {
 	ID        string
 	StartedBy *PaneRef

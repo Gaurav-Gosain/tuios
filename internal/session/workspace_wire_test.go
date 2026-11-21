@@ -6,11 +6,6 @@ import (
 	"testing"
 )
 
-// The two workspace fields are additive, so the only thing worth pinning is
-// that they survive a round trip both ways: a newer peer's payload must not
-// break an older reader, and an older peer's payload must read back as
-// "unknown" rather than as workspace zero meaning something.
-
 // TestOlderPayloadReadsAsUnknown: a daemon that predates the fields sends
 // neither, and the client has to read that as "I do not know" rather than as
 // workspace zero.
@@ -27,7 +22,6 @@ func TestOlderPayloadReadsAsUnknown(t *testing.T) {
 	if len(out.Windows) != 1 || out.Windows[0].Workspace != 0 {
 		t.Errorf("a window with no workspace read back as %+v", out.Windows)
 	}
-	// Everything the older payload did carry is untouched.
 	if out.Name != "work" || out.Windows[0].Title != "nvim" {
 		t.Errorf("the older fields were disturbed: %+v", out)
 	}
@@ -46,7 +40,6 @@ func TestNewerPayloadIsIgnorableByAnOlderReader(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	// The shape an older build compiled against.
 	var older struct {
 		Name    string `json:"name"`
 		Windows []struct {

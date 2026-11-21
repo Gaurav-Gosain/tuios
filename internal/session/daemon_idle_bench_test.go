@@ -1,24 +1,5 @@
 package session
 
-// What the daemon costs when nobody is doing anything.
-//
-// The client's idle cost is a defended invariant: BenchmarkIdleTick pins it at
-// zero work and zero renders per tick, and a change that moves it is reverted.
-// The daemon has no such guard, and unlike the client it is not driven by
-// output at all: agentMonitor (daemon.go) runs on a 2 second ticker whatever
-// the panes are doing, and every tick walks every session's every window,
-// resolves each one's foreground process, and does it inside the session state
-// lock.
-//
-// That makes the daemon's floor O(panes) per two seconds, forever, on a machine
-// where every pane is a shell sitting at a prompt. These benchmarks price the
-// two halves of it separately, because they scale differently and only one of
-// them is Go code: the walk itself, and one process resolution, which on Linux
-// is four reads out of procfs.
-//
-// Benchmark only. The pane counts build real PTYs, so the setup is the
-// expensive part; keep the counts to the ones that answer the question.
-
 import (
 	"testing"
 )

@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// waitForSavedState waits for a session's state file to appear, and returns
-// whether it did within the deadline.
 func waitForSavedState(name string, within time.Duration) bool {
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
@@ -62,7 +60,6 @@ func TestAnIdleSessionDoesNotWakeTheSaver(t *testing.T) {
 	stop := StartPeriodicSave(func() *SessionState { return state }, &dirty, &stale, &wakes)
 	defer stop()
 
-	// The first look, then three more intervals of nothing.
 	time.Sleep(resurrectionDirtyInterval*4 + resurrectionDirtyInterval/2)
 	if waitForSavedState("idle", 0) {
 		t.Error("an unchanged session was written; an idle session is meant to cost nothing")
@@ -86,7 +83,7 @@ func TestSessionMutationsMarkTheStateDirty(t *testing.T) {
 	sess := newTestSession(t)
 
 	take := func() bool { return sess.stateDirty.Take() }
-	take() // clear whatever creation left
+	take()
 
 	if err := sess.SetDisplayName("labelled"); err != nil {
 		t.Fatalf("SetDisplayName: %v", err)

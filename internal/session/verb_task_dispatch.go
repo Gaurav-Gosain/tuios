@@ -9,30 +9,24 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// taskDispatchParams are what get-task-dispatch and set-task-dispatch take.
 type taskDispatchParams struct {
-	Action     string `json:"action"`
-	Mode       string `json:"mode"`
-	Session    string `json:"session"`
-	Project    string `json:"project"`
-	Quiet      string `json:"quiet"`
-	HumanNonce string `json:"human_nonce"`
-	// With preset, or mode auto: the board's preset.
+	Action         string `json:"action"`
+	Mode           string `json:"mode"`
+	Session        string `json:"session"`
+	Project        string `json:"project"`
+	Quiet          string `json:"quiet"`
+	HumanNonce     string `json:"human_nonce"`
 	Agent          string `json:"agent"`
 	Model          string `json:"model"`
 	Effort         string `json:"effort"`
 	PermissionMode string `json:"permission_mode"`
 	Machine        string `json:"machine"`
-	// With cap: auto's caps, 0 for the default.
-	Cap        *int `json:"cap"`
-	MachineCap *int `json:"machine_cap"`
-	// With verify: the board's verify command ("" or off clears it), and
-	// its limit in seconds, 0 for the default.
-	Verify        string `json:"verify"`
-	VerifyTimeout int    `json:"verify_timeout"`
+	Cap            *int   `json:"cap"`
+	MachineCap     *int   `json:"machine_cap"`
+	Verify         string `json:"verify"`
+	VerifyTimeout  int    `json:"verify_timeout"`
 }
 
-// preset checks the preset p names, nil when it names no agent.
 func (d *Daemon) presetParam(p taskDispatchParams) (*DispatchPreset, *verbError) {
 	agent := strings.TrimSpace(p.Agent)
 	if agent == "" {
@@ -53,8 +47,6 @@ func (d *Daemon) presetParam(p taskDispatchParams) (*DispatchPreset, *verbError)
 	return &DispatchPreset{Agent: agent, Model: p.Model, Effort: p.Effort, PermissionMode: p.PermissionMode, Machine: machine}, nil
 }
 
-// dispatchBoardParam is the board a call names: its project, or the session's
-// own cards. "" when it names none, which only get-task-dispatch allows.
 func (d *Daemon) dispatchBoardParam(cs *connState, p taskDispatchParams, need bool) (string, *Session, *verbError) {
 	project, verr := projectParam("project", p.Project)
 	if verr != nil {
@@ -70,7 +62,6 @@ func (d *Daemon) dispatchBoardParam(cs *connState, p taskDispatchParams, need bo
 	return dispatchBoardKey(sess.Name(), project), sess, nil
 }
 
-// verbGetTaskDispatch answers get-task-dispatch.
 func (d *Daemon) verbGetTaskDispatch(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p taskDispatchParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -86,10 +77,6 @@ func (d *Daemon) verbGetTaskDispatch(cs *connState, params json.RawMessage) (any
 	return st, nil
 }
 
-// verbSetTaskDispatch answers set-task-dispatch. Anyone may pause. A mode,
-// a resume and quiet hours are the person's, a shell's outside every pane, a
-// plugin's, or a pane's that holds admin: an agent must not turn on the
-// dispatch that feeds it, or start it again after a safety switch stopped it.
 func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p taskDispatchParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -121,8 +108,6 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 		})
 	}
 	if p.Action == dispatchActionVerify && caller.window != "" {
-		// Admin too: the command is what judges an agent's work, so no
-		// agent writes it.
 		return nil, newVerbError(ErrVerbForbidden, "set-task-dispatch verify is refused from every pane")
 	}
 	verify, verr := verifyCommandParam(p.Verify, p.VerifyTimeout)
@@ -168,8 +153,6 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 			ds.f.Paused, ds.f.PausedBy, ds.f.PausedAt = true, caller.by, time.Now().UnixNano()
 		}
 	case dispatchActionResume:
-		// Resume lifts every switch a person must lift: the pause, a stop for
-		// a usage limit, and each board's stop and failure count.
 		ds.f.Paused, ds.f.PausedBy, ds.f.PausedAt, ds.f.Stopped = false, "", 0, ""
 		for k, b := range ds.f.Boards {
 			b.Failures, b.Stopped = 0, ""
@@ -220,7 +203,6 @@ func (d *Daemon) verbSetTaskDispatch(cs *connState, params json.RawMessage) (any
 	return st, nil
 }
 
-// taskDispatchVerbs are the registry entries of the dispatch verbs.
 func taskDispatchVerbs(humanNonce verbParam) map[string]verbEntry {
 	status := []verbParam{
 		{Name: "paused", Type: "bool", Description: "True while dispatch is paused."},

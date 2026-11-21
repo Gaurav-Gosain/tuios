@@ -8,10 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Security boundaries the review of the transfer engine found. These are kept
-// unit tests because each is a deterministic policy decision the E2E suite
-// cannot reach without a second machine linking in.
-
 // TestTransferEventsReachOnlyAFilesLink: a copy is the person's, so its events
 // reach a link only when the link may list the transfers, which needs files
 // and the relay capabilities, not list alone. A list-only link that
@@ -121,9 +117,9 @@ func TestADenyNameMatchesEveryFold(t *testing.T) {
 	ssh := filepath.Join(home, ".ssh")
 	for _, p := range []string{
 		filepath.Join(home, ".SSH", "authorized_keys"),
-		filepath.Join(home, ".\u017fsh", "authorized_keys"),  // long s
-		filepath.Join(home, ".s\u00adsh", "authorized_keys"), // soft hyphen
-		home, // an ancestor
+		filepath.Join(home, ".\u017fsh", "authorized_keys"),
+		filepath.Join(home, ".s\u00adsh", "authorized_keys"),
+		home,
 	} {
 		if !makeDenyKeys([]string{ssh}).holds(p) {
 			t.Errorf("%q passed the deny list for %q", p, ssh)

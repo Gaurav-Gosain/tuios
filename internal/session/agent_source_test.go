@@ -13,16 +13,12 @@ func TestParseAgentSource(t *testing.T) {
 		want AgentSource
 		ok   bool
 	}{
-		"":       {AgentSourceReport, true},
-		"report": {AgentSourceReport, true},
-		"osc":    {AgentSourceOSC, true},
-		"screen": {AgentSourceScreen, true},
-		"stall":  {AgentSourceStall, true},
-		"bogus":  {"", false},
-		// The detector's own source is daemon-internal, not something a caller
-		// reports, so it is not accepted from the wire. Nor is the transcript
-		// reader's, for the same reason: both are the daemon looking at the
-		// machine, and a caller naming one has looked at nothing.
+		"":           {AgentSourceReport, true},
+		"report":     {AgentSourceReport, true},
+		"osc":        {AgentSourceOSC, true},
+		"screen":     {AgentSourceScreen, true},
+		"stall":      {AgentSourceStall, true},
+		"bogus":      {"", false},
 		"detect":     {"", false},
 		"transcript": {"", false},
 	}
@@ -52,7 +48,6 @@ func TestLowerSourceCannotOverwriteHigher(t *testing.T) {
 
 	held := sess.GetState().Version
 
-	// A lower-ranked source loses, and is told so rather than getting an error.
 	refused := result(t, c.call(t, `{"id":2,"verb":"set-agent-state","params":{"session":"work","window":"Window","state":"working","source":"screen"}}`))
 	if refused["applied"] != false {
 		t.Fatalf("a screen report overwrote a harness report: %v", refused)
@@ -67,7 +62,6 @@ func TestLowerSourceCannotOverwriteHigher(t *testing.T) {
 		t.Fatalf("state after a refused report = %q, want needs_input", st)
 	}
 
-	// The same source updating its own claim is allowed.
 	again := result(t, c.call(t, `{"id":3,"verb":"set-agent-state","params":{"session":"work","window":"Window","state":"done","source":"report"}}`))
 	if again["applied"] != true || again["state"] != "done" {
 		t.Fatalf("a source could not update its own claim: %v", again)
@@ -108,12 +102,10 @@ func TestReportOutranksTheDetector(t *testing.T) {
 		t.Fatalf("detector claim source = %q, want detect", src)
 	}
 
-	// A stall report cannot take a pane the detector holds.
 	if _, applied, err := sess.ApplyAgentReport(id, AgentReport{State: AgentStateIdle, Source: AgentSourceStall}); err != nil || applied {
 		t.Fatalf("a stall report took a detector-held pane: applied=%v err=%v", applied, err)
 	}
 
-	// A report can.
 	if _, applied, err := sess.ApplyAgentReport(id, AgentReport{State: AgentStateNeedsInput}); err != nil || !applied {
 		t.Fatalf("a report could not take a detector-held pane: applied=%v err=%v", applied, err)
 	}
@@ -121,7 +113,6 @@ func TestReportOutranksTheDetector(t *testing.T) {
 		t.Fatalf("claim source after a report = %q, want report", src)
 	}
 
-	// The detector still owns the pane's lifecycle and clears it on exit.
 	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
 	if n := sess.applyAgentDetection(shell, agent.identifyDetail); n != 1 {
 		t.Fatalf("agent exit changed %d windows, want 1", n)
@@ -148,7 +139,6 @@ func TestStallHeuristicStillDemotesAReport(t *testing.T) {
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
 		t.Fatalf("state after stall = %q, want idle", got)
 	}
-	// Having demoted it, the heuristic owns the state, so it says so.
 	if src := sess.agentClaimFor(id).source; src != AgentSourceStall {
 		t.Fatalf("claim source after stall = %q, want stall", src)
 	}
@@ -173,8 +163,6 @@ func TestAgentClaimDroppedWithTheWindow(t *testing.T) {
 	}
 }
 
-// windowIDOf returns the only window's ID, for tests built on
-// makeSessionWithWindow.
 func windowIDOf(t *testing.T, sess *Session) string {
 	t.Helper()
 	state := sess.GetState()

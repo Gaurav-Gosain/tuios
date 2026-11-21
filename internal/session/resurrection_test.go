@@ -67,15 +67,9 @@ func TestResurrectionRoundTripMultiWindowMultiWorkspace(t *testing.T) {
 	if loaded.FocusedWindowID != "win-c" {
 		t.Errorf("FocusedWindowID = %q, want win-c", loaded.FocusedWindowID)
 	}
-	// The per-workspace master ratios are session state, so they are on disk with
-	// the rest of it: a resurrected session that came back at each client's own
-	// configured ratio would have thrown away every split the user had tuned.
 	if got := loaded.WorkspaceMasterRatio; got[1] != 0.4 || got[2] != 0.65 || len(got) != 2 {
 		t.Errorf("WorkspaceMasterRatio = %v, want map[1:0.4 2:0.65]", got)
 	}
-	// The custom-layout flags are session state for the same reason and travel
-	// with it: a resurrected session that came back with every workspace handed
-	// to the tiler would have retiled away the layouts the user arranged.
 	if got := loaded.WorkspaceHasCustom; !got[1] || got[2] || len(got) != 2 {
 		t.Errorf("WorkspaceHasCustom = %v, want map[1:true 2:false]", got)
 	}
@@ -91,7 +85,6 @@ func TestResurrectionRoundTripMultiWindowMultiWorkspace(t *testing.T) {
 	if loaded.Windows[2].IsAltScreen != true {
 		t.Error("alt screen flag not preserved for win-c")
 	}
-	// Workspaces are distinct.
 	ws := map[int]bool{}
 	for _, w := range loaded.Windows {
 		ws[w.Workspace] = true
@@ -130,12 +123,10 @@ func TestLoadResurrectionCorruptFileArchived(t *testing.T) {
 		t.Fatal("expected error loading corrupt state")
 	}
 
-	// Original must be gone (moved to archive), not left to trip up every load.
 	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 		t.Errorf("corrupt file still present at original path (stat err: %v)", statErr)
 	}
 
-	// A .bak copy must exist in the archive directory.
 	archiveDir := filepath.Join(tmpDir, "archive")
 	entries, err := os.ReadDir(archiveDir)
 	if err != nil {
@@ -151,7 +142,6 @@ func TestLoadResurrectionCorruptFileArchived(t *testing.T) {
 		t.Errorf("expected an archived .bak file, got %d entries", len(entries))
 	}
 
-	// The corrupt session must not appear as resurrectable.
 	infos, err := ListResurrectableInfos()
 	if err != nil {
 		t.Fatalf("ListResurrectableInfos failed: %v", err)
@@ -169,8 +159,6 @@ func TestLoadResurrectionIncompatibleVersionArchived(t *testing.T) {
 	tmpDir := t.TempDir()
 	defer useResurrectionDir(tmpDir)()
 
-	// Write a state file directly with a future version. Bypass Save (which
-	// would stamp the current version) by writing JSON by hand.
 	path := filepath.Join(tmpDir, "future.json")
 	future := `{"name":"future","resurrection_version":999,"windows":[]}`
 	if err := os.WriteFile(path, []byte(future), 0600); err != nil {

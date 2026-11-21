@@ -7,13 +7,6 @@ import (
 	"time"
 )
 
-// These are race regressions for the pacing of a graphics pane: the hold runs
-// on the read goroutine while clients come and go on others, and the ways it
-// can go wrong are a hold that never ends and a queue that never stops
-// growing. The end-to-end behaviour is in e2e/tui/kitty_pacing_test.go.
-
-// pacingPTY is a pane with no process behind it that has just streamed a
-// frame, so it counts as a graphics pane.
 func pacingPTY(t *testing.T) *PTY {
 	t.Helper()
 	p := queuePTY()
@@ -24,8 +17,6 @@ func pacingPTY(t *testing.T) *PTY {
 	return p
 }
 
-// pacingFrame is one full frame of image 1 in 4 KiB chunks, as kitten icat
-// sends it, behind a cursor home.
 func pacingFrame(n, size int) []byte {
 	var b bytes.Buffer
 	payload := bytes.Repeat([]byte{'A' + byte(n%26)}, size)
@@ -34,7 +25,6 @@ func pacingFrame(n, size int) []byte {
 	return b.Bytes()
 }
 
-// feedReads hands data to broadcast in reads of at most 16 KiB, as readOutput does.
 func (p *PTY) feedReads(data []byte) {
 	for len(data) > 0 {
 		n := min(len(data), 16<<10)
@@ -43,8 +33,6 @@ func (p *PTY) feedReads(data []byte) {
 	}
 }
 
-// holdReturns runs one hold and reports how long it took, or fails the test
-// if it has not returned within limit.
 func holdReturns(t *testing.T, p *PTY, limit time.Duration, during func()) time.Duration {
 	t.Helper()
 	done := make(chan time.Duration, 1)
@@ -125,16 +113,11 @@ func TestPacingHoldIsCappedOncePerEpisode(t *testing.T) {
 	if took := holdReturns(t, p, 2*time.Second, nil); took < maxGraphicsHold {
 		t.Fatalf("the first hold ended after %s, before its cap of %s with the client still behind", took, maxGraphicsHold)
 	}
-	// The cap is spent: the next reads are not held while the same client
-	// stays behind, so a stuck client costs the program one cap, not one per
-	// read.
 	for i := range 5 {
 		if took := holdReturns(t, p, time.Second, nil); took > 10*time.Millisecond {
 			t.Fatalf("read %d after the cap ran out was held for %s", i, took)
 		}
 	}
-	// Once the client catches up, the next time it falls behind is a new
-	// episode with a new cap.
 	for ch.len() > 0 {
 		takeChunk(nil, ch.take(), sub)
 	}
@@ -164,13 +147,11 @@ func TestPacingNeedsEveryPacingClientBehind(t *testing.T) {
 		t.Fatalf("a client that keeps up did not set the pace: held %s", took)
 	}
 
-	// With only the viewer and the stuck client, the stuck one holds.
 	p.Unsubscribe("fast")
 	took := holdReturns(t, p, 2*time.Second, func() { p.Unsubscribe("stuck") })
 	if took > time.Second {
 		t.Fatalf("held for %s", took)
 	}
-	// The viewer alone never holds, however far behind it is.
 	if took := holdReturns(t, p, time.Second, nil); took > 10*time.Millisecond {
 		t.Fatalf("a read-only viewer held the pane for %s", took)
 	}
@@ -209,8 +190,6 @@ func TestStuckClientQueueStaysBounded(t *testing.T) {
 	if sub.gapped.Load() {
 		t.Fatal("the stuck client was gapped: its queue filled anyway")
 	}
-	// Two frames: the one waiting and the one being gathered when a read
-	// lands. Plus the cursor homes between them.
 	if limit := int64(2*size + 64<<10); peak > limit {
 		t.Fatalf("the stuck client held up to %d bytes, want at most %d", peak, limit)
 	}
@@ -262,7 +241,7 @@ func TestFrameDropRacesTheTake(t *testing.T) {
 	kept := 0
 	for _, part := range bytes.Split(out, []byte("\x1b[H"))[1:] {
 		if len(part) == 0 {
-			continue // a dropped frame
+			continue
 		}
 		kept++
 		n := int(part[bytes.IndexByte(part, ';')+1] - 'A')

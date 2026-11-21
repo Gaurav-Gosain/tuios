@@ -13,16 +13,14 @@ func TestListingCannotDropAJustCreatedSession(t *testing.T) {
 	c := NewTUIClient()
 	c.UpdateSessionCache([]SessionInfo{{Name: "origin"}})
 
-	stamp := c.listingStamp() // a background poll goes out
-	c.NoteSession("spawned")  // the session is created while it is in flight
+	stamp := c.listingStamp()
+	c.NoteSession("spawned")
 	c.applySessionListing([]SessionInfo{{Name: "origin"}}, stamp)
 
 	if names := c.AvailableSessionNames(); !slices.Contains(names, "spawned") {
 		t.Fatalf("an in-flight listing dropped a session created after it was sent: %v", names)
 	}
 
-	// A listing requested after the creation is current, so a session that really
-	// went away still leaves.
 	c.applySessionListing([]SessionInfo{{Name: "origin"}}, c.listingStamp())
 	if names := c.AvailableSessionNames(); slices.Contains(names, "spawned") {
 		t.Fatalf("a current listing failed to drop a gone session: %v", names)

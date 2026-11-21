@@ -4,12 +4,6 @@ import (
 	"testing"
 )
 
-// The raw output log exists to make a live rendering fault reproducible. A
-// capture taken afterwards shows the grid as it is now, which says nothing
-// about the moment it went wrong, and the grid is downstream of the bytes
-// anyway. These pin the two things a person relying on it needs: that it is
-// off unless asked for, and that what lands in the file is what was written.
-
 // TestTheRawLogIsOffUnlessAskedFor. It is a debugging aid, and a pane that
 // wrote every byte it produced to disk by default would be a worse thing than
 // the bug it is for.

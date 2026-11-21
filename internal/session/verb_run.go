@@ -12,46 +12,18 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// The verbs that read a shell's commands: run, wait-for command-finished and
-// capture-pane with source last-command-output. They rest on the facts
-// shell_commands.go keeps from the shell's OSC 133 marks.
-//
-// run is send-text, a wait and capture-pane in one call, and it grants nothing
-// those three do not: any caller that may type into a pane and read it back
-// may already do everything run does. What it adds is care. It types only at a
-// prompt, so a command never lands in a running program, and it reads the exit
-// status and the output from the shell's own marks rather than from a marker
-// the caller has to make up and match.
-
-// captureLastCommand is the capture-pane source for the last finished
-// command's output.
 const captureLastCommand = "last-command-output"
 
-// waitCommandFinished is the wait-for condition for a command finishing.
 const waitCommandFinished = "command-finished"
 
-// defaultRunTimeout is how long run waits for the command when the caller
-// names no timeout. It is wait-for's default, so the two read the same.
 const defaultRunTimeout = defaultWaitTimeout
 
-// runFirstPromptWait is how long run waits for a pane that has not sent a
-// mark yet to show its first prompt. A window opened a moment ago has a shell
-// that is still starting, and refusing it would make "open a window, run in
-// it" fail for no reason but timing.
 var runFirstPromptWait = 3 * time.Second
 
-// shellStarting reports whether a pane's shell has not drawn its first
-// prompt yet: it has sent no mark, or only marks that put it nowhere. A
-// bash whose PROMPT_COMMAND sends D before A sends that D first, and a D
-// with no command running does not put the shell at a prompt. run waits for
-// the prompt there too, and a refusal with not_at_prompt would send the
-// caller to wait for a command that is not running.
 func shellStarting(f ShellFacts) bool {
 	return !f.Seen || (!f.AtPrompt && f.Running == "" && !f.PromptOnly && f.CommandSeq == 0)
 }
 
-// resolveWindowPTY resolves a window target, the focused window when empty,
-// to the window and its PTY.
 func (d *Daemon) resolveWindowPTY(sess *Session, target string) (WindowState, *PTY, *verbError) {
 	state := sess.GetState()
 	if target == "" {
@@ -73,9 +45,6 @@ func (d *Daemon) resolveWindowPTY(sess *Session, target string) (WindowState, *P
 	return w, pty, nil
 }
 
-// shellFactsData is a pane's shell facts as list-windows reports them. It is
-// empty for a pane whose shell never sent a mark, so such a window's entry
-// keeps exactly the shape it had before.
 func shellFactsData(f ShellFacts) map[string]any {
 	if !f.Seen {
 		return nil
@@ -101,7 +70,6 @@ func shellFactsData(f ShellFacts) map[string]any {
 	return out
 }
 
-// addShellFacts adds each window's shell facts to a list-windows result.
 func addShellFacts(sess *Session, data map[string]any) {
 	windows, _ := data["windows"].([]map[string]any)
 	for _, w := range windows {
@@ -114,11 +82,6 @@ func addShellFacts(sess *Session, data map[string]any) {
 	}
 }
 
-// addPaneMeta adds each window's history_rows and revision to a
-// list-windows result, the numbers capture-pane reports beside its content.
-// A window with no pane on this daemon has neither. A pane whose process runs
-// here also gets pid, the process the pane started, and tty, its terminal
-// device: the tmux shim reports them as pane_pid and pane_tty.
 func addPaneMeta(sess *Session, data map[string]any) {
 	windows, _ := data["windows"].([]map[string]any)
 	for _, w := range windows {
@@ -129,8 +92,6 @@ func addPaneMeta(sess *Session, data map[string]any) {
 	}
 }
 
-// addOnePaneMeta adds one pane's history_rows, revision, pid and tty to its
-// window's entry. get-window uses it too, so the two reads agree.
 func addOnePaneMeta(pty *PTY, w map[string]any) {
 	m := pty.Meta()
 	w["history_rows"] = m.HistoryRows
@@ -143,7 +104,6 @@ func addOnePaneMeta(pty *PTY, w map[string]any) {
 	}
 }
 
-// commandFinishedData is a command-finished event as a result's fields.
 func commandFinishedData(sessionName, window string, ev streamEvent) map[string]any {
 	out := map[string]any{
 		"session":     sessionName,
@@ -158,12 +118,6 @@ func commandFinishedData(sessionName, window string, ev streamEvent) map[string]
 	return out
 }
 
-// waitCommandFinishedFor resolves when a command finishes: in the named
-// window, or with no window in any pane of the session. With commandSeq set it
-// resolves once the window has finished more than that many commands, which
-// is already true when the command finished before the wait began, so a
-// caller that read command_seq before starting the command cannot miss it.
-// Without it, the next command to finish after the wait starts matches.
 func (d *Daemon) waitCommandFinishedFor(cs *connState, sessionName, window string, commandSeq *uint64, deadline <-chan time.Time) (any, *verbError) {
 	sess, verr := d.resolveVerbSession(cs, sessionName)
 	if verr != nil {
@@ -196,8 +150,6 @@ func (d *Daemon) waitCommandFinishedFor(cs *connState, sessionName, window strin
 		if commandSeq != nil {
 			baseline = *commandSeq
 			if facts.CommandSeq > baseline {
-				// Finished before the wait began. The facts hold only the
-				// newest command, which is the one to report.
 				ev := streamEvent{Cmdline: facts.LastCmdline, DurationMS: facts.LastDuration.Milliseconds(), CommandSeq: facts.CommandSeq, ExitCode: facts.LastExit}
 				return waitMatched(waitCommandFinished, commandFinishedData(sess.Name(), target.ID, ev)), nil
 			}
@@ -227,8 +179,6 @@ func (d *Daemon) waitCommandFinishedFor(cs *connState, sessionName, window strin
 	}
 }
 
-// noShellIntegration is the refusal for a pane whose shell never marked a
-// command.
 func noShellIntegration(sess *Session, windowID, window string) *verbError {
 	return hintedVerbError(ErrVerbNoShellIntegration, "the shell in window "+echoName(window)+" has not sent OSC 133 marks, so the daemon cannot tell where a command starts and ends", &VerbHint{
 		Command: "tuios wait-for window-output " + paneArgs(sess, windowID) + " --pattern <marker>",
@@ -236,9 +186,6 @@ func noShellIntegration(sess *Session, windowID, window string) *verbError {
 	})
 }
 
-// promptMarksOnly is the refusal for a pane whose shell marks its prompts and
-// not its commands, so a running command looks like a prompt. what says what
-// happened to the command line.
 func promptMarksOnly(window, what string) *verbError {
 	return hintedVerbError(ErrVerbNoShellIntegration, "the shell in window "+echoName(window)+" sends prompt marks only: it ran a command without the OSC 133 C mark, so the daemon cannot tell a running command from a prompt", &VerbHint{
 		Command: "tuios doctor shell",
@@ -246,8 +193,6 @@ func promptMarksOnly(window, what string) *verbError {
 	})
 }
 
-// verbRun types one command line at a pane's prompt, waits for the shell to
-// report it finished, and returns its exit status and output.
 func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -294,13 +239,9 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
-	// The wait ends when the caller leaves: its connection closes, or the
-	// report channel a pane on another machine called on ends.
 	gone, stopGone := askCancel(cs)
 	defer stopGone()
 
-	// A shell that has sent nothing yet may be one still starting. Give it
-	// a moment to draw its first prompt before deciding it has no marks.
 	facts := pty.ShellFacts()
 	if shellStarting(facts) {
 		first := time.NewTimer(runFirstPromptWait)
@@ -326,9 +267,6 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	if !facts.Seen {
 		return nil, noShellIntegration(sess, w.ID, windowLabelFor(w))
 	}
-	// One run at a time in a pane. Without the claim two calls both pass the
-	// prompt check, both paste, and the shell reads one line made of both
-	// commands. The claim is held until this call ends.
 	if !pty.runClaim.CompareAndSwap(false, true) {
 		return nil, hintedVerbError(ErrVerbNotAtPrompt, "another run is typing or running in window "+echoName(windowLabelFor(w)), &VerbHint{
 			Command: "tuios wait-for command-finished " + paneArgs(sess, w.ID) + " --command-seq " + strconv.FormatUint(facts.CommandSeq, 10),
@@ -389,9 +327,6 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 			case EventCommandStarted:
 				started = true
 			case EventPrompt:
-				// A new prompt before the command was marked started: the
-				// shell ran the line without a C mark and will never report
-				// it finished. Say so now rather than at the timeout.
 				if !started && pty.ShellFacts().PromptOnly {
 					return nil, promptMarksOnly(windowLabelFor(w), "The command was typed and the shell has likely run it, but its exit status and output are not known.")
 				}
@@ -411,10 +346,6 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	}
 }
 
-// captureLastCommandOutput is capture-pane with source last-command-output:
-// the plain text the pane's last finished command printed, with the facts the
-// shell reported about it. It is plain only, because the rows are read out
-// of the emulator cell by cell and carry no styling.
 func captureLastCommandOutput(sess *Session, pty *PTY, window string, styled, unwrap, trim bool, start, end, lines int) (any, *verbError) {
 	if styled {
 		return nil, invalidParam("styled", "last-command-output is plain text; drop styled, ansi and resolved")
@@ -464,7 +395,6 @@ func captureLastCommandOutput(sess *Session, pty *PTY, window string, styled, un
 	return res, nil
 }
 
-// windowLabelFor is how a refusal names a window: its name when it has one.
 func windowLabelFor(w WindowState) string {
 	if w.CustomName != "" {
 		return w.CustomName

@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// askAsync starts an ask-human call on its own connection and returns a
-// channel with its response.
 func askAsync(t *testing.T, sp string, params map[string]any) <-chan map[string]any {
 	t.Helper()
 	c := dialVerb(t, sp)
@@ -29,7 +27,6 @@ func askAsync(t *testing.T, sp string, params map[string]any) <-chan map[string]
 	return out
 }
 
-// awaitAskItem waits for the ask item to reach the Inbox and returns it.
 func awaitAskItem(t *testing.T, c *verbConn) map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -45,7 +42,6 @@ func awaitAskItem(t *testing.T, c *verbConn) map[string]any {
 	}
 }
 
-// answerAskCall calls answer-ask with the given nonce.
 func answerAskCall(t *testing.T, c *verbConn, requestID, answer, nonce string) map[string]any {
 	t.Helper()
 	raw, _ := json.Marshal(map[string]any{"request_id": requestID, "answer": answer, "human_nonce": nonce})
@@ -71,7 +67,6 @@ func TestAskHumanReturnsThePersonsAnswer(t *testing.T) {
 	}
 	id, _ := item["request_id"].(string)
 
-	// No nonce: an agent cannot answer the person's question.
 	if code := errCode(t, answerAskCall(t, c, id, "yes", "")); code != ErrVerbNotHuman {
 		t.Fatalf("answer without a nonce: code %q, want %q", code, ErrVerbNotHuman)
 	}
@@ -99,7 +94,6 @@ func TestAskHumanReturnsThePersonsAnswer(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the ask did not return after the answer")
 	}
-	// The first answer stands.
 	res = result(t, answerAskCall(t, c, id, "yes", nonce))
 	if res["applied"] != false || res["answer"] != "no" {
 		t.Fatalf("a second answer = %v, want not applied, no standing", res)

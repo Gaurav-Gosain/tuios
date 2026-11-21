@@ -10,29 +10,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The judge of a fan: an agent judge-fan starts to read the attempts and
-// pick one, and set-fan-verdict, how it reports.
-//
-// The judge's reach is held to what it needs. Each attempt's record names
-// the judge by its session's ID and its pane's window ID, never by a name
-// another session could take. Only that pane reaches the attempts, and only
-// with verbs that read (checkGrants, judgeReaches), plus set-fan-verdict. It
-// cannot type into an attempt's pane, run a command in an attempt's session
-// or start an agent there. A verdict is recorded only by that pane or by a
-// call from outside every pane, and it says which of the two recorded it.
-
-// Bounds of a verdict, so a judge's report stays small on every attempt.
 const (
 	fanVerdictText    = 400
 	fanVerdictReasons = 6
 	fanVerdictNotes   = 4
 )
 
-// judgeReadVerbs are the reads a judge makes of the attempts it judges: the
-// comparison, the diffs and checkpoints, the attempts' screens and
-// scrollback, their windows and their agents' state. Nothing else of an
-// attempt's session is in its reach: not its command history, mail,
-// environment, stash or approvals.
 var judgeReadVerbs = map[string]bool{
 	"compare-fan":      true,
 	"review-diff":      true,
@@ -43,13 +26,8 @@ var judgeReadVerbs = map[string]bool{
 	"get-agent-state":  true,
 }
 
-// fanJudgeGrants are what the judge's pane holds: read alone. Through tuios
-// it reads, and records its verdict through judgeReaches. It cannot start a
-// fan, an agent or a command anywhere.
 var fanJudgeGrants = []string{"read"}
 
-// paneViewOrNil is the pane the grant check found for the connection, nil
-// for none.
 func (cs *connState) paneViewOrNil() *paneAuth {
 	if cs == nil {
 		return nil
@@ -57,8 +35,6 @@ func (cs *connState) paneViewOrNil() *paneAuth {
 	return cs.paneView.Load()
 }
 
-// judgeReaches reports whether pa is the live judge pane of the fan the
-// session named target belongs to.
 func (d *Daemon) judgeReaches(pa *paneAuth, target string) bool {
 	if pa == nil || pa.sessionID == "" || pa.window == "" {
 		return false
@@ -83,8 +59,6 @@ func (d *Daemon) judgeReaches(pa *paneAuth, target string) bool {
 	return false
 }
 
-// forgetFanJudge clears the judge record of every attempt the session with
-// ID id judged. It runs when that session ends.
 func (d *Daemon) forgetFanJudge(id string) {
 	for _, s := range d.manager.AllSessions() {
 		if wt := s.Worktree(); wt == nil || wt.JudgeSession != id {
@@ -99,7 +73,6 @@ func (d *Daemon) forgetFanJudge(id string) {
 	}
 }
 
-// setFanVerdictParams are what set-fan-verdict takes.
 type setFanVerdictParams struct {
 	Session string              `json:"session"`
 	Pick    string              `json:"pick"`
@@ -108,9 +81,6 @@ type setFanVerdictParams struct {
 	Notes   map[string][]string `json:"notes"`
 }
 
-// verbSetFanVerdict records a judge's pick on every attempt of a fan, each
-// with its own notes. Only the fan's judge pane, or a call from outside
-// every pane, records one: an attempt cannot name itself the winner.
 func (d *Daemon) verbSetFanVerdict(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p setFanVerdictParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -191,7 +161,6 @@ func (d *Daemon) verbSetFanVerdict(cs *connState, params json.RawMessage) (any, 
 	return map[string]any{"type": "fan_verdict", "group": info.Group, "pick": p.Pick, "by": by, "attempts": names}, nil
 }
 
-// judgeFanParams are what judge-fan takes.
 type judgeFanParams struct {
 	Session      string            `json:"session"`
 	Agent        string            `json:"agent"`
@@ -199,12 +168,6 @@ type judgeFanParams struct {
 	ReadyTimeout int               `json:"ready_timeout"`
 }
 
-// verbJudgeFan starts an agent that judges the attempts of a fan, in a new
-// session of its own in the repository's main checkout. The attempts name
-// the judge's session and pane only once start-agent made both, and the
-// first prompt is typed only after that, so the judge's first call reaches
-// them. Only the person, or a pane with admin, starts a judge: an attempt
-// cannot.
 func (d *Daemon) verbJudgeFan(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p judgeFanParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -235,7 +198,6 @@ func (d *Daemon) verbJudgeFan(cs *connState, params json.RawMessage) (any, *verb
 	if agent == "" {
 		return nil, invalidParam("agent", "agent is required: no attempt names the agent it ran")
 	}
-	// A session of its own, new: a free name, which start-agent must create.
 	name := ""
 	base := fanJudgeSession(info)
 	for i := 1; i <= 9 && name == ""; i++ {
@@ -269,8 +231,6 @@ func (d *Daemon) verbJudgeFan(cs *connState, params json.RawMessage) (any, *verb
 	created, _ := out["created_session"].(bool)
 	judge := d.manager.GetSessionByID(sessionID)
 	if !created || judge == nil || window == "" {
-		// Another caller made a session of that name first. Its panes get
-		// nothing, and the agent just started there is closed.
 		if judge != nil && window != "" {
 			closeRaw, _ := jsonx.Marshal(map[string]any{"session": judge.Name(), "window": window})
 			_, _ = d.verbCloseWindow(cs, closeRaw)
@@ -297,14 +257,11 @@ func (d *Daemon) verbJudgeFan(cs *connState, params json.RawMessage) (any, *verb
 	return out, nil
 }
 
-// fanJudgeSession is the name the judge of a fan runs under, unless taken.
 func fanJudgeSession(info *WorktreeInfo) string {
 	stem := strings.NewReplacer("/", "-", " ", "-", ":", "-").Replace(info.Group)
 	return info.Repo + "-" + stem + "-judge"
 }
 
-// fanJudgePrompt is the judge's first prompt: the task, the attempts by
-// letter, and how to read them and report.
 func fanJudgePrompt(info *WorktreeInfo, siblings []*Session) string {
 	var b strings.Builder
 	b.WriteString("You judge a fan of ")

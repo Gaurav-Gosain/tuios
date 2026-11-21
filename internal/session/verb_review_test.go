@@ -11,9 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// reviewFixture is a daemon whose panes start in a throwaway repository, with
-// a session work of two windows, a verb connection from outside every pane,
-// and the repository. The queue looks at a pane 50 ms after it comes to rest.
 func reviewFixture(t *testing.T) (d *Daemon, sp, repo string, sess *Session, c *verbConn, a, b string) {
 	t.Helper()
 	repo = testutil.GitRepo(t)
@@ -37,7 +34,6 @@ func notesOf(t *testing.T, res map[string]any) []map[string]any {
 	return out
 }
 
-// queuedText is the text of the first entry queued for window.
 func queuedText(d *Daemon, window string) string {
 	d.queue.mu.Lock()
 	defer d.queue.mu.Unlock()
@@ -59,16 +55,11 @@ func TestReviewNotesWhoMayChangeThem(t *testing.T) {
 		t.Errorf("a note with the nonce is by %v, want human", n[0]["by"])
 	}
 	mustRefuse(t, callP(c, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 4, "text": "x", "human_nonce": "0123456789abcdef0123456789abcdef"}), ErrVerbNotHuman, "a nonce no client holds")
-	// A pane that runs here for another machine has no grants here and must
-	// not pass for the person's shell.
 	raw := []byte(`{"action":"add","session":"work","window":"` + b + `","path":"api.go","line":4,"text":"x"}`)
 	if _, verr := d.verbReviewNote(&connState{paneOnly: true}, raw); verr == nil || verr.Code != ErrVerbForbidden {
 		t.Errorf("review-note from a forwarded pane = %v, want forbidden", verr)
 	}
 
-	// Pane a, with write. A note is typed into its pane when it is sent, so a
-	// pane writes notes only on panes it could type into: not on b while b
-	// holds admin.
 	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": a, "grants": []string{"read", "write"}}))
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
 	pane := dialVerb(t, sp)
@@ -91,7 +82,6 @@ func TestReviewNotesWhoMayChangeThem(t *testing.T) {
 		t.Errorf("a pane's clear = %v, want its own note gone and the person's kept", cleared)
 	}
 
-	// Outside every pane: any note but the person's.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	wantForbidden(t, "a shell removing the person's note", callP(c, t, "review-note", map[string]any{"action": "remove", "session": "work", "window": b, "id": personID}))
 	result(t, callP(c, t, "review-note", map[string]any{"action": "remove", "session": "work", "window": b, "id": personID, "human_nonce": tui.HumanNonce()}))

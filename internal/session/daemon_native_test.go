@@ -47,7 +47,6 @@ func TestKeysToBytes(t *testing.T) {
 	}
 }
 
-// newTestDaemonSession builds a daemon with one detached (no-client) session.
 func newTestDaemonSession(t *testing.T) (*Daemon, *Session) {
 	t.Helper()
 	d := NewDaemon(&DaemonConfig{})

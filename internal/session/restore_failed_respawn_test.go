@@ -13,7 +13,6 @@ func TestFailedRespawnDropsTheWindowRatherThanLeavingItPointingAtNothing(t *test
 	tmpDir := t.TempDir()
 	defer useResurrectionDir(tmpDir)()
 
-	// Every shell in this restore fails to exec, so every window's respawn fails.
 	t.Setenv("SHELL", "/nonexistent/definitely-not-a-shell")
 
 	saved := &SessionState{
@@ -37,8 +36,6 @@ func TestFailedRespawnDropsTheWindowRatherThanLeavingItPointingAtNothing(t *test
 
 	sess := d.manager.GetSession("work")
 	if sess == nil {
-		// An empty restore is refused outright, which is also an acceptable
-		// answer to "every window failed"; either way no pane survives.
 		return
 	}
 

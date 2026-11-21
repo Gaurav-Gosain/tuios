@@ -7,16 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 )
 
-// herdrPluginRestart is plugin.restart, which tuios plugins install calls
-// after it switched a plugin to a new build folder. It stops the plugin's
-// processes and runs its startup again from the folder the plugin is found
-// in now. It changes no config, so a restart that fails or is killed leaves
-// the plugin enabled, and the next daemon starts it from that folder. It is
-// refused for a plugin that is not enabled, and from a pane.
-//
-// With unless_root, the restart is skipped when the plugin's startup already
-// ran from that folder. The answer lists the folders that open panes of the
-// plugin run from, so the caller keeps them.
 func (d *Daemon) herdrPluginRestart(cs *connState, params json.RawMessage) (any, *herdrError) {
 	if herr := d.herdrPluginTrust(cs, "plugin.restart"); herr != nil {
 		return nil, herr
@@ -52,8 +42,6 @@ func (d *Daemon) herdrPluginRestart(cs *connState, params json.RawMessage) (any,
 	return map[string]any{"type": "plugin_restarted", "restarted": restarted, "pane_roots": d.pluginPaneRoots(e.ID)}, nil
 }
 
-// pluginPaneRoots are the folders the open panes of plugin id were opened
-// from.
 func (d *Daemon) pluginPaneRoots(id string) []string {
 	h := d.plugins
 	h.mu.Lock()

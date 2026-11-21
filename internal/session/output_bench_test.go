@@ -5,16 +5,6 @@ import (
 	"testing"
 )
 
-// The daemon's per-chunk output path had no benchmark, so the cost of the work
-// that runs once per PTY read was never visible. A flooding pane drives this
-// loop thousands of times a second per subscriber, which makes anything
-// unconditional here far more expensive than its source line suggests.
-//
-// The two steps measured are the ones every chunk pays regardless of what the
-// bytes are: recording the chunk in the catch-up ring, and handing it to every
-// subscriber. The PTY read and the VT parse are deliberately outside: the read
-// is a syscall the benchmark cannot honestly reproduce, and the parse is
-// already covered by the emulator benchmarks in vt.
 func benchPTY(subs int) *PTY {
 	p := &PTY{
 		ID:           "bench-pty-0000000000000000000000000",
@@ -51,9 +41,6 @@ func BenchmarkPTYOutputChunk(b *testing.B) {
 				p.outputMu.Unlock()
 				p.broadcast(ptyChunk{data: data}, seq)
 
-				// Keep the queues from filling, which would turn every later
-				// broadcast into the cheap dropped-chunk branch and stop the
-				// benchmark measuring the delivery path at all.
 				if subs > 0 && i%1024 == 1023 {
 					for _, sub := range p.subscribers {
 						for _, ok, _ := sub.out.pop(); ok; _, ok, _ = sub.out.pop() {
@@ -149,6 +136,4 @@ func BenchmarkPaneMarkRaised(b *testing.B) {
 	}
 }
 
-// benchPaneMarkEvent is the event type BenchmarkPaneMarkRaised passes, a
-// variable so the compare runs as it does per chunk.
 var benchPaneMarkEvent = EventOutput

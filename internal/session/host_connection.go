@@ -12,11 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The client half of open-host-connection: what a client does to a fresh
-// connection to its own daemon to turn it into a connection to another
-// machine's daemon. TUIClient.ConnectThroughHost and DialVerbClientThroughHost
-// both start here and then carry on exactly as they would on a local socket.
-
 // HostConnectionInfo is what the local daemon said about the host as it opened
 // the connection. The version and protocol are what the host reported at the
 // link handshake, carried for a message, never trusted for a decision.
@@ -40,21 +35,12 @@ func (e *HostConnectError) Error() string {
 	return e.Message
 }
 
-// maxHostConnectReply bounds the local daemon's reply line. The local daemon is
-// trusted, and a bound costs nothing.
 const maxHostConnectReply = 64 * 1024
 
-// openHostConnectionOn sends open-host-connection on a freshly dialed
-// connection to the local daemon and reads its reply. On success the
-// connection is, from here on, a connection to the host's daemon. br must be
-// the only reader of conn and is left holding nothing past the reply.
 func openHostConnectionOn(conn net.Conn, br *bufio.Reader, host string) (HostConnectionInfo, error) {
 	return openHostConnectionAgent(conn, br, host, "")
 }
 
-// openHostConnectionAgent is openHostConnectionOn that also tells this
-// machine's daemon the client's agent socket, so the link's ssh forwards the
-// agent of the person attached here. See ssh_agent_follow.go.
 func openHostConnectionAgent(conn net.Conn, br *bufio.Reader, host, agent string) (HostConnectionInfo, error) {
 	params := map[string]string{"host": host}
 	if agent != "" {
@@ -72,17 +58,11 @@ func openHostConnectionAgent(conn net.Conn, br *bufio.Reader, host, agent string
 	if _, err := conn.Write(append(req, '\n')); err != nil {
 		return HostConnectionInfo{}, errfmt.Errorf("cannot ask the daemon for a connection to %s: %w", host, err)
 	}
-	// The daemon waits for the host's first attempt to settle before it
-	// answers, which is bounded by its own budget. This is that budget plus
-	// room.
 	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 	line, err := readLimitedLine(br, maxHostConnectReply)
 	_ = conn.SetReadDeadline(time.Time{})
 	if err != nil {
 		if isConnectionGone(err) {
-			// A daemon from before this verb speaks JSON and answers an unknown
-			// verb with an error line, so a closed connection is a daemon from
-			// before the JSON protocol altogether.
 			return HostConnectionInfo{}, &HostConnectError{
 				Host:    host,
 				Code:    ErrVerbProtocolMismatch,
@@ -111,7 +91,6 @@ func openHostConnectionAgent(conn net.Conn, br *bufio.Reader, host, agent string
 	return *resp.Result, nil
 }
 
-// readLimitedLine reads one newline-terminated line of at most limit bytes.
 func readLimitedLine(br *bufio.Reader, limit int) ([]byte, error) {
 	var out []byte
 	for {

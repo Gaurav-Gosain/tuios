@@ -11,33 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// This file holds the stash verbs: put bytes in, list what is in, and get
-// bytes out for a file that has to cross a link. There is no delete on purpose.
-//
-// On one machine the answer to a put is a path, and a path is already the
-// thing every reader on this host can open. Between two machines a path means
-// nothing, so a put may carry the bytes themselves and a get may hand them
-// back, both bounded well under what one request line may hold. That is the
-// only copy through the socket, and it is the one the link makes necessary.
-//
-// No delete, because the lifetime is the session's and an agent that could
-// delete could delete a file another agent's message still names. The only
-// deletions are the session ending, the daemon stopping, and the cap forcing a
-// reclaim, and all three are the daemon's own.
-
-// stashTransferMaxBytes bounds a file that crosses the socket as bytes, in
-// either direction. It is under the per-file cap because the bytes travel
-// base64 in one request or reply line, and that line is capped at 16 MiB.
 const stashTransferMaxBytes = 8 << 20
 
-// verbStashPut copies a file into the session's store and answers with the
-// stored path. With content the bytes come in the request, for a file on
-// another machine, and path is only the name they are stored under.
-//
-// Over a link the bytes always come as content and the path is never opened:
-// the path names a file on this machine, and reading it would hand the stash
-// a file the link's policy may not read (the stash, mail, is a lower class
-// than files). An empty file arrives as empty content.
 func (d *Daemon) verbStashPut(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string  `json:"session"`
@@ -83,8 +58,6 @@ func (d *Daemon) verbStashPut(cs *connState, params json.RawMessage) (any, *verb
 		if derr != nil {
 			return nil, invalidParam("content", "content is not base64")
 		}
-		// The encoded check above is coarse: padding lets a byte or two
-		// past it. The decoded size is the bound.
 		if len(data) > stashTransferMaxBytes {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "stash put "+echoName(p.Path)+": the content is larger than the transfer cap", &VerbHint{
 				Param:  "content",
@@ -100,24 +73,16 @@ func (d *Daemon) verbStashPut(cs *connState, params json.RawMessage) (any, *verb
 	}
 
 	return map[string]any{
-		"type":    "stash_entry",
-		"session": sess.Name(),
-		"path":    res.Entry.Path,
-		"name":    res.Entry.Name,
-		"hash":    res.Entry.Hash,
-		"bytes":   res.Entry.Bytes,
-		// media_type and kind are the same two fields an attachment carries, read
-		// from the extension, so a caller can decide what to do with the file
-		// without opening it.
-		"media_type": res.Entry.MediaType,
-		"kind":       res.Entry.Kind,
-		"stored_at":  res.Entry.StoredAt,
-		// deduped says the bytes were already here and this put stored nothing
-		// new. The path is the one that already existed.
-		"deduped": res.Deduped,
-		// evicted is how many files this put deleted to make room; evictions is
-		// the session's total since it started. A caller that sees either move
-		// knows a file it stashed earlier may be gone.
+		"type":            "stash_entry",
+		"session":         sess.Name(),
+		"path":            res.Entry.Path,
+		"name":            res.Entry.Name,
+		"hash":            res.Entry.Hash,
+		"bytes":           res.Entry.Bytes,
+		"media_type":      res.Entry.MediaType,
+		"kind":            res.Entry.Kind,
+		"stored_at":       res.Entry.StoredAt,
+		"deduped":         res.Deduped,
 		"evicted":         res.Evicted,
 		"evictions":       res.Evictions,
 		"session_bytes":   res.Bytes,
@@ -127,7 +92,6 @@ func (d *Daemon) verbStashPut(cs *connState, params json.RawMessage) (any, *verb
 	}, nil
 }
 
-// verbStashList reports what a session's store holds.
 func (d *Daemon) verbStashList(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -158,14 +122,8 @@ func (d *Daemon) verbStashList(cs *connState, params json.RawMessage) (any, *ver
 			"kind":       e.Kind,
 			"source":     e.Source,
 			"stored_at":  e.StoredAt,
-			// referenced says a message still in this session's ring names this
-			// file. Those are never evicted, so this is also the answer to "is
-			// this one safe".
 			"referenced": listing.Reference[e.Path],
-			// missing says the file is not on disk any more. It should never be
-			// true while the daemon is running, and it is resolved rather than
-			// assumed for the same reason an attachment's is.
-			"missing": stashMissing(e.Path),
+			"missing":    stashMissing(e.Path),
 		})
 	}
 
@@ -182,9 +140,6 @@ func (d *Daemon) verbStashList(cs *connState, params json.RawMessage) (any, *ver
 	}, nil
 }
 
-// verbStashGet hands back the bytes of one stashed file, so a file can cross a
-// link. Only a path this session's store put there is served: the stash is
-// not a way to read the daemon's disk.
 func (d *Daemon) verbStashGet(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -235,15 +190,11 @@ func (d *Daemon) verbStashGet(cs *connState, params json.RawMessage) (any, *verb
 	}, nil
 }
 
-// stashMissing reports whether a stored file has gone from disk.
 func stashMissing(path string) bool {
 	_, err := os.Stat(path)
 	return err != nil
 }
 
-// stashPutError turns a store failure into the code and the remedy for it. Each
-// class has a different thing the caller has to do, so each gets its own hint
-// rather than one generic refusal.
 func stashPutError(path string, err error) *verbError {
 	switch {
 	case errors.Is(err, errStashNotAbsolute):

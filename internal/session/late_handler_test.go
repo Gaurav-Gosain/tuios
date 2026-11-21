@@ -4,16 +4,6 @@ import (
 	"testing"
 )
 
-// The read loop starts before the handlers exist: cmd/tuios attaches, starts
-// reading, builds the program, and only then registers OnStateSync and
-// OnSessionResize. A broadcast landing in that window used to be dropped on
-// the floor, and both messages are last-value-wins snapshots the daemon does
-// not resend until something changes, so a peer's push racing this client's
-// attach was simply lost, and the two clients sat on different state until
-// the peer's next change. These pin the retention: the newest missed
-// broadcast of each kind is handed to the handler at registration.
-
-// deliver runs one fabricated broadcast through the client's own dispatch.
 func deliver(t *testing.T, c *TUIClient, msgType MessageType, payload any) {
 	t.Helper()
 	msg, err := NewMessage(msgType, payload)
@@ -38,8 +28,6 @@ func TestStateSyncBeforeHandlerIsDeliveredOnRegistration(t *testing.T) {
 		TriggerType: "test",
 		SourceID:    "peer",
 	})
-	// Only the newest is kept: a second sync supersedes the first outright,
-	// because the state is a whole snapshot rather than a delta.
 	deliver(t, c, MsgStateSync, StateSyncPayload{
 		State:       &SessionState{Name: "newest"},
 		TriggerType: "test",
@@ -54,8 +42,6 @@ func TestStateSyncBeforeHandlerIsDeliveredOnRegistration(t *testing.T) {
 		t.Fatalf("a state sync that arrived before the handler was registered was dropped or replayed wrong: got %v, want [newest]", got)
 	}
 
-	// With the handler in place, delivery is direct and nothing is parked: a
-	// re-registration hands over nothing extra.
 	deliver(t, c, MsgStateSync, StateSyncPayload{
 		State:       &SessionState{Name: "live"},
 		TriggerType: "test",
@@ -103,8 +89,6 @@ func TestSessionResizeBeforeHandlerIsDeliveredOnRegistration(t *testing.T) {
 	if len(got) != 1 || got[0] != (box{90, 28, LayoutReserve{Left: 5}}) {
 		t.Fatalf("a session resize that arrived before the handler was registered was dropped or replayed wrong: got %v", got)
 	}
-	// The reserve itself was recorded on arrival either way; the retention is
-	// about the notification, and the two must agree.
 	if r := c.SessionLayoutReserve(); r != (LayoutReserve{Left: 5}) {
 		t.Fatalf("the recorded reserve %+v does not match the replayed one", r)
 	}

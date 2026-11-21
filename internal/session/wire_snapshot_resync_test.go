@@ -28,12 +28,8 @@ func TestWireFromSnapshotSkipsTheResyncWhenRolled(t *testing.T) {
 	pty := sess.GetPTY(ptyID)
 	client := attachTestClient(t, "wire-snapshot")
 
-	// Roll the ring well past any position the client could name, so any
-	// subscribe from a small fromSeq is a rolled catch-up.
 	pty.appendAndBroadcast(bytes.Repeat([]byte("x"), 96*1024))
 
-	// FromSnapshot=true: a client that just laid down a snapshot. The replay
-	// must not open with the resync clear.
 	var snap collector
 	if err := client.SubscribePTY(ptyID, 1, true, snap.add); err != nil {
 		t.Fatalf("subscribe with FromSnapshot: %v", err)
@@ -54,8 +50,6 @@ func TestWireFromSnapshotSkipsTheResyncWhenRolled(t *testing.T) {
 		return len(pty.subscribers) == 0
 	})
 
-	// FromSnapshot=false: the old contract for a client resuming a screen it
-	// drew itself. The rolled replay keeps its resync clear.
 	var plain collector
 	if err := client.SubscribePTY(ptyID, 1, false, plain.add); err != nil {
 		t.Fatalf("subscribe without FromSnapshot: %v", err)

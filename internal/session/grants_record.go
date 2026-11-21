@@ -18,29 +18,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// What panes held on the default when the daemon last ran.
-//
-// A reload of config.toml applies [agents.permissions] only where it narrows
-// (reloadPanePermissions). A process in a pane can still widen the file and
-// then end the daemon, so the next start reads the wider file. The start
-// cannot tell who started it, and the record below is a file a process of the
-// user can also change, so neither is a boundary. What the start does is make
-// the change visible: when the default in force at start gives panes more
-// than the one recorded at the last run, it says so in the log, in
-// tuios pane-grants, and in the Inbox, where the person sees it.
-
-// appliedGrants is the record of the default in force.
 type appliedGrants struct {
 	Strict bool     `json:"strict"`
 	Grants []string `json:"grants"`
 }
 
-// appliedGrantsPath is where the record lives, under the saved state.
 func appliedGrantsPath() string {
 	return filepath.Join(getResurrectionDir(), "grants", "applied.json")
 }
 
-// recordAppliedGrants writes the default now in force.
 func (d *Daemon) recordAppliedGrants(r config.ResolvedPermissions) {
 	data, err := jsonx.Marshal(appliedGrants{Strict: r.Strict, Grants: r.Grants})
 	if err != nil {
@@ -49,7 +35,6 @@ func (d *Daemon) recordAppliedGrants(r config.ResolvedPermissions) {
 	_ = atomicfile.WritePrivate(appliedGrantsPath(), data, false)
 }
 
-// inForce is the default the grant table holds now, as a config value.
 func (t *paneGrantTable) inForce() config.ResolvedPermissions {
 	if !t.strict() {
 		return config.ResolvedPermissions{Grants: t.strictDefaults().Names()}
@@ -57,12 +42,8 @@ func (t *paneGrantTable) inForce() config.ResolvedPermissions {
 	return config.ResolvedPermissions{Strict: true, Grants: t.defaults().Names()}
 }
 
-// grantsWidenedNote is what the start says when panes on the default hold
-// more than at the last run.
 const grantsWidenedNote = "Panes on the default hold more than when tuios last ran, because config.toml changed. Check [agents.permissions] if you did not change it."
 
-// checkGrantsSinceLastRun compares the default in force at start with the one
-// recorded at the last run, says so when it widened, and records the new one.
 func (d *Daemon) checkGrantsSinceLastRun() {
 	now := d.manager.grants.inForce()
 	if data, err := os.ReadFile(appliedGrantsPath()); err == nil {
@@ -79,18 +60,13 @@ func (d *Daemon) checkGrantsSinceLastRun() {
 	d.recordAppliedGrants(now)
 }
 
-// The Inbox items about config.toml, by name.
 const (
-	// configWidenedNotice says panes hold more than at the last run.
 	configWidenedNotice = "config.toml"
-	// configWaitsNotice says a change that gives more waits for the person.
-	configWaitsNotice = "config.toml change waits"
+	configWaitsNotice   = "config.toml change waits"
 )
 
-// configWaitsNote is the summary of the configWaitsNotice item.
 const configWaitsNote = "Run tuios config apply in a terminal outside tuios. The change gives panes, other machines or a notification address more, or adds a command to run. So it waits for you."
 
-// closeConfigNotice closes the Inbox item about config.toml named name.
 func (a *attentionStore) closeConfigNotice(name string) {
 	if a == nil {
 		return
@@ -100,8 +76,6 @@ func (a *attentionStore) closeConfigNotice(name string) {
 	a.closeKeyLocked(attentionItemKey(&AttentionItem{Kind: AttentionErrored, Name: name}), AttentionClosedResolved)
 }
 
-// noteConfigNotice opens or updates the Inbox item about config.toml named
-// name, which the person dismisses.
 func (a *attentionStore) noteConfigNotice(name, summary string) {
 	if a == nil {
 		return
@@ -115,11 +89,6 @@ func (a *attentionStore) noteConfigNotice(name, summary string) {
 	})
 }
 
-// verbApplyConfig applies config.toml for the person. A file change applies
-// only what narrows (applyUserConfig); this is how the person applies a change
-// that widens without restarting the daemon. With host it applies that one
-// host entry and nothing else, which is what tuios hosts add asks for: a
-// widening some other process wrote to the file is not applied with it.
 func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Host string `json:"host"`
@@ -152,16 +121,8 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	if err != nil {
 		return nil, newVerbError(ErrVerbCommandFailed, "config.toml has an error, so nothing was applied: "+err.Error())
 	}
-	// A key tuios cannot read is dropped, the same as on load, and the
-	// person is told which.
-	// A table under [keybindings] that tuios does not have is listed with
-	// them: the decoder drops it, and every binding in it (issue #1734).
-	// So is an action name in a keybinding table that no action has: the
-	// registry skips it, and its keys do nothing.
 	dropped := append(config.UnknownKeybindTables(lc), config.UnknownKeybindActions(lc)...)
 	dropped = append(dropped, config.DroppedWarnings(config.DropUnreadableKeys(cfg, lc))...)
-	// Keys tuios reads but that do not do what they say, such as a
-	// [startup] layout with tiling off.
 	notices := config.StartupLayoutWarnings(lc, cfg)
 
 	before := d.configSnapshot()
@@ -189,8 +150,6 @@ func (d *Daemon) verbApplyConfig(cs *connState, params json.RawMessage) (any, *v
 	return out, nil
 }
 
-// applyOneHost applies the entry of one host from cfg, or its removal, and
-// nothing else.
 func (d *Daemon) applyOneHost(cfg *config.UserConfig, name string) *verbError {
 	if d.federation == nil {
 		return newVerbError(ErrVerbCommandFailed, "this daemon dials no hosts")
@@ -220,7 +179,6 @@ func (d *Daemon) applyOneHost(cfg *config.UserConfig, name string) *verbError {
 	return nil
 }
 
-// configSnapshot is what apply-config reports a change of.
 type configSnapshot struct {
 	mode   string
 	grants []string
@@ -246,7 +204,6 @@ func (d *Daemon) configSnapshot() configSnapshot {
 	return s
 }
 
-// describeConfigChanges says in words what changed between two snapshots.
 func describeConfigChanges(before, after configSnapshot) []string {
 	var out []string
 	if before.mode != after.mode || !slices.Equal(before.grants, after.grants) {
@@ -267,8 +224,6 @@ func describeConfigChanges(before, after configSnapshot) []string {
 			out = append(out, "Host "+n+" is removed.")
 		}
 	}
-	// The policy each machine gets, compared machine by machine: a host
-	// entry with no policy of its own adds a key and changes nothing.
 	peers := map[string]bool{config.LinkPolicyDefaultName: true}
 	for k := range before.links {
 		peers[k] = true
@@ -310,7 +265,6 @@ func describeConfigChanges(before, after configSnapshot) []string {
 	return out
 }
 
-// grantWords is a grant list for a sentence.
 func grantWords(names []string) string {
 	if len(names) == 0 {
 		return "none"

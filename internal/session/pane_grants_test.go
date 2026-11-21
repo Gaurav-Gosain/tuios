@@ -133,7 +133,6 @@ func TestStrictModeHoldsAPaneToItsGrants(t *testing.T) {
 	wantForbidden(t, "kill-session", callP(c, t, "kill-session", map[string]any{"session": "b"}))
 	wantForbidden(t, "set-option", callP(c, t, "set-option", map[string]any{"session": "a", "key": "x", "value": "y"}))
 
-	// The default grants read, write and fan: its own session is open to it.
 	listed := result(t, callP(c, t, "list-agents", nil))
 	if listed["session"] != "a" {
 		t.Errorf("list-agents with no session listed %v, want the pane's own a", listed["session"])
@@ -145,10 +144,8 @@ func TestStrictModeHoldsAPaneToItsGrants(t *testing.T) {
 	}
 	result(t, callP(c, t, "set-agent-state", map[string]any{"state": "working"}))
 
-	// respond needs its own grant, which strict does not give by default.
 	wantForbidden(t, "respond", callP(c, t, "respond", map[string]any{"window": a2, "action": "approve"}))
 
-	// The person, outside every pane, is untouched.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	plain := dialVerb(t, sp)
 	result(t, callP(plain, t, "list-sessions", nil))
@@ -168,12 +165,10 @@ func TestReadOnlyGrantRefusesTypingAndMail(t *testing.T) {
 	wantForbidden(t, "send-keys", callP(c, t, "send-keys", map[string]any{"window": a2, "keys": "Enter"}))
 	wantForbidden(t, "mail", callP(c, t, "send-agent-message", map[string]any{"to": a2, "text": "x"}))
 	wantForbidden(t, "start-agent", callP(c, t, "start-agent", map[string]any{"agent": "true"}))
-	// Its own record is always its own to write.
 	result(t, callP(c, t, "set-agent-state", map[string]any{"state": "idle"}))
 	result(t, callP(c, t, "set-agent-meta", map[string]any{"tokens": map[string]any{"model": "x"}}))
 	wantForbidden(t, "another pane's record", callP(c, t, "set-agent-state", map[string]any{"window": a2, "state": "idle"}))
 
-	// No grants at all still reports itself.
 	d.manager.SetPanePermissions(config.ResolvedPermissions{Strict: true, Grants: []string{}})
 	wantForbidden(t, "capture with no grants", callP(c, t, "capture-pane", map[string]any{"window": a2}))
 	result(t, callP(c, t, "set-agent-state", map[string]any{"state": "working"}))
@@ -186,7 +181,6 @@ func TestFanGrantReachesTheFanGroup(t *testing.T) {
 
 	setStrict(d, "read", "write")
 	c := dialVerb(t, sp)
-	// read reaches the group, write does not.
 	result(t, callP(c, t, "capture-pane", map[string]any{"session": "b", "window": b1}))
 	resp := callP(c, t, "send-text", map[string]any{"session": "b", "window": b1, "text": "x"})
 	wantForbidden(t, "write into the group without fan", resp)
@@ -196,7 +190,6 @@ func TestFanGrantReachesTheFanGroup(t *testing.T) {
 
 	setStrict(d, "read", "fan")
 	result(t, callP(c, t, "send-text", map[string]any{"session": "b", "window": b1, "text": "x"}))
-	// fan alone does not write into the pane's own session.
 	wantForbidden(t, "own session with fan and no write", callP(c, t, "send-text", map[string]any{"session": "a", "window": a1, "text": "x"}))
 }
 
@@ -228,7 +221,6 @@ func TestExplicitGrantsHoldEvenUnderOpen(t *testing.T) {
 	wantForbidden(t, "send-text from a read pane", callP(c, t, "send-text", map[string]any{"window": a2, "text": "x"}))
 	wantForbidden(t, "list-sessions from a read pane", callP(c, t, "list-sessions", nil))
 
-	// Another pane still holds the open default.
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a2 })
 	other := dialVerb(t, sp)
 	result(t, callP(other, t, "send-text", map[string]any{"session": "b", "window": b1, "text": "x"}))
@@ -242,22 +234,17 @@ func TestAPaneCannotWidenItself(t *testing.T) {
 	wantForbidden(t, "widening to admin", callP(c, t, "set-pane-grants", map[string]any{"grants": []string{"admin"}}))
 	wantForbidden(t, "giving itself respond", callP(c, t, "set-pane-grants", map[string]any{"grants": []string{"read", "respond"}}))
 	wantForbidden(t, "changing another pane", callP(c, t, "set-pane-grants", map[string]any{"window": a2, "grants": []string{"read"}}))
-	// Narrowing itself is allowed and sticks.
 	result(t, callP(c, t, "set-pane-grants", map[string]any{"grants": []string{"read"}}))
 	wantForbidden(t, "send-text after narrowing", callP(c, t, "send-text", map[string]any{"window": a2, "text": "x"}))
-	// And it cannot come back, not even to the default it came from.
 	wantForbidden(t, "reset to the default", callP(c, t, "set-pane-grants", map[string]any{"reset": true}))
 	got := result(t, callP(c, t, "pane-grants", nil))
 	if g := got["grants"].([]any); len(g) != 1 || g[0] != "read" || got["explicit"] != true {
 		t.Errorf("pane-grants after narrowing = %v", got)
 	}
 
-	// An admin pane may not give respond either.
 	setStrict(d, "admin")
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a2 })
 	admin := dialVerb(t, sp)
-	// b is the most recently active session; a pane's call that names none
-	// still means its own.
 	d.manager.GetSession("b").TouchActive()
 	wantForbidden(t, "admin giving respond", callP(admin, t, "set-pane-grants", map[string]any{"window": a1, "grants": []string{"respond"}}))
 	result(t, callP(admin, t, "set-pane-grants", map[string]any{"window": a1, "grants": []string{"read", "write"}}))
@@ -289,7 +276,6 @@ func TestLaunchGrantsNeverWiden(t *testing.T) {
 		t.Error("an admin pane gave respond")
 	}
 
-	// The person gives anything; a link may not give respond.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	if g, verr := d.launchGrants(&connState{}, []string{"respond", "read"}); verr != nil || *g != GrantRespond|GrantRead {
 		t.Errorf("the person giving respond,read = %v, %v", g, verr)
@@ -342,12 +328,10 @@ func TestPaneGrantsEnvAndTableFollowTheProcess(t *testing.T) {
 		t.Error("a pane given nothing does not say it holds the open default")
 	}
 
-	// A new process in the window with no grants named keeps the window's.
 	m.grants.add(win.ID, "second-pty", "env", nil)
 	if got, explicit := m.grants.effective(win.ID); got != g || !explicit {
 		t.Errorf("after a second process the window holds %v (explicit %v), want read,write", got, explicit)
 	}
-	// The first process exiting does not drop the second's entry.
 	m.grants.remove(win.ID, win.PTYID)
 	if _, ok := m.grants.lookup(win.ID); !ok {
 		t.Error("the first process's exit removed the window")
@@ -360,8 +344,6 @@ func TestPaneGrantsEnvAndTableFollowTheProcess(t *testing.T) {
 		t.Error("the table still counts an explicit pane after it left")
 	}
 
-	// A new process in the window after the last one left still holds what
-	// the window's record says it was given, not the default.
 	if _, err := sess.CreatePTY(win.ID, 80, 24, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -522,16 +504,12 @@ func TestRespondGrantLetsAPaneAnswer(t *testing.T) {
 		t.Error("a pane holding respond may answer in a session outside its reach")
 	}
 	c := dialVerb(t, sp)
-	// Past the grant check, the handler looks for a prompt, and a2 shows
-	// none: the refusal is the prompt's, not the caller's.
 	resp := callP(c, t, "respond", map[string]any{"window": a2, "action": "approve"})
 	if code := errCode(t, resp); code == ErrVerbForbidden || code == ErrVerbNotHuman {
 		t.Errorf("a pane holding respond was refused as %s", code)
 	}
 	wantForbidden(t, "respond into b", callP(c, t, "respond", map[string]any{"session": "b", "window": b1, "action": "approve"}))
 
-	// admin alone is not respond. An admin pane's call is not rewritten, so
-	// it names its session the way any caller does.
 	setStrict(d, "admin")
 	resp = callP(c, t, "respond", map[string]any{"session": "a", "window": a2, "action": "approve"})
 	if code := errCode(t, resp); code != ErrVerbNotHuman {
@@ -558,9 +536,6 @@ func TestAHostedPaneReachesNoSessionHereUnderStrict(t *testing.T) {
 		t.Errorf("pane-grants from a hosted pane = %v, want a pane with no session", got)
 	}
 
-	// A report as the hosted pane passes the grants, to be sent on to the
-	// machine that owns it. Here the owner's check is what answers: the test
-	// process is not in the pane.
 	d.hostedPanesMu.Lock()
 	if d.hostedPanes == nil {
 		d.hostedPanes = map[string]*hostedPane{}
@@ -586,7 +561,6 @@ func TestGrantKindCoversEveryVerb(t *testing.T) {
 			t.Errorf("verb %q has no class for pane grants", name)
 		}
 	}
-	// The verbs a pane calls about itself are open to every pane.
 	for _, v := range []string{"hello", "list-verbs", "pane-grants", "resolve-pane"} {
 		if grantKind(v) != scopeOpen {
 			t.Errorf("%s is not open to every pane", v)
@@ -636,8 +610,6 @@ func TestAPaneCannotTypeIntoAPaneThatHoldsMore(t *testing.T) {
 	wantForbidden(t, "run in an admin sibling", callP(c, t, "run", map[string]any{"window": a2, "command": "true"}))
 	wantForbidden(t, "ask-agent of an admin sibling", callP(c, t, "ask-agent", map[string]any{"window": a2, "text": "hi", "force": true}))
 
-	// With no window the call means the focused pane, which is a2 here. It
-	// is checked the same way.
 	if f, _ := focusedWindowID(d.manager.GetSession("a").GetState()); f != a2 {
 		t.Fatalf("focused window = %s, want %s for this check", f, a2)
 	}
@@ -645,17 +617,13 @@ func TestAPaneCannotTypeIntoAPaneThatHoldsMore(t *testing.T) {
 		t.Errorf("send-text with no window from a pane answered %s, want invalid_params", code)
 	}
 
-	// Its own pane is always its own to type into.
 	result(t, callP(c, t, "send-text", map[string]any{"window": a1, "text": "x"}))
 
-	// A sibling that holds no more than the caller may be typed into. The
-	// person's connection is placed in no pane; c stays placed in a1.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a2, "grants": []string{"read"}}))
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
 	result(t, callP(c, t, "send-text", map[string]any{"window": a2, "text": "x"}))
 	result(t, callP(c, t, "send-keys", map[string]any{"window": a2, "keys": "Enter"}))
-	// The window was pinned to the id it resolved to.
 	out, verr := d.checkGrants(&connState{}, "send-text", json.RawMessage(`{"window":"Second","text":"x"}`))
 	if verr != nil {
 		t.Fatal(verr)
@@ -685,23 +653,17 @@ func TestTypingIntoAPromptNeedsRespond(t *testing.T) {
 	}
 	wantForbidden(t, "send-text into a prompt", callP(c, t, "send-text", map[string]any{"window": a2, "text": "y\r"}))
 	wantForbidden(t, "ask-agent allow_blocked into a prompt", callP(c, t, "ask-agent", map[string]any{"window": a2, "text": "y", "allow_blocked": true, "force": true}))
-	// Without allow_blocked ask-agent keeps its own refusal.
 	if code := errCode(t, callP(c, t, "ask-agent", map[string]any{"window": a2, "text": "y"})); code != ErrVerbAgentBlocked {
 		t.Errorf("ask-agent into a prompt answered %s, want agent_blocked as before", code)
 	}
 
-	// respond covers it, with allow_blocked to say the caller read the prompt.
 	setStrict(d, append(append([]string{}, config.DefaultStrictGrants...), config.PaneGrantRespond)...)
 	if code := errCode(t, callP(c, t, "send-keys", map[string]any{"window": a2, "keys": "Enter"})); code != ErrVerbAgentBlocked {
 		t.Errorf("send-keys with respond and no allow_blocked answered %s, want agent_blocked", code)
 	}
 	result(t, callP(c, t, "send-keys", map[string]any{"window": a2, "keys": "Enter", "allow_blocked": true}))
 
-	// A pane that has come to a prompt since the call was checked is refused
-	// by the handler's second look.
 	setStrict(d)
-	// The pane says it is at rest itself. A word from anyone else would
-	// hold it as still on its prompt (promptStillShown).
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a2 })
 	setAgentState(t, dialVerb(t, sp), "a", a2, string(AgentStateIdle), "", "")
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
@@ -714,7 +676,6 @@ func TestTypingIntoAPromptNeedsRespond(t *testing.T) {
 	if verr := d.recheckTyping(cs, "send-text", d.manager.GetSession("a"), a2); verr == nil || verr.Code != ErrVerbForbidden {
 		t.Errorf("recheck of a pane now on a prompt = %v, want forbidden", verr)
 	}
-	// The person is never held by it.
 	if verr := d.recheckTyping(&connState{}, "send-text", d.manager.GetSession("a"), a2); verr != nil {
 		t.Errorf("recheck for a connection that ran no checked call = %v", verr)
 	}
@@ -738,14 +699,11 @@ func TestGetWindowIsARead(t *testing.T) {
 	if _, ok := got["agent_state"]; !ok {
 		t.Errorf("get-window = %v, want agent_state", got)
 	}
-	// No window means the focused one, as GetWindow did.
 	if got := result(t, callP(c, t, "get-window", nil)); got["window_id"] != a2 {
 		t.Errorf("get-window with no window = %v, want the focused %s", got["window_id"], a2)
 	}
 	wantForbidden(t, "get-window of b", callP(c, t, "get-window", map[string]any{"session": "b", "window": b1}))
 
-	// The client protocol's command message stays admin only, and its
-	// refusal names run-command and the read that replaces it, not attach.
 	conn, err := net.DialTimeout("unix", sp, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
@@ -769,9 +727,6 @@ func TestGetWindowIsARead(t *testing.T) {
 		t.Errorf("GetWindow over the client protocol from a read pane: type %d, %+v; want forbidden naming run-command and get-window", resp.Type, e)
 	}
 
-	// The fields are list-windows' entry for the same window. The pane's
-	// shell can still be printing, and output between the two reads moves
-	// fields such as revision, so read both again until one pair agrees.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	person := dialVerb(t, sp)
 	var diffs []string
@@ -826,8 +781,6 @@ func TestAttachedClientAnswersGetWindowAndNeverAPanesKeys(t *testing.T) {
 	})
 
 	setStrict(d)
-	// The attached client said hello over the client protocol and is the
-	// person's; the verb connection is the pane a1.
 	d.setApprovalPeer(func(cs *connState) (bool, string) {
 		if cs.hello != nil {
 			return false, ""
@@ -839,7 +792,6 @@ func TestAttachedClientAnswersGetWindowAndNeverAPanesKeys(t *testing.T) {
 	if got["id"] != a2 || got["cursor_x"] != float64(3) || got["type"] != "window" {
 		t.Errorf("get-window with a client attached = %v, want the client's answer for %s", got, a2)
 	}
-	// Drain the GetWindow the client answered.
 	for len(routed) > 0 {
 		<-routed
 	}
@@ -851,9 +803,6 @@ func TestAttachedClientAnswersGetWindowAndNeverAPanesKeys(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	// The person's keys with no window still go through the client. Keys for
-	// a named window go to that window's terminal, whoever sends them, since
-	// the client would hand them to the focused window instead.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	person := dialVerb(t, sp)
 	result(t, callP(person, t, "send-keys", map[string]any{"session": "a", "window": a2, "keys": "Enter"}))
@@ -901,9 +850,6 @@ func TestThePluginTokenHoldsTheCaller(t *testing.T) {
 		t.Errorf("a caller with a plugin's token was confirmed as the person")
 	}
 
-	// Flip one hex digit rather than writing a fixed prefix: a token whose
-	// first byte is already 00 would survive that untouched, and the daemon
-	// would rightly take it. (Once in 256 daemon starts, drawn on CI.)
 	tampered := []byte(env["TUIOS_PLUGIN_TOKEN"])
 	if tampered[0] == '0' {
 		tampered[0] = '1'

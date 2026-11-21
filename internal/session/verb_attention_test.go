@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// setAgentState reports a state for a window over the verb socket.
 func setAgentState(t *testing.T, c *verbConn, session, window, state, kind, message string) {
 	t.Helper()
 	params := map[string]any{"session": session, "window": window, "state": state}
@@ -23,7 +22,6 @@ func setAgentState(t *testing.T, c *verbConn, session, window, state, kind, mess
 	result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"set-agent-state","params":%s}`, raw)))
 }
 
-// listAttention returns the items list-attention answers, and its result.
 func listAttention(t *testing.T, c *verbConn, params string) ([]map[string]any, map[string]any) {
 	t.Helper()
 	if params == "" {
@@ -38,7 +36,6 @@ func listAttention(t *testing.T, c *verbConn, params string) ([]map[string]any, 
 	return out, res
 }
 
-// waitAttention polls list-attention until pred holds.
 func waitAttention(t *testing.T, c *verbConn, why string, pred func([]map[string]any) bool) []map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second * testDeadlineScale)
@@ -100,7 +97,6 @@ func TestInboxEventsResumeFromAListing(t *testing.T) {
 	}
 }
 
-// readStreamEvent reads one event line off a subscribed connection.
 func readStreamEvent(t *testing.T, c *verbConn) map[string]any {
 	t.Helper()
 	_ = c.conn.SetReadDeadline(time.Now().Add(5 * time.Second * testDeadlineScale))
@@ -135,8 +131,6 @@ func TestInboxDismissIsForThePerson(t *testing.T) {
 		}
 	}
 
-	// A client attached to another session may still dismiss: the Inbox spans
-	// every session.
 	tui := attachTUI(t, sp, "other")
 	res := result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"dismiss-attention","params":{"id":%q,"human_nonce":%q}}`, id, tui.HumanNonce())))
 	if res["dismissed"] != true || res["kind"] != AttentionFinished {
@@ -145,7 +139,6 @@ func TestInboxDismissIsForThePerson(t *testing.T) {
 	if items, _ := listAttention(t, c, ""); len(items) != 0 {
 		t.Errorf("the dismissed item is still listed: %v", items)
 	}
-	// Dismissing a finished turn is having seen it.
 	for _, w := range sess.GetState().Windows {
 		if w.ID == a && sess.finishedUnread(&w) {
 			t.Errorf("finished_unread is still true after the dismiss")
@@ -200,9 +193,6 @@ func TestInboxSurvivesADaemonRestart(t *testing.T) {
 		t.Fatalf("after a restart the Inbox holds %v, want only the finished item %s", items, finishedID)
 	}
 
-	// The message ring started over, so the first new thread may take the id
-	// the saved mail item had. It opens a fresh item rather than adding to a
-	// stale one.
 	sendJSON(t, c2, 1, map[string]any{"session": "work", "to": AgentInboxHuman, "from": a, "text": "after the restart"})
 	items = waitAttention(t, c2, "new mail", hasKind(AttentionMail, a))
 	for _, it := range items {

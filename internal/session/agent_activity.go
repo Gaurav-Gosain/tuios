@@ -13,43 +13,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
 
-// An agent pane's activity: the prompts, tool calls, tool results, finished
-// turns, subagents and conversation starts its hooks reported, kept in a
-// bounded ring per pane in daemon memory, and the recap computed from it.
-//
-// The ring is written only by the pane's own reports: activity rides
-// set-agent-state, which is scopeSelf and passes the identity guard first. It
-// is display only, and nothing reads it to decide a state, a wait or an alert.
-// agent-activity reads it: scopeRead with fan-group reach, and a link needs
-// list. Its text is the agent's, cleaned by attentionText and marked
-// untrusted.
-//
-// A pane gets a ring on the first report that carries activity, so a plain
-// shell pane, and an agent pane whose harness has no hooks, costs nothing.
-// Once it has one, the pane's OSC 133 commands and its agent state changes are
-// added to it as well, from the session event sink. The ring dies with the
-// window, the session or the daemon; it is never saved.
-
-// Sizes of the activity ring and what one entry may hold.
 const (
-	// activityRingSize is how many entries one pane keeps. An older entry is
-	// dropped for a newer one.
-	activityRingSize = 256
-	// agentActivityMaxLimit bounds one agent-activity answer.
-	agentActivityMaxLimit = activityRingSize
-	// agentActivityDefaultLimit is what an agent-activity call without a
-	// limit gets.
+	activityRingSize          = 256
+	agentActivityMaxLimit     = activityRingSize
 	agentActivityDefaultLimit = 64
-	// activityTextMax bounds an entry's text and target, in bytes.
-	activityTextMax = 160
-	// activityToolMax bounds a tool name, in bytes.
-	activityToolMax = 64
-	// activityFileMax bounds one file path, in bytes.
-	activityFileMax = 256
-	// activityFilesMax is how many files one entry keeps.
-	activityFilesMax = 16
-	// recapFilesShown is how many files a recap lists. files_total counts all.
-	recapFilesShown = 20
+	activityTextMax           = 160
+	activityToolMax           = 64
+	activityFileMax           = 256
+	activityFilesMax          = 16
+	recapFilesShown           = 20
 )
 
 // Activity entry kinds. They are wire values: agent-activity returns them and
@@ -108,15 +80,11 @@ const (
 	AgentMetaSubagents = "subagents"
 	// AgentMetaModel is the model the harness named. It is not reserved: a
 	// status line may write it too.
-	AgentMetaModel = "model"
-	// agentMetaActivitySource is the source recorded on the reserved keys.
+	AgentMetaModel          = "model"
 	agentMetaActivitySource = "activity"
-	// agentMetaHookSource is the source recorded on a model a hook named.
-	agentMetaHookSource = "hook"
+	agentMetaHookSource     = "hook"
 )
 
-// reservedAgentMetaKeys are the keys set-agent-meta refuses and its clear
-// leaves alone.
 var reservedAgentMetaKeys = []string{AgentMetaNow, AgentMetaPrompt, AgentMetaSubagents}
 
 // AgentActivityEntry is one entry of a pane's activity ring.
@@ -149,22 +117,15 @@ type AgentActivityEntry struct {
 	DurationMS int64 `json:"duration_ms,omitempty"`
 	Tools      int   `json:"tools,omitempty"`
 
-	// turns is how many turns the pane finished with a state entry: its
-	// completion_seq delta. The recap adds them up. Never on the wire.
 	turns uint64
 }
 
-// activityRing is one pane's entries, oldest first, in a circular buffer.
 type activityRing struct {
 	entries []AgentActivityEntry
 	start   int
-	// seq is the Seq of the newest entry, which is also how many entries the
-	// pane has had.
-	seq uint64
+	seq     uint64
 }
 
-// push adds e as the newest entry, dropping the oldest when full, and returns
-// it numbered.
 func (r *activityRing) push(e AgentActivityEntry) AgentActivityEntry {
 	r.seq++
 	e.Seq = r.seq
@@ -177,28 +138,21 @@ func (r *activityRing) push(e AgentActivityEntry) AgentActivityEntry {
 	return e
 }
 
-// ordered returns a copy of the entries, oldest first.
 func (r *activityRing) ordered() []AgentActivityEntry {
 	out := make([]AgentActivityEntry, 0, len(r.entries))
 	out = append(out, r.entries[r.start:]...)
 	return append(out, r.entries[:r.start]...)
 }
 
-// dropped reports whether the ring has let go of an entry.
 func (r *activityRing) dropped() bool {
 	return r.seq > uint64(len(r.entries))
 }
 
-// activityKey names a pane: its session's id and its window id. The id rather
-// than the name, so a renamed session keeps its rings.
 type activityKey struct {
 	session string
 	window  string
 }
 
-// activityStore holds every pane's ring. It has its own lock and never calls
-// into a session while holding it, so the session event sink, which runs with
-// the session's state lock held, may add to it.
 type activityStore struct {
 	mu      sync.Mutex
 	rings   map[activityKey]*activityRing
@@ -209,9 +163,6 @@ func newActivityStore(publish func(streamEvent)) *activityStore {
 	return &activityStore{rings: make(map[activityKey]*activityRing), publish: publish}
 }
 
-// add records e for the pane. create says whether a pane with no ring gets
-// one; without it an entry for such a pane is dropped. It reports whether the
-// entry was kept. Every kept entry is published as an agent-activity event.
 func (a *activityStore) add(sessionID, sessionName, windowID string, e AgentActivityEntry, create bool) bool {
 	if a == nil || windowID == "" {
 		return false
@@ -232,16 +183,12 @@ func (a *activityStore) add(sessionID, sessionName, windowID string, e AgentActi
 	}
 	e = ring.push(e)
 	if a.publish != nil {
-		// Published under the store's lock, so two entries of one pane reach
-		// a subscriber in the order of their seq. The hub's lock is a leaf.
 		entry := e
 		a.publish(streamEvent{Type: EventAgentActivity, Session: sessionName, Window: windowID, Entry: &entry})
 	}
 	return true
 }
 
-// ensure gives the pane a ring if it has none, and reports whether it made
-// one.
 func (a *activityStore) ensure(sessionID, windowID string) bool {
 	if a == nil || windowID == "" {
 		return false
@@ -256,7 +203,6 @@ func (a *activityStore) ensure(sessionID, windowID string) bool {
 	return true
 }
 
-// has reports whether the pane has a ring.
 func (a *activityStore) has(sessionID, windowID string) bool {
 	if a == nil {
 		return false
@@ -267,8 +213,6 @@ func (a *activityStore) has(sessionID, windowID string) bool {
 	return ok
 }
 
-// read returns a copy of the pane's entries, oldest first, whether it has a
-// ring, and whether the ring has dropped any.
 func (a *activityStore) read(sessionID, windowID string) ([]AgentActivityEntry, bool, bool) {
 	if a == nil {
 		return nil, false, false
@@ -282,7 +226,6 @@ func (a *activityStore) read(sessionID, windowID string) ([]AgentActivityEntry, 
 	return ring.ordered(), true, ring.dropped()
 }
 
-// forgetWindow drops a closed window's ring.
 func (a *activityStore) forgetWindow(sessionID, windowID string) {
 	if a == nil {
 		return
@@ -292,8 +235,6 @@ func (a *activityStore) forgetWindow(sessionID, windowID string) {
 	delete(a.rings, activityKey{sessionID, windowID})
 }
 
-// forgetIfEmpty drops the pane's ring when nothing was ever added to it: a
-// ring ensure made for a report that then did not record anything.
 func (a *activityStore) forgetIfEmpty(sessionID, windowID string) {
 	if a == nil {
 		return
@@ -306,7 +247,6 @@ func (a *activityStore) forgetIfEmpty(sessionID, windowID string) {
 	}
 }
 
-// forgetSession drops every ring of a session that ended.
 func (a *activityStore) forgetSession(sessionID string) {
 	if a == nil {
 		return
@@ -320,10 +260,6 @@ func (a *activityStore) forgetSession(sessionID string) {
 	}
 }
 
-// noteSessionEvent adds what a session event says to the ring of a pane that
-// has one: a command its shell finished, or its agent state changing. A closed
-// window's ring is dropped. It runs in the session event sink, with the
-// session's state lock held, so it reads nothing from the session.
 func (a *activityStore) noteSessionEvent(s *Session, ev SessionEvent) {
 	if a == nil || s == nil {
 		return
@@ -335,10 +271,6 @@ func (a *activityStore) noteSessionEvent(s *Session, ev SessionEvent) {
 			c := *ev.ExitCode
 			exit = &c
 		}
-		// Checked first, so a plain shell pane costs one map lookup and no
-		// text cleaning. The command line is cleaned and cut like every other
-		// target: shell_commands.go keeps up to shellCmdlineMax bytes of it,
-		// and the ring keeps activityTextMax.
 		if !a.has(s.ID, ev.Window) {
 			return
 		}
@@ -390,15 +322,10 @@ type AgentActivityReport struct {
 	Tools int `json:"tools,omitempty"`
 }
 
-// subagentOutcomes are the outcomes a subagent_update takes.
 var subagentOutcomes = []string{subagentOutcomeStopping, subagentOutcomeFailed}
 
-// subagentToolsMax bounds a reported tool count.
 const subagentToolsMax = 1_000_000
 
-// checkActivityReport refuses an activity whose event is not one of events,
-// the verb's, and a subagent event without an id the daemon can keep. A
-// report without one is not checked.
 func checkActivityReport(a *AgentActivityReport, events []string) *verbError {
 	if a == nil {
 		return nil
@@ -430,9 +357,6 @@ func checkActivityReport(a *AgentActivityReport, events []string) *verbError {
 	return nil
 }
 
-// activityEntryOf cleans a hook's report into a ring entry. Every string is
-// the agent's, so each is cut to one line, stripped of control characters and
-// masked for secrets before it is kept.
 func activityEntryOf(r *AgentActivityReport) AgentActivityEntry {
 	e := AgentActivityEntry{
 		Kind:   r.Event,
@@ -441,9 +365,6 @@ func activityEntryOf(r *AgentActivityReport) AgentActivityEntry {
 		Text:   attentionText(integration.FirstLine(r.Text), activityTextMax),
 	}
 	if subagentEvent(r.Event) {
-		// The entry says which kind of agent it was. Its id pairs a start
-		// with its stop in the daemon and says nothing to a reader.
-		// recordAgentActivity names it better once the daemon knows it.
 		e.Text = attentionText(integration.FirstLine(r.AgentType), activityToolMax)
 	}
 	if r.OK != nil {
@@ -463,15 +384,6 @@ func activityEntryOf(r *AgentActivityReport) AgentActivityEntry {
 	return e
 }
 
-// recordAgentActivity keeps one hook event in the pane's ring and moves the
-// reserved metadata keys it implies, and reports whether the ring kept it.
-// state is the pane's state after the report the activity rode on, applied
-// or not.
-//
-// A subagent's start or stop is kept only when it moved the pane's
-// subagents. A stop for one the pane never saw start, a second start of one
-// already running, a start past the cap and a start on a pane with no agent
-// state are nothing, and an entry in the ring would say otherwise.
 func (d *Daemon) recordAgentActivity(sess *Session, windowID string, r *AgentActivityReport, state AgentState) bool {
 	e := activityEntryOf(r)
 	m := activityMetaFor(e, r.Model, state)
@@ -481,8 +393,6 @@ func (d *Daemon) recordAgentActivity(sess *Session, windowID string, r *AgentAct
 		if got.move == subagentNoMove && !got.ended {
 			return false
 		}
-		// The ring keeps a subagent's start and its end, named, and not its
-		// tool calls. An update that ended it, a failed call, is its end.
 		if r.Event == ActivitySubagentUpdate && !got.ended {
 			return true
 		}
@@ -497,8 +407,6 @@ func (d *Daemon) recordAgentActivity(sess *Session, windowID string, r *AgentAct
 	return true
 }
 
-// subagentEntry is the ring entry of a subagent's start, or of its end when
-// the change ended it.
 func subagentEntry(got subagentOutcome) AgentActivityEntry {
 	sa := got.sa
 	if !got.ended {
@@ -511,35 +419,19 @@ func subagentEntry(got subagentOutcome) AgentActivityEntry {
 	return e
 }
 
-// dropRingOfClosedWindow forgets the pane's ring when the window is gone. The
-// window id was resolved before the report applied, and a window that closed
-// since has already had its ring forgotten by the session event sink, so an
-// add after that would leave a ring nothing ever drops. The window leaves the
-// state and its close event reaches the sink under one hold of the state
-// lock, so either the sink forgets the ring after this check or this check
-// sees the window gone.
 func (d *Daemon) dropRingOfClosedWindow(sess *Session, windowID string) {
 	if !sess.holdsWindowID(windowID) {
 		d.activity.forgetWindow(sess.ID, windowID)
 	}
 }
 
-// activityMeta is what one activity entry does to the reserved metadata keys:
-// a value to set, or nil to clear, per key it touches.
 type activityMeta struct {
-	keys   []string
-	values []*string
-	// model is a model the harness named, empty when it named none.
-	model string
-	// subagents is what the entry does to the subagents the pane's agent is
-	// running, which the subagents key counts.
+	keys      []string
+	values    []*string
+	model     string
 	subagents subagentChange
 }
 
-// activityMetaFor decides the metadata an entry implies. A tool call starting
-// sets now; a prompt sets prompt and clears now; a failure or the end of a
-// turn clears now; and a pane at rest has nothing to be doing, so now is
-// cleared whatever the entry is.
 func activityMetaFor(e AgentActivityEntry, model string, state AgentState) activityMeta {
 	var m activityMeta
 	set := func(key string, v *string) {
@@ -574,19 +466,10 @@ func activityMetaFor(e AgentActivityEntry, model string, state AgentState) activ
 	return m
 }
 
-// agentStateBusy reports whether state is one in which the agent is doing
-// something, so the reserved now key may stand.
 func agentStateBusy(state AgentState) bool {
 	return state == AgentStateWorking || state == AgentStateNeedsInput
 }
 
-// clearNowAtRestLocked drops the reserved now key from every window whose
-// agent state moved, in this mutation, to a state other than working or
-// needs_input. It runs inside every daemon-side mutation, so now is cleared
-// however the pane came to rest: a report with no activity, a screen rule, an
-// OSC sequence, the detector or the silence timer. A new slice is built rather
-// than the old one edited, since a published snapshot may share it. The caller
-// holds stateMu.
 func clearNowAtRestLocked(before lifecycleSnapshot, st *SessionState) {
 	for i := range st.Windows {
 		w := &st.Windows[i]
@@ -613,17 +496,6 @@ func clearNowAtRestLocked(before lifecycleSnapshot, st *SessionState) {
 	}
 }
 
-// applyActivityMeta writes what activityMetaFor decided. A key already
-// holding the value, a key already absent, and a model the pane already shows
-// from any source change nothing, so a hook firing on every tool call pushes
-// state only when what the rail draws moves.
-//
-// The pane's subagents move in the same mutation as the count and the list
-// the window carries and the key that says the count, under the state lock,
-// so hooks for subagents started together, which a harness runs at the same
-// moment, cannot leave a count the set no longer has. A change to the tool a
-// subagent runs alone, within subagentPublishGap of the last subagent change
-// shown, is held for subagentFlush. It reports what the subagents did.
 func (s *Session) applyActivityMeta(windowID string, m activityMeta) subagentOutcome {
 	var got subagentOutcome
 	if len(m.keys) == 0 && m.model == "" && m.subagents.op == "" && !m.subagents.spawn {
@@ -687,7 +559,6 @@ func (s *Session) applyActivityMeta(windowID string, m activityMeta) subagentOut
 	return got
 }
 
-// agentMetaValue is the value tokens hold for key, or "".
 func agentMetaValue(tokens []AgentMetaToken, key string) string {
 	for _, t := range tokens {
 		if t.Key == key {
@@ -697,7 +568,6 @@ func agentMetaValue(tokens []AgentMetaToken, key string) string {
 	return ""
 }
 
-// agentActivityParams are what agent-activity takes.
 type agentActivityParams struct {
 	Session  string `json:"session"`
 	Window   string `json:"window"`
@@ -740,13 +610,8 @@ type AgentActivityTest struct {
 	At int64 `json:"at"`
 }
 
-// shellTools are the tool names harnesses give a shell command: Claude Code
-// and Codex say Bash, Codex's older builds shell, exec_command and
-// local_shell, and Gemini CLI run_shell_command.
 var shellTools = []string{"Bash", "bash", "shell", "exec_command", "local_shell", "run_shell_command"}
 
-// agentActivityRecap summarises entries, which are the pane's entries since
-// since, oldest first. patterns are the commands that read as a test run.
 func agentActivityRecap(entries []AgentActivityEntry, since int64, state AgentState, patterns []string) AgentActivityRecap {
 	rc := AgentActivityRecap{Since: since, Files: []string{}, State: state.Name()}
 	seen := map[string]bool{}
@@ -783,11 +648,6 @@ func agentActivityRecap(entries []AgentActivityEntry, since int64, state AgentSt
 	return rc
 }
 
-// newestTestRun finds the newest command that matches a test pattern and
-// says how it went: a finished tool call by its result (a failure event is a
-// failure, a finished call is a pass unless it said otherwise), a shell
-// command by its exit status. A call that started and has not finished, and a
-// command that sent no status, pass nothing.
 func newestTestRun(entries []AgentActivityEntry, patterns []string) *AgentActivityTest {
 	for _, e := range slices.Backward(entries) {
 		isShell := e.Kind == ActivityCommand ||
@@ -817,7 +677,6 @@ func newestTestRun(entries []AgentActivityEntry, patterns []string) *AgentActivi
 	return nil
 }
 
-// matchesTestPattern reports whether a command line contains one of patterns.
 func matchesTestPattern(cmdline string, patterns []string) bool {
 	if cmdline == "" {
 		return false
@@ -840,7 +699,6 @@ func (d *Daemon) SetRecapTestPatterns(patterns []string) {
 	d.recapTests.Store(&p)
 }
 
-// recapTestPatterns is what SetRecapTestPatterns set, else the defaults.
 func (d *Daemon) recapTestPatterns() []string {
 	if p := d.recapTests.Load(); p != nil {
 		return *p
@@ -848,9 +706,6 @@ func (d *Daemon) recapTestPatterns() []string {
 	return config.DefaultRecapTestPatterns
 }
 
-// verbAgentActivity answers agent-activity: the pane's entries after since
-// and since_seq, the newest limit of them, and with recap a summary of every
-// one of them.
 func (d *Daemon) verbAgentActivity(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p agentActivityParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -909,8 +764,6 @@ func (d *Daemon) verbAgentActivity(cs *connState, params json.RawMessage) (any, 
 		"untrusted": true,
 	}
 	if p.Recap {
-		// A recap of the whole ring starts at its oldest entry, and so does
-		// one asked from before entries the ring has since dropped.
 		since := p.Since
 		if len(all) > 0 && all[0].At > since && (since == 0 || dropped) {
 			since = all[0].At
@@ -922,8 +775,6 @@ func (d *Daemon) verbAgentActivity(cs *connState, params json.RawMessage) (any, 
 	return out, nil
 }
 
-// cwdPath is the path a pane's Cwd names: the path of an OSC 7 file URL, or
-// the Cwd when it is a plain absolute path.
 func cwdPath(cwd string) string {
 	if strings.HasPrefix(cwd, "file://") {
 		_, p, _ := winpath.FileURL(cwd)

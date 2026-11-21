@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-// These tests cover the subagents a pane's agent is running: what moves the
-// set, what clears it, the guard on report-agent-activity, the expiry of a
-// subagent that never stopped, and the rate a pane may report at.
-
-// reportActivity calls report-agent-activity for the work session's window
-// as the Claude Code hook would, in conversation sid.
 func reportActivity(t *testing.T, c *verbConn, sid string, activity map[string]any) map[string]any {
 	t.Helper()
 	return callP(c, t, "report-agent-activity", map[string]any{
@@ -19,19 +13,15 @@ func reportActivity(t *testing.T, c *verbConn, sid string, activity map[string]a
 	})
 }
 
-// subagentStart is a subagent_start activity for id.
 func subagentStart(id string) map[string]any {
 	return map[string]any{"event": "subagent_start", "agent_id": id, "agent_type": "Explore"}
 }
 
-// paneSubagentCount is what the session's one window says about its subagents:
-// the count it carries and the subagents key of its metadata.
 func paneSubagentCount(sess *Session) (int, string) {
 	w := sess.GetState().Windows[0]
 	return w.AgentSubagents, agentMetaValue(w.AgentMeta, AgentMetaSubagents)
 }
 
-// agentAtRest gives the work window an agent at rest in conversation s1.
 func agentAtRest(t *testing.T, c *verbConn) {
 	t.Helper()
 	setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"idle","harness":"claude-code","agent_session_id":"s1"}`)

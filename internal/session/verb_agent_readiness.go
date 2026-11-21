@@ -13,28 +13,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// agent-readiness: whether each harness can start an agent on this machine.
-//
-// The New agent sheet showed "claude ready" from a PATH lookup in the client
-// process, so it said nothing true about another machine, and nothing about
-// a harness that is installed and signed out. The daemon of each machine now
-// answers for itself: the harness's program on the PATH the caller sent (or
-// the daemon's own), and, for a harness whose manifest names a check
-// ([launch] signed_in_args), whether it says it is signed in.
-//
-// The check runs the harness's own program with the manifest's arguments,
-// never a program a manifest names. Its output is matched and dropped: Claude
-// Code's holds the account's email. It is bounded by readinessCheckTimeout and
-// its answer kept for readinessTTL, so a sheet open on five machines starts at
-// most one check per harness a minute on each.
-
-// readinessCheckTimeout bounds one signed-in check.
 const readinessCheckTimeout = 2 * time.Second
 
-// readinessTTL is how long an answer is kept.
 const readinessTTL = time.Minute
 
-// readinessOutputMax bounds the output a check is read for.
 const readinessOutputMax = 64 << 10
 
 // Signed-in answers.
@@ -62,9 +44,7 @@ type AgentReadiness struct {
 type readinessEntry struct {
 	at     time.Time
 	answer string
-	// done is closed when the check ends; a second caller waits on it
-	// rather than start its own.
-	done chan struct{}
+	done   chan struct{}
 }
 
 var readinessCache struct {
@@ -72,31 +52,20 @@ var readinessCache struct {
 	m map[string]*readinessEntry
 }
 
-// readinessParams are what agent-readiness takes.
 type readinessParams struct {
-	Harnesses []string          `json:"harnesses"`
-	Env       map[string]string `json:"env"`
-	// RepoURL and ReposRoot ask whether this machine has a checkout of a
-	// repository, found the way start-agent finds one (pool_place.go).
-	RepoURL   string `json:"repo_url"`
-	ReposRoot string `json:"repos_root"`
-	// PeerInstance is the calling daemon's instance. The answer's back is
-	// this machine's name for that daemon, when a link to it is up.
-	PeerInstance string `json:"peer_instance"`
+	Harnesses    []string          `json:"harnesses"`
+	Env          map[string]string `json:"env"`
+	RepoURL      string            `json:"repo_url"`
+	ReposRoot    string            `json:"repos_root"`
+	PeerInstance string            `json:"peer_instance"`
 }
 
-// readinessAnswer is agent-readiness's result.
 type readinessAnswer struct {
 	Agents []AgentReadiness `json:"agents"`
-	// Repo is found, none or many, with repo_url; empty without.
-	Repo string `json:"repo,omitempty"`
-	// Load is this machine's load now, with the agents that are starting.
-	Load *poolLoad `json:"load,omitempty"`
-	// Cap is [tasks] machine_cap, 0 for no cap.
-	Cap int `json:"cap"`
-	// Back is this machine's [hosts] name for the daemon peer_instance
-	// names, when its link is up.
-	Back string `json:"back,omitempty"`
+	Repo   string           `json:"repo,omitempty"`
+	Load   *poolLoad        `json:"load,omitempty"`
+	Cap    int              `json:"cap"`
+	Back   string           `json:"back,omitempty"`
 }
 
 func (d *Daemon) verbAgentReadiness(cs *connState, params json.RawMessage) (any, *verbError) {
@@ -107,7 +76,6 @@ func (d *Daemon) verbAgentReadiness(cs *connState, params json.RawMessage) (any,
 	return d.readiness(cs, p)
 }
 
-// readiness answers agent-readiness for this machine.
 func (d *Daemon) readiness(cs *connState, p readinessParams) (readinessAnswer, *verbError) {
 	_, pathList, verr := callerEnv(cs, p.Env)
 	if verr != nil {
@@ -152,8 +120,6 @@ func (d *Daemon) readiness(cs *connState, p readinessParams) (readinessAnswer, *
 			path, err = lookPathIn(cmd, pathList)
 		}
 		if pathList == "" || err != nil {
-			// start-agent falls back to the daemon's PATH the same way
-			// (resolveAgentLaunch), so installed means it would start.
 			path, err = exec.LookPath(cmd)
 		}
 		r.Installed = err == nil
@@ -170,9 +136,6 @@ func (d *Daemon) readiness(cs *connState, p readinessParams) (readinessAnswer, *
 	return ans, nil
 }
 
-// signedIn is the harness's answer, from the cache when it is fresh. ctx is
-// the daemon's: a check still running when the daemon stops is killed, and
-// its answer is not kept.
 func signedIn(ctx context.Context, id, path string, l *harness.Launch) string {
 	key := id + "\x00" + path
 	readinessCache.Lock()
@@ -193,7 +156,6 @@ func signedIn(ctx context.Context, id, path string, l *harness.Launch) string {
 	readinessCache.Lock()
 	e.answer, e.at = answer, time.Now()
 	if ctx.Err() != nil {
-		// Cut short by the stop: nothing was learned.
 		delete(readinessCache.m, key)
 	}
 	readinessCache.Unlock()
@@ -201,10 +163,6 @@ func signedIn(ctx context.Context, id, path string, l *harness.Launch) string {
 	return answer
 }
 
-// runSignedInCheck runs the check once, under parent: the harness's program
-// is killed when parent ends, so a daemon that stops leaves no check running
-// after it. A check left running wrote the harness's own files (Claude Code's
-// ~/.claude.json) after its daemon was gone.
 func runSignedInCheck(parent context.Context, path string, l *harness.Launch) string {
 	ctx, cancel := context.WithTimeout(parent, readinessCheckTimeout)
 	defer cancel()
@@ -213,8 +171,6 @@ func runSignedInCheck(parent context.Context, path string, l *harness.Launch) st
 	var buf capBuffer
 	cmd.Stdout, cmd.Stderr = &buf, &buf
 	if err := cmd.Run(); err != nil {
-		// A signed-out harness may say so with a failing exit; a check
-		// that never ran or ran out of time says nothing.
 		var exit *exec.ExitError
 		if ctx.Err() != nil || !errors.As(err, &exit) {
 			return SignedInUnknown
@@ -227,7 +183,6 @@ func runSignedInCheck(parent context.Context, path string, l *harness.Launch) st
 	return SignedInNo
 }
 
-// capBuffer keeps the first readinessOutputMax bytes written to it.
 type capBuffer struct{ b []byte }
 
 func (c *capBuffer) Write(p []byte) (int, error) {

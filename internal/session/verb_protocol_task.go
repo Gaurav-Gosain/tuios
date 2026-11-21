@@ -5,12 +5,10 @@ import (
 	"strings"
 )
 
-// taskVerbs are the registry entries of the task verbs (verb_task.go).
 func taskVerbs() map[string]verbEntry {
 	id := verbParam{Name: "id", Type: "string", Required: true, Description: "The card, such as t1."}
 	humanNonce := verbParam{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human."}
 	rowFields := "id, session, title, preview (the first line of the prompt, at most 80 characters), stage, stage_at (Unix nanoseconds), holder (window, name, harness, state, held_at, read from the pane now; null when no pane holds it), by (human, shell, the adding pane's window id, link:HOST or plugin:ID), at, blocked (reason, by, at; null when not blocked) and fan (fan, fan_id) for a card added in a fan."
-	// The fields of a card's row, which every verb that changes one returns.
 	row := []verbParam{
 		{Name: "id", Type: "string", Description: "The card."},
 		{Name: "session", Type: "string", Description: "Its session."},
@@ -114,12 +112,7 @@ func taskVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbAddTask,
 		},
 		"list-tasks": {
-			// The task cards (task.go). The listing and one card read the session;
-			// every change is the task grant's.
-			scope: scopeRead,
-			// The task cards. The listing carries titles and holders, which list
-			// reaches; a card's prompt is what a pane will be told to do, so a
-			// change needs write.
+			scope:       scopeRead,
 			link:        needList,
 			description: "List a session's task cards, oldest first.",
 			params: []verbParam{

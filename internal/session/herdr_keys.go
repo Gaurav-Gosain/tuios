@@ -9,26 +9,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// herdr's key grammar, read into send-keys calls.
-//
-// pane.send_keys takes a list of keys in herdr's grammar
-// (src/config/keybinds.rs parse_key_combo at herdrTargetVersion): a key name
-// or one character, after modifiers joined with '+', matched without regard
-// to case. send-keys takes one string that it splits on spaces and commas, so
-// a comma or a space typed as itself cannot be a token there. The keys are
-// therefore sent in runs: named keys as one send-keys call, and plain
-// characters as another with literal set, which types them as they are.
-
-// herdrKeyRun is one send-keys call: tokens joined for send-keys, or text
-// typed as it is.
 type herdrKeyRun struct {
 	keys    string
 	literal bool
 }
 
-// herdrKeyNames maps herdr's key names, lower-cased, to send-keys names. The
-// punctuation names become the character. tuios's own names for the keys
-// herdr has none for (PageUp, Home, End, Insert, Delete) are taken as well.
 var herdrKeyNames = map[string]string{
 	"space": " ", "enter": "Enter", "return": "Enter", "esc": "Escape", "escape": "Escape",
 	"tab": "Tab", "backtab": "BTab", "backspace": "Backspace", "bs": "Backspace",
@@ -40,10 +25,6 @@ var herdrKeyNames = map[string]string{
 	"insert": "Insert", "delete": "Delete",
 }
 
-// herdrKeyMod is the send-keys prefix of one of herdr's modifier words, read
-// by the spellings every key reader shares (config.ParseModifier). super and
-// hyper have no byte encoding in a terminal without a keyboard protocol, so a
-// key that holds one is refused: refused is true.
 func herdrKeyMod(word string) (prefix string, isMod, refused bool) {
 	name, ok := config.ParseModifier(word)
 	if !ok {
@@ -56,8 +37,6 @@ func herdrKeyMod(word string) (prefix string, isMod, refused bool) {
 	return "", true, true
 }
 
-// herdrKeyRuns reads herdr keys into send-keys runs. It returns the first key
-// it cannot read, for herdr's invalid_key error, and sends nothing then.
 func herdrKeyRuns(keys []string) ([]herdrKeyRun, string) {
 	var runs []herdrKeyRun
 	add := func(tok string, literal bool) {
@@ -81,8 +60,6 @@ func herdrKeyRuns(keys []string) ([]herdrKeyRun, string) {
 	return runs, ""
 }
 
-// herdrKeyToken reads one herdr key: a send-keys token, or with literal the
-// text of a plain character.
 func herdrKeyToken(key string) (string, bool, bool) {
 	key = strings.TrimSpace(key)
 	switch key {
@@ -132,15 +109,12 @@ func herdrKeyToken(key string) (string, bool, bool) {
 		return "", false, false
 	}
 	if len(mods) == 0 && utf8.RuneCountInString(name) == 1 {
-		// A plain character, the space included, is typed as itself.
 		return name, true, true
 	}
 	if name == " " {
 		name = "Space"
 	}
 	if name == "," {
-		// send-keys splits on commas; with a modifier the comma is not a
-		// key tuios encodes anyway.
 		return "", false, false
 	}
 	if len(mods) == 0 {

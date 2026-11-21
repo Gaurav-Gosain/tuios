@@ -21,8 +21,6 @@ func sendText(t *testing.T, c *verbConn, winID, text string) {
 	result(t, c.call(t, `{"id":1,"verb":"send-text","params":`+string(params)+`}`))
 }
 
-// explainUntil polls explain-agent-detect until ready accepts the answer or the
-// deadline passes, then returns the last answer for the assertions.
 func explainUntil(t *testing.T, c *verbConn, winID string, ready func(map[string]any) bool) map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -49,9 +47,6 @@ func TestTranscriptIdentityReadsTheAgentBehindAWrapper(t *testing.T) {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The agent is this test binary under the name crush, which TestMain
-	// turns into a wait. A link to sleep does not do: a multi-call coreutils,
-	// as Ubuntu 26.04 ships, refuses to run under another name.
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

@@ -37,7 +37,6 @@ func BenchmarkAgentDetectScanLockWait(b *testing.B) {
 					b.Fatalf("AddDaemonWindow: %v", err)
 				}
 			}
-			// Let the shells start, so the scan reads live processes.
 			time.Sleep(time.Second)
 
 			resolve := func(ptyID string) (foregroundInfo, bool) {
@@ -51,8 +50,6 @@ func BenchmarkAgentDetectScanLockWait(b *testing.B) {
 				return info, running
 			}
 			identify := newAgentMatcher(nil).identifyDetail
-			// One scan first, so the labels and shell pids the first scan
-			// writes are not counted as an idle scan's cost.
 			sess.applyAgentDetection(resolve, identify)
 
 			stop := make(chan struct{})
@@ -79,9 +76,6 @@ func BenchmarkAgentDetectScanLockWait(b *testing.B) {
 				}
 			})
 
-			// Scans are spaced apart, as the real two-second tick spaces them.
-			// Run back to back, a scan could take the lock again before the
-			// waiting writer got it, and the wait would measure several scans.
 			b.ResetTimer()
 			for range b.N {
 				sess.applyAgentDetection(resolve, identify)

@@ -46,7 +46,6 @@ func TestHerdrWorktreeOpenChecksTheCallerFirst(t *testing.T) {
 	}
 }
 
-// herdrGoroutinesSettle waits until the goroutine count is below limit.
 func herdrGoroutinesSettle(limit int, within time.Duration) int {
 	deadline := time.Now().Add(within)
 	for {
@@ -111,8 +110,6 @@ func TestHerdrConnectionsPerCallerAreCapped(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	sess := makeSessionWithWindow(t, d, "w")
 	pane := herdrPaneID(sess.ID, sess.GetState().Windows[0].ID)
-	// Each held connection is a wait, so it stays counted however slow the
-	// runner is. An idle connection would time out and drop from the count.
 	wait, _ := json.Marshal(map[string]any{"id": "x", "method": "pane.wait_for_output", "params": map[string]any{
 		"pane_id": pane, "source": "recent",
 		"match": map[string]any{"type": "substring", "value": "never-printed-zzz"}, "timeout_ms": 600_000}})
@@ -132,9 +129,6 @@ func TestHerdrConnectionsPerCallerAreCapped(t *testing.T) {
 		}
 		return c
 	}
-	// alive reports whether the daemon still holds c open. On a starved
-	// runner the daemon can drop a wait whose request it did not read
-	// within its I/O timeout.
 	alive := func(c net.Conn) bool {
 		_ = c.SetReadDeadline(time.Now().Add(time.Millisecond))
 		_, err := c.Read(make([]byte, 1))
@@ -178,8 +172,6 @@ func TestHerdrConnectionsPerCallerAreCapped(t *testing.T) {
 	}
 }
 
-// pasteProbePane is a window running cat -v after it turns bracketed paste
-// on, so what reaches it shows on its screen, escapes visible.
 func pasteProbePane(t *testing.T, d *Daemon, name string) (*Session, string) {
 	t.Helper()
 	sess, err := d.manager.CreateSession(name, &SessionConfig{}, 120, 30)
@@ -200,7 +192,6 @@ func pasteProbePane(t *testing.T, d *Daemon, name string) (*Session, string) {
 	return sess, win.ID
 }
 
-// waitScreen waits for want on a pane's screen.
 func waitScreen(t *testing.T, sess *Session, window string, want ...string) string {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -234,7 +225,6 @@ func TestHerdrSendTextPastes(t *testing.T) {
 	sess, w := pasteProbePane(t, d, "paste")
 	pane := herdrPaneID(sess.ID, w)
 	herdrOK(t, "send_text", herdrDial(t, sp, "pane.send_text", map[string]any{"pane_id": pane, "text": "first\nsecond\x1b[201~evil"}))
-	// Collie submits a reply with Enter after the text.
 	herdrOK(t, "send_keys", herdrDial(t, sp, "pane.send_keys", map[string]any{"pane_id": pane, "keys": []string{"Enter"}}))
 	text := waitScreen(t, sess, w, "^[[200~first", "second[201~evil^[[201~")
 	if strings.Contains(text, "second^[[201~evil") {
@@ -318,8 +308,6 @@ func TestHerdrLeavesScratchTerminalsOut(t *testing.T) {
 // Where the kernel does not say, the pane is busy, as for typing at a prompt.
 func TestHerdrAgentStartRefusesAnUnknownForeground(t *testing.T) {
 	t.Setenv("SHELL", "/bin/sh")
-	// Set before the daemon starts and put back after it stops, so no
-	// daemon goroutine reads the variable while it changes.
 	real := foregroundPGID
 	t.Cleanup(func() { foregroundPGID = real })
 	foregroundPGID = func(int) (int, bool) { return 0, false }

@@ -21,45 +21,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
-// Approvals answered from the Inbox.
-//
-// A harness with a structured decision channel, Claude Code's PermissionRequest
-// hook or opencode's permission reply, can be told the answer to its permission
-// prompt by the hook instead of asking in its pane. With [agents.approvals]
-// naming the harness, `tuios agent-hook` does that: after reporting the pane as
-// needs_input it calls request-approval, and the call does not answer until the
-// person answers the Inbox item with reply-approval, or the hold ends. The hook
-// then prints the harness's own decision, or nothing, and a harness that gets
-// nothing shows its own prompt as it always did. That fallback is the whole
-// safety story, so every way a hold can end without an answer ends it with no
-// decision:
-//
-//   - the hold times out ([agents.approvals] hold_seconds, 120 by default);
-//   - the pane leaves needs_input, closes, or its block turns into a question;
-//   - the person dismisses the item, presses enter on it, or focuses the pane;
-//   - the hook goes away, which is how a harness that gave up on it shows;
-//   - a second request for the same pane arrives;
-//   - the daemon shuts down.
-//
-// Who may do what:
-//
-//   - Only reply-approval can put a decision in a hold, and it takes the same
-//     proof dismiss-attention does: the nonce of a client attached right now,
-//     from a process that is not inside a pane of this daemon (human_sender.go
-//     and human_origin.go). An agent cannot answer its own prompt or another
-//     agent's, and no mail, ask or send-keys reaches a hold.
-//   - request-approval is refused over a link, and a caller inside a pane may
-//     only hold the prompt of the pane it runs in. All it gets back is what the
-//     person answered about the item it opened, which says nothing it did not
-//     ask.
-//   - A hold is only opened on a pane already on needs_input with kind
-//     approval, which the hook's own report establishes, so a stray call
-//     cannot put an approval in the Inbox for a pane that is not blocked.
-//
-// The holds live in the attention store under its lock, beside the items they
-// belong to, so an item and its hold cannot disagree: closing the item ends the
-// hold, and ending the hold clears the item's request.
-
 // Approval decisions. They are wire values: the decision reply-approval takes
 // and request-approval returns.
 const (
@@ -75,15 +36,10 @@ const (
 	ApprovalAsk = "ask"
 )
 
-// approvalDecisions are the decisions a hold can end with.
 var approvalDecisions = []string{ApprovalOnce, ApprovalAlways, ApprovalDeny}
 
-// approvalReplies are what reply-approval takes.
 var approvalReplies = []string{ApprovalOnce, ApprovalAlways, ApprovalDeny, ApprovalAsk}
 
-// Reasons a hold ended, as request-approval reports them. The attention close
-// reasons (resolved, dismissed, window_closed, session_closed, evicted) are
-// reported as they are.
 const (
 	approvalEndAnswered   = AttentionClosedAnswered
 	approvalEndTimeout    = "timeout"
@@ -94,33 +50,21 @@ const (
 	approvalEndViewed     = "viewed"
 	approvalEndCallerGone = "caller_gone"
 	approvalEndShutdown   = "shutdown"
-	// approvalEndNotShown is a hold refused because its line would not show
-	// the whole request: the daemon would have to cut, mask or rewrite it.
-	approvalEndNotShown = "not_shown"
-	// approvalEndChanged is not an end: it is reply-approval's reason for a
-	// decision refused because the held line is not the one it was made from.
-	// The hold keeps running.
-	approvalEndChanged  = "changed"
-	approvalEndResolved = AttentionClosedResolved
+	approvalEndNotShown   = "not_shown"
+	approvalEndChanged    = "changed"
+	approvalEndResolved   = AttentionClosedResolved
 )
 
 // DefaultApprovalHold is how long a hold lasts when the config names none.
 const DefaultApprovalHold = 120 * time.Second
 
-// minApprovalHold and maxApprovalHold bound hold_seconds. The top is below the
-// 310 second timeout the Claude Code integration installs for its
-// PermissionRequest hook, so the daemon always ends a hold before the harness
-// kills the hook. They are variables so a test can hold for milliseconds.
 var (
 	minApprovalHold = 10 * time.Second
 	maxApprovalHold = 300 * time.Second
 )
 
-// approvalSettledMax bounds how many ended holds are remembered for a late or
-// repeated reply.
 const approvalSettledMax = 256
 
-// approvalMaxMessage bounds a deny message, which goes to the model.
 const approvalMaxMessage = 500
 
 // ApprovalPolicy is the [agents.approvals] table as the daemon uses it.
@@ -160,11 +104,6 @@ func ApprovalPolicyFromConfig(c config.ApprovalsConfig) ApprovalPolicy {
 	return p
 }
 
-// narrowApprovalPolicy is next as a file change may apply it over was: only
-// where it narrows. A rule in force that next drops stays in force, beside
-// the rules next adds, and a pane may not allow a risky call unless it could
-// already. waits reports that next asks for more than it was given, which
-// waits for tuios config apply or a restart.
 func narrowApprovalPolicy(was, next ApprovalPolicy) (kept ApprovalPolicy, waits bool) {
 	kept = next
 	for _, r := range was.Risk {
@@ -180,8 +119,6 @@ func narrowApprovalPolicy(was, next ApprovalPolicy) (kept ApprovalPolicy, waits 
 	return kept, waits
 }
 
-// canonicalHarness resolves a harness name to the id hooks report under, or
-// lower-cases a name nothing knows.
 func canonicalHarness(name string) string {
 	if id, ok := integration.Canonical(name); ok {
 		return id
@@ -189,7 +126,6 @@ func canonicalHarness(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
 
-// holdFor is the bounded hold length.
 func (p ApprovalPolicy) holdFor() time.Duration {
 	switch {
 	case p.Hold <= 0:
@@ -211,7 +147,6 @@ func (d *Daemon) SetApprovalPolicy(p ApprovalPolicy) {
 	}
 }
 
-// approvalPolicy is the current policy, never nil.
 func (d *Daemon) approvalPolicy() ApprovalPolicy {
 	if p := d.approvals.Load(); p != nil {
 		return *p
@@ -219,7 +154,6 @@ func (d *Daemon) approvalPolicy() ApprovalPolicy {
 	return ApprovalPolicy{}
 }
 
-// approvalOutcome is how a hold ended: a decision, or none with the reason.
 type approvalOutcome struct {
 	Decision string
 	Message  string
@@ -227,42 +161,23 @@ type approvalOutcome struct {
 	By       string
 }
 
-// approvalHold is one hook waiting for the person.
 type approvalHold struct {
-	id      string
-	itemID  string
-	session string
-	window  string
-	options []string
-	// summary is the line the person answers from, which the item shows for
-	// as long as the hold runs. A reply that names another line is refused.
-	summary string
-	// latest is the newest message reported for the pane while the hold
-	// ran, shown on the item again once the hold ends. Empty when none came.
-	latest string
-	// kind is AttentionApproval or AttentionPlan.
-	kind string
-	// tool and target are the call the risk rules read, as the hook named
-	// it. Empty when the hook did not.
-	tool, target string
-	// root is the pane's fixed root (approvalRoot) when the hold began: where
-	// the outside-the-worktree rule measures from. runDir is the folder the
-	// call runs in, which a relative path is resolved against.
-	root, runDir string
-	// risk are the rules the call matched. An allow needs risk_ack naming
-	// exactly these.
-	risk []risk.Hit
-	// plan and planSHA are a plan's text and its digest. An allow of a plan
-	// must name the digest of the plan it was made from.
+	id            string
+	itemID        string
+	session       string
+	window        string
+	options       []string
+	summary       string
+	latest        string
+	kind          string
+	tool, target  string
+	root, runDir  string
+	risk          []risk.Hit
 	plan, planSHA string
-	// denyMessage says the harness takes a reason with a deny.
-	denyMessage bool
-	// done receives the outcome exactly once. It is buffered, so whatever
-	// ends the hold never waits on the hook.
-	done chan approvalOutcome
+	denyMessage   bool
+	done          chan approvalOutcome
 }
 
-// newApprovalID returns a fresh request id.
 func newApprovalID() string {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -271,36 +186,22 @@ func newApprovalID() string {
 	return hex.EncodeToString(b[:])
 }
 
-// holdSpec is what a hold is opened with: the line and answers the item
-// shows, and what the risk rules, a plan and a deny reason need.
 type holdSpec struct {
-	session, window string
-	// kind is AttentionApproval or AttentionPlan.
-	kind    string
-	summary string
-	options []string
-	scope   []string
-	expires time.Time
-	// tool, target and root are the call as the risk rules read it.
+	session, window            string
+	kind                       string
+	summary                    string
+	options                    []string
+	scope                      []string
+	expires                    time.Time
 	tool, target, root, runDir string
-	// risk are the rules the call matched, computed before the hold opens.
-	risk []risk.Hit
-	// plan is a plan's text.
-	plan        string
-	denyMessage bool
+	risk                       []risk.Hit
+	plan                       string
+	denyMessage                bool
 }
 
-// startHold opens a hold on a pane's approval item. It returns the reason
-// when there is nothing to hold: the pane has no open approval. A hold already
-// on the item ends as superseded, since one pane shows one prompt at a time.
-// The item shows summary, the held call's own line, and scope beside always,
-// until the hold ends. A plan turns the item into a plan item for as long as
-// the hold runs.
 func (a *attentionStore) startHold(spec holdSpec) (*approvalHold, string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	// A hold on a snoozed approval is news the person can act on from the
-	// Inbox now, so the approval wakes.
 	if sid, ok := a.snoozedKey[attentionKey(AttentionApproval, spec.session, spec.window, 0)]; ok && a.snoozed[sid].Kind == AttentionApproval {
 		a.wakeLocked(sid)
 	}
@@ -346,8 +247,6 @@ func (a *attentionStore) startHold(spec holdSpec) (*approvalHold, string) {
 	a.rev++
 	it.RequestID, it.Options, it.Expires = h.id, h.options, spec.expires.UnixNano()
 	it.Summary, it.AlwaysScope = spec.summary, slices.Clone(scope)
-	// A hold adds to the mark on the item and takes nothing off it
-	// (stickyRisk): the requester may be the pane itself.
 	it.Kind, it.Risk, it.DenyMessage = kind, stickyRisk(it.Risk, risk.Names(h.risk)), h.denyMessage
 	it.PlanLines, it.PlanSHA = 0, h.planSHA
 	if kind == AttentionPlan {
@@ -359,16 +258,12 @@ func (a *attentionStore) startHold(spec holdSpec) (*approvalHold, string) {
 	return h, ""
 }
 
-// endHold ends a hold with out, if it is still running, and reports whether
-// it was. The item stays open with its request cleared.
 func (a *attentionStore) endHold(requestID string, out approvalOutcome) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.endHoldLocked(requestID, out, true)
 }
 
-// endHoldLocked ends a hold. clearItem publishes the item without its request;
-// a caller about to close or rewrite the item passes false. The caller holds mu.
 func (a *attentionStore) endHoldLocked(requestID string, out approvalOutcome, clearItem bool) bool {
 	h, ok := a.holds[requestID]
 	if !ok {
@@ -386,9 +281,6 @@ func (a *attentionStore) endHoldLocked(requestID string, out approvalOutcome, cl
 		if h.latest != "" {
 			it.Summary = h.latest
 		}
-		// With no hold there is no plan to serve and no deny to type a
-		// reason for, so the item is the pane's approval again, marked by
-		// what its line says now.
 		it.Kind, it.DenyMessage, it.PlanLines, it.PlanSHA = AttentionApproval, false, 0, ""
 		it.Risk = stickyRisk(it.Risk, risk.Names(a.riskOfLine(it.Summary, h.root, h.runDir)))
 		it.Seq = a.rev
@@ -398,7 +290,6 @@ func (a *attentionStore) endHoldLocked(requestID string, out approvalOutcome, cl
 	return true
 }
 
-// rememberLocked keeps how a hold ended, for a reply that comes after it.
 func (a *attentionStore) rememberLocked(requestID string, out approvalOutcome) {
 	if a.settled == nil {
 		a.settled = make(map[string]approvalOutcome)
@@ -413,7 +304,6 @@ func (a *attentionStore) rememberLocked(requestID string, out approvalOutcome) {
 	}
 }
 
-// holdOn finds the running hold on a pane, if there is one.
 func (a *attentionStore) holdOn(session, window string) (string, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -425,22 +315,8 @@ func (a *attentionStore) holdOn(session, window string) (string, bool) {
 	return "", false
 }
 
-// errNoHold is a reply to a request no hold is waiting on.
 var errNoHold = errors.New("no hold")
 
-// answer ends a hold with the person's reply. A decision closes the item as
-// answered; ask hands the prompt back to the pane and leaves the item open.
-// A reply to a hold that already ended returns how it ended with applied
-// false, so the first reply wins and a repeat is harmless. A decision that
-// names the line it was made from (shown) is refused with applied false and
-// reason changed when the hold is on another line, so an answer can only
-// approve what the person read.
-//
-// An allow (once or always) must also say what the person saw: a plan's
-// digest (planSHA), without which or for another plan nothing is answered and
-// the reason is changed; and for a call the risk rules matched, riskAck naming
-// exactly those rules, without which errRiskUnacknowledged is returned and
-// nothing is answered. A deny needs neither.
 func (a *attentionStore) answer(requestID, decision, message, by, shown string, riskAck []string, planSHA string) (out approvalOutcome, h approvalHold, applied bool, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -459,10 +335,6 @@ func (a *attentionStore) answer(requestID, decision, message, by, shown string, 
 	if !slices.Contains(hold.options, decision) {
 		return approvalOutcome{}, *hold, false, errBadDecision
 	}
-	// An allow names the line it was made from, so a caller that leaves it
-	// out answers nothing: without the line, an allow would approve whatever
-	// call the hold is on now, which the person may never have read. A deny
-	// may leave it out, as before.
 	if shown == "" && decision != ApprovalDeny {
 		return approvalOutcome{}, *hold, false, errSummaryRequired
 	}
@@ -485,15 +357,10 @@ func (a *attentionStore) answer(requestID, decision, message, by, shown string, 
 	return out, *hold, true, nil
 }
 
-// errBadDecision is a decision the hold's harness does not offer.
 var errBadDecision = errors.New("decision not offered")
 
-// errSummaryRequired is an allow that does not name the line it was made from.
 var errSummaryRequired = errors.New("summary required")
 
-// noteFocused ends the hold on a pane the person just brought in front of
-// them: the harness's own prompt is the quickest thing to answer there, and a
-// held prompt shows nothing in the pane at all.
 func (a *attentionStore) noteFocused(session, window string) {
 	if a == nil || window == "" {
 		return
@@ -507,16 +374,8 @@ func (a *attentionStore) noteFocused(session, window string) {
 	a.endHoldLocked(a.items[id].RequestID, approvalOutcome{Reason: approvalEndViewed}, true)
 }
 
-// approvalMaxScope bounds the rules always may add, the same bound the hook
-// applies (integration.MaxScopeLines).
 const approvalMaxScope = integration.MaxScopeLines
 
-// approvalLineShown reports whether an Inbox item can show line exactly as it
-// is: the item's own cleaning (control characters, whitespace, masking, the
-// length cut) leaves it unchanged, and every rune is a visible character or a
-// space, so no format character such as a bidi override makes it read as
-// something else. The hook checks the same before it asks; the daemon checks
-// again because the person answers from the item, not from the hook.
 func approvalLineShown(line string) bool {
 	if line == "" || !utf8.ValidString(line) || attentionText(line, attentionMaxSummary) != line {
 		return false
@@ -529,8 +388,6 @@ func approvalLineShown(line string) bool {
 	return true
 }
 
-// approvalScopeShown reports whether always may be offered with scope: one to
-// approvalMaxScope rules, each shown as it is.
 func approvalScopeShown(scope []string) bool {
 	if len(scope) == 0 || len(scope) > approvalMaxScope {
 		return false
@@ -543,7 +400,6 @@ func approvalScopeShown(scope []string) bool {
 	return true
 }
 
-// approvalResult is request-approval's answer.
 func approvalResult(requestID string, out approvalOutcome) map[string]any {
 	res := map[string]any{
 		"type":       "approval_result",
@@ -560,23 +416,20 @@ func approvalResult(requestID string, out approvalOutcome) map[string]any {
 	return res
 }
 
-// verbRequestApproval holds a pane's permission prompt for an answer from the
-// Inbox. See the file comment for who may call it and every way it ends.
 func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session string   `json:"session"`
-		Window  string   `json:"window"`
-		Harness string   `json:"harness"`
-		Options []string `json:"options"`
-		Summary string   `json:"summary"`
-		Scope   []string `json:"always_scope"`
-		// The fields a hook sends for risk rules, plans and deny reasons.
-		Kind        string `json:"kind"`
-		Plan        string `json:"plan"`
-		Tool        string `json:"tool"`
-		Target      string `json:"target"`
-		DenyMessage bool   `json:"deny_message"`
-		Cwd         string `json:"cwd"`
+		Session     string   `json:"session"`
+		Window      string   `json:"window"`
+		Harness     string   `json:"harness"`
+		Options     []string `json:"options"`
+		Summary     string   `json:"summary"`
+		Scope       []string `json:"always_scope"`
+		Kind        string   `json:"kind"`
+		Plan        string   `json:"plan"`
+		Tool        string   `json:"tool"`
+		Target      string   `json:"target"`
+		DenyMessage bool     `json:"deny_message"`
+		Cwd         string   `json:"cwd"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -621,7 +474,6 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 			return nil, invalidParam("options", "options: "+echoName(o)+" is not a decision", approvalDecisions...)
 		}
 	}
-	// Always is only offered with the rules it adds, each shown as it is.
 	if slices.Contains(options, ApprovalAlways) && !approvalScopeShown(p.Scope) {
 		options = slices.DeleteFunc(slices.Clone(options), func(o string) bool { return o == ApprovalAlways })
 	}
@@ -637,9 +489,6 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	w := st.Windows[idx]
 
 	policy := d.approvalPolicy()
-	// A pane start-agent --protocol opened holds without the table: choosing
-	// the protocol is the opt-in (agent_protocol.go). Every check below still
-	// applies to it.
 	if !policy.Enabled[harnessID] && d.paneProtocol(w.ID) == "" {
 		return approvalResult("", approvalOutcome{Reason: approvalEndDisabled}), nil
 	}
@@ -660,9 +509,6 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	}
 	summary := p.Summary
 	if isPlan {
-		// A plan is answered from its whole text, which the Inbox shows and
-		// the answer names by digest, so its summary is only the title the
-		// row carries: cleaned the way every item line is, not refused.
 		summary = attentionText(summary, attentionMaxSummary)
 		if summary == "" {
 			return approvalResult("", approvalOutcome{Reason: approvalEndNotShown}), nil
@@ -695,16 +541,11 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if hold == nil {
 		return approvalResult("", approvalOutcome{Reason: reason}), nil
 	}
-	// The call was admitted while the agent features were on, and they went
-	// off before the hold started, after the switch closed every item. The
-	// harness gets its prompt back now rather than after the hold.
 	if d.agentsOff.Load() {
 		d.attention.closeAll(AttentionClosedAgentsDisabled)
 		return approvalResult(hold.id, <-hold.done), nil
 	}
 	LogBasic("Approval %s held for %s in %s (%s) for up to %s", hold.id, w.ID, sess.Name(), harnessID, holdFor)
-	// A plan held for the person moves the cards the pane holds to plan.
-	// See task_auto.go.
 	if hold.kind == AttentionPlan {
 		d.autoStage(sess, heldBy(w.ID), movePlanHeld, taskReasonPlanHeld)
 	}
@@ -732,30 +573,22 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	case <-d.ctx.Done():
 		d.attention.endHold(hold.id, approvalOutcome{Reason: approvalEndShutdown})
 	}
-	// Whatever ended it, the outcome is in done now: endHold put it there, or
-	// an answer that won the race did.
 	out := <-hold.done
 	LogBasic("Approval %s ended: %s", hold.id, out.Reason)
 	return approvalResult(hold.id, out), nil
 }
 
-// verbReplyApproval answers a held approval for the person.
 func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		RequestID  string `json:"request_id"`
-		Session    string `json:"session"`
-		Window     string `json:"window"`
-		Decision   string `json:"decision"`
-		Message    string `json:"message"`
-		HumanNonce string `json:"human_nonce"`
-		// Summary is the line the decision was made from. When it is set
-		// and the hold is on another line, nothing is answered.
-		Summary string `json:"summary"`
-		// RiskAck names the risk rules the person saw, for an allow of a
-		// risky call, and PlanSHA the plan they read, for an allow of a
-		// plan. See answer.
-		RiskAck []string `json:"risk_ack"`
-		PlanSHA string   `json:"plan_sha"`
+		RequestID  string   `json:"request_id"`
+		Session    string   `json:"session"`
+		Window     string   `json:"window"`
+		Decision   string   `json:"decision"`
+		Message    string   `json:"message"`
+		HumanNonce string   `json:"human_nonce"`
+		Summary    string   `json:"summary"`
+		RiskAck    []string `json:"risk_ack"`
+		PlanSHA    string   `json:"plan_sha"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -811,9 +644,6 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		return nil, riskUnacknowledgedError(risk.Names(hold.risk), "Nothing was answered and the hold runs on. The Inbox allows a risky call on a second press of the same key; a client that predates that answers it in the pane.")
 	}
 	if !applied && out.Reason == approvalEndChanged {
-		// The hold is on another call, or another plan, than the one the
-		// person read. Nothing was answered and the hold runs on, so they can
-		// read it and answer.
 		res := map[string]any{
 			"type":       "approval_replied",
 			"request_id": requestID,
@@ -834,19 +664,12 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 	}
 	if applied && out.Decision != "" {
 		LogBasic("Approval %s answered %s by %s", requestID, out.Decision, by)
-		// The hook is on its way back to the harness with the answer, and
-		// the next report it would send is working. Saying it now closes the
-		// block for every client at once, and only if the pane is still on it.
 		if sess, _ := d.manager.ResolveSession(hold.session); sess != nil {
 			_, _, _, _ = sess.applyAgentReport(hold.window, AgentReport{
-				State:   AgentStateWorking,
-				IfState: []AgentState{AgentStateNeedsInput},
-				// The prompt was the pane's own held approval, now
-				// answered, so nothing is left on the screen to hold.
+				State:    AgentStateWorking,
+				IfState:  []AgentState{AgentStateNeedsInput},
 				fromPane: true,
 			})
-			// A plan let through moves the pane's cards out of plan. See
-			// task_auto.go.
 			if hold.kind == AttentionPlan {
 				d.notePlanAnswered(sess, hold.window, out.Decision)
 			}
@@ -872,7 +695,6 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 	return res, nil
 }
 
-// noHoldError is the refusal for a reply nothing is waiting on.
 func noHoldError(msg string) *verbError {
 	return hintedVerbError(ErrVerbInvalidParams, msg, &VerbHint{
 		Param:   "request_id",
@@ -882,7 +704,6 @@ func noHoldError(msg string) *verbError {
 	})
 }
 
-// holdSession is the session a running hold is in, by name.
 func (a *attentionStore) holdSession(requestID string) (string, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -892,8 +713,6 @@ func (a *attentionStore) holdSession(requestID string) (string, bool) {
 	return "", false
 }
 
-// nonceScopeError refuses a nonce that is live but does not cover the
-// session the act lands in (humanNonceFor).
 func nonceScopeError(verb string) *verbError {
 	return hintedVerbError(ErrVerbNotHuman, verb+" is refused: the human_nonce is for another session", &VerbHint{
 		Param:  "human_nonce",
@@ -902,9 +721,6 @@ func nonceScopeError(verb string) *verbError {
 	})
 }
 
-// paneInFrontOfPerson reports whether a client the person holds is attached
-// to the session with the pane focused. Holding that pane's prompt would hide
-// it from someone already looking at it.
 func (d *Daemon) paneInFrontOfPerson(sess *Session, window string) bool {
 	if sess.GetState().FocusedWindowID != window {
 		return false
@@ -922,12 +738,8 @@ func (d *Daemon) paneInFrontOfPerson(sess *Session, window string) bool {
 	return slices.ContainsFunc(attached, d.mayActAsHuman)
 }
 
-// peerPlacer places the process on a connection: outside every pane, or in
-// one, named by its window when that can be told.
 type peerPlacer func(cs *connState) (fromPane bool, window string)
 
-// peerPane says whether the process on cs runs inside a pane of this daemon,
-// and which pane when that can be told. See peerPaneWindow.
 func (d *Daemon) peerPane(cs *connState) (bool, string) {
 	if place := d.approvalPeer.Load(); place != nil {
 		return (*place)(cs)
@@ -935,17 +747,11 @@ func (d *Daemon) peerPane(cs *connState) (bool, string) {
 	return d.peerPaneWindow(cs)
 }
 
-// peerPaneWindow places the process on cs: outside every pane, or in one pane,
-// found the way resolve-pane finds one (an ancestor that is a pane's shell,
-// then the controlling terminal) and last by the TUIOS_PANE_ID in its
-// environment. A process inside a pane that none of these place gets an empty
-// window, which matches no target, so request-approval fails closed on it.
 func (d *Daemon) peerPaneWindow(cs *connState) (bool, string) {
 	if !d.connFromPane(cs) {
 		return false, ""
 	}
 	if d.peerChanged(cs) {
-		// The pid no longer names the process that connected.
 		return true, ""
 	}
 	pid := cs.peerPID
@@ -975,11 +781,6 @@ func (d *Daemon) peerPaneWindow(cs *connState) (bool, string) {
 	return true, ""
 }
 
-// watchPeerGone reports when the process on the other end of conn goes away
-// while a verb blocks on it. The connection is the hook's own and it sends
-// nothing more while it waits, so a read that returns means the peer closed
-// it. A byte that does arrive is discarded, which the verb's documentation
-// says. stop ends the watch and leaves the connection readable again.
 func watchPeerGone(conn net.Conn) (<-chan struct{}, func()) {
 	gone := make(chan struct{})
 	finished := make(chan struct{})
@@ -1003,14 +804,8 @@ func watchPeerGone(conn net.Conn) (<-chan struct{}, func()) {
 	}
 }
 
-// peerProcessPoll is how often a hold whose caller closed its sending half
-// checks that the caller's process is still there.
 const peerProcessPoll = 500 * time.Millisecond
 
-// watchPeerProcess is watchPeerGone for a caller that has closed its sending
-// half, a hook forwarder: gone closes when the process ends, which is what
-// the harness does to a hook it stops waiting for. A pid the kernel reuses
-// for another process counts as gone.
 func watchPeerProcess(pid int) (<-chan struct{}, func()) {
 	gone := make(chan struct{})
 	quit := make(chan struct{})
@@ -1038,8 +833,6 @@ func watchPeerProcess(pid int) (<-chan struct{}, func()) {
 	}
 }
 
-// approvalRunDir is the folder a held call runs in: the cwd the harness sent
-// with it, when that is an absolute path, else the pane's live folder.
 func approvalRunDir(harnessCwd, live string) string {
 	if harnessCwd != "" && filepath.IsAbs(harnessCwd) {
 		return filepath.Clean(harnessCwd)
@@ -1047,8 +840,6 @@ func approvalRunDir(harnessCwd, live string) string {
 	return live
 }
 
-// resolvedRunDir is a run folder with its links resolved, so it compares
-// with the resolved root. "" stays "".
 func resolvedRunDir(dir string) string {
 	if dir == "" || !filepath.IsAbs(dir) {
 		return ""

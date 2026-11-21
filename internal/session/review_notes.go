@@ -14,38 +14,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 )
 
-// The review notes store: the notes people and agents leave on a pane's
-// changes, held by the daemon so every client and the CLI see the same ones.
-//
-// Notes are keyed by the worktree's root (its path with symbolic links
-// resolved), then by the pane they are for. A worktree holds at most
-// reviewNotesMax notes across its panes. The store is saved to
-// <resurrection dir>/review/notes.json, readable by the owner only, half a
-// second after a change and once more at shutdown. On load a pane that did not
-// come back loses its notes, and so does a worktree whose directory is gone.
-// Removing a worktree with remove-worktree (or keep-fan) drops its notes.
-//
-// A daemon with no notes costs one atomic load per window close.
-
-// reviewNotesMax bounds the notes on one worktree.
 const reviewNotesMax = 200
 
-// reviewNotesSaveDelay is how long after a change the store is saved, so a
-// burst of edits is one write.
 const reviewNotesSaveDelay = 500 * time.Millisecond
 
-// reviewPane is one pane's notes on one worktree.
 type reviewPane struct {
-	Root   string `json:"root"`
-	Window string `json:"window"`
-	// Base is the base the pane's last review-diff was read against, which
-	// send-review names in the message. Empty until a diff was read.
-	Base  string        `json:"base,omitempty"`
-	Notes []review.Note `json:"notes"`
+	Root   string        `json:"root"`
+	Window string        `json:"window"`
+	Base   string        `json:"base,omitempty"`
+	Notes  []review.Note `json:"notes"`
 }
 
-// reviewNoteStore holds every pane's notes. The zero value is ready and does
-// not save; load gives it its file.
 type reviewNoteStore struct {
 	mu        sync.Mutex
 	panes     map[string]*reviewPane
@@ -53,24 +32,15 @@ type reviewNoteStore struct {
 	path      string
 	saveTimer *time.Timer
 	frozen    bool
-	// entries is len(panes), kept so a window close costs one atomic load on
-	// a daemon with no notes.
-	entries atomic.Int64
+	entries   atomic.Int64
 }
 
-// reviewKey is the key of a pane's notes on a worktree.
 func reviewKey(root, window string) string { return root + "\x00" + window }
 
-// reviewNotesPath is where the store is saved.
 func reviewNotesPath() string {
 	return filepath.Join(getResurrectionDir(), "review", "notes.json")
 }
 
-// canonRoot is a worktree root as notes are keyed by it: symbolic links
-// resolved, so a path read from a process and one recorded at creation name
-// the same key. A path that no longer exists, such as a worktree whose
-// directory was deleted, resolves through its nearest ancestor that does, so
-// it still names the key its notes were stored under while it existed.
 func canonRoot(p string) string {
 	if p == "" {
 		return ""
@@ -95,7 +65,6 @@ func canonRoot(p string) string {
 	}
 }
 
-// countLocked is how many notes a worktree holds. It holds mu.
 func (s *reviewNoteStore) countLocked(root string) int {
 	n := 0
 	for _, p := range s.panes {
@@ -106,8 +75,6 @@ func (s *reviewNoteStore) countLocked(root string) int {
 	return n
 }
 
-// list returns a pane's notes in their listed order, and the base its last
-// diff was read against.
 func (s *reviewNoteStore) list(root, window string) ([]review.Note, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -120,8 +87,6 @@ func (s *reviewNoteStore) list(root, window string) ([]review.Note, string) {
 	return out, p.Base
 }
 
-// add stores n as a new note of the pane and returns it with its id. It
-// refuses a worktree already at reviewNotesMax, returning false.
 func (s *reviewNoteStore) add(root, window string, n review.Note) (review.Note, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -144,16 +109,12 @@ func (s *reviewNoteStore) add(root, window string, n review.Note) (review.Note, 
 	return n, true
 }
 
-// reviewNoteMissing and reviewNoteRefused are what edit and remove report
-// about a note they did not change.
 const (
 	reviewNoteOK = iota
 	reviewNoteMissing
 	reviewNoteRefused
 )
 
-// edit replaces the text of note id, when may allows the caller to touch it.
-// The note becomes by's, unsent again, and is stamped now.
 func (s *reviewNoteStore) edit(root, window, id, text, by string, may func(review.Note) bool) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -178,9 +139,6 @@ func (s *reviewNoteStore) edit(root, window, id, text, by string, may func(revie
 	return reviewNoteMissing
 }
 
-// remove drops the notes of the pane that match: every one when id is empty,
-// else the one with that id. Notes may refuses are kept. It returns how many
-// went, whether any matched, and how many matches were refused and kept.
 func (s *reviewNoteStore) remove(root, window, id string, may func(review.Note) bool) (removed int, found bool, refused int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -214,7 +172,6 @@ func (s *reviewNoteStore) remove(root, window, id string, may func(review.Note) 
 	return removed, found, refused
 }
 
-// markSent stamps the notes named by ids as sent at at.
 func (s *reviewNoteStore) markSent(root, window string, ids []string, at int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -230,7 +187,6 @@ func (s *reviewNoteStore) markSent(root, window string, ids []string, at int64) 
 	s.changedLocked()
 }
 
-// setBase records the base the pane's diff was last read against.
 func (s *reviewNoteStore) setBase(root, window, base string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -251,9 +207,6 @@ func (s *reviewNoteStore) setBase(root, window, base string) {
 	}
 }
 
-// applyAnchors writes where the notes in moved sit now: line, hunk header and
-// outdated, matched by id. A note edited or removed since it was read is
-// matched by id still, and its text is left as it is now.
 func (s *reviewNoteStore) applyAnchors(root, window string, moved []review.Note) {
 	if len(moved) == 0 {
 		return
@@ -276,7 +229,6 @@ func (s *reviewNoteStore) applyAnchors(root, window string, moved []review.Note)
 	s.changedLocked()
 }
 
-// dropRoot forgets every note on the worktree at root.
 func (s *reviewNoteStore) dropRoot(root string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -292,8 +244,6 @@ func (s *reviewNoteStore) dropRoot(root string) {
 	}
 }
 
-// dropWindow forgets the notes for a pane that closed. It runs on the session
-// event sink, so it takes only its own lock.
 func (s *reviewNoteStore) dropWindow(window string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -309,8 +259,6 @@ func (s *reviewNoteStore) dropWindow(window string) {
 	}
 }
 
-// noteSessionEvent drops the notes of a pane that closed. A pane closing on
-// shutdown saves nothing: the store froze before any pane closed.
 func (s *reviewNoteStore) noteSessionEvent(ev SessionEvent) {
 	if ev.Type != EventWindowClosed || s.entries.Load() == 0 {
 		return
@@ -318,14 +266,12 @@ func (s *reviewNoteStore) noteSessionEvent(ev SessionEvent) {
 	s.dropWindow(ev.Window)
 }
 
-// reviewNotesFile is the on-disk form of the store.
 type reviewNotesFile struct {
 	Version int           `json:"version"`
 	NextID  uint64        `json:"next_id"`
 	Panes   []*reviewPane `json:"panes"`
 }
 
-// changedLocked schedules a save. It holds mu.
 func (s *reviewNoteStore) changedLocked() {
 	s.entries.Store(int64(len(s.panes)))
 	if s.path == "" || s.frozen || s.saveTimer != nil {
@@ -344,7 +290,6 @@ func (s *reviewNoteStore) changedLocked() {
 	})
 }
 
-// encodeLocked serialises the store. It holds mu.
 func (s *reviewNoteStore) encodeLocked() []byte {
 	f := reviewNotesFile{Version: 1, NextID: s.nextID, Panes: []*reviewPane{}}
 	keys := make([]string, 0, len(s.panes))
@@ -364,8 +309,6 @@ func (s *reviewNoteStore) encodeLocked() []byte {
 	return data
 }
 
-// writeReviewNotes writes the store atomically, readable by the owner only:
-// a note quotes the repository's code.
 func writeReviewNotes(path string, data []byte) {
 	if data == nil {
 		return
@@ -375,8 +318,6 @@ func writeReviewNotes(path string, data []byte) {
 	}
 }
 
-// saveNowAndFreeze writes the store as it stands and stops saving: the
-// daemon's last save, before shutdown closes any pane.
 func (s *reviewNoteStore) saveNowAndFreeze() {
 	s.mu.Lock()
 	if s.saveTimer != nil {
@@ -395,10 +336,6 @@ func (s *reviewNoteStore) saveNowAndFreeze() {
 	}
 }
 
-// load reads the notes a previous daemon saved and keeps those of panes that
-// came back, on worktrees whose directory is still there. live reports whether
-// a window is in a live session; it is called with no lock held. Ids carry on
-// from the file, so one is never reused.
 func (s *reviewNoteStore) load(path string, live func(window string) bool) {
 	var f reviewNotesFile
 	if data, err := os.ReadFile(path); err == nil {

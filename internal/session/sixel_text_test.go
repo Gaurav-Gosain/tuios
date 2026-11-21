@@ -7,7 +7,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// A two-row sixel at 10x20 cells: 30x40 pixels.
 const sixelTextImage = "\x1bPq\"1;1;30;40#1;2;100;0;0!30~-!30~-!30~-!30~-!30~-!30~-!30~\x1b\\"
 
 // TestSixelCellsLeaveAsBlanks: a pane that drew a sixel image holds marker

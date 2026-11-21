@@ -7,18 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// A worktree session is a session whose directory is a linked git worktree.
-// The daemon records which one, so the rail can group it under its repository
-// and label it by its branch, and so the worktree verbs can take it away
-// again without re-deriving where it came from.
-//
-// The record has two sources. The worktree verbs write it when they create
-// the worktree, and mark it managed: tuios made it, so tuios may remove it.
-// Every other session gets it by detection from its first window's directory,
-// which is read from files and never from git. A detected record follows the
-// directory: when the shell moves out of the worktree the record goes with it.
-// A managed record does not, because the session is the worktree.
-
 // WorktreeInfo is the daemon's record of a worktree session. It sits on
 // SessionState, so it is pushed to every client and saved for resurrection,
 // and it is copied onto SessionInfo for the listing.
@@ -197,7 +185,6 @@ func (s *Session) Worktree() *WorktreeInfo {
 	return &cp
 }
 
-// setPromptStatus updates the fan prompt's status on a worktree session.
 func (s *Session) setPromptStatus(status, note string, at int64) {
 	_ = s.mutateState(func(st *SessionState) error {
 		if st.Worktree == nil {
@@ -210,7 +197,6 @@ func (s *Session) setPromptStatus(status, note string, at int64) {
 	})
 }
 
-// setPromptReadyBy records the evidence the agent was ready on.
 func (s *Session) setPromptReadyBy(by string) {
 	_ = s.mutateState(func(st *SessionState) error {
 		if st.Worktree != nil {
@@ -220,10 +206,6 @@ func (s *Session) setPromptReadyBy(by string) {
 	})
 }
 
-// worktreeListing is the worktree record as the listing reports it: the
-// state's record with Gone filled in from the directory. A managed session
-// whose directory was removed keeps its record, marked gone. A detected
-// session whose directory went is no longer in a worktree at all.
 func (s *Session) worktreeListing() *WorktreeInfo {
 	info := s.Worktree()
 	if info == nil {
@@ -238,13 +220,6 @@ func (s *Session) worktreeListing() *WorktreeInfo {
 	return info
 }
 
-// refreshWorktree re-detects a session's worktree from its first window's
-// directory. It is called when a session is restored and on every dirty save,
-// so it costs nothing while the session is idle. A managed record is left
-// alone: the verbs that wrote it own it.
-//
-// cwd is the directory to look at when the caller already knows it. Empty
-// means read the first window's process directory.
 func (s *Session) refreshWorktree(cwd string) {
 	s.stateMu.RLock()
 	managed := s.state.Worktree != nil && s.state.Worktree.Managed

@@ -135,7 +135,6 @@ func TestAStaleClientCannotDropACustomFlagItNeverSaw(t *testing.T) {
 	}
 	t.Cleanup(sess.Stop)
 
-	// Client A settles the session with workspace 3 arranged by hand.
 	sess.UpdateState(&SessionState{
 		Name:               "custom",
 		CurrentWorkspace:   3,
@@ -147,13 +146,10 @@ func TestAStaleClientCannotDropACustomFlagItNeverSaw(t *testing.T) {
 		t.Fatalf("the session does not hold workspace 3 as custom after A's push")
 	}
 
-	// A daemon-side mutation moves the version on, so B's next push is stale.
 	if err := sess.SetDisplayName("Custom"); err != nil {
 		t.Fatalf("SetDisplayName: %v", err)
 	}
 
-	// Client B has never been to workspace 3 and pushes a snapshot from before
-	// the rename.
 	accepted := sess.UpdateState(&SessionState{
 		Name:               "custom",
 		CurrentWorkspace:   1,

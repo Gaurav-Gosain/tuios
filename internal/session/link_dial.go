@@ -13,14 +13,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The proxy's half of a link connection: `tuios stdio-proxy` calls
-// DialForLink once for every stream the hub opens.
-
-// linkDialTimeout bounds one dial of a socket on this machine, and the
-// handshake on it.
 const linkDialTimeout = 5 * time.Second
 
-// maxLinkHandshakeReply bounds the reply line the proxy reads.
 const maxLinkHandshakeReply = 64 * 1024
 
 // ErrLinkSocketMissing reports a daemon that holds links to a policy and whose
@@ -48,9 +42,6 @@ var ErrLinkSocketMissing = errors.New("the daemon here holds links to a policy a
 // link_policy is refused rather than reached on a socket that would give the
 // hub everything.
 func DialForLink(socketPath string, open federation.StreamOpen, pinnedPeer string) (net.Conn, error) {
-	// The agent the link's ssh forwarded here, when it forwards one. The
-	// daemon follows it for a client attached through this link, under the
-	// same checks as a local client's. See ssh_agent_follow.go.
 	agent := os.Getenv("SSH_AUTH_SOCK")
 	peer, pinned := open.From, false
 	if pinnedPeer != "" {
@@ -74,13 +65,10 @@ func DialForLink(socketPath string, open federation.StreamOpen, pinnedPeer strin
 	return net.DialTimeout("unix", socketPath, linkDialTimeout)
 }
 
-// linkHandshakeError is a daemon refusing the handshake for a reason other
-// than not knowing it. The stream is refused with it.
 type linkHandshakeError struct{ verr *verbError }
 
 func (e *linkHandshakeError) Error() string { return "link-peer refused: " + e.verr.Error() }
 
-// dialLinkSocket dials one link socket and runs the handshake on it.
 func dialLinkSocket(path, peer string, pinned bool, agent string) (net.Conn, error) {
 	conn, err := net.DialTimeout("unix", path, linkDialTimeout)
 	if err != nil {
@@ -93,13 +81,10 @@ func dialLinkSocket(path, peer string, pinned bool, agent string) (net.Conn, err
 		return nil, err
 	case verr == nil:
 		if token == "" {
-			// A daemon from before close tokens: it cannot be told.
 			return conn, nil
 		}
 		return &linkConn{Conn: conn, path: path, peer: peer, pinned: pinned, token: token}, nil
 	case verr.Code == ErrVerbUnknownVerb:
-		// A daemon from before link policies. It has no policy to hold the
-		// link to, so the connection is made again without the handshake.
 		_ = conn.Close()
 		return net.DialTimeout("unix", path, linkDialTimeout)
 	default:
@@ -108,10 +93,6 @@ func dialLinkSocket(path, peer string, pinned bool, agent string) (net.Conn, err
 	}
 }
 
-// linkHandshake sends link-peer on conn and reads the reply. It reads the reply
-// a byte at a time, so no byte past the reply line is taken from the
-// connection: the daemon may start the next reply only after the hub's first
-// request, but a read-ahead buffer here would still be the wrong owner of it.
 func linkHandshake(conn net.Conn, params map[string]any) (string, *verbError, error) {
 	req, err := jsonx.Marshal(verbRequest{
 		ID:     json.RawMessage(`0`),
@@ -142,10 +123,6 @@ func linkHandshake(conn net.Conn, params map[string]any) (string, *verbError, er
 	return resp.Result.CloseToken, resp.Error, nil
 }
 
-// linkConn is a link connection whose daemon gave it a close token. When the
-// far side closes the stream on purpose, the proxy says so on a connection of
-// its own before this one ends, so the daemon can tell that close from a
-// dropped link. See federation.PurposeCloser.
 type linkConn struct {
 	net.Conn
 	path   string
@@ -154,9 +131,6 @@ type linkConn struct {
 	token  string
 }
 
-// NoteClosedOnPurpose sends the close token back as link-peer's closes. A
-// failure is not reported: the daemon then treats the end as a dropped link,
-// which costs a lease that lingers, not a wrong answer.
 func (c *linkConn) NoteClosedOnPurpose() {
 	conn, err := net.DialTimeout("unix", c.path, linkDialTimeout)
 	if err != nil {
@@ -168,7 +142,6 @@ func (c *linkConn) NoteClosedOnPurpose() {
 	_, _, _ = linkHandshake(conn, params)
 }
 
-// CloseWrite passes the half close through to the socket under the wrapper.
 func (c *linkConn) CloseWrite() error {
 	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
 		return cw.CloseWrite()
@@ -176,8 +149,6 @@ func (c *linkConn) CloseWrite() error {
 	return nil
 }
 
-// linkPeerParams are the link-peer parameters. ssh_auth_sock is left out when
-// there is none.
 func linkPeerParams(peer string, pinned bool, agent string) map[string]any {
 	p := map[string]any{"peer": peer, "pinned": pinned}
 	if agent != "" {
@@ -186,7 +157,6 @@ func linkPeerParams(peer string, pinned bool, agent string) map[string]any {
 	return p
 }
 
-// readLineUnbuffered reads up to and not past the next newline.
 func readLineUnbuffered(conn net.Conn, limit int) ([]byte, error) {
 	var buf bytes.Buffer
 	one := make([]byte, 1)
@@ -202,10 +172,6 @@ func readLineUnbuffered(conn net.Conn, limit int) ([]byte, error) {
 	return nil, errors.New("the daemon's reply line is too long")
 }
 
-// daemonHoldsLinkPolicy asks the daemon on its own socket whether it is new
-// enough to hold links to a policy. Any failure reads as no, which is the
-// answer that keeps an older daemon reachable; a daemon that answers at all
-// and says yes is not dialled on this socket for a link.
 func daemonHoldsLinkPolicy(socketPath string) bool {
 	conn, err := net.DialTimeout("unix", socketPath, linkDialTimeout)
 	if err != nil {

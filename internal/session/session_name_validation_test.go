@@ -8,11 +8,6 @@ import (
 	"testing"
 )
 
-// A session's name is also the name of its state file. A name carrying a path
-// separator used to be accepted, run perfectly, and never persist: the write
-// went to a directory that does not exist and the error was discarded on both
-// save paths. These pin both halves of that.
-
 // TestSessionNameWithAPathSeparatorIsRejectedAtCreation is the important one:
 // the failure has to surface where the user chose the name, not silently at a
 // save nobody is watching.
@@ -44,8 +39,6 @@ func TestSessionNameWithAPathSeparatorIsRejectedAtCreation(t *testing.T) {
 // `_ = SaveSessionForResurrection(...)`, so a session that failed to persist
 // looked exactly like one that had, right up until it did not come back.
 func TestFinalSaveErrorIsSurfacedRatherThanDiscarded(t *testing.T) {
-	// A regular file where the state directory should be: MkdirAll under it
-	// fails, so every save fails.
 	blocked := filepath.Join(t.TempDir(), "not-a-dir")
 	if err := os.WriteFile(blocked, []byte("x"), 0600); err != nil {
 		t.Fatalf("seeding the unwritable state dir: %v", err)

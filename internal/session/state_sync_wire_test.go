@@ -5,15 +5,6 @@ import (
 	"time"
 )
 
-// The two answers a client's state sync can get, read off the wire.
-//
-// handleUpdateState builds the merged state only for the two paths that read
-// it: the reconcile reply to a sender whose snapshot was stale, and the
-// broadcast to the sender's peers. These tests are what those two paths owe,
-// so that a change to when the merge is built cannot quietly hand either of
-// them nothing.
-
-// syncTaker records the state syncs a client is handed.
 type syncTaker struct {
 	ch chan syncSeen
 }
@@ -31,7 +22,6 @@ func takeSyncs(c *TUIClient) *syncTaker {
 	return s
 }
 
-// next waits for a sync with the given trigger, skipping others.
 func (s *syncTaker) next(t *testing.T, trigger string) syncSeen {
 	t.Helper()
 	deadline := time.After(5 * time.Second)
@@ -56,8 +46,6 @@ func TestAStaleSyncIsAnsweredWithTheMergedState(t *testing.T) {
 	a := attachTestClient(t, "stale")
 	seenByA := takeSyncs(a)
 
-	// Two daemon-side mutations, so the session is at version 2 and a push
-	// claiming to be built on version 1 is behind.
 	if err := sess.SetDisplayName("first"); err != nil {
 		t.Fatal(err)
 	}

@@ -10,13 +10,6 @@ import (
 	"time"
 )
 
-// transcriptGoroutines counts goroutines currently running transcript
-// machinery. This is the direct form of "an idle join wakes no goroutine": a
-// regression back to a per-join poller sits in agent_transcript.go frames and
-// is counted here, while goroutines owned by other tests in the same binary
-// are not. The process-wide goroutine count this replaced measured the whole
-// binary: any earlier test's leftover timer firing inside the sampling window
-// grew the count and failed the test without anything here being wrong.
 func transcriptGoroutines() int {
 	buf := make([]byte, 1<<20)
 	n := runtime.Stack(buf, true)
@@ -45,7 +38,6 @@ func TestAnIdleJoinArmsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// No debounce armed: nothing has changed since the join read.
 	s.transcripts.mu.Lock()
 	armed := s.transcripts.joins[win].debounce != nil
 	s.transcripts.mu.Unlock()
@@ -53,12 +45,10 @@ func TestAnIdleJoinArmsNothing(t *testing.T) {
 		t.Fatal("a join with no file activity armed a timer")
 	}
 
-	// A quarter of a second of a completely silent agent.
 	time.Sleep(250 * time.Millisecond)
 	if n := transcriptGoroutines(); n != 0 {
 		t.Fatalf("%d goroutines are running transcript code while nothing happened", n)
 	}
-	// And the quiet window armed nothing either.
 	s.transcripts.mu.Lock()
 	stillArmed := s.transcripts.joins[win].debounce != nil
 	s.transcripts.mu.Unlock()
@@ -85,7 +75,6 @@ func TestABurstOfEventsCollapsesIntoOneRead(t *testing.T) {
 	for range 20 {
 		fake.fire(path)
 	}
-	// Twenty events, one timer.
 	s.transcripts.mu.Lock()
 	j := s.transcripts.joins[win]
 	armed := j.debounce != nil
@@ -140,7 +129,6 @@ func TestWatchAfterCloseIsRefusedRatherThanPanicking(t *testing.T) {
 	if err := w.Watch(filepath.Join(t.TempDir(), "a.jsonl"), "k", func() {}); err == nil {
 		t.Fatal("a closed watcher accepted a watch")
 	}
-	// Idempotent, because the daemon's shutdown path may run twice.
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}

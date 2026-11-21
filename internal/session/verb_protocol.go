@@ -22,24 +22,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// This file implements the typed, line-delimited JSON verb protocol layered
-// additively on the existing daemon socket. One request per line:
-//
-//	{"id": 1, "verb": "list-windows", "params": {"session": "work"}}
-//
-// and one response per line, either
-//
-//	{"id": 1, "result": {"type": "window_list", ...}}
-//
-// or
-//
-//	{"id": 1, "error": {"code": "session_not_found", "message": "..."}}
-//
-// The envelope id is opaque and echoed back verbatim. Error codes are stable
-// strings so a caller never has to cross-reference a numeric table. The binary
-// gob/PTY fast path is untouched; a connection is detected as JSON or binary
-// from its first byte on accept (see detectJSONClient).
-
 // VerbProtocolVersion is the version of the JSON verb protocol. It is reported
 // by the list-verbs introspection verb so a client can gate on it. Bump it only
 // on an incompatible change to the envelope or to an existing verb's contract;
@@ -153,120 +135,74 @@ const (
 	ErrVerbProtocolMismatch = "protocol_mismatch"
 )
 
-// The two federation error codes live in verb_hosts.go beside the verbs that
-// raise them: ErrVerbUnknownHost and ErrVerbHostUnreachable. Both are final.
-// A caller that gets either must report it, never retry into a different host
-// name, because reaching the wrong machine is worse than reaching none.
-
 // MinVerbProtocolVersion is the oldest protocol version this daemon still
 // serves. A caller announcing anything older is told to upgrade rather than
 // being allowed to proceed into undefined behavior.
 const MinVerbProtocolVersion = 1
 
-// verbRequest is one decoded request line. ID is opaque (number, string, or
-// absent) and echoed back on the response.
 type verbRequest struct {
 	ID     json.RawMessage `json:"id,omitempty"`
 	Verb   string          `json:"verb"`
 	Params json.RawMessage `json:"params,omitempty"`
 }
 
-// verbError is the error envelope with a stable string code. Hint, when
-// present, names the verb, CLI command, parameter, or closest spelling that
-// resolves the failure; it is additive and always omitempty, so a consumer that
-// reads only code and message is unaffected.
 type verbError struct {
-	Code    string    `json:"code"`
-	Message string    `json:"message"`
-	Hint    *VerbHint `json:"hint,omitempty"`
-	// Problems lists what is wrong with a TML document, on invalid_tml.
-	Problems any `json:"problems,omitempty"`
+	Code     string    `json:"code"`
+	Message  string    `json:"message"`
+	Hint     *VerbHint `json:"hint,omitempty"`
+	Problems any       `json:"problems,omitempty"`
 }
 
 func (e *verbError) Error() string { return e.Code + ": " + e.Message }
 
-// newVerbError builds a *verbError with the given code and message.
-//
 //go:noinline
 func newVerbError(code, message string) *verbError {
 	return &verbError{Code: code, Message: message}
 }
 
-// verbResponse is one response line. Exactly one of Result or Error is set.
 type verbResponse struct {
 	ID     json.RawMessage `json:"id,omitempty"`
 	Result any             `json:"result,omitempty"`
 	Error  *verbError      `json:"error,omitempty"`
 }
 
-// verbHandler executes one verb. params carries the raw JSON of the request's
-// params object (may be empty). It returns a result value to serialize, or a
-// *verbError describing why it failed.
 type verbHandler func(d *Daemon, cs *connState, params json.RawMessage) (any, *verbError)
 
-// verbParam documents one parameter of a verb for the list-verbs introspection
-// output, so an agent can discover the full call shape without reading the docs.
 type verbParam struct {
 	Name        string   `json:"name"`
-	Type        string   `json:"type"` // string | int | bool | []string | []int | object
+	Type        string   `json:"type"`
 	Required    bool     `json:"required,omitempty"`
 	Description string   `json:"description"`
-	Accepted    []string `json:"accepted,omitempty"` // closed value set, when there is one
+	Accepted    []string `json:"accepted,omitempty"`
 	Default     string   `json:"default,omitempty"`
-	// Nullable says the field can be null as well as its type. Only a
-	// returned field sets it: a parameter is omitted rather than sent null.
-	Nullable bool `json:"nullable,omitempty"`
+	Nullable    bool     `json:"nullable,omitempty"`
 }
 
-// verbEntry pairs a handler with the documentation list-verbs reports: a
-// one-line description, the parameter schema, the result shape, and
-// copy-pasteable examples.
 type verbEntry struct {
 	description string
 	params      []verbParam
-	// returns names the fields of a successful result. A caller could learn how
-	// to make the call from params alone and still had to guess what came back,
-	// which is half a contract.
-	returns  []verbParam
-	examples []string
-	handler  verbHandler
-	// scope is what the verb does, for a restricted connection and for a
-	// pane's grants (see conn_scope.go). An entry that names none is refused
-	// to every restricted caller, and a test fails on it.
-	scope scopeKind
-	// link is what the verb needs on a link connection (see link_policy.go):
-	// needNothing for nothing. An entry that names none is refused over every
-	// link, and a test fails on it.
-	link linkNeed
-	// stream is set on a verb that keeps its connection after the reply, as
-	// an event stream, a byte stream or a connection to something else. A
-	// one-shot caller such as tuios call reads it to refuse the verb, and
-	// list-verbs publishes it.
-	stream *verbStream
+	returns     []verbParam
+	examples    []string
+	handler     verbHandler
+	scope       scopeKind
+	link        linkNeed
+	stream      *verbStream
 }
 
-// verbStream says when a verb keeps its connection after the reply. With no
-// Param it always does. With Param, it does when that param is one of Values,
-// a bool param as "true".
 type verbStream struct {
 	Param  string   `json:"param,omitempty"`
 	Values []string `json:"values,omitempty"`
 }
 
-// verbDoc is the serialized form of a verbEntry in the list-verbs result.
 type verbDoc struct {
 	Verb        string      `json:"verb"`
 	Description string      `json:"description"`
 	Params      []verbParam `json:"params"`
 	Returns     []verbParam `json:"returns,omitempty"`
 	Examples    []string    `json:"examples,omitempty"`
-	// Stream is present on a verb that keeps the connection after its reply.
-	Stream *verbStream `json:"stream,omitempty"`
+	Stream      *verbStream `json:"stream,omitempty"`
 }
 
-// HoldsConnection reports whether a call of the verb with params keeps the
-// connection after its reply, so a caller that sends one request and reads
-// one reply cannot make it.
 func (doc verbDoc) HoldsConnection(params map[string]any) bool {
 	st := doc.Stream
 	if st == nil {
@@ -291,34 +227,26 @@ func (doc verbDoc) HoldsConnection(params map[string]any) bool {
 	return slices.Contains(st.Values, got)
 }
 
-// identityReturn, confidenceReturn and evidenceAgeReturn are the three
-// detection fields get-agent-state, explain-agent-detect and list-agents share,
-// declared once so the three verbs describe them in the same words.
 var (
 	identityReturn    = verbParam{Name: "identity", Type: "string", Description: "What named the agent: report (the harness named itself), manifest (a manifest rule matched the process), list (a name list matched the process) or hint (TUIOS_AGENT in the process environment). Empty when nothing named it.", Accepted: []string{"report", "manifest", "list", "hint", ""}}
 	confidenceReturn  = verbParam{Name: "confidence", Type: "string", Description: "How sure the identity is: certain for report, strong for manifest, list and hint, none when nothing named the agent.", Accepted: []string{"certain", "strong", "none"}}
 	evidenceAgeReturn = verbParam{Name: "evidence_age_ms", Type: "int", Nullable: true, Description: "Milliseconds since the last evidence about the state arrived. For a state the agent or a rule reported, that is the report. For a state the detector or the silence timer inferred (source detect or stall), it is the later of that and the pane's last output. A look that reads back the same claim does not reset it. null when nothing ever set a state."}
 )
 
-// sessionParam is the session selector shared by nearly every verb.
 var sessionParam = verbParam{
 	Name:        "session",
 	Type:        "string",
 	Description: "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one.",
 }
 
-// windowParam is the window selector shared by window-targeted verbs.
 var windowParam = verbParam{
 	Name:        "window",
 	Type:        "string",
 	Description: "Window id or name. Omit to target the focused window.",
 }
 
-// selectorSyntax is the one sentence every select param shares.
 const selectorSyntax = "A selector: space-separated key:value terms, all of which must match, each with comma-separated alternatives. Keys: harness (id or program name), state, needs:you, session (glob), group (fan-out group, glob), host (local or a host name, glob), name (window name, glob), cwd (the directory or under it; ~ is home), task (a task card the pane holds, by id, glob), stage (the stage of a card the pane holds), parent and root (the parent agent pane, or the first of its chain, by window id or a start of it)."
 
-// selectWriteParams are the two params a write addressed by selector takes.
-// what says what the write does to the panes the selector matches.
 func selectWriteParams(what string) []verbParam {
 	return []verbParam{
 		{Name: "select", Type: "string", Description: selectorSyntax + " " + what + " It reaches agent panes on this machine, in every session, and takes no session and no window. Without confirm nothing is sent: the call fails with confirm_required, whose hint lists the panes in available and carries the token in confirm."},
@@ -326,16 +254,6 @@ func selectWriteParams(what string) []verbParam {
 	}
 }
 
-// verbRegistry returns the dispatch table for every JSON verb the daemon
-// supports, so list-verbs and dispatch share one source of truth.
-//
-// It is built on first use, not in init. A table that init builds is reachable
-// in every program that links this package, and so is every handler it names,
-// which is most of the daemon. The browser build links this package for its
-// types and never runs a daemon, and the table alone kept about 3 MB of daemon
-// code in it. A function rather than a package-level initializer, because the
-// table names list-verbs, which reads the table: an initializer would be a
-// static initialization cycle.
 func verbRegistry() map[string]verbEntry {
 	verbRegistryOnce.Do(func() { verbRegistryMap = buildVerbRegistry() })
 	return verbRegistryMap
@@ -346,7 +264,6 @@ var (
 	verbRegistryMap  map[string]verbEntry
 )
 
-// buildVerbRegistry makes the table verbRegistry returns.
 func buildVerbRegistry() map[string]verbEntry {
 	table := map[string]verbEntry{
 		"hello": {
@@ -364,10 +281,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbHello,
 		},
 		"daemon-upgrade": {
-			// daemon-upgrade replaces the daemon every session runs under.
-			scope: scopeDeny,
-			// daemon-upgrade replaces the daemon's image. Its handler refuses it over
-			// a link too: an upgrade is run on the machine whose daemon it is.
+			scope:       scopeDeny,
 			link:        needRelay,
 			description: "Upgrade the daemon live to another tuios binary. Every pane's process keeps running, with the same pid, terminal and screen, and the daemon keeps its pid. The binary is run once first and must say it reads this daemon's state; a refusal changes nothing. The call answers once every pane is stopped and written down. Then every client is told and dropped, and the daemon execs the binary in place. Call hello until instance changes: its upgrade field says what the handoff measured, and has fallback set when the new binary could not take the panes and the binary that was running took them back, and recovered too when the new image died first and the handoff's keeper started that binary under a new pid. Refused on Windows, while a pane runs on another machine or here for another machine, while a fan check, a capturing popup, a hook or a plugin command runs, and to a plugin or over a link, whatever its grants. From a caller inside a pane it first asks the person in a dialog on every attached client, naming the binary's full path, its version and the pane, and blocks for up to 60 s: only Yes, pressed at a client, lets it go on, and anything else is forbidden.",
 			params: []verbParam{
@@ -389,9 +303,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbDaemonUpgrade,
 		},
 		"restrict-connection": {
-			scope: scopeOpen,
-			// restrict-connection only gives up authority on the calling
-			// connection, so it needs nothing.
+			scope:       scopeOpen,
 			link:        needNothing,
 			description: "Give up authority on this connection for as long as it is open. scope own reaches only the caller's own session, its fan group and the sessions a fan from it started; read_only refuses every verb that types into a pane. The caller's pane is found from the kernel's record of its pid, and only when that finds none from pane_id and pane_token. A later call may narrow further and never widen. Every verb a restricted connection may not call answers forbidden.",
 			params: []verbParam{
@@ -415,13 +327,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbRestrictConnection,
 		},
 		"pane-grants": {
-			// pane-grants reports the caller's own grants and touches no session.
-			// set-pane-grants changes what a pane may do, which is not for a
-			// restricted caller.
-			scope: scopeOpen,
-			// pane-grants only reports; over a link it says no pane grants apply.
-			// set-pane-grants is refused over a link by its handler whatever the
-			// policy, and needs every capability here as well.
+			scope:       scopeOpen,
 			link:        needNothing,
 			description: "Say what the caller may do through tuios: the pane it runs in and the grants that pane holds (read, write, fan, respond, admin), or that it runs in no pane and no pane grants apply. The pane is found from the kernel's record of the caller's pid, and only when that finds none from pane_id and pane_token, which then place this connection in that pane for as long as it is open. Every JSON verb and client protocol message from a pane is held to its grants; a call they do not cover answers forbidden and names the missing grant.",
 			params: []verbParam{
@@ -489,7 +395,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbGetKeepAwake,
 		},
 		"set-keep-awake": {
-			// It changes what the person's machine does and saves config.toml.
 			scope:       scopeDeny,
 			link:        needWrite,
 			description: "Set [daemon] keep_awake: off, on (while the daemon runs) or agents (while an agent pane on this machine works). It applies at once and is saved to config.toml, so the settings page, the file and every client show one value.",
@@ -509,9 +414,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbSetKeepAwake,
 		},
 		"apply-config": {
-			// apply-config is for the person, outside every pane.
-			scope: scopeDeny,
-			// apply-config is refused over a link by its handler as well.
+			scope:       scopeDeny,
 			link:        needRelay,
 			description: "Apply config.toml now, including the changes that give panes or linked machines more: [agents.permissions], [hosts] and their link policies. A change to the file applies only what narrows those; the rest waits for this verb or a daemon restart. Only the person may call it: it is refused from inside a pane and over a link.",
 			params: []verbParam{
@@ -590,7 +493,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbListDockComponents,
 		},
 		"plugin-cell": {
-			// A plugin's own verbs. checkPluginGrants holds them to the ui grant.
 			scope:       scopeDeny,
 			link:        needWrite,
 			description: "Set or clear one dock cell of the calling plugin. Only a process of a native plugin that holds the ui grant may call it, and the manifest must name the cell in [[cell]]. The daemon keeps the text until the plugin changes it or stops. At most 8 changes a second for one plugin.",
@@ -704,8 +606,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbNewSession,
 		},
 		"switch-session": {
-			// switch-session moves a client and detach-client takes clients off
-			// their sessions: client-level actions, like attach.
 			scope:       scopeDeny,
 			link:        needWrite,
 			description: "Switch an attached client to another session in place, as go-to does. The client is the one named by client, else the one showing session, else the one showing the caller's own session from a pane, else the only one attached.",
@@ -877,8 +777,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			description: "Fan a prompt out across several agents. Creates count worktrees and sessions, starts an agent in each, and types each session's prompt into its agent once the agent shows it is at its prompt. Returns as soon as the sessions exist. An agent that is not ready for 30 seconds turns its prompt_status to held and raises a question in the Inbox; the prompt is still typed when it is ready.",
 			params: append([]verbParam{
 				{Name: "count", Type: "int", Description: "How many worktrees and agents, 1 to 16. Required unless prompts is given, which sets it."},
-				// agent is documented without Required on purpose: agents
-				// stands in for it. See Changes to existing verbs.
 				{Name: "agent", Type: "string", Description: "The agent to run in every session, as one string: a harness id or program name (claude, codex, gemini), or any program, with its arguments after it (\"codex --model o5\"). Words are split the way a shell splits them, quotes included, and exec'd directly; nothing is expanded. Required unless agents is given."},
 				{Name: "agents", Type: "[]string", Description: "Several agents, each written as agent is, cycled across the sessions: [\"claude\",\"codex\"] with count 4 is claude, codex, claude, codex. Takes no agent."},
 				{Name: "prompt", Type: "string", Description: "The prompt every agent gets. It is typed as one paste (wrapped in bracketed paste when the agent has it on) and submitted with a carriage return, the way ask-agent types a question. Required unless prompts is given."},
@@ -917,11 +815,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbFan,
 		},
 		"bundle-worktree": {
-			// From the host targeting work: reading a worktree's files out is for
-			// the person's own CLI (worktree pull), not a restricted caller.
-			scope: scopeDeny,
-			// bundle-worktree reads a worktree's files out, which write already
-			// reaches through a shell, and list must not.
+			scope:       scopeDeny,
 			link:        needWrite,
 			description: "Read a worktree session's work out in chunks so it can cross a link: its commits as a git bundle, then its uncommitted work as a binary patch. The first call makes the transfer and answers with its first chunk. Later calls pass the token and the next offset. tuios worktree pull is the caller.",
 			params: []verbParam{
@@ -1158,10 +1052,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbListHosts,
 		},
 		"retry-host": {
-			// retry-host is the person's act from the rail or from 'tuios hosts
-			// signin'. A restricted caller has no reason to make a link dial.
-			scope: scopeDeny,
-			// Another machine has no reason to make this one's links dial.
+			scope:       scopeDeny,
 			link:        needRelay,
 			description: "Dial the link to one host again now. The backoff starts again from one second. If the link is up, the link pings the host instead. If the host does not answer in 5 seconds, the link dials again. If the host waits for a Tailscale SSH sign-in, the link dials every few seconds for two minutes. A dial in progress continues.",
 			params: []verbParam{
@@ -1240,10 +1131,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbClosePane,
 		},
 		"link-peer": {
-			stream: &verbStream{},
-			// From the host policy and dropped-link work: the link handshake,
-			// ending a hosted pane, and passing on held mail are for a link
-			// connection or the person's client, never a restricted caller.
+			stream:      &verbStream{},
 			scope:       scopeDeny,
 			link:        needNothing,
 			description: "Name the machine a link connection came from. tuios stdio-proxy sends it as the first line of every connection it opens for a link, and the daemon resolves that machine's link policy from the name. Accepted once per connection, before anything else, and only on a link socket. After the reply the connection is read from scratch, JSON or binary.",
@@ -1313,8 +1201,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbPaneAgent,
 		},
 		"paste-image": {
-			// paste-image is the person's act and paste-pane-image the owning
-			// daemon's. Neither is for a restricted caller.
 			scope:       scopeDeny,
 			link:        needWrite | needFiles,
 			description: "Write an image the person pasted to the machine where a pane's process runs, and answer with the path there. For a pane on another machine the image crosses the link and is written there. The client pastes the path into the pane as text. Only the person's attached client may call it: it needs that client's attach nonce and is refused from inside a pane. The file is readable by its owner only and is deleted after an hour, or when the daemon stops.",
@@ -1334,13 +1220,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbPasteImage,
 		},
 		"paste-pane-image": {
-			scope: scopeDeny,
-			// paste-pane-image writes a file for a hosted pane, which the peer
-			// opened, and needs the pane's token as well. paste-image writes a file
-			// and has its path typed into a pane, which is what write already
-			// reaches. Its handler also wants the person. Both put a file from the
-			// other machine on this one, so both need files too: a person who took
-			// files away from a machine expects nothing it sends to land on disk.
+			scope:       scopeDeny,
 			link:        needOpen | needFiles,
 			description: "Write an image for a pane this machine runs for another machine, and answer with the path here. Only the daemon that owns the window holds the token it needs. That daemon sends it for a paste-image the person made.",
 			params: []verbParam{
@@ -1372,10 +1252,8 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbPaneCalls,
 		},
 		"pane-kitty-medium": {
-			stream: &verbStream{},
-			scope:  scopeDeny,
-			// pane-kitty-medium carries the bytes of a file a hosted pane named in a
-			// kitty graphics command: a file read, so it needs files.
+			stream:      &verbStream{},
+			scope:       scopeDeny,
 			link:        needFiles,
 			description: "Turn this connection into the bytes of an image that a pane this machine runs for another machine named by path in a kitty graphics command (t=f, t=t or t=s). The pane's output holds a marker with the id in the command's place. Only the daemon that owns the window holds the token. After the reply the connection carries size bytes, as one flate stream when compressed is set, then closes. A temporary file or a shared memory object is deleted after it is read.",
 			params: []verbParam{
@@ -1597,15 +1475,8 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbPopup,
 		},
 		"tml-open": {
-			stream: &verbStream{Param: "events", Values: []string{"true"}},
-			// A pane opens, changes and closes a TML surface with the write grant,
-			// in its own session, and only its own surfaces (tmlOwnerCheck). The
-			// input verb acts as the person.
-			scope: scopeWrite,
-			// A link needs every relay capability to open or change a surface,
-			// which the default policy does not give: a surface names its owner on
-			// its frame, and a surface opened from another machine would need that
-			// machine's name there.
+			stream:      &verbStream{Param: "events", Values: []string{"true"}},
+			scope:       scopeWrite,
 			link:        needRelay,
 			description: "Show a TML document as a popup or a pane. Every attached client draws it, and the daemon keeps it while nobody is attached.",
 			params: []verbParam{
@@ -1654,13 +1525,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbTMLClose,
 		},
 		"tml-input": {
-			scope: scopeDeny,
-			// A client attached over a link draws this machine's surfaces (see
-			// tml_surface.go, "Surfaces over a link"). Reading one is reading a
-			// screen. What the person does on one, and where it sits, is what the
-			// attach already does to a pane: tml-input and tml-place also need the
-			// attach nonce of a client on the link-human socket. A pane() action a
-			// tml-input carries is held to the verb it runs as well.
+			scope:       scopeDeny,
 			link:        needWrite,
 			description: "Report what the person did on a TML surface: the state its local actions changed, and a close. The attached client sends it, with its attach nonce.",
 			params: []verbParam{
@@ -1717,8 +1582,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbTMLReplace,
 		},
 		"tml-get": {
-			// tml-get checks the surface's session and the read grant itself
-			// (tmlReach), so the pane that opened a surface reads it with write.
 			scope:       scopeOpen,
 			link:        needList,
 			description: "Read a TML surface: its tree as TML JSON, its state and its version.",
@@ -1772,8 +1635,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbTMLPlace,
 		},
 		"artifact-list": {
-			// artifact-list checks the pane and the read grant itself, so a pane
-			// reads its own artifacts with no grant.
 			scope:       scopeOpen,
 			link:        needRelay,
 			description: "List what one pane has shown the person, newest first: the TML surfaces it opened, open or closed, and the screenshots it took. The daemon keeps the last 20 of each pane until it restarts.",
@@ -1789,7 +1650,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbArtifactList,
 		},
 		"tml-validate": {
-			// tml-validate reads only the document it is given.
 			scope:       scopeOpen,
 			link:        needNothing,
 			description: "Check a TML document as tml-open would. Needs no session.",
@@ -1840,8 +1700,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbSplitWindow,
 		},
 		"layout-template": {
-			// It opens panes and types their commands, as split-window
-			// opens one: the person's tool, not a restricted caller's.
 			scope:       scopeDeny,
 			link:        needOpen,
 			description: "Save the workspace a session shows as a layout template, load one back, list them, or delete one. Templates are files of this machine (~/.config/tuios/layouts), so every client reads one list. A load reuses the workspace's panes in order, opens the ones it lacks with their folder and name and types their command, minimizes the ones it does not name, and gives a bsp layout its split tree back. Works with no client attached.",
@@ -2128,10 +1986,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbSendText,
 		},
 		"run": {
-			// From the shell command and ask-human work. run types a line at a
-			// prompt. ask-human asks the person as the caller's own pane, which
-			// is a report about that pane, like set-agent-state. answer-ask
-			// answers for the person, which no restricted caller does.
 			scope:       scopeWrite,
 			link:        needWrite,
 			description: "Type one command line at a pane's shell prompt, wait for the shell to report it finished, and return its exit code and output. Needs a shell that marks its commands with OSC 133, and refuses with no_shell_integration one that marks only its prompts; refuses with not_at_prompt when a command, or another run, is already running there. From a pane, window is required.",
@@ -2159,10 +2013,8 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbRun,
 		},
 		"stream-pane": {
-			stream: &verbStream{},
-			scope:  scopeRead,
-			// stream-pane reads a pane. Its input and lease frames are checked
-			// as send-text and resize, frame by frame, so they need write.
+			stream:      &verbStream{},
+			scope:       scopeRead,
 			link:        needList,
 			description: "Stream one pane as bytes, for a client that is not tuios. The reply is one JSON line, and after it the connection carries binary frames both ways: a type byte, a 4-byte big-endian length, then the payload. From the daemon: S snapshot (u64 seq, u16 cols, u16 rows, then bytes that paint the pane on a fresh emulator of that size), O output (u64 seq after the frame's last byte, then the pane's bytes), R resize (u64 seq, u16 cols, u16 rows), E error (JSON code and message, for a refused frame or a lease that was not renewed; the stream goes on), X exit (the reason: exited N when the pane's program exited with status N, killed N when signal N ended it, closed when its window closed first, or refused: … when the caller may no longer read it; the connection then closes). From the client: I input (at most 64 KiB of bytes typed into the pane, checked as send-text is), L lease (u16 cols, u16 rows, 0 0 to release; send it again every 10 seconds, or the lease ends after 30). Skip a frame type you do not know: read its length and drop that many bytes. At most 4 I frames wait for a pane that does not read, and the next gets E busy. The stream never changes the pane's size or the session's. A lease holds the pane at most at its size while the stream is open, and the pane goes back to the size its clients asked for when the lease ends.",
 			params: []verbParam{
@@ -2194,10 +2046,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbStreamPane,
 		},
 		"attach-presence": {
-			// A restricted connection is automation, never the person.
-			scope: scopeDeny,
-			// attach-presence only names the person on this connection. What it
-			// lets the connection answer is checked by those verbs (respond).
+			scope:       scopeDeny,
 			link:        needList,
 			description: "Hold the person's nonce on this connection without a screen. The reply carries human_nonce, which respond, reply-approval, answer-ask and dismiss-attention take as the person's, by the same rules as an attach nonce: only from outside every pane, over a link only on a stream the hub vouched for, and only from the process that holds it. The presence does not attach: it does not change the session size, focus or view a pane, or receive broadcasts. The connection serves other verbs as before, and the presence ends when it closes.",
 			params: []verbParam{
@@ -2212,10 +2061,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbAttachPresence,
 		},
 		"register-push": {
-			// The phones for Web Push are the person's, like attach-presence.
-			scope: scopeDeny,
-			// A phone registered for Web Push gets what waits for the person, so
-			// the push verbs need what answering it needs.
+			scope:       scopeDeny,
 			link:        needRespond,
 			description: "Register a phone's Web Push subscription, so the phone gets Inbox items while it sleeps. When an item of a kind the phone asked for opens, the daemon posts a payload encrypted for the phone (RFC 8291, aes128gcm) to its push service, signed with the daemon's VAPID key (RFC 8292), and posts a close when the item closes. The same device name replaces the phone it names, but not over a link. Each registration opens an Inbox item named phone NAME. Only the person: a live human_nonce from an attach or a presence with no session (a phone gets the Inbox of every session), and over a link the respond capability. At most 16 phones.",
 			params: []verbParam{
@@ -2275,9 +2121,6 @@ func buildVerbRegistry() map[string]verbEntry {
 				windowParam,
 				{Name: "source", Type: "string", Description: "Which buffer to capture. last-command-output is what the pane's last finished command printed, read between its shell's OSC 133 marks; it is plain text, adds cmdline, exit_code, command_seq and truncated to the result, and fails with no_shell_integration when no command has finished under the marks.", Accepted: captureSources, Default: "visible"},
 				{Name: "styled", Type: "bool", Description: "Include ANSI styling in the captured text.", Default: "false"},
-				// scrollback and ansi predate source and styled and are still
-				// accepted; they are declared so a caller reading only list-verbs
-				// can see the whole call shape.
 				{Name: "scrollback", Type: "bool", Description: `Older spelling of source "recent".`, Default: "false"},
 				{Name: "ansi", Type: "bool", Description: "Older spelling of styled.", Default: "false"},
 				{Name: "resolved", Type: "bool", Description: "Rewrite ANSI index colours (30-37, 90-97, 40-47, 100-107, 38;5;n<16, 48;5;n<16) to 24-bit RGB so the capture matches what a themed client paints. Indices above 15 and true colour pass through untouched.", Default: "false"},
@@ -2311,7 +2154,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbCapturePane,
 		},
 		"clear-history": {
-			// Clearing a pane's history changes what every viewer of it sees.
 			scope:       scopeWrite,
 			link:        needWrite,
 			description: "Clear a pane's scrollback for every client of the session.",
@@ -2564,10 +2406,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbSetSessionAccent,
 		},
 		"set-note": {
-			// The return notes (verb_note.go): a line of text on a session or a
-			// pane, written in the caller's own session. Nothing is typed.
-			scope: scopeWrite,
-			// The return notes (verb_note.go).
+			scope:       scopeWrite,
 			link:        needWrite,
 			description: "Set the return note of a session, or of one pane with window: one short line that says what it is for or what comes next. Every client shows it, the dock shows it when a person comes back to the session, and it survives a reattach and a daemon restart.",
 			params: []verbParam{
@@ -2730,9 +2569,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbSetAgentSession,
 		},
 		"report-agent-activity": {
-			// set-agent-state's activity with no state: the same record.
-			scope: scopeSelf,
-			// set-agent-state's activity with no state, so the same capability.
+			scope:       scopeSelf,
 			link:        needWrite,
 			description: "Record one hook event of a window's pane's own agent without reporting a state: a subagent starting, stopping or doing something (subagent_update), a conversation starting, or any activity set-agent-state takes. It goes into the pane's activity ring, read back with agent-activity, and moves the reserved metadata keys, the subagents count above all. The state, its source and stamp, the message and the harness attribution stay as they are. It is what a hook sends for an event that says nothing about what the pane's agent is doing.",
 			params: []verbParam{
@@ -2827,8 +2664,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbResolvePane,
 		},
 		"set-agent-quiet": {
-			scope: scopeDeny,
-			// It closes Inbox items, so it needs what dismiss-attention needs too.
+			scope:       scopeDeny,
 			link:        needWrite | needRespond,
 			description: "Mark a window quiet, or clear the mark. A quiet window opens no finished, question or errored item in the Inbox, and its open items of those kinds close. A pane that calls this leaves an open question open. Its agent state and agent-state events do not change, and an approval or a login still reaches the person. The window must run an agent. Needs the admin grant.",
 			params: []verbParam{
@@ -2873,9 +2709,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbSetAgentMeta,
 		},
 		"report-program-status": {
-			// An OSC 7501 report the pane's process could not write to its terminal.
-			scope: scopeSelf,
-			// An OSC 7501 report, which sets the pane's agent state as set-agent-state does.
+			scope:       scopeSelf,
 			link:        needWrite,
 			description: "Apply one OSC 7501 report (the Program Status Protocol) to a pane, as if the pane's emulator read it from the pane's output. tuios status sends it when the process has no terminal, such as an agent's shell tool. The report gets the same checks, records and lifetime as one the pane writes. A pane may report only for itself, as with set-agent-state.",
 			params: []verbParam{
@@ -3235,8 +3069,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbReplyApproval,
 		},
 		"ask-human": {
-			scope: scopeSelf,
-			// ask-human's own handler refuses every link caller as well.
+			scope:       scopeSelf,
 			link:        needWrite,
 			description: "Ask the person a question with a fixed set of answers, and wait for the answer. The question goes in the Inbox as an ask item; a client that shows the asking pane opens it at once, and a detached session keeps it for the next attach. When the wait ends first the status is pending and the question stays: the answer is then mailed to the asking pane from human, marked verified_human, or read by calling again with request_id. A caller inside a pane asks only as that pane. Refused over a link.",
 			params: []verbParam{
@@ -3284,8 +3117,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler:  (*Daemon).verbAnswerAsk,
 		},
 		"prompt": {
-			scope: scopeSelf,
-			// prompt's own handler refuses every link caller as well.
+			scope:       scopeSelf,
 			link:        needWrite,
 			description: "Show a text field or a list in the command palette of every client attached on this machine, and wait for the answer. The first answer from any client wins, and the prompt closes on the others. One prompt shows at a time. Plugins, actions and scripts call it; only the person at a client can answer. It works with the agent features off. Refused over a link.",
 			params: []verbParam{
@@ -3366,7 +3198,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbReadAgentMessages,
 		},
 		"agent-mail-notice": {
-			// It marks the pane's own mail announced, so it is the pane's record.
 			scope:       scopeSelf,
 			link:        needMail,
 			description: "Answer with one line that tells a pane's agent about its unread mail, once per message. tuios agent-hook calls it for a harness that adds a hook's output to the agent's context. The line holds a count, the senders' names cut to letters, digits and . _ - : @, and the read-agent-messages command to run. It never holds a subject or a body. A message is announced once: the call marks the unread mail it describes as announced, and the next call answers with an empty notice until newer mail arrives.",
@@ -3435,9 +3266,6 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbAskAgent,
 		},
 
-		// The session stash. Two verbs and one contiguous block, because the
-		// store's whole surface is put and list; see stash.go for why there is
-		// no get and no delete.
 		"stash-put": {
 			scope:       scopeMail,
 			link:        needMail,
@@ -3511,48 +3339,26 @@ func buildVerbRegistry() map[string]verbEntry {
 			handler: (*Daemon).verbStashGet,
 		},
 	}
-	// The verbs of the agent review, triage, queue and approval work, kept in
-	// a file of their own. See verb_protocol_agents.go.
 	maps.Copy(table, agentWorkVerbs())
 	maps.Copy(table, taskVerbs())
-	// exec, what tuios run --host sends. See verb_exec.go.
 	maps.Copy(table, execVerbs())
-	// The sender's view of its mail. See verb_receipts.go.
 	maps.Copy(table, receiptVerbs())
 	maps.Copy(table, taskVerifyVerbs())
 	maps.Copy(table, taskDispatchVerbs(verbParam{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human."}))
-	// The checkpoint verbs. See verb_checkpoint.go.
 	maps.Copy(table, checkpointVerbs())
-	// The ship verbs. See verb_ship.go.
 	maps.Copy(table, shipVerbs())
-	// The paste buffer verbs. See verb_buffers.go.
 	maps.Copy(table, bufferVerbs())
-	// The file verbs, transfers, the drop folder and previews. See
-	// verb_files.go, transfer.go, drop_files.go and verb_preview.go.
 	maps.Copy(table, fileVerbs())
 	maps.Copy(table, transferVerbs())
 	maps.Copy(table, dropVerbs())
 	maps.Copy(table, previewVerbs())
-	// The tree stream, the check-ahead and the link speed test. See
-	// transfer_tree.go and transfer_speed.go.
 	maps.Copy(table, treeVerbs())
 	maps.Copy(table, speedVerbs())
-	// search-panes, command-history and list-ports. See verb_find.go and
-	// verb_ports.go.
 	maps.Copy(table, findVerbs())
-	// record-pane and the verbs around it. See pane_record.go.
 	maps.Copy(table, recordVerbs())
 	return table
 }
 
-// detectJSONClient inspects the first byte of the connection without consuming
-// it. A JSON verb-protocol client's first byte is '{' or leading whitespace; a
-// binary client's is the high byte of a big-endian length prefix (0x00/0x01 for
-// any sub-16MB frame), so the two never collide. It returns true when the
-// connection should be handled as JSON. When nothing arrives within
-// firstByteDeadline it returns errFirstByteTimeout, and the caller closes the
-// connection. On any other read error it returns false and lets the (short)
-// binary path observe the same error and clean up.
 func (d *Daemon) detectJSONClient(cs *connState, br *bufio.Reader) (bool, error) {
 	select {
 	case <-d.ctx.Done():
@@ -3561,10 +3367,6 @@ func (d *Daemon) detectJSONClient(cs *connState, br *bufio.Reader) (bool, error)
 		return false, nil
 	default:
 	}
-	// One deadline for the first byte, with no poll: shutdown and drop close
-	// the connection, which ends the wait. Every client speaks first, so a
-	// connection that stays silent this long is closed and gives its slot
-	// back. See frame_budget.go.
 	_ = cs.conn.SetReadDeadline(time.Now().Add(firstByteDeadline))
 	peeked, err := br.Peek(1)
 	_ = cs.conn.SetReadDeadline(time.Time{})
@@ -3573,36 +3375,23 @@ func (d *Daemon) detectJSONClient(cs *connState, br *bufio.Reader) (bool, error)
 		if errors.As(err, &ne) && ne.Timeout() {
 			return false, errFirstByteTimeout
 		}
-		// EOF or hard error: not JSON; the binary loop will re-observe it.
 		return false, nil
 	}
 	return isJSONStart(peeked[0]), nil
 }
 
-// handleJSONConnection runs the read/dispatch/respond loop for a JSON client. It
-// reads newline-delimited request objects, dispatches each, and writes one
-// response line per request. It blocks until the connection closes (which
-// shutdown and drop both trigger, unblocking the read).
 func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
-	// No aggressive read deadline: an idle JSON control connection should not be
-	// dropped mid-wait. Shutdown and drop close the connection, which unblocks
-	// the scan and ends the loop.
 	_ = cs.conn.SetReadDeadline(time.Time{})
 
 	LogBasic("Client %s using JSON verb protocol", cs.clientID)
-	// A buffer upload the connection did not finish goes with it.
 	defer d.dropUploads(cs)
 
-	// Each line is memory of its own, bounded and charged to the daemon's
-	// budget when it is large. See verb_lines.go.
 	lr := &verbLineReader{d: d, cs: cs, br: br}
 	defer lr.done()
 
 	for {
 		raw, err := lr.next()
 		if err != nil {
-			// The rest of the line cannot be read as a request, so the
-			// connection ends after the answer.
 			switch {
 			case errors.Is(err, errVerbLineBusy):
 				_ = d.writeVerbError(cs, nil, "", newVerbError(ErrVerbBusy, err.Error()+"; nothing was done. Try again."))
@@ -3623,18 +3412,11 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 		if len(line) == 0 {
 			continue
 		}
-		// The line is the reader's own copy, so a routed verb that blocks
-		// (routeToTUISync) may keep a reference to its params.
 		err = d.dispatchVerbLine(cs, line, lr.done)
 		if err != nil {
-			// A write failure means the connection is gone; stop.
 			return
 		}
 		if cs.takeover != nil {
-			// The verb's reply is on the wire, and from here the connection
-			// is not a verb connection. See connState.takeover. It is cleared
-			// before it runs, because link-peer's takeover serves the same
-			// connection again, and a stale one would run after every verb.
 			take := cs.takeover
 			cs.takeover = nil
 			take(br)
@@ -3643,17 +3425,7 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 	}
 }
 
-// dispatchVerbLine parses one request line, runs its verb, and writes the
-// response. It returns an error only when writing the response fails (the
-// connection is unusable); verb-level failures are returned to the client as an
-// error envelope, not as a Go error.
-//
-// release, when not nil, gives back the read budget the line holds. It is
-// called once the request envelope is decoded, before the verb runs, so a
-// verb that waits (a send-text into a pane that does not read, a routed verb)
-// does not hold the budget while it waits. See verb_lines.go.
 func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) error {
-	// A verb can change what the session listing shows.
 	d.wakes.listing.Set()
 	var req verbRequest
 	err := jsonx.Unmarshal(line, &req)
@@ -3680,8 +3452,6 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) er
 	}
 	req.Params = params
 
-	// A report from a pane this machine runs for another machine goes to the
-	// machine that owns the pane's window. See hosted_calls.go.
 	if result, verr, handled := d.forwardHostedCall(cs, req.Verb, req.Params); handled {
 		if verr != nil {
 			return d.writeVerbError(cs, req.ID, req.Verb, verr)
@@ -3692,8 +3462,6 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) er
 	cs.verbCall.begin(req.ID, req.Verb)
 	result, verr := entry.handler(d, cs, req.Params)
 	if !cs.verbCall.end() {
-		// A live upgrade answered the call while it ran, and is closing the
-		// connection.
 		return errVerbAnswered
 	}
 	replyFailed := cs.replyFailed
@@ -3707,21 +3475,10 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte, release func()) er
 		}
 		return err
 	}
-	// A subscribe verb stashes its fresh subscription for the streamer, which must
-	// start only after the ack line above is on the wire so no event precedes it.
 	d.startPendingStream(cs)
 	return nil
 }
 
-// admitVerb runs every check a verb call passes before its handler: the verb
-// exists, its parameters are declared, a call over a link is held to that
-// link's policy, and a call from a pane is held to the pane's grants and a
-// restricted connection to its scope. It returns the verb's entry and the
-// params the handler should see, which the checks may have filled in.
-//
-// Every caller of a verb goes through here: the verb socket, and the herdr
-// socket's adapters (herdr_api.go), so a herdr client in a pane is held to
-// exactly what the same call as a verb would be.
 func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (verbEntry, json.RawMessage, *verbError) {
 	entry, ok := verbRegistry()[verb]
 	if !ok {
@@ -3739,13 +3496,10 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 		return verbEntry{}, nil, verr
 	}
 
-	// An agent verb while the agent features are off. See agents_switch.go.
 	if verr := d.agentsOffRefusal(verb, params); verr != nil {
 		return verbEntry{}, nil, verr
 	}
 
-	// A call from another machine is held to that machine's link policy
-	// before its handler runs. See link_policy.go.
 	if verr := d.checkLinkVerb(cs, verb); verr != nil {
 		return verbEntry{}, nil, verr
 	}
@@ -3753,18 +3507,8 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 		markLinkServed(cs)
 	}
 
-	// A call from a pane is held to what the pane holds, and a connection
-	// that restricted itself is held to that too, before anything,
-	// forwarding included, sees the call. See pane_grants.go and
-	// conn_scope.go.
-	// Follow the pane's own stale session name before a rename alias can
-	// expand it to another session. See session_rename.go.
 	params = d.followOwnPane(cs, verb, params)
-	// A session named by a name it was renamed from is named by its current
-	// one from here on. See session_rename.go.
 	params = d.followRenamedSession(verb, params)
-	// A window moved out of the session named goes to the one it is in now.
-	// See window_move_session.go.
 	params = d.followMovedWindow(params)
 	granted, verr := d.checkGrants(cs, verb, params)
 	if verr != nil {
@@ -3777,10 +3521,6 @@ func (d *Daemon) admitVerb(cs *connState, verb string, params json.RawMessage) (
 	return entry, scoped, nil
 }
 
-// callVerb runs one verb for cs the way the verb socket does, checks and
-// all, and returns its result. It is how another protocol served by the
-// daemon (the herdr socket) reuses a verb rather than doing its work again.
-// A verb that streams (subscribe) is not called this way.
 func (d *Daemon) callVerb(cs *connState, verb string, params any) (any, *verbError) {
 	raw, err := jsonx.Marshal(params)
 	if err != nil {
@@ -3798,26 +3538,11 @@ func (d *Daemon) callVerb(cs *connState, verb string, params any) (any, *verbErr
 	return result, verr
 }
 
-// checkParamNames refuses a request carrying a parameter the verb does not
-// declare, before the handler ever sees it.
-//
-// Dropping an unknown field is what encoding/json does by default, and it is the
-// worst answer available to a machine caller: new-window with a workspace the
-// verb did not yet take reported a created window and put it wherever it liked,
-// with a success envelope and no way to tell. A caller that guessed a name, or
-// that is newer than the daemon it reached, has to learn that from the response
-// rather than from the pane it is looking at.
-//
-// The check runs against the same schema list-verbs publishes, so the two cannot
-// drift: a parameter a handler reads but does not declare is unreachable, and a
-// caller that read list-verbs can always spell every accepted name.
 func checkParamNames(verb string, entry verbEntry, params json.RawMessage) *verbError {
 	if len(bytes.TrimSpace(params)) == 0 {
 		return nil
 	}
 	var got map[string]json.RawMessage
-	// A params value that is not an object at all is left to the handler's
-	// decode, which already reports it as invalid_params with the decode error.
 	if err := jsonx.Unmarshal(params, &got); err != nil {
 		return nil
 	}
@@ -3845,19 +3570,6 @@ func checkParamNames(verb string, entry verbEntry, params json.RawMessage) *verb
 	return nil
 }
 
-// writeVerbError records the refusal and writes the error envelope. Every verb
-// failure leaves the daemon through here, so the log line and the response
-// cannot drift apart.
-//
-// The caller already learns why its call failed, from the code and the hint. The
-// gap this closes is on the other side: the daemon kept no memory of what it
-// refused, so a harness author debugging a wrapper could see their own traffic
-// but not the daemon's reading of it. One line per refusal in `tuios logs -f`
-// is that reading.
-//
-// The line carries the verb name, the client id and the refusal code, and not
-// the message. A message quotes what the caller sent, which for a path or a
-// title is content, and the level boundary keeps content out of basic.
 func (d *Daemon) writeVerbError(cs *connState, id json.RawMessage, verb string, verr *verbError) error {
 	name := verb
 	if name == "" {
@@ -3872,12 +3584,9 @@ func (d *Daemon) writeVerbError(cs *connState, id json.RawMessage, verb string, 
 	return d.writeVerbResponse(cs, &verbResponse{ID: id, Error: verr})
 }
 
-// writeVerbResponse serializes resp as one newline-terminated JSON line and
-// writes it under the connection's send mutex with a write deadline.
 func (d *Daemon) writeVerbResponse(cs *connState, resp *verbResponse) error {
 	data, err := jsonx.Marshal(resp)
 	if err != nil {
-		// Should not happen; fall back to a minimal internal error line.
 		data = []byte(`{"error":{"code":"internal","message":"failed to encode response"}}`)
 	}
 	data = append(escapeC1(data), '\n')
@@ -3889,12 +3598,6 @@ func (d *Daemon) writeVerbResponse(cs *connState, resp *verbResponse) error {
 	return werr
 }
 
-// verbListVerbs implements the list-verbs introspection verb. It reports every
-// verb with its parameter schema and examples, the protocol version range, and
-// the error-code catalog, which together are enough to drive the control plane
-// without reading the documentation. Naming a verb narrows the output to that
-// one verb.
-// verbListKeys reports the send-keys key grammar. It reads no session.
 func (d *Daemon) verbListKeys(_ *connState, _ json.RawMessage) (any, *verbError) {
 	return keyList(), nil
 }
@@ -3944,8 +3647,6 @@ func (d *Daemon) verbListVerbs(_ *connState, params json.RawMessage) (any, *verb
 	}, nil
 }
 
-// verbEnvelopeDoc describes the request and response envelopes themselves, so a
-// caller that has only ever seen list-verbs knows how to frame a call.
 var verbEnvelopeDoc = map[string]any{
 	"transport": "One JSON object per line on the daemon socket. One response line per request line.",
 	"request":   `{"id":<any>,"verb":"<name>","params":{...}}`,
@@ -3980,7 +3681,6 @@ func LookupVerbDoc(name string) (VerbDoc, bool) {
 	return describeVerb(name, entry), true
 }
 
-// describeVerb renders one registry entry as its documented form.
 func describeVerb(name string, entry verbEntry) verbDoc {
 	params := entry.params
 	if params == nil {
@@ -3996,13 +3696,6 @@ func describeVerb(name string, entry verbEntry) verbDoc {
 	}
 }
 
-// verbHello implements the handshake verb. It exists so a version mismatch is
-// reported as a protocol_mismatch error on a live connection rather than
-// surfacing as a framing failure or a reset connection several calls later.
-//
-// A daemon that predates this verb answers unknown_verb, which still identifies
-// it as a working but older daemon; a daemon that predates the whole JSON
-// protocol closes the connection, which the client reports as a mismatch too.
 func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Client    string `json:"client"`
@@ -4015,9 +3708,6 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		return nil, verr
 	}
 
-	// Recorded as the binary protocol's hello records it, so new-session
-	// gives a session this connection creates the caller's terminal. The
-	// shell is left to the daemon, as every hello leaves it.
 	cs.mu.Lock()
 	cs.hello = &HelloPayload{Term: helloTermValue(p.Term), ColorTerm: helloTermValue(p.ColorTerm)}
 	cs.mu.Unlock()
@@ -4052,45 +3742,22 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		"pid":            os.Getpid(),
 		"instance":       d.instance,
 		"sessions":       len(infos),
-		// load is this machine's load, which a linked daemon reads off the
-		// hello its heartbeat sends anyway. See machine_load.go.
-		"load": machineLoad(infos),
-		// link_policy says this daemon holds links to a policy, so a proxy
-		// must reach it on a link socket and never on this one. See
-		// DialForLink in link_dial.go.
-		"link_policy": true,
-		// pane_grants says this daemon holds calls from panes to their
-		// grants and takes a pane's token with pane-grants, which the CLI
-		// presents where the kernel cannot name the caller's pane.
-		"pane_grants": true,
-		// os is the daemon's GOOS. A client attached from another machine
-		// builds a command line for this one: sh -c here, cmd /C on Windows.
-		"os": runtime.GOOS,
+		"load":           machineLoad(infos),
+		"link_policy":    true,
+		"pane_grants":    true,
+		"os":             runtime.GOOS,
 	}
-	// mail_waiting is the mail this daemon keeps for the machine a link
-	// connection named, while its own link there is down. See held_mail.go.
 	if held := d.mailWaitingFor(cs); held != nil {
 		res["mail_waiting"] = held
 	}
-	// upgrade says this image took its panes over in a live upgrade, and
-	// what that measured. daemon upgrade waits for it.
 	if st := d.lastHandoff.Load(); st != nil {
 		res["upgrade"] = st
 	}
 	return res, nil
 }
 
-// maxHelloTermLen bounds a TERM or COLORTERM a hello names. Real names are a
-// few dozen bytes at most.
 const maxHelloTermLen = 64
 
-// helloTermValue is v, a TERM or COLORTERM a hello named, when it is short
-// printable ASCII with no spaces, and empty otherwise. It goes into the
-// environment of every pane of a session the connection creates, and only
-// PaneTerm on Unix checks TERM after this, so a link peer could otherwise put
-// control characters or a long string there. An empty value gives the
-// daemon's fallback. It is dropped rather than refused, because a refused
-// hello would fail every command of that user.
 func helloTermValue(v string) string {
 	if len(v) > maxHelloTermLen || !guestenv.ValidTermName(v) {
 		return ""

@@ -10,19 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// legacyDaemon is a faithful stand-in for a daemon built before the JSON verb
-// protocol existed. It reproduces the only two behaviors that matter for
-// compatibility detection:
-//
-//   - it answers the binary hello handshake with a welcome carrying its version,
-//     which is how a new client learns what is actually running, and
-//   - it reads every connection as binary frames, so a JSON request line is
-//     decoded as a bogus length prefix and the connection is dropped, exactly as
-//     the old read loop did on a framing error.
-//
-// This is deliberately not a mock of the new daemon with a feature switched off:
-// it is the old wire behavior, so the test proves the client copes with the real
-// upgrade scenario.
 type legacyDaemon struct {
 	ln       net.Listener
 	version  string
@@ -32,8 +19,6 @@ type legacyDaemon struct {
 func startLegacyDaemon(t *testing.T, version string, sessions ...string) *legacyDaemon {
 	t.Helper()
 
-	// Point GetSocketPath at an isolated runtime dir so the fake daemon takes
-	// the place of the real one for this test only.
 	runtimeDir := testutil.RuntimeDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	socketPath, err := GetSocketPath()
@@ -68,9 +53,6 @@ func (d *legacyDaemon) handle(conn net.Conn) {
 		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		msg, err := ReadMessage(conn)
 		if err != nil {
-			// The old read loop returned here, closing the connection. A JSON
-			// request line lands in exactly this branch: '{' is 0x7b, so the
-			// length prefix reads as ~2GB and fails the 16MB sanity check.
 			return
 		}
 		if msg.Type != MsgHello {
@@ -110,8 +92,6 @@ func TestHandshakeAgainstLegacyDaemonReportsMismatch(t *testing.T) {
 		t.Errorf("client version = %q, want 1.4.0", mismatch.ClientVersion)
 	}
 
-	// The message is the whole point: it must say what failed, why, and the
-	// exact command that fixes it.
 	msg := mismatch.Error()
 	for _, want := range []string{
 		"The running TUIOS daemon does not speak this client's control protocol",
@@ -124,7 +104,6 @@ func TestHandshakeAgainstLegacyDaemonReportsMismatch(t *testing.T) {
 		}
 	}
 
-	// It must not surface as the raw transport error a user cannot act on.
 	if strings.Contains(msg, "failed to read response") {
 		t.Errorf("mismatch message leaked the raw transport error:\n%s", msg)
 	}

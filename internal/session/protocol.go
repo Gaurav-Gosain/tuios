@@ -209,8 +209,6 @@ const (
 	// ThemeEvents. See theme_event.go.
 	MsgClientTheme
 
-	// msgTypeEnd is one past the last message type. It stays last: a type
-	// added above it is walked by the tests that sweep every type.
 	msgTypeEnd
 )
 
@@ -804,8 +802,6 @@ type ErrorPayload struct {
 	Unnamed bool   `json:"unnamed,omitempty"`
 }
 
-// PTY-related payloads
-
 // CreatePTYPayload requests creation of a new PTY.
 type CreatePTYPayload struct {
 	Title  string `json:"title,omitempty"`
@@ -1111,8 +1107,6 @@ const (
 func WriteMessage(w io.Writer, msg *Message) error {
 	var hdr [6 + reqIDLen]byte
 	head := hdr[:6]
-	// Length counts the type and codec bytes plus the payload, and the
-	// request id when there is one.
 	binary.BigEndian.PutUint32(hdr[:4], uint32(2+len(msg.Payload)))
 	hdr[4], hdr[5] = byte(msg.Type), wireCodecGob
 	if msg.ReqID != 0 {
@@ -1133,7 +1127,6 @@ func WriteMessage(w io.Writer, msg *Message) error {
 		}
 	}
 
-	// Debug logging
 	LogMessage("SEND", msg)
 
 	return nil
@@ -1172,8 +1165,6 @@ func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeou
 	return readMessageBody(r, totalLen, nil)
 }
 
-// readFrameLength reads the length prefix of the next frame with
-// boundaryTimeout, then arms bodyTimeout for the rest of the frame.
 func readFrameLength(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration) (uint32, error) {
 	setBoundaryDeadline(conn, boundaryTimeout)
 
@@ -1193,14 +1184,6 @@ func readFrameLength(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout ti
 	return totalLen, nil
 }
 
-// setBoundaryDeadline arms the deadline for the wait between frames, or
-// clears it when there is none.
-//
-// The read loops do not poll their done channels with a short deadline. A
-// 100 ms poll costs an idle connection a timer, a wakeup and an empty read ten
-// times a second on each side, and it is not needed: the only things that
-// close those channels close the connection with them, and a closed
-// connection wakes the read on its own.
 func setBoundaryDeadline(conn net.Conn, timeout time.Duration) {
 	if timeout > 0 {
 		_ = conn.SetReadDeadline(time.Now().Add(timeout))
@@ -1209,8 +1192,6 @@ func setBoundaryDeadline(conn net.Conn, timeout time.Duration) {
 	_ = conn.SetReadDeadline(time.Time{})
 }
 
-// frameHeader is what precedes a frame's payload: its type, the request id
-// it carries (0 when it carries none) and the length of the payload.
 type frameHeader struct {
 	Type       MessageType
 	ReqID      uint64
@@ -1218,11 +1199,7 @@ type frameHeader struct {
 	TotalLen   uint32
 }
 
-// readFrameHeader reads the type, codec and request id that follow the
-// length prefix, and checks the length against them.
 func readFrameHeader(r io.Reader, totalLen uint32) (frameHeader, error) {
-	// Sanity check length (max 16MB). A frame past this is not skipped: a
-	// length that large is more likely a stream out of step than a frame.
 	if totalLen > maxFrameBytes {
 		return frameHeader{}, errfmt.Errorf("message too large: %d bytes (raw: 0x%08x)", totalLen, totalLen)
 	}
@@ -1231,8 +1208,6 @@ func readFrameHeader(r io.Reader, totalLen uint32) (frameHeader, error) {
 		return frameHeader{}, errfmt.Errorf("message too small: %d bytes", totalLen)
 	}
 
-	// Read type and codec. The codec byte is gob, with or without a request
-	// id in front of the payload.
 	var header [2]byte
 	if _, err := io.ReadFull(r, header[:]); err != nil {
 		return frameHeader{}, errfmt.Errorf("failed to read message header (after len=%d): %w", totalLen, err)
@@ -1241,8 +1216,6 @@ func readFrameHeader(r io.Reader, totalLen uint32) (frameHeader, error) {
 	h := frameHeader{Type: MessageType(header[0]), PayloadLen: totalLen - 2, TotalLen: totalLen}
 	tagged := header[1] == wireCodecGobTagged
 	if tagged && h.PayloadLen < reqIDLen {
-		// Too short to hold the id it says it carries, which no sender writes:
-		// the same fault as a frame too small for its header.
 		return frameHeader{}, errfmt.Errorf("tagged message too small: %d bytes", totalLen)
 	}
 
@@ -1253,10 +1226,6 @@ func readFrameHeader(r io.Reader, totalLen uint32) (frameHeader, error) {
 		}
 		h.ReqID = binary.BigEndian.Uint64(id[:])
 		if h.ReqID == 0 {
-			// Zero is the id of a message that answers nothing, and that
-			// message goes out untagged. A tagged zero would read as the
-			// same Message as an untagged frame, so the frame a relay writes
-			// back would not be the one it read. No sender writes one.
 			return frameHeader{}, errfmt.Errorf("tagged message with request id 0 (type=%d)", h.Type)
 		}
 		h.PayloadLen -= reqIDLen
@@ -1264,8 +1233,6 @@ func readFrameHeader(r io.Reader, totalLen uint32) (frameHeader, error) {
 	return h, nil
 }
 
-// skipPayload reads the payload of a refused frame and drops it, so the
-// stream stays in step.
 func skipPayload(r io.Reader, h frameHeader) error {
 	if _, err := io.CopyN(io.Discard, r, int64(h.PayloadLen)); err != nil {
 		return errfmt.Errorf("failed to skip a refused message payload (len=%d, type=%d): %w", h.PayloadLen, h.Type, err)
@@ -1273,20 +1240,12 @@ func skipPayload(r io.Reader, h frameHeader) error {
 	return nil
 }
 
-// readMessageBody reads the header and payload after the length prefix has
-// already been consumed from r. limit, when not nil, is the largest frame
-// accepted for each message type. A frame over its type's limit is skipped
-// unread and reported as a *FrameTooLargeError, after which the stream is
-// still in step. A nil limit allows every type the 16 MB any frame may have.
 func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint32) (*Message, error) {
 	h, err := readFrameHeader(r, totalLen)
 	if err != nil {
 		return nil, err
 	}
 
-	// A frame over its own type's limit is skipped before any of it is
-	// decoded, which is the point of the limit: see wire_bounds.go. The
-	// request id was read first so the refusal can answer the request.
 	if limit != nil {
 		if typeMax := limit(h.Type); totalLen > typeMax {
 			if err := skipPayload(r, h); err != nil {
@@ -1298,7 +1257,6 @@ func readMessageBody(r io.Reader, totalLen uint32, limit func(MessageType) uint3
 	return readFramePayloadOf(r, h)
 }
 
-// readFramePayloadOf reads the payload h announces and builds the message.
 func readFramePayloadOf(r io.Reader, h frameHeader) (*Message, error) {
 	payload, err := readFramePayload(r, int(h.PayloadLen))
 	if err != nil {
@@ -1311,25 +1269,16 @@ func readFramePayloadOf(r io.Reader, h frameHeader) (*Message, error) {
 		ReqID:   h.ReqID,
 	}
 
-	// Debug logging
 	LogMessage("RECV", msg)
 
 	return msg, nil
 }
 
-// readFramePayload reads n payload bytes into memory that grows as they
-// arrive: it starts at firstFrameChunk, or twice what a buffered reader
-// already holds, and doubles, by frameGrowStep at most, up to n. A sender that
-// announces more than it sends costs at most twice what it sent, not what it
-// announced.
 func readFramePayload(r io.Reader, n int) ([]byte, error) {
 	if n == 0 {
 		return nil, nil
 	}
 	first := firstFrameChunk
-	// Bytes a buffered reader already holds have arrived. Starting at twice
-	// them costs no more than the doublings would after them, and takes most
-	// frames in one buffer.
 	if b, ok := r.(interface{ Buffered() int }); ok {
 		first = max(first, 2*b.Buffered())
 	}
@@ -1375,31 +1324,13 @@ func (m *Message) ParsePayload(v any) error {
 	return decodePayload(m.Payload, v)
 }
 
-// Binary message helpers for high-frequency PTY I/O
-// These bypass the codec system for maximum performance.
-// Format: [4 bytes length][1 byte type][1 byte codec=0][36 bytes PTY ID][raw data]
-
-// ptyFrameHeaderLen is the fixed part of a binary PTY frame: the length
-// prefix, the type and codec bytes, and the padded PTY id.
 const ptyFrameHeaderLen = 4 + 2 + 36
 
-// ptyFrameBufs hands out frame buffers so a keystroke does not allocate one.
 var ptyFrameBufs = sync.Pool{New: func() any {
 	b := make([]byte, 0, ptyFrameHeaderLen+4096)
 	return &b
 }}
 
-// writePTYFrame writes one binary PTY frame in a single Write.
-//
-// Both callers write straight to an unbuffered unix socket, so separate
-// writes for the length, the type and codec bytes, the 36-byte id and the data
-// would be four syscalls. On the input path the user waits through them with
-// the client's whole-client mutex held. One assembled frame and one write
-// measured 1140ns for a keystroke, against 3346ns for four writes.
-//
-// The bytes are unchanged. The id field is still a fixed 36 bytes, zero padded
-// when the id is shorter and truncated when it is longer, which is what copy
-// into a 36-byte slice did before.
 func writePTYFrame(w io.Writer, msg MessageType, ptyID string, data []byte) error {
 	bufp := ptyFrameBufs.Get().(*[]byte)
 	buf := (*bufp)[:0]
@@ -1415,8 +1346,6 @@ func writePTYFrame(w io.Writer, msg MessageType, ptyID string, data []byte) erro
 
 	_, err := w.Write(buf)
 
-	// A batch far larger than the pool's buffers should not be kept alive by
-	// it; anything up to the usual size goes back.
 	if cap(buf) <= ptyFrameHeaderLen+256*1024 {
 		*bufp = buf
 		ptyFrameBufs.Put(bufp)
@@ -1440,9 +1369,6 @@ func ParseBinaryPTYMessage(payload []byte) (ptyID string, data []byte, err error
 	if len(payload) < 36 {
 		return "", nil, errfmt.Errorf("payload too short for PTY message: %d bytes", len(payload))
 	}
-	// Trim the NUL padding from the ID. The loop this replaces stopped at the
-	// first byte that was not NUL, so an ID of nothing but padding came back
-	// as 36 NUL bytes rather than empty (FuzzReadMessageFraming).
 	ptyID = strings.TrimRight(string(payload[:36]), "\x00")
 	data = payload[36:]
 	return ptyID, data, nil

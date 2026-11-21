@@ -41,12 +41,10 @@ import (
 	"tuios.dev/vt/snapshot"
 )
 
-// debugEnabled returns true if debug logging is enabled via TUIOS_DEBUG_INTERNAL env var
 func debugEnabled() bool {
 	return debuglog.Enabled()
 }
 
-// debugLog logs a message only if debug mode is enabled
 func debugLog(format string, args ...any) {
 	if debugEnabled() {
 		log.Printf(format, args...)
@@ -703,12 +701,6 @@ type SessionState struct {
 	AutoTiling  bool    `json:"auto_tiling"`
 	Width       int     `json:"width"`
 	Height      int     `json:"height"`
-	// Input mode (window-management vs terminal) is deliberately absent: it is
-	// per-viewer, not per-session. It used to live here, which meant one client
-	// entering terminal mode flipped the input mode of every other client
-	// attached to the same session. Clients own their own mode.
-	//
-	// BSP tiling state
 
 	// WorkspaceNames maps a workspace number to its optional label. A workspace
 	// with no entry here is unnamed and renders as its number. Naming one is a
@@ -894,11 +886,7 @@ type SessionState struct {
 	// numbered below one it has already applied. Zero is a daemon that does
 	// not number them. Wire only, like PushSeen.
 	SnapshotSeq uint64 `json:"-"`
-	// changeSeq is the session's change count when this copy was taken. See
-	// Session.changeSeq. It is unexported, so it never goes on the wire or to
-	// disk: it orders the copies the daemon sends, and only the daemon reads
-	// it.
-	changeSeq uint64
+	changeSeq   uint64
 	// Options is a daemon-owned key/value store for session options set through
 	// the JSON verb protocol (set-option / get-option). It is additive: older
 	// clients and older on-disk state simply omit it. Keys are advisory names;
@@ -1041,21 +1029,6 @@ type ScrollStripState struct {
 	ViewportX int `json:"viewport_x"`
 }
 
-// paneIO is where a pane's bytes come from and go to.
-//
-// A pane on this machine gets the pty the daemon spawned, which is what this
-// has always been. The type is narrowed to the four operations a PTY actually
-// performs on it, out of the nine xpty.Pty carries, because the other five
-// cannot be answered honestly by anything that is not a local file: a stream to
-// another machine has no file descriptor, no name on this filesystem, and no
-// command of its own to start.
-//
-// Those four are the entire seam between "a pane is a process here" and "a pane
-// is a process somewhere else". Nothing else in PTY touches the handle: the
-// emulator, the scrollback, the sequenced ring buffer and every subscriber path
-// are already indifferent to where the bytes came from, which is why a pane on
-// another machine can reuse all of it rather than needing a second
-// implementation of it.
 type paneIO interface {
 	io.ReadWriteCloser
 	Resize(width, height int) error
@@ -1063,242 +1036,96 @@ type paneIO interface {
 
 // PTY represents a daemon-managed pseudo-terminal.
 type PTY struct {
-	ID string
-	// largeSlot is the pane's one slot for a write of more than largeFrame
-	// bytes, and largeSince when the write holding it took it, in unix
-	// nanoseconds, or 0. See Write.
-	largeSlot     chan struct{}
-	largeSlotOnce sync.Once
-	largeSince    atomic.Int64
-	// sessionID is the session the pane was made in. home is the session
-	// it belongs to now, which move-window with to_session changes. Every
-	// callback the pane makes reads home, so its events, focus and place
-	// reach the session that shows it. See window_move_session.go.
-	sessionID string
-	home      atomic.Pointer[Session]
-	// windowID is the window the pane was made for, for the line its exit
-	// writes to the log. A window keeps its ID when it moves to another
-	// session, and a PTY never serves another window.
-	windowID string
-	// probeTail is the end of the last output chunk, so a probe split across
-	// two reads is still seen. Only readOutput touches it.
-	probeTail []byte
-	// probeJoin is scanNestProbes' scratch for the tail and the start of the
-	// next chunk, so a join costs no allocation.
-	probeJoin [2 * nestProbeMax]byte
-	// host is the machine the process is on, empty for this one. It is what
-	// tells the two halves of exit detection apart: a pane here has an
-	// exec.Cmd to wait on, and a pane elsewhere has only its stream ending.
-	host string
-	pty  paneIO
-	cmd  *exec.Cmd
-	// proc is the pane's process: cmd's for a pane started here, and one
-	// found by its pid for a pane adopted across an exec, which has no
-	// exec.Cmd. Nil for a pane on another machine. See monitorExit.
-	proc *os.Process
-	// procStart is proc's start time, read when it was started or adopted,
-	// 0 when unknown. It makes the shell a spawn root. See spawn_trust.go.
-	procStart uint64
-	// reap holds back the reap of a process that has exited while a handoff
-	// writes the panes down. See pty_reap.go.
-	reap reapGate
-	// gate, readMu, quiesced and resumed stop and restart the reader without
-	// losing a byte, and respMu and respWake do the same for the replies the
-	// emulator sends the program. vtDone closes when vtWriter returns. See
-	// pty_quiesce.go.
-	gate     *readGate
-	readMu   sync.Mutex
-	quiesced bool
-	resumed  chan struct{}
-	respMu   sync.Mutex
-	respWake chan struct{}
-	vtDone   chan struct{}
-	// frozen holds the pane's size and cell size from the quiesce to Resume,
-	// so nothing changes the emulator, the kernel's window size or the
-	// replies after the pane is written down. frozenW and frozenH (guarded by
-	// streamMu) and frozenCellW and frozenCellH (guarded by winsizeMu) are
-	// the last asked meanwhile, which Resume applies. See pty_quiesce.go.
+	ID                       string
+	largeSlot                chan struct{}
+	largeSlotOnce            sync.Once
+	largeSince               atomic.Int64
+	sessionID                string
+	home                     atomic.Pointer[Session]
+	windowID                 string
+	probeTail                []byte
+	probeJoin                [2 * nestProbeMax]byte
+	host                     string
+	pty                      paneIO
+	cmd                      *exec.Cmd
+	proc                     *os.Process
+	procStart                uint64
+	reap                     reapGate
+	gate                     *readGate
+	readMu                   sync.Mutex
+	quiesced                 bool
+	resumed                  chan struct{}
+	respMu                   sync.Mutex
+	respWake                 chan struct{}
+	vtDone                   chan struct{}
 	frozen                   atomic.Bool
 	frozenW, frozenH         int
 	frozenCellW, frozenCellH int
-	// rawLog appends every byte the process writes, when TUIOS_PTY_LOG asks
-	// for it, and is nil otherwise. See pty_log.go.
-	rawLog *ptyLogger
-	ctx    context.Context
-	cancel context.CancelFunc
+	rawLog                   *ptyLogger
+	ctx                      context.Context
+	cancel                   context.CancelFunc
 
-	// Terminal emulator: maintains scrollback, screen state, cursor position
-	// This persists across client disconnect/reconnect
-	terminal vt.Terminal
-	// terminalMu guards the daemon-side VT emulator (p.terminal) and the
-	// p.width/p.height it is sized to. This is the daemon process; it is a
-	// different lock from app.OS.terminalMu and the two never coexist.
-	//
-	//   LOCK ORDER (within the daemon):
-	//       PTY.terminalMu  ->  (nothing)
-	//
-	//   It is a leaf lock. No holder may take p.outputMu, send on a channel,
-	//   or touch p.pty while holding it. Resize deliberately drops it before
-	//   calling p.pty.Resize, and vtWriter drops it between queue items, for
-	//   exactly that reason: p.pty operations are syscalls that can block, and
-	//   the subscriber/capture paths take the read side constantly.
-	//
-	//   NOT REENTRANT. Size, SetCellSize, Resize, GetTerminalState,
-	//   CaptureContent and vtWriter must not call one another
-	//   (UpdatePixelDimensions calls SetCellSize and Size in sequence, not
-	//   nested, which is why it is written that way).
+	terminal   vt.Terminal
 	terminalMu sync.RWMutex
 	width      int
 	height     int
 
-	// Output ring buffer that drives resubscribe catch-up.
-	// outputSeq is the total number of bytes this PTY has ever produced, so the
-	// buffer holds the stream's last outputPos bytes ending at outputSeq. It is
-	// what lets a resubscribing client be resumed where it left off instead of
-	// being handed the buffer from the top.
-	// The ring starts empty and grows with the output, by powers of two from
-	// 1 KiB, until it reaches outputRingMax; from there it is a fixed ring that
-	// shifts in half steps. It holds what a ring of outputRingMax would hold at
-	// every point, so a pane that prints only a prompt keeps a few KiB, not 64.
-	// The slice header is written by appendToBuffer under outputMu, and only
-	// with streamMu held, which is how broadcast reads its length without
-	// outputMu.
 	outputMu     sync.RWMutex
 	outputBuffer []byte
 	outputPos    int
 	outputSeq    int64
-	// outputTaps get a copy of every chunk appended after they were added.
-	// Guarded by outputMu. See output_tap.go.
-	outputTaps []*outputTap
-	// resizeMarks are the stream positions resizes took effect at, oldest
-	// first, kept while the ring still holds bytes either side of them plus
-	// the newest one behind the ring, which is the width the ring's first
-	// byte was laid out at.
-	resizeMarks []resizeMark
+	outputTaps   []*outputTap
+	resizeMarks  []resizeMark
 
-	// paneMarks holds the pane marks already reported for the subscriptions
-	// of the moment, as paneMark bits. See pane_marks.go.
 	paneMarks atomic.Uint32
 
-	// Subscribers for raw output streaming.
-	subscribers   map[string]*ptySubscriber
-	subscribersMu sync.RWMutex
-	// subscriberCount is len(subscribers), kept beside the map so the
-	// emulator's callbacks can read it. They run under terminalMu, and
-	// subscribeLocked takes terminalMu under subscribersMu, so taking
-	// subscribersMu there would be the other order.
+	subscribers     map[string]*ptySubscriber
+	subscribersMu   sync.RWMutex
 	subscriberCount atomic.Int32
-	// graphicsAt is when the pane last wrote a kitty graphics command that
-	// is not a query, in unix nanoseconds, zero if never. See
-	// holdForSlowSubscribers.
-	graphicsAt atomic.Int64
-	// gfx cuts the output into text and frames for the subscribers. Used
-	// by broadcast only, under streamMu. See kitty_frames.go.
-	gfx gfxScanner
-	// unbroadcast is how many bytes the ring holds that broadcast has not
-	// cut yet: readOutput appends a read before it broadcasts it.
-	unbroadcast atomic.Int64
-	// reads counts the reads broadcast has cut. Used by broadcast only.
-	reads uint64
-	// framesSkipped counts frames dropped for a client that was behind.
-	framesSkipped atomic.Int64
-	// streamsCut counts the client streams gapped because their queue filled.
-	streamsCut atomic.Int64
-	// The pacing state. See graphics_backpressure.go.
-	paceWake    chan struct{}
-	holding     atomic.Bool
-	holdSpent   bool // readOutput only
-	holds       atomic.Int64
-	holdsRanOut atomic.Int64
-	heldNanos   atomic.Int64
-	// readOutput only: when reportPacing last wrote, and what.
-	pacingReportAt time.Time
-	pacingReported pacingCounts
+	graphicsAt      atomic.Int64
+	gfx             gfxScanner
+	unbroadcast     atomic.Int64
+	reads           uint64
+	framesSkipped   atomic.Int64
+	streamsCut      atomic.Int64
+	paceWake        chan struct{}
+	holding         atomic.Bool
+	holdSpent       bool
+	holds           atomic.Int64
+	holdsRanOut     atomic.Int64
+	heldNanos       atomic.Int64
+	pacingReportAt  time.Time
+	pacingReported  pacingCounts
 
-	// debug mirrors TUIOS_DEBUG_INTERNAL, read once when the PTY is built.
-	// broadcast runs per chunk per subscriber, and a debugLog there costs an
-	// os.Getenv (which takes the process-wide environment lock) plus a boxed
-	// argument slice on every call, whether or not the flag is set. The env var
-	// is set from the --debug flag before any PTY exists, so a value read here
-	// is the value the run was started with.
 	debug bool
 
-	exited   bool
-	exitedMu sync.RWMutex
-	exitCode int
-	// exitSignal is the signal that ended the process, 0 when it exited on
-	// its own. See ExitSignal.
+	exited     bool
+	exitedMu   sync.RWMutex
+	exitCode   int
 	exitSignal atomic.Int32
-	// keepOpen is set for a pane that stays after its process exits, and
-	// writes the exit status into it. Nil for every other pane. See
-	// keep_open.go.
-	keepOpen *exitNote
+	keepOpen   *exitNote
 
-	// Single-goroutine VT writer channel. Closed by readOutput on exit so
-	// vtWriter's range terminates.
-	vtWriteChan chan vtChunk
-	// screenStopped is set when vtWriter stops feeding the emulator after
-	// repeated faults. See pane_vt_fault.go.
-	screenStopped atomic.Bool
-	// recording is set while record-pane writes the pane to a file. See
-	// pane_record.go.
-	recording atomic.Bool
-	// faultNotices holds the fault notices not yet put into the stream, in
-	// the order the faults happened. See pane_vt_fault.go.
-	faultNotices faultNoticeQueue
-	// focusReporting is whether the guest had focus reporting on after the
-	// last write to the emulator. Only vtWriter reads and writes it. See
-	// focus_report.go.
+	vtWriteChan    chan vtChunk
+	screenStopped  atomic.Bool
+	recording      atomic.Bool
+	faultNotices   faultNoticeQueue
 	focusReporting bool
-	// hasFocus reports whether this pane has focus. Nil for a PTY made
-	// outside a session. See Session.paneHasFocus.
-	hasFocus func() bool
+	hasFocus       func() bool
 
-	// streamMu puts a resize at one position in the pane's stream. readOutput
-	// holds it across appending a chunk, broadcasting it and queueing it for
-	// the emulator, so a resize taken under it lands between the same two
-	// bytes on the daemon's emulator and on every subscriber's. Without that
-	// the two sides change width at different bytes and disagree for good
-	// about where the line in between wrapped.
 	streamMu sync.Mutex
-	// vtClosed records that readOutput has closed vtWriteChan, so a resize
-	// arriving during teardown does not send on a closed channel. Guarded by
-	// streamMu, which readOutput also holds to close.
 	vtClosed bool
 
-	// askedW and askedH are the size the session's clients last asked this
-	// pane to be, and leases the size leases held on it, by holder. Both are
-	// guarded by streamMu. See pane_lease.go.
 	askedW, askedH int
 	leases         map[string]paneLease
-	// noClients is set while no TUI client shows the pane's session. A fit
-	// lease sizes the pane only then. See pane_lease.go.
-	noClients atomic.Bool
-	// leaseAt is when a lease last resized the pane, and leaseTimer the
-	// resize put off until leaseInterval has passed since. Both guarded by
-	// streamMu.
-	leaseAt    time.Time
-	leaseTimer *time.Timer
-	// spawnW and spawnH are the size the pane was made at, which is the
-	// size of the stream before its first resize mark. Set once.
+	noClients      atomic.Bool
+	leaseAt        time.Time
+	leaseTimer     *time.Timer
 	spawnW, spawnH int
 
-	// winsizeMu serializes writes of the real PTY's window size, and guards
-	// the cell size in pixels they are computed from. Resize takes it under
-	// streamMu; UpdatePixelDimensions takes it alone. It is held across the
-	// ioctl, so it must not be taken under terminalMu.
-	//
-	// The cell size is kept so a resize carries the pixel size in the same
-	// ioctl as the cell size. Two ioctls, one without pixels and one with,
-	// gave the guest two SIGWINCHes for one resize. Zero means no client has
-	// reported a cell size yet, and the pixel size stays zero.
 	winsizeMu  sync.Mutex
 	cellWidth  int
 	cellHeight int
 
-	// The window size writes are coalesced; see pty_winsize.go. spawnedAt is
-	// set once at creation. The rest is guarded by winsizeMu, except
-	// winsizeHeld, which is also read without it on the input path.
 	spawnedAt             time.Time
 	winsizeWritten        time.Time
 	winsizeHeld           atomic.Bool
@@ -1306,141 +1133,54 @@ type PTY struct {
 	winsizeTimer          *time.Timer
 	winsizeClosed         bool
 
-	// vtSeq is the stream position the emulator has consumed, guarded by
-	// terminalMu. It trails outputSeq by whatever is still queued.
-	vtSeq int64
-	// vtResizes counts the resizes the emulator has applied, guarded by
-	// terminalMu. With vtSeq it makes the pane's revision (see paneMeta).
+	vtSeq     int64
 	vtResizes int64
 
-	// Callback when PTY process exits, used by daemon to notify clients
-	onExit func(ptyID string)
-	// exitedAlone is told, before onExit, when the process exits without
-	// the PTY having been closed and the window will not be kept open. See
-	// Session.notePaneExitedAlone.
+	onExit      func(ptyID string)
 	exitedAlone func(ptyID string, shell bool, signal int)
-	// ownShell is set when the pane runs the daemon's own shell on this
-	// machine: it was started with no command and without close_on_exit.
-	// That process ends when a person types exit, which is a person's close.
-	// A pane given a command (an xpanes run, an agent, a fan) and one that
-	// closes on exit end on their own, and a pane on another machine can end
-	// with its link.
-	ownShell bool
+	ownShell    bool
 
-	// emit, when set, raises a control-plane event (output activity, bell, mode
-	// change, process exit) already tagged with this PTY's window and PTY ID. It
-	// is a no-op when the session has no event sink installed.
 	emit func(SessionEvent)
 
-	// lastOutput is the unix-nano time this PTY most recently produced output. It
-	// is written on the PTY read goroutine and read by the daemon's output-stall
-	// heuristic, so it is an atomic rather than guarded by a lock.
 	lastOutput atomic.Int64
 
-	// humanKeyAt is the unix-nano time a person last typed into this pane
-	// through a client, focus and mouse reports left out. The delivery queue
-	// waits for it to be queueTypingQuiet old. draftWatch, when set, runs on
-	// every output chunk and every such key: the queue sets it while a draft
-	// holds its next entry, so a change in the box re-arms the look. See
-	// agent_queue_draft.go.
 	humanKeyAt atomic.Int64
 	draftWatch atomic.Pointer[func()]
 
-	// lastAgentProbe is the unix-nano time of the last output-driven agent-exit
-	// probe. It throttles the /proc read the probe does so a busy pane does not
-	// re-check its foreground on every output chunk.
 	lastAgentProbe atomic.Int64
 
-	// lastScreenScan is the unix-nano time of the last output-driven screen scan,
-	// throttling it the same way.
 	lastScreenScan atomic.Int64
 
-	// lastDetectScan is the unix-nano time the detection poll last read this
-	// pane's foreground process, and detectSkips how many ticks have passed
-	// over it since. Only the poll's goroutine touches them. See detectScanDue.
 	lastDetectScan atomic.Int64
 	detectSkips    atomic.Int32
 
-	// sshOffer is the check for the offer to add a machine. See ssh_offer.go.
 	sshOffer sshOfferCheck
 
-	// screenSettle is the one-shot that scans the screen after a pane goes quiet.
-	// It is a timer rather than a ticker so a silent pane costs nothing, which is
-	// the rule the whole daemon is built to.
-	//
-	// The timer is built once and re-armed with Reset. Arming happens on every
-	// chunk a pane emits, and a fresh time.AfterFunc there allocated a runtime
-	// timer per chunk. screenLook is what it runs, held separately so the caller
-	// does not have to build a closure per chunk either.
 	screenSettleMu sync.Mutex
 	screenSettle   *time.Timer
 	screenLook     func()
 
-	// agentProgress parks the most recent OSC 9;4 progress state the emulator
-	// saw, as the state plus one so zero means none pending. The VT callback runs
-	// on the vtWriter goroutine with the terminal lock held, where mutating
-	// session state would re-enter that lock, so it only stores here and the PTY
-	// read goroutine applies it on the output event that carried the sequence.
 	agentProgress atomic.Int64
-	// lastProgress is the most recent OSC 9;4 report, kept after it is
-	// applied so a manifest's osc_progress rules can read it on any look. It
-	// packs the state plus one into the high half and the percentage into the
-	// low half, so zero means the pane has sent none.
-	lastProgress atomic.Int64
-	// agentNotify parks the most recent desktop notification (OSC 9, 777 or
-	// 99) for the read goroutine, for the reason agentProgress does. See
-	// agent_notify.go.
-	agentNotify atomic.Pointer[paneNotification]
+	lastProgress  atomic.Int64
+	agentNotify   atomic.Pointer[paneNotification]
 
-	// progStatus holds the pane's OSC 7501 records (program_status.go). The
-	// emulator callback writes it under the terminal lock; the store has its
-	// own leaf lock and calls nothing. progStatusDirty says it changed since
-	// the vtWriter last handed it on.
-	progStatus      progstatus.Store
-	progStatusDirty atomic.Bool
-	// chunkGroup is the foreground process group the PTY reader read for the
-	// chunk the vtWriter is writing now, plus one, and 0 when it read none.
-	// See PTY.reportGroup.
-	chunkGroup atomic.Int64
-	// progStatusApplyMu orders the copies of the records into the session
-	// state. See Session.applyProgramStatus.
+	progStatus        progstatus.Store
+	progStatusDirty   atomic.Bool
+	chunkGroup        atomic.Int64
 	progStatusApplyMu sync.Mutex
 
-	// title is the last title this PTY's application set. The daemon reads every
-	// byte of every window, so this is the freshest title anyone holds: a client
-	// only sees the windows it is subscribed to, and its copy of the title stops
-	// where its subscription did.
-	title atomic.Pointer[string]
-	// iconName is the name the pane's application last gave with OSC 1, for
-	// the label of an unnamed workspace. See WindowState.IconName.
+	title    atomic.Pointer[string]
 	iconName atomic.Pointer[string]
-	// place is where the shell is: its directory from OSC 7 (seeded from the
-	// spawn directory) and the git branch there. See session_place.go.
-	place placeRecord
-	// dnd is what the program said about drag and drop. See
-	// dnd_registration.go.
-	dnd dndRegistration
-	// marks is the emulator's OSC 133 marker list, kept for its origin: a
-	// command's prompt row is stored against it. See shell_commands.go.
-	marks *vt.SemanticMarkerList
-	// cwdCheck paces the read of where the shell is that output drives. See
-	// pane_cwd_check.go.
+	place    placeRecord
+	dnd      dndRegistration
+	marks    *vt.SemanticMarkerList
 	cwdCheck paneCwdCheck
-	// shell follows the shell's commands through its OSC 133 marks. See
-	// shell_commands.go.
-	shell shellTrack
-	// runClaim is held by one run call from its prompt check until the call
-	// ends, so two runs cannot both pass the check and type into one line.
-	// See verb_run.go.
+	shell    shellTrack
 	runClaim atomic.Bool
 }
 
-// owner is the session the pane belongs to now. It is never nil for a pane
-// made by a session.
 func (p *PTY) owner() *Session { return p.home.Load() }
 
-// ownerID is the ID of the session the pane belongs to now, or the one it
-// was made in when it has no owner recorded.
 func (p *PTY) ownerID() string {
 	if s := p.home.Load(); s != nil {
 		return s.ID
@@ -1466,7 +1206,6 @@ func (p *PTY) IconName() string {
 	return ""
 }
 
-// setIconName records the name OSC 1 gave and reports whether it changed.
 func (p *PTY) setIconName(name string) bool {
 	old := p.iconName.Swap(&name)
 	if old == nil {
@@ -1475,9 +1214,6 @@ func (p *PTY) setIconName(name string) bool {
 	return *old != name
 }
 
-// agentExitProbeInterval bounds how often output drives an agent-exit probe, so a
-// pane streaming heavy output probes /proc at most a few times a second while a
-// quit agent still clears well inside one detection poll.
 const agentExitProbeInterval = 250 * time.Millisecond
 
 // LastOutput returns the unix-nano time this PTY most recently produced output,
@@ -1487,10 +1223,6 @@ func (p *PTY) LastOutput() int64 {
 	return p.lastOutput.Load()
 }
 
-// probeAgentExitDue reports whether enough time has passed since the last
-// output-driven agent-exit probe to run another, and claims the slot if so. It is
-// only ever called from the single PTY read goroutine, so a plain load/store is
-// race-free.
 func (p *PTY) probeAgentExitDue(now int64) bool {
 	if now-p.lastAgentProbe.Load() < int64(agentExitProbeInterval) {
 		return false
@@ -1499,17 +1231,11 @@ func (p *PTY) probeAgentExitDue(now int64) bool {
 	return true
 }
 
-// storeAgentProgress parks an OSC 9;4 progress state for the read goroutine to
-// apply. Called from the VT callback under the terminal lock, so it must stay a
-// single atomic store and nothing more.
 func (p *PTY) storeAgentProgress(state vt.ProgressState, percent int) {
 	p.agentProgress.Store(int64(state) + 1)
 	p.lastProgress.Store((int64(state)+1)<<32 | int64(uint32(int32(percent))))
 }
 
-// takeAgentProgress returns the parked OSC 9;4 progress state and clears it,
-// reporting whether one was pending. A burst that parked several states between
-// two output events collapses to the newest, which is the only one still true.
 func (p *PTY) takeAgentProgress() (vt.ProgressState, bool) {
 	v := p.agentProgress.Swap(0)
 	if v == 0 {
@@ -1521,276 +1247,99 @@ func (p *PTY) takeAgentProgress() (vt.ProgressState, bool) {
 // Session represents a persistent TUIOS session.
 // The daemon manages PTYs and stores state; the client runs the TUI.
 type Session struct {
-	// startDirs is each local window's start folder, by window id: where its
-	// first process started, fixed then and never moved by the shell's cd or
-	// its OSC 7. See noteStartDir.
-	startDirs sync.Map
-	// agentDirs is each agent session's start folder, by window id and
-	// then agent session id. See noteAgentStartDir.
-	agentDirsMu sync.Mutex
-	agentDirs   map[string]map[string]string
-	// places is each local PTY, by PTY id, kept beside ptys so a reader
-	// holding the state lock can see where a pane runs without taking the
-	// PTY lock. See paneRunDir.
-	places sync.Map
-	// attachMu serialises attaches to the session from the moment a client
-	// is placed on it through its reply. exclusiveSeq is the attachSeq of the
-	// newest attach that detaches the others. See detach_client.go.
-	attachMu     sync.Mutex
-	exclusiveSeq atomic.Uint64
-	// optionApplyMu orders the routes of options to a client, so a value set
-	// live while the waiting ones are routed cannot reach the client ahead of
-	// an older one and be overwritten by it. optionsWaiting holds the options
-	// set while no client was attached, guarded by stateMu. See
-	// option_pending.go.
+	startDirs      sync.Map
+	agentDirsMu    sync.Mutex
+	agentDirs      map[string]map[string]string
+	places         sync.Map
+	attachMu       sync.Mutex
+	exclusiveSeq   atomic.Uint64
 	optionApplyMu  sync.Mutex
 	optionsWaiting map[string]waitingOption
 
 	// Identity
-	ID string
-	// name is the session's one name: what the daemon lists, addresses it by,
-	// saves its state file under and exports as TUIOS_SESSION to new panes. It
-	// changes only through Manager.RenameSession, and it is read from many
-	// goroutines, so it is an atomic pointer rather than a plain string.
-	name atomic.Pointer[string]
-	// persistMu serializes writes of the state file with a rename, which moves
-	// the file. See persist.
+	ID        string
+	name      atomic.Pointer[string]
 	persistMu sync.Mutex
-	// startDir is the directory a new local window starts in when nothing
-	// else names one: no cwd from the caller and no focused pane to inherit
-	// from. A bare local attach creating the default session, tuios new --cwd,
-	// and the new-session verb's cwd set it, so later windows start in the
-	// session's original directory. Empty keeps the daemon's own directory.
-	// Saved as SessionState.StartDir and set again on a restore, so it survives
-	// a daemon restart.
-	startDir atomic.Pointer[string]
+	startDir  atomic.Pointer[string]
 
-	// PTYs managed by this session
-	ptys   map[string]*PTY
-	ptysMu sync.RWMutex
-	// reportBg and reportFg are the colours every emulator in the session
-	// answers OSC 11 and OSC 10 with, from the last client push, and the
-	// strings they were read from. Guarded by ptysMu, so a pane created while
-	// they change cannot miss them. See applyReportColors.
+	ptys                     map[string]*PTY
+	ptysMu                   sync.RWMutex
 	reportBgHex, reportFgHex string
 	reportBg, reportFg       color.Color
-	// reportPalHex and reportPal are the host's sixteen, the same way, for
-	// OSC 4.
-	reportPalHex string
-	reportPal    [16]color.Color
-	// reportsHeld keeps a push of the colours from the emulators while a
-	// handoff writes the session down, and reportHeld is the last push
-	// meanwhile. Both guarded by ptysMu. See holdReportColors.
-	reportsHeld bool
-	reportHeld  *heldReportColors
-	// tuiClients is how many TUI clients show the session, as
-	// Daemon.recountTUIClients last counted. viewers are the streams that
-	// show a pane on their own. See pane_viewers.go.
-	tuiClients atomic.Int32
-	viewers    sessionViewers
+	reportPalHex             string
+	reportPal                [16]color.Color
+	reportsHeld              bool
+	reportHeld               *heldReportColors
+	tuiClients               atomic.Int32
+	viewers                  sessionViewers
 
-	// The last directory read out of each PTY's process, and when. See
-	// liveCwds: GetState is on the render path and reading a process
-	// directory is a syscall per window, so the read is throttled per
-	// session rather than taken on every call.
-	cwdCache   map[string]string
-	cwdReadAt  time.Time
-	cwdCacheMu sync.Mutex
-	// liveFactsPushQueued coalesces the pushes publishLiveFactsSoon starts.
+	cwdCache            map[string]string
+	cwdReadAt           time.Time
+	cwdCacheMu          sync.Mutex
 	liveFactsPushQueued atomic.Bool
-	// liveFactsPushedAt is when the last of them started, as time since
-	// liveFactsEpoch, and 0 before the first. See liveFactsPushGap.
-	liveFactsPushedAt atomic.Int64
+	liveFactsPushedAt   atomic.Int64
 
-	// Session state (serializable)
 	state            *SessionState
-	stopResurrection func() // Stops periodic resurrection saving
-	// history records when each pane's history was last saved. See
-	// scrollback_persist.go.
-	history historySaver
-	// discardHistory is set when the session is killed. The history would be
-	// deleted with the state straight after, so the last save skips it.
-	discardHistory atomic.Bool
+	stopResurrection func()
+	history          historySaver
+	discardHistory   atomic.Bool
 
-	stateMu sync.RWMutex
-	// snapSeq is the last SnapshotSeq handed out.
-	snapSeq atomic.Uint64
-	// pushSeen is what every snapshot's PushSeen is copied from, guarded by
-	// stateMu. It is kept beside the state rather than in it so that nothing
-	// that replaces the state wholesale (a restore, a verb) can lose it: a
-	// client whose entry went missing would take every broadcast for one that
-	// predates its own push until it next pushed.
-	pushSeen map[string]uint64
-	// refusedOrigin is the push origin whose last dropped push was logged,
-	// guarded by stateMu. A client that shows another session's windows pushes
-	// them on every keystroke; the line is written for the first drop and not
-	// again while that origin keeps being dropped. See foreignPushLocked.
-	refusedOrigin string
-	// focusMovedVersion is the Version of the last daemon mutation that moved
-	// the focus or the workspace, or that a focus verb made, guarded by
-	// stateMu. A stale push built at or after it keeps its own focus. See
-	// keepClientFocus.
+	stateMu           sync.RWMutex
+	snapSeq           atomic.Uint64
+	pushSeen          map[string]uint64
+	refusedOrigin     string
 	focusMovedVersion int
-	// clientFocusMoved is, by push origin, the Version at which that client's
-	// last push moved the focus, guarded by stateMu. A push never advances
-	// Version, so a move by one client is invisible to focusMovedVersion, and a
-	// stale push from another client built at that version may predate it.
-	clientFocusMoved map[string]int
-	// askedFocusMoved is, by push origin, the daemon mutations that moved
-	// the focus because that client asked for it (a new window with focus)
-	// and that the client's pushes have not yet shown it has seen, oldest
-	// first, guarded by stateMu. The client sent each request before any
-	// push it sends next, so such a push may keep a focus it moved since. See
-	// pushOwnsFocusLocked.
-	askedFocusMoved map[string]*askedFocusMoves
-	// workspaceTrail is the workspaces the session has shown, oldest first,
-	// each at most once, guarded by stateMu. When the workspace on screen
-	// loses its last pane the session goes back along it. See
-	// empty_workspace.go.
-	workspaceTrail []int
-	// renumberedAt is the version of the last renumber of the workspaces. A
-	// push built before it holds the old numbering. See RenumberWorkspaces.
-	renumberedAt int
-	// tabListed is the workspaces that were herdr tabs at the last change, so
-	// one that stops being a tab gives up its tab key, and existed is the
-	// workspaces that existed then, so one that stops existing is compacted
-	// away. See noteWorkspacesLocked.
-	tabListed map[int]bool
-	existed   map[int]bool
-	// hadPanes is the workspaces that have held a pane since they last came
-	// into existence: only such a workspace closes up its place when it goes.
-	hadPanes map[int]bool
-	// The rest of what decides whether a workspace that goes closes up its
-	// place, guarded by stateMu: panesAt is where each pane was at the last
-	// change, selfEmptied the workspaces whose last pane exited on its own,
-	// gaps the places such workspaces left, which a person's change closes
-	// up, and closeUpPending a move that asked for that. See
-	// noteWorkspacesLocked.
-	panesAt        map[string]paneAt
-	selfEmptied    map[int]bool
-	gaps           map[int]bool
-	closeUpPending bool
-	// exitedAlone is the PTYs whose process exited without being closed,
-	// each true when it was the pane's own shell, guarded by exitedAloneMu
-	// rather than stateMu, because the exit is heard on the PTY's goroutine.
-	// See notePaneExitedAlone.
-	exitedAloneMu sync.Mutex
-	exitedAlone   map[string]bool
-	// signalHold is when the last pane killed from outside by a signal
-	// stops holding the saved layout, in unix nanoseconds. See
-	// holdingCheckpoint.
-	signalHold atomic.Int64
-	// tabKeys is the state's WorkspaceTabKeys as last written, readable
-	// without stateMu, for a shell started while the state is being written.
-	// See herdrTabFor.
-	tabKeys atomic.Pointer[map[int]int]
-	// returnTo is, by workspace, the workspace to show first when that one
-	// loses its last pane, guarded by stateMu. tuios xpanes sets it to the
-	// workspace that ran it.
-	returnTo map[int]int
-	// treeOps holds the recent Versions that were tree ops, with the client
-	// connection that sent each, at its version modulo the length, guarded by
-	// stateMu. A fixed ring, so it never grows. See missedMutationLocked and
-	// missedPeerTreeLocked.
-	treeOps [1024]treeOpRecord
-	// zoomOpAt is the Version of the last zoom the daemon set itself
-	// (zoom-window), guarded by stateMu. A push built before it carries the
-	// zoom the client had, and the stale merge keeps the daemon's. See
-	// keepDaemonZoom.
-	zoomOpAt int
-	// recountMu is held across counting the session's clients and applying
-	// the answer, so two recounts cannot apply their answers in the opposite
-	// order to the one they worked them out in. See Daemon.recountTUIClients.
-	recountMu sync.Mutex
-	// focusIntent is set by a focus verb inside mutateState, so the mutation
-	// counts as a focus move even when the focus it names is the one already
-	// held: the verb is a later intent than any push in flight.
-	focusIntent bool
-	// focusNeutral is set by a mutation inside mutateState that must not
-	// count as a focus move, so a stale push still keeps its own focus. Only
-	// a FocusIfShown window sets it. See ExecuteCommandPayload.FocusIfShown.
-	focusNeutral bool
-	// focusAskedBy is set inside mutateState to the push origin of the client
-	// that asked for the mutation's focus move. The move then goes to
-	// askedFocusMoved, not to focusMovedVersion.
-	focusAskedBy string
-	// movingWindow is set inside mutateState by the half of a move to
-	// another session that runs here, guarded by stateMu. The window that
-	// leaves raises no window-closed, and the one that arrives raises
-	// window-moved rather than window-created, because the pane goes on. See
-	// window_move_session.go.
-	movingWindow string
+	clientFocusMoved  map[string]int
+	askedFocusMoved   map[string]*askedFocusMoves
+	workspaceTrail    []int
+	renumberedAt      int
+	tabListed         map[int]bool
+	existed           map[int]bool
+	hadPanes          map[int]bool
+	panesAt           map[string]paneAt
+	selfEmptied       map[int]bool
+	gaps              map[int]bool
+	closeUpPending    bool
+	exitedAloneMu     sync.Mutex
+	exitedAlone       map[string]bool
+	signalHold        atomic.Int64
+	tabKeys           atomic.Pointer[map[int]int]
+	returnTo          map[int]int
+	treeOps           [1024]treeOpRecord
+	zoomOpAt          int
+	recountMu         sync.Mutex
+	focusIntent       bool
+	focusNeutral      bool
+	focusAskedBy      string
+	movingWindow      string
 
-	// stateDirty is raised by every change to the session's structure and taken
-	// by the resurrection saver, which is how a new window reaches disk in a
-	// couple of seconds. It is a latch rather than a field of state because the
-	// saver goroutine sleeps on it and holds no lock of this session.
-	stateDirty wakeLatch
-	// saveStale is raised when a pane prints or the person uses the session:
-	// what a save reads may have moved, though the structure did not. The
-	// saver writes it within resurrectionInterval. See startPeriodicSaveWith.
-	saveStale wakeLatch
-	// saverWakes counts the resurrection saver's timer fires.
-	saverWakes atomic.Int64
-	// wakes are the daemon's idle latches, raised by this session's panes
-	// and state. Nil until the daemon adopts the session. See idle_wakes.go.
-	wakes atomic.Pointer[idleWakes]
-	// offerProbe is the daemon's check for the offer to add a machine. Nil
-	// until the daemon adopts the session. See ssh_offer.go.
-	offerProbe atomic.Pointer[sshOfferProbe]
-	// stateWake is closed by noteStateChangeLocked to wake WaitState. Guarded
-	// by stateWakeMu, which is never held with another lock taken after it.
+	stateDirty  wakeLatch
+	saveStale   wakeLatch
+	saverWakes  atomic.Int64
+	wakes       atomic.Pointer[idleWakes]
+	offerProbe  atomic.Pointer[sshOfferProbe]
 	stateWake   chan struct{}
 	stateWakeMu sync.Mutex
 
-	// eventSink, when set, receives control-plane events raised by this session
-	// and its PTYs (window lifecycle, output activity, bell, mode changes). The
-	// daemon installs it so events reach the event hub; nil for a session with no
-	// hub (e.g. bare unit tests).
-	eventSink   func(SessionEvent)
-	eventSinkMu sync.RWMutex
-	// paneMarkSink, when set, is told the first output or bell of a pane
-	// since its subscriptions last changed. See pane_marks.go.
+	eventSink    func(SessionEvent)
+	eventSinkMu  sync.RWMutex
 	paneMarkSink atomic.Pointer[paneMarkFunc]
 
-	// stateSink, when set, receives the canonical state after every daemon-side
-	// mutation, so an attached client can be told what the daemon just did. The
-	// daemon installs it and broadcasts the snapshot to the session's clients;
-	// nil for a session with no clients (bare unit tests, resurrection loads).
 	stateSink   func(*SessionState)
 	stateSinkMu sync.RWMutex
 
-	// changeSeq counts every change to the state, guarded by stateMu. It is
-	// bumped by noteStateChangeLocked, so a client push counts as well as a
-	// daemon-side mutation. Version cannot order the copies sent to clients:
-	// a client push keeps it the same, so two different states share it.
 	changeSeq uint64
 
-	// pushMu serializes the state deliveries to clients, and deliveredSeq
-	// records the changeSeq of the newest state delivered. Snapshots are taken
-	// under stateMu but delivered without it, so two changes can reach the
-	// clients in either order. pushMu drops the older one rather than let a
-	// client see the daemon go backwards. Every delivery goes through it: the
-	// state sink, a client push forwarded to its peers, and the attach repair.
 	pushMu       sync.Mutex
 	deliveredSeq uint64
 
-	// broadcastFP is the fingerprint of the state last forwarded to this
-	// session's peers on a client sync, and broadcastFPSet says whether there
-	// is one. See deliverPush.
 	broadcastFP    uint64
 	broadcastFPSet bool
 
-	// Terminal size, and the chrome reserve every client lays its panes out
-	// around. Both are guarded by sizeMu.
-	width   int
-	height  int
-	reserve LayoutReserve
-	// layoutGen counts settlements of the two above. See
-	// SessionResizePayload.Generation.
-	layoutGen uint64
-	// sizePolicy is the window_size policy the size above was settled under,
-	// and sizedBy the client that set it.
+	width      int
+	height     int
+	reserve    LayoutReserve
+	layoutGen  uint64
 	sizePolicy string
 	sizedBy    SizeOwner
 	sizeMu     sync.RWMutex
@@ -1798,159 +1347,55 @@ type Session struct {
 	// Lifecycle
 	Created time.Time
 
-	// lastActive is when this session was last used, and activeMu guards it. A
-	// mutex rather than a bare field because it is written from the connection
-	// goroutine on every keystroke and read from whichever goroutine is
-	// answering a session listing.
 	lastActive time.Time
-	// lastUsed is when the person last used this session: a key, a click or a
-	// wheel turn at the terminal of a client attached to it (see
-	// session_used.go). It is what a bare attach picks by. lastActive is not,
-	// because a window an agent opens and keys a script sends bump it, so an
-	// orchestrator would pull the person's attach away from the session they
-	// were typing in. Zero until the person uses the session. activeMu
-	// guards it too.
-	lastUsed time.Time
-	// usedMarked is when TouchUsed last marked the session for a save.
+	lastUsed   time.Time
 	usedMarked time.Time
 	activeMu   sync.Mutex
 
-	// Configuration
 	config *SessionConfig
 
-	// agentClaims records, by window ID, who owns the window's agent state: the
-	// ranked source that last set it (see AgentSource) and whether the
-	// foreground-process detector promoted the window and so must clear it when
-	// the agent exits.
-	//
-	// It used to be a bool holding only the second half. That was enough while the
-	// detector was the only thing competing with an explicit report; it cannot
-	// express which of several sources should win, so the value carries the source
-	// now. Read and written under stateMu, so it needs no lock of its own.
 	agentClaims map[string]agentClaim
 
-	// askShows records, by window ID, the question from ask-human a pane
-	// shows as its agent state while its call waits, and the state beneath
-	// it. Read and written under stateMu. See askShow.
 	askShows map[string]askShow
 
-	// agentHarnessPIDs records, by window ID, the pid of the harness process
-	// whose hook last set the window's AgentSessionID, as the hook reported it.
-	// sessionGuard reads it to tell a new conversation in the same harness
-	// process (/clear or /resume after an interrupted turn) from a nested run
-	// in another process, and applyAgentSession reads it for the same reason.
-	// The detector reads its start time to tell that the harness has exited
-	// (harnessProc). It is kept apart from agentClaims because other sources replace the
-	// claim, and the pid must outlive that. The detector forgets it when it sees
-	// the agent leave the pane. Daemon memory only, and read and written under
-	// stateMu.
 	agentHarnessPIDs map[string]harnessProc
 
-	// agentSharedGuards records, by window ID, the conversations the guard of
-	// a shared-server harness (Codex) protects on that window: the owner and
-	// the owner before it. See sharedGuard. It is kept apart from the stored
-	// AgentSessionID, which outlives the agent so a pane can resume its last
-	// conversation; the guard must not, so the detector forgets it when the
-	// pane goes back to its shell. Daemon memory only, under stateMu.
 	agentSharedGuards map[string]sharedGuard
-	// harnessNamed are the PTYs whose harness the detector named, waiting for
-	// one look at their screen with that harness's rules (takeHarnessNamed).
-	harnessNamed   []string
-	harnessNamedMu sync.Mutex
+	harnessNamed      []string
+	harnessNamedMu    sync.Mutex
 
-	// agentSubagents records, by window ID, the subagents the window's agent
-	// is running or ran a moment ago, and the launches whose subagent has not
-	// started, as its hooks reported them. The window's AgentSubagents and
-	// AgentSubagentList and the reserved metadata key subagents say them, and
-	// move in one mutation. See agent_subagents.go. Daemon memory only, and
-	// read and written under stateMu.
-	agentSubagents map[string]*paneSubagents
-	// subagentShownAt is when a subagent change was last put on a window,
-	// unix nanoseconds, under stateMu. A tool change within
-	// subagentPublishGap of it waits for subagentFlush.
+	agentSubagents  map[string]*paneSubagents
 	subagentShownAt int64
 
-	// transcripts binds windows to the record files their harnesses write. It is
-	// held here rather than in SessionState because none of it is state: a
-	// transcript path names a project directory and a session, so it is kept in
-	// daemon memory and never serialised, never versioned, and never pushed to a
-	// client. Only the AgentState derived from it is.
 	transcripts agentTranscriptState
 
-	// agentHolds records, by window ID, a quieter agent state waiting out the
-	// anti-flicker window before it is published (see holdQuieterState). It has a
-	// lock of its own rather than riding stateMu because it is read and written
-	// around ApplyAgentReport, which takes stateMu itself.
-	agentHolds map[string]agentHold
-	// agentHoldTimer is the one-shot that publishes a hold whose source then
-	// went silent. Nil when nothing is waiting. Guarded by agentHoldMu.
+	agentHolds     map[string]agentHold
 	agentHoldTimer *time.Timer
 	agentHoldMu    sync.Mutex
 
-	// idle holds idle readings from the title and screen tiers until they are
-	// confirmed (see agent_idle.go). It has its own lock.
 	idle idleGate
 
-	// agentTurns records, by window ID, when the window's current working
-	// phase began, so a return to rest can be counted as a finished turn (see
-	// agent_turns.go). completionSeen is the CompletionSeq each window had when
-	// an attached client last pushed state with it focused. Both are guarded by
-	// stateMu and neither is serialised.
 	agentTurns     map[string]agentTurn
 	completionSeen map[string]uint64
 
-	// agentMetaPrune drops expired agent metadata. Idle when no token has a
-	// TTL. See agent_meta.go.
 	agentMetaPrune pruneTimer
 
-	// subagentPrune drops subagents gone quiet. Idle while no pane has
-	// subagents. See agent_subagents.go.
 	subagentPrune pruneTimer
-	// subagentFlush pushes the subagent tool changes held back. Idle while
-	// no subagent runs a tool.
 	subagentFlush pruneTimer
 
-	// Graphics capabilities of the attached client's host terminal. The daemon
-	// records them on attach so shells spawned afterwards can advertise a
-	// terminal identity the guest's image tools recognise.
-	graphicsMu    sync.RWMutex
-	kittyGraphics bool
-	sixelGraphics bool
-	// graphicsKnown says SetGraphicsCapabilities was called. Until then
-	// GraphicsCapabilities answers with the daemon's most recent client.
-	graphicsKnown bool
-	// linkedViewer says a client attached over a link, from another machine,
-	// is drawing this session. Read from the VT callback, so it is atomic
-	// rather than behind a lock that callback could wait on. See
-	// kittyQueryResponse.
-	linkedViewer atomic.Bool
-	// kittyAnimation says the attached client's host edits image frames. Read
-	// from the VT callback, so it is atomic. See SetKittyAnimation.
-	kittyAnimation atomic.Bool
-	// sixelAdvertised says the session's panes are told they can draw
-	// sixel. Read from the VT's DA1 handler, so it is atomic. See
-	// SetSixelAdvertised.
+	graphicsMu      sync.RWMutex
+	kittyGraphics   bool
+	sixelGraphics   bool
+	graphicsKnown   bool
+	linkedViewer    atomic.Bool
+	kittyAnimation  atomic.Bool
 	sixelAdvertised atomic.Bool
-	// kittyAdvertised says a kitty image a pane draws will be shown. Read
-	// from the VT callback, so it is atomic. See SetKittyAdvertised.
 	kittyAdvertised atomic.Bool
-	// fed is the link manager a window on another machine is opened over. It is
-	// nil unless the daemon installed one, and every reader checks. See
-	// remote_pane.go.
-	fed paneFederation
-	// onRemotePane is told of every window this session opens on another
-	// machine, so the daemon can hold the pane's report channel. Guarded by
-	// ptysMu, like fed. See hosted_calls.go.
-	onRemotePane func(windowID string, p *remotePane)
-	// hostShown reports whether the session is on a screen. See
-	// SetHostShownProbe.
-	hostShown atomic.Pointer[func() bool]
-	// taskAuto reports whether cards move on their own. See
-	// SetTaskAutoProbe.
-	taskAuto atomic.Pointer[func() bool]
-	// taskOutcome counts a dispatched card's outcome on its board. See
-	// SetTaskOutcomeSink.
-	taskOutcome atomic.Pointer[func(board string, finished bool)]
+	fed             paneFederation
+	onRemotePane    func(windowID string, p *remotePane)
+	hostShown       atomic.Pointer[func() bool]
+	taskAuto        atomic.Pointer[func() bool]
+	taskOutcome     atomic.Pointer[func(board string, finished bool)]
 }
 
 // SetGraphicsCapabilities records the graphics protocols tuios can forward to
@@ -1976,7 +1421,6 @@ func (s *Session) SetGraphicsCapabilities(kitty, sixel bool) {
 // nested tuios then took the refusal for keys and typed it into its pane.
 func (s *Session) SetKittyAnimation(ok bool) { s.kittyAnimation.Store(ok) }
 
-// dragAndDrop reports whether [panes] drag_and_drop is on for this session.
 func (s *Session) dragAndDrop() bool {
 	return s.config != nil && s.config.DragAndDrop != nil && s.config.DragAndDrop()
 }
@@ -2089,20 +1533,9 @@ type SessionConfig struct {
 	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.
 	// Nil, or an empty answer, leaves the variable unset. See pane_token.go.
 	PaneToken func(windowID string) string
-	// grants is the manager's pane grant table. Every local pane is entered
-	// in it before its process starts, and TUIOS_PANE_GRANTS is read from
-	// it. Nil for a session made outside a manager, whose panes hold the
-	// default. See pane_grants.go.
-	grants *paneGrantTable
-	// paneLife is the manager's pane lifecycle lock: starting and closing a
-	// pane hold it for reading, and a handoff holds it for writing from the
-	// moment it writes the panes down to the exec, so the panes it wrote are
-	// the panes there are. Nil for a session made outside a manager.
-	paneLife *sync.RWMutex
-	// history is what the session does with its panes' history across a
-	// restart. The manager stamps it from the daemon's config. Nil saves
-	// nothing.
-	history *HistoryPolicy
+	grants    *paneGrantTable
+	paneLife  *sync.RWMutex
+	history   *HistoryPolicy
 	// Global creates the session as a global one. See SessionState.Global.
 	Global bool
 	// Space creates the session in a space. See SessionState.Space. A restore
@@ -2111,11 +1544,7 @@ type SessionConfig struct {
 	Space string
 	// Rank is the session's place in the session order, set by a restore
 	// from the state file for the reason Space is. See SessionState.Rank.
-	Rank int
-	// restoreID is the id a restored session had before the daemon
-	// restarted, from its state file. A session made with it keeps that id,
-	// so a client's ids for it stay valid. Empty, or an id already in use,
-	// mints a new one.
+	Rank      int
 	restoreID string
 }
 
@@ -2125,9 +1554,6 @@ func (s *Session) SetStartDir(dir string) {
 	s.startDir.Store(&dir)
 }
 
-// absStartDir is dir made absolute, for the paths that set a start
-// directory from a request. The directory is saved, so a relative one would
-// mean another folder after a restart in another directory.
 func absStartDir(dir string) string {
 	if dir == "" {
 		return ""
@@ -2138,8 +1564,6 @@ func absStartDir(dir string) string {
 	return dir
 }
 
-// noteStartDir records a window's start folder, once. A later process in the
-// same window keeps the first one.
 func (s *Session) noteStartDir(windowID, dir string) {
 	if windowID == "" || dir == "" {
 		return
@@ -2147,14 +1571,9 @@ func (s *Session) noteStartDir(windowID, dir string) {
 	if abs, err := filepath.Abs(dir); err == nil {
 		dir = abs
 	}
-	// Resolved once, here. A link in the path that is repointed later must
-	// not move the folder a grant is held to, so no check resolves it again.
 	s.startDirs.LoadOrStore(windowID, startDirEntry{dir: realPath(filepath.Clean(dir)), at: time.Now()})
 }
 
-// windowStartDir is a window's start folder, or "" when none was recorded.
-// Nothing the pane does moves it: it is the folder the files grant holds a
-// copy to (transfer_grants.go).
 func (s *Session) windowStartDir(windowID string) string {
 	if v, ok := s.startDirs.Load(windowID); ok {
 		return v.(startDirEntry).dir
@@ -2162,7 +1581,6 @@ func (s *Session) windowStartDir(windowID string) string {
 	return ""
 }
 
-// startDirEntry is a window's start folder and when it was recorded.
 type startDirEntry struct {
 	dir string
 	at  time.Time
@@ -2176,7 +1594,6 @@ func (s *Session) StartDir() string {
 	return ""
 }
 
-// historyPolicy is the session's HistoryPolicy, off when none was stamped.
 func (s *Session) historyPolicy() HistoryPolicy {
 	if s.config == nil || s.config.history == nil {
 		return HistoryPolicy{}
@@ -2184,19 +1601,6 @@ func (s *Session) historyPolicy() HistoryPolicy {
 	return *s.config.history
 }
 
-// inheritedCwd is the directory a new window should start in when the caller
-// named none, or "" when there is nothing to inherit.
-//
-// The focused pane's live shell is asked rather than the Cwd on the window
-// record: that field is filled when resurrection state is saved, so it says
-// where the pane was the last time the daemon wrote state, not where the user
-// has since cd'd to. The shell's process comes first, then the record, which a
-// snapshot fills with the shell's OSC 7 report; see windowCwd. "" is the
-// fallback after that, and the caller then uses the session's start directory.
-//
-// caller is the folder of the process that asked, when it runs in a pane (see
-// Daemon.callerCwd). It wins over the focused pane: an agent in one pane that
-// opens another means its own folder, not the one the person is looking at.
 func (s *Session) inheritedCwd(caller string) string {
 	if s.config == nil || !s.config.InheritCwd {
 		return ""
@@ -2207,21 +1611,6 @@ func (s *Session) inheritedCwd(caller string) string {
 	return s.windowCwd(s.GetState().FocusedWindowID)
 }
 
-// windowCwd is the directory of the window id's pane, or "" when the window is
-// gone or no answer names a folder that exists here. The answers, best first:
-//
-//   - The folder of the shell's process. It cannot be spoofed. Any program in
-//     the pane can print an OSC 7 report, and a shell without OSC 7 hooks
-//     never corrects one, so a report must not win over the process.
-//   - The folder the window record holds, only when no process can be read
-//     (see pickWindowCwd). In a snapshot it is the shell's
-//     OSC 7 report when there is one (see fillLiveFacts). On native Windows
-//     no process can be read, so this is the only live answer there (#491).
-//
-// Each answer must be a folder that exists. A shell can report a folder it
-// deleted, and a record can hold one from before a restart. A window that
-// inherits such a folder starts in the daemon's folder, so it is skipped and
-// the caller falls back to the session's start folder.
 func (s *Session) windowCwd(id string) string {
 	win, ok := findWindowState(s.GetState(), id)
 	if !ok {
@@ -2235,13 +1624,6 @@ func (s *Session) windowCwd(id string) string {
 	return pickWindowCwd(procCwd, procOK, win.Cwd)
 }
 
-// pickWindowCwd is the rule windowCwd applies to what it read: the process
-// folder when the process could be read, else the record. The record is only
-// for a process that cannot be read at all, as on Windows. A process that can
-// be read but sits in a folder that is gone (Linux reads "/x (deleted)")
-// gives "", so the caller uses the start folder. Taking the record there
-// would let an OSC 7 or OSC 9;9 report, which any program in the pane can
-// print, choose the folder in place of the shell.
 func pickWindowCwd(procCwd string, procOK bool, record string) string {
 	if procOK {
 		if isLocalDir(procCwd) {
@@ -2255,8 +1637,6 @@ func pickWindowCwd(procCwd string, procOK bool, record string) string {
 	return ""
 }
 
-// isLocalDir reports whether dir is an absolute path to a folder that exists
-// on this machine.
 func isLocalDir(dir string) bool {
 	if dir == "" || !filepath.IsAbs(dir) {
 		return false
@@ -2265,12 +1645,6 @@ func isLocalDir(dir string) bool {
 	return err == nil && info.IsDir()
 }
 
-// cwdFrom is the directory a new window named by ExecuteCommandPayload.CwdFrom
-// starts in: the window's own, else the session's start directory. An empty
-// id, from a switch that left no pane, is the start directory too. A window
-// whose process runs on another machine gives the start directory, since
-// its paths mean nothing here. It does not fall back to the focused pane,
-// which on the workspace the client just switched to is no pane at all.
 func (s *Session) cwdFrom(id string) string {
 	if win, ok := findWindowState(s.GetState(), id); id != "" && ok && win.Host == "" {
 		if cwd := s.windowCwd(id); cwd != "" {
@@ -2280,7 +1654,6 @@ func (s *Session) cwdFrom(id string) string {
 	return s.StartDir()
 }
 
-// scrollbackLines is the history depth a new pane in this session keeps.
 func (s *Session) scrollbackLines() int {
 	if s.config != nil && s.config.ScrollbackLines > 0 {
 		return s.config.ScrollbackLines
@@ -2311,12 +1684,8 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 			MasterRatio:      0.5,
 			Width:            width,
 			Height:           height,
-			// Versions start at 1 so that a BaseVersion of 0 on an incoming sync
-			// means one thing only: a client that predates state versioning and
-			// cannot say what it saw. A versioned client always echoes back at
-			// least 1, even before the daemon has mutated anything.
-			Version: 1,
-			Global:  cfg != nil && cfg.Global,
+			Version:          1,
+			Global:           cfg != nil && cfg.Global,
 		},
 		width:      width,
 		height:     height,
@@ -2331,7 +1700,6 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 
 	session.setName(name)
 
-	// Start periodic resurrection saving
 	session.stateDirty.init()
 	session.saveStale.init()
 	saveEvery := resurrectionInterval
@@ -2355,17 +1723,10 @@ func (s *Session) Name() string {
 	return ""
 }
 
-// setName records the session's name. Only the constructor and
-// Manager.RenameSession call it.
 func (s *Session) setName(name string) {
 	s.name.Store(&name)
 }
 
-// persist writes a state snapshot to the session's state file. It holds
-// persistMu, which a rename also holds while it moves the file, and it drops a
-// snapshot taken under a name the session no longer has: written after the
-// rename, it would bring the old name back as a second session on the next
-// daemon start.
 func (s *Session) persist(state *SessionState) error {
 	s.persistMu.Lock()
 	defer s.persistMu.Unlock()
@@ -2390,7 +1751,6 @@ func (s *Session) SetEventSink(fn func(SessionEvent)) {
 	s.eventSinkMu.Unlock()
 }
 
-// emit forwards a control-plane event to the installed sink, if any.
 func (s *Session) emit(ev SessionEvent) {
 	switch ev.Type {
 	case EventOutput:
@@ -2416,10 +1776,6 @@ func (s *Session) SetStateSink(fn func(*SessionState)) {
 	s.stateSinkMu.Unlock()
 }
 
-// publishState hands a post-mutation snapshot to the state sink, in version
-// order and never twice for the same version. It must be called without stateMu
-// held: the sink writes to client sockets, and a slow client must be able to
-// delay other pushes without also blocking every mutation of the session.
 func (s *Session) publishState(snap *SessionState) {
 	if snap == nil {
 		return
@@ -2431,11 +1787,6 @@ func (s *Session) publishState(snap *SessionState) {
 		return
 	}
 
-	// The same live facts a verb would read. Without this the clients were the
-	// one audience told less than everybody else: the snapshot they were
-	// pushed carried only what had been stored, so a pane whose shell never
-	// announces its directory appeared to have none, and the rail's file
-	// section had nothing to ask about.
 	s.fillLiveFacts(snap)
 
 	s.pushMu.Lock()
@@ -2444,36 +1795,10 @@ func (s *Session) publishState(snap *SessionState) {
 		return
 	}
 	s.deliveredSeq = snap.changeSeq
-	// A daemon-side push reaches the clients by a different road than a client
-	// sync does, so what the peers hold afterwards is not what the sync
-	// suppressor last recorded. Forget the record rather than try to keep it in
-	// step: the cost of being wrong here is one state sync too many, and the
-	// cost of being wrong the other way is a peer that never hears about a
-	// change.
 	s.forgetBroadcastFingerprint()
 	fn(snap)
 }
 
-// resendState hands the session's current state to one client that missed a
-// broadcast of it, in the same order as publishState delivers, so the copy can
-// never arrive behind a newer state the client was already sent.
-//
-// The attach repair used to take a snapshot and queue it with no order
-// against publishState. A mutation published between the two reached the
-// client first, and the older snapshot followed it. The client adopted the
-// older state last: a client attaching beside a current one put the current
-// one's tree ops back on, at a Version below the one that turned them off.
-//
-// The snapshot is taken outside pushMu, because fillLiveFacts takes the pane
-// locks and publishState never holds pushMu across those. Under pushMu it is
-// checked against what was delivered, by change count. Older than that, it is
-// taken again. Newer, it is a change whose own delivery has not run yet, so it
-// goes to every client through the sink and the late delivery is dropped as
-// stale. The same, it goes to send alone.
-//
-// The check used to compare Version. A client push keeps Version the same, so
-// a peer's push forwarded between the snapshot and the check passed as the
-// same state, and the older snapshot followed it to the client.
 func (s *Session) resendState(send func(*SessionState)) {
 	s.stateSinkMu.RLock()
 	fn := s.stateSink
@@ -2500,53 +1825,14 @@ func (s *Session) resendState(send func(*SessionState)) {
 	}
 }
 
-// stateResendSnapshotTaken runs in resendState between the snapshot and the
-// check against what was delivered. It is unset outside tests, which use it
-// to land a mutation in that window on purpose.
 var stateResendSnapshotTaken atomic.Pointer[func()]
 
-// pushSends is what deliverPush may send for one snapshot, made ready
-// before pushMu is taken: the messages are encoded and the fingerprint is
-// taken, so pushMu is held only to queue them. toSender answers the client
-// that pushed, and is nil when its push was not reconciled. toPeers sends to
-// every client but that one, and is nil when there are none. fp is the
-// snapshot's fingerprint, read only with toPeers.
 type pushSends struct {
 	toSender func()
 	toPeers  func()
 	fp       uint64
 }
 
-// deliverPush hands the state after a client push to the clients that need
-// it, in the same order as publishState and resendState deliver. snap is the
-// merged state, taken after the push, and pushSeq is the change count the
-// push itself made. prepare makes the sends for a snapshot ready. withPeers
-// false asks it for the reply alone.
-//
-// Both sends used to run outside pushMu with no check. Two clients pushing at
-// once could forward in the opposite order to the one their pushes landed in,
-// and a peer adopted the older state last. A push forwarded inside an attach
-// repair let the repair's older snapshot follow it, because a push keeps
-// Version the same and the repair compared Version. The reply to the sender
-// was written straight to its socket, ahead of an older state already queued
-// to it, and the older state landed last.
-//
-// Under pushMu, the snapshot is checked against what was delivered, by change
-// count. A forward to the peers no newer than that is dropped: every peer
-// already has a state at least as new on its way.
-//
-// The reply is not dropped. A client whose push was reconciled drops every
-// state built before its push (see TUIClient.PredatesOwnPush), so the reply
-// may be the only state it takes, and what was delivered may not have reached
-// it: a forward the fingerprint suppressed counts as delivered and sends
-// nothing. An older reply is taken again, as in resendState. One at the count
-// delivered goes to the sender alone, behind what is queued to it.
-//
-// A snapshot newer than the push carries a later change whose own delivery
-// has not run yet. It goes to every client through the sink, the sender
-// included, and the late delivery is dropped as stale. Otherwise the reply
-// goes to the sender, and the snapshot to the peers unless they already hold
-// it.
 func (s *Session) deliverPush(snap *SessionState, pushSeq uint64, prepare func(snap *SessionState, withPeers bool) pushSends) {
 	if snap == nil {
 		return
@@ -2561,9 +1847,6 @@ func (s *Session) deliverPush(snap *SessionState, pushSeq uint64, prepare func(s
 
 	s.pushMu.Lock()
 	for snap.changeSeq < s.deliveredSeq && sends.toSender != nil {
-		// Taken again outside pushMu, which is never held across the pane
-		// locks. The peers have a newer state on its way, so the new
-		// snapshot is for the sender alone.
 		s.pushMu.Unlock()
 		snap = s.GetState()
 		sends = prepare(snap, false)
@@ -2588,9 +1871,6 @@ func (s *Session) deliverPush(snap *SessionState, pushSeq uint64, prepare func(s
 	if sends.toPeers == nil {
 		return
 	}
-	// A merge that landed on the state already forwarded is not sent again.
-	// See the call site in handleUpdateState for why a suppressed sync costs
-	// a peer nothing.
 	if s.broadcastFPSet && s.broadcastFP == sends.fp {
 		return
 	}
@@ -2599,22 +1879,12 @@ func (s *Session) deliverPush(snap *SessionState, pushSeq uint64, prepare func(s
 	sends.toPeers()
 }
 
-// statePushSnapshotTaken runs in handleUpdateState between the merged
-// snapshot and its forward to the peers. It is unset outside tests, which
-// use it to land another change in that window on purpose.
 var statePushSnapshotTaken atomic.Pointer[func()]
 
-// forgetBroadcastFingerprint drops the record, so the next client sync is
-// forwarded whatever it says. pushMu must already be held: publishState holds
-// it for the whole delivery. forgetBroadcast is the same for a caller that
-// does not hold it.
 func (s *Session) forgetBroadcastFingerprint() {
 	s.broadcastFPSet = false
 }
 
-// forgetBroadcast drops the record for a client joining the session. The
-// record says what every peer holds, and a joining client holds its attach
-// snapshot instead. See handleAttach.
 func (s *Session) forgetBroadcast() {
 	s.pushMu.Lock()
 	defer s.pushMu.Unlock()
@@ -2629,89 +1899,38 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 	return s.createPTY(width, height, ptySpawn{windowID: windowID, onExit: onExit})
 }
 
-// restorePTYWithGrants creates a fresh PTY for a resurrected window. It
-// behaves like CreatePTY but starts the shell in cwd (when that directory
-// still exists) and marks the shell as restored: the shell's environment
-// carries TUIOS_RESTORED=1 and a one-line banner is written to the terminal so
-// the user can see the process is a freshly respawned shell, not the original
-// long-lived one. grants are the window's saved grants, which the new process
-// holds from its first instruction. history, when not nil, is the pane's saved
-// history, which the new emulator shows above the banner.
 func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd string, grants *Grants, history *savedHistory, workspace int, onExit func(ptyID string)) (*PTY, error) {
 	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, restored: &restoreSpec{history: history, savedCwd: cwd}, onExit: onExit, grants: grants, workspace: workspace})
 }
 
-// restorePlaceholderPTY starts the placeholder of a window a renderer draws
-// natively (WindowState.Kind), for a restore: the window comes back as what
-// it was, not as a shell.
 func (s *Session) restorePlaceholderPTY(windowID string, width, height int, cwd, kind, uri string, workspace int, onExit func(ptyID string)) (*PTY, error) {
 	return s.createPTY(width, height, ptySpawn{windowID: windowID, cwd: cwd, command: PlaceholderCommand(kind, uri), onExit: onExit, workspace: workspace})
 }
 
-// ptySpawn is what createPTY starts a pane with, beside its size.
 type ptySpawn struct {
-	// windowID is the client-side window id, exported as TUIOS_WINDOW_ID.
-	windowID string
-	cwd      string
-	command  []string
-	// env is the caller's KEY=VALUE pairs. See createPTY.
-	env        []string
-	host       string
-	restored   *restoreSpec
-	onExit     func(ptyID string)
-	stdout     *os.File
-	extraFiles []*os.File
-	grants     *Grants
-	// workspace is the workspace the window is being made on, for the
-	// shell's HERDR_TAB_ID. 0 takes it from the state. See herdrTabFor.
-	workspace int
-	// noStartDir records no start folder for the window: a pane without
-	// admin and with no folder of its own asked for it. See
-	// NewWindowOptions.Bounded.
-	noStartDir bool
-	// keepOpen writes the exit status into the pane when its process exits.
-	// See keep_open.go.
-	keepOpen bool
-	// closeOnExit is new-window's close_on_exit. See PTY.ownShell.
-	closeOnExit bool
-	// shellIntegration is new-window's shell_integration: auto or off for
-	// this pane, "" for [shell] integration. See shellIntegrationFor.
-	shellIntegration string
-	// cellWidth and cellHeight are the session's cell in pixels, read by
-	// createPTY before the process starts. See ptyspawn.SpawnTTY.
+	windowID              string
+	cwd                   string
+	command               []string
+	env                   []string
+	host                  string
+	restored              *restoreSpec
+	onExit                func(ptyID string)
+	stdout                *os.File
+	extraFiles            []*os.File
+	grants                *Grants
+	workspace             int
+	noStartDir            bool
+	keepOpen              bool
+	closeOnExit           bool
+	shellIntegration      string
 	cellWidth, cellHeight int
 }
 
-// createPTY starts a pane's process. sp.command, when non-empty, is an argv
-// exec'd as the PTY's process in place of
-// the shell. It is deliberately not persisted: a restored window respawns as a
-// shell, because silently rerunning a program the user ran once is not what
-// restoration promises. sp.env, KEY=VALUE pairs, goes on top of the daemon's
-// environment and under the TUIOS_ variables; see buildEnvWith. It is not
-// persisted either, and a window on another machine ignores it.
-//
-// stdout, when non-nil, is the process's standard output instead of the PTY:
-// a popup's captured output goes to a pipe the daemon reads, while the program
-// still draws on the PTY through stderr or /dev/tty. It is only honoured for a
-// local process. extraFiles are inherited as fd 3 and up, again only by a
-// local process.
-//
-// grants is what the pane may do through tuios, nil for the default. A local
-// pane is entered in the grant table before its process starts and leaves it
-// when the process exits, so the process is never placed in a pane the table
-// does not know. See pane_grants.go.
 func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	defer s.holdPaneLife()()
-	// A window that was given grants and gets a new process with none named
-	// keeps what it was given, even when its last process has already gone
-	// and taken its entry in the grant table with it. Read before ptysMu is
-	// taken, so the two locks are never held together here.
 	if sp.grants == nil && sp.host == "" && sp.windowID != "" {
 		sp.grants = s.recordedGrants(sp.windowID)
 	}
-	// startDir is the folder a local shell starts in, "" for the daemon's: cwd
-	// when it is a folder. Decided once, so the shell, its start folder and a
-	// restored pane's banner agree.
 	var startDir string
 	if sp.host == "" && sp.cwd != "" {
 		if info, err := os.Stat(sp.cwd); err == nil && info.IsDir() {
@@ -2742,7 +1961,6 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 				exit(ptyID)
 			}
 		}
-		// A spawn that fails leaves no process to exit.
 		defer func() {
 			if _, ok := s.ptys[id]; !ok {
 				table.remove(sp.windowID, id)
@@ -2755,18 +1973,6 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		log.Printf("Warning: configured shell %q not found, using %s", missingShell, shell)
 	}
 
-	// The PTY and the process are created together, and retried together, by
-	// ptyspawn: a spawn can be refused with a transient EPERM from the kernel's
-	// controlling-terminal grab, and that refusal belongs to every spawn path
-	// rather than to this one. See the ptyspawn package comment.
-	//
-	// The command is rebuilt per attempt, because an exec.Cmd that failed to
-	// start cannot be started again.
-	// A window on another machine takes the same path from here down. Only the
-	// two lines that produce the handle differ: the process is started over a
-	// link instead of here, so there is no exec.Cmd to wait on and no local pid
-	// to read. Everything below is the code a local pane runs, which is the
-	// point of the paneIO seam.
 	var (
 		ptyInstance paneIO
 		cmd         *exec.Cmd
@@ -2782,9 +1988,6 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 			s.onRemotePane(sp.windowID, rp)
 		}
 	} else {
-		// The pane starts with the session's cell, so the guest's first
-		// pixel size is its last until a resize. A cell applied after the
-		// start reached a shell as a SIGWINCH at the size it started at.
 		if s.config != nil && s.config.CellSize != nil {
 			if w, h, ok := s.config.CellSize(s.ID); ok {
 				sp.cellWidth, sp.cellHeight = w, h
@@ -2800,8 +2003,6 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 				cmd = exec.Command(shell)
 			}
 			cmd.Env = s.buildEnvFor(sp.windowID, sp.workspace, sp.restored != nil, sp.env, sp.command)
-			// The user's own shell starts with the prompt marks on. A command
-			// is the caller's program, run as it was named.
 			if len(sp.command) == 0 && s.shellIntegrationFor(sp.shellIntegration) {
 				if args, env, ok := shellinteg.Setup(shell, cmd.Env); ok {
 					cmd.Args = append(cmd.Args, args...)
@@ -2811,9 +2012,6 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 			if len(sp.command) == 0 && s.config != nil && s.config.ShellLogin != nil && s.config.ShellLogin() {
 				shellinteg.Login(cmd)
 			}
-			// The pane's terminal, so a tuios client can tell whether it runs
-			// on it or only inherited the pane's variables. See
-			// nested_attach.go.
 			if tty != "" {
 				cmd.Env = append(cmd.Env, PaneTTYEnv+"="+tty)
 			}
@@ -2823,14 +2021,6 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 			if len(sp.extraFiles) > 0 && runtime.GOOS != "windows" {
 				cmd.ExtraFiles = sp.extraFiles
 			}
-			// Start the shell in cwd when one was named and still exists; otherwise
-			// fall back to the shell's default (inherited) directory.
-			//
-			// The restored flag used to gate this too, which meant a caller that
-			// asked a fresh window for a directory was answered with a shell
-			// somewhere else and no indication of it. Restoration and placement are
-			// separate questions: the flag still decides the banner, because that
-			// is what it is about.
 			if startDir != "" {
 				cmd.Dir = startDir
 			}
@@ -2840,24 +2030,11 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 			cancel()
 			return nil, err
 		}
-		// Under a systemd user service, the pane gets a scope of its own, so
-		// its OOM kill does not stop the daemon. See internal/panescope.
 		panescope.Place(cmd.Process.Pid, log.Printf)
 	}
 
-	// Create VT emulator for persistent terminal state
-	// This maintains scrollback, screen content, cursor position across reconnects
-	//
-	// For a restored shell, seed the emulator with a one-line banner so the
-	// respawned process is clearly marked, under the pane's saved history when
-	// there is one (see scrollback_persist.go). This is written directly
-	// (before the reader/writer goroutines start) so it lands ahead of the
-	// shell's first prompt; it only touches the daemon-side emulator and never
-	// the real PTY, so the shell is unaffected.
 	var terminal vt.Terminal
 	if sp.restored != nil {
-		// A saved folder the shell could not start in left it in the daemon's.
-		// A pane saved with no folder names none.
 		startedIn := startDir
 		if startedIn == "" && sp.restored.savedCwd != "" {
 			startedIn, _ = os.Getwd()
@@ -2876,10 +2053,6 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	return pty, nil
 }
 
-// installPTY builds the PTY around a pane's terminal device and emulator and
-// enters it in the session, without starting its goroutines. The caller holds
-// ptysMu. createPTY and adoptPTY differ only in where the device and the
-// process came from.
 func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id string, ptyInstance paneIO, cmd *exec.Cmd, width, height int, sp ptySpawn, terminal vt.Terminal) *PTY {
 	pty := &PTY{
 		ID:          id,
@@ -2906,10 +2079,8 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		debug:       debugEnabled(),
 		rawLog:      newPTYLogger(id),
 		spawnedAt:   time.Now(),
-		// The cell the process started with, so UpdatePixelDimensions with
-		// the same cell writes nothing to the pty.
-		cellWidth:  sp.cellWidth,
-		cellHeight: sp.cellHeight,
+		cellWidth:   sp.cellWidth,
+		cellHeight:  sp.cellHeight,
 	}
 	if sp.keepOpen {
 		pty.keepOpen = newExitNote()
@@ -2918,9 +2089,6 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		pty.gate = newReadGate(ptyInstance)
 	}
 
-	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
-	// ID. It routes through the session's event sink so events reach the daemon's
-	// event hub; when no sink is installed it is a cheap no-op.
 	pty.home.Store(s)
 	pty.hasFocus = func() bool { return pty.owner().paneHasFocus(sp.windowID) }
 	pty.emit = func(ev SessionEvent) {
@@ -2928,13 +2096,10 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		ev.PTYID = id
 		owner := pty.owner()
 		owner.emit(ev)
-		// Per chunk this is one compare and one atomic load. See pane_marks.go.
 		if bit := paneMarkBit(ev.Type); bit != 0 && pty.raisePaneMark(bit) {
 			owner.notePaneMark(id, sp.windowID, bit)
 		}
 	}
-	// The pane's folder and branch label its session in the listing. The
-	// branch is read on its own goroutine after a move.
 	pty.place.onChange = func() {
 		if s := pty.owner(); s != nil {
 			s.noteListingChange()
@@ -2943,18 +2108,6 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 
 	s.setUpPaneTerminal(pty, terminal)
 
-	// The shell's first directory is known before it prints a prompt, so the
-	// pane has a place from the start even under a shell that never reports
-	// OSC 7, which bash and zsh mostly do not.
-	//
-	// A pane on another machine is seeded with nothing, and that is the honest
-	// answer rather than a gap. Both seeds here are paths on this machine: the
-	// command's directory is one this daemon chose, and the daemon's own
-	// working directory is plainly local. Neither describes where a shell on
-	// another machine started, and the far side is free to ignore the
-	// directory that was asked for when it does not exist there. So the pane
-	// has no place until its own shell announces one over OSC 7, which is the
-	// only report that actually comes from the machine the process is on.
 	if cmd != nil {
 		if seed := cmd.Dir; seed != "" {
 			pty.place.setCwd(seed)
@@ -2963,7 +2116,6 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 		}
 	}
 
-	// Before the goroutines start, so the emulator needs no lock yet.
 	terminal.SetReportColors(s.reportFg, s.reportBg, s.reportPal)
 	s.ptys[id] = pty
 	if sp.host == "" {
@@ -2973,27 +2125,17 @@ func (s *Session) installPTY(ctx context.Context, cancel context.CancelFunc, id 
 	return pty
 }
 
-// startPTY starts the goroutines that move a pane's bytes and wait for its
-// process.
 func (pty *PTY) startPTY() {
-	// Start VT writer goroutine (single, persistent)
 	go pty.vtWriter()
 
-	// Start output reader
 	go pty.readOutput()
 
-	// Start terminal response forwarder. The daemon's emulator generates query responses
-	// (DA, CPR, etc.) which must be sent to the PTY for applications to receive.
-	// Client emulators DRAIN their responses to prevent duplicates. The
-	// emulator wakes it for each reply it queues, and it is woken once here
-	// for anything queued before.
 	if pty.terminal != nil {
 		pty.terminal.OnResponse(pty.wakeResponses)
 	}
 	go pty.forwardTerminalResponses()
 	pty.wakeResponses()
 
-	// Monitor process exit
 	go pty.monitorExit()
 }
 
@@ -3051,15 +2193,12 @@ func (s *Session) LastUsed() time.Time {
 	return s.lastUsed
 }
 
-// setLastUsed puts back the time a saved session was last used, on restore.
 func (s *Session) setLastUsed(t time.Time) {
 	s.activeMu.Lock()
 	s.lastUsed = t
 	s.activeMu.Unlock()
 }
 
-// holdPaneLife takes the pane lifecycle lock for reading and returns its
-// release. It is taken before ptysMu, never under it.
 func (s *Session) holdPaneLife() func() {
 	if s.config == nil || s.config.paneLife == nil {
 		return func() {}
@@ -3081,8 +2220,6 @@ func (s *Session) ClosePTY(id string) error {
 	return s.closePTYHeld(id)
 }
 
-// closePTYHeld is ClosePTY for a caller that holds the pane lifecycle lock
-// already, as a live upgrade does while it closes exited remote panes.
 func (s *Session) closePTYHeld(id string) error {
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
@@ -3109,8 +2246,6 @@ func (s *Session) ListPTYIDs() []string {
 	return ids
 }
 
-// hasLivePTY reports whether a PTY with this ID is still open on the session.
-// A window whose PTY is gone has been closed; see reconcileStale.
 func (s *Session) hasLivePTY(id string) bool {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
@@ -3135,31 +2270,11 @@ func (s *Session) GetState() *SessionState {
 	return state
 }
 
-// fillLiveFacts writes what the emulators and the processes know into a
-// snapshot, over the top of what was stored.
-//
-// It is applied to every snapshot that leaves the session, both the ones a
-// verb reads and the ones pushed to clients, and that is the point. It used to
-// run in GetState alone, so `tuios list-windows` reported a pane's directory
-// and the client drawing that same pane was never told it. Local panes hid it:
-// a shell that announces over OSC 7 reaches the client through its own
-// emulator, so only a pane whose shell says nothing went without, and the
-// panes that say nothing are exactly the ones on another machine.
-//
-// It writes into the copy. The stored state keeps holding only what was
-// actually announced, which is what resurrection saves.
 func (s *Session) fillLiveFacts(state *SessionState) {
 	if state == nil {
 		return
 	}
-	// Retitle from the live emulators. The stored title is only as fresh as the
-	// last sync from a client, which knows the title of the windows it is
-	// subscribed to and nothing about the rest, so a reattach or a resurrection
-	// snapshot built from the stored value alone brings back a title the window
-	// stopped having. Taken outside stateMu: the PTY map is a different lock.
 	live := s.livePaneFacts()
-	// The icon names are the emulators' alone, so a value a client pushed
-	// back never outlives the program's own.
 	state.IconNames = nil
 	for i := range state.Windows {
 		fact := live[state.Windows[i].PTYID]
@@ -3174,22 +2289,11 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 		}
 	}
 
-	// And fill the directory the same way, for the same reason. A shell that
-	// announces one wins, because it is the shell's own answer and it stays
-	// right when the pane is running something that changed directory without
-	// the process doing so. The read of the process is what a pane whose shell
-	// never announced gets, and it is the only thing a client on another
-	// machine can be given. Both are live and both win over the stored value,
-	// which is only where the window was created: a client takes the
-	// directory from here when the pane is not on its machine, so a stored
-	// value that won would keep that client on the first folder for good. This
-	// writes into the copy, so the stored state keeps what it had.
 	cwds := s.liveCwds()
 	for i := range state.Windows {
 		w := &state.Windows[i]
 		place := live[w.PTYID].place
 		w.CwdHost = place.elsewhere
-		// The drag and drop registration is live too, and the daemon's alone.
 		dnd := live[w.PTYID].dnd
 		w.DnDAccepts, w.DnDOffers, w.DnDID, w.DnDOwner = dnd.accepts, dnd.offers, dnd.id, dnd.owner
 		switch {
@@ -3198,17 +2302,10 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 		case cwds[w.PTYID] != "":
 			w.Cwd = cwds[w.PTYID]
 		case w.Cwd == "" && place.seed != "":
-			// The process read is cached, and a snapshot taken just after
-			// the spawn can come from a read made before it. The folder
-			// the shell was started in is the answer until then.
 			w.Cwd = place.seed
 		}
 	}
 
-	// A window on another machine whose link is lost says so, and until
-	// when the far machine keeps its process. Nothing stored holds this: it
-	// is true only while it is true, so whatever a client pushed back is
-	// cleared first.
 	for i := range state.Windows {
 		state.Windows[i].HostLink, state.Windows[i].HostLinkUntil, state.Windows[i].HostEnded = "", 0, ""
 	}
@@ -3229,15 +2326,12 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 	}
 }
 
-// hostLinkFact is one remote pane's link state for a snapshot.
 type hostLinkFact struct {
 	state string
 	until int64
 	ended string
 }
 
-// liveHostLinks is the link state of every window on another machine whose
-// link is not up, by PTY id.
 func (s *Session) liveHostLinks() map[string]hostLinkFact {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
@@ -3263,16 +2357,12 @@ func (s *Session) liveHostLinks() map[string]hostLinkFact {
 	return out
 }
 
-// placeFact is what a pane's shell reported about where it is.
 type placeFact struct {
 	cwd       string
 	elsewhere string
-	// seed is the folder the shell was started in, for a shell that has not
-	// announced one.
-	seed string
+	seed      string
 }
 
-// paneFact is what a pane's emulator and shell know now, for a snapshot.
 type paneFact struct {
 	title    string
 	iconName string
@@ -3280,12 +2370,6 @@ type paneFact struct {
 	dnd      dndRegistrationFact
 }
 
-// livePaneFacts is each pane's live facts by PTY id, in one pass over the
-// PTYs: the title its application last set, and what its shell announced
-// over OSC 7, the folder and the machine when the report named another one,
-// or else the folder the shell was started in. A pane with none of them is
-// left out. A few atomic loads per pane, so it is not cached the way the
-// process read is.
 func (s *Session) livePaneFacts() map[string]paneFact {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
@@ -3308,35 +2392,14 @@ func (s *Session) livePaneFacts() map[string]paneFact {
 	return out
 }
 
-// forgetCwdCache drops the cached directory read, so the next snapshot asks
-// again rather than repeating an answer that is known to be stale.
 func (s *Session) forgetCwdCache() {
 	s.cwdCacheMu.Lock()
 	s.cwdCache, s.cwdReadAt = nil, time.Time{}
 	s.cwdCacheMu.Unlock()
 }
 
-// cwdReadInterval bounds how often a session reads its shells' directories out
-// of the operating system. A second is well under the time it takes a person to
-// notice a cd, and well over the rate the render path asks.
 const cwdReadInterval = time.Second
 
-// liveCwds is each window's working directory, read from the process the daemon
-// owns, keyed by PTY id.
-//
-// The stored Cwd is only ever set by a shell announcing one over OSC 7, and
-// most shells are not configured to announce. That was survivable while the
-// only consumer was the file section running on the same machine as the pane,
-// because it could read the process itself when nothing was announced. It
-// stopped being survivable once a client could attach a session on another
-// machine: that client has no process to read, so a pane on another machine had
-// no directory at all, and a file section with nothing to be about does not
-// draw a row, which means the whole section disappears.
-//
-// The side that owns the process is the side that can answer. It answers here,
-// and the answer crosses the wire with the rest of the window state, so a
-// client gets a directory the same way whether the pane is on this machine or
-// another one.
 func (s *Session) liveCwds() map[string]string {
 	s.cwdCacheMu.Lock()
 	if s.cwdCache != nil && time.Since(s.cwdReadAt) < cwdReadInterval {
@@ -3346,9 +2409,6 @@ func (s *Session) liveCwds() map[string]string {
 	}
 	s.cwdCacheMu.Unlock()
 
-	// Read outside the cache lock so the two are never held together. Two
-	// callers racing here both do the work and both store the same answer,
-	// which is cheaper than serialising the render path behind a syscall.
 	s.ptysMu.RLock()
 	cwds := make(map[string]string, len(s.ptys))
 	for id, pty := range s.ptys {
@@ -3364,8 +2424,6 @@ func (s *Session) liveCwds() map[string]string {
 	return cwds
 }
 
-// liveTitles maps PTY ID to the title that PTY's application last set, for every
-// PTY that has set one.
 func (s *Session) liveTitles() map[string]string {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
@@ -3379,21 +2437,10 @@ func (s *Session) liveTitles() map[string]string {
 	return titles
 }
 
-// snapshotStateLocked returns a copy of the canonical state. The caller must
-// hold stateMu (for read or write).
 func (s *Session) snapshotStateLocked() *SessionState {
-	// Return a copy
 	stateCopy := *s.state
 	stateCopy.Windows = make([]WindowState, len(s.state.Windows))
 	copy(stateCopy.Windows, s.state.Windows)
-	// Worktree is a pointer, so the struct copy above aliases the canonical
-	// record rather than copying it. That was harmless while the only write was
-	// SetWorktree replacing the whole pointer, but the fan prompt writes the
-	// status fields through the pointer under stateMu, and the snapshot is
-	// encoded for the wire after stateMu is released. Copying the record here
-	// is what makes the snapshot a snapshot. WorktreeInfo is value fields
-	// apart from Verify and PR, which are only ever replaced whole, so one
-	// level is the whole of it.
 	if s.state.Worktree != nil {
 		wt := *s.state.Worktree
 		stateCopy.Worktree = &wt
@@ -3419,7 +2466,6 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	if s.state.WorkspaceOrder != nil {
 		stateCopy.WorkspaceOrder = slices.Clone(s.state.WorkspaceOrder)
 	}
-	// A card's history and block are never written in place (TaskState.note).
 	stateCopy.Tasks = slices.Clone(s.state.Tasks)
 	stateCopy.WindowMoves = slices.Clone(s.state.WindowMoves)
 	if s.state.WorkspaceMasterRatio != nil {
@@ -3441,22 +2487,10 @@ func (s *Session) snapshotStateLocked() *SessionState {
 		stateCopy.WorkspaceLayoutModes = maps.Clone(s.state.WorkspaceLayoutModes)
 	}
 	stateCopy.PushSeen = maps.Clone(s.pushSeen)
-	// A v0.12 client reads both and falls back to its old paths without
-	// them, so they stay on the wire, always on.
 	stateCopy.LayoutTreeOps = true
 	stateCopy.ScratchWorkspaces = true
-	// Taken under the state lock, so a copy with a higher number shows the
-	// state at least as late as one with a lower number.
 	stateCopy.SnapshotSeq = s.snapSeq.Add(1)
 	stateCopy.changeSeq = s.changeSeq
-	// WorkspaceTrees, WindowToBSPID, PaneGeometry and ScrollStrip are left
-	// aliased on purpose: the daemon only ever replaces those whole, never
-	// writes into what they point at, so a snapshot that shares them is reading
-	// something nothing mutates. Deep-copying the BSP trees on every mutation
-	// would cost more than that buys. The invariant is the whole of the safety
-	// here, so a daemon-side write *through* one of those pointers has to clone
-	// the field here first. See the Worktree case above, which is exactly that
-	// invariant broken.
 	return &stateCopy
 }
 
@@ -3557,7 +2591,6 @@ func (s *Session) SetRank(rank int) error {
 	})
 }
 
-// rank is the session's place in the session order, zero for none.
 func (s *Session) rank() int {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
@@ -3658,19 +2691,12 @@ func (s *Session) ResurrectionState() *SessionState {
 		live[state.Windows[i].ID] = true
 		state.Windows[i].StartDir = s.windowStartDir(state.Windows[i].ID)
 	}
-	// A window that closed takes its start folder with it. One recorded in
-	// the last minute may be a window whose process started and that is not
-	// in the state yet, so it stays until a later save.
 	s.startDirs.Range(func(k, v any) bool {
 		if !live[k.(string)] && time.Since(v.(startDirEntry).at) > time.Minute {
 			s.startDirs.Delete(k)
 		}
 		return true
 	})
-	// The first window's directory is the session's, and this is the one place
-	// it is read on a cadence: a save happens only when the state changed, so a
-	// shell that moved into or out of a worktree is noticed here and an idle
-	// session is never looked at.
 	if len(state.Windows) > 0 {
 		s.refreshWorktree(state.Windows[0].Cwd)
 	}
@@ -3719,11 +2745,6 @@ func (s *Session) NotePush(origin string, seq uint64) {
 	s.notePushLocked(origin, seq)
 }
 
-// notePushLocked is NotePush for a caller that holds stateMu. A push or an op
-// that changes the state is counted here, inside the same critical section as
-// the change, so no snapshot can say the daemon has seen push k while showing
-// the state from before it. A client that trusted such a snapshot took an old
-// tree over the op it had just sent.
 func (s *Session) notePushLocked(origin string, seq uint64) {
 	if origin == "" || seq == 0 || len(origin) > maxPushOriginLen {
 		return
@@ -3761,19 +2782,10 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	return accepted
 }
 
-// updateStateFrom is UpdateStateFrom that also reports whether the push was
-// built before a tree op another client sent. Such a push is accepted, because
-// it cannot undo a tree op (see missedMutationLocked). But the client that
-// sent it has not seen that tree, and a client is never sent its own push
-// back, so the caller answers it with the session's state. seq is the change
-// count the push made (see Session.changeSeq).
 func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, behind bool, seq uint64) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
-	// The push is counted here, with the change it makes. The table it goes
-	// into lives beside the state, not in it. The origin is also what tells
-	// one client's focus move from another's, below.
 	origin := state.PushOrigin
 	s.notePushLocked(origin, state.PushSeq)
 	state.PushOrigin, state.PushSeq, state.PushSeen, state.SnapshotSeq = "", 0, nil, 0
@@ -3785,60 +2797,39 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	state.FocusByCommand = false
 	prev := s.state
 	if prev != nil && unmoved && keepSessionFocus(state, prev) {
-		// The push's focus was stale and the session's stands, so the
-		// client is answered with the state as merged.
 		accepted = false
 	}
 	staleForeign := false
 	if prev != nil {
 		behind = state.BaseVersion != 0 && s.missedPeerTreeLocked(origin, state.BaseVersion, prev.Version)
 		if state.BaseVersion != 0 && s.missedMutationLocked(state.BaseVersion, prev.Version) {
-			// Decided on the push as it arrived, before reconcileStale rewrites
-			// its windows: a slipped client's stale pushes must not end the
-			// slip's one log line.
 			if origin != "" && s.refusedOrigin == origin {
 				staleForeign = s.foreignPushLocked(state, prev)
 			}
 			mine := focusViewOf(state)
 			reconcileStale(state, prev, s.hasLivePTY)
 			if state.BaseVersion < s.zoomOpAt {
-				// The daemon set a zoom the client had not seen when it
-				// built the push, so the push's zoom flags are older.
 				keepDaemonZoom(state, prev)
 			}
 			if s.pushOwnsFocusLocked(origin, state.BaseVersion, mine) {
-				// Nothing the client missed moved the focus, so the focus in
-				// the push is the person's latest move.
 				keepClientFocus(state, mine)
 			}
 			accepted = false
 		} else if s.foreignPushLocked(state, prev) {
-			// The push names windows of another session and none of this
-			// one's: a client slip. The session keeps its state and the
-			// sender is answered with it.
 			if origin == "" || s.refusedOrigin != origin {
 				s.refusedOrigin = origin
 				LogError("Refused a state update to %s: it names none of the session's windows", s.Name())
 			}
 			return false, behind, s.changeSeq
 		}
-		// A push from this origin is taken, by either path: a later slip
-		// from it is logged again. A stale-merged push that named none of the
-		// session's windows is still the slip.
 		if s.refusedOrigin == origin && !staleForeign {
 			s.refusedOrigin = ""
 		}
-		// A push built before a renumber keys its workspace maps by the old
-		// numbers. The windows and the focus were taken from the session
-		// above, and the maps are taken with them.
 		if s.workspaceRenumberMissedLocked(state.BaseVersion) {
 			takeWorkspaceMapsFrom(state, prev)
 			accepted = false
 		}
 		retainDaemonExclusive(state, prev)
-		// Version counts daemon-side mutations only, so converging on a client
-		// snapshot carries it forward unchanged: the client is not telling the
-		// daemon anything the daemon did not already know.
 		state.Version = prev.Version
 	}
 	if moves := s.askedFocusMoved[origin]; moves != nil && state.BaseVersion != 0 {
@@ -3856,35 +2847,20 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 		}
 		s.clientFocusMoved[origin] = state.Version
 	}
-	// The name is the daemon's. A client that built this push before a rename
-	// still carries the old one, and taking it would undo the rename.
 	state.Name = s.Name()
 	s.state = state
-	// A push that minimized a window got its stamp here, which the client
-	// that sent it does not have: it is answered with the session's state,
-	// so its dock lists the panes in the order every other client does.
 	if stampMinimizedLocked(state, time.Now().UnixNano()) {
 		behind = true
 	}
-	// A window the client closed takes its subagents with it.
 	s.forgetSubagentsLocked(state)
-	// A client pushing state with a pane focused has that pane in front of
-	// its user, so whatever it finished has been seen.
 	if seen {
 		s.markCompletionSeenLocked(state.FocusedWindowID)
-		// A move of the focus is the person turning to a pane, which ends an
-		// approval hold on it (see approvals.go). Only a move: a push that
-		// keeps the focus says nothing new. A move a command made is not the
-		// person turning to the pane.
 		if !byCommand && state.FocusedWindowID != "" && (prev == nil || prev.FocusedWindowID != state.FocusedWindowID) {
 			s.emit(SessionEvent{Type: eventPaneFocused, Window: state.FocusedWindowID})
 		}
 	}
 	s.TouchActive()
 	if s.noteWorkspacesLocked() {
-		// The push left a workspace empty or opened one past the last, and
-		// the session renumbered: a daemon-side change the sender has not
-		// seen, so it is answered with the state.
 		s.state.Version++
 		s.noteRenumberLocked()
 		accepted = false
@@ -3894,11 +2870,6 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	return accepted, behind, s.changeSeq
 }
 
-// foreignPushLocked reports whether a push taken as sent names another
-// session's windows: prev holds a window, the push names at least one, and none
-// of the push's windows is one prev holds or has a live PTY of this session.
-// It copies nothing and stops at the first window prev holds. The caller holds
-// stateMu.
 func (s *Session) foreignPushLocked(state, prev *SessionState) bool {
 	if len(prev.Windows) == 0 || len(state.Windows) == 0 {
 		return false
@@ -3917,21 +2888,6 @@ func (s *Session) foreignPushLocked(state, prev *SessionState) bool {
 	return true
 }
 
-// pushOwnsFocusLocked reports whether a stale push from origin, built at base,
-// may keep its own focus, mine: no daemon move and no other client's move of
-// the focus landed at or after base. Such a move may postdate the push, and the
-// push would undo it. The origin's own earlier moves do not count: the push
-// is newer than they are.
-//
-// A daemon move the origin asked for is the origin's own as well, when the
-// push moved the focus away from where it was before that move. The client
-// sent the request first, so the push is the newer of the two. Without this,
-// a switch made just after a new-window key, before the client had seen the
-// window, was overridden: the session went back to the new window's
-// workspace. A push that still shows the focus from before the move did not
-// move it, and the window the client asked for keeps the focus.
-//
-// The caller holds stateMu.
 func (s *Session) pushOwnsFocusLocked(origin string, base int, mine focusView) bool {
 	if base < s.focusMovedVersion {
 		return false
@@ -3948,8 +2904,6 @@ func (s *Session) pushOwnsFocusLocked(origin string, base int, mine focusView) b
 			}
 			continue
 		}
-		// The focus the push would show had it not moved is the one from
-		// before the first move it has not seen.
 		m, ok := moves.firstAfter(base)
 		if !ok {
 			continue
@@ -3961,19 +2915,13 @@ func (s *Session) pushOwnsFocusLocked(origin string, base int, mine focusView) b
 	return true
 }
 
-// askedFocusMove is a daemon move of the focus that a client asked for:
-// the version it made, and the focus just before it.
 type askedFocusMove struct {
 	version int
 	before  focusView
 }
 
-// maxAskedFocusMoves bounds askedFocusMoves. A client that has more requests
-// in flight than this keeps the session's focus on a stale push.
 const maxAskedFocusMoves = 16
 
-// askedFocusMoves is one client's askedFocusMove records, oldest first.
-// dropped is the newest version let go to stay in bound.
 type askedFocusMoves struct {
 	moves   []askedFocusMove
 	dropped int
@@ -3987,7 +2935,6 @@ func (a *askedFocusMoves) add(m askedFocusMove) {
 	a.moves = append(a.moves, m)
 }
 
-// last is the version of the newest record, zero for none.
 func (a *askedFocusMoves) last() int {
 	if len(a.moves) == 0 {
 		return max(a.dropped, 0)
@@ -3995,9 +2942,6 @@ func (a *askedFocusMoves) last() int {
 	return a.moves[len(a.moves)-1].version
 }
 
-// firstAfter returns the oldest record a push built at base has not seen.
-// ok is false when it has seen them all. A record with version zero means
-// the oldest unseen one was let go, and its focus is not known.
 func (a *askedFocusMoves) firstAfter(base int) (askedFocusMove, bool) {
 	if base < a.dropped {
 		return askedFocusMove{}, true
@@ -4010,7 +2954,6 @@ func (a *askedFocusMoves) firstAfter(base int) (askedFocusMove, bool) {
 	return askedFocusMove{}, false
 }
 
-// seen drops the records a push built at base has seen.
 func (a *askedFocusMoves) seen(base int) {
 	if base >= a.dropped {
 		a.dropped = 0
@@ -4022,34 +2965,19 @@ func (a *askedFocusMoves) seen(base int) {
 	a.moves = a.moves[i:]
 }
 
-// markFocusIntentLocked records, from inside a mutateState function, that the
-// mutation is an explicit focus request. See focusIntent.
 func (s *Session) markFocusIntentLocked() {
 	s.focusIntent = true
 }
 
-// mutateState runs fn against the canonical state under the state lock, raises
-// the window lifecycle events implied by whatever fn changed, and hands the
-// resulting state to the state sink. Daemon-side (headless) window operations go
-// through it so they emit through the same diff as a TUI state sync, rather than
-// each op emitting for itself.
-//
-// The sink call is what makes an attached client a subscriber to the daemon
-// rather than the daemon's only writer: every mutation the daemon makes itself
-// reaches the client's renderer through this one place, so a new daemon-side
-// operation is live in the TUI without a line of routing code of its own.
 func (s *Session) mutateState(fn func(state *SessionState) error) error {
 	snap, err := s.mutateStateLocked(fn)
 	if err != nil {
 		return err
 	}
-	// Deliberately outside the state lock: the sink writes to client sockets.
 	s.publishState(snap)
 	return nil
 }
 
-// mutateStateLocked is mutateState's critical section. It returns the snapshot
-// to publish once the lock is released.
 func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*SessionState, error) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
@@ -4069,10 +2997,6 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	clearQuietOfLeftAgentLocked(before, s.state)
 	s.forgetSubagentsLocked(s.state)
 	pruneDeadLeaves(s.state)
-	// A daemon-side mutation is exactly what a client sync must not undo, so it
-	// is what advances the version. A client that pushes a snapshot built before
-	// this point is reconciled by UpdateState rather than winning by arriving
-	// last.
 	s.state.Version++
 	if !s.focusNeutral && (s.focusIntent || !focusBefore.sameFocus(focusViewOf(s.state))) {
 		if s.focusAskedBy != "" {
@@ -4098,16 +3022,8 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	return s.snapshotStateLocked(), nil
 }
 
-// emitLifecycleLocked diffs the current state against before and emits the
-// resulting events. It is called with the state lock held, deliberately: holding
-// it across the emit is what keeps a session's events in the same order as the
-// mutations that caused them when several callers mutate concurrently. It is
-// safe because the sink only stamps a sequence number and does non-blocking
-// channel sends; it never re-enters the session.
 func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
 	events := diffLifecycle(before, snapshotLifecycle(s.state))
-	// A task card held by a pane that closed, or whose agent left, is let
-	// go here, in the change that closed it. See releasedTaskEvents.
 	events = append(events, releasedTaskEvents(s, s.state, events, time.Now().UnixNano())...)
 	moving := s.movingWindow
 	s.movingWindow = ""
@@ -4115,7 +3031,6 @@ func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
 		if moving != "" && ev.Window == moving {
 			switch ev.Type {
 			case EventWindowClosed:
-				// The pane left for another session, which reports it.
 				continue
 			case EventWindowCreated:
 				ev = SessionEvent{Type: EventWindowMoved, Window: ev.Window, PTYID: ev.PTYID, Workspace: ev.hookWorkspace, hookTitle: ev.hookTitle, hookWorkspace: ev.hookWorkspace}
@@ -4127,14 +3042,9 @@ func (s *Session) emitLifecycleLocked(before lifecycleSnapshot) {
 
 // Stop closes all PTYs and cleans up.
 func (s *Session) Stop() {
-	// Stop resurrection saving
 	if s.stopResurrection != nil {
 		s.stopResurrection()
 	}
-	// Final save before stopping. Capture cwds while the shells are still alive.
-	// This is the last chance to persist the session, so a failure here is the
-	// difference between it coming back and not; it is reported rather than
-	// dropped even though Stop cannot act on it.
 	final := s.ResurrectionState()
 	if s.holdingCheckpoint() {
 		log.Printf("Session %q keeps its last saved layout: panes were killed by a signal just before the stop", s.Name())
@@ -4142,21 +3052,16 @@ func (s *Session) Stop() {
 		if err := s.persist(final); err != nil {
 			LogError("Final resurrection save for session %q failed, it will not come back: %v", s.Name(), err)
 		}
-		// Every pane with output since its last save, whatever the interval:
-		// this is the save a restart restores from.
 		s.persistMu.Lock()
 		s.saveHistory(final, true)
 		s.persistMu.Unlock()
 	}
 
-	// Before the panes go, so a hold cannot publish a state against a session
-	// that has already saved and stopped.
 	s.stopAgentHoldTimer()
 	s.idle.stop()
 	s.agentMetaPrune.stop()
 	s.subagentPrune.stop()
 	s.subagentFlush.stop()
-	// A stopped session must not stay reachable from the daemon's transcript watcher.
 	s.dropAgentTranscripts()
 
 	defer s.holdPaneLife()()
@@ -4222,9 +3127,6 @@ type SizeOwner struct {
 	Machine, Kind, Client string
 }
 
-// swapWindowSizePolicy records the window_size policy the session's size was
-// last settled under, and the client that set it, and reports whether either
-// changed. Guarded by sizeMu with the size it describes.
 func (s *Session) swapWindowSizePolicy(policy string, by SizeOwner) bool {
 	s.sizeMu.Lock()
 	defer s.sizeMu.Unlock()
@@ -4276,8 +3178,6 @@ func (s *Session) Info() SessionInfo {
 	}
 	s.stateMu.RUnlock()
 
-	// The focused pane's place labels the session. Read after stateMu is
-	// released: the PTY table has its own lock and the two are never nested.
 	var dir, branch string
 	if p := s.GetPTY(focusedPTY); p != nil {
 		dir, branch = p.place.place()
@@ -4289,7 +3189,7 @@ func (s *Session) Info() SessionInfo {
 		Created:          s.Created.Unix(),
 		LastActive:       s.LastActive().Unix(),
 		WindowCount:      len(windows),
-		Attached:         false, // Will be set by manager
+		Attached:         false,
 		Width:            width,
 		Height:           height,
 		Windows:          windows,
@@ -4307,10 +3207,6 @@ func (s *Session) Info() SessionInfo {
 	}
 }
 
-// windowSummaries builds the lightweight per-window listing for Info() from the
-// cached window states, titled from the live emulators. Each pane's folder is
-// the one liveCwds read, which caches its process reads, so it stays cheap
-// enough to run on every session list.
 func (s *Session) windowSummaries() []WindowSummary {
 	live := s.liveTitles()
 	cwds := s.liveCwds()
@@ -4334,8 +3230,6 @@ func (s *Session) windowSummaries() []WindowSummary {
 		if title == "" {
 			title = "shell"
 		}
-		// A named pane has nothing to gain from a command name, and offering one
-		// would let it outrank the name the user chose.
 		fg := w.ForegroundCmd
 		if w.CustomName != "" {
 			fg = ""
@@ -4360,28 +3254,20 @@ func (s *Session) windowSummaries() []WindowSummary {
 			ProgramStatus: w.ProgramStatus,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
-			// The rail pane is left out of a rail's rows as the scratch
-			// terminal is, and an older reader knows only this mark.
-			Scratch:     w.Scratch || w.Rail != "",
-			Note:        w.Note,
-			AgentParent: agentParentRef(*w),
-			Cwd:         firstNonEmpty(cwds[w.PTYID], w.Cwd),
+			Scratch:       w.Scratch || w.Rail != "",
+			Note:          w.Note,
+			AgentParent:   agentParentRef(*w),
+			Cwd:           firstNonEmpty(cwds[w.PTYID], w.Cwd),
 		})
 	}
 	return out
 }
 
-// getShell returns the shell a new pane in this session runs.
 func (s *Session) getShell() string {
 	shell, _ := s.resolveShell()
 	return shell
 }
 
-// resolveShell picks the shell for a new pane: the one the client that made
-// the session named, then the daemon's appearance.preferred_shell, then $SHELL
-// and the platform default, through the same config.ShellFor the standalone
-// path uses. missing is the preferred shell when it was set and not found,
-// for the spawn path to log.
 func (s *Session) resolveShell() (shell, missing string) {
 	if s.config != nil && s.config.Shell != "" {
 		return s.config.Shell, ""
@@ -4397,8 +3283,6 @@ func (s *Session) resolveShell() (shell, missing string) {
 	return shell, missing
 }
 
-// shellIntegrationFor reports whether a pane's shell starts with the prompt
-// marks on: the pane's own choice when it made one, else [shell] integration.
 func (s *Session) shellIntegrationFor(pane string) bool {
 	if pane != "" {
 		return config.ShellIntegrationOn(pane)
@@ -4410,23 +3294,11 @@ func (s *Session) buildEnv(windowID string, restored bool) []string {
 	return s.buildEnvWith(windowID, restored, nil)
 }
 
-// buildEnvWith is buildEnvFor a pane that runs the user's shell.
 func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) []string {
 	return s.buildEnvFor(windowID, 0, restored, extra, nil)
 }
 
-// buildEnvFor is buildEnv with a caller's own variables, for a pane that runs
-// command (nil for the user's shell). The caller's variables replace the
-// daemon's variables of the same name, and every variable set below them,
-// TERM and the TUIOS_ contract, is set after them and wins. The caller's
-// variables are checked before they get here (callerEnv), which refuses a
-// TUIOS_ name outright. command decides what a harness started directly is
-// told beyond that: see guestenv.TermProgramFor. workspace is the one the
-// window is being made on, 0 to read it from the state (herdrTabFor).
 func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, extra, command []string) []string {
-	// The daemon's environment, less TMUX and TMUX_PANE. A daemon started from
-	// inside tmux would otherwise hand every pane the variables that make a
-	// program believe it is in a tmux pane. See guestenv.WithoutHostMultiplexer.
 	env := guestenv.WithoutHostMultiplexer(os.Environ())
 	if len(extra) > 0 {
 		replaced := make(map[string]bool, len(extra))
@@ -4443,8 +3315,6 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 		}
 		env = append(kept, extra...)
 	}
-	// The session's agent link replaces the daemon's SSH_AUTH_SOCK, unless the
-	// caller gave the pane one of its own (a split that follows ssh does).
 	if s.config != nil && s.config.AgentEnv != nil && !slices.ContainsFunc(extra, func(kv string) bool {
 		return strings.HasPrefix(kv, "SSH_AUTH_SOCK=")
 	}) {
@@ -4453,8 +3323,6 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 			env = append(env, agent...)
 		}
 	}
-	// The display of the session's newest local client, when the daemon has
-	// none of its own, unless the caller gave the pane a display itself.
 	if s.config != nil && s.config.DisplayEnv != nil && !slices.ContainsFunc(extra, func(kv string) bool {
 		k, _, _ := strings.Cut(kv, "=")
 		return slices.Contains(displayVarNames, k)
@@ -4468,9 +3336,6 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 		}
 	}
 
-	// The TERM the session's first client named, checked against this
-	// machine's terminfo: a client's xterm-kitty is no use to a pane on a host
-	// with no entry for it. See guestenv.PaneTerm.
 	term := ""
 	if s.config != nil {
 		term = s.config.Term
@@ -4486,54 +3351,32 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 	env = append(env, "TERM_PROGRAM="+guestenv.TermProgramFor(command, kitty, sixel))
 	env = append(env, "TERM_PROGRAM_VERSION="+guestenv.TermProgramVersion())
 	env = append(env, "TUIOS_SESSION="+s.Name())
-	// TUIOS_HOST names the machine this pane runs on. A pane is always local
-	// to the daemon that made it, so this is the daemon's own hostname, on
-	// every machine: a program that wants to know where it is reads it, and a
-	// program that sends mail to another machine signs with it.
 	if s.config != nil && s.config.HostName != "" {
 		env = append(env, "TUIOS_HOST="+s.config.HostName)
 	}
 	if windowID != "" {
 		env = append(env, "TUIOS_WINDOW_ID="+windowID)
-		// TUIOS_PANE_ID is an alias a state-reporting shim guards on, mirroring
-		// the pane-id contract other multiplexers' agent integrations use.
 		env = append(env, "TUIOS_PANE_ID="+windowID)
-		// TUIOS_PANE_TOKEN proves the pane id to restrict-connection where
-		// the kernel cannot name the caller's pane. See pane_token.go.
 		if s.config != nil && s.config.PaneToken != nil {
 			if tok := s.config.PaneToken(windowID); tok != "" {
 				env = append(env, "TUIOS_PANE_TOKEN="+tok)
 			}
 		}
-		// TUIOS_PANE_GRANTS says what the pane may do through tuios as it
-		// starts. pane-grants gives the current answer. See pane_grants.go.
 		if s.config != nil && s.config.grants != nil {
 			env = append(env, "TUIOS_PANE_GRANTS="+s.config.grants.envValue(windowID))
 		}
 	}
-	// TUIOS_ENV marks a process as running under tuios, and TUIOS_SOCKET tells a
-	// shim which daemon socket to report to. Together with the pane id above they
-	// are the whole contract the agent-state shim needs; a shim finds nothing to
-	// report to when they are unset and no-ops.
 	env = append(env, "TUIOS_ENV=1")
 	if s.config != nil && s.config.SocketPath != "" {
 		env = append(env, "TUIOS_SOCKET="+s.config.SocketPath)
 	}
-	// TUIOS_SERVER names this daemon's server, so a tuios run in the pane
-	// reaches this daemon. It is set here rather than inherited, because the
-	// process that started the daemon need not have applied it (tuios-web runs
-	// its daemon in-process). The default server's panes get none.
 	env = slices.DeleteFunc(env, func(kv string) bool { return strings.HasPrefix(kv, serverscope.Env+"=") })
 	if name := serverscope.Name(); name != "" {
 		env = append(env, serverscope.Env+"="+name)
 	}
-	// A harness that reports to herdr (Crush) finds tuios's herdr protocol
-	// socket here, when this pane starts one. See herdr_compat.go.
 	if s.config != nil && s.config.HerdrEnv != nil {
 		env = append(env, s.config.HerdrEnv(s.ID, windowID, s.herdrTabFor(windowID, workspace), command)...)
 	}
-	// Mark restored shells so the user's shell rc (and scripts) can react, and
-	// so the restore is observable without relying on the visual banner.
 	if restored {
 		env = append(env, "TUIOS_RESTORED=1")
 	}
@@ -4541,57 +3384,21 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 	return env
 }
 
-// PTY methods
-
-// maxSubscriberQueue bounds, in bytes, the output one (client, pane) stream
-// holds for a client that has stopped taking it. The queue used to be bounded
-// by slot count alone, and with 16 KiB reads that was 64 MiB per stream, so a
-// daemon's heap grew by hundreds of megabytes while one stalled client sat
-// behind one flooding pane. Past this the stream is marked gapped and stops
-// queuing; it resumes from the ring once it has drained (resumeAfterGap). A
-// variable so a test can lower it.
 var maxSubscriberQueue int64 = 8 << 20
 
-// ptySubscriber is one client's output stream. sent is the stream position of
-// the last chunk this subscriber was handed, which is where the client is
-// resumed if it comes back.
 type ptySubscriber struct {
-	out  ptyQueue
-	sent atomic.Int64
-	// queued is how many bytes sit on out that the stream goroutine has not
-	// taken yet.
+	out    ptyQueue
+	sent   atomic.Int64
 	queued atomic.Int64
-	// gapped is set when a chunk could not be queued, because the queue held
-	// maxSubscriberQueue bytes or subscriberSlots chunks. Nothing more is queued
-	// for a gapped stream: what it holds drains, and then the stream is
-	// rebuilt from sent through the ring. A chunk dropped in the middle of a
-	// stream used to be a silent hole the client painted the rest of the
-	// stream on top of, until the next workspace switch replaced the screen.
 	gapped atomic.Bool
-	// missed says the catch-up could not start where the subscriber asked,
-	// because the ring had already rolled past that position. Set once, by
-	// subscribeLocked.
 	missed bool
 
-	// framesWaiting counts the frames on out that the stream goroutine has not
-	// taken. skipped counts the frames dropped for newer ones. See
-	// kitty_frames.go.
 	framesWaiting atomic.Int32
 	skipped       atomic.Int64
-	// noPace marks a client that never holds the pane: a read-only viewer or
-	// a client on another machine. See holdForSlowSubscribers.
-	noPace atomic.Bool
+	noPace        atomic.Bool
 
-	// Read and written by broadcast only, under streamMu. seen is the stream
-	// position this client has been handed or skipped up to. open is the
-	// frame it is gathering, and passFrame sends the rest of a frame as it
-	// arrives. latest is the newest waiting frame of each image on each
-	// screen, and lastFrame the last frame queued, while nothing but a
-	// cursor move has come after it.
 	seen      int64
-	skipFrame bool // the catch-up began inside this frame: skip its rest
-	// The catch-up began inside a graphics command that is not a frame,
-	// which starts at skipFrom: skip its rest.
+	skipFrame bool
 	skipSpan  bool
 	skipFrom  int64
 	open      *queuedFrame
@@ -4600,23 +3407,13 @@ type ptySubscriber struct {
 	lastFrame *queuedFrame
 }
 
-// ptyChunk is one item on a subscriber's stream: output bytes, or the size the
-// daemon's emulator took at exactly this point. A resize carries no bytes and
-// so does not move the stream position.
 type ptyChunk struct {
 	data          []byte
-	width, height int // both > 0 marks a resize rather than output
-	// frame is one whole kitty graphics frame instead of data. See
-	// kitty_frames.go.
-	frame *queuedFrame
-	// end is the stream position just after the chunk's last byte, set on
-	// output and frames, zero on a resize. A stream-pane subscriber reads it
-	// to number what it sends (verb_stream_pane.go); the attach stream does
-	// not need it.
-	end int64
+	width, height int
+	frame         *queuedFrame
+	end           int64
 }
 
-// size is how many bytes the chunk holds.
 func (c ptyChunk) size() int64 {
 	if c.frame != nil {
 		return c.frame.size
@@ -4624,10 +3421,6 @@ func (c ptyChunk) size() int64 {
 	return int64(len(c.data))
 }
 
-// resizeMark records the stream position a resize took effect at. The ring
-// holds bytes only, so without the marks a subscriber resumed across a resize
-// was handed the whole span at one width and laid out at that width lines the
-// daemon had wrapped at another. Guarded by outputMu and pruned with the ring.
 type resizeMark struct {
 	seq           int64
 	width, height int
@@ -4635,14 +3428,8 @@ type resizeMark struct {
 
 func (c ptyChunk) isResize() bool { return c.width > 0 && c.height > 0 }
 
-// resyncPrefix homes the cursor and clears the screen and the scrollback. It
-// goes in front of a catch-up the client cannot splice onto what it already
-// holds.
 var resyncPrefix = []byte("\x1b[H\x1b[2J" + scrollclear.Drop)
 
-// cancelPrefix is CAN, which ends any sequence a parser is part way through
-// and draws nothing. It goes in front of a rolled catch-up for a client that
-// restored a snapshot: see subscribeLocked.
 var cancelPrefix = []byte{0x18}
 
 // Subscribe adds a subscriber to receive PTY output, resuming it at fromSeq: the
@@ -4674,9 +3461,6 @@ func (p *PTY) subscribe(clientID string, fromSeq int64, fromSnapshot bool) *ptyQ
 	return &p.subscribeSub(clientID, fromSeq, fromSnapshot).out
 }
 
-// subscribeSub is Subscribe returning the subscriber itself. A stream
-// goroutine holds on to it, so that when the goroutine ends it releases its
-// own subscription and not a newer one the same client has made since.
 func (p *PTY) subscribeSub(clientID string, fromSeq int64, fromSnapshot bool) *ptySubscriber {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
@@ -4684,21 +3468,12 @@ func (p *PTY) subscribeSub(clientID string, fromSeq int64, fromSnapshot bool) *p
 	return p.subscribers[clientID]
 }
 
-// subscriberFor returns the client's stream, or nil when it has none. The
-// stream goroutine reads it once per stream to account for what it takes.
 func (p *PTY) subscriberFor(clientID string) *ptySubscriber {
 	p.subscribersMu.RLock()
 	defer p.subscribersMu.RUnlock()
 	return p.subscribers[clientID]
 }
 
-// resumeAfterGap rebuilds the gapped stream cur once it has drained. The new
-// stream resumes at the position the old one reached, so the client is handed
-// what it missed from the ring, behind a clear when the ring has rolled past
-// it. It returns nil when cur is not gapped, still holds chunks, or is no
-// longer the client's stream: a client that unsubscribed and subscribed again
-// while cur's goroutine was still draining has a new stream, and rebuilding
-// over it would close the queue its new goroutine reads.
 func (p *PTY) resumeAfterGap(clientID string, cur *ptySubscriber) (*ptyQueue, *ptySubscriber) {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
@@ -4716,33 +3491,19 @@ func (p *PTY) resumeAfterGap(clientID string, cur *ptySubscriber) (*ptyQueue, *p
 	return q, next
 }
 
-// subscribeLocked is subscribe with subscribersMu held.
 func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool) *ptyQueue {
-	// Return the existing queue if already subscribed
 	if existing, ok := p.subscribers[clientID]; ok {
 		debugLog("[DEBUG] PTY %s: client %s already subscribed", p.ID[:8], clientID)
 		return &existing.out
 	}
 
-	// subscriberSlots bounds the count of chunks, maxSubscriberQueue bounds
-	// their bytes. Each chunk is one PTY read of up to 16 KiB, and the
-	// catch-up below is at most the ring, so the byte bound is the one a
-	// stalled client meets. The queue grows with the backlog: an idle pane
-	// holds a few slots per client, not all of them (subscriber_queue.go).
 	sub := newSubscriber()
 	p.subscribers[clientID] = sub
 	p.subscriberCount.Store(int32(len(p.subscribers)))
 	debugLog("[DEBUG] PTY %s: added subscriber %s (total: %d)", p.ID[:8], clientID, len(p.subscribers))
 
-	// Send whatever the client has not seen to catch it up.
 	p.outputMu.RLock()
-	// A client that fell further behind than the buffer reaches cannot be
-	// resumed exactly, so it gets everything still held rather than a gap.
 	bufStart := p.outputSeq - int64(p.outputPos)
-	// The catch-up ends where broadcast has got to. readOutput appends a read
-	// to the ring before it broadcasts it, so a subscribe can land between
-	// the two: that read goes out through broadcast, which cuts it into text
-	// and frames, rather than in the catch-up, which the cut has not seen.
 	ringEnd := p.outputPos
 	if unscanned := p.unbroadcast.Load(); unscanned > 0 {
 		ringEnd = max(0, p.outputPos-int(unscanned))
@@ -4754,10 +3515,6 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 	if fromSeq > bufStart {
 		start = min(int(fromSeq-bufStart), ringEnd)
 	}
-	// A catch-up that starts inside a kitty graphics command would hand the
-	// client the rest of it with no start, and the client prints the payload
-	// as text. Start after it instead. A frame still arriving is skipped as
-	// it arrives (route).
 	if inside, end := p.gfx.spanAt(bufStart + int64(start)); inside {
 		if end < 0 {
 			start = ringEnd
@@ -4776,15 +3533,7 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 				debugLog("[DEBUG] PTY %s: failed to send catch-up chunk (queue full)", p.ID[:8])
 			}
 		}
-		// The replay is cut at every resize mark inside it and the resize sent
-		// between the two segments, so the client lays each segment out at the
-		// width the daemon laid it out at. One flat replay put the whole span
-		// at one width, and a catch-up that crossed a resize came back with
-		// every line after it wrapped where the daemon had not wrapped it.
 		startSeq := bufStart + int64(start)
-		// The width the replay begins at. A client resumed here is usually at
-		// it already and skips it; a rolled client, whose screen the resync
-		// below clears, is not.
 		for _, m := range slices.Backward(p.resizeMarks) {
 			if m.seq <= startSeq {
 				send(ptyChunk{width: m.width, height: m.height})
@@ -4794,29 +3543,8 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 		var prefix []byte
 		switch {
 		case rolled && fromSnapshot:
-			// The snapshot ends at fromSeq, and its PendingInput is the start
-			// of the sequence the daemon's parser was in there. That start is
-			// finished by the bytes after fromSeq, and the ring no longer
-			// holds them: the tail begins in some later sequence. Joined to
-			// the old start, the tail's first bytes made a different
-			// sequence, such as "\x1b[" and ";1H" moving the cursor to the
-			// top left, and the next text painted over rows only the
-			// snapshot held. CAN drops the old start, so the tail begins
-			// from a parser at rest, as it would on a fresh client.
 			prefix = cancelPrefix
 		case rolled:
-			// The client still holds the screen it drew up to fromSeq, and the
-			// bytes between there and the buffer's start are gone. Appending the
-			// tail to that screen splices two halves of the stream that never
-			// met: the missing bytes carried the cursor moves and the modes the
-			// tail is written against, so the guest's output lands wherever the
-			// old screen had left off. Clear first, so the tail repaints from a
-			// known state instead of over a stale one.
-			//
-			// A client that just restored a snapshot is not in that state: the
-			// snapshot is the whole of the stream up to fromSeq, and clearing
-			// it throws away rows a full-screen program drew that the ring no
-			// longer holds (issue #123). The tail replays on top of it.
 			prefix = resyncPrefix
 		}
 		segStart := start
@@ -4846,11 +3574,6 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 	sub.seen = endSeq
 	p.outputMu.RUnlock()
 
-	// The size the emulator is at now, behind the catch-up. A resize is only
-	// broadcast to the subscribers of the moment, so one that landed between a
-	// client's snapshot and its subscribe reaches nobody; this states the
-	// answer on every subscribe instead of leaving the pane at whatever width
-	// the client last heard about. It is a no-op whenever nothing was missed.
 	p.terminalMu.RLock()
 	if p.terminal != nil {
 		w, h := p.terminal.Width(), p.terminal.Height()
@@ -4867,18 +3590,10 @@ func (p *PTY) Unsubscribe(clientID string) int64 {
 	return p.unsubscribe(clientID, nil)
 }
 
-// unsubscribeSub is Unsubscribe for one stream: it removes the client's
-// subscriber only while that is still sub. A stream goroutine ends some time
-// after the client has let its subscription go, and by then the client may
-// have subscribed again. Removing by client ID alone took the new
-// subscription with it, and the pane stopped updating until it was hidden and
-// shown once more.
 func (p *PTY) unsubscribeSub(clientID string, sub *ptySubscriber) {
 	p.unsubscribe(clientID, sub)
 }
 
-// unsubscribe removes the client's subscriber, when only is nil or is that
-// subscriber.
 func (p *PTY) unsubscribe(clientID string, only *ptySubscriber) int64 {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
@@ -4887,8 +3602,6 @@ func (p *PTY) unsubscribe(clientID string, only *ptySubscriber) int64 {
 	if !ok || (only != nil && sub != only) {
 		return 0
 	}
-	// Closing lets the streaming goroutine drain what is still queued, so every
-	// chunk broadcast up to here does reach the client.
 	sub.out.close()
 	delete(p.subscribers, clientID)
 	p.subscriberCount.Store(int32(len(p.subscribers)))
@@ -4930,25 +3643,13 @@ func (p *PTY) Write(data []byte) (int, error) {
 	return p.pty.Write(data)
 }
 
-// paneWriteWait is how long the write holding a pane's large write slot may
-// hold it before the next large write is refused. A variable so a test can
-// shorten it.
 var paneWriteWait = 5 * time.Second
 
-// largeSlotCh is the pane's slot for a large write.
 func (p *PTY) largeSlotCh() chan struct{} {
 	p.largeSlotOnce.Do(func() { p.largeSlot = make(chan struct{}, 1) })
 	return p.largeSlot
 }
 
-// takeLargeSlot takes the pane's large write slot, waiting as Write says.
-//
-// The wait runs out paneWriteWait after the current holder took the slot,
-// and starts over each time the slot passes to another write. Timing the
-// wait from the waiter's own start instead refused the sixth of six queued
-// 1 MiB writes into cat on a slow machine (go test -race on a CI runner):
-// the five ahead of it took longer than paneWriteWait in total, while each
-// one went in well within it.
 func (p *PTY) takeLargeSlot() error {
 	slot := p.largeSlotCh()
 	var timer *time.Timer
@@ -4964,8 +3665,6 @@ func (p *PTY) takeLargeSlot() error {
 			return nil
 		default:
 		}
-		// 0 means the holder is between taking the slot and recording when,
-		// or is giving it back: either way it has only just held it.
 		since := time.Now()
 		if ns := p.largeSince.Load(); ns != 0 {
 			since = time.Unix(0, ns)
@@ -4984,23 +3683,17 @@ func (p *PTY) takeLargeSlot() error {
 			p.largeSince.Store(time.Now().UnixNano())
 			return nil
 		case <-timer.C:
-			// Look again: the slot may have passed to another write, whose
-			// own paneWriteWait starts now.
 		}
 	}
 }
 
-// giveLargeSlot gives the slot back.
 func (p *PTY) giveLargeSlot() {
 	p.largeSince.Store(0)
 	<-p.largeSlotCh()
 }
 
-// largeWriteWaiting reports whether a large write holds the pane's slot.
 func (p *PTY) largeWriteWaiting() bool { return p.largeSince.Load() != 0 }
 
-// errPaneInputBusy refuses a large input to a pane that has not read the
-// last one.
 var errPaneInputBusy = errors.New("the pane has not read the last large input yet")
 
 // Size returns the current PTY dimensions.
@@ -5047,7 +3740,6 @@ func (p *PTY) UpdatePixelDimensions(cellWidth, cellHeight int) error {
 	if _, ok := p.pty.(ptyspawn.WinsizeSetter); !ok {
 		return nil
 	}
-	// A size already held is written with the new pixels when it is due.
 	if p.winsizeHeld.Load() {
 		return nil
 	}
@@ -5067,42 +3759,12 @@ func (p *PTY) UpdatePixelDimensions(cellWidth, cellHeight int) error {
 // being heard one width narrower than the daemon did, and a line that wrapped
 // differently is in the scrollback for good.
 func (p *PTY) Resize(width, height int) error {
-	// A resize to the size the pane is already at is nothing, and has to cost
-	// nothing. It is not a rare case: every client of a session announces every
-	// pane's size for itself, so a second client attaching, or a client
-	// re-announcing after a retile that moved nothing, arrives here with the
-	// size that is already set.
-	//
-	// A resize is not free. It marks the ring, broadcasts a width to every
-	// subscriber, resizes the emulator (which drops the scroll region a
-	// full-screen program had set) and SIGWINCHes the guest into repainting.
-	// A repaint at an unchanged width is invisible when it works and is a line
-	// of lost scrollback when the guest's own idea of where the cursor is does
-	// not survive it.
-	//
-	// Zero is not a size and is left to the layers below to reject; it must not
-	// be recorded as the pane's own.
-	//
-	// The size is recorded, queued for the emulator and applied to the real PTY
-	// under one lock, because every client of a session announces sizes on
-	// its own connection and two of them can arrive here at once. Recording
-	// under one lock and queueing under another let a pair of resizes be
-	// recorded in one order and queued in the other: the pane then said 26
-	// columns while its emulator sat at 22, and the next 26 from anyone was
-	// declined above as unchanged, so nothing ever put the emulator right. A
-	// client attached to that pane was handed a snapshot laid out at a width
-	// no client was drawing.
 	p.streamMu.Lock()
 	defer p.streamMu.Unlock()
-	// The size the clients ask for is kept apart from the size the pane
-	// takes, because a lease (pane_lease.go) can hold the pane smaller, and
-	// the pane goes back to the size asked for when the lease ends.
 	if width > 0 && height > 0 {
 		p.askedW, p.askedH = width, height
 	}
 	width, height = p.leasedSizeLocked(width, height)
-	// A reflow leaves scratch behind that cleanupLoop releases, and a pane
-	// whose program does not repaint prints nothing to wake it.
 	if s := p.owner(); s != nil {
 		if w := s.wakes.Load(); w != nil {
 			w.cleanup.Set()
@@ -5111,7 +3773,6 @@ func (p *PTY) Resize(width, height int) error {
 	return p.resizeStreamLocked(width, height)
 }
 
-// resizeStreamLocked is Resize with streamMu held and the lease applied.
 func (p *PTY) resizeStreamLocked(width, height int) error {
 	if p.frozen.Load() {
 		if width > 0 && height > 0 {
@@ -5127,15 +3788,9 @@ func (p *PTY) resizeStreamLocked(width, height int) error {
 	if unchanged {
 		return nil
 	}
-	// A size change is rare and is the one thing a shell repaints its prompt
-	// for, so it is worth a line in `tuios logs`: a pane that gains blank lines
-	// on a focus move is answered by whether this line appears with it.
 	LogBasic("PTY %s resized %dx%d -> %dx%d", shortID(p.ID), oldW, oldH, width, height)
 
 	if !p.vtClosed {
-		// Recorded against the ring before it is broadcast, so a catch-up cut
-		// from the ring later replays it between the same two bytes every
-		// subscriber of this moment saw it between.
 		p.outputMu.Lock()
 		p.resizeMarks = append(p.resizeMarks, resizeMark{seq: p.outputSeq, width: width, height: height})
 		p.outputMu.Unlock()
@@ -5146,10 +3801,6 @@ func (p *PTY) resizeStreamLocked(width, height int) error {
 		}
 	}
 
-	// The real PTY is resized without waiting for the emulator to catch up
-	// with the backlog. The pixel size goes in the same ioctl: see
-	// ptyspawn.SetWinsize. A resize inside a burst is held and written with
-	// the burst's last size: see pty_winsize.go.
 	p.winsizeMu.Lock()
 	defer p.winsizeMu.Unlock()
 	return p.setWinsizeLocked(width, height)
@@ -5176,10 +3827,6 @@ func (p *PTY) GetTerminalState(maxScrollback, have int) *TerminalState {
 		return nil
 	}
 
-	// The emulator's own size, not the pane's announced one. They differ only
-	// while a resize is still behind output in the stream, and a snapshot has
-	// to describe the grid it is serializing: reporting the size the pane is
-	// about to be handed one row of cells short.
 	state := TerminalStateOf(p.terminal, p.terminal.Width(), p.terminal.Height(), maxScrollback, have)
 	state.Seq = p.vtSeq
 	return state
@@ -5224,19 +3871,11 @@ func (p *PTY) CaptureContent(scrollback, ansi bool) string {
 	return vt.StripKittyPlaceholders(p.captureContent(scrollback, ansi))
 }
 
-// paneMeta is what a capture reports about a pane beside its content.
 type paneMeta struct {
-	// HistoryRows is how many scrollback lines the pane holds above its
-	// screen: the lines a "recent" capture has before the screen.
 	HistoryRows int
-	// Revision changes whenever the pane's content can have changed: output
-	// reached its emulator, or the emulator was resized. It only grows, and
-	// it counts from 0 again when the daemon restarts. Two captures with one
-	// revision have the same content.
-	Revision int64
+	Revision    int64
 }
 
-// metaLocked is the pane's paneMeta. Callers hold terminalMu.
 func (p *PTY) metaLocked() paneMeta {
 	m := paneMeta{Revision: p.vtSeq + p.vtResizes}
 	if p.terminal != nil {
@@ -5286,10 +3925,7 @@ func (p *PTY) CaptureContentResolvedMeta(scrollback bool, palette [16]color.Colo
 	return ResolveSGR(content, palette), p.metaLocked()
 }
 
-// captureContent is the shared core of the two capture paths. Callers hold
-// terminalMu.
 func (p *PTY) captureContent(scrollback, ansi bool) string {
-	// A sixel image's cells are markers in the grid; a capture gets blanks.
 	return vt.StripSixelMarkers(p.captureContentRaw(scrollback, ansi))
 }
 
@@ -5331,25 +3967,15 @@ func (p *PTY) captureContentRaw(scrollback, ansi bool) string {
 	return content
 }
 
-// scrollbackTexter is an emulator that writes its scrollback as plain text
-// without decoding every line into cells. The pure Go emulator is one. The
-// plain capture uses it when it is there and reads line by line otherwise, and
-// the two give the same bytes.
 type scrollbackTexter interface {
 	AppendScrollbackText(*strings.Builder)
 }
 
-// captureState identifies what the emulator has been given: the stream
-// position it has applied and the size it has. Output and resizes are the
-// only things that change a pane's content, and each moves one of these, so a
-// capture taken at one captureState reads the same as any later capture at an
-// equal one.
 type captureState struct {
 	seq           int64
 	width, height int
 }
 
-// captureStateLocked is the pane's captureState. Callers hold terminalMu.
 func (p *PTY) captureStateLocked() captureState {
 	st := captureState{seq: p.vtSeq}
 	if p.terminal != nil {
@@ -5358,15 +3984,12 @@ func (p *PTY) captureStateLocked() captureState {
 	return st
 }
 
-// currentCaptureState is the pane's captureState now.
 func (p *PTY) currentCaptureState() captureState {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
 	return p.captureStateLocked()
 }
 
-// capturePlainAt is CaptureContent without styling, plus the captureState the
-// capture was taken at, read under the same lock.
 func (p *PTY) capturePlainAt(scrollback bool) (string, captureState) {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
@@ -5377,11 +4000,8 @@ func (p *PTY) capturePlainAt(scrollback bool) (string, captureState) {
 func (p *PTY) Close() error {
 	p.cancel()
 
-	// Before anything else, so a settle scan already armed cannot fire against a
-	// pane whose emulator is about to be closed.
 	p.stopScreenSettle()
 
-	// Close all subscriber queues
 	p.subscribersMu.Lock()
 	for id, sub := range p.subscribers {
 		sub.out.close()
@@ -5390,31 +4010,19 @@ func (p *PTY) Close() error {
 	p.subscriberCount.Store(0)
 	p.subscribersMu.Unlock()
 
-	// Hang up the pane's jobs, as a terminal that goes away does, and kill
-	// the shell. See killPaneTree.
 	killPaneTree(p.proc)
-	// A reader waiting for output is in poll, which closing the master does
-	// not end.
 	if p.gate != nil {
 		p.gate.wake()
 	}
 
-	// Mark the VT emulator closed so forwardTerminalResponses returns EOF on
-	// its next read. (A read already blocked in the response pipe is only
-	// unblocked once Emulator.Close CloseWrites the pipe.)
 	if p.terminal != nil {
 		_ = p.terminal.Close()
 	}
 
-	// No held window size may be written once the descriptor is closed.
 	p.closeWinsize()
 
-	// The pane's emulator and scrollback are garbage now. A burst of closes
-	// is one trim, once the daemon settles. See memtrim.
 	memtrim.Request()
 
-	// Close PTY. This unblocks readOutput's pending Read, which then closes
-	// vtWriteChan so vtWriter exits.
 	if p.pty != nil {
 		return p.pty.Close()
 	}
@@ -5425,11 +4033,6 @@ func (p *PTY) Close() error {
 // The second return is false when it cannot be determined (process gone, or an
 // unsupported platform). Used to capture cwd for session resurrection.
 func (p *PTY) ProcessCwd() (string, bool) {
-	// A pane on another machine has no process here to read. The machine
-	// running it is the only one that can say where it is, so the answer is
-	// the one that machine last gave, and asking for a fresher one is started
-	// here rather than waited for: this is called from GetState, which is on
-	// the render path.
 	if rp, ok := p.pty.(*remotePane); ok {
 		return rp.Cwd()
 	}
@@ -5478,17 +4081,10 @@ func (p *PTY) ExitStatus() (int, bool) {
 	return p.exitCode, p.exited
 }
 
-// gateRetryDelay is how long a pane's reader waits before it asks the read
-// gate again after a poll failed.
 const gateRetryDelay = 50 * time.Millisecond
 
 func (p *PTY) readOutput() {
-	// Closing vtWriteChan lets vtWriter's range terminate when the read loop
-	// exits. Resize sends on it too, so the close is taken under the lock it
-	// sends under and leaves the flag that stops it trying.
 	defer func() {
-		// A pane kept open shows its exit status under the last output, so
-		// it is written before the emulator's channel closes.
 		p.noteReadEnd()
 		p.streamMu.Lock()
 		p.vtClosed = true
@@ -5500,7 +4096,7 @@ func (p *PTY) readOutput() {
 		}
 	}()
 
-	buf := make([]byte, 16*1024) // 16KB: matches typical PTY pipe buffer
+	buf := make([]byte, 16*1024)
 	gateFailed := false
 	for {
 		select {
@@ -5509,19 +4105,11 @@ func (p *PTY) readOutput() {
 		default:
 		}
 
-		// A pane streaming graphics waits here while a client is behind,
-		// so the program waits in write() instead of the client's stream
-		// being cut. See holdForSlowSubscribers.
 		p.holdForSlowSubscribers()
 
-		// Output is waited for outside readMu and read under it, so a
-		// quiesce never waits on a quiet program. See pty_quiesce.go.
 		if p.gate != nil {
 			ready, err := p.gate.wait(p.pty)
 			if err != nil {
-				// Not knowing whether output waits, the reader asks again
-				// rather than read: a read with nothing to take would hold
-				// readMu until the program next prints.
 				if !gateFailed {
 					LogError("Pane %s: %v. Retrying", shortID(p.ID), err)
 					gateFailed = true
@@ -5552,12 +4140,6 @@ func (p *PTY) readOutput() {
 		n, err := p.pty.Read(buf)
 		if err != nil {
 			p.readMu.Unlock()
-			// A pane on another machine ends here. Its stream stopping is the
-			// only notice that crosses: the far side closes the connection
-			// when the process exits, when the owner hangs up and when the
-			// link drops, and none of those leaves anything here to wait on.
-			// Without this the window stayed open around a pane that had
-			// nothing behind it, because monitorExit had returned at once.
 			if p.host != "" {
 				p.noteExit(0)
 			}
@@ -5568,32 +4150,15 @@ func (p *PTY) readOutput() {
 			data := make([]byte, n)
 			copy(data, buf[:n])
 
-			// Who holds the foreground, read first and only for a chunk
-			// holding an OSC 7501 report: a program that reports and exits
-			// at once may already be gone a moment later. See
-			// PTY.reportGroup.
 			reportGroup := p.readerReportGroup(data)
 
-			// The raw stream, when TUIOS_PTY_LOG asks for it. Taken here,
-			// before anything reads or reorders it, so what lands in the file
-			// is what the program wrote.
 			p.rawLog.Write(data)
 
-			// A tuios client whose output lands in this pane announces
-			// itself with a probe. See nest_probe.go.
 			p.scanNestProbes(data)
 
-			// Held across all three steps so a resize taken under the same
-			// lock cannot land between two of them: the daemon's emulator and
-			// every subscriber must change width at the same byte.
-			//
-			// Taken before readMu is let go, so a quiesce that gets readMu
-			// next finds this chunk either queued or still holding streamMu,
-			// and its own marker lands behind it.
 			p.streamMu.Lock()
 			p.readMu.Unlock()
 
-			// Store in ring buffer for reconnection
 			p.outputMu.Lock()
 			seq := p.appendToBuffer(data)
 			for _, tap := range p.outputTaps {
@@ -5601,22 +4166,8 @@ func (p *PTY) readOutput() {
 			}
 			p.outputMu.Unlock()
 
-			// Broadcast to subscribers
 			p.broadcast(ptyChunk{data: data}, seq)
 
-			// VT emulator: feed via a dedicated single goroutine to
-			// avoid unbounded goroutine growth at high FPS.
-			//
-			// This send blocks rather than dropping. Falling behind is fine;
-			// skipping a chunk is not. Every route a client takes into a pane
-			// rehydrates it from this emulator, so a chunk dropped here is
-			// output that no client will ever see again: the screen it is
-			// handed is missing the cursor moves and modes the rest of the
-			// stream is written against. Blocking applies backpressure to the
-			// shell, which is what a terminal does when a program outputs
-			// faster than the terminal can take it. vtWriter only ever holds
-			// the leaf terminal lock and never waits on this loop, so there is
-			// nothing here to deadlock against.
 			select {
 			case p.vtWriteChan <- vtChunk{data: data, seq: seq, group: reportGroup}:
 			case <-p.ctx.Done():
@@ -5626,18 +4177,11 @@ func (p *PTY) readOutput() {
 			p.streamMu.Unlock()
 			p.reportPacing()
 
-			// Record the activity time for the agent-state stall heuristic before
-			// anything that can block, so a demotion decision is made against when
-			// output actually arrived.
 			p.lastOutput.Store(time.Now().UnixNano())
 			if f := p.draftWatch.Load(); f != nil {
 				(*f)()
 			}
 
-			// Raise a control-plane output-activity event. This is a lightweight
-			// signal (byte count only, no content) that drives wait-for-output and
-			// window-idle waits and lets a subscriber know the pane is active; the
-			// raw bytes still flow only through the binary subscriber stream.
 			if p.emit != nil {
 				p.emit(SessionEvent{Type: EventOutput, Bytes: n})
 			}
@@ -5647,35 +4191,17 @@ func (p *PTY) readOutput() {
 	}
 }
 
-// vtChunk is one chunk of PTY output and the stream position it ends at, or a
-// resize to apply between the chunks either side of it.
 type vtChunk struct {
 	data          []byte
 	seq           int64
-	width, height int // both > 0 marks a resize rather than output
-	// group is the foreground process group the reader read for a chunk
-	// holding an OSC 7501 report, plus one; 0 for any other chunk. See
-	// PTY.reportGroup.
-	group int64
-	// ack, when set, marks no output: vtWriter closes it once every chunk
-	// queued before it is written. See PTY.Quiesce.
-	ack chan struct{}
-	// notice marks the line tuios puts into the stream after an emulator
-	// fault, which is written even to a pane the daemon stopped feeding.
-	// See pane_vt_fault.go.
-	notice bool
+	width, height int
+	group         int64
+	ack           chan struct{}
+	notice        bool
 }
 
-// setUpPaneTerminal gives a pane's emulator everything the daemon needs from
-// it: the callbacks that raise the pane's events, the kitty and sixel
-// settings, the cell size, and the semantic marks the pane reads. A pane's
-// first emulator and one rebuilt after a fault (rebuildTerminal) go through
-// here, so the two cannot differ.
 func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 	scrollclear.Apply(terminal)
-	// A local pane on Windows runs on a ConPTY, which cannot carry the kitty
-	// keyboard protocol (see vt.Emulator.DisableKittyKeyboardProtocol). A
-	// remote pane runs on a real PTY at the far end and keeps it.
 	if pty.host == "" && ptyspawn.HostIsConPTY() {
 		terminal.DisableKittyKeyboardProtocol()
 	}
@@ -5683,10 +4209,6 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 		terminal.SetCellSize(pty.cellWidth, pty.cellHeight)
 	}
 
-	// Raise control-plane events from the daemon-side VT emulator: bell, an
-	// app-driven title change, and alt-screen mode toggles. These fire from the
-	// single vtWriter goroutine; the emitter only does a non-blocking hub publish,
-	// so it never re-enters the terminal lock held during Write.
 	pty.marks = terminal.SemanticMarkers()
 	terminal.SetCallbacks(vt.Callbacks{
 		Bell: func() { pty.emit(SessionEvent{Type: EventBell}) },
@@ -5694,10 +4216,6 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 			pty.title.Store(&title)
 			pty.emit(SessionEvent{Type: EventWindowRetitled, Title: title})
 		},
-		// Recorded, then pushed to the clients, which label an unnamed
-		// workspace with it. A client draws the dock pill of a workspace
-		// whose panes it does not stream, so it cannot read the name off
-		// its own emulator. Programs send OSC 1 rarely, unlike a title.
 		ExplicitIconName: func(name string) {
 			if pty.setIconName(ClampDisplayText(name)) {
 				pty.owner().publishLiveFactsSoon()
@@ -5706,13 +4224,6 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 		AltScreen: func(on bool) {
 			pty.emit(SessionEvent{Type: EventModeChanged, Mode: "alt-screen", Enabled: on})
 		},
-		// Recorded, not applied: this fires with the terminal lock held, and
-		// the record is two atomics plus one branch read on its own goroutine.
-		//
-		// A pane on another machine keeps the plain record, for the session's
-		// label. Its shell reports a folder on that machine, which this side
-		// would read as a shell that went somewhere else; the machine running
-		// it says where it is instead (remotePane.Cwd).
 		WorkingDirectory: func(raw string) {
 			if _, remote := pty.pty.(*remotePane); remote {
 				pty.place.setCwd(raw)
@@ -5722,35 +4233,19 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 				pty.owner().publishLiveFactsSoon()
 			}
 		},
-		// Parked rather than applied: this fires with the terminal lock held, and
-		// applying it mutates session state. The read goroutine picks it up on the
-		// output event carrying these same bytes.
 		Progress: func(state vt.ProgressState, percent int) {
 			pty.storeAgentProgress(state, percent)
 		},
-		// A desktop notification: published at once, like the bell, and parked
-		// for the read goroutine to match against the harness's rules, like the
-		// progress report.
 		Notify: func(title, body string) {
 			title, body = capNotifyText(title), capNotifyText(body)
 			pty.storeAgentNotify(title, body)
 			pty.emit(SessionEvent{Type: EventNotification, Title: title, Body: body})
 		},
-		// A shell's OSC 133 marks: recorded under the track's own leaf lock
-		// and published at once, like the bell. See shell_commands.go. A
-		// prompt also ends the working and blocked OSC 7501 records.
 		SemanticMark: func(m vt.SemanticMarker) {
 			pty.noteProgramStatusMark(m)
 			pty.noteShellMark(m)
 		},
-		// An OSC 7501 report, or a full reset: stored at once, in order with
-		// the prompt marks, and handed on by the vtWriter after the write.
 		ProgramStatus: pty.noteProgramStatus,
-		// A drag and drop registration is kept for the clients that attach
-		// later, and a query is answered here, once. Not for a pane on
-		// another machine: the daemon that runs its program answers there,
-		// and an answer from here would be a second one. See
-		// dnd_registration.go.
 		PrivateOSC: func(cmd int, data []byte) {
 			if cmd != dnd.Code || pty.host != "" || !s.dragAndDrop() {
 				return
@@ -5761,18 +4256,10 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 		},
 	})
 
-	// DA1 and XTSMGRAPHICS answer from what the attached clients can show.
 	terminal.SetSixelAdvertised(func() bool { return pty.owner().SixelAdvertised() })
 
-	// Handle kitty graphics queries on the daemon side for low-latency
-	// responses. All other commands flow through the raw PTY broadcast.
-	// The daemon reads only the control keys, so it does not decode the
-	// payload of a frame that only the clients draw.
 	remotePane := pty.host != ""
 	terminal.SetKittyHeaderOnly(true)
-	// A file a pane on another machine names for an upload is a path over
-	// there. Checked here, the answer would tell that pane what files this
-	// machine has.
 	terminal.SetKittyFilesElsewhere(remotePane)
 	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		if cmd.Action == vt.KittyActionQuery {
@@ -5784,23 +4271,16 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 		if response := kittyAnimationRefusal(cmd, remotePane, pty.owner().kittyAnimation.Load()); response != nil {
 			terminal.WriteResponse(response)
 		}
-		// With no client attached to this pane, nothing will read the object
-		// a shared memory frame names. See kitty_medium.go.
 		if !remotePane && pty.subscriberCount.Load() == 0 {
 			releaseUnreadKittyMedium(cmd)
 		}
 	})
 }
 
-// vtWriter is a single persistent goroutine that feeds the daemon's VT
-// emulator. Using a dedicated goroutine (instead of spawning one per PTY
-// read) prevents unbounded goroutine growth at high FPS.
 func (p *PTY) vtWriter() {
 	if p.vtDone != nil {
 		defer close(p.vtDone)
 	}
-	// The emulator's size, for a rebuild after a fault: the old emulator is
-	// not asked again once it has panicked.
 	var size [2]int
 	p.terminalMu.Lock()
 	if p.terminal != nil {
@@ -5831,11 +4311,8 @@ func (p *PTY) vtWriter() {
 	}
 }
 
-// outputRingMax is the most the catch-up ring holds.
 const outputRingMax = 64 * 1024
 
-// outputRingSize is the size the catch-up ring grows to for n bytes: a power
-// of two from 1 KiB that holds them, up to outputRingMax.
 func outputRingSize(n int) int {
 	size := 1024
 	for size < n && size < outputRingMax {
@@ -5844,52 +4321,34 @@ func outputRingSize(n int) int {
 	return min(size, outputRingMax)
 }
 
-// appendToBuffer records a chunk in the catch-up buffer and returns the stream
-// position it ends at. Callers hold streamMu, so the ring may be reassigned
-// here while broadcast reads its length.
 func (p *PTY) appendToBuffer(data []byte) int64 {
 	p.unbroadcast.Add(int64(len(data)))
 	p.outputSeq += int64(len(data))
-	// Marks the ring has rolled past stop being split points, but the newest
-	// of them is still the width the ring's first byte was laid out at, so a
-	// catch-up can start a rolled client at it.
-	// A ring that is still growing prunes as the full ring would, so it keeps
-	// the marks the full ring keeps.
 	bufStart := p.outputSeq - int64(max(len(p.outputBuffer), outputRingMax))
 	for len(p.resizeMarks) > 1 && p.resizeMarks[1].seq <= bufStart {
 		p.resizeMarks = p.resizeMarks[1:]
 	}
-	// Grow before anything shifts: a ring below its bound gets room for this
-	// chunk, so it never drops a byte the full ring would still hold.
 	if len(p.outputBuffer)-p.outputPos < len(data) && len(p.outputBuffer) < outputRingMax {
 		grown := make([]byte, outputRingSize(p.outputPos+len(data)))
 		copy(grown, p.outputBuffer[:p.outputPos])
 		p.outputBuffer = grown
 	}
 	bufLen := len(p.outputBuffer)
-	// If data is bigger than the buffer, keep only the tail
 	if len(data) >= bufLen {
 		copy(p.outputBuffer, data[len(data)-bufLen:])
 		p.outputPos = bufLen
 		return p.outputSeq
 	}
-	// Shift in half-buffer steps until there is room. A single half-shift is
-	// not always enough when len(data) exceeds bufLen/2, so loop until the
-	// remaining space fits or the buffer is empty.
 	for bufLen-p.outputPos < len(data) && p.outputPos > 0 {
 		half := min(bufLen/2, p.outputPos)
 		copy(p.outputBuffer, p.outputBuffer[half:p.outputPos])
 		p.outputPos -= half
 	}
-	// Advance by bytes actually copied so outputPos can never exceed bufLen.
 	n := copy(p.outputBuffer[p.outputPos:], data)
 	p.outputPos += n
 	return p.outputSeq
 }
 
-// broadcast hands a chunk ending at stream position seq to every subscriber.
-// Output is cut into text and kitty graphics frames on the way, so a client
-// that is behind can skip frames (kitty_frames.go).
 func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 	p.subscribersMu.RLock()
 	defer p.subscribersMu.RUnlock()
@@ -5898,12 +4357,6 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 		debugLog("[DEBUG] PTY %s: BROADCAST called with %d bytes, %d subscribers", p.ID[:8], len(chunk.data), len(p.subscribers))
 	}
 	if chunk.isResize() {
-		// A resize carries no bytes, so there is no position for it to be
-		// behind and nothing to skip it against: it goes to every
-		// subscriber. A frame a client is gathering ends before it, so the
-		// frame goes first. A resize leaves sent where the last bytes put
-		// it; it used to store its zero, and a client that switched away
-		// after a resize came back to the whole ring painted over its screen.
 		for clientID, sub := range p.subscribers {
 			if sub.gapped.Load() {
 				continue
@@ -5919,37 +4372,18 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 		return
 	}
 
-	// Cut even with nobody subscribed, so the scanner never loses its place
-	// in the stream.
 	p.reads++
 	p.unbroadcast.Add(-int64(len(chunk.data)))
 	segs, saw := p.gfx.scan(chunk.data, seq)
-	// Read without outputMu: appendToBuffer reassigns the ring only with
-	// streamMu held, and so does every caller of broadcast.
 	p.gfx.pruneSpans(seq - int64(max(len(p.outputBuffer), outputRingMax)))
 	if saw {
 		p.graphicsAt.Store(time.Now().UnixNano())
 	}
-	// A chunk appended between a subscriber's catch-up being copied and this
-	// broadcast running is in both, because Subscribe blocks the broadcast
-	// rather than the append. route skips what a subscriber has seen:
-	// delivering it again paints it twice at the seam, which is one
-	// duplicated line every time a pane is shown while it is producing. A
-	// gapped stream takes nothing more until it is rebuilt from the ring:
-	// queuing past the hole would paint the rest of the stream on top of it.
 	for clientID, sub := range p.subscribers {
 		p.route(clientID, sub, segs)
 	}
 }
 
-// noteExit marks the process gone and tells everything that was waiting on it.
-// It is idempotent: a pane on another machine can reach it from the read loop
-// and from a close at the same time.
-//
-// The two callers differ only in what they know. A local pane arrives with the
-// exit status the kernel gave it; a pane on another machine arrives with the
-// fact that its stream ended, which is all that crosses. That is why the code
-// is a parameter rather than read from the command here.
 func (p *PTY) noteExit(code int) {
 	p.exitedMu.Lock()
 	if p.exited {
@@ -5966,8 +4400,6 @@ func (p *PTY) noteExit(code int) {
 
 	debugLog("[DEBUG] PTY %s: process exited with code %d", p.ID[:8], p.exitCode)
 
-	// The process attached to the terminal exited: its working and blocked
-	// OSC 7501 records go, and done and error stay.
 	if p.progStatus.DropTransient() {
 		p.progStatusDirty.Store(true)
 		p.flushProgramStatus()
@@ -5977,28 +4409,15 @@ func (p *PTY) noteExit(code int) {
 		p.exitedAlone(p.ID, p.ownShell, p.ExitSignal())
 	}
 
-	// Notify callback (used by daemon to inform clients)
 	if p.onExit != nil {
 		p.onExit(p.ID)
 	}
 
-	// Raise a control-plane window-exit event so wait-for window-exit resolves.
 	if p.emit != nil {
 		p.emit(SessionEvent{Type: EventWindowExit})
 	}
 }
 
-// forwardTerminalResponses sends the replies the daemon's emulator queues
-// (DA1, CPR and the rest) to the program. Client emulators drain theirs, so
-// the program gets one copy.
-//
-// The emulator queues a reply while vtWriter writes to it, and from elsewhere:
-// when the cell size or the colours it reports change, and when a kitty file
-// upload's check ends, on a goroutine of its own. Every reply wakes this loop
-// through OnResponse, set in startPTY, so a flood that asks for nothing costs
-// it nothing. The replies are taken and written under respMu. Taking them under the lock
-// is what lets a quiesce flush them: once it holds respMu, no reply is in this
-// goroutine's hands. See pty_quiesce.go.
 func (p *PTY) forwardTerminalResponses() {
 	if p.terminal == nil {
 		return
@@ -6015,8 +4434,6 @@ func (p *PTY) forwardTerminalResponses() {
 	}
 }
 
-// sendResponsesLocked writes every queued reply to the program. The caller
-// holds respMu.
 func (p *PTY) sendResponsesLocked() {
 	for {
 		data := p.terminal.TakeResponses()
@@ -6027,8 +4444,6 @@ func (p *PTY) sendResponsesLocked() {
 	}
 }
 
-// wakeResponses tells forwardTerminalResponses the emulator may have queued
-// a reply. It never blocks: one pending wake covers any number of writes.
 func (p *PTY) wakeResponses() {
 	select {
 	case p.respWake <- struct{}{}:
@@ -6036,8 +4451,6 @@ func (p *PTY) wakeResponses() {
 	}
 }
 
-// isGlobal reports whether this session is a global one. See
-// SessionState.Global.
 func (s *Session) isGlobal() bool {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()

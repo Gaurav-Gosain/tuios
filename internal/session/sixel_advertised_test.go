@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// dialGraphicsClient attaches a raw client whose hello states its terminal's
-// graphics.
 func dialGraphicsClient(t *testing.T, socketPath, session string, sixel, kitty bool) *boundsClient {
 	t.Helper()
 	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
@@ -58,7 +56,6 @@ func TestSixelAdvertisedFollowsAttachedClients(t *testing.T) {
 	kitty := dialGraphicsClient(t, socketPath, "img", false, true)
 	waitSixelAdvertised(t, d, "img", true, "a kitty client, sent sixel as kitty images")
 
-	// One at a time: two connections' detaches are handled in any order.
 	plain.send(t, MsgDetach, struct{}{})
 	waitAttachedClients(t, d, "img", 1)
 	waitSixelAdvertised(t, d, "img", true, "the plain client left")
@@ -83,7 +80,6 @@ func TestClientGraphicsAfterHelloReachesPanes(t *testing.T) {
 	waitSixelAdvertised(t, d, "late", false, "the client's DA1 answer said no sixel")
 }
 
-// waitAttachedClients waits until n TUI clients are attached to the session.
 func waitAttachedClients(t *testing.T, d *Daemon, name string, n int) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second * testDeadlineScale)

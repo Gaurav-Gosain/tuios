@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// queuePTY is a PTY with no process behind it: enough for the ring, the
-// subscribers and broadcast.
 func queuePTY() *PTY {
 	return &PTY{
 		ID:           "queue-test-pty",
@@ -16,7 +14,6 @@ func queuePTY() *PTY {
 	}
 }
 
-// feedRing appends one chunk to the ring and broadcasts it, as readLoop does.
 func (p *PTY) feedRing(data []byte) int64 {
 	p.outputMu.Lock()
 	seq := p.appendToBuffer(data)
@@ -41,7 +38,7 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 		t.Fatal("no subscriber after Subscribe")
 	}
 	chunk := bytes.Repeat([]byte("o"), 16<<10)
-	for range 64 { // 1 MiB, four times the bound
+	for range 64 {
 		p.feedRing(chunk)
 	}
 	if q := sub.queued.Load(); q > maxSubscriberQueue {
@@ -63,7 +60,6 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 		t.Fatal("the channel held nothing: the bound dropped everything")
 	}
 
-	// Gapped and drained: nothing more is queued until the stream is rebuilt.
 	p.feedRing(chunk)
 	if ch.len() != 0 {
 		t.Fatal("a gapped stream was handed another chunk, which would paint past the hole")
@@ -88,7 +84,6 @@ func TestSubscriberQueueIsBoundedByBytes(t *testing.T) {
 		t.Fatalf("after taking the replay the stream still accounts %d bytes", q)
 	}
 
-	// Live output flows again.
 	next := bytes.Repeat([]byte("n"), 100)
 	p.feedRing(next)
 	if c, ok, _ := nch.pop(); !ok {
@@ -150,14 +145,11 @@ func head(b []byte) []byte {
 	return b
 }
 
-// take pops the oldest chunk, or the zero chunk when none is queued.
 func (q *ptyQueue) take() ptyChunk {
 	c, _, _ := q.pop()
 	return c
 }
 
-// next waits for the oldest chunk. It reports false once the queue is closed
-// and drained, as a receive from a closed channel does.
 func (q *ptyQueue) next() (ptyChunk, bool) {
 	for {
 		c, ok, closed := q.pop()
@@ -171,7 +163,6 @@ func (q *ptyQueue) next() (ptyChunk, bool) {
 	}
 }
 
-// recv is next with a time limit. It reports false on timeout too.
 func (q *ptyQueue) recv(limit time.Duration) (ptyChunk, bool) {
 	timeout := time.After(limit)
 	for {

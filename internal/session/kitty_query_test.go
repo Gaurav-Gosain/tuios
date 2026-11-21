@@ -36,7 +36,7 @@ func TestKittyQueryResponse(t *testing.T) {
 		remotePane   bool
 		linkedViewer bool
 		noShmPath    bool
-		want         []string // per probe, in order
+		want         []string
 	}{
 		{"local pane, local clients", false, false, false, []string{ok("1"), ok("2"), ok("3"), ok("4")}},
 		{"pane on another machine", true, false, false, []string{ok("1"), refused("2"), refused("3"), refused("4")}},

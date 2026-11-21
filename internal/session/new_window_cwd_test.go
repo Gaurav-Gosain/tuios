@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// sessionWithInheritCwd builds a one-window session with the inherit setting
-// at v, and returns it with the id of the window that starts out focused.
 func sessionWithInheritCwd(t *testing.T, v bool) (*Session, string) {
 	t.Helper()
 	t.Cleanup(useResurrectionDir(t.TempDir()))
@@ -22,10 +20,6 @@ func sessionWithInheritCwd(t *testing.T, v bool) (*Session, string) {
 	return sess, win.ID
 }
 
-// cwdOfWindow reads a window's live shell directory, waiting for the shell to
-// exist. A shell that never reports one skips the test rather than failing it:
-// ProcessCwd is platform-specific and this test is about the choice tuios
-// makes, not about whether this OS can answer.
 func cwdOfWindow(t *testing.T, sess *Session, windowID string) string {
 	t.Helper()
 	win, ok := findWindowState(sess.GetState(), windowID)

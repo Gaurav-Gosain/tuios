@@ -19,39 +19,6 @@ import (
 	"time"
 )
 
-// The limits in frame_budget.go are a security boundary: any process that can
-// reach the daemon's socket can send a frame header, and before them a header
-// alone made the daemon allocate the 16 MiB it announced. This test holds the
-// frame reader, the read budget, the per-pane input bound and the connection
-// caps to each limit.
-//
-// The ways this could fail, written down before the code:
-//
-//  1. The body is still allocated from the header: a frame that announces
-//     16 MiB and sends 1 KiB costs megabytes. Measured with the allocator's
-//     own count, which sees an allocation whether or not it is touched.
-//  2. The buffer grows but loses or reorders bytes at a chunk edge.
-//  3. A short request type still takes 16 MiB: a hello over the short limit
-//     must be refused unread, with the stream in step after it.
-//  4. Large frames starve each other: each holds part of the budget while it
-//     waits for the rest, so several at once all time out where one after
-//     another would all succeed. Six concurrent 16 MiB frames must all be
-//     read.
-//  5. A refused frame holds budget while its body is skipped, which can take
-//     the whole body deadline.
-//  6. A frame small enough to be every keystroke is charged, so a spent
-//     budget would stop typing.
-//  7. A paste into a pane that does not read holds the budget for as long as
-//     the pane does not read, or a second paste to that pane waits too, with
-//     its memory, and nobody is told. The same for a large send-text, whose
-//     request line holds the verb budget while the verb runs.
-//  8. Input typed while a refused paste waits for its retry overtakes it:
-//     a paste and then Enter must reach the pane in that order.
-//  9. The connection caps are off by one, a refused connection is counted
-//     and never given back, the link sockets share the main socket's slots,
-//     or a refused client is not told why.
-
-// budgetWhole reports whether none of b is taken.
 func budgetWhole(b *memBudget) bool {
 	if !b.sem.TryAcquire(b.size) {
 		return false
@@ -60,8 +27,6 @@ func budgetWhole(b *memBudget) bool {
 	return true
 }
 
-// rawFrameHeader is the length prefix, type and codec of an untagged frame
-// with a payload of n bytes.
 func rawFrameHeader(t MessageType, n int) []byte {
 	h := make([]byte, 6)
 	binary.BigEndian.PutUint32(h, uint32(2+n))
@@ -69,8 +34,6 @@ func rawFrameHeader(t MessageType, n int) []byte {
 	return h
 }
 
-// readOne reads one frame from r the way the client does, with the daemon's
-// type limits.
 func readOne(r io.Reader) (*Message, error) {
 	var n uint32
 	if err := binary.Read(r, binary.BigEndian, &n); err != nil {
@@ -153,8 +116,6 @@ func TestFrameLimitRefusesShortRequestsUnread(t *testing.T) {
 	}
 }
 
-// frameReader is one connection's read side for readClientFrame, and the
-// other end of it to write frames into.
 type frameReader struct {
 	cs     *connState
 	br     *bufio.Reader
@@ -168,7 +129,6 @@ func newFrameReader(t *testing.T) frameReader {
 	return frameReader{cs: &connState{conn: server}, br: bufio.NewReaderSize(server, connReadBuffer), client: client}
 }
 
-// testFrameDaemon is a daemon with nothing started, for readClientFrame.
 func testFrameDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := NewDaemon(&DaemonConfig{})
@@ -179,8 +139,6 @@ func testFrameDaemon(t *testing.T) *Daemon {
 func TestFrameBudgetReadsLargeFramesInTurn(t *testing.T) {
 	t.Run("six concurrent 16 MiB frames are all read", func(t *testing.T) {
 		d := testFrameDaemon(t)
-		// A command frame is charged twice its size, so two fit the budget at
-		// once and the other four wait their turn.
 		payload := make([]byte, maxFrameBytes-2)
 		var frame bytes.Buffer
 		if err := WriteMessage(&frame, &Message{Type: MsgExecuteCommand, Payload: payload}); err != nil {
@@ -197,7 +155,6 @@ func TestFrameBudgetReadsLargeFramesInTurn(t *testing.T) {
 					errs <- err
 					return
 				}
-				// The handler's time, with the budget held.
 				time.Sleep(100 * time.Millisecond)
 				release()
 				if len(msg.Payload) != len(payload) {
@@ -209,10 +166,6 @@ func TestFrameBudgetReadsLargeFramesInTurn(t *testing.T) {
 		close(errs)
 		read := 6
 		for err := range errs {
-			// A wait for the budget is a wall clock, and under the race detector
-			// reading one frame can take longer than it. A refusal is then the
-			// designed answer to a slow machine. This still runs under -race for
-			// the budget's own locking, and at least the first two have to get in.
 			var busy *FrameBusyError
 			if raceEnabled && errors.As(err, &busy) {
 				read--
@@ -233,8 +186,6 @@ func TestFrameBudgetReadsLargeFramesInTurn(t *testing.T) {
 		if !ok {
 			t.Fatal("could not spend the budget")
 		}
-		// The sender sends the header and part of the body, then stalls, so
-		// the skip waits for the rest.
 		go func() {
 			_, _ = fr.client.Write(rawFrameHeader(MsgInput, 8<<20))
 			_, _ = fr.client.Write(make([]byte, 1<<20))
@@ -244,8 +195,6 @@ func TestFrameBudgetReadsLargeFramesInTurn(t *testing.T) {
 			_, _, err := d.readClientFrame(fr.cs, fr.br)
 			done <- err
 		}()
-		// Past the budget wait, the frame is refused and its body is being
-		// skipped. All of the budget must be free.
 		time.Sleep(readBudgetWait + 300*time.Millisecond)
 		release()
 		all, ok := budget.acquire(personBudgetBytes, 100*time.Millisecond)
@@ -293,13 +242,9 @@ func TestFrameBudgetReadsLargeFramesInTurn(t *testing.T) {
 		}
 	})
 
-	// A pane holds admin under the default open mode, and admin reads as the
-	// person's buffer access. It must still not draw on the person's budget.
 	t.Run("a pane draws on the other budget", func(t *testing.T) {
 		d := testFrameDaemon(t)
 		person := d.readBudgetFor(&connState{})
-		// The test's own pid never reads as changed, so the caller is placed
-		// in no pane and holds the open default, admin.
 		pane := &connState{peerPID: os.Getpid()}
 		pane.fromPaneOnce.Do(func() { pane.fromPane, pane.fromPaneWhy = true, paneOriginAncestor })
 		if d.readBudgetFor(pane) == person {
@@ -323,7 +268,6 @@ func TestPasteIntoAPaneThatDoesNotRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Whole lines, so the pane's input queue fills and the write blocks.
 	paste := bytes.Repeat([]byte(strings.Repeat("a", 79)+"\n"), (8<<20)/80)
 
 	first := attachTUI(t, sock, "paste")
@@ -516,8 +460,6 @@ func TestSendTextIntoPanesThatDoNotRead(t *testing.T) {
 			blocked = w.ID
 		}
 	}
-	// The pane's slot holder has waited less than paneWriteWait, so this
-	// one waits for the slot first, then is refused.
 	third := dialVerb(t, sock)
 	_ = third.conn.SetDeadline(time.Now().Add(paneWriteWait + 10*time.Second))
 	third.send(t, sendText(blocked))
@@ -637,8 +579,6 @@ func TestLargeWritesIntoAReadingPaneQueue(t *testing.T) {
 	}
 }
 
-// slowPane is a paneIO whose program reads each write after read, or never
-// when read is 0. Inside a synctest bubble the time is fake.
 type slowPane struct {
 	read   time.Duration
 	closed chan struct{}
@@ -676,8 +616,6 @@ func TestLargeWriteWaitIsTimedFromTheHolder(t *testing.T) {
 
 	t.Run("a pane that reads takes every queued write", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			// Each write goes in after 600ms, under paneWriteWait. The last
-			// of four waits 1.8s in all, over it.
 			p := &PTY{pty: &slowPane{read: 600 * time.Millisecond, closed: make(chan struct{})}}
 			defer func() { _ = p.pty.Close() }()
 			errs := make(chan error, 4)
@@ -769,8 +707,6 @@ func TestPasteHoldIsASafetyNet(t *testing.T) {
 		t.Fatal("the input held behind a paste with no pong was never sent")
 	}
 
-	// A paste on a connection that then goes: the next input returns the
-	// connection's error, well before the hold would run out.
 	pasteHoldTimeout = time.Minute
 	if err := c.WritePTY(pane, bytes.Repeat([]byte("q"), 200<<10)); err != nil {
 		t.Fatal(err)

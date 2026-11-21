@@ -11,38 +11,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
-// Fuzzing the payload half of the wire protocol. FuzzReadMessageFraming covers
-// the frame; this covers what is inside it, the gob body every handler decodes
-// with ParsePayload. The bytes come from any client on the socket and, for the
-// messages a link policy allows, from another machine.
-//
-// The ways this could fail, written down before the target:
-//
-//  1. The decoder panics on a hostile body. A panic in a handler takes the
-//     daemon's connection goroutine down, and every session with it.
-//  2. A small body makes the decoder allocate far more than it holds: a
-//     declared length, a map count or a string size the bytes cannot back.
-//  3. The decoder spins on a body that is short.
-//  4. A payload that decodes cannot be encoded again. The daemon relays some
-//     of what it decodes (a state update is rebroadcast as a state sync), so
-//     a value it accepts and cannot send is a client that silently stops
-//     hearing about its session.
-//  5. A payload changes on a round trip: decode, encode, decode gives a
-//     different value, so what a relaying daemon forwards is not what it was
-//     sent.
-//
-// decodePayload runs the nesting scan of wire_gobscan.go before gob, so every
-// input here goes through the scan too, and a panic, a spin or an allocation
-// in it fails the same checks.
-//
-// Not covered here: a SerializedBSPNode tree nested a few million deep decodes
-// by recursion and overflows the goroutine stack, which is a fatal error the
-// fuzzer cannot survive to report. Neither side decodes one: see
-// wire_bounds.go and TestDaemonBoundsWhatClientsSend for the daemon, and
-// wire_gobscan.go and TestClientBoundsWhatDaemonsSend for any payload.
-
-// wirePayloads are the bodies the daemon and its clients decode, one
-// constructor each. The first byte of a fuzz input picks one.
 var wirePayloads = []func() any{
 	func() any { return new(HelloPayload) },
 	func() any { return new(WelcomePayload) },
@@ -80,8 +48,6 @@ var wirePayloads = []func() any{
 	func() any { return new(SessionState) },
 }
 
-// wireSamples are populated values, encoded to seed the corpus with bodies the
-// decoder actually accepts, so mutation starts inside gob's grammar.
 func wireSamples() []any {
 	root := &SerializedBSPNode{SplitType: 1, SplitRatio: 0.5,
 		Left: &SerializedBSPNode{WindowID: 1}, Right: &SerializedBSPNode{WindowID: 2}}
@@ -93,8 +59,6 @@ func wireSamples() []any {
 		&ResizePTYPayload{PTYID: "p", Width: 10, Height: 5},
 		&TerminalStatePayload{},
 		&TerminalStatePayload{PTYID: "p", State: &TerminalState{Width: 4, Height: 2, CursorX: 3, PendingWrap: true}},
-		// The state no cell shows: DECSCA on the pen and on two runs of
-		// cells, REP's character, and a saved cursor on each screen.
 		&TerminalStatePayload{PTYID: "p", State: &TerminalState{
 			Width: 4, Height: 2, IsAltScreen: true,
 			PenProtected: true, Protected: []int{0, 1, 2}, MainProtected: []int{1, 0, 4},
@@ -107,8 +71,6 @@ func wireSamples() []any {
 		&StateSyncPayload{State: &SessionState{Name: "s", WorkspaceTrees: map[int]*SerializedBSPTree{1: {Root: root}}}, TriggerType: "window"},
 		&SessionState{Name: "s", WorkspaceTrees: map[int]*SerializedBSPTree{1: {Root: root}}},
 		&SessionListPayload{Sessions: []SessionInfo{{Name: "a"}, {Name: "b"}}},
-		// A window and a summary with subagents, the list a peer before it
-		// drops on decode.
 		&StateSyncPayload{State: &SessionState{Name: "s", Windows: []WindowState{{ID: "w", AgentState: AgentStateDone, AgentSubagents: 1,
 			AgentSubagentList: []SubagentInfo{
 				{ID: "ab34da07d2d63ee3c", Type: "general-purpose", Description: "Echo one in background", State: SubagentRunning, StartedAt: 1, Now: "Bash: sleep 3; echo one", Tools: 1},
@@ -119,9 +81,6 @@ func wireSamples() []any {
 	}
 }
 
-// wireCmp compares a value to its round trip under gob's own rules: an empty
-// slice or map and a nil one are the same thing on the wire, and NaN is
-// carried as NaN.
 var wireCmp = []cmp.Option{
 	cmpopts.EquateEmpty(),
 	cmpopts.EquateNaNs(),
@@ -134,7 +93,6 @@ func FuzzWirePayloadDecode(f *testing.F) {
 		if err != nil {
 			f.Fatalf("encoding sample %d: %v", i, err)
 		}
-		// The picker byte for the sample's own type, so the seed decodes.
 		for k, mk := range wirePayloads {
 			if reflect.TypeOf(mk()) == reflect.TypeOf(s) {
 				f.Add(append([]byte{byte(k)}, b...))
@@ -163,9 +121,6 @@ func FuzzWirePayloadDecode(f *testing.F) {
 			t.Fatalf("decoding %d bytes into %T did not return", len(body), v)
 		}
 		runtime.ReadMemStats(&after)
-		// A decode may allocate what it builds and gob's own buffers. A
-		// multiple of the input far past that is a length the bytes did not
-		// back.
 		const budget = 64 << 20
 		if grew := after.TotalAlloc - before.TotalAlloc; grew > budget+64*uint64(len(body)) {
 			t.Fatalf("decoding %d bytes into %T allocated %d bytes", len(body), v, grew)
@@ -188,7 +143,6 @@ func FuzzWirePayloadDecode(f *testing.F) {
 	})
 }
 
-// trimDiff keeps a mismatch report readable when a payload is large.
 func trimDiff(s string) string {
 	if len(s) > 4000 {
 		return s[:4000] + fmt.Sprintf("\n... %d more bytes", len(s)-4000)

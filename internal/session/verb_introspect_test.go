@@ -33,8 +33,6 @@ func TestErrorCodeCatalogHasEveryErrVerbConstant(t *testing.T) {
 	}
 }
 
-// catalogueScan parses files and reports each string constant named with
-// prefix whose code is not in catalogued. It returns how many it found.
 func catalogueScan(t *testing.T, files []string, prefix string, catalogued []string) int {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -108,13 +106,11 @@ func TestListVerbsAcceptedValuesMatchTheImplementation(t *testing.T) {
 		t.Fatalf("documented conditions %v do not match the implemented set %v", accepted, waitConditions)
 	}
 
-	// And each documented condition must actually be accepted by the handler:
-	// a rejected one comes back as invalid_params naming the condition param.
 	for _, condition := range accepted {
 		resp := c.call(t, `{"id":2,"verb":"wait-for","params":{"condition":"`+condition+`","timeout":1}}`)
 		e, ok := resp["error"].(map[string]any)
 		if !ok {
-			continue // it matched immediately, which also means it was accepted
+			continue
 		}
 		if code, _ := e["code"].(string); code == ErrVerbInvalidParams {
 			hint, _ := e["hint"].(map[string]any)
@@ -152,13 +148,8 @@ func TestCaptureSourcesMatchTheImplementation(t *testing.T) {
 		t.Fatalf("documented sources %v do not match the implemented set %v", accepted, captureSources)
 	}
 
-	// Each documented source must capture rather than be rejected, and must be
-	// echoed back as the source that was actually used.
 	for _, source := range accepted {
 		if source == captureLastCommand {
-			// It reads a finished command, and the fixture's shell marks
-			// none, so here it has to say so rather than return a screen.
-			// It captures in verb_run_test.go.
 			resp := c.call(t, `{"id":2,"verb":"capture-pane","params":{"session":"work","source":"`+source+`"}}`)
 			if code := errCode(t, resp); code != ErrVerbNoShellIntegration {
 				t.Errorf("capture with source %q and no marks: code %q, want %q", source, code, ErrVerbNoShellIntegration)
@@ -171,8 +162,6 @@ func TestCaptureSourcesMatchTheImplementation(t *testing.T) {
 		}
 	}
 
-	// A retired source must not merely be undocumented, it must be refused, so a
-	// caller still passing it finds out instead of silently getting "recent".
 	for retired := range retiredCaptureSources {
 		if slices.Contains(captureSources, retired) {
 			t.Errorf("%q is listed as both accepted and retired", retired)

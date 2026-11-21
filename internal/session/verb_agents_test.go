@@ -7,9 +7,6 @@ import (
 	"time"
 )
 
-// twoWindowSession returns a session with two live daemon windows and their ids,
-// which is the smallest shape the cross-agent verbs need: a sender and a
-// recipient.
 func twoWindowSession(t *testing.T, d *Daemon, name string) (*Session, string, string) {
 	t.Helper()
 	sess := makeSessionWithWindow(t, d, name)
@@ -181,14 +178,12 @@ func TestAskCycleIsRefusedBeforeItSpins(t *testing.T) {
 	if bus.openAsk("b", "a") {
 		t.Error("an edge closing a cycle was allowed")
 	}
-	// And a longer cycle: a -> b -> c -> a.
 	if !bus.openAsk("b", "c") {
 		t.Fatal("b -> c was refused")
 	}
 	if bus.openAsk("c", "a") {
 		t.Error("a three-hop cycle was allowed")
 	}
-	// Releasing the edge opens the path again.
 	bus.closeAsk("a", "b")
 	if !bus.openAsk("b", "a") {
 		t.Error("the edge stayed blocked after the ask it belonged to finished")
@@ -213,9 +208,6 @@ func TestAskRefusesABlockedAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolvePTYForTarget: %v", err)
 	}
-	// A shell echoes what is typed at it, so a pane that was written to prints
-	// the marker. Wait for the prompt to be drawn first, so the comparison is
-	// between two settled screens.
 	waitForQuiet(t, pty, 300*time.Millisecond, 5*time.Second)
 	before := pty.CaptureContent(true, false)
 
@@ -242,7 +234,6 @@ func TestAskRefusesABlockedAgent(t *testing.T) {
 		t.Errorf("a refused ask wrote to the pane:\nbefore %q\nafter  %q", before, after)
 	}
 
-	// allow_blocked is the caller saying it read the prompt and it takes text.
 	res := result(t, c.call(t, `{"id":2,"verb":"ask-agent","params":{"session":"blocked","window":"`+b+`","from":"`+a+`","text":"echo tuios_blocked_marker","allow_blocked":true,"settle":700,"timeout":15000}}`))
 	if res["waited_for"] != "needs_input" {
 		t.Errorf("waited_for = %v, want needs_input", res["waited_for"])
@@ -252,8 +243,6 @@ func TestAskRefusesABlockedAgent(t *testing.T) {
 	}
 }
 
-// waitForQuiet waits until the pane has printed nothing for quiet, so a test
-// compares screens after the shell has drawn its prompt.
 func waitForQuiet(t *testing.T, pty *PTY, quiet, limit time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(limit)
@@ -376,8 +365,6 @@ func TestTailLinesReturnsOnlyWhatCameAfter(t *testing.T) {
 	if got != "three\nfour" || !truncated {
 		t.Errorf("capped tail = %q truncated=%v", got, truncated)
 	}
-	// A baseline past the end of the content is the pane having been cleared,
-	// and must not panic or return the whole screen.
 	if got, _ = tailLines(content, 99, 10); got != "" {
 		t.Errorf("tail past the end = %q, want empty", got)
 	}

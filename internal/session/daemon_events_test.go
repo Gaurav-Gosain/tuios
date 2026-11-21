@@ -19,7 +19,6 @@ func TestEventHubDropsWhenQueueFull(t *testing.T) {
 		h.publish(streamEvent{Type: EventOutput})
 	}
 
-	// 4 buffered, 6 dropped.
 	if got := sub.dropped.Load(); got != 6 {
 		t.Fatalf("dropped = %d, want 6", got)
 	}
@@ -46,7 +45,6 @@ func TestStreamEventsEmitsGapMarker(t *testing.T) {
 	}
 
 	sub := d.events.subscribe(eventFilter{}, 2)
-	// Burst 5 events with no streamer draining: seq 1,2 buffer; 3,4,5 drop.
 	for range 5 {
 		d.events.publish(streamEvent{Type: EventOutput})
 	}
@@ -72,7 +70,6 @@ func TestStreamEventsEmitsGapMarker(t *testing.T) {
 		return ev
 	}
 
-	// The gap marker precedes the next surviving event.
 	if gap := read(); gap.Type != EventGap || gap.Dropped != 3 {
 		t.Fatalf("first line = %+v, want gap with dropped=3", gap)
 	}

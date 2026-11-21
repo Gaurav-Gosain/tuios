@@ -9,104 +9,36 @@ import (
 	"time"
 )
 
-// Waking an agent at rest that has mail.
-//
-// A hook tells an agent about its mail during a turn (mail_notice.go). An agent
-// at rest runs no hooks, and an agent whose harness has none never hears at
-// all. So when mail for a pane stays unannounced and unread for
-// mailWakeGrace, and the pane's agent is at rest, the daemon types one line
-// into it: the count of unread messages and the command that reads them.
-//
-// The line goes through the delivery queue (agent_queue.go), the same path
-// queue-prompt takes, so everything the queue promises holds: it is typed
-// only once the agent has rested for a second, never into a pane on
-// needs_input, never twice, and with the sender's authority checked again
-// right before typing. The entry's origin is the caller that sent the mail,
-// as the connection proved it, not the from the message claims. A pane that
-// may not type into the recipient cannot wake it either; its mail waits for
-// the recipient's next hook or read. A connection restricted to read_only,
-// and a pane on another machine, which queue-prompt refuses, wake nothing.
-//
-// The line is written by tuios alone, and holds no text a sender chose: not
-// the subject, not the body, not even the sender's name. Text typed into an
-// agent is read as its user's prompt, and mail must stay data the recipient
-// reads on purpose. The hook notice may name senders, since it goes into the
-// agent's context, not its user's turn.
-//
-// The line is written again right before it is typed: a wake whose mail was
-// read while it waited is dropped, and one that waited while more mail came
-// says the count at that moment.
-//
-// Mail from delegate that carries a child's answer also says how the task
-// ended, and the line counts those messages by that state: "Child agents
-// finished: 2 done, 1 errored." The state is the daemon's own record, never
-// the child's text, so the rule above holds. Children that finish together
-// therefore wake the parent once, with one line that says what came back.
-//
-// Each message is announced once, by a hook or by a wake, whichever comes
-// first: both mark the bus's notice mark, and a wake claims it only if no hook
-// moved it since the wake looked (claimNotice). A burst of mail gives one wake,
-// because the grace timer is armed once and a wake already queued for the pane
-// covers mail that arrives after it. Wakes of one pane are also at least
-// mailWakeGap apart. Once a wake is typed its record goes, so a daemon whose
-// mail was all announced is back on the sink's fast path.
-//
-// [agents.mail] wake = false turns it off. So does turning the agent features
-// off, since the queue then types nothing.
-
-// mailWakeGrace is how long new mail stays unannounced before a wake is
-// typed. It leaves room for an agent mid-turn to hear of it from its hook, or
-// to read its mail.
 const mailWakeGrace = 5 * time.Second
 
-// mailWakeGap is the least time between two wakes of one pane.
 const mailWakeGap = 30 * time.Second
 
-// mailWakeBy is the by of a wake entry, as list-queued shows it.
 const mailWakeBy = "tuios mail"
 
-// mailWakeSender is one message that may wake its recipient, and the origin of
-// the call that sent it.
 type mailWakeSender struct {
-	id     uint64
-	origin queueOrigin
-	// finished is the final state of a delegated task whose answer the
-	// message carries, empty for any other message.
+	id       uint64
+	origin   queueOrigin
 	finished string
 }
 
-// mailWakePane is what the waker holds for one pane.
 type mailWakePane struct {
 	session string
 	senders []mailWakeSender
 	timer   *time.Timer
-	// entry is the wake waiting in the pane's queue, nil when none.
-	entry *queueEntry
-	// answers are the delegated answers entry's line counts, which grow
-	// while it waits.
+	entry   *queueEntry
 	answers []mailWakeSender
 }
 
-// mailWakeMaxSenders bounds the senders kept for one pane. Only the newest
-// are needed: a wake picks the newest sender that may type into the pane.
 const mailWakeMaxSenders = 16
 
-// mailWaker holds the panes that have mail which may wake them. The zero
-// value is ready and off.
 type mailWaker struct {
-	on    atomic.Bool
-	mu    sync.Mutex
-	panes map[string]*mailWakePane
-	// count is len(panes), so the event sink returns at once when no pane
-	// waits on mail.
-	count atomic.Int64
-	// recent is when a wake was last typed into each pane, for the gap. An
-	// entry older than the gap is pruned when mail arrives.
+	on     atomic.Bool
+	mu     sync.Mutex
+	panes  map[string]*mailWakePane
+	count  atomic.Int64
 	recent map[string]time.Time
-	// grace and gap replace mailWakeGrace and mailWakeGap when set. Only
-	// tests set them.
-	grace time.Duration
-	gap   time.Duration
+	grace  time.Duration
+	gap    time.Duration
 }
 
 // SetMailWake applies [agents.mail] wake. Turning it off drops what waits.
@@ -141,7 +73,6 @@ func (w *mailWaker) gapFor() time.Duration {
 	return mailWakeGap
 }
 
-// paneLocked returns the pane's record, making one. It holds mu.
 func (w *mailWaker) paneLocked(window, session string) *mailWakePane {
 	if w.panes == nil {
 		w.panes = map[string]*mailWakePane{}
@@ -156,7 +87,6 @@ func (w *mailWaker) paneLocked(window, session string) *mailWakePane {
 	return p
 }
 
-// dropLocked forgets a pane. It holds mu.
 func (w *mailWaker) dropLocked(window string) {
 	p := w.panes[window]
 	if p == nil {
@@ -169,8 +99,6 @@ func (w *mailWaker) dropLocked(window string) {
 	w.count.Add(-1)
 }
 
-// armLocked looks at the pane after the grace, or after the gap since the
-// last wake when that is later, unless a look is already armed. It holds mu.
 func (w *mailWaker) armLocked(d *Daemon, window string, p *mailWakePane) {
 	if p.timer != nil {
 		return
@@ -182,15 +110,10 @@ func (w *mailWaker) armLocked(d *Daemon, window string, p *mailWakePane) {
 	p.timer = time.AfterFunc(wait, func() { d.mailWakeLook(window) })
 }
 
-// noteMailSent records a direct message for window, sent by a call with
-// origin, and arms the look that may wake the pane. It runs after the message
-// is stored.
 func (d *Daemon) noteMailSent(session, window string, id uint64, origin queueOrigin) {
 	d.noteMailSentAs(session, window, id, origin, "")
 }
 
-// noteMailSentAs is noteMailSent for a message that carries a delegated
-// task's answer, with the state the task finished in.
 func (d *Daemon) noteMailSentAs(session, window string, id uint64, origin queueOrigin, finished string) {
 	w := &d.mailWake
 	if !w.on.Load() || window == "" || window == AgentInboxHuman {
@@ -211,10 +134,6 @@ func (d *Daemon) noteMailSentAs(session, window string, id uint64, origin queueO
 	w.armLocked(d, window, p)
 }
 
-// noteMailWakeEvent folds one session event into the waker: a pane that comes
-// to rest with mail waiting gets a look, and a pane that closes is forgotten.
-// It runs on the session's event sink with the state lock held, so it reads
-// nothing but the event.
 func (d *Daemon) noteMailWakeEvent(ev SessionEvent) {
 	w := &d.mailWake
 	if w.count.Load() == 0 {
@@ -226,7 +145,6 @@ func (d *Daemon) noteMailWakeEvent(ev SessionEvent) {
 		w.dropLocked(ev.Window)
 		w.mu.Unlock()
 	case EventAgentState:
-		// A silent pane is still working underneath: it is not at rest.
 		if ev.Reason == AgentReasonSilent || ev.State != AgentStateIdle.Name() && ev.State != AgentStateDone.Name() && ev.State != AgentStateUnknown.Name() {
 			return
 		}
@@ -238,9 +156,6 @@ func (d *Daemon) noteMailWakeEvent(ev SessionEvent) {
 	}
 }
 
-// mailWakeLook is the armed look at a pane. It queues the wake when the pane
-// is at rest and holds mail nobody announced, and otherwise leaves the pane to
-// its next rest or its next mail.
 func (d *Daemon) mailWakeLook(window string) {
 	w := &d.mailWake
 	w.mu.Lock()
@@ -266,8 +181,6 @@ func (d *Daemon) mailWakeLook(window string) {
 	}
 	sum, mark := d.agents.unannounced(sess.Name(), window)
 	if sum.unread == 0 || sum.newest <= mark {
-		// Read, or announced by a hook. Nothing to wake for, and nothing to
-		// keep until the next mail.
 		w.mu.Lock()
 		if w.panes[window] == p && p.timer == nil && (p.entry == nil || !d.queue.holds(window, p.entry)) {
 			w.dropLocked(window)
@@ -275,7 +188,6 @@ func (d *Daemon) mailWakeLook(window string) {
 		w.mu.Unlock()
 		return
 	}
-	// The delegated answers among the new mail.
 	var answers []mailWakeSender
 	for _, s := range senders {
 		if s.finished != "" && s.id > mark {
@@ -283,8 +195,6 @@ func (d *Daemon) mailWakeLook(window string) {
 		}
 	}
 	if queued != nil && d.queue.holds(window, queued) {
-		// A wake already waits in the pane's queue. It is written again
-		// before it is typed, so it counts this message too.
 		w.mu.Lock()
 		if w.panes[window] == p {
 			for _, a := range answers {
@@ -301,15 +211,10 @@ func (d *Daemon) mailWakeLook(window string) {
 	if !ok {
 		return
 	}
-	// The pane must be at rest the way the queue judges it: idle or done,
-	// and unknown only for a harness that cannot show idle. A pane on none
-	// has no agent, and its prompt line is a shell's.
 	if !d.agentReady(target, fanReadyStates) {
 		return
 	}
 	session := sess.Name()
-	// The answers are counted again, by what is still unread, each time the
-	// line is written. A wake that waits gathers the answers that come.
 	tally := func() string {
 		w.mu.Lock()
 		got := answers
@@ -323,8 +228,6 @@ func (d *Daemon) mailWakeLook(window string) {
 		text: mailWakeText(sum, session, window, tally()),
 		by:   mailWakeBy,
 	}
-	// The newest sender that may type into the pane now lends the wake its
-	// authority. The queue checks it again before typing.
 	picked := false
 	for i := len(senders) - 1; i >= 0; i-- {
 		if senders[i].id <= mark {
@@ -340,8 +243,6 @@ func (d *Daemon) mailWakeLook(window string) {
 		LogBasic("Mail for window %s wakes nothing: no sender of it may type into the pane", shortWindowID(window))
 		return
 	}
-	// The line is written again right before it is typed, and dropped when
-	// the mail was read meanwhile.
 	e.recheck = func() (string, bool) {
 		now, _ := d.agents.unannounced(session, window)
 		if now.unread == 0 {
@@ -350,8 +251,6 @@ func (d *Daemon) mailWakeLook(window string) {
 		return mailWakeText(now, session, window, tally()), true
 	}
 	e.done = func() { d.mailWakeTyped(window, e) }
-	// The claim fails when a hook announced the mail since it was looked at:
-	// the agent heard of it, and no wake is queued.
 	if !d.agents.claimNotice(session, window, sum.newest, mark) {
 		return
 	}
@@ -369,9 +268,6 @@ func (d *Daemon) mailWakeLook(window string) {
 	w.mu.Unlock()
 }
 
-// mailWakeTyped forgets the pane's wake record once its wake left the queue,
-// typed or dropped, unless more mail came for it meanwhile. It notes when, for
-// the gap.
 func (d *Daemon) mailWakeTyped(window string, e *queueEntry) {
 	w := &d.mailWake
 	w.mu.Lock()
@@ -390,7 +286,6 @@ func (d *Daemon) mailWakeTyped(window string, e *queueEntry) {
 	}
 }
 
-// holds reports whether e still waits in window's queue, not yet typed.
 func (q *agentQueues) holds(window string, e *queueEntry) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -406,13 +301,6 @@ func (q *agentQueues) holds(window string, e *queueEntry) bool {
 	return false
 }
 
-// mailOriginOf is the origin a wake for mail sent by cs carries: the person,
-// a linked machine, the pane the connection belongs to, or a caller outside
-// every pane. It reads the connection, never the message's from, which is a
-// claim. It reports false for a caller that may not lend a wake its
-// authority: a connection restricted to read_only, which may type into no
-// pane, a restricted connection that is no pane, and a pane on another
-// machine, which queue-prompt refuses too (refuseForwardedPane).
 func (d *Daemon) mailOriginOf(cs *connState, verifiedHuman bool) (queueOrigin, bool) {
 	if cs != nil {
 		if cs.paneOnly {
@@ -422,7 +310,6 @@ func (d *Daemon) mailOriginOf(cs *connState, verifiedHuman bool) (queueOrigin, b
 			if sc.readOnly {
 				return queueOrigin{}, false
 			}
-			// Under scope own the pane's grants decide, as for queue-prompt.
 			if sc.window == "" {
 				return queueOrigin{}, false
 			}
@@ -447,8 +334,6 @@ func (d *Daemon) mailOriginOf(cs *connState, verifiedHuman bool) (queueOrigin, b
 	return queueOrigin{kind: queueByShell}, true
 }
 
-// mailWakeText is the wake line: the count, the delegated answers by state
-// (childTally, empty when none), and the command, and nothing a sender chose.
 func mailWakeText(s mailSummary, session, window, tally string) string {
 	if s.unread == 0 {
 		return ""
@@ -462,12 +347,8 @@ func mailWakeText(s mailSummary, session, window, tally string) string {
 	return "You have " + strconv.Itoa(s.unread) + " unread tuios messages. " + tally + "Read them with: " + mailReadCommand(session, window)
 }
 
-// childTallyOrder is the order the wake line counts finished tasks in.
 var childTallyOrder = []string{delegateDone, delegateErrored, delegateClosed}
 
-// childTally counts the delegated answers among answers that are still
-// unread, by the state each task finished in: "Child agents finished: 2 done,
-// 1 errored." Empty when none is unread.
 func (d *Daemon) childTally(session string, answers []mailWakeSender) string {
 	if len(answers) == 0 {
 		return ""

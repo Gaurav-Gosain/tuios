@@ -14,94 +14,37 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The herdr plugin host.
-//
-// tuios runs herdr plugins (internal/herdrplugin) in the daemon, the side
-// that owns the panes and the event stream. What runs:
-//
-//   - [[startup]] commands, once per enabled plugin when the daemon is up,
-//     and when the person enables a plugin while the daemon runs. Disabling
-//     the plugin or stopping the daemon kills their process groups.
-//   - [[actions]], when a person runs one from the palette or tuios plugins
-//     run, or a caller sends plugin.action.invoke.
-//   - [[events]], when the herdr event stream (herdr_events.go) carries the
-//     event a hook names.
-//   - [[panes]], as ordinary tuios panes, when plugin.pane.open asks.
-//
-// Trust. Only a plugin whose id is in [plugins] enabled runs anything, and
-// the list the daemon holds changes only by the person: tuios plugins enable
-// and disable, tuios config apply, or a restart. A change to config.toml
-// that some other process writes applies at once only where it narrows: a
-// plugin taken off the list stops, a plugin put on it waits for the person.
-// A folder put on [plugins] dirs waits for the person too, because it can
-// hold a plugin with the id of an enabled one. That is how [hosts] and the
-// pane grants behave too (daemon_hosts.go).
-// Every trust change through the herdr socket (plugin.enable, plugin.disable,
-// plugin.link, plugin.unlink) is refused from a pane and from a process the
-// daemon started, a plugin's own included (mayActAsHuman).
-//
-// Authority. A plugin's background command runs outside every pane, as the
-// user, with the person's rights over the machine, as it does in herdr. Its
-// calls back to tuios come from a child of the daemon, which the grants
-// place in no pane, so they hold the default pane grants (paneAuthority) and
-// never act as the person. A plugin pane is an ordinary pane and holds what
-// any pane started by its caller holds (launchGrants).
-
-// Bounds on event hooks: at most pluginEventBurst runs of one plugin's hooks
-// in any pluginEventWindow. Hooks past it are dropped and logged, as a
-// stream that falls behind drops events.
 const (
 	pluginEventBurst  = 20
 	pluginEventWindow = 10 * time.Second
-	// pluginDiscoverTTL is how long one listing of the plugins is reused.
-	// An event storm reads the manifests once, not once per event.
 	pluginDiscoverTTL = 2 * time.Second
 )
 
-// pluginHost is the daemon's plugin state.
 type pluginHost struct {
 	d      *Daemon
 	runner *herdrplugin.Runner
 
-	mu sync.Mutex
-	// enabled is the list the daemon runs, which the person applied.
-	enabled []string
-	// dirs are [plugins] dirs, which only add places to list.
-	dirs []string
-	// startedUp are the plugins whose startup commands ran.
-	startedUp map[string]bool
-	// roots are the folders the startup of each plugin ran from, for
-	// plugin.restart.
-	roots map[string]string
-	// panes are the plugin panes plugin.pane.open made, by window id.
-	panes map[string]pluginPane
-	// burst counts each plugin's event hook runs in the current window.
+	mu         sync.Mutex
+	enabled    []string
+	dirs       []string
+	startedUp  map[string]bool
+	roots      map[string]string
+	panes      map[string]pluginPane
 	burst      map[string]int
 	burstStart time.Time
-	// cache is the last listing, reused for pluginDiscoverTTL.
-	cache   []herdrplugin.Entry
-	cacheAt time.Time
-	running bool
-	// following says followEvents runs. It starts with the first enabled
-	// plugin, so a daemon with none subscribes to nothing and wakes for no
-	// event.
-	following bool
-	// cells are the dock cells of each plugin, nil until one sets a cell.
-	// See plugin_ui.go.
-	cells map[string]map[string]PluginCell
-	// uiCount counts each plugin's cell changes and notices since uiStart.
-	uiCount map[string]int
-	uiStart time.Time
-	// fresh is a translator apply made as the first plugin was enabled,
-	// for followEvents to take up. See followEvents.
-	fresh *herdrTranslator
+	cache      []herdrplugin.Entry
+	cacheAt    time.Time
+	running    bool
+	following  bool
+	cells      map[string]map[string]PluginCell
+	uiCount    map[string]int
+	uiStart    time.Time
+	fresh      *herdrTranslator
 }
 
-// pluginPane is a pane a plugin opened.
 type pluginPane struct {
 	pluginID, entrypoint string
-	// root is the plugin folder the pane was opened from.
-	root string
+	root                 string
 }
 
 // PluginReaper is the argv that runs a plugin command under a reaper, set
@@ -122,7 +65,6 @@ func newPluginHost(d *Daemon, cfg config.PluginsConfig) *pluginHost {
 	}
 }
 
-// pluginDirs are the folders the plugins are read from.
 func (h *pluginHost) pluginDirs() herdrplugin.Dirs {
 	path := h.d.configPath
 	if path == "" {
@@ -134,8 +76,6 @@ func (h *pluginHost) pluginDirs() herdrplugin.Dirs {
 	return herdrplugin.DefaultDirs(path, dirs)
 }
 
-// entries lists the plugins, with enabled from the daemon's applied list.
-// fresh skips the cache.
 func (h *pluginHost) entries(fresh bool) []herdrplugin.Entry {
 	h.mu.Lock()
 	if !fresh && h.cache != nil && time.Since(h.cacheAt) < pluginDiscoverTTL {
@@ -152,15 +92,12 @@ func (h *pluginHost) entries(fresh bool) []herdrplugin.Entry {
 	return out
 }
 
-// applied is the [plugins] table the daemon runs.
 func (h *pluginHost) applied() config.PluginsConfig {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return config.PluginsConfig{Enabled: slices.Clone(h.enabled), Dirs: slices.Clone(h.dirs)}
 }
 
-// waits reports whether cfg, read from config.toml, enables a plugin or
-// names a folder that the daemon does not run.
 func (h *pluginHost) waits(cfg config.PluginsConfig) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -168,8 +105,6 @@ func (h *pluginHost) waits(cfg config.PluginsConfig) bool {
 		slices.ContainsFunc(cfg.Dirs, func(dir string) bool { return !slices.Contains(h.dirs, dir) })
 }
 
-// start runs the startup commands of the enabled plugins and starts
-// following the event stream. It runs once, when the daemon is up.
 func (h *pluginHost) start() {
 	h.mu.Lock()
 	if h.running {
@@ -186,14 +121,10 @@ func (h *pluginHost) start() {
 	}
 }
 
-// stop kills every plugin process. It runs on daemon shutdown.
 func (h *pluginHost) stop() {
 	h.runner.StopAll(2 * time.Second)
 }
 
-// restart takes plugin commands again after stop, and runs every startup
-// command again, as the new image would have, for a daemon whose live upgrade
-// did not go ahead. Their event hooks never stopped following.
 func (h *pluginHost) restart() {
 	h.runner.Resume()
 	h.mu.Lock()
@@ -205,9 +136,6 @@ func (h *pluginHost) restart() {
 	}
 }
 
-// apply sets the daemon's [plugins] table. byPerson applies all of it. A
-// file change applies only what narrows: a plugin taken off the list stops,
-// a new one waits for the person. It reports whether a change waits.
 func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool) {
 	h.mu.Lock()
 	old := slices.Clone(h.enabled)
@@ -220,9 +148,6 @@ func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool)
 		}
 		next = slices.DeleteFunc(next, func(id string) bool { return !slices.Contains(old, id) })
 	}
-	// A new folder waits for the person too. Plugins are enabled by id, and
-	// the folders are read first, so a plugin in a new folder with the id of
-	// an enabled plugin would run in its place.
 	dirs := slices.Clone(cfg.Dirs)
 	if !byPerson {
 		for _, dir := range dirs {
@@ -236,10 +161,6 @@ func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool)
 	h.dirs = dirs
 	h.cache = nil
 	running := h.running
-	// The event follower reads nothing while no plugin is enabled. The first
-	// plugin enabled gets a translator that knows the panes as they are now,
-	// so an event after it is told against that, and not against whatever
-	// the follower would find when the next event came.
 	wake := running && len(old) == 0 && len(next) > 0
 	follow := wake && !h.following
 	h.following = h.following || follow
@@ -276,8 +197,6 @@ func (h *pluginHost) apply(cfg config.PluginsConfig, byPerson bool) (waits bool)
 	return waits
 }
 
-// refresh reads the plugins again and starts what may run now, after an
-// answer to an approval.
 func (h *pluginHost) refresh() {
 	h.mu.Lock()
 	h.cache = nil
@@ -288,8 +207,6 @@ func (h *pluginHost) refresh() {
 	}
 }
 
-// stopPlugin stops a plugin's processes, and lets its startup run again
-// when it may run again.
 func (h *pluginHost) stopPlugin(id string) {
 	h.mu.Lock()
 	delete(h.startedUp, id)
@@ -298,9 +215,6 @@ func (h *pluginHost) stopPlugin(id string) {
 	h.dropCells(id)
 }
 
-// runStartups runs the startup commands of every enabled plugin whose
-// startup has not run yet, in plugin id order, as herdr does. It also tells
-// the clients which native plugins wait for the person.
 func (h *pluginHost) runStartups() {
 	entries := h.entries(true)
 	defer func() { h.d.notePluginAsks(pluginAsksOf(entries)) }()
@@ -331,7 +245,6 @@ func (h *pluginHost) runStartups() {
 	}
 }
 
-// run starts one command of plugin p with herdr's environment.
 func (h *pluginHost) run(p *herdrplugin.Plugin, actionID, event string, argv []string, ctx pluginContext, eventJSON string, timeout time.Duration) (herdrplugin.LogEntry, *herdrplugin.Error) {
 	dirs := h.pluginDirs()
 	if err := dirs.EnsureUserDirs(p.PluginID); err != nil {
@@ -366,8 +279,6 @@ func (h *pluginHost) run(p *herdrplugin.Plugin, actionID, event string, argv []s
 			env = append(env, kv[0]+"="+kv[1])
 		}
 	}
-	// A plugin herdr installed keeps its files while the command runs:
-	// herdr deletes an old install only when no one holds its lease.
 	release, err := herdrplugin.HoldLease(dirs.HerdrConfig, p.PluginRoot)
 	if err != nil {
 		LogBasic("Warning: plugin %s runs without herdr's install lease: %v", p.PluginID, err)
@@ -375,17 +286,9 @@ func (h *pluginHost) run(p *herdrplugin.Plugin, actionID, event string, argv []s
 	return h.runner.Start(herdrplugin.Job{Plugin: p, ActionID: actionID, Event: event, Command: argv, Env: env, Timeout: timeout, Release: release})
 }
 
-// baseEnv is what every plugin process and plugin pane gets: herdr's plugin
-// variables, the herdr socket, and the herdr link first on PATH, so a
-// plugin that runs a bare herdr reaches tuios.
 func (h *pluginHost) baseEnv(p *herdrplugin.Plugin, dirs herdrplugin.Dirs) []string {
 	sock := HerdrSocketPath(h.d.manager.SocketPath())
 	env := []string{
-		// TUIOS_SOCKET places a plugin's process, and what it starts, as
-		// automation of this daemon and not the person (human_origin.go).
-		// Without it a service that a startup command leaves behind, once
-		// its parent exits, has no tie to the daemon, and it could enable
-		// plugins or answer as the person.
 		"TUIOS_SOCKET=" + h.d.manager.SocketPath(),
 		"HERDR_ENV=1",
 		"HERDR_SOCKET_PATH=" + sock,
@@ -395,12 +298,7 @@ func (h *pluginHost) baseEnv(p *herdrplugin.Plugin, dirs herdrplugin.Dirs) []str
 		"HERDR_PLUGIN_STATE_DIR=" + dirs.StateDir(p.PluginID),
 	}
 	if p.Format == herdrplugin.FormatTuios {
-		// The plugin's token, for a caller the kernel cannot place. See
-		// plugin_token.go.
 		env = append(env, "TUIOS_PLUGIN_ID="+p.PluginID, "TUIOS_PLUGIN_TOKEN="+h.d.manager.PluginToken(p.PluginID))
-		// The names docs/PLUGINS.md promises. TUIOS_BIN is this daemon's own
-		// binary, so a plugin reaches the tuios that runs it whatever PATH
-		// holds.
 		env = append(env, "TUIOS_PLUGIN_ROOT="+p.PluginRoot,
 			"TUIOS_PLUGIN_CONFIG_DIR="+dirs.ConfigDir(p.PluginID),
 			"TUIOS_PLUGIN_STATE_DIR="+dirs.StateDir(p.PluginID))
@@ -417,14 +315,6 @@ func (h *pluginHost) baseEnv(p *herdrplugin.Plugin, dirs herdrplugin.Dirs) []str
 	return env
 }
 
-// followEvents runs the event hooks of the enabled plugins, for as long as
-// the daemon runs. It reads the stream every herdr client reads, through
-// the same translator, so a hook sees what events.subscribe would send.
-//
-// While no plugin is enabled no hook can run, so an event is not translated.
-// Translating reads the session's whole state, and a harness that animates
-// its title raises an event several times a second: with four of them it was
-// over a third of an idle daemon's CPU, all of it thrown away.
 func (h *pluginHost) followEvents() {
 	sub, _, err := h.d.events.subscribeFrom(eventFilter{types: herdrHubTypes}, herdrEventQueue, nil)
 	if err != nil {
@@ -466,8 +356,6 @@ func (h *pluginHost) followEvents() {
 	}
 }
 
-// hooksOn reports whether any plugin is enabled, and hands over the
-// translator apply made for the first one, if there is one.
 func (h *pluginHost) hooksOn() (on bool, fresh *herdrTranslator) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -478,7 +366,6 @@ func (h *pluginHost) hooksOn() (on bool, fresh *herdrTranslator) {
 	return true, fresh
 }
 
-// fireHooks runs every enabled plugin's hooks on one herdr event.
 func (h *pluginHost) fireHooks(e herdrEvent) {
 	name := e.sub
 	if !slices.Contains(herdrplugin.HookEvents, name) {
@@ -511,7 +398,6 @@ func (h *pluginHost) fireHooks(e herdrEvent) {
 	}
 }
 
-// admitEvent reports whether plugin id may run one more event hook now.
 func (h *pluginHost) admitEvent(id string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -525,8 +411,6 @@ func (h *pluginHost) admitEvent(id string) bool {
 	return true
 }
 
-// herdrHookJSON is HERDR_PLUGIN_EVENT_JSON: herdr's EventEnvelope, the kind
-// in snake_case and the same kind as the data's type.
 func herdrHookJSON(e herdrEvent) string {
 	kind := strings.ReplaceAll(e.sub, ".", "_")
 	data := *e.Data
@@ -538,7 +422,6 @@ func herdrHookJSON(e herdrEvent) string {
 	return string(out)
 }
 
-// pluginContext is herdr's PluginInvocationContext: what a command is about.
 type pluginContext struct {
 	WorkspaceID       string                  `json:"workspace_id,omitempty"`
 	WorkspaceLabel    string                  `json:"workspace_label,omitempty"`
@@ -556,15 +439,9 @@ type pluginContext struct {
 	ClickedURL        string                  `json:"clicked_url,omitempty"`
 	LinkHandlerID     string                  `json:"link_handler_id,omitempty"`
 
-	// sessionName and window name the focused pane as the -s and -w flags of
-	// the tuios command line take it. They are not in herdr's context.
 	sessionName, window string
 }
 
-// nativeEnv is what a process of a native plugin gets for this context, in
-// the names docs/PLUGINS.md promises. entry is the id of its [[process]].
-// These names differ from TUIOS_SESSION and TUIOS_PANE_ID on purpose: those
-// say that a process runs in that pane, and a plugin's process does not.
 func (c pluginContext) nativeEnv(contextJSON, entry string) []string {
 	env := []string{"TUIOS_PLUGIN_CONTEXT_JSON=" + contextJSON}
 	for _, kv := range [][2]string{
@@ -578,8 +455,6 @@ func (c pluginContext) nativeEnv(contextJSON, entry string) []string {
 	return env
 }
 
-// merge lays the fields a caller gave over the computed ones, field by
-// field, as herdr's merge_plugin_context does.
 func (c pluginContext) merge(p *pluginContext) pluginContext {
 	if p == nil {
 		return c
@@ -610,8 +485,6 @@ func (c pluginContext) merge(p *pluginContext) pluginContext {
 	return c
 }
 
-// pluginContextCurrent is the context of the focused pane of the focused
-// session.
 func (d *Daemon) pluginContextCurrent(correlation string) pluginContext {
 	sess := d.herdrFocusedSession(d.herdrOrderedSessions())
 	if sess == nil {
@@ -620,7 +493,6 @@ func (d *Daemon) pluginContextCurrent(correlation string) pluginContext {
 	return d.pluginContextFor(sess, sess.GetState().FocusedWindowID, correlation)
 }
 
-// pluginContextForPane is the context of one pane, named by its herdr id.
 func (d *Daemon) pluginContextForPane(paneID, correlation string) (pluginContext, bool) {
 	sess, win, ierr := d.herdrFindPane(paneID)
 	if ierr != nil {
@@ -629,8 +501,6 @@ func (d *Daemon) pluginContextForPane(paneID, correlation string) (pluginContext
 	return d.pluginContextFor(sess, win.ID, correlation), true
 }
 
-// pluginContextFor builds the context of window in sess, or of the session
-// alone when window is "".
 func (d *Daemon) pluginContextFor(sess *Session, window, correlation string) pluginContext {
 	ctx := pluginContext{InvocationSource: "api", CorrelationID: correlation, sessionName: sess.Name(), window: window}
 	v := &herdrView{}
@@ -662,7 +532,6 @@ func (d *Daemon) pluginContextFor(sess *Session, window, correlation string) plu
 	return ctx
 }
 
-// pluginContextForEvent is the context of the object an event is about.
 func (d *Daemon) pluginContextForEvent(e herdrEvent, name string) pluginContext {
 	data := e.Data
 	paneID := data.PaneID

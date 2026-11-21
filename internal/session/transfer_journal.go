@@ -15,86 +15,52 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// The transfer journal, the part folders, and the transfer events.
-//
-// A job lives in the daemon's memory, and a daemon restarts: tuios update,
-// tuios kill-server, a crash. Without a record the job is gone and its part
-// files stay behind as hidden files that nothing removes. So each job that has
-// not ended is a JSON file in the journal folder, written on every change of
-// state, and the next daemon start reads the folder and goes on with each job
-// from its parts. A job that ended is removed from the journal, except a
-// failed one, which stays until it leaves the list (transferKeepDone), so a
-// restart still shows it and a person can try it again.
-//
-// Every part file this daemon writes, for its own copies and for copies a
-// linked machine runs, is in a folder the daemon notes in the part folders
-// file. At start the daemon removes the parts in those folders that are older
-// than transferPartMaxAge and belong to no job it holds. A part of a copy a
-// linked machine runs is that machine's to resume, so it waits out the age.
-// The daemon never looks for parts in a folder it did not note.
-
-// transferPartMaxAge is how long a part with no job of this daemon is kept.
 const transferPartMaxAge = 7 * 24 * time.Hour
 
-// transferPartDirsMax bounds the part folders the daemon notes. The oldest
-// note goes first.
 const transferPartDirsMax = 1000
 
-// transferProgressEvery is the shortest time between two progress events of
-// one job.
 const transferProgressEvery = 250 * time.Millisecond
 
-// transferSaveFinishedEvery is the shortest time between two journal writes
-// of a folder copy's finished files. A file finished after the last write is
-// copied again after a restart, which costs its bytes and nothing else.
 const transferSaveFinishedEvery = 2 * time.Second
 
-// transferJournalDir is the folder that holds the journal.
 func transferJournalDir() string {
 	return filepath.Join(getResurrectionDir(), "transfers")
 }
 
-// transferRecord is one job in the journal.
 type transferRecord struct {
-	Version     int      `json:"version"`
-	ID          string   `json:"id"`
-	Socket      string   `json:"socket"`
-	Src         Endpoint `json:"src"`
-	Dst         Endpoint `json:"dst"`
-	Move        bool     `json:"move,omitempty"`
-	Conflict    string   `json:"conflict,omitempty"`
-	Each        string   `json:"each,omitempty"`
-	Place       string   `json:"place,omitempty"`
-	Label       string   `json:"label,omitempty"`
-	Private     bool     `json:"private,omitempty"`
-	NoPerms     bool     `json:"no_perms,omitempty"`
-	NoTimes     bool     `json:"no_times,omitempty"`
-	NoCompress  bool     `json:"no_compress,omitempty"`
-	RateLimit   int64    `json:"rate_limit,omitempty"`
-	Pane        string   `json:"pane,omitempty"`
-	PaneSession string   `json:"pane_session,omitempty"`
-	PaneRoot    string   `json:"pane_root,omitempty"`
-	// Link is the linked machine the job runs for, absent for the person's
-	// own job. A resumed job is held to that machine's link policy.
-	Link     *transferLink `json:"link,omitempty"`
-	Created  int64         `json:"created"`
-	State    string        `json:"state"`
-	Target   string        `json:"target,omitempty"`
-	Final    string        `json:"final,omitempty"`
-	Finished []string      `json:"finished,omitempty"`
-	Same     int           `json:"same,omitempty"`
-	Skips    int           `json:"conflicts_skipped,omitempty"`
-	Error    string        `json:"error,omitempty"`
-	Code     string        `json:"code,omitempty"`
-	Ended    int64         `json:"ended,omitempty"`
+	Version     int           `json:"version"`
+	ID          string        `json:"id"`
+	Socket      string        `json:"socket"`
+	Src         Endpoint      `json:"src"`
+	Dst         Endpoint      `json:"dst"`
+	Move        bool          `json:"move,omitempty"`
+	Conflict    string        `json:"conflict,omitempty"`
+	Each        string        `json:"each,omitempty"`
+	Place       string        `json:"place,omitempty"`
+	Label       string        `json:"label,omitempty"`
+	Private     bool          `json:"private,omitempty"`
+	NoPerms     bool          `json:"no_perms,omitempty"`
+	NoTimes     bool          `json:"no_times,omitempty"`
+	NoCompress  bool          `json:"no_compress,omitempty"`
+	RateLimit   int64         `json:"rate_limit,omitempty"`
+	Pane        string        `json:"pane,omitempty"`
+	PaneSession string        `json:"pane_session,omitempty"`
+	PaneRoot    string        `json:"pane_root,omitempty"`
+	Link        *transferLink `json:"link,omitempty"`
+	Created     int64         `json:"created"`
+	State       string        `json:"state"`
+	Target      string        `json:"target,omitempty"`
+	Final       string        `json:"final,omitempty"`
+	Finished    []string      `json:"finished,omitempty"`
+	Same        int           `json:"same,omitempty"`
+	Skips       int           `json:"conflicts_skipped,omitempty"`
+	Error       string        `json:"error,omitempty"`
+	Code        string        `json:"code,omitempty"`
+	Ended       int64         `json:"ended,omitempty"`
 }
 
-// transferJournalFinishedMax bounds the finished files the journal names. A
-// folder copy of more goes on after a restart all the same: the check-ahead
-// finds the files that are there with the same bytes and leaves them out.
 const transferJournalFinishedMax = 50000
 
-// record is the job as the journal keeps it. The caller holds j.mu.
 func (j *transferJob) recordLocked(socket string) transferRecord {
 	o := j.opts
 	r := transferRecord{
@@ -124,8 +90,6 @@ func (m *transferManager) socket() string {
 	return m.d.manager.SocketPath()
 }
 
-// save writes the job's journal entry, or removes it when the job is done or
-// cancelled.
 func (m *transferManager) save(j *transferJob) {
 	j.mu.Lock()
 	rec := j.recordLocked(m.socket())
@@ -150,7 +114,6 @@ func (m *transferManager) save(j *transferJob) {
 	}
 }
 
-// forget removes the job's journal entry.
 func (m *transferManager) forget(j *transferJob) {
 	err := os.Remove(filepath.Join(transferJournalDir(), j.id+".json"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -158,8 +121,6 @@ func (m *transferManager) forget(j *transferJob) {
 	}
 }
 
-// saveFinished writes the journal after a file of a folder copy finished, at
-// most every transferSaveFinishedEvery.
 func (m *transferManager) saveFinished(j *transferJob) {
 	j.mu.Lock()
 	due := time.Since(j.saved) >= transferSaveFinishedEvery
@@ -169,11 +130,6 @@ func (m *transferManager) saveFinished(j *transferJob) {
 	}
 }
 
-// note says a change of the job: it writes the journal and publishes a
-// transfer event when the state is not the one the last event said. A folder
-// copy goes between running and verifying for each of its files, which is
-// one state to a reader, so that change alone is not said. created marks the
-// first note of a new job.
 func (m *transferManager) note(j *transferJob, created bool) {
 	j.mu.Lock()
 	state, was := j.state, j.emitted
@@ -202,8 +158,6 @@ func isMoving(state string) bool {
 	return state == transferRunning || state == transferVerifying
 }
 
-// progress publishes a progress event, at most every transferProgressEvery
-// for one job.
 func (m *transferManager) progress(j *transferJob) {
 	now := time.Now()
 	j.mu.Lock()
@@ -241,8 +195,6 @@ type TransferFile struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// fileEvent publishes what happened to one file of a copy. It reaches only a
-// subscriber that names transfer-file.
 func (m *transferManager) fileEvent(j *transferJob, rel, state, sum, code, msg string) {
 	if m.d == nil || m.d.events == nil {
 		return
@@ -252,10 +204,6 @@ func (m *transferManager) fileEvent(j *transferJob, rel, state, sum, code, msg s
 	}})
 }
 
-// load reads the journal and takes back this daemon's jobs: a paused job
-// stays paused, a failed one is listed as failed, and any other goes on from
-// its parts. Then it removes the stale parts. It runs once, at start, after
-// the links are started.
 func (m *transferManager) load() {
 	dir := transferJournalDir()
 	entries, err := os.ReadDir(dir)
@@ -285,7 +233,6 @@ func (m *transferManager) load() {
 			continue
 		}
 		if rec.Socket != socket {
-			// Another daemon's, one that runs on another socket.
 			continue
 		}
 		if rec.Label != "" && checkKeepLabel(rec.Label) != nil {
@@ -340,7 +287,6 @@ func (m *transferManager) load() {
 		}
 	}
 	m.mu.Unlock()
-	// A copy that ended before the restart still leaves the list on time.
 	for _, j := range ended {
 		m.expireLater(j)
 	}
@@ -349,14 +295,11 @@ func (m *transferManager) load() {
 		m.publish(EventTransfer, "state", j)
 		go m.run(j)
 	}
-	// A paused job waits in run for a resume, as one paused before the
-	// restart did.
 	for _, j := range paused {
 		go m.run(j)
 	}
 }
 
-// partIDs are the ids of the jobs this daemon holds, whose parts stay.
 func (m *transferManager) partIDs() map[string]bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -367,13 +310,11 @@ func (m *transferManager) partIDs() map[string]bool {
 	return out
 }
 
-// transferPartDirsFile names the part folders file in the journal folder.
 const transferPartDirsFile = "part-dirs.json"
 
-// partDirs is the set of folders this daemon wrote part files in.
 type partDirs struct {
 	mu   sync.Mutex
-	dirs map[string]int64 // folder: when it was last noted, Unix ms
+	dirs map[string]int64
 	path string
 }
 
@@ -388,7 +329,6 @@ func (p *partDirs) file() string {
 	return filepath.Join(transferJournalDir(), transferPartDirsFile)
 }
 
-// readLocked loads the file once. The caller holds p.mu.
 func (p *partDirs) readLocked() {
 	if p.dirs == nil {
 		p.dirs = map[string]int64{}
@@ -434,9 +374,6 @@ func (p *partDirs) saveLocked() {
 	}
 }
 
-// note records that a part file was written in dir. The file is written only
-// for a folder it did not hold, or held for more than a day, so a copy of many
-// files to one folder writes it once.
 func (p *partDirs) note(dir string) {
 	if p == nil {
 		return
@@ -452,9 +389,6 @@ func (p *partDirs) note(dir string) {
 	p.saveLocked()
 }
 
-// sweep removes, in each noted folder, the part files older than
-// transferPartMaxAge whose job is not in keep. A folder with no part left is
-// no longer noted.
 func (p *partDirs) sweep(keep map[string]bool, now time.Time) {
 	if p == nil {
 		return
@@ -500,7 +434,6 @@ func (p *partDirs) sweep(keep map[string]bool, now time.Time) {
 	}
 }
 
-// partIDOf is the part id in a part file's name, empty for a part with none.
 func partIDOf(name string) string {
 	_, id, ok := strings.Cut(name, partSuffix+"-")
 	if !ok || checkPartID(id) != nil {

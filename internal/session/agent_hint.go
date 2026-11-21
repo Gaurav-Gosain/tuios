@@ -18,13 +18,8 @@ import (
 // this one variable of it. A value that names no manifest is ignored.
 const AgentHintEnv = "TUIOS_AGENT"
 
-// readAgentHintEnv reads TUIOS_AGENT from a process's environment. The kernel
-// gives it only for a process of the same user, and a refusal is an absent
-// hint, never an error.
 func readAgentHintEnv(pid int) (string, bool) { return procinfo.EnvVar(pid, AgentHintEnv) }
 
-// agentHint returns the harness a process's TUIOS_AGENT names, trimmed and
-// lowercased, or "" when it names none.
 func agentHint(read func(pid int) (string, bool), pid int) string {
 	if read == nil || pid <= 1 {
 		return ""

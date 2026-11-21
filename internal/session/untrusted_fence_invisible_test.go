@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// fenceInvisible is every kind of invisible character the fence removes.
 var fenceInvisible = []rune{
 	0x00ad, 0x061c, 0x180e, 0x200b, 0x200c, 0x200d, 0x200e, 0x200f,
 	0x2028, 0x2029, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e,
@@ -41,7 +40,6 @@ func TestUntrustedFenceHasNoInvisibleRune(t *testing.T) {
 			t.Errorf("fence output holds U+%04X:\n%q", r, out)
 		}
 	}
-	// The two separators in who become spaces: who stays on the open line.
 	if !strings.HasPrefix(out, "--- begin untrusted content from   agent: ") {
 		t.Errorf("open line = %q", strings.SplitN(out, "\n", 2)[0])
 	}

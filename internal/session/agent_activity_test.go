@@ -8,11 +8,6 @@ import (
 	"time"
 )
 
-// These tests cover the activity ring: what set-agent-state's activity puts in
-// it and when, the reserved metadata keys it moves, what the session event
-// sink adds, the recap, and the agent-activity verb and event.
-
-// activityOf reads a pane's ring through the verb, the way a client does.
 func activityOf(t *testing.T, c *verbConn, params map[string]any) (entries []AgentActivityEntry, res map[string]any) {
 	t.Helper()
 	res = result(t, callP(c, t, "agent-activity", params))
@@ -40,13 +35,10 @@ func TestActivityRecordedByTheIdentityGuardNotTheState(t *testing.T) {
 	if res["applied"] != false || res["reason"] != agentRefusedIfState || res["activity_recorded"] != true {
 		t.Fatalf("a PostToolUse refused by if_state: %v, want its activity recorded", res)
 	}
-	// A nested run, mid-turn: the guard refuses it by session.
 	res = setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"done","harness":"claude-code","agent_session_id":"nested","activity":{"event":"turn_end","text":"nested run finished"}}`)
 	if res["reason"] != agentRefusedForeignSession || res["activity_recorded"] != false {
 		t.Fatalf("a nested run's Stop: %v, want refused and not recorded", res)
 	}
-	// The same nested run's PostToolUse fails if_state first, and is still
-	// not the pane's.
 	res = setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"working","if_state":"needs_input","harness":"claude-code","agent_session_id":"nested","activity":{"event":"tool_done","tool":"Bash","target":"rm -rf nested"}}`)
 	if res["reason"] != agentRefusedIfState || res["activity_recorded"] != false {
 		t.Fatalf("a nested run's PostToolUse: %v, want not recorded", res)
@@ -64,7 +56,6 @@ func TestActivityRecordedByTheIdentityGuardNotTheState(t *testing.T) {
 	if out["untrusted"] != true {
 		t.Error("agent-activity is not marked untrusted")
 	}
-	// A report without activity says nothing about it.
 	res = setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"working"}`)
 	if _, ok := res["activity_recorded"]; ok {
 		t.Errorf("a report with no activity answered activity_recorded: %v", res)

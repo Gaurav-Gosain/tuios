@@ -9,10 +9,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// agentPaneWithWindow is bareSessionWithWindow with an agent in the window
-// (see attributeHarness), which is what an OSC 9;4 report needs before it may
-// drive agent state (see progressTarget). No state is set: the agent has not
-// said anything yet.
 func agentPaneWithWindow(t *testing.T) (*Session, string) {
 	t.Helper()
 	sess, id := bareSessionWithWindow(t)
@@ -20,10 +16,6 @@ func agentPaneWithWindow(t *testing.T) (*Session, string) {
 	return sess, id
 }
 
-// attributeHarness puts an agent in a window without setting a state: it names
-// the harness on the window and records the test process as the harness
-// process, which is running. A harness named on its own is what an agent that
-// has left the pane leaves behind, and is not an agent in it (agentInPane).
 func attributeHarness(t *testing.T, sess *Session, windowID, harnessID string) {
 	t.Helper()
 	err := sess.mutateState(func(st *SessionState) error {
@@ -58,15 +50,12 @@ func TestAgentProgressDrivesState(t *testing.T) {
 		t.Fatalf("state after a warning progress report = %q, want needs_input", got)
 	}
 
-	// Clearing is quieter than needs_input, so it lands once it has stood for the
-	// anti-flicker window rather than the instant it arrives.
 	sess.applyAgentProgressAt(id, vt.ProgressClear, now)
 	sess.applyAgentProgressAt(id, vt.ProgressClear, now.Add(agentHoldWindow+time.Millisecond))
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
 		t.Fatalf("state after a cleared progress report = %q, want idle", got)
 	}
 
-	// A state the sequence cannot name leaves the pane where it was.
 	sess.applyAgentProgressAt(id, vt.ProgressState(9), now)
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
 		t.Fatalf("state after an unknown progress state = %q, want idle (unchanged)", got)
@@ -82,7 +71,6 @@ func TestAgentProgressOutranksDetectorAndYieldsToReport(t *testing.T) {
 	agent := newAgentMatcher(nil)
 	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 
-	// The detector owns the pane; a progress report outranks it.
 	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
 	}
@@ -91,7 +79,6 @@ func TestAgentProgressOutranksDetectorAndYieldsToReport(t *testing.T) {
 		t.Fatalf("progress over a detected pane = %q, want needs_input", got)
 	}
 
-	// The harness then reports for itself, which outranks the sequence.
 	if err := sess.SetDaemonWindowAgentState(id, AgentStateDone, "finished"); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
@@ -151,8 +138,6 @@ func TestPlainPaneProgressReachesNoInbox(t *testing.T) {
 	feedProgress(plain)
 	feedProgress(agent)
 
-	// The attributed pane is the positive control: once its item is in the
-	// Inbox, the plain pane has had the same chance to put one there.
 	items := waitAttention(t, c, "the attributed pane's warning", hasItemFor(agent))
 	for _, it := range items {
 		if it["window"] == plain {
@@ -165,14 +150,11 @@ func TestPlainPaneProgressReachesNoInbox(t *testing.T) {
 	if got := agentStateOf(t, sess, agent); got != AgentStateNeedsInput {
 		t.Fatalf("an attributed pane's warning = %q, want needs_input", got)
 	}
-	// The report is still readable on the plain pane, for anything that shows
-	// progress as progress.
 	if got := sess.GetPTY(ptyIDOfWindow(t, sess, plain)).ProgressText(); got != "4;4;30" {
 		t.Fatalf("the plain pane's progress text = %q, want 4;4;30", got)
 	}
 }
 
-// hasItemFor holds when any Inbox item is about the window.
 func hasItemFor(window string) func([]map[string]any) bool {
 	return func(items []map[string]any) bool {
 		for _, it := range items {
@@ -192,7 +174,6 @@ func TestPTYProgressParking(t *testing.T) {
 		t.Fatal("takeAgentProgress reported a state with none parked")
 	}
 
-	// Clear is state 0, so it has to survive the "nothing parked" encoding.
 	p.storeAgentProgress(vt.ProgressClear, 0)
 	if state, ok := p.takeAgentProgress(); !ok || state != vt.ProgressClear {
 		t.Fatalf("parked clear came back as (%d, %v), want (0, true)", state, ok)

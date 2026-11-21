@@ -6,26 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// Whether the sidebar rail is shown, as an op.
-//
-// The rail is chrome, and the panes' box is settled across every client of a
-// session (see LayoutReserve): the daemon takes the largest reserve any client
-// asks for. So a rail one client hides while another still draws it takes
-// nothing back for the panes, and the client that hid it is left with a blank
-// band where the rail was. Showing or hiding the rail is therefore session
-// state. Every client of a session shows it or hides it together, and the
-// panes grow or shrink on every screen at once.
-//
-// It travels the way the master-stack shape does (see master_layout.go): a
-// client that toggles the rail sends MsgSidebarVisibility, the daemon applies
-// it under mutateState, Version advances, and every client (the sender
-// included) is sent the result. A push never carries the field, so two
-// clients cannot argue over it by pushing their own copies.
-//
-// Only whether the rail is shown is shared. Its width stays each viewer's
-// own, because it says how much of one screen the rail may have, and the
-// daemon settles the panes' box against the widest rail a client draws.
-
 // The values SessionState.Sidebar holds. Empty means no client has said yet.
 const (
 	SidebarShown  = "shown"
@@ -54,17 +34,12 @@ type SidebarVisibilityPayload struct {
 	All bool
 }
 
-// maxSidebarVisibilityFrame bounds a MsgSidebarVisibility frame. The payload
-// is a push origin, a number, a short word and a flag.
 const maxSidebarVisibilityFrame = 4 * 1024
 
-// validSidebarVisibility says whether v is a value the session can hold.
 func validSidebarVisibility(v string) bool {
 	return v == SidebarShown || v == SidebarHidden
 }
 
-// errSidebarSame refuses an op that would not change the state, so it does
-// not advance Version and wake every client for nothing.
 var errSidebarSame = errors.New("sidebar op changes nothing")
 
 // ApplySidebarVisibility applies one client's sidebar op. It reports whether
@@ -82,8 +57,6 @@ func (s *Session) ApplySidebarVisibility(p *SidebarVisibilityPayload) (bool, err
 			return errSidebarSame
 		}
 		state.Sidebar = p.Visibility
-		// Recorded as a tree op is: the op changes one field that no push
-		// carries, so a push built before it has missed nothing it could undo.
 		s.noteTreeOpLocked(state.Version+1, p.PushOrigin, treeOpNoWorkspace)
 		return nil
 	})
@@ -111,11 +84,6 @@ func (s *Session) RestoreSidebar(saved string) {
 	})
 }
 
-// handleSidebarVisibility applies a client's sidebar op. An op that is
-// applied reaches every client through the state sink. One that changes
-// nothing, or that is refused, is answered to its sender alone with the state
-// that stands, so the sender never keeps showing a rail the session did not
-// take.
 func (d *Daemon) handleSidebarVisibility(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
 		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
@@ -146,9 +114,6 @@ func (d *Daemon) handleSidebarVisibility(cs *connState, msg *Message) error {
 	})
 }
 
-// applySidebarEverywhere sets the rail's visibility on every session but
-// from, which the op itself already set. Each session that changes advances
-// its Version and sends its clients the result, as the op does for its own.
 func (d *Daemon) applySidebarEverywhere(from *Session, visibility string) {
 	for _, s := range d.manager.AllSessions() {
 		if s == from {

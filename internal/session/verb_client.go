@@ -26,17 +26,8 @@ type VerbClient struct {
 	nextID int
 	callMu sync.Mutex
 
-	// daemon is what the daemon reported during the hello handshake, or nil
-	// when no handshake was performed.
 	daemon *DaemonHandshake
-	// host is the machine the verbs run on, "" for this one.
-	host string
-	// broken is why the connection can no longer be trusted to pair a reply
-	// with its request, or nil. A call that timed out or failed part way
-	// leaves its reply, if one ever comes, waiting on the connection, and the
-	// next call would read that reply as its own: a capture of one pane
-	// handed back as the capture of another. So every call after such a
-	// failure fails at once, and the caller dials again.
+	host   string
 	broken error
 }
 
@@ -44,8 +35,6 @@ type VerbClient struct {
 // call left out of step. Dial again.
 var ErrVerbClientBroken = errfmt.Errorf("the verb connection is out of step after an earlier failed call; dial again")
 
-// verbNotSentError is a call this client did not write whole: the connection
-// was broken before it, or the write failed. Its text is the cause's.
 type verbNotSentError struct{ err error }
 
 func (e *verbNotSentError) Error() string { return e.err.Error() }
@@ -137,24 +126,10 @@ func DialVerbClientAt(socketPath, clientVersion string) (*VerbClient, error) {
 	return c, nil
 }
 
-// presentPaneToken places this connection in the caller's pane where the
-// daemon cannot place it by pid, so a call from a pane is held to the pane's
-// grants on every platform. It sends TUIOS_PANE_ID and TUIOS_PANE_TOKEN with
-// pane-grants when both are set and the daemon takes them. Presenting a pane
-// token can only narrow what the connection may do, so a failure is
-// ignored: the daemon holds the call to what it can prove either way.
-//
-// A native plugin's process presents TUIOS_PLUGIN_ID and TUIOS_PLUGIN_TOKEN
-// on every platform. That one must take: a refusal, or a daemon that does
-// not know the parameters, fails the connection, so a plugin's call never
-// goes through unplaced. See plugin_token.go.
 func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) string, socketPath string) error {
 	if c.daemon == nil || !c.daemon.PaneGrants {
 		return nil
 	}
-	// Only to the plugin's own daemon, whose socket the plugin's processes
-	// get as TUIOS_SOCKET: another daemon cannot prove the token, and a
-	// call there with --server must not fail for it.
 	if id, tok := getenv("TUIOS_PLUGIN_ID"), getenv("TUIOS_PLUGIN_TOKEN"); (id != "" || tok != "") && sameSocket(getenv("TUIOS_SOCKET"), socketPath) {
 		if _, err := c.Call("pane-grants", map[string]any{"plugin_id": id, "plugin_token": tok}); err != nil {
 			return errfmt.Errorf("this process belongs to plugin %s, and the daemon did not take its token: %w", id, err)
@@ -171,7 +146,6 @@ func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) str
 	return nil
 }
 
-// sameSocket reports whether two socket paths name the same socket.
 func sameSocket(a, b string) bool {
 	return a != "" && b != "" && filepath.Clean(a) == filepath.Clean(b)
 }
@@ -244,9 +218,6 @@ func (c *VerbClient) ReadEventLine(timeout time.Duration) ([]byte, error) {
 	return bytes.TrimRight(line, "\r\n"), nil
 }
 
-// defaultCallTimeout bounds how long a verb call waits for its response. It is
-// generous for verbs that answer immediately and is the wrong bound for the ones
-// that block by design, which is what CallWithTimeout exists for.
 const defaultCallTimeout = 30 * time.Second
 
 // Call sends a verb request with the given params (may be nil) and returns the
@@ -262,8 +233,6 @@ func (c *VerbClient) Call(verb string, params any) (json.RawMessage, error) {
 // must widen this deadline too or the connection gives up before the daemon
 // answers, turning a satisfied wait into a read failure.
 func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error) {
-	// A call to another machine is held to this machine's agent switch. See
-	// HostCallGuard.
 	if c.host != "" && HostCallGuard != nil {
 		if err := HostCallGuard(verb, params); err != nil {
 			return nil, err
@@ -316,9 +285,6 @@ func (c *VerbClient) CallWithTimeout(verb string, params any, timeout time.Durat
 		c.broken = err
 		return nil, errfmt.Errorf("failed to decode response: %w", err)
 	}
-	// A reply that names another request is one an earlier call gave up
-	// on. Taking it would hand this caller an answer to a different
-	// question.
 	if len(resp.ID) > 0 && string(bytes.TrimSpace(resp.ID)) != fmt.Sprintf("%d", id) {
 		c.broken = errfmt.Errorf("reply %s to request %d", resp.ID, id)
 		return nil, errfmt.Errorf("%w (%v)", ErrVerbClientBroken, c.broken)

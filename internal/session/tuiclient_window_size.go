@@ -5,10 +5,6 @@ import (
 	"time"
 )
 
-// activityInterval is the shortest gap between two MsgClientActivity sends.
-// The daemon holds the latest client for a second after its last input (see
-// latestHold), so a report at most this stale costs nothing, and a person
-// typing sends a few small messages a second rather than one per key.
 const activityInterval = 100 * time.Millisecond
 
 // SessionWindowSize is the window_size policy the session's size was last
@@ -23,8 +19,6 @@ func (c *TUIClient) SessionWindowSize() string {
 	return ""
 }
 
-// sessionSizer is the client whose size the session took: its machine and its
-// connection ID.
 type sessionSizer struct {
 	machine, client, kind string
 }
@@ -88,8 +82,6 @@ func (c *TUIClient) SessionSizedBySelf() bool {
 	return owner != nil && self != nil && *self != "" && owner.client == *self
 }
 
-// noteSizePolicy records the session's window_size policy, from an attach
-// reply. Empty, from a daemon that does not say it, records it as unknown.
 func (c *TUIClient) noteSizePolicy(policy string) {
 	if policy == "" {
 		c.sizePolicy.Store(nil)
@@ -120,8 +112,6 @@ func (c *TUIClient) ReportActivity(now time.Time) {
 	_ = c.send(msg)
 }
 
-// viewOnly is what the attach says about the client's input: ViewOnly, or
-// TUIOS_VIEW_ONLY=1, which lets a test attach a native client as a viewer.
 func (c *TUIClient) viewOnly() bool {
 	return c.ViewOnly || os.Getenv("TUIOS_VIEW_ONLY") == "1"
 }

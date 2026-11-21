@@ -90,7 +90,6 @@ func TestIdleGateStartupGrace(t *testing.T) {
 	if ok, _ := g.admit("w", AgentStateUnknown, t0.Add(agentStartupGrace)); !ok {
 		t.Fatal("did not publish once the grace ended")
 	}
-	// The same harness seen again does not restart it; a new one does.
 	g.noteHarnessSeen("w", "claude-code", t0.Add(agentStartupGrace))
 	if ok, _ := g.admit("w", AgentStateUnknown, t0.Add(agentStartupGrace)); !ok {
 		t.Fatal("seeing the same harness again restarted the grace")
@@ -101,15 +100,12 @@ func TestIdleGateStartupGrace(t *testing.T) {
 	}
 }
 
-// claudeIdleScreen is the measured idle Claude Code screen, trimmed to the rows
-// the rules read. See harness/testdata/screens.
 const claudeIdleScreen = "  \xe2\x97\x90 medium \xc2\xb7 /effort\r\n" +
 	"\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\r\n" +
 	"\xe2\x9d\xaf \r\n" +
 	"\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\r\n" +
 	"  \xe2\x8f\xb5\xe2\x8f\xb5 auto mode on (shift+tab to cycle)\r\n"
 
-// claudeWorkingScreen is the same box under a live turn.
 const claudeWorkingScreen = "\xe2\x9c\xbb Thinking\xe2\x80\xa6 (12s)\r\n" +
 	"\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\r\n" +
 	"\xe2\x9d\xaf \r\n" +
@@ -125,13 +121,10 @@ func bundledRegistry(t *testing.T) *harness.Registry {
 	return reg
 }
 
-// pastStartupGrace marks a harness as seen in a window long enough ago that
-// its startup grace is over.
 func pastStartupGrace(sess *Session, windowID, harnessID string) {
 	sess.idle.noteHarnessSeen(windowID, harnessID, time.Now().Add(-2*agentStartupGrace))
 }
 
-// waitForAgentState polls until the window reaches want or the deadline passes.
 func waitForAgentState(t *testing.T, sess *Session, windowID string, want AgentState, within time.Duration) bool {
 	t.Helper()
 	deadline := time.Now().Add(within)

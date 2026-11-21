@@ -6,9 +6,6 @@ import (
 	"time"
 )
 
-// silenceWindow turns a pane's shell into one that reads its input and prints
-// nothing: echo off, then cat into /dev/null. It is the pane an agent looks like
-// when it dropped the prompt, and the one the stall gate is for.
 func silenceWindow(t *testing.T, d *Daemon, sess *Session, windowID string) *PTY {
 	t.Helper()
 	pty, err := d.resolvePTYForTarget(sess, windowID)
@@ -16,13 +13,6 @@ func silenceWindow(t *testing.T, d *Daemon, sess *Session, windowID string) *PTY
 		t.Fatalf("resolvePTYForTarget: %v", err)
 	}
 	waitForQuiet(t, pty, 300*time.Millisecond, 5*time.Second)
-	// The shell prints a marker once echo is off, and then becomes cat. The
-	// marker is typed in two pieces, so the tty's echo of the command line does
-	// not contain it: only the shell running the command prints it whole. The
-	// tty echoes what is typed at once, before the shell has read it, so seeing
-	// the command echoed says nothing about the shell having run it, and a shell
-	// a loaded machine is slow to start the command in would still echo the
-	// question the test types next, which a silent pane must not.
 	if _, err := pty.Write([]byte("stty -echo; printf '%s%s\\n' SIL ENCED; exec cat >/dev/null\r")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -52,7 +42,6 @@ func TestPromptGateEvidence(t *testing.T) {
 	before := func() int64 { return now.Add(-time.Second).UnixNano() }
 	after := func() int64 { return now.Add(time.Second).UnixNano() }
 
-	// No harness: output after Enter is the only evidence a plain pane gives.
 	report(AgentReport{State: AgentStateIdle})
 	g := d.newPromptGate(sess, b)
 	g.markSubmitted(now)
@@ -66,8 +55,6 @@ func TestPromptGateEvidence(t *testing.T) {
 		t.Errorf("output after Enter did not count: taken %q", g.taken)
 	}
 
-	// A harness that can show working: output alone is not evidence, because a
-	// TUI that read Enter as a newline redraws too.
 	report(AgentReport{State: AgentStateIdle, Harness: "claude-code"})
 	g = d.newPromptGate(sess, b)
 	g.markSubmitted(now)
@@ -82,8 +69,6 @@ func TestPromptGateEvidence(t *testing.T) {
 		t.Errorf("working did not count: taken %q", g.taken)
 	}
 
-	// A turn that finished between two looks still counts: the pane is back
-	// at idle, and CompletionSeq says a turn ended.
 	report(AgentReport{State: AgentStateIdle, Harness: "claude-code"})
 	g = d.newPromptGate(sess, b)
 	g.markSubmitted(now)
@@ -94,7 +79,6 @@ func TestPromptGateEvidence(t *testing.T) {
 		t.Errorf("a turn that came and went was not seen: taken %q", g.taken)
 	}
 
-	// needs_input counts only when the pane was not already on it.
 	report(AgentReport{State: AgentStateNeedsInput, Harness: "claude-code", Kind: "question"})
 	g = d.newPromptGate(sess, b)
 	g.markSubmitted(now)
@@ -141,7 +125,6 @@ func TestAskFailsWithPromptStalledOnASilentPane(t *testing.T) {
 		t.Errorf("the hint does not point at capture-pane: %v", e["hint"])
 	}
 
-	// The question was typed, so the record of the ask is kept.
 	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"stall"}}`))
 	msgs, _ := read["messages"].([]any)
 	found := false

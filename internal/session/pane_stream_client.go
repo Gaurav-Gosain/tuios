@@ -12,13 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The client end of stream-pane, for a viewer that is not a tuios client.
-//
-// After the verb's one reply line the connection stops speaking JSON and
-// carries frames both ways: a type byte, a big-endian u32 length, the payload
-// (docs/protocol.md, "stream-pane"). A VerbClient that opened a stream hands
-// its connection to the PaneStream and takes no more calls.
-
 // Frame types of a pane stream.
 const (
 	PaneFrameSnapshot = 'S'
@@ -34,9 +27,6 @@ const (
 	PaneFrameInputAt = 'J'
 )
 
-// paneFrameMax bounds a frame this client reads. The daemon's largest is a
-// snapshot: 160 bytes a cell at most, for a 4096-square screen and history.
-// Anything larger is a broken stream, not a frame to allocate for.
 const paneFrameMax = 256 << 20
 
 // PaneStreamMaxInput is the most input one frame may carry. The daemon ends

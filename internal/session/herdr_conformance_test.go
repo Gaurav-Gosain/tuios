@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// herdrConformanceStep is one request of a herdr client and what the client
-// reads from the reply.
 type herdrConformanceStep struct {
 	Call   string            `json:"call"`
 	Method string            `json:"method"`
@@ -50,7 +48,6 @@ func TestHerdrConformanceCollie(t *testing.T) {
 	}
 	for _, step := range fixture.Steps {
 		params := string(step.Params)
-		// Longer names first, so $TABPANE is not read as $TAB.
 		names := slices.Collect(maps.Keys(vars))
 		slices.SortFunc(names, func(a, b string) int { return len(b) - len(a) })
 		for _, k := range names {
@@ -86,8 +83,6 @@ func TestHerdrConformanceCollie(t *testing.T) {
 	}
 }
 
-// herdrRaw sends one request line with raw params and returns the first
-// reply line, which for events.subscribe is the acknowledgement.
 func herdrRaw(t *testing.T, sp, method, params string) map[string]any {
 	t.Helper()
 	conn, err := net.Dial("unix", HerdrSocketPath(sp))
@@ -113,7 +108,6 @@ func herdrRaw(t *testing.T, sp, method, params string) map[string]any {
 	return out
 }
 
-// herdrPath reads a dotted path; a[] means every element of list a.
 func herdrPath(v any, path string) any {
 	if path == "" {
 		return v
@@ -130,9 +124,6 @@ func herdrPath(v any, path string) any {
 	return herdrPath(m[head], rest)
 }
 
-// herdrHasPath reports whether a path is present; for a list path, whether
-// every element has the field. An empty list has it vacuously, and the
-// fixture's lists are never empty here.
 func herdrHasPath(v any, path string) bool {
 	head, rest, _ := strings.Cut(path, ".")
 	m, ok := v.(map[string]any)

@@ -10,40 +10,25 @@ import (
 	"tuios.dev/vt"
 )
 
-// What a pane holds that its emulator's snapshot does not, carried across a
-// live handoff (docs/design/live-handoff.md, section 2.3): its title, where its
-// shell is, its OSC 133 marks and the commands they delimit, its OSC 7501
-// records, and the stream position and ring a resuming subscriber reads from.
-
-// handoffHistoryRows is how much history each pane's emulator carries: the
-// depth a client gets on attach.
 const handoffHistoryRows = 1000
 
-// handoffLive is a pane's live section.
 type handoffLive struct {
-	Title string
-	// IconName is the name OSC 1 gave (PTY.IconName).
-	IconName string
-	Place    handoffPlace
-	// Marks are the OSC 133 marks, on the rows of the carried emulator.
-	Marks []vt.SemanticMarker
-	Shell handoffShell
-	// ProgStatus is the OSC 7501 store, oldest update first.
+	Title      string
+	IconName   string
+	Place      handoffPlace
+	Marks      []vt.SemanticMarker
+	Shell      handoffShell
 	ProgStatus []progstatus.Record
 
-	// The stream. Ring is the last bytes of it, ending at OutputSeq.
 	OutputSeq   int64
 	Ring        []byte
 	ResizeMarks []handoffResizeMark
 	VTResizes   int64
 	LastOutput  int64
 
-	// vtSeq is the stream position the applied snapshot was taken at. It
-	// is the snapshot's own Seq, kept here once the snapshot is dropped.
 	vtSeq int64
 }
 
-// handoffPlace is a placeRecord.
 type handoffPlace struct {
 	Cwd, Branch   string
 	Announced     bool
@@ -51,13 +36,11 @@ type handoffPlace struct {
 	ElsewhereDir  string
 }
 
-// handoffResizeMark is a resizeMark.
 type handoffResizeMark struct {
 	Seq           int64
 	Width, Height int
 }
 
-// handoffShell is a shellTrack, with its rows on the carried emulator.
 type handoffShell struct {
 	Seen          bool
 	Phase         uint8
@@ -80,7 +63,6 @@ type handoffShell struct {
 	History       []handoffCommand
 }
 
-// handoffCommand is a shellCommandRecord.
 type handoffCommand struct {
 	Seq          uint64
 	Cmdline      string
@@ -91,13 +73,6 @@ type handoffCommand struct {
 	PromptOrigin int
 }
 
-// handoffCapture snapshots a quiesced pane's emulator and its live section.
-//
-// The emulator carries handoffHistoryRows of its history, so a row the pane
-// counts from the top of its history moves up by the rows left behind. Marks
-// and the shell's rows are moved here, and the ones above the carried
-// history are dropped. A row stored plus the marker list's origin is stored
-// against an origin of zero, which is where the new emulator's list starts.
 func (p *PTY) handoffCapture() (*TerminalState, handoffLive) {
 	state := p.GetTerminalStatePacked(handoffHistoryRows, 0)
 	live := handoffLive{Title: p.Title(), IconName: p.IconName(), Place: p.place.handoffState(), ProgStatus: p.progStatus.Records()}
@@ -134,8 +109,6 @@ func (p *PTY) handoffCapture() (*TerminalState, handoffLive) {
 	return state, live
 }
 
-// restoreLive puts a pane's live section back on a pane adopted around an
-// emulator the carried snapshot was applied to. The pane has not started.
 func (p *PTY) restoreLive(live handoffLive) {
 	if live.Title != "" {
 		title := live.Title
@@ -158,7 +131,6 @@ func (p *PTY) restoreLive(live handoffLive) {
 	}
 
 	p.outputSeq = live.OutputSeq
-	// The ring grows with the output, so an adopted pane's starts empty.
 	p.outputBuffer = make([]byte, outputRingSize(len(live.Ring)))
 	p.outputPos = copy(p.outputBuffer, live.Ring)
 	p.resizeMarks = p.resizeMarks[:0]
@@ -170,14 +142,11 @@ func (p *PTY) restoreLive(live handoffLive) {
 	p.lastOutput.Store(live.LastOutput)
 }
 
-// handoffState is the record as it stands.
 func (r *placeRecord) handoffState() handoffPlace {
 	host, dir := r.ElsewhereReport()
 	return handoffPlace{Cwd: r.Cwd(), Branch: r.Branch(), Announced: r.announced.Load(), ElsewhereHost: host, ElsewhereDir: dir}
 }
 
-// restore puts a record back as it was, with no branch read: the branch
-// came with it.
 func (r *placeRecord) restore(h handoffPlace) {
 	if h.Cwd != "" {
 		cwd := h.Cwd
@@ -191,8 +160,6 @@ func (r *placeRecord) restore(h handoffPlace) {
 	}
 }
 
-// handoffState is the track, with its plain rows moved by plain and the rows
-// stored plus the marker list's origin moved by origin.
 func (t *shellTrack) handoffState(plain, origin func(int) int) handoffShell {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -213,7 +180,6 @@ func (t *shellTrack) handoffState(plain, origin func(int) int) handoffShell {
 	return h
 }
 
-// restore puts a carried track back.
 func (t *shellTrack) restore(h handoffShell) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

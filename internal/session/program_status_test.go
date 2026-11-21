@@ -17,8 +17,6 @@ func TestProgramStatusAfterHookEnd(t *testing.T) {
 			}
 			sess.yieldNoneClaim(id)
 			_, applied, err := sess.ApplyAgentReport(id, AgentReport{State: AgentStateIdle, Source: AgentSourceProgram})
-			// When a program reports "idle", it should override "none" set by hook,
-			// but it should keep "working" set by hook.
 			if err != nil || applied != (state == AgentStateNone) {
 				t.Fatalf("program report: applied=%v, err=%v", applied, err)
 			}

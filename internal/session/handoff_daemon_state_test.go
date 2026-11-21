@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// handoffCarriedUnexported names the unexported fields of streamEvent that
-// handoffEvents carries beside the ring, since the ring's JSON drops them.
 var handoffCarriedUnexported = map[string]bool{"relayed": true}
 
 // TestHandoffCarriesEveryEventCounter fails when the event hub gains a

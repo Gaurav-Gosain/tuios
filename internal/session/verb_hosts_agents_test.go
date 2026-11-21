@@ -18,7 +18,6 @@ func TestHostAgentPanesAreBounded(t *testing.T) {
 		}
 		windows = append(windows, w)
 	}
-	// IDs a window cannot have: escape codes, a bidi override, too long.
 	windows = append([]WindowSummary{
 		{ID: "\x1b[2Jbad", AgentState: "working"},
 		{ID: "a\u202eb", AgentState: "working"},
@@ -48,7 +47,6 @@ func TestHostAgentPanesAreBounded(t *testing.T) {
 		}
 	}
 
-	// Over every session of a host, at most remoteAgentHostMax panes.
 	var rows []remoteSessionListRow
 	for i := range 40 {
 		rows = append(rows, remoteSessionListRow{remoteSessionRow: remoteSessionRow{Name: "s" + strconv.Itoa(i)}, Windows: windows})

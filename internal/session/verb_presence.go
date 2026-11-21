@@ -2,27 +2,6 @@ package session
 
 import "encoding/json"
 
-// attach-presence: the person's nonce without a screen.
-//
-// respond, reply-approval, answer-ask and dismiss-attention act as the person,
-// and the proof they take is the human_nonce of a client attached now
-// (human_sender.go). A phone that only answers the Inbox has no screen to
-// attach: a full attach would size the session to the phone and count as a
-// client looking at the focused pane, which makes request-approval answer
-// viewed instead of holding the prompt for the Inbox.
-//
-// A presence is the proof and nothing else. The connection that asks for one
-// gets a nonce that verifies by every rule an attach nonce does: only from a
-// caller that may act as the person (outside every pane here, and over a link
-// only on the link-human socket), only over the same kind of connection, and,
-// where the kernel names pids, only from the process that holds it. It is
-// never attached, so nothing that measures, focuses or speaks to a session's
-// clients counts it, and it ends when its connection closes or restricts
-// itself. Which sessions it acts in is the nonce scope (human_sender.go): a
-// presence made for a session acts only there, and one made with none acts
-// in every session.
-
-// verbAttachPresence registers a screenless presence on this connection.
 func (d *Daemon) verbAttachPresence(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`

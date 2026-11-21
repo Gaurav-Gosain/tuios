@@ -2,9 +2,6 @@ package session
 
 import "golang.org/x/sys/unix"
 
-// pendingBytes is how many bytes the kernel holds for a reader of fd, or -1
-// when that cannot be read. FIONREAD reads 0 on a darwin PTY master however
-// much is waiting, so the count comes from kqueue's EVFILT_READ instead.
 func pendingBytes(fd int) int {
 	kq, err := unix.Kqueue()
 	if err != nil {

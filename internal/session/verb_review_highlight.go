@@ -5,14 +5,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 )
 
-// reviewHighlight fills in the syntax colour (HL) and the changed part
-// (Changed) of every line of the diff, for review-diff's highlight. It reads
-// each hunk the way the TUI's review does (internal/app/review_look.go): the
-// old side (context and removed lines) and the new side (context and added
-// lines) are each tokenised as one text, so a comment that spans lines keeps
-// its colour, and a context line takes its colour from the new side. A
-// truncated or binary file has no lines to colour, and diffview leaves a text
-// past its own byte limits plain.
 func reviewHighlight(files []review.File) {
 	for fi := range files {
 		f := &files[fi]
@@ -71,8 +63,6 @@ func reviewHighlight(files []review.File) {
 	}
 }
 
-// reviewSpans are spans as review-diff sends them, nil for a line that is
-// plain all through.
 func reviewSpans(spans []diffview.Span) [][3]int {
 	var out [][3]int
 	for _, s := range spans {

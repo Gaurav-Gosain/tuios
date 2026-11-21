@@ -4,8 +4,6 @@ package session
 
 import "golang.org/x/sys/unix"
 
-// diskFree is the bytes an unprivileged write may still use on the disk that
-// holds dir, or -1 when it cannot be read.
 func diskFree(dir string) int64 {
 	var st unix.Statfs_t
 	if err := unix.Statfs(dir, &st); err != nil {

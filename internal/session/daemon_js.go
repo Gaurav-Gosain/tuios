@@ -7,10 +7,6 @@ import (
 	"os"
 )
 
-// The browser build never runs a daemon: tuios runs standalone in the page and
-// its panes are in-memory guests. These exist so the package compiles for
-// js/wasm; the standalone path does not call them.
-
 var errNoDaemonInBrowser = errors.New("no daemon in the browser build")
 
 func lockFileExclusive(_ *os.File) error { return errNoDaemonInBrowser }

@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// collectEvents reads event lines off a subscribed connection until it has want
-// of them or the read deadline expires. It returns what it managed to read, so a
-// caller can assert on "exactly N and no more" as well as on the contents.
 func collectEvents(t *testing.T, c *verbConn, want int, wait time.Duration) []map[string]any {
 	t.Helper()
 	var got []map[string]any
@@ -31,9 +28,6 @@ func collectEvents(t *testing.T, c *verbConn, want int, wait time.Duration) []ma
 	return got
 }
 
-// expectNoMoreEvents fails if any further event line arrives within grace. This
-// is how the exactly-once assertions are made: the expected events are drained
-// first, then the stream must be silent.
 func expectNoMoreEvents(t *testing.T, c *verbConn, grace time.Duration) {
 	t.Helper()
 	_ = c.conn.SetReadDeadline(time.Now().Add(grace))
@@ -52,7 +46,6 @@ func eventTypes(events []map[string]any) []string {
 	return types
 }
 
-// subscribeTo opens an event stream filtered to one session and the given types.
 func subscribeTo(t *testing.T, sp, session string, types ...string) *verbConn {
 	t.Helper()
 	c := dialVerb(t, sp)
@@ -71,9 +64,6 @@ func subscribeTo(t *testing.T, sp, session string, types ...string) *verbConn {
 	return c
 }
 
-// lifecycleTypes are the window lifecycle event types under test. PTY-driven
-// types (output, bell, window-exit, mode-changed) are excluded so a live shell's
-// startup chatter cannot make these tests flaky.
 var lifecycleTypes = []string{
 	EventWindowCreated,
 	EventWindowClosed,
@@ -85,18 +75,12 @@ var lifecycleTypes = []string{
 	EventWorkspaceSwitched,
 }
 
-// syncingTUI is a fake attached TUI that behaves like the real one: it receives
-// the daemon's state pushes and echoes the state back with UpdateState, which is
-// what a real client does after absorbing a daemon-side change into its layout.
-// It never emits events itself.
 type syncingTUI struct {
 	d    *Daemon
 	sess *Session
 	conn *connState
 }
 
-// attachSyncingTUI registers the fake TUI and drains whatever the daemon pushes
-// at it, so a push can never block a mutation for the rest of the test.
 func attachSyncingTUI(t *testing.T, d *Daemon, sess *Session) *syncingTUI {
 	t.Helper()
 	tui, clientSide := newFakeTUI(t, d, sess.ID)
@@ -112,8 +96,6 @@ func attachSyncingTUI(t *testing.T, d *Daemon, sess *Session) *syncingTUI {
 	return s
 }
 
-// sync pushes a state snapshot to the daemon exactly as a TUI client does, via
-// the daemon's update-state handler.
 func (s *syncingTUI) sync(state *SessionState) {
 	msg, err := NewMessage(MsgUpdateState, state)
 	if err != nil {
@@ -122,9 +104,6 @@ func (s *syncingTUI) sync(state *SessionState) {
 	_ = s.d.handleUpdateState(s.conn, msg)
 }
 
-// newTUIWindow builds the window a TUI would add for a new-window command,
-// including a live PTY, and appends it to state with focus, mirroring
-// AddDaemonWindow.
 func newTUIWindow(t *testing.T, sess *Session, state *SessionState, id, title string) {
 	t.Helper()
 	pty, err := sess.CreatePTY(id, 78, 22, nil)
@@ -153,7 +132,6 @@ func newTUIWindow(t *testing.T, sess *Session, state *SessionState, id, title st
 func TestLifecycleEventsMatchHeadlessAndAttached(t *testing.T) {
 	d, sp := startTestDaemon(t)
 
-	// Headless: no client attached, the daemon mutates its own state.
 	makeSessionWithWindow(t, d, "headless")
 	hsub := subscribeTo(t, sp, "headless", lifecycleTypes...)
 
@@ -165,16 +143,8 @@ func TestLifecycleEventsMatchHeadlessAndAttached(t *testing.T) {
 	if _, verr := d.verbCloseWindow(nil, json.RawMessage(`{"session":"headless","window":"`+createdID+`"}`)); verr != nil {
 		t.Fatalf("verbCloseWindow: %v", verr)
 	}
-	// Creating focuses the new window, and closing it hands focus back, so each
-	// mutation raises its lifecycle event plus the changes it caused. Naming is
-	// not a mutation of its own: a window is created with the name it was asked
-	// for, so window-created carries it and no retitle follows.
 	headlessEvents := collectEvents(t, hsub, 4, 3*time.Second)
 
-	// Attached: a client is attached, and the same two verbs run. There is no
-	// second implementation for them to reach any more, so what this asserts is
-	// that attaching a client does not change the event stream, including that
-	// the client echoing the state back raises nothing extra.
 	attached := makeSessionWithWindow(t, d, "attached")
 	tui := attachSyncingTUI(t, d, attached)
 
@@ -203,7 +173,6 @@ func TestLifecycleEventsMatchHeadlessAndAttached(t *testing.T) {
 		t.Fatalf("unexpected event sequence: %v", got)
 	}
 
-	// Payload shape must match too, not just the type sequence.
 	for i := range headlessEvents {
 		h, a := headlessEvents[i], attachedEvents[i]
 		for _, field := range []string{"session", "window", "pty_id", "seq", "time"} {
@@ -212,17 +181,10 @@ func TestLifecycleEventsMatchHeadlessAndAttached(t *testing.T) {
 					i, h["type"], field, ok, hasKey(a, field))
 			}
 		}
-		// The default title carries the window's own UUID, so two windows never
-		// share one. What must match is that both paths report a title at all.
 		if h["type"] == EventWindowCreated {
 			if h["title"] == "" || a["title"] == "" {
 				t.Errorf("window-created title = %q headless, %q attached, want both set", h["title"], a["title"])
 			}
-			// The name asked for arrives with the creation rather than in a
-			// retitle behind it. A subscriber that has to wait for a second
-			// event to learn what a window is called sees it under its
-			// generated title first, and anything matching on the name misses
-			// the window entirely if it only ever looks at creations.
 			if h["title"] != "build" || a["title"] != "build" {
 				t.Errorf("window-created title = %q headless, %q attached, want the name it was created with",
 					h["title"], a["title"])
@@ -247,12 +209,10 @@ func TestTUIDrivenWindowLifecycleIsObserved(t *testing.T) {
 
 	sub := subscribeTo(t, sp, "work", EventWindowCreated, EventWindowClosed)
 
-	// The TUI creates a window on its own (a human pressing the new-window key).
 	state := sess.GetState()
 	newTUIWindow(t, sess, state, "human-window", "shell")
 	tui.sync(state)
 
-	// ...and then closes it.
 	state = sess.GetState()
 	state.Windows = state.Windows[:len(state.Windows)-1]
 	tui.sync(state)
@@ -284,15 +244,12 @@ func TestLifecycleEventsFireExactlyOnce(t *testing.T) {
 		t.Fatalf("AddDaemonWindow: %v", err)
 	}
 
-	// One create raises exactly one window-created (plus the focus change it
-	// causes), never two of either.
 	events := collectEvents(t, sub, 2, 3*time.Second)
 	if got := eventTypes(events); !reflect.DeepEqual(got, []string{EventWindowCreated, EventWindowFocused}) {
 		t.Fatalf("event types = %v, want one window-created then one window-focused", got)
 	}
 	expectNoMoreEvents(t, sub, 300*time.Millisecond)
 
-	// Re-syncing the very same state is a no-op for the event stream.
 	tui, _ := newFakeTUI(t, d, sess.ID)
 	(&syncingTUI{d: d, sess: sess, conn: tui}).sync(sess.GetState())
 	expectNoMoreEvents(t, sub, 300*time.Millisecond)
@@ -390,8 +347,8 @@ func TestDiffLifecycleOrdering(t *testing.T) {
 		EventWindowRetitled,
 		EventWindowMoved,
 		EventWindowMinimized,
-		EventLayoutChanged, // workspace 1: "gone" closed and "stays" left
-		EventLayoutChanged, // workspace 2: "stays" and "fresh" arrived
+		EventLayoutChanged,
+		EventLayoutChanged,
 		EventWorkspaceSwitched,
 		EventWindowFocused,
 	}
@@ -478,8 +435,6 @@ func TestStaleClientSyncRaisesNoPhantomEvents(t *testing.T) {
 	expectNoMoreEvents(t, sub, 300*time.Millisecond)
 }
 
-// newFakeTUI registers a connState that looks like an attached TUI client and
-// returns it along with the client-side pipe end the test drives.
 func newFakeTUI(t *testing.T, d *Daemon, sessionID string) (*connState, net.Conn) {
 	t.Helper()
 	serverSide, clientSide := net.Pipe()
@@ -490,11 +445,7 @@ func newFakeTUI(t *testing.T, d *Daemon, sessionID string) (*connState, net.Conn
 		ptySubscriptions: make(map[string]*ptySubscriber),
 		sessionID:        sessionID,
 		isTUIClient:      true,
-		// A real client is marked attached once its attach reply is written,
-		// and nothing is sent to it before that. A hand-built one has to say so
-		// too, or the daemon correctly treats it as still attaching and never
-		// speaks to it. See connState.attached.
-		attached: true,
+		attached:         true,
 	}
 	d.clientsMu.Lock()
 	d.clients[tui.clientID] = tui

@@ -8,24 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// A workspace's number is its position. Moving a workspace, by the move keys, by
-// dragging its dock pill, through set-workspace-order or through herdr's
-// tab.move, renumbers it: the panes on it, its name, its focus, its layout and
-// everything else the session keeps by workspace number go to the new number
-// together, so opt+N, the pill's {index}, TUIOS_WORKSPACE and every verb agree
-// with where it is shown.
-//
-// The daemon is the one place a renumber happens. A client asks for one and
-// takes the result from the state the daemon publishes, which is what keeps two
-// attached clients, and a client that attaches later, on one numbering.
-//
-// A herdr tab id is the one name that does not follow the position. herdr gives
-// each tab a number of its own, from a counter that is never reused, and keeps
-// it through a move, so a client that read a tab id before a move still holds
-// the same tab after it. WorkspaceTabKeys is that number for a tuios workspace.
-// It moves with the workspace through a renumber, and a workspace that stops
-// being a tab gives its key up for good, so the next tab there has a new one.
-
 // WorkspaceTabKey is the herdr tab number of workspace ws: the number it was
 // first listed under, kept through every renumber. A session never renumbered
 // has no keys, and every workspace's key is its number.
@@ -47,11 +29,6 @@ func (st *SessionState) WorkspaceForTabKey(key int) int {
 	return 0
 }
 
-// denseTabKeys is the tab key of every workspace in range, in a new map, and
-// the counter past every key in it. A workspace with no key yet takes the
-// workspace's own number while the session has never had keys, which is what
-// keeps every tab id a session had before keys existed, and a new key from
-// the counter once it has, so a key is never handed out twice.
 func (st *SessionState) denseTabKeys() (map[int]int, int) {
 	bound := st.workspaceBound()
 	keys := make(map[int]int, bound)
@@ -123,11 +100,6 @@ func WorkspaceRenumbering(from map[int]int, to *SessionState) map[int]int {
 	return newOf
 }
 
-// workspacePlaces turns order, a list of workspace numbers in the order they
-// are to be shown, into a renumbering: the workspaces it names take the
-// numbers they hold between them, smallest first, in the order given, and a
-// workspace it does not name keeps its number. An entry outside the session's
-// range, or one already placed, is dropped. It is nil when nothing moves.
 func workspacePlaces(order []int, bound int) (map[int]int, error) {
 	clean := make([]int, 0, len(order))
 	for _, ws := range order {
@@ -152,13 +124,6 @@ func workspacePlaces(order []int, bound int) (map[int]int, error) {
 	return newOf, nil
 }
 
-// renumberWorkspaces moves every workspace in newOf to its new number, with
-// everything the state keeps by workspace number. It writes new maps rather
-// than into the ones it holds, because a published snapshot shares some of
-// them (see snapshotStateLocked).
-//
-// A new map keyed by workspace number belongs in this list, or a move leaves
-// it describing the wrong workspace.
 func (st *SessionState) renumberWorkspaces(newOf map[int]int) {
 	if len(newOf) == 0 {
 		return
@@ -206,10 +171,6 @@ func RenumberWorkspaceMap[V any](m map[int]V, newOf map[int]int) map[int]V {
 	return out
 }
 
-// applyLegacyWorkspaceOrder turns a display order saved by a build that kept
-// one into the numbering it showed, once, and drops it. The workspaces come
-// back numbered the way their pills were arranged, which is what the person
-// was looking at.
 func (st *SessionState) applyLegacyWorkspaceOrder() {
 	if len(st.WorkspaceOrder) == 0 {
 		st.WorkspaceOrder = nil
@@ -240,26 +201,19 @@ func (s *Session) RenumberWorkspaces(order []int) (map[int]int, error) {
 		}
 		state.renumberWorkspaces(newOf)
 		state.WorkspaceOrder = nil
-		// A move is a person's change, so the gaps panes exiting on their
-		// own left close up with it (noteWorkspacesLocked).
 		s.closeUpPending = len(s.gaps) > 0
 		if newOf == nil {
 			return nil
 		}
 		moved = newOf
 		s.renumberSessionRecordsLocked(newOf)
-		// The focus maps were renumbered, so a push built before this keeps
-		// the session's focus rather than putting the old numbering back.
 		s.markFocusIntentLocked()
-		// mutateStateLocked advances the version once this returns.
 		s.renumberedAt = state.Version + 1
 		return nil
 	})
 	return moved, err
 }
 
-// renumberSessionRecordsLocked moves what the Session itself keeps by
-// workspace number, beside the state. The caller holds stateMu.
 func (s *Session) renumberSessionRecordsLocked(newOf map[int]int) {
 	to := func(ws int) int {
 		if n, ok := newOf[ws]; ok {
@@ -288,37 +242,11 @@ func (s *Session) renumberSessionRecordsLocked(newOf map[int]int) {
 	}
 }
 
-// noteWorkspacesLocked runs after every change to the state, a client's push
-// included, and keeps a workspace's number its position:
-//
-//   - A workspace exists while it holds a pane or is the one shown. When one
-//     that has held a pane stops existing it loses its name.
-//   - Its place closes up, every workspace above it moving down one, only
-//     when a person made the change: closed a pane (by key, menu, verb or
-//     herdr, or by typing exit in its shell), moved one off the workspace,
-//     closed the workspace or moved one.
-//     Closing workspace 2 of three leaves 1 and 2.
-//   - A workspace whose last pane exited on its own (close_on_exit, an xpanes
-//     run, an agent finishing) leaves a gap instead, and nothing renumbers:
-//     the workspace on screen keeps its number, so no hook fires for a switch
-//     nobody made, no window-moved goes out for a pane that did not move, and
-//     a script or agent holding a number still holds the same workspace. The
-//     next change a person makes closes every gap up.
-//   - An empty workspace that was only looked at goes without moving
-//     anything, and a number past the last workspace that a pane is put on
-//     directly stays as it is until a close-up below it.
-//   - A workspace that stops being a herdr tab gives up its tab key, so a tab
-//     made there later gets a key no client has seen.
-//
-// It reports whether it renumbered, which the caller counts as a daemon
-// mutation. The caller holds stateMu.
 func (s *Session) noteWorkspacesLocked() bool {
 	st := s.state
 	if st == nil {
 		return false
 	}
-	// Published for herdrTabFor whatever happens below. The map is never
-	// written in place, so a reader of this copy needs no lock.
 	defer func() { s.publishTabKeys(st.WorkspaceTabKeys) }()
 	exists := st.existingWorkspaces()
 	if s.hadPanes == nil {
@@ -383,22 +311,12 @@ func (s *Session) noteWorkspacesLocked() bool {
 	return true
 }
 
-// paneAt is where a pane was at the last change: its workspace, its PTY, and
-// whether an agent was live in it.
 type paneAt struct {
 	ws    int
 	pty   string
 	agent bool
 }
 
-// notePaneMovesLocked compares the panes with where they were at the last
-// change, records each workspace that lost its last pane as emptied on its own
-// or by a person, and reports whether a person took a pane off a workspace: a
-// pane that is gone without its process having exited on its own, or one that
-// moved. A pane's own shell that exited counts as a person's close, since a
-// person typed exit, unless an agent was live in it at the last change: an
-// agent run with exec ends the shell's process when it finishes. It returns
-// where the panes are now. The caller holds stateMu.
 func (s *Session) notePaneMovesLocked() (map[string]paneAt, bool) {
 	st := s.state
 	now := make(map[string]paneAt, len(st.Windows))
@@ -446,14 +364,6 @@ func (s *Session) notePaneMovesLocked() (map[string]paneAt, bool) {
 	return now, byPerson
 }
 
-// notePaneExitedAlone records that the process of a PTY exited without being
-// closed, and whether it was the pane's own shell. A pane whose process ended
-// on its own leaves its workspace's place for the next change a person makes;
-// see notePaneMovesLocked for the shell. It runs on the PTY's exit goroutine,
-// before the daemon tells anyone the pane closed.
-//
-// A process killed by a signal also holds the saved layout; see
-// holdingCheckpoint.
 func (s *Session) notePaneExitedAlone(ptyID string, shell bool, signal int) {
 	if signal > 0 {
 		s.signalHold.Store(time.Now().Add(signalHoldFor).UnixNano())
@@ -466,11 +376,6 @@ func (s *Session) notePaneExitedAlone(ptyID string, shell bool, signal int) {
 	s.exitedAlone[ptyID] = shell
 }
 
-// existingWorkspaces is the workspaces that exist: each one holding a pane,
-// and the one shown.
-//
-// Workspace 0, which a state from before workspaces were numbered from 1
-// carries, is workspace 1.
 func (st *SessionState) existingWorkspaces() map[int]bool {
 	exists := map[int]bool{max(st.CurrentWorkspace, 1): true}
 	for i := range st.Windows {
@@ -481,9 +386,6 @@ func (st *SessionState) existingWorkspaces() map[int]bool {
 	return exists
 }
 
-// closeUp is the renumber that closes the places of the workspaces in gone:
-// every workspace above one moves down one, and the places go to the end. Nil
-// when nothing moves.
 func (st *SessionState) closeUp(gone []int) map[int]int {
 	if len(gone) == 0 {
 		return nil
@@ -507,8 +409,6 @@ func (st *SessionState) closeUp(gone []int) map[int]int {
 	return newOf
 }
 
-// retireTabKeysLocked gives a workspace that stopped being a herdr tab since
-// the last change a new tab key. The caller holds stateMu.
 func (s *Session) retireTabKeysLocked() {
 	st := s.state
 	bound := st.workspaceBound()
@@ -525,8 +425,6 @@ func (s *Session) retireTabKeysLocked() {
 		}
 	}
 	s.tabListed = listed
-	// A session given more workspaces since its keys were made gets keys for
-	// the new ones from the counter, so none can take a key already in use.
 	short := st.WorkspaceTabKeys != nil && len(st.WorkspaceTabKeys) < bound
 	if len(gone) == 0 && !short {
 		return
@@ -540,26 +438,15 @@ func (s *Session) retireTabKeysLocked() {
 	st.WorkspaceTabKeys, st.NextWorkspaceTabKey = keys, next
 }
 
-// noteRenumberLocked records that the change at the current version
-// renumbered the workspaces: a push built before it holds the old numbering in
-// its maps and its focus. The caller holds stateMu.
 func (s *Session) noteRenumberLocked() {
 	s.renumberedAt = s.state.Version
 	s.focusMovedVersion = s.state.Version
 }
 
-// workspaceRenumberMissedLocked reports whether a push built at base predates
-// a renumber. Such a push holds the old numbering in the maps a reconcile
-// otherwise takes from the client. The caller holds stateMu.
 func (s *Session) workspaceRenumberMissedLocked(base int) bool {
 	return base != 0 && base < s.renumberedAt
 }
 
-// takeWorkspaceMapsFrom puts canonical's per-workspace maps in place of a
-// stale push's, whose keys still name the numbers from before a renumber. The
-// trees and the columns are shared with canonical rather than cloned, which is
-// safe because nothing writes into a state's maps in place: every change builds
-// a new map (see placeTree and renumberWorkspaces).
 func takeWorkspaceMapsFrom(incoming, canonical *SessionState) {
 	incoming.WorkspaceNames = maps.Clone(canonical.WorkspaceNames)
 	incoming.WorkspaceMasterRatio = maps.Clone(canonical.WorkspaceMasterRatio)
@@ -575,8 +462,6 @@ func takeWorkspaceMapsFrom(incoming, canonical *SessionState) {
 	}
 }
 
-// publishTabKeys stores keys for herdrTabFor. keys must not be written in
-// place afterwards, so a reader of the stored map needs no lock.
 func (s *Session) publishTabKeys(keys map[int]int) {
 	s.tabKeys.Store(&keys)
 }

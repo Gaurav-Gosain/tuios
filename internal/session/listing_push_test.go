@@ -27,7 +27,6 @@ func TestListingPushReplacesThePoll(t *testing.T) {
 	}
 	c.StartReadLoop()
 
-	// Let the shells print their prompts and the attach settle.
 	waitIdleSettled(t, []idleCounters{{"listing", &d.wakes.listingTicks}}, 2*listingPushGap, 30*time.Second)
 	before, looks := pushes.Load(), d.wakes.listingTicks.Load()
 	time.Sleep(listingPushGap + time.Second)

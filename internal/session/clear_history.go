@@ -12,23 +12,10 @@ import (
 	"tuios.dev/vt"
 )
 
-// This file is the clear-history verb: drop a pane's scrollback, and with
-// screen set also the rows above the prompt, the way cmd+k does in Ghostty,
-// iTerm2 and Terminal.app.
-//
-// The clear travels as output. The daemon writes a short escape sequence into
-// the pane's stream at the point it is asked, on the path program output
-// takes (the ring, every subscriber, the daemon's emulator), so every
-// attached client clears at the same byte and an attach after it is handed a
-// snapshot that no longer holds the history. A client that clears only its
-// own emulator gets the old rows back on the next attach, because every
-// attach rebuilds from the daemon's emulator (docs/REHYDRATION.md).
-
 // ErrVerbFullScreen reports a clear refused because a full-screen program
 // holds the pane's alternate screen. Nothing was cleared.
 const ErrVerbFullScreen = "full_screen"
 
-// errFullScreen is ErrVerbFullScreen before it becomes a verb error.
 var errFullScreen = errors.New("a full-screen program uses the pane. Quit the program, then clear the scrollback")
 
 // IsFullScreenError reports whether err is a clear refused because a
@@ -41,8 +28,6 @@ func IsFullScreenError(err error) bool {
 	return ok && callErr.Code == ErrVerbFullScreen
 }
 
-// clearHistoryWait bounds how long a clear waits for the daemon's emulator to
-// take the output queued before it. A pane at a prompt has none.
 const clearHistoryWait = 5 * time.Second
 
 // ClearHistorySequence is the output that clears t's scrollback. With screen
@@ -75,10 +60,6 @@ func ClearHistorySequence(t vt.Terminal, screen bool) ([]byte, error) {
 	return []byte(b.String()), nil
 }
 
-// clearKeepRow is how many rows above the prompt a screen clear removes. The
-// prompt is the cursor row, or the row of the newest OSC 133 prompt start
-// when no command has run since it and it is on the screen above the cursor,
-// so a prompt of two lines keeps both.
 func clearKeepRow(t vt.Terminal) int {
 	y := t.CursorPosition().Y
 	if y <= 0 {
@@ -135,8 +116,6 @@ func (p *PTY) ClearHistory(ctx context.Context, screen bool) error {
 		return err
 	}
 	if p.vtClosed {
-		// The program has gone and vtWriter with it, but a pane kept open
-		// still shows its screen. The emulator is written here instead.
 		_, _ = p.terminal.Write(data)
 	}
 	p.terminalMu.Unlock()
@@ -158,8 +137,6 @@ func (p *PTY) ClearHistory(ctx context.Context, screen bool) error {
 	return nil
 }
 
-// verbClearHistory is clear-history. Without screen it is tmux clear-history:
-// the history goes and the screen stays.
 func (d *Daemon) verbClearHistory(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`

@@ -11,31 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Checkpoints: the state of a pane's git work tree, saved each time its agent
-// finishes a turn, so the turn can be read again and undone.
-//
-// When a window goes from working to done, idle or needs_input, or to unknown
-// on a finished turn (agent_turns.go), and the pane's directory is in a git
-// work tree, the daemon writes the work tree as a commit under
-// refs/tuios/checkpoints/<window id>/<n> (worktree.SaveCheckpoint). The index,
-// HEAD, the branch and the stash are not touched. A turn that changed nothing
-// since the pane's last checkpoint takes none.
-//
-// The git work never runs on the event path. The session's event sink only
-// notes that a checkpoint is due, under the session's state lock, and a
-// tracked goroutine does the rest. One checkpoint runs at a time on the whole
-// daemon (checkpointer.gitMu), each bounded by checkpointTimeout, and a pane
-// that finishes another turn while its checkpoint runs gets one more after
-// it, not one per turn. The verbs that read and restore checkpoints are in
-// verb_checkpoint.go.
-
-// checkpointTimeout bounds one checkpoint, or one checkpoint verb, together.
-// On a work tree of 50,000 files a checkpoint takes about 100 ms.
 const checkpointTimeout = 30 * time.Second
 
-// tempRemoveWait bounds how long the daemon waits, before an exec or the end
-// of its process, for the git work in its temporary folders to stop. A git
-// that is ended returns in milliseconds.
 const tempRemoveWait = time.Second
 
 // RemoveTempFolders ends the git work in the temporary folders of this
@@ -44,29 +21,17 @@ const tempRemoveWait = time.Second
 // otherwise leave its folder in the temp dir.
 func RemoveTempFolders() { worktree.RemoveTemp(tempRemoveWait) }
 
-// checkpointer holds the daemon's checkpoint switch and the work in flight.
-// Its zero value is on, with the default keep.
 type checkpointer struct {
-	// off is [agents.checkpoints] enabled = false.
-	off atomic.Bool
-	// keep is [agents.checkpoints] keep; zero reads as the default.
-	keep atomic.Int64
-	// maxUntracked is [agents.checkpoints] max_untracked_mb in bytes, zero
-	// for no limit.
+	off          atomic.Bool
+	keep         atomic.Int64
 	maxUntracked atomic.Int64
 
-	// gitMu runs one checkpoint or restore at a time, so a restore never
-	// reads a work tree a checkpoint is writing a tree of, and the daemon
-	// never runs more than one of these git commands at once.
 	gitMu sync.Mutex
 
-	mu sync.Mutex
-	// due holds the windows with a checkpoint queued or running. again marks
-	// one that finished another turn while its checkpoint ran.
+	mu  sync.Mutex
 	due map[string]*checkpointDue
 }
 
-// checkpointDue is a checkpoint a window is waiting for.
 type checkpointDue struct {
 	again bool
 	turn  uint64
@@ -81,7 +46,6 @@ func (d *Daemon) SetCheckpoints(c config.CheckpointsConfig) {
 	d.checkpoints.maxUntracked.Store(c.MaxUntrackedBytes())
 }
 
-// checkpointKeep is how many checkpoints a pane keeps.
 func (d *Daemon) checkpointKeep() int {
 	if n := d.checkpoints.keep.Load(); n > 0 {
 		return int(n)
@@ -89,9 +53,6 @@ func (d *Daemon) checkpointKeep() int {
 	return config.DefaultCheckpointKeep
 }
 
-// checkpointWanted reports whether ev ends a turn a checkpoint is taken for.
-// unknown counts only when the turn counted as finished: the detector sends a
-// pane to working on any output, and back on the silence timer.
 func checkpointWanted(ev SessionEvent) bool {
 	if ev.Type != EventAgentState || ev.hookPrevState != string(AgentStateWorking) {
 		return false
@@ -105,9 +66,6 @@ func checkpointWanted(ev SessionEvent) bool {
 	return false
 }
 
-// noteCheckpointEvent starts a checkpoint for a window whose agent just
-// finished a turn. It runs in the session event sink with the session's state
-// lock held, so it reads nothing from the session and runs no git.
 func (d *Daemon) noteCheckpointEvent(s *Session, ev SessionEvent) {
 	if d.checkpoints.off.Load() || !checkpointWanted(ev) {
 		return
@@ -132,8 +90,6 @@ func (d *Daemon) noteCheckpointEvent(s *Session, ev SessionEvent) {
 	}
 }
 
-// runCheckpoints takes the window's checkpoint, and one more for each time
-// the window finished a turn while the last one ran.
 func (d *Daemon) runCheckpoints(s *Session, window string) {
 	c := &d.checkpoints
 	for {
@@ -159,9 +115,6 @@ func (d *Daemon) runCheckpoints(s *Session, window string) {
 	}
 }
 
-// takeTurnCheckpoint saves one checkpoint of the window's work tree. A pane
-// with no work tree under it, a pane on another machine and a failed git
-// call take none; a failure is logged, since nobody is waiting on it.
 func (d *Daemon) takeTurnCheckpoint(s *Session, window string, job checkpointDue) {
 	if d.ctx.Err() != nil || d.checkpoints.off.Load() {
 		return
@@ -200,8 +153,6 @@ func (d *Daemon) takeTurnCheckpoint(s *Session, window string, job checkpointDue
 	}
 }
 
-// forWindowState runs fn with a copy of one window's state, if the session
-// has the window. It must not be called with the session's state lock held.
 func (d *Daemon) forWindowState(s *Session, window string, fn func(WindowState)) {
 	state := s.GetState()
 	if idx, err := findWindowStateIndex(state.Windows, window); err == nil {
@@ -209,9 +160,6 @@ func (d *Daemon) forWindowState(s *Session, window string, fn func(WindowState))
 	}
 }
 
-// checkpointLabel is a short line for what the turn was: the newest prompt
-// the pane's activity holds, else the line the turn ended with, else the
-// agent's own message.
 func (d *Daemon) checkpointLabel(s *Session, window, fallback string) string {
 	entries, _, _ := d.activity.read(s.ID, window)
 	var ended string
@@ -233,10 +181,6 @@ func (d *Daemon) checkpointLabel(s *Session, window, fallback string) string {
 	return fallback
 }
 
-// dropCheckpointsOf removes every checkpoint taken in the work tree at root,
-// whichever pane took it, running git in repoRoot. It is what removing a
-// worktree does with them. A failure is logged: the refs then stay until the
-// person removes them with git.
 func (d *Daemon) dropCheckpointsOf(repoRoot, root string) {
 	ctx, cancel := context.WithTimeout(d.ctx, checkpointTimeout)
 	defer cancel()

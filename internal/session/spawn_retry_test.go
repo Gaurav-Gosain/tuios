@@ -12,15 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
-// These tests pin what the daemon's spawn path does about the kernel's
-// transient controlling-terminal refusal, by injecting it at the one door every
-// PTY-backed process goes through. The policy itself is pinned in
-// internal/ptyspawn; what is under test here is that this path goes through
-// that door, the thing that stopped being true of the standalone path when the
-// policy lived in only one of two copies of the same code.
-
-// failStarts makes the next n starts fail with err, then delegates to the real
-// start. It returns a restore function and a counter of injected failures.
 func failStarts(t *testing.T, n int, err error) *int {
 	t.Helper()
 	real := ptyspawn.StartProcess

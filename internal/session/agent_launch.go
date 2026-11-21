@@ -15,66 +15,23 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
-// Starting an agent: what fan and start-agent share.
-//
-// An agent is named the way a person types it, as one string: "claude",
-// "codex --model o5", or a program no manifest knows. The first word is a
-// harness id (claude-code), a program name a manifest detects (claude), or any
-// program; the rest are its arguments. The string is split into words here,
-// with quotes and backslashes read the way a POSIX shell reads them, and the
-// program is exec'd directly. No shell ever parses it, so nothing in the string
-// is expanded, substituted or redirected.
-//
-// The program is found on the caller's PATH when the caller sent one (env), and
-// on the daemon's otherwise. A daemon started from a login shell long ago has a
-// PATH of its own, and an agent installed since, or into a directory only the
-// caller's shell adds, was reported as not installed although the caller could
-// run it. The other way round, a caller started by an app, such as the Rex
-// server, sends a bare PATH with none of the person's folders on it. So a
-// program not on the caller's PATH is looked up on the daemon's, the PATH a new
-// pane gets, and the agent then runs with the daemon's PATH too: on the
-// caller's bare one it would start, then fail to find git or node.
-//
-// Being ready for a first prompt is positive evidence: the pane reads idle or
-// done, from a report, a hook, the screen or the title. unknown counts only for
-// a harness whose manifest can never show idle, as agentReady says. A program no
-// manifest knows is ready only when it reports a state itself. While an agent
-// is not ready for longer than agentHeldAfter, the Inbox says so, because the
-// most common reason is a first-run screen only the person can answer.
-
-// agentHeldAfter is how long an agent the daemon started may sit unready before
-// the Inbox asks the person to look. It is a variable so tests can shorten it.
 var agentHeldAfter = 30 * time.Second
 
-// callerEnvMax bounds a caller's environment: the number of variables, the
-// size of one value, and the size of all of them.
 const (
 	callerEnvMaxVars  = 64
 	callerEnvMaxValue = 32 << 10
 	callerEnvMaxTotal = 256 << 10
 )
 
-// envNameRE is a portable environment variable name.
 var envNameRE = lazyre.New(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// agentLaunch is one agent to start: the argv to exec and the harness it is,
-// when a manifest recognises it.
 type agentLaunch struct {
-	// spec is the string as the caller wrote it.
-	spec string
-	// argv is what is exec'd. argv[0] is an absolute path when the caller
-	// sent a PATH, and the program name as written otherwise.
-	argv []string
-	// harness is the manifest id, empty for a program no manifest knows.
-	harness string
-	// daemonPath is true when the caller sent a PATH without the program on
-	// it and the daemon's PATH had it. The agent then gets the daemon's PATH
-	// (withPath).
+	spec       string
+	argv       []string
+	harness    string
 	daemonPath bool
 }
 
-// pathFrom names the PATH the program was found on, for the result: "caller"
-// or "daemon".
 func (l agentLaunch) pathFrom(callerSent bool) string {
 	if callerSent && !l.daemonPath {
 		return "caller"
@@ -82,9 +39,6 @@ func (l agentLaunch) pathFrom(callerSent bool) string {
 	return "daemon"
 }
 
-// withPath returns the environment the agent gets: env as the caller sent it,
-// with the daemon's PATH in place of the caller's when the program was found
-// only on the daemon's.
 func (l agentLaunch) withPath(env []string) []string {
 	if !l.daemonPath {
 		return env
@@ -98,14 +52,8 @@ func (l agentLaunch) withPath(env []string) []string {
 	return append(out, "PATH="+os.Getenv("PATH"))
 }
 
-// command is the argv as one line, for a result a person reads.
 func (l agentLaunch) command() string { return strings.Join(l.argv, " ") }
 
-// splitAgentWords splits an agent string into words the way a POSIX shell
-// splits a simple command: whitespace separates words, single quotes keep
-// everything literal, double quotes keep everything but a backslash before
-// " or \, and a backslash outside quotes keeps the next character. Nothing is
-// expanded.
 func splitAgentWords(s string) ([]string, error) {
 	var (
 		words   []string
@@ -161,10 +109,6 @@ func splitAgentWords(s string) ([]string, error) {
 	return words, nil
 }
 
-// lookPathIn finds a program on a PATH list the way exec.LookPath finds it on
-// the process's own. A directory in the list that is not absolute is skipped:
-// "." in a caller's PATH means the caller's directory, which the daemon is not
-// in. A name with a separator must be an absolute path.
 func lookPathIn(name, pathList string) (string, error) {
 	if strings.ContainsAny(name, `/\`) {
 		if !filepath.IsAbs(name) {
@@ -183,8 +127,6 @@ func lookPathIn(name, pathList string) (string, error) {
 	return "", exec.ErrNotFound
 }
 
-// resolveAgentLaunch turns an agent string into the argv to exec. pathList is
-// the caller's PATH, empty to use the daemon's.
 func (d *Daemon) resolveAgentLaunch(param, spec, pathList string) (agentLaunch, *verbError) {
 	spec = strings.TrimSpace(spec)
 	words, err := splitAgentWords(spec)
@@ -200,24 +142,18 @@ func (d *Daemon) resolveAgentLaunch(param, spec, pathList string) (agentLaunch, 
 		if m, cmd, ok := reg.Resolve(name); ok {
 			launch.harness = m.ID
 			display = m.DisplayName
-			// A harness id names the program that starts it; a program
-			// name the manifest detects is kept as written.
 			if reg.Lookup(name) != nil {
 				name = cmd
 			}
 		}
 	}
 	if strings.ContainsAny(name, `/\`) && !filepath.IsAbs(name) {
-		// Relative to what? The caller's directory is not the daemon's.
 		return agentLaunch{}, invalidParam(param, "agent "+echoName(name)+": a program path must be absolute")
 	}
 	var path string
 	if pathList != "" {
 		path, err = lookPathIn(name, pathList)
 		if err != nil {
-			// Not on the caller's PATH: the daemon's, the PATH a new pane
-			// gets, may have it. exec checks the name the same way at
-			// spawn, so the found path is kept and exec'd as it is.
 			if own, ownErr := exec.LookPath(name); ownErr == nil {
 				if abs, absErr := filepath.Abs(own); absErr == nil {
 					path, err, launch.daemonPath = abs, nil, true
@@ -225,9 +161,6 @@ func (d *Daemon) resolveAgentLaunch(param, spec, pathList string) (agentLaunch, 
 			}
 		}
 	} else {
-		// exec resolves the name again at spawn, on the same PATH, so the
-		// lookup only checks that it is there and the name as written is
-		// what is kept.
 		_, err = exec.LookPath(name)
 		path = name
 	}
@@ -240,8 +173,6 @@ func (d *Daemon) resolveAgentLaunch(param, spec, pathList string) (agentLaunch, 
 			Param:  param,
 			Detail: "Install it, name a program that is installed, or pass env with the PATH it is on. The tuios CLI sends its own PATH.",
 		}
-		// A name no manifest knows may be a harness spelled wrong, so the
-		// ones tuios recognises are listed, with the closest.
 		if launch.harness == "" && d.agentMatcher.registry != nil {
 			ids := d.agentMatcher.registry.IDs()
 			hint.Available, hint.DidYouMean = ids, closestMatch(name, ids)
@@ -252,12 +183,6 @@ func (d *Daemon) resolveAgentLaunch(param, spec, pathList string) (agentLaunch, 
 	return launch, nil
 }
 
-// callerEnv checks the environment a caller sent and returns it as KEY=VALUE
-// pairs in name order, with the PATH among them, which is where programs are
-// looked up. A call from another machine may not send one: its variables name
-// directories and settings of that machine. A TUIOS_ variable is refused, since
-// those are the contract a pane's process reads its identity from, and so are
-// TMUX and TMUX_PANE, which the daemon strips on purpose (guestenv).
 func callerEnv(cs *connState, env map[string]string) ([]string, string, *verbError) {
 	if len(env) == 0 {
 		return nil, "", nil
@@ -301,7 +226,6 @@ func callerEnv(cs *connState, env map[string]string) ([]string, string, *verbErr
 	return out, env["PATH"], nil
 }
 
-// agentStartOutcome is how the wait for a just-started agent ended.
 type agentStartOutcome string
 
 const (
@@ -311,23 +235,12 @@ const (
 	agentStartWindowClosed agentStartOutcome = "window_closed"
 	agentStartSessionEnded agentStartOutcome = "session_closed"
 	agentStartShutdown     agentStartOutcome = "shutdown"
-	// agentStartStarted is start-agent with no_wait: the agent's process
-	// was started and had not exited by startAgentEarlyExit, and readiness
-	// was not waited for.
-	agentStartStarted agentStartOutcome = "started"
-	// agentStartExited is start-agent with no_wait when the agent's program
-	// exited within startAgentEarlyExit and its pane was kept open with what
-	// it printed.
-	agentStartExited agentStartOutcome = "exited"
+	agentStartStarted      agentStartOutcome = "started"
+	agentStartExited       agentStartOutcome = "exited"
 )
 
-// startAgentEarlyExit is how long start-agent with no_wait watches a new agent
-// before it answers: long enough for a program that exits at once, on a bad
-// flag or a missing file, to show it, and short of any agent's start.
 const startAgentEarlyExit = time.Second
 
-// readyBy names the evidence a ready pane showed: its state, or quiet for a
-// pane on unknown whose harness can never show more.
 func readyBy(w WindowState) string {
 	if w.AgentState == AgentStateUnknown {
 		return "quiet"
@@ -335,26 +248,6 @@ func readyBy(w WindowState) string {
 	return w.AgentState.Name()
 }
 
-// waitAgentStart waits for an agent the daemon just started to be ready for
-// its first prompt (fanReadyStates, through agentReady). With stopOnBlocked a
-// pane on needs_input ends the wait at once; without it the wait goes on, since
-// what the pane asks is the person's to answer and the prompt comes after.
-//
-// When the pane has not been ready for agentHeldAfter and is not on
-// needs_input, which raises its own Inbox item, held is called once with the
-// pane as it is, and the Inbox gets an item saying the agent waits at a screen
-// tuios does not recognise. The item is closed when the wait ends, and by the
-// pane's next state change.
-//
-// harness is the harness the daemon started, when a manifest named it. It
-// stands in for detection until detection has run: without it, a pane that
-// reads unknown before the detector has named its harness would count as a
-// harness that can never show idle, and the prompt would be typed into
-// whatever the agent shows first.
-//
-// reportedOnly counts only a state the pane shows, never unknown, whatever the
-// harness: a protocol pane's screen is a transcript no manifest rule reads, and
-// its own report is the evidence.
 func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout time.Duration, stopOnBlocked, reportedOnly bool, held func(WindowState)) (WindowState, agentStartOutcome) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
@@ -431,12 +324,6 @@ func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout
 	}
 }
 
-// typeFirstPrompt pastes and submits the first prompt into an agent that is
-// ready for it, and waits for the pane to show it took it. It returns the
-// prompt status (PromptSent, PromptStalled or PromptNotSent), a note for any
-// but sent, and when the prompt was typed.
-//
-// It first waits for the agent's input box to be live. See waitInputLive.
 func (d *Daemon) typeFirstPrompt(sess *Session, windowID, text string) (string, string, int64) {
 	if pty, err := d.resolvePTYForTarget(sess, windowID); err == nil && d.harnessKnown(sess, windowID) {
 		if err := waitInputLive(d.ctx, pty, d.inputProfileFor(sess, windowID), inputLiveQuiet, inputLiveMaxWait); err != nil {
@@ -446,11 +333,6 @@ func (d *Daemon) typeFirstPrompt(sess *Session, windowID, text string) (string, 
 	return d.typePromptPastes(sess, windowID, []string{text})
 }
 
-// harnessKnown reports whether a manifest claims the harness running in a
-// window. Only such a harness waits for its input box before its first prompt:
-// its manifest says whether it turns bracketed paste on, and a program no
-// manifest describes would wait the whole inputLiveMaxWait for a mode it may
-// never turn on.
 func (d *Daemon) harnessKnown(sess *Session, windowID string) bool {
 	reg := d.agentMatcher.registry
 	if reg == nil || sess == nil {
@@ -466,36 +348,26 @@ func (d *Daemon) harnessKnown(sess *Session, windowID string) bool {
 	return false
 }
 
-// typePromptPastes is typeFirstPrompt for a prompt typed as several pastes
-// and submitted once. See submitPastes.
 func (d *Daemon) typePromptPastes(sess *Session, windowID string, pastes []string) (string, string, int64) {
 	status, note, at, _ := d.typePromptGated(sess, windowID, pastes)
 	return status, note, at
 }
 
-// typePromptGated is typePromptPastes returning the prompt gate as well, nil
-// when nothing was typed, so a caller can go on watching a stalled prompt.
 func (d *Daemon) typePromptGated(sess *Session, windowID string, pastes []string) (string, string, int64, *promptGate) {
 	pty, err := d.resolvePTYForTarget(sess, windowID)
 	if err != nil {
 		return PromptNotSent, "The agent's pane is gone.", 0, nil
 	}
-	// Every prompt this types goes to an agent: a first prompt, a delegated
-	// task, a card, a queued message. See invisible.StripHidden.
 	clean := make([]string, len(pastes))
 	for i, paste := range pastes {
 		clean[i], _ = invisible.StripHidden(paste)
 	}
 	pastes = clean
-	// Pasted and submitted with a carriage return, the way ask-agent types its
-	// question. See prompt_submit.go.
 	gate := d.newPromptGate(sess, windowID)
 	at, err := submitPastes(d.ctx, pty, pastes, d.inputProfileFor(sess, windowID))
 	if err != nil {
 		return PromptNotSent, "Could not write to the agent's pane: " + err.Error(), 0, nil
 	}
-	// The prompt is sent only once the agent shows it took it. See
-	// prompt_gate.go.
 	gate.markSubmitted(at)
 	stall := d.promptStall()
 	taken, gone := d.waitPromptTaken(sess, pty, gate, stall)
@@ -508,20 +380,12 @@ func (d *Daemon) typePromptGated(sess *Session, windowID string, pastes []string
 	return PromptSent, "", at.UnixNano(), gate
 }
 
-// launchChoice is the model, effort and permission mode a start-agent or fan
-// caller chose, as verb params.
 type launchChoice struct {
 	Model          string `json:"model"`
 	Effort         string `json:"effort"`
 	PermissionMode string `json:"permission_mode"`
 }
 
-// withChoice adds the flags of c after l's program, the flags its harness's
-// manifest names for each choice ([launch] in the manifest). A choice the
-// harness cannot take is refused by its param, before anything starts: a
-// guessed --model is how a model reached a harness that reads it as a
-// prompt. The flags go before the caller's own args and before the child
-// clamp, which reads the permission mode off the argv.
 func (d *Daemon) withChoice(l agentLaunch, c launchChoice) (agentLaunch, *verbError) {
 	var m *harness.Manifest
 	if reg := d.agentMatcher.registry; reg != nil && l.harness != "" {

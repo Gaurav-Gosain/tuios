@@ -5,37 +5,18 @@ import (
 	"strconv"
 )
 
-// paneShell is one local pane and the pid of the shell the daemon started in
-// it, the only process of a pane's tree the daemon knows for certain.
 type paneShell struct {
 	session  string
 	windowID string
 	shellPID int
 }
 
-// paneMatch is the pane a process was traced to, and how.
 type paneMatch struct {
 	pane paneShell
-	// by is "tty" when the caller's terminal session led to the pane's shell
-	// and "pid" when one of its ancestors was the shell.
-	by  string
-	pid int
+	by   string
+	pid  int
 }
 
-// matchPaneByProcess finds the pane a process belongs to from what the
-// process can say about itself without any help from tuios's environment.
-//
-// sid is the process's session id. The shell in a pane is the session leader
-// of the pane's terminal, so every process whose controlling terminal is that
-// pane shares its session id, however far down the tree it is. That is the
-// controlling-tty answer, and it is tried first because it survives a
-// reparented process. pids is the ancestor chain, nearest first, for a process
-// that left the terminal's session: a sandbox that calls setsid, or a harness
-// that runs its hooks detached. The first ancestor that is a pane's shell
-// names the pane.
-//
-// Zero and one are never matched. Zero is what an unset sid decodes to, and
-// pid 1 is every orphan's parent.
 func matchPaneByProcess(panes []paneShell, sid int, pids []int) (paneMatch, bool) {
 	byPID := make(map[int]paneShell, len(panes))
 	for _, p := range panes {
@@ -59,9 +40,6 @@ func matchPaneByProcess(panes []paneShell, sid int, pids []int) (paneMatch, bool
 	return paneMatch{}, false
 }
 
-// localPaneShells lists every pane on this daemon with a live shell. Panes on
-// another machine are left out: their pids belong to that machine's process
-// table and could collide with a local one.
 func (d *Daemon) localPaneShells() []paneShell {
 	var out []paneShell
 	for _, sess := range d.manager.AllSessions() {
@@ -83,10 +61,6 @@ func (d *Daemon) localPaneShells() []paneShell {
 	return out
 }
 
-// verbResolvePane names the pane a process runs in, for a hook reporter that
-// lost the pane's environment. A harness that scrubs its hooks' environment,
-// or a sandbox wrapper that starts clean, leaves TUIOS_PANE_ID unset, and the
-// report would otherwise land on whichever window is focused.
 func (d *Daemon) verbResolvePane(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		SID  int   `json:"sid"`

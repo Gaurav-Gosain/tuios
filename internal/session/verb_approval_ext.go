@@ -7,21 +7,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
-// Reading a held approval whole, and the answers that need more than the
-// summary line: risk acknowledgements and plans.
-//
-// get-approval reads, so it is scopeRead and a link needs list. It names a hold
-// by request id rather than by session, so it also takes session: from a pane
-// without admin the session is filled in as the pane's own, and a hold in
-// another session is not found. reply-approval and respond keep their own
-// rules: the person's nonce, or the respond grant for respond.
-
 // ErrVerbRiskUnacknowledged reports an allow for an approval that matched a
 // risk rule, sent without risk_ack naming exactly the rules it matched.
 // Nothing was answered.
 const ErrVerbRiskUnacknowledged = "risk_unacknowledged"
 
-// getApprovalParams are what get-approval takes.
 type getApprovalParams struct {
 	RequestID string `json:"request_id"`
 	Session   string `json:"session"`
@@ -46,7 +36,6 @@ type ApprovalDetail struct {
 	Untrusted   bool       `json:"untrusted"`
 }
 
-// holdDetail copies a running hold and the scope its item shows.
 func (a *attentionStore) holdDetail(requestID string) (approvalHold, []string, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -61,7 +50,6 @@ func (a *attentionStore) holdDetail(requestID string) (approvalHold, []string, b
 	return *h, scope, true
 }
 
-// verbGetApproval answers get-approval: a running hold, whole.
 func (d *Daemon) verbGetApproval(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p getApprovalParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -76,8 +64,6 @@ func (d *Daemon) verbGetApproval(cs *connState, params json.RawMessage) (any, *v
 		if verr != nil {
 			return nil, verr
 		}
-		// A hold in another session is not found, so a caller held to its
-		// own session learns nothing about the rest.
 		ok = sess.Name() == h.session
 	}
 	if !ok {
@@ -109,7 +95,6 @@ func (d *Daemon) verbGetApproval(cs *connState, params json.RawMessage) (any, *v
 		"plan_sha":     h.planSHA,
 		"risk":         hits,
 		"deny_message": h.denyMessage,
-		// The summary, the target and the plan are the agent's text.
-		"untrusted": true,
+		"untrusted":    true,
 	}, nil
 }

@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// waitPrompt polls cond for up to five seconds.
 func waitPrompt(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -50,7 +49,6 @@ func TestTypeAtPromptTypesOnlyAtAShellPrompt(t *testing.T) {
 		return ok && cwd == dir
 	})
 
-	// A program takes the terminal. The cd must not reach it.
 	if _, err := pty.Write([]byte("sleep 30\n")); err != nil {
 		t.Fatal(err)
 	}

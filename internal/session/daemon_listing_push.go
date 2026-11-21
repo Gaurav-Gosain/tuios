@@ -9,47 +9,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// The session listing push.
-//
-// A client draws other sessions on its rail from the session listing. It used
-// to ask for the listing every 3 seconds while the rail was open, and every 30
-// while it was hidden, whether anything had changed or not. Each ask woke the
-// daemon and the client.
-//
-// Now the daemon tells a client when the listing changed, and the client asks
-// then. Everything the listing shows changes through an event the daemon
-// already sees: output, input, a change to a session's state, a title, a
-// pane's folder or branch, a client arriving or leaving, a session made or
-// ended. Each raises the listing latch (idle_wakes.go). The notifier then
-// builds the listing, and sends MsgSessionsChanged when it differs from the
-// last one it sent. With nothing happening it arms no timer and sends nothing.
-//
-// The push is never more frequent than the poll was: one every
-// listingPushGap at most, the first listingPushSettle after a quiet spell.
-// A session made or ended is the exception. It raises the listingNow latch
-// too, and the notifier looks listingPushSettle after it, gap or not: a
-// script that kills a session wants its row gone from the rail at once, and
-// the push sent for the command that came just before it would otherwise hold
-// the next one back for the whole gap (issue #1225). A burst of them still
-// costs one look, because each waits listingPushSettle for the rest.
-
 const (
-	// listingPushGap is the shortest gap between two looks at the listing.
-	listingPushGap = 3 * time.Second
-	// listingPushSettle is how long a change waits for the ones that come with
-	// it, so a burst is looked at once.
+	listingPushGap    = 3 * time.Second
 	listingPushSettle = 100 * time.Millisecond
 )
 
-// listingNotifier looks at the listing after the listing latch goes up, and
-// tells the clients that read MsgSessionsChanged when it changed.
 func (d *Daemon) listingNotifier() {
 	timer := time.NewTimer(time.Hour)
 	timer.Stop()
 	defer timer.Stop()
 	armed := false
-	// armedAt is when the armed timer fires, so a session change can bring
-	// it forward and never push it back.
 	var armedAt time.Time
 	var last uint64
 	var lastLook time.Time
@@ -60,8 +29,6 @@ func (d *Daemon) listingNotifier() {
 		case <-d.ctx.Done():
 			return
 		case <-d.wakes.listing.C():
-			// The token can outlive the flag: a look took the flag before
-			// this token was read.
 			if armed || !d.wakes.listing.Up() {
 				continue
 			}
@@ -79,8 +46,6 @@ func (d *Daemon) listingNotifier() {
 			if armed && !armedAt.After(at) {
 				continue
 			}
-			// Reset on a running timer is safe since Go 1.23: no stale fire
-			// is left in its channel.
 			armed, armedAt = true, at
 			timer.Reset(time.Until(at))
 		case <-timer.C:
@@ -105,14 +70,6 @@ func (d *Daemon) listingNotifier() {
 	}
 }
 
-// listingForPush is the listing as the notifier compares it: each pane's title
-// without its state marks. An agent's spinner changes its title several times
-// a second, and the rail and the Inbox label a row by railWindowLabel, which
-// trims the marks, so a new frame changes nothing they draw. With the frame in
-// the hash, each look found a new listing: a running agent sent every client a
-// push every listingPushGap, and each push made the client ask for the listing
-// and run its full scans. A listing a client asks for still carries the title
-// as it is. sessions is a fresh listing, and is changed in place.
 func listingForPush(sessions []SessionInfo) []SessionInfo {
 	for i := range sessions {
 		for j := range sessions[i].Windows {
@@ -123,17 +80,12 @@ func listingForPush(sessions []SessionInfo) []SessionInfo {
 	return sessions
 }
 
-// listingReader reports whether cs reads MsgSessionsChanged. A client that
-// has not had its attach reply yet reads its next message as that reply, so
-// a push must not come first; broadcastHostsChanged keeps the same rule. The
-// client refreshes its listing once it is attached.
 func listingReader(cs *connState) bool {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	return cs.isTUIClient && cs.attached && cs.listingPush
 }
 
-// hasListingReaders reports whether any client reads MsgSessionsChanged.
 func (d *Daemon) hasListingReaders() bool {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
@@ -145,8 +97,6 @@ func (d *Daemon) hasListingReaders() bool {
 	return false
 }
 
-// broadcastSessionsChanged sends MsgSessionsChanged to every client that
-// reads it.
 func (d *Daemon) broadcastSessionsChanged() {
 	msg, err := NewMessage(MsgSessionsChanged, nil)
 	if err != nil {

@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// previewSearchText is size bytes of 'x' with a newline every 80 bytes, with
-// each text in plants written at its offset.
 func previewSearchText(size int, plants map[int]string) []byte {
 	b := make([]byte, size)
 	for i := range b {
@@ -26,9 +24,6 @@ func previewSearchText(size int, plants map[int]string) []byte {
 	return b
 }
 
-// previewLogText is size bytes of log-like ASCII text with capitals and no
-// digits, so a lower-case query has to lower real work and a query of digits
-// has nothing to find.
 func previewLogText(size int) []byte {
 	const line = "Alpha Beta GAMMA delta Epsilon Kappa Omega sigma\n"
 	b := make([]byte, size)
@@ -158,8 +153,8 @@ func TestPreviewSearchAllocatesLittle(t *testing.T) {
 		name string
 		path string
 		seek PreviewSeek
-		want int64 // the match's byte, or -1 for not found
-		end  int64 // where a search without a match stopped
+		want int64
+		end  int64
 	}{
 		{"lower case across the edge", lowerEdge, PreviewSeek{Find: "needle"}, edge, 0},
 		{"lower case across the edge, back", lowerEdge, PreviewSeek{Find: "needle", From: 2 * mi, Back: true}, edge, 0},

@@ -2,8 +2,6 @@ package session
 
 import "testing"
 
-// newTestSessionWithWindow gives the ranking tests one real window to claim,
-// without a daemon: precedence is decided entirely inside the session.
 func newTestSessionWithWindow(t *testing.T) *Session {
 	t.Helper()
 	sess := newTestSession(t)
@@ -22,7 +20,6 @@ func TestTranscriptOutranksTheWeakerTiers(t *testing.T) {
 	}); err != nil || !applied {
 		t.Fatalf("transcript report: %v applied=%v", err, applied)
 	}
-	// A weaker tier guessing at the same pane leaves the better answer alone.
 	for _, weaker := range []AgentSource{AgentSourceOSC, AgentSourceScreen, AgentSourceStall} {
 		if _, applied, err := s.ApplyAgentReport(win, AgentReport{
 			State: AgentStateIdle, Source: weaker,
@@ -30,7 +27,6 @@ func TestTranscriptOutranksTheWeakerTiers(t *testing.T) {
 			t.Fatalf("%s overwrote the transcript: applied=%v err=%v", weaker, applied, err)
 		}
 	}
-	// The harness reporting for itself still wins, because it is speaking now.
 	if _, applied, err := s.ApplyAgentReport(win, AgentReport{
 		State: AgentStateNeedsInput, Source: AgentSourceReport,
 	}); err != nil || !applied {
@@ -53,12 +49,9 @@ func TestYieldingAClaimReopensTheWindowWithoutChangingIt(t *testing.T) {
 	if !s.yieldAgentClaim(win, AgentSourceTranscript) {
 		t.Fatal("yield reported nothing to give back")
 	}
-	// What was last read is still the best answer anyone has; it just stops
-	// being defended.
 	if got := s.GetState().Windows[0].AgentState; got != AgentStateWorking {
 		t.Fatalf("state after yield = %q, want it left alone", got)
 	}
-	// And now the weakest tier can speak.
 	if _, applied, err := s.ApplyAgentReport(win, AgentReport{
 		State: AgentStateIdle, Source: AgentSourceStall,
 	}); err != nil || !applied {
@@ -84,10 +77,6 @@ func TestYieldingKeepsTheDetectorsLifecycleClaim(t *testing.T) {
 	if claim.source != AgentSourceDetect {
 		t.Fatalf("source after yield = %q, want detect", claim.source)
 	}
-	// The pane is back exactly where it was before the transcript spoke: under
-	// the detector, and open to every tier above it. The silence timer is not
-	// checked here because it does not come through this gate at all; it reads
-	// working and writes idle directly, which is already narrower.
 	if _, applied, err := s.ApplyAgentReport(win, AgentReport{
 		State: AgentStateNeedsInput, Source: AgentSourceScreen,
 	}); err != nil || !applied {

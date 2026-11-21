@@ -7,11 +7,6 @@ import (
 	"time"
 )
 
-// Threading tests. A thread id is a message id, so everything here is about one
-// rule and the two ways the bounded ring makes it hard: a reply belongs to the
-// thread of the message it answers, and the ring forgets.
-
-// idOf reads a message id out of a verb result.
 func idOf(t *testing.T, res map[string]any, key string) uint64 {
 	t.Helper()
 	n, ok := res[key].(float64)
@@ -21,7 +16,6 @@ func idOf(t *testing.T, res map[string]any, key string) uint64 {
 	return uint64(n)
 }
 
-// messageIDs lists the ids a read returned, in the order it returned them.
 func messageIDs(t *testing.T, res map[string]any) []uint64 {
 	t.Helper()
 	msgs, _ := res["messages"].([]any)
@@ -75,7 +69,6 @@ func TestAnUnthreadedMessageCarriesItsOwnThreadOnTheWire(t *testing.T) {
 	if uint64(thread) != id {
 		t.Errorf("thread_id = %v, want the message's own id %d", thread, id)
 	}
-	// And it is filterable by that thread like any other.
 	byThread := result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"zero","thread":`+u(id)+`}}`))
 	if got := messageIDs(t, byThread); !slices.Equal(got, []uint64{id}) {
 		t.Errorf("filtering on an unthreaded message's own thread read back %v, want %v", got, []uint64{id})
@@ -102,7 +95,6 @@ func TestThreadIdsMeanNothingOutsideTheirSession(t *testing.T) {
 	}
 }
 
-// u renders an id for a JSON literal in these tests.
 func u(id uint64) string {
 	return strconv.FormatUint(id, 10)
 }
@@ -129,15 +121,12 @@ func TestAThreadHoldsTheWholeConversation(t *testing.T) {
 		t.Fatalf("a reply is in thread %d, want the thread it answered, %d", got, root)
 	}
 
-	// The reply to the reply names the middle message, and must not start a
-	// thread of its own.
 	third := result(t, c.call(t, `{"id":3,"verb":"send-agent-message","params":{"session":"thread","to":"`+b+`","from":"`+a+`","reply_to":`+u(replyID)+`,"text":"thanks, merging"}}`))
 	thirdID := idOf(t, third, "message_id")
 	if got := idOf(t, third, "thread_id"); got != root {
 		t.Fatalf("a reply to a reply is in thread %d, want %d", got, root)
 	}
 
-	// Something said in the same session that is not part of the conversation.
 	other := result(t, c.call(t, `{"id":4,"verb":"send-agent-message","params":{"session":"thread","to":"`+b+`","from":"`+a+`","text":"unrelated"}}`))
 	otherID := idOf(t, other, "message_id")
 
@@ -150,14 +139,11 @@ func TestAThreadHoldsTheWholeConversation(t *testing.T) {
 		t.Errorf("the read did not report which thread it filtered on: %v", read["thread"])
 	}
 
-	// Any id in the thread names the thread, so a caller holding the reply it
-	// just read does not have to trace back to the first message.
 	byReply := result(t, c.call(t, `{"id":6,"verb":"read-agent-messages","params":{"session":"thread","thread":`+u(replyID)+`}}`))
 	if got := messageIDs(t, byReply); !slices.Equal(got, want) {
 		t.Fatalf("filtering on a reply's id read back %v, want the whole thread %v", got, want)
 	}
 
-	// And the unrelated message is its own thread, holding only itself.
 	alone := result(t, c.call(t, `{"id":7,"verb":"read-agent-messages","params":{"session":"thread","thread":`+u(otherID)+`}}`))
 	if got := messageIDs(t, alone); !slices.Equal(got, []uint64{otherID}) {
 		t.Fatalf("an unthreaded message read back as %v, want only itself", got)
@@ -182,7 +168,6 @@ func TestReplyToAMessageThatNeverExistedIsRefused(t *testing.T) {
 		t.Errorf("the refusal did not name reply_to: %v", e)
 	}
 
-	// And nothing was stored: a refused send must not half-run.
 	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"ghost"}}`))
 	if n, _ := read["messages"].([]any); len(n) != 0 {
 		t.Errorf("the refused reply was stored anyway: %v", read)
@@ -207,8 +192,6 @@ func TestReplyToAnEvictedParentStillThreads(t *testing.T) {
 		t.Fatalf("a reply to a live parent: thread %d missing %v, want thread %d and not missing", live.ThreadID, live.ReplyToMissing, root.ID)
 	}
 
-	// Fill the ring until the root has actually been dropped, rather than
-	// assuming a count does it.
 	for range agentMailboxMaxMessages + 8 {
 		bus.send("s", AgentMessage{Kind: agentMsgNotice, Text: "filler"})
 	}
@@ -227,8 +210,6 @@ func TestReplyToAnEvictedParentStillThreads(t *testing.T) {
 		t.Error("a reply to an evicted parent did not report that the parent is gone")
 	}
 
-	// The property that matters: two replies to the same evicted parent are
-	// still one conversation.
 	later := bus.send("s", AgentMessage{Kind: agentMsgNotice, Text: "and another", ReplyTo: root.ID})
 	if later.ThreadID != late.ThreadID {
 		t.Errorf("two replies to the same evicted parent are in threads %d and %d, want one thread", late.ThreadID, later.ThreadID)
@@ -258,7 +239,6 @@ func TestWaitForAThreadIgnoresEverythingElse(t *testing.T) {
 	}()
 	time.Sleep(200 * time.Millisecond)
 
-	// Mail that is not an answer. Without the thread this resolves the wait.
 	c.call(t, `{"id":2,"verb":"send-agent-message","params":{"session":"waitthread","to":"`+a+`","from":"`+b+`","text":"unrelated, about something else"}}`)
 	time.Sleep(300 * time.Millisecond)
 	select {

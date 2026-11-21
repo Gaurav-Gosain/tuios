@@ -154,11 +154,6 @@ func TestTaskEventsLeaveInTheOrderOfTheirChanges(t *testing.T) {
 		})
 	}
 
-	// A change refused inside its closure (r1: a release of a card no pane
-	// holds) and one refused before it (r2: a stage move of a card that does
-	// not exist) publish no task event; nor does a change that moves nothing
-	// (a finish of a card already in done). The accepted changes beside them
-	// publish exactly one event each, and the stream carries them in order.
 	t.Run("refused changes publish nothing", func(t *testing.T) {
 		sess, c := orderSession(t, d, sp, false)
 		result(t, callP(c, t, "add-task", map[string]any{"session": sess.Name(), "title": "order"}))
@@ -198,8 +193,6 @@ func TestTaskEventsLeaveInTheOrderOfTheirChanges(t *testing.T) {
 		}
 	})
 
-	// The positive half: two changes made one after the other arrive in
-	// order, with no sink in the way.
 	t.Run("two changes in sequence", func(t *testing.T) {
 		sess, c := orderSession(t, d, sp, false)
 		result(t, callP(c, t, "add-task", map[string]any{"session": sess.Name(), "title": "order"}))
@@ -214,16 +207,11 @@ func TestTaskEventsLeaveInTheOrderOfTheirChanges(t *testing.T) {
 	})
 }
 
-// orderCall is one verb call of a row, without its session.
 type orderCall struct {
 	verb   string
 	params map[string]any
 }
 
-// orderRow is one parked row: what is made before the sink is set, change A,
-// which snapshot carries it, change B, and which event belongs to which.
-// Every call acts on the card t1 as the person, and the window argument is
-// the session's pane, empty on a session with no window.
 type orderRow struct {
 	pane     bool
 	prepare  func(window string) []orderCall
@@ -232,12 +220,8 @@ type orderRow struct {
 	isA, isB func(streamEvent) bool
 }
 
-// orderSessions numbers the sessions so every subtest and every run in one
-// process has its own.
 var orderSessions atomic.Uint64
 
-// orderSession makes a session of its own, with one live pane when pane is
-// set and no window otherwise, and a connection that acts as the person.
 func orderSession(t *testing.T, d *Daemon, sp string, pane bool) (*Session, *verbConn) {
 	t.Helper()
 	name := "event-order-" + strconv.FormatUint(orderSessions.Add(1), 10)
@@ -251,7 +235,6 @@ func orderSession(t *testing.T, d *Daemon, sp string, pane bool) (*Session, *ver
 	return sess, dialVerb(t, sp)
 }
 
-// orderSubscribe reads the session's task events.
 func orderSubscribe(t *testing.T, d *Daemon, sess *Session) *eventSub {
 	t.Helper()
 	sub := d.events.subscribe(eventFilter{sess: sess, types: map[string]bool{
@@ -261,9 +244,6 @@ func orderSubscribe(t *testing.T, d *Daemon, sess *Session) *eventSub {
 	return sub
 }
 
-// orderParked runs one parked row on a fresh session. It reports false only
-// when change A answered before change B was made on a session with a pane,
-// which may set up once more.
 func orderParked(t *testing.T, d *Daemon, sp string, r orderRow) bool {
 	t.Helper()
 	sess, c := orderSession(t, d, sp, r.pane)
@@ -335,9 +315,6 @@ func orderParked(t *testing.T, d *Daemon, sp string, r orderRow) bool {
 	return true
 }
 
-// orderCheck asserts exactly one event of A and one of B, A's first by stream
-// sequence, the last event's row against the card t1 the session holds, and no
-// event dropped.
 func orderCheck(t *testing.T, sess *Session, sub *eventSub, evs []streamEvent, isA, isB func(streamEvent) bool) {
 	t.Helper()
 	if n := sub.dropped.Load(); n != 0 {
@@ -381,15 +358,12 @@ func orderCheck(t *testing.T, sess *Session, sub *eventSub, evs []streamEvent, i
 	}
 }
 
-// orderPending is a verb call answered on its own goroutine: done is closed
-// when the answer, or the error that ended the wait, is in.
 type orderPending struct {
 	done chan struct{}
 	resp map[string]any
 	err  error
 }
 
-// orderStart sends call on c and reads the answer on a goroutine of its own.
 func orderStart(c *verbConn, call orderCall) *orderPending {
 	p := &orderPending{done: make(chan struct{})}
 	line := `{"id":1,"verb":"` + call.verb + `","params":` + jsonParams(call.params) + "}\n"
@@ -409,7 +383,6 @@ func orderStart(c *verbConn, call orderCall) *orderPending {
 	return p
 }
 
-// orderAnswered reports whether p has answered, without waiting.
 func orderAnswered(p *orderPending) bool {
 	select {
 	case <-p.done:
@@ -419,9 +392,6 @@ func orderAnswered(p *orderPending) bool {
 	}
 }
 
-// orderDrain takes the events the subscription holds now. Every change in
-// these tests has answered before it is called, and a verb answers after its
-// event is published.
 func orderDrain(sub *eventSub) []streamEvent {
 	var evs []streamEvent
 	for {
@@ -434,7 +404,6 @@ func orderDrain(sub *eventSub) []streamEvent {
 	}
 }
 
-// orderDescribe lists events as seq, type, action and stage.
 func orderDescribe(evs []streamEvent) string {
 	out := ""
 	for _, ev := range evs {

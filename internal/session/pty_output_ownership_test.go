@@ -29,8 +29,6 @@ func TestPTYOutputHandlerOwnsItsBytes(t *testing.T) {
 	c.ptyHandlersMu.Unlock()
 	c.StartReadLoop()
 
-	// Frames of the same length and different bytes, so a shared buffer
-	// would be overwritten in place rather than resliced.
 	var want [][]byte
 	for i := range 8 {
 		frame := bytes.Repeat([]byte{'a' + byte(i)}, 300)

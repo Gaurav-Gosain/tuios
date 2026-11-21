@@ -40,7 +40,6 @@ func TestEveryDaemonKeyReachesTheDaemon(t *testing.T) {
 	}
 }
 
-// setNonZero gives a field a value that is not its zero.
 func setNonZero(t *testing.T, v reflect.Value) {
 	t.Helper()
 	switch v.Kind() {

@@ -43,8 +43,6 @@ func TestReposRootMustBeAnAbsoluteDirectory(t *testing.T) {
 	}
 }
 
-// reposRootWith makes a directory holding one checkout of the fixture
-// repository whose origin is url, and returns the directory and the checkout.
 func reposRootWith(t *testing.T, repo, url string) (string, string) {
 	t.Helper()
 	root := t.TempDir()

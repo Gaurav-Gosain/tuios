@@ -155,7 +155,6 @@ func TestAStaleClientCannotDropAMasterRatioItNeverSaw(t *testing.T) {
 	}
 	t.Cleanup(sess.Stop)
 
-	// Client A settles the session with workspace 3 tuned to 0.7.
 	sess.UpdateState(&SessionState{
 		Name:                 "ratio",
 		CurrentWorkspace:     3,
@@ -168,13 +167,10 @@ func TestAStaleClientCannotDropAMasterRatioItNeverSaw(t *testing.T) {
 		t.Fatalf("the session holds %v for workspace 3 after A's push, want 0.7", got)
 	}
 
-	// A daemon-side mutation moves the version on, so B's next push is stale.
 	if err := sess.SetDisplayName("Ratio"); err != nil {
 		t.Fatalf("SetDisplayName: %v", err)
 	}
 
-	// Client B has never been to workspace 3 and pushes a snapshot from before
-	// the rename.
 	accepted := sess.UpdateState(&SessionState{
 		Name:                 "ratio",
 		CurrentWorkspace:     1,

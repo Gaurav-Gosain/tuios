@@ -21,7 +21,6 @@ func TestSplitAgentWords(t *testing.T) {
 		{in: `aider --message 'fix the "bug"'`, want: []string{"aider", "--message", `fix the "bug"`}},
 		{in: `x "a \"b\" \\ c" d\ e`, want: []string{"x", `a "b" \ c`, "d e"}},
 		{in: `x ''`, want: []string{"x", ""}},
-		// Nothing is expanded: these are literal words.
 		{in: `x $HOME $(id) ; rm`, want: []string{"x", "$HOME", "$(id)", ";", "rm"}},
 		{in: `x 'open`, bad: true},
 		{in: `x \`, bad: true},
@@ -82,8 +81,6 @@ func TestBuildEnvWithPutsTheCallersVariablesUnderTuios(t *testing.T) {
 	if count != 1 {
 		t.Errorf("FAN_DAEMON_ONLY appears %d times", count)
 	}
-	// TERM is set after the caller's, so the last one, which exec keeps, is
-	// tuios's.
 	last := ""
 	for _, kv := range env {
 		if strings.HasPrefix(kv, "TERM=") {
@@ -95,8 +92,6 @@ func TestBuildEnvWithPutsTheCallersVariablesUnderTuios(t *testing.T) {
 	}
 }
 
-// fakeProgram writes a script into a directory of its own and returns the
-// directory. The directory is not on the daemon's PATH.
 func fakeProgram(t *testing.T, name, script string) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "bin-"+name)
@@ -109,7 +104,6 @@ func fakeProgram(t *testing.T, name, script string) string {
 	return bin
 }
 
-// echoScript prints its arguments and a variable, then echoes what it reads.
 const echoScript = "echo \"ARGS: $*\"\necho \"MARK: $FAN_MARK\"\nwhile IFS= read -r line; do echo \"GOT: $line\"; done\n"
 
 // TestFanHoldsAPromptAndSaysSoInTheInbox: an agent that sits on a screen
@@ -127,8 +121,6 @@ func TestFanHoldsAPromptAndSaysSoInTheInbox(t *testing.T) {
 	row := res["sessions"].([]any)[0].(map[string]any)
 	sess := d.manager.GetSession(row["session"].(string))
 	windowID := row["window_id"].(string)
-	// Claude Code can show idle, so unknown is not ready for it: this is the
-	// first-run screen.
 	if err := sess.SetDaemonWindowAgentState(windowID, AgentStateUnknown, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +198,6 @@ func TestStartAgentStopsAtABlockedAgentAndAtNoEvidence(t *testing.T) {
 		t.Error("the blocked agent's pane was not kept")
 	}
 
-	// A program that never shows a state is never ready.
 	raw, _ := json.Marshal(map[string]any{"session": "start2", "agent": "mytool", "env": map[string]string{"PATH": path}, "ready_timeout": 300})
 	out, verr := d.verbStartAgent(nil, raw)
 	if verr != nil {
@@ -223,8 +214,6 @@ func TestStartAgentStopsAtABlockedAgentAndAtNoEvidence(t *testing.T) {
 	}
 }
 
-// envValue returns the last value env holds for key, which is the one exec
-// keeps.
 func envValue(env []string, key string) string {
 	prefix := key + "="
 	for _, kv := range slices.Backward(env) {

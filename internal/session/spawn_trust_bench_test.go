@@ -10,10 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
-// The cost of placing a caller, against the parent walk it replaced. The
-// legacy functions are the walks of paneOriginWith and hookOfPeer before
-// spawn_trust.go, kept here only to measure against.
-
 func legacyPaneAncestor(d *Daemon, pid int) bool {
 	self := os.Getpid()
 	ppid, tty, ok := readProcLineage(pid)

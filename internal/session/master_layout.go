@@ -10,21 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
-// The master-stack shape of a workspace as an op.
-//
-// A workspace's master position and master count are session state: they
-// decide every pane's rectangle, and a PTY has one size, so every client of a
-// session has to lay a workspace out with the same ones. They are never carried
-// in a client's state push. A client that changes one sends MsgMasterLayout,
-// the daemon applies it under mutateState, Version advances, and every client
-// (the sender included) is sent the result. This is the rule every
-// session-owned field heads for, so these fields start there instead of adding
-// another merge rule.
-//
-// The op is recorded with noteTreeOpLocked. Like a tree op it changes one
-// field that no push carries, so a push built before it has missed nothing it
-// could undo, and a peer whose push crossed it is answered with the state.
-
 // MasterLayoutState is one workspace's master-stack shape.
 type MasterLayoutState struct {
 	// Position is the side the masters take: one of config.MasterPositions.
@@ -54,15 +39,8 @@ type MasterLayoutPayload struct {
 	IfAbsent bool
 }
 
-// maxMasterLayouts caps how many workspaces hold a shape. An ordinary
-// workspace is bounded by the workspace count and a scratch one by the windows
-// on it, so this only stops a client that keeps sending new scratch numbers
-// from growing the state past what a push can carry.
 const maxMasterLayouts = 64
 
-// checkMasterLayout refuses a shape the session cannot hold: a workspace that
-// is not one (0, past the workspace count, or a scratch workspace with no
-// window on it), a side that is not a side, or a count out of range.
 func checkMasterLayout(state *SessionState, ws int, st MasterLayoutState) error {
 	ok := ws >= 1 && ws <= state.workspaceBound()
 	if IsScratchWorkspace(ws) {
@@ -101,8 +79,6 @@ func (s *Session) RestoreMasterLayouts(saved map[int]MasterLayoutState) {
 	})
 }
 
-// errMasterLayoutSame refuses an op that would not change the state, so it
-// does not advance Version and wake every client for nothing.
 var errMasterLayoutSame = errors.New("master layout op changes nothing")
 
 // ApplyMasterLayout applies one client's master-stack shape for one
@@ -124,8 +100,6 @@ func (s *Session) ApplyMasterLayout(p *MasterLayoutPayload) (bool, error) {
 		if !had && len(state.WorkspaceMasterLayout) >= maxMasterLayouts {
 			return errfmt.Errorf("the session already holds %d master layouts", maxMasterLayouts)
 		}
-		// The snapshot handed out before this aliases the map, so it is
-		// cloned before the write.
 		next := maps.Clone(state.WorkspaceMasterLayout)
 		if next == nil {
 			next = make(map[int]MasterLayoutState, 1)
@@ -145,11 +119,6 @@ func (s *Session) ApplyMasterLayout(p *MasterLayoutPayload) (bool, error) {
 	return true, nil
 }
 
-// handleMasterLayout applies a client's master layout op. An op that is
-// applied reaches every client through the state sink. One that changes
-// nothing, or that is refused, is answered to its sender alone with the state
-// that stands, so the sender never keeps showing a shape the session did not
-// take.
 func (d *Daemon) handleMasterLayout(cs *connState, msg *Message) error {
 	if cs.sessionID == "" {
 		return d.replyError(cs, msg, ErrCodeNotAttached, "not attached to any session")
@@ -198,8 +167,6 @@ func (c *TUIClient) SendMasterLayout(ws int, st MasterLayoutState, ifAbsent bool
 	return nil
 }
 
-// cloneMasterSplits copies a session's master-stack splits deep, so a copy of
-// the state shares no list with the session's own.
 func cloneMasterSplits(m map[int]layout.MasterSplits) map[int]layout.MasterSplits {
 	if m == nil {
 		return nil

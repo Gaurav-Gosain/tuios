@@ -52,10 +52,6 @@ import (
 func TestClientBoundsWhatDaemonsSend(t *testing.T) {
 	h := startHostileDaemon(t)
 
-	// Levels as the scan counts them, the payload being level one: for a
-	// state carried at payload.State, the state is 2, WorkspaceTrees 3, the
-	// tree 4, its root 5, and a node k splits below the root is 5+k. bspChain
-	// makes a tree whose deepest node is depth splits below the root.
 	const treeLevelsAboveChain = 5
 	atLimit := maxGobNesting - treeLevelsAboveChain
 
@@ -88,8 +84,6 @@ func TestClientBoundsWhatDaemonsSend(t *testing.T) {
 	})
 
 	t.Run("a layout tree past the bound is refused before decode", func(t *testing.T) {
-		// At the bound gob decodes it, and the layout validator refuses the
-		// tree for being deeper than any real layout.
 		_, err := attach(t, &AttachedPayload{SessionName: "hostile", State: stateWithChain(atLimit)})
 		if err == nil || !strings.Contains(err.Error(), "layout tree is deeper") {
 			t.Fatalf("a state nesting exactly %d levels was not decoded and handed to the layout check: %v", maxGobNesting, err)
@@ -101,8 +95,6 @@ func TestClientBoundsWhatDaemonsSend(t *testing.T) {
 	})
 
 	t.Run("a chain of type definitions past the bound is refused", func(t *testing.T) {
-		// The chain is the payload's only other definitions: one for the
-		// payload's own struct and one per slice level.
 		st, err := attach(t, typeChainPayload(maxGobTypes-1))
 		if err != nil || st != nil {
 			t.Fatalf("a payload defining exactly %d types was not decoded: %v", maxGobTypes, err)
@@ -124,8 +116,6 @@ func TestClientBoundsWhatDaemonsSend(t *testing.T) {
 			h.write(t, conn, MsgStateSync, &StateSyncPayload{TriggerType: "deep", State: stateWithChain(atLimit + 1)})
 			h.write(t, conn, MsgStateSync, typeChainSync(maxGobTypes))
 			h.write(t, conn, MsgStateSync, &StateSyncPayload{TriggerType: "good", State: largeRealisticState(1, 3)})
-			// Held open until the client is done, so a disconnect the test
-			// sees is the client's own doing.
 			_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			_, _ = ReadMessage(conn)
 		})
@@ -172,10 +162,6 @@ func TestClientBoundsWhatDaemonsSend(t *testing.T) {
 	})
 
 	t.Run("command result data past the bound is refused", func(t *testing.T) {
-		// Levels: the payload 1, Data 2, and each wrapping map adds an
-		// interface and a map. After k wraps the innermost map is 2+2k and
-		// its value's interface 3+2k; a []int there is 4+2k, a map with a
-		// value 5+2k. k = 510 puts them at 1024 and 1025.
 		const wraps = (maxGobNesting - 4) / 2
 		nest := func(leaf any) map[string]any {
 			m := map[string]any{"leaf": leaf}
@@ -218,11 +204,6 @@ func TestClientBoundsWhatDaemonsSend(t *testing.T) {
 	})
 }
 
-// typeChainPayload is an attach reply that carries, beside its session name,
-// a field no client has: a slice of a slice of ... of int, n slices deep and
-// nil. gob sends a definition for the reply's struct and one for each slice
-// level, n+1 in all, and a receiver compiles a decoder for the chain by
-// recursion even though it skips the field.
 func typeChainPayload(n int) any {
 	v := reflect.New(reflect.StructOf([]reflect.StructField{
 		{Name: "SessionName", Type: reflect.TypeFor[string]()},
@@ -232,7 +213,6 @@ func typeChainPayload(n int) any {
 	return v.Interface()
 }
 
-// typeChainSync is typeChainPayload as a state sync.
 func typeChainSync(n int) any {
 	v := reflect.New(reflect.StructOf([]reflect.StructField{
 		{Name: "TriggerType", Type: reflect.TypeFor[string]()},
@@ -250,8 +230,6 @@ func sliceChain(n int) reflect.Type {
 	return typ
 }
 
-// hostileDaemon is a fake daemon on the test's socket that answers the hello
-// like a real one and then sends what a test tells it to.
 type hostileDaemon struct {
 	ln net.Listener
 }
@@ -271,8 +249,6 @@ func startHostileDaemon(t *testing.T) *hostileDaemon {
 	return &hostileDaemon{ln: ln}
 }
 
-// serve accepts the next connection, completes the handshake, and runs fn on
-// it in the background.
 func (h *hostileDaemon) serve(t *testing.T, fn func(conn net.Conn)) {
 	t.Helper()
 	go func() {

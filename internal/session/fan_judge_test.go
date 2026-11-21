@@ -22,7 +22,6 @@ func TestFanJudgeReach(t *testing.T) {
 		return wt.JudgeSession, wt.JudgeWindow
 	}
 
-	// A judge-fan that fails records nothing.
 	r := callP(admin, t, "judge-fan", map[string]any{"session": mine[0], "agent": "/nonexistent/agent", "ready_timeout": 300})
 	if r["error"] == nil {
 		t.Fatalf("judge-fan with a missing agent answered %v", r["result"])
@@ -33,7 +32,6 @@ func TestFanJudgeReach(t *testing.T) {
 		}
 	}
 
-	// The person starts a judge.
 	r = callP(admin, t, "judge-fan", map[string]any{"session": mine[0], "agent": "sleep 60", "ready_timeout": 300})
 	res, ok := r["result"].(map[string]any)
 	if !ok {
@@ -50,7 +48,6 @@ func TestFanJudgeReach(t *testing.T) {
 			t.Fatalf("%s names judge %q %q, want %q %q", s, js, jw, judge.ID, judgeWin)
 		}
 	}
-	// A second pane in the judge's session.
 	r = callP(admin, t, "new-window", map[string]any{"session": judgeName, "name": "shell"})
 	shellRes, _ := r["result"].(map[string]any)
 	shellWin, _ := shellRes["window_id"].(string)
@@ -67,14 +64,11 @@ func TestFanJudgeReach(t *testing.T) {
 	firstWindow := func(name string) string { return d.manager.GetSession(name).GetState().Windows[0].ID }
 	setStrict(d, "read", "write", "fan")
 
-	// The judge's pane reads an attempt, and cannot type into it or run a
-	// command in its session.
 	j := as(judgeWin)
 	r = callP(j, t, "compare-fan", map[string]any{"session": mine[1], "changes": false})
 	if rows, _ := r["result"].(map[string]any)["rows"].([]any); len(rows) != 2 {
 		t.Fatalf("the judge reads %d attempts, want 2: %v", len(rows), r)
 	}
-	// It reads screens and scrollback, and nothing past what judging needs.
 	if r := callP(j, t, "capture-pane", map[string]any{"session": mine[1], "window": firstWindow(mine[1])}); r["error"] != nil {
 		t.Fatalf("the judge cannot read an attempt's screen: %v", r["error"])
 	}
@@ -84,25 +78,19 @@ func TestFanJudgeReach(t *testing.T) {
 	}
 	wantForbidden(t, "send-keys into an attempt from the judge", callP(j, t, "send-keys", map[string]any{"session": mine[1], "window": firstWindow(mine[1]), "keys": "x"}))
 	wantForbidden(t, "verify-fan from the judge", callP(j, t, "verify-fan", map[string]any{"session": mine[1], "command": "true"}))
-	// The judge holds read alone: it cannot join the attempts' fan by its
-	// stem, nor start an agent in its own session.
 	wantForbidden(t, "fan into the attempts' group from the judge", callP(j, t, "fan", map[string]any{"repo": repo, "name": "fan/retry", "count": 1, "agent": "sleep 60", "prompt": "x", "ready_timeout": 300}))
 	wantForbidden(t, "start-agent from the judge", callP(j, t, "start-agent", map[string]any{"session": judgeName, "agent": "sleep 60", "ready_timeout": 300}))
 
-	// Another pane of the judge's session reaches nothing of the attempts.
 	wantForbidden(t, "compare-fan from another pane of the judge's session", callP(as(shellWin), t, "compare-fan", map[string]any{"session": mine[1], "changes": false}))
 
-	// An attempt cannot record a verdict, nor start a judge of its own.
 	att := as(firstWindow(mine[0]))
 	wantForbidden(t, "set-fan-verdict from an attempt", callP(att, t, "set-fan-verdict", map[string]any{"session": mine[0], "pick": mine[0], "summary": "Keep A."}))
 	wantForbidden(t, "judge-fan from an attempt", callP(att, t, "judge-fan", map[string]any{"session": mine[0], "agent": "sleep 60"}))
 	if v := d.manager.GetSession(mine[1]).Worktree().Verdict; v != nil {
 		t.Fatalf("an attempt recorded a verdict: %+v", v)
 	}
-	// An outsider cannot either.
 	wantForbidden(t, "set-fan-verdict from an outsider", callP(as(firstWindow(other.Name())), t, "set-fan-verdict", map[string]any{"session": mine[0], "pick": mine[0], "summary": "Keep A."}))
 
-	// The judge records one, and the daemon says it was the judge.
 	if r := callP(j, t, "set-fan-verdict", map[string]any{"session": mine[0], "pick": mine[1], "summary": "Keep B."}); r["error"] != nil {
 		t.Fatalf("the judge cannot record its verdict: %v", r["error"])
 	}
@@ -110,8 +98,6 @@ func TestFanJudgeReach(t *testing.T) {
 		t.Fatalf("the judge's verdict reads %+v", v)
 	}
 
-	// The judge's session ends: the attempts no longer name it, and a
-	// session that takes its name reaches nothing.
 	d.setApprovalPeer(nil)
 	if r := callP(admin, t, "kill-session", map[string]any{"session": judgeName}); r["error"] != nil {
 		t.Fatalf("kill-session: %v", r["error"])
@@ -126,8 +112,6 @@ func TestFanJudgeReach(t *testing.T) {
 	wantForbidden(t, "compare-fan from a session that took the judge's name", callP(as(firstWindow(squat.Name())), t, "compare-fan", map[string]any{"session": mine[1], "changes": false}))
 	wantForbidden(t, "set-fan-verdict from a session that took the judge's name", callP(as(firstWindow(squat.Name())), t, "set-fan-verdict", map[string]any{"session": mine[0], "pick": mine[0], "summary": "Keep A."}))
 
-	// A restart brings the judge's session and pane back as a fresh shell:
-	// the attempts no longer name it, and that pane reaches nothing.
 	d.setApprovalPeer(nil)
 	r = callP(admin, t, "judge-fan", map[string]any{"session": mine[0], "agent": "sleep 60", "ready_timeout": 300})
 	res, _ = r["result"].(map[string]any)

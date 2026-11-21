@@ -11,16 +11,6 @@ import (
 	"time"
 )
 
-// A client used to match the daemon's replies by message type alone. The
-// daemon answers a failed subscribe, which nobody waits for, with MsgError, so
-// during a restore the error about pane A was taken as the answer to pane B's
-// state request, and B's real state then went to whichever request was waiting
-// next. A reply that came after its request timed out did the same. These are
-// the wire compatibility tests for the request id that ties a reply to its
-// request, and the race regressions for the two ways a reply went astray.
-
-// rawFrame reads one frame off r and returns it whole, so a test can look at
-// the codec byte a peer actually wrote.
 func rawFrame(t *testing.T, r io.Reader) []byte {
 	t.Helper()
 	var hdr [4]byte
@@ -138,8 +128,6 @@ func TestRequestIDsAcrossPeerVintages(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		// An old client: a hello in its own words, which name no request ids,
-		// and untagged requests.
 		send(MsgHello, &HelloPayload{Version: "old", Protocol: ProtocolVersion})
 		send(MsgAttach, &AttachPayload{SessionName: "vintage", CreateNew: true, Width: 80, Height: 24})
 		send(MsgGetTerminalState, &GetTerminalStatePayload{PTYID: "no-such-pane"})
@@ -214,8 +202,6 @@ func TestSubscribeErrorDoesNotAnswerAStateRequest(t *testing.T) {
 	}
 	c.StartReadLoop()
 
-	// Positive half: with nothing failing in front of it, a state request for
-	// a missing pane is refused with that pane's error.
 	if _, err := c.GetTerminalState("pane-b-missing", 0, 0); err == nil || !strings.Contains(err.Error(), "pane-b-missing") {
 		t.Fatalf("the plain refusal read %v", err)
 	}

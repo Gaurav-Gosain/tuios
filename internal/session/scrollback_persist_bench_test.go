@@ -12,7 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// benchPane is a 200x50 pane holding a full history of text.
 func benchPane(b *testing.B, line func(i int) string) *PTY {
 	b.Helper()
 	p := &PTY{ID: "bench", terminal: vt.NewWithScrollback(200, 50, 10000)}
@@ -25,8 +24,6 @@ func benchPane(b *testing.B, line func(i int) string) *PTY {
 	return p
 }
 
-// yes(1) output, and a build log with colours and varied paths, which
-// compresses far less.
 var benchLines = map[string]func(int) string{
 	"yes": func(int) string { return "y" },
 	"buildlog": func(i int) string {
@@ -126,9 +123,6 @@ func BenchmarkHistorySave20BusyPanes(b *testing.B) {
 	stop.Store(true)
 	wg.Wait()
 	b.ReportMetric(float64(maxWait.Load())/1e6, "max-wait-ms")
-	// What the save leaves behind: the live heap once it is over, with the
-	// panes and their histories still held. A save that leaves decoded
-	// copies of the rows it read in a cache shows here.
 	runtime.GC()
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)

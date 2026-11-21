@@ -13,8 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
-// enableRiskyApprovals turns approvals on for claude-code with the shipped
-// risk rules and plans held, the way a config naming claude-code reads.
 func enableRiskyApprovals(t *testing.T, d *Daemon, hold time.Duration, mut func(*ApprovalPolicy)) {
 	t.Helper()
 	oldMin := minApprovalHold
@@ -30,7 +28,6 @@ func enableRiskyApprovals(t *testing.T, d *Daemon, hold time.Duration, mut func(
 
 const riskyLine = "approve Bash: rm -rf build/"
 
-// replyWith answers with extra params beside the usual ones.
 func replyWith(c *verbConn, t *testing.T, requestID, decision, nonce string, extra map[string]any) map[string]any {
 	t.Helper()
 	params := map[string]any{"request_id": requestID, "decision": decision, "human_nonce": nonce}
@@ -93,8 +90,6 @@ func TestRiskyHeldApprovalNeedsTheAcknowledgement(t *testing.T) {
 		t.Fatalf("the hook got %v", got)
 	}
 
-	// A deny is one press: no acknowledgement, and its reason reaches the
-	// hook cleaned.
 	setAgentState(t, c, "work", b, "needs_input", "approval", riskyLine)
 	pending, _ = requestApprovalWith(t, sp, map[string]any{
 		"session": "work", "window": b, "harness": "claude", "summary": riskyLine, "tool": "Bash", "target": "rm -rf build/", "deny_message": true,
@@ -137,7 +132,6 @@ func TestRiskFromTheLineWhenTheHookNamesNoCall(t *testing.T) {
 	if it["risk"] != nil {
 		t.Fatalf("a plain call is marked %v", it["risk"])
 	}
-	// An older client: no risk_ack, no plan_sha.
 	if res := result(t, reply(c, t, it["request_id"].(string), ApprovalOnce, tui.HumanNonce())); res["applied"] != true {
 		t.Fatalf("an older client's allow of a plain call answered %v", res)
 	}
@@ -162,14 +156,10 @@ func TestUnheldApprovalIsMarkedFromItsLine(t *testing.T) {
 		{"sudo rm -rf build", []string{risk.RuleRecursiveDelete, risk.RuleSudo}},
 		{"Claude needs your permission to use Bash", nil},
 		{"plan: Remove sudo from the scripts", nil},
-		// The hooks clip a long line, and what was cut may be the risky
-		// part: a clipped line is marked cut short, beside any rule it
-		// matched before the cut.
 		{oneline.Clip("approve Bash: echo " + strings.Repeat("x", oneline.MaxMessage) + " && rm -rf ~"), []string{risk.RuleCutShort}},
 		{oneline.Clip("approve Bash: git push -f && echo " + strings.Repeat("x", oneline.MaxMessage)), []string{risk.RuleForcePush, risk.RuleCutShort}},
 		{"approve Bash: echo wait...", nil},
 	} {
-		// The pane goes back to work between cases, so each is a new prompt.
 		setAgentState(t, c, "work", a, "working", "", "")
 		setAgentState(t, c, "work", a, "needs_input", "approval", tc.line)
 		items := waitAttention(t, c, "the item for "+tc.line, func(items []map[string]any) bool {
@@ -179,7 +169,6 @@ func TestUnheldApprovalIsMarkedFromItsLine(t *testing.T) {
 			t.Errorf("%q is marked %v, want %v", tc.line, got, tc.want)
 		}
 	}
-	// On the same prompt a harmless line keeps the mark the risky one set.
 	setAgentState(t, c, "work", a, "working", "", "")
 	setAgentState(t, c, "work", a, "needs_input", "approval", "approve Bash: git push -f")
 	setAgentState(t, c, "work", a, "needs_input", "approval", "approve Bash: ls")
@@ -190,7 +179,6 @@ func TestUnheldApprovalIsMarkedFromItsLine(t *testing.T) {
 		t.Errorf("a harmless line on the same prompt left the mark %v, want [%s]", got, risk.RuleForcePush)
 	}
 
-	// A question is never marked.
 	setAgentState(t, c, "work", a, "working", "", "")
 	setAgentState(t, c, "work", a, "needs_input", "question", "run rm -rf build?")
 	items = waitAttention(t, c, "the question", func(items []map[string]any) bool {
@@ -200,7 +188,6 @@ func TestUnheldApprovalIsMarkedFromItsLine(t *testing.T) {
 		t.Errorf("a question is marked %v", items[0]["risk"])
 	}
 
-	// With builtin = false and no rules of the person's, nothing is marked.
 	off := false
 	d.SetApprovalPolicy(ApprovalPolicyFromConfig(config.ApprovalsConfig{Enabled: []string{"claude"}, Risk: config.RiskConfig{Builtin: &off}}))
 	setAgentState(t, c, "work", a, "working", "", "")
@@ -215,7 +202,6 @@ func TestUnheldApprovalIsMarkedFromItsLine(t *testing.T) {
 
 const testPlanText = "# Refactor the retry loop\n1. Move backoff into api/retry.go.\n2. Add table tests.\n"
 
-// holdPlan reports the pane blocked on a plan and holds it.
 func holdPlan(t *testing.T, c *verbConn, sp, window string, options ...string) (<-chan map[string]any, map[string]any) {
 	t.Helper()
 	setAgentState(t, c, "work", window, "needs_input", "approval", "plan: Refactor the retry loop")
@@ -284,7 +270,6 @@ func TestPlanIsHeldAndAnsweredByDigest(t *testing.T) {
 		t.Errorf("get-approval after the answer: %s, want invalid_params", code)
 	}
 
-	// Keep planning takes no digest and carries its reason.
 	pending, it = holdPlan(t, c, sp, b)
 	res = result(t, replyWith(c, t, it["request_id"].(string), ApprovalDeny, tui.HumanNonce(), map[string]any{"message": "split step 2"}))
 	if res["applied"] != true {
@@ -346,8 +331,6 @@ func TestGetApprovalStaysInItsSession(t *testing.T) {
 	wantForbidden(t, "a pane naming another session", callP(pane, t, "get-approval", map[string]any{"request_id": id, "session": "b"}))
 }
 
-// markRisky marks the pane's blocking item with rules, the way a report of a
-// risky line would.
 func markRisky(t *testing.T, d *Daemon, session, window string, rules ...string) {
 	t.Helper()
 	d.attention.mu.Lock()
@@ -416,9 +399,6 @@ func TestAPaneMayNotAllowARiskyPrompt(t *testing.T) {
 		t.Fatalf("ASSERTION: a pane's allow reached the agent: %q", got)
 	}
 
-	// The mark comes from the pane's own report, and a pane may report a
-	// harmless line over it. The prompt on the screen still shows rm -rf,
-	// and the daemon reads that too.
 	d.SetApprovalPolicy(ApprovalPolicyFromConfig(config.ApprovalsConfig{}))
 	markRisky(t, d, "grant", ag.window)
 	delete(params, "value")
@@ -433,9 +413,6 @@ func TestAPaneMayNotAllowARiskyPrompt(t *testing.T) {
 		t.Fatalf("ASSERTION: a pane's allow reached the agent: %q", got)
 	}
 
-	// A Write outside the worktree shows a path on the screen, not a command,
-	// so the screen matches no rule. The pane reports the call, then a
-	// harmless line over it: the mark stays until the prompt closes.
 	wa := startBlockedAgent(t, d, sp, "grantw", "claude-code", "write")
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, wa.window })
 	cw := dialVerb(t, sp)
@@ -462,7 +439,6 @@ func TestAPaneMayNotAllowARiskyPrompt(t *testing.T) {
 	}
 }
 
-// waitRiskOn waits for a pane's blocking item to carry rule.
 func waitRiskOn(t *testing.T, d *Daemon, session, window, rule string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second * testDeadlineScale)
@@ -474,9 +450,6 @@ func waitRiskOn(t *testing.T, d *Daemon, session, window, rule string) {
 	}
 }
 
-// riskSession is twoWindowSession with each window given the folder its shell
-// runs in as its start folder, as a window made from a folder has. A window
-// with none has no root, and the risk rules read every path in it as outside.
 func riskSession(t *testing.T, d *Daemon) (*Session, string, string) {
 	t.Helper()
 	sess, a, b := twoWindowSession(t, d, "work")

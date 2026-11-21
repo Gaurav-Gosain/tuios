@@ -31,9 +31,6 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 	release := make(chan struct{}, 4)
 	var writeMu sync.Mutex
 
-	// Daemon: for each request, report the concurrency level, then hold the reply
-	// until the test releases it. The reply echoes the request type so each waiter
-	// can prove it got its own answer.
 	go func() {
 		for {
 			m, err := ReadMessage(server)
@@ -50,7 +47,6 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 				resp, _ := NewMessage(MsgSessionList, &SessionListPayload{
 					Sessions: []SessionInfo{{Name: marker}},
 				})
-				// A daemon tags its reply with the request's id.
 				resp.ReqID = reqID
 				writeMu.Lock()
 				_ = WriteMessage(server, resp)
@@ -92,7 +88,6 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 	go roundTrip(MsgKill, "kill")
 	go roundTrip(MsgList, "list")
 
-	// First request must reach the daemon.
 	select {
 	case n := <-arrived:
 		if n != 1 {
@@ -102,16 +97,12 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 		t.Fatal("no request reached the daemon")
 	}
 
-	// A second request must NOT be outstanding while the first is unanswered: that
-	// is the collision the fix prevents. Under the old code both round-trips are
-	// live at once and share the MsgSessionList slot.
 	select {
 	case n := <-arrived:
 		t.Fatalf("two round-trips outstanding at once (in-flight=%d); responses can misroute", n)
 	case <-time.After(300 * time.Millisecond):
 	}
 
-	// Let the first reply through, then the second round-trip proceeds.
 	release <- struct{}{}
 	select {
 	case <-arrived:
@@ -137,8 +128,6 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 	}
 }
 
-// newTestTUIClient builds a TUIClient wired to one end of an in-memory pipe so
-// the read loop can be exercised without a real daemon.
 func newTestTUIClient(conn net.Conn) *TUIClient {
 	c := NewTUIClient()
 	c.conn = conn

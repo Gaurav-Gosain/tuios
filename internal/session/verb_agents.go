@@ -15,61 +15,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
-// This file implements the cross-agent verbs: who is here (list-agents), leaving
-// a message (send-agent-message), reading one (read-agent-messages), and asking
-// an agent a question and waiting for it to answer (ask-agent).
-//
-// The addressing scheme is deliberately not a new one. An agent is a window, and
-// a window is already addressable by uuid, unique id prefix, list index or exact
-// name, which is what every other window-targeted verb takes. Inventing a second
-// namespace for agents would mean two ways to name the same pane and a rule for
-// when they disagree. Discovery is list-agents, so an agent finds its
-// correspondents rather than being told them, and $TUIOS_PANE_ID is its own
-// address.
-//
-// An inbox therefore lives and dies with its window. A message addressed to a
-// window that has since closed reads back undeliverable rather than being handed
-// to whatever pane later takes that name.
-
-// agentRestStates are the states that mean an agent is not mid-turn, so a
-// question sent to it will be read rather than typed over whatever it is doing.
-// errored is in the set on purpose: an agent that stopped on an error is at its
-// prompt and can be told about it.
-//
-// needs_input is not in the set. An agent on needs_input is most often sitting
-// on a permission menu, and text typed there is read as the answer to the menu:
-// the question approves or denies whatever the agent asked for. ask-agent
-// refuses such a pane with agent_blocked unless the caller passes allow_blocked,
-// and list-agents reports it as not ready.
 var agentRestStates = map[string]bool{
-	AgentStateIdle.Name():    true,
-	AgentStateDone.Name():    true,
-	AgentStateErrored.Name(): true,
-	AgentStateNone.Name():    true,
-	// limit_reached is at rest: its prompt is back. Mail typed into it
-	// before the reset gets the limit again, and after the reset it is the
-	// lead's way to start it, so it is not held back.
+	AgentStateIdle.Name():         true,
+	AgentStateDone.Name():         true,
+	AgentStateErrored.Name():      true,
+	AgentStateNone.Name():         true,
 	AgentStateLimitReached.Name(): true,
-	// unknown is not in the set. It is what the silence timer writes to a pane
-	// that said nothing for the stall window when the screen showed nothing a
-	// rule knows, and silence is also what a long tool call looks like, so
-	// typing at such a pane can land in the middle of a turn. A harness with
-	// rules that read its prompt box reaches idle instead, and a caller that
-	// knows better passes force. It stays on the rail as a display state.
-	//
-	// fanReadyStates in verb_worktree.go is a subset of this set: it also
-	// leaves out errored and none, because fan types a first prompt into an
-	// agent it just started, and neither of those says the agent reached its
-	// prompt. Neither set holds needs_input or unknown.
 }
 
-// agentReady reports whether a window's agent state is in the given ready set,
-// with one exception for unknown. A harness whose manifest has an idle rule
-// shows positive evidence when it is at its prompt, so for it unknown stays not
-// ready. A harness without one can never reach idle from its screen, and
-// without this its pane would never be ready for fan or ask-agent at all, only
-// after the wait ends. For those, unknown is the best evidence of rest there is,
-// as it was before idle rules existed.
 func (d *Daemon) agentReady(w WindowState, set map[string]bool) bool {
 	name := w.AgentState.Name()
 	if set[name] {
@@ -82,7 +35,6 @@ func (d *Daemon) agentReady(w WindowState, set map[string]bool) bool {
 	return reg == nil || !reg.CanProveIdle(w.AgentHarness)
 }
 
-// askDefaults bound the three waits ask-agent performs.
 const (
 	askDefaultReadyTimeout = 30 * time.Second
 	askDefaultSettle       = 2 * time.Second
@@ -90,8 +42,6 @@ const (
 	askDefaultLines        = 200
 )
 
-// windowLabelOf is the name a human would call a window: the name someone gave
-// it, else the title its shell set.
 func windowLabelOf(w WindowState) string {
 	if w.CustomName != "" {
 		return w.CustomName
@@ -99,24 +49,10 @@ func windowLabelOf(w WindowState) string {
 	return w.Title
 }
 
-// isAgentWindow reports whether a pane looks like it is running an agent at all.
-// Any tier having an opinion is enough: a reported state, a named harness, or
-// the foreground detector having promoted the pane.
 func isAgentWindow(w WindowState) bool {
 	return w.AgentState != AgentStateNone || w.AgentHarness != ""
 }
 
-// verbListAgents reports the agent panes in a session: who is there, what each
-// one is doing, and how much unread mail is waiting for it.
-//
-// It adds no state of its own. Every field except the unread count is already
-// tracked per window; the verb exists because an agent that wants to talk to
-// another agent had no way to discover one without listing every window and
-// working out which were agents.
-//
-// With all_sessions it answers for every session on the daemon at once, which is
-// what a hub asks a linked host so its listing covers more than the session that
-// host last touched. Every row names its session either way.
 func (d *Daemon) verbListAgents(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session     string `json:"session"`
@@ -149,28 +85,17 @@ func (d *Daemon) verbListAgents(cs *connState, params json.RawMessage) (any, *ve
 	agents := d.agentRows(sess, p.All, unread, d.evidenceNow().UnixNano(), sel)
 
 	out := map[string]any{
-		"type":    "agent_list",
-		"session": sess.Name(),
-		"agents":  agents,
-		"total":   len(agents),
-		// The person's inbox, which is not a row because it is not a pane: it
-		// cannot be asked, focused or captured, and a row would invite all three.
-		// It is addressed as "human" and read from the attached client's mail
-		// overlay.
+		"type":         "agent_list",
+		"session":      sess.Name(),
+		"agents":       agents,
+		"total":        len(agents),
 		"human_inbox":  AgentInboxHuman,
 		"human_unread": unread[AgentInboxHuman],
 	}
-	// Narrowed to one session, the rows are not what a write by the same
-	// selector reaches, which is every session, so no token is handed out.
 	addSelection(out, sel, agents, true)
 	return out, nil
 }
 
-// addSelection puts the selector and its confirm token on a list-agents
-// answer. The token is the one a write addressed by the same selector takes,
-// so a caller can look here and write with it. noToken leaves it out: with
-// all, since a write reaches agent panes only and the rows then include other
-// windows, and for a listing narrowed to one session.
 func addSelection(out map[string]any, sel *Selector, rows []map[string]any, noToken bool) {
 	if sel == nil {
 		return
@@ -187,9 +112,6 @@ func addSelection(out map[string]any, sel *Selector, rows []map[string]any, noTo
 	out["confirm"] = SelectionToken(keys)
 }
 
-// listAgentsAllSessions is list-agents over every session, in session name
-// order. human_unread is the person's unread mail summed over the sessions.
-// sel, when not nil, keeps only the rows it matches.
 func (d *Daemon) listAgentsAllSessions(all bool, sel *Selector) map[string]any {
 	sessions := d.manager.AllSessions()
 	slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name(), b.Name()) })
@@ -213,8 +135,6 @@ func (d *Daemon) listAgentsAllSessions(all bool, sel *Selector) map[string]any {
 	return out
 }
 
-// agentRows is one session's rows of a list-agents answer. sel, when not nil,
-// keeps only the rows it matches.
 func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now int64, sel *Selector) []map[string]any {
 	seen := d.agents.seenCounts(sess.Name())
 	state := sess.GetState()
@@ -234,81 +154,52 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 		}
 		claim := sess.agentClaimFor(w.ID)
 		meta := agentMetaMap(w.AgentMeta, now)
-		// An unset claim reads back as "report", because that is the default a
-		// caller naming no source gets. Reporting it for a pane nothing has
-		// claimed would say a pane at a shell prompt reported itself idle, so
-		// the absence is shown as an absence.
 		source := ""
 		if isAgentWindow(w) {
 			source = claim.source.Name()
 		}
 		agents = append(agents, map[string]any{
-			"session":   sess.Name(),
-			"window_id": w.ID,
-			"name":      windowLabelOf(w),
-			"state":     w.ShownAgentState().Name(),
-			// last_state is the state the agent itself last gave, and
-			// last_heard_at when it last said anything. They differ from
-			// state for a silent pane: state is unknown, last_state working.
-			"last_state":     w.AgentState.Name(),
-			"last_heard_at":  max(w.AgentStateAt, claim.heardAt),
-			"reason":         w.AgentReason,
-			"quiet":          w.AgentQuiet,
-			"message":        w.AgentMessage,
-			"agent_state_at": w.AgentStateAt,
-			"source":         source,
-			"harness_id":     firstNonEmpty(w.AgentHarness, claim.harness),
-			"foreground":     w.ForegroundCmd,
-			"cwd":            w.Cwd,
-			"workspace":      w.Workspace,
-			"focused":        w.ID == state.FocusedWindowID,
-			"unread":         unread[w.ID],
-			"seen":           seen[w.ID],
-			"ready":          d.agentReady(w, agentRestStates),
-			"blocked_by":     agentBlockedBy(w),
-			"waits_on":       agentWaitsOn(w),
-			"needs_you":      w.AgentState.NeedsYou(),
-			"confidence":     claim.identity.confidence(),
-			// identity is the tier confidence is read from: report, manifest,
-			// list or hint, empty when nothing named the agent.
-			"identity":        string(claim.identity),
-			"evidence_age_ms": evidenceAgeMS(sess.evidenceStamp(w, claim), time.Unix(0, now)),
-			// completion_seq counts the pane's finished turns, and
-			// finished_unread says the latest one has not been in front of
-			// anybody: no attached client has pushed state with the pane
-			// focused since. See agent_turns.go.
-			"completion_seq":  w.CompletionSeq,
-			"finished_unread": sess.finishedUnread(&w),
-			// The harness's own conversation id, empty until a hook reports
-			// one. It is what a resume names.
+			"session":          sess.Name(),
+			"window_id":        w.ID,
+			"name":             windowLabelOf(w),
+			"state":            w.ShownAgentState().Name(),
+			"last_state":       w.AgentState.Name(),
+			"last_heard_at":    max(w.AgentStateAt, claim.heardAt),
+			"reason":           w.AgentReason,
+			"quiet":            w.AgentQuiet,
+			"message":          w.AgentMessage,
+			"agent_state_at":   w.AgentStateAt,
+			"source":           source,
+			"harness_id":       firstNonEmpty(w.AgentHarness, claim.harness),
+			"foreground":       w.ForegroundCmd,
+			"cwd":              w.Cwd,
+			"workspace":        w.Workspace,
+			"focused":          w.ID == state.FocusedWindowID,
+			"unread":           unread[w.ID],
+			"seen":             seen[w.ID],
+			"ready":            d.agentReady(w, agentRestStates),
+			"blocked_by":       agentBlockedBy(w),
+			"waits_on":         agentWaitsOn(w),
+			"needs_you":        w.AgentState.NeedsYou(),
+			"confidence":       claim.identity.confidence(),
+			"identity":         string(claim.identity),
+			"evidence_age_ms":  evidenceAgeMS(sess.evidenceStamp(w, claim), time.Unix(0, now)),
+			"completion_seq":   w.CompletionSeq,
+			"finished_unread":  sess.finishedUnread(&w),
 			"agent_session_id": w.AgentSessionID,
 			"meta":             meta,
-			// How full the agent's context is, null when no source said.
-			"context": agentContextOf(meta),
-			// The reset a pane on limit_reached names, in the harness's
-			// words; empty otherwise.
-			"limit_resets": agentLimitResets(&w),
-			// The fan-out group of the pane's session, empty outside one. It
-			// is what a group: selector term reads.
-			"group": group,
-			// acp or codex for an agent start-agent runs headless over a
-			// protocol, empty for every other pane.
-			"protocol": d.paneProtocol(w.ID),
-			// How many messages wait in the pane's delivery queue.
-			"queued": w.AgentQueued,
-			// Whether the person's draft in the input box holds the queue.
-			"draft_held": w.AgentDraftHeld,
-			// The person put the agent away on the Settled shelf.
-			"settled": w.AgentSettled,
-			// How many subagents the pane's agent is running.
-			"subagents": w.AgentSubagents,
-			// The subagents themselves, running and finished a moment ago.
-			"subagent_list": subagentListOut(w.AgentSubagentList),
-			// The pane's OSC 7501 records, the root first.
-			"program_status": programStatusList(w.ProgramStatus),
+			"context":          agentContextOf(meta),
+			"limit_resets":     agentLimitResets(&w),
+			"group":            group,
+			"protocol":         d.paneProtocol(w.ID),
+			"queued":           w.AgentQueued,
+			"draft_held":       w.AgentDraftHeld,
+			"settled":          w.AgentSettled,
+			"subagents":        w.AgentSubagents,
+			"subagent_list":    subagentListOut(w.AgentSubagentList),
+			"program_status":   programStatusList(w.ProgramStatus),
 		})
 		if w.HostEnded != "" {
-			// The pane ran on another machine and cannot come back.
 			agents[len(agents)-1]["exited"] = true
 			agents[len(agents)-1]["host_ended"] = w.HostEnded
 		}
@@ -321,11 +212,6 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 	return agents
 }
 
-// resolveMailParty turns a send, read or wait target into an inbox id and the
-// label to print for it. "human" is the person at the attached client and
-// resolves to itself; anything else is a window, addressed the way every
-// window verb addresses one. The reserved name wins over a window that happens
-// to be called human, so an agent addressing the person always reaches them.
 func resolveMailParty(state *SessionState, target string) (id, label string, err error) {
 	if target == AgentInboxHuman {
 		return AgentInboxHuman, AgentInboxHuman, nil
@@ -337,14 +223,6 @@ func resolveMailParty(state *SessionState, target string) (id, label string, err
 	return state.Windows[idx].ID, windowLabelOf(state.Windows[idx]), nil
 }
 
-// resolveSender is resolveMailParty for a sender. With anySession, a sender
-// that is not in the session is looked for by its exact window id in every
-// session, and then as a name, short id or index in the session of the pane
-// the caller runs in, and labelled with the session it is in. A name or a
-// prefix of a third session is not taken: it means different panes in
-// different sessions. The caller's own session is known from its pane, not
-// from anything it sent, and a pane that names itself by name is the common
-// case: a lead in one session that mails its workers in another (#1624).
 func (d *Daemon) resolveSender(cs *connState, state *SessionState, from string, anySession bool) (string, string, error) {
 	id, label, err := resolveMailParty(state, from)
 	if err == nil || !anySession {
@@ -365,10 +243,6 @@ func (d *Daemon) resolveSender(cs *connState, state *SessionState, from string, 
 	return "", "", err
 }
 
-// senderNotFound is mapResolveErr for a from that names no window. The
-// error is about from, not about the recipient, so the hint names from and
-// does not list or suggest the recipient's windows, which made a missing
-// sender read as a wrong target.
 func senderNotFound(err error, sess *Session) *verbError {
 	verr := mapResolveErr(err, sess)
 	if verr.Code != ErrVerbWindowNotFound || verr.Hint == nil {
@@ -382,7 +256,6 @@ func senderNotFound(err error, sess *Session) *verbError {
 	return verr
 }
 
-// firstNonEmpty returns the first argument that is not empty.
 func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {
 		if v != "" {
@@ -392,12 +265,6 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// verbSendAgentMessage puts a message in a session's ring, addressed to one
-// window's inbox or, with no recipient, to the session as a notice.
-//
-// It does not touch the recipient's keyboard. That is the whole point of having
-// a queue: a message can be left for an agent that is mid-turn, which is exactly
-// when typing at it would be wrong.
 func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p sendAgentMessageParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -410,43 +277,26 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 	if p.Confirm != "" {
 		return nil, invalidParam("confirm", "confirm goes with select: it is the token for the panes a selector matched")
 	}
-	// from may name a window of another session by its full id, as a send by
-	// selector already does: a lead in one session and its workers in another
-	// could not mail each other, though from is a claim either way (only human
-	// is checked). A name or a short id still resolves only in this session.
 	return d.sendAgentMessage(cs, p, true)
 }
 
-// sendAgentMessageParams are send-agent-message's parameters.
 type sendAgentMessageParams struct {
-	Session     string   `json:"session"`
-	To          string   `json:"to"`
-	From        string   `json:"from"`
-	FromHost    string   `json:"from_host"`
-	Subject     string   `json:"subject"`
-	Text        string   `json:"text"`
-	ReplyTo     uint64   `json:"reply_to"`
-	Attachments []string `json:"attachments"`
-	// Parts is the message in parts, as queue-prompt takes them: a long
-	// paste or an image is written to the paste folder and attached. With
-	// parts, text is ignored. See mailParts.
-	Parts      []queuePart `json:"parts"`
-	HumanNonce string      `json:"human_nonce"`
-	Host       string      `json:"host"`
-	Select     string      `json:"select"`
-	Confirm    string      `json:"confirm"`
-	// raw is the call's params as sent, which a send with host forwards to
-	// the far machine as they are, so an older daemon there sees only the
-	// names the caller used.
-	raw json.RawMessage
+	Session     string      `json:"session"`
+	To          string      `json:"to"`
+	From        string      `json:"from"`
+	FromHost    string      `json:"from_host"`
+	Subject     string      `json:"subject"`
+	Text        string      `json:"text"`
+	ReplyTo     uint64      `json:"reply_to"`
+	Attachments []string    `json:"attachments"`
+	Parts       []queuePart `json:"parts"`
+	HumanNonce  string      `json:"human_nonce"`
+	Host        string      `json:"host"`
+	Select      string      `json:"select"`
+	Confirm     string      `json:"confirm"`
+	raw         json.RawMessage
 }
 
-// sendAgentMessageSelect sends one message to every pane a selector matches,
-// once the caller has confirmed the set (resolveSelection). Each pane gets its
-// own directed message in its own session's ring, through the same checks a
-// single send makes, rate cap included, so a broadcast costs the sender one
-// message per pane. A pane that refuses (the sender itself, a closed window,
-// the cap) is reported in its row and does not stop the others.
 func (d *Daemon) sendAgentMessageSelect(cs *connState, p sendAgentMessageParams) (any, *verbError) {
 	if p.To != "" {
 		return nil, invalidParam("to", "select names the recipients, so it takes no to. Drop one or the other")
@@ -496,14 +346,8 @@ func (d *Daemon) sendAgentMessageSelect(cs *connState, p sendAgentMessageParams)
 	}, nil
 }
 
-// sendAgentMessage is one send. fromAnySession lets from name a window of
-// another session by its exact id, for a send by selector, where the sender's
-// pane is in one session and the recipients are in many.
 func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromAnySession bool) (map[string]any, *verbError) {
 	viaLink := cs != nil && cs.viaLink
-	// A message in parts is checked here, and its files are written only
-	// once every other check has passed. Mail to another machine carries
-	// its parts there, and that machine writes them.
 	var filed bool
 	if p.Parts != nil && p.Host == "" {
 		shown, size, verr := checkParts(p.Parts, agentMsgMaxText)
@@ -548,8 +392,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	if len(p.Attachments) > agentMsgMaxAttachments {
 		return nil, invalidParam("attachments", "a message carries at most 8 attachments")
 	}
-	// A message for a session on another machine goes over this machine's
-	// link to it, and waits here while the link is down. See host_outbox.go.
 	if p.Host != "" {
 		res, verr := d.sendAgentMessageToHost(cs, p.Host, p.Session, p.To, p.From, p.raw)
 		if verr != nil {
@@ -558,10 +400,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		out, _ := res.(map[string]any)
 		return out, nil
 	}
-	// An id past the last one issued names a message that has never existed, so
-	// it is a caller mistake rather than the ring having forgotten. The two are
-	// worth separating: a parent that aged out is normal and is threaded on the
-	// id anyway, while a typed id is a reply nobody will ever find.
 	if p.ReplyTo > d.agents.highestID() {
 		return nil, hintedVerbError(ErrVerbInvalidParams, "reply_to names a message that has never existed", &VerbHint{
 			Param:   "reply_to",
@@ -580,12 +418,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 
 	switch {
 	case viaLink:
-		// The sender is on another machine, so it is not a window here and
-		// its name is not resolved against this session: it is kept as the
-		// label it claimed, and the message is marked with where it came
-		// from. The one name that is honoured is human, because the person
-		// at a client attached through a link is the person at the attached
-		// client. Their reply still carries the origin mark.
 		msg.Origin = AgentOriginLink
 		msg.OriginHost = printableClaim(p.FromHost, agentMsgMaxHostName)
 		msg.OriginLink = cs.linkPeer
@@ -605,16 +437,10 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		}
 	}
 
-	// A process inside a pane of this daemon cannot speak as the person at
-	// all, not even as a claim: whatever it was told, the answer it would be
-	// forging is the one the person gives. See human_origin.go.
 	if msg.From == AgentInboxHuman && !viaLink && !d.mayActAsHuman(cs) {
 		return nil, humanForbiddenError("send-agent-message")
 	}
 
-	// A message from human is verified only when it carries the nonce of a
-	// client attached to this session now; see human_sender.go. The link and
-	// the local socket are checked the same way, each against its own attaches.
 	if msg.From == AgentInboxHuman {
 		msg.VerifiedHuman = d.verifyHumanNonce(p.HumanNonce, sess.ID, cs)
 		msg.ClaimedHuman = !msg.VerifiedHuman
@@ -629,8 +455,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		msg.To, msg.ToLabel = id, label
 	}
 
-	// A pane messaging itself is the shortest loop there is, and no legitimate
-	// caller writes it: an agent that wants to remember something writes a file.
 	if msg.To != "" && msg.To == msg.From {
 		return nil, hintedVerbError(ErrVerbLoopRefused, "a pane cannot send a message to itself", &VerbHint{
 			Param:  "to",
@@ -638,11 +462,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		})
 	}
 
-	// Mail from a machine whose link policy holds it goes to the person
-	// instead, marked with who it was for, and reaches the agent only when
-	// the person passes it on with release-agent-message. The recipient was
-	// resolved above, so a send to a window that does not exist is still
-	// refused rather than held.
 	if viaLink && msg.To != AgentInboxHuman && d.linkPolicy(cs).HoldMail {
 		msg.HeldFor, msg.HeldForLabel = msg.To, msg.ToLabel
 		msg.Held = true
@@ -651,13 +470,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	}
 
 	for _, path := range p.Attachments {
-		// A path from another machine names a file on this one, and the only
-		// files another machine may name here are the ones it put in the
-		// stash. Anything else is refused before it is looked at, so a
-		// remote sender cannot use the missing flag to ask whether a file
-		// exists on this machine. A hosted pane's call (paneOnly) is held to
-		// the same rule: its process, and the daemon that forwarded it, are
-		// on the other machine too.
 		if (viaLink || (cs != nil && cs.paneOnly)) && !d.stash.owns(sess.ID, path) {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "attachment "+echoName(path)+": a message from another machine can attach only a stashed file", &VerbHint{
 				Param:   "attachments",
@@ -676,11 +488,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 		msg.Attachments = append(msg.Attachments, att)
 	}
 
-	// The rate cap is charged after validation so a caller cannot burn its
-	// budget on calls that were never going to be delivered. A sender on
-	// another machine has its own bucket, keyed on the name it claims, so a
-	// flood from a link cannot spend the anonymous local bucket. The table
-	// of buckets is bounded, and past the bound a link shares one bucket.
 	sender := msg.From
 	if viaLink {
 		sender = queueByLinkPrefix + msg.OriginHost + ":" + msg.FromLabel
@@ -691,8 +498,6 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 			Detail:  "A sender gets 10 messages back to back and 30 a minute after that. Hitting the cap almost always means two agents are answering each other in a loop; read the ring before sending again.",
 		})
 	}
-	// And what other machines can leave waiting is bounded on its own, so a
-	// link cannot fill the ring with mail nobody here asked for.
 	if viaLink {
 		unread, notices := d.agents.linkQueued(sess.Name())
 		if msg.Kind == agentMsgDirect && unread >= agentLinkMaxQueued {
@@ -726,27 +531,17 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 
 	stored := d.agents.send(sess.Name(), msg)
 
-	// The attached clients get the whole message, not only the event: they
-	// are the readers that cannot come back and read the ring on their own
-	// schedule, because the person they draw for is not polling anything.
 	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{Message: stored}, "")
 
-	// The event carries only what a subscriber needs to filter on. Everything
-	// else is read back from the ring, the discipline the other waits follow: a
-	// payload that is trusted rather than re-read goes stale the moment anything
-	// about the message changes.
 	d.events.publish(streamEvent{
 		Type:    EventAgentMessage,
 		Session: sess.Name(),
 		Window:  stored.To,
 	})
-	// Mail to the person waits in the Inbox until it is read.
 	d.attention.noteMail(stored)
-	// An agent that writes to the person needs them: it leaves the shelf.
 	if stored.Kind == agentMsgDirect && stored.To == AgentInboxHuman {
 		d.wakeSettled(sess, stored.From)
 	}
-	// Mail to an agent at rest wakes it if nobody tells it sooner.
 	if stored.Kind == agentMsgDirect {
 		if origin, ok := d.mailOriginOf(cs, stored.VerifiedHuman); ok {
 			d.noteMailSent(sess.Name(), stored.To, stored.ID, origin)
@@ -754,45 +549,26 @@ func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromA
 	}
 
 	return map[string]any{
-		"type":       "agent_message_sent",
-		"session":    sess.Name(),
-		"message_id": stored.ID,
-		"kind":       stored.Kind,
-		"to":         stored.To,
-		"to_name":    stored.ToLabel,
-		"from":       stored.From,
-		"sent_at":    stored.SentAt,
-		"reply_to":   stored.ReplyTo,
-		// The thread is reported on every send, not only on a reply, because a
-		// message that starts a thread is the one whose id the next reply needs.
-		"thread_id": stored.ThreadID,
-		// True when the message being answered had already been dropped from the
-		// ring. The reply still stands, and it is threaded on the id it named.
+		"type":             "agent_message_sent",
+		"session":          sess.Name(),
+		"message_id":       stored.ID,
+		"kind":             stored.Kind,
+		"to":               stored.To,
+		"to_name":          stored.ToLabel,
+		"from":             stored.From,
+		"sent_at":          stored.SentAt,
+		"reply_to":         stored.ReplyTo,
+		"thread_id":        stored.ThreadID,
 		"reply_to_missing": stored.ReplyToMissing,
-		// origin is link when the send arrived from another machine. The
-		// daemon decides it from the connection; the sender cannot.
-		"origin":      stored.Origin,
-		"origin_host": stored.OriginHost,
-		// For a send from human: whether the daemon verified it came from an
-		// attached client, or stored it as a claim.
-		"verified_human": stored.VerifiedHuman,
-		"claimed_human":  stored.ClaimedHuman,
-		// held is true when this machine's link policy put the message in
-		// the person's Inbox instead of the recipient's. held_for is the
-		// window it was for.
-		"held":     stored.Held,
-		"held_for": stored.HeldFor,
+		"origin":           stored.Origin,
+		"origin_host":      stored.OriginHost,
+		"verified_human":   stored.VerifiedHuman,
+		"claimed_human":    stored.ClaimedHuman,
+		"held":             stored.Held,
+		"held_for":         stored.HeldFor,
 	}, nil
 }
 
-// verbReleaseAgentMessage passes a held message on to the agent it was for.
-//
-// Only the person may: the call needs the nonce of a client attached right
-// now, as dismiss-attention does, and a process in a pane of this daemon is
-// never issued one. Over a link it also needs respond. The message is sent
-// again as a new message to the window it was held for, with the sender and
-// the origin it arrived with, and the held copy is marked read so its Inbox
-// item closes. A message is released once.
 func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session    string `json:"session"`
@@ -826,7 +602,6 @@ func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) 
 			Detail:  "The message may already have been passed on, or dropped from the ring. Only a message marked held can be released.",
 		})
 	}
-	// The window it was for may have closed while it was held.
 	if held.HeldFor != "" {
 		if _, _, err := resolveMailParty(sess.GetState(), held.HeldFor); err != nil {
 			return nil, mapResolveErr(err, sess)
@@ -849,8 +624,6 @@ func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) 
 	stored := d.agents.send(sess.Name(), out)
 	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{Message: stored}, "")
 	d.events.publish(streamEvent{Type: EventAgentMessage, Session: sess.Name(), Window: stored.To})
-	// The held copy was marked read when it was taken. Only it: other mail to
-	// the person in the same thread stays as it was.
 	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{ReadIDs: []uint64{held.ID}, ReadAt: held.ReadAt}, "")
 	if _, unread := d.agents.firstUnread(sess.Name(), AgentInboxHuman, held.ThreadID); !unread {
 		d.attention.noteMailRead(sess.Name(), held.ThreadID)
@@ -866,11 +639,6 @@ func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) 
 	}, nil
 }
 
-// verbReadAgentMessages reads a session's ring.
-//
-// Reading marks a directed message read; it does not consume it. A consumed
-// message would leave nothing behind for a human, or for the next agent trying
-// to work out what happened, and the ring's cap already bounds what is kept.
 func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -891,9 +659,6 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	state := sess.GetState()
 
 	q := readQuery{unreadOnly: p.Unread, notices: p.Notices, peek: p.Peek, limit: p.Limit}
-	// The filter takes any id in the thread, not only the root's, so a caller
-	// that read a reply can pass the id it has rather than tracing back to the
-	// first message.
 	q.thread = d.agents.resolveThread(sess.Name(), p.Thread)
 	if p.To != "" {
 		id, _, err := resolveMailParty(state, p.To)
@@ -902,17 +667,11 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 		}
 		q.inbox = id
 	}
-	// Marking the person's mail read says the person has seen it, and the
-	// unread count on their rail is how they learn there is mail at all. A
-	// caller that may not act as the person reads it as a peek, so an agent
-	// cannot clear the person's inbox by reading it. See human_origin.go.
 	peekForced := false
 	if q.inbox == AgentInboxHuman && !q.peek && !d.mayActAsHuman(cs) {
 		q.peek, peekForced = true, true
 	}
-	// A peek marks the inbox seen only when the caller is its reader.
 	q.markSeen = q.peek && !peekForced && d.callerReadsInbox(cs, q.inbox)
-	// The person's inbox is always live: it has no window to close.
 	live := map[string]bool{AgentInboxHuman: true}
 	for i := range state.Windows {
 		live[state.Windows[i].ID] = true
@@ -928,9 +687,6 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 		}
 	}
 
-	// A read that marked something read is news to the attached clients: the
-	// unread count they draw beside a pane just changed, and nothing else would
-	// tell them.
 	var marked []uint64
 	var readAt int64
 	for _, m := range res.Messages {
@@ -942,8 +698,6 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	if len(marked) > 0 {
 		d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{ReadIDs: marked, ReadAt: readAt}, "")
 	}
-	// A peek that marked messages seen is news too: the sender reads seen_at,
-	// and the mailbox and the Inbox draw it.
 	var seenIDs []uint64
 	var seenAt int64
 	seenThreads := map[uint64]bool{}
@@ -962,8 +716,6 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 			}
 		}
 	}
-	// A thread of the person's mail with nothing left unread in it is no
-	// longer waiting in the Inbox.
 	if q.inbox == AgentInboxHuman && len(marked) > 0 {
 		threads := map[uint64]bool{}
 		for _, m := range res.Messages {
@@ -979,50 +731,23 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	}
 
 	return map[string]any{
-		"type":    "agent_messages",
-		"session": sess.Name(),
-		"inbox":   q.inbox,
-		// The thread the filter resolved to, zero when the read was not filtered.
-		// It can differ from what the caller passed: any id in the thread names
-		// the thread, and this is the one it named.
-		"thread": q.thread,
-		// untrusted is a constant, and that is deliberate. Every body here was
-		// written by something other than the reader, so a consumer that keys on
-		// this field is right every time, and a consumer that never read the
-		// skill trips over it in the shape of the answer.
-		"untrusted": true,
-		"messages":  res.Messages,
-		// unread is how many of the returned messages were not read before
-		// this call, seen ones included. seen is how many of those had been
-		// seen, and marked_read and marked_seen are what this call changed.
-		"unread":      res.Unread,
-		"seen":        res.Seen,
-		"marked_read": res.MarkedRead,
-		"marked_seen": res.MarkedSeen,
-		"total":       res.Total,
-		// evicted is every entry the session's ring has dropped, read or
-		// not. evicted_unread is the mail it dropped before anyone read it,
-		// for the inbox the read named, or for the whole session.
+		"type":           "agent_messages",
+		"session":        sess.Name(),
+		"inbox":          q.inbox,
+		"thread":         q.thread,
+		"untrusted":      true,
+		"messages":       res.Messages,
+		"unread":         res.Unread,
+		"seen":           res.Seen,
+		"marked_read":    res.MarkedRead,
+		"marked_seen":    res.MarkedSeen,
+		"total":          res.Total,
 		"evicted":        res.Evicted,
 		"evicted_unread": res.EvictedUnread,
-		// True when the read asked to mark the person's mail read and was
-		// served as a peek instead, because the caller runs in a pane.
-		"peek_forced": peekForced,
+		"peek_forced":    peekForced,
 	}, nil
 }
 
-// callerReadsInbox reports whether the caller on cs is the reader of an inbox,
-// which is the only caller whose peek means the inbox's owner looked at its
-// mail. Another pane that peeks to check on a message has not looked as the
-// recipient, so it must not turn the message seen.
-//
-//   - A window inbox is read by the pane the caller runs in, placed the way
-//     the grants code places it. A caller in a different pane, in an unplaced
-//     pane, over a link, or in no pane at all is not that reader. A plain CLI
-//     in no pane is not an agent reading its own mail, so it marks nothing.
-//   - The person's inbox is read by the person: a caller that may act as the
-//     person (see mayActAsHuman), such as the CLI run outside every pane.
-//   - No inbox named means no reader.
 func (d *Daemon) callerReadsInbox(cs *connState, inbox string) bool {
 	switch inbox {
 	case "":
@@ -1034,19 +759,6 @@ func (d *Daemon) callerReadsInbox(cs *connState, inbox string) bool {
 	return pa != nil && pa.window == inbox
 }
 
-// verbAskAgent is the composition that turns "type into a pane" into "ask
-// another agent a question": it waits until the target is not mid-turn, writes
-// the question to its PTY, waits until the target has actually dealt with it,
-// and answers with what the pane printed in between.
-//
-// It exists because the honest signal that a message landed is the target's
-// state coming back to rest, and assembling that from send-text plus two
-// wait-fors is the composition every caller would otherwise write, incorrectly:
-// the naive version returns as soon as the pane is quiet, which for an agent
-// that thinks before it types is immediately.
-//
-// It is also the only half of this feature that works with the agents that exist
-// today. None of them read a tuios mailbox; all of them read their keyboard.
 func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p askAgentParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -1069,8 +781,6 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 		return nil, verr
 	}
 	state := sess.GetState()
-	// The person has an inbox and no keyboard, so a question for them is left
-	// as mail and answered from the client, never typed anywhere.
 	if p.Window == AgentInboxHuman {
 		return nil, hintedVerbError(ErrVerbNoKeyboard, "human has no pane to type into", &VerbHint{
 			Param:   "window",
@@ -1085,8 +795,6 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 	target := state.Windows[idx]
 	gone, stop := askCancel(cs)
 	defer stop()
-	// from may name a window of another session by its full id, as for
-	// send-agent-message.
 	res, verr := d.askAgent(cs, sess, state, target, p, true, gone)
 	if verr != nil {
 		return nil, verr
@@ -1094,7 +802,6 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 	return res, nil
 }
 
-// askAgentParams are ask-agent's parameters.
 type askAgentParams struct {
 	Session      string `json:"session"`
 	Window       string `json:"window"`
@@ -1112,13 +819,6 @@ type askAgentParams struct {
 	Confirm      string `json:"confirm"`
 }
 
-// askAgentSelect asks every pane a selector matches the same question, once
-// the caller has confirmed the set (resolveSelection), and answers with each
-// pane's reply. The asks run at once, each the whole single ask: it refuses a
-// pane on needs_input with agent_blocked unless allow_blocked, waits for the
-// pane to come to rest unless force, and records the exchange in that pane's
-// session. A pane that refuses or fails is reported in its row and does not
-// stop the others, so one blocked agent does not cost the caller every reply.
 func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbError) {
 	if p.Window != "" {
 		return nil, invalidParam("window", "select names the agents to ask, so it takes no window. Drop one or the other")
@@ -1137,8 +837,6 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 	for i, pane := range panes {
 		wg.Go(func() {
 			row := map[string]any{"session": pane.sess.Name(), "window": pane.window.ID, "name": windowLabelOf(pane.window)}
-			// The pane is read again: the set was resolved a moment ago, and
-			// a single ask reads its target at the time of the call too.
 			state := pane.sess.GetState()
 			target, ok := findWindowState(state, pane.window.ID)
 			if !ok {
@@ -1167,40 +865,29 @@ func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbErro
 		}
 	}
 	return map[string]any{
-		"type":     "agent_replies",
-		"select":   p.Select,
-		"replies":  results,
-		"answered": answered,
-		"failed":   len(results) - answered,
-		"total":    len(results),
-		// As in a single ask: every reply is another program's output.
+		"type":      "agent_replies",
+		"select":    p.Select,
+		"replies":   results,
+		"answered":  answered,
+		"failed":    len(results) - answered,
+		"total":     len(results),
 		"untrusted": true,
 	}, nil
 }
 
-// askAgent is one ask of target in sess. fromAnySession is resolveSender's.
-// gone closes when the caller went away: an ask that is still waiting then
-// leaves the line and types nothing.
 func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, target WindowState, p askAgentParams, fromAnySession bool, gone <-chan struct{}) (map[string]any, *verbError) {
-	// The question is typed into an agent with no person reading it first,
-	// so the invisible characters that can hide words in it are removed.
-	// See invisible.StripHidden.
 	var hidden int
 	p.Text, hidden = invisible.StripHidden(p.Text)
 	from, fromLabel := "", ""
 	viaLink := cs != nil && cs.viaLink
 	switch {
 	case viaLink:
-		// As in send-agent-message: a caller on another machine is not a
-		// window here, so its name is a label and never resolved.
 		fromLabel = printableClaim(p.From, agentMsgMaxSubject)
 	case p.From != "":
 		fid, flabel, ferr := d.resolveSender(cs, state, p.From, fromAnySession)
 		if ferr != nil {
 			return nil, senderNotFound(ferr, sess)
 		}
-		// The record of an ask from human reads as the person asking, so
-		// a pane cannot leave one. See human_origin.go.
 		if fid == AgentInboxHuman && !d.mayActAsHuman(cs) {
 			return nil, humanForbiddenError("ask-agent")
 		}
@@ -1217,9 +904,6 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		})
 	}
 
-	// The cycle guard runs before anything is typed. Releasing the edge is
-	// deferred so a wait that times out does not leave the graph claiming an ask
-	// is still open.
 	if !d.agents.openAsk(from, target.ID) {
 		detail := "The target is already waiting, directly or through another agent, on the pane making this call, so answering would leave both sides blocked on each other. Leave a message instead: send-agent-message does not block."
 		if edges := d.agents.openAskEdges(); len(edges) > 0 {
@@ -1245,9 +929,6 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		lines = askDefaultLines
 	}
 
-	// One ask types at a pane at a time. Another ask of the same pane waits
-	// for its turn, in the order the asks came, for up to timeout. See
-	// ask_turns.go.
 	turnStart := time.Now()
 	ahead, release := d.askTurns.take(d.ctx, gone, target.ID, timeout)
 	if release == nil {
@@ -1266,19 +947,12 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	defer release()
 	waitedTurn := time.Since(turnStart)
 
-	// Step one: do not type into an agent that is blocked on a prompt, because
-	// the text would answer the prompt. This holds with force too: force skips
-	// the wait for a working agent, and only allow_blocked says the caller knows
-	// the prompt takes free text.
 	if !p.AllowBlocked {
 		if verr := d.refuseBlockedAgent(sess, target.ID); verr != nil {
 			return nil, verr
 		}
 	}
 
-	// Step two: do not type into an agent that is mid-turn. force skips the
-	// wait, and is the caller taking responsibility for interleaving its text
-	// with whatever the target is doing.
 	waitedFor := ""
 	if !p.Force {
 		reached, verr := d.waitAgentRest(sess, target.ID, readyTimeout, p.AllowBlocked, gone)
@@ -1288,38 +962,21 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		waitedFor = reached
 	}
 
-	// Step three: the baseline for the reply. Everything the pane prints from
-	// here on is what it printed in answer.
 	before := contentLines(pty.CaptureContent(true, false))
-	// And the end of its transcript, for an agent that has one: the reply is
-	// then its own text since the question (verb_ask_transcript.go).
 	mark := d.askTranscriptMark(sess, target.ID)
 
-	// The pane is checked once more right before anything is typed, since a
-	// prompt can have come up while the wait above returned or the baseline was
-	// read. Nothing has been written yet, so a refusal here still leaves the
-	// pane untouched.
 	if !p.AllowBlocked {
 		if verr := d.refuseBlockedAgent(sess, target.ID); verr != nil {
 			return nil, verr
 		}
 	}
-	// A pane without admin is checked against the target once more too. See
-	// holdTypingTarget.
 	if verr := d.recheckTyping(cs, "ask-agent", sess, target.ID); verr != nil {
 		return nil, verr
 	}
-	// A caller that went away while the ask waited gets nothing typed: no
-	// one would read the answer.
 	if closed(gone) {
 		return nil, askCallerGoneError()
 	}
-	// Pasted and submitted with a carriage return, the way fan types its
-	// prompt. See prompt_submit.go. The gate reads the pane first, so it can
-	// tell afterwards whether the pane took the question. See prompt_gate.go.
 	gate := d.newPromptGate(sess, target.ID)
-	// And once more right before the submit key, which would answer a
-	// prompt that came up while the paste was taken in.
 	ctx := withSubmitGuard(d.ctx, func() *verbError {
 		if !p.AllowBlocked {
 			if verr := d.refuseBlockedAgent(sess, target.ID); verr != nil {
@@ -1334,7 +991,6 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	}
 	gate.markSubmitted(submittedAt)
 
-	// Step four: wait for the target to have dealt with it.
 	stall := durationOr(p.StallTimeout, d.promptStall())
 	settledBy, endState := d.waitAgentSettled(sess, target.ID, pty, gate, settle, timeout, stall, gone)
 
@@ -1348,12 +1004,6 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 		}
 	}
 
-	// The exchange goes in the ring once it is over, so the person at the
-	// client can see what one agent asked another and what came back. It is
-	// a record and not a delivery: nothing waits on it, nothing is unread
-	// because of it, and the rate cap does not count it because the waits
-	// above already bound how often an ask can run. A stalled ask is recorded
-	// too, since the question was typed into the pane either way.
 	d.recordAsk(sess, from, fromLabel, origin, target, p.Text, reply, settledBy)
 
 	if settledBy == askSettledStalled {
@@ -1366,34 +1016,24 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 	}
 
 	return map[string]any{
-		"type":       "agent_reply",
-		"session":    sess.Name(),
-		"window":     target.ID,
-		"name":       windowLabelOf(target),
-		"waited_for": waitedFor,
-		// queued_behind is how many asks of the same agent were ahead of
-		// this one, and waited_turn_ms how long it waited for its turn.
-		"queued_behind":  ahead,
-		"waited_turn_ms": waitedTurn.Milliseconds(),
-		"settled_by":     settledBy,
-		"state":          endState,
-		// untrusted, as in read-agent-messages: this is another program's output.
-		"untrusted": true,
-		"reply":     reply,
-		"lines":     countLines(reply),
-		"truncated": truncated,
-		// reply_source is where the reply was read: the agent's transcript,
-		// or the lines the pane printed after the question.
-		"reply_source": replySource,
-		// invisible_removed is how many invisible characters were taken out
-		// of the question before it was typed.
+		"type":              "agent_reply",
+		"session":           sess.Name(),
+		"window":            target.ID,
+		"name":              windowLabelOf(target),
+		"waited_for":        waitedFor,
+		"queued_behind":     ahead,
+		"waited_turn_ms":    waitedTurn.Milliseconds(),
+		"settled_by":        settledBy,
+		"state":             endState,
+		"untrusted":         true,
+		"reply":             reply,
+		"lines":             countLines(reply),
+		"truncated":         truncated,
+		"reply_source":      replySource,
 		"invisible_removed": hidden,
 	}, nil
 }
 
-// recordAsk stores one finished ask-agent exchange in the session's ring and
-// pushes it to the attached clients. The question rides in the subject, cut to
-// the subject cap, and the captured reply in the text, cut to the body cap.
 func (d *Daemon) recordAsk(sess *Session, from, fromLabel string, origin askOrigin, target WindowState, question, reply, settledBy string) {
 	if len(question) > agentMsgMaxSubject {
 		question = question[:agentMsgMaxSubject]
@@ -1416,16 +1056,11 @@ func (d *Daemon) recordAsk(sess *Session, from, fromLabel string, origin askOrig
 	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{Message: stored}, "")
 }
 
-// askOrigin is where an ask came from, for the record it leaves: empty for
-// this machine, AgentOriginLink and the claimed host for another.
 type askOrigin struct {
 	origin string
 	host   string
 }
 
-// printableClaim bounds a name another machine claimed for itself or its
-// sender: printable characters only, cut to limit. It is what keeps a claim
-// from carrying a control sequence into a terminal that prints it.
 func printableClaim(s string, limit int) string {
 	var b strings.Builder
 	for _, r := range s {
@@ -1440,8 +1075,6 @@ func printableClaim(s string, limit int) string {
 	return strings.TrimSpace(b.String())
 }
 
-// durationOr converts a millisecond parameter to a duration, falling back to a
-// default when the caller passed nothing.
 func durationOr(ms int, fallback time.Duration) time.Duration {
 	if ms > 0 {
 		return time.Duration(ms) * time.Millisecond
@@ -1449,11 +1082,6 @@ func durationOr(ms int, fallback time.Duration) time.Duration {
 	return fallback
 }
 
-// agentBlockedError is the refusal ask-agent gives a pane on needs_input. It
-// names what the pane waits on when that is known, and the remedy is always
-// to look first with peek-prompt. Answering another agent's prompt is the
-// person's call, so the hint sends the caller to the person, never to
-// send-keys.
 func agentBlockedError(sess *Session, w WindowState) *verbError {
 	what := "a prompt"
 	switch agentBlockedBy(w) {
@@ -1477,9 +1105,6 @@ func agentBlockedError(sess *Session, w WindowState) *verbError {
 	})
 }
 
-// refuseBlockedAgent returns agentBlockedError when the window is on
-// needs_input now, and nil otherwise, including when the window is gone: the
-// caller's own lookups report that.
 func (d *Daemon) refuseBlockedAgent(sess *Session, windowID string) *verbError {
 	st := sess.GetState()
 	i, err := findWindowStateIndex(st.Windows, windowID)
@@ -1492,13 +1117,6 @@ func (d *Daemon) refuseBlockedAgent(sess *Session, windowID string) *verbError {
 	return nil
 }
 
-// waitAgentRest blocks until the window is in a state that means it is not
-// mid-turn, and reports which state that was.
-//
-// A window that reaches needs_input ends the wait with agent_blocked, since
-// waiting on does not help: the prompt stays until somebody answers it. With
-// allowBlocked, needs_input counts as at rest instead, which is what every
-// caller got before needs_input left agentRestStates.
 func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Duration, allowBlocked bool, gone <-chan struct{}) (string, *verbError) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name(),
@@ -1572,22 +1190,6 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 	}
 }
 
-// waitAgentSettled blocks until the target has finished dealing with what was
-// just sent, and reports which of the two signals ended the wait.
-//
-// Two signals rather than one, because neither is sufficient alone. An agent
-// that reports its own state says so contractually, and that is the honest
-// answer; but most panes report nothing, and for those the only evidence is the
-// pane going quiet. Quiet alone is wrong for a reporting agent, which is silent
-// while it thinks. So: whichever arrives first, and the answer says which.
-//
-// Neither ends the wait before the stall gate has seen the pane take the
-// question, because a pane that never took it is also quiet and also at rest.
-// If the gate has seen nothing when stall runs out, the wait ends with
-// askSettledStalled. See prompt_gate.go.
-//
-// gone ends the wait with askSettledCallerGone: the ask holds the pane's turn
-// while it waits, so a caller that left must not keep it until timeout.
 func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate *promptGate, settle, timeout, stall time.Duration, gone <-chan struct{}) (string, string) {
 	sentAt := gate.submittedAt
 	sub := d.events.subscribe(eventFilter{
@@ -1627,8 +1229,6 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate
 		timer.Reset(settle)
 	}
 
-	// The gate is polled until it has seen the question taken, and then not at
-	// all. taken latches, so the checks below are cheap once it has.
 	taken := gate.check(sess, pty.LastOutput)
 	stallTimer := time.NewTimer(stall)
 	defer stallTimer.Stop()
@@ -1648,8 +1248,6 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate
 		case <-poll.C:
 			if !taken && gate.check(sess, pty.LastOutput) {
 				taken = true
-				// The quiet clock starts when the pane took the question, so
-				// the silence before it does not count toward settling.
 				resetSettle()
 			}
 		case <-stallTimer.C:
@@ -1665,28 +1263,17 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate
 				return "window-closed", AgentStateNone.Name()
 			}
 			gate.observe(ev)
-			// An event about another pane says nothing about this pane's
-			// screen; the poll still looks.
 			if !taken && ev.Window == windowID && gate.check(sess, pty.LastOutput) {
 				taken = true
 			}
-			// Only a report stamped after the question was sent says anything
-			// about this question. A stale rest state is the pane not having
-			// noticed yet, and returning on it is the bug this guards.
 			if ev.Time <= sentAt || !taken {
 				continue
 			}
-			// needs_input ends the wait too, though it is not a rest state: an
-			// agent that answers with a prompt of its own has dealt with the
-			// question as far as it can, and the reply is what it printed.
 			if name := currentState(); (agentRestStates[name] || name == AgentStateNeedsInput.Name()) && name != AgentStateNone.Name() {
 				return "agent-state", name
 			}
 		case <-timer.C:
 			if !taken {
-				// Quiet before the pane took the question says nothing: a
-				// pane that never took it is quiet too. The stall timer
-				// decides that case, and the poll restarts this clock.
 				continue
 			}
 			return "idle", currentState()
@@ -1694,28 +1281,14 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate
 	}
 }
 
-// askSettledStalled is the settled_by an ask ends with when the stall gate saw
-// nothing. It never reaches a caller as a result: ask-agent turns it into
-// prompt_stalled.
 const askSettledStalled = "stalled"
 
-// askSettledCallerGone is the settled_by of an ask whose caller went away
-// after the question was typed. No one reads the reply.
 const askSettledCallerGone = "caller-gone"
 
-// contentLines counts a capture up to its last line with anything on it.
-//
-// A capture is the pane's full height, so it ends in the blank rows below the
-// cursor. Counting those would give a baseline that is the pane's height rather
-// than what it has printed, and a baseline that never moves makes every reply
-// empty. This is the same rule capture-pane's --lines already follows.
 func contentLines(s string) int {
 	return countContent(strings.Split(s, "\n"))
 }
 
-// countContent is contentLines over an already-split capture, so a caller that
-// needs both the count and the lines does not split a ten-thousand-line
-// scrollback twice.
 func countContent(lines []string) int {
 	for i, line := range slices.Backward(lines) {
 		if strings.TrimSpace(line) != "" {
@@ -1725,7 +1298,6 @@ func countContent(lines []string) int {
 	return 0
 }
 
-// countLines counts the lines in a reply.
 func countLines(s string) int {
 	if s == "" {
 		return 0
@@ -1733,13 +1305,6 @@ func countLines(s string) int {
 	return strings.Count(s, "\n") + 1
 }
 
-// tailLines returns the content that arrived after the first `before` content
-// lines, capped to the newest maxLines, and reports whether anything was cut.
-//
-// A pane whose scrollback has wrapped can end up with fewer content lines than
-// the baseline recorded. That reads as an empty reply rather than as the whole
-// screen, which is the safe way to be wrong: a caller sees nothing and captures
-// the pane, instead of being handed text from before it asked.
 func tailLines(content string, before, maxLines int) (string, bool) {
 	all := strings.Split(content, "\n")
 	if n := countContent(all); n < len(all) {
@@ -1760,10 +1325,6 @@ func tailLines(content string, before, maxLines int) (string, bool) {
 	return strings.TrimRight(strings.Join(added, "\n"), "\n \t"), truncated
 }
 
-// askCancel is a channel that closes when the caller on cs goes away: its
-// connection closes, or the hosted pane it calls for ends. A verb reads
-// nothing from its connection while it runs, so the watch peeks at it.
-// stop ends the watch. A caller with no connection never goes away.
 func askCancel(cs *connState) (<-chan struct{}, func()) {
 	if cs == nil {
 		return nil, func() {}
@@ -1794,7 +1355,6 @@ func askCancel(cs *connState) (<-chan struct{}, func()) {
 	}
 }
 
-// closed reports whether ch is closed. A nil channel never is.
 func closed(ch <-chan struct{}) bool {
 	if ch == nil {
 		return false
@@ -1807,15 +1367,10 @@ func closed(ch <-chan struct{}) bool {
 	}
 }
 
-// askCallerGoneError ends an ask whose caller went away before it typed.
 func askCallerGoneError() *verbError {
 	return newVerbError(ErrVerbInternal, "the caller went away before the question was typed, so nothing was typed")
 }
 
-// liveLeadOf is the pane that started window with start-agent (its parent
-// link), when that pane is still live on this daemon, "" otherwise. It is read
-// when mail is read, so a lead that closed stops being one, and nothing a
-// message carries can make its sender a lead.
 func (d *Daemon) liveLeadOf(window string) string {
 	if window == "" || window == AgentInboxHuman {
 		return ""

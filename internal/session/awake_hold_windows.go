@@ -9,12 +9,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// awakeHolder holds Windows awake with SetThreadExecutionState. The state
-// belongs to a thread, so one goroutine locked to its own thread sets it and
-// clears it. The state ends with the process.
-//
-// Adapted from Kero (github.com/egoist/kero, awake_windows.go, MIT). See
-// NOTICE.
 type awakeHolder struct {
 	asks chan bool
 	errs chan error

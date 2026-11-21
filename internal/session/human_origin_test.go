@@ -21,22 +21,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// The helper process these tests start: this test binary, run again with
-// TUIOS_HELPER_SOCK set, as a stand in for an agent calling the socket. It is
-// started inside a pane, or detached from everything, and writes what the
-// daemon told it to TUIOS_HELPER_OUT.
 const (
-	helperSockEnv = "TUIOS_HELPER_SOCK"
-	helperOutEnv  = "TUIOS_HELPER_OUT"
-	helperModeEnv = "TUIOS_HELPER_MODE"
-	helperArgsEnv = "TUIOS_HELPER_ARGS"
-	// helperDetachEnv makes the helper wait until it has been reparented.
+	helperSockEnv   = "TUIOS_HELPER_SOCK"
+	helperOutEnv    = "TUIOS_HELPER_OUT"
+	helperModeEnv   = "TUIOS_HELPER_MODE"
+	helperArgsEnv   = "TUIOS_HELPER_ARGS"
 	helperDetachEnv = "TUIOS_HELPER_DETACH"
-	// helperSizeEnv is the size an attaching helper reports, WxH.
-	helperSizeEnv = "TUIOS_HELPER_SIZE"
+	helperSizeEnv   = "TUIOS_HELPER_SIZE"
 )
 
-// ppidAtStart is the helper's parent when the binary started.
 var ppidAtStart = os.Getppid()
 
 // TestHelperSocketCaller is not a test. It is the body of the helper process,
@@ -47,8 +40,6 @@ func TestHelperSocketCaller(t *testing.T) {
 		t.Skip("only runs as a helper process")
 	}
 	out := os.Getenv(helperOutEnv)
-	// A detached helper waits for the shell that started it to exit, so it
-	// dials as an orphan and not as that shell's child.
 	if os.Getenv(helperDetachEnv) != "" && ppidAtStart != 1 {
 		deadline := time.Now().Add(5 * time.Second)
 		for os.Getppid() == ppidAtStart && time.Now().Before(deadline) {
@@ -58,8 +49,6 @@ func TestHelperSocketCaller(t *testing.T) {
 	var result string
 	switch os.Getenv(helperModeEnv) {
 	case "attach-host":
-		// args is "host session": attach to a session on another machine
-		// through the daemon at sock, the way tuios attach --host does.
 		host, sessName, _ := strings.Cut(os.Getenv(helperArgsEnv), " ")
 		conn, err := net.DialTimeout("unix", sock, 3*time.Second)
 		if err != nil {
@@ -84,7 +73,6 @@ func TestHelperSocketCaller(t *testing.T) {
 		_ = c.Close()
 	case "attach", "attach-served", "attach-force", "attach-probe", "attach-served-probe", "attach-hold", "attach-late-probe":
 		mode := os.Getenv(helperModeEnv)
-		// The size the client attaches at, WxH, 80x24 when unset.
 		width, height := 80, 24
 		if size := os.Getenv(helperSizeEnv); size != "" {
 			_, _ = fmt.Sscanf(size, "%dx%d", &width, &height)
@@ -93,7 +81,6 @@ func TestHelperSocketCaller(t *testing.T) {
 		c.Served = strings.HasPrefix(mode, "attach-served")
 		c.AllowNested = mode == "attach-force"
 		if strings.HasSuffix(mode, "-probe") {
-			// Written to this process's terminal, as a client writes it.
 			c.SetNestProbe(WriteNestProbe(os.Stdout))
 		}
 		conn, err := net.DialTimeout("unix", sock, 3*time.Second)
@@ -112,10 +99,6 @@ func TestHelperSocketCaller(t *testing.T) {
 		}
 		result = "nonce:" + c.HumanNonce()
 		if strings.HasSuffix(mode, "-probe") {
-			// The daemon does not wait for the probe, so a client can attach
-			// before its probe reaches a pane and be taken off after. Report
-			// the attach, then wait to be taken off, and report the reason to
-			// out.ended.
 			ended := make(chan string, 1)
 			c.OnSessionEnded(func(_, reason string) { ended <- reason })
 			c.StartReadLoop()
@@ -130,8 +113,6 @@ func TestHelperSocketCaller(t *testing.T) {
 			return
 		}
 		if mode == "attach-hold" {
-			// Stays attached, so a later attach sees this client in the
-			// chain. The pane closing with its daemon ends it.
 			if err := os.WriteFile(out+".tmp", []byte(result), 0o600); err == nil {
 				_ = os.Rename(out+".tmp", out)
 			}
@@ -162,8 +143,6 @@ func TestHelperSocketCaller(t *testing.T) {
 	}
 }
 
-// helperCommand is the shell line that runs the helper with mode and args,
-// writing to out.
 func helperCommand(t *testing.T, sock, out, mode, args string) string {
 	t.Helper()
 	exe, err := os.Executable()
@@ -176,7 +155,6 @@ func helperCommand(t *testing.T, sock, out, mode, args string) string {
 		q(exe) + " -test.run='^TestHelperSocketCaller$'"
 }
 
-// waitHelper waits for the helper to write its result.
 func waitHelper(t *testing.T, out string) string {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
@@ -246,9 +224,6 @@ func TestADetachedProcessWithAPaneEnvironmentCannotSendAsHuman(t *testing.T) {
 	run := func(envName, paneID string) map[string]any {
 		t.Helper()
 		out := filepath.Join(t.TempDir(), "out")
-		// sh starts the helper in the background and exits at once, so the
-		// helper is reparented away from this process, and setsid leaves it
-		// with no controlling terminal.
 		cmd := exec.Command("/bin/sh", "-c", helperCommand(t, sp, out, "send", req)+" &")
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		env := []string{}
@@ -273,16 +248,12 @@ func TestADetachedProcessWithAPaneEnvironmentCannotSendAsHuman(t *testing.T) {
 		return resp
 	}
 
-	// TUIOS_PANE_ID is what a pane's processes carry, TUIOS_WINDOW_ID what the
-	// client's hook commands carry, and TUIOS_SOCKET what its dock components
-	// carry. Each places the process with the automation, not the person.
 	for name, value := range map[string]string{"TUIOS_PANE_ID": b, "TUIOS_WINDOW_ID": b, "TUIOS_SOCKET": sp} {
 		resp := run(name, value)
 		if e, _ := resp["error"].(map[string]any); e == nil || e["code"] != ErrVerbForbidden {
 			t.Errorf("a detached process with %s=%s was not refused: %v", name, value, resp)
 		}
 	}
-	// A window id this daemon does not hold is someone else's pane.
 	if resp := run("TUIOS_PANE_ID", "not-a-window-here"); resp["error"] != nil {
 		t.Errorf("a pane id this daemon does not hold was refused: %v", resp)
 	}
@@ -382,15 +353,11 @@ func TestPaneOriginOfThisProcess(t *testing.T) {
 	if from, _ := d.paneOrigin(pty.ShellPID()); !from {
 		t.Error("a pane's shell does not count as inside a pane")
 	}
-	// A pid that is not running fails closed.
 	if from, why := d.paneOrigin(1 << 30); !from || why != paneOriginUnreadable {
 		t.Errorf("an unreadable pid: from %v (%s), want inside a pane, unreadable", from, why)
 	}
 }
 
-// startHubAndLinkedFar is startHubAndFar with the far side's proxy doing what
-// tuios stdio-proxy does: dial the link-human socket for a stream the hub
-// vouched for, and the plain link socket for any other.
 func startHubAndLinkedFar(t *testing.T) (*Daemon, *farSide) {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))

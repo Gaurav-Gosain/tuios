@@ -6,63 +6,26 @@ import (
 	"time"
 )
 
-// The Inbox's lifecycle beyond open and close: snoozing an item, waking it,
-// marking a finished pane unread, and restoring an item the person closed a
-// moment ago.
-//
-// Every one of them is the person's act on the list the person reads, so
-// mark-attention takes the proof dismiss-attention and reply-approval take: a
-// live nonce from an attached client, over the kind of connection it was
-// issued on, and not from inside a pane (humanNonceFor). It is scopeDeny
-// for a restricted connection and for a pane without admin, and a link needs
-// respond. An agent therefore cannot snooze, un-read or restore the Inbox.
-//
-// A snooze closes the item with the reason snoozed and keeps it aside, in
-// snoozed, with when it opens again. It opens again, with its id and since,
-// when that time comes, when its fact changes (the pane reports something the
-// item did not already say), or when the person wakes it. When the fact ends
-// while it sleeps (the pane leaves needs_input, the turn is seen, the pane
-// closes), it is dropped with the reason that would have closed it, so a
-// client that lists snoozed items drops it too. A client that predates
-// snoozing reads the snoozed close as any close and never hears of the item
-// again until it opens.
-//
-// One timer wakes the timed snoozes: it is set for the earliest, and there is
-// none while nothing timed is asleep.
-
 // SnoozeUntilChange is the snoozed_until of an item that sleeps until its fact
 // changes rather than until a time.
 const SnoozeUntilChange int64 = -1
 
-// undoSpan is the store's undo window: agents.undo_window_seconds, or
-// attentionUndoWindow for a store the daemon did not set.
 func (a *attentionStore) undoSpan() time.Duration {
 	return positiveOr(a.undoWindow, attentionUndoWindow)
 }
 
-// attentionUndoWindow is how long after a dismiss or a snooze the person can
-// restore the item.
 const attentionUndoWindow = 10 * time.Second
 
-// attentionUndoMax bounds the closes kept for restore.
 const attentionUndoMax = 16
 
-// attentionSnoozeMax bounds how far ahead a snooze may run.
 const attentionSnoozeMax = 366 * 24 * time.Hour
 
-// attentionUndo is one close the person made, kept for restore.
 type attentionUndo struct {
 	item   AttentionItem
 	reason string
 	at     time.Time
 }
 
-// attentionSnoozable reports whether an item may be snoozed, and why not.
-// What blocks an agent and waits on an answer only the person gives, a prompt
-// a hook is holding, a plan, or a question put with ask-human, is answered or
-// dismissed rather than put off: snoozing it would leave an agent waiting on
-// a list nobody is reading. Mail waiting for another machine is about the
-// link, and goes by itself.
 func attentionSnoozable(it *AttentionItem) (bool, string) {
 	switch it.Kind {
 	case AttentionFinished, AttentionErrored, AttentionMail, AttentionResume, AttentionQuestion:
@@ -82,8 +45,6 @@ func attentionSnoozable(it *AttentionItem) (bool, string) {
 	return false, "this kind of item cannot be snoozed"
 }
 
-// openOrSnoozedLocked is the item under key, open or asleep, or nil. The
-// caller holds mu.
 func (a *attentionStore) openOrSnoozedLocked(key string) *AttentionItem {
 	if id, ok := a.byKey[key]; ok {
 		return a.items[id]
@@ -94,8 +55,6 @@ func (a *attentionStore) openOrSnoozedLocked(key string) *AttentionItem {
 	return nil
 }
 
-// snoozedIDsLocked lists the snoozed ids in a stable order. The caller holds
-// mu.
 func (a *attentionStore) snoozedIDsLocked() []string {
 	ids := make([]string, 0, len(a.snoozed))
 	for id := range a.snoozed {
@@ -114,7 +73,6 @@ func (a *attentionStore) snoozedIDsLocked() []string {
 	return ids
 }
 
-// putSnoozedLocked files an item as asleep. The caller holds mu.
 func (a *attentionStore) putSnoozedLocked(it *AttentionItem) {
 	if a.snoozed == nil {
 		a.snoozed = make(map[string]*AttentionItem)
@@ -124,8 +82,6 @@ func (a *attentionStore) putSnoozedLocked(it *AttentionItem) {
 	a.snoozedKey[attentionItemKey(it)] = it.ID
 }
 
-// takeSnoozedLocked removes an item from the snoozed set and returns it. The
-// caller holds mu.
 func (a *attentionStore) takeSnoozedLocked(id string) (*AttentionItem, bool) {
 	it, ok := a.snoozed[id]
 	if !ok {
@@ -136,9 +92,6 @@ func (a *attentionStore) takeSnoozedLocked(id string) (*AttentionItem, bool) {
 	return it, true
 }
 
-// snoozeLocked puts an open item to sleep until until (unix nanoseconds, or
-// SnoozeUntilChange). It publishes the close with the reason snoozed, the
-// closing copy carrying snoozed_until. The caller holds mu.
 func (a *attentionStore) snoozeLocked(id string, until int64) (AttentionItem, *verbError) {
 	if it, ok := a.hostItems[id]; ok {
 		if ok, why := attentionSnoozable(it); !ok {
@@ -174,8 +127,6 @@ func (a *attentionStore) snoozeLocked(id string, until int64) (AttentionItem, *v
 	delete(a.items, id)
 	delete(a.byKey, attentionItemKey(it))
 	it.SnoozedUntil = until
-	// The person took the item in hand, so it is theirs from now on: a
-	// question held for a parent agent wakes as the person's.
 	held := it.WithParentUntil != 0
 	it.WithParentUntil = 0
 	a.putSnoozedLocked(it)
@@ -195,8 +146,6 @@ func (a *attentionStore) snoozeLocked(id string, until int64) (AttentionItem, *v
 	return closed, nil
 }
 
-// wakeLocked opens a snoozed item again with its id and since, and reports
-// whether there was one. The caller holds mu.
 func (a *attentionStore) wakeLocked(id string) (AttentionItem, bool) {
 	if it, ok := a.hostSnoozed[id]; ok {
 		delete(a.hostSnoozed, id)
@@ -223,11 +172,6 @@ func (a *attentionStore) wakeLocked(id string) (AttentionItem, bool) {
 	return *it, true
 }
 
-// wakeOnChangeLocked wakes the snoozed item under key when next says
-// something it did not, with next's content and the item's id and since. It
-// reports whether it handled next: true when it woke the item, and true when
-// next repeats what the sleeping item says, which leaves it asleep. The caller
-// holds mu.
 func (a *attentionStore) wakeOnChangeLocked(key string, next AttentionItem) bool {
 	id, ok := a.snoozedKey[key]
 	if !ok {
@@ -253,10 +197,6 @@ func (a *attentionStore) wakeOnChangeLocked(key string, next AttentionItem) bool
 	return true
 }
 
-// dropSnoozedLocked forgets a snoozed item whose fact ended, and publishes a
-// close with reason, so a client that lists snoozed items drops it too. The
-// item was already closed for a client that does not, and a close of an id
-// it does not hold changes nothing there. The caller holds mu.
 func (a *attentionStore) dropSnoozedLocked(id, reason string) {
 	it, ok := a.takeSnoozedLocked(id)
 	if !ok {
@@ -271,8 +211,6 @@ func (a *attentionStore) dropSnoozedLocked(id, reason string) {
 	a.armWakeLocked()
 }
 
-// dropHostSnoozedLocked is dropSnoozedLocked for a host's item. The caller
-// holds mu.
 func (a *attentionStore) dropHostSnoozedLocked(id, reason string) {
 	it, ok := a.hostSnoozed[id]
 	if !ok {
@@ -287,8 +225,6 @@ func (a *attentionStore) dropHostSnoozedLocked(id, reason string) {
 	a.armWakeLocked()
 }
 
-// armWakeLocked sets the one wake timer for the earliest timed snooze, or
-// stops it when there is none. The caller holds mu.
 func (a *attentionStore) armWakeLocked() {
 	var next int64
 	for _, m := range []map[string]*AttentionItem{a.snoozed, a.hostSnoozed} {
@@ -305,10 +241,6 @@ func (a *attentionStore) armWakeLocked() {
 		a.wakeTimer.Stop()
 		a.wakeTimer = nil
 	}
-	// A timer whose Stop came too late, because it fired while this caller
-	// held mu, finds a newer generation and does nothing. Without it, that
-	// late fire would drop the timer set here and arm another, and two
-	// would run.
 	a.wakeGen++
 	a.wakeAt = next
 	if next == 0 {
@@ -319,8 +251,6 @@ func (a *attentionStore) armWakeLocked() {
 	a.wakeTimer = time.AfterFunc(max(delay, 0), func() { a.wakeFired(gen) })
 }
 
-// wakeFired is the wake timer of generation gen firing. A timer replaced
-// since it was set does nothing: the one that replaced it is the timer.
 func (a *attentionStore) wakeFired(gen uint64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -330,8 +260,6 @@ func (a *attentionStore) wakeFired(gen uint64) {
 	a.wakeDueLocked()
 }
 
-// wakeDueLocked wakes every timed snooze whose time has come and sets the
-// timer for the next. The caller holds mu.
 func (a *attentionStore) wakeDueLocked() {
 	if a.wakeTimer != nil {
 		a.wakeTimer.Stop()
@@ -354,7 +282,6 @@ func (a *attentionStore) wakeDueLocked() {
 	a.armWakeLocked()
 }
 
-// clock is the store's time.
 func (a *attentionStore) clock() time.Time {
 	if a.now != nil {
 		return a.now()
@@ -362,10 +289,6 @@ func (a *attentionStore) clock() time.Time {
 	return time.Now()
 }
 
-// rememberUndoLocked keeps a close the person made, for restore. Mail
-// waiting for another machine is discarded by its dismiss and a question put
-// with ask-human has told its asker, so neither can come back. The caller
-// holds mu.
 func (a *attentionStore) rememberUndoLocked(it AttentionItem, reason string) {
 	if it.Kind == AttentionOutbox || it.Kind == AttentionAsk {
 		return
@@ -375,10 +298,6 @@ func (a *attentionStore) rememberUndoLocked(it AttentionItem, reason string) {
 		return u.item.ID == it.ID || now.Sub(u.at) >= a.undoSpan()
 	})
 	it.RequestID, it.Options, it.Expires, it.AlwaysScope = "", nil, 0, nil
-	// A restored item of this machine has no hold, so, as when a hold ends
-	// (endHoldLocked), a plan comes back as the pane's approval, with no plan
-	// to serve and no deny to type a reason for. Another machine's item is
-	// that machine's to describe.
 	if it.Host == "" {
 		if it.Kind == AttentionPlan {
 			it.Kind = AttentionApproval
@@ -392,7 +311,6 @@ func (a *attentionStore) rememberUndoLocked(it AttentionItem, reason string) {
 	}
 }
 
-// undoEntry is the restorable close of id, if it is still in time.
 func (a *attentionStore) undoEntry(id string) (attentionUndo, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -409,10 +327,6 @@ func (a *attentionStore) undoEntryLocked(id string) (attentionUndo, bool) {
 	return attentionUndo{}, false
 }
 
-// restore reopens an item the person dismissed or snoozed less than
-// attentionUndoWindow ago, with its id and since. A snoozed one is woken. A
-// dismissed one comes back unless something newer took its place, or, for
-// another machine's item, that machine changed or closed it since.
 func (a *attentionStore) restore(id string) (AttentionItem, *verbError) {
 	a.mu.Lock()
 	hook := a.beforeRestore
@@ -435,7 +349,6 @@ func (a *attentionStore) restore(id string) (AttentionItem, *verbError) {
 		return AttentionItem{}, invalidParam("id", "item "+echoName(id)+" is not asleep any more: it woke, or what it was about is over")
 	}
 	it := u.item
-	// The person brought it back, so it is theirs, held for a parent or not.
 	it.WithParentUntil = 0
 	if it.Host != "" {
 		if _, hidden := a.hostHidden[id]; !hidden {
@@ -469,9 +382,6 @@ func (a *attentionStore) restore(id string) (AttentionItem, *verbError) {
 	return item, nil
 }
 
-// openUnread opens a finished item for a pane the person looked at and wants
-// back on the list, marked unread. An item already open for the pane's turn
-// is marked; a snoozed one wakes.
 func (a *attentionStore) openUnread(it AttentionItem) AttentionItem {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -493,8 +403,6 @@ func (a *attentionStore) openUnread(it AttentionItem) AttentionItem {
 	return *a.items[id]
 }
 
-// resolveMarkTargetLocked finds the item mark-attention names: by id, open or
-// asleep, or by session, window and kind. The caller holds mu.
 func (a *attentionStore) resolveMarkTargetLocked(p markAttentionParams) (string, bool) {
 	if p.ID != "" {
 		_, open := a.items[p.ID]
@@ -513,7 +421,6 @@ func (a *attentionStore) resolveMarkTargetLocked(p markAttentionParams) (string,
 	return "", false
 }
 
-// attentionNoItem is the refusal for an id that names nothing.
 func attentionNoItem(id string) *verbError {
 	return hintedVerbError(ErrVerbInvalidParams, "no attention item has id "+echoName(id), &VerbHint{
 		Param:   "id",
@@ -523,7 +430,6 @@ func attentionNoItem(id string) *verbError {
 	})
 }
 
-// markAttentionParams are what mark-attention takes.
 type markAttentionParams struct {
 	ID          string `json:"id"`
 	Session     string `json:"session"`
@@ -536,7 +442,6 @@ type markAttentionParams struct {
 	HumanNonce  string `json:"human_nonce"`
 }
 
-// snoozeUntil is the snoozed_until a snooze asks for, in unix nanoseconds.
 func (p markAttentionParams) snoozeUntil(now time.Time) (int64, *verbError) {
 	given := 0
 	for _, set := range []bool{p.Until != 0, p.ForMS != 0, p.UntilChange} {
@@ -564,8 +469,6 @@ func (p markAttentionParams) snoozeUntil(now time.Time) (int64, *verbError) {
 	return at.UnixNano(), nil
 }
 
-// verbMarkAttention answers mark-attention. The person's proof is checked
-// before anything else, so the verb refuses an agent from the start.
 func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p markAttentionParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -633,7 +536,6 @@ func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, 
 			return nil, verr
 		}
 		if _, asleep := a.snoozed[id]; asleep {
-			// A second snooze of a sleeping item changes when it wakes.
 			a.snoozed[id].SnoozedUntil = until
 			a.changedLocked()
 			a.armWakeLocked()
@@ -644,7 +546,7 @@ func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, 
 			return nil, verr
 		}
 		return map[string]any{"type": "attention_marked", "id": id, "action": p.Action, "snoozed_until": until}, nil
-	default: // wake
+	default:
 		if _, ok := a.wakeLocked(id); !ok {
 			return nil, invalidParam("id", "item "+echoName(id)+" is not snoozed")
 		}
@@ -652,10 +554,6 @@ func (d *Daemon) verbMarkAttention(cs *connState, params json.RawMessage) (any, 
 	}
 }
 
-// markAttentionUnread puts a finished pane back on the list as unread: the
-// daemon forgets that the pane's turns were seen, so the next client to focus
-// it marks them seen again, and a finished item opens with marked_unread. It
-// acts on a pane of this machine that has finished a turn and is at rest.
 func (d *Daemon) markAttentionUnread(cs *connState, p markAttentionParams) (any, *verbError) {
 	if p.Kind != "" && p.Kind != AttentionFinished {
 		return nil, invalidParam("kind", "unread reopens a finished turn, so kind is finished or left out", AttentionFinished)
@@ -701,12 +599,6 @@ func (d *Daemon) markAttentionUnread(cs *connState, p markAttentionParams) (any,
 	return map[string]any{"type": "attention_marked", "id": it.ID, "action": p.Action}, nil
 }
 
-// markAttentionRestore reopens an item the person dismissed or snoozed a
-// moment ago. A dismiss marked the pane's turns seen or the thread's mail
-// read; a restored finished item forgets the look again, so it closes the
-// next time the pane is focused. Restored mail comes back as a row; its
-// messages stay read. An approval, a question or an error comes back only
-// while the pane is still in the state it was about.
 func (d *Daemon) markAttentionRestore(p markAttentionParams) (any, *verbError) {
 	if p.ID == "" {
 		return nil, invalidParam("id", "restore takes the id of the item dismissed or snoozed")
@@ -724,10 +616,6 @@ func (d *Daemon) markAttentionRestore(p markAttentionParams) (any, *verbError) {
 			return nil, invalidParam("id", "the session of item "+echoName(p.ID)+" ended")
 		}
 		if u.item.Window != "" && u.item.Kind != AttentionMail {
-			// The check and the reopen happen under the session's state lock,
-			// the lock a transition holds while the Inbox hears of it. A pane
-			// that left the state between a check and a later reopen would
-			// leave the item open with nothing left to close it.
 			sess.withWindowState(u.item.Window, func(w WindowState, found bool) {
 				if !found {
 					verr = invalidParam("id", "the pane of item "+echoName(p.ID)+" closed")
@@ -754,8 +642,6 @@ func (d *Daemon) markAttentionRestore(p markAttentionParams) (any, *verbError) {
 	return map[string]any{"type": "attention_marked", "id": it.ID, "action": p.Action}, nil
 }
 
-// attentionKindState is the agent state a kind's item stands for, empty for a
-// kind whose item is not about a state the pane is in.
 func attentionKindState(kind string) string {
 	switch kind {
 	case AttentionApproval, AttentionQuestion, AttentionPlan:
@@ -766,8 +652,6 @@ func attentionKindState(kind string) string {
 	return ""
 }
 
-// attentionItemAnywhere is an item by id, open or asleep, of this machine or
-// another.
 func (d *Daemon) attentionItemAnywhere(id string) (AttentionItem, bool) {
 	a := d.attention
 	a.mu.Lock()
@@ -780,8 +664,6 @@ func (d *Daemon) attentionItemAnywhere(id string) (AttentionItem, bool) {
 	return AttentionItem{}, false
 }
 
-// attentionItemSession is the ID of the session an item is in, for
-// humanNonceFor: "" for an item of another machine, or one not found.
 func (d *Daemon) attentionItemSession(id string) string {
 	it, ok := d.attentionItemAnywhere(id)
 	if !ok || it.Host != "" {

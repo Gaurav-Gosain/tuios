@@ -42,10 +42,6 @@ type PromptTypedPayload struct {
 	Refused string `json:"refused,omitempty"`
 }
 
-// shellAtPrompt reports whether the pane's own shell holds its terminal: the
-// kernel's foreground process group is the shell's. It fails closed. A pane
-// whose shell has exited, or a platform where the kernel does not say, is not
-// at a prompt, whatever the pane last reported.
 func shellAtPrompt(pty *PTY) bool {
 	if pty == nil || pty.IsExited() {
 		return false
@@ -58,18 +54,8 @@ func shellAtPrompt(pty *PTY) bool {
 	return ok && pgid == pid
 }
 
-// foregroundPGID is readForegroundPGID, held in a variable so a test can play
-// a platform where the kernel does not say.
 var foregroundPGID = readForegroundPGID
 
-// handleTypeAtPrompt types a cd into a pane of the attached session if the
-// pane's shell is at its prompt, and says whether it did.
-//
-// It carries no more authority than MsgInput: the connection must be attached
-// to the session the pane is in, a link needs write, and a caller that is a
-// pane is held to the same grant check as its keystrokes (refuseTypingInto).
-// It carries less, because the daemon builds the line from the directory, so
-// the request can only ever type one cd.
 func (d *Daemon) handleTypeAtPrompt(cs *connState, msg *Message) error {
 	var p TypeAtPromptPayload
 	if err := msg.ParsePayload(&p); err != nil {

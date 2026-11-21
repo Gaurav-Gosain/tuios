@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// cdAsPane sends MsgTypeAtPrompt for ptyID on a connection the daemon places
-// in window (the person when window is empty), and returns the answer.
 func cdAsPane(t *testing.T, d *Daemon, sess *Session, window, ptyID, dir string) PromptTypedPayload {
 	t.Helper()
 	d.setApprovalPeer(func(*connState) (bool, string) { return window != "", window })
@@ -87,7 +85,6 @@ func TestAPaneWithoutTheTargetsGrantsCannotCdIt(t *testing.T) {
 	if got := cdAsPane(t, d, sess, a1, ptyOf(t, sess, a2), "/tmp"); got.Typed || got.Refused == "" {
 		t.Fatalf("a read-only pane's cd into a pane holding more = %+v, want refused", got)
 	}
-	// The person is not a pane and is held to nothing: the same cd goes in.
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

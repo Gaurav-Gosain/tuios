@@ -7,8 +7,6 @@ import (
 	"syscall"
 )
 
-// fileLinks is the number of names the open file has: more than one means a
-// hard link elsewhere shares its bytes.
 func fileLinks(f *os.File) (uint64, error) {
 	fi, err := f.Stat()
 	if err != nil {

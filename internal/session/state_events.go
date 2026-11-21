@@ -5,89 +5,39 @@ import (
 	"slices"
 )
 
-// Window lifecycle events are derived, in one place, from the difference between
-// two canonical SessionState snapshots. This matters because a mutation reaches
-// daemon-owned state by one of two routes: the headless daemon-side ops in
-// session_ops.go mutate the state in place, and an attached TUI performs the
-// mutation itself and pushes the result back with UpdateState. Both routes funnel
-// through the helpers below, so a subscriber sees the same events, with the same
-// payloads and the same ordering, no matter which one ran. Emitting from the
-// diff (rather than from each op and again from the TUI bridge) is also what
-// makes the events exactly-once: state converges once, so it is diffed once.
-//
-// Events that hang off a PTY rather than off window state (output, bell,
-// mode-changed, window-exit, and OSC-driven title changes) are emitted by the
-// per-PTY emitter in session.go and are deliberately not derived here, so they
-// are not double-counted.
-
-// lifecycleWindow is the subset of a WindowState that window lifecycle events
-// are derived from. Geometry, z-order, and alt-screen state are excluded: they
-// change on nearly every render and raise no lifecycle event.
 type lifecycleWindow struct {
-	id         string
-	ptyID      string
-	title      string
-	customName string
-	workspace  int
-	minimized  bool
-	agentState AgentState
-	// shownState and agentReason are what a reader is shown: unknown with
-	// the reason silent for a hooked pane that stopped reporting, the state
-	// itself otherwise. The agent-state event reports them. See
-	// agent_silent.go.
-	shownState  AgentState
-	agentReason string
-	// agentQuiet rides along so the Inbox can read it off the event.
-	agentQuiet bool
-	// agentHarness and agentMessage ride the snapshot only so the hook a
-	// transition raises can name them. The lifecycle events themselves do not
-	// report them and neither field alone raises an event.
-	agentHarness string
-	agentMessage string
-	// agentStateAt rides along for the turn count, which needs to know when a
-	// working phase began if nothing recorded it. See agent_turns.go.
-	agentStateAt int64
-	// agentKind and completionSeq ride along for the attention queue: what a
-	// needs_input window is blocked by, and how many turns it has finished.
-	agentKind     string
-	completionSeq uint64
-	// program rides along for the attention queue too: a pane whose state
-	// comes from OSC 7501 is named by its id as well as its title.
-	program bool
-	// worktree and agentSession ride along for the risk rules: the
-	// session's worktree when tuios made it, and the window's agent session
-	// id. The sink turns them into the approval root (windowApprovalRoot),
-	// off this snapshot, since that reads the file system.
+	id                     string
+	ptyID                  string
+	title                  string
+	customName             string
+	workspace              int
+	minimized              bool
+	agentState             AgentState
+	shownState             AgentState
+	agentReason            string
+	agentQuiet             bool
+	agentHarness           string
+	agentMessage           string
+	agentStateAt           int64
+	agentKind              string
+	completionSeq          uint64
+	program                bool
 	worktree, agentSession string
-	// link rides along for the Inbox: the window's parent and root in a
-	// chain of agents. See attention_children.go.
-	link childLink
-	// The rectangle and how the pane sits in it, for layout-changed only.
-	// They change while a person drags a split, so they raise no event of
-	// their own and only mark the workspace's layout as changed.
-	x, y, w, h       int
-	zoomed, floating bool
+	link                   childLink
+	x, y, w, h             int
+	zoomed, floating       bool
 }
 
-// lifecycleSnapshot is a copy of the lifecycle-relevant parts of a SessionState.
-// It is a copy, not a reference, because the headless ops mutate the state in
-// place and the "before" snapshot has to survive that.
 type lifecycleSnapshot struct {
-	windows   []lifecycleWindow // in state order
-	index     map[string]int    // window ID -> index into windows
-	focused   string
-	workspace int
-	// wsNames is a copy of the workspace names, for workspace-renamed.
-	wsNames map[int]string
-	// displayName is the session's display name, for session-labelled.
-	displayName string
-	// width and height are the session's size in cells, the box the
-	// windows' rectangles are laid out in. For layout-changed.
+	windows       []lifecycleWindow
+	index         map[string]int
+	focused       string
+	workspace     int
+	wsNames       map[int]string
+	displayName   string
 	width, height int
 }
 
-// snapshotLifecycle captures the lifecycle-relevant parts of state. The caller
-// must hold the session's state lock.
 func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 	snap := lifecycleSnapshot{index: make(map[string]int)}
 	if state == nil {
@@ -99,9 +49,6 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 	snap.width, snap.height = state.Width, state.Height
 	if len(state.WorkspaceNames) > 0 {
 		snap.wsNames = maps.Clone(state.WorkspaceNames)
-		// A scratch group's workspace is not a workspace a person names or
-		// switches to, so no workspace event ever reports one. See
-		// scratch_workspace.go.
 		maps.DeleteFunc(snap.wsNames, func(ws int, _ string) bool { return IsScratchWorkspace(ws) })
 	}
 	snap.windows = make([]lifecycleWindow, 0, len(state.Windows))
@@ -140,13 +87,6 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 	return snap
 }
 
-// diffLifecycle returns the window lifecycle events implied by the move from
-// before to after, in a stable order: closes, then creates, then per-window
-// changes (rename, move, minimize/restore) in after-state order, then the
-// session-level workspace switch, then the focus change. Focus comes last
-// because it is usually a consequence of one of the earlier events, and a
-// consumer that reacts to focus wants the window it is focusing to already
-// exist in the picture it has built from the stream.
 func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 	var events []SessionEvent
 
@@ -181,14 +121,10 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 		w := &after.windows[i]
 		prevIdx, ok := before.index[w.id]
 		if !ok {
-			continue // already reported as created
+			continue
 		}
 		prev := &before.windows[prevIdx]
 
-		// Only an explicit rename (CustomName) raises window-retitled from the
-		// diff. A Title change is the shell's OSC title sequence, which the
-		// per-PTY emitter already reports; deriving it here too would emit the
-		// same title change twice.
 		if w.customName != prev.customName {
 			events = append(events, SessionEvent{
 				Type:   EventWindowRetitled,
@@ -215,13 +151,6 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				PTYID:  w.ptyID,
 			})
 		}
-		// Diffed here rather than emitted by each writer because agent state has
-		// several: explicit reports, the screen tier, the stall heuristic and
-		// the foreground detector all set it, and every one already runs inside
-		// a state mutation. The event carries the wire spelling, so a pane
-		// ceasing to be an agent says "none" rather than vanishing silently.
-		// A pane going silent, or reporting again after it, changes only the
-		// shown state, and is an agent-state event all the same.
 		if w.agentState != prev.agentState || w.shownState != prev.shownState {
 			events = append(events, SessionEvent{
 				Type:          EventAgentState,
@@ -231,8 +160,6 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				Reason:        w.agentReason,
 				hookTitle:     w.displayTitle(),
 				hookWorkspace: w.workspace,
-				// The state the agent left, not the one shown: a checkpoint
-				// is taken for a turn that ends after a silence too.
 				hookPrevState: prev.agentState.Name(),
 				hookHarness:   w.agentHarness,
 				hookMessage:   w.agentMessage,
@@ -247,9 +174,6 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				prevCompletionSeq: prev.completionSeq,
 			})
 		} else if attentionDetailChanged(w, prev) {
-			// The same state with a new kind, message or name. Only the Inbox
-			// hears it; prevCompletionSeq is the current count so it can
-			// never be taken for a finished turn.
 			events = append(events, SessionEvent{
 				Type:          eventAttentionDetail,
 				Window:        w.id,
@@ -273,8 +197,6 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 		}
 	}
 
-	// A workspace whose name was set, changed or cleared. Title is the new
-	// name, empty when it was cleared. Ascending, so the order is stable.
 	var renamed []int
 	for ws, name := range after.wsNames {
 		if before.wsNames[ws] != name {
@@ -305,9 +227,6 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 		})
 	}
 
-	// A focus change is only reported for a window that still exists; losing
-	// focus because the focused window closed is already implied by
-	// window-closed, and an empty focus target has nothing to report.
 	if after.focused != before.focused && after.focused != "" {
 		ev := SessionEvent{Type: EventWindowFocused, Window: after.focused}
 		if idx, ok := after.index[after.focused]; ok {
@@ -321,16 +240,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 	return events
 }
 
-// layoutChanges returns one layout-changed event for each workspace whose
-// panes now sit differently: a pane on it opened, closed, moved in or out,
-// was minimized or restored, zoomed, floated, or changed its rectangle, or the
-// session itself changed size. A client that mirrors a session's layout reads
-// list-windows again on it. One event per workspace, however many panes moved,
-// so a split that reshapes five panes is one event and not five. Ascending by
-// workspace, so the order is stable.
 func layoutChanges(before, after lifecycleSnapshot) []SessionEvent {
-	// Allocated on the first change, so a push that moves nothing, which is
-	// most of them, costs no allocation.
 	var changed map[int]bool
 	mark := func(ws int) {
 		if ws > 0 && !IsScratchWorkspace(ws) {
@@ -364,8 +274,6 @@ func layoutChanges(before, after lifecycleSnapshot) []SessionEvent {
 		}
 	}
 	if (before.width != after.width || before.height != after.height) && after.width > 0 && after.height > 0 {
-		// Every workspace is laid out in the same box, so a new box is a new
-		// layout on each one that holds a pane.
 		for i := range after.windows {
 			mark(after.windows[i].workspace)
 		}
@@ -381,10 +289,6 @@ func layoutChanges(before, after lifecycleSnapshot) []SessionEvent {
 	return events
 }
 
-// attentionDetailChanged reports whether a window that kept its agent state
-// changed something its Inbox item shows. Only needs_input and errored windows
-// have an item that follows the current report; a finished item describes the
-// turn that finished and is left as it was.
 func attentionDetailChanged(w, prev *lifecycleWindow) bool {
 	if w.agentState != AgentStateNeedsInput && w.agentState != AgentStateErrored {
 		return false
@@ -394,8 +298,6 @@ func attentionDetailChanged(w, prev *lifecycleWindow) bool {
 		w.displayTitle() != prev.displayTitle() || w.program != prev.program
 }
 
-// displayTitle is the title reported for a window in a lifecycle event: the
-// explicit name when one was set, otherwise the shell-reported title.
 func (w *lifecycleWindow) displayTitle() string {
 	if w.customName != "" {
 		return w.customName

@@ -7,30 +7,8 @@ import (
 	"testing"
 )
 
-// Fuzzing the selector parser. A selector is typed by a person or written by
-// an agent, and the writing verbs echo it back with a confirm token, so what
-// the parser accepts has to mean the same thing when it comes back, and has to
-// select the pane it plainly names.
-//
-// The ways this could fail, written down before the target:
-//
-//  1. ParseSelector accepts a text whose String does not parse back to the
-//     same terms, so a selector echoed with its token selects a different set
-//     on the second call.
-//  2. A selector that names a pane's values literally does not select that
-//     pane, because the parser normalised the value (case, a trailing slash,
-//     a ~) and the matcher did not normalise the pane the same way.
-//  3. A value the parser accepted as a glob errors inside path.Match against a
-//     real name, and the term silently matches nothing.
-//  4. The parser accepts more than its documented bounds: 1024 bytes, 16
-//     terms, 16 values a term.
-//  5. Match on an empty or nil selector selects something.
-//  6. A panic on hostile text: invalid UTF-8, a lone colon, commas only.
-
 const fuzzHome = "/home/fuzz"
 
-// literal reports whether a glob value is also a plain string, so a pane
-// holding exactly that string must match it.
 func literal(v string) bool { return !strings.ContainsAny(v, `*?[\`) }
 
 func FuzzSelector(f *testing.F) {
@@ -126,9 +104,6 @@ func FuzzSelector(f *testing.F) {
 			case SelectorStage:
 				target.Stages = []string{v}
 			case SelectorCwd:
-				// cwd:/// parses to "", which the matcher reads as the
-				// root: every absolute directory is under it. A pane has
-				// no empty directory to hold, so "/" stands in.
 				target.Cwd = v
 				if v == "" {
 					target.Cwd = "/"
@@ -138,9 +113,6 @@ func FuzzSelector(f *testing.F) {
 				once = false
 			}
 		}
-		// A pane holding exactly the first value of every term, where each
-		// key appears once and no value is a pattern, is the pane the selector
-		// names. A cwd term matches its own directory.
 		if once && !sel.Match(target) {
 			t.Fatalf("%q does not select the pane it names: %+v", text, target)
 		}

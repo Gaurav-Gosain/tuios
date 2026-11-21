@@ -23,73 +23,6 @@ import (
 	"tuios.dev/tml"
 )
 
-// TML surfaces: a document a program, a script or an agent sends, which every
-// attached client draws with tuios.dev/loom. See docs/protocol.md, "TML
-// surfaces", and the design in the notes (TML-DESIGN.md, section 5).
-//
-// The daemon holds the surface: the tree, the state store, a version and the
-// window it is drawn in. That is what lets it survive a detach, and what lets
-// two clients and a phone see the same values. Each client keeps its own view
-// state (focus, the cursor row, the open tab, sort and scroll), as each keeps
-// its own zoom box.
-//
-// The window is an ordinary window of kind tml, the native-renderer contract
-// the view, web and app kinds already have (WindowState.Kind): it still has a
-// PTY, whose program prints one line for a terminal client that does not draw
-// TML. Opening, closing, focus, popups, tiling and listing all go through the
-// paths every window takes. The placeholder turns on the alternate screen and
-// mouse reporting, so a client sends the wheel and clicks to the pane, where
-// its TML code takes them, instead of scrolling the pane's history.
-//
-// A surface does not survive a daemon restart: resurrection drops its window,
-// as it drops a popup.
-//
-// Surfaces over a link
-//
-// A client on another machine that attaches a session here (tuios attach
-// --host, or a session picked in its rail) is a client of this daemon like
-// any other: its own daemon relays the bytes of the attach over the link and
-// reads none of them. So it gets the same pushes, and this daemon stays the
-// one that holds each surface. What the person does on a surface comes back
-// on a second connection over the same link, as tml-input with the nonce of
-// that attach, and tml-get and tml-place come the same way. The welcome's
-// TMLLink tells the client this daemon takes them. A client of a daemon
-// without it says the daemon is too old, in place of a surface it could not
-// answer.
-//
-// What keeps a surface the person's and its owner's:
-//
-//   - tml-input and tml-place need the attach nonce of a client that came in
-//     on the link-human socket, through the same link proxy. A process in a
-//     pane on the other machine is issued none (human_sender.go).
-//   - The link policy holds each verb (link_policy.go): tml-get and tml-list
-//     need list, tml-input and tml-place need write, as a keystroke into the
-//     pane does. A pane() action in a tml-input is held to the verb it runs,
-//     so new-window needs open.
-//   - tmlReach holds a connection restricted to its own session to it.
-//   - Nothing over a link opens a surface or names its owner: tml-open,
-//     tml-patch, tml-replace and tml-close still need every relay
-//     capability. The owner stays the caller here that opened the surface,
-//     and its pane() actions run with that caller's grants.
-//
-// How it fails, and what happens then:
-//
-//   - The link drops with a surface open. The surface stays here and takes
-//     its owner's patches. An input on its way fails, and the client says
-//     what did not go through. When the link is back the client attaches
-//     again, the attach pushes every open surface whole, and the client takes
-//     each one as the truth, so a value it set and could not send goes back
-//     to this daemon's (see resumeOnHost in internal/app).
-//   - Order. Pushes go on the attach connection, in order, through one outbox
-//     per client. Inputs go on the second connection, one after the other. A
-//     client that misses a version reads the surface again with tml-get.
-//   - Two clients, here or on other machines, each get every push and send
-//     their own inputs. This daemon applies the inputs as they arrive.
-//   - A surface that closes while an input is on its way answers no_surface,
-//     and the close push takes its window away.
-//   - Size. The limits are this daemon's, the same for every client, and the
-//     outbox holds one push per surface for a slow link.
-
 // WindowKindTML is the kind of a window that draws a TML surface.
 const WindowKindTML = "tml"
 
@@ -176,9 +109,6 @@ type TMLEvent struct {
 	Version uint64 `json:"version"`
 }
 
-// legacyTMLLink makes this daemon answer as a build from before surfaces over
-// a link: its welcome leaves TMLLink out. It is TUIOS_TML_LINK_LEGACY=1, so a
-// client of an older far daemon can be tested without an old build.
 func legacyTMLLink() bool {
 	return os.Getenv("TUIOS_TML_LINK_LEGACY") == "1"
 }
@@ -192,18 +122,6 @@ func TMLSurfaceID(uri string) string {
 	return id
 }
 
-// tmlPlaceholderCommand is the program of a TML window. It prints what to do
-// for a client that does not draw the surface: one that predates TML, or one
-// on another machine that predates surfaces over a link. q or esc ends it,
-// and with it
-// the window, which dismisses the surface. It holds the alternate screen and
-// button-event mouse reporting (SGR), so a client that does draw TML sends
-// the wheel and clicks to the pane, where its TML code takes them before
-// they reach this program.
-//
-// An esc is told from the start of a mouse report by the byte after it: a
-// report follows at once, and a lone esc has nothing after it for a tenth of
-// a second. A mouse report holds no q.
 func tmlPlaceholderCommand(uri string) []string {
 	return []string{"/bin/sh", "-c", `stty -echo -icanon min 1 time 0 2>/dev/null
 printf '\033[?1049h\033[?1002h\033[?1006h\033[2m%s\n%s\033[0m\n%s\n' "$1" "$2" "$3"
@@ -223,21 +141,14 @@ done`,
 		"Press q to close it.", uri}
 }
 
-// tmlSurface is one open surface.
 type tmlSurface struct {
-	id        string
-	sessionID string
-	windowID  string
-	title     string
-	owner     string
-	// caller keys the surface cap and owns the surface: the opening pane,
-	// or "" for a caller in no pane. Only that pane, or a caller in no
-	// pane, may patch, replace or close the surface, and its pane()
-	// actions run with that pane's grants.
-	caller string
-	// patches bounds the patches and replaces a second.
-	patches tmlBucket
-	// ownerClient is the connection that opened the surface.
+	id          string
+	sessionID   string
+	windowID    string
+	title       string
+	owner       string
+	caller      string
+	patches     tmlBucket
 	ownerClient string
 
 	doc     *tml.Node
@@ -248,8 +159,6 @@ type tmlSurface struct {
 	version    uint64
 	docVersion uint64
 
-	// view is the view state of the client that last reported one with
-	// tml-input, as JSON, for capture-pane. See tml_capture.go.
 	view json.RawMessage
 
 	closed   bool
@@ -259,15 +168,11 @@ type tmlSurface struct {
 	done     chan struct{}
 }
 
-// tmlHost holds the open surfaces of the daemon. The zero value is ready.
 type tmlHost struct {
 	mu       sync.Mutex
 	surfaces map[string]*tmlSurface
 }
 
-// payload builds the push for s: with the tree when withDoc, and with the
-// patch that made this version when ops is set. The caller holds the host's
-// lock.
 func (s *tmlSurface) payload(withDoc bool, ops []byte) *TMLSurfacePayload {
 	p := &TMLSurfacePayload{Surface: s.id, WindowID: s.windowID, Title: s.title, Owner: s.owner, Caller: s.artifactCaller(),
 		Version: s.version, DocVersion: s.docVersion, Closed: s.closed}
@@ -277,8 +182,6 @@ func (s *tmlSurface) payload(withDoc bool, ops []byte) *TMLSurfacePayload {
 	if withDoc {
 		p.Doc = s.docJSON
 	}
-	// A patch travels alone: the client one version behind applies it. The
-	// outbox sends the state instead when it folds two pushes into one.
 	if ops != nil && !withDoc {
 		p.Ops = ops
 		return p
@@ -287,9 +190,6 @@ func (s *tmlSurface) payload(withDoc bool, ops []byte) *TMLSurfacePayload {
 	return p
 }
 
-// artifactCaller is the window id of the pane that opened s, or "" for a
-// caller in no pane, a pane tuios cannot place, a daemon hook, a herdr plugin
-// and a linked machine.
 func (s *tmlSurface) artifactCaller() string {
 	if s.caller == unplacedWindow || s.caller == "hook" || strings.HasPrefix(s.caller, "herdr:") || strings.HasPrefix(s.caller, "link:") {
 		return ""
@@ -297,15 +197,12 @@ func (s *tmlSurface) artifactCaller() string {
 	return s.caller
 }
 
-// newTMLSurfaceID returns a short random id, such as tml-4f1a9c02.
 func newTMLSurfaceID() string {
 	var b [4]byte
 	_, _ = rand.Read(b[:])
 	return "tml-" + hex.EncodeToString(b[:])
 }
 
-// tmlDocSource reads the doc parameter: a JSON string holds TML text or TML
-// JSON, and a JSON object is TML JSON.
 func tmlDocSource(raw json.RawMessage) ([]byte, *verbError) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 || string(raw) == "null" {
@@ -324,7 +221,6 @@ func tmlDocSource(raw json.RawMessage) ([]byte, *verbError) {
 	return raw, nil
 }
 
-// tmlInvalid is the invalid_tml error for a document's problems.
 func tmlInvalid(problems []tml.Problem, err error) *verbError {
 	msg := err.Error()
 	if terr, ok := errors.AsType[*tml.Error](err); ok {
@@ -340,9 +236,6 @@ func tmlInvalid(problems []tml.Problem, err error) *verbError {
 	return e
 }
 
-// tmlLimitsFor is what a document from cs may hold: the person's limits for
-// a caller in no pane, and the default limits for any pane, whatever it
-// holds. An agent runs in a pane.
 func (d *Daemon) tmlLimitsFor(cs *connState) tml.Limits {
 	if d.paneAuthority(cs) == nil {
 		return tml.PersonLimits()
@@ -350,26 +243,15 @@ func (d *Daemon) tmlLimitsFor(cs *connState) tml.Limits {
 	return tml.DefaultLimits()
 }
 
-// Open surfaces a caller may hold at once: one caller (a pane, a plugin, a
-// linked machine, the daemon's hooks), and the person, per session. A surface
-// is a window, a PTY and a process, so a loop that opens them must stop.
 const (
 	tmlSurfacesPerPane    = 8
 	tmlSurfacesPerSession = 32
 )
 
-// tmlCallerKey names the caller on cs as the owner of the surfaces it opens,
-// for the owner checks and the surface cap: its pane's window, "plugin:<id>"
-// for a native plugin, "herdr:<id>" for a herdr plugin, "hook" for the
-// daemon's hooks, "link:<peer>" for a linked machine, "hosted:<id>" for a pane
-// run for another machine, "unknown" for any other process tuios starts
-// outside every pane, and "" for the person's own commands and the client's
-// hooks.
 func (d *Daemon) tmlCallerKey(cs *connState) string {
 	return d.tmlKeyOf(cs, d.paneAuthority(cs))
 }
 
-// tmlKeyOf is tmlCallerKey for a caller whose paneAuthority is pa.
 func (d *Daemon) tmlKeyOf(cs *connState, pa *paneAuth) string {
 	if cs.viaLink {
 		return "link:" + cs.linkPeer
@@ -385,14 +267,9 @@ func (d *Daemon) tmlKeyOf(cs *connState, pa *paneAuth) string {
 			return key
 		}
 	}
-	// A pane this daemon cannot place, or one it runs for another
-	// machine, is still not the person.
 	return cmp.Or(pa.window, unplacedWindow)
 }
 
-// outsideCallerKey names a caller in no pane that is a herdr plugin or a
-// daemon hook, or "" for any other. A found key is kept on the connection;
-// the caller checks peerChanged before every use.
 func (d *Daemon) outsideCallerKey(cs *connState) string {
 	if key := cs.outsideKey.Load(); key != nil {
 		return *key
@@ -409,17 +286,6 @@ func (d *Daemon) outsideCallerKey(cs *connState) string {
 	return key
 }
 
-// tmlOwnerLabel names the caller on cs for the frame: its pane, a linked
-// machine, or the CLI.
-//
-// A pane is named by the first of its labels (tmlPaneLabels) that is its
-// alone (tmlLabelIsOwnersAlone): its name, then the agent in it, such as
-// "claude", then the agent and the folder it started in. A label is a
-// pane's alone when no other window has it among its own labels and it
-// cannot pass for an id label, so no pane can copy another pane's label.
-// Otherwise the pane is named by its window id, which no program chooses,
-// with its first label in brackets. Never the pane's title or the name of
-// the program in it, which the program sets (OSC 2, argv[0]).
 func (d *Daemon) tmlOwnerLabel(cs *connState) string {
 	if cs.viaLink {
 		return "machine " + tmlLabelText(cmp.Or(cs.linkPeer, "unknown"), 24)
@@ -444,13 +310,8 @@ func (d *Daemon) tmlOwnerLabel(cs *connState) string {
 	return "tuios tml show"
 }
 
-// tmlIDLabel matches the label of a pane with no name, "pane 3f2a91c0".
 var tmlIDLabel = regexp.MustCompile(`^pane [0-9a-f]{8}$`)
 
-// tmlPaneLabels are the labels a window may be named by, best first: its
-// name, the agent in it, and the agent with the folder the window started
-// in. The agent is the harness the pane reported or was detected as, by the
-// name its program runs as, such as "claude" for Claude Code.
 func (d *Daemon) tmlPaneLabels(windowID string) []string {
 	sess := d.sessionHoldingWindow(windowID)
 	if sess == nil {
@@ -464,7 +325,6 @@ func (d *Daemon) tmlPaneLabels(windowID string) []string {
 	return nil
 }
 
-// tmlWindowLabels is tmlPaneLabels for one window of sess.
 func (d *Daemon) tmlWindowLabels(sess *Session, w WindowState) []string {
 	var out []string
 	if name := tmlLabelText(w.CustomName, 24); name != "" {
@@ -480,8 +340,6 @@ func (d *Daemon) tmlWindowLabels(sess *Session, w WindowState) []string {
 	return out
 }
 
-// tmlAgentName is the short name of a harness: the first program name its
-// manifest detects, such as "claude" for claude-code, else its id.
 func (d *Daemon) tmlAgentName(harnessID string) string {
 	if harnessID == "" {
 		return ""
@@ -494,12 +352,6 @@ func (d *Daemon) tmlAgentName(harnessID string) string {
 	return harnessID
 }
 
-// tmlLabelIsOwnersAlone reports whether a label may stand alone as the
-// owner of a window's surfaces: no other window in this daemon has it among
-// its labels, and it cannot pass for the label of a pane that has none. A
-// name is not always the person's: a pane with the fan grant names the
-// agents it starts (start-agent --name), and a program can report itself as
-// any harness, so a label alone could copy another pane's.
 func (d *Daemon) tmlLabelIsOwnersAlone(windowID, label string) bool {
 	if label == "" || tmlIDLabel.MatchString(label) {
 		return false
@@ -514,12 +366,8 @@ func (d *Daemon) tmlLabelIsOwnersAlone(windowID, label string) bool {
 	return true
 }
 
-// tmlTitleWidth bounds the document's part of a TML window's name.
 const tmlTitleWidth = 48
 
-// tmlLabelText makes text safe for a window name: no control characters, no
-// separator dot or brackets, which only the owner part uses, and at most max
-// runes.
 func tmlLabelText(text string, max int) string {
 	text = strings.Join(strings.Fields(tml.Sanitize(text)), " ")
 	text = strings.NewReplacer("·", "-", "(", "[", ")", "]").Replace(text)
@@ -529,14 +377,10 @@ func tmlLabelText(text string, max int) string {
 	return text
 }
 
-// tmlWindowName is a TML window's name: the owner first, which is never cut,
-// then the document's title, which the frame cuts when it must. The title
-// cannot hold the separator, so it cannot draw a second owner.
 func tmlWindowName(owner, title string) string {
 	return "from " + owner + " · " + tmlLabelText(title, tmlTitleWidth)
 }
 
-// verbTMLOpen opens a surface as a popup or a pane.
 func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string          `json:"session"`
@@ -611,8 +455,6 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 			})
 	}
 
-	// The name is shown on the frame and listed, so it is held to what a
-	// document's text is: no control characters.
 	title := cmp.Or(tml.Sanitize(p.Name), doc.AttrString("title"), "TML")
 	s := &tmlSurface{
 		id:          newTMLSurfaceID(),
@@ -629,9 +471,6 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	uri := TMLURIPrefix + s.id
 	s.caller = d.tmlCallerKey(cs)
-	// The surface is registered before the window exists, so the push that
-	// follows the window's creation finds it; a client that sees the window
-	// first draws it empty until the push lands.
 	d.tml.mu.Lock()
 	if d.tml.surfaces == nil {
 		d.tml.surfaces = map[string]*tmlSurface{}
@@ -661,16 +500,11 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 		d.tmlWindowGone(s.id)
 		d.closeWindowOfPTY(sess, ptyID, false)
 	}
-	// The window's name names the owner, and the document cannot change it,
-	// so a surface cannot pass for one another program opened.
 	label := tmlWindowName(s.owner, title)
 	opts := NewWindowOptions{
-		Title:     label,
-		Name:      label,
-		Workspace: p.Workspace,
-		// A surface a pane opened does not take the keys: the person
-		// focuses it with a click or a key, so text meant for another pane
-		// cannot answer it. The person's own surface takes the focus.
+		Title:       label,
+		Name:        label,
+		Workspace:   p.Workspace,
 		Focus:       s.caller == "",
 		Command:     tmlPlaceholderCommand(uri),
 		Popup:       target == TMLTargetPopup,
@@ -705,9 +539,6 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 			"workspace": win.Workspace,
 		}
 		if p.Events {
-			// The events of this surface follow the answer on this
-			// connection, as a subscribe's do. Nothing is missed in between:
-			// the subscription is made before the answer is written.
 			sub, baseline, _ := d.events.subscribeFrom(eventFilter{types: map[string]bool{EventTML: true}, surface: s.id}, 0, nil)
 			cs.mu.Lock()
 			cs.eventSub, cs.pendingStream, cs.streaming = sub, sub, true
@@ -722,8 +553,6 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 		defer t.Stop()
 		timeout = t.C
 	}
-	// A caller that leaves ends the wait, so its handler and connection state
-	// do not stay for as long as the surface is on screen. The surface stays.
 	gone, stopGone := askCancel(cs)
 	defer stopGone()
 	select {
@@ -744,7 +573,6 @@ func (d *Daemon) verbTMLOpen(cs *connState, params json.RawMessage) (any, *verbE
 	return res, nil
 }
 
-// verbTMLClose closes a surface with a value.
 func (d *Daemon) verbTMLClose(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Surface string          `json:"surface"`
@@ -777,9 +605,6 @@ func (d *Daemon) verbTMLClose(cs *connState, params json.RawMessage) (any, *verb
 	return map[string]any{"type": "tml_closed", "surface": p.Surface}, nil
 }
 
-// verbTMLInput is what the person did on a surface, from an attached client:
-// the state the surface's local actions changed, and a close with its value.
-// It needs the client's attach nonce, since it acts as the person.
 func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Surface    string          `json:"surface"`
@@ -792,8 +617,7 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 			Value json.RawMessage `json:"value"`
 		} `json:"events"`
 		Actions []tmlPaneAction `json:"actions"`
-		// View is the client's view state, present when it changed.
-		View json.RawMessage `json:"view"`
+		View    json.RawMessage `json:"view"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -817,8 +641,6 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 	if verr := d.tmlReach(cs, s, "tml-input", true); verr != nil {
 		return nil, verr
 	}
-	// The limits are checked before anything applies, so a refused input
-	// changes nothing.
 	if len(p.Actions) > tmlActionsPerInput {
 		return nil, invalidParam("actions", fmt.Sprintf("one press can run at most %d pane actions", tmlActionsPerInput))
 	}
@@ -866,9 +688,6 @@ func (d *Daemon) verbTMLInput(cs *connState, params json.RawMessage) (any, *verb
 	}
 	var results []map[string]any
 	for _, a := range p.Actions {
-		// From another machine, the action is held to what that machine may
-		// do here itself: a surface does not let a link that may only type
-		// start a program. See "Surfaces over a link".
 		if verb, ok := tmlPaneVerbs[a.Verb]; ok {
 			if verr := d.checkLinkVerb(cs, verb); verr != nil {
 				results = append(results, map[string]any{"verb": a.Verb, "ok": false, "error": verr.Message, "code": verr.Code})
@@ -911,8 +730,6 @@ func noSurface(id string) *verbError {
 	})
 }
 
-// tmlClose closes a surface: it records the value, tells the clients, ends a
-// waiting tml-open and closes the window.
 func (d *Daemon) tmlClose(id string, value any, has bool, reason string) *verbError {
 	d.tml.mu.Lock()
 	s := d.tml.surfaces[id]
@@ -935,9 +752,6 @@ func (d *Daemon) tmlClose(id string, value any, has bool, reason string) *verbEr
 	return nil
 }
 
-// tmlWindowGone ends the surface of a window that closed some other way: by
-// hand, with close-window, or because its session ended. A waiting tml-open
-// answers with a null value and reason "dismissed".
 func (d *Daemon) tmlWindowGone(id string) {
 	d.tml.mu.Lock()
 	s := d.tml.surfaces[id]
@@ -956,18 +770,12 @@ func (d *Daemon) tmlWindowGone(id string) {
 	d.publishTMLEvent(s, "close", nil, TMLDismissed)
 }
 
-// tmlReader reports whether cs is told about the surfaces of a session: an
-// attached TUI client of it whose hello says it draws TML. A passive client,
-// such as a session shown in the rail, draws no surface.
 func tmlReader(cs *connState, sessionID string) bool {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	return cs.isTUIClient && cs.attached && cs.tmlSurfaces && !cs.passive && cs.sessionID == sessionID
 }
 
-// pushTMLSurface sends one surface to every client of its session that draws
-// TML, through each client's outbox, and publishes a tml-surface event for a
-// client that draws it from verbs.
 func (d *Daemon) pushTMLSurface(sessionID string, payload *TMLSurfacePayload) {
 	d.clientsMu.RLock()
 	for _, cs := range d.clients {
@@ -994,11 +802,8 @@ type TMLSurfaceEvent struct {
 	Closed bool            `json:"closed,omitempty"`
 }
 
-// tmlSurfaceEventOps bounds the patch a tml-surface event carries, as the
-// hub fans each event out to every subscriber of the session.
 const tmlSurfaceEventOps = 64 << 10
 
-// publishTMLSurface publishes the tml-surface event of a push.
 func (d *Daemon) publishTMLSurface(sessionID string, p *TMLSurfacePayload) {
 	session := ""
 	if sess := d.manager.GetSessionByID(sessionID); sess != nil {
@@ -1011,9 +816,6 @@ func (d *Daemon) publishTMLSurface(sessionID string, p *TMLSurfacePayload) {
 	d.events.publish(streamEvent{Type: EventTMLSurface, Session: session, Window: p.WindowID, TMLSurface: ev})
 }
 
-// tmlOutbox is one client's TML pushes not yet written: at most one per
-// surface. A client that reads slowly, or not at all, makes the daemon hold
-// one push per surface, never one per change. The zero value is ready.
 type tmlOutbox struct {
 	mu      sync.Mutex
 	pending map[string]*tmlPending
@@ -1021,16 +823,11 @@ type tmlOutbox struct {
 	sending bool
 }
 
-// tmlPending is a push waiting for its client. full says two or more pushes
-// were folded into it, so it goes out as the whole surface at send time;
-// withDoc says one of them carried the tree.
 type tmlPending struct {
 	p             *TMLSurfacePayload
 	full, withDoc bool
 }
 
-// tmlEnqueue puts a push in cs's outbox, folding it into one not yet written
-// for the same surface, and starts the writer when none runs.
 func (d *Daemon) tmlEnqueue(cs *connState, p *TMLSurfacePayload) {
 	ob := &cs.tmlOut
 	ob.mu.Lock()
@@ -1055,8 +852,6 @@ func (d *Daemon) tmlEnqueue(cs *connState, p *TMLSurfacePayload) {
 	}
 }
 
-// tmlDrain writes cs's outbox in the order the surfaces first queued, until
-// it is empty. A folded push is built again from the surface as it is now.
 func (d *Daemon) tmlDrain(cs *connState) {
 	ob := &cs.tmlOut
 	for {
@@ -1095,17 +890,10 @@ func (d *Daemon) tmlDrain(cs *connState) {
 	}
 }
 
-// tmlPushDelay holds each TML push back after it is built, by
-// the tml_push_delay_ms knob, in milliseconds, as a loaded machine or a slow
-// link does. It exists for the end-to-end test of a push that lands after
-// inputs the client already had answered (TestTMLInputKeepsTypingOverALatePush).
-// Ordinary runs never set it.
 var tmlPushDelay = sync.OnceValue(func() time.Duration {
 	return testknob.Millis("tml_push_delay_ms")
 })
 
-// sendTMLSurfaces sends a client that just attached every open surface of
-// its session, behind the attach reply.
 func (d *Daemon) sendTMLSurfaces(cs *connState, sessionID string) {
 	if !tmlReader(cs, sessionID) {
 		return
@@ -1123,8 +911,6 @@ func (d *Daemon) sendTMLSurfaces(cs *connState, sessionID string) {
 	}
 }
 
-// publishTMLEvent tells the owner, and any subscriber of tml-event, what
-// happened on a surface.
 func (d *Daemon) publishTMLEvent(s *tmlSurface, name string, value any, reason string) {
 	d.tml.mu.Lock()
 	ev := &TMLEvent{Surface: s.id, Name: name, Value: value, Reason: reason, Version: s.version}
@@ -1137,7 +923,6 @@ func (d *Daemon) publishTMLEvent(s *tmlSurface, name string, value any, reason s
 	d.events.publish(streamEvent{Type: EventTML, Session: session, Window: window, TML: ev})
 }
 
-// tmlSurfaceOf finds an open surface, or answers no_surface.
 func (d *Daemon) tmlSurfaceOf(id string) (*tmlSurface, *verbError) {
 	d.tml.mu.Lock()
 	s := d.tml.surfaces[id]
@@ -1148,7 +933,6 @@ func (d *Daemon) tmlSurfaceOf(id string) (*tmlSurface, *verbError) {
 	return s, nil
 }
 
-// verbTMLPatch applies a JSON Patch to a surface's state.
 func (d *Daemon) verbTMLPatch(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Surface string          `json:"surface"`
@@ -1198,8 +982,6 @@ func (d *Daemon) verbTMLPatch(cs *connState, params json.RawMessage) (any, *verb
 	return map[string]any{"type": "tml_patched", "surface": p.Surface, "version": version, "changed": changed}, nil
 }
 
-// tmlPatchError is the answer to a patch that cannot apply. A failed test
-// says to read the state again.
 func tmlPatchError(err error) *verbError {
 	var pe *tml.PatchError
 	if errors.As(err, &pe) && pe.Code == tml.CodeTestFailed {
@@ -1213,7 +995,6 @@ func tmlPatchError(err error) *verbError {
 	return invalidParam("ops", err.Error())
 }
 
-// verbTMLReplace swaps a surface's tree, and its state unless keep_state.
 func (d *Daemon) verbTMLReplace(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Surface   string          `json:"surface"`
@@ -1256,8 +1037,6 @@ func (d *Daemon) verbTMLReplace(cs *connState, params json.RawMessage) (any, *ve
 	}
 	var store *tml.Store
 	if p.KeepState {
-		// The kept state goes into the new tree, so the store checks it
-		// against the new tree's limits on each, list and rows.
 		raw, _ := jsonx.Marshal(s.store.State())
 		withState := doc.Clone()
 		withState.SetAttr("state", tml.Value{Kind: tml.KindObject, Raw: raw})
@@ -1282,7 +1061,6 @@ func (d *Daemon) verbTMLReplace(cs *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"type": "tml_replaced", "surface": p.Surface, "version": version}, nil
 }
 
-// verbTMLGet reads a surface: its tree, its state and its version.
 func (d *Daemon) verbTMLGet(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Surface string `json:"surface"`
@@ -1306,7 +1084,6 @@ func (d *Daemon) verbTMLGet(cs *connState, params json.RawMessage) (any, *verbEr
 	}, nil
 }
 
-// verbTMLList lists the open surfaces of a session.
 func (d *Daemon) verbTMLList(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -1327,12 +1104,10 @@ func (d *Daemon) verbTMLList(cs *connState, params json.RawMessage) (any, *verbE
 		}
 		list = append(list, map[string]any{"surface": s.id, "window_id": s.windowID, "title": s.title, "owner": s.owner, "version": s.version})
 	}
-	// sort.Slice, not slices.SortFunc: see docs/perf.md, "Where the bytes go".
 	sort.Slice(list, func(i, j int) bool { return list[i]["surface"].(string) < list[j]["surface"].(string) })
 	return map[string]any{"type": "tml_list", "session": sess.Name(), "surfaces": list}, nil
 }
 
-// verbTMLValidate checks a document as tml-open would, with no session.
 func (d *Daemon) verbTMLValidate(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Doc json.RawMessage `json:"doc"`
@@ -1355,17 +1130,11 @@ func (d *Daemon) verbTMLValidate(cs *connState, params json.RawMessage) (any, *v
 	return map[string]any{"type": "tml_valid", "warnings": problems}, nil
 }
 
-// tmlEventsPerInput bounds the emits one tml-input carries, and
-// tmlActionsPerInput its pane actions: one key or click runs a few.
 const (
 	tmlEventsPerInput  = 16
 	tmlActionsPerInput = 4
 )
 
-// tmlReach refuses a caller that may not reach a surface's session: a pane
-// outside the session and its fan group, a pane without the read grant for
-// a read, and a connection restricted to its own session. The person, a
-// caller that holds admin, and the caller that opened the surface reach it.
 func (d *Daemon) tmlReach(cs *connState, s *tmlSurface, verb string, write bool) *verbError {
 	d.tml.mu.Lock()
 	sessionID := s.sessionID
@@ -1381,9 +1150,6 @@ func (d *Daemon) tmlReach(cs *connState, s *tmlSurface, verb string, write bool)
 	if pa == nil || pa.grants.Has(GrantAdmin) {
 		return nil
 	}
-	// The caller that opened a surface reaches it, with write alone, by the
-	// key tmlOwnerCheck compares. A plugin, a hook or a herdr plugin is in no
-	// pane, so only its own surfaces are its.
 	d.tml.mu.Lock()
 	owner := s.caller
 	d.tml.mu.Unlock()
@@ -1399,18 +1165,14 @@ func (d *Daemon) tmlReach(cs *connState, s *tmlSurface, verb string, write bool)
 	return nil
 }
 
-// tmlPatchesPerSecond bounds the patches and replaces of one surface.
 const tmlPatchesPerSecond = 100
 
-// tmlBucket is a token bucket of tmlPatchesPerSecond tokens a second, full
-// when it starts. The zero value is ready. It is guarded by its own lock.
 type tmlBucket struct {
 	mu     sync.Mutex
 	tokens float64
 	last   time.Time
 }
 
-// allow takes a token at now, and reports whether there was one.
 func (b *tmlBucket) allow(now time.Time) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -1427,9 +1189,6 @@ func (b *tmlBucket) allow(now time.Time) bool {
 	return true
 }
 
-// tmlOwnerCheck refuses a caller that may not change s: any caller but the
-// one that opened it (tmlCallerKey). The person's own commands, and the
-// client's hooks and dock components, may change any surface.
 func (d *Daemon) tmlOwnerCheck(cs *connState, s *tmlSurface, verb string) *verbError {
 	caller := d.tmlCallerKey(cs)
 	if caller == "" || caller == s.caller {
@@ -1443,27 +1202,19 @@ func (d *Daemon) tmlOwnerCheck(cs *connState, s *tmlSurface, verb string) *verbE
 	})
 }
 
-// tmlPaneVerbs maps the verbs of a pane() action to the verbs they run.
 var tmlPaneVerbs = map[string]string{
 	"focus":      "focus-window",
 	"new-window": "new-window",
 	"send-text":  "send-text",
 }
 
-// tmlNewWindowParams are the new-window parameters a surface may pass.
 var tmlNewWindowParams = []string{"session", "name", "workspace", "cwd", "focus", "command"}
 
-// tmlPaneAction is one pane() action the person ran on a surface.
 type tmlPaneAction struct {
 	Verb   string         `json:"verb"`
 	Params map[string]any `json:"params"`
 }
 
-// runTMLPaneAction runs a pane() action with the grants of the surface's
-// owner, never the person's: a connection placed in the opening pane, or the
-// person's own when no pane opened it. The verb's own checks apply, so a
-// send-text into a pane that holds more than the owner is refused as it is
-// for the owner's own call.
 func (d *Daemon) runTMLPaneAction(s *tmlSurface, a tmlPaneAction) map[string]any {
 	verb, ok := tmlPaneVerbs[a.Verb]
 	if !ok {
@@ -1471,9 +1222,6 @@ func (d *Daemon) runTMLPaneAction(s *tmlSurface, a tmlPaneAction) map[string]any
 	}
 	params := map[string]any{}
 	for k, v := range a.Params {
-		// A new window from a surface takes only these: no host, no
-		// environment, no wait, no grants and no kind. The person saw the
-		// command in the question before the action came here.
 		if verb == "new-window" && !slices.Contains(tmlNewWindowParams, k) {
 			continue
 		}
@@ -1500,11 +1248,6 @@ func (d *Daemon) runTMLPaneAction(s *tmlSurface, a tmlPaneAction) map[string]any
 	return map[string]any{"verb": a.Verb, "ok": true}
 }
 
-// verbTMLPlace moves a surface between a popup and a tiled pane: the person's
-// choice of where it sits. The surface, its state and its window stay; only
-// the window's placement changes, so a form keeps what the person typed. It
-// acts as the person, so it needs the attach nonce of a client. A patch or a
-// replace from the owner never moves the window back.
 func (d *Daemon) verbTMLPlace(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Surface    string `json:"surface"`

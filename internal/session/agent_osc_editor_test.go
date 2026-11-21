@@ -6,11 +6,6 @@ import (
 	"time"
 )
 
-// nvimProgressBytes is what Neovim 0.12 writes for one progress message: its
-// nvim.progress autocmd (runtime/lua/vim/_core/defaults.lua) sends
-// OSC 9;4;1;<percent> while the message is running and OSC 9;4;0;0 when it
-// ends, both ST-terminated. Any progress message does it: an LSP client or a
-// plugin echoing one, vim.pack, :checkhealth.
 var nvimProgressBytes = []string{
 	"\x1b]9;4;1;0\x1b\\",
 	"\x1b]9;4;1;40\x1b\\",
@@ -18,10 +13,6 @@ var nvimProgressBytes = []string{
 	"\x1b]9;4;0;0\x1b\\",
 }
 
-// brewUpgradeOutput is the tail of a `brew bundle install --upgrade` run as a
-// pane printed it, drawn the way Homebrew draws it: the cursor hidden, the
-// download line redrawn inside synchronized updates, then plain text naming
-// claude, a check mark, a beer mug (escaped here) and a starship prompt.
 const brewUpgradeOutput = "\x1b[?25l" +
 	"\x1b[?2026h\x1b[0G\x1b[K\x1b[34m⠋\x1b[0m Cask claude-code@latest (2.1.281)   Downloading\x1b[?2026l" +
 	"\x1b[0G\x1b[K\x1b[32m\u2714\ufe0e\x1b[0m Cask claude-code@latest (2.1.281)   Downloaded  220.9MB/220.9MB" +
@@ -55,8 +46,6 @@ func TestEditorProgressThenBrewLeavesAPlainPane(t *testing.T) {
 	c := dialVerb(t, sp)
 	attributeHarness(t, sess, agent, "claude-code")
 
-	// feed writes one chunk to a pane's emulator and then does what the
-	// daemon's output handler does with a report the emulator parked.
 	feed := func(windowID, chunk string) {
 		t.Helper()
 		ptyID := ptyIDOfWindow(t, sess, windowID)
@@ -74,8 +63,6 @@ func TestEditorProgressThenBrewLeavesAPlainPane(t *testing.T) {
 	}
 	sess.settleAgentHolds(time.Now().Add(time.Hour))
 
-	// Both panes are back at fish. The plain pane never ran an agent binary;
-	// the attributed one is left to what its harness said.
 	atShell := foregroundInfo{comm: "fish", argv: []string{"/opt/homebrew/bin/fish"}, exe: "/opt/homebrew/bin/fish", pid: 4242, shellPID: 4242}
 	table := map[string]fakeProc{
 		ptyIDOfWindow(t, sess, plain): {info: atShell, running: true},
@@ -103,8 +90,6 @@ func TestEditorProgressThenBrewLeavesAPlainPane(t *testing.T) {
 		t.Fatalf("list-agents does not list the attributed pane: %v", rows)
 	}
 
-	// The report is still recorded on the plain pane, for anything that shows
-	// progress as progress. "4;0" is what the reported pane held.
 	if got := sess.GetPTY(ptyIDOfWindow(t, sess, plain)).ProgressText(); got != "4;0" {
 		t.Fatalf("the plain pane's progress text = %q, want 4;0", got)
 	}

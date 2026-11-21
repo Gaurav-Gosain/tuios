@@ -6,9 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Mail from a machine whose link policy holds it. See hold_mail in
-// internal/config's link_policy.go and verbReleaseAgentMessage.
-
 func holdAll() map[string]config.HostConfig {
 	hold := true
 	return map[string]config.HostConfig{"*": {HoldMail: &hold}}
@@ -52,7 +49,6 @@ func TestHeldMailGoesToThePersonAndNotTheAgent(t *testing.T) {
 		t.Fatalf("the Inbox does not offer the held message for release: %v", items)
 	}
 
-	// Mail from the same link to the person is the person's already.
 	toPerson := result(t, sendJSON(t, link, 2, map[string]any{"session": "work", "to": AgentInboxHuman, "text": "fyi"}))
 	if toPerson["held"] == true {
 		t.Errorf("mail to the person was marked held: %v", toPerson)
@@ -70,7 +66,6 @@ func TestOnlyThePersonReleasesHeldMail(t *testing.T) {
 	local := dialVerb(t, sp)
 	mustRefuse(t, callVerb(t, local, "release-agent-message", map[string]any{"session": "work", "id": id}),
 		ErrVerbNotHuman, "a release with no nonce")
-	// The link itself cannot release what its own policy held.
 	mustRefuse(t, callVerb(t, link, "release-agent-message", map[string]any{"session": "work", "id": id, "human_nonce": "x"}),
 		ErrVerbForbidden, "a release from the link the mail came on")
 
@@ -97,7 +92,6 @@ func TestOnlyThePersonReleasesHeldMail(t *testing.T) {
 		ErrVerbInvalidParams, "a second release of the same message")
 }
 
-// attentionItems lists the Inbox.
 func attentionItems(t *testing.T, c *verbConn) []map[string]any {
 	t.Helper()
 	res := result(t, callVerb(t, c, "list-attention", map[string]any{}))

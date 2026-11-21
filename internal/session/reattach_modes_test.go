@@ -38,7 +38,6 @@ func TestReattachRestoresModesScrolledOutOfBuffer(t *testing.T) {
 		t.Fatal("no PTY for the created window")
 	}
 
-	// The guest emits the enables itself, exactly as a browser would.
 	if _, err := pty.Write([]byte("printf '\\033[?1003h\\033[?1006h\\033[?1016h\\033[>31u'\n")); err != nil {
 		t.Fatalf("write to PTY: %v", err)
 	}
@@ -60,13 +59,6 @@ func TestReattachRestoresModesScrolledOutOfBuffer(t *testing.T) {
 		return st != nil && st.Modes[1003]
 	})
 
-	// Flood well past the 64KB output buffer bound so the enable sequences
-	// scroll out of the replay a new subscriber gets. The trailing sleep keeps
-	// the shell from drawing its next prompt: a bash prompt toggles bracketed
-	// paste, and ANY mode sequence in the replay recomputes the stale mouse
-	// cache as a side effect, masking the bug this test reproduces. A browser
-	// pane's steady-state output is pure text and graphics with no mode
-	// traffic, which is exactly why the bug bit browser panes.
 	if _, err := pty.Write([]byte("dd if=/dev/zero bs=1024 count=128 2>/dev/null | tr '\\0' f; echo FLOOD-DONE; sleep 300\n")); err != nil {
 		t.Fatalf("write to PTY: %v", err)
 	}
@@ -80,9 +72,6 @@ func TestReattachRestoresModesScrolledOutOfBuffer(t *testing.T) {
 			bytes.Contains(pty.outputBuffer[:pty.outputPos], []byte("FLOOD-DONE"))
 	})
 
-	// Reattach: a fresh subscriber gets the bounded replay, and the client
-	// rebuilds its per-window emulator from the daemon snapshot, in the same
-	// order restoreTerminalContent uses (restore, then replay).
 	ch := pty.Subscribe("reattach-client", 0)
 	defer func() { _ = pty.Unsubscribe("reattach-client") }()
 
@@ -121,7 +110,6 @@ func TestReattachRestoresModesScrolledOutOfBuffer(t *testing.T) {
 	if !em.HasAllMotionMode() {
 		t.Fatal("reattached client emulator lost any-motion tracking (?1003)")
 	}
-	// SGR-pixel must survive too, or hover reports downgrade to cell indices.
 	em.SetCellSize(10, 20)
 	if got := em.EncodeMouseEvent(vt.MouseClick{Button: vt.MouseLeft, X: 4, Y: 2}); got != "\x1b[<0;46;51M" {
 		t.Fatalf("mouse report = %q, want pixel coordinates %q (?1016 lost across reattach)", got, "\x1b[<0;46;51M")

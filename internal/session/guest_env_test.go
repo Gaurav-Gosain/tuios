@@ -4,12 +4,6 @@ import (
 	"testing"
 )
 
-// Guest processes pick their image protocol from the environment, so a shell
-// spawned by the daemon has to be told what the attached client's terminal can
-// actually display. The daemon's own environment says nothing useful: it is
-// detached from any terminal, so every window used to advertise TERM_PROGRAM=
-// TUIOS and tools like chafa fell back to block art even under kitty.
-
 // TestAttachRecordsClientGraphicsCapabilities covers the plumbing end to end:
 // the capabilities a client detects at startup must survive the hello/attach
 // handshake and reach the session that spawns its shells.

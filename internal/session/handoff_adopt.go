@@ -19,16 +19,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// The new image's half of a live handoff: reading the manifest its
-// predecessor wrote and taking over the panes, the sockets and the start lock
-// it handed down. See handoff.go.
-//
-// None of the start-time sweeps run here. Each of them clears what a dead
-// daemon left, and nothing here is dead: the saved state and its leftovers,
-// the stash, the ssh agent and display links the panes' environment names,
-// the history files, the grants record, and the resume offers for agents that
-// are still running.
-
 // RunAdopted runs the daemon from the panes its previous image handed over on
 // the descriptor fd, and blocks until shutdown.
 //
@@ -38,8 +28,6 @@ func (d *Daemon) RunAdopted(fd int) error {
 	InstallDaemonLogging(d.foreground, d.logFile)
 	LogBasic("Daemon %s adopting its predecessor's panes (pid %d)", d.version, os.Getpid())
 	handoffTestCrash(crashAtStart)
-	// An image a keeper started finds every descriptor where the keeper
-	// held it, the manifest's included.
 	kept, err := keptDescriptors()
 	if err == nil {
 		fd, err = keptAt(kept, fd)
@@ -55,8 +43,6 @@ func (d *Daemon) RunAdopted(fd int) error {
 	if err != nil {
 		LogError("Live upgrade: adopting the panes failed: %v", err)
 		if !fb.reexec(err) {
-			// The watchdog's fallback is under way, and it execs or ends
-			// the process itself.
 			select {}
 		}
 		return errfmt.Errorf("live upgrade: adopting the panes: %w", err)
@@ -65,9 +51,6 @@ func (d *Daemon) RunAdopted(fd int) error {
 	return d.shutdown()
 }
 
-// adoptGuarded is adopt with a panic turned into an error, so the fallback
-// still runs. A recover covers only its own goroutine, which is why nothing
-// adopt starts runs before the point the fallback is disarmed.
 func (d *Daemon) adoptGuarded(fd int, fb *adoptFallback, kept map[int]int) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -77,11 +60,6 @@ func (d *Daemon) adoptGuarded(fd int, fb *adoptFallback, kept map[int]int) (err 
 	return d.adopt(fd, fb, kept)
 }
 
-// adopt reads the manifest on fd and takes over what it names. Until the
-// fallback is disarmed nothing reads a pane or accepts a call, so an adoption
-// that fails before then leaves every inherited descriptor as it found it.
-// kept is where a keeper holds each descriptor, nil for an image the handoff
-// or its fallback execed.
 func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	mf := adoptedFile(fd, "tuios-handoff")
 	if mf == nil {
@@ -109,17 +87,12 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 
 	socketPath := m.Daemon.SocketPath
 	d.manager.SetSocketPath(socketPath)
-	// Before any pane is entered: a pane's token is checked against the key,
-	// and its events go on from the carried numbering.
 	if len(m.Daemon.PaneTokenKey) > 0 {
 		d.manager.paneTokenKey = m.Daemon.PaneTokenKey
 	}
 	d.events.restore(m.Daemon.Events)
 	d.agents.restore(m.Daemon.Mail)
 	listeners := map[string]net.Listener{}
-	// FileListener works on a copy of each descriptor. The inherited ones
-	// stay open for the fallback, and are closed once the adoption has gone
-	// through.
 	var inherited []*os.File
 	for name, lfd := range m.Daemon.Listeners {
 		f := adoptedFile(lfd, name)
@@ -134,8 +107,6 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 		}
 		listeners[name] = l
 	}
-	// The previous binary's descriptor stays open for the fallback, and is
-	// closed with the listeners' once the adoption has gone through.
 	if m.Daemon.FallbackFD >= 0 {
 		f := adoptedFile(m.Daemon.FallbackFD, "tuios-prev")
 		fb.keep(f)
@@ -186,14 +157,9 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	d.adopting.Store(false)
 	handoffTestCrash(crashWhileAdopting)
 
-	// The point of no return: from here the panes are read and the sockets
-	// served, and the previous binary could not take them back.
 	if !fb.disarm() {
 		select {}
 	}
-	// Run through /proc/self/fd/N, this image is named N: name it before
-	// it starts the panes and serves its main socket, so ps and pidof find
-	// the daemon from the first reply there.
 	setProcessName(filepath.Base(os.Args[0]))
 	for _, p := range started {
 		p.startPTY()
@@ -212,8 +178,6 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	}
 	d.loadStores(true)
 	d.serve()
-	// A delegated child that finished while the daemon was handed over is
-	// still answered for.
 	d.resumeDelegations()
 	state := "upgraded"
 	if stats.Fallback {
@@ -223,36 +187,26 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 		state = "recovered"
 	}
 	d.events.publish(streamEvent{Type: EventDaemonUpgraded, Title: stats.From, Body: d.version, State: state})
-	// This image is up: the keeper stands down and exits, and is reaped.
 	handoffTestCrash(crashServing)
 	d.releaseKeeper()
 	_ = mf.Close()
 	for _, f := range inherited {
 		_ = f.Close()
 	}
-	// This image is the one a later handoff falls back to.
 	d.keepPrevBinary()
-	// The copies the images before this one ran from are no longer needed.
 	removeOldCopies()
 	LogBasic("Live upgrade: adopted %d sessions and %d panes from %s (paused %.0f ms, apply %.0f ms, peak heap in use %s)",
 		len(m.Sessions), len(m.Panes), stats.From, stats.PausedMS, stats.ApplyMS, units.Bytes(int64(stats.ApplyPeakHeapInuse)))
 	return nil
 }
 
-// adoptedPane is a pane record with its emulator rebuilt.
 type adoptedPane struct {
 	rec      handoffPane
 	terminal vt.Terminal
 }
 
-// handoffGCPercent is the GC target while the panes' emulators are rebuilt.
-// Applying a snapshot with history allocates several times what it keeps, and
-// at the default target the heap peaks at about twice the rebuilt live heap
-// (docs/design/live-handoff.md, section 3.2).
 const handoffGCPercent = 25
 
-// applyHandoffPanes rebuilds every pane's emulator from its snapshot, a few
-// at a time, under a lowered GC target. It drops each snapshot once applied.
 func applyHandoffPanes(panes []handoffPane, lines int, stats *HandoffStats) ([]vt.Terminal, error) {
 	t0 := time.Now()
 	stats.ApplyHeapStart = heapInuse()
@@ -278,11 +232,8 @@ func applyHandoffPanes(panes []handoffPane, lines int, stats *HandoffStats) ([]v
 	return terms, err
 }
 
-// heapInuseSamples are the runtime metrics that add up to MemStats'
-// HeapInuse, which they read without stopping the world.
 var heapInuseSamples = []string{"/memory/classes/heap/objects:bytes", "/memory/classes/heap/unused:bytes"}
 
-// heapInuse is the heap in use now.
 func heapInuse() uint64 {
 	samples := make([]metrics.Sample, len(heapInuseSamples))
 	for i, name := range heapInuseSamples {
@@ -292,7 +243,6 @@ func heapInuse() uint64 {
 	return samples[0].Value.Uint64() + samples[1].Value.Uint64()
 }
 
-// sampleHeapInuse records the most heap in use, every 2 ms, until stopped.
 func sampleHeapInuse(peak *uint64) (stop func()) {
 	read := func() {
 		if n := heapInuse(); n > *peak {
@@ -321,8 +271,6 @@ func sampleHeapInuse(peak *uint64) (stop func()) {
 	}
 }
 
-// checkAdoptable checks the manifest names what this image can take: a main
-// socket, and a session for every pane.
 func checkAdoptable(m *handoffManifest) error {
 	if _, ok := m.Daemon.Listeners["main"]; !ok {
 		return errors.New("the manifest names no main socket")
@@ -345,8 +293,6 @@ func checkAdoptable(m *handoffManifest) error {
 	return nil
 }
 
-// adoptSession rebuilds one session around its adopted panes, and returns
-// the panes for the caller to start.
 func (d *Daemon) adoptSession(rec handoffSession, panes []adoptedPane, fb *adoptFallback) ([]*PTY, error) {
 	st := rec.State
 	width, height := st.Width, st.Height
@@ -382,8 +328,6 @@ func (d *Daemon) adoptSession(rec handoffSession, panes []adoptedPane, fb *adopt
 		case p.KeepOpen:
 			onExit = nil
 		case w.Popup && !w.Scratch:
-			// A popup is closed by the daemon when its command exits, as
-			// new-popup's own exit does.
 			onExit = func(ptyID string) {
 				d.notifyPTYClosed(sessionID, ptyID)
 				d.closeWindowOfPTY(sess, ptyID, true)
@@ -400,8 +344,6 @@ func (d *Daemon) adoptSession(rec handoffSession, panes []adoptedPane, fb *adopt
 	return out, nil
 }
 
-// adoptPTY enters a pane handed over by the previous image, around its
-// inherited master and its running process. It does not start it.
 func (s *Session) adoptPTY(rec handoffPane, w WindowState, onExit func(string), terminal vt.Terminal) (*PTY, error) {
 	master, err := adoptMaster(rec.FD, rec.TTY)
 	if err != nil {
@@ -422,9 +364,6 @@ func (s *Session) adoptPTY(rec handoffPane, w WindowState, onExit func(string), 
 		}
 	}
 
-	// The snapshot went into the emulator before it had callbacks (see
-	// applyHandoffPanes), so nothing it set is raised as an event: none of
-	// it is new.
 	ctx, cancel := context.WithCancel(context.Background())
 	sp := ptySpawn{windowID: w.ID, onExit: onExit, workspace: w.Workspace, keepOpen: rec.KeepOpen && !rec.Exited}
 	pty := s.installPTY(ctx, cancel, rec.ID, master, nil, rec.Width, rec.Height, sp, terminal)
@@ -436,20 +375,12 @@ func (s *Session) adoptPTY(rec handoffPane, w WindowState, onExit func(string), 
 		pty.exitedMu.Unlock()
 		pty.exitSignal.Store(int32(rec.ExitSignal)) //nolint:gosec // a signal number
 	} else if rec.PID > 0 {
-		// On unix FindProcess always succeeds. The process is still this
-		// pid's child, so it can be waited on: see monitorExit.
 		pty.proc, _ = os.FindProcess(rec.PID)
-		// After a keeper's takeover the shell is not this process's child,
-		// so this record is what places the pane's processes. See
-		// spawn_trust.go.
 		pty.procStart = processStart(pty.proc)
 	}
 	return pty, nil
 }
 
-// adoptState installs a session's state as its previous image held it. It
-// is not a client's push, so nothing is merged and no window event is raised:
-// every window in it was already there.
 func (s *Session) adoptState(st *SessionState) {
 	s.stateMu.Lock()
 	st.Name = s.Name()

@@ -18,7 +18,7 @@ func TestPaneRevisionMovesWithOutputAndResize(t *testing.T) {
 	done := make(chan struct{})
 	go func() { p.vtWriter(); close(done) }()
 	p.vtWriteChan <- vtChunk{data: []byte("one\r\n"), seq: 5}
-	p.vtWriteChan <- vtChunk{width: 20, height: 4} // the size it has
+	p.vtWriteChan <- vtChunk{width: 20, height: 4}
 	p.vtWriteChan <- vtChunk{width: 30, height: 4}
 	p.vtWriteChan <- vtChunk{data: []byte("1\r\n2\r\n3\r\n4\r\n5\r\n"), seq: 15}
 	close(p.vtWriteChan)
@@ -39,7 +39,6 @@ func TestPaneRevisionMovesWithOutputAndResize(t *testing.T) {
 	}
 }
 
-// splitCaptureLines splits captured text into its rows.
 func splitCaptureLines(s string) []string {
 	return strings.Split(strings.TrimSuffix(s, "\n"), "\n")
 }
@@ -57,9 +56,6 @@ func TestCapturePaneReportsHistoryAndRevision(t *testing.T) {
 	capture := func(n int, source string) map[string]any {
 		return result(t, c.call(t, `{"id":`+strconv.Itoa(n)+`,"verb":"capture-pane","params":{"session":"meta","window":"`+id+`","source":"`+source+`"}}`))
 	}
-	// The quotes keep the marker out of the command line. The tty echoes text
-	// sent before the shell reads it, and the shell draws it again after its
-	// prompt, so a plain marker shows twice before seq has run.
 	result(t, c.call(t, `{"id":1,"verb":"send-text","params":{"session":"meta","window":"`+id+`","text":"seq 1 60; echo DONE''-MARK\n"}}`))
 	deadline := time.Now().Add(10 * time.Second)
 	var first map[string]any
@@ -73,7 +69,6 @@ func TestCapturePaneReportsHistoryAndRevision(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	// Let the prompt finish drawing, then read twice with nothing between.
 	var a, b map[string]any
 	for range 50 {
 		time.Sleep(100 * time.Millisecond)

@@ -36,19 +36,11 @@ func FuzzFrameSkipping(f *testing.F) {
 	f.Add([]byte{1, 4, 1, 5, 1, 3, 1, 1, 2, 1}, uint8(1), uint8(50), uint8(0))
 	f.Add([]byte{6, 1, 6, 1, 6, 1, 0, 6, 1}, uint8(9), uint8(200), uint8(4))
 	f.Add([]byte{7, 1, 7, 1, 1, 1}, uint8(2), uint8(13), uint8(1))
-	// A client that takes nothing until the end, in small and large reads.
 	f.Add([]byte{1, 0, 1, 3, 1, 6, 1, 9, 1, 0, 5, 4, 1, 3}, uint8(0), uint8(9), uint8(3))
 	f.Add([]byte{2, 3, 2, 6, 2, 9, 2, 12, 2, 15}, uint8(0), uint8(63), uint8(0))
-	// A frame that scrolls at the bottom row, a cursor move, and the same
-	// image again.
 	f.Add([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0}, uint8(0), uint8(7), uint8(0))
-	// Frames with no id, one after another at one place, then a cursor move
-	// between two of them.
 	f.Add([]byte{9, 9, 9, 9, 9, 9, 4, 9, 9, 9}, uint8(0), uint8(6), uint8(0))
-	// A query between frames.
 	f.Add([]byte{1, 1, 10, 1, 1, 1}, uint8(0), uint8(5), uint8(0))
-	// A frame of image 1 on the main screen, then one on the alternate
-	// screen, and back.
 	f.Add([]byte{2, 2, 11, 2, 2, 11, 1}, uint8(0), uint8(7), uint8(0))
 
 	f.Fuzz(func(t *testing.T, ops []byte, slowEvery, readSize, joinAt uint8) {
@@ -84,9 +76,6 @@ func TestFrameSkippingSweep(t *testing.T) {
 	}
 }
 
-// frameSkipping drives broadcast with the stream ops make and three clients:
-// one that takes everything at once, one that falls behind, and one that
-// subscribes partway. It returns the first failure it finds.
 func frameSkipping(ops []byte, slowEvery, readSize, joinAt uint8) error {
 	if len(ops) > 64 {
 		ops = ops[:64]
@@ -128,8 +117,6 @@ func frameSkipping(ops []byte, slowEvery, readSize, joinAt uint8) error {
 			lateOut = drain(lateCh, late, lateOut)
 		}
 	}
-	// The pane writes nothing more, so whatever the scanner carries
-	// stays with it: compare against the bytes broadcast handed out.
 	handed := stream[:len(stream)-len(p.gfx.carry)]
 	slowOut = drain(slowCh, slow, slowOut)
 
@@ -137,8 +124,6 @@ func frameSkipping(ops []byte, slowEvery, readSize, joinAt uint8) error {
 		return fmt.Errorf("the client that kept up got %d bytes, want %d\n got %q\nwant %q",
 			len(fastOut), len(handed), fastOut, handed)
 	}
-	// A client that joined after the last read also has the carry, from
-	// the ring.
 	if lateCh != nil && (!bytes.HasPrefix(stream[lateFrom:], lateOut) || int64(len(lateOut)) < int64(len(handed))-lateFrom) {
 		return fmt.Errorf("the client that subscribed at %d got\n%q\nwant\n%q", lateFrom, lateOut, handed[lateFrom:])
 	}
@@ -159,9 +144,6 @@ func frameSkipping(ops []byte, slowEvery, readSize, joinAt uint8) error {
 	return nil
 }
 
-// genPaneStream turns ops into a pane's output: text, cursor moves, frames of
-// a few images in one or several chunks, and placements. Every frame's
-// payload is unique, so a dropped frame cannot be mistaken for another.
 func genPaneStream(ops []byte) []byte {
 	var b bytes.Buffer
 	n := 0
@@ -188,43 +170,32 @@ func genPaneStream(ops []byte) []byte {
 		case 4:
 			fmt.Fprintf(&b, "\x1b[%d;%dH", 1+arg%20, 1+arg%60)
 		case 5:
-			// An a=T that moves the cursor, followed by text or not.
 			n++
 			writeFrame(&b, fmt.Sprintf("a=T,f=32,s=1,v=1,i=%d,q=2", 1+arg%3), fmt.Sprintf("MOVE%04d", n), 1)
 		case 6:
-			// A transmission with no image id that is not drawn at a known
-			// place: never replaced.
 			n++
 			writeFrame(&b, "a=T,f=32,s=1,v=1,C=1,q=2", fmt.Sprintf("NOID%04d", n), 1+arg%2)
 		case 7:
-			// Text between the chunks of one transmission.
 			n++
 			fmt.Fprintf(&b, "\x1b_Ga=t,f=32,s=1,v=1,i=%d,m=1,q=2;MID%04d\x1b\\", 1+arg%3, n)
 			b.WriteString("between")
 			b.WriteString("\x1b_Gm=0;END\x1b\\")
 		case 8:
-			// An a=T at the bottom row that moves the cursor past three
-			// rows, so the screen scrolls, and a cursor move after it.
 			n++
 			fmt.Fprintf(&b, "\x1b[%d;1H", replayRows)
 			writeFrame(&b, fmt.Sprintf("a=T,f=32,s=1,v=1,i=%d,r=3,c=2,q=2", 1+arg%2), fmt.Sprintf("SCROLL%04d", n), 1+arg%2)
 			fmt.Fprintf(&b, "\x1b[%d;1H", replayRows-1)
 		case 9:
-			// A frame with no id, as mpv sends: a cursor move, then f=24
-			// with C=1. Two places, so only some replace each other.
 			n++
 			fmt.Fprintf(&b, "\x1b[%d;1H", 1+arg%2)
 			writeFrame(&b, "a=T,f=24,s=1,v=1,C=1,q=2", fmt.Sprintf("MPV%04d", n), 1+arg%3)
 		case 11:
-			// A switch to the alternate screen or back. A terminal keeps
-			// one image store per screen.
 			if arg%2 == 0 {
 				b.WriteString("\x1b[?1049h")
 			} else {
 				b.WriteString("\x1b[?1049l")
 			}
 		case 10:
-			// A query, which a program sends to learn the protocol.
 			fmt.Fprintf(&b, "\x1b_Gi=%d,s=1,v=1,a=q,t=d,f=24,q=2;AAAA\x1b\\", 31+arg%2)
 		}
 	}
@@ -247,14 +218,12 @@ func writeFrame(b *bytes.Buffer, keys, payload string, chunks int) {
 	}
 }
 
-// checkSkipped checks that got is stream with some whole frames left out, and
-// that each frame left out was safe to leave out.
 func checkSkipped(stream, got []byte) error {
 	var s gfxScanner
 	segs, _ := s.scan(stream, int64(len(stream)))
 	type item struct {
 		from, to int
-		frame    bool // a whole frame in one run
+		frame    bool
 		id       uint32
 		alt      bool
 		keep     bool
@@ -291,16 +260,12 @@ func checkSkipped(stream, got []byte) error {
 			return fmt.Errorf("the slow client is missing bytes %d-%d that are not a frame it may skip: %q\n got from there: %q",
 				it.from, it.to, want, got[at:min(at+80, len(got))])
 		}
-		// Left out. Something later must replace it, with nothing between
-		// that depends on it.
 		replaced := false
 		for m, next := range items[k+1:] {
 			if next.pins {
 				break
 			}
 			if it.id == 0 {
-				// Only the next frame, with nothing but a cursor move
-				// before it.
 				if next.frame {
 					replaced = next.follows && next.id == 0 && next.key != "" && next.key == it.key && next.alt == it.alt
 					break
@@ -325,17 +290,12 @@ func checkSkipped(stream, got []byte) error {
 	return nil
 }
 
-// The screen replayClient lays a stream out on.
 const replayCols, replayRows = 40, 10
 
-// replayClient replays what a client got the way a tuios client shows it: the
-// emulator for the text, kitty commands put back together from their chunks,
-// and the rows a client reserves for an a=T that moves the cursor
-// (ReserveImageSpace). It returns the screen, the cursor and the images.
 func replayClient(out []byte) string {
 	e := vt.NewEmulator(replayCols, replayRows)
 	defer e.Close()
-	go func() { // take the emulator's replies, so a write never waits on one
+	go func() {
 		buf := make([]byte, 4096)
 		for {
 			if _, err := e.Read(buf); err != nil {
@@ -348,11 +308,10 @@ func replayClient(out []byte) string {
 		x, y int
 		data strings.Builder
 	}
-	// A terminal keeps one image store per screen. [0] is the main screen.
 	type store struct {
 		images map[uint32]string
 		places map[[2]uint32]bool
-		idless map[string]string // place and size of an image with no id
+		idless map[string]string
 	}
 	var stores [2]store
 	for i := range stores {
@@ -400,8 +359,6 @@ func replayClient(out []byte) string {
 		c := l.cmd
 		if c.ImageID == 0 {
 			if c.Action == vt.KittyActionTransmitPlace {
-				// A newer image at the same cells, of the same size, covers
-				// the older one.
 				idless[fmt.Sprintf("%d,%d %dx%d f=%d c=%d r=%d", l.x, l.y, c.Width, c.Height, c.Format, c.Columns, c.Rows)] = l.data.String()
 			}
 		} else {

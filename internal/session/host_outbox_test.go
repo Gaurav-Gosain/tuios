@@ -17,11 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// Mail for a machine whose link is down. See host_outbox.go.
-
-// startHubAndGatedFar is a hub linked to a far daemon through the real proxy,
-// with a gate: while down is set, every dial fails, which is a machine whose
-// network is gone.
 func startHubAndGatedFar(t *testing.T) (*Daemon, *farSide, *atomic.Bool) {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
@@ -57,7 +52,6 @@ func startHubAndGatedFar(t *testing.T) (*Daemon, *farSide, *atomic.Bool) {
 	return hub, far, down
 }
 
-// waitForHostDown blocks until the hub reports the host not up.
 func waitForHostDown(t *testing.T, hub *Daemon, host string) {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -70,7 +64,6 @@ func waitForHostDown(t *testing.T, hub *Daemon, host string) {
 	t.Fatalf("the hub still reports %s up", host)
 }
 
-// farMessages reads the far session's ring.
 func farMessages(t *testing.T, far *farSide, sessionName string) []map[string]any {
 	t.Helper()
 	return readAll(t, dialVerb(t, far.socket), sessionName)
@@ -196,8 +189,6 @@ func TestALinkCallerCannotQueueMailOnward(t *testing.T) {
 		ErrVerbForbidden, "a link caller sending onward with host")
 }
 
-// failFirstCalls makes the hub's first n sends of text on a link fail as a
-// timeout does, which leaves the link up. It counts those sends.
 func failFirstCalls(hub *Daemon, n int32, text string) *atomic.Int32 {
 	calls := &atomic.Int32{}
 	hub.outbox.mu.Lock()
@@ -218,14 +209,12 @@ func failFirstCalls(hub *Daemon, n int32, text string) *atomic.Int32 {
 	return calls
 }
 
-// retryPending reports whether the hub waits to retry host's queue.
 func retryPending(hub *Daemon, host string) bool {
 	hub.outbox.mu.Lock()
 	defer hub.outbox.mu.Unlock()
 	return hub.outbox.retry[host] != nil && !hub.outbox.flushing[host]
 }
 
-// waitForFarTexts blocks until the far session's ring holds want, in order.
 func waitForFarTexts(t *testing.T, far *farSide, want string) {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -282,9 +271,6 @@ func TestASendWhileMailWaitsGoesBehindIt(t *testing.T) {
 	hub, far, _ := startHubAndGatedFar(t)
 	_, farWin, _ := twoWindowSession(t, far.daemon, "far")
 	waitForHostUp(t, hub, "build")
-	// Only the first message fails, three times: the send, the kick after it,
-	// and the first retry, so it still waits however late the second send is.
-	// The second would go through at once if it were sent.
 	failFirstCalls(hub, 3, "first")
 	sp, _ := GetSocketPath()
 	local := dialVerb(t, sp)
@@ -293,8 +279,6 @@ func TestASendWhileMailWaitsGoesBehindIt(t *testing.T) {
 	if first["queued"] != true {
 		t.Fatalf("the first send was not queued: %v", first)
 	}
-	// The kick after the first send fails as well, which leaves it waiting
-	// for a backoff retry.
 	deadline := time.Now().Add(5 * time.Second)
 	for !retryPending(hub, "build") {
 		if time.Now().After(deadline) {

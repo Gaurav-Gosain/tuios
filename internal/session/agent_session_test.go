@@ -4,10 +4,6 @@ import (
 	"testing"
 )
 
-// These tests cover set-agent-session: a harness naming its conversation in a
-// pane without reporting a state, for the integrations whose hooks are trusted
-// with identity and not with state.
-
 func setAgentSessionVerb(t *testing.T, c *verbConn, params string) map[string]any {
 	t.Helper()
 	return result(t, c.call(t, `{"id":1,"verb":"set-agent-session","params":`+params+`}`))
@@ -43,7 +39,6 @@ func TestSetAgentSessionLeavesTheStateAlone(t *testing.T) {
 		t.Fatalf("get-agent-state: %v", got)
 	}
 
-	// The same id again is taken and changes nothing, not even the version.
 	version := sess.GetState().Version
 	if res := setAgentSessionVerb(t, c, `{"session":"work","window":"Window","harness":"qwen","agent_session_id":"q-1"}`); res["applied"] != true {
 		t.Fatalf("a repeat: %v", res)
@@ -94,13 +89,11 @@ func TestSetAgentSessionRefusesANestedRun(t *testing.T) {
 		t.Fatalf("session id = %q after refused reports, want outer", id)
 	}
 
-	// The same process starting a new conversation (/clear) takes over.
 	res = setAgentSessionVerb(t, c, `{"session":"work","window":"Window","harness":"qwen","agent_session_id":"next","harness_pid":4100}`)
 	if res["applied"] != true || res["agent_session_id"] != "next" {
 		t.Fatalf("a new conversation in the same process: %v", res)
 	}
 
-	// At rest any process may: a new conversation is what it looks like.
 	setAgentStateVerb(t, c, `{"session":"work","window":"Window","state":"idle","source":"screen","harness":"qwen"}`)
 	res = setAgentSessionVerb(t, c, `{"session":"work","window":"Window","harness":"qwen","agent_session_id":"later","harness_pid":4500}`)
 	if res["applied"] != true {
@@ -124,9 +117,7 @@ func TestDetectorForgetsTheHarnessPIDWhenTheAgentLeaves(t *testing.T) {
 	if _, ok, reason, err := sess.applyAgentSession(winID, AgentSessionReport{Harness: "qwen", SessionID: "first", HarnessPID: 4100}); err != nil || !ok {
 		t.Fatalf("first report: %v %v %s", ok, err, reason)
 	}
-	// The agent exits: the pane is back at its shell.
 	sess.applyAgentDetection(shell, agent.identifyDetail)
-	// A new qwen starts in the pane and the detector says working again.
 	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("restart: detection changed %d windows", n)
 	}

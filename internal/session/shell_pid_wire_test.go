@@ -9,12 +9,6 @@ import (
 	"time"
 )
 
-// WindowState.ShellPID is the client's only second source for the directory a
-// pane reports over OSC 7, so what matters is not that the field exists but
-// that it arrives. These drive a real daemon over a real unix socket, because
-// the transport is gob and gob is where a field quietly does not travel.
-
-// syncWatcher collects the session states a client is pushed.
 type syncWatcher struct {
 	mu     sync.Mutex
 	states []*SessionState
@@ -26,7 +20,6 @@ func (w *syncWatcher) add(s *SessionState, _, _ string) {
 	w.mu.Unlock()
 }
 
-// await waits for a state the predicate accepts and returns it.
 func (w *syncWatcher) await(t *testing.T, what string, ok func(*SessionState) bool) *SessionState {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -46,7 +39,6 @@ func (w *syncWatcher) await(t *testing.T, what string, ok func(*SessionState) bo
 	}
 }
 
-// stateWindow finds a window in a state, or fails.
 func stateWindow(t *testing.T, s *SessionState, id string) WindowState {
 	t.Helper()
 	for _, w := range s.Windows {
@@ -74,9 +66,6 @@ func TestAZeroShellPidSurvivesTheSocket(t *testing.T) {
 	var got syncWatcher
 	client.OnStateSync(got.add)
 
-	// A window the daemon has no process for. Clients do not create windows, so
-	// this is put in the daemon's own state, which is where a pane with a dead
-	// PTY would leave one.
 	const ghost = "ghostwindow01"
 	if err := sess.mutateState(func(st *SessionState) error {
 		st.Windows = append(st.Windows, WindowState{ID: ghost, Width: 40, Height: 20, Workspace: 1})
@@ -115,8 +104,6 @@ func TestAClientPushDoesNotStripTheShellPid(t *testing.T) {
 
 	client := attachTestClient(t, "pushes")
 
-	// What a client really pushes: its own view, with no pid on any pane, and
-	// something changed so the push is not a no-op.
 	push := sess.GetState()
 	for i := range push.Windows {
 		push.Windows[i].ShellPID = 0
@@ -193,9 +180,6 @@ func TestTheShellPidIsNotWrittenToResurrectionState(t *testing.T) {
 	}
 }
 
-// oldWindowState is a WindowState as a peer that predates ShellPID encodes one.
-// gob matches struct fields by name, so encoding this and decoding a
-// WindowState is what an older daemon on the wire looks like.
 type oldWindowState struct {
 	ID            string
 	Title         string
@@ -264,8 +248,6 @@ func TestThePollRestoresAShellPidThatWentMissing(t *testing.T) {
 		t.Fatalf("the pid did not clear: %d", pid)
 	}
 
-	// The count the poll returns is agent states only, so the pid coming back is
-	// read off the state rather than out of the return.
 	sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail)
 	if pid := stateWindow(t, sess.GetState(), winID).ShellPID; pid != want {
 		t.Fatalf("the poll left shell pid %d, want %d", pid, want)

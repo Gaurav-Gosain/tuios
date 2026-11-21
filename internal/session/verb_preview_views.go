@@ -28,30 +28,17 @@ import (
 )
 
 const (
-	// previewJSONMax is the largest JSON file that is laid out for reading.
-	previewJSONMax = 1 << 20
-	// previewJSONOutMax is the largest laid-out JSON, since deep nesting makes the
-	// layout far larger than the file.
-	previewJSONOutMax = 16 << 20
-	// previewHexMax is the start of a binary file a preview sends.
-	previewHexMax = 16 << 10
-	// previewArchiveItems and previewArchiveBytes bound a listing. A small gzip
-	// can unpack to a great deal, and tar has to read through all of it.
+	previewJSONMax      = 1 << 20
+	previewJSONOutMax   = 16 << 20
+	previewHexMax       = 16 << 10
 	previewArchiveItems = 2000
 	previewArchiveBytes = 1 << 30
 	previewArchiveTime  = 3 * time.Second
-	// previewArchiveName is the longest name a listing sends, in bytes.
-	previewArchiveName = 4096
-	// previewZipBuf is the read buffer for a zip's central directory.
-	previewZipBuf = 64 << 10
-	// previewDiffMax is the most of a diff a preview sends.
-	previewDiffMax = 256 << 10
-	// previewGIFFrames is the most frames of a GIF that can be stepped through.
-	previewGIFFrames = 64
-	// previewGIFCanvases is the memory held besides the frames, in paletted-frame units: two
-	// RGBA pictures (the canvas and the copy a frame disposed to the previous one keeps), each
-	// at 4 bytes per pixel, so 2*4 = 8.
-	previewGIFCanvases = 8
+	previewArchiveName  = 4096
+	previewZipBuf       = 64 << 10
+	previewDiffMax      = 256 << 10
+	previewGIFFrames    = 64
+	previewGIFCanvases  = 8
 )
 
 // PreviewArchiveEntry is one row of an archive's listing.
@@ -61,7 +48,6 @@ type PreviewArchiveEntry struct {
 	Dir  bool   `json:"dir,omitempty"`
 }
 
-// previewIsArchive reports whether the name is an archive tuios reads itself.
 func previewIsArchive(path string) bool {
 	name := strings.ToLower(path)
 	for _, ext := range []string{".tar", ".tar.gz", ".tgz", ".zip"} {
@@ -72,8 +58,6 @@ func previewIsArchive(path string) bool {
 	return false
 }
 
-// previewArchive sends the listing of an archive, and reports false when the file
-// cannot be read as one, so the caller shows it as a binary file.
 func previewArchive(ctx context.Context, f *os.File, size int64, path string, out map[string]any) bool {
 	ctx, cancel := context.WithTimeout(ctx, previewArchiveTime)
 	defer cancel()
@@ -104,7 +88,6 @@ func previewArchive(ctx context.Context, f *os.File, size int64, path string, ou
 	return true
 }
 
-// previewTar lists a tar stream. A listing cut by a bound is still a listing.
 func previewTar(ctx context.Context, src io.Reader) ([]PreviewArchiveEntry, bool, error) {
 	var entries []PreviewArchiveEntry
 	tr := tar.NewReader(src)
@@ -124,8 +107,6 @@ func previewTar(ctx context.Context, src io.Reader) ([]PreviewArchiveEntry, bool
 	return entries, true, nil
 }
 
-// previewArchiveClip cuts a name longer than previewArchiveName at a rune boundary and
-// marks the cut with "...". The result is a new string, so a long name is not kept alive.
 func previewArchiveClip(name string) string {
 	if len(name) <= previewArchiveName {
 		return name
@@ -137,8 +118,6 @@ func previewArchiveClip(name string) string {
 	return name[:cut] + "..."
 }
 
-// previewZip lists a zip file from its central directory, with nothing unpacked. It
-// reads the first previewArchiveItems headers only, where archive/zip reads them all.
 func previewZip(f *os.File, size int64) ([]PreviewArchiveEntry, bool, error) {
 	records, base, off, err := previewZipEnd(f, size)
 	if err != nil {
@@ -150,7 +129,6 @@ func previewZip(f *os.File, size int64) ([]PreviewArchiveEntry, bool, error) {
 	for {
 		h, err := previewZipHeader(buf)
 		if err == zip.ErrFormat || err == io.ErrUnexpectedEOF {
-			// The end of the directory; the count is only kept modulo 65536.
 			if uint16(len(entries)) != uint16(records) {
 				return nil, false, err
 			}
@@ -168,10 +146,6 @@ func previewZip(f *os.File, size int64) ([]PreviewArchiveEntry, bool, error) {
 	return entries, capped, nil
 }
 
-// previewZipEnd finds the central directory from the end record, or the zip64 end record
-// when that is present. It returns the entry count, the start of the zip proper in the
-// file (a self-extracting archive has data before it) and the directory offset, as
-// archive/zip does.
 func previewZipEnd(r io.ReaderAt, size int64) (records uint64, base, off int64, err error) {
 	var buf []byte
 	var endAt int64
@@ -197,7 +171,6 @@ func previewZipEnd(r io.ReaderAt, size int64) (records uint64, base, off int64, 
 		return 0, 0, 0, errors.New("zip: invalid comment length")
 	}
 	if records == 0xffff || dirSize == 0xffffffff || dirOff == 0xffffffff {
-		// A zip64 locator sits just before the end record and names the zip64 end record.
 		if loc := endAt - 20; loc >= 0 {
 			lb := make([]byte, 20)
 			if _, err := r.ReadAt(lb, loc); err != nil {
@@ -226,8 +199,6 @@ func previewZipEnd(r io.ReaderAt, size int64) (records uint64, base, off int64, 
 	if o := base + int64(dirOff); o < 0 || o >= size {
 		return 0, 0, 0, zip.ErrFormat
 	}
-	// A prefix that the end record does not account for gives a bad base; when a
-	// directory header is found at the plain offset, that offset is the right one.
 	if base > 0 {
 		d := int64(dirOff)
 		if _, err := previewZipHeader(io.NewSectionReader(r, d, size-d)); err == nil {
@@ -237,10 +208,8 @@ func previewZipEnd(r io.ReaderAt, size int64) (records uint64, base, off int64, 
 	return records, base, int64(dirOff), nil
 }
 
-// previewZipEndLen is the length of a zip end record without its comment.
 const previewZipEndLen = 22
 
-// previewZipFindEnd returns where the last end record starts in b, or -1.
 func previewZipFindEnd(b []byte) int {
 	for i := len(b) - previewZipEndLen; i >= 0; i-- {
 		if b[i] == 'P' && b[i+1] == 'K' && b[i+2] == 0x05 && b[i+3] == 0x06 {
@@ -254,8 +223,6 @@ func previewZipFindEnd(b []byte) int {
 	return -1
 }
 
-// previewZipHeader reads one central directory header: the name, the sizes (with the
-// zip64 extra field) and what FileInfo needs to tell a folder.
 func previewZipHeader(r io.Reader) (zip.FileHeader, error) {
 	var h zip.FileHeader
 	var fixed [46]byte
@@ -289,7 +256,6 @@ func previewZipHeader(r io.Reader) (zip.FileHeader, error) {
 		if tag != 1 {
 			continue
 		}
-		// The zip64 field holds, in order, only the values the header maxed out.
 		for i, maxed := range []bool{size32 == ^uint32(0), packed32 == ^uint32(0), offset == ^uint32(0)} {
 			if !maxed {
 				continue
@@ -306,8 +272,6 @@ func previewZipHeader(r io.Reader) (zip.FileHeader, error) {
 	return h, nil
 }
 
-// previewFormatJSON lays out a JSON file for reading. It reports false for a file
-// that is too large or is not JSON, which then shows as it is.
 func previewFormatJSON(f *os.File, size int64, out map[string]any) bool {
 	if size > previewJSONMax {
 		return false
@@ -330,10 +294,6 @@ func previewFormatJSON(f *os.File, size int64, out map[string]any) bool {
 	return true
 }
 
-// previewJSONIndentSize estimates the size of what json.Indent writes for b, counted in one
-// pass without laying anything out: each line it starts costs a newline and two spaces a
-// level. It is an estimate to hold against the bound, not a bound and not exact: it counts the
-// input's own whitespace, and it does not count the space json.Indent writes after each ':'.
 func previewJSONIndentSize(b []byte) int64 {
 	total, depth := int64(len(b)), int64(0)
 	inString, escaped, opened := false, false, false
@@ -381,9 +341,6 @@ func previewJSONIndentSize(b []byte) int64 {
 	return total
 }
 
-// previewDetails adds what a person asks about a file: its permissions and owner,
-// and what git says of it. A file git sees as changed gets its diff, and a PDF the
-// words of the page.
 func previewDetails(ctx context.Context, f *os.File, fi os.FileInfo, path string, want PreviewWant, out map[string]any) {
 	out["details"] = true
 	out["mode"] = fi.Mode().Perm().String()[1:]
@@ -398,7 +355,6 @@ func previewDetails(ctx context.Context, f *os.File, fi os.FileInfo, path string
 	if _, _, root, ok := gitstate.Locate(dir); !ok || root == "" {
 		return
 	}
-	// core.fsmonitor names a program to run, and a folder can set it.
 	safe := []string{"-c", "core.fsmonitor=false", "-c", "core.quotePath=false"}
 	st, err := review.Git(ctx, dir, nil, append(safe, "status", "--porcelain=v1", "--", name)...)
 	if err != nil {
@@ -415,7 +371,6 @@ func previewDetails(ctx context.Context, f *os.File, fi os.FileInfo, path string
 	}
 }
 
-// previewGitWords is a line of git status in words.
 func previewGitWords(status, branch string) string {
 	on := ""
 	if branch != "" {
@@ -434,9 +389,6 @@ func previewGitWords(status, branch string) string {
 	return "changed" + on + ", not staged"
 }
 
-// previewGIFCut walks a GIF's blocks with nothing decoded. It returns how many frames
-// the file holds, up to limit, and the file cut after the last of them. A small GIF
-// can hold thousands of full frames, so the decoder must not see them all.
 func previewGIFCut(b []byte, limit int) (int, []byte) {
 	if len(b) < 13 {
 		return 0, nil
@@ -479,9 +431,6 @@ func previewGIFCut(b []byte, limit int) (int, []byte) {
 	return frames, nil
 }
 
-// previewGIFFrame decodes one frame of a GIF as it looks when played, and adds how
-// many frames there are to out. A file that is not safe to decode whole gives nil, and
-// the caller shows the first frame.
 func previewGIFFrame(f *os.File, size int64, cfg image.Config, page int, out map[string]any) image.Image {
 	if size > previewImageMax {
 		return nil
@@ -521,7 +470,6 @@ func previewGIFFrame(f *os.File, size int64, cfg image.Config, page int, out map
 	return canvas
 }
 
-// previewHead adds the start of a binary file to out, for a hex view.
 func previewHead(f *os.File, size int64, out map[string]any) {
 	head := make([]byte, min(size, previewHexMax))
 	n, _ := f.ReadAt(head, 0)

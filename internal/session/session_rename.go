@@ -11,15 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
-// A session has one name, and the daemon owns it. rename-session changes it:
-// the name the daemon lists, addresses the session by, saves it under and
-// hands to new panes as TUIOS_SESSION. Every client that renames a session
-// goes through this verb and shows the name the daemon then pushes.
-//
-// set-session-name is a different thing: an optional display label that some
-// scripts set on top of the name. A rename clears it, so the name a person
-// just typed is the name every view shows.
-
 // RenamedSessionMessage is the refusal an attach by an old name gets. The
 // wording is parsed back by RenamedSessionTarget, so change both together.
 func RenamedSessionMessage(old, current string) string {
@@ -75,20 +66,11 @@ func (d *Daemon) verbRenameSession(cs *connState, params json.RawMessage) (any, 
 	return map[string]any{"type": "session_renamed", "session": name, "old_name": old}, nil
 }
 
-// renameNotFollowed are the verbs whose session param is not rewritten from
-// an old name to the current one. new-session makes a session of the name it
-// is given, and kill-session must never destroy a session the caller named by
-// a name it no longer has: it is refused with the new name instead.
 var renameNotFollowed = map[string]bool{
 	"new-session":  true,
 	"kill-session": true,
 }
 
-// followRenamedSession rewrites a session param that names a session by a
-// name it was renamed from to the name it has now. It runs before the pane
-// grants and the connection scope, so a pane started before the rename, whose
-// TUIOS_SESSION still holds the old name, is held to its own session as it
-// was before, and every handler sees the current name.
 func (d *Daemon) followRenamedSession(verb string, params json.RawMessage) json.RawMessage {
 	if renameNotFollowed[verb] || len(params) == 0 {
 		return params
@@ -117,24 +99,6 @@ func (d *Daemon) followRenamedSession(verb string, params json.RawMessage) json.
 	return out
 }
 
-// followOwnPane sends a call from a pane about that same pane to the session
-// holding it, when the session it names is gone under every name. The pane's
-// TUIOS_SESSION is what its processes send, and it can name a session the
-// daemon no longer knows by that name: an alias held only in daemon memory is
-// lost to a restart, or to a handoff from a build that did not carry it, and
-// every hook of an agent in the pane is then refused with session_not_found
-// for as long as the agent runs. The window id is the pane's own and names
-// one pane on this machine, so the caller, placed in that pane by its token or
-// by its process, is answered as it was before the name went.
-//
-// A reused name can also become another session's alias after that session is
-// renamed. Follow the verified own pane before followRenamedSession expands
-// that alias, so it cannot redirect the pane's reports into the other session.
-//
-// A live session name is never rewritten here, so an explicitly named session
-// is checked as sent. A placement read from the caller's environment does not
-// count, since a process can set that itself. The verbs in renameNotFollowed
-// are left as sent, as followRenamedSession leaves them.
 func (d *Daemon) followOwnPane(cs *connState, verb string, params json.RawMessage) json.RawMessage {
 	if renameNotFollowed[verb] || cs == nil || cs.viaLink || cs.paneOnly || len(params) == 0 {
 		return params
@@ -156,8 +120,6 @@ func (d *Daemon) followOwnPane(cs *connState, verb string, params json.RawMessag
 	if placed, via := d.placePaneWindow(cs); placed != named.Window || (via != "token" && via != "pid") {
 		return params
 	}
-	// The struct decode matches keys without regard to case, so the rewrite
-	// goes ahead only when the exact keys hold the values checked above.
 	var m map[string]json.RawMessage
 	if err := jsonx.Unmarshal(params, &m); err != nil {
 		return params

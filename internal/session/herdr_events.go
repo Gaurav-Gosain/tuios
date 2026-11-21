@@ -11,55 +11,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// herdr's event stream, from tuios's.
-//
-// events.subscribe keeps the connection open. The server answers once with
-// {"id","result":{"type":"subscription_started"}} and then writes one event a
-// line: {"event":"<kind>","data":{...}}. A global event's kind is snake_case
-// (pane_created) and its data carries the same kind as type. A pane's own
-// event, which a subscription names the pane for, is dotted
-// (pane.agent_status_changed) and its data has no type. See herdr's
-// src/api/schema/events.rs and src/api/server.rs at herdrTargetVersion.
-//
-// The events come from tuios's event hub (daemon_events.go), read the way a
-// subscribe verb reads them: the caller must be allowed subscribe, and a
-// pane without admin sees only the sessions it may read (eventInScope).
-//
-//	tuios event         herdr event
-//	session-created     workspace_created, or workspace_renamed after a rename
-//	session-closed      workspace_closed, or nothing for the old name of a rename
-//	session-labelled    workspace_renamed, when the label it shows changed
-//	window-created      pane_created, and tab_created for a new tab
-//	window-closed       pane_closed, and tab_closed for a tab left empty
-//	window-exit         pane_exited
-//	window-retitled     pane_updated
-//	window-focused      pane_focused, unless clients are attached and none
-//	                    shows the window's session
-//	window-moved        pane_moved
-//	workspace-switched  tab_focused
-//	client-session-changed  workspace_focused, tab_focused and pane_focused
-//	                    when a client moves to another session
-//	workspace-renamed   tab_renamed
-//	agent-state         pane_agent_detected when an agent comes or goes, and
-//	                    pane.agent_status_changed when its status changes
-//	agent-seen          pane.agent_status_changed, done to idle or back
-//
-// herdr has no event for a lost one. When the stream falls behind, tuios
-// writes herdr's error line with code events_lost and closes, and the client
-// reads the state again, as it does after any reconnect.
-
-// herdrEventQueue is the events one stream may fall behind by.
 const herdrEventQueue = 1024
 
-// herdrSubscription is one entry of events.subscribe.
 type herdrSubscription struct {
 	Type   string `json:"type"`
 	PaneID string `json:"pane_id"`
-	// window is the tuios window a pane subscription is about.
 	window string
 }
 
-// herdrGlobalEvents are the subscription types that name no pane.
 var herdrGlobalEvents = []string{
 	"workspace.created", "workspace.updated", "workspace.metadata_updated", "workspace.renamed",
 	"workspace.moved", "workspace.reordered", "workspace.closed", "workspace.focused",
@@ -69,12 +28,8 @@ var herdrGlobalEvents = []string{
 	"pane.agent_detected", "layout.updated",
 }
 
-// herdrPaneEvents are the subscription types that name a pane. tuios sends
-// only the first: it has no stream of scroll positions, and matches output
-// with pane.wait_for_output instead.
 var herdrPaneEvents = []string{"pane.agent_status_changed", "pane.scroll_changed", "pane.output_matched"}
 
-// herdrHubTypes are the tuios events the stream reads.
 var herdrHubTypes = map[string]bool{
 	EventSessionCreated: true, EventSessionClosed: true, EventWindowCreated: true,
 	EventWindowClosed: true, EventWindowExit: true, EventWindowRetitled: true,
@@ -83,8 +38,6 @@ var herdrHubTypes = map[string]bool{
 	EventClientSessionChanged: true, EventSessionLabelled: true, EventWorktreeRemoved: true,
 }
 
-// herdrParseSubscriptions reads and checks events.subscribe's list. One
-// entry herdr does not know refuses the whole call, as herdr's does.
 func (d *Daemon) herdrParseSubscriptions(params json.RawMessage) ([]herdrSubscription, *herdrError) {
 	var p struct {
 		Subscriptions []herdrSubscription `json:"subscriptions"`
@@ -115,19 +68,13 @@ func (d *Daemon) herdrParseSubscriptions(params json.RawMessage) ([]herdrSubscri
 	return p.Subscriptions, nil
 }
 
-// herdrEvent is one line of the stream.
 type herdrEvent struct {
-	Event string          `json:"event"`
-	Data  *herdrEventData `json:"data"`
-	// sub is the subscription type that admits it.
-	sub string
-	// window is the tuios window a pane's own event is about.
+	Event  string          `json:"event"`
+	Data   *herdrEventData `json:"data"`
+	sub    string
 	window string
 }
 
-// herdrEventData is the data of every event herdr's stream carries, each
-// field under herdr's name and left out when the event has none. A global
-// event carries its own kind as type; a pane's own event does not.
 type herdrEventData struct {
 	Type                string          `json:"type,omitempty"`
 	PaneID              string          `json:"pane_id,omitempty"`
@@ -147,32 +94,20 @@ type herdrEventData struct {
 	Workspace           *herdrWorkspace `json:"workspace,omitempty"`
 }
 
-// herdrPaneMemo is what the stream remembers of a window, to say what an
-// event changed: where the window was, and its agent and status.
 type herdrPaneMemo struct {
 	sessionID string
-	// tabKey is the tab key of the window's workspace, which names its tab
-	// through any renumber since. See SessionState.WorkspaceTabKey.
-	tabKey int
-	agent  string
-	status string
+	tabKey    int
+	agent     string
+	status    string
 }
 
-// herdrTranslator turns tuios events into herdr events for one stream.
 type herdrTranslator struct {
 	d        *Daemon
 	panes    map[string]herdrPaneMemo
-	sessions map[string]string // session name -> id
-	// shows is the session id each TUI client last showed. A client that
-	// enters the session it showed (a rename) is not a focus, and neither is
-	// a client's first attach: herdr has no attach, only a switch.
-	shows map[string]string
-	// in is the session id each client is in now. A detach drops it, which
-	// shows does not.
-	in map[string]string
-	// labels is each workspace's label as the stream last told it, so a
-	// session-labelled that leaves the label as it was sends nothing.
-	labels map[string]string // session id -> label
+	sessions map[string]string
+	shows    map[string]string
+	in       map[string]string
+	labels   map[string]string
 }
 
 func (d *Daemon) newHerdrTranslator() *herdrTranslator {
@@ -193,14 +128,7 @@ func (d *Daemon) newHerdrTranslator() *herdrTranslator {
 	return t
 }
 
-// clientMoved is a client entering or leaving a session. A client that
-// moves from one session to another makes that session the active herdr
-// workspace, and herdr says so with workspace_focused, tab_focused and
-// pane_focused, for the workspace, its tab and its focused pane
-// (emit_focus_api_events in herdr's src/app/api.rs).
 func (t *herdrTranslator) clientMoved(ev streamEvent, sess *Session) []herdrEvent {
-	// A switch is a detach and then an attach, so the detach keeps the
-	// session the client showed for the attach to compare against.
 	if ev.Attached == nil || !*ev.Attached || sess == nil {
 		delete(t.in, ev.ClientID)
 		return nil
@@ -223,11 +151,6 @@ func (t *herdrTranslator) clientMoved(ev streamEvent, sess *Session) []herdrEven
 	return out
 }
 
-// active says whether a session is the one herdr would call the active
-// workspace: a client is in it, or no client is attached anywhere. herdr
-// sends no focus event for a workspace that is not the active one, so a pane
-// focused in a session no client shows says nothing until a client moves
-// there, and clientMoved then names the pane.
 func (t *herdrTranslator) active(sessionID string) bool {
 	if len(t.in) == 0 {
 		return true
@@ -240,7 +163,6 @@ func (t *herdrTranslator) active(sessionID string) bool {
 	return false
 }
 
-// remember records a session and its windows as they are now.
 func (t *herdrTranslator) remember(s *Session) {
 	t.sessions[s.Name()] = s.ID
 	st := s.GetState()
@@ -261,21 +183,17 @@ func herdrMemoOf(sess *Session, st *SessionState, w *WindowState) herdrPaneMemo 
 	return m
 }
 
-// view reads one session for a record.
 func (t *herdrTranslator) view(s *Session) *herdrView {
 	v := &herdrView{}
 	t.d.addHerdrSession(v, s, s.GetState(), 1, false)
 	return v
 }
 
-// global is a global event: kind in snake_case, and the same kind as the
-// data's type.
 func global(kind string, data *herdrEventData) herdrEvent {
 	data.Type = kind
 	return herdrEvent{Event: kind, Data: data, sub: strings.Replace(kind, "_", ".", 1)}
 }
 
-// translate is the herdr events for one tuios event.
 func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 	sess := t.d.manager.GetSession(ev.Session)
 	switch ev.Type {
@@ -286,7 +204,6 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		renamed := false
 		for name, id := range t.sessions {
 			if id == sess.ID {
-				// The old name of a rename, which its session-closed kept.
 				renamed = true
 				delete(t.sessions, name)
 			}
@@ -303,10 +220,6 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 			return nil
 		}
 		if t.d.manager.GetSessionByID(id) != nil {
-			// A rename closes the old name. The session lives on, and its
-			// session-created under the new name says so as one
-			// workspace_renamed, which it can tell only while the old name
-			// is still known.
 			return nil
 		}
 		delete(t.sessions, ev.Session)
@@ -318,9 +231,6 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		}
 		return []herdrEvent{global("workspace_closed", &herdrEventData{WorkspaceID: herdrWorkspaceID(id)})}
 	case EventSessionLabelled:
-		// herdr's workspace.rename sets the label in place and sends
-		// workspace_renamed. tuios's is set-session-name, which no session
-		// closes or opens for.
 		if sess == nil {
 			return nil
 		}
@@ -333,8 +243,6 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 	case EventWindowClosed, EventWindowExit:
 		return t.closed(ev)
 	case EventWorktreeRemoved:
-		// The session goes with the worktree, so it may be gone already. The
-		// stream still knows its id from when it was there.
 		data := &herdrEventData{Path: ev.Path}
 		if sess != nil {
 			data.WorkspaceID = herdrWorkspaceID(sess.ID)
@@ -362,7 +270,6 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		return nil
 	}
 	if w, ok := findWindowState(sess.GetState(), ev.Window); ok && herdrScratch(&w) {
-		// A scratch terminal is not a herdr pane. See herdrScratch.
 		return nil
 	}
 	paneID := herdrPaneID(sess.ID, ev.Window)
@@ -373,8 +280,6 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 		}
 		return []herdrEvent{global("pane_focused", &herdrEventData{PaneID: paneID, WorkspaceID: wsID})}
 	case EventAgentState, EventAgentSeen:
-		// A pane looked at turns herdr's done into idle without a change of
-		// tuios state, so agent-seen is read the same way.
 		return t.agentState(sess, ev.Window, paneID, wsID)
 	}
 	v := t.view(sess)
@@ -400,8 +305,6 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 	case EventWindowMoved:
 		from := cmp.Or(prev.sessionID, sess.ID)
 		if from == sess.ID && prev.tabKey == t.panes[ev.Window].tabKey {
-			// The workspace was renumbered, and the pane is in the tab it was
-			// in: to herdr nothing moved.
 			return nil
 		}
 		return []herdrEvent{global("pane_moved", &herdrEventData{
@@ -412,12 +315,6 @@ func (t *herdrTranslator) translate(ev streamEvent) []herdrEvent {
 	return nil
 }
 
-// renamed is tab_renamed for a workspace whose name was set, changed or
-// cleared. herdr's label is always there and is the label tab.get reads next,
-// so a cleared name sends the label the tab falls back to. The stream names a
-// tab with tab_created when its workspace gets a window, or tab_focused when
-// it shows; an empty workspace in the background has not been named to the
-// client, and its name reaches it with that tab_created.
 func (t *herdrTranslator) renamed(sess *Session, ev streamEvent) []herdrEvent {
 	st := sess.GetState()
 	if IsScratchWorkspace(ev.Workspace) || (herdrCount(st, ev.Workspace) == 0 && ev.Workspace != st.CurrentWorkspace) {
@@ -429,8 +326,6 @@ func (t *herdrTranslator) renamed(sess *Session, ev streamEvent) []herdrEvent {
 	})}
 }
 
-// closed is pane_closed or pane_exited for a window, with tab_closed when
-// the window was the last on a workspace that is not a tab any more.
 func (t *herdrTranslator) closed(ev streamEvent) []herdrEvent {
 	m, ok := t.panes[ev.Window]
 	if !ok {
@@ -451,8 +346,6 @@ func (t *herdrTranslator) closed(ev streamEvent) []herdrEvent {
 	return out
 }
 
-// agentState is what one agent-state or agent-seen event says: an agent
-// that came or went, and a status that changed.
 func (t *herdrTranslator) agentState(sess *Session, window, paneID, wsID string) []herdrEvent {
 	st := sess.GetState()
 	w, ok := findWindowState(st, window)
@@ -479,7 +372,6 @@ func (t *herdrTranslator) agentState(sess *Session, window, paneID, wsID string)
 	return out
 }
 
-// herdrWanted reports whether a subscription list admits an event.
 func herdrWanted(subs []herdrSubscription, e herdrEvent) bool {
 	for _, s := range subs {
 		if s.Type == e.sub && (s.window == "" || s.window == e.window) {
@@ -489,8 +381,6 @@ func herdrWanted(subs []herdrSubscription, e herdrEvent) bool {
 	return false
 }
 
-// herdrSubscribe opens the tuios event stream for a herdr stream, after the
-// caller passes the check a subscribe verb passes.
 func (d *Daemon) herdrSubscribe(cs *connState) (*eventSub, *herdrError) {
 	if _, _, verr := d.admitVerb(cs, "subscribe", nil); verr != nil {
 		return nil, herdrFromVerb(verr, "forbidden")
@@ -502,11 +392,7 @@ func (d *Daemon) herdrSubscribe(cs *connState) (*eventSub, *herdrError) {
 	return sub, nil
 }
 
-// serveHerdrEvents answers events.subscribe: the ack, then events until the
-// client closes the connection or the daemon stops.
 func (d *Daemon) serveHerdrEvents(cs *connState, id string, params json.RawMessage) {
-	// The caller is checked before a pane id is looked up, so a refused
-	// caller learns nothing of which panes exist.
 	sub, herr := d.herdrSubscribe(cs)
 	if herr != nil {
 		writeHerdr(cs.conn, id, nil, herr.code, herr.msg)
@@ -519,15 +405,10 @@ func (d *Daemon) serveHerdrEvents(cs *connState, id string, params json.RawMessa
 		return
 	}
 	_ = cs.conn.SetDeadline(time.Time{})
-	// Take the baseline before the ack. A client acts as soon as it reads the
-	// ack, and a baseline taken after that would already hold the change, so
-	// the translator would see no change and send no event.
 	tr := d.newHerdrTranslator()
 	if !d.herdrWriteLine(cs, herdrLine{ID: id, Result: &herdrResult{Type: "subscription_started"}}) {
 		return
 	}
-	// The client sends nothing more. A read that returns is the client
-	// closing the connection.
 	gone := make(chan struct{})
 	go func() {
 		_, _ = io.Copy(io.Discard, cs.conn)
@@ -558,13 +439,11 @@ func (d *Daemon) serveHerdrEvents(cs *connState, id string, params json.RawMessa
 	}
 }
 
-// herdrLine is a reply line.
 type herdrLine struct {
 	ID     string       `json:"id"`
 	Result *herdrResult `json:"result"`
 }
 
-// herdrWriteLine writes one JSON line, and reports whether it went.
 func (d *Daemon) herdrWriteLine(cs *connState, v any) bool {
 	data, err := jsonx.Marshal(v)
 	if err != nil {
@@ -575,10 +454,6 @@ func (d *Daemon) herdrWriteLine(cs *connState, v any) bool {
 	return err == nil
 }
 
-// herdrEventsWait answers events.wait. herdr answers only a match on
-// pane_agent_status_changed, and so does this: wait-for agent-state on the
-// pane, until its status is the one named. Any other match is herdr's
-// unsupported_event_wait_match.
 func (d *Daemon) herdrEventsWait(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	kind, _ := in.MatchEvent["event"].(string)
 	paneID, _ := in.MatchEvent["pane_id"].(string)

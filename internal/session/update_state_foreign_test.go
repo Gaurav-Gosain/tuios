@@ -57,7 +57,6 @@ func TestUpdateStateDropsAnotherSessionsWindows(t *testing.T) {
 			{ID: "far-window-two", PTYID: "far-pty-two", Title: "far two", Workspace: 1, X: 40, Width: 40, Height: 12},
 		}
 		push.FocusedWindowID = "far-window-one"
-		// A busy host numbers its versions far ahead of this session's.
 		push.BaseVersion = before.Version + 40
 		seq := pushFrom(t, c, push)
 		after := stateOnceCounted(t, sess, c, seq)
@@ -113,7 +112,6 @@ func TestUpdateStateDropsAnotherSessionsWindows(t *testing.T) {
 			t.Fatal(err)
 		}
 		held := windowPTYs(sess.GetState().Windows)
-		// Version 1 is behind the session's.
 		push := sess.GetState()
 		push.Windows = []WindowState{{ID: "far-window", PTYID: "far-pty", Title: "far", Workspace: 1, Width: 40, Height: 12}}
 		push.FocusedWindowID = "far-window"
@@ -195,17 +193,12 @@ func TestUpdateStateDropsAnotherSessionsWindows(t *testing.T) {
 	})
 }
 
-// foreignSessionCounter numbers the sessions this file's tests make.
 var foreignSessionCounter atomic.Uint64
 
-// foreignSessionName is stem with a number that no other call in the process
-// has returned. The log buffer is the process's, so a fixed session name would
-// count the refusal lines of an earlier run of the same test.
 func foreignSessionName(stem string) string {
 	return stem + "-" + strconv.FormatUint(foreignSessionCounter.Add(1), 10)
 }
 
-// pushFrom sends state as c's next push and returns the push's count.
 func pushFrom(t *testing.T, c *TUIClient, state *SessionState) uint64 {
 	t.Helper()
 	if err := c.UpdateState(state); err != nil {
@@ -214,9 +207,6 @@ func pushFrom(t *testing.T, c *TUIClient, state *SessionState) uint64 {
 	return c.pushSeq.Load()
 }
 
-// stateOnceCounted waits until the session has counted c's push seq, and
-// returns the state as it stood then. The count is taken under the same lock
-// as the state the push makes, so once it shows, the push has been decided.
 func stateOnceCounted(t *testing.T, sess *Session, c *TUIClient, seq uint64) *SessionState {
 	t.Helper()
 	origin := c.pushOrigin.Load()
@@ -239,7 +229,6 @@ func stateOnceCounted(t *testing.T, sess *Session, c *TUIClient, seq uint64) *Se
 	}
 }
 
-// windowPTYs is each window as "id=pty", sorted.
 func windowPTYs(ws []WindowState) []string {
 	out := make([]string, 0, len(ws))
 	for _, w := range ws {
@@ -249,20 +238,14 @@ func windowPTYs(ws []WindowState) []string {
 	return out
 }
 
-// foreignRefusalLine is the daemon's log line for a push it dropped as
-// another session's windows.
 func foreignRefusalLine(session string) string {
 	return "Refused a state update to " + session + ": it names none of the session's windows"
 }
 
-// refusalLogged reports whether the log buffer holds the refusal line for
-// session.
 func refusalLogged(session string) bool {
 	return refusalCount(session) > 0
 }
 
-// refusalCount is how many lines of the log buffer are the refusal line for
-// session.
 func refusalCount(session string) int {
 	line := foreignRefusalLine(session)
 	n := 0

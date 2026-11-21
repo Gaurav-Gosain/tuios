@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// Global daemon instance for in-process daemon
 var (
 	inProcessDaemon     *Daemon
 	inProcessDaemonOnce sync.Once
@@ -37,28 +36,20 @@ var (
 // already-running daemon keeps the settings it started with, since they are
 // its own and it outlives this process.
 func EnsureDaemonRunningWith(version string, cfg *DaemonConfig) error {
-	// Check if daemon is already running (either in-process or external)
 	if IsDaemonRunning() {
 		return nil
 	}
 
-	// Start daemon in-process (only once)
 	inProcessDaemonOnce.Do(func() {
 		if cfg == nil {
 			cfg = &DaemonConfig{}
 		}
-		// The build that started it, not a label saying how. A client compares
-		// the daemon's build against its own at the handshake and says so when
-		// they differ, and "in-process" made every such comparison meaningless:
-		// it is not a version, so it never matched anything and told nobody
-		// anything either.
 		cfg.Version = version
 		if cfg.Version == "" {
 			cfg.Version = "in-process"
 		}
 		inProcessDaemon = NewDaemon(cfg)
 
-		// Start() is non-blocking: it starts goroutines and returns
 		if err := inProcessDaemon.Start(); err != nil {
 			inProcessDaemonErr = errfmt.Errorf("failed to start in-process daemon: %w", err)
 			return
@@ -69,11 +60,9 @@ func EnsureDaemonRunningWith(version string, cfg *DaemonConfig) error {
 		return inProcessDaemonErr
 	}
 
-	// Wait for daemon to be ready with timeout
 	return waitForDaemon(5 * time.Second)
 }
 
-// waitForDaemon waits for the daemon to be ready with a timeout.
 func waitForDaemon(timeout time.Duration) error {
 	socketPath, err := GetSocketPath()
 	if err != nil {

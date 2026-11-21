@@ -8,10 +8,7 @@ import (
 	"time"
 )
 
-// verbSetAgentMeta records display metadata about the agent in a pane. See
-// agent_meta.go for what it is and why it is display only.
 func (d *Daemon) verbSetAgentMeta(cs *connState, params json.RawMessage) (any, *verbError) {
-	// The herdr socket calls this handler directly, past admitVerb.
 	if !d.agentsEnabled() {
 		return nil, agentsDisabledError()
 	}
@@ -83,13 +80,11 @@ func (d *Daemon) verbSetAgentMeta(cs *connState, params json.RawMessage) (any, *
 	windowID := sess.GetState().Windows[idx].ID
 
 	tokens, err := sess.SetAgentMeta(windowID, AgentMetaUpdate{
-		Keys:   keys,
-		Values: values,
-		Source: source,
-		TTL:    time.Duration(p.TTLMs) * time.Millisecond,
-		Clear:  p.Clear,
-		// clear removes what callers wrote. The reserved keys are the
-		// daemon's, so they stay.
+		Keys:    keys,
+		Values:  values,
+		Source:  source,
+		TTL:     time.Duration(p.TTLMs) * time.Millisecond,
+		Clear:   p.Clear,
 		Protect: reservedAgentMetaKeys,
 	})
 	if errors.Is(err, errAgentMetaFull) {
@@ -109,8 +104,6 @@ func (d *Daemon) verbSetAgentMeta(cs *connState, params json.RawMessage) (any, *
 	}, nil
 }
 
-// agentMetaMap is a pane's live metadata as the verbs report it: key to value,
-// never nil, so a caller reads {} rather than null for a pane with none.
 func agentMetaMap(tokens []AgentMetaToken, now int64) map[string]string {
 	out := make(map[string]string, len(tokens))
 	for _, t := range liveAgentMeta(tokens, now) {

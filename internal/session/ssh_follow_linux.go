@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
-// readParentAndOwner returns a process's parent pid and the user that owns it,
-// from procfs. The owner of /proc/<pid> is the process's effective uid.
 func readParentAndOwner(pid int) (ppid, uid int, ok bool) {
 	dir := "/proc/" + strconv.Itoa(pid)
 	fi, err := os.Stat(dir)
@@ -30,9 +28,6 @@ func readParentAndOwner(pid int) (ppid, uid int, ok bool) {
 	return ppid, int(st.Uid), true
 }
 
-// readArgvExact returns a process's arguments with empty ones kept. readCmdline
-// drops them, which is right for naming a process and wrong for replaying one:
-// an empty value (ssh -o "") would pair the next argument with the option.
 func readArgvExact(pid int) []string {
 	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
 	if err != nil || len(data) == 0 {

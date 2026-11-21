@@ -9,36 +9,6 @@ import (
 	"time"
 )
 
-// start-agent: one agent in a new pane, and the answer once it is ready.
-//
-// fan starts agents in worktrees it makes and returns at once. An orchestrator
-// that wants one helper next to it had to open a window with the command,
-// then poll list-agents until the helper looked ready, and then type at it,
-// which is where a first prompt landed in a first-run screen. start-agent is
-// that composition done by the daemon: the pane is opened with the agent in
-// it, the verb waits for positive evidence the agent is at its prompt (see
-// agent_launch.go), types the first prompt when one is given, and answers with
-// the pane and what it showed.
-//
-// A pane on needs_input ends the wait at once with ready false: a trust
-// question or a login is the person's to answer, the Inbox shows it, and the
-// pane is kept with its name so the caller can wait for it and ask later.
-//
-// From another machine it is reached like every verb, with -s HOST:SESSION,
-// and the repository is named by its origin URL (verb_repo_source.go), so "an
-// agent for this repository on build" is one call. A named session that does
-// not exist is made, so the caller does not have to make the somewhere first.
-//
-// It grants nothing new-window with a command does not already grant: the
-// argv is exec'd directly, never a shell line.
-//
-// With protocol, the agent runs headless over ACP or the Codex app-server
-// protocol, under `tuios agent-proto` as the pane's process, which shows it as
-// a transcript and reports its state (agent_protocol.go). The pane is ready on
-// that report alone, and the first prompt is typed into it the same way.
-
-// startAgentDefaultReadyTimeout bounds the wait. It is shorter than fan's,
-// because a caller is blocked on it.
 const startAgentDefaultReadyTimeout = 2 * time.Minute
 
 func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *verbError) {
@@ -59,23 +29,14 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Grants       []string          `json:"grants"`
 		Task         string            `json:"task"`
 		HumanNonce   string            `json:"human_nonce"`
-		// TaskHost names the machine that owns the card, as this
-		// machine's [hosts] calls it, and TaskSession its session there:
-		// the new pane claims the card on its owner over the link
-		// (pool_place.go).
-		TaskHost    string `json:"task_host"`
-		TaskSession string `json:"task_session"`
-		// TaskMail mails the pane the card once it holds it, from tuios,
-		// so the agent reads it rather than having it typed.
-		TaskMail bool   `json:"task_mail"`
-		Parent   string `json:"parent"`
-		// AddDirs are passed with the harness's add-dir flag, and
-		// AfterReady is sent once the agent is ready (agent_presets.go).
-		AddDirs    []string `json:"add_dirs"`
-		AfterReady []string `json:"after_ready"`
+		TaskHost     string            `json:"task_host"`
+		TaskSession  string            `json:"task_session"`
+		TaskMail     bool              `json:"task_mail"`
+		Parent       string            `json:"parent"`
+		AddDirs      []string          `json:"add_dirs"`
+		AfterReady   []string          `json:"after_ready"`
 		launchChoice
 	}
-	// A preset is read once, here, and merged into the params.
 	params, verr := d.expandAgentPreset(params)
 	if verr != nil {
 		return nil, verr
@@ -88,15 +49,10 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 			return nil, verr
 		}
 	}
-	// What the new pane may do through tuios, decided before anything is
-	// made. See pane_grants.go.
 	grants, verr := d.launchGrants(cs, p.Grants)
 	if verr != nil {
 		return nil, verr
 	}
-	// The agent the new one reports to, also decided before anything is
-	// made: a parent the caller may not name, or a chain too deep, starts
-	// nothing. See agent_parent.go.
 	parent, verr := d.resolveAgentParent(cs, "start-agent", p.Parent)
 	if verr != nil {
 		return nil, verr
@@ -133,8 +89,6 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		return verr
 	}
 
-	// The repository, when one is named. The agent is checked before a
-	// clone, so a missing agent does not cost one.
 	cwd, cloned := p.Cwd, false
 	if p.named() || p.ReposRoot != "" || p.Clone {
 		root, didClone, verr := d.resolveRepoSource(cs, "start-agent", p.repoSource, resolveAgent)
@@ -159,13 +113,9 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	if p.Protocol != "" {
 		argv = protocolAgentArgv(p.Protocol, launch.argv, extra)
 	}
-	// The agent's permission mode is held to the calling agent's, before
-	// anything is made (child_clamp.go).
 	if argv, verr = d.clampChildMode(cs, "start-agent", launch.harness, argv, env, p.Protocol != ""); verr != nil {
 		return nil, verr
 	}
-	// A protocol pane runs the pane program with the agent's argv after it.
-	// The agent is still exec'd directly, by the pane program, with no shell.
 	command := argv
 	if p.Protocol != "" {
 		var verr *verbError
@@ -174,17 +124,10 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		}
 	}
 
-	// The session: the named one, made when it does not exist, or the most
-	// recently active one, made when there is none at all.
-	// Checked before a session is made for it: a pane without admin starts
-	// an agent only inside its own folder.
 	if _, _, verr := d.childWindowBound(cs, "start-agent", cwd); verr != nil {
 		return nil, verr
 	}
 	sess := d.findTargetSession(cs, name)
-	// The card the new pane is to work on, checked before anything is made.
-	// It is a card of the session the pane opens in, so that session has to
-	// exist already. See task_auto.go.
 	var task *taskParam
 	taskHost := strings.TrimSpace(p.TaskHost)
 	if taskHost != "" {
@@ -228,17 +171,11 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		created = true
 	}
 
-	// From inside a pane of this session, the default is the pane's own
-	// workspace, as for new-window (#1494). Outside every pane, and for
-	// another session, it stays the one the session shows.
 	if p.Workspace == 0 {
 		p.Workspace = d.callerWorkspaceIn(cs, sess)
 	}
 
 	sessionID := sess.ID
-	// The window id is known only once the window exists, and the process
-	// can exit before then, so the mark is set and dropped under one lock:
-	// a pane whose process already exited is never marked.
 	var (
 		markMu   sync.Mutex
 		markedID string
@@ -254,18 +191,15 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		markMu.Unlock()
 	}
 	win, bverr, err := d.addWindowFor(cs, "start-agent", sess, NewWindowOptions{
-		Title:     p.Name,
-		Name:      p.Name,
-		Cwd:       cwd,
-		CallerCwd: d.callerCwd(cs),
-		Workspace: p.Workspace,
-		// Not focused unless asked: an agent starting a helper should not
-		// pull the person out of the pane they are in.
-		Focus:   p.Focus,
-		Command: command,
-		Env:     env,
-		Grants:  grants,
-		// Checked above, on the agent's own argv.
+		Title:       p.Name,
+		Name:        p.Name,
+		Cwd:         cwd,
+		CallerCwd:   d.callerCwd(cs),
+		Workspace:   p.Workspace,
+		Focus:       p.Focus,
+		Command:     command,
+		Env:         env,
+		Grants:      grants,
 		modeChecked: true,
 	}, onExit)
 	if bverr != nil {
@@ -279,8 +213,6 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	} else {
 		d.noteStartedBy(cs, win.ID)
 	}
-	// The card is the new pane's from the start, before the wait, so the
-	// board shows who works on it while the agent loads.
 	d.noteAgentStarted(sess, win.ID)
 	var taskRow *TaskRow
 	taskNote := ""
@@ -293,8 +225,6 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		}
 	}
 	if task != nil {
-		// The card's session cannot read the pane, so it keeps a name: the
-		// pane's own, or the agent's when the pane has none yet.
 		holderName := windowLabelOf(win)
 		if reg := d.agentMatcher.registry; p.Name == "" && reg != nil && launch.harness != "" {
 			if m := reg.Lookup(launch.harness); m != nil && m.DisplayName != "" {
@@ -305,8 +235,6 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 			taskNote = "Task card " + task.id + " was not claimed: " + verr.Message
 		} else {
 			taskRow = &row
-			// A pane that closed before the claim landed lets the card go
-			// now: its close found nothing to let go.
 			if _, ok := findWindowState(sess.GetState(), win.ID); !ok {
 				d.remoteHolds.take(win.ID)
 				d.releaseHeld(task.sess, win.ID, taskReleasePaneClosed)
@@ -326,16 +254,12 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	}
 
 	timeout := durationOr(p.ReadyTimeout, startAgentDefaultReadyTimeout)
-	// A protocol pane is ready only on its own report: its screen is a
-	// transcript no manifest rule reads, so unknown never means quiet.
 	var w WindowState
 	var outcome agentStartOutcome
 	if p.NoWait {
 		w, outcome = d.waitAgentStart(sess, win.ID, launch.harness, startAgentEarlyExit, true, p.Protocol != "", nil)
 		if outcome == agentStartTimeout {
 			outcome = agentStartStarted
-			// A pane whose program fails at once can stay open with its
-			// output, so the program's own exit is what says it failed.
 			if pty := sess.GetPTY(win.PTYID); pty != nil {
 				if _, exited := pty.ExitStatus(); exited {
 					outcome = agentStartExited
@@ -406,8 +330,6 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	default:
 		out["reason"] = "The wait ended with the " + string(outcome) + "."
 	}
-	// With no_wait the after_ready steps and the prompt go in the background,
-	// once the agent is ready, so the answer does not wait for them either.
 	if p.NoWait && (outcome == agentStartStarted || outcome == agentStartReady) && (len(p.AfterReady) > 0 || p.Prompt != "") {
 		if len(p.AfterReady) > 0 {
 			out["after_ready_status"] = PromptPending
@@ -450,9 +372,6 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	return out, nil
 }
 
-// startAgentSessionName names the session start-agent makes when the caller
-// names none and there is none at all: the harness id, else the program's
-// name, else agents.
 func startAgentSessionName(l agentLaunch) string {
 	for _, name := range []string{l.harness, filepath.Base(l.argv[0])} {
 		if name != "" && ValidateSessionName(name) == nil {
@@ -462,10 +381,6 @@ func startAgentSessionName(l agentLaunch) string {
 	return "agents"
 }
 
-// deliverStartAfter is the rest of start-agent with no_wait: it waits for the
-// agent to be ready, then sends the after_ready steps and types the prompt, as
-// start-agent does in the call when it waits. An agent that stays unready
-// raises the Inbox item waitAgentStart opens, and nothing is sent.
 func (d *Daemon) deliverStartAfter(sess *Session, windowID, harness string, timeout time.Duration, reportedOnly bool, afterReady []string, prompt string) {
 	if _, outcome := d.waitAgentStart(sess, windowID, harness, timeout, false, reportedOnly, nil); outcome != agentStartReady {
 		return

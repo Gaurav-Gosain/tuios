@@ -9,10 +9,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// progressHarness is a manifest whose harness uses OSC 9;4 its own way:
-// indeterminate progress means it waits on the user, which the sequence's
-// published meaning would call working. It also submits on a line feed and
-// asks for a focus report, so the input profile lookup has something to find.
 const progressHarness = `schema_version = 1
 id = "prog-agent"
 [detect]

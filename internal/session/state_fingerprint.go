@@ -42,8 +42,6 @@ func StateFingerprint(s *SessionState) uint64 {
 			str("0")
 		}
 	}
-	// Bit pattern rather than a decimal rendering, so two ratios that print the
-	// same but are not equal do not fingerprint the same.
 	f64 := func(v float64) { str(strconv.FormatUint(math.Float64bits(v), 16)) }
 
 	str(s.Name)
@@ -68,13 +66,9 @@ func StateFingerprint(s *SessionState) uint64 {
 	num(s.ResurrectionVersion)
 	num(s.Version)
 	num(s.BaseVersion)
-	// The daemon acts on these rather than a peer: they are what its emulators
-	// answer OSC 11 and OSC 10 with, so a push that changes them has news.
 	str(s.PaneReportBg)
 	str(s.PaneReportFg)
 	str(s.PaneReportPalette)
-	// The task cards, which only the task verbs write. A card's history only
-	// grows at its end, so its length and its newest entry stand for it.
 	num(len(s.Tasks))
 	for i := range s.Tasks {
 		tk := &s.Tasks[i]
@@ -96,8 +90,6 @@ func StateFingerprint(s *SessionState) uint64 {
 		}
 	}
 
-	// Windows are ordered, and the order is meaningful (it is the z-order the
-	// peer rebuilds its list in), so they are hashed as they stand.
 	num(len(s.Windows))
 	for i := range s.Windows {
 		w := &s.Windows[i]
@@ -243,8 +235,6 @@ func StateFingerprint(s *SessionState) uint64 {
 		}
 	}
 	hashIntStr(s.WorkspaceFocus)
-	// Focus history decides where the daemon sends focus when a pane closes, so
-	// it must not be mistaken for an otherwise identical state-sync repeat.
 	num(len(s.FocusHistory))
 	for _, workspace := range sortedIntKeys(s.FocusHistory) {
 		num(workspace)
@@ -254,9 +244,6 @@ func StateFingerprint(s *SessionState) uint64 {
 	}
 	hashIntStr(s.WorkspaceNames)
 
-	// The per-workspace master ratios, folded in the same way and for the same
-	// reason as the flat one above: a peer acts on them, so a push that changes
-	// one has something to say and must not be suppressed.
 	num(len(s.WorkspaceMasterRatio))
 	for _, k := range sortedIntKeys(s.WorkspaceMasterRatio) {
 		num(k)
@@ -287,18 +274,12 @@ func StateFingerprint(s *SessionState) uint64 {
 		flag(ml.NoGrid)
 	}
 
-	// The custom-layout flags, folded in for the reason the ratios above are: a
-	// peer acts on them, so a push that changes one has something to say and must
-	// not be suppressed as a repeat.
 	num(len(s.WorkspaceHasCustom))
 	for _, k := range sortedIntKeys(s.WorkspaceHasCustom) {
 		num(k)
 		flag(s.WorkspaceHasCustom[k])
 	}
 
-	// The per-workspace layout modes, folded in for the same reason: a push that
-	// changes only the map has to reach the peer, and without it the push came
-	// out with the same fingerprint as the last one and was dropped as a repeat.
 	hashIntStr(s.WorkspaceLayoutModes)
 
 	num(len(s.WorkspaceOrder))
@@ -324,8 +305,6 @@ func StateFingerprint(s *SessionState) uint64 {
 		str(s.Options[k])
 	}
 
-	// Nil and the zero value are distinguished here too, and for the same
-	// reason: a strip scrolled home is not a peer with nothing to say about it.
 	if s.ScrollStrip == nil {
 		str("nil-strip")
 	} else {
@@ -333,10 +312,6 @@ func StateFingerprint(s *SessionState) uint64 {
 		num(s.ScrollStrip.ViewportX)
 	}
 
-	// The scrolling layout's columns, for the reason the trees above are here:
-	// a peer acts on them. Left out, widening a column changed nothing a push
-	// was compared on, so the push was suppressed as a repeat and the width
-	// lived on this client alone.
 	num(len(s.WorkspaceScrollColumns))
 	for _, k := range sortedIntKeys(s.WorkspaceScrollColumns) {
 		num(k)
@@ -353,8 +328,6 @@ func StateFingerprint(s *SessionState) uint64 {
 		}
 	}
 
-	// Nil and the zero value are distinguished: nil is a peer that has not said,
-	// and a peer adopting on receipt has to see the difference.
 	if s.PaneGeometry == nil {
 		str("nil-geometry")
 	} else {
@@ -367,15 +340,10 @@ func StateFingerprint(s *SessionState) uint64 {
 	return uint64(h)
 }
 
-// fpHash is an FNV-1a 64 hash held in one word.
 type fpHash uint64
 
 func newFPHash() fpHash { return 14695981039346656037 }
 
-// str folds v and a zero byte in. Calls go through the method value h.str,
-// which keeps one out-of-line copy where the closure was inlined at every
-// field. Calling h.str(...) directly at each site measured 8,192 bytes more on
-// linux/amd64 and the same size on darwin/arm64.
 func (h *fpHash) str(v string) {
 	x := uint64(*h)
 	for i := 0; i < len(v); i++ {
@@ -386,8 +354,6 @@ func (h *fpHash) str(v string) {
 	*h = fpHash(x)
 }
 
-// hashBSPNode folds a serialized tree in, shape and all. A nil tree and an
-// empty one are distinguished, because they mean different things to a peer.
 func hashBSPNode(h *fpHash, t *SerializedBSPTree) {
 	write := h.str
 	if t == nil {

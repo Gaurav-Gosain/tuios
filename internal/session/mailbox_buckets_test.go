@@ -12,7 +12,6 @@ func TestSendBucketsStayBounded(t *testing.T) {
 	const bound = 256
 	t0 := time.Unix(1_700_000_000, 0)
 	fresh := func() *agentMailbox { return &agentMailbox{buckets: map[string]*sendBucket{}} }
-	// send fails the test the moment the table holds more than the bound.
 	send := func(t *testing.T, mb *agentMailbox, key string, now time.Time) bool {
 		t.Helper()
 		ok := mb.allow(key, now)
@@ -37,8 +36,6 @@ func TestSendBucketsStayBounded(t *testing.T) {
 		}
 		return bk.tokens
 	}
-	// fill sends new link keys until the table holds the bound, and fails
-	// rather than spinning when it never gets there.
 	fill := func(t *testing.T, mb *agentMailbox, prefix string, now time.Time) {
 		t.Helper()
 		for i := 0; len(mb.buckets) < bound; i++ {
@@ -122,7 +119,6 @@ func TestALinkFloodSparesTheLocalBucket(t *testing.T) {
 	const bound = 256
 	t0 := time.Unix(1_700_000_000, 0)
 	fresh := func() *agentMailbox { return &agentMailbox{buckets: map[string]*sendBucket{}} }
-	// send fails the test the moment the table holds more than the bound.
 	send := func(t *testing.T, mb *agentMailbox, key string, now time.Time) bool {
 		t.Helper()
 		ok := mb.allow(key, now)
@@ -147,8 +143,6 @@ func TestALinkFloodSparesTheLocalBucket(t *testing.T) {
 		}
 		return bk.tokens
 	}
-	// partlySpentLocals has "" spend 3 when anon is set, then w1..w255 spend
-	// one each, all at t0, which fills the table with local buckets.
 	partlySpentLocals := func(t *testing.T, mb *agentMailbox, anon bool) {
 		t.Helper()
 		if anon {

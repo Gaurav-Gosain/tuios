@@ -8,9 +8,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// cloneFrom makes dst an APFS clone of the open file src, owned by this
-// user and readable only by it. It fails on a file system without clones,
-// or across volumes.
 func cloneFrom(src *os.File, dst string) error {
 	dir, err := os.Open(filepath.Dir(dst))
 	if err != nil {
@@ -27,13 +24,8 @@ func cloneFrom(src *os.File, dst string) error {
 	return nil
 }
 
-// quarantineAttr marks a file a browser or another app downloaded.
-// Gatekeeper checks such a file before its first run.
 const quarantineAttr = "com.apple.quarantine"
 
-// copyQuarantine gives dst the quarantine mark src has, so Gatekeeper judges
-// the private copy as it judges the binary the person named. Without it a
-// downloaded binary would run through the copy with no check at all.
 func copyQuarantine(src, dst *os.File) error {
 	buf := make([]byte, 1024)
 	n, err := unix.Fgetxattr(fdNum(src), quarantineAttr, buf)

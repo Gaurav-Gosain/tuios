@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-// testPNG is the smallest byte string sniffImage takes as a PNG, with a tail
-// so two pastes can differ.
 func testPNG(tail string) []byte {
 	return append([]byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"), tail...)
 }
@@ -43,7 +41,6 @@ func TestSniffImageReadsTheTypeFromTheBytes(t *testing.T) {
 	}
 }
 
-// newTestPasteStore is a store in a temp directory with a clock the test sets.
 func newTestPasteStore(t *testing.T) (*pasteStore, string, *time.Time) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "paste")
@@ -81,8 +78,6 @@ func TestAPastedImageIsTheOwnersAloneAndNamedByItsType(t *testing.T) {
 		}
 	}
 
-	// Two pastes of the same image are two files: a pane that deleted the
-	// first must not lose the second.
 	again, err := s.save(data)
 	if err != nil || again == path {
 		t.Errorf("a second paste wrote %s (%v), want a new file", again, err)
@@ -109,7 +104,6 @@ func TestPastedImagesGoAfterTheirTTLAndWhenTheDaemonStops(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A file somebody else put in the directory is not the store's to take.
 	foreign := filepath.Join(dir, "notes.txt")
 	if err := os.WriteFile(foreign, []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
@@ -135,7 +129,6 @@ func TestPastedImagesGoAfterTheirTTLAndWhenTheDaemonStops(t *testing.T) {
 		t.Errorf("the new image is gone: %v", err)
 	}
 
-	// The clock moving on is what a later daemon start sees.
 	*now = now.Add(2 * time.Hour)
 	s.sweep()
 	if _, err := os.Stat(fresh); !os.IsNotExist(err) {
@@ -255,7 +248,6 @@ func TestAPastedImageForAPaneOnAnotherMachineIsWrittenThere(t *testing.T) {
 		}
 	}
 
-	// A pane from a daemon that gave no token cannot be pasted into.
 	old := &remotePane{host: p.host, id: p.id, fed: p.fed}
 	if _, err := old.pasteImage(ctx, data); err == nil {
 		t.Error("a pane with no token took a paste")

@@ -26,58 +26,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
-// Transfers: copies between machines that the daemon runs.
-//
-// A copy started from a client is a job here, in the daemon on the machine the
-// client is on, so the client can quit and the copy goes on. Every client (the
-// GUI, the TUI, a phone, the CLI) sees the same jobs. This daemon reads and
-// writes its own disk directly and reaches every other machine's disk through
-// that machine's daemon, over the link, with the file verbs (verb_files.go).
-// So each direction, this machine to a host, a host to this machine, and one
-// host to another, is the same code with a different end.
-//
-// The bytes travel on bulk streams (federation/bulk.go), which wait behind
-// every pane on the link and keep to a window, so a copy does not make typing
-// on that machine slow.
-//
-// Every file goes through stage, hash, rename: the bytes land in a part file
-// beside the destination, the part's sha256 is checked against the source's,
-// and only then is it renamed into place. Both hashes are taken while the
-// bytes move: the machine that reads the file hashes what it reads, and the
-// machine that writes the part hashes what it writes, so a copy reads each
-// file once on each side. A link that drops leaves the part. The job waits
-// for the machine, then compares the last MiB of the part with the same range
-// of the source and goes on from the part's end when they match. A resumed
-// file is hashed whole at the end on both sides.
-//
-// A folder's small files go in one tree stream (transfer_tree.go) instead of
-// a few round trips each, and a file over treeSmallMax goes by itself, so it
-// can resume from the middle. Before a folder copy into a folder that is
-// there, a check-ahead pass asks the far side about every file in batches and
-// leaves out each one that is there already with the same sha256.
-//
-// Each job writes parts of its own, named by its id, so two jobs to one path
-// never write one part. The job is also kept in a journal on disk
-// (transfer_journal.go), so a daemon that restarts finds its jobs and goes on
-// with them from their parts, and every change of a job is an event on the
-// daemon's event stream.
-
-// transferMaxRunning bounds the jobs that move bytes at once. The rest wait
-// in order.
 const transferMaxRunning = 3
 
-// transferKeepDone is how long a finished job stays in the list, unless
-// daemon.transfer_keep_seconds says otherwise.
 const transferKeepDone = 30 * time.Minute
 
-// transferTailCheck is the range a resume compares before it trusts a part.
 const transferTailCheck = 1 << 20
 
-// transferHashTimeout bounds one hash of a whole file on another machine.
 const transferHashTimeout = 30 * time.Minute
 
-// transferConflictsShown bounds the conflicts a row lists at once. The next
-// ones show when these are answered.
 const transferConflictsShown = 200
 
 // ErrVerbSourceChanged is a file that changed on its machine while it was
@@ -98,143 +54,91 @@ func (e Endpoint) String() string {
 	return e.Host + ":" + e.Path
 }
 
-// Transfer states.
 const (
 	transferQueued    = "queued"
 	transferRunning   = "running"
 	transferVerifying = "verifying"
 	transferWaiting   = "waiting"
 	transferPaused    = "paused"
-	// transferConflict is a copy that waits for an answer to files that are
-	// there and differ (transfer-answer).
 	transferConflict  = "conflict"
 	transferDone      = "done"
 	transferFailed    = "failed"
 	transferCancelled = "cancelled"
 )
 
-// transferOptions is how a job copies, fixed when it starts.
 type transferOptions struct {
-	Move bool
-	// Conflict is what to do with a destination that is there: fail (or
-	// empty), replace, keep-both, merge (a folder into the folder there),
-	// skip, or ask.
-	Conflict string
-	// Each is what a folder copy does with each file that is there and
-	// differs: replace, keep-both, skip or ask. Empty follows Conflict.
-	Each string
-	// Place is how the destination is read: empty for the full path of the
-	// copy, auto for the cp rule (a folder that is there gets the copy
-	// inside it), into for a folder that must be there.
-	Place string
-	// Label names the copy keep-both makes: "name (LABEL).ext".
-	Label string
-	// Private keeps every file it writes owner only, as a drop folder's are,
-	// instead of taking the original's permission bits.
-	Private    bool
-	NoPerms    bool
-	NoTimes    bool
-	NoCompress bool
-	// RateLimit caps the bytes a second, 0 for none.
-	RateLimit int64
-	// Pane and PaneSession name the pane that started the copy, for a copy
-	// started from a pane.
+	Move              bool
+	Conflict          string
+	Each              string
+	Place             string
+	Label             string
+	Private           bool
+	NoPerms           bool
+	NoTimes           bool
+	NoCompress        bool
+	RateLimit         int64
 	Pane, PaneSession string
-	// PaneRoot, for a copy a pane started with the files grant and no
-	// admin, is the pane's folder. Every read and write the job makes on
-	// this machine goes through an os.Root at it (transfer_access.go).
-	PaneRoot string
-	// Link, when not nil, says a linked machine started the job. Every read
-	// and write the job makes on this machine is then held to that machine's
-	// link policy, as its own file verbs would be. The journal keeps it, so a
-	// job that resumes after a restart is held the same way.
-	Link *transferLink
+	PaneRoot          string
+	Link              *transferLink
 }
 
-// transferJob is one copy.
 type transferJob struct {
 	id       string
 	src, dst Endpoint
 	opts     transferOptions
 	created  time.Time
 
-	done atomic.Int64
-	// wire counts the bytes that crossed a link, which compression makes
-	// fewer than done.
-	wire atomic.Int64
-	// acked counts the bytes of this run that the writing side said it
-	// holds: written to this machine's disk, or confirmed by the far daemon.
-	// done runs ahead of it by every buffer on the link, so the rate is
-	// taken from acked. A resume does not add to it.
+	done  atomic.Int64
+	wire  atomic.Int64
 	acked atomic.Int64
 
-	mu        sync.Mutex
-	state     string
-	size      int64
-	isDir     bool
-	files     int
-	filesDone int
-	finished  map[string]bool
-	// target is where the copy goes, as the first attempt read the
-	// destination: the file's path, or the folder's.
-	target    string
-	current   string
-	curBase   int64
-	curSize   int64
-	final     string
-	hash      string
-	verified  bool
-	errText   string
-	errCode   string
-	resumedAt int64
-	resumes   int
-	restarts  int
-	started   time.Time
-	ended     time.Time
-	samples   []rateSample
-	// skipped names what a folder copy did not carry (links, pipes, sockets,
-	// devices), and skippedCount counts all of it.
-	skipped      []SkippedItem
-	skippedCount int
-	// denied counts the entries of a folder copy that the source machine
-	// left out because a linked machine may not read them.
-	denied int
-	// same counts the files that were there already with the same bytes,
-	// conflictsSkipped the files a skip answer left out, conflictsLeft the
-	// files that appeared during the copy under a policy that asks, and
-	// failedFiles the files that did not copy.
+	mu               sync.Mutex
+	state            string
+	size             int64
+	isDir            bool
+	files            int
+	filesDone        int
+	finished         map[string]bool
+	target           string
+	current          string
+	curBase          int64
+	curSize          int64
+	final            string
+	hash             string
+	verified         bool
+	errText          string
+	errCode          string
+	resumedAt        int64
+	resumes          int
+	restarts         int
+	started          time.Time
+	ended            time.Time
+	samples          []rateSample
+	skipped          []SkippedItem
+	skippedCount     int
+	denied           int
 	same             int
 	conflictsSkipped int
 	conflictsLeft    int
 	failedFiles      int
-	// pending is the conflicts that wait for an answer, answers what the
-	// answers said by file, and answerAll the answer for every file.
-	pending   []ConflictItem
-	answers   map[string]string
-	answerAll string
-	answered  chan struct{}
-	// emitted is the state the last transfer event reported, and
-	// lastProgress when the last progress event went, so a copy says each
-	// state once and its progress at most four times a second.
-	emitted      string
-	lastProgress time.Time
-	// saved is when the journal last took the list of finished files.
-	saved   time.Time
-	cancel  context.CancelFunc
-	stop    transferStop
-	wake    chan struct{}
-	retryAt time.Time
-	limiter rateLimiter
+	pending          []ConflictItem
+	answers          map[string]string
+	answerAll        string
+	answered         chan struct{}
+	emitted          string
+	lastProgress     time.Time
+	saved            time.Time
+	cancel           context.CancelFunc
+	stop             transferStop
+	wake             chan struct{}
+	retryAt          time.Time
+	limiter          rateLimiter
 }
 
-// transferLink is the linked machine a job runs for.
 type transferLink struct {
-	// Peer is the name the machine linked in under, empty when it gave none.
 	Peer string `json:"peer,omitempty"`
 }
 
-// gate is a stand-in connection for the machine a job runs for, which the
-// link checks read the policy through. It is nil for the person's own job.
 func (j *transferJob) gate() *connState {
 	if j.opts.Link == nil {
 		return nil
@@ -242,9 +146,6 @@ func (j *transferJob) gate() *connState {
 	return &connState{viaLink: true, linkPeer: j.opts.Link.Peer, clientID: "transfer " + j.id}
 }
 
-// linkAllowed reports whether the machine a job runs for may still copy here:
-// relay and files, as transfer-start needs. A policy reload or a restart that
-// took them away ends the job, as forbidden. A job of the person's always may.
 func (m *transferManager) linkAllowed(j *transferJob) error {
 	if j.opts.Link == nil {
 		return nil
@@ -255,10 +156,6 @@ func (m *transferManager) linkAllowed(j *transferJob) error {
 	return nil
 }
 
-// failRevoked ends every job that has not ended and runs for a machine the
-// link policy no longer lets copy here. A running job stops at once; one that
-// waits, queues or is paused ends where it is. It runs after each policy
-// reload.
 func (m *transferManager) failRevoked() {
 	m.mu.Lock()
 	jobs := make([]*transferJob, 0, len(m.order))
@@ -305,8 +202,6 @@ func (m *transferManager) failRevoked() {
 	}
 }
 
-// end is one end of the job: this machine's disk, under the job's link
-// policy when a linked machine started it, or a host's.
 func (m *transferManager) end(j *transferJob, host string) fileEnd {
 	e := fileEnd{d: m.d, host: host, wire: &j.wire, ack: j.ack}
 	if host == "" {
@@ -331,22 +226,15 @@ type ConflictItem struct {
 	DstMTime int64  `json:"dst_mtime,omitempty"`
 }
 
-// transferManager holds the jobs.
 type transferManager struct {
-	d *Daemon
-	// keep is how long a finished job stays in the list:
-	// daemon.transfer_keep_seconds.
-	keep time.Duration
-	// parts is the folders this daemon wrote part files in.
-	parts *partDirs
-	// sums is the hashes write streams took as their bytes landed.
-	sums    partSums
-	mu      sync.Mutex
-	jobs    map[string]*transferJob
-	order   []string
-	running chan struct{}
-	// journalMu serialises writes to the journal folder, so two jobs saving
-	// at once do not race on a shared temp file.
+	d         *Daemon
+	keep      time.Duration
+	parts     *partDirs
+	sums      partSums
+	mu        sync.Mutex
+	jobs      map[string]*transferJob
+	order     []string
+	running   chan struct{}
 	journalMu sync.Mutex
 }
 
@@ -360,7 +248,6 @@ func newTransferID() string {
 	return hex.EncodeToString(b[:])
 }
 
-// errTransferBusy is a copy to a path another copy is writing.
 var errTransferBusy = errors.New("busy")
 
 func newJob(id string, src, dst Endpoint, o transferOptions) *transferJob {
@@ -378,10 +265,6 @@ func newJob(id string, src, dst Endpoint, o transferOptions) *transferJob {
 	}
 }
 
-// busyKey is a destination path as the busy check compares it. A local path
-// is resolved through its real parent, so ~/x and /home/u/x are one path. A
-// remote path is left as given: canonicalising it needs a round trip, and the
-// part id keeps two copies from corrupting each other anyway.
 func busyKey(host, path string) string {
 	if host == "" && path != "" {
 		return realParent(filepath.Clean(path))
@@ -389,14 +272,8 @@ func busyKey(host, path string) string {
 	return path
 }
 
-// start makes a job and runs it in the background. A copy to the same place
-// as a copy that has not ended is refused: one of the two would replace the
-// other's file.
 func (m *transferManager) start(src, dst Endpoint, o transferOptions) (*transferJob, error) {
 	j := newJob(newTransferID(), src, dst, o)
-	// A copy into a folder that is there writes a path below it, which
-	// resolveTarget checks once the folder is known; a copy to a receive
-	// folder (no path) is checked there too.
 	key := busyKey(dst.Host, dst.Path)
 	m.mu.Lock()
 	for _, id := range m.order {
@@ -420,25 +297,15 @@ func (m *transferManager) start(src, dst Endpoint, o transferOptions) (*transfer
 	return j, nil
 }
 
-// transferEnded reports whether a state is one a job does not leave by
-// itself.
-// transferStop is why a running attempt is being stopped: its context is
-// cancelled, and the run loop reads this first when the attempt returns.
 type transferStop string
 
 const (
 	transferStopNone   transferStop = ""
 	transferStopPause  transferStop = "pause"
 	transferStopCancel transferStop = "cancel"
-	// transferStopRevoke: the link policy took the copy away. failRevoked
-	// set the job failed already.
 	transferStopRevoke transferStop = "revoke"
 )
 
-// to moves the job to state, and reports false, with nothing changed, when
-// the job has ended: done, failed and cancelled are final, so an attempt's
-// own writes that race a stop cannot bring a job back from one. It is the one
-// writer of state but reopen (a check in internal/lint). j.mu is held.
 func (j *transferJob) to(state string) bool {
 	if transferEnded(j.state) {
 		return false
@@ -447,17 +314,12 @@ func (j *transferJob) to(state string) bool {
 	return true
 }
 
-// reopen takes a failed job back to queued, for a retry the person asked
-// for. j.mu is held.
 func (j *transferJob) reopen() {
 	if j.state == transferFailed {
 		j.state = transferQueued
 	}
 }
 
-// transferTestHold holds an attempt between its last byte and its verify
-// for the transfer_hold_ms knob, without looking at its context, so an e2e
-// test can land a stop where the attempt has not yet seen it.
 func transferTestHold(id string) {
 	if d := testknob.Millis("transfer_hold_ms"); d > 0 {
 		LogBasic("Transfer %s holds before its verify", id)
@@ -475,9 +337,6 @@ func (m *transferManager) get(id string) *transferJob {
 	return m.jobs[id]
 }
 
-// pruneLocked drops finished jobs older than transferKeepDone. A failed job
-// that leaves the list takes its parts and its journal entry with it: nothing
-// can resume it after that.
 func (m *transferManager) pruneLocked() {
 	keep := m.keep
 	m.dropLocked(func(j *transferJob) bool {
@@ -485,9 +344,6 @@ func (m *transferManager) pruneLocked() {
 	})
 }
 
-// dropLocked removes the jobs gone says to, with their journal entries and
-// the parts of the failed ones, and says each one on the event stream as a
-// transfer event with action removed. gone is called with j.mu held.
 func (m *transferManager) dropLocked(gone func(j *transferJob) bool) int {
 	keep := m.order[:0]
 	n := 0
@@ -531,9 +387,6 @@ func (j *transferJob) getTarget() string {
 	return j.target
 }
 
-// run drives one job to its end: it takes a running slot, makes attempts, and
-// between attempts waits for a machine that went away or for a person who
-// paused it.
 func (m *transferManager) run(j *transferJob) {
 	ctx := m.d.ctx
 	backoff := []time.Duration{time.Second, 2 * time.Second, 3 * time.Second, 5 * time.Second}
@@ -556,8 +409,6 @@ func (m *transferManager) run(j *transferJob) {
 			return
 		}
 		actx, cancel := context.WithCancel(ctx)
-		// A job paused or cancelled while it waited for its slot was told so
-		// with no attempt to stop. It must not start one now.
 		held := false
 		j.set(func(j *transferJob) {
 			if j.state == transferPaused || j.state == transferCancelled || j.state == transferFailed {
@@ -592,8 +443,6 @@ func (m *transferManager) run(j *transferJob) {
 
 		switch {
 		case stop == transferStopRevoke:
-			// failRevoked set the state, also when the attempt got to its
-			// end; the parts stay for a copy the person may start again.
 			m.note(j, false)
 			return
 		case err == nil:
@@ -622,16 +471,12 @@ func (m *transferManager) run(j *transferJob) {
 			tries = 0
 			continue
 		case ctx.Err() != nil:
-			// The daemon is stopping. The journal keeps the job, and the
-			// next start goes on with it.
 			return
 		}
 
 		var te *transferError
 		if errors.As(err, &te) && !te.retry {
 			if te.code == ErrVerbHashMismatch && j.restarts == 0 {
-				// One copy that did not match is a part that went wrong. It
-				// was removed, so the next attempt starts that file again.
 				j.set(func(j *transferJob) { j.restarts++ })
 				continue
 			}
@@ -649,7 +494,6 @@ func (m *transferManager) run(j *transferJob) {
 			m.note(j, false)
 			return
 		}
-		// Anything else is the way to a machine, which comes back.
 		wait := backoff[min(tries, len(backoff)-1)]
 		tries++
 		host := j.src.Host
@@ -678,7 +522,6 @@ func (m *transferManager) run(j *transferJob) {
 	}
 }
 
-// transferError is a failure an attempt cannot get past by trying again.
 type transferError struct {
 	code  string
 	msg   string
@@ -689,10 +532,6 @@ func (e *transferError) Error() string { return e.msg }
 
 func permanent(code, msg string) error { return &transferError{code: code, msg: msg} }
 
-// classify decides whether an error ends the job or waits for the machine.
-// A verb answering with an error is the far machine's word about its files
-// and stands; a stream or a link that ended is the way there, which comes
-// back.
 func classify(err error) error {
 	if err == nil {
 		return nil
@@ -714,7 +553,6 @@ func classify(err error) error {
 	return &transferError{code: ErrVerbHostUnreachable, msg: err.Error(), retry: true}
 }
 
-// attempt runs the job once from where its parts are.
 func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 	if err := m.linkAllowed(j); err != nil {
 		return err
@@ -745,10 +583,6 @@ func (m *transferManager) attempt(ctx context.Context, j *transferJob) error {
 	return m.attemptDir(ctx, j, src, dst, info, target)
 }
 
-// resolveTarget reads the destination once, on the first attempt: with place
-// auto a folder that is there gets the copy inside it, as cp does, and with
-// place into it must be a folder. Later attempts keep the answer, so a
-// folder the first attempt made does not move the copy into itself.
 func (m *transferManager) resolveTarget(ctx context.Context, j *transferJob, dst fileEnd, info statResult) (string, error) {
 	if t := j.getTarget(); t != "" {
 		return t, nil
@@ -787,9 +621,6 @@ func (m *transferManager) resolveTarget(ctx context.Context, j *transferJob, dst
 		if info.isDir && pathUnder(t, s) {
 			return "", permanent(ErrVerbInvalidParams, "a folder cannot be copied into itself: "+j.dst.String())
 		}
-		// Two strings can name one file: through a link, with ~, or in
-		// another case on a disk that ignores case. The machine that holds
-		// both paths tells (#2136).
 		rel, _, err := dst.relation(ctx, j.src.Path, target)
 		if err != nil {
 			return "", err
@@ -801,8 +632,6 @@ func (m *transferManager) resolveTarget(ctx context.Context, j *transferJob, dst
 			return "", permanent(ErrVerbInvalidParams, "a folder cannot be copied into itself: "+j.dst.String())
 		}
 	}
-	// Another copy that writes the same place would replace this one's
-	// files, or this one its.
 	m.mu.Lock()
 	for _, id := range m.order {
 		o := m.jobs[id]
@@ -816,9 +645,6 @@ func (m *transferManager) resolveTarget(ctx context.Context, j *transferJob, dst
 	return target, nil
 }
 
-// keepAction is what a file that is not there yet gets at its commit, should
-// one appear there during the copy: a file made meanwhile is not replaced
-// unless the policy says to.
 func keepAction(policy string) string {
 	switch policy {
 	case "replace", "keep-both", "skip":
@@ -829,7 +655,6 @@ func keepAction(policy string) string {
 	return "fail"
 }
 
-// attemptFile copies one file.
 func (m *transferManager) attemptFile(ctx context.Context, j *transferJob, src, dst fileEnd, info statResult, target string) error {
 	name := transferName(j.src.Path)
 	j.set(func(j *transferJob) {
@@ -842,7 +667,6 @@ func (m *transferManager) attemptFile(ctx context.Context, j *transferJob, src, 
 	}
 	policy := j.opts.Conflict
 	if policy == "merge" {
-		// A file has nothing to merge: each says what to do with it.
 		policy = j.opts.Each
 	}
 	action := keepAction(policy)
@@ -856,8 +680,6 @@ func (m *transferManager) attemptFile(ctx context.Context, j *transferJob, src, 
 				return classify(err)
 			}
 			if same {
-				// A file that is there with the same bytes is the copy
-				// already. Nothing is written.
 				j.set(func(j *transferJob) {
 					j.same, j.filesDone, j.hash, j.verified, j.final = 1, 1, sum, true, target
 				})
@@ -904,7 +726,6 @@ func (m *transferManager) attemptFile(ctx context.Context, j *transferJob, src, 
 		return classify(err)
 	}
 	if skipped {
-		// A file appeared at the destination during the copy.
 		j.set(func(j *transferJob) {
 			if policy == "ask" {
 				j.conflictsLeft = 1
@@ -928,16 +749,6 @@ func (m *transferManager) attemptFile(ctx context.Context, j *transferJob, src, 
 	return nil
 }
 
-// checkMoveApart is the last check before a move removes its source: the
-// source and the copy must be two files on the disk. When they are one, the
-// remove would delete the only copy (#2136), so the move stops and the file
-// stays. resolveTarget refuses such a copy first; this holds when a link
-// appeared during the copy.
-//
-// A host too old to say whether two paths are one file is trusted for a copy
-// that wrote bytes, which two names of one file cannot need. sameBytes is a
-// copy that found the bytes there and wrote nothing, which is what a move onto
-// itself looks like, so there the source stays.
 func (m *transferManager) checkMoveApart(ctx context.Context, j *transferJob, src fileEnd, target string, sameBytes bool) error {
 	if j.src.Host != j.dst.Host {
 		return nil
@@ -955,8 +766,6 @@ func (m *transferManager) checkMoveApart(ctx context.Context, j *transferJob, sr
 	return nil
 }
 
-// sameFile reports whether two files hold the same bytes, by their sha256,
-// each taken on its own machine at once.
 func (m *transferManager) sameFile(ctx context.Context, src, dst fileEnd, a, b string) (bool, string, error) {
 	type res struct {
 		sum string
@@ -978,24 +787,18 @@ func (m *transferManager) sameFile(ctx context.Context, src, dst fileEnd, a, b s
 	return ours == t.sum, ours, nil
 }
 
-// fileTask is one file of a folder copy and what its commit does when a file
-// is there.
 type fileTask struct {
 	e      WalkEntry
 	action string
 }
 
-// attemptDir copies a folder.
 func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, dst fileEnd, info statResult, target string) error {
 	j.mu.Lock()
 	final := j.final
 	j.mu.Unlock()
-	// merging is a copy into a folder that may hold files already, which
-	// asks the far side about them before it sends any.
 	merging := final != ""
 	dstPath := target
 	if final != "" {
-		// A folder copy keeps the folder it chose on its first attempt.
 		dstPath = final
 	} else {
 		existing, err := dst.stat(ctx, dstPath)
@@ -1042,9 +845,6 @@ func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, d
 	}
 	files := 0
 	for _, e := range entries {
-		// The names come from the machine the folder is on, which may not
-		// be this one. A name that climbs out of the folder, or starts at
-		// the root, would let that machine choose where its bytes land.
 		if !safeRel(e.Rel) {
 			return permanent(ErrVerbInvalidParams, j.src.String()+" names a file outside the folder: "+echoName(e.Rel)+". Nothing outside the folder was written.")
 		}
@@ -1066,8 +866,6 @@ func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, d
 		return classify(err)
 	}
 
-	// What the finished files hold counts as done from the start, so a resume
-	// shows the copy where it is and not from zero.
 	var base int64
 	var dirs []string
 	var todo []WalkEntry
@@ -1121,7 +919,6 @@ func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, d
 		res, err := m.treeCopy(ctx, j, src, dst, j.src.Path, dstPath, dirs, small, perm, mtime)
 		var ve *VerbCallError
 		if errors.As(err, &ve) && ve.Code == ErrVerbUnknownVerb {
-			// A daemon from before tree streams: each file by itself.
 			LogBasic("Transfer %s: a far daemon has no tree stream, so each file goes by itself", j.id)
 			for _, d := range dirs {
 				if err := dst.mkdir(ctx, joinRemote(dstPath, d)); err != nil {
@@ -1136,14 +933,9 @@ func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, d
 		}
 		for _, r := range res {
 			if r.code == ErrVerbBusy {
-				// The far machine takes no more new files for now
-				// (files_max_entries). The job waits and goes on; the
-				// files that landed are the same next time and are not
-				// sent again.
 				return &transferError{code: r.code, msg: r.msg, retry: true}
 			}
 			if r.code == ErrVerbHashMismatch {
-				// Once more by itself, which reads it again on both sides.
 				for _, t := range small {
 					if t.e.Rel == r.rel {
 						large = append(large, t)
@@ -1169,7 +961,6 @@ func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, d
 			c := classify(err)
 			var te *transferError
 			if errors.As(c, &te) && !te.retry && te.code != ErrVerbHashMismatch && ctx.Err() == nil {
-				// One file that cannot copy does not stop the others.
 				failed = append(failed, treeResult{rel: e.Rel, code: te.code, msg: te.msg})
 				m.fileEvent(j, e.Rel, "failed", "", te.code, te.msg)
 				continue
@@ -1183,8 +974,6 @@ func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, d
 	if len(failed) > 0 {
 		j.set(func(j *transferJob) { j.failedFiles = len(failed) })
 		first := failed[0]
-		// A folder that could not be made is in the list too; the count
-		// says files.
 		isDir := make(map[string]bool, len(dirs))
 		for _, d := range dirs {
 			isDir[d] = true
@@ -1227,7 +1016,6 @@ func (m *transferManager) attemptDir(ctx context.Context, j *transferJob, src, d
 	return nil
 }
 
-// noteFileResult records a file a folder copy finished.
 func (m *transferManager) noteFileResult(j *transferJob, rel, each string, skipped bool, sum string) {
 	if skipped {
 		j.set(func(j *transferJob) {
@@ -1248,13 +1036,6 @@ func (m *transferManager) noteFileResult(j *transferJob, rel, each string, skipp
 	m.saveFinished(j)
 }
 
-// checkAhead decides each file of a folder copy before any byte moves. Into a
-// folder that holds nothing of the copy yet, every file goes. Into one that
-// may hold some, the far side is asked about all of them in batches: a file
-// there with the same size is hashed on both machines, and one with the same
-// sha256 is left out as the copy already. One that differs follows each, and
-// ask waits for the answers. It returns the files to send and the bytes of
-// those left out, for the progress.
 func (m *transferManager) checkAhead(ctx context.Context, j *transferJob, src, dst fileEnd, dstPath string, todo []WalkEntry, merging bool, each string) ([]fileTask, int64, error) {
 	tasks := make([]fileTask, 0, len(todo))
 	if !merging {
@@ -1315,7 +1096,6 @@ func (m *transferManager) checkAhead(ctx context.Context, j *transferJob, src, d
 			tasks = append(tasks, fileTask{e: e, action: keepAction(each)})
 			continue
 		case t.Kind != "file":
-			// A folder or a link where the file goes. It is not replaced.
 			extra += e.Size
 			j.set(func(j *transferJob) { j.conflictsLeft++ })
 			m.fileEvent(j, e.Rel, "conflict", "", ErrVerbFileExists, "a "+t.Kind+" is in the way")
@@ -1364,10 +1144,6 @@ func (m *transferManager) checkAhead(ctx context.Context, j *transferJob, src, d
 	return tasks, extra, nil
 }
 
-// ask puts conflicts to whoever follows the copy and waits for an answer to
-// each: the job is in state conflict until then, and transfer-answer answers.
-// An answer given before, for a file or for all, stands. It returns the
-// answer per file.
 func (m *transferManager) ask(ctx context.Context, j *transferJob, items []ConflictItem) (map[string]string, error) {
 	out := make(map[string]string, len(items))
 	for {
@@ -1398,7 +1174,6 @@ func (m *transferManager) ask(ctx context.Context, j *transferJob, items []Confl
 		j.pending = pending
 		was := j.state
 		if !j.to(transferConflict) {
-			// A stop ended the job; the attempt sees it on its context.
 			j.mu.Unlock()
 			return nil, ctx.Err()
 		}
@@ -1420,11 +1195,6 @@ func (m *transferManager) ask(ctx context.Context, j *transferJob, items []Confl
 	}
 }
 
-// removeMoved removes from a moved folder what the copy carried: each file it
-// copied, then each folder that is empty after that, deepest first. A move
-// must not remove what it did not copy: a link, a pipe, or a file made in the
-// folder while the copy ran stays, and so does the folder that holds it. It
-// reports whether anything stayed.
 func removeMoved(ctx context.Context, src fileEnd, root string, entries []WalkEntry) (bool, error) {
 	gone := func(err error) bool {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -1462,8 +1232,6 @@ func removeMoved(ctx context.Context, src fileEnd, root string, entries []WalkEn
 	return left, nil
 }
 
-// safeRel reports whether rel names a path inside a folder: relative, slash
-// separated, and with no empty, "." or ".." part and no NUL.
 func safeRel(rel string) bool {
 	if rel == "" || strings.HasPrefix(rel, "/") || strings.ContainsAny(rel, "\x00\\:") {
 		return false
@@ -1473,47 +1241,27 @@ func safeRel(rel string) bool {
 			return false
 		}
 	}
-	// On the destination machine a rel is joined with filepath.FromSlash, so
-	// a Windows daemon must read it as a local path with no drive, no volume
-	// and no escape. A backslash and a colon are refused above, which leaves
-	// filepath.IsLocal to catch a reserved name such as CON or NUL.
 	return filepath.IsLocal(filepath.FromSlash(rel))
 }
 
-// joinRemote joins a path under a folder on any machine. Paths on every
-// machine tuios links to are slash separated.
 func joinRemote(dir, rel string) string {
 	return strings.TrimSuffix(dir, "/") + "/" + filepath.ToSlash(rel)
 }
 
-// fileCopy is one file a copy sends by itself.
 type fileCopy struct {
 	rel      string
 	from, to string
 	size     int64
-	// base is what the job had done before this file, for the progress.
 	base     int64
 	conflict string
 	label    string
 	perm     uint32
 	mtime    int64
-	// srcMTime is the source's modification time the copy started from, so
-	// a file that changes during the copy is found. 0 skips the check.
 	srcMTime int64
 }
 
-// emptySHA256 is the sha256 of no bytes.
 var emptySHA256 = func() string { s := sha256.Sum256(nil); return hex.EncodeToString(s[:]) }()
 
-// copyFile copies one file through its part, resuming a part that is there,
-// and returns where the file ended up, whether a skip conflict left it out,
-// and its sha256.
-//
-// From the start of a file, both hashes are taken on the way: the reading
-// side hashes what it reads (this daemon for its own disk, the far daemon in
-// the stream's trailer), and the writing side hashes what it writes. A resume
-// has bytes from an earlier attempt in its part, so it hashes the source
-// whole beside the copy, and the commit reads the part whole.
 func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst fileEnd, fc fileCopy) (string, bool, string, error) {
 	part, err := dst.partSize(ctx, fc.to, j.id)
 	if err != nil {
@@ -1631,8 +1379,6 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 				return "", false, "", permanent(ErrVerbHashMismatch, "the bytes of "+echoName(fc.rel)+" that arrived are not the bytes "+src.name()+" read")
 			}
 			if dst.local() {
-				// This daemon wrote the part, so its hash is the one taken
-				// on the way.
 				known = sum
 			}
 		}
@@ -1660,8 +1406,6 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 		sum = emptySHA256
 	}
 	if fc.srcMTime > 0 && size > treeSmallMax {
-		// A large file takes long enough to copy that its writer may have
-		// come back to it.
 		st, err := src.stat(ctx, fc.from)
 		if err != nil {
 			return "", false, "", err
@@ -1675,7 +1419,6 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 	if label == "" {
 		label = j.opts.Label
 	}
-	// A stop that came during the copy or the verify puts nothing in place.
 	if err := ctx.Err(); err != nil {
 		return "", false, "", err
 	}
@@ -1693,8 +1436,6 @@ func (m *transferManager) copyFile(ctx context.Context, j *transferJob, src, dst
 	return got, skipped, sum, nil
 }
 
-// progressWriter counts the bytes a copy has written, and holds them to the
-// copy's rate limit.
 type progressWriter struct {
 	w   io.Writer
 	j   *transferJob
@@ -1708,8 +1449,6 @@ func (p *progressWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// moved counts n bytes the copy moved: the progress, the rate, and the wait
-// a rate limit asks for.
 func (j *transferJob) moved(ctx context.Context, m *transferManager, n int) {
 	j.done.Add(int64(n))
 	j.sample()
@@ -1717,7 +1456,6 @@ func (j *transferJob) moved(ctx context.Context, m *transferManager, n int) {
 	j.limiter.wait(ctx, n)
 }
 
-// ack counts n bytes the writing side said it holds, for the rate.
 func (j *transferJob) ack(n int64) {
 	if n <= 0 {
 		return
@@ -1726,8 +1464,6 @@ func (j *transferJob) ack(n int64) {
 	j.sample()
 }
 
-// rateLimiter holds a copy to a rate: after each write it sleeps until the
-// bytes so far are no more than the rate allows since the first.
 type rateLimiter struct {
 	rate  int64
 	start time.Time
@@ -1753,10 +1489,6 @@ func (l *rateLimiter) wait(ctx context.Context, n int) {
 	}
 }
 
-// sample records the acknowledged bytes for the rate, at most every 200 ms.
-// The window runs across files: it used to start again at each file, and
-// the first fraction of a second of a file, while the link's buffers filled,
-// read as several times the link's speed.
 func (j *transferJob) sample() {
 	now := time.Now()
 	j.mu.Lock()
@@ -1772,8 +1504,6 @@ func (j *transferJob) sample() {
 	j.samples = j.samples[cut:]
 }
 
-// rateLocked is the bytes per second the writing side acknowledged over the
-// last five seconds or so of wall time.
 func (j *transferJob) rateLocked() float64 {
 	n := len(j.samples)
 	if n < 2 {
@@ -1794,12 +1524,9 @@ func (j *transferJob) rateLocked() float64 {
 	return float64(last.acked-first.acked) / dt
 }
 
-// abortParts removes the part a cancelled copy left, on whichever machine.
 func (m *transferManager) abortParts(j *transferJob) {
 	ctx, cancel := context.WithTimeout(m.d.ctx, 10*time.Second)
 	defer cancel()
-	// Through the job's own ends, so a pane's copy removes its part only
-	// inside the pane's folder.
 	dst := m.end(j, j.dst.Host)
 	j.mu.Lock()
 	isDir, final, current, target := j.isDir, j.final, j.current, j.target
@@ -1904,8 +1631,6 @@ func (j *transferJob) row() TransferRow {
 	}
 	if j.state == transferRunning || j.state == transferVerifying {
 		r.Rate = j.rateLocked()
-		// Time left after two seconds of data, so the first guess is not a
-		// wild one.
 		if r.Rate > 0 && r.Size > r.Done && len(j.samples) > 0 && time.Since(j.samples[0].at) >= 2*time.Second {
 			r.ETAms = int64(float64(r.Size-r.Done) / r.Rate * 1000)
 		}
@@ -1943,10 +1668,6 @@ func (m *transferManager) rows() []TransferRow {
 	return out
 }
 
-// ---- the verbs --------------------------------------------------------------
-
-// A destination with no path is the receive folder of its machine
-// (receiveFolder), which the job makes and copies into.
 func (d *Daemon) checkEndpoint(name string, e *Endpoint) *verbError {
 	if e.Path == "" && name == "dst" {
 		if e.Host == federation.LocalHostName {
@@ -1989,7 +1710,6 @@ func IsHostPath(p string) bool {
 	return strings.HasPrefix(p, "/") || strings.HasPrefix(p, "~") || isDrivePath(p)
 }
 
-// isDrivePath reports whether p is a Windows drive path, "C:\..." or "C:/...".
 func isDrivePath(p string) bool {
 	if len(p) < 3 || p[1] != ':' || (p[2] != '\\' && p[2] != '/') {
 		return false
@@ -1998,10 +1718,6 @@ func isDrivePath(p string) bool {
 	return c >= 'a' && c <= 'z'
 }
 
-// transferName is the last element of a copy's source path, the name the copy
-// gets in a folder. A Windows drive path splits at \ too, whatever system this
-// machine runs: the path may be a Windows host's. Elsewhere a \ is part of a
-// name on Unix, so only the separator this machine uses splits it.
 func transferName(p string) string {
 	if isDrivePath(p) {
 		p = strings.ReplaceAll(p, `\`, "/")
@@ -2009,8 +1725,6 @@ func transferName(p string) string {
 	return path.Base(filepath.ToSlash(p))
 }
 
-// thisMachineLabel is the name a keep-both copy from this machine carries on
-// another: the host name up to its first dot.
 func thisMachineLabel() string {
 	h, err := os.Hostname()
 	if err != nil || h == "" {
@@ -2023,8 +1737,6 @@ func thisMachineLabel() string {
 	return h
 }
 
-// transferLinkOf is the link a job started on cs runs for, or nil for the
-// person's own connection.
 func (d *Daemon) transferLinkOf(cs *connState) *transferLink {
 	if cs == nil || !cs.viaLink {
 		return nil
@@ -2032,11 +1744,6 @@ func (d *Daemon) transferLinkOf(cs *connState) *transferLink {
 	return &transferLink{Peer: d.linkPolicy(cs).Peer}
 }
 
-// checkTransferEnds refuses, before a job exists, a copy from a linked
-// machine whose ends on this machine its file verbs could not reach: a
-// source it may not read (or, for a move, remove) and a destination outside
-// its write roots or in the deny list. The job checks each file again as it
-// goes.
 func (d *Daemon) checkTransferEnds(cs *connState, src, dst Endpoint, move bool) *verbError {
 	if cs == nil || !cs.viaLink {
 		return nil
@@ -2081,12 +1788,9 @@ func (d *Daemon) verbTransferStart(cs *connState, params json.RawMessage) (any, 
 		return nil, verr
 	}
 	if p.Dst.Path == "" {
-		// The receive folder is a folder, and the copy goes inside it.
 		p.Place = "into"
 	}
 	if p.Place == "auto" && strings.HasSuffix(p.Dst.Path, "/") {
-		// A destination written with a slash at its end is a folder, as cp
-		// reads it.
 		p.Place = "into"
 	}
 	if verr := d.checkEndpoint("src", &p.Src); verr != nil {
@@ -2142,8 +1846,6 @@ func (d *Daemon) verbTransferStart(cs *connState, params json.RawMessage) (any, 
 	}
 	o.Link = d.transferLinkOf(cs)
 	probe := &transferJob{opts: o}
-	// A destination that is there is the caller's question to put to the
-	// person, so it is answered before a job exists.
 	if (p.Conflict == "" || p.Conflict == "fail") && p.Place == "" {
 		ctx, cancel := context.WithTimeout(d.ctx, 15*time.Second)
 		st, err := d.transfers.end(probe, p.Dst.Host).stat(ctx, p.Dst.Path)
@@ -2204,7 +1906,6 @@ func (d *Daemon) verbTransferList(cs *connState, params json.RawMessage) (any, *
 // ErrVerbNoTransfer is a transfer id the daemon does not hold.
 const ErrVerbNoTransfer = "no_transfer"
 
-// busyTransferError is the answer to a copy that start refused.
 func busyTransferError(err error) *verbError {
 	return hintedVerbError(ErrVerbBusy, "another copy writes this path now: "+err.Error(), &VerbHint{
 		Verb:   "transfer-list",
@@ -2212,9 +1913,6 @@ func busyTransferError(err error) *verbError {
 	})
 }
 
-// transferJobFor is the job id names, if the caller on cs may act on it: any
-// job for the person and a pane with admin, and only its own for a pane with
-// the files grant.
 func (d *Daemon) transferJobFor(cs *connState, id string) (*transferJob, *verbError) {
 	j := d.transfers.get(id)
 	if j == nil {
@@ -2275,7 +1973,6 @@ func transferControl(op string) verbHandler {
 				default:
 				}
 			case transferFailed:
-				// Retry: the same job, from its parts.
 				j.reopen()
 				j.ended = time.Time{}
 				j.errText, j.errCode = "", ""
@@ -2290,7 +1987,6 @@ func transferControl(op string) verbHandler {
 	}
 }
 
-// verbTransferAnswer answers the conflicts a copy in state conflict waits on.
 func (d *Daemon) verbTransferAnswer(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		ID     string   `json:"id"`
@@ -2333,7 +2029,6 @@ func (d *Daemon) verbTransferAnswer(cs *connState, params json.RawMessage) (any,
 	return j.row(), nil
 }
 
-// verbTransferClear drops the copies that ended from the list.
 func (d *Daemon) verbTransferClear(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		IDs []string `json:"ids"`
@@ -2378,10 +2073,7 @@ func transferVerbs() map[string]verbEntry {
 	idParam := verbParam{Name: "id", Type: "string", Required: true, Description: "The transfer's id."}
 	return map[string]verbEntry{
 		"transfer-start": {
-			scope: scopeDeny,
-			// A transfer and a drop make this daemon open connections on its own
-			// links, as open-host-connection does, so they need what a relay needs,
-			// and files, because they move file bytes.
+			scope:       scopeDeny,
 			link:        needRelay | needFiles,
 			description: "Copy a file or a folder between this machine and a host, or between two hosts. The daemon runs the copy, so a client may quit, and a daemon restart goes on with it. A machine that goes away pauses it, and it goes on from where it stopped when the machine is back. Every file's sha256 is checked before it is put in place, and it keeps the original's permission bits and modification time. A file that arrives over a link gets the receiving machine's umask and never group or world write. A file that is there with the same sha256 is not copied again. A destination that exists answers file_exists unless conflict says what to do. A destination another copy writes now answers busy. Each change is a transfer event on the event stream.",
 			params: []verbParam{

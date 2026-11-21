@@ -84,9 +84,6 @@ func TestVerbClientRefusesAReplyForAnotherRequest(t *testing.T) {
 	}
 }
 
-// bufferedPair is two ends of a loopback connection. Unlike net.Pipe it
-// buffers, so a reply the client is not reading yet does not block the
-// server, which is how a real socket behaves.
 func bufferedPair(t *testing.T) (net.Conn, net.Conn) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

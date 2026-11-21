@@ -21,11 +21,9 @@ func TestAnOptionLeftWaitingDuringAnAttachReachesTheAttachingClient(t *testing.T
 	makeSessionWithWindow(t, d, "opt")
 	sess := d.manager.GetSession("opt")
 
-	// set-option has found no client and holds the route order.
 	sess.optionApplyMu.Lock()
 	c := attachTUI(t, sp, "opt")
 	waitForHandlerIdle(t, c)
-	// set-option leaves its value waiting and lets go.
 	sess.waitOption("appearance.border_style", "rounded", false)
 	sess.optionApplyMu.Unlock()
 

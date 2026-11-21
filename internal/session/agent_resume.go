@@ -10,53 +10,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// Resuming an agent's conversation after the daemon restarts.
-//
-// A restart ends every program in every pane. A restore brings back the layout
-// and starts a new shell in each pane, and nothing else, so the agent a pane
-// was running is gone. What is not gone is the conversation: every harness
-// with a resume command keeps it on disk, and a hook already told the daemon
-// its id (the window's agent_session_id). So the restore offers to start the
-// harness again on that conversation, which is the part a person actually
-// lost.
-//
-// Only a pane whose agent was still running when the state was saved gets an
-// offer. The id outlives the agent on purpose, so a pane where the person quit
-// the agent and went back to shell work still has one, and resuming that
-// conversation unasked would be wrong. resume-agent still works on such a pane.
-//
-// Three modes, from daemon.resume_agents:
-//
-//   - ask (the default): each restored pane with a resumable conversation gets
-//     a resume item in the Inbox. The person answers it with y in the Inbox or
-//     with tuios resume-agent, or dismisses it. Nothing is typed until then.
-//   - auto: the daemon waits for the restored shell's prompt mark and
-//     retries while its terminal is busy, for at most ten seconds. A shell
-//     with no marks may use the existing quiet-output fallback. A pane
-//     still unsafe then gets the ask item instead. So does an offer whose
-//     kept flags turn approvals off (resumeOffer.risky): that is the
-//     person's call to make again, not the daemon's.
-//   - off: neither. The id stays on the window, so resume-agent still works.
-//
-// The command is built from the harness manifest's [resume] template, the
-// stored id, and the flags of the agent's own command line that the
-// manifest's allow list keeps (AgentFlags, values held to the same character
-// set as the id), and from nothing else: no prompt, other flag or environment
-// is replayed. The id is held to a character set every shell reads
-// as one plain argument (harness.ValidResumeSessionID), so an id a pane
-// reported cannot turn into a second command. And the command is typed only
-// into a pane whose own shell holds the terminal's foreground, so it never
-// lands in an editor or in another agent's input box.
-
-// Resume modes, the resolved daemon.resume_agents values.
 const (
 	resumeModeAsk  = "ask"
 	resumeModeAuto = "auto"
 	resumeModeOff  = "off"
 )
 
-// resolveResumeMode maps the configured value onto a mode. Anything that is
-// not auto or off is ask, which types nothing without the person.
 func resolveResumeMode(v string) string {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case resumeModeAuto:
@@ -67,20 +26,14 @@ func resolveResumeMode(v string) string {
 	return resumeModeAsk
 }
 
-// resumeAutoStagger spaces the automatic resumes, so a restore of twenty
-// agents does not start twenty harnesses in the same instant.
 const resumeAutoStagger = 100 * time.Millisecond
 
-// resumeShellWait bounds the whole readiness wait, including busy retries.
-// resumeShellQuiet preserves the quiet-output fallback for unmarked shells.
 const (
 	resumeShellWait  = 10 * time.Second
 	resumeShellQuiet = 300 * time.Millisecond
 	resumePromptPoll = 25 * time.Millisecond
 )
 
-// resumeOffer is one pane a restore brought back with a conversation that
-// can be resumed.
 type resumeOffer struct {
 	session   string
 	window    string
@@ -89,9 +42,7 @@ type resumeOffer struct {
 	harness   string
 	sessionID string
 	argv      []string
-	// risky are the kept flags in argv that turn off approvals or
-	// sandboxing. An offer with any is never typed without the person.
-	risky []string
+	risky     []string
 }
 
 // ResumeWarning is what a resume command that carries flags turning off
@@ -105,9 +56,6 @@ func ResumeWarning(risky []string) string {
 	return "Resumes with approvals off (" + strings.Join(risky, ", ") + ")"
 }
 
-// resumeHarnessOf is the harness a window's conversation id belongs to: the
-// one recorded with the id, else, for state written before that was recorded,
-// the pane's harness attribution.
 func resumeHarnessOf(w WindowState) string {
 	if w.AgentSessionHarness != "" {
 		return w.AgentSessionHarness
@@ -115,8 +63,6 @@ func resumeHarnessOf(w WindowState) string {
 	return w.AgentHarness
 }
 
-// resumeFlagsOf is the kept flags of a window's agent when they were read from
-// harness hid, the one being resumed, and nil otherwise.
 func resumeFlagsOf(w WindowState, hid string) []string {
 	if w.AgentFlags == nil || w.AgentFlags.Harness != hid {
 		return nil
@@ -124,23 +70,10 @@ func resumeFlagsOf(w WindowState, hid string) []string {
 	return w.AgentFlags.Flags
 }
 
-// agentWasLive reports whether a saved window had an agent in it when the state
-// was written: an agent state or a harness attribution. Both are cleared when
-// the agent leaves the pane (see scanAgentDetection) and the conversation id
-// is not, so the id alone says only that the pane ran an agent at some point.
-//
-// A restore does not carry either field onto the new shell, so the state the
-// next save writes for a restored pane says no agent is live. That is what
-// makes an offer happen once: after the restart that ended the agent, and not
-// again on every later restart for a conversation nobody resumed.
 func agentWasLive(w WindowState) bool {
 	return w.AgentHarness != "" || w.AgentState != AgentStateNone
 }
 
-// resumeOfferFor builds the offer for a window as it was saved, or reports
-// that it has nothing to resume: no agent live in the pane when the state was
-// saved, no conversation id, a harness with no resume command, or an id that
-// cannot be typed safely.
 func (d *Daemon) resumeOfferFor(sessionName string, w WindowState) (resumeOffer, bool) {
 	if !d.agentsEnabled() {
 		return resumeOffer{}, false
@@ -165,8 +98,6 @@ func (d *Daemon) resumeOfferFor(sessionName string, w WindowState) (resumeOffer,
 	}, true
 }
 
-// applyResumeOffers does what the configured mode says with a restore's
-// offers.
 func (d *Daemon) applyResumeOffers(offers []resumeOffer) {
 	switch d.resumeAgents {
 	case resumeModeOff:
@@ -174,8 +105,6 @@ func (d *Daemon) applyResumeOffers(offers []resumeOffer) {
 	case resumeModeAuto:
 		for i, o := range offers {
 			if len(o.risky) > 0 {
-				// Approvals off is the person's call to make again, so the
-				// offer waits for them instead of being typed.
 				d.attention.openResume(d.resumeItem(o))
 				continue
 			}
@@ -188,8 +117,6 @@ func (d *Daemon) applyResumeOffers(offers []resumeOffer) {
 	}
 }
 
-// resumeItem is the Inbox item that asks about an offer. The summary is the
-// command itself, so the person sees exactly what y would type.
 func (d *Daemon) resumeItem(o resumeOffer) AttentionItem {
 	return AttentionItem{
 		Kind:       AttentionResume,
@@ -205,8 +132,6 @@ func (d *Daemon) resumeItem(o resumeOffer) AttentionItem {
 	}
 }
 
-// autoResume types one offer's command once its restored shell is ready, and
-// falls back to asking when the shell never gets there.
 func (d *Daemon) autoResume(o resumeOffer, delay time.Duration) {
 	if delay > 0 {
 		select {
@@ -215,8 +140,6 @@ func (d *Daemon) autoResume(o resumeOffer, delay time.Duration) {
 			return
 		}
 	}
-	// The offer was made before a delay, and the session may have been
-	// renamed since.
 	sess, _ := d.manager.ResolveSession(o.session)
 	if sess == nil {
 		return
@@ -250,10 +173,6 @@ func (d *Daemon) autoResume(o resumeOffer, delay time.Duration) {
 	}
 }
 
-// waitShellPrompt waits for a fresh A or B prompt mark, or quiet output from
-// a shell that never marked anything. These are readiness candidates only.
-// typeResume checks foreground ownership, and autoResume retries busy panes
-// within the same deadline.
 func waitShellPrompt(ctx context.Context, pty *PTY, deadline time.Time, quiet time.Duration) bool {
 	tick := time.NewTicker(resumePromptPoll)
 	defer tick.Stop()
@@ -279,17 +198,12 @@ func waitShellPrompt(ctx context.Context, pty *PTY, deadline time.Time, quiet ti
 	}
 }
 
-// errResumeNothing says the window has no conversation a resume can name.
 var errResumeNothing = errors.New("no resumable conversation")
 
-// errResumeBusy says the pane's shell does not hold the foreground.
 var errResumeBusy = errors.New("the pane is running a program")
 
-// errResumeRemote says the window's process is on another machine.
 var errResumeRemote = errors.New("the pane is on another machine")
 
-// resumePlan is what a resume of one window would type, and why not when it
-// cannot.
 type resumePlan struct {
 	window    WindowState
 	harness   string
@@ -298,7 +212,6 @@ type resumePlan struct {
 	risky     []string
 }
 
-// planResume works out the command for a window without typing anything.
 func (d *Daemon) planResume(sess *Session, target string) (resumePlan, error) {
 	state := sess.GetState()
 	if target == "" {
@@ -328,11 +241,6 @@ func (d *Daemon) planResume(sess *Session, target string) (resumePlan, error) {
 		risky: d.agentMatcher.registry.RiskyFlags(hid, argv)}, nil
 }
 
-// shellHoldsForeground reports whether a pane's own shell is in the
-// terminal's foreground, which is a pane at its prompt: nothing it runs would
-// read what is typed. Where the kernel will not say (Windows, the BSDs), it
-// falls back to what the detector last saw: no foreground program and no
-// agent state.
 func shellHoldsForeground(pty *PTY, w WindowState) bool {
 	pid := pty.ShellPID()
 	if pid <= 0 || pty.IsExited() {
@@ -344,8 +252,6 @@ func shellHoldsForeground(pty *PTY, w WindowState) bool {
 	return w.ForegroundCmd == "" && w.AgentState == AgentStateNone
 }
 
-// typeResume types a window's resume command into its shell and closes the
-// window's resume item. It refuses a pane whose shell is not at its prompt.
 func (d *Daemon) typeResume(sess *Session, target string) (resumePlan, error) {
 	plan, err := d.planResume(sess, target)
 	if err != nil {
@@ -366,16 +272,6 @@ func (d *Daemon) typeResume(sess *Session, target string) (resumePlan, error) {
 	return plan, nil
 }
 
-// verbResumeAgent types the resume command for a window's recorded
-// conversation into the window's shell, or with dry_run only says what it
-// would type.
-//
-// What a caller can do with it is strictly less than send-text, which every
-// caller of this socket already has: the text is fixed by the harness
-// manifest and the id stored on the window, the id is one plain shell token,
-// and the pane must be sitting at its shell prompt. So it is not gated on the
-// person the way dismiss-attention is: an agent that coordinates others may
-// bring one back.
 func (d *Daemon) verbResumeAgent(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -412,7 +308,6 @@ func (d *Daemon) verbResumeAgent(cs *connState, params json.RawMessage) (any, *v
 	}, nil
 }
 
-// resumeError maps a failed resume onto the error a caller can act on.
 func (d *Daemon) resumeError(sess *Session, plan resumePlan, err error) *verbError {
 	switch {
 	case errors.Is(err, errResumeBusy):

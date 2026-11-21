@@ -11,12 +11,6 @@ import (
 	"time"
 )
 
-// A fan's sessions reach each other, so joining a fan is never implicit.
-// Security boundary test: each case is a way a caller could put a session
-// in a fan it is not part of.
-
-// fanJoinRig places each connection in the pane it was first dialed for, so
-// calls on several connections can run at once.
 type fanJoinRig struct {
 	t     *testing.T
 	d     *Daemon
@@ -46,7 +40,6 @@ func newFanJoinRig(t *testing.T) *fanJoinRig {
 	return r
 }
 
-// as dials a connection placed in window, "" for the person.
 func (r *fanJoinRig) as(window string) *verbConn {
 	r.mu.Lock()
 	r.cur = window
@@ -90,19 +83,16 @@ func TestFanRefusesJoiningAnotherGroup(t *testing.T) {
 	setStrict(r.d, "read", "fan")
 	group := func() int { return len(r.d.fanSiblings(r.d.manager.GetSession(mine[0]).Worktree())) }
 
-	// The fan's name with no join is refused for everyone, the person too.
 	for who, w := range map[string]string{"another session's pane": r.win(other.Name()), "the fan's lead": r.win(lead.Name()), "the person": ""} {
 		res := r.fan(r.as(w), "fan/retry", "")
 		if code := errCode(t, res); code != ErrVerbFanExists {
 			t.Fatalf("%s fanned the taken name with no join: %v", who, res)
 		}
 	}
-	// join from a pane that does not reach the fan is refused.
 	wantForbidden(t, "join from another session's pane", r.fan(r.as(r.win(other.Name())), "", mine[0]))
 	if n := group(); n != 2 {
 		t.Fatalf("the group grew to %d sessions", n)
 	}
-	// join from the lead, a pane of the fan and the person adds attempts.
 	for who, w := range map[string]string{"the fan's lead": r.win(lead.Name()), "a pane of the fan": r.win(mine[1]), "the person": ""} {
 		if res := r.fan(r.as(w), "", mine[0]); res["error"] != nil {
 			t.Fatalf("%s could not join on purpose: %v", who, res["error"])
@@ -112,7 +102,6 @@ func TestFanRefusesJoiningAnotherGroup(t *testing.T) {
 		t.Fatalf("the group has %d sessions, want 5", n)
 	}
 
-	// A name taken first by an outsider is not joined by the person's fan.
 	out := r.as(r.win(other.Name()))
 	squat := fanMade(r.fan(out, "fan/add-retry-client", ""))
 	if len(squat) != 1 {
@@ -121,19 +110,16 @@ func TestFanRefusesJoiningAnotherGroup(t *testing.T) {
 	if res := r.fan(r.as(""), "fan/add-retry-client", ""); errCode(t, res) != ErrVerbFanExists {
 		t.Fatalf("the person's fan joined the outsider's: %v", res)
 	}
-	// The name fan makes from the prompt moves on to a free one.
 	first := fanMade(callP(r.as(""), t, "fan", map[string]any{"repo": r.repo, "count": 1, "agent": "sleep 60", "prompt": "same task", "ready_timeout": 300}))
 	second := fanMade(callP(r.as(""), t, "fan", map[string]any{"repo": r.repo, "count": 1, "agent": "sleep 60", "prompt": "same task", "ready_timeout": 300}))
 	if len(first) != 1 || len(second) != 1 || r.d.sessionInScope(first[0], second[0]) {
 		t.Fatalf("two fans from one prompt are one fan: %v %v", first, second)
 	}
 
-	// A name outside A-Z, a-z, 0-9 and / . _ - is refused: characters that
-	// do not print, blank letters, and letters that look like Latin ones.
 	for _, n := range []string{
-		"fan/retry\u200b", "fan/re\u202etry", "fan/ret\u00adry", // zero-width, RLO, soft hyphen
-		"fan/retry\u3164", "fan/retry\u2800", "fan/retry\uffa0", // Hangul filler, braille blank, halfwidth filler
-		"fan/retry\u20dd", "fan/retry-\u0430", "fan/\uff52etry", // enclosing circle, Cyrillic a, full-width r
+		"fan/retry\u200b", "fan/re\u202etry", "fan/ret\u00adry",
+		"fan/retry\u3164", "fan/retry\u2800", "fan/retry\uffa0",
+		"fan/retry\u20dd", "fan/retry-\u0430", "fan/\uff52etry",
 		"fan/re\u00a0try", "fan/re try",
 	} {
 		res := r.fan(r.as(""), n, "")
@@ -145,7 +131,6 @@ func TestFanRefusesJoiningAnotherGroup(t *testing.T) {
 		t.Fatal("a plain name was refused")
 	}
 
-	// A refusal lists the fan's sessions only to a caller that reaches them.
 	secret := fanMade(r.fan(r.as(""), "fan/secret", ""))
 	if len(secret) != 1 {
 		t.Fatal("the person could not start a fan")
@@ -168,13 +153,6 @@ func TestFanRefusesJoiningAnotherGroup(t *testing.T) {
 	}
 }
 
-// A fan's sessions save its fan ID, and a fan's sessions are the ones that
-// share it. A fan made later under the same name, also while the first was
-// saved and not running (disable_auto_restore), stays a fan of its own: the
-// two never reach each other, in any order of restore and across restarts.
-// Security boundary test.
-
-// fanRestoreRig adds saving, restoring and a restart to fanJoinRig.
 type fanRestoreRig struct {
 	*fanJoinRig
 	other *Session
@@ -187,12 +165,10 @@ func newFanRestoreRig(t *testing.T) *fanRestoreRig {
 	return &fanRestoreRig{r, other}
 }
 
-// save keeps the sessions' saved states and ends them.
 func (r *fanRestoreRig) save(names []string) []*SessionState {
 	r.t.Helper()
 	var out []*SessionState
 	for _, n := range names {
-		// Through JSON, as the state file holds it.
 		raw, err := json.Marshal(r.d.manager.GetSession(n).ResurrectionState())
 		if err != nil {
 			r.t.Fatal(err)
@@ -218,7 +194,6 @@ func (r *fanRestoreRig) restore(st *SessionState) *Session {
 	return s
 }
 
-// restart drops what the daemon holds in memory about fans.
 func (r *fanRestoreRig) restart() {
 	r.d.fanReserved.mu.Lock()
 	r.d.fanReserved.names = nil
@@ -243,8 +218,6 @@ func (r *fanRestoreRig) paneFan(name string) string {
 	return made[0]
 }
 
-// apart fails when a session of pane's fan reaches one of the person's, or
-// when the person's do not reach each other.
 func (r *fanRestoreRig) apart(pane *Session, person ...*Session) {
 	r.t.Helper()
 	for _, s := range person {
@@ -269,8 +242,6 @@ func (r *fanRestoreRig) apart(pane *Session, person ...*Session) {
 
 func TestRestoredFanStaysItsOwnFan(t *testing.T) {
 	r := newFanRestoreRig(t)
-	// A pane makes the name while the person's fan is saved; then the
-	// person restores it, and joins it.
 	states := r.save(r.personFan("fan/saved", 2))
 	squat := r.d.manager.GetSession(r.paneFan("fan/saved"))
 	a, b := r.restore(states[0]), r.restore(states[1])
@@ -283,14 +254,10 @@ func TestRestoredFanStaysItsOwnFan(t *testing.T) {
 
 func TestReview984RestoreAcrossRestart(t *testing.T) {
 	r := newFanRestoreRig(t)
-	// Run 1 ends with the person's fan saved.
 	ps := r.save(r.personFan("fan/saved", 2))
 	r.restart()
-	// Run 2, with no restore: a pane makes the name, and its session is
-	// saved when the daemon goes down.
 	sq := r.save([]string{r.paneFan("fan/saved")})
 	r.restart()
-	// Run 3: everything comes back.
 	a, b, pane := r.restore(ps[0]), r.restore(ps[1]), r.restore(sq[0])
 	r.apart(pane, a, b)
 }

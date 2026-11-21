@@ -15,8 +15,6 @@ import (
 // a small fraction of the old channel and the test fails if it comes back.
 func TestIdleSubscriptionMemoryBudget(t *testing.T) {
 	const panes = 50
-	// The old channel was 4096 slots of 56 bytes. An idle subscription may
-	// cost at most a sixteenth of it, catch-up copy included.
 	const budget = 4096 * 56 / 16
 
 	ptys := make([]*PTY, panes)
@@ -67,7 +65,6 @@ func TestFloodedQueueGivesBackItsPeak(t *testing.T) {
 			t.Fatalf("chunk %d came out as %d", out, c.end)
 		}
 	}
-	// Wrap the ring before each doubling: take some, then fill.
 	for q.len() < subscriberSlots {
 		for range q.len() / 3 {
 			pop()

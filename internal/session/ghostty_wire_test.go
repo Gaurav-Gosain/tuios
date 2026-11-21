@@ -2,11 +2,6 @@
 
 package session
 
-// Wire-snapshot fidelity across emulator implementations: a daemon on one
-// backend snapshots, a client on the other restores, and both directions
-// must land on the same observable state. This is the daemon-attach path,
-// and for the libghostty backend it exercises the synthesized restore.
-
 import (
 	"fmt"
 	"slices"
@@ -17,10 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// runWireCase writes a stream, snapshots the source, restores into the
-// destination and compares. packed picks the form the snapshot takes on the
-// wire; a client on this backend may be answered by a daemon of either age,
-// so the callers run both.
 func runWireCase(t *testing.T, name, stream string, src, dst vt.Terminal, packed bool) {
 	t.Helper()
 	if _, err := src.Write([]byte(stream)); err != nil {
@@ -30,7 +21,6 @@ func runWireCase(t *testing.T, name, stream string, src, dst vt.Terminal, packed
 	state := TerminalStateOf(src, w, h, 200, 0)
 	ApplyTerminalState(dst, throughWire(t, state, packed))
 	compareEmulators(t, src, dst)
-	// Screen text agrees cell by cell.
 	for y := 0; y < h; y++ {
 		var sb1, sb2 strings.Builder
 		for x := 0; x < w; x++ {
@@ -55,7 +45,6 @@ func runWireCase(t *testing.T, name, stream string, src, dst vt.Terminal, packed
 	}
 }
 
-// compareScreenText checks the visible text row by row.
 func compareScreenText(t *testing.T, name string, src, dst vt.Terminal) {
 	t.Helper()
 	w, h := src.Width(), src.Height()
@@ -80,7 +69,6 @@ func compareScreenText(t *testing.T, name string, src, dst vt.Terminal) {
 	}
 }
 
-// wireLineText renders one history line for comparison.
 func wireLineText(line uv.Line) string {
 	var sb strings.Builder
 	for _, c := range line {
@@ -93,9 +81,6 @@ func wireLineText(line uv.Line) string {
 	return strings.TrimRight(sb.String(), " ")
 }
 
-// compareScrollbackText checks that dst holds exactly the history src holds,
-// line for line. Comparing against src rather than a fixed count keeps the
-// ring's cap handled the same way on both sides.
 func compareScrollbackText(t *testing.T, name string, src, dst vt.Terminal) {
 	t.Helper()
 	a, b := src.ScrollbackLen(), dst.ScrollbackLen()
@@ -114,8 +99,6 @@ func compareScrollbackText(t *testing.T, name string, src, dst vt.Terminal) {
 	}
 }
 
-// numbered writes lines prefix-from to prefix-to, each ended by CR LF, so a
-// history that shifted or lost its head is visible by number.
 func numbered(prefix string, from, to int) string {
 	var sb strings.Builder
 	for i := from; i <= to; i++ {
@@ -124,14 +107,6 @@ func numbered(prefix string, from, to int) string {
 	return sb.String()
 }
 
-// runWireCaseAgain is the workspace-switch shape, which is the one every
-// surviving emulator takes and the one a single apply into a fresh
-// destination never reaches. dst is brought level with src, either by
-// following the same bytes (a client that watched the pane) or by a first
-// snapshot (a client that attached), src moves on alone, and a second
-// snapshot carries only the rows dst lacks. dst must then hold what src
-// holds: the history it had, extended by the rows it missed, under the
-// screen src shows.
 func runWireCaseAgain(t *testing.T, name, stream, more string, src, dst vt.Terminal, followed bool) {
 	t.Helper()
 	write := func(term vt.Terminal, s string) {
@@ -159,12 +134,6 @@ func runWireCaseAgain(t *testing.T, name, stream, more string, src, dst vt.Termi
 	compareScrollbackText(t, name, src, dst)
 }
 
-// wireAgainStreams pairs a stream that leaves history behind with the bytes
-// src alone sees afterwards. Each "more" is chosen to expose one way the
-// synthesized restore of a surviving emulator can go wrong: history that
-// grows, history that stays, live rows that shrink, and the region, origin,
-// charset and alternate screen the emulator had in force when the rows it
-// missed were typed into it.
 var wireAgainStreams = []struct {
 	name   string
 	stream string
@@ -341,16 +310,12 @@ func TestGhosttyWireNarrowsAWiderClient(t *testing.T) {
 func TestGhosttyWireCarriesTheSnapshotState(t *testing.T) {
 	pure := func() vt.Terminal { return vt.NewEmulator(fidelityCols, fidelityRows) }
 	ghostty := func() vt.Terminal { return vt.NewGhosttyTerminal(fidelityCols, fidelityRows) }
-	// A palette slot past the sixteen paints an SGR 38;5 on the library and
-	// not on the pure emulator, snapshot or none, so that case runs on one
-	// backend at a time.
 	cross := withoutSeamCases(snapshotStateCases, "palette-slot-256")
 	t.Run("pure-to-ghostty", func(t *testing.T) { runSnapshotStateCases(t, cross, pure, ghostty) })
 	t.Run("ghostty-to-pure", func(t *testing.T) { runSnapshotStateCases(t, cross, ghostty, pure) })
 	t.Run("ghostty-to-ghostty", func(t *testing.T) { runSnapshotStateCases(t, snapshotStateCases, ghostty, ghostty) })
 }
 
-// withoutSeamCases is cases without the ones named.
 func withoutSeamCases(cases []seamCase, names ...string) []seamCase {
 	var out []seamCase
 	for _, c := range cases {

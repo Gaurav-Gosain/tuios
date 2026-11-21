@@ -27,10 +27,6 @@ func TestBroadcastsReachAPeerInTheOrderTheyWereMade(t *testing.T) {
 	var seen []float64
 	last := make(chan struct{}, 1)
 	watcher.OnStateSync(func(state *SessionState, _, _ string) {
-		// A peer that applies each snapshot takes longer over one than the
-		// daemon takes to forward the next, which is what lets the sends to it
-		// pile up behind its socket. The pile is the condition under test: a
-		// peer that keeps up never gives two sends the chance to pass.
 		time.Sleep(time.Millisecond)
 		mu.Lock()
 		seen = append(seen, state.MasterRatio)
@@ -44,8 +40,6 @@ func TestBroadcastsReachAPeerInTheOrderTheyWereMade(t *testing.T) {
 		}
 	})
 
-	// Each push moves one field the fingerprint covers, so every one of them
-	// is forwarded, and the field counts up so the order is legible.
 	base := sess.GetState()
 	for i := 1; i <= pushes; i++ {
 		st := *base

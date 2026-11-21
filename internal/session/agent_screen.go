@@ -7,41 +7,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// screenScanInterval bounds how often output drives a screen scan, so a pane
-// printing a build log pays for one scan per interval rather than one per chunk.
 const screenScanInterval = 250 * time.Millisecond
 
-// screenSettleDelay is how long after output stops before the settle scan runs.
-//
-// This is the whole reason the throttle alone is not enough. The state a rule
-// most wants to see is a blocking prompt, and a blocking prompt is painted by
-// the LAST chunk a pane emits before it goes silent: the throttle can swallow
-// exactly that chunk and then nothing else ever arrives to trigger a scan. One
-// timer, armed on output and disarmed when it fires, closes that hole without a
-// ticker, so a pane that stays silent costs nothing.
 const screenSettleDelay = 400 * time.Millisecond
 
-// screenVerdict matches the harness's screen rules against the bottom of the
-// pane. looked is false when there was nothing to read at all: no rules, or an
-// empty screen.
-//
-// It is the last-resort tier and reports as AgentSourceScreen, so it does not
-// write over a harness reporting for itself or an escape sequence the pane
-// emitted. What it can do is see a state those two never mention: a harness
-// sitting on a blocking prompt paints it once and then emits nothing at all, no
-// title and no progress sequence, so the screen is the only channel carrying the
-// fact that a human is being waited for.
-//
-// That is also why it carries the one exception to the ranking. A source that
-// has gone quiet while the pane painted a prompt over it is stale rather than
-// authoritative, so a matched blocker may take its claim; see
-// blockerOverridesClaim. The claim goes back the moment a later look finds the
-// prompt gone.
-//
-// A look reports whether a rule matched, which is a different question from
-// whether the report was accepted: a matching rule means the screen carries an
-// answer even when a higher-ranked source owns the window, and the silence
-// timer needs that fact to know it must not call the pane idle.
 func screenVerdict(pty *PTY, hid string, reg *harness.Registry) (v agentVerdict, looked bool) {
 	lines := reg.ScreenLines(hid)
 	if lines <= 0 {
@@ -57,9 +26,6 @@ func screenVerdict(pty *PTY, hid string, reg *harness.Registry) (v agentVerdict,
 	}
 	msg, kind := screenRuleMessage(reg, hid, rule, tail), reg.RuleKind(hid, rule)
 	if AgentState(state) == AgentStateLimitReached {
-		// A limit is no prompt: it has no kind to front its line, and the
-		// line is the harness's own words, without the mark it is drawn
-		// under.
 		kind = ""
 		line := strings.TrimLeft(reg.RulePrompt(hid, rule, tail), "⎿ ")
 		if line == "" {
@@ -76,13 +42,6 @@ func screenVerdict(pty *PTY, hid string, reg *harness.Registry) (v agentVerdict,
 	}, true
 }
 
-// promptBoxEmpty reports whether the pane shows the harness's input box with
-// nothing typed in it, by the manifest's [prompt_box] block. The idle rule only
-// asks for a ❯ at the start of a line in the box, and Claude Code's forms mark
-// their focused field, option and button with the same ❯ (2.1.316's elicitation
-// dialog draws "❯ ◉ us-east"), so a form framed by rules reads idle. Its rows
-// are no empty box. A harness with no [prompt_box] block cannot say, and the
-// idle rule's word stands.
 func promptBoxEmpty(pty *PTY, hid string, reg *harness.Registry) bool {
 	if !reg.HasBoxRule(hid) {
 		return true
@@ -95,11 +54,6 @@ func promptBoxEmpty(pty *PTY, hid string, reg *harness.Registry) bool {
 	return known && !draft
 }
 
-// releaseScreenIdle stops defending an idle state the screen tier took, once a
-// look finds no rule matching: the prompt box that proved rest is off the
-// screen. The state stays where it is and the claim is yielded, so the pane is
-// back under the tiers that handled it before, and the detector can move it to
-// working on the next output from the agent.
 func (s *Session) releaseScreenIdle(windowID string) {
 	if claim, held := s.agentClaimHeld(windowID); !held || claim.source != AgentSourceScreen {
 		return
@@ -110,20 +64,8 @@ func (s *Session) releaseScreenIdle(windowID string) {
 	s.yieldAgentClaim(windowID, AgentSourceScreen)
 }
 
-// screenRuleMessage is what a screen claim says about itself: the prompt line
-// the rule matched, fronted by whether it is an approval or a question, so the
-// alert and the rail can say what the agent asked rather than only that it
-// asked. A rule whose match carried no readable line falls back to the
-// manifest's own sentence, which is what every claim said before the line was
-// read.
-//
-// Only the screen tier builds a message this way. A report or an OSC claim
-// carries its own words and nothing here touches them.
 func screenRuleMessage(reg *harness.Registry, hid string, rule int, tail []string) string {
 	if prompt := reg.RulePrompt(hid, rule, tail); prompt != "" {
-		// A dialog rule's message is already in the form tuios's hooks
-		// report an approval in ("approve <tool>: <what>"). It says its
-		// kind, and the risk rules read it in that form.
 		if kind := reg.RuleKind(hid, rule); kind != "" && !(reg.RuleShowsDialog(hid, rule) && strings.HasPrefix(prompt, "approve ")) {
 			return kind + ": " + prompt
 		}
@@ -132,15 +74,6 @@ func screenRuleMessage(reg *harness.Registry, hid string, rule int, tail []strin
 	return reg.RuleMessage(hid, rule)
 }
 
-// agentHarnessOf names the window backed by ptyID and the harness running in it,
-// under the state read lock. An empty harness means no agent is in the pane, and
-// the title, screen and notification rules have nothing to match with.
-//
-// A pane with no agent in it (agentInPane) has no harness running in it,
-// whatever it is attributed to. A pane carried over from a daemon that kept the
-// harness its agent left it with is one, and reading the next program in the
-// pane by that harness's rules took a spinner in its title for the agent
-// working.
 func (s *Session) agentHarnessOf(ptyID string) (windowID, harnessID string) {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
@@ -155,8 +88,6 @@ func (s *Session) agentHarnessOf(ptyID string) (windowID, harnessID string) {
 	return "", ""
 }
 
-// tailText reads the bottom of the pane's emulator under the terminal lock, the
-// same lock GetTerminalState takes.
 func (p *PTY) tailText(lines int) []string {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
@@ -166,9 +97,6 @@ func (p *PTY) tailText(lines int) []string {
 	return p.terminal.TailText(lines)
 }
 
-// screenScanDue reports whether enough time has passed since the last
-// output-driven screen scan to run another, and claims the slot if so. Called
-// only from the single PTY read goroutine, so a plain load/store is race-free.
 func (p *PTY) screenScanDue(now int64) bool {
 	if now-p.lastScreenScan.Load() < int64(screenScanInterval) {
 		return false
@@ -177,34 +105,18 @@ func (p *PTY) screenScanDue(now int64) bool {
 	return true
 }
 
-// hasScreenLook reports whether the look has been installed, so the caller can
-// skip building the closure that installs it. The check is worth having because
-// the caller runs per chunk and the install runs once.
 func (p *PTY) hasScreenLook() bool {
 	p.screenSettleMu.Lock()
 	defer p.screenSettleMu.Unlock()
 	return p.screenLook != nil
 }
 
-// setScreenLook installs the look this pane runs, both on the throttled path
-// and when it settles. Both callers run it through runScreenLook, so the
-// closure is built once per pane rather than once per chunk.
 func (p *PTY) setScreenLook(f func()) {
 	p.screenSettleMu.Lock()
 	defer p.screenSettleMu.Unlock()
 	p.screenLook = f
 }
 
-// armScreenSettle schedules the one scan that runs after a pane goes quiet.
-// Re-arming while output is still flowing pushes the scan out, so a busy pane
-// runs it once when it finally stops rather than once per chunk.
-//
-// The timer is created on the first arm and reset afterwards. Building a fresh
-// time.AfterFunc per arm allocated a runtime timer on every chunk a flooding
-// pane emitted, for a scan that by design runs only once, after the flood ends.
-// A Reset that races the fire simply runs the scan twice, and the scan reads the
-// screen and reports what it finds, so a second look costs a scan and decides
-// the same thing.
 func (p *PTY) armScreenSettle() {
 	p.screenSettleMu.Lock()
 	defer p.screenSettleMu.Unlock()
@@ -218,9 +130,6 @@ func (p *PTY) armScreenSettle() {
 	p.screenSettle.Reset(screenSettleDelay)
 }
 
-// runScreenLook runs the installed look. It is also what the timer fires, and it
-// reads the look under the lock rather than closing over it, so the timer built
-// on the first arm is never holding a stale callback.
 func (p *PTY) runScreenLook() {
 	p.screenSettleMu.Lock()
 	f := p.screenLook
@@ -230,7 +139,6 @@ func (p *PTY) runScreenLook() {
 	}
 }
 
-// stopScreenSettle disarms the settle timer, for a pane being closed.
 func (p *PTY) stopScreenSettle() {
 	p.screenSettleMu.Lock()
 	defer p.screenSettleMu.Unlock()
@@ -240,9 +148,6 @@ func (p *PTY) stopScreenSettle() {
 	}
 }
 
-// noteAgentWaitsOn records what window's screen says its agent still runs
-// after its turn. It changes the state only when the words change, so a look
-// on every keystroke costs no state version.
 func (s *Session) noteAgentWaitsOn(windowID, waits string) {
 	s.stateMu.RLock()
 	same := false
@@ -263,9 +168,6 @@ func (s *Session) noteAgentWaitsOn(windowID, waits string) {
 	})
 }
 
-// agentWaitsOn is what a reader is told the agent still waits on: the
-// screen's count, beside a done or idle state only, since a working agent is
-// at it already and a blocked one needs the person first.
 func agentWaitsOn(w WindowState) string {
 	switch w.ShownAgentState() {
 	case AgentStateDone, AgentStateIdle:

@@ -48,7 +48,6 @@ func TestSavedDisplayOrderRestoresAsNumbering(t *testing.T) {
 	if len(got.Windows) != 1 || got.Windows[0].Workspace != 1 || got.CurrentWorkspace != 1 {
 		t.Errorf("the pane is on workspace %d and the session shows %d, want both on 1", got.Windows[0].Workspace, got.CurrentWorkspace)
 	}
-	// The tab that was workspace 3 keeps its herdr tab id, now as workspace 1.
 	if got.WorkspaceTabKey(1) != 3 {
 		t.Errorf("workspace 1 has tab key %d, want 3, the number its tab id was made from", got.WorkspaceTabKey(1))
 	}

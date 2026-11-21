@@ -9,19 +9,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// claudePermissionPrompt is what Claude Code paints and then goes silent behind.
-// It is the exact shape the bundled manifest's first rule keys on.
 const claudePermissionPrompt = "Do you want to proceed?\r\n" +
 	"\xe2\x9d\xaf 1. Yes\r\n" +
 	"  2. Yes, and don't ask again\r\n" +
 	"  3. No, and tell Claude what to do differently (esc)\r\n"
 
-// agentPaneWithHarness returns a session, its window id and its PTY id, with the
-// window already attributed to harnessID so the screen tier has rules to run.
-//
-// The claim is AgentSourceDetect because that is what an unhooked harness gets:
-// the foreground-process detector saw the binary and said working, which is the
-// only thing it can honestly say. That is the case the screen tier is for.
 func agentPaneWithHarness(t *testing.T, harnessID string, state AgentState) (*Session, string, string) {
 	t.Helper()
 	sess, winID := bareSessionWithWindow(t)
@@ -55,7 +47,7 @@ func TestStallTimerLooksAtTheScreenBeforeCallingAPaneIdle(t *testing.T) {
 	}
 
 	const stall = 30 * time.Second
-	quiet := func(string) int64 { return 0 } // the pane never wrote anything
+	quiet := func(string) int64 { return 0 }
 	past := time.Now().Add(stall + time.Second)
 
 	t.Run("without a look the blocked pane is called idle", func(t *testing.T) {
@@ -84,32 +76,14 @@ func TestStallTimerLooksAtTheScreenBeforeCallingAPaneIdle(t *testing.T) {
 	})
 }
 
-// paintPane writes to the pane's emulator and records that the pane wrote, which
-// is one event in the daemon and two calls here because the test bypasses the
-// read loop that would otherwise do both.
-//
-// The screen is cleared first, in the same write, because the pane has a real
-// shell in it. That shell prints its prompt a few tens of milliseconds after
-// the window is created, and a test that paints before the prompt arrives sees
-// a clean screen while one that paints after sees its text appended to the
-// prompt's line: "sh-3.2$ Do you want to make this edit to main.go?" instead of
-// the question on its own. Which side of that the test lands on is a race it
-// usually won and sometimes lost, and losing it is a nightly failure on a rule
-// that matches the line rather than a defect in the rule. Clearing costs
-// nothing and settles it, and it goes in the same feedVT call so the shell,
-// which writes under the same lock, cannot land between the clear and the text.
 func paintPane(t *testing.T, p *PTY, data string) {
 	t.Helper()
 	feedVT(t, p, clearScreen+data)
 	p.lastOutput.Store(time.Now().UnixNano())
 }
 
-// clearScreen erases the display and homes the cursor.
 const clearScreen = "\x1b[2J\x1b[H"
 
-// backdateAgentClaim moves a window's claim timestamp into the past, standing in
-// for the seconds a harness spends working between reporting that it started and
-// stopping on a prompt.
 func backdateAgentClaim(t *testing.T, sess *Session, windowID string, by time.Duration) {
 	t.Helper()
 	sess.stateMu.Lock()
@@ -123,9 +97,6 @@ func backdateAgentClaim(t *testing.T, sess *Session, windowID string, by time.Du
 	t.Fatalf("window %s not found", windowID)
 }
 
-// blockedPaneClaimedByItsHarness is the defect's setup: a pane whose harness
-// reported working for itself at report rank, then stopped and painted a
-// permission prompt without saying anything further.
 func blockedPaneClaimedByItsHarness(t *testing.T) (*Session, string, string) {
 	t.Helper()
 	sess, winID := bareSessionWithWindow(t)
@@ -204,8 +175,6 @@ func TestAReportThatNamesNoHarnessLeavesTheAttributionAlone(t *testing.T) {
 		t.Fatalf("detection promoted %d windows, want 1", n)
 	}
 
-	// The shim's UserPromptSubmit hook, which is the no-source, no-harness path
-	// every caller predating the harness registry takes.
 	if err := sess.SetDaemonWindowAgentState(winID, AgentStateWorking, ""); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
@@ -213,8 +182,6 @@ func TestAReportThatNamesNoHarnessLeavesTheAttributionAlone(t *testing.T) {
 		t.Fatalf("harness = %q after a report that named none, want the detector's claude-code", got)
 	}
 
-	// The turn then stops on a permission prompt the hooks do not cover, which is
-	// the case the screen tier and the visible-blocker override exist for.
 	backdateAgentClaim(t, sess, winID, agentBlockerOverrideGrace+time.Second)
 	paintPane(t, sess.GetPTY(ptyID), claudePermissionPrompt)
 
@@ -226,7 +193,6 @@ func TestAReportThatNamesNoHarnessLeavesTheAttributionAlone(t *testing.T) {
 	}
 }
 
-// agentHarnessIDOf reads the harness a window is attributed to.
 func agentHarnessIDOf(t *testing.T, sess *Session, windowID string) string {
 	t.Helper()
 	for _, w := range sess.GetState().Windows {
@@ -258,9 +224,6 @@ func TestTheOverrideIsHandedBackWhenThePromptLeaves(t *testing.T) {
 		t.Fatalf("state = %q, want needs_input before the prompt leaves", got)
 	}
 
-	// The prompt is still up, so the next look matches the same rule again. That
-	// is the standing override rather than a fresh claim, and it has to keep
-	// hold of what it displaced or there would be nothing left to hand back.
 	if !sess.scanScreenForAgent(ptyID, reg) {
 		t.Fatal("the prompt did not match while it is still on the screen")
 	}
@@ -268,9 +231,6 @@ func TestTheOverrideIsHandedBackWhenThePromptLeaves(t *testing.T) {
 		t.Fatalf("prior = %+v, want the displaced claim still held", prior)
 	}
 
-	// The user answered: the pane repaints over the question, which is the only
-	// way a prompt can ever leave a screen, and that repaint is what runs the
-	// look that ends the override.
 	paintPane(t, sess.GetPTY(ptyID), "Running tests...\r\n")
 	if sess.scanScreenForAgent(ptyID, reg) {
 		t.Fatal("a screen with no prompt on it still matched a rule")
@@ -284,8 +244,6 @@ func TestTheOverrideIsHandedBackWhenThePromptLeaves(t *testing.T) {
 		t.Fatalf("claim = %+v, want the report's claim back and the override gone", claim)
 	}
 
-	// And the restored claim is an ordinary one again, so the silence timer can
-	// demote it the way it always could. Nothing is stuck.
 	const stall = 30 * time.Second
 	backdateAgentClaim(t, sess, winID, stall+time.Second)
 	look := func(id string) bool { return sess.scanScreenForAgent(id, reg) }
@@ -319,7 +277,6 @@ func TestAFreshReportIsNotSecondGuessedByARule(t *testing.T) {
 		t.Fatalf("state = %q, want working: the report is seconds old and outranks the rule", got)
 	}
 
-	// The same screen, once the report has stood unrefreshed past the grace.
 	backdateAgentClaim(t, sess, winID, agentBlockerOverrideGrace+time.Second)
 	if !sess.scanScreenForAgent(ptyID, reg) {
 		t.Fatal("the prompt on the screen did not match the second time")
@@ -335,10 +292,6 @@ func TestAFreshReportIsNotSecondGuessedByARule(t *testing.T) {
 func TestAClaimTheScreenHasNotPaintedOverIsNotStale(t *testing.T) {
 	sess, winID, _ := blockedPaneClaimedByItsHarness(t)
 
-	// The prompt was already on the screen when the harness reported working, so
-	// the report is old without having been painted over. The report goes
-	// straight to the gate because a live PTY's shell writes on its own schedule
-	// and would otherwise supply an output time the test did not choose.
 	stale := time.Now().Add(-10 * time.Second).UnixNano()
 	if _, _, err := sess.ApplyAgentReport(winID, AgentReport{
 		State:       AgentStateNeedsInput,
@@ -410,8 +363,6 @@ func TestIdlePaneArmsNoTimers(t *testing.T) {
 	sess, _, ptyID := agentPaneWithHarness(t, "claude-code", AgentStateWorking)
 	pty := sess.GetPTY(ptyID)
 
-	// Long enough that a timer armed at session start would have fired and
-	// re-armed by now, had one existed.
 	time.Sleep(2 * screenSettleDelay)
 
 	pty.screenSettleMu.Lock()

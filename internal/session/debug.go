@@ -162,7 +162,6 @@ func (b *LogBuffer) Clear() {
 	b.count = 0
 }
 
-// timeNow is a variable to allow testing
 var timeNow = time.Now
 
 var (
@@ -173,13 +172,10 @@ var (
 )
 
 func init() {
-	// Initialize default logger
 	debugLogger = log.New(os.Stderr, "[TUIOS] ", log.LstdFlags|log.Lmicroseconds)
 
-	// Initialize log buffer with 1000 entries
 	logBuffer = NewLogBuffer(1000)
 
-	// Check environment variable for initial debug level
 	if level := os.Getenv("TUIOS_LOG_LEVEL"); level != "" {
 		SetDebugLevel(ParseDebugLevel(level))
 	}
@@ -223,19 +219,11 @@ func ProtocolLog(level DebugLevel, format string, args ...any) {
 	logRaw(level, fmt.Sprintf(format, args...))
 }
 
-// logRaw records one already-formatted line. Every sink the daemon has is fed
-// from here, so a line cannot reach the ring and miss the file.
-//
-// It takes the message rather than a format string because the callers that do
-// not own their text (the standard library logger, an error string) would have
-// their per-cent signs read as verbs.
 func logRaw(level DebugLevel, message string) {
-	// Always store in buffer (regardless of debug level)
 	if logBuffer != nil {
 		logBuffer.Add(level.String(), message)
 	}
 
-	// Only print if debug level is high enough
 	if GetDebugLevel() >= level {
 		debugMu.RLock()
 		logger := debugLogger
@@ -243,8 +231,6 @@ func logRaw(level DebugLevel, message string) {
 		logger.Print(message)
 	}
 
-	// The file keeps errors and basic events whatever the level, and follows the
-	// level for anything above them.
 	if alwaysFile(level) || GetDebugLevel() >= level {
 		writeDaemonLogFile(level.String(), message)
 	}
@@ -271,18 +257,16 @@ func LogMessage(direction string, msg *Message) {
 		return
 	}
 
-	// Skip high-frequency messages unless verbose
 	if level < DebugVerbose {
 		switch msg.Type {
 		case MsgPTYOutput, MsgInput:
-			return // Skip PTY I/O at normal message level
+			return
 		}
 	}
 
 	typeName := MessageTypeName(msg.Type)
 
 	if level >= DebugTrace {
-		// Full payload dump (truncated for sanity)
 		payloadPreview := msg.Payload
 		if len(payloadPreview) > 256 {
 			payloadPreview = payloadPreview[:256]
@@ -295,9 +279,6 @@ func LogMessage(direction string, msg *Message) {
 	}
 }
 
-// messageTypeNames names every message type, indexed by its wire value.
-// Reserved types, which nothing sends any more, are labelled as such so a
-// protocol log that shows one points at a peer from another build.
 var messageTypeNames = [...]string{
 	MsgHello:             "Hello",
 	MsgAttach:            "Attach",

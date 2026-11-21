@@ -13,41 +13,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// A pane in this daemon's session whose process runs on another machine: the
-// near half of a global session. The far half is hostedPane in
-// hosted_pane.go, and the case for the split is written there.
-//
-// This is a paneIO and nothing more. PTY takes it in place of the pty it would
-// have spawned, and from that line upward nothing changes: the same emulator
-// parses the bytes, the same scrollback keeps them, the same ring buffer
-// sequences them and the same subscribers receive them. A window holding one
-// of these is an ordinary window of an ordinary session, which is what makes a
-// global session ordinary everywhere else in the daemon.
-//
-// The four methods map onto two channels, and which one carries what is forced
-// by the shape of the far side. Read, Write and Close are the pane's own
-// connection, raw from the open reply onward. Resize cannot be: the connection
-// is carrying the process's bytes and framing them to make room for a control
-// message would mean inventing a protocol on top of a pty. So a resize goes
-// out as a verb on the link's control stream instead, addressed by the pane id
-// the open returned.
-
-// remotePaneOpenBudget bounds the open. It covers dialing a stream on a link
-// that is already up and the far daemon spawning a process, both of which are
-// fast or broken.
 const remotePaneOpenBudget = 20 * time.Second
 
-// remotePaneResizeBudget bounds a resize. A resize that does not land is not
-// worth waiting on: the next one supersedes it, and the pane is still legible
-// at the size it has.
 const remotePaneResizeBudget = 10 * time.Second
 
-// maxRemotePaneReply bounds the far daemon's reply line.
 const maxRemotePaneReply = 64 * 1024
 
-// paneFederation is the part of federation.Manager a remote pane uses. It is
-// an interface so the transport can be tested against a fake pair of daemons
-// rather than against a machine over ssh.
 type paneFederation interface {
 	OpenConnection(ctx context.Context, host string) (io.ReadWriteCloser, error)
 	Call(ctx context.Context, host, verb string, params any) (json.RawMessage, error)
@@ -59,85 +30,40 @@ type remotePane struct {
 	fed  paneFederation
 
 	stream io.ReadWriteCloser
-	// br is the only reader of stream. It is the reader the open reply was
-	// read through, and it is kept rather than discarded because the far side
-	// may have written the process's first bytes into the same packet as the
-	// reply: dropping it would lose the shell's first prompt.
-	br *bufio.Reader
+	br     *bufio.Reader
 
-	mu     sync.Mutex
-	closed bool
-	// cwd is where the far machine last said the process was, with the time it
-	// said so and whether an ask is already out. See Cwd.
+	mu          sync.Mutex
+	closed      bool
 	cwd         string
 	cwdAt       time.Time
 	cwdInflight bool
-	// onCwdChange is called when the far machine reports a directory that is
-	// not the one held, so the session can tell its clients. It is set by the
-	// session that owns the pane and is nil in a test that builds one by hand.
 	onCwdChange func()
-	// fg is what the far machine last said is running in the pane, on the same
-	// terms as cwd: a cached answer, a time it was given, and whether an ask
-	// is already out. See Foreground.
-	fg         foregroundInfo
-	fgRunning  bool
-	fgAt       time.Time
-	fgInflight bool
+	fg          foregroundInfo
+	fgRunning   bool
+	fgAt        time.Time
+	fgInflight  bool
 
-	// callsToken opens the pane's report channel on the far machine; see
-	// hosted_calls.go. Empty from a far daemon too old to have one.
 	callsToken string
-	// done is closed when the pane closes. It is nil in a test that builds a
-	// pane by hand.
-	done chan struct{}
+	done       chan struct{}
 
-	// resumeToken and grace are what the far machine gave for reattaching
-	// the pane after the link drops: the secret, and how long it keeps the
-	// process. Empty and zero from a far daemon too old to keep one, or one
-	// whose policy gives no grace; the pane then ends with the link, as it
-	// always did. See hosted_resume.go for the far half.
-	resumeToken string
-	grace       time.Duration
-	// received counts the bytes of the process's output read so far, which
-	// is where a reattach asks the far machine to resume from. Only Read
-	// touches it.
-	received int64
-	// pendingErr is a read error that came with bytes, kept for the next Read.
-	pendingErr error
-	// ended is why the pane cannot come back, once reconnect has given up:
-	// remoteEndedForgotten or remoteEndedGrace. Empty while it runs or
-	// retries.
-	ended string
-	// link is "reconnecting" while the link is lost and the pane is being
-	// reattached, and linkUntil is when the far machine stops keeping the
-	// process. onLinkChange tells the session, so its clients are told.
-	link         string
-	linkUntil    time.Time
-	onLinkChange func()
-	// width and height are the last size asked for, sent again after a
-	// reattach, with xpixel and ypixel, its size in pixels.
+	resumeToken    string
+	grace          time.Duration
+	received       int64
+	pendingErr     error
+	ended          string
+	link           string
+	linkUntil      time.Time
+	onLinkChange   func()
 	width, height  int
 	xpixel, ypixel int
-	// pixels is set when the far machine takes a size in pixels with
-	// resize-pane. One that does not gets cells only.
-	pixels bool
-	// kitty writes the images the far machine read for the pane's kitty
-	// graphics commands into its output. Nil when the far machine does not
-	// read them. See kitty_link_near.go.
-	kitty *kittyLinkNear
+	pixels         bool
+	kitty          *kittyLinkNear
 }
 
-// remotePaneLinkReconnecting is the link state of a pane being reattached.
 const remotePaneLinkReconnecting = "reconnecting"
 
-// remotePaneLinkEnded is the link state of a pane that cannot come back: the
-// far daemon no longer has it, or the link stayed down past its grace. It
-// stays for as long as the window does, so every caller reads the pane as
-// ended rather than as a stream that broke.
 const remotePaneLinkEnded = "ended"
 
-// remotePaneEndedError is what a write or a resize gets on a pane that ended
-// on the other machine. It names the machine and why.
 type remotePaneEndedError struct {
 	host, why string
 }
@@ -146,28 +72,23 @@ func (e *remotePaneEndedError) Error() string {
 	return "the pane on " + e.host + " ended: " + e.why
 }
 
-// The causes a pane that cannot come back is given, in words.
 const (
 	remoteEndedForgotten = "its daemon there no longer has it: it restarted, or the pane's process ended there"
 	remoteEndedGrace     = "the link stayed down past the time the machine kept the pane for"
 )
 
-// linkState is the pane's link state and, while reconnecting, when the far
-// machine's grace ends.
 func (p *remotePane) linkState() (string, time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.link, p.linkUntil
 }
 
-// isClosed reports whether Close has run.
 func (p *remotePane) isClosed() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.closed
 }
 
-// openRemotePane starts a process on host and returns the pane it speaks to.
 func openRemotePane(ctx context.Context, fed paneFederation, host string, spec hostedPaneSpec) (*remotePane, error) {
 	if fed == nil {
 		return nil, errfmt.Errorf("this daemon has no links, so it cannot put a pane on %s", host)
@@ -199,25 +120,17 @@ func openRemotePane(ctx context.Context, fed paneFederation, host string, spec h
 	return p, nil
 }
 
-// paneOpened is the part of the open-pane reply the owner keeps. CallsToken is
-// empty from a far daemon too old to carry reports from the pane.
 type paneOpened struct {
-	Pane        string `json:"pane"`
-	CallsToken  string `json:"calls_token"`
-	ResumeToken string `json:"resume_token"`
-	Grace       int64  `json:"grace"`
-	Resumed     bool   `json:"resumed"`
-	Gap         bool   `json:"gap"`
-	// KittyMediaToken is set when the far machine reads the files the
-	// pane's kitty graphics commands name. See kitty_link_near.go.
+	Pane            string `json:"pane"`
+	CallsToken      string `json:"calls_token"`
+	ResumeToken     string `json:"resume_token"`
+	Grace           int64  `json:"grace"`
+	Resumed         bool   `json:"resumed"`
+	Gap             bool   `json:"gap"`
 	KittyMediaToken string `json:"kitty_media_token"`
-	// Pixels is set when resize-pane takes xpixel and ypixel there.
-	Pixels bool `json:"pixels"`
+	Pixels          bool   `json:"pixels"`
 }
 
-// openPaneReply sends open-pane on a fresh connection to the far daemon and
-// reads its whole reply. On success the connection is the pty from here on,
-// and the reader that is returned is the only one that may read it.
 func openPaneReply(stream io.ReadWriteCloser, spec hostedPaneSpec) (paneOpened, *bufio.Reader, error) {
 	br := bufio.NewReader(stream)
 	resp, err := sendOpenPane(stream, br, spec)
@@ -244,14 +157,11 @@ func openPaneReply(stream io.ReadWriteCloser, spec hostedPaneSpec) (paneOpened, 
 	return *resp.Result, br, nil
 }
 
-// openPaneResponse is one reply to open-pane.
 type openPaneResponse struct {
 	Result *paneOpened `json:"result"`
 	Error  *verbError  `json:"error"`
 }
 
-// sendOpenPane writes one open-pane request for spec and reads its reply
-// through br, which must be the only reader of stream.
 func sendOpenPane(stream io.Writer, br *bufio.Reader, spec hostedPaneSpec) (openPaneResponse, error) {
 	params, err := jsonx.Marshal(spec)
 	if err != nil {
@@ -279,11 +189,6 @@ func sendOpenPane(stream io.Writer, br *bufio.Reader, spec hostedPaneSpec) (open
 	return resp, nil
 }
 
-// Read returns the process's output. The stream ends when the far side closes
-// it, which is what the process exiting and the link dropping both look like
-// from here. A pane the far machine keeps for a grace is reattached (see
-// reconnect), and Read carries on from the byte it stopped at; any other end
-// is returned, and PTY treats it the way it treats a local shell exiting.
 func (p *remotePane) Read(b []byte) (int, error) {
 	if p.kitty != nil {
 		return p.kitty.read(b, p.readRaw)
@@ -291,7 +196,6 @@ func (p *remotePane) Read(b []byte) (int, error) {
 	return p.readRaw(b)
 }
 
-// readRaw is Read without the images: the far machine's bytes as they came.
 func (p *remotePane) readRaw(b []byte) (int, error) {
 	for {
 		p.mu.Lock()
@@ -327,13 +231,8 @@ func (p *remotePane) readRaw(b []byte) (int, error) {
 	}
 }
 
-// errPaneReconnecting is what a write gets while the link is being restored.
 var errPaneReconnecting = errors.New("the link to this pane's machine is down and tuios is reconnecting")
 
-// Write sends input to the process. While the pane is being reattached there
-// is nowhere to send it, and the keystrokes are refused rather than queued:
-// typing into a pane whose screen is frozen and replaying it later is worse
-// than typing again.
 func (p *remotePane) Write(b []byte) (int, error) {
 	p.mu.Lock()
 	closed, stream, link, ended := p.closed, p.stream, p.link, p.ended
@@ -350,22 +249,10 @@ func (p *remotePane) Write(b []byte) (int, error) {
 	return stream.Write(b)
 }
 
-// Resize tells the far daemon the rectangle this pane is being drawn into.
-//
-// It is sent on the link's control stream rather than on the pane's own
-// connection, and it is best effort: a resize that fails leaves the pane
-// readable at the size it already had, and the next layout change sends
-// another. A pane that the far side has forgotten reports itself, so the
-// caller learns the process is gone from the resize as well as from the read.
 func (p *remotePane) Resize(width, height int) error {
 	return p.SetWinsize(width, height, 0, 0)
 }
 
-// SetWinsize is Resize with the size in pixels, which kitty graphics and
-// sixel programs read to scale their images (kitten icat refuses to draw
-// without it). It makes the pane a ptyspawn.WinsizeSetter. A far machine
-// that does not take pixels is sent the cells alone, and fills the pixels in
-// from its fallback cell.
 func (p *remotePane) SetWinsize(width, height, xpixel, ypixel int) error {
 	p.mu.Lock()
 	closed, ended := p.closed, p.ended
@@ -384,7 +271,6 @@ func (p *remotePane) SetWinsize(width, height, xpixel, ypixel int) error {
 	return err
 }
 
-// resizeParams is a resize-pane request for this pane.
 func (p *remotePane) resizeParams(width, height, xpixel, ypixel int) map[string]any {
 	params := map[string]any{"pane": p.id, "width": width, "height": height}
 	if p.pixels && xpixel > 0 && ypixel > 0 {
@@ -393,16 +279,6 @@ func (p *remotePane) resizeParams(width, height, xpixel, ypixel int) map[string]
 	return params
 }
 
-// Close ends the pane. Closing the stream is what tells the far side: its
-// relay sees the read end, and it kills the process rather than leaving a
-// shell on a pty nobody holds.
-//
-// A pane the far machine would keep for a grace is ended there with
-// close-pane as well, since a closed stream is also what a dropped link looks
-// like, and the far machine would otherwise keep the process waiting for a
-// reattach that is not coming. It is sent on its own goroutine and bounded:
-// Close must not wait on another machine, and a link that is down cannot
-// carry it anyway, in which case the grace ends the process there.
 func (p *remotePane) Close() error {
 	p.mu.Lock()
 	if p.closed {
@@ -425,27 +301,11 @@ func (p *remotePane) Close() error {
 	return stream.Close()
 }
 
-// remotePaneRetryMin and remotePaneRetryMax bound the wait between attempts
-// to reattach a pane: soon after the drop, when a flapping link is most
-// likely back, then no more often than every few seconds.
 const (
 	remotePaneRetryMin = 250 * time.Millisecond
 	remotePaneRetryMax = 5 * time.Second
 )
 
-// reconnect reattaches the pane after its stream ended: it opens a new
-// connection to the far daemon and sends open-pane with resume, until one is
-// answered or the far machine's grace runs out. While it tries, the pane's
-// link state is reconnecting, which the session shows its clients.
-//
-// A reply of unknown_pane, forbidden or invalid_params is final: the process
-// exited, its grace ran out, or the far machine will not take the token. That
-// and a grace that ran out end the pane, which is returned as an error.
-//
-// The first attempt is made before the pane says it is reconnecting. A stream
-// also ends when the far process exits, and then the link is up and the far
-// daemon answers unknown_pane at once: the pane closes without flashing a
-// reconnect it never needed.
 func (p *remotePane) reconnect(cause error) error {
 	deadline := time.Now().Add(p.grace)
 	wait := remotePaneRetryMin
@@ -462,9 +322,6 @@ func (p *remotePane) reconnect(cause error) error {
 		if stream != nil {
 			p.mu.Lock()
 			old := p.stream
-			// The bytes the old reader held and the pane had not read are
-			// the ones the far machine replays from received, so dropping
-			// the old reader loses nothing and repeats nothing.
 			p.stream, p.br = stream, br
 			width, height, closed := p.width, p.height, p.closed
 			p.mu.Unlock()
@@ -480,14 +337,6 @@ func (p *remotePane) reconnect(cause error) error {
 		}
 		if final {
 			if attempt == 0 && errors.Is(cause, io.EOF) {
-				// The far side closed the stream itself and, with the link
-				// up, said at once that it has no such pane: the process
-				// exited there, which is an ordinary end, not one to warn
-				// about. A far daemon that restarted is told apart by the
-				// stream ending with the link, or by the first attempt not
-				// being answered. One that restarted and is back before the
-				// first attempt reads as an ordinary end; a far daemon that
-				// answers "exited" apart from "unknown" would close that gap.
 				p.setLink("", time.Time{})
 				LogBasic("Pane %s on %s ended: its process exited there", shortID(p.id), p.host)
 				return errPaneGone
@@ -506,9 +355,6 @@ func (p *remotePane) reconnect(cause error) error {
 	return errPaneGone
 }
 
-// end records that the pane cannot come back and why, and tells the session,
-// whose snapshot then shows the window as ended (host_link "ended" and
-// host_ended) to clients, list-windows, list-agents and wait-for alike.
 func (p *remotePane) end(why string) {
 	p.mu.Lock()
 	p.ended = why
@@ -517,18 +363,14 @@ func (p *remotePane) end(why string) {
 	p.setLink(remotePaneLinkEnded, time.Time{})
 }
 
-// endedWhy is why the pane cannot come back, or "" while it runs.
 func (p *remotePane) endedWhy() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.ended
 }
 
-// errPaneGone is a pane that cannot be reattached.
 var errPaneGone = errors.New("the pane's process on the other machine is gone")
 
-// reattachOnce makes one attempt. It returns the new stream and its reader on
-// success, and final when the far machine said the pane cannot come back.
 func (p *remotePane) reattachOnce() (paneOpened, io.ReadWriteCloser, *bufio.Reader, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), remotePaneOpenBudget)
 	stream, err := p.fed.OpenConnection(ctx, p.host)
@@ -561,10 +403,6 @@ func (p *remotePane) reattachOnce() (paneOpened, io.ReadWriteCloser, *bufio.Read
 	return *resp.Result, stream, br, false
 }
 
-// afterReattach sends the pane's size again, since a resize while the link
-// was down went nowhere. When more output was missed than the far ring holds,
-// the size is nudged down a row and back, so a full screen program draws its
-// whole screen again rather than leaving what the gap cut in half.
 func (p *remotePane) afterReattach(gap bool, width, height int) {
 	if width <= 0 || height <= 0 {
 		return
@@ -582,7 +420,6 @@ func (p *remotePane) afterReattach(gap bool, width, height int) {
 	}()
 }
 
-// setLink records the link state and tells the session.
 func (p *remotePane) setLink(state string, until time.Time) {
 	p.mu.Lock()
 	changed := p.link != state
@@ -612,12 +449,6 @@ func (s *Session) SetRemotePaneHook(hook func(windowID string, p *remotePane)) {
 	s.onRemotePane = hook
 }
 
-// openRemotePaneFor starts this session's window on another machine.
-//
-// The terminal type and the colour support travel with the request, because
-// the pane is drawn by this session's emulator and the program at the far end
-// has to be told what it is really talking to. The shell does not travel: see
-// below.
 func (s *Session) openRemotePaneFor(windowID, host string, width, height int, cwd string, command []string) (paneIO, error) {
 	fed := s.fed
 	if fed == nil {
@@ -630,33 +461,12 @@ func (s *Session) openRemotePaneFor(windowID, host string, width, height int, cw
 		Command: command,
 		Session: s.Name(),
 	}
-	// The window id goes only when there is a daemon to hold the report
-	// channel it promises: a far machine that gets it exports it and waits for
-	// the channel before answering a report.
 	if s.onRemotePane != nil {
 		spec.Window = windowID
 	}
-	// Ask the far machine to keep the process through a dropped link. It
-	// decides how long from its own policy; an older one refuses the param
-	// and the pane ends with the link as before.
 	spec.Resumable = true
-	// Ask the far machine to read the files kitty graphics commands name,
-	// where the paths mean something. An older one refuses the param, and
-	// file media are refused as before.
 	spec.KittyMedia = true
 	if s.config != nil {
-		// The terminal type travels and the shell does not.
-		//
-		// TERM and COLORTERM describe the emulator the program is talking to,
-		// and that emulator is here, so this session's answer is the right one
-		// wherever the process runs. The shell is a file that has to exist on
-		// the machine running it. Sending this session's shell made the far
-		// side try to exec a path from this machine: a laptop running zsh
-		// asked a Linux host for /bin/zsh and got "no such file or directory".
-		//
-		// So the far machine picks its own shell, which is what open-pane does
-		// with an empty one. A caller that wants a particular shell over there
-		// can still name it, but it has to be a path that exists over there.
 		spec.Term, spec.ColorTerm = s.config.Term, s.config.ColorTerm
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), remotePaneOpenBudget)
@@ -672,20 +482,6 @@ func (s *Session) openRemotePaneFor(windowID, host string, width, height int, cw
 	return p, nil
 }
 
-// Foreground is what the far machine last said is running in this pane, and
-// whether it could read anything at all.
-//
-// It is the answer the agent detector needs and the one thing the daemon that
-// owns the window cannot work out for itself: the pane's process is on another
-// machine, so the pid here is zero and every tier that starts from a process
-// gives up. Asking the far machine is the only way to know, which is exactly
-// the argument pane-cwd makes about directories.
-//
-// It never waits. The cached answer is returned at once and a stale one starts
-// a refresh on its own goroutine, because this is called from the detector's
-// tick and a round trip to another machine must not hold that up. The first
-// call therefore reports nothing running, which is what a pane whose process
-// has not been looked at yet honestly is.
 func (p *remotePane) Foreground() (foregroundInfo, bool) {
 	p.mu.Lock()
 	info, running := p.fg, p.fgRunning
@@ -699,16 +495,8 @@ func (p *remotePane) Foreground() (foregroundInfo, bool) {
 	return info, running
 }
 
-// remotePaneAgentTTL is how long an answer about what a pane is running stays
-// good before it is asked for again.
-//
-// Longer than the directory's. A directory changes the moment somebody types
-// cd and the rail is showing it, so a second is already slow. What a pane is
-// running changes when a command starts or ends, the detector's own tick is
-// two seconds, and the answer costs a round trip to another machine.
 const remotePaneAgentTTL = 2 * time.Second
 
-// refreshForeground asks the far machine what the pane is running.
 func (p *remotePane) refreshForeground() {
 	ctx, cancel := context.WithTimeout(context.Background(), remotePaneResizeBudget)
 	defer cancel()
@@ -717,8 +505,6 @@ func (p *remotePane) refreshForeground() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.fgInflight = false
-	// The clock moves whether or not the answer was useful, so a machine that
-	// is refusing is asked on the same schedule rather than once per tick.
 	p.fgAt = time.Now()
 	if err != nil {
 		return
@@ -744,20 +530,8 @@ func (p *remotePane) refreshForeground() {
 	p.fgRunning = res.Running
 }
 
-// remotePaneCwdTTL is how long a directory the far machine gave stays good
-// before a fresher one is asked for. A shell changes directory when somebody
-// types cd, so a second is both far faster than anyone types and slow enough
-// that a rail redrawing at sixty frames a second asks once.
 const remotePaneCwdTTL = time.Second
 
-// Cwd is where the far machine last said the pane's process was.
-//
-// It never waits. The caller is GetState, which runs on the render path, and a
-// call over a link takes about as long as a frame does even when the link is
-// healthy. So this answers from the last reply and starts a new ask when that
-// one is stale, which means the first call after a cd is a frame behind and
-// every one after it is current. A rail one frame behind on a directory is not
-// a fault anybody can see; a rail that stops drawing while it asks is.
 func (p *remotePane) Cwd() (string, bool) {
 	p.mu.Lock()
 	cwd, asked, closed, inflight := p.cwd, p.cwdAt, p.closed, p.cwdInflight
@@ -770,10 +544,6 @@ func (p *remotePane) Cwd() (string, bool) {
 	return cwd, cwd != ""
 }
 
-// askCwd asks the far machine where the pane is now, unless an ask is already
-// out. Unlike Cwd it does not wait out the time to live: its caller paces it
-// (Session.noteCwdOnOutput), and the look that follows a quiet pane has to
-// reach the far machine even when the last answer is younger than a second.
 func (p *remotePane) askCwd() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -784,7 +554,6 @@ func (p *remotePane) askCwd() {
 	go p.refreshCwd()
 }
 
-// refreshCwd asks the far machine where the pane is and stores the answer.
 func (p *remotePane) refreshCwd() {
 	ctx, cancel := context.WithTimeout(context.Background(), remotePaneResizeBudget)
 	defer cancel()
@@ -793,8 +562,6 @@ func (p *remotePane) refreshCwd() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.cwdInflight = false
-	// The clock moves whether or not the answer was useful, so a machine that
-	// is refusing is asked once a second rather than once a frame.
 	p.cwdAt = time.Now()
 	if err != nil {
 		return
@@ -810,9 +577,6 @@ func (p *remotePane) refreshCwd() {
 	if !changed || notify == nil {
 		return
 	}
-	// Outside the lock, and on this goroutine rather than a new one: the push
-	// writes to client sockets, and holding a pane's lock across that would
-	// put a slow client in front of the next read of where the pane is.
 	go notify()
 }
 
@@ -842,12 +606,6 @@ func (p *remotePane) refreshCwd() {
 // moved by a key while its shell reported a new folder went back to the
 // workspace it left.
 func (s *Session) PublishLiveFacts() {
-	// The cached read goes first. liveCwds holds its answer for a second so
-	// the render path does not ask the operating system per frame, and the
-	// push that created the pane had already cached the answer from before the
-	// far machine replied: an empty one. Publishing without clearing it sent
-	// that same empty answer again, which is the whole reason this was still
-	// broken after the push itself was fixed.
 	s.forgetCwdCache()
 	_ = s.mutateState(func(state *SessionState) error {
 		s.noteTreeOpLocked(state.Version+1, "", treeOpNoWorkspace)
@@ -855,10 +613,6 @@ func (s *Session) PublishLiveFacts() {
 	})
 }
 
-// remoteForeground is what the far machine says this pane is running, for a
-// pane whose process is on another machine. The last result says whether this
-// is such a pane at all, which is what tells "nothing is running there" apart
-// from "this question does not apply here".
 func (p *PTY) remoteForeground() (foregroundInfo, bool, bool) {
 	rp, ok := p.pty.(*remotePane)
 	if !ok {

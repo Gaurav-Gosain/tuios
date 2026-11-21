@@ -6,21 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// The theme event.
-//
-// A theme is a client's: each TUI client has its own, and it changes on the
-// client, through the theme picker, the settings page, the light and dark pair
-// or a theme file. A program that follows the tuios theme had to poll for it
-// or ride the after-theme-change hook, which waits until the picker closes.
-// So a client reports its theme to the daemon with MsgClientTheme on every
-// change, previews from the theme picker and the theme editor included, and
-// the daemon publishes it as a theme event. A follower can repaint while the
-// person browses themes, and the last event, with preview false, is the theme
-// that stays.
-//
-// The event is opt-in: it reaches only a subscription that names it in types,
-// so a subscriber written before it, which names no types, sees nothing new.
-
 // ClientThemePayload is the body of MsgClientTheme: the theme a client shows.
 type ClientThemePayload struct {
 	// Theme is the theme id, or "none" when no theme is in force and the
@@ -46,17 +31,12 @@ type ThemeEvent struct {
 	Preview    bool   `json:"preview"`
 }
 
-// maxClientThemeFrame bounds a MsgClientTheme frame. The payload is a theme
-// id, a colour and two flags.
 const maxClientThemeFrame = 1024
 
-// maxThemeIDBytes bounds the theme id a client reports.
 const maxThemeIDBytes = 128
 
 var hexColour = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
-// handleClientTheme publishes the theme a client reports as a theme event in
-// the client's session.
 func (d *Daemon) handleClientTheme(cs *connState, msg *Message) error {
 	var p ClientThemePayload
 	if err := msg.ParsePayload(&p); err != nil {

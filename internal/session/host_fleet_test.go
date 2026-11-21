@@ -11,14 +11,8 @@ import (
 	"time"
 )
 
-// The fleet, proved with two real daemons linked by the real proxy: what waits
-// on the far machine reaches the hub's Inbox and listings without anyone
-// polling, and stays visible, marked stale, while the link is down.
-
-// fleetBudget bounds a wait on something crossing the link.
 const fleetBudget = 15 * time.Second
 
-// hubVerb dials the hub's socket, which GetSocketPath names in these tests.
 func hubVerb(t *testing.T) *verbConn {
 	t.Helper()
 	sp, err := GetSocketPath()
@@ -28,7 +22,6 @@ func hubVerb(t *testing.T) *verbConn {
 	return dialVerb(t, sp)
 }
 
-// waitHostAttention polls the hub's list-attention until pred holds.
 func waitHostAttention(t *testing.T, c *verbConn, params, why string, pred func([]map[string]any) bool) []map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(fleetBudget * testDeadlineScale)
@@ -44,7 +37,6 @@ func waitHostAttention(t *testing.T, c *verbConn, params, why string, pred func(
 	}
 }
 
-// waitFleetLive blocks until the hub follows host by stream.
 func waitFleetLive(t *testing.T, hub *Daemon, host string) {
 	t.Helper()
 	deadline := time.Now().Add(fleetBudget * testDeadlineScale)
@@ -89,7 +81,6 @@ func TestAHostsItemsGoStaleWhenTheLinkDropsAndFreshWhenItReturns(t *testing.T) {
 	c := hubVerb(t)
 	waitHostAttention(t, c, "", "the errored pane on build", withHost("build"))
 
-	// The session listing is cached by the refresh the event triggered.
 	deadline := time.Now().Add(fleetBudget * testDeadlineScale)
 	for {
 		if rows, at := hub.fleet.cachedSessions("build"); len(rows) > 0 && !at.IsZero() {
@@ -115,7 +106,6 @@ func TestAHostsItemsGoStaleWhenTheLinkDropsAndFreshWhenItReturns(t *testing.T) {
 		t.Errorf("a stale item carries no seen_at: %v", stale[0])
 	}
 
-	// The listing keeps build's rows while it is down, stale.
 	res := result(t, c.call(t, `{"id":1,"verb":"list-host-sessions","params":{"host":"build"}}`))
 	hosts, _ := res["hosts"].([]any)
 	var entry map[string]any
@@ -276,7 +266,6 @@ func TestASessionFilterDoesNotMatchAHostsInboxItem(t *testing.T) {
 	}
 }
 
-// cannedConn answers each request line with the next canned reply.
 type cannedConn struct {
 	replies []string
 	out     bytes.Buffer

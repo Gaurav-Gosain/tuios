@@ -17,39 +17,22 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// Drop files on a pane: the files a person drops from the desktop onto a pane
-// whose shell is on another machine have to be on that machine before a path
-// to them means anything there.
-//
-// Each drop goes into a folder of its own inside one private folder under the
-// far daemon's runtime directory: the folder is the user's alone (0700), each
-// copy is owner only, and the folder keeps at most dropKeepBytes and nothing
-// older than dropKeepAge. The bytes travel as transfers, so a large file shows
-// its progress like any other copy and survives a dropped link. paste-image
-// is the same idea for one image of at most 8 MiB in one request; this has no
-// such cap.
-
 const (
 	dropKeepBytes = 256 << 20
 	dropKeepAge   = 24 * time.Hour
 )
 
-// dropRoot is this machine's drop folder, made private if it is missing.
 func (d *Daemon) dropRoot() (string, error) {
 	root := filepath.Join(filepath.Dir(d.manager.SocketPath()), "drop")
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return "", err
 	}
-	// MkdirAll keeps the mode of a folder that was there. A drop folder that
-	// others can read is not one to write into.
 	if err := os.Chmod(root, 0o700); err != nil { //nolint:gosec // a directory needs x, and 0700 opens it to its owner only
 		return "", err
 	}
 	return root, nil
 }
 
-// pruneDrops removes whole drops, oldest first, until the folder holds no
-// drop older than dropKeepAge and at most keep bytes.
 func pruneDrops(root string, keep int64, maxAge time.Duration, now time.Time) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -94,8 +77,6 @@ func pruneDrops(root string, keep int64, maxAge time.Duration, now time.Time) {
 	}
 }
 
-// verbFileDropDir makes a new private folder for one drop and answers its
-// path. The caller copies the dropped files into it.
 func (d *Daemon) verbFileDropDir(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Bytes int64 `json:"bytes"`
@@ -107,9 +88,6 @@ func (d *Daemon) verbFileDropDir(cs *connState, params json.RawMessage) (any, *v
 	if err != nil {
 		return nil, fileError("make the drop folder", root, err)
 	}
-	// Room for this drop comes out of what the older drops may keep. A caller
-	// that names more bytes than the folder ever holds would otherwise prune
-	// every older drop, so the claim is clamped.
 	want := min(max(p.Bytes, 0), d.dropKeepBytes)
 	pruneDrops(root, d.dropKeepBytes-want, d.dropKeepAge, time.Now())
 	var b [6]byte
@@ -124,10 +102,6 @@ func (d *Daemon) verbFileDropDir(cs *connState, params json.RawMessage) (any, *v
 	return map[string]any{"dir": dir, "keep_bytes": d.dropKeepBytes, "keep_hours": int(d.dropKeepAge / time.Hour)}, nil
 }
 
-// verbDropFiles gives a pane on a machine the paths of files that are on this
-// one. For this machine the paths are the answer. For a host, each file is
-// copied into a new drop folder there, and the answer has the paths there and
-// the transfers that carry them.
 func (d *Daemon) verbDropFiles(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Host  string   `json:"host"`
@@ -150,7 +124,6 @@ func (d *Daemon) verbDropFiles(cs *connState, params json.RawMessage) (any, *ver
 		if verr != nil {
 			return nil, verr
 		}
-		// A linked machine drops only files its own file verbs could read.
 		if verr := d.checkLinkRead(cs, path); verr != nil {
 			return nil, verr
 		}
@@ -200,13 +173,6 @@ func (d *Daemon) verbDropFiles(cs *connState, params json.RawMessage) (any, *ver
 	return map[string]any{"paths": remote, "dir": dir, "transfers": rows}, nil
 }
 
-// dropName is the name a dropped file gets in its drop folder. The client
-// types the path into a shell, so a control character in it, which can act
-// as a key there, becomes "_", and so does a backslash: fish reads \' inside
-// single quotes as a quote, which ends the quoting a POSIX quote gives, and
-// the rest of the name would run as a command. Two files of one name in one
-// drop get " 2", " 3" ..., so each path the answer gives is the file that
-// lands there.
 func dropName(base string, used map[string]bool) string {
 	name := strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) || r == '\\' {

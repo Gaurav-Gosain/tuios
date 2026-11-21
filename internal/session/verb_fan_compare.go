@@ -18,41 +18,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Fan compare: the attempts of a fan side by side, one check run in all of
-// them, and keeping one.
-//
-// compare-fan reads counts and states, not file contents, so it is scopeRead
-// and a link needs only list. verify-fan starts a window in each sibling, so it
-// is scopeLaunch (the fan grant, reaching the caller's fan group) and a link
-// needs open and write. The command is always the caller's and the verify
-// window is opened with no grants, so a check cannot call tuios and cloning a
-// repository cannot make fan run code. keep-fan removes worktrees, so it is
-// the person's or admin's (scopeDeny), like remove-worktree, and a link needs
-// write.
-//
-// The grant and scope checks hold the named session to the caller's reach.
-// compare-fan and verify-fan then act on every sibling of that session, so
-// each sibling is held to the same reach again here (callerReachesSession): a
-// sibling the caller could not name itself is left out of the rows and gets
-// no check.
-
-// fanGitTimeout bounds all the git calls one sibling's row costs, together:
-// the merge base, the snapshot, the diff, the ahead count and the status. A
-// repository slow enough to pass it reports the row without the counts it did
-// not reach rather than holding the verb.
 const fanGitTimeout = 10 * time.Second
 
-// fanVerifyMaxCommand bounds a verify command. It is a shell line a person or
-// an agent typed, not a script.
 const fanVerifyMaxCommand = 4096
 
-// fanVerifyWindow is the name of the window a check runs in.
 const fanVerifyWindow = "verify"
 
-// fanTarget resolves a session of a fan: its session and record, or the
-// refusal for a session that is not a worktree or not part of a fan. The
-// refusal's hint names only the fan sessions the caller on cs reaches, so a
-// pane held to its own reach learns no other session's name from it.
 func (d *Daemon) fanTarget(cs *connState, name string) (*Session, *WorktreeInfo, *verbError) {
 	sess, info, verr := d.worktreeTarget(cs, name)
 	if verr != nil {
@@ -75,8 +46,6 @@ func (d *Daemon) fanTarget(cs *connState, name string) (*Session, *WorktreeInfo,
 	return sess, info, nil
 }
 
-// fanSiblings lists the sessions of info's fan, in the order fan made them:
-// the same group in the same repository.
 func (d *Daemon) fanSiblings(info *WorktreeInfo) []*Session {
 	var out []*Session
 	for _, s := range d.manager.AllSessions() {
@@ -89,8 +58,6 @@ func (d *Daemon) fanSiblings(info *WorktreeInfo) []*Session {
 	return out
 }
 
-// fanOrder sorts fan sessions the way fan numbers them: the stem, then -2,
-// -3 and on, with -10 after -9.
 func fanOrder(a, b string) int {
 	stemA, nA := fanSuffix(a)
 	stemB, nB := fanSuffix(b)
@@ -100,8 +67,6 @@ func fanOrder(a, b string) int {
 	return nA - nB
 }
 
-// fanSuffix splits "api-retry-3" into "api-retry" and 3, and gives a name
-// with no number 1.
 func fanSuffix(name string) (string, int) {
 	if i := strings.LastIndexByte(name, '-'); i > 0 {
 		if n, err := strconv.Atoi(name[i+1:]); err == nil && n > 1 {
@@ -111,10 +76,6 @@ func fanSuffix(name string) (string, int) {
 	return name, 1
 }
 
-// callerReachesSession reports whether the caller on cs may reach session
-// target: the restriction of a restricted connection, and the reach of a
-// pane without admin, as checkScope and checkGrants held the named session.
-// A caller held to neither reaches every session.
 func (d *Daemon) callerReachesSession(cs *connState, target string) bool {
 	if cs == nil {
 		return true
@@ -128,68 +89,48 @@ func (d *Daemon) callerReachesSession(cs *connState, target string) bool {
 	return true
 }
 
-// fanCompareParams are what compare-fan takes.
 type fanCompareParams struct {
 	Session string `json:"session"`
 	Changes *bool  `json:"changes"`
-	// Detail asks for each attempt's files and its first changed lines.
-	Detail bool `json:"detail"`
+	Detail  bool   `json:"detail"`
 }
 
-// Bounds of compare-fan's detail, per attempt. The ignored files are listed
-// whole up to fanIgnoredMax entries, a folder git ignores whole being one.
 const (
 	fanDetailFiles = 8
 	fanDetailLines = 6
 	fanIgnoredMax  = 200
 )
 
-// fanCompareRow is one attempt as compare-fan reports it. The counts are nil
-// when they were not asked for or git could not give them.
 type fanCompareRow struct {
-	Session      string          `json:"session"`
-	Branch       string          `json:"branch"`
-	Path         string          `json:"path"`
-	Agent        string          `json:"agent"`
-	Harness      string          `json:"harness"`
-	State        string          `json:"state"`
-	Files        *int            `json:"files,omitempty"`
-	Added        *int            `json:"added,omitempty"`
-	Removed      *int            `json:"removed,omitempty"`
-	Ahead        *int            `json:"ahead,omitempty"`
-	Dirty        *bool           `json:"dirty,omitempty"`
-	BaseSHA      string          `json:"base_sha,omitempty"`
-	PromptStatus string          `json:"prompt_status"`
-	Verify       *FanVerify      `json:"verify,omitempty"`
-	LastCommand  *fanLastCommand `json:"last_command,omitempty"`
-	Gone         bool            `json:"gone,omitempty"`
-	// Note says why the counts are missing when git failed.
-	Note string `json:"note,omitempty"`
-	// FileList and Lines are the attempt's files, most changed first, and
-	// its first changed lines, with detail.
-	FileList []worktree.FileStat `json:"file_list,omitempty"`
-	Lines    []worktree.DiffLine `json:"lines,omitempty"`
-	// Notes are the judge's notes on this attempt.
-	Notes []string `json:"notes,omitempty"`
-	// Ignored and IgnoredCount are the files git ignores in the worktree,
-	// which keep-fan deletes with it, with detail.
-	Ignored      []string `json:"ignored,omitempty"`
-	IgnoredCount int      `json:"ignored_count,omitempty"`
-	// IgnoredError says why the ignored files could not be listed, and
-	// IgnoredHash names the list, for keep-fan's ignored.
-	IgnoredError string `json:"ignored_error,omitempty"`
-	IgnoredHash  string `json:"ignored_hash,omitempty"`
-	// Cost is what the attempt's agent reported it cost, empty when it did
-	// not say.
-	Cost string `json:"cost,omitempty"`
-	// StartedAt and DoneAt are when the attempt's prompt was typed and when
-	// its agent last finished a turn, in Unix nanoseconds, 0 when unknown.
-	StartedAt int64 `json:"started_at,omitempty"`
-	DoneAt    int64 `json:"done_at,omitempty"`
+	Session      string              `json:"session"`
+	Branch       string              `json:"branch"`
+	Path         string              `json:"path"`
+	Agent        string              `json:"agent"`
+	Harness      string              `json:"harness"`
+	State        string              `json:"state"`
+	Files        *int                `json:"files,omitempty"`
+	Added        *int                `json:"added,omitempty"`
+	Removed      *int                `json:"removed,omitempty"`
+	Ahead        *int                `json:"ahead,omitempty"`
+	Dirty        *bool               `json:"dirty,omitempty"`
+	BaseSHA      string              `json:"base_sha,omitempty"`
+	PromptStatus string              `json:"prompt_status"`
+	Verify       *FanVerify          `json:"verify,omitempty"`
+	LastCommand  *fanLastCommand     `json:"last_command,omitempty"`
+	Gone         bool                `json:"gone,omitempty"`
+	Note         string              `json:"note,omitempty"`
+	FileList     []worktree.FileStat `json:"file_list,omitempty"`
+	Lines        []worktree.DiffLine `json:"lines,omitempty"`
+	Notes        []string            `json:"notes,omitempty"`
+	Ignored      []string            `json:"ignored,omitempty"`
+	IgnoredCount int                 `json:"ignored_count,omitempty"`
+	IgnoredError string              `json:"ignored_error,omitempty"`
+	IgnoredHash  string              `json:"ignored_hash,omitempty"`
+	Cost         string              `json:"cost,omitempty"`
+	StartedAt    int64               `json:"started_at,omitempty"`
+	DoneAt       int64               `json:"done_at,omitempty"`
 }
 
-// fanLastCommand is the newest command a shell in the session finished, from
-// its OSC 133 marks.
 type fanLastCommand struct {
 	Cmdline string `json:"cmdline"`
 	Exit    *int   `json:"exit,omitempty"`
@@ -197,14 +138,11 @@ type fanLastCommand struct {
 	Window  string `json:"window"`
 }
 
-// verbCompareFan answers compare-fan.
 func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p fanCompareParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	// detail returns the first changed lines of each attempt's files, which
-	// are file contents: over a link it needs what review-diff needs.
 	if p.Detail {
 		if verr := d.checkLinkPolicy(cs, linkCapReadOut, "compare-fan with detail"); verr != nil {
 			return nil, verr
@@ -218,7 +156,6 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 	var siblings []*Session
 	pa := cs.paneViewOrNil()
 	for _, s := range d.fanSiblings(info) {
-		// The fan's judge reads every attempt.
 		if d.callerReachesSession(cs, s.Name()) || d.judgeReaches(pa, s.Name()) {
 			siblings = append(siblings, s)
 		}
@@ -245,7 +182,6 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 				var err error
 				row.Ignored, row.IgnoredCount, err = worktree.IgnoredFiles(ctx, wt.Path, fanIgnoredMax)
 				if err != nil {
-					// A keep must not go ahead on a list that could not be read.
 					row.IgnoredError = err.Error()
 				} else {
 					row.IgnoredHash = worktree.IgnoredHash(row.Ignored, row.IgnoredCount)
@@ -257,8 +193,6 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 
 	base := info.Base
 	if base == "" {
-		// A fan with no base started from the main checkout's HEAD; the rows
-		// are counted from where each branch left it.
 		if b, err := worktree.CurrentBranch(info.RepoRoot); err == nil && b != "" {
 			base = b
 		} else {
@@ -282,7 +216,6 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 	return out, nil
 }
 
-// fanRow is one sibling's row without the git counts.
 func (d *Daemon) fanRow(s *Session) fanCompareRow {
 	wt := s.worktreeListing()
 	if wt == nil {
@@ -337,13 +270,6 @@ func (d *Daemon) fanRow(s *Session) fanCompareRow {
 	return row
 }
 
-// fanRowChanges fills in a row's counts against the sibling's base: where its
-// branch left the fan's recorded base, or the main checkout's HEAD for a fan
-// with no base. The counts run from that merge base, which is BaseSHA, not
-// from the base's tip, so a base that moves on (a fetch, or one attempt merged
-// into it) does not change the other rows. Every git call here runs under
-// ctx, which the caller bounds with fanGitTimeout. Untracked files larger
-// than maxUntracked bytes are not read or counted.
 func fanRowChanges(ctx context.Context, row *fanCompareRow, wt *WorktreeInfo, maxUntracked int64) {
 	if wt == nil {
 		return
@@ -385,14 +311,6 @@ func fanRowChanges(ctx context.Context, row *fanCompareRow, wt *WorktreeInfo, ma
 	}
 }
 
-// fanVerifyReport is a session's recorded check as it is reported: a check
-// recorded as running that no watcher of this daemon runs was ended by a
-// restart, and reads as failed with no exit status.
-//
-// The watcher writes a finished record and takes its run out of the table in
-// one step under the session's state lock, so a record read before that step
-// and a table read after it are the check finishing, not a restart. The record
-// is read again to tell them apart.
 func (d *Daemon) fanVerifyReport(s *Session, v *FanVerify) *FanVerify {
 	if v == nil || v.State != VerifyRunning || d.fanVerifies.running(s.ID) {
 		return v
@@ -410,7 +328,6 @@ func (d *Daemon) fanVerifyReport(s *Session, v *FanVerify) *FanVerify {
 	return &cp
 }
 
-// verifyFanParams are what verify-fan takes.
 type verifyFanParams struct {
 	Session   string            `json:"session"`
 	Command   string            `json:"command"`
@@ -418,7 +335,6 @@ type verifyFanParams struct {
 	Env       map[string]string `json:"env"`
 }
 
-// verbVerifyFan answers verify-fan.
 func (d *Daemon) verbVerifyFan(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p verifyFanParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -468,7 +384,6 @@ func (d *Daemon) verbVerifyFan(cs *connState, params json.RawMessage) (any, *ver
 			Detail: skippedDetail(skipped),
 		})
 	}
-	// The cards the fan works on move to verify. See task_auto.go.
 	d.autoStageFan(info.FanID, moveVerifyStarted, taskReasonVerifyStarted)
 	out := map[string]any{
 		"type":     "fan_verify_started",
@@ -493,10 +408,6 @@ func skippedDetail(skipped []map[string]any) string {
 	return strings.Join(parts, "; ")
 }
 
-// fanVerifyScript runs the check and reports how it ended on fd 3, which the
-// check itself does not inherit, so its output cannot be taken for the
-// status. A check that passed ends the window. One that failed keeps it open,
-// so the output can be read, until the person presses enter.
 const fanVerifyScript = `printf 'tuios verify: %s\n\n' "$1"
 sh -c "$1" 3>&-
 s=$?
@@ -507,10 +418,6 @@ printf '\nThe check exited %s. This window stays open so the output can be read.
 read -r _
 exit "$s"`
 
-// startFanVerify opens the verify window in one sibling and watches it. A
-// check still running there from before is stopped and its window closed, and
-// so is the window an earlier failed check left open, so re-running a check
-// does not pile up windows waiting for enter.
 func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string, timeout time.Duration) error {
 	prev, failedWindow := d.fanVerifies.take(sess.ID)
 	if prev != nil {
@@ -528,8 +435,6 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 		release = func() {}
 	)
 	if runtime.GOOS == "windows" {
-		// No descriptor passes to a console process, so the window's own exit
-		// status is the check's, and the window closes either way.
 		argv = []string{"cmd.exe", "/c", command}
 	} else {
 		var err error
@@ -538,11 +443,6 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 		}
 		extras = []*os.File{w}
 		argv = []string{"/bin/sh", "-c", fanVerifyScript, "tuios-verify", command}
-		// Held before the window starts. A handoff that asks after this is
-		// refused, and one that asked before holds paneLife, so the window
-		// cannot start until it is over. Held only once the window was in, a
-		// handoff could take paneLife in between, carry the window, and close
-		// the pipe the check reports on with the exec.
 		release = d.pipes.hold("a fan check is running in session " + sess.Name())
 	}
 	none := Grants(0)
@@ -557,8 +457,6 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 		extraFiles: extras,
 	}, onExit)
 	if w != nil {
-		// The child holds its own copy. Closing this one is what lets the
-		// reader see the end of the pipe when the child is gone.
 		_ = w.Close()
 	}
 	if err != nil {
@@ -594,9 +492,6 @@ func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string
 	return nil
 }
 
-// readVerifyStatus reads the status the script writes on fd 3. A pipe that
-// ends with no number in it is a script that was killed, and the window's
-// exit status stands for it when there is one.
 func readVerifyStatus(r *os.File, sess *Session, ptyID string) *int {
 	defer func() { _ = r.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(r, 64))
@@ -604,8 +499,6 @@ func readVerifyStatus(r *os.File, sess *Session, ptyID string) *int {
 		return &code
 	}
 	if pty := sess.GetPTY(ptyID); pty != nil {
-		// The pipe closes as the process exits; the status lands a moment
-		// after.
 		for range 20 {
 			if code, exited := pty.ExitStatus(); exited {
 				if code < 0 {
@@ -619,10 +512,6 @@ func readVerifyStatus(r *os.File, sess *Session, ptyID string) *int {
 	return nil
 }
 
-// watchFanVerify records how one check ended. A check that passed closes its
-// window; one that failed leaves it open. A check that runs past its timeout
-// is failed and its window closed. A check stopped by a newer one records
-// nothing, since the newer one owns the record.
 func (d *Daemon) watchFanVerify(sess *Session, run *fanVerifyRun, rec *FanVerify, status <-chan *int, timeout time.Duration) {
 	var deadline <-chan time.Time
 	if timeout > 0 {
@@ -650,10 +539,6 @@ func (d *Daemon) watchFanVerify(sess *Session, run *fanVerifyRun, rec *FanVerify
 		done.State = VerifyPassed
 	}
 	keptOpen := done.State == VerifyFailed && note == ""
-	// The record is written and the run taken out of the table in one step,
-	// under the state lock, so no reader sees the run gone with the record
-	// still running, and a newer check that took the run first keeps its own
-	// record.
 	current := false
 	_ = sess.mutateState(func(st *SessionState) error {
 		current = d.fanVerifies.finish(sess.ID, run, keptOpen)
@@ -665,18 +550,12 @@ func (d *Daemon) watchFanVerify(sess *Session, run *fanVerifyRun, rec *FanVerify
 	if !current {
 		return
 	}
-	// The last check to end, with none passed, sends the fan's cards back
-	// to doing. See task_auto.go.
 	d.noteFanVerifyEnded(sess)
 	if !keptOpen {
-		// A passed check's window has already ended on its own; closing it
-		// here takes it out of a session no client is attached to. A timed
-		// out one is ended here.
 		_, _ = sess.CloseDaemonWindow(run.window, "the daemon, as its fan check ended")
 	}
 }
 
-// setFanVerify replaces the session's verify record.
 func (s *Session) setFanVerify(v *FanVerify) {
 	_ = s.mutateState(func(st *SessionState) error {
 		if st.Worktree != nil {
@@ -686,17 +565,12 @@ func (s *Session) setFanVerify(v *FanVerify) {
 	})
 }
 
-// fanVerifyRuns holds the check running in each fan session, and the window a
-// failed check left open there, by session id. The zero value is ready. Its
-// lock is taken inside a session's state lock and never the other way round.
 type fanVerifyRuns struct {
 	mu     sync.Mutex
 	runs   map[string]*fanVerifyRun
 	failed map[string]string
 }
 
-// fanVerifyRun is one running check: its window, and the channel that stops
-// its watcher.
 type fanVerifyRun struct {
 	window string
 	stop   chan struct{}
@@ -705,7 +579,6 @@ type fanVerifyRun struct {
 
 func (r *fanVerifyRun) halt() { r.once.Do(func() { close(r.stop) }) }
 
-// put records run as the session's check.
 func (t *fanVerifyRuns) put(session string, run *fanVerifyRun) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -715,8 +588,6 @@ func (t *fanVerifyRuns) put(session string, run *fanVerifyRun) {
 	t.runs[session] = run
 }
 
-// take removes and returns the session's check, nil for none, and the window
-// a failed check left open there, "" for none.
 func (t *fanVerifyRuns) take(session string) (*fanVerifyRun, string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -727,9 +598,6 @@ func (t *fanVerifyRuns) take(session string) (*fanVerifyRun, string) {
 	return run, window
 }
 
-// finish removes run when it is still the session's check, and reports
-// whether it was. keptOpen records run's window as the one its failure left
-// open, for the next check to close.
 func (t *fanVerifyRuns) finish(session string, run *fanVerifyRun, keptOpen bool) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -746,43 +614,26 @@ func (t *fanVerifyRuns) finish(session string, run *fanVerifyRun, keptOpen bool)
 	return true
 }
 
-// running reports whether a check runs in the session now.
 func (t *fanVerifyRuns) running(session string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.runs[session] != nil
 }
 
-// keepFanParams are what keep-fan takes.
 type keepFanParams struct {
-	Session string `json:"session"`
-	Stash   bool   `json:"stash"`
-	Force   bool   `json:"force"`
-	// Merge merges the kept attempt's branch into its base first, the way
-	// ship-merge does, with MergeMode and Into as ship-merge takes mode and
-	// into. A merge that fails stops the keep before any sibling is removed.
-	Merge     bool   `json:"merge"`
-	MergeMode string `json:"merge_mode"`
-	Into      string `json:"into"`
-	// Group and RepoRoot, when given, are the fan the caller means: a
-	// session renamed since the caller read it is refused, not kept.
-	Group    string `json:"group"`
-	RepoRoot string `json:"repo_root"`
-	// FanID, when given, is the fan_id compare-fan gave: a fan of the same
-	// name made since is refused, not kept.
-	FanID *string `json:"fan_id"`
-	// Siblings, when given, are the attempts the caller means to remove,
-	// and Ignored the ignored_hash of the list it showed for each. A fan
-	// whose other attempts differ, or whose ignored files changed, is
-	// refused whole.
-	Siblings []string          `json:"siblings"`
-	Ignored  map[string]string `json:"ignored"`
+	Session   string            `json:"session"`
+	Stash     bool              `json:"stash"`
+	Force     bool              `json:"force"`
+	Merge     bool              `json:"merge"`
+	MergeMode string            `json:"merge_mode"`
+	Into      string            `json:"into"`
+	Group     string            `json:"group"`
+	RepoRoot  string            `json:"repo_root"`
+	FanID     *string           `json:"fan_id"`
+	Siblings  []string          `json:"siblings"`
+	Ignored   map[string]string `json:"ignored"`
 }
 
-// verbKeepFan answers keep-fan: every sibling of the kept session is removed
-// the way remove-worktree removes it, each on its own, so one sibling with
-// uncommitted work is left in place and the rest still go. Branches are never
-// deleted.
 func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p keepFanParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -822,8 +673,6 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	var merged map[string]any
 	if p.Merge {
-		// The merge comes first: when it fails, every attempt is still there
-		// to choose from again.
 		recorded := info.Base
 		if recorded == "" && info.Managed {
 			if b, err := worktree.CurrentBranch(info.RepoRoot); err == nil && b != info.Branch {
@@ -856,9 +705,6 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 			removed = append(removed, out)
 			continue
 		}
-		// The session and its verify window are gone with the worktree, so a
-		// check still running there has nothing left to record into. One in a
-		// sibling left in place runs on.
 		if run, _ := d.fanVerifies.take(s.ID); run != nil {
 			run.halt()
 		}
@@ -885,9 +731,6 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 	return out, nil
 }
 
-// checkKeepAsShown refuses a keep when the fan is not what the caller showed:
-// another set of attempts to remove, or more files git ignores in one of
-// them, which the removal would delete unseen. Nothing given checks nothing.
 func (d *Daemon) checkKeepAsShown(kept *Session, info *WorktreeInfo, siblings []string, ignored map[string]string) *verbError {
 	if siblings == nil && ignored == nil {
 		return nil
@@ -915,8 +758,6 @@ func (d *Daemon) checkKeepAsShown(kept *Session, info *WorktreeInfo, siblings []
 			if ignored == nil {
 				continue
 			}
-			// The caller named lists, and not this attempt's: it showed
-			// nothing of it.
 			return hintedVerbError(ErrVerbInvalidParams, "ignored names no list for "+name+", which a keep removes", &VerbHint{
 				Param: "ignored", Detail: "Nothing was removed. Send the ignored_hash of every attempt to remove.",
 			})

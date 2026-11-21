@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// queueFixture is a daemon whose queue looks at a pane 50 ms after it comes
-// to rest, with a session work of two windows, a verb connection from outside
-// every pane, and the second window's id.
 func queueFixture(t *testing.T) (*Daemon, string, *Session, *verbConn, string, string) {
 	t.Helper()
 	d, sp := startTestDaemon(t)
@@ -20,7 +17,6 @@ func queueFixture(t *testing.T) (*Daemon, string, *Session, *verbConn, string, s
 	return d, sp, sess, dialVerb(t, sp), a, b
 }
 
-// eventually polls cond until it holds or the deadline passes.
 func eventually(t *testing.T, what string, within time.Duration, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(within * time.Duration(testDeadlineScale))
@@ -32,7 +28,6 @@ func eventually(t *testing.T, what string, within time.Duration, cond func() boo
 	}
 }
 
-// paneShows reports whether the window's screen or history holds s.
 func paneShows(t *testing.T, d *Daemon, sess *Session, window, s string) bool {
 	t.Helper()
 	pty, err := d.resolvePTYForTarget(sess, window)
@@ -42,7 +37,6 @@ func paneShows(t *testing.T, d *Daemon, sess *Session, window, s string) bool {
 	return strings.Contains(pty.CaptureContent(true, false), s)
 }
 
-// queuedEntries is list-queued's entries for window.
 func queuedEntries(t *testing.T, c *verbConn, window string) []map[string]any {
 	t.Helper()
 	res := result(t, callP(c, t, "list-queued", map[string]any{"session": "work", "window": window}))
@@ -72,7 +66,6 @@ func TestQueuedPaneEntryIsCheckedAgainWhenTyped(t *testing.T) {
 	result(t, callP(pane, t, "queue-prompt", map[string]any{"window": a2, "text": "echo from-a1"}))
 	d.setApprovalPeer(nil)
 
-	// The person takes write away from a1 before the agent rests.
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a1, "grants": []string{"read"}}))
 	setAgentState(t, person, "a", a2, "idle", "", "")
 	eventually(t, "the entry is dropped at delivery", 3*time.Second, func() bool { return d.queue.count(a2) == 0 })
@@ -81,7 +74,6 @@ func TestQueuedPaneEntryIsCheckedAgainWhenTyped(t *testing.T) {
 		t.Fatal("an entry was typed for a pane that no longer holds write")
 	}
 
-	// With its grants intact, the same entry is typed.
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a1, "grants": []string{"read", "write"}}))
 	setAgentState(t, person, "a", a2, "working", "", "")
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
@@ -150,26 +142,19 @@ func TestCancelQueuedOwnership(t *testing.T) {
 	if len(entries) != 3 || entries[0]["by"] != queueByHuman || entries[1]["by"] != queueByShell || entries[2]["by"] != a {
 		t.Fatalf("list-queued = %v, want by human, shell and pane a", entries)
 	}
-	// The pane may not drop the person's or the shell's, and drops its own.
 	wantForbidden(t, "a pane dropping the person's entry", callP(pane, t, "cancel-queued", map[string]any{"session": "work", "id": byPerson["id"]}))
 	wantForbidden(t, "a pane dropping the shell's entry", callP(pane, t, "cancel-queued", map[string]any{"session": "work", "id": byShell["id"]}))
 	got := result(t, callP(pane, t, "cancel-queued", map[string]any{"session": "work", "window": b, "all": true}))
 	if ids, _ := got["cancelled"].([]any); len(ids) != 1 || ids[0] != byPane["id"] || got["queued"] != float64(2) {
 		t.Fatalf("a pane's cancel all = %v, want only its own entry dropped", got)
 	}
-	// Nor may it name itself as another sender.
 	wantForbidden(t, "a pane queueing as another window", callP(pane, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "x", "from": b}))
 	d.setApprovalPeer(nil)
 
-	// A bad nonce is refused, not taken as the shell. It is sent once c is
-	// placed outside every pane again: a typing call is placed, and the
-	// placement is kept for the connection.
 	mustRefuse(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "x", "human_nonce": "0123456789abcdef0123456789abcdef"}), ErrVerbNotHuman, "a nonce that does not verify")
 
-	// A shell may not drop the person's entry, and may drop its own.
 	wantForbidden(t, "a shell dropping the person's entry", callP(c, t, "cancel-queued", map[string]any{"session": "work", "id": byPerson["id"]}))
 	result(t, callP(c, t, "cancel-queued", map[string]any{"session": "work", "id": byShell["id"]}))
-	// The person drops theirs.
 	got = result(t, callP(c, t, "cancel-queued", map[string]any{"session": "work", "window": b, "all": true, "human_nonce": tui.HumanNonce()}))
 	if ids, _ := got["cancelled"].([]any); len(ids) != 1 || ids[0] != byPerson["id"] || got["queued"] != float64(0) {
 		t.Fatalf("the person's cancel all = %v, want their entry dropped and the queue empty", got)
@@ -200,7 +185,6 @@ func TestQueueStampOutlivesTheQueue(t *testing.T) {
 	}
 	eventually(t, "the entry is typed at the next rest", 5*time.Second, func() bool { return paneShows(t, d, sess, b, "stamp-12") })
 
-	// The stamp goes with the agent, and with the pane.
 	d.queue.mu.Lock()
 	_, stamped := d.queue.typed[b]
 	d.queue.mu.Unlock()
@@ -227,8 +211,6 @@ func TestQueueStampIsTheSubmitTime(t *testing.T) {
 	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateIdle, Harness: "claude-code"}); err != nil {
 		t.Fatal(err)
 	}
-	// The fast turn: once the first command has run, which is after its
-	// Enter, the agent reports working and done back to back.
 	pty, err := d.resolvePTYForTarget(sess, b)
 	if err != nil {
 		t.Fatal(err)
@@ -255,8 +237,6 @@ func TestQueueStampIsTheSubmitTime(t *testing.T) {
 	if workingAt == 0 {
 		t.Fatal("the first entry never ran")
 	}
-	// The gate can return only after it saw working, so a stamp taken when
-	// it returned would be later than working and hide the rest after it.
 	eventually(t, "the first entry is stamped", 5*time.Second, func() bool {
 		d.queue.mu.Lock()
 		defer d.queue.mu.Unlock()
@@ -330,7 +310,6 @@ func TestCancelQueuedUnnamedLinks(t *testing.T) {
 		t.Fatalf("an unnamed link dropping its own entry: %v", verr.Message)
 	}
 
-	// A named machine drops what it queued, on any connection.
 	named := &connState{clientID: "link-three", viaLink: true, linkPeer: "laptop", done: make(chan struct{})}
 	again := &connState{clientID: "link-four", viaLink: true, linkPeer: "laptop", done: make(chan struct{})}
 	id := queue(named, "from laptop")

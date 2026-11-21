@@ -9,26 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// switch-session moves an attached client to another session in place, the
-// way go-to does. It is the CLI's route to what herdr's
-// workspace.focus already did, and it reaches the other machines the
-// switcher and the rail reach.
-//
-// It acts on a client, not on a session, so it is an admin action for a pane
-// (scopeDeny on its verb entry) and a write over a link.
-//
-// Which client: the one named by client, else the one showing session, else
-// the one showing the caller's own session when the caller runs in a pane,
-// else the only TUI client attached. With several attached and nothing to
-// choose by, the call is refused rather than guessed.
-//
-// A target on this daemon is checked, and with create made, before the
-// client hears of it, so a mistyped name is refused here with the names that
-// exist. A target on another machine is opened by the client, which holds
-// the link, and the client answers once the attach there has landed or
-// failed.
-
-// switchSessionParams are the verb's parameters.
 type switchSessionParams struct {
 	Name    string `json:"name"`
 	Host    string `json:"host"`
@@ -87,8 +67,6 @@ func (d *Daemon) verbSwitchSession(cs *connState, params json.RawMessage) (any, 
 			if verr.Code != ErrVerbSessionExists {
 				return nil, verr
 			}
-			// Made by somebody else between the lookup and the create: the
-			// switch still goes where it was asked to.
 		} else {
 			created = true
 		}
@@ -118,17 +96,12 @@ func (d *Daemon) verbSwitchSession(cs *connState, params json.RawMessage) (any, 
 	if !res.Success {
 		return nil, newVerbError(ErrVerbCommandFailed, nonEmpty(res.Message, "the client refused the switch"))
 	}
-	// The client answers before it switches, because the switch moves the
-	// connection the answer goes over. So the answer here waits for the
-	// switch to show, and says when it did not.
 	if !sess.waitChange(routedVerbTimeout, func() bool { return connSessionID(tui) == sess.ID }) {
 		return nil, newVerbError(ErrVerbCommandFailed, "the client did not switch to "+sess.Name()+". Its screen says why")
 	}
 	return out, nil
 }
 
-// switchToHost has the client open a session on another machine. The client
-// holds the link and makes the attach, and answers once it has landed.
 func (d *Daemon) switchToHost(tui *connState, p switchSessionParams) (any, *verbError) {
 	args := []string{p.Name, p.Host, "", p.Cwd}
 	if p.Create {
@@ -152,7 +125,6 @@ func (d *Daemon) switchToHost(tui *connState, p switchSessionParams) (any, *verb
 	}, nil
 }
 
-// switchTarget picks the client a switch moves. See verbSwitchSession.
 func (d *Daemon) switchTarget(cs *connState, p switchSessionParams) (*connState, *verbError) {
 	if p.Client != "" {
 		return d.attachedClientByID(p.Client)
@@ -210,7 +182,6 @@ func (d *Daemon) switchTarget(cs *connState, p switchSessionParams) (*connState,
 	})
 }
 
-// connSessionID is the session a connection shows, "" while detached.
 func connSessionID(c *connState) string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -220,7 +191,6 @@ func connSessionID(c *connState) string {
 	return c.sessionID
 }
 
-// nonEmpty is s, or fallback when s is empty.
 func nonEmpty(s, fallback string) string {
 	if s == "" {
 		return fallback

@@ -14,32 +14,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// A board per project: task cards that name a repository.
-//
-// A card is still kept by the session that made it, on the daemon that made
-// it, which owns it. A card with a project names its repository by the
-// normalised origin URL (worktree.NormalizeRemote), the one name a repository
-// has on every machine. list-tasks with project lists such cards from every
-// session of this daemon, and with hosts also asks each linked machine for its
-// own. A worker on another machine claims, releases and finishes a card over
-// the link: its daemon checks its own pane, then calls the owner with
-// remote_window, and the owner records the holder as that window on the
-// link's peer, a name it takes from the link and never from a param.
-//
-// A call that came over a link answers with this daemon's cards only, never
-// asking its own links: a card is listed by its owner alone, so rows cannot
-// loop or double between two machines that link each other.
-
-// remoteHolderPrefix starts a holder that is a pane on another machine:
-// "@host/window". A local window id never starts with it.
 const remoteHolderPrefix = "@"
 
-// remoteHolder is the holder key of window on host.
 func remoteHolder(host, window string) string {
 	return remoteHolderPrefix + host + "/" + window
 }
 
-// splitRemoteHolder is the host and window of a remote holder key.
 func splitRemoteHolder(holder string) (host, window string, ok bool) {
 	rest, ok := strings.CutPrefix(holder, remoteHolderPrefix)
 	if !ok {
@@ -49,8 +29,6 @@ func splitRemoteHolder(holder string) (host, window string, ok bool) {
 	return host, window, ok && host != "" && window != ""
 }
 
-// holderLabel is a holder key as a person reads it: a window id shortened,
-// or "a pane on HOST" for a holder on another machine.
 func holderLabel(holder string) string {
 	if host, window, ok := splitRemoteHolder(holder); ok {
 		return shortWindowID(window) + " on " + host
@@ -58,8 +36,6 @@ func holderLabel(holder string) string {
 	return shortWindowID(holder)
 }
 
-// projectParam is the project a verb names, normalised. A local path names
-// no repository on another machine, so it is refused.
 func projectParam(param, raw string) (string, *verbError) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -67,8 +43,6 @@ func projectParam(param, raw string) (string, *verbError) {
 	}
 	p := worktree.NormalizeRemote(raw)
 	if strings.HasPrefix(p, "file:") && isNormalisedProject(raw) {
-		// The form a row carries, host/path, as a linked machine sends it
-		// back.
 		p = worktree.NormalizeRemote("https://" + raw)
 	}
 	if p == "" || strings.HasPrefix(p, "file:") {
@@ -83,9 +57,6 @@ func projectParam(param, raw string) (string, *verbError) {
 	return p, nil
 }
 
-// isNormalisedProject reports whether raw reads as a project in its
-// normalised form, host/path: no scheme, no colon, not a local path, and a
-// host with a dot in it before the first slash.
 func isNormalisedProject(raw string) bool {
 	if strings.ContainsAny(raw, ":\\ ") || strings.HasPrefix(raw, ".") || strings.HasPrefix(raw, "~") {
 		return false
@@ -94,17 +65,12 @@ func isNormalisedProject(raw string) bool {
 	return ok && path != "" && strings.Contains(host, ".")
 }
 
-// remoteClaim is what a worker's daemon sends the owner with a claim,
-// release or finish over the link: the window on the worker's machine, and
-// how it reads there.
 type remoteClaim struct {
 	RemoteWindow  string `json:"remote_window"`
 	RemoteName    string `json:"remote_name"`
 	RemoteHarness string `json:"remote_harness"`
 }
 
-// remoteCaller is the caller of a task verb that came over the link for a
-// window of the peer: it holds and changes only that window's cards.
 func remoteCaller(cs *connState, verb string, rc remoteClaim) (taskCaller, string, *verbError) {
 	if rc.RemoteWindow == "" {
 		return taskCaller{}, "", nil
@@ -122,22 +88,15 @@ func remoteCaller(cs *connState, verb string, rc remoteClaim) (taskCaller, strin
 	return taskCaller{by: queueByLinkPrefix + peer, window: h}, h, nil
 }
 
-// remoteHold is a card this daemon's pane holds on another machine, or with
-// host empty in another session of this daemon (start-agent task_session),
-// which the pane's own session does not let go.
 type remoteHold struct {
 	host, session, id string
 }
 
-// remoteHoldSet is the cards each local window holds on other machines, so
-// the window's close lets them go. The daemon keeps one (Daemon.remoteHolds).
 type remoteHoldSet struct {
 	mu sync.Mutex
 	m  map[string][]remoteHold
 }
 
-// note records that window holds h, or with held false that it no longer
-// does.
 func (rs *remoteHoldSet) note(window string, h remoteHold, held bool) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -161,7 +120,6 @@ func (rs *remoteHoldSet) note(window string, h remoteHold, held bool) {
 	rs.m[window] = out
 }
 
-// far is every hold on another machine, for the handoff manifest.
 func (rs *remoteHoldSet) far() []handoffFarHold {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -176,11 +134,6 @@ func (rs *remoteHoldSet) far() []handoffFarHold {
 	return out
 }
 
-// rebuildTaskHolds notes again, from the cards, what only memory kept beside
-// them: each card a pane of another local session holds (remoteHolds), and
-// each card auto runs, which its cap counts. A live upgrade keeps every
-// holder but not that memory. A cold start lets every holder go, so it
-// finds nothing. The holds on other machines come from the handoff manifest.
 func (d *Daemon) rebuildTaskHolds() {
 	far := d.farHosts()
 	for _, sess := range d.manager.AllSessions() {
@@ -202,8 +155,6 @@ func (d *Daemon) rebuildTaskHolds() {
 			if !tk.Dispatched || tk.Stage == TaskStageDone || !d.dispatch.isMode(board, DispatchAuto) {
 				continue
 			}
-			// A far holder is named by the name its machine gives itself;
-			// the cap per machine counts by the [hosts] name.
 			host := peer
 			if remote && !slices.Contains(far, peer) {
 				if h, ok := d.verifyPeers.Load(peer); ok {
@@ -215,7 +166,6 @@ func (d *Daemon) rebuildTaskHolds() {
 	}
 }
 
-// take removes and returns what window holds.
 func (rs *remoteHoldSet) take(window string) []remoteHold {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -224,9 +174,6 @@ func (rs *remoteHoldSet) take(window string) []remoteHold {
 	return list
 }
 
-// releaseRemoteHolds lets go, on their owners, the cards window held on other
-// machines. It is best effort: a link that is down leaves the card held,
-// and tuios task release on either machine frees it.
 func (d *Daemon) releaseRemoteHolds(window string) {
 	list := d.remoteHolds.take(window)
 	for _, h := range list {
@@ -249,8 +196,6 @@ func (d *Daemon) releaseRemoteHolds(window string) {
 	}
 }
 
-// releaseHeld lets go, for reason, the cards of sess that window holds, here
-// or on another machine.
 func (d *Daemon) releaseHeld(sess *Session, window, reason string) {
 	if window == "" {
 		return
@@ -272,8 +217,6 @@ func (d *Daemon) releaseHeld(sess *Session, window, reason string) {
 	d.afterReleased(sess, rows, reason)
 }
 
-// cardSessions are the sessions whose cards window may hold: its own, and
-// those it holds a card of from another session of this daemon.
 func (d *Daemon) cardSessions(sess *Session, window string) []*Session {
 	out := []*Session{sess}
 	d.remoteHolds.mu.Lock()
@@ -287,9 +230,6 @@ func (d *Daemon) cardSessions(sess *Session, window string) []*Session {
 	return out
 }
 
-// forwardTask sends a claim, release or finish for a card owned by host, on
-// behalf of the calling pane, and notes the hold so the pane's close lets it
-// go.
 func (d *Daemon) forwardTask(cs *connState, verb, host, sessionName, id string) (any, *verbError) {
 	if cs != nil && cs.viaLink {
 		return nil, invalidParam("host", "a call that came over the link is not passed on again")
@@ -304,8 +244,6 @@ func (d *Daemon) forwardTask(cs *connState, verb, host, sessionName, id string) 
 	return d.forwardTaskFor(pa.session, pa.window, verb, host, sessionName, id)
 }
 
-// forwardTaskFor is forwardTask for window, a pane of paneSession on this
-// machine: start-agent uses it for the pane it opened.
 func (d *Daemon) forwardTaskFor(paneSession, window, verb, host, sessionName, id string) (any, *verbError) {
 	if sessionName == "" {
 		return nil, invalidParam("session", verb+" with host names the card's session on "+echoName(host)+": list-tasks with project and hosts gives it")
@@ -340,16 +278,11 @@ func (d *Daemon) forwardTaskFor(paneSession, window, verb, host, sessionName, id
 	return row, nil
 }
 
-// federationTaskErr is the refusal of a task verb passed on to host that
-// failed there or on the way.
 func federationTaskErr(verb, host string, err error) *verbError {
 	if rerr, ok := errors.AsType[*federation.RemoteError](err); ok {
-		// A daemon from before remote_window reads the call as one from
-		// outside every pane, and asks for a window.
 		if strings.Contains(rerr.Message, "window is required") {
 			return newVerbError(ErrVerbInvalidParams, host+" runs a tuios that cannot hand its cards to another machine. Update tuios there")
 		}
-		// host answered and refused: its words, with its code.
 		return &verbError{Code: rerr.Code, Message: "on " + host + ": " + rerr.Message}
 	}
 	if _, ok := errors.AsType[*federation.RefusedError](err); ok {
@@ -361,7 +294,6 @@ func federationTaskErr(verb, host string, err error) *verbError {
 	})
 }
 
-// projectRows lists the cards of project from every session of this daemon.
 func (d *Daemon) projectRows(p listTasksParams) []TaskRow {
 	rows := []TaskRow{}
 	for _, sess := range d.manager.AllSessions() {
@@ -374,10 +306,6 @@ func (d *Daemon) projectRows(p listTasksParams) []TaskRow {
 	return rows
 }
 
-// hostTaskRows asks every linked machine for its own cards of project, or
-// with no project for every card of every session, at once. The caller keeps
-// the project cards only, so a machine from before projects costs nothing. A machine that does not answer is named in down, and costs the
-// listing its rows only.
 func (d *Daemon) hostTaskRows(p listTasksParams) (rows []TaskRow, down []map[string]string) {
 	if d.federation == nil {
 		return nil, nil
@@ -429,10 +357,6 @@ func (d *Daemon) hostTaskRows(p listTasksParams) (rows []TaskRow, down []map[str
 	return rows, down
 }
 
-// claimForRemote is claim-task over the link for a pane of the peer: the
-// card is held by "@peer/window". A claim the same pane made before is
-// taken again without a refusal, so a worker whose answer was lost to a
-// dropped link can retry.
 func (d *Daemon) claimForRemote(cs *connState, p claimTaskParams) (any, *verbError) {
 	caller, holder, verr := remoteCaller(cs, "claim-task", p.remoteClaim)
 	if verr != nil {
@@ -456,7 +380,6 @@ func (d *Daemon) claimForRemote(cs *connState, p claimTaskParams) (any, *verbErr
 			})
 			return errTaskRefused
 		}
-		// A claim for a card auto is starting on another machine is auto's.
 		auto := d.auto.expects(sess.Name(), tk.ID, true)
 		if _, _, verr = sess.moveCard(tk, cardMove{kind: moveClaim, by: cmp.Or(auto, caller.by), window: holder, dispatched: auto != "",
 			names: true, name: printableClaim(p.RemoteName, 64), harness: printableClaim(p.RemoteHarness, 64), refresh: true}, time.Now().UnixNano()); verr != nil {

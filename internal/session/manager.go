@@ -18,90 +18,35 @@ import (
 // It handles session creation, lookup, and lifecycle management.
 type Manager struct {
 	mu       sync.RWMutex
-	sessions map[string]*Session // Sessions by name
-	byID     map[string]*Session // Sessions by ID (for quick lookup)
-	// aliases maps a name a session was renamed from to that session's ID. A
-	// pane started before a rename keeps TUIOS_SESSION set to the old name,
-	// and a running process cannot be given a new environment, so a verb that
-	// names the old session still reaches it through here. A live session of
-	// that name always wins, and an alias goes when its session does.
-	aliases map[string]string
+	sessions map[string]*Session
+	byID     map[string]*Session
+	aliases  map[string]string
 
-	// Configuration
-	// socketPath is the pinned socket, a string. Atomic: the daemon pins it
-	// in Start while its goroutines may already read it.
-	socketPath atomic.Value
-	// scrollbackLines is stamped into every session made here, so each pane
-	// keeps the history depth the daemon was configured with.
-	scrollbackLines int
-	// history is what sessions made from now on do with their panes' history
-	// across a restart. Nil saves nothing. Guarded by mu.
-	history *HistoryPolicy
-	// inheritCwd is appearance.new_window_inherit_cwd, stamped into every
-	// session this manager makes.
-	inheritCwd bool
-	// preferredShell is appearance.preferred_shell. Every session this manager
-	// makes reads it at spawn time through PreferredShell, so a config reload
-	// reaches the next pane of a session that already exists. It is atomic so
-	// a spawn never needs m.mu.
-	preferredShell atomic.Pointer[string]
-	// shellIntegrationOff is [shell] integration = "off". The zero value is
-	// the default, auto. Every session reads it through ShellIntegration.
+	socketPath          atomic.Value
+	scrollbackLines     int
+	history             *HistoryPolicy
+	inheritCwd          bool
+	preferredShell      atomic.Pointer[string]
 	shellIntegrationOff atomic.Bool
-	// shellLogin is [shell] login: a new pane's shell starts as a login
-	// shell.
-	shellLogin atomic.Bool
-	// stayOnEmpty is workspaces.return_when_empty turned off. The zero value
-	// is the default, on. Every session reads it through ReturnWhenEmpty.
-	stayOnEmpty atomic.Bool
-	// dragAndDrop is [panes] drag_and_drop. Every session reads it through
-	// DragAndDrop. See dnd_registration.go.
-	dragAndDrop atomic.Bool
-	// subagentFade is daemon.subagent_fade_seconds, stamped on every
-	// session's config. Zero is the default.
-	subagentFade time.Duration
-	// saveEvery is daemon.save_seconds, stamped on every session's config.
-	// Zero is resurrectionInterval.
-	saveEvery time.Duration
-	// sshAgentFollow is [daemon] ssh_agent = "follow": a new pane gets
-	// SSH_AUTH_SOCK naming its session's agent link. See ssh_agent_follow.go.
-	sshAgentFollow atomic.Bool
-	// displayFollow is [daemon] display = "follow" on a daemon with no
-	// display of its own. displaySource gives a new pane its session's
-	// display. See display_follow.go.
-	displayFollow atomic.Bool
-	displaySource atomic.Pointer[func(sessionID string) []string]
-	// hostGraphicsBits are the graphics of the daemon's most recent client,
-	// for a session no client has attached to. See noteHostGraphics.
-	hostGraphicsBits atomic.Uint32
-	// cellSource gives a new pane its session's cell in pixels. See
-	// Daemon.newPaneCellSize.
-	cellSource atomic.Pointer[func(sessionID string) (w, h int, ok bool)]
-	// herdrSocket is the herdr protocol socket the daemon listens on, "" when
-	// it does not. herdrMode is [agents] herdr_protocol. Both are read at
-	// spawn time through HerdrEnv. See herdr_compat.go.
-	herdrSocket atomic.Pointer[string]
-	herdrMode   atomic.Pointer[string]
-	// herdrBin is HERDR_BIN_PATH, this tuios. See SetHerdrBin.
-	herdrBin atomic.Pointer[string]
-	// paneTokenKey signs the TUIOS_PANE_TOKEN every pane is started with. It
-	// is picked at random for each manager and never leaves memory. See
-	// pane_token.go.
-	paneTokenKey []byte
-	// grants holds what every local pane may do through tuios, and the
-	// [agents.permissions] default. It is stamped into every session made
-	// here. See pane_grants.go.
-	grants *paneGrantTable
-	// paneLife is held for reading while a pane starts or closes, and for
-	// writing by a handoff. See SessionConfig.paneLife.
-	paneLife sync.RWMutex
+	shellLogin          atomic.Bool
+	stayOnEmpty         atomic.Bool
+	dragAndDrop         atomic.Bool
+	subagentFade        time.Duration
+	saveEvery           time.Duration
+	sshAgentFollow      atomic.Bool
+	displayFollow       atomic.Bool
+	displaySource       atomic.Pointer[func(sessionID string) []string]
+	hostGraphicsBits    atomic.Uint32
+	cellSource          atomic.Pointer[func(sessionID string) (w, h int, ok bool)]
+	herdrSocket         atomic.Pointer[string]
+	herdrMode           atomic.Pointer[string]
+	herdrBin            atomic.Pointer[string]
+	paneTokenKey        []byte
+	grants              *paneGrantTable
+	paneLife            sync.RWMutex
 
-	// Lifecycle hooks (set by the daemon). onCreate fires after a session is
-	// registered; onDelete fires after it is removed but before it is stopped.
-	// Both run outside m.mu so a hook may safely call back into the manager.
 	onCreate func(*Session)
 	onDelete func(*Session)
-	// onRename fires after a rename, outside m.mu, with the old name.
 	onRename func(sess *Session, old string)
 }
 
@@ -126,20 +71,14 @@ func (m *Manager) SetSessionHooks(onCreate, onDelete func(*Session)) {
 // NewManager creates a new session manager.
 func NewManager() *Manager {
 	return &Manager{
-		sessions: make(map[string]*Session),
-		byID:     make(map[string]*Session),
-		aliases:  make(map[string]string),
-		// The default matches config.DefaultSettings: a daemon nobody
-		// configured still opens windows where the user is looking.
+		sessions:     make(map[string]*Session),
+		byID:         make(map[string]*Session),
+		aliases:      make(map[string]string),
 		inheritCwd:   true,
 		paneTokenKey: newPaneTokenKey(),
 		grants:       newPaneGrantTable(),
 	}
 }
-
-// GetSocketPath and GetPidFilePath are defined in platform-specific files:
-// - manager_unix.go for Unix/Linux/macOS
-// - manager_windows.go for Windows
 
 // SetScrollbackLines sets the history depth every session made from now on
 // gives its panes. Zero means the emulator's default.
@@ -328,15 +267,12 @@ func (m *Manager) SocketPath() string {
 
 // CreateSession creates a new session with the given name.
 func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height int) (*Session, error) {
-	// Validated before the session exists, so a name that could never be saved
-	// is refused rather than producing a session that runs and never persists.
 	if err := ValidateSessionName(name); err != nil {
 		return nil, err
 	}
 
 	m.mu.Lock()
 
-	// Check if name already exists
 	if name != "" {
 		if _, exists := m.sessions[name]; exists {
 			m.mu.Unlock()
@@ -344,8 +280,6 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 		}
 	}
 
-	// Stamp the daemon socket path so shells spawned in this session can find the
-	// daemon (exported as TUIOS_SOCKET) without every caller having to know it.
 	if cfg == nil {
 		cfg = &SessionConfig{}
 	}
@@ -358,8 +292,6 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	if cfg.HostName == "" {
 		cfg.HostName = m.HostName()
 	}
-	// Read directly, not through a helper: m.mu is already held here, and the
-	// fields above are read the same way for the same reason.
 	cfg.InheritCwd = m.inheritCwd
 	if cfg.PreferredShell == nil {
 		cfg.PreferredShell = m.PreferredShell
@@ -408,34 +340,26 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	cfg.paneLife = &m.paneLife
 
-	// A restored id is kept only when it is a well-formed id no live session
-	// holds. Anything else gets a new one, as before ids were saved.
 	if cfg.restoreID != "" {
 		if _, err := uuid.Parse(cfg.restoreID); err != nil || m.byID[cfg.restoreID] != nil {
 			cfg.restoreID = ""
 		}
 	}
 
-	// Create the session
 	session, err := NewSession(name, cfg, width, height)
 	if err != nil {
 		m.mu.Unlock()
 		return nil, err
 	}
 
-	// If no name was provided, one was auto-generated
 	name = session.Name()
 
-	// Register the session. A name that used to be an alias now names this
-	// session, so the alias stops pointing at the one renamed away from it.
 	m.sessions[name] = session
 	delete(m.aliases, name)
 	m.byID[session.ID] = session
 	onCreate := m.onCreate
 	m.mu.Unlock()
 
-	// Fire the create hook outside the lock so it may install the event sink and
-	// publish a session-created event without risking a manager re-entry deadlock.
 	if onCreate != nil {
 		onCreate(session)
 	}
@@ -474,8 +398,6 @@ func (m *Manager) ResolveSession(name string) (sess *Session, renamed bool) {
 	return nil, false
 }
 
-// dropAliasesLocked forgets every old name of the session with this ID. The
-// caller holds m.mu.
 func (m *Manager) dropAliasesLocked(id string) {
 	for alias, target := range m.aliases {
 		if target == id {
@@ -507,15 +429,9 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 	if old == newName {
 		return sess, nil
 	}
-	// Held from before the name changes until the state file has moved, so no
-	// save of this session can land in between. See Session.persist. It is
-	// taken before m.mu, never while m.mu is held, so a slow save of this
-	// session never stalls every other lookup in the daemon.
 	sess.persistMu.Lock()
 	defer sess.persistMu.Unlock()
 
-	// A saved session that is not running still owns its state file. Taking
-	// its name would overwrite that file, and the saved session would be lost.
 	if path, err := getResurrectionPath(newName); err != nil {
 		return nil, err
 	} else if _, err := os.Stat(path); err == nil && m.GetSession(newName) == nil {
@@ -524,7 +440,6 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 
 	m.mu.Lock()
 	if m.sessions[old] != sess {
-		// Renamed or killed while this call waited for the save.
 		m.mu.Unlock()
 		return nil, errfmt.Errorf("session '%s' not found", old)
 	}
@@ -546,15 +461,12 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 	onRename := m.onRename
 	m.mu.Unlock()
 
-	// Through mutateState, so every attached client gets the new name on the
-	// same push as any other daemon-side change, and adopts it.
 	_ = sess.mutateState(func(st *SessionState) error {
 		st.Name = newName
 		st.DisplayName = ""
 		return nil
 	})
 
-	// Sessions a fan started from this one record it by name.
 	for _, s := range others {
 		if wt := s.Worktree(); wt != nil && wt.LaunchedFrom == old {
 			moved := *wt
@@ -562,19 +474,15 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 			_ = s.SetWorktree(&moved)
 		}
 	}
-	// So do the panes a pane of this session started, in any session.
 	for _, s := range append(others, sess) {
 		s.renameStartedBy(old, newName)
 	}
 
-	// The new file is written before the old one goes, so a crash between
-	// the two leaves the session saved under one name or both, never none.
 	if st := sess.ResurrectionState(); st != nil {
 		if err := SaveSessionForResurrection(st); err != nil {
 			LogError("Resurrection save for renamed session %q failed: %v", newName, err)
 		}
 	}
-	// Before the old state goes, which takes the old name's history with it.
 	moveHistory(old, newName)
 	RemoveResurrectionState(old)
 
@@ -586,7 +494,6 @@ func (m *Manager) RenameSession(old, newName string) (*Session, error) {
 
 // GetOrCreateSession returns an existing session or creates a new one.
 func (m *Manager) GetOrCreateSession(name string, cfg *SessionConfig, width, height int) (*Session, bool, error) {
-	// First try to get existing session
 	m.mu.RLock()
 	session, exists := m.sessions[name]
 	m.mu.RUnlock()
@@ -595,7 +502,6 @@ func (m *Manager) GetOrCreateSession(name string, cfg *SessionConfig, width, hei
 		return session, false, nil
 	}
 
-	// Create new session
 	session, err := m.CreateSession(name, cfg, width, height)
 	if err != nil {
 		return nil, false, err
@@ -618,14 +524,10 @@ func (m *Manager) DeleteSession(name string) error {
 	onDelete := m.onDelete
 	m.mu.Unlock()
 
-	// Fire the delete hook outside the lock (publishes a session-closed event).
 	if onDelete != nil {
 		onDelete(session)
 	}
 
-	// Stop the session (outside lock to avoid deadlock). Stop performs a final
-	// resurrection save, so remove the state file afterwards: an explicit kill
-	// is a deliberate teardown and must not leave the session resurrectable.
 	session.discardHistory.Store(true)
 	session.Stop()
 	RemoveResurrectionState(name)
@@ -637,13 +539,6 @@ func (m *Manager) ListSessions() []SessionInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Order the sessions themselves, not their Info snapshots: Info truncates
-	// Created to whole seconds, so two sessions made in the same second tied and
-	// took the map's random iteration order. The placed sessions come first,
-	// by rank (set-session-order), then the rest on the full-precision
-	// timestamp, with the name as a final tiebreak, so the list is stable
-	// everywhere it is read (sidebar, switcher, palette) and is the same order
-	// on every client.
 	ordered := make([]*Session, 0, len(m.sessions))
 	ranks := make(map[*Session]int, len(m.sessions))
 	for _, session := range m.sessions {
@@ -699,12 +594,6 @@ func (m *Manager) LastUsedSession() *Session {
 	return mostRecentSession(m.AllSessions(), true)
 }
 
-// mostRecentSession picks the session with the latest LastActive, or with
-// byUse the latest LastUsed and then the latest LastActive. It compares the
-// full-precision times: SessionInfo truncates them to whole seconds, so two
-// sessions used in the same second tied and the pick fell to list order. A
-// tie that remains goes to the newer session, then to the lower name, so the
-// answer never depends on map order.
 func mostRecentSession(sessions []*Session, byUse bool) *Session {
 	var best *Session
 	var bestUsed, bestActive time.Time
@@ -721,9 +610,6 @@ func mostRecentSession(sessions []*Session, byUse bool) *Session {
 	return best
 }
 
-// newerPick reports whether s, used and active at the times given, ranks
-// above best: the later use, then the later activity, then the newer
-// session, then the lower name.
 func newerPick(used, bestUsed, active, bestActive time.Time, s, best *Session) bool {
 	switch {
 	case !used.Equal(bestUsed):
@@ -745,7 +631,6 @@ func (m *Manager) GetDefaultSession(cfg *SessionConfig, width, height int) (*Ses
 		return session, false, nil
 	}
 
-	// No sessions, create default with generated name
 	name := m.GenerateSessionName()
 	session, err := m.CreateSession(name, cfg, width, height)
 	if err != nil {
@@ -766,7 +651,6 @@ func (m *Manager) Shutdown() {
 	m.aliases = make(map[string]string)
 	m.mu.Unlock()
 
-	// Stop all sessions (outside lock)
 	for _, session := range sessions {
 		session.Stop()
 	}
@@ -777,7 +661,6 @@ func (m *Manager) GenerateSessionName() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Find the lowest available number using "session-N" format
 	for i := 0; ; i++ {
 		name := fmt.Sprintf("session-%d", i)
 		if _, exists := m.sessions[name]; !exists {
@@ -786,17 +669,11 @@ func (m *Manager) GenerateSessionName() string {
 	}
 }
 
-// Bits of Manager.hostGraphicsBits.
 const (
 	hostKittyGraphics = 1 << iota
 	hostSixelGraphics
 )
 
-// noteHostGraphics records the graphics of the client that attached or
-// reported them last, on any session. A session no client has attached to
-// tells its new shells these (see Session.GraphicsCapabilities): a session
-// an agent made with new --detach, or one a restore brought back, has no
-// client of its own and told every shell TERM_PROGRAM=TUIOS.
 func (m *Manager) noteHostGraphics(kitty, sixel bool) {
 	var bits uint32
 	if kitty {
@@ -808,7 +685,6 @@ func (m *Manager) noteHostGraphics(kitty, sixel bool) {
 	m.hostGraphicsBits.Store(bits)
 }
 
-// hostGraphics returns what noteHostGraphics last recorded.
 func (m *Manager) hostGraphics() (kitty, sixel bool) {
 	bits := m.hostGraphicsBits.Load()
 	return bits&hostKittyGraphics != 0, bits&hostSixelGraphics != 0

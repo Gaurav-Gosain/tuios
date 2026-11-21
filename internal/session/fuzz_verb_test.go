@@ -11,38 +11,6 @@ import (
 	"time"
 )
 
-// Fuzzing the JSON verb plane through the dispatcher the daemon runs, rather
-// than through a copy of its first half. Anything that can open the socket can
-// send a line, so every line has to come back as exactly one well-formed
-// answer, and the gates in front of the handlers (the envelope decode, the
-// unknown-verb hint, the parameter-name check) have to hold for any input.
-//
-// Handlers that would start a process, touch the filesystem, dial a host or
-// block run only their gates here: the dispatcher is driven for the verbs in
-// fuzzReadVerbs, which are safe to run on an empty daemon, and checkParamNames
-// is driven directly for the rest. The daemon is built once per process and
-// holds no sessions, so no iteration can leave state for the next.
-//
-// The ways this could fail, written down before the target:
-//
-//  1. A line produces no reply, two replies, or a reply that is not one line
-//     of JSON, and the client waiting on its id waits forever.
-//  2. The reply carries neither a result nor an error, or carries both.
-//  3. An error code is not one list-verbs publishes, so a client switching on
-//     codes has no branch for it; or its message is empty.
-//  4. The reply's id is not the request's id, so a pipelining client files
-//     the answer under the wrong call.
-//  5. A parameter the verb does not declare gets past checkParamNames, which
-//     is the one thing standing between a misspelt name and a call that
-//     silently ignores it; or a declared one is refused.
-//  6. A handler panics on a hostile params object (wrong types, deep nesting,
-//     huge numbers), which takes the connection goroutine down.
-//  7. The unknown-verb hint scales with the client's string (covered for
-//     closestMatch alone by FuzzClosestMatch; here through the dispatcher).
-//  8. The dispatcher does not return.
-
-// fuzzReadVerbs are the verbs that only read, and on a daemon with no sessions
-// answer from memory. Every other verb is fuzzed up to its handler.
 var fuzzReadVerbs = []string{
 	"hello", "list-verbs", "list-hooks", "list-dock-components", "list-sessions", "list-clients",
 	"session-info", "list-windows", "get-window", "list-workspaces", "capture-pane",
@@ -51,7 +19,6 @@ var fuzzReadVerbs = []string{
 	"pane-grants", "list-hosts",
 }
 
-// captureConn is a net.Conn that keeps what the daemon writes.
 type captureConn struct {
 	net.Conn
 	buf bytes.Buffer
@@ -72,8 +39,6 @@ var (
 	fuzzDaemon     *Daemon
 )
 
-// sameJSON reports whether two JSON texts hold the same value, numbers kept
-// exact.
 func sameJSON(a, b []byte) bool {
 	decode := func(s []byte) (any, bool) {
 		d := json.NewDecoder(bytes.NewReader(s))
@@ -128,13 +93,9 @@ func FuzzVerbDispatch(f *testing.F) {
 		entry, known := verbRegistry()[req.Verb]
 
 		if decoded && known && !safe[req.Verb] {
-			// Gates only. checkParamNames must refuse exactly the names
-			// the schema does not declare.
 			verr := checkParamNames(req.Verb, entry, req.Params)
 			var got map[string]json.RawMessage
 			isObject := len(bytes.TrimSpace(req.Params)) > 0 && json.Unmarshal(req.Params, &got) == nil
-			// hasUndeclared is kept apart from the name because "" is a
-			// name a client can send, and no verb declares it.
 			undeclared, hasUndeclared := "", false
 			for name := range got {
 				declared := false

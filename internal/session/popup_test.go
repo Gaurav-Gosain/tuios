@@ -83,7 +83,6 @@ func TestClientSyncCannotUnmakeAPopup(t *testing.T) {
 		{ID: "w1", Popup: true, IsFloating: true, PopupWidth: "60%", PopupHeight: "40%"},
 		{ID: "w2"},
 	}}
-	// What a client that knows nothing about popups sends back.
 	incoming := &SessionState{Windows: []WindowState{
 		{ID: "w1"},
 		{ID: "w2"},

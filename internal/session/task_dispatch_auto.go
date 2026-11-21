@@ -15,56 +15,23 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Auto dispatch: the daemon starts an agent for each open card.
-//
-// A board in auto mode has a preset: the agent, its model, effort and
-// permission mode, and the machine (this one unless the person picked any or
-// a linked one). For each open card (todo or plan, held by no pane, not
-// blocked, not ask_first), oldest first, the daemon picks the machine as
-// place-agent does, makes a worktree there on a new branch named from the
-// card's title, and starts the agent with start-agent, which claims the card
-// for the new pane and mails it the card. Nothing is typed into the pane.
-//
-// Bounds: at most cap agents at once in total, and machine_cap on one
-// machine, starts in flight included. Each machine's own [tasks] machine_cap
-// still gates it in placement. A card in doing is never started on its own:
-// one let go mid-work (its pane closed, a restart) waits for a person, so a
-// restart never starts a second agent beside one that came back.
-//
-// Every switch of pull holds: pause, quiet hours, a board stopped after 3
-// failures in a row (a failed start counts one), and a usage limit. A preset
-// whose agent no machine has stops the board at once. Auto never answers an
-// approval.
-//
-// One goroutine decides every start, woken by a kick: a task event, a change
-// of the settings, the end of quiet hours. Nothing polls.
-
-// autoState is auto's state on this daemon.
 type autoState struct {
 	once sync.Once
 	kick chan struct{}
 
-	mu sync.Mutex
-	// runs are the cards auto starts or started and that are still held,
-	// by autoKey.
-	runs map[string]autoRun
-	// waiting and note are each auto board's cards that wait, and why.
+	mu      sync.Mutex
+	runs    map[string]autoRun
 	waiting map[string]int
 	note    map[string]string
 	quiet   *time.Timer
-	// told is each auto board's run count as the last pass published it.
-	// A run that starts or ends changes the board's "N running", so a pass
-	// that sees another count publishes, as it does for waiting and note.
-	told map[string]int
+	told    map[string]int
 }
 
-// autoRun is one card auto starts (starting) or started.
 type autoRun struct {
 	board, host string
 	starting    bool
 }
 
-// noteRun records run for key, as a run auto started.
 func (a *autoState) noteRun(key string, run autoRun) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -74,18 +41,14 @@ func (a *autoState) noteRun(key string, run autoRun) {
 	a.runs[key] = run
 }
 
-// autoCard is one open card of an auto board.
 type autoCard struct {
 	sess                                  *Session
 	board, id, title, project, harness, m string
 	at                                    int64
 }
 
-// autoKey is a card's key in runs.
 func autoKey(session, id string) string { return session + "\x00" + id }
 
-// expects is the by of a claim of card id in session that auto is making, or
-// "" when it makes none. remote says the claim came over a link.
 func (a *autoState) expects(session, id string, remote bool) string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -95,8 +58,6 @@ func (a *autoState) expects(session, id string, remote bool) string {
 	return ""
 }
 
-// kickAuto wakes the auto loop when a board is in auto mode. It never
-// blocks.
 func (d *Daemon) kickAuto() {
 	if !d.dispatch.anyMode(DispatchAuto) {
 		return
@@ -121,7 +82,6 @@ func (d *Daemon) kickAuto() {
 	}
 }
 
-// autoPass starts what the auto boards have room for.
 func (d *Daemon) autoPass() {
 	boards := map[string]DispatchPreset{}
 	d.dispatch.mu.Lock()
@@ -148,7 +108,6 @@ func (d *Daemon) autoPass() {
 			if tk.Holder != "" && tk.Dispatched && tk.Stage != TaskStageDone {
 				held[autoKey(sess.Name(), tk.ID)] = true
 			} else if tk.Holder == "" && tk.Blocked == nil && !tk.AskFirst && (tk.Stage == TaskStageTodo || tk.Stage == TaskStagePlan) {
-				// Oldest first: each card goes back past the newer ones.
 				cards := append(open[board], autoCard{sess, board, tk.ID, tk.Title, tk.Project, tk.Harness, tk.Machine, tk.At})
 				for i := len(cards) - 1; i > 0 && cards[i-1].at > cards[i].at; i-- {
 					cards[i-1], cards[i] = cards[i], cards[i-1]
@@ -238,9 +197,6 @@ func (d *Daemon) autoPass() {
 	}
 }
 
-// autoExclude is the machines placement leaves out for a card of machine:
-// each one at capMachine of auto's agents, and each one but machine unless it
-// is any. a.mu is held.
 func (d *Daemon) autoExclude(machine string, capMachine int) []string {
 	out := []string{}
 	for _, h := range append(d.farHosts(), "") {
@@ -258,8 +214,6 @@ func (d *Daemon) autoExclude(machine string, capMachine int) []string {
 	return out
 }
 
-// notInstalledAnywhere reports whether placement left out every machine
-// it asked because the agent is not installed there.
 func notInstalledAnywhere(machines []PlaceMachine) bool {
 	asked := 0
 	for _, m := range machines {
@@ -274,10 +228,8 @@ func notInstalledAnywhere(machines []PlaceMachine) bool {
 	return asked > 0
 }
 
-// dispatchMachineHere is a preset's machine for this machine only.
 const dispatchMachineHere = "here"
 
-// farHosts are the [hosts] names of this daemon.
 func (d *Daemon) farHosts() []string {
 	if d.federation == nil {
 		return nil
@@ -285,7 +237,6 @@ func (d *Daemon) farHosts() []string {
 	return d.federation.Table().Names()
 }
 
-// stopBoard stops board for reason, once.
 func (d *Daemon) stopBoard(board, reason string) {
 	ds := &d.dispatch
 	ds.mu.Lock()
@@ -302,7 +253,6 @@ func (d *Daemon) stopBoard(board, reason string) {
 	}
 }
 
-// untilQuietEnds is how long until the quiet hours end, a second after.
 func (ds *dispatchStore) untilQuietEnds(now time.Time) time.Duration {
 	ds.mu.Lock()
 	_, to, _ := parseQuietHours(ds.f.Quiet)
@@ -311,8 +261,6 @@ func (ds *dispatchStore) untilQuietEnds(now time.Time) time.Duration {
 	return time.Duration(wait)*time.Minute - time.Duration(now.Second()-1)*time.Second
 }
 
-// autoFolder is the folder of sess's repository: its worktree's main
-// checkout, else its focused pane's folder, else its start folder.
 func (d *Daemon) autoFolder(sess *Session) string {
 	if st := sess.GetState(); st != nil {
 		if st.Worktree != nil && st.Worktree.RepoRoot != "" {
@@ -325,24 +273,17 @@ func (d *Daemon) autoFolder(sess *Session) string {
 	return sess.StartDir()
 }
 
-// autoOrigin is the origin URL of sess's folder, "" when it has none.
 func (d *Daemon) autoOrigin(sess *Session) string {
 	origin, _ := worktree.OriginURL(d.autoFolder(sess))
 	return origin
 }
 
-// autoConn is the caller auto's own verb calls run as: the daemon, outside
-// every pane.
 func autoConn() *connState {
 	return &connState{clientID: "tuios dispatch", done: make(chan struct{})}
 }
 
-// autoStartBudget bounds a start on another machine: the worktree (a clone,
-// maybe) and the agent's ready wait.
 const autoStartBudget = 6 * time.Minute
 
-// autoStart makes the worktree and starts agent for card c on the machine
-// place picked, then counts the outcome.
 func (d *Daemon) autoStart(c autoCard, agent string, preset DispatchPreset, place PlaceAnswer) {
 	key := autoKey(c.sess.Name(), c.id)
 	ok := false
@@ -363,12 +304,9 @@ func (d *Daemon) autoStart(c autoCard, agent string, preset DispatchPreset, plac
 			d.publishDispatch("stopped", dispatchStopFailures)
 		}
 	}
-	// The switches again: a pause that came after the pick holds the start.
 	if d.dispatch.blocked(c.board, DispatchAuto, time.Now()) != "" {
 		return
 	}
-	// call runs verb here, or on the picked machine, and reads its answer
-	// the same way.
 	call := func(verb string, params map[string]any) (map[string]any, *verbError) {
 		var raw []byte
 		var err error
@@ -391,7 +329,6 @@ func (d *Daemon) autoStart(c autoCard, agent string, preset DispatchPreset, plac
 			raw, err = d.federation.Call(ctx, place.Host, verb, params)
 			cancel()
 			if rerr, ok := errors.AsType[*federation.RemoteError](err); ok {
-				// Its code, not its words: the far daemon is untrusted.
 				code := printableClaim(rerr.Code, 40)
 				return nil, newVerbError(code, place.Host+" refused "+verb+" ("+code+")")
 			}
@@ -415,8 +352,6 @@ func (d *Daemon) autoStart(c autoCard, agent string, preset DispatchPreset, plac
 			params["repos_root"] = hostReposRoots()[place.Host]
 		}
 	}
-	// A branch from the title, -2 to -9 when it or its folder or session is
-	// there already.
 	slug := strings.ToLower(worktree.Slug(c.title))
 	slug = strings.TrimRight(slug[:min(len(slug), 40)], "-.")
 	var wt map[string]any
@@ -432,9 +367,6 @@ func (d *Daemon) autoStart(c autoCard, agent string, preset DispatchPreset, plac
 		}
 		wt = res
 	}
-	// A start that fails from here closes what it opened: the worktree and
-	// its session, with the pane and its agent. remove-worktree keeps a
-	// worktree that holds changes or commits, and its branch either way.
 	defer func() {
 		if ok {
 			return
@@ -451,8 +383,6 @@ func (d *Daemon) autoStart(c autoCard, agent string, preset DispatchPreset, plac
 		params["task_host"] = place.TaskHost
 	}
 	if d.dispatchReady > 0 {
-		// daemon.dispatch_ready_seconds: tests shorten the wait for an agent
-		// that never comes up.
 		params["ready_timeout"] = int(d.dispatchReady.Milliseconds())
 	}
 	res, verr := call("start-agent", params)
@@ -462,20 +392,16 @@ func (d *Daemon) autoStart(c autoCard, agent string, preset DispatchPreset, plac
 	case verr != nil:
 		failed("the agent did not start: " + verr.Message)
 	case outcome == string(agentStartReady) || outcome == string(agentStartBlocked):
-		// Ready, or waiting on the person: the agent holds its card.
 		ok = res["task"] != nil
 		LogBasic("Task dispatch started %s for task %s in session %s on %s", agent, c.id, c.sess.Name(), cmp.Or(place.Host, "this machine"))
 	case res["task"] == nil:
 		failed("the agent did not start (" + outcome + ")")
 	default:
-		// The agent never came up, and its pane holds the card: letting it
-		// go counts the failure. A closed pane let it go already.
 		window, _ := res["window_id"].(string)
 		d.releaseHeld(c.sess, window, "the agent did not start")
 	}
 }
 
-// autoStatus adds auto's counts to st.
 func (d *Daemon) autoStatus(st *DispatchStatus) {
 	a := &d.auto
 	a.mu.Lock()

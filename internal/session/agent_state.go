@@ -9,10 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
-// clearAgentNote drops what a window's state said about itself: the message
-// and the kind of block. Every path that moves a window's state without a
-// report of its own calls it, so a kind never outlives the needs_input it
-// described.
 func clearAgentNote(w *WindowState) {
 	w.AgentMessage = ""
 	w.AgentKind = ""
@@ -74,11 +70,7 @@ type AgentReport struct {
 	// then is the pid known to name a process of this machine, and only then
 	// may its exit clear the pane. See harnessProc.
 	HarnessIsCaller bool
-	// harnessGone is set by the daemon when the report comes from a process
-	// in the pane whose harness no longer runs there (harnessLeftPane): a
-	// hook that landed after its harness quit. The harness record is then
-	// taken for exited, so the claim lapses once the pane is at its shell.
-	harnessGone bool
+	harnessGone     bool
 	// SessionStart marks the report of a conversation starting or resuming,
 	// as the hook's SessionStart sends it. It only matters with SharedServer.
 	SessionStart bool
@@ -100,37 +92,12 @@ type AgentReport struct {
 	// needs_input and waits on that subagent's prompt. It is how a subagent's hook clears the prompt
 	// it raised without clearing one the main agent or another subagent
 	// raised meanwhile.
-	IfSubagent string
-	// foreignPane says the harness that ran the hook does not run in the pane
-	// the report names. The verb handler sets it from harnessOutsidePane, and
-	// the report is then refused with foreign_pane before anything else is
-	// read.
+	IfSubagent  string
 	foreignPane bool
-	// fromPane says the report comes from the pane it is about: a caller
-	// placed in that pane, a herdr report the pane sent for itself, or the
-	// answer to the pane's own held approval. A report from anywhere else
-	// that moves the pane off needs_input does not prove the prompt is gone,
-	// and holds it (promptHold).
-	fromPane bool
-	// paneWroteAt is the unix-nano time the pane last produced output, as the
-	// source read it at the moment it looked. Only the daemon's own looks set
-	// it (the title, the screen and a notification). blockerOverridesClaim reads
-	// it to show a claim is describing a screen the pane has since painted over,
-	// and lookRepeatsClaim reads it to tell a look from a report.
+	fromPane    bool
 	paneWroteAt int64
-	// event marks a report read from a one-off event rather than a standing
-	// fact: a desktop notification says what was true when it was sent and is
-	// never repeated. Its claim is stale as soon as the pane writes again, and
-	// from then on a look at the title or screen may replace it. Without that
-	// a notification asking for approval held the pane on needs_input after
-	// the approval was given, against every tier that could see the agent
-	// working again. Only the daemon sets it.
-	event bool
-	// promptGone marks an idle look that the screen confirmed: the empty
-	// prompt box, read as long as a working pane's idle must hold. It is the
-	// one look that may end a prompt a hook reported from a one-off event
-	// (hookPromptHolds). Only applyIdleVerdict sets it.
-	promptGone bool
+	event       bool
+	promptGone  bool
 }
 
 // SetDaemonWindowAgentState records an explicit report on the window matching
@@ -161,61 +128,26 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 	return effective, applied, err
 }
 
-// Refusal reasons applyAgentReport gives for a report it did not apply. They
-// are wire values: set-agent-state returns them as "reason".
 const (
-	// agentRefusedOutranked is a report from a source ranked below the claim.
-	agentRefusedOutranked = "outranked"
-	// agentRefusedIfState is a report whose if_state did not hold.
-	agentRefusedIfState = "if_state"
-	// agentRefusedForeignSession is a hook report from a conversation other
-	// than the one the pane's own harness is in the middle of.
+	agentRefusedOutranked      = "outranked"
+	agentRefusedIfState        = "if_state"
 	agentRefusedForeignSession = "foreign_session"
-	// agentRefusedForeignHarness is a hook report from a harness other than
-	// the one that reported the pane mid-turn.
 	agentRefusedForeignHarness = "foreign_harness"
-	// agentRefusedForeignPane is a hook report from a harness that does not
-	// run in the pane it names. See harnessOutsidePane.
-	agentRefusedForeignPane = "foreign_pane"
+	agentRefusedForeignPane    = "foreign_pane"
 )
 
-// sharedGuard is what the guard of a shared-server harness knows about one
-// window: the harness, the conversation that owns the window, and the
-// conversations that owned it before, most recent first. An empty owner means
-// the guard is not armed and every report passes it. Only a report with
-// SessionStart arms it, so a pane whose hooks were installed mid-conversation,
-// or a daemon that restarted, fails open.
-//
-// history is what keeps the guard from locking a pane against its own
-// conversation, which matters more than keeping a foreign one off it. A
-// SessionStart from another terminal on the same server looks exactly like
-// /new or /resume in the pane, so it takes the window over. Any conversation in
-// history takes the window back with its next report. Either way the owner it
-// displaces goes to the front of history, so the pane's own conversation, whose
-// TUI is in the pane, is always one report away from the window, however the
-// takeovers interleave with /new in the pane. The cost is that a foreign
-// conversation that once sent a SessionStart can take the window back the same
-// way. A conversation that never did is refused.
-//
-// armedAt is when the guard was armed, so the detector's shell sweep does not
-// forget a guard armed after the process reading it acts on was taken.
 type sharedGuard struct {
 	harness, owner string
 	history        []string
 	armedAt        int64
 }
 
-// sharedGuardHistory bounds sharedGuard.history. The oldest entry goes first.
 const sharedGuardHistory = 4
 
-// accepts reports whether the armed guard g lets a report about conversation
-// id through without a SessionStart.
 func (g sharedGuard) accepts(id string) bool {
 	return id == g.owner || slices.Contains(g.history, id)
 }
 
-// noteSharedGuard moves the window's guard on for an applied report r. Called
-// with stateMu held.
 func (s *Session) noteSharedGuard(windowID string, r AgentReport) {
 	if !r.SharedServer || r.SessionID == "" {
 		return
@@ -223,7 +155,6 @@ func (s *Session) noteSharedGuard(windowID string, r AgentReport) {
 	g, armed := s.agentSharedGuards[windowID]
 	switch {
 	case r.State == AgentStateNone:
-		// SessionEnd: the conversation is over and the pane is free.
 		delete(s.agentSharedGuards, windowID)
 		return
 	case !armed || g.owner == "" || g.harness != r.Harness:
@@ -234,9 +165,6 @@ func (s *Session) noteSharedGuard(windowID string, r AgentReport) {
 	case r.SessionID == g.owner:
 		return
 	default:
-		// A SessionStart or a reclaim: r's conversation becomes the owner,
-		// leaves history, and the owner it displaces goes to the front. A
-		// fresh slice: the map holds a copy of g that shares the old array.
 		next := []string{g.owner}
 		for _, id := range g.history {
 			if id != r.SessionID && len(next) < sharedGuardHistory {
@@ -251,52 +179,14 @@ func (s *Session) noteSharedGuard(windowID string, r AgentReport) {
 	s.agentSharedGuards[windowID] = g
 }
 
-// refusedAsForeign says reason refused a report as another agent's, whose
-// activity and folder are not the pane's agent's.
 func refusedAsForeign(reason string) bool {
 	return reason == agentRefusedForeignSession || reason == agentRefusedForeignHarness || reason == agentRefusedForeignPane
 }
 
-// errAgentReportRefused carries a refusal reason out of mutateState.
 type errAgentReportRefused string
 
 func (e errAgentReportRefused) Error() string { return "agent report refused: " + string(e) }
 
-// sessionGuard decides whether a hook report about one conversation may write
-// to a window, returning a refusal reason or "".
-//
-// A hook fires for every harness process that loaded it, not only the one that
-// owns the pane. A `claude -p` a tool call started inside the pane runs the
-// same user hooks, and so does a second harness nested in the first. Their
-// events carry their own session id, and without this a nested run finishing
-// would mark the pane done while the outer turn is still running.
-//
-// The rule refuses only while the pane's own harness is mid-turn by its own
-// report: a report-source claim in working or needs_input. That is the only
-// time a nested run can exist, since a nested run is started by a tool call.
-// At rest, a different session is a new conversation in the same pane (a
-// restart, /clear, /resume), and it takes the pane over. A report without a
-// session id never reaches here, so a caller that sends none keeps its
-// behaviour.
-//
-// Mid-turn, a different session from the same harness process also takes the
-// pane over. Claude Code fires no Stop when the user interrupts a turn, so the
-// pane can sit in working with nothing running, and a /clear or /resume then
-// starts a new session id in the same process. Refusing that would hold the
-// pane in working until the harness exits. ownerPID is the harness pid the
-// pane's current session id was reported with, and 0 when unknown; a nested
-// run is a different process, so it is still refused.
-//
-// A shared-server harness (Codex) breaks both rules above. It runs the hooks
-// of every conversation from one server process, and a Codex in another
-// terminal can use the server a pane's codex started, so its hooks carry the
-// pane's TUIOS_PANE_ID and the same harness pid (#852). For such a harness,
-// once g is armed, a report about a conversation other than g's owner is
-// refused with foreign_session, at rest and mid-turn, unless it is in the
-// guard's history (which takes the pane back, see sharedGuard) or a
-// SessionStart.
-// A SessionStart then goes on to the rules above, so mid-turn it still has to
-// come from the owner's process.
 func sessionGuard(w *WindowState, claim agentClaim, held bool, ownerPID int, g sharedGuard, r AgentReport) string {
 	if r.SessionID == "" {
 		return ""
@@ -327,18 +217,11 @@ func sessionGuard(w *WindowState, claim agentClaim, held bool, ownerPID int, g s
 	return ""
 }
 
-// agentReportGuard resolves target to a window id and runs sessionGuard for r
-// against the window as it stands, returning the id and the refusal reason,
-// or "" for a report the guard lets through. The id is empty when target
-// names no window.
 func (s *Session) agentReportGuard(target string, r AgentReport) (string, string) {
 	id, _, reason, _ := s.guardReport(target, r, false)
 	return id, reason
 }
 
-// guardReport resolves target under the state lock and runs sessionGuard for
-// r against it. strict adds activityReportGuard's checks. It returns the
-// window's id and state, and the refusal reason, "" when it lets r through.
 func (s *Session) guardReport(target string, r AgentReport, strict bool) (string, AgentState, string, error) {
 	s.stateMu.RLock()
 	defer s.stateMu.RUnlock()
@@ -362,27 +245,14 @@ func (s *Session) guardReport(target string, r AgentReport, strict bool) (string
 	return w.ID, w.AgentState, reason, nil
 }
 
-// sharedAccepts reports whether r is from a shared-server harness whose armed
-// guard on the window holds r's conversation. Such a report is not refused for
-// naming a conversation other than the stored one: it is a reclaim waiting for
-// its state report, and hiding the pane's own conversation is the worse error.
 func sharedAccepts(g sharedGuard, r AgentReport) bool {
 	return r.SharedServer && g.owner != "" && g.harness == r.Harness && g.accepts(r.SessionID)
 }
 
-// activityReportGuard is agentReportGuard for report-agent-activity, which
-// carries no state, and returns the state the window shows as well. Such a
-// report never takes a pane over, so beyond sessionGuard it is refused
-// whenever it names a conversation other than the one the pane holds, or a
-// harness other than the one the pane is attributed to, at rest as well as
-// mid-turn: the subagents of a `claude -p` the agent left running in the
-// background are not the pane's agent's, whatever the pane is doing.
 func (s *Session) activityReportGuard(target string, r AgentReport) (string, AgentState, string, error) {
 	return s.guardReport(target, r, true)
 }
 
-// applyAgentReport is ApplyAgentReport with the reason a refused report was
-// refused, empty when it was applied.
 func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bool, string, error) {
 	if r.Source == "" {
 		r.Source = AgentSourceReport
@@ -391,8 +261,6 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 	applied := false
 	var holdAt int64
 	var heldWindow, heldPTY string
-	// heardOnly is an if_state refusal that cleared a silence: the state
-	// changes, so the mutation publishes, and the report is still refused.
 	heardOnly := false
 	err := s.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, target)
@@ -401,10 +269,6 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		}
 		w := &st.Windows[idx]
 		if ask, asking := s.askShowLocked(w); asking {
-			// The pane shows a question from ask-human over its state. The
-			// report is about the state beneath it, judged and applied
-			// there, and the question stays on top unless the report is
-			// one the person has to see now (ask_human_state.go).
 			shown := w
 			beneath := *shown
 			ask.beneath.put(&beneath)
@@ -427,17 +291,12 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		prev := w.AgentState
 		if len(r.IfState) > 0 && !slices.Contains(r.IfState, prev) {
 			effective = prev
-			// A conditional report that does not apply is still the agent
-			// speaking, and counts against a silence (agent_silent.go).
 			if s.noteHeardLocked(w, claim, held, r) {
 				heardOnly = true
 				return nil
 			}
 			return errAgentReportRefused(agentRefusedIfState)
 		}
-		// Checked against the state as well as the claim, so a report naming
-		// a subagent never applies to a pane that is not waiting on a prompt,
-		// whatever if_state the sender passed.
 		if r.IfSubagent != "" && (prev != AgentStateNeedsInput || !held || claim.subagent != r.IfSubagent) {
 			effective = prev
 			return errAgentReportRefused(agentRefusedIfState)
@@ -451,14 +310,10 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			return errAgentClaimHeld
 		}
 		override := false
-		// held, not the zero claim's rank: a window nobody has claimed is open to
-		// any source, including the weakest.
 		if held && r.Source.Rank() < claim.source.Rank() && !eventClaimStale(claim, w, r) {
 			if !blockerOverridesClaim(w, r, claim, time.Now()) {
 				effective = w.AgentState
 				if screenNamesPrompt(claim, w, r) {
-					// The claim stays the reporter's; the screen only says
-					// what the prompt it reported is about.
 					w.AgentMessage = ClampDisplayText(r.Message)
 					return nil
 				}
@@ -467,17 +322,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			override = true
 		}
 		next := agentClaim{source: r.Source, harness: harnessAfterReport(w, r), auto: claim.auto, misses: claim.misses, event: r.event}
-		// A transcript cannot say that a prompt is up: Claude Code's reads
-		// working while a permission or folder-trust question waits on the
-		// screen. So a prompt the daemon's own look sees takes its claim at
-		// once (blockerOverridesClaim), and gives it back when the prompt goes.
 		next.screenWins = r.Source == AgentSourceTranscript && r.State == AgentStateWorking
-		// sawProcess is carried over too, for the same reason auto is: it is
-		// what lets the detector clear a claim it does not own once the agent
-		// has left the pane. Claude Code clears its progress bar as it exits,
-		// and a claim rebuilt from that report without it kept the pane at idle
-		// for as long as the pane lived. A none report ends it, the way it ends
-		// the harness pid: that agent has gone.
 		next.sawProcess = claim.sawProcess && r.State != AgentStateNone
 		next.identity = identityAfterReport(claim, r, next.harness)
 		if r.State == AgentStateNeedsInput {
@@ -488,27 +333,13 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			next.blocker = true
 			next.prior = priorOf(claim, w)
 		case claim.blocker && r.Source == claim.source && r.State == prev:
-			// The same rule matching the same prompt again is the standing
-			// override, not a fresh claim. Forgetting what it displaced here
-			// would leave nothing to hand back, and the pane would stick.
 			next.blocker, next.prior = true, claim.prior
 		case r.Source == AgentSourceScreen && agentStateBlocks(r.State) && held:
-			// A screen rule reads a prompt, and a prompt is true only while it
-			// is on the screen. So every claim the screen tier takes is a loan,
-			// whether it outranked the claim it displaced or overrode it: when
-			// the prompt is painted over, the displaced claim comes back. Without
-			// this a pane the detector held stayed on needs_input through the
-			// whole turn that followed the answer, because the screen tier
-			// asserts no other state and outranks the detector.
 			next.blocker = true
 			next.prior = priorOf(claim, w)
 		}
 		switch {
 		case r.State == AgentStateNeedsInput, r.fromPane, r.paneWroteAt != 0:
-			// On a prompt again, or a word from the pane itself or from the
-			// daemon's own look at it (only a look sets paneWroteAt; a
-			// caller that names source screen has looked at nothing):
-			// nothing to hold.
 		case prev == AgentStateNeedsInput:
 			next.promptHold = time.Now().UnixNano()
 			holdAt = next.promptHold
@@ -516,9 +347,6 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			next.promptHold, next.holdFg = claim.promptHold, claim.holdFg
 		}
 		if next.blocker {
-			// A blocker over a herdr reporter's claim still follows the
-			// reporter's process, so a crashed harness clears the pane even
-			// while its last prompt is on the screen (herdrClaimLapsed).
 			next.herdrAt, next.herdrAnchors = claim.herdrAt, claim.herdrAnchors
 		}
 		w.AgentState = r.State
@@ -529,25 +357,16 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		s.noteSharedGuard(w.ID, r)
 		if r.SessionID != "" {
 			w.AgentSessionID = r.SessionID
-			// The harness the id belongs to: the one the report named, else
-			// the one the pane is attributed to after it.
 			w.AgentSessionHarness = r.Harness
 			if w.AgentSessionHarness == "" {
 				w.AgentSessionHarness = next.harness
 			}
 			s.setAgentHarnessPID(w.ID, r.HarnessPID, r.HarnessIsCaller, r.harnessGone)
 		}
-		// A pane cleared to none has no agent to describe, and metadata left
-		// behind would be drawn for whatever agent starts in it next. Nor a
-		// harness process: one recorded past its SessionEnd would read as
-		// exited later and clear a note a person leaves on the pane at its
-		// shell (see the detector's lapse of a hook's claim).
 		if r.State == AgentStateNone {
 			w.AgentMeta = nil
 			delete(s.agentHarnessPIDs, w.ID)
 		}
-		// auto is carried over: it says the detector will clear this pane when the
-		// agent exits, which a report taking the state over does not change.
 		s.setAgentClaim(w.ID, next)
 		heldWindow, heldPTY = w.ID, w.PTYID
 		effective = r.State
@@ -563,9 +382,6 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 	if errors.Is(err, errAgentClaimHeld) {
 		return effective, false, agentRefusedOutranked, nil
 	}
-	// A look that read back its own claim changed nothing, and it has no
-	// reason: it comes from the daemon's own looks, never from a caller of
-	// set-agent-state, which is the only reader of the reason.
 	if errors.Is(err, errAgentLookUnchanged) {
 		return effective, false, "", nil
 	}
@@ -578,32 +394,6 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 	return effective, applied, "", nil
 }
 
-// harnessAfterReport decides what a window is attributed to once r is applied.
-//
-// Attribution and state answer different questions, and the harness id is the
-// one the foreground-process detector owns: it names the harness when it sees
-// the binary and clears it when the agent leaves the foreground, which is the
-// only event that can honestly say a pane is no longer running one. A report
-// says what the agent is doing, and most reporters have no idea what tuios calls
-// the program they run inside: the shipped hook shim, an OSC 9;4 sequence and a
-// settled hold all name a state and no harness. Writing their empty id over the
-// detector's answer would erase the pane's attribution, and the screen tier keys
-// on it to know whose rules to run, so one hook event would leave the pane
-// unable to see any prompt on it ever again.
-//
-// So a report that names no harness is silent about attribution rather than
-// denying it, and a reporter that does name one is refining what the detector
-// guessed, which is how a harness behind a wrapper gets attributed at all. The
-// one report that clears it is none, since that is the caller saying in as many
-// words that the pane is not running an agent.
-//
-// It clears it whatever harness the none report names. A harness's own none
-// names that harness (Claude Code's SessionEnd hook, herdr's
-// pane.release_agent), and a none that kept it left the pane at none with a
-// harness. Nothing cleared that afterwards: the detector lets go of a claim it
-// does not own only while the pane still shows a state, and a pane at none has
-// none to clear. So the pane stayed in list-agents, at none and at its shell,
-// for as long as it lived.
 func harnessAfterReport(w *WindowState, r AgentReport) string {
 	if r.State == AgentStateNone {
 		return ""
@@ -614,29 +404,16 @@ func harnessAfterReport(w *WindowState, r AgentReport) string {
 	return w.AgentHarness
 }
 
-// agentKindOf is the block kind a window records once r is applied. Only
-// needs_input carries one. A report that names a kind is believed; one that
-// names none, such as the Claude Code hook shim's, is guessed from its message
-// the way a rule without a kind is guessed from its words. A report with
-// neither leaves the kind empty, which blocked_by reports as the source not
-// having said.
 func agentKindOf(r AgentReport) string {
 	if r.State != AgentStateNeedsInput {
 		return ""
 	}
 	if r.Kind != "" || r.Source == AgentSourceProgram {
-		// An OSC 7501 report's msg is never read for meaning, so a blocked
-		// report with no kind keeps an empty one.
 		return r.Kind
 	}
 	return harness.GuessPromptKind(r.Message)
 }
 
-// agentBlockedBy is what list-agents and get-agent-state report as blocked_by:
-// the recorded kind while the pane is on needs_input, and nothing otherwise. The
-// state is checked rather than trusted to have cleared the kind, because the
-// detector and the stall timer move a pane off needs_input without going
-// through ApplyAgentReport.
 func agentBlockedBy(w WindowState) string {
 	if w.AgentState != AgentStateNeedsInput {
 		return ""
@@ -644,10 +421,6 @@ func agentBlockedBy(w WindowState) string {
 	return w.AgentKind
 }
 
-// identityAfterReport decides what kind of evidence stands behind a window's
-// harness once r is applied. A report that names a harness is the harness
-// speaking for itself, the one certain source; a report that names none leaves
-// the evidence as it was, the same way harnessAfterReport leaves the harness.
 func identityAfterReport(claim agentClaim, r AgentReport, harness string) identityTier {
 	switch {
 	case harness == "":
@@ -659,21 +432,12 @@ func identityAfterReport(claim agentClaim, r AgentReport, harness string) identi
 	}
 }
 
-// screenNamesPrompt reports whether a screen look may put its words on a
-// prompt a screenWins reporter reported with none of its own: the reporter
-// and the look agree the pane waits, and the reporter's message is the
-// placeholder herdrReport writes for a blocked report with no message
-// (Crush before charmbracelet/crush#3541 sends none). The look reads the
-// tool and what it acts on from the dialog, which the Inbox and the risk
-// rules need.
 func screenNamesPrompt(claim agentClaim, w *WindowState, r AgentReport) bool {
 	return claim.screenWins && r.Source == AgentSourceScreen && r.paneWroteAt != 0 &&
 		r.State == w.AgentState && agentStateBlocks(r.State) && r.Message != "" &&
 		w.AgentMessage == herdrBlockedPlaceholder
 }
 
-// priorOf is what a visible-blocker override keeps of the claim it displaces,
-// on window w before the override is applied.
 func priorOf(claim agentClaim, w *WindowState) agentPriorClaim {
 	return agentPriorClaim{
 		source:       claim.source,
@@ -688,29 +452,12 @@ func priorOf(claim agentClaim, w *WindowState) agentPriorClaim {
 	}
 }
 
-// agentBlockerOverrideGrace is how long a higher-ranked claim must have stood
-// without being refreshed before a visible blocker may write over it.
-//
-// It is the fair-chance window. A harness that paints a permission prompt and
-// has a hook reports the prompt itself within a socket round trip, and that
-// answer is better than any rule, so the rule waits this long for it. Two
-// seconds is far longer than a shim takes to spawn and dial, and far shorter
-// than the silence timer, which is the only other thing that would ever notice.
 const agentBlockerOverrideGrace = 2 * time.Second
 
-// agentStateBlocks reports whether a state means a human is being waited for.
-//
-// Only such a state may take the exception. A rule claiming working or idle is
-// guessing at what a pane is doing from how it looks, and a guess must never
-// outrank a source that was told; a rule matching a prompt is reading a question
-// addressed to the user, which is a fact about the screen rather than an
-// inference about the process.
 func agentStateBlocks(state AgentState) bool {
 	return state == AgentStateNeedsInput
 }
 
-// paneForeground is the foreground process group of the pane with this
-// PTY, and false when the pane has exited or the group cannot be read.
 func (s *Session) paneForeground(ptyID string) (int, bool) {
 	pty := s.GetPTY(ptyID)
 	if pty == nil || pty.IsExited() {
@@ -720,8 +467,6 @@ func (s *Session) paneForeground(ptyID string) (int, bool) {
 	return info.pid, ok
 }
 
-// notePromptHoldFg records the pane's foreground process group on the hold
-// taken at holdAt. It is read outside the state lock, since it reads /proc.
 func (s *Session) notePromptHoldFg(windowID, ptyID string, holdAt int64) {
 	fg, ok := s.paneForeground(ptyID)
 	if !ok {
@@ -735,15 +480,6 @@ func (s *Session) notePromptHoldFg(windowID, ptyID string, holdAt int64) {
 	}
 }
 
-// promptStillShown reports whether w is held as still on the prompt it was
-// moved off (promptHold). Keys typed into it would answer that prompt,
-// whatever state was reported after.
-//
-// The hold ends when the pane says something for itself, when a look at its
-// screen reports, when it comes to a prompt again, or when the program in its
-// foreground changes, which is what answering the prompt or leaving it
-// usually does. Output does not end it: a resize makes most prompts draw
-// themselves again, and anyone may resize a pane.
 func (s *Session) promptStillShown(w WindowState) bool {
 	s.stateMu.RLock()
 	c := s.agentClaims[w.ID]
@@ -756,51 +492,12 @@ func (s *Session) promptStillShown(w WindowState) bool {
 		return false
 	}
 	if c.holdFg == 0 {
-		// The foreground could not be read when the hold began. It holds
-		// until the pane says something for itself.
 		return true
 	}
 	fg, ok := s.paneForeground(w.PTYID)
 	return !ok || fg == c.holdFg
 }
 
-// blockerOverridesClaim is the one hole in the source ranking: a screen rule
-// that can see a blocking prompt may write over a source ranked above it when
-// that source has gone stale.
-//
-// The case it exists for is a harness that reported working for itself, then
-// stopped and painted a permission prompt without saying anything further.
-// Ranking alone pins such a pane on working forever, and the user is never told
-// they are being waited for, which is the one thing the whole feature is for.
-//
-// Stale has to mean something the code can check, so it means both halves of it:
-//
-//   - The pane has written since the claim was stamped, so the claim is
-//     describing a screen that has been painted over. An older claim about the
-//     current screen is not stale, it is just old.
-//   - The claim has stood unrefreshed for agentBlockerOverrideGrace, so a source
-//     that is actively reporting has had its chance to describe the new screen
-//     first and has not taken it.
-//
-// The rest is scope: only the screen tier, only a blocking state, and never over
-// a claim already saying it, so a harness that reports needs_input properly
-// keeps its own claim rather than having it taken by a rule agreeing with it.
-//
-// paneWroteAt is what confines the exception to the daemon's own tier. A caller
-// naming source=screen over the socket has not looked at anything, sends no
-// observation, and so fails the first half of staleness every time.
-//
-// A claim marked screenWins skips both halves: its reporter is known to say
-// working while its prompt is up, so a prompt on the screen is the newer fact
-// whenever the daemon's own look sees one. paneWroteAt still has to be set,
-// which keeps the exception to the daemon's tier.
-//
-// A usage limit on the screen takes a resting claim the same way, and only a
-// resting one. A harness at its limit is back at its prompt, so its title
-// says at rest (Claude Code's ✳) and a turn-end report says done or idle; the
-// limit line is the one thing that says why, and no claim at rest describes
-// it. A working claim keeps the pane: the limit line of an earlier turn under
-// a live one is history.
 func blockerOverridesClaim(w *WindowState, r AgentReport, claim agentClaim, now time.Time) bool {
 	if r.Source == AgentSourceScreen && r.State == AgentStateLimitReached && w.AgentState != r.State {
 		return r.paneWroteAt > w.AgentStateAt && agentStateRests(w.AgentState)
@@ -814,51 +511,20 @@ func blockerOverridesClaim(w *WindowState, r AgentReport, claim agentClaim, now 
 	if r.paneWroteAt <= w.AgentStateAt {
 		return false
 	}
-	// A claim that says the agent is at rest is not a source mid-way through
-	// describing the new screen, so it gets no grace. It is what a rest glyph
-	// in the title or a cleared progress bar leaves behind, and waiting two
-	// seconds on it meant the one look that sees the prompt, the settle look,
-	// was always too early and nothing else looked again. Done is at rest
-	// too: a turn's Stop said it, and Claude Code then draws a form (Teach
-	// auto mode about your environment?) that no hook reports.
 	if agentStateRests(w.AgentState) {
 		return true
 	}
 	return now.UnixNano()-w.AgentStateAt >= int64(agentBlockerOverrideGrace)
 }
 
-// agentStateRests reports whether a state says the agent is at its prompt with
-// nothing to say: idle, unknown or done.
 func agentStateRests(s AgentState) bool {
 	return s == AgentStateIdle || s == AgentStateUnknown || s == AgentStateDone
 }
 
-// eventClaimStale reports whether a claim read from a one-off event may be
-// replaced by r: the pane has written since the claim was stamped, and r is a
-// look at the pane (the title or the screen) rather than a guess from the
-// detector or the silence timer. See AgentReport.event.
 func eventClaimStale(claim agentClaim, w *WindowState, r AgentReport) bool {
 	return claim.event && r.paneWroteAt > w.AgentStateAt && r.Source.Rank() >= AgentSourceScreen.Rank()
 }
 
-// hookPromptHolds reports whether r must leave alone the prompt a hook
-// reported from a one-off event (agentClaim.hookEventPrompt), held by the hook
-// itself or lent to a screen rule reading its menu.
-//
-// Such a prompt ends on a hook's word, or on the screen's word that it is gone:
-// the empty prompt box, confirmed as a working pane's idle is (promptGone). No
-// other look ends it. A spinner in the title or a "Thinking…" line on the
-// screen can be drawn between the hook and the menu, or over a form no rule
-// reads, so a working look says nothing about whether the prompt was answered,
-// and a prompt that ends early is one nobody answers. A desktop notification
-// or the transcript would end it the same way, so they are held off too, and
-// a needs_input from any of them is the prompt the hook already reported.
-//
-// A screen rule reading the prompt still takes it, as a loan that keeps the
-// hook's claim to hand back. The hook tier is not held at all: a person who
-// answers Yes sets off PostToolUse or PreToolUse, which ends the prompt at
-// once. Nor is a report that the agent is gone, so a pane whose harness left
-// clears as before.
 func hookPromptHolds(claim agentClaim, held bool, w *WindowState, r AgentReport) bool {
 	if !held || w.AgentState != AgentStateNeedsInput || !claim.hookEventPrompt() {
 		return false
@@ -869,16 +535,6 @@ func hookPromptHolds(claim agentClaim, held bool, w *WindowState, r AgentReport)
 	return r.Source != AgentSourceScreen || !agentStateBlocks(r.State) || r.paneWroteAt == 0
 }
 
-// releaseAgentBlockerOverride puts back the claim a visible blocker displaced,
-// and reports whether it had one to put back. Its caller is the screen tier,
-// running a look that found no rule matching: the prompt the exception was
-// granted for is off the screen, so the exception ends with it.
-//
-// This is the half that keeps the hole from being a trap. The screen tier
-// asserts needs_input and nothing else, so without a release nothing on the pane
-// could ever move it off again and it would stick on needs_input. The displaced
-// source and state go back as they were, which puts the pane back under
-// whichever tier was already handling it, silence timer included.
 func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
 	released := false
 	_ = s.mutateState(func(st *SessionState) error {
@@ -895,12 +551,6 @@ func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
 		w.AgentMessage, w.AgentKind = claim.prior.message, claim.prior.kind
 		w.AgentHarness = claim.prior.harness
 		w.AgentStateAt = time.Now().UnixNano()
-		// auto and sawProcess are the blocker's, not the displaced claim's:
-		// both are facts about the pane rather than about who held it, and the
-		// detector may have seen the agent while the prompt was up. The
-		// prompt is often painted over by the agent's own exit, so a claim
-		// handed back without sawProcess kept the pane at its prior state for
-		// as long as the pane lived.
 		s.setAgentClaim(w.ID, agentClaim{
 			source:       claim.prior.source,
 			harness:      claim.prior.harness,
@@ -917,46 +567,24 @@ func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
 	return released
 }
 
-// errNoBlockerRelease tells mutateState the window was not holding an override,
-// so a look that found nothing on an ordinary pane neither bumps the version nor
-// pushes state. It never leaves the package.
 var errNoBlockerRelease = blockerNoRelease{}
 
 type blockerNoRelease struct{}
 
 func (blockerNoRelease) Error() string { return "no visible-blocker override to release" }
 
-// errAgentClaimHeld tells mutateState that a higher-ranked source owns the
-// window, so the refused report neither bumps the version nor pushes state. It
-// never leaves the package.
 var errAgentClaimHeld = agentClaimHeld{}
 
 type agentClaimHeld struct{}
 
 func (agentClaimHeld) Error() string { return "agent state is held by a higher-ranked source" }
 
-// errAgentLookUnchanged tells mutateState that a look read back what its own
-// claim already says, so nothing is written, stamped or pushed. It never leaves
-// the package.
 var errAgentLookUnchanged = agentLookUnchanged{}
 
 type agentLookUnchanged struct{}
 
 func (agentLookUnchanged) Error() string { return "agent state is unchanged" }
 
-// lookRepeatsClaim reports whether r is a look at the pane (the title or the
-// screen, which set paneWroteAt) reading back exactly the claim its own source
-// already holds: same source, state, message, block kind and harness.
-//
-// Such a report is not new evidence, and applying it restamped AgentStateAt on
-// every look. A spinner frame left in the title then kept its working claim
-// looking fresh forever, and blockerOverridesClaim, which waits for a claim to
-// go unrefreshed, never let the permission prompt under it through.
-//
-// A report from anything else still restamps. A hook or a caller saying working
-// again is a source that is actively reporting, which is what the override's
-// grace and the silence timer both measure, and a notification is a new event
-// even when it says the same thing as the last one.
 func lookRepeatsClaim(claim agentClaim, held bool, w *WindowState, r AgentReport) bool {
 	return held && r.paneWroteAt != 0 && !r.event && !claim.event &&
 		claim.source == r.Source &&
@@ -966,58 +594,12 @@ func lookRepeatsClaim(claim agentClaim, held bool, w *WindowState, r AgentReport
 		harnessAfterReport(w, r) == w.AgentHarness
 }
 
-// applyStallHeuristic moves any window that has been silently working for at
-// least stall into AgentStateIdle, and reports how many it moved. It is the
-// fallback for agents that do not report their own state: a pane that reported
-// working but has produced no output for the stall window has most likely gone
-// idle, so it is demoted rather than left looking busy forever.
-//
-// Silence on its own is not evidence of finishing, and that is why look exists.
-// A harness waiting on a human paints its question and then emits nothing at
-// all, no title and no progress sequence, which is byte for byte the same
-// silence as a harness that finished. Demoting on the timer alone therefore
-// prints idle over a pane that is blocked, and idle reads as "fine and done" and
-// raises no alert, so the user is told the opposite of the truth at exactly the
-// moment the feature exists to serve.
-//
-// look is given each stalled pane's PTY and reports whether the screen tier
-// found a rule matching it. A pane whose screen answers is left alone: the
-// answer came from looking, and looking beats a timer. A pane whose screen
-// answered nothing is demoted to unknown rather than idle: the screen was
-// read, it said nothing, and idle would say nothing needs you when nothing here
-// knows that. A nil look restores the timer-only behaviour, which writes idle,
-// the best available when there is nothing to read at all.
-//
-// It is deliberately conservative and strictly secondary to explicit reporting:
-//
-//   - It only ever reads AgentStateWorking and only ever writes AgentStateIdle
-//     or AgentStateUnknown. Any window in any other state is untouched, so an
-//     explicit needs_input, done, or errored report is never overridden.
-//   - The silence clock is the later of the window's last output and the time
-//     its working state was set, so an agent that is genuinely working (and thus
-//     producing output) is never demoted, and a working report just made is given
-//     the full stall window before it can be demoted.
-//   - It never promotes a pane into working; only an explicit report does that.
-//
-// Those three rules are why it writes state directly instead of going through
-// ApplyAgentReport's precedence gate: reading only working and writing only idle
-// is already narrower than the gate, and gating it would silently stop it
-// demoting a reported working state, which is the case it exists for. It does
-// record itself as the window's source afterwards, so get-agent-state can say
-// the idle came from the silence timer rather than from the agent.
-//
-// now and stall are passed in, and lastOutput returns the unix-nano time of a
-// PTY's most recent output (0 when unknown), so the whole rule is deterministic
-// and unit-testable without real timers. A stall <= 0 disables the heuristic.
 func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOutput func(ptyID string) int64, look func(ptyID string) bool) int {
 	if stall <= 0 {
 		return 0
 	}
 	cutoff := now.Add(-stall).UnixNano()
 
-	// Candidates are collected before anything is written, because look reads a
-	// pane's screen and may publish a state of its own, and that goes through
-	// ApplyAgentReport, which takes the lock mutateState is holding.
 	type candidate struct{ windowID, ptyID string }
 	var pending []candidate
 	s.stateMu.RLock()
@@ -1032,9 +614,6 @@ func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOu
 		return 0
 	}
 
-	// With a look, silence after the screen said nothing is the absence of
-	// evidence, and the state that says so is unknown. Without one, the timer
-	// is on its own and idle is the guess it has always made.
 	quiet := AgentStateIdle
 	if look != nil {
 		quiet = AgentStateUnknown
@@ -1059,12 +638,9 @@ func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOu
 				continue
 			}
 			w := &st.Windows[idx]
-			// Re-checked because look ran between the two passes and may have
-			// moved the pane out of working, which is the whole point of it.
 			if w.AgentState != AgentStateWorking || !stalledAt(w.AgentStateAt, w.PTYID, cutoff, lastOutput) {
 				continue
 			}
-			// The turn ended when the pane went quiet, not now.
 			workEnd := w.AgentStateAt
 			if w.PTYID != "" {
 				workEnd = max(workEnd, lastOutput(w.PTYID))
@@ -1078,8 +654,6 @@ func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOu
 			flipped++
 		}
 		if flipped == 0 {
-			// Returning an error makes mutateState skip the version bump and the
-			// client push, so a quiet tick that changed nothing is free.
 			return errNoStallChange
 		}
 		return nil
@@ -1087,8 +661,6 @@ func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOu
 	return flipped
 }
 
-// stalledAt reports whether a window has been silent since cutoff, taking the
-// later of when its working state was set and when its pane last wrote.
 func stalledAt(stateAt int64, ptyID string, cutoff int64, lastOutput func(ptyID string) int64) bool {
 	if ptyID != "" {
 		if out := lastOutput(ptyID); out > stateAt {
@@ -1098,9 +670,6 @@ func stalledAt(stateAt int64, ptyID string, cutoff int64, lastOutput func(ptyID 
 	return stateAt <= cutoff
 }
 
-// errNoStallChange is a sentinel used by applyStallHeuristic to tell mutateState
-// that a tick changed nothing, so it neither bumps the version nor pushes state.
-// It never leaves the package.
 var errNoStallChange = stallNoChange{}
 
 type stallNoChange struct{}

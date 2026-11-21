@@ -16,65 +16,31 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// bundle-worktree: a worktree's work, read out in pieces so it can cross a
-// link.
-//
-// `tuios worktree pull build:api-fan-2` is the caller. It asks the daemon on
-// build for the worktree's commits as a git bundle and its uncommitted work
-// as a binary patch, reads both back in chunks over its one connection, and
-// makes a local worktree session from them. The chunking is why this is not
-// stash get: stash get answers in one reply line, capped at 8 MB, and a
-// branch's history can be larger.
-//
-// The first call makes the transfer and answers with what is in it and the
-// first chunk. Later calls pass the token and an offset. The transfer lives
-// as long as the connection that made it, and at most bundleIdle past the
-// last read, so a caller that goes away leaves nothing behind. Only the
-// connection that made a transfer can read it.
-//
-// What a caller reads here is the worktree's git objects and its files, which
-// any caller that can run a command in a pane can read already. Over a link it
-// needs the write capability, the one that lets a machine type into a shell
-// here, checked before the handler and again in checkLinkPolicy.
-
-// bundleChunkBytes is the most one reply carries, before base64. It is well
-// under the 16 MB a reply line may hold. A variable so a test can make a small
-// transfer take several chunks.
 var bundleChunkBytes = 4 << 20
 
 const (
-	// bundleMaxBytes bounds one transfer. A branch past it is better moved by
-	// git push, and the refusal says so.
 	bundleMaxBytes = 512 << 20
-	// bundleMaxOpen bounds the transfers one daemon holds at once.
-	bundleMaxOpen = 4
-	// bundleIdle is how long a transfer is kept with nobody reading it.
-	bundleIdle = 10 * time.Minute
+	bundleMaxOpen  = 4
+	bundleIdle     = 10 * time.Minute
 )
 
-// bundleStore is the open transfers. The zero value is ready.
 type bundleStore struct {
 	mu   sync.Mutex
 	open map[string]*bundleTransfer
 }
 
-// bundleTransfer is one transfer: a file of bundle bytes then patch bytes.
 type bundleTransfer struct {
-	token   string
-	owner   *connState
-	session string
-	dir     string
-	path    string
-	size    int64
-	touched time.Time
-	gone    chan struct{}
-	// dropping is set, under the store's lock, by the one drop that removes
-	// this transfer. See drop.
+	token    string
+	owner    *connState
+	session  string
+	dir      string
+	path     string
+	size     int64
+	touched  time.Time
+	gone     chan struct{}
 	dropping bool
 }
 
-// put adds a transfer and starts the goroutine that removes it when its
-// connection ends, the daemon stops, or nobody reads it for bundleIdle.
 func (s *bundleStore) put(d *Daemon, t *bundleTransfer) bool {
 	s.mu.Lock()
 	if s.open == nil {
@@ -117,7 +83,6 @@ func (s *bundleStore) put(d *Daemon, t *bundleTransfer) bool {
 	return true
 }
 
-// get returns the transfer for token, if cs made it.
 func (s *bundleStore) get(cs *connState, token string) *bundleTransfer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -129,10 +94,6 @@ func (s *bundleStore) get(cs *connState, token string) *bundleTransfer {
 	return t
 }
 
-// drop removes a transfer's files and then the transfer. The files go
-// first: a transfer is gone once it has left the store, and until then it is
-// only dropping, which get refuses. Deleting it from the store first let a
-// caller see it gone while its files were still on disk.
 func (s *bundleStore) drop(token string) {
 	s.mu.Lock()
 	t := s.open[token]
@@ -151,7 +112,6 @@ func (s *bundleStore) drop(token string) {
 	s.mu.Unlock()
 }
 
-// count is how many transfers are open.
 func (s *bundleStore) count() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -192,11 +152,6 @@ func (d *Daemon) verbBundleWorktree(cs *connState, params json.RawMessage) (any,
 	return d.openBundle(cs, sess.Name(), info, p.Full)
 }
 
-// liveHead reads the branch and commit the worktree's HEAD is on now. The
-// session's info.Branch is the branch the session was made on, and a managed
-// worktree session never refreshes it, so an agent that switched branch or
-// detached HEAD since would otherwise be carried as the old branch with a
-// head that is not on it.
 func liveHead(sessionName, path string) (branch, head string, verr *verbError) {
 	branch, err := worktree.CurrentBranch(path)
 	if err != nil {
@@ -214,14 +169,6 @@ func liveHead(sessionName, path string) (branch, head string, verr *verbError) {
 	return branch, head, nil
 }
 
-// openBundle makes the transfer for a worktree and answers with its first
-// chunk.
-//
-// The branch bundled, the head reported and the commit the patch is made
-// against all come from the worktree's HEAD as git has it now, not from the
-// branch recorded on the session. HEAD is read again once the bundle and the
-// patch are written, and a HEAD that moved in between refuses the transfer,
-// so the three always agree.
 func (d *Daemon) openBundle(cs *connState, sessionName string, info *WorktreeInfo, full bool) (any, *verbError) {
 	branch, head, verr := liveHead(sessionName, info.Path)
 	if verr != nil {
@@ -258,9 +205,6 @@ func (d *Daemon) openBundle(cs *connState, sessionName string, info *WorktreeInf
 	if err != nil {
 		return nil, hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{Detail: "git could not read the uncommitted work. The worktree is as it was."})
 	}
-	// The agent in the worktree can commit or switch branch while the bundle
-	// and the patch are written. Either would leave a head that is not the
-	// bundled branch's tip, or a patch made against another commit.
 	if nowBranch, nowHead, verr := liveHead(sessionName, info.Path); verr != nil {
 		return nil, verr
 	} else if nowBranch != branch || nowHead != head {
@@ -329,8 +273,6 @@ func (d *Daemon) openBundle(cs *connState, sessionName string, info *WorktreeInf
 	return out, nil
 }
 
-// readBundleChunk answers one chunk of a transfer, and drops the transfer
-// after its last chunk or on release.
 func (d *Daemon) readBundleChunk(cs *connState, token string, offset int64, release bool) (map[string]any, *verbError) {
 	t := d.bundles.get(cs, token)
 	if t == nil {
@@ -367,9 +309,6 @@ func (d *Daemon) readBundleChunk(cs *connState, token string, offset int64, rele
 	}, nil
 }
 
-// joinTransfer writes the bundle, then the patch, to dest, and returns the
-// size of each and the SHA-256 of the whole. An empty bundlePath is a
-// transfer with no commits.
 func joinTransfer(dest, bundlePath, patchPath string) (bundleBytes, patchBytes int64, sum string, err error) {
 	out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {

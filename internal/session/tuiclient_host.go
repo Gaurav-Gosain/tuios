@@ -10,23 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
 
-// A TUI client attached to a session on another machine.
-//
-// The client dials its own daemon, asks it for a connection to the host, and
-// then runs the ordinary binary attach protocol on that connection with the
-// host's daemon: hello, attach, PTY streams, keystrokes. Every byte of the
-// session's output is decoded by this process's own emulator and drawn by this
-// process's own renderer, with this machine's theme, config and prefix key.
-// Nothing about the far side is rendered as anything but a session.
-//
-// The one thing that differs from a local attach is trust. A daemon on another
-// machine is another machine's process, possibly older, possibly newer,
-// possibly compromised. Its output goes into an emulator, which is the same
-// fence a shell's output gets. Its state pushes describe its own session and
-// nothing else. The one message a daemon sends that can make a client do
-// something on its own machine is a routed command, and that is where the
-// fence below is.
-
 // ConnectThroughHost connects to the daemon on host by way of the daemon on
 // this machine, and performs the handshake with it.
 //
@@ -82,10 +65,6 @@ func (e *HostHandshakeError) Error() string {
 
 func (e *HostHandshakeError) Unwrap() error { return e.Err }
 
-// refuseHostCommand decides whether a routed command that arrived through a
-// host may run, and says why not when it may not. A command on a local
-// connection is always allowed; the daemon on this machine is trusted the way
-// it always was.
 func (c *TUIClient) refuseHostCommand(p *RemoteCommandPayload) string {
 	if c.viaHost == "" {
 		return ""
@@ -100,15 +79,6 @@ func (c *TUIClient) refuseHostCommand(p *RemoteCommandPayload) string {
 	return fmt.Sprintf("refused: %s came from host %s and would change this machine, not the session", what, c.viaHost)
 }
 
-// hostCommandAllowed is the fence for routed commands from another machine's
-// daemon.
-//
-// The rule: a command may drive the session on screen, because that session
-// belongs to the machine that sent the command. It may not read or write a
-// file, a setting or a theme on this machine, because those belong to the
-// person, and a daemon on a build box has no business with them. Everything
-// not named here is refused, so a command a newer remote build adds is refused
-// until someone reads what it does.
 func hostCommandAllowed(p *RemoteCommandPayload) bool {
 	switch p.CommandType {
 	case "send_keys":
@@ -145,13 +115,7 @@ func hostTapeCommandAllowed(t tape.CommandType) bool {
 		tape.CommandTypeSmartSplit, tape.CommandTypeCommandPalette, tape.CommandTypeComment:
 		return true
 	case "ListWindows", "GetSessionInfo", "GetWindow":
-		// Read-only queries about the session on screen.
 		return true
 	}
-	// Refused, by name, so the list above is read against it: SetConfig,
-	// SetTheme, SetDockbarPosition, SetBorderStyle and Set write this machine's
-	// settings; Screenshot, Output, SaveLayout and LoadLayout write or read
-	// this machine's files; Source runs a tape file from this machine's disk;
-	// the animation toggles change this client's own settings.
 	return false
 }

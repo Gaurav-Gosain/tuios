@@ -12,11 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 )
 
-// This file answers one question precisely: why can this process not talk to a
-// daemon? "Not running" covers several genuinely different states, and each one
-// has a different fix, so collapsing them into a single message is what leaves a
-// user stuck.
-
 // DaemonState classifies the daemon socket's condition.
 type DaemonState int
 
@@ -66,8 +61,6 @@ func (d DaemonDiagnosis) Running() bool { return d.State == DaemonRunning }
 func DiagnoseDaemon() DaemonDiagnosis {
 	d := probeDaemonSocket()
 	if !d.Running() {
-		// Only when there is no daemon, since that is the only case where the
-		// answer changes what the user should be told to run.
 		names, err := ListResurrectableSessions()
 		if err == nil {
 			d.Restorable = len(names)
@@ -76,7 +69,6 @@ func DiagnoseDaemon() DaemonDiagnosis {
 	return d
 }
 
-// probeDaemonSocket classifies the socket alone, without consulting saved state.
 func probeDaemonSocket() DaemonDiagnosis {
 	socketPath, err := GetSocketPath()
 	if err != nil {
@@ -111,7 +103,6 @@ func probeDaemonSocket() DaemonDiagnosis {
 	d.Err = dialErr
 	switch {
 	case errors.Is(dialErr, syscall.ECONNREFUSED), errors.Is(dialErr, syscall.ENOENT):
-		// The file is there but no process is behind it: a crashed daemon.
 		d.State = DaemonStaleSocket
 	case errors.Is(dialErr, fs.ErrPermission), errors.Is(dialErr, syscall.EACCES):
 		d.State = DaemonPermissionDenied
@@ -162,8 +153,6 @@ func WaitForDaemonShutdown(socketPath string, timeout time.Duration) error {
 	}
 }
 
-// savedSessionsPhrase names how many sessions are waiting on disk, so every
-// message that mentions them agrees with itself on the plural.
 func (d DaemonDiagnosis) savedSessionsPhrase() string {
 	if d.Restorable == 1 {
 		return "1 saved session"
@@ -175,8 +164,6 @@ func (d DaemonDiagnosis) savedSessionsPhrase() string {
 // likely cause, and the exact command that resolves it. It returns an empty
 // string when the daemon is running, so a caller can use it as a guard.
 func (d DaemonDiagnosis) Explain() string {
-	// The TUIOS_SOCKET refusal already says what failed and what to do, and
-	// no socket was probed, so the generic advice below would be wrong.
 	if _, ok := errors.AsType[*SocketEnvError](d.Err); ok {
 		return d.Err.Error()
 	}
@@ -189,8 +176,6 @@ func (d DaemonDiagnosis) Explain() string {
 			return "The TUIOS daemon is not running.\n" +
 				"Most likely cause: the daemon was shut down or the machine restarted. TUIOS has " +
 				d.savedSessionsPhrase() + " on disk, restored automatically when a daemon starts.\n" +
-				// Both routes, because this message is also what a scripted
-				// caller sees, and 'tuios attach' takes over its terminal.
 				"Fix: run '" + tuiosCmd("attach") + "' to start the daemon and reopen them, or '" + tuiosCmd("start-server") + "' to bring them back without attaching."
 		}
 		return "The TUIOS daemon is not running, and no sessions are saved on disk.\n" +
@@ -225,8 +210,6 @@ func (d DaemonDiagnosis) Explain() string {
 	}
 }
 
-// tuiosCmd is the command line that runs sub on this process's server, so a
-// hint printed on a named server does not send the reader to the default one.
 func tuiosCmd(sub string) string {
 	if name := serverscope.Name(); name != "" {
 		return "tuios --server " + name + " " + sub

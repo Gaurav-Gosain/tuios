@@ -39,8 +39,6 @@ func TestLiveFactsPushesKeepTheGap(t *testing.T) {
 		t.Fatalf("the state carries icon name %q, want the last one %q", got, last)
 	}
 	pushes := version() - before
-	// One push per gap over the loop, the trailing one, and one for a shell
-	// prompt that lands meanwhile.
 	limit := int(time.Since(start)/liveFactsPushGap) + 3
 	t.Logf("%d flips, %d pushes, limit %d", flips, pushes, limit)
 	if pushes > limit {

@@ -2,32 +2,17 @@ package session
 
 import "testing"
 
-// corpusCase is one real command line as the detector reads it: the foreground
-// process group leader of a pane, and the other members of that group when the
-// leader is a wrapper. Each case says how it was obtained, so a shape nobody has
-// measured is labelled as such rather than passed off as evidence.
 type corpusCase struct {
-	name string
-	// how is "measured" for a shape read from /proc on a real machine, or
-	// "documented" for one taken from an installer's published layout.
-	how  string
-	info foregroundInfo
-	// group holds the other members of the foreground process group, in the
-	// order a breadth-first walk from the leader yields them.
+	name  string
+	how   string
+	info  foregroundInfo
 	group []foregroundInfo
-	// want is the harness id the pane must be attributed to, "" when it must not
-	// be an agent, or nameList when only the flat name list can claim it.
-	want string
+	want  string
 }
 
 const nameList = "(name list)"
 
-// detectionCorpus is the table the matcher is held to. The false positives are
-// the ones a maintainer reported from daily use, reproduced under a real PTY on
-// 2026-09-09; the true positives are the harnesses tuios ships manifests for,
-// launched the way their installers launch them.
 var detectionCorpus = []corpusCase{
-	// --- False positives. None of these runs an agent. ---
 	{
 		name: "a shell script in a checkout named crush",
 		how:  "measured",
@@ -123,12 +108,8 @@ var detectionCorpus = []corpusCase{
 		name: "a shell with a background agent job",
 		how:  "documented",
 		info: foregroundInfo{comm: "bash", exe: "/usr/bin/bash", argv: []string{"-bash"}},
-		// A background job is in its own process group. The walk never yields it
-		// because it is not in the foreground group, so it is absent here; the
-		// case pins that a shell at its prompt reads as no agent.
 	},
 
-	// --- True positives: the leader is the agent. ---
 	{
 		name: "claude from the native installer",
 		how:  "measured",
@@ -278,7 +259,6 @@ var detectionCorpus = []corpusCase{
 		want: nameList,
 	},
 
-	// --- True positives: the leader is a wrapper and the agent is behind it. ---
 	{
 		name: "claude behind sh -c with a trailing command",
 		how:  "measured",
@@ -307,8 +287,6 @@ var detectionCorpus = []corpusCase{
 	{
 		name: "codex behind npx, which stays resident above it",
 		how:  "documented",
-		// npm sets its process title, which on Linux rewrites both comm and the
-		// argument memory, so the command line reads back as the title alone.
 		info: foregroundInfo{comm: "npm exec", exe: "/usr/bin/node", argv: []string{"npm exec"}},
 		group: []foregroundInfo{{comm: "node", exe: "/usr/bin/node",
 			argv: []string{"node", "/home/u/.npm/_npx/1a2b/node_modules/.bin/codex"}}},
@@ -349,10 +327,6 @@ var detectionCorpus = []corpusCase{
 		group: []foregroundInfo{{comm: "make", exe: "/usr/bin/make", argv: []string{"make"}}},
 	},
 	{
-		// A documented gap rather than a wish: build tools are not wrappers, and
-		// walking every build's children on every tick would cost far more panes
-		// than it would ever find agents in. A person who runs an agent this way
-		// has the hook shim, OSC 9;4 and set-agent-state.
 		name:  "crush run from a Makefile target (documented gap: build tools are not walked)",
 		how:   "documented",
 		info:  foregroundInfo{comm: "make", exe: "/usr/bin/make", argv: []string{"make", "run"}},
@@ -412,8 +386,6 @@ func TestDetectionCorpusNamesTheProcessThatDecided(t *testing.T) {
 	}
 }
 
-// staticGroup turns a fixed list into the iterator the resolver hands the
-// matcher, so a corpus case stands in for a real process tree.
 func staticGroup(members []foregroundInfo) func(yield func(foregroundInfo) bool) {
 	if len(members) == 0 {
 		return nil

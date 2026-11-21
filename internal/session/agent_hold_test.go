@@ -14,21 +14,17 @@ func TestAgentHoldCollapsesAFlap(t *testing.T) {
 	sess, id := agentPaneWithWindow(t)
 	now := time.Now()
 
-	// The agent starts working. Louder than none, so it is published at once.
 	sess.applyAgentProgressAt(id, vt.ProgressIndeterminate, now)
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
 		t.Fatalf("state after the first progress report = %q, want working", got)
 	}
 	versionAfterWorking := sess.GetState().Version
 
-	// It clears the bar between two steps of the same task. Quieter, so it waits.
 	sess.applyAgentProgressAt(id, vt.ProgressClear, now.Add(50*time.Millisecond))
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
 		t.Fatalf("state during the hold = %q, want working (the quiet state is held)", got)
 	}
 
-	// It sets the bar again well inside the window: the hold is cancelled and
-	// nothing was ever published, so the pane never blinked through idle.
 	sess.applyAgentProgressAt(id, vt.ProgressNormal, now.Add(120*time.Millisecond))
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
 		t.Fatalf("state after the flap = %q, want working", got)
@@ -38,7 +34,6 @@ func TestAgentHoldCollapsesAFlap(t *testing.T) {
 			versionAfterWorking, got)
 	}
 
-	// Nothing is left waiting to be published.
 	if n := sess.settleAgentHolds(now.Add(time.Hour)); n != 0 {
 		t.Fatalf("settle published %d states after a cancelled flap, want 0", n)
 	}
@@ -60,7 +55,6 @@ func TestAgentHoldPublishesAStateThatStands(t *testing.T) {
 		t.Fatalf("state at the start of the hold = %q, want working", got)
 	}
 
-	// The same quiet state, still true after the window: published.
 	sess.applyAgentProgressAt(id, vt.ProgressClear, now.Add(agentHoldWindow+time.Millisecond))
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
 		t.Fatalf("state after the hold elapsed = %q, want idle", got)
@@ -80,7 +74,6 @@ func TestAgentHoldSettlesWhenTheSourceGoesSilent(t *testing.T) {
 		t.Fatalf("state during the hold = %q, want working", got)
 	}
 
-	// Too early: the window has not elapsed.
 	if n := sess.settleAgentHolds(now.Add(100 * time.Millisecond)); n != 0 {
 		t.Fatalf("settle published %d states inside the window, want 0", n)
 	}
@@ -88,14 +81,12 @@ func TestAgentHoldSettlesWhenTheSourceGoesSilent(t *testing.T) {
 		t.Fatalf("state after an early settle = %q, want working", got)
 	}
 
-	// Past the window, with no further word from the harness.
 	if n := sess.settleAgentHolds(now.Add(agentHoldWindow + time.Millisecond)); n != 1 {
 		t.Fatalf("settle published %d states past the window, want 1", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
 		t.Fatalf("state after settling = %q, want idle", got)
 	}
-	// The hold is consumed, not repeated.
 	if n := sess.settleAgentHolds(now.Add(time.Hour)); n != 0 {
 		t.Fatalf("settle republished %d states, want 0", n)
 	}
@@ -122,8 +113,6 @@ func TestAgentHoldPublishesItselfWithNoOneToCallIt(t *testing.T) {
 		t.Fatalf("state during the hold = %q, want working", got)
 	}
 
-	// Nothing else touches the session: no stall monitor, no further progress
-	// report, no client. The hold has to publish itself or never publish at all.
 	deadline := time.Now().Add(5 * time.Second)
 	for agentStateOf(t, sess, id) != AgentStateIdle {
 		if time.Now().After(deadline) {
@@ -173,9 +162,6 @@ func TestAgentHoldDropsAStateWhenTheAgentLeaves(t *testing.T) {
 		t.Fatalf("state during the hold = %q, want working (the quiet state is held)", got)
 	}
 
-	// The agent leaves while the clear is held, and the detector's exit sweep
-	// clears the pane the way it does at the shell: no state, no harness, and
-	// no claim or harness process left to outrank a late report.
 	err := sess.mutateState(func(st *SessionState) error {
 		for i := range st.Windows {
 			if st.Windows[i].ID == id {

@@ -53,10 +53,6 @@ import (
 //  10. The bound is on one message type only: a command result's data, which
 //     nests through map[string]any, is held to its own frame cap and depth.
 func TestDaemonBoundsWhatClientsSend(t *testing.T) {
-	// The decode stack of the worst tree a cap admits, at the 256 bytes of
-	// stack per byte of frame measured in wire_bounds.go, has to stay well
-	// under the runtime's stack limit for that word size: 1 GB on 64-bit,
-	// 250 MB on 32-bit.
 	const treeStackPerWireByte = 256
 	for bits, ceiling := range map[int]int{64: 300 << 20, 32: 200 << 20} {
 		if worst := payloadCap(bits) * treeStackPerWireByte; worst > ceiling {
@@ -81,8 +77,6 @@ func runBoundsScenario(t *testing.T) {
 	a := dialBoundsClient(t, socketPath, "bounds")
 	b := dialBoundsClient(t, socketPath, "bounds")
 
-	// B hears every accepted push from A as a state sync; that is the
-	// evidence the daemon took a state and is still serving B.
 	heard := func(t *testing.T, windows int) *SessionState {
 		t.Helper()
 		msg := b.await(t, MsgStateSync)
@@ -116,7 +110,7 @@ func runBoundsScenario(t *testing.T) {
 	})
 
 	t.Run("display text is clamped on a rune boundary", func(t *testing.T) {
-		long := strings.Repeat("ét世", 1000) // 6 bytes a repeat, runes of 2, 1 and 3 bytes
+		long := strings.Repeat("ét世", 1000)
 		st := small(2)
 		st.Windows[0].Title, st.Windows[0].CustomName = long, long
 		a.send(t, MsgUpdateState, st)
@@ -129,8 +123,6 @@ func runBoundsScenario(t *testing.T) {
 	})
 
 	t.Run("a state frame over the cap is refused and the sender still served", func(t *testing.T) {
-		// The body is never decoded when it is over the cap, so its content
-		// does not matter. At the cap it is read and fails to decode instead.
 		a.sendRaw(t, MsgUpdateState, make([]byte, maxStateUpdateBytes))
 		if msg := a.awaitError(t); strings.Contains(msg, "byte limit") {
 			t.Fatalf("a frame of exactly the cap was refused for its size: %s", msg)
@@ -161,8 +153,6 @@ func runBoundsScenario(t *testing.T) {
 
 	t.Run("a tree with too many nodes is refused", func(t *testing.T) {
 		wide := small(1)
-		// maxBSPNodes is 2n-1 for n panes: the tree at the limit is taken, and
-		// one more pane (two more nodes) is refused.
 		wide.WorkspaceTrees[1].Root = bspBalanced((maxBSPNodes + 1) / 2)
 		pushAccepted(t, wide, 1)
 		wide.WorkspaceTrees[1].Root = bspBalanced((maxBSPNodes+1)/2 + 1)
@@ -186,7 +176,6 @@ func runBoundsScenario(t *testing.T) {
 		if msg := a.awaitError(t); !strings.Contains(msg, "nests deeper") {
 			t.Fatalf("result data %d deep was not refused: %s", maxResultDataDepth+1, msg)
 		}
-		// The shape a real command returns passes.
 		a.send(t, MsgCommandResult, &CommandResultPayload{RequestID: "r2", Success: true, Data: map[string]any{
 			"windows": []map[string]any{{"id": "w", "workspaces": []int{1, 2}}},
 		}})
@@ -203,7 +192,6 @@ func runBoundsScenario(t *testing.T) {
 	})
 }
 
-// bspChain is a tree depth levels deep, every split hanging off one side.
 func bspChain(depth int, left bool) *SerializedBSPNode {
 	n := &SerializedBSPNode{WindowID: 1}
 	for i := range depth {
@@ -217,8 +205,6 @@ func bspChain(depth int, left bool) *SerializedBSPNode {
 	return n
 }
 
-// bspBalanced is a balanced tree of leaves panes, 2*leaves-1 nodes, built
-// without recursion.
 func bspBalanced(leaves int) *SerializedBSPNode {
 	level := make([]*SerializedBSPNode, leaves)
 	for i := range level {
@@ -237,7 +223,6 @@ func bspBalanced(leaves int) *SerializedBSPNode {
 	return level[0]
 }
 
-// boundsClient is a raw binary client attached to one session.
 type boundsClient struct {
 	conn net.Conn
 }
@@ -266,8 +251,6 @@ func (c *boundsClient) send(t *testing.T, typ MessageType, payload any) {
 	c.sendRaw(t, typ, msg.Payload)
 }
 
-// sendRaw writes a frame with this payload as it stands, so a test can send
-// one of an exact size.
 func (c *boundsClient) sendRaw(t *testing.T, typ MessageType, payload []byte) {
 	t.Helper()
 	_ = c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second * testDeadlineScale))
@@ -276,8 +259,6 @@ func (c *boundsClient) sendRaw(t *testing.T, typ MessageType, payload []byte) {
 	}
 }
 
-// await reads until a message of this type arrives, skipping the rest (size
-// announcements, client joins), and fails on an error reply.
 func (c *boundsClient) await(t *testing.T, typ MessageType) *Message {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second * testDeadlineScale)
@@ -298,7 +279,6 @@ func (c *boundsClient) await(t *testing.T, typ MessageType) *Message {
 	}
 }
 
-// awaitError reads until an error reply arrives and returns its message.
 func (c *boundsClient) awaitError(t *testing.T) string {
 	t.Helper()
 	msg := c.await(t, MsgError)
@@ -309,9 +289,6 @@ func (c *boundsClient) awaitError(t *testing.T) string {
 	return e.Message
 }
 
-// noError fails if an error reply is waiting or arrives within a short
-// window. A refusal is the daemon's first answer to a push, so a push with no
-// error by then was taken.
 func (c *boundsClient) noError(t *testing.T) {
 	t.Helper()
 	for {
@@ -324,7 +301,6 @@ func (c *boundsClient) noError(t *testing.T) {
 			}
 			t.Fatalf("reading after a push: %v", err)
 		}
-		// A byte arrived: read the rest of the frame it starts.
 		_ = c.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		if _, err := io.ReadFull(c.conn, lenBuf[1:]); err != nil {
 			t.Fatalf("reading after a push: %v", err)
@@ -341,15 +317,6 @@ func (c *boundsClient) noError(t *testing.T) {
 	}
 }
 
-// largeRealisticState is the largest state update a client can make for a
-// session of workspaces with panes each: every field BuildSessionState in
-// internal/app sets, at its maximum. The title and the user-given name are
-// clamped display text at their full 256 bytes; ids are the 36 byte UUIDs
-// panes carry; each workspace is tiled as a chain, the deepest layout its
-// panes can make (panes-1 levels), and holds a scrolling column per pane as
-// well, which a client only sends for one layout or the other. The fields a
-// client does not send (the directory, the agent state, the command line)
-// are the daemon's and are merged in on its side.
 func largeRealisticState(workspaces, panes int) *SessionState {
 	text := ClampDisplayText(strings.Repeat("é", maxDisplayTextBytes))
 	uuid := func(n int) string { return fmt.Sprintf("%08d-0000-4000-8000-%012d", n, n) }

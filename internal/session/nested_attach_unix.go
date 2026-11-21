@@ -7,8 +7,6 @@ import (
 	"syscall"
 )
 
-// stdinIsTerminal reports whether this process's standard input is the
-// terminal at path, by device number.
 func stdinIsTerminal(path string) bool {
 	in, err := os.Stdin.Stat()
 	if err != nil {

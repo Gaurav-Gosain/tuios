@@ -55,7 +55,6 @@ func TestAPaneCannotDialTheLinkSocket(t *testing.T) {
 		}
 	}
 
-	// The proxy runs outside every pane, as this process does.
 	link := dialLink(t, sp)
 	result(t, link.call(t, req))
 }
@@ -70,13 +69,11 @@ func TestAPermissionReloadOnlyTightens(t *testing.T) {
 	d, sp, a1, _, _ := scopeFixture(t)
 	strictRead := &config.UserConfig{Agents: config.AgentsConfig{Permissions: config.PermissionsConfig{Mode: "strict", Grants: []string{"read"}}}}
 
-	// open -> strict read narrows, so it applies.
 	d.onConfigReload(strictRead, nil)
 	if g, _ := d.manager.grants.effective(a1); g != GrantRead {
 		t.Fatalf("after a narrowing reload the pane holds %v, want read", g)
 	}
 
-	// strict read -> open widens, so it waits.
 	d.onConfigReload(&config.UserConfig{}, nil)
 	if g, _ := d.manager.grants.effective(a1); g != GrantRead {
 		t.Fatalf("after a reload to open the pane holds %v, want read until a restart", g)
@@ -89,19 +86,16 @@ func TestAPermissionReloadOnlyTightens(t *testing.T) {
 		t.Errorf("pane-grants does not say a change waits for a restart: %v", got)
 	}
 
-	// strict read -> strict read,write,respond widens too.
 	d.onConfigReload(&config.UserConfig{Agents: config.AgentsConfig{Permissions: config.PermissionsConfig{Mode: "strict", Grants: []string{"read", "write", "respond"}}}}, nil)
 	if g, _ := d.manager.grants.effective(a1); g != GrantRead {
 		t.Fatalf("after a widening strict reload the pane holds %v, want read", g)
 	}
 
-	// strict read -> strict none narrows again, and applies.
 	d.onConfigReload(&config.UserConfig{Agents: config.AgentsConfig{Permissions: config.PermissionsConfig{Mode: "strict", Grants: []string{}}}}, nil)
 	if g, _ := d.manager.grants.effective(a1); g != 0 {
 		t.Fatalf("after a narrowing reload to none the pane holds %v, want none", g)
 	}
 
-	// A mixed change applies what it takes away and waits for what it adds.
 	d2, _, b1, _, _ := scopeFixture(t)
 	d2.manager.SetPanePermissions(config.ResolvedPermissions{Strict: true, Grants: []string{"read", "write"}})
 	d2.onConfigReload(&config.UserConfig{Agents: config.AgentsConfig{Permissions: config.PermissionsConfig{Mode: "strict", Grants: []string{"read", "fan"}}}}, nil)
@@ -110,7 +104,6 @@ func TestAPermissionReloadOnlyTightens(t *testing.T) {
 	}
 }
 
-// deadPID is the pid of a process that has exited and been reaped.
 func deadPID(t *testing.T) int {
 	t.Helper()
 	cmd := exec.Command("true")
@@ -138,8 +131,6 @@ func TestAnUnreadableCallerIsHeldToTheStrictDefault(t *testing.T) {
 	if verr := d.checkGrantMessage(&connState{clientID: "gone2", peerPID: deadPID(t)}, MsgAttach); verr == nil {
 		t.Error("a caller that cannot be read may use the client protocol")
 	}
-	// Under open with one narrowed pane, the trick must not turn a narrowed
-	// pane into admin either.
 	d.manager.SetPanePermissions(config.ResolvedPermissions{})
 	g := GrantRead
 	d.manager.grants.set(a1, &g)
@@ -180,19 +171,15 @@ func TestAnAdminPaneCannotAnswerAnotherPanesPrompt(t *testing.T) {
 			}
 		}
 	}
-	// The focused pane, reached with no window, is held the same way.
 	if err := d.manager.GetSession("a").mutateState(func(st *SessionState) error { st.FocusedWindowID = a2; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	// A pane must name the window, so no keys reach the focused prompt.
 	if code := errCode(t, callP(c, t, "send-keys", map[string]any{"session": "a", "keys": "1 Enter"})); code != ErrVerbInvalidParams {
 		t.Errorf("send-keys with no window from a pane answered %s, want invalid_params", code)
 	}
 
-	// Its own pane is its own.
 	result(t, callP(c, t, "send-text", map[string]any{"session": "a", "window": a1, "text": "x"}))
 
-	// The person gives respond: then it may.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	result(t, callP(person, t, "set-pane-grants", map[string]any{"session": "a", "window": a1, "grants": []string{"admin", "respond"}}))
 	d.setApprovalPeer(func(*connState) (bool, string) { return true, a1 })
@@ -201,7 +188,6 @@ func TestAnAdminPaneCannotAnswerAnotherPanesPrompt(t *testing.T) {
 	}
 	result(t, callP(dialVerb(t, sp), t, "send-text", map[string]any{"session": "a", "window": a2, "text": "1\r", "allow_blocked": true}))
 
-	// The person is never held by it.
 	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
 	result(t, callP(dialVerb(t, sp), t, "send-text", map[string]any{"session": "a", "window": a2, "text": "1\r"}))
 }
@@ -232,11 +218,9 @@ func TestPaneGrantsAnswersForAPeerPID(t *testing.T) {
 	if got["pane"] != true || got["window"] != a1 || !jsonEqual(got["grants"], []any{"read"}) || got["peer_pid"] != float64(inPane) {
 		t.Errorf("pane-grants for a pid in pane a1 = %v, want pane a1 holding read, peer_pid echoed", got)
 	}
-	// Another process that holds the pid now is not the one that connected.
 	if got := result(t, callP(c, t, "pane-grants", map[string]any{"peer_pid": inPane, "peer_start": start + 1})); got["window"] != unplacedWindow {
 		t.Errorf("pane-grants for a pid with another start time = %v, want it held in no pane", got)
 	}
-	// pid 1 runs outside every pane.
 	if got := result(t, callP(c, t, "pane-grants", map[string]any{"peer_pid": 1})); got["pane"] != false {
 		t.Errorf("pane-grants for a pid outside every pane = %v, want pane false", got)
 	}
@@ -248,8 +232,6 @@ func TestPaneGrantsAnswersForAPeerPID(t *testing.T) {
 	}
 	wantForbidden(t, "peer_pid over a link", callP(dialLink(t, sp), t, "pane-grants", map[string]any{"peer_pid": inPane}))
 
-	// A pane without admin, asking about a process in another pane, learns
-	// only pane and admin.
 	callerWindow = a2
 	other := dialVerb(t, sp)
 	got = result(t, callP(other, t, "pane-grants", map[string]any{"peer_pid": inPane, "peer_start": start}))
@@ -273,8 +255,6 @@ func TestADaemonChildOutsideEveryPaneIsHeld(t *testing.T) {
 
 	out := filepath.Join(t.TempDir(), "out")
 	req := `{"id":1,"verb":"set-pane-grants","params":{"session":"child","window":"` + a + `","grants":["admin","respond"]}}`
-	// The test process is the daemon, so a child of it is a daemon child
-	// that no pane shell started.
 	cmd := exec.Command("/bin/sh", "-c", helperCommand(t, sp, out, "send", req))
 	env := []string{}
 	for _, kv := range os.Environ() {
@@ -310,8 +290,6 @@ func TestAConnectionWhoseProcessChangedIsHeld(t *testing.T) {
 	skipWithoutPeerPID(t)
 	d, _, _, _, b1 := scopeFixture(t)
 	setStrict(d)
-	// The parent of this test binary is outside every pane. A start time it
-	// does not have stands for a process that held its pid before.
 	cs := &connState{clientID: "reused", peerPID: os.Getppid(), peerStart: 1, peerStartOK: true}
 	if _, verr := d.checkGrants(cs, "send-text", json.RawMessage(`{"session":"b","window":"`+b1+`","text":"x"}`)); verr == nil || verr.Code != ErrVerbForbidden {
 		t.Fatalf("send-text from a connection whose process changed = %v, want forbidden", verr)
@@ -319,7 +297,6 @@ func TestAConnectionWhoseProcessChangedIsHeld(t *testing.T) {
 	if !d.connFromPane(&connState{clientID: "reused2", peerPID: os.Getppid(), peerStart: 1, peerStartOK: true}) {
 		t.Error("a connection whose process changed may act as the person")
 	}
-	// The same process, pinned right, is the person.
 	live := &connState{clientID: "live", peerPID: os.Getppid()}
 	d.pinPeer(live)
 	if _, verr := d.checkGrants(live, "send-text", json.RawMessage(`{"session":"b","window":"`+b1+`","text":"x"}`)); verr != nil {
@@ -363,7 +340,6 @@ func TestAHostsReloadOnlyNarrows(t *testing.T) {
 		t.Errorf("the link policy after the reload allows %v, want list", pol.Allow)
 	}
 
-	// The person applies it.
 	c := dialVerb(t, sp)
 	result(t, callP(c, t, "apply-config", nil))
 	if _, err := d.federation.Table().Lookup("build"); err != nil {
@@ -376,7 +352,6 @@ func TestAHostsReloadOnlyNarrows(t *testing.T) {
 		t.Error("a change still waits after apply-config")
 	}
 
-	// A host that is gone goes at once.
 	d.onConfigReload(&config.UserConfig{}, nil)
 	if _, err := d.federation.Table().Lookup("build"); err == nil {
 		t.Error("a host removed from config.toml is still dialled")
@@ -419,7 +394,6 @@ func TestAnApprovalsReloadOnlyNarrows(t *testing.T) {
 		t.Error("the daemon does not say a change waits")
 	}
 
-	// A rule added applies at once, and nothing waits.
 	reload("[[agents.approvals.risk.rule]]\nname = \"deploy\"\npattern = \"deploy\"\n")
 	if n := len(d.approvalPolicy().Risk); n != shipped+1 {
 		t.Errorf("after a reload that adds a rule: %d rules, want %d", n, shipped+1)
@@ -428,7 +402,6 @@ func TestAnApprovalsReloadOnlyNarrows(t *testing.T) {
 		t.Error("a change waits after a reload that only adds a rule")
 	}
 
-	// The person applies the wider table.
 	reload("[agents.approvals.risk]\nbuiltin = false\npanes_may_allow = true\n")
 	result(t, callP(dialVerb(t, sp), t, "apply-config", nil))
 	if pol := d.approvalPolicy(); len(pol.Risk) != 0 || !pol.PanesMayAllow {
@@ -504,14 +477,12 @@ func TestAStartSaysWhenGrantsWidened(t *testing.T) {
 	}
 }
 
-// paneText reads what window shows now.
 func paneText(t *testing.T, c *verbConn, session, window string) string {
 	t.Helper()
 	res := result(t, callP(c, t, "capture-pane", map[string]any{"session": session, "window": window}))
 	return fmt.Sprint(res["content"], res["lines"], res["text"])
 }
 
-// waitPaneText waits up to five seconds for want in window.
 func waitPaneText(c *verbConn, t *testing.T, session, window, want string) bool {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -661,7 +632,6 @@ func TestAPaneRunCommandCannotType(t *testing.T) {
 			t.Errorf("run-command %+v from an admin pane = %+v, want a refusal naming the respond grant", p, res)
 		}
 	}
-	// The JSON verb runs the same tape commands through the client.
 	c := dialVerb(t, sp)
 	for _, params := range []map[string]any{
 		{"session": "a", "command": "Type", "args": []string{"1"}},

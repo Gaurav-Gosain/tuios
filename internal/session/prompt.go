@@ -7,31 +7,6 @@ import (
 	"time"
 )
 
-// Prompts: a text field or a list in the palette of the attached clients.
-//
-// An action, a script or a plugin that needs a value from the person calls
-// prompt. The daemon pushes the prompt to every client attached on this
-// machine that shows prompts (MsgPrompt), and the client opens it in its
-// command palette: a field to type in, or a list to pick from. The first
-// answer from any client wins, and the push that closes it takes it off
-// every other client.
-//
-// It borrows the proof ask-human uses (ask_human.go). Only answer-prompt
-// puts an answer in, with the nonce of a client attached right now, from a
-// process outside every pane (human_sender.go). So an agent, a plugin or a
-// script cannot answer a prompt, its own included. Unlike ask-human it does
-// not ride the Inbox: the Inbox is an agent feature, and a prompt works with
-// [agents] enabled = false. A prompt is never kept: it ends with the call
-// that waits on it.
-//
-// A call that gets no answer says why, so a script can tell the cases apart:
-// cancelled (Esc at a client), timeout, no_client (no attached client could
-// show it, so nothing was shown; an older client does not say it shows
-// prompts and does not count), busy (another prompt is open: one shows at a
-// time, since every client shows it in the same place) and shutdown.
-//
-// A prompt is refused over a link: it asks the person at this machine.
-
 // Prompt kinds.
 const (
 	PromptInput = "input"
@@ -48,7 +23,6 @@ const (
 	promptShutdown  = "shutdown"
 )
 
-// Bounds on a prompt. promptMaxValue bounds what the person types.
 const (
 	promptMaxItems = 1000
 	promptMaxID    = 128
@@ -56,8 +30,6 @@ const (
 	promptMaxValue = 4096
 )
 
-// defaultPromptWait is how long prompt waits when the caller names no
-// timeout. The most it waits is maxAskWait.
 var defaultPromptWait = 120 * time.Second
 
 // PromptItem is one row of a pick. ID is what the answer names, unique in
@@ -105,18 +77,13 @@ type PromptResult struct {
 	AnsweredBy string   `json:"answered_by,omitempty"`
 }
 
-// promptStore holds the one open prompt and the channel its call waits on.
 type promptStore struct {
-	mu   sync.Mutex
-	open *PromptRequest
-	done chan PromptResult
-	// pushMu orders the prompt pushes. The open and the close of a prompt,
-	// and the open an attaching client is sent, each take their place in a
-	// client's broadcast order under it. See pushPrompt.
+	mu     sync.Mutex
+	open   *PromptRequest
+	done   chan PromptResult
 	pushMu sync.Mutex
 }
 
-// start opens req, or reports false when a prompt is open.
 func (s *promptStore) start(req *PromptRequest) (chan PromptResult, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -127,8 +94,6 @@ func (s *promptStore) start(req *PromptRequest) (chan PromptResult, bool) {
 	return s.done, true
 }
 
-// finish ends the open prompt id with out, when it is still open, and
-// reports whether it was. checked runs first, under the lock.
 func (s *promptStore) finish(id string, out PromptResult, check func(*PromptRequest) *verbError) (bool, *verbError) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -145,14 +110,12 @@ func (s *promptStore) finish(id string, out PromptResult, check func(*PromptRequ
 	return true, nil
 }
 
-// current is the open prompt, or nil.
 func (s *promptStore) current() *PromptRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.open
 }
 
-// checkPromptAnswer checks an answer against what the prompt offered.
 func checkPromptAnswer(req *PromptRequest, out PromptResult) *verbError {
 	n := len(out.IDs)
 	if out.Other != "" {
@@ -182,19 +145,14 @@ func checkPromptAnswer(req *PromptRequest, out PromptResult) *verbError {
 	return nil
 }
 
-// promptValueOK reports whether s is text the person may type: one line of
-// printable text, at most promptMaxValue bytes. Empty is allowed.
 func promptValueOK(s string) bool {
 	return len(s) <= promptMaxValue && askLinePrintable(s)
 }
 
-// promptLineOK reports whether s is a line the palette shows as written,
-// at most limit bytes. Empty is allowed.
 func promptLineOK(s string, limit int) bool {
 	return s == "" || askLineShown(s, limit)
 }
 
-// checkPromptRequest checks what a prompt asks before anything is shown.
 func checkPromptRequest(p *PromptRequest) *verbError {
 	pick := p.Kind == PromptPick
 	switch {
@@ -218,25 +176,12 @@ func checkPromptRequest(p *PromptRequest) *verbError {
 	return nil
 }
 
-// promptReader reports whether cs is an attached client of this machine
-// that shows prompts and takes keys from the person at it. The upgrade
-// dialog's mark says the same of a client that takes keys: the tuios TUI,
-// and not gui-bridge. See personClients.
 func promptReader(cs *connState) bool {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	return cs.isTUIClient && cs.attached && cs.prompts && cs.upgradeDialog && !cs.viaLink && !cs.passive && !cs.viewOnly
 }
 
-// pushPrompt sends p to every client that shows prompts, and reports how
-// many of them could answer. A nil p sends nothing.
-//
-// Each client is sent one open and one close of a prompt, in that order. An
-// attaching client is admitted to the pushes before sendPrompt sends it the
-// open prompt, so the open can reach it both ways: the open goes only to a
-// client whose promptShown is another prompt, and the close only to one whose
-// promptShown is this prompt. Under pushMu, and on the broadcast order, a
-// close cannot pass the open it closes.
 func (d *Daemon) pushPrompt(p *PromptPayload) int {
 	d.prompts.pushMu.Lock()
 	defer d.prompts.pushMu.Unlock()
@@ -264,8 +209,6 @@ func (d *Daemon) pushPrompt(p *PromptPayload) int {
 	return n
 }
 
-// sendPrompt sends a client that just attached the open prompt, unless the
-// push of it reached the client already. See pushPrompt.
 func (d *Daemon) sendPrompt(cs *connState) {
 	d.prompts.pushMu.Lock()
 	defer d.prompts.pushMu.Unlock()
@@ -282,8 +225,6 @@ func (d *Daemon) sendPrompt(cs *connState) {
 	}
 }
 
-// markPromptShown records that p goes to cs, and reports whether it should:
-// an open that cs was not sent yet, or the close of the prompt cs shows.
 func (cs *connState) markPromptShown(p *PromptPayload) bool {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -298,8 +239,6 @@ func (cs *connState) markPromptShown(p *PromptPayload) bool {
 	return false
 }
 
-// promptFrom says who asks, for the palette: the pane, the plugin, or a
-// command outside every pane.
 func (d *Daemon) promptFrom(cs *connState) string {
 	if pa := d.pluginAuthority(cs); pa != nil {
 		return "plugin " + pa.plugin
@@ -310,8 +249,6 @@ func (d *Daemon) promptFrom(cs *connState) string {
 	return "a command"
 }
 
-// verbPrompt shows a field or a list in the palette of the attached
-// clients, and waits for the answer. See the file comment.
 func (d *Daemon) verbPrompt(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		PromptRequest
@@ -356,8 +293,6 @@ func (d *Daemon) verbPrompt(cs *connState, params json.RawMessage) (any, *verbEr
 		ended = promptShutdown
 	}
 	if ended != "" {
-		// An answer that raced the end is in done already; otherwise the
-		// end goes there.
 		_, _ = d.prompts.finish(req.ID, PromptResult{Status: ended}, nil)
 		res = <-done
 	}
@@ -366,7 +301,6 @@ func (d *Daemon) verbPrompt(cs *connState, params json.RawMessage) (any, *verbEr
 	return res, nil
 }
 
-// verbAnswerPrompt answers the open prompt for the person.
 func (d *Daemon) verbAnswerPrompt(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		PromptResult

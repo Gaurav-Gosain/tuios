@@ -7,12 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The Inbox verbs: list-attention reads the queue, dismiss-attention closes an
-// item. Changes arrive as attention events on subscribe. See attention.go.
-
-// attentionLive reports whether a session is live, and with a window, whether
-// the window is in it. It is how a restarted daemon decides which saved items
-// still describe something.
 func (d *Daemon) attentionLive(sessionName, window string) bool {
 	sess := d.manager.GetSession(sessionName)
 	if sess == nil {
@@ -25,7 +19,6 @@ func (d *Daemon) attentionLive(sessionName, window string) bool {
 	return ok
 }
 
-// attentionWaiting reports whether a pane is on needs_input.
 func (d *Daemon) attentionWaiting(sessionName, window string) bool {
 	sess := d.manager.GetSession(sessionName)
 	if sess == nil {
@@ -35,17 +28,13 @@ func (d *Daemon) attentionWaiting(sessionName, window string) bool {
 	return ok && w.AgentState == AgentStateNeedsInput
 }
 
-// verbListAttention answers the queue, in Inbox order, with the counts per kind
-// and the stream position the answer is current to.
 func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session string   `json:"session"`
-		Kinds   []string `json:"kinds"`
-		Host    string   `json:"host"`
-		Select  string   `json:"select"`
-		// IncludeSnoozed also lists the snoozed items, after the open ones,
-		// each with snoozed_until. They are not in the counts.
-		IncludeSnoozed bool `json:"include_snoozed"`
+		Session        string   `json:"session"`
+		Kinds          []string `json:"kinds"`
+		Host           string   `json:"host"`
+		Select         string   `json:"select"`
+		IncludeSnoozed bool     `json:"include_snoozed"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -80,7 +69,6 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 	if sel != nil {
 		items = d.selectAttention(items, sel)
 	}
-	// The questions held for a parent agent are listed and not counted.
 	withParent := 0
 	for _, it := range items {
 		if it.WithParentUntil != 0 {
@@ -125,8 +113,6 @@ func AttentionSelectorTarget(it AttentionItem) SelectorTarget {
 	return t
 }
 
-// selectAttention keeps the items sel matches. An item of this machine also
-// answers group and cwd from its session and pane.
 func (d *Daemon) selectAttention(items []AttentionItem, sel *Selector) []AttentionItem {
 	kept := make([]AttentionItem, 0, len(items))
 	for _, it := range items {
@@ -149,20 +135,6 @@ func (d *Daemon) selectAttention(items []AttentionItem, sel *Selector) []Attenti
 	return kept
 }
 
-// verbDismissAttention closes one item for the person.
-//
-// Only the person may clear what is waiting for the person, so the call must
-// carry the attach nonce of a TUI client attached right now, over the same kind
-// of connection (see human_sender.go), and the caller must be allowed to act as
-// the person (see human_origin.go): not inside a pane of this daemon, not on an
-// unvouched link, and, where the kernel gave both pids, the process that holds
-// the attach. The Inbox sends its client's nonce. An agent in a pane is issued
-// no nonce and could not use one it copied, so it cannot empty the queue the
-// person reads to find out what the agents want.
-//
-// Dismissing does what reading would have: a finished item marks the pane's
-// turns seen, so finished_unread clears too, and a mail item marks the
-// person's mail in the thread read, so the rail's count agrees with the Inbox.
 func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		ID         string `json:"id"`
@@ -192,9 +164,6 @@ func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (an
 			Detail:  "The item may already be closed: its pane moved on, the mail was read, or someone else dismissed it.",
 		})
 	}
-	// Outside the queue's lock, since both take the session's. An item from
-	// another machine was only hidden here: its pane and its mail are on that
-	// machine, and nothing here marks them.
 	if it.Host != "" {
 		return map[string]any{
 			"type":      "attention_dismissed",
@@ -205,8 +174,6 @@ func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (an
 			"dismissed": true,
 		}, nil
 	}
-	// Dismissing a machine's outbox discards what still waits for it: that is
-	// the person deciding the mail should not go.
 	if it.Kind == AttentionOutbox {
 		dropped := d.outbox.discard(it.ForHost)
 		return map[string]any{
@@ -218,8 +185,6 @@ func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (an
 			"dismissed": true,
 		}, nil
 	}
-	// Mail another machine keeps for this one stays dismissed until its
-	// count changes. Nothing here can send it.
 	if it.Kind == AttentionHeldMail {
 		d.attention.noteHeldDismissed(it.ForHost, it.Count)
 	}
@@ -240,8 +205,6 @@ func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (an
 	}, nil
 }
 
-// markHumanThreadRead marks the person's unread mail in one thread read, the
-// way the mail overlay's read does, receipt to the attached clients included.
 func (d *Daemon) markHumanThreadRead(sess *Session, thread uint64) {
 	if thread == 0 {
 		return

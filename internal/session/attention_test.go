@@ -10,14 +10,12 @@ import (
 	"time"
 )
 
-// recordingAttention is a store whose events are kept for the test to read.
 func recordingAttention() (*attentionStore, *[]streamEvent) {
 	var events []streamEvent
 	a := newAttentionStore(func(ev streamEvent) { events = append(events, ev) }, func() uint64 { return uint64(len(events)) })
 	return a, &events
 }
 
-// agentEvent is an agent-state transition as the diff raises it.
 func agentEvent(window, from, to, kind, message string, prevDone, done uint64) SessionEvent {
 	return SessionEvent{
 		Type:              EventAgentState,
@@ -61,13 +59,11 @@ func TestAttentionFollowsAgentState(t *testing.T) {
 		t.Errorf("the item does not describe the pane: %+v", it)
 	}
 
-	// The same block reported again is not news.
 	a.noteSessionEvent("work", agentEvent("w1", "working", "needs_input", "approval", "approve Bash: go test ./...", 0, 0))
 	if got := actions(*events); got != "open:approval" {
 		t.Errorf("a repeated block published %q, want only the open", got)
 	}
 
-	// Leaving needs_input resolves it.
 	a.noteSessionEvent("work", agentEvent("w1", "needs_input", "working", "", "", 0, 0))
 	if items := openItems(t, a); len(items) != 0 {
 		t.Fatalf("working left %+v open", items)
@@ -77,7 +73,6 @@ func TestAttentionFollowsAgentState(t *testing.T) {
 		t.Errorf("the close said %s/%s, want close/resolved", last.Action, last.Attention.Closed)
 	}
 
-	// A question, then an error, then a finished turn.
 	a.noteSessionEvent("work", agentEvent("w1", "working", "needs_input", "question", "which branch?", 0, 0))
 	if items := openItems(t, a); len(items) != 1 || items[0].Kind != AttentionQuestion {
 		t.Fatalf("a question opened %+v", items)
@@ -93,13 +88,11 @@ func TestAttentionFollowsAgentState(t *testing.T) {
 		t.Fatalf("a finished turn opened %+v", items)
 	}
 
-	// Coming to rest without a counted turn opens nothing.
 	a.noteSessionEvent("work", agentEvent("w2", "working", "idle", "", "", 3, 3))
 	if items := openItems(t, a); len(items) != 1 {
 		t.Errorf("a pane at rest with no finished turn opened an item: %+v", items)
 	}
 
-	// A new turn supersedes the finished one.
 	a.noteSessionEvent("work", agentEvent("w1", "idle", "working", "", "", 1, 1))
 	if items := openItems(t, a); len(items) != 0 {
 		t.Errorf("a new turn left %+v open", items)
@@ -110,7 +103,6 @@ func TestAttentionFinishedClosesWhenSeen(t *testing.T) {
 	a, _ := recordingAttention()
 	a.noteSessionEvent("work", agentEvent("w1", "working", "done", "", "", 2, 3))
 
-	// Seen at an older count is not this turn.
 	a.noteSessionEvent("work", SessionEvent{Type: eventCompletionSeen, Window: "w1", completionSeq: 2})
 	if items := openItems(t, a); len(items) != 1 {
 		t.Fatalf("a look at turn 2 closed the item for turn 3")
@@ -167,7 +159,6 @@ func TestAttentionMailOneItemPerThread(t *testing.T) {
 		t.Fatalf("two messages in one thread gave %+v", items)
 	}
 
-	// Mail between agents, a notice and the person's own reply are not for the Inbox.
 	a.noteMail(AgentMessage{Kind: agentMsgDirect, Session: "s", From: "w1", To: "w2", ThreadID: 9})
 	a.noteMail(AgentMessage{Kind: agentMsgNotice, Session: "s", From: "w1", ThreadID: 10})
 	a.noteMail(AgentMessage{Kind: agentMsgDirect, Session: "s", From: AgentInboxHuman, To: AgentInboxHuman, ThreadID: 11})
@@ -220,7 +211,6 @@ func TestAttentionSurvivesARestartWithinReason(t *testing.T) {
 	a.noteMail(AgentMessage{Kind: agentMsgDirect, Session: "work", From: "w1", To: AgentInboxHuman, Text: "hi", ThreadID: 3})
 	a.saveNowAndFreeze()
 
-	// Frozen: a pane closing during shutdown does not reach the file.
 	a.noteSessionEvent("work", SessionEvent{Type: EventWindowClosed, Window: "w1"})
 	time.Sleep(2 * attentionSaveDelay)
 
@@ -241,8 +231,6 @@ func TestAttentionSurvivesARestartWithinReason(t *testing.T) {
 	for _, it := range openItems(t, b) {
 		got[it.Kind+"/"+it.Window] = true
 	}
-	// Mail is dropped: its thread id points into a ring that did not survive
-	// and would be reused by the next thread.
 	want := map[string]bool{"finished/w1": true, "errored/w2": true}
 	if len(got) != len(want) {
 		t.Errorf("after a restart the queue holds %v, want %v", got, want)
@@ -256,7 +244,6 @@ func TestAttentionSurvivesARestartWithinReason(t *testing.T) {
 		t.Errorf("loading published %d events", len(*events))
 	}
 
-	// Ids carry on rather than being reused.
 	b.noteSessionEvent("work", agentEvent("w4", "working", "errored", "", "", 0, 0))
 	for _, it := range openItems(t, b) {
 		if it.Window == "w4" && it.ID != "7" {
@@ -289,8 +276,6 @@ func TestAttentionSaveIsDebounced(t *testing.T) {
 	}
 }
 
-// savedAttention writes a queue with an errored item on w1 and a finished
-// item on w2, in session work, and returns its path.
 func savedAttention(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "attention", "items.json")

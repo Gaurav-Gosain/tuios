@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-// attachTUI attaches a TUI client to session over socketPath, which is the
-// daemon's own socket or its link socket, and returns the client.
 func attachTUI(t *testing.T, socketPath, session string) *TUIClient {
 	t.Helper()
 	conn, err := net.DialTimeout("unix", socketPath, 3*time.Second)
@@ -27,9 +25,6 @@ func attachTUI(t *testing.T, socketPath, session string) *TUIClient {
 	return c
 }
 
-// sendAsHuman sends a message from human to window on conn, with nonce when it
-// is not empty, and returns the send result and the message as a read gives it
-// back.
 func sendAsHuman(t *testing.T, conn *verbConn, session, window, nonce string) (map[string]any, map[string]any) {
 	t.Helper()
 	params := map[string]any{"session": session, "to": window, "from": AgentInboxHuman, "text": "yes, go ahead"}
@@ -47,7 +42,6 @@ func sendAsHuman(t *testing.T, conn *verbConn, session, window, nonce string) (m
 	return nil, nil
 }
 
-// humanMark says which of the two marks a message carries.
 func humanMark(m map[string]any) string {
 	verified, _ := m["verified_human"].(bool)
 	claimed, _ := m["claimed_human"].(bool)
@@ -91,18 +85,15 @@ func TestHumanMailIsVerifiedOnlyWithALiveAttachNonce(t *testing.T) {
 		}
 	}
 
-	// The nonce vouches for the session it was issued in, not for another.
 	if _, m := sendAsHuman(t, conn, "other", "0", nonce); humanMark(m) != "claimed" {
 		t.Errorf("a nonce from an attach to another session verified a message here: %s", humanMark(m))
 	}
 
-	// A message from a window says nothing about the person either way.
 	res = result(t, sendJSON(t, conn, 2, map[string]any{"session": "mail", "to": AgentInboxHuman, "from": a, "text": "done", "human_nonce": nonce}))
 	if humanMark(res) != "neither" {
 		t.Errorf("a message from a window is marked %s, want neither", humanMark(res))
 	}
 
-	// Once the client detaches its nonce stops counting.
 	_ = tui.Close()
 	deadline := time.Now().Add(5 * time.Second)
 	for d.verifyHumanNonce(nonce, d.manager.GetSession("mail").ID, nil) {
@@ -203,7 +194,6 @@ func TestReattachIssuesAFreshNonce(t *testing.T) {
 	}
 }
 
-// awaitBufferedFrame waits until the daemon has sent c a frame it has not read.
 func awaitBufferedFrame(t *testing.T, c *TUIClient) {
 	t.Helper()
 	c.readMu.Lock()

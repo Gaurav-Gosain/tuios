@@ -5,16 +5,6 @@ import (
 	"time"
 )
 
-// This file covers the contract that makes 'tuios attach' exit when its session
-// is killed: the daemon must tell every attached client that the session is
-// gone, and the client must surface that exactly once.
-//
-// Before this existed, killing a session closed its PTYs and dropped it from the
-// manager but left every attached client connected to nothing, so the client sat
-// in a dead UI with no way to learn what had happened.
-
-// attachTestClient connects a TUIClient to the test daemon and attaches it to a
-// session, returning the client with its read loop running.
 func attachTestClient(t *testing.T, sessionName string) *TUIClient {
 	t.Helper()
 
@@ -52,7 +42,6 @@ func TestSessionEndedFiresExactlyOnce(t *testing.T) {
 		t.Fatal("no session-ended notification")
 	}
 
-	// A second notification would mean the client saw the session die twice.
 	select {
 	case name := <-ended:
 		t.Fatalf("session-ended fired more than once (second: %q)", name)

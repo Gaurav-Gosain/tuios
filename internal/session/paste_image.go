@@ -25,91 +25,34 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// Pasting an image into a pane.
-//
-// A terminal pastes text. When the person's clipboard holds a screenshot, the
-// host terminal has nothing to send, and an agent in the pane that takes an
-// image by path (Claude Code, Codex and the rest) never gets it. The tuios
-// client reads the image itself, on the machine where the person is, and hands
-// the bytes to the daemon with paste-image. The daemon writes them to a file on
-// the machine where the pane's process runs and answers with that file's path,
-// which the client then pastes as ordinary text.
-//
-// Where the file is written is the whole point. For a pane of this daemon it is
-// here. For a pane whose process runs on another machine (a window of a global
-// session) a path here means nothing to that process, so the bytes cross the
-// link on a connection of their own and the far daemon writes them with
-// paste-pane-image. Either way the path the client pastes is one the pane's
-// process can open.
-//
-// Who may do it. paste-image is the person's act: it carries the attach nonce
-// and is refused from inside a pane, the same rule a reply as the person
-// follows (human_sender.go, human_origin.go). A pane that could call it could
-// not read the person's clipboard with it, since the client does the reading,
-// but it could plant files and have a path typed as if the person had pasted
-// it. paste-pane-image, on the far machine, is taken only with the calls token
-// of the hosted pane it names. That token is in the open-pane reply and nowhere
-// else, so only the daemon that owns the window can use it, and that daemon
-// forwards only a paste-image it has already taken as the person's.
-
-// pasteImageMaxBytes bounds one pasted image. The bytes travel base64 in one
-// request line, which is capped at 16 MiB, so this is the stash's transfer cap.
-// A screenshot of a 5K display is a few megabytes.
 const pasteImageMaxBytes = stashTransferMaxBytes
 
 // PasteImageMaxBytes is pasteImageMaxBytes, for the client's own check before
 // it sends anything.
 const PasteImageMaxBytes = pasteImageMaxBytes
 
-// pasteFileTTL is how long a pasted image stays on disk. An agent reads the
-// file when the prompt it was pasted into is sent, which is seconds or minutes
-// later. An hour covers a prompt that is written slowly and still keeps the
-// directory from growing for the life of the daemon.
 const pasteFileTTL = time.Hour
 
-// pasteReplyPrefix starts the name of a file a queued reply carries: a long
-// paste or an image the person attached to it. It starts with pasteFilePrefix,
-// so every sweep and cap that knows pasted files knows these too.
 const pasteReplyPrefix = pasteFilePrefix + "reply-"
 
-// pasteReplyTTL is how long a file a queued reply carries stays on disk. It is
-// written when the reply is typed, and the agent can read it again at any
-// point of the work that follows, so it is kept for a day, as dropped files
-// are.
 const pasteReplyTTL = 24 * time.Hour
 
-// pasteMaxFiles and pasteMaxDirBytes bound the paste directory. It is under
-// the runtime directory, which is often a small tmpfs, and a run of pastes
-// inside the TTL must not fill it. The oldest pasted files go first.
 const (
 	pasteMaxFiles    = 50
 	pasteMaxDirBytes = 100 << 20
 )
 
-// pasteFilePerm and pasteDirPerm keep the files the owner's alone. A
-// screenshot can hold anything that was on the screen.
 const (
 	pasteFilePerm = 0o600
 	pasteDirPerm  = 0o700
 )
 
-// pasteFilePrefix starts every pasted file's name. The sweep deletes only
-// names with this prefix, so a directory shared with a standalone tuios, or a
-// file somebody put there by hand, is left alone.
 const pasteFilePrefix = "tuios-paste-"
 
-// pasteHostedBudget bounds a paste that crosses a link: dialing a stream, the
-// bytes, and the far daemon's write. It is longer than a control call because
-// eight megabytes over a slow ssh link takes a while.
 const pasteHostedBudget = 60 * time.Second
 
-// errPasteNotImage is a paste whose bytes are not an image tuios recognises.
 var errPasteNotImage = errors.New("the content is not a PNG, JPEG, GIF, WebP, BMP or TIFF image")
 
-// sniffImage returns the extension for an image's bytes, from their magic
-// number, or "" when they are not an image this accepts. The extension is read
-// from the bytes and never taken from the caller, so a paste cannot name a
-// file .sh or .desktop.
 func sniffImage(data []byte) string {
 	switch {
 	case bytes.HasPrefix(data, []byte("\x89PNG\r\n\x1a\n")):
@@ -128,41 +71,21 @@ func sniffImage(data []byte) string {
 	return ""
 }
 
-// pasteStore writes pasted images to one directory and deletes them again.
-//
-// Files are deleted four ways: a timer deletes each pasted file once it is
-// older than the TTL, a save deletes the oldest files past the directory's
-// caps, the daemon deletes the files it wrote when it stops, and a daemon
-// that starts deletes the expired ones a killed daemon left behind. On Linux
-// and macOS the directory is under the runtime directory or /tmp, which a
-// reboot clears. On Windows it is under the user's local app data, which a
-// reboot keeps, so there the start sweep is what clears a killed daemon's
-// files.
 type pasteStore struct {
-	mu  sync.Mutex
-	dir func() (string, error)
-	now func() time.Time
-	ttl time.Duration
-	// replyTTL is pasteReplyTTL. Only tests change it.
+	mu       sync.Mutex
+	dir      func() (string, error)
+	now      func() time.Time
+	ttl      time.Duration
 	replyTTL time.Duration
-	// maxFiles and maxBytes cap the directory. Zero means the defaults.
 	maxFiles int
 	maxBytes int64
-	// written is every file this store wrote that is still on disk, which is
-	// what a stop deletes. A directory shared with another process keeps that
-	// process's files.
-	written map[string]bool
-	// timer runs the next TTL sweep, nil when nothing is waiting for one.
-	timer *time.Timer
-	// seq numbers the files this store writes, in order. See write.
-	seq uint64
+	written  map[string]bool
+	timer    *time.Timer
+	seq      uint64
 }
 
-// errPasteDirLink is a paste directory that is a symbolic link. Following it
-// would write the images wherever it points.
 var errPasteDirLink = errors.New("the paste folder is a symbolic link or not a folder. Remove it and paste again")
 
-// newPasteStore returns a store in the "paste" directory beside the socket.
 func newPasteStore(socketPath func() string) *pasteStore {
 	return &pasteStore{
 		dir: func() (string, error) {
@@ -179,7 +102,6 @@ func newPasteStore(socketPath func() string) *pasteStore {
 	}
 }
 
-// save writes one image and returns its absolute path.
 func (s *pasteStore) save(data []byte) (string, error) {
 	if s == nil {
 		return "", errors.New("this daemon has no store for pasted images")
@@ -194,16 +116,6 @@ func (s *pasteStore) save(data []byte) (string, error) {
 	return s.write(data, pasteFilePrefix, ext, nil)
 }
 
-// saveReply writes one part of a queued reply, a long paste or an image, and
-// returns its absolute path. It is kept for pasteReplyTTL, since the agent
-// can read it again later in its turn. ext must be one this package chose:
-// ".txt", or one sniffImage returned.
-//
-// held is the set of files the same message has written so far, and the new
-// path is added to it. The directory cap never deletes a file in held: a
-// message may hold more parts (queueMaxParts) than the directory keeps files
-// (pasteMaxFiles), and without it a long message would delete its own first
-// files before the agent read them. nil holds nothing back.
 func (s *pasteStore) saveReply(data []byte, ext string, held map[string]bool) (string, error) {
 	if s == nil {
 		return "", errors.New("this daemon has no store for pasted files")
@@ -211,20 +123,6 @@ func (s *pasteStore) saveReply(data []byte, ext string, held map[string]bool) (s
 	return s.write(data, pasteReplyPrefix, ext, held)
 }
 
-// write puts data in a new file named prefix, the time, a sequence number,
-// random letters and ext, in the paste directory, and returns its absolute
-// path. The path is added to held when held is not nil, and the cap deletes
-// no file in held.
-//
-// The sequence number orders the files one store writes in the same second,
-// which the time in the name cannot. The cap goes by it when two files have
-// the same modification time, which a coarse file system clock makes common.
-//
-// Nothing is written through a link. The directory is refused when it is a
-// link, and the file is opened through an os.Root at the directory that was
-// checked, so a link swapped in for the directory, or planted inside it, cannot
-// carry the write anywhere else. The file is created with O_EXCL, so a name
-// that exists, a link included, is refused rather than written through.
 func (s *pasteStore) write(data []byte, prefix, ext string, held map[string]bool) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -238,7 +136,6 @@ func (s *pasteStore) write(data []byte, prefix, ext string, held map[string]bool
 	if err := os.Mkdir(dir, pasteDirPerm); err != nil && !os.IsExist(err) {
 		return "", err
 	}
-	// A link planted where the directory goes is refused, not followed.
 	info, err := os.Lstat(dir)
 	if err != nil {
 		return "", err
@@ -251,13 +148,9 @@ func (s *pasteStore) write(data []byte, prefix, ext string, held map[string]bool
 		return "", err
 	}
 	defer root.Close()
-	// The root must be the directory that was checked, not one swapped in
-	// for it since.
 	if opened, err := root.Stat("."); err != nil || !os.SameFile(opened, info) {
 		return "", errfmt.Errorf("%s: %w", dir, errPasteDirLink)
 	}
-	// Mkdir leaves an existing directory's mode alone. This one is ours, so
-	// it is put back to the owner's alone.
 	_ = root.Chmod(".", pasteDirPerm)
 	s.sweepLocked(dir)
 
@@ -290,10 +183,6 @@ func (s *pasteStore) write(data []byte, prefix, ext string, held map[string]bool
 	return path, nil
 }
 
-// capLocked deletes the oldest pasted files until the directory is within
-// its caps. keep, the file just written, and the files in held are never
-// deleted, so the directory can stay over its caps while one message is
-// written. The next write after it brings the directory back.
 func (s *pasteStore) capLocked(dir, keep string, held map[string]bool) {
 	maxFiles, maxBytes := s.maxFiles, s.maxBytes
 	if maxFiles <= 0 {
@@ -340,9 +229,6 @@ func (s *pasteStore) capLocked(dir, keep string, held map[string]bool) {
 	}
 }
 
-// pasteNameKey is the part of a pasted file's name after its prefix: the
-// time, then the sequence number. It sorts in the order one store wrote its
-// files, whichever prefix each has.
 func pasteNameKey(name string) string {
 	if rest, ok := strings.CutPrefix(name, pasteReplyPrefix); ok {
 		return rest
@@ -350,7 +236,6 @@ func pasteNameKey(name string) string {
 	return strings.TrimPrefix(name, pasteFilePrefix)
 }
 
-// pastedEntries lists the pasted files in dir.
 func (s *pasteStore) pastedEntries(dir string) []os.DirEntry {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -361,7 +246,6 @@ func (s *pasteStore) pastedEntries(dir string) []os.DirEntry {
 	})
 }
 
-// ttlFor is how long the pasted file called name is kept.
 func (s *pasteStore) ttlFor(name string) time.Duration {
 	if strings.HasPrefix(name, pasteReplyPrefix) && s.replyTTL > 0 {
 		return s.replyTTL
@@ -369,8 +253,6 @@ func (s *pasteStore) ttlFor(name string) time.Duration {
 	return s.ttl
 }
 
-// armLocked sets the timer for the next TTL sweep: when the first pasted
-// file in dir expires. With no pasted file left it sets none.
 func (s *pasteStore) armLocked(dir string) {
 	if s.timer != nil {
 		s.timer.Stop()
@@ -393,7 +275,6 @@ func (s *pasteStore) armLocked(dir string) {
 	s.timer = time.AfterFunc(wait, s.sweep)
 }
 
-// sweep deletes the pasted files older than their TTL.
 func (s *pasteStore) sweep() {
 	if s == nil {
 		return
@@ -411,7 +292,6 @@ func (s *pasteStore) sweep() {
 	s.armLocked(dir)
 }
 
-// sweepLocked is sweep with s.mu held.
 func (s *pasteStore) sweepLocked(dir string) {
 	now := s.now()
 	for _, e := range s.pastedEntries(dir) {
@@ -426,8 +306,6 @@ func (s *pasteStore) sweepLocked(dir string) {
 	}
 }
 
-// removeWritten deletes every file this store wrote. The daemon calls it when
-// it stops.
 func (s *pasteStore) removeWritten() {
 	if s == nil {
 		return
@@ -446,8 +324,6 @@ func (s *pasteStore) removeWritten() {
 	s.written = map[string]bool{}
 }
 
-// localPasteStore is the store a client with no daemon writes to. It is made
-// on first use, beside the socket a daemon would use.
 var (
 	localPasteOnce  sync.Once
 	localPasteStore *pasteStore
@@ -468,8 +344,6 @@ func SavePastedImage(data []byte) (string, error) {
 	return localPasteStore.save(data)
 }
 
-// decodePasteContent reads the base64 content of a paste request and holds it
-// to the size cap.
 func decodePasteContent(verb, content string) ([]byte, *verbError) {
 	if content == "" {
 		return nil, invalidParam("content", verb+" needs the image, base64 encoded, in content")
@@ -494,8 +368,6 @@ func decodePasteContent(verb, content string) ([]byte, *verbError) {
 	return data, nil
 }
 
-// verbPasteImage writes an image the person pasted to the machine where a
-// pane's process runs, and answers with the path there. See the file comment.
 func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session    string `json:"session"`
@@ -533,8 +405,6 @@ func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *ve
 		defer cancel()
 		path, err := rp.pasteImage(ctx, data)
 		if err != nil {
-			// A refusal by the far machine's link policy is passed on as it
-			// is, so the client can say which capability to add and where.
 			if far, ok := errors.AsType[*verbError](err); ok && far.Code == ErrVerbForbidden {
 				return nil, hintedVerbError(ErrVerbForbidden, "paste-image: "+rp.host+" refused the image: "+far.Message, refusedOn(far.Hint, rp.host))
 			}
@@ -545,8 +415,6 @@ func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *ve
 		return map[string]any{"type": "pasted_image", "session": sess.Name(), "window": w.ID, "host": rp.host, "path": path, "bytes": len(data)}, nil
 	}
 
-	// A pane whose shell is on another machine (ssh in the pane) gets the
-	// file on that machine. See paste_image_ssh.go.
 	host, elsewhere, err := d.paneRemoteHost(pty)
 	if refusal, ok := errors.AsType[pasteRefusal](err); ok {
 		hint := &VerbHint{Detail: refusal.detail}
@@ -577,8 +445,6 @@ func (d *Daemon) verbPasteImage(cs *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"type": "pasted_image", "session": sess.Name(), "window": w.ID, "path": path, "bytes": len(data)}, nil
 }
 
-// verbPastePaneImage writes an image for a pane this machine runs for another
-// machine. Only that machine's daemon holds the token it needs.
 func (d *Daemon) verbPastePaneImage(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Pane    string `json:"pane"`
@@ -609,13 +475,8 @@ func (d *Daemon) verbPastePaneImage(_ *connState, params json.RawMessage) (any, 
 	return map[string]any{"pane": p.Pane, "path": path, "bytes": len(data)}, nil
 }
 
-// maxPasteReply bounds the far daemon's answer to paste-pane-image.
 const maxPasteReply = 64 * 1024
 
-// pasteImage sends an image to the far machine and returns the path it was
-// written to there. The bytes go on a connection of their own: the link's
-// control stream carries every other call, and eight megabytes on it would
-// hold them all up.
 func (p *remotePane) pasteImage(ctx context.Context, data []byte) (string, error) {
 	if p.fed == nil {
 		return "", errors.New("this daemon has no links")
@@ -627,7 +488,6 @@ func (p *remotePane) pasteImage(ctx context.Context, data []byte) (string, error
 	if err != nil {
 		return "", err
 	}
-	// Closing the stream is what ends a read that ctx has given up on.
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
@@ -684,8 +544,6 @@ func (p *remotePane) pasteImage(ctx context.Context, data []byte) (string, error
 	return resp.Result.Path, nil
 }
 
-// refusedOn is a copy of the far machine's hint with the host that refused,
-// as this machine names it.
 func refusedOn(h *VerbHint, host string) *VerbHint {
 	out := &VerbHint{}
 	if h != nil {

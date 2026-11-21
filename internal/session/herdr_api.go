@@ -14,62 +14,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// herdr's socket API, answered by tuios.
-//
-// herdr (github.com/herdrdev/herdr) serves a JSON API on its socket that
-// tools drive it with: Collie's herdr adapter, herdr plugins, bar widgets and
-// editor bridges. tuios answers the part of that API that maps onto tuios on
-// its herdr socket (HerdrSocketPath), so those tools work against tuios.
-// herdr_compat.go carries the pane report methods and the transport;
-// this file carries everything else.
-//
-// The API tracked is herdr's at herdrTargetVersion: the request and result
-// types of src/api/schema, the handlers of src/app/api, and the stream of
-// src/api/server.rs. docs/AGENT_STATE.md#herdr-compatibility lists what is
-// answered and how, and how the version is tracked.
-//
-// # Mapping
-//
-//	herdr workspace   a tuios session
-//	herdr tab         a tuios workspace (one of a session's numbered slots)
-//	herdr pane        a tuios window
-//
-// herdr_ids.go says how the ids are made. A tuios workspace is a fixed slot,
-// and herdr lists only the tabs that exist, so a workspace is a tab when it
-// holds a window, has a name, or is the one showing.
-//
-// # Authority
-//
-// Every method that reads or changes tuios runs the tuios verb that does the
-// same thing, through admitVerb, the path the verb socket uses. So a herdr
-// client inside a pane is held to that pane's grants exactly as the verb
-// would be: reads need read, typing needs write and passes typingRefusal
-// (a pane without respond cannot type into a pane that waits on a prompt),
-// and creating, closing, renaming and focusing need admin. A caller outside
-// every pane is the person, as on the verb socket. The adapters translate
-// shapes and ids, and hold no rule of their own.
-//
-// # Size
-//
-// Requests decode into one struct (herdrIn), results encode from one
-// (herdrResult), and verb calls are built from one (herdrArgs), each with
-// omitempty fields. A map literal per call site costs several times the code
-// of a struct literal, and the binary has a size budget.
-
-// herdrTargetVersion is the herdr release whose API this file follows, and
-// herdrTargetProtocol the protocol number that release reports.
 const (
 	herdrTargetVersion  = "0.9.5"
 	herdrTargetProtocol = 22
 )
 
-// herdrReadDefaultLines and herdrReadMaxLines bound a read, as herdr does.
 const (
 	herdrReadDefaultLines = 80
 	herdrReadMaxLines     = 1000
 )
 
-// herdrError is a failed method: herdr's error code and message.
 type herdrError struct{ code, msg string }
 
 //go:noinline
@@ -77,8 +31,6 @@ func herdrErr(code, msg string) *herdrError { return &herdrError{code: code, msg
 
 func (e *herdrIDError) herdr() *herdrError { return herdrErr(e.code, e.msg) }
 
-// herdrIn is the params of every method, each field under herdr's name.
-// Like herdr's serde types, a field a method does not take is ignored.
 type herdrIn struct {
 	WorkspaceID  string   `json:"workspace_id"`
 	TabID        string   `json:"tab_id"`
@@ -126,7 +78,6 @@ type herdrIn struct {
 	TTLMS         *int64              `json:"ttl_ms"`
 }
 
-// label is the label, "" when there is none.
 func (in *herdrIn) label() string {
 	if in.Label == nil {
 		return ""
@@ -134,8 +85,6 @@ func (in *herdrIn) label() string {
 	return *in.Label
 }
 
-// herdrResult is the result of every method: herdr's ResponseResult, whose
-// type says which fields it carries.
 type herdrResult struct {
 	Type          string                 `json:"type"`
 	Version       string                 `json:"version,omitempty"`
@@ -182,10 +131,8 @@ type herdrResult struct {
 	Manifests     *[]herdrManifestInfo   `json:"manifests,omitempty"`
 }
 
-// herdrAck is the result of a method that only acknowledges.
 var herdrAck = &herdrResult{Type: "ok"}
 
-// herdrReadRecord is herdr's PaneReadResult.
 type herdrReadRecord struct {
 	PaneID      string `json:"pane_id"`
 	WorkspaceID string `json:"workspace_id"`
@@ -197,7 +144,6 @@ type herdrReadRecord struct {
 	Truncated   bool   `json:"truncated"`
 }
 
-// herdrWorktreeSource is herdr's WorktreeSourceInfo.
 type herdrWorktreeSource struct {
 	RepoKey           string `json:"repo_key"`
 	RepoName          string `json:"repo_name"`
@@ -206,25 +152,19 @@ type herdrWorktreeSource struct {
 	SourceWorkspaceID string `json:"source_workspace_id,omitempty"`
 }
 
-// herdrArgs is the params of every verb call an adapter makes, each field
-// under the verb's name. Name and Focus are pointers because the empty name
-// and focus false are values the verbs read.
 type herdrArgs struct {
-	Session   string  `json:"session,omitempty"`
-	Window    string  `json:"window,omitempty"`
-	Name      *string `json:"name,omitempty"`
-	Workspace int     `json:"workspace,omitempty"`
-	ToSession string  `json:"to_session,omitempty"`
-	Focus     *bool   `json:"focus,omitempty"`
-	Cwd       string  `json:"cwd,omitempty"`
-	Text      string  `json:"text,omitempty"`
-	Keys      string  `json:"keys,omitempty"`
-	Literal   bool    `json:"literal,omitempty"`
-	Paste     bool    `json:"paste,omitempty"`
-	Submit    bool    `json:"submit,omitempty"`
-	// AllowBlocked is set on the pane input calls only: the herdr API has
-	// no flag for it, and its clients type to answer what the pane shows.
-	// respond is still needed for a pane on needs_input.
+	Session      string            `json:"session,omitempty"`
+	Window       string            `json:"window,omitempty"`
+	Name         *string           `json:"name,omitempty"`
+	Workspace    int               `json:"workspace,omitempty"`
+	ToSession    string            `json:"to_session,omitempty"`
+	Focus        *bool             `json:"focus,omitempty"`
+	Cwd          string            `json:"cwd,omitempty"`
+	Text         string            `json:"text,omitempty"`
+	Keys         string            `json:"keys,omitempty"`
+	Literal      bool              `json:"literal,omitempty"`
+	Paste        bool              `json:"paste,omitempty"`
+	Submit       bool              `json:"submit,omitempty"`
 	AllowBlocked bool              `json:"allow_blocked,omitempty"`
 	Source       string            `json:"source,omitempty"`
 	Styled       bool              `json:"styled,omitempty"`
@@ -245,16 +185,11 @@ type herdrArgs struct {
 	Env          map[string]string `json:"env,omitempty"`
 }
 
-// herdrMethod answers one method for cs.
 type herdrMethod struct {
 	run      func(d *Daemon, cs *connState, in *herdrIn) (*herdrResult, *herdrError)
 	required []string
 }
 
-// herdrMethods returns the methods tuios answers besides the pane reports,
-// with the params each must have. It is built on first use and not in init,
-// for the reason verbRegistry gives: a table init builds keeps every handler
-// it names in every program that links this package.
 func herdrMethods() map[string]herdrMethod {
 	herdrMethodsOnce.Do(func() { herdrMethodsMap = buildHerdrMethods() })
 	return herdrMethodsMap
@@ -265,7 +200,6 @@ var (
 	herdrMethodsMap  map[string]herdrMethod
 )
 
-// buildHerdrMethods makes the table herdrMethods returns.
 func buildHerdrMethods() map[string]herdrMethod {
 	pane := []string{"pane_id"}
 	tab := []string{"tab_id"}
@@ -342,10 +276,6 @@ func buildHerdrMethods() map[string]herdrMethod {
 	}
 }
 
-// herdrUnsupported are herdr's other methods. tuios has nothing they map
-// onto, and answers each with herdr's error shape and code unsupported. A
-// method herdr does not have at all is answered as herdr answers it: code
-// invalid_request, "unknown variant".
 var herdrUnsupported = []string{
 	"server.stop", "server.live_handoff", "server.ssh_agent.register",
 	"server.reload_agent_manifests",
@@ -360,13 +290,9 @@ var herdrUnsupported = []string{
 	"integration.list", "integration.install", "integration.uninstall",
 }
 
-// herdrAPICall answers a method that is not a pane report. handled is false
-// for a method herdr does not have.
 func (d *Daemon) herdrAPICall(cs *connState, method string, params json.RawMessage) (any, *herdrError, bool) {
 	m, ok := herdrMethods()[method]
 	if !ok {
-		// The plugin methods are answered by the plugin host. See
-		// herdr_plugins.go.
 		if out, herr, handled := d.herdrPluginCall(cs, method, params); handled {
 			return out, herr, true
 		}
@@ -382,7 +308,6 @@ func (d *Daemon) herdrAPICall(cs *connState, method string, params json.RawMessa
 	if herr := herdrDecode(params, in, m.required...); herr != nil {
 		return nil, herr, true
 	}
-	// Each send method takes only its own field.
 	switch method {
 	case "pane.send_text":
 		in.Keys = nil
@@ -396,9 +321,6 @@ func (d *Daemon) herdrAPICall(cs *connState, method string, params json.RawMessa
 	return out, nil, true
 }
 
-// herdrDecode decodes params into p the way herdr's serde types do: unknown
-// fields are ignored, and a field in required that is absent or null is
-// invalid_request, with serde's words.
 func herdrDecode(params json.RawMessage, p any, required ...string) *herdrError {
 	if len(params) == 0 || string(params) == "null" {
 		params = json.RawMessage("{}")
@@ -418,8 +340,6 @@ func herdrDecode(params json.RawMessage, p any, required ...string) *herdrError 
 	return nil
 }
 
-// herdrFromVerb turns a verb's error into herdr's shape. fail is the code
-// for a failure no herdr code names, such as pane_send_failed.
 func herdrFromVerb(verr *verbError, fail string) *herdrError {
 	msg := verr.Message
 	if verr.Hint != nil && verr.Hint.Detail != "" && verr.Code == ErrVerbForbidden {
@@ -450,7 +370,6 @@ func herdrFromVerb(verr *verbError, fail string) *herdrError {
 	return herdrErr(code, msg)
 }
 
-// herdrVerb runs a verb for cs and reads its result as an object.
 func (d *Daemon) herdrVerb(cs *connState, verb string, args herdrArgs, fail string) (map[string]any, *herdrError) {
 	out, verr := d.callVerb(cs, verb, args)
 	if verr != nil {
@@ -460,7 +379,6 @@ func (d *Daemon) herdrVerb(cs *connState, verb string, args herdrArgs, fail stri
 	return m, nil
 }
 
-// herdrString is one string field of a verb's result.
 func herdrString(m map[string]any, key string) string {
 	s, _ := m[key].(string)
 	return s
@@ -468,9 +386,6 @@ func herdrString(m map[string]any, key string) string {
 
 func ptr[T any](v T) *T { return new(v) }
 
-// herdrVersion is the version a pong and a snapshot report: the herdr
-// release whose API this follows, marked as tuios in semver build metadata,
-// which a version comparison ignores.
 func herdrVersion() string { return herdrTargetVersion + "+tuios" }
 
 func (d *Daemon) herdrPing(_ *connState, _ *herdrIn) (*herdrResult, *herdrError) {
@@ -486,9 +401,6 @@ func (d *Daemon) herdrSnapshot(cs *connState, _ *herdrIn) (*herdrResult, *herdrE
 	}}, nil
 }
 
-// herdrSessionView is the view of one session, for a method about one
-// object. The caller must be allowed to read the session, as list-windows
-// requires. Its number is its place in the full list.
 func (d *Daemon) herdrSessionView(cs *connState, sess *Session) (*herdrView, *herdrError) {
 	if _, _, verr := d.admitVerb(cs, "list-windows", herdrSessionParams(sess)); verr != nil {
 		return nil, herdrFromVerb(verr, "forbidden")
@@ -499,7 +411,6 @@ func (d *Daemon) herdrSessionView(cs *connState, sess *Session) (*herdrView, *he
 	return v, nil
 }
 
-// herdrPaneView resolves a pane id and reads its session.
 func (d *Daemon) herdrPaneView(cs *connState, id string) (*Session, WindowState, *herdrPaneInfo, *herdrView, *herdrError) {
 	sess, win, ierr := d.herdrFindPane(id)
 	if ierr != nil {
@@ -515,7 +426,6 @@ func (d *Daemon) herdrPaneView(cs *connState, id string) (*Session, WindowState,
 	return nil, WindowState{}, nil, nil, herdrNotFound("pane", id).herdr()
 }
 
-// pane is the view's record of a pane, nil for none.
 func (v *herdrView) pane(id string) *herdrPaneInfo {
 	for i := range v.panes {
 		if v.panes[i].PaneID == id {
@@ -525,7 +435,6 @@ func (v *herdrView) pane(id string) *herdrPaneInfo {
 	return nil
 }
 
-// tab is the view's record of a tab, nil for none.
 func (v *herdrView) tab(id string) *herdrTab {
 	for i := range v.tabs {
 		if v.tabs[i].TabID == id {
@@ -535,7 +444,6 @@ func (v *herdrView) tab(id string) *herdrTab {
 	return nil
 }
 
-// herdrPaneResult answers with a pane's record.
 func (d *Daemon) herdrPaneResult(cs *connState, kind, id string) (*herdrResult, *herdrError) {
 	_, _, p, _, herr := d.herdrPaneView(cs, id)
 	if herr != nil {
@@ -544,12 +452,9 @@ func (d *Daemon) herdrPaneResult(cs *connState, kind, id string) (*herdrResult, 
 	return &herdrResult{Type: kind, Pane: p}, nil
 }
 
-// herdrWin names a window for a verb call.
 func herdrWin(sess *Session, windowID string) herdrArgs {
 	return herdrArgs{Session: sess.Name(), Window: windowID}
 }
-
-// Workspaces.
 
 func (d *Daemon) herdrWorkspaceList(cs *connState, _ *herdrIn) (*herdrResult, *herdrError) {
 	return &herdrResult{Type: "workspace_list", Workspaces: &d.buildHerdrView(cs).workspaces}, nil
@@ -559,7 +464,6 @@ func (d *Daemon) herdrWorkspaceGet(cs *connState, in *herdrIn) (*herdrResult, *h
 	return d.herdrWorkspaceInfo(cs, in.WorkspaceID)
 }
 
-// herdrWorkspaceInfo answers with the record of the workspace id names.
 func (d *Daemon) herdrWorkspaceInfo(cs *connState, id string) (*herdrResult, *herdrError) {
 	sess, ierr := d.herdrFindSession(id)
 	if ierr != nil {
@@ -572,16 +476,10 @@ func (d *Daemon) herdrWorkspaceInfo(cs *connState, id string) (*herdrResult, *he
 	return &herdrResult{Type: "workspace_info", Workspace: &v.workspaces[0]}, nil
 }
 
-// herdrWorkspaceCreate is new-session: a session with one window in cwd, its
-// display name the label. herdr's focus moves its client to the new
-// workspace. tuios has no verb that moves an attached client to another
-// session, so focus is taken and does nothing.
 func (d *Daemon) herdrWorkspaceCreate(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	return d.herdrNewSession(cs, herdrArgs{Cwd: in.Cwd, Env: in.Env}, in.label(), "workspace_create_failed", &herdrResult{Type: "workspace_created"})
 }
 
-// herdrNewSession runs new-session, names the session label when one is
-// given, and answers res with the new session's workspace, tab and pane.
 func (d *Daemon) herdrNewSession(cs *connState, args herdrArgs, label, fail string, res *herdrResult) (*herdrResult, *herdrError) {
 	out, herr := d.herdrVerb(cs, "new-session", args, fail)
 	if herr != nil {
@@ -590,8 +488,6 @@ func (d *Daemon) herdrNewSession(cs *connState, args herdrArgs, label, fail stri
 	return d.herdrLabelled(cs, herdrString(out, "session"), herdrString(out, "window_id"), label, fail, res)
 }
 
-// herdrLabelled names a new session label when one is given, and answers res
-// with its workspace, tab and the pane of windowID.
 func (d *Daemon) herdrLabelled(cs *connState, name, windowID, label, fail string, res *herdrResult) (*herdrResult, *herdrError) {
 	sess := d.manager.GetSession(name)
 	if sess == nil {
@@ -608,8 +504,6 @@ func (d *Daemon) herdrLabelled(cs *connState, name, windowID, label, fail string
 	return d.herdrCreated(cs, sess, windowID, res)
 }
 
-// herdrCreated fills a create's answer: the workspace, the tab and the root
-// pane a new window is in. A tab_created has no workspace.
 func (d *Daemon) herdrCreated(cs *connState, sess *Session, windowID string, res *herdrResult) (*herdrResult, *herdrError) {
 	v, herr := d.herdrSessionView(cs, sess)
 	if herr != nil {
@@ -648,8 +542,6 @@ func (d *Daemon) herdrWorkspaceClose(cs *connState, in *herdrIn) (*herdrResult, 
 	return herdrAck, nil
 }
 
-// Tabs.
-
 func (d *Daemon) herdrTabList(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	if in.WorkspaceID == "" {
 		return &herdrResult{Type: "tab_list", Tabs: &d.buildHerdrView(cs).tabs}, nil
@@ -669,7 +561,6 @@ func (d *Daemon) herdrTabGet(cs *connState, in *herdrIn) (*herdrResult, *herdrEr
 	return d.herdrTabInfo(cs, in.TabID)
 }
 
-// herdrTabInfo answers with the record of the tab id names.
 func (d *Daemon) herdrTabInfo(cs *connState, id string) (*herdrResult, *herdrError) {
 	sess, ws, ierr := d.herdrFindTab(id)
 	if ierr != nil {
@@ -685,8 +576,6 @@ func (d *Daemon) herdrTabInfo(cs *connState, id string) (*herdrResult, *herdrErr
 	return nil, herdrNotFound("tab", id).herdr()
 }
 
-// herdrTabCreate puts a window on the first workspace of the session that is
-// not a tab yet, and names the workspace when a label is given.
 func (d *Daemon) herdrTabCreate(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	sess, herr := d.herdrSessionOrFocused(cs, in.WorkspaceID)
 	if herr != nil {
@@ -704,8 +593,6 @@ func (d *Daemon) herdrTabCreate(cs *connState, in *herdrIn) (*herdrResult, *herd
 		return nil, herdrErr("tab_create_failed", fmt.Sprintf("every one of the %d workspaces of this session is in use. Close a tab first", st.workspaceBound()))
 	}
 	const fail = "tab_create_failed"
-	// The name goes on first, so the tab_created event of the new window
-	// carries it. A window that then fails to open takes the name back off.
 	label := in.label()
 	if label != "" {
 		if _, herr := d.herdrVerb(cs, "set-workspace-name", herdrArgs{Session: sess.Name(), Workspace: ws, Name: &label}, fail); herr != nil {
@@ -727,8 +614,6 @@ func (d *Daemon) herdrTabCreate(cs *connState, in *herdrIn) (*herdrResult, *herd
 	return d.herdrCreated(cs, sess, herdrString(out, "window_id"), &herdrResult{Type: "tab_created"})
 }
 
-// herdrSessionOrFocused is the session a workspace id names, or with none
-// the session herdr calls the active workspace.
 func (d *Daemon) herdrSessionOrFocused(cs *connState, id string) (*Session, *herdrError) {
 	if id != "" {
 		sess, ierr := d.herdrFindSession(id)
@@ -752,8 +637,6 @@ func (d *Daemon) herdrTabFocus(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	return d.herdrTabVerb(cs, in.TabID, "select-workspace", herdrArgs{}, "tab_focus_failed")
 }
 
-// herdrTabVerb runs a verb on the workspace of a tab and answers with the
-// tab's record.
 func (d *Daemon) herdrTabVerb(cs *connState, id, verb string, args herdrArgs, fail string) (*herdrResult, *herdrError) {
 	sess, ws, ierr := d.herdrFindTab(id)
 	if ierr != nil {
@@ -766,10 +649,6 @@ func (d *Daemon) herdrTabVerb(cs *connState, id, verb string, args herdrArgs, fa
 	return d.herdrTabInfo(cs, id)
 }
 
-// herdrTabMove is set-workspace-order, which renumbers the workspaces: the
-// tabs take the numbers they hold between them in their new order, and keep
-// their ids. insert_index counts places in the session's tab list before the
-// tab is taken out, as herdr's does.
 func (d *Daemon) herdrTabMove(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	if *in.InsertIndex < 0 {
 		return nil, herdrErr("invalid_request", "invalid request: insert_index must not be negative")
@@ -796,9 +675,6 @@ func (d *Daemon) herdrTabMove(cs *connState, in *herdrIn) (*herdrResult, *herdrE
 	return &herdrResult{Type: "tab_list", Tabs: &v.tabs}, nil
 }
 
-// herdrTabClose closes every window on the workspace, as herdr closes every
-// pane of the tab, and clears the workspace's name so it is not a tab any
-// more.
 func (d *Daemon) herdrTabClose(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	sess, ws, ierr := d.herdrFindTab(in.TabID)
 	if ierr != nil {
@@ -806,8 +682,6 @@ func (d *Daemon) herdrTabClose(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	}
 	const fail = "tab_close_failed"
 	st := sess.GetState()
-	// The name goes first: clearing it is admin, as closing is, and a pane
-	// refused here has closed nothing.
 	if st.WorkspaceNames[ws] != "" {
 		if _, herr := d.herdrVerb(cs, "set-workspace-name", herdrArgs{Session: sess.Name(), Workspace: ws, Name: new("")}, fail); herr != nil {
 			return nil, herr
@@ -821,9 +695,6 @@ func (d *Daemon) herdrTabClose(cs *connState, in *herdrIn) (*herdrResult, *herdr
 			return nil, herdrFromVerb(verr, fail)
 		}
 	}
-	// The workspace showing is always a tab. herdr shows another tab when
-	// it closes the one showing, and so does this: the nearest one before
-	// it in display order that holds a window, else the nearest after it.
 	if st = sess.GetState(); st.CurrentWorkspace == ws {
 		if next := herdrNeighbourTab(st, ws); next != 0 {
 			if _, herr := d.herdrVerb(cs, "select-workspace", herdrArgs{Session: sess.Name(), Workspace: next}, fail); herr != nil {
@@ -834,9 +705,6 @@ func (d *Daemon) herdrTabClose(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	return herdrAck, nil
 }
 
-// herdrNeighbourTab is the workspace to show when ws closes: the nearest
-// one before it in display order that holds a window, else the nearest
-// after it, else 0.
 func herdrNeighbourTab(st *SessionState, ws int) int {
 	order := herdrWorkspaceOrder(st)
 	at := slices.Index(order, ws)
@@ -853,8 +721,6 @@ func herdrNeighbourTab(st *SessionState, ws int) int {
 	}
 	return 0
 }
-
-// Panes.
 
 func (d *Daemon) herdrPaneList(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	if in.WorkspaceID == "" {
@@ -875,8 +741,6 @@ func (d *Daemon) herdrPaneGet(cs *connState, in *herdrIn) (*herdrResult, *herdrE
 	return d.herdrPaneResult(cs, "pane_info", in.PaneID)
 }
 
-// herdrPaneCurrent is the pane caller_pane_id names, else the caller's own
-// pane, else the focused one.
 func (d *Daemon) herdrPaneCurrent(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	id := in.CallerPaneID
 	if id == "" {
@@ -913,11 +777,6 @@ func (d *Daemon) herdrPaneRead(cs *connState, in *herdrIn) (*herdrResult, *herdr
 	return d.herdrRead(cs, in.PaneID, in)
 }
 
-// herdrRead is capture-pane, in herdr's result. herdr's sources map onto
-// tuios's: visible and detection read the screen, recent and
-// recent_unwrapped the screen and scrollback. tuios does not rejoin
-// soft-wrapped rows, so recent_unwrapped reads as recent does. A recent read
-// is the last lines lines, 80 when lines is left out, and at most 1000.
 func (d *Daemon) herdrRead(cs *connState, id string, in *herdrIn) (*herdrResult, *herdrError) {
 	source := herdrSource(in.Source)
 	if source == "" {
@@ -944,7 +803,6 @@ func (d *Daemon) herdrRead(cs *connState, id string, in *herdrIn) (*herdrResult,
 	args := herdrWin(sess, win.ID)
 	args.Source, args.Styled = source, format == "ansi"
 	if lines > 0 {
-		// One line more than asked says whether there was more to read.
 		args.Lines = lines + 1
 	}
 	out, herr := d.herdrVerb(cs, "capture-pane", args, "read_failed")
@@ -969,7 +827,6 @@ func (d *Daemon) herdrRead(cs *connState, id string, in *herdrIn) (*herdrResult,
 	}}, nil
 }
 
-// herdrSource is tuios's capture source for herdr's, "" for none.
 func herdrSource(s string) string {
 	switch s {
 	case "visible", "detection":
@@ -980,23 +837,10 @@ func herdrSource(s string) string {
 	return ""
 }
 
-// herdrPaneSend is pane.send_text, pane.send_keys and pane.send_input: the
-// text, then the keys.
 func (d *Daemon) herdrPaneSend(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	return d.herdrSend(cs, in.PaneID, in.Text, in.Keys, "pane_send_failed")
 }
 
-// herdrSend types text, then keys, into a pane: send-text with paste for the
-// text, and send-keys for the keys. Each call is checked as that verb is, so
-// a pane is held to its write grant and to typingRefusal. Every key is read
-// before anything is sent, so a key tuios cannot send fails the call whole,
-// as in herdr.
-//
-// herdr 0.9.3 writes the text raw. tuios sends it as a paste: control
-// characters removed, and in bracketed paste delimiters when the pane's
-// program has that mode on. Collie sends a reply as send_text and then
-// send_keys Enter, and a reply of several lines written raw would run line by
-// line.
 func (d *Daemon) herdrSend(cs *connState, id, text string, keys []string, fail string) (*herdrResult, *herdrError) {
 	runs, bad := herdrKeyRuns(keys)
 	if bad != "" {
@@ -1006,10 +850,6 @@ func (d *Daemon) herdrSend(cs *connState, id, text string, keys []string, fail s
 	if ierr != nil {
 		return nil, ierr.herdr()
 	}
-	// A tool that wraps its text in bracketed paste itself (terminal-browser
-	// does for text of several lines) sends the markers as text. A paste
-	// removes their escape bytes and would type the rest, so the markers
-	// come off, and the paste puts its own on when the program wants them.
 	if inner, ok := strings.CutPrefix(text, bracketedPasteStart); ok {
 		text = strings.TrimSuffix(inner, bracketedPasteEnd)
 	}
@@ -1033,7 +873,6 @@ func (d *Daemon) herdrSend(cs *connState, id, text string, keys []string, fail s
 	return herdrAck, nil
 }
 
-// herdrPaneRename is set-window's name. A null label clears it, as in herdr.
 func (d *Daemon) herdrPaneRename(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	sess, win, ierr := d.herdrFindPane(in.PaneID)
 	if ierr != nil {
@@ -1051,11 +890,6 @@ func (d *Daemon) herdrPaneFocus(cs *connState, in *herdrIn) (*herdrResult, *herd
 	return d.herdrFocusPane(cs, in.PaneID)
 }
 
-// herdrFocusPane is focus-window, which also shows the window's workspace,
-// and then shows the window's session on an attached client: herdr's
-// pane.focus makes the pane's workspace the active one, and a herdr
-// workspace is a tuios session. With no client attached the pane is still
-// focused in its session, as focus-window does.
 func (d *Daemon) herdrFocusPane(cs *connState, id string) (*herdrResult, *herdrError) {
 	sess, win, ierr := d.herdrFindPane(id)
 	if ierr != nil {
@@ -1072,23 +906,16 @@ func (d *Daemon) herdrFocusPane(cs *connState, id string) (*herdrResult, *herdrE
 			return nil, herr
 		}
 	}
-	// herdr marks the target seen on an explicit pane.focus or agent.focus,
-	// with or without a client to show it, so a done pane answers idle. A
-	// tuios client marks a pane seen only when it pushes state with the pane
-	// in front of its user, which a daemon with no client never does.
 	sess.MarkCompletionSeen(win.ID)
 	return d.herdrPaneResult(cs, "pane_info", id)
 }
 
-// herdrPaneSplit is split-window: the new pane goes right of or below the
-// target in the split tree, with or without a client.
 func (d *Daemon) herdrPaneSplit(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	if in.Direction != "right" && in.Direction != "down" {
 		return nil, herdrErr("invalid_request", "invalid request: unknown variant `"+in.Direction+"`, expected `right` or `down`")
 	}
 	target := in.TargetPaneID
 	if target == "" {
-		// herdr splits the calling pane, else the focused one.
 		if ref := d.callerPaneRef(cs); ref != nil && in.WorkspaceID == "" {
 			if sess := d.sessionHoldingWindow(ref.Window); sess != nil {
 				target = herdrPaneID(sess.ID, ref.Window)
@@ -1130,8 +957,6 @@ func (d *Daemon) herdrPaneClose(cs *connState, in *herdrIn) (*herdrResult, *herd
 	return herdrAck, nil
 }
 
-// herdrPaneWaitForOutput is wait-for window-output: a substring is matched
-// as the text itself, a regex as it is.
 func (d *Daemon) herdrPaneWaitForOutput(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	pattern := ""
 	switch in.Match.Type {
@@ -1172,14 +997,10 @@ func (d *Daemon) herdrPaneWaitForOutput(cs *connState, in *herdrIn) (*herdrResul
 	return &herdrResult{Type: "output_matched", PaneID: res.Read.PaneID, Revision: &res.Read.Revision, MatchedLine: matched, Read: res.Read}, nil
 }
 
-// Agents.
-
 func (d *Daemon) herdrAgentList(cs *connState, _ *herdrIn) (*herdrResult, *herdrError) {
 	return &herdrResult{Type: "agent_list", Agents: &d.buildHerdrView(cs).agents}, nil
 }
 
-// herdrAgentTarget is the pane an agent target names: a pane id, a
-// terminal id, or the one agent pane with that label or agent name.
 func (d *Daemon) herdrAgentTarget(cs *connState, target string) (string, *herdrError) {
 	if _, _, ierr := d.herdrFindPane(target); ierr == nil {
 		return target, nil
@@ -1199,8 +1020,6 @@ func (d *Daemon) herdrAgentTarget(cs *connState, target string) (string, *herdrE
 	return found, nil
 }
 
-// herdrAgentResult answers with the agent record of the pane id names,
-// which must hold an agent.
 func (d *Daemon) herdrAgentResult(cs *connState, kind, id string) (*herdrResult, *herdrError) {
 	_, _, pane, v, herr := d.herdrPaneView(cs, id)
 	if herr != nil {
@@ -1214,7 +1033,6 @@ func (d *Daemon) herdrAgentResult(cs *connState, kind, id string) (*herdrResult,
 	return nil, herdrErr("agent_not_found", "pane "+pane.PaneID+" holds no agent")
 }
 
-// herdrAgent runs an agent method on the pane in.Target names.
 func (d *Daemon) herdrAgent(cs *connState, in *herdrIn, run func(id string) (*herdrResult, *herdrError)) (*herdrResult, *herdrError) {
 	id, herr := d.herdrAgentTarget(cs, in.Target)
 	if herr != nil {
@@ -1241,8 +1059,6 @@ func (d *Daemon) herdrAgentFocus(cs *connState, in *herdrIn) (*herdrResult, *her
 	return d.herdrAgent(cs, in, func(id string) (*herdrResult, *herdrError) { return d.herdrFocusPane(cs, id) })
 }
 
-// herdrStatesFor checks a herdr status list, and is the tuios agent states
-// it can match, for the grant check of the wait-for verb it stands in for.
 func herdrStatesFor(statuses []string) (string, *herdrError) {
 	var states []string
 	for _, s := range statuses {
@@ -1265,12 +1081,6 @@ func herdrStatesFor(statuses []string) (string, *herdrError) {
 	return strings.Join(states, ","), nil
 }
 
-// herdrWaitAgent is wait-for agent-state on one pane, matched on herdr's
-// status rather than the tuios state: herdr's idle and done are one tuios
-// state told apart by whether the pane was seen, so a seen done pane matches
-// idle and not done, as herdr's agent wait does (src/api/wait.rs). It holds
-// the caller to the grants wait-for needs, and answers what wait-for would
-// when it runs out or the pane closes.
 func (d *Daemon) herdrWaitAgent(cs *connState, id string, until []string, timeoutMS *int64) *herdrError {
 	if len(until) == 0 {
 		until = []string{"idle", "done"}
@@ -1310,18 +1120,11 @@ func (d *Daemon) herdrWaitAgent(cs *connState, id string, until []string, timeou
 	closed := func() *herdrError {
 		return herdrFromVerb(newVerbError(ErrVerbWindowNotFound, "the watched window closed before reaching "+strings.Join(until, ",")), "wait_failed")
 	}
-	// matches says whether the pane reached a wanted status, and gone whether
-	// it is no longer there. A pane that closed after herdrFindPane and before
-	// the subscription sent its close event to nobody, so the read of the
-	// state is the only thing that can tell.
 	matches := func() (matched, gone bool) {
 		w, ok := findWindowState(sess.GetState(), win.ID)
 		if !ok {
 			return false, true
 		}
-		// The state is read without waiting for a harness, as wait-for does:
-		// a program that reports over OSC 7501 is at rest before tuios has
-		// named its harness.
 		return slices.Contains(until, herdrStatus(w.AgentState, sess.finishedUnread(&w))), false
 	}
 	if ok, gone := matches(); ok {
@@ -1357,25 +1160,15 @@ func (d *Daemon) herdrAgentWait(cs *connState, in *herdrIn) (*herdrResult, *herd
 	})
 }
 
-// herdrAgentPrompt types a prompt into an agent and presses Enter, as herdr
-// does. Like herdr (validate_agent_prompt), it refuses only an agent that
-// waits on a prompt, with agent_blocked, because the Enter would answer the
-// prompt. A working agent gets the prompt typed: the harness queues it for
-// its next turn (Claude Code and Codex both do), and herdr clients such as
-// herdr-projects rely on that. tuios's own ask-agent keeps its stricter rule.
 func (d *Daemon) herdrAgentPrompt(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	return d.herdrAgent(cs, in, func(id string) (*herdrResult, *herdrError) {
 		res, herr := d.herdrAgentResult(cs, "agent_prompted", id)
 		if herr != nil {
 			return nil, herr
 		}
-		// send-text refuses a blocked pane only for a caller in a pane, so
-		// the check is made here for every caller.
 		if res.Agent.AgentStatus == "blocked" {
 			return nil, herdrErr("agent_blocked", "agent "+res.Agent.PaneID+" is blocked and needs interactive input. Nothing was typed")
 		}
-		// send-text submit is the prompt path ask-agent types with: one
-		// paste, a wait for it to be taken in, and the harness's submit key.
 		sess, win, ierr := d.herdrFindPane(id)
 		if ierr != nil {
 			return nil, ierr.herdr()
@@ -1394,9 +1187,6 @@ func (d *Daemon) herdrAgentPrompt(cs *connState, in *herdrIn) (*herdrResult, *he
 	})
 }
 
-// Worktrees.
-
-// herdrWorktreeRecord is herdr's WorktreeInfo.
 type herdrWorktreeRecord struct {
 	Path             string  `json:"path"`
 	Branch           *string `json:"branch,omitempty"`
@@ -1408,8 +1198,6 @@ type herdrWorktreeRecord struct {
 	Label            string  `json:"label"`
 }
 
-// herdrRepoDir is the directory a worktree call names: cwd, or the directory
-// of the workspace's session.
 func (d *Daemon) herdrRepoDir(cs *connState, in *herdrIn) (string, *herdrError) {
 	if in.Cwd != "" {
 		return in.Cwd, nil
@@ -1436,8 +1224,6 @@ func (d *Daemon) herdrRepoDir(cs *connState, in *herdrIn) (string, *herdrError) 
 	return "", herdrErr("not_git_repository", "the workspace has no directory")
 }
 
-// herdrWorktreeList runs git worktree list in the repository. It reads git,
-// not a session, and needs what list-worktrees needs.
 func (d *Daemon) herdrWorktreeList(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	if _, _, verr := d.admitVerb(cs, "list-worktrees", nil); verr != nil {
 		return nil, herdrFromVerb(verr, "forbidden")
@@ -1464,7 +1250,6 @@ func (d *Daemon) herdrWorktreeList(cs *connState, in *herdrIn) (*herdrResult, *h
 	}}, nil
 }
 
-// herdrWorktreeOf is the record of one checkout.
 func herdrWorktreeOf(e worktree.Entry, open map[string]string) herdrWorktreeRecord {
 	r := herdrWorktreeRecord{
 		Path: e.Path, IsBare: e.Bare, IsDetached: e.Detached, IsPrunable: e.Prunable,
@@ -1476,9 +1261,6 @@ func herdrWorktreeOf(e worktree.Entry, open map[string]string) herdrWorktreeReco
 	return r
 }
 
-// herdrOpenCheckouts maps each checkout a session the caller may read shows
-// to its workspace id: the checkout of the session's worktree record, else
-// the one its directory is in.
 func (d *Daemon) herdrOpenCheckouts(cs *connState) map[string]string {
 	open := make(map[string]string)
 	for _, w := range d.buildHerdrView(cs).workspaces {
@@ -1492,8 +1274,6 @@ func (d *Daemon) herdrOpenCheckouts(cs *connState) map[string]string {
 	return open
 }
 
-// herdrWorktreeCreate is new-worktree. tuios puts the checkout under its own
-// worktree directory, so a path is refused rather than ignored.
 func (d *Daemon) herdrWorktreeCreate(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	if in.Branch == "" {
 		return nil, herdrErr("invalid_request", "invalid request: tuios needs a branch for a new worktree")
@@ -1514,9 +1294,6 @@ func (d *Daemon) herdrWorktreeCreate(cs *connState, in *herdrIn) (*herdrResult, 
 	return d.herdrLabelled(cs, herdrString(out, "session"), herdrString(out, "window_id"), in.label(), fail, &herdrResult{Type: "worktree_created", Worktree: wt})
 }
 
-// herdrRealPath is a path with its symlinks resolved, or the cleaned path when
-// it cannot be. git reports a checkout by its real path, and a caller may know
-// it by a symlinked one: on macOS /tmp and /var are links into /private.
 func herdrRealPath(p string) string {
 	if r, err := filepath.EvalSymlinks(p); err == nil {
 		return r
@@ -1524,11 +1301,7 @@ func herdrRealPath(p string) string {
 	return filepath.Clean(p)
 }
 
-// herdrWorktreeOpen shows a checkout that exists: the session that already
-// shows it, or a new session in it.
 func (d *Daemon) herdrWorktreeOpen(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
-	// It runs git before any verb does, so the caller is checked first, as
-	// for worktree.list: a refused caller learns nothing of the repository.
 	if _, _, verr := d.admitVerb(cs, "list-worktrees", nil); verr != nil {
 		return nil, herdrFromVerb(verr, "forbidden")
 	}
@@ -1573,8 +1346,6 @@ func (d *Daemon) herdrWorktreeOpen(cs *connState, in *herdrIn) (*herdrResult, *h
 	return d.herdrNewSession(cs, args, in.label(), "worktree_open_failed", res)
 }
 
-// herdrWorktreeSessionName is the session name new-worktree would give the
-// checkout: <repo>-<branch>, or the directory's name for a detached one.
 func herdrWorktreeSessionName(dir string, e worktree.Entry) string {
 	repo := filepath.Base(dir)
 	if root, err := worktree.Root(dir); err == nil {
@@ -1586,8 +1357,6 @@ func herdrWorktreeSessionName(dir string, e worktree.Entry) string {
 	return worktree.SessionName(repo, e.Branch)
 }
 
-// herdrWorktreeRemove is remove-worktree. herdr removes the worktree of a
-// workspace that shows one; tuios removes a worktree session's.
 func (d *Daemon) herdrWorktreeRemove(cs *connState, in *herdrIn) (*herdrResult, *herdrError) {
 	sess, ierr := d.herdrFindSession(in.WorkspaceID)
 	if ierr != nil {

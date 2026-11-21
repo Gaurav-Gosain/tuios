@@ -6,20 +6,6 @@ import (
 	"os"
 )
 
-// The rail-pane verb: the session's rail pane, the one live pane an attached
-// client draws in its rail's pane section ([appearance.sidebar.pane]).
-//
-// The pane is an ordinary daemon window with a PTY, so the daemon owns its
-// process and a detach leaves it running. Two things set it apart, both
-// decided here at creation: it carries WindowState.Rail, the command line the
-// client's config gave it, and it sits on a scratch-range workspace that no
-// client shows, which keeps it out of every layout, tiler and workspace list
-// without a check in each of them. A session has at most one.
-//
-// The key is how a client says "my pane". The same key keeps the pane there
-// is, so a second client or a reattach does not restart it. A different key
-// replaces it, which is a config edit. off closes it.
-
 func (d *Daemon) verbRailPane(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string   `json:"session"`
@@ -52,8 +38,6 @@ func (d *Daemon) verbRailPane(cs *connState, params json.RawMessage) (any, *verb
 	}
 	if p.Cwd != "" {
 		if info, err := os.Stat(p.Cwd); err != nil || !info.IsDir() {
-			// A folder that is gone is not worth a failed pane: the program
-			// starts where the session's panes do.
 			p.Cwd = ""
 		}
 	}
@@ -70,7 +54,6 @@ func (d *Daemon) verbRailPane(cs *connState, params json.RawMessage) (any, *verb
 	}
 	if existing != nil {
 		if _, err := sess.CloseDaemonWindow(existing.ID, d.askerOf(cs)+" (rail-pane, which replaces it)"); err != nil {
-			// Gone meanwhile is what was asked for.
 			if _, gone := findWindowStateIndex(sess.GetState().Windows, existing.ID); gone == nil {
 				return nil, newVerbError(ErrVerbInternal, "cannot close the rail pane: "+err.Error())
 			}
@@ -80,9 +63,6 @@ func (d *Daemon) verbRailPane(cs *connState, params json.RawMessage) (any, *verb
 		return map[string]any{"type": "rail_pane", "window_id": "", "created": false}, nil
 	}
 
-	// The pane's program ending ends the pane, as a popup's does: a rail
-	// section over a dead shell would say nothing about why it is empty, and
-	// the client says it stopped and offers to start it again.
 	onExit := func(ptyID string) {
 		d.notifyPTYClosed(sess.ID, ptyID)
 		d.closeWindowOfPTY(sess, ptyID, false)
@@ -99,8 +79,6 @@ func (d *Daemon) verbRailPane(cs *connState, params json.RawMessage) (any, *verb
 		return nil, bverr
 	}
 	if errors.Is(err, ErrRailPaneExists) {
-		// A second client raced this one past the check above. Its pane is
-		// the session's pane.
 		for _, w := range sess.GetState().Windows {
 			if w.Rail != "" {
 				return map[string]any{"type": "rail_pane", "window_id": w.ID, "created": false}, nil

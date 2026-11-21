@@ -22,7 +22,6 @@ import (
 //     respond are each tried.
 func TestNoPaneAnswersAChildAgentsApproval(t *testing.T) {
 	d, sp, a1, a2, b1 := scopeFixture(t)
-	// admin and respond: every rule a typing pane meets is covered.
 	all := GrantAdmin | GrantRespond
 	if !d.manager.grants.set(a1, &all) {
 		t.Fatalf("pane %s is not in the grant table", a1)
@@ -39,7 +38,6 @@ func TestNoPaneAnswersAChildAgentsApproval(t *testing.T) {
 	if sa == nil || sb == nil {
 		t.Fatal("the fixture sessions are missing")
 	}
-	// a2 is a child agent of a1. b1 is an agent nobody started.
 	sa.setAgentParent(a2, &agentParent{ref: PaneRef{Session: "a", Window: a1}, link: AgentLink{Root: PaneRef{Session: "a", Window: a1}, Depth: 1}})
 
 	person := dialVerb(t, sp)
@@ -68,13 +66,10 @@ func TestNoPaneAnswersAChildAgentsApproval(t *testing.T) {
 	refused("send-text into the child's approval", callP(pane, t, "send-text", map[string]any{"session": "a", "window": a2, "text": "y", "submit": true, "allow_blocked": true}))
 	refused("respond to the child's approval", callP(pane, t, "respond", map[string]any{"session": "a", "window": a2, "action": "approve"}))
 
-	// The same keys into an approval of a pane with no link go through: the
-	// caller's grants cover them.
 	if resp := callP(pane, t, "send-keys", map[string]any{"session": "b", "window": b1, "keys": "1", "allow_blocked": true}); resp["error"] != nil {
 		t.Errorf("send-keys into an unlinked pane's approval was refused, so the rule is not the link: %v", resp)
 	}
 
-	// A child's question is the parent's to answer.
 	asPane.Store(false)
 	result(t, callP(person, t, "set-agent-state", map[string]any{"session": "a", "window": a2, "state": "working"}))
 	block("a", a2, "question")

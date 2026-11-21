@@ -13,22 +13,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// These tests hit the stash the way it will actually be used and the way it will
-// actually fail. The caps are exercised by writing files past them rather than
-// by reading the constants back, because a constant asserted against itself
-// passes whatever the code does with it.
-
-// newStore builds a store rooted under a temp directory, with the socket path it
-// derives its root from pointed at that directory. Everything written by these
-// tests lives under it.
 func newStore(t *testing.T) (*stashStore, string) {
 	t.Helper()
 	base := t.TempDir()
 	return newStashStore(func() string { return filepath.Join(base, "tuios.sock") }), base
 }
 
-// writeBytes writes n bytes to path, with the first eight bytes set from seed so
-// two files of the same size still have different content and do not dedup.
 func writeBytes(t *testing.T, path string, n int, seed byte) {
 	t.Helper()
 	buf := make([]byte, n)
@@ -46,8 +36,6 @@ func writeBytes(t *testing.T, path string, n int, seed byte) {
 // XDG_RUNTIME_DIR unset the socket, and therefore the stash, must still land in
 // a per-boot directory and never anywhere under the user's home.
 func TestStashHasNoPermanentFallback(t *testing.T) {
-	// Both roots moved: with XDG_RUNTIME_DIR unset the real /run/user/<uid>
-	// and /tmp/tuios-<uid> would be used, and their daemons dialled.
 	tmp, err := os.MkdirTemp("/tmp", "tu")
 	if err != nil {
 		t.Fatal(err)
@@ -111,9 +99,6 @@ func TestStashPerFileCapIsHit(t *testing.T) {
 	if err == nil {
 		t.Fatal("a file over the per-file cap was stored")
 	}
-	// The refusal names the real size, which is the reason the size is checked
-	// before the copy starts rather than only bounded during it. A caller told
-	// only "too big" has to guess by how much.
 	if !strings.Contains(err.Error(), fmt.Sprintf("%d bytes", stashMaxFileBytes+1)) {
 		t.Errorf("the refusal does not say the size: %v", err)
 	}
@@ -125,13 +110,10 @@ func TestStashPerFileCapIsHit(t *testing.T) {
 	if len(listing.Entries) != 0 || listing.Bytes != 0 {
 		t.Errorf("the refused put left %d entries and %d bytes", len(listing.Entries), listing.Bytes)
 	}
-	// And nothing half-written was left in the directory either.
 	if names, err := os.ReadDir(listing.Dir); err == nil && len(names) != 0 {
 		t.Errorf("the refused put left %d files on disk", len(names))
 	}
 
-	// One byte under the cap still goes in, so the boundary is the cap and not
-	// something smaller.
 	ok := filepath.Join(base, "ok.bin")
 	writeBytes(t, ok, stashMaxFileBytes, 4)
 	if _, err := s.put("sess-1", ok, nil); err != nil {
@@ -149,11 +131,9 @@ func TestStashPerFileCapIsHit(t *testing.T) {
 func TestStashSessionCapEvictsOldestUnreferenced(t *testing.T) {
 	s, base := newStore(t)
 
-	// One source file, rewritten each round, so the test needs 16 MiB of source
-	// disk rather than 272.
 	src := filepath.Join(base, "chunk.bin")
 	const chunk = stashMaxFileBytes
-	const rounds = stashMaxSessionBytes / chunk // 16 files fill the cap exactly
+	const rounds = stashMaxSessionBytes / chunk
 
 	var paths []string
 	for i := range rounds {
@@ -176,8 +156,6 @@ func TestStashSessionCapEvictsOldestUnreferenced(t *testing.T) {
 		t.Fatalf("the store holds %d bytes, want the cap %d", filled.Bytes, stashMaxSessionBytes)
 	}
 
-	// The oldest file is referenced by a message, so it must survive and the
-	// second oldest must go instead.
 	referenced := map[string]bool{paths[0]: true}
 
 	writeBytes(t, src, chunk, 200)
@@ -201,8 +179,6 @@ func TestStashSessionCapEvictsOldestUnreferenced(t *testing.T) {
 		t.Errorf("the store holds %d bytes, over the cap %d", res.Bytes, stashMaxSessionBytes)
 	}
 
-	// With every file referenced there is nothing to take, so the put is refused
-	// rather than breaking a message that still reads.
 	all := map[string]bool{}
 	after, err := s.list("sess-1", nil)
 	if err != nil {
@@ -236,8 +212,6 @@ func TestStashConcurrentPutsKeepTheBooks(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, writers*2)
 	for i := range writers {
-		// Each file is put twice from two goroutines, so the dedup path and the
-		// store path race each other as well.
 		for range 2 {
 			src := srcs[i]
 			wg.Go(func() {
@@ -340,8 +314,6 @@ func TestStashAwkwardPaths(t *testing.T) {
 		if err != nil {
 			t.Fatalf("put: %v", err)
 		}
-		// The stored name is the hash and a sanitised extension, so none of the
-		// source's punctuation reaches a path the daemon builds.
 		if strings.ContainsAny(res.Entry.Name, " ;&*'\"|$/") {
 			t.Errorf("the stored name carried the source's punctuation: %q", res.Entry.Name)
 		}
@@ -366,8 +338,6 @@ func TestStashAwkwardPaths(t *testing.T) {
 	})
 }
 
-// quote renders a string as a JSON string literal, so a test can build a request
-// line around a path with punctuation in it.
 func quote(s string) string {
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -400,7 +370,6 @@ func TestStashForgetDeletesTheSessionDirectory(t *testing.T) {
 	if _, err := os.Stat(filepath.Dir(res.Entry.Path)); !os.IsNotExist(err) {
 		t.Error("the killed session's directory is still there")
 	}
-	// The other session is untouched, which is why the boxes are per session.
 	if _, err := os.Stat(other.Entry.Path); err != nil {
 		t.Errorf("another session's file went with it: %v", err)
 	}
@@ -426,8 +395,6 @@ func TestStashSweepClearsEverything(t *testing.T) {
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Error("the stash root survived the sweep")
 	}
-	// And the store is usable again afterwards, which is what makes the sweep
-	// safe to run at start as well as at shutdown.
 	if _, err := s.put("sess-1", src, nil); err != nil {
 		t.Errorf("the store is unusable after a sweep: %v", err)
 	}
@@ -456,7 +423,6 @@ func TestStashedFileVanishesWithTheSession(t *testing.T) {
 	if _, err := os.Stat(filepath.Dir(stored)); !os.IsNotExist(err) {
 		t.Error("the killed session's stash directory is still there")
 	}
-	// The source is untouched. The stash copies; it does not move.
 	if _, err := os.Stat(src); err != nil {
 		t.Errorf("killing the session deleted the source file: %v", err)
 	}
@@ -494,7 +460,6 @@ func TestStashSweepClearsAnUncleanPredecessor(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 
-	// Residue from a daemon that never got to run its shutdown.
 	leftoverDir := filepath.Join(runtimeDir, "tuios", "stash", "gone-session")
 	if err := os.MkdirAll(leftoverDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -523,8 +488,8 @@ func TestStashDedupsIdenticalBytes(t *testing.T) {
 	b := filepath.Join(base, "b.txt")
 	c := filepath.Join(base, "c.txt")
 	writeBytes(t, a, 4096, 7)
-	writeBytes(t, b, 4096, 7) // same bytes, different name
-	writeBytes(t, c, 4096, 9) // different bytes
+	writeBytes(t, b, 4096, 7)
+	writeBytes(t, c, 4096, 9)
 
 	first, err := s.put("sess-1", a, nil)
 	if err != nil {

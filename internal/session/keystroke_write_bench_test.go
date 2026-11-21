@@ -1,17 +1,5 @@
 package session
 
-// What a keystroke costs on the way out, as opposed to what it weighs.
-//
-// BenchmarkWireKeystroke/raw-input reports the size of the frame and nothing
-// else: it does arithmetic on the header and returns, so the one number nobody
-// had was what it costs to actually put that frame on the socket. The client
-// holds a whole-client mutex across the write (tuiclient.go), so this is time
-// the next keystroke waits for, and input latency is the thing the maintainer
-// says is most perceptible.
-//
-// The benchmark runs over a real unix socket rather than net.Pipe, because the
-// cost being measured is syscalls and net.Pipe has none.
-
 import (
 	"io"
 	"net"
@@ -19,8 +7,6 @@ import (
 	"testing"
 )
 
-// countingWriter counts Write calls, which on an unbuffered socket is the
-// syscall count.
 type countingWriter struct {
 	w      io.Writer
 	writes int
@@ -33,8 +19,6 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 	return c.w.Write(p)
 }
 
-// socketPair returns two ends of a connected unix socket, which is what a
-// client and the daemon actually talk over.
 func socketPair(tb testing.TB) (client, server net.Conn) {
 	tb.Helper()
 	path := filepath.Join(tb.TempDir(), "s")
@@ -110,8 +94,6 @@ func TestBinaryPTYFrameRoundTrips(t *testing.T) {
 					write.name, len(data), cw.bytes, want)
 			}
 
-			// Reassemble the payload the way the reader does: past the 4-byte
-			// length and the 2-byte header, what is left is what the parser gets.
 			var raw bytesWriter
 			if err := write.fn(&raw, ptyID, data); err != nil {
 				t.Fatalf("%s: %v", write.name, err)
@@ -130,7 +112,6 @@ func TestBinaryPTYFrameRoundTrips(t *testing.T) {
 	}
 }
 
-// bytesWriter collects everything written, however many writes it arrives in.
 type bytesWriter struct{ b []byte }
 
 func (w *bytesWriter) Write(p []byte) (int, error) {

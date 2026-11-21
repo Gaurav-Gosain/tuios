@@ -32,10 +32,6 @@ func TestHerdrMethodsNameTheirCheck(t *testing.T) {
 	}
 }
 
-// herdrVerbsCalls are the params each herdrVerbs method is called with in
-// TestHerdrVerbMethodsRefuseAPluginWithNoGrants. WS, TAB and PANE stand for
-// the ids of a workspace the person made. A herdrVerbs method missing here
-// fails the test.
 var herdrVerbsCalls = map[string]string{
 	"session.snapshot":          `{}`,
 	"workspace.list":            `{}`,
@@ -96,15 +92,8 @@ var herdrVerbsCalls = map[string]string{
 	"popup.close":               `{"pane_id":"PANE"}`,
 }
 
-// herdrListMethods answer a caller that may read nothing with an empty list
-// rather than an error, as the matching tuios list verbs do, and the window
-// title methods find no client the caller may reach and change nothing.
-// They pass when the answer names nothing the person made.
 var herdrListMethods = []string{"session.snapshot", "workspace.list", "tab.list", "pane.list", "agent.list", "client.window_title.set", "client.window_title.clear"}
 
-// herdrHiddenMethods look their target up in the caller's filtered view
-// before they act, so a caller that may read nothing is told the target is
-// not there. That answer is the refusal: the target exists for the person.
 var herdrHiddenMethods = map[string]string{
 	"pane.current": "pane_not_found",
 	"agent.rename": "agent_not_found",
@@ -123,12 +112,6 @@ func TestHerdrVerbMethodsRefuseAPluginWithNoGrants(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("native plugins run only where the kernel names a caller")
 	}
-	// The person's shell starts on its own time, and its prompt raises the
-	// pane's revision. A prompt that lands between the two snapshots below
-	// reads as a change the calls made, so the shell prints a prompt the test
-	// can wait for, and the first snapshot is taken once it shows. After it the
-	// shell writes nothing until it reads input, so any later change to the
-	// pane is a call that got through.
 	const prompt = "tuios-test-ready>"
 	t.Setenv("PS1", prompt+" ")
 	d, sp := startTestDaemon(t)
@@ -159,8 +142,6 @@ func TestHerdrVerbMethodsRefuseAPluginWithNoGrants(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	// The person's pane counts as a pane of this plugin, so plugin.pane.*
-	// reach their grant check rather than stop at "not a plugin pane".
 	if _, win, ierr := d.herdrFindPane(ids["PANE"]); ierr == nil {
 		d.plugins.mu.Lock()
 		d.plugins.panes[win.ID] = pluginPane{pluginID: p.PluginID, entrypoint: "x"}

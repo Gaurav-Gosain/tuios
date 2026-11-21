@@ -5,27 +5,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// Cell-grid capture for the screenshot verb.
-//
-// It reads the emulator straight into a shot.Grid rather than going through
-// CaptureContent's ANSI string. Both would work, but the string route resolves
-// colours to SGR and then asks the renderer to parse them back, which loses
-// the colour kind: an indexed cell would come back as whatever RGB this
-// process guessed, and --theme could no longer re-map it. Reading the cells is
-// also shorter.
-
-// screenshotGrid builds the render grid for a pane. scrollbackRows rows of
-// history are prepended above the visible screen, bounded by what the pane
-// actually holds. cursor draws the cursor cell as a block.
-//
-// It takes the same read lock GetTerminalState takes, and holds it for the
-// walk only: the render happens after, off the lock.
-//
-// The grid has no images. The daemon reads only the control keys of a kitty
-// graphics command and keeps no picture (see the passthrough set up in
-// session.go), so it has none to draw. A sixel image cell is drawn blank. The
-// screenshot keys in a client draw the images that client shows; see
-// internal/app/screenshot_images.go.
 func (p *PTY) screenshotGrid(palette *shot.Palette, scrollbackRows int, cursor bool) *shot.Grid {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
@@ -35,8 +14,6 @@ func (p *PTY) screenshotGrid(palette *shot.Palette, scrollbackRows int, cursor b
 	return gridOf(p.terminal, palette, scrollbackRows, cursor)
 }
 
-// gridOf is screenshotGrid without the lock, so a test can drive it against a
-// bare emulator.
 func gridOf(t vt.Terminal, palette *shot.Palette, scrollbackRows int, cursor bool) *shot.Grid {
 	if palette == nil {
 		palette = shot.XTermPalette()
@@ -53,8 +30,6 @@ func gridOf(t vt.Terminal, palette *shot.Palette, scrollbackRows int, cursor boo
 	g := shot.NewGrid(cols, rows+scrollbackRows, palette.FG, palette.BG)
 
 	for i := range scrollbackRows {
-		// A wide rune across the last column of a line written when the
-		// pane was wider is clipped, so the row stays as wide as the grid.
 		line := vt.ClipHistoryRow(t.ScrollbackLine(held-scrollbackRows+i), cols)
 		row := g.Cells[i]
 		for x := 0; x < cols && x < len(line); x++ {

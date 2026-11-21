@@ -11,9 +11,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// echoHarness installs a user manifest whose resume command is an echo, so a
-// test can see the command land in a real shell without a real agent. It has
-// to be in place before the daemon loads its registry.
 func echoHarness(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
@@ -33,11 +30,6 @@ argv = ["echo", "resumed-{session_id}"]
 	t.Setenv("TUIOS_HARNESS_DIR", dir)
 }
 
-// savedAgentSession is the state a previous daemon wrote for a session whose
-// panes ran agents: one resumable pane with its agent running, one whose
-// harness has no resume command, one that ran on another machine, one with no
-// conversation, and one whose agent had already exited, which keeps its id and
-// has nothing live to resume.
 func savedAgentSession(name string) *SessionState {
 	return &SessionState{
 		Name:             name,
@@ -61,7 +53,6 @@ func savedAgentSession(name string) *SessionState {
 	}
 }
 
-// capturePane reads what a pane shows.
 func capturePane(t *testing.T, c *verbConn, session, window string) string {
 	t.Helper()
 	res := result(t, c.call(t, `{"id":1,"verb":"capture-pane","params":{"session":"`+session+`","window":"`+window+`"}}`))
@@ -69,7 +60,6 @@ func capturePane(t *testing.T, c *verbConn, session, window string) string {
 	return content
 }
 
-// waitPaneHolds polls a pane until it shows want.
 func waitPaneHolds(t *testing.T, c *verbConn, session, window, want string) {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second * testDeadlineScale)
@@ -139,8 +129,6 @@ func TestRestoreOffersOnlyWhatWasRunning(t *testing.T) {
 		t.Fatalf("restore: %v", err)
 	}
 	waitPaneHolds(t, c, "ended-auto", "win-agent", "resumed-5f1c-9a3d")
-	// The running pane's command landed, and the ended pane's would have been
-	// typed 100 ms later at most; give it well past that.
 	time.Sleep(time.Second)
 	if text := capturePane(t, c, "ended-auto", "win-ended"); strings.Contains(text, "resumed-") {
 		t.Errorf("auto mode typed into a pane whose agent had exited:\n%s", text)
@@ -182,7 +170,6 @@ func TestRestoreOffersOnce(t *testing.T) {
 	}
 }
 
-// mustList is every open Inbox item.
 func mustList(t *testing.T, c *verbConn) []map[string]any {
 	t.Helper()
 	items, _ := listAttention(t, c, "")
@@ -234,7 +221,6 @@ func TestResumeAgentRefusesWhatItCannotDo(t *testing.T) {
 		}
 	}
 
-	// An id reported by a pane that a shell would split is never typed.
 	sess := d.manager.GetSession("refuse")
 	result(t, c.call(t, `{"id":1,"verb":"set-agent-session","params":{"session":"refuse","window":"win-plain","harness":"echoer","agent_session_id":"x; touch /tmp/pwned"}}`))
 	resp := c.call(t, `{"id":1,"verb":"resume-agent","params":{"session":"refuse","window":"win-plain"}}`)
@@ -242,7 +228,6 @@ func TestResumeAgentRefusesWhatItCannotDo(t *testing.T) {
 		t.Errorf("an unsafe id: code %q, want %q", code, ErrVerbNotResumable)
 	}
 
-	// A pane running a program does not get the command typed into it.
 	pty, err := d.resolvePTYForTarget(sess, "win-agent")
 	if err != nil {
 		t.Fatal(err)
@@ -310,7 +295,6 @@ func TestAutoResumeFallsBackToAsking(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	// The offer is made from the window as it was saved, agent running.
 	saved, _ := findWindowState(savedAgentSession("fallback"), "win-agent")
 	o, ok := d.resumeOfferFor("fallback", saved)
 	if !ok {

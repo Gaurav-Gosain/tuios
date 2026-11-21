@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-// This covers the same contract as pty_resubscribe_test.go one level up, over
-// the real wire: a client hiding and showing a pane goes through the daemon's
-// subscribe and unsubscribe handlers, and those are what have to carry the
-// stream position between the two.
-
-// collector accumulates the raw PTY bytes a client is sent.
 type collector struct {
 	mu  sync.Mutex
 	buf []byte
@@ -31,8 +25,6 @@ func (c *collector) take() []byte {
 	return out
 }
 
-// waitFor polls until cond holds, so the test does not depend on how fast the
-// daemon's streaming goroutine gets going.
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

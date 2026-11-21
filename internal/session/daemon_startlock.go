@@ -12,30 +12,10 @@ import (
 // the socket is the whole remedy.
 var ErrDaemonStarting = errors.New("another TUIOS daemon is starting")
 
-// startLockPath returns the lock file guarding the startup of the daemon on
-// socketPath. It sits beside the socket and is never removed: a lock is an
-// inode, and deleting it would let two starters hold locks on two different
-// inodes, which is the race it exists to prevent.
-//
-// It is keyed by the daemon's own socket rather than the default one, so a
-// daemon on a chosen socket locks itself and not the daemon of the runtime
-// directory.
 func startLockPath(socketPath string) string {
 	return socketPath + ".lock"
 }
 
-// acquireStartLock takes the exclusive startup lock, returning ErrDaemonStarting
-// if another process already holds it.
-//
-// Start's stale-socket recovery is what makes this necessary. Between a daemon's
-// bind and its listen, a probe from a second starter is refused, which reads
-// exactly like the crashed daemon that recovery is for: the second starter would
-// unlink a live daemon's socket and bind its own, leaving the first serving an
-// inode nothing can reach and its sessions unreachable with it. Two clients
-// racing 'tuios attach' is the ordinary way to produce that interleaving.
-//
-// The returned file must stay open for the daemon's life; closing it releases
-// the lock.
 func acquireStartLock(socketPath string) (*os.File, error) {
 	f, err := os.OpenFile(startLockPath(socketPath), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
@@ -48,7 +28,6 @@ func acquireStartLock(socketPath string) (*os.File, error) {
 	return f, nil
 }
 
-// releaseStartLock drops the startup lock. Safe on a daemon that never took one.
 func (d *Daemon) releaseStartLock() {
 	if d.startLock == nil {
 		return

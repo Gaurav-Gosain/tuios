@@ -47,7 +47,6 @@ func TestCloseWorkspaceClosesOnlyItsWorkspace(t *testing.T) {
 		t.Fatalf("windows left = %v", left)
 	}
 
-	// A scratch workspace is closed when it is the target.
 	if got := WindowsToCloseOnWorkspace([]WindowState{{ID: "s", Workspace: ScratchWorkspaceBase, Scratch: true}}, ScratchWorkspaceBase); len(got) != 1 {
 		t.Fatalf("a targeted scratch workspace closes %v", got)
 	}

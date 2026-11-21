@@ -46,7 +46,6 @@ func TestReadGateNeverReportsOutputAfterAFailedWait(t *testing.T) {
 	}
 	t.Cleanup(g.close)
 
-	// The master has output from here on: nothing reads it.
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if ready, err := g.wait(pty); err == nil && ready {
@@ -59,7 +58,6 @@ func TestReadGateNeverReportsOutputAfterAFailedWait(t *testing.T) {
 	}
 
 	real := g.waiter
-	// Whatever a failed wait says about the wake pipe, it is not an answer.
 	for _, woken := range []bool{false, true} {
 		t.Run(fmt.Sprintf("a failed wait is neither output nor a wake, woken=%v", woken), func(t *testing.T) {
 			g.waiter = func(int, int) (bool, error) { return woken, unix.ENOMEM }

@@ -14,21 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
-// agent-hook-event runs one harness hook event in the daemon, the way
-// `tuios agent-hook` runs it in a process of its own (internal/agenthook),
-// so a harness's hook does not have to start tuios for each event.
-//
-// The caller hands the harness, the event and the payload, and gets back what
-// the hook would print. Where the caller runs is never taken from the call:
-// the pane is found from the process at the other end of the socket, as the
-// hook finds it from its own process. TUIOS_PANE_ID and TUIOS_SESSION are
-// read from that process's environment as the kernel reports it, and when
-// that cannot be read (macOS keeps its own binaries' environment private) the
-// daemon matches the process's session and ancestors against its panes'
-// shells. Every report the run makes goes through this connection's own
-// verbs, so it is checked exactly as the hook's own calls are.
-
-// hookCall is the params agent-hook-event and agent-statusline-event share.
 type hookCall struct {
 	Harness     string            `json:"harness"`
 	Event       string            `json:"event"`
@@ -40,8 +25,6 @@ type hookCall struct {
 	TurnEnd     bool              `json:"turn_end"`
 }
 
-// decodeHookCall reads and checks a hook call's params. what names the
-// command the call stands in for, for the error a missing harness gets.
 func decodeHookCall(params json.RawMessage, what string) (hookCall, *verbError) {
 	var p hookCall
 	if verr := decodeParams(params, &p); verr != nil {
@@ -68,15 +51,6 @@ func decodeHookCall(params json.RawMessage, what string) (hookCall, *verbError) 
 	return p, nil
 }
 
-// peerHookIO is the IO a hook call runs with: the caller's own environment
-// for where it runs, the call's env for the variables the mapping reads,
-// the caller's process for its session and ancestors, and this connection
-// for every verb the run calls.
-//
-// self is the process the hook stands in for. A plugin reports from inside
-// its harness (forwarder false), so the peer is the harness itself, and its
-// ancestry starts at the peer. A forwarder is a line of shell the harness ran
-// as a hook, as tuios agent-hook is, so its ancestry starts at its parent.
 func (d *Daemon) peerHookIO(cs *connState, env map[string]string, forwarder bool) (agenthook.IO, *verbError) {
 	pid := cs.peerPID
 	if pid <= 1 {
@@ -86,8 +60,6 @@ func (d *Daemon) peerHookIO(cs *connState, env map[string]string, forwarder bool
 	getenv := func(name string) string {
 		switch name {
 		case "TUIOS_PANE_ID", "TUIOS_SESSION":
-			// Where the event comes from: only the process's own
-			// environment, never the call.
 			if v, ok := peerEnv.Get(name); peerEnvOK && ok {
 				return v
 			}
@@ -120,9 +92,6 @@ func (d *Daemon) peerHookIO(cs *connState, env map[string]string, forwarder bool
 	}, nil
 }
 
-// writeForwarded answers a forwarder: the mark and body as they are, with no
-// JSON response, and the connection ends. A forwarder is a line of shell that
-// cannot decode JSON.
 func writeForwarded(cs *connState, body []byte) {
 	if _, _, ok := cs.verbCall.take(); ok {
 		cs.sendMu.Lock()
@@ -132,7 +101,6 @@ func writeForwarded(cs *connState, body []byte) {
 	}
 }
 
-// verbAgentHookEvent handles agent-hook-event.
 func (d *Daemon) verbAgentHookEvent(cs *connState, params json.RawMessage) (any, *verbError) {
 	p, verr := decodeHookCall(params, "hook")
 	if verr != nil {
@@ -171,9 +139,6 @@ func (d *Daemon) verbAgentHookEvent(cs *connState, params json.RawMessage) (any,
 	return res, nil
 }
 
-// verbAgentStatusLineEvent handles agent-statusline-event: one status line
-// run of tuios agent-statusline, without --then, run here. Nothing is
-// printed for it; a forwarder runs the person's own status line itself.
 func (d *Daemon) verbAgentStatusLineEvent(cs *connState, params json.RawMessage) (any, *verbError) {
 	p, verr := decodeHookCall(params, "status line")
 	if verr != nil {
@@ -208,15 +173,11 @@ func (d *Daemon) verbAgentStatusLineEvent(cs *connState, params json.RawMessage)
 	return res, nil
 }
 
-// inProcessCaller is a verb client that calls the daemon's own handlers on
-// one connection, so a hook event run here is admitted, scoped and answered
-// exactly as the same calls made over that connection would be.
 type inProcessCaller struct {
 	d  *Daemon
 	cs *connState
 }
 
-// Call runs one verb on the caller's connection.
 func (c inProcessCaller) Call(verb string, params any) (json.RawMessage, error) {
 	result, verr := c.d.callVerb(c.cs, verb, params)
 	if verr != nil {
@@ -229,13 +190,8 @@ func (c inProcessCaller) Call(verb string, params any) (json.RawMessage, error) 
 	return raw, nil
 }
 
-// CallWithTimeout is Call. A verb run here is bounded by its own params, as
-// request-approval's hold is, not by a read deadline on a socket.
 func (c inProcessCaller) CallWithTimeout(verb string, params any, _ time.Duration) (json.RawMessage, error) {
 	return c.Call(verb, params)
 }
 
-// forwardedReplyMark starts a forwarder's reply. A forwarder prints what
-// follows it, and runs tuios agent-hook when a reply lacks it: an older
-// daemon answers the call with a JSON error line instead.
 const forwardedReplyMark = "TUIOS-HOOK-OK\n"

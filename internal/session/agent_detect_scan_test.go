@@ -6,12 +6,10 @@ import (
 	"time"
 )
 
-// shellAt is a pane sitting at its own shell prompt.
 func shellAt(pid int) fakeProc {
 	return fakeProc{foregroundInfo{comm: "zsh", argv: []string{"zsh"}, pid: pid, shellPID: pid}, true}
 }
 
-// agentIn is a pane whose shell runs an agent in the foreground.
 func agentIn(shellPID int) fakeProc {
 	return fakeProc{foregroundInfo{comm: "claude", argv: []string{"claude"}, pid: shellPID + 1, shellPID: shellPID}, true}
 }
@@ -57,8 +55,6 @@ func TestIdleDetectionTakesNoWriteLock(t *testing.T) {
 	matcher := newAgentMatcher(nil)
 	resolve := fakeResolver(map[string]fakeProc{ptyID: shellAt(100)})
 
-	// The first scan records the shell pid, which is a change. The second has
-	// nothing to say.
 	sess.applyAgentDetection(resolve, matcher.identifyDetail)
 	version := sess.GetState().Version
 
@@ -91,7 +87,6 @@ func TestDetectionSkipsAWindowRepointedDuringTheRead(t *testing.T) {
 	matcher := newAgentMatcher(nil)
 
 	resolve := func(p string) (foregroundInfo, bool) {
-		// The window moves to another PTY while its old one is being read.
 		_ = sess.mutateState(func(st *SessionState) error {
 			for i := range st.Windows {
 				if st.Windows[i].ID == id {
@@ -110,8 +105,6 @@ func TestDetectionSkipsAWindowRepointedDuringTheRead(t *testing.T) {
 	}
 }
 
-// detectTicker drives scanAgentDetection tick by tick with the daemon's
-// backoff, against one fake PTY per window, and counts the reads per PTY.
 type detectTicker struct {
 	sess   *Session
 	ptys   map[string]*PTY
@@ -145,7 +138,6 @@ func (d *detectTicker) pty(ptyID string) *PTY {
 	return p
 }
 
-// output records output on a pane at the current time.
 func (d *detectTicker) output(ptyID string) {
 	d.pty(ptyID).lastOutput.Store(d.now + 1)
 }
@@ -173,11 +165,9 @@ func TestDetectionFindsAnAgentStartedSilently(t *testing.T) {
 	d := newDetectTicker(sess)
 	d.table[ptyID] = shellAt(100)
 
-	// Settle into the backoff: read, then quiet.
 	for range 2 * d.quiet {
 		d.tick()
 	}
-	// Start the agent right after a read, which is the worst case.
 	for d.pty(ptyID).detectSkips.Load() != 0 {
 		d.tick()
 	}
@@ -194,7 +184,6 @@ func TestDetectionFindsAnAgentStartedSilently(t *testing.T) {
 		t.Fatalf("a silently started agent took %v to find, bound is %v", bound, agentDetectQuietBound)
 	}
 
-	// With output it is the next tick.
 	sess2, id2 := bareSessionWithWindow(t)
 	ptyID2 := ptyIDOfWindow(t, sess2, id2)
 	d2 := newDetectTicker(sess2)

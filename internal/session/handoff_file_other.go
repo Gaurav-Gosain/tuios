@@ -8,10 +8,6 @@ import (
 	"strconv"
 )
 
-// newHandoffFile makes the descriptor the manifest is written to: a file only
-// the owner can read, under dir, unlinked as soon as it is open, so only the
-// descriptor names it. It lives in the page cache, and the exec keeps the
-// descriptor and its offset.
 func newHandoffFile(dir string) (*os.File, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err

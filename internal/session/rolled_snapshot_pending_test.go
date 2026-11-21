@@ -24,13 +24,10 @@ import (
 // pending sequence is placed 3 bytes short of a 16-byte unit there.
 func TestRolledSnapshotCatchUpDropsThePendingSequence(t *testing.T) {
 	const header = "HEADER-ROW"
-	// One unit moves to row 6 and writes ten cells: 16 bytes.
 	const unit = "\x1b[6;1Hxxxxxxxxxx"
 
 	p := newEmulatedPTY(t, 80, 24)
 	lead := "\x1b[1;1H" + header + "\x1b[6;1H"
-	// The pending "\x1b[" starts at a position 13 mod 16, so a ring start at
-	// a multiple of 32768 falls 3 bytes into a unit, on ";1H".
 	lead += strings.Repeat("y", (13-len(lead)%16+16)%16)
 	p.feed([]byte(lead))
 	p.feed([]byte("\x1b["))
@@ -44,7 +41,6 @@ func TestRolledSnapshotCatchUpDropsThePendingSequence(t *testing.T) {
 		t.Fatalf("the snapshot's pending input is %q, want the cut %q: the fixture no longer reaches the join", state.PendingInput, "\x1b[")
 	}
 
-	// Finish the cut unit, then roll the ring far past the snapshot.
 	var rest bytes.Buffer
 	rest.WriteString(unit[2:])
 	for range 12 << 10 {
@@ -65,8 +61,6 @@ func TestRolledSnapshotCatchUpDropsThePendingSequence(t *testing.T) {
 	replay := drain(p.SubscribeFromSnapshot("rolled", state.Seq))
 	defer func() { _ = p.Unsubscribe("rolled") }()
 
-	// The positive half: the catch-up is rolled, and its bytes begin on the
-	// end of a sequence whose start the client does not hold.
 	if body := bytes.TrimLeft(replay, "\x18"); !bytes.HasPrefix(body, []byte(";1H")) {
 		t.Fatalf("the catch-up begins %q, want the ring to start on %q: the fixture no longer reaches the join", body[:min(len(body), 16)], ";1H")
 	}

@@ -11,10 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// These respond tests run a helper process in a pane and read its peer pid
-// off the socket, which the helpers in human_origin_test.go do on linux and
-// darwin only.
-
 // TestRespondFromShellIsAGrant: without the grant, a caller outside every pane
 // with no attach is refused; with it, the same caller may answer. A call on
 // the plain link socket, whose hub did not vouch for its caller, is refused
@@ -31,12 +27,9 @@ func TestRespondFromShellIsAGrant(t *testing.T) {
 	}
 	d.respondFromShell = true
 	link := dialLink(t, sp)
-	// A link may not respond at all under the default policy.
 	if code := errCode(t, callVerb(t, link, "respond", params)); code != ErrVerbForbidden {
 		t.Fatalf("on the plain link socket with the default link policy: %s, want %s", code, ErrVerbForbidden)
 	}
-	// With respond allowed, the plain link socket still carries no one the
-	// grant covers.
 	d.SetLinkPolicies(map[string]config.HostConfig{"*": {Allow: config.LinkCapabilities}})
 	if code := errCode(t, callVerb(t, link, "respond", params)); code != ErrVerbNotHuman {
 		t.Fatalf("on the plain link socket with the grant: %s, want %s", code, ErrVerbNotHuman)
@@ -99,7 +92,6 @@ func TestRespondOverTheLink(t *testing.T) {
 	}
 
 	params := map[string]any{"session": "far", "window": ag.window, "action": "approve", "prompt_id": pk["prompt_id"]}
-	// Answering for the person is not in the default link policy.
 	if _, err := vc.Call("respond", params); err == nil || !strings.Contains(err.Error(), ErrVerbForbidden) {
 		t.Fatalf("respond over a link with the default policy: %v, want %s", err, ErrVerbForbidden)
 	}

@@ -31,36 +31,13 @@ import (
 	"tuios.dev/shot"
 )
 
-// file-preview: what Quick Look shows, made on the machine the file is on.
-//
-// A preview of a file on another machine should not cost the file: a 40 MB
-// photo is shown at 1600 pixels, a PDF as its first page, a film as one frame.
-// So the machine with the file does the heavy part and sends the small result,
-// and the client decodes what comes back (tuios-gpui's tuios-preview crate). A
-// text file is sent as its first 256 KiB; the client highlights it.
-//
-// PDF pages and film frames come from pdftoppm and ffmpeg when that machine
-// has them. Without pdftoppm a PDF up to 8 MiB is sent as it is, for a client
-// that can draw one. Without ffmpeg a film is described, not shown.
-//
-// A preview reads a file's bytes, so it is held to the rules file-read keeps:
-// the scope table denies it to a pane, the link policy asks for the files
-// capability, and a call over a link goes through the read deny list and
-// files_roots (checkLinkRead). The file is opened once, through
-// openLinkRead, and everything after reads that open file: the decoders read
-// it, and pdftoppm, pdfinfo, ffprobe and ffmpeg get it as /dev/fd/3, not by
-// its name. A name checked and then handed to a tool would race a rename that
-// swaps a key in under it.
-
 const (
-	previewMaxPx      = 1600
-	previewMaxPxLimit = 4096
-	previewTextMax    = 256 << 10
-	previewWindowMax  = 1 << 20
-	previewSeekChunk  = 1 << 20
-	previewLineMax    = 1 << 20
-	// previewSeekBudget bounds one search or one count. The answer says how far it
-	// read, and the next call goes on from there.
+	previewMaxPx       = 1600
+	previewMaxPxLimit  = 4096
+	previewTextMax     = 256 << 10
+	previewWindowMax   = 1 << 20
+	previewSeekChunk   = 1 << 20
+	previewLineMax     = 1 << 20
 	previewSeekBudget  = 5 * time.Second
 	previewImageMax    = 64 << 20
 	previewImageDimMax = 10000
@@ -68,21 +45,10 @@ const (
 	previewWordsMax    = 256 << 10
 	previewSVGMax      = 4 << 20
 	previewToolTimeout = 20 * time.Second
-	// previewDecodeMax bounds the memory one image's decode and scale may
-	// take, the decoder's own buffers counted (decodeCost). A small file can
-	// hold a huge picture: a 400 KB PNG of 10000 x 10000 pixels decodes to
-	// 400 MB, and an 8 MB progressive JPEG of 9000 x 7000 holds 945 MB of
-	// coefficients and planes while it decodes.
-	previewDecodeMax = 256 << 20
-	// previewPassMax is the largest picture sent as it is, for the client
-	// to decode: a WebP or a BMP, which this machine does not decode, and a
-	// picture too large to decode here within previewDecodeMax. The GUI
-	// decodes them with its own caps (tuios-gpui's tuios-preview crate).
-	previewPassMax = 16 << 20
+	previewDecodeMax   = 256 << 20
+	previewPassMax     = 16 << 20
 )
 
-// previewDecodeSlot lets one image decode at a time, so previews asked for
-// together cannot add their pictures up in the daemon's memory.
 var previewDecodeSlot = make(chan struct{}, 1)
 
 var (
@@ -90,7 +56,6 @@ var (
 	previewVideoExt = map[string]bool{".mp4": true, ".mkv": true, ".webm": true, ".mov": true, ".avi": true, ".m4v": true}
 )
 
-// verbFilePreview makes the preview of one file on this machine.
 func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Path          string `json:"path"`
@@ -128,8 +93,6 @@ func (d *Daemon) verbFilePreview(cs *connState, params json.RawMessage) (any, *v
 		atMs = *p.AtMs
 	}
 
-	// The name is judged before anything about the file is said, so a
-	// folder or a pipe in the deny list gets the same refusal as a file.
 	if verr := d.checkLinkRead(cs, path); verr != nil {
 		return nil, verr
 	}
@@ -267,9 +230,6 @@ func PreviewShowsPicture(name string) bool {
 	return previewImageExt[ext] || previewVideoExt[ext] || ext == ".pdf"
 }
 
-// previewOpened is the preview of the file f, opened through openRegular.
-// openErr is openRegular's refusal of a file that is not regular, whose
-// fi then says what it is; f is nil then. It closes f.
 func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr error, path string, maxPx int, pdf PreviewWant) map[string]any {
 	out := map[string]any{
 		"path":  path,
@@ -278,9 +238,6 @@ func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr erro
 		"mtime": fi.ModTime().UnixMilli(),
 	}
 	if openErr != nil {
-		// openRegular refused it and said what it is, without reading it.
-		// A named pipe would hold the preview until something wrote to it,
-		// and a device has no end. Neither is opened past that.
 		if fi.IsDir() {
 			out["kind"] = "dir"
 			return out
@@ -330,7 +287,6 @@ func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr erro
 	return out
 }
 
-// readAllOf reads at most limit bytes of f from its start.
 func readAllOf(f *os.File, limit int64) ([]byte, error) {
 	b, err := io.ReadAll(io.NewSectionReader(f, 0, limit+1))
 	if err != nil {
@@ -342,13 +298,8 @@ func readAllOf(f *os.File, limit int64) ([]byte, error) {
 	return b, nil
 }
 
-// previewToolsReadFD says a tool can be handed the open file as /dev/fd/3.
-// Windows has no such name, so there a PDF is sent as it is and a film is
-// described.
 var previewToolsReadFD = runtime.GOOS != "windows" && runtime.GOOS != "js"
 
-// previewTool runs a tool over the open file f, which it reads as
-// /dev/fd/3. args name the file as fdArg. It returns the tool's stdout.
 func previewTool(ctx context.Context, f *os.File, tool string, args ...string) ([]byte, error) {
 	if !previewToolsReadFD {
 		return nil, errors.New("no tools on this system")
@@ -367,21 +318,13 @@ func previewTool(ctx context.Context, f *os.File, tool string, args ...string) (
 	return stdout.Bytes(), nil
 }
 
-// previewProtocols and previewFormats hold ffmpeg and ffprobe to the open
-// file and to the film containers a preview is made of. A file named .mp4
-// can hold a playlist (HLS) or a concat list that names other files, and an
-// ffmpeg that followed it would read them; the demuxers that do are not on
-// the list.
 const (
 	previewProtocols = "file"
 	previewFormats   = "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi"
 )
 
-// fdArg is how a preview tool names the file it was handed.
 const fdArg = "/dev/fd/3"
 
-// decodedBytesPerPixel is what one pixel of a decoded image takes in memory,
-// at the most, for the color model the image's header names.
 func decodedBytesPerPixel(m color.Model) int64 {
 	switch m {
 	case color.RGBA64Model, color.NRGBA64Model:
@@ -399,8 +342,6 @@ func decodedBytesPerPixel(m color.Model) int64 {
 	return 4
 }
 
-// previewNote is a sentence a preview without a picture shows the person, in
-// its note. It is an error so the image path can hand it back.
 type previewNote string
 
 func (n previewNote) Error() string { return string(n) }
@@ -411,12 +352,8 @@ const (
 	noteTooSlow    previewNote = "The preview took too long. Try again."
 )
 
-// previewPassExt are the pictures sent as they are, never decoded here.
 var previewPassExt = map[string]string{".webp": "image/webp", ".bmp": "image/bmp"}
 
-// previewImage sends a picture at most maxPx on its long side, decoded and
-// scaled here when that fits in previewDecodeMax, and otherwise as it is for
-// the client to decode, when it is at most previewPassMax.
 func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx, page int, out map[string]any) error {
 	if mime, ok := previewPassExt[ext]; ok {
 		return passImage(f, size, mime, out)
@@ -445,7 +382,6 @@ func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx
 	var img image.Image
 	r := io.NewSectionReader(f, 0, size)
 	if format == "gif" {
-		// One frame. An animation is not played in a preview.
 		if img = previewGIFFrame(f, size, cfg, page, out); img == nil {
 			img, err = gif.Decode(r)
 		}
@@ -471,7 +407,6 @@ func previewImage(ctx context.Context, f *os.File, ext string, size int64, maxPx
 	return nil
 }
 
-// passImage sends the picture's own bytes, for the client to decode.
 func passImage(f *os.File, size int64, mime string, out map[string]any) error {
 	if size > previewPassMax {
 		return noteTooLarge
@@ -486,16 +421,10 @@ func passImage(f *os.File, size int64, mime string, out map[string]any) error {
 	return nil
 }
 
-// decodeCost is the most memory decoding the picture and scaling it to
-// maxPx takes: the decoded image, the decoder's own buffers, and the scaled
-// copy. A progressive JPEG keeps every block's coefficients, as int32, until
-// its last scan: four bytes a pixel for each component, on top of the planes.
 func decodeCost(f *os.File, size int64, format string, cfg image.Config, maxPx int) int64 {
 	px := int64(cfg.Width) * int64(cfg.Height)
 	cost := px * decodedBytesPerPixel(cfg.ColorModel)
 	if format == "png" {
-		// An interlaced PNG decodes each of its seven passes into an image
-		// of its own before it puts them together.
 		var ihdr [1]byte
 		if _, err := f.ReadAt(ihdr[:], 28); err == nil && ihdr[0] == 1 {
 			cost *= 2
@@ -503,38 +432,32 @@ func decodeCost(f *os.File, size int64, format string, cfg image.Config, maxPx i
 	}
 	if format == "jpeg" {
 		progressive, comps := jpegFrame(io.NewSectionReader(f, 0, size))
-		// The planes: one byte a pixel for each component at the most (no
-		// chroma subsampling).
 		cost = px * int64(comps)
 		if progressive {
 			cost += px * int64(comps) * 4
 		}
 	}
-	// The scaled copy, RGBA, at most maxPx on its long side.
 	sw, sh := int64(min(cfg.Width, maxPx)), int64(min(cfg.Height, maxPx))
 	return cost + sw*sh*4
 }
 
-// jpegFrame reads a JPEG's frame header: whether it is progressive, and how
-// many components it has (3 when the header is not found in the first MiB,
-// which costs the most a baseline file can).
 func jpegFrame(r io.ReaderAt) (progressive bool, comps int) {
 	const limit = 1 << 20
 	comps = 3
 	var hdr [4]byte
-	off := int64(2) // after SOI
+	off := int64(2)
 	for off < limit {
 		if _, err := r.ReadAt(hdr[:2], off); err != nil || hdr[0] != 0xff {
-			return true, comps // unknown: count it as the dearer kind
+			return true, comps
 		}
 		marker := hdr[1]
 		if marker == 0xff {
-			off++ // fill byte
+			off++
 			continue
 		}
 		off += 2
 		if marker == 0x01 || (marker >= 0xd0 && marker <= 0xd9) {
-			continue // no length
+			continue
 		}
 		if _, err := r.ReadAt(hdr[2:4], off); err != nil {
 			return true, comps
@@ -559,10 +482,6 @@ func jpegFrame(r io.ReaderAt) (progressive bool, comps int) {
 	return true, comps
 }
 
-// fit scales img down to at most maxPx on its long side. A bilinear scale
-// samples the source in place; CatmullRom built a float buffer of the
-// destination's width by the source's height, 358 MB for a 9000 x 7000
-// picture at 1600 px.
 func fit(img image.Image, maxPx int) image.Image {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
@@ -581,8 +500,6 @@ func fit(img image.Image, maxPx int) image.Image {
 	return dst
 }
 
-// encodePreview is the image as JPEG for a photo and PNG for everything else,
-// which may hold transparency or hard edges.
 func encodePreview(img image.Image, photo bool) ([]byte, string, error) {
 	var buf bytes.Buffer
 	if photo {
@@ -598,7 +515,6 @@ func encodePreview(img image.Image, photo bool) ([]byte, string, error) {
 	return buf.Bytes(), "image/png", nil
 }
 
-// previewPDF sends one page as an image, or the file for a client to draw.
 func previewPDF(ctx context.Context, f *os.File, size int64, maxPx int, want PreviewWant, out map[string]any) {
 	out["kind"] = "pdf"
 	page := max(want.Page, 1)
@@ -633,7 +549,6 @@ func previewPDF(ctx context.Context, f *os.File, size int64, maxPx int, want Pre
 	if previewToolMissing("pdftoppm") {
 		out["no_tool"] = "pdftoppm"
 	} else if page > 1 || want.PagesKnown {
-		// The file has been drawn before, so this page is what failed.
 		out["note"] = "tuios could not draw this page."
 		return
 	}
@@ -646,8 +561,6 @@ func previewPDF(ctx context.Context, f *os.File, size int64, maxPx int, want Pre
 	out["note"] = "This machine has no pdftoppm, and the file is too large to send for a preview."
 }
 
-// previewToolMissing reports whether a tool that could run on this system is not
-// installed.
 func previewToolMissing(tool string) bool {
 	if !previewToolsReadFD {
 		return false
@@ -656,7 +569,6 @@ func previewToolMissing(tool string) bool {
 	return err != nil
 }
 
-// pdfPages counts a PDF's pages with pdfinfo, 0 when it cannot.
 func pdfPages(ctx context.Context, f *os.File) int {
 	b, err := previewTool(ctx, f, "pdfinfo", fdArg)
 	if err != nil {
@@ -671,8 +583,6 @@ func pdfPages(ctx context.Context, f *os.File) int {
 	return 0
 }
 
-// previewVideo sends one frame from 5 % into the film, the first key frame
-// there, as yazi does.
 func previewVideo(ctx context.Context, f *os.File, maxPx int, want PreviewWant, out map[string]any) {
 	out["kind"] = "video"
 	var durMs int64
@@ -691,9 +601,6 @@ func previewVideo(ctx context.Context, f *os.File, maxPx int, want PreviewWant, 
 		atMs = max(want.AtMs, 0)
 	}
 	out["at_ms"] = atMs
-	// Key frames first, because they need no decode from the frame before. A film
-	// with few of them has none past this point, so the next try decodes. The last
-	// frame of a film starts before its end, so the last try looks a second back.
 	for _, try := range []struct {
 		keys bool
 		back int64
@@ -716,7 +623,6 @@ func previewVideo(ctx context.Context, f *os.File, maxPx int, want PreviewWant, 
 	out["note"] = "No frame could be read from the film."
 }
 
-// videoFrame runs ffmpeg for the one frame at atMs.
 func videoFrame(ctx context.Context, f *os.File, maxPx int, atMs int64, keys bool) ([]byte, error) {
 	at := float64(atMs) / 1000
 	args := []string{"-v", "error", "-nostdin", "-protocol_whitelist", previewProtocols, "-format_whitelist", previewFormats}
@@ -731,8 +637,6 @@ func videoFrame(ctx context.Context, f *os.File, maxPx int, atMs int64, keys boo
 	return previewTool(ctx, f, "ffmpeg", args...)
 }
 
-// videoFacts adds what ffprobe says of the film to out, and returns its length in
-// ms, 0 when it cannot.
 func videoFacts(ctx context.Context, f *os.File, out map[string]any) int64 {
 	b, err := previewTool(ctx, f, "ffprobe", "-v", "error", "-protocol_whitelist", previewProtocols, "-format_whitelist", previewFormats, "-show_entries", "format=duration:stream=codec_type,codec_name,width,height,avg_frame_rate", "-of", "json", fdArg)
 	if err != nil {
@@ -779,8 +683,6 @@ func videoFacts(ctx context.Context, f *os.File, out map[string]any) int64 {
 	return durMs
 }
 
-// previewText sends the start of a file that reads as text. It reports false
-// for a file that does not.
 func previewText(f *os.File, size int64, out map[string]any) bool {
 	buf := make([]byte, min(size, previewTextMax))
 	n, _ := io.ReadFull(io.NewSectionReader(f, 0, int64(len(buf))), buf)
@@ -789,7 +691,6 @@ func previewText(f *os.File, size int64, out map[string]any) bool {
 	if bytes.IndexByte(head, 0) >= 0 {
 		return false
 	}
-	// A cut through the last character is not a reason to call it binary.
 	trimmed := buf
 	for i := 0; i < 4 && len(trimmed) > 0 && !utf8.Valid(trimmed); i++ {
 		trimmed = trimmed[:len(trimmed)-1]
@@ -804,15 +705,6 @@ func previewText(f *os.File, size int64, out map[string]any) bool {
 	return true
 }
 
-// previewWindow sends a window of a text file: at most limit bytes from offset.
-// The window holds whole lines. It starts at the first line that starts at or
-// after offset, and it ends after the last line that ends inside it. A line
-// longer than the window is sent cut. next_offset is where the next window
-// starts, and a window that ends at offset N asked for from N-limit ends exactly
-// there, so a client can read backward too.
-//
-// No line is counted and nothing is kept: the cost is one read of limit bytes,
-// whatever the size of the file.
 func previewWindow(f *os.File, size, offset int64, limit int, out map[string]any) {
 	if limit <= 0 {
 		limit = previewTextMax
@@ -843,24 +735,15 @@ func previewWindow(f *os.File, size, offset int64, limit int, out map[string]any
 	out["truncated"] = offset+int64(end) < size
 }
 
-// previewSeek looks in a text one chunk at a time, for at most previewSeekBudget.
-// It holds at most one chunk, and a file smaller than a chunk gets a buffer of
-// its own size. offset is the start of the line it found, or -1. reached is how
-// far it read, so a later call can go on from there, and counted is the lines it
-// passed on the way to a line number.
 func previewSeek(ctx context.Context, f *os.File, size int64, seek PreviewSeek, out map[string]any) {
 	out["kind"] = "text"
 	out["offset"] = int64(-1)
-	// The buffer is a chunk at most, and the size of a smaller file.
 	buf := make([]byte, int(min(previewSeekChunk, size)))
 	if seek.Line > 0 {
 		previewSeekLine(ctx, f, size, seek.Line, buf, out)
 		return
 	}
 	needle := []byte(seek.Find)
-	// A search in lower case ignores case, and one with a capital does not. A
-	// query of ASCII digits, punctuation or spaces has no case to ignore, so it
-	// searches the raw bytes: nothing is lowered and no offset can shift.
 	fold := !bytes.ContainsFunc(needle, unicode.IsUpper) && !noLetterASCII(needle)
 	var lower []byte
 	if fold {
@@ -880,11 +763,6 @@ func previewSeek(ctx context.Context, f *os.File, size int64, seek PreviewSeek, 
 		}
 		hay := chunk
 		if fold {
-			// An ASCII chunk is lowered into the one buffer (as long as buf), in
-			// place of its own length. A chunk with a byte past ASCII takes
-			// bytes.ToLower, which allocates that chunk, and its offsets are read
-			// as they always were (a chunk whose lowering changes its length keeps
-			// that shift).
 			hay = lower[:len(chunk)]
 			if !lowerASCII(hay, chunk) {
 				hay = bytes.ToLower(chunk)
@@ -919,8 +797,6 @@ func previewSeek(ctx context.Context, f *os.File, size int64, seek PreviewSeek, 
 	out["reached"] = at
 }
 
-// noLetterASCII reports whether q is all ASCII with no letter in it, so that
-// lowering cannot change what it matches.
 func noLetterASCII(q []byte) bool {
 	for _, c := range q {
 		if c >= utf8.RuneSelf || c|0x20 >= 'a' && c|0x20 <= 'z' {
@@ -930,9 +806,6 @@ func noLetterASCII(q []byte) bool {
 	return true
 }
 
-// lowerASCII writes src into dst (at least len(src) long) with A-Z lowered, 8
-// bytes at a time. It reports false, leaving dst unspecified, when src has a
-// byte past ASCII.
 func lowerASCII(dst, src []byte) bool {
 	const hi = 0x8080808080808080
 	n := len(src)
@@ -943,8 +816,6 @@ func lowerASCII(dst, src []byte) bool {
 		if w&hi != 0 {
 			return false
 		}
-		// Per byte: bit 7 of ge is set from 'A' up, of gt from '[' up; they
-		// differ exactly for A-Z. No add carries into the next byte.
 		ge := w + 0x3f3f3f3f3f3f3f3f
 		gt := w + 0x2525252525252525
 		binary.LittleEndian.PutUint64(dst[i:], w|((ge^gt)&hi)>>2)
@@ -962,7 +833,6 @@ func lowerASCII(dst, src []byte) bool {
 	return true
 }
 
-// previewSeekLine finds the start of line number line.
 func previewSeekLine(ctx context.Context, f *os.File, size, line int64, buf []byte, out map[string]any) {
 	if line <= 1 {
 		out["offset"] = int64(0)
@@ -987,7 +857,6 @@ func previewSeekLine(ctx context.Context, f *os.File, size, line int64, buf []by
 			if counted == line-1 {
 				start := at + int64(n-len(chunk))
 				if start >= size {
-					// The newline ends the file: that line is not there.
 					break
 				}
 				out["offset"] = start
@@ -1002,8 +871,6 @@ func previewSeekLine(ctx context.Context, f *os.File, size, line int64, buf []by
 	out["reached"] = at
 }
 
-// previewLineStart is the start of the line that holds byte at. It looks back at
-// most previewLineMax bytes: a longer line is entered where the match is.
 func previewLineStart(f *os.File, at int64) int64 {
 	from := max(at-previewLineMax, 0)
 	buf := make([]byte, at-from)
@@ -1017,7 +884,6 @@ func previewLineStart(f *os.File, at int64) int64 {
 	return at
 }
 
-// describeBinary is the preview of a file that has none: its type and size.
 func describeBinary(f *os.File, out map[string]any, note string) {
 	out["kind"] = "binary"
 	head := make([]byte, 512)

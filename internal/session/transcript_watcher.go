@@ -56,23 +56,13 @@ import (
 // and it happens to be well aimed: the moment worth catching is a turn ending,
 // and a turn ends immediately after the pane paints its last chunk.
 type TranscriptWatcher struct {
-	mu sync.Mutex
-	w  *fsnotify.Watcher
-	// dirs refcounts the directories being watched, so the last file in a
-	// project takes its watch with it and no earlier one does.
-	dirs map[string]int
-	// onChange maps an absolute file path to the joins waiting on it, by the
-	// key each join watched with. Two windows may be joined to the same file,
-	// which happens when a session is attached from two panes, and each one
-	// counts once in dirs and is taken out alone by Unwatch.
+	mu       sync.Mutex
+	w        *fsnotify.Watcher
+	dirs     map[string]int
 	onChange map[string]map[string]func()
-	// lost holds the watched directories whose watch the kernel dropped
-	// because the directory was deleted or moved.
-	lost map[string]bool
-	// parents refcounts the parent directories watched for a lost directory
-	// to come back.
-	parents map[string]int
-	closed  bool
+	lost     map[string]bool
+	parents  map[string]int
+	closed   bool
 }
 
 // NewTranscriptWatcher starts a watcher, or reports why it could not.
@@ -114,14 +104,10 @@ func (t *TranscriptWatcher) Watch(path, key string, onChange func()) error {
 	t.mu.Unlock()
 
 	if lost {
-		// The directory was deleted and made again while joins still
-		// counted it. Watch it again before counting this join in it.
 		if err := t.rearm(dir); err != nil {
 			return err
 		}
 	} else if first {
-		// Added outside the lock: fsnotify's Add touches the kernel, and holding
-		// the lock across it would block every other join behind one syscall.
 		if err := t.w.Add(dir); err != nil {
 			return err
 		}
@@ -181,8 +167,6 @@ func (t *TranscriptWatcher) Unwatch(path, key string) {
 	}
 }
 
-// markLost records that the kernel dropped the watch on dir, and watches its
-// parent so the directory coming back is seen.
 func (t *TranscriptWatcher) markLost(dir string) {
 	parent := filepath.Dir(dir)
 	t.mu.Lock()
@@ -194,21 +178,15 @@ func (t *TranscriptWatcher) markLost(dir string) {
 	t.parents[parent]++
 	addParent := t.parents[parent] == 1 && t.dirs[parent] == 0
 	t.mu.Unlock()
-	// A moved directory may still be watched at its new place. That watch
-	// reports names this watcher does not know, so it is removed.
 	_ = t.w.Remove(dir)
 	if addParent {
-		// When the parent cannot be watched either, the directory stays
-		// lost until a new join in it watches it again.
 		_ = t.w.Add(parent)
 	}
-	// The directory may be back already, before the parent was watched.
 	if info, err := os.Stat(dir); err == nil && info.IsDir() {
 		t.comeBack(dir)
 	}
 }
 
-// comeBack watches a lost directory again and wakes every join in it.
 func (t *TranscriptWatcher) comeBack(dir string) {
 	if t.rearm(dir) != nil {
 		return
@@ -228,9 +206,6 @@ func (t *TranscriptWatcher) comeBack(dir string) {
 	}
 }
 
-// rearm adds the watch on a lost directory again and stops watching its
-// parent for it. It returns the error of the add, and nil for a directory
-// that is not lost.
 func (t *TranscriptWatcher) rearm(dir string) error {
 	if err := t.w.Add(dir); err != nil {
 		return err
@@ -248,8 +223,6 @@ func (t *TranscriptWatcher) rearm(dir string) error {
 	return nil
 }
 
-// releaseParentLocked drops one count on a parent watch and returns the
-// parent when its watch is to be removed. Called with the mutex held.
 func (t *TranscriptWatcher) releaseParentLocked(parent string) string {
 	t.parents[parent]--
 	if t.parents[parent] > 0 {
@@ -281,8 +254,6 @@ func (t *TranscriptWatcher) Close() error {
 	return t.w.Close()
 }
 
-// run drains the event channel. It blocks here for the daemon's whole life on a
-// machine whose agents are idle, which is what "no polling" means in practice.
 func (t *TranscriptWatcher) run() {
 	for {
 		select {
@@ -290,8 +261,6 @@ func (t *TranscriptWatcher) run() {
 			if !ok {
 				return
 			}
-			// Chmod alone is not a content change, and reacting to it would wake
-			// a read for every backup tool that touches the directory.
 			if ev.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename|fsnotify.Remove) == 0 {
 				continue
 			}
@@ -305,11 +274,8 @@ func (t *TranscriptWatcher) run() {
 			t.mu.Unlock()
 			switch {
 			case watched && !lost && ev.Op&(fsnotify.Remove|fsnotify.Rename) != 0:
-				// The watched directory itself went away.
 				t.markLost(ev.Name)
 			case lost && ev.Op&(fsnotify.Create|fsnotify.Rename) != 0:
-				// A parent reports the lost directory made again, or moved
-				// back.
 				if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
 					t.comeBack(ev.Name)
 				}
@@ -318,10 +284,6 @@ func (t *TranscriptWatcher) run() {
 				cb()
 			}
 		case _, ok := <-t.w.Errors:
-			// Errors are drained and dropped. An fsnotify error names the path it
-			// happened on, and that path is the user's project and session, so it
-			// is not written anywhere. Draining matters more than reporting: the
-			// channel is unbuffered, and leaving it full stops events.
 			if !ok {
 				return
 			}
@@ -329,18 +291,12 @@ func (t *TranscriptWatcher) run() {
 	}
 }
 
-// errNoTranscriptWatcher says notification is unavailable, which puts a join on
-// the output-driven fallback rather than failing it.
 var errNoTranscriptWatcher = watcherUnavailable{}
 
 type watcherUnavailable struct{}
 
 func (watcherUnavailable) Error() string { return "no transcript watcher" }
 
-// lazyTranscriptWatcher is the daemon's transcript watcher, opened on the first
-// join that asks for it. A daemon with no watcher is a working daemon: every
-// join falls back to reading on its pane's own output, so a watcher that cannot
-// be opened is not reported, and the open is not tried again.
 type lazyTranscriptWatcher struct {
 	mu     sync.Mutex
 	w      *TranscriptWatcher
@@ -348,7 +304,6 @@ type lazyTranscriptWatcher struct {
 	closed bool
 }
 
-// open returns the watcher, opening it the first time.
 func (l *lazyTranscriptWatcher) open() *TranscriptWatcher {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -363,7 +318,6 @@ func (l *lazyTranscriptWatcher) open() *TranscriptWatcher {
 	return l.w
 }
 
-// Watch opens the watcher if it is not open yet and registers the callback.
 func (l *lazyTranscriptWatcher) Watch(path, key string, onChange func()) error {
 	w := l.open()
 	if w == nil {
@@ -372,7 +326,6 @@ func (l *lazyTranscriptWatcher) Watch(path, key string, onChange func()) error {
 	return w.Watch(path, key, onChange)
 }
 
-// Unwatch drops a callback. A watcher that was never opened holds none.
 func (l *lazyTranscriptWatcher) Unwatch(path, key string) {
 	l.mu.Lock()
 	w := l.w
@@ -382,7 +335,6 @@ func (l *lazyTranscriptWatcher) Unwatch(path, key string) {
 	}
 }
 
-// Close closes the watcher if it was opened, and keeps it from opening later.
 func (l *lazyTranscriptWatcher) Close() error {
 	l.mu.Lock()
 	l.closed = true

@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// routedCommand reads the one remote command the daemon routes to the fake TUI,
-// answers it, and returns what was routed.
 func routedCommand(t *testing.T, d *Daemon, sessionID string) (chan RemoteCommandPayload, *connState) {
 	t.Helper()
 	tui, clientSide := newFakeTUI(t, d, sessionID)
@@ -95,8 +93,6 @@ func TestExecuteCommandRefusesAnUnknownName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The reply is written on the handler's goroutine into an unbuffered pipe,
-	// so the handler runs beside the read.
 	go func() { _ = d.handleExecuteCommand(cli, msg) }()
 	reply, err := ReadMessage(cliSide)
 	if err != nil {

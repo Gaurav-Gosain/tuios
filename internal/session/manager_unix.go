@@ -25,15 +25,7 @@ func GetSocketPath() (string, error) {
 	return path, nil
 }
 
-// defaultSocketPath is the daemon socket this user reaches: the one in
-// sockpath.Dir, unless only a daemon in the other folder answers. See
-// pickLiveSocket.
 func defaultSocketPath() (string, error) {
-	// $XDG_RUNTIME_DIR/tuios when there is a runtime directory (found at
-	// /run/user/$UID when the variable is unset), and /tmp/tuios-$UID
-	// otherwise. A named server's folder is inside that one,
-	// <that folder>/servers/<name>, and each folder down to it is checked:
-	// whoever controls a parent can replace the child.
 	socketDir := sockpath.Dir()
 	dirs := []string{socketDir}
 	if base := sockpath.BaseDir(); base != socketDir {
@@ -56,13 +48,6 @@ func GetPidFilePath() (string, error) {
 	return socketPath + ".pid", nil
 }
 
-// ensureSocketDir creates the directory the daemon's socket and pid file live
-// in, or checks the one that is there. Whoever controls this directory can put
-// their own socket in place of the daemon's and read what every client sends,
-// and without XDG_RUNTIME_DIR its name, /tmp/tuios-<uid>, is one any local
-// user can create first. So an existing directory must be a real directory
-// (not a link), owned by this user, and closed to everyone else. One this user
-// owns that is open is closed rather than refused.
 func ensureSocketDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return errfmt.Errorf("failed to create socket directory: %w", err)

@@ -7,10 +7,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// A snapshot writes cells, and cells say nothing about whether a row wrapped.
-// These tests hold ApplyTerminalState to the flags the sending emulator had,
-// on whichever backend the build selects.
-
 const wrapW, wrapH = 10, 4
 
 func wrapTerm(t *testing.T, input string) vt.Terminal {
@@ -76,7 +72,7 @@ func TestApplyTerminalStateWithoutWrapBitsClearsFlags(t *testing.T) {
 	client := wrapTerm(t, "0123456789abc")
 	daemon := wrapTerm(t, "http://b.c\r\nfoo.bar/zz")
 	state := TerminalStateOf(daemon, wrapW, wrapH, 100, client.ScrollbackLen())
-	state.ScreenWraps, state.ScrollbackWraps = nil, nil // an old peer
+	state.ScreenWraps, state.ScrollbackWraps = nil, nil
 	ApplyTerminalState(client, state)
 	for y, w := range rowWraps(t, client) {
 		if w {
@@ -89,8 +85,6 @@ func TestApplyTerminalStateWithoutWrapBitsClearsFlags(t *testing.T) {
 // rebuilt from a snapshot gets the wraps the pane had, on the screen and in
 // the history.
 func TestApplyTerminalStateCarriesWraps(t *testing.T) {
-	// Row one of each pair wraps; the pairs end with a newline. Enough of
-	// them to push the first pairs into history.
 	input := strings.Repeat("0123456789abc\r\n", 4)
 	daemon := wrapTerm(t, input)
 	fresh := vt.NewWithScrollback(wrapW, wrapH, 100)
@@ -106,9 +100,6 @@ func TestApplyTerminalStateCarriesWraps(t *testing.T) {
 	if fresh.ScrollbackLen() != n {
 		t.Fatalf("history holds %d rows, want %d", fresh.ScrollbackLen(), n)
 	}
-	// The newest history row carries on into the screen; the ghostty
-	// synthesis cannot reproduce that one (see ghosttyRestore), so it is
-	// left out of the comparison on both backends.
 	for i := range n - 1 {
 		got, _ := fresh.ScrollbackSoftWrapped(i)
 		want, _ := daemon.ScrollbackSoftWrapped(i)

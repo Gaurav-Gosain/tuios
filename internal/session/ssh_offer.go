@@ -10,38 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// The offer to add a machine.
-//
-// A person who runs ssh in a pane to a machine tuios has no [hosts] entry for
-// may want that machine on the rail. The daemon already reads each pane's
-// foreground process after the pane prints (the detection poll), so it can
-// see the login. When the login is one a person types to work on a machine,
-// and ssh -G resolves it to a machine no entry reaches, the window state says
-// so (WindowState.SSHOffer), and the client shows a message with Add, Not now
-// and Never.
-//
-// What counts as such a login:
-//
-//   - An ssh or mosh client the pane's shell started, as findRemoteClient
-//     reads it. ssh run by scp, rsync, git, sftp or sshfs is a transfer and is
-//     never read. A ProxyJump hop is a child of the client, never the pane's
-//     foreground program.
-//   - A session that reads the pane's keys: no tunnel (-N, -f, -n, -W), no
-//     -s or -T, and no remote command unless -t asks for a tty with it.
-//   - A client that has run for sshOfferAfter, so a failed login or a password
-//     prompt does not bring the message up.
-//   - A target that is not this machine on port 22 and not a git host.
-//
-// It is not an agent feature. With [agents] enabled = false the poll reads
-// nothing for agents, and runs this read alone (sshOfferScan). With
-// notifications.machine_offer = false nothing here runs.
-//
-// The cost: a pane's check runs once for each new foreground process, and
-// ssh -G runs once for each login that passes the rules above. The check
-// rides the poll, which runs only after a pane printed, took input or changed,
-// so a daemon at rest runs none of it.
-
-// sshOfferAfter is how long a client must run before its machine is offered.
 const sshOfferAfter = 5 * time.Second
 
 // SSHOffer is a machine the client may offer to add: Dest is the destination
@@ -53,9 +21,6 @@ type SSHOffer struct {
 	Target  string `json:"target"`
 }
 
-// sshOfferCheck is one pane's check: the foreground process it was made for
-// (its pid and name: a shell that forked keeps the pid when it execs ssh),
-// when the poll first saw it, the login it found, and the answer once known.
 type sshOfferCheck struct {
 	mu     sync.Mutex
 	leader int
@@ -65,31 +30,20 @@ type sshOfferCheck struct {
 	login  remoteLogin
 	done   bool
 	offer  *SSHOffer
-	// wait is found && !done, kept apart so the poll can ask without the
-	// lock, which a running ssh -G holds.
-	wait atomic.Bool
+	wait   atomic.Bool
 }
 
-// reset forgets the check. The caller holds mu.
 func (c *sshOfferCheck) reset() {
 	c.leader, c.comm, c.seen, c.found = 0, "", time.Time{}, false
 	c.login, c.done, c.offer = remoteLogin{}, false, nil
 }
 
-// waiting reports whether a login was found that has not run long enough
-// yet. The poll keeps looking while it waits, and it waits sshOfferAfter at
-// most.
 func (c *sshOfferCheck) waiting() bool { return c.wait.Load() }
 
-// sshOfferProbe answers the check for a pane on one poll read.
 type sshOfferProbe func(pty *PTY, info foregroundInfo, running bool) *SSHOffer
 
-// setSSHOfferProbe points the session at the daemon's check. A session with
-// none checks nothing.
 func (s *Session) setSSHOfferProbe(p sshOfferProbe) { s.offerProbe.Store(&p) }
 
-// probeSSHOffer runs the check for a pane, if the session has one. read is
-// false when it has none, and then the window keeps what it holds.
 func (s *Session) probeSSHOffer(ptyID string, info foregroundInfo, running bool) (offer *SSHOffer, read bool) {
 	p := s.offerProbe.Load()
 	if p == nil {
@@ -102,8 +56,6 @@ func (s *Session) probeSSHOffer(ptyID string, info foregroundInfo, running bool)
 	return (*p)(pty, info, running), true
 }
 
-// sshOfferWaiting reports whether a pane of this session has a login that is
-// not old enough yet, so the poll looks again with nothing new happening.
 func (s *Session) sshOfferWaiting() bool {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
@@ -115,8 +67,6 @@ func (s *Session) sshOfferWaiting() bool {
 	return false
 }
 
-// syncSSHOffer moves the window's offer to the one the reading found, and
-// reports whether it differs.
 func syncSSHOffer(w *WindowState, r detectReading, write bool) bool {
 	if !r.offerRead || sameSSHOffer(w.SSHOffer, r.offer) {
 		return false
@@ -134,8 +84,6 @@ func sameSSHOffer(a, b *SSHOffer) bool {
 	return *a == *b
 }
 
-// scanSSHOffers is the poll's read with the agent features off: the
-// foreground of each pane that is due, for the offer and nothing else.
 func (s *Session) scanSSHOffers(resolve func(ptyID string) (foregroundInfo, bool), due func(ptyID string) bool) {
 	if s.offerProbe.Load() == nil {
 		return
@@ -183,7 +131,6 @@ func (s *Session) scanSSHOffers(resolve func(ptyID string) (foregroundInfo, bool
 	})
 }
 
-// clearSSHOffers takes every offer off the session's windows.
 func (s *Session) clearSSHOffers() {
 	_ = s.mutateState(func(st *SessionState) error {
 		n := 0
@@ -215,7 +162,6 @@ func (d *Daemon) SetMachineOffer(on bool) {
 	}
 }
 
-// sshOfferFor is the daemon's check for one pane on one poll read.
 func (d *Daemon) sshOfferFor(pty *PTY, info foregroundInfo, running bool) *SSHOffer {
 	c := &pty.sshOffer
 	c.mu.Lock()
@@ -225,7 +171,6 @@ func (d *Daemon) sshOfferFor(pty *PTY, info foregroundInfo, running bool) *SSHOf
 		c.reset()
 		return nil
 	}
-	// A pane whose program is on another machine is that machine's to offer.
 	if _, _, remote := pty.remoteForeground(); remote {
 		c.reset()
 		return nil
@@ -247,9 +192,6 @@ func (d *Daemon) sshOfferFor(pty *PTY, info foregroundInfo, running bool) *SSHOf
 		case ok && interactiveLogin(login):
 			c.found, c.login = true, login
 		case seen, time.Since(c.seen) >= sshOfferAfter:
-			// A client that is not a login decides at once. With no client
-			// yet, a wrapper may still be about to start one, so a later
-			// read looks again until the client would be old enough.
 			c.done = true
 			return nil
 		default:
@@ -264,9 +206,6 @@ func (d *Daemon) sshOfferFor(pty *PTY, info foregroundInfo, running bool) *SSHOf
 	return c.offer
 }
 
-// interactiveLogin reports whether a login is a session that reads the
-// pane's keys: no tunnel, no -s, -N or -T, and no remote command unless -t
-// asks for a tty with it (ssh -t box tmux).
 func interactiveLogin(l remoteLogin) bool {
 	if l.tunnel || l.forward || l.notLogin {
 		return false
@@ -274,9 +213,6 @@ func interactiveLogin(l remoteLogin) bool {
 	return !l.command || l.tty
 }
 
-// machineOfferFor resolves a login and returns the offer for it, or nil when
-// a [hosts] entry reaches it already, ssh cannot say where it goes, or it is
-// this machine or a git host.
 func (d *Daemon) machineOfferFor(login remoteLogin) *SSHOffer {
 	t, _, matches, ok := d.loginHosts(login)
 	if !ok || len(matches) > 0 || gitHost(t.HostName) || thisMachine(t) {
@@ -289,9 +225,6 @@ func (d *Daemon) machineOfferFor(login remoteLogin) *SSHOffer {
 	return &SSHOffer{Dest: login.dest, Machine: ClampDisplayText(machine), Target: sshTargetKey(t)}
 }
 
-// sshTargetKey names a target in one line: user@host:port, and the hop when
-// the login goes through one. The same host behind another hop can be another
-// machine.
 func sshTargetKey(t federation.SSHTarget) string {
 	key := t.User + "@" + t.HostName + ":" + t.Port
 	switch {
@@ -303,12 +236,8 @@ func sshTargetKey(t federation.SSHTarget) string {
 	return key
 }
 
-// gitHosts are the hosts a person reaches over ssh for git, never for a
-// shell.
 var gitHosts = []string{"github.com", "gitlab.com", "bitbucket.org", "codeberg.org"}
 
-// gitHost reports whether host is a git host or a name under one
-// (ssh.github.com, altssh.gitlab.com).
 func gitHost(host string) bool {
 	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	for _, g := range gitHosts {
@@ -319,8 +248,6 @@ func gitHost(host string) bool {
 	return false
 }
 
-// thisMachine reports whether a target is this machine's own ssh server: a
-// loopback address or this machine's name, on port 22.
 func thisMachine(t federation.SSHTarget) bool {
 	if t.Port != "22" {
 		return false

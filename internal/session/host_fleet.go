@@ -17,89 +17,35 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The fleet: this daemon following the agents of every linked host.
-//
-// The hub keeps one stream per linked host, so the rail never polls, a
-// transition on another machine raises an alert, and a host whose link goes
-// down keeps what its agents were waiting on. For each host whose link is up
-// it opens a connection to that host's daemon over the link, lists the host's
-// Inbox, and subscribes to the host's attention, agent and session events from
-// the position the listing was current to. From then on:
-//
-//   - The host's Inbox items are mirrored into this daemon's Inbox with host
-//     set (attention_hosts.go), so list-attention and the client's Inbox cover
-//     every machine, and a new item there raises the same alert a local one
-//     does.
-//   - Any agent or session change on the host refreshes a cached copy of the
-//     host's session and agent listings and publishes host-changed, which is
-//     what a client listens for instead of polling.
-//   - agent-state, session-created and session-closed are relayed onto this
-//     daemon's stream with host set, for a subscriber that asks with hosts.
-//
-// When the link drops the mirrored items are marked stale with when the host
-// was last heard from, and the listings answer from the cache with stale set,
-// so the rail keeps the host's rows, dimmed, rather than dropping them. On a
-// redial the stream resumes from the last seq it delivered (the host's replay
-// ring), and relists when the host says the replay cannot be exact.
-//
-// A host whose tuios predates the Inbox or the resumable stream is followed by
-// polling, as every host was before: list-hosts says so in events and
-// events_note, and the client keeps its poll for that host.
-//
-// Everything a host sends is data from another machine. Lines are bounded,
-// items are cleaned and capped per host, relayed events carry only their
-// identifying fields, and nothing a host sends here reaches a pane, a hook or a
-// command.
-
-// Fleet event modes, the events field of list-hosts.
 const (
 	fleetEventsLive    = "live"
 	fleetEventsPolling = "polling"
 )
 
-// fleetEventTypes are what the hub subscribes to on each host.
 var fleetEventTypes = []string{
 	EventAttention, EventAgentState, EventAgentMessage,
 	EventSessionCreated, EventSessionClosed, EventWindowCreated, EventWindowClosed,
 }
 
-// fleetRelayed are the host events copied onto this daemon's stream.
 var fleetRelayed = map[string]bool{EventAgentState: true, EventSessionCreated: true, EventSessionClosed: true}
 
 const (
-	// fleetMaxLine bounds one line from a host's stream. An event is a few
-	// hundred bytes; a listing of a full Inbox is well under this.
-	fleetMaxLine = 1 << 20
-	// fleetCallBudget bounds each call the fleet makes on a host.
-	fleetCallBudget = 10 * time.Second
-	// fleetRefreshDelay gathers a burst of host events into one refresh of the
-	// cached listings, so sixteen agents finishing together cost one round
-	// trip and one host-changed.
+	fleetMaxLine      = 1 << 20
+	fleetCallBudget   = 10 * time.Second
 	fleetRefreshDelay = 300 * time.Millisecond
-	// fleetUpPoll is how often a pump waiting for its host's link looks again
-	// when no status change woke it. The link reports every change, so this
-	// is only the backstop.
-	fleetUpPoll = 5 * time.Second
-	// fleetRetry is how long a pump waits before following its host again
-	// after the stream failed with the link still up.
-	fleetRetry = 2 * time.Second
-	// fleetPollingRetry is how long a pump waits before trying again to
-	// stream from a host whose tuios could not, in case it was upgraded.
+	fleetUpPoll       = 5 * time.Second
+	fleetRetry        = 2 * time.Second
 	fleetPollingRetry = time.Minute
-	// fleetMaxSessions and fleetMaxAgents bound what the cache keeps per host.
-	fleetMaxSessions = 512
-	fleetMaxAgents   = 2048
+	fleetMaxSessions  = 512
+	fleetMaxAgents    = 2048
 )
 
-// errFleetOld reports a host whose tuios cannot stream its agents.
 type errFleetOld struct{ note string }
 
 func (e errFleetOld) Error() string { return e.note }
 
-// errFleetResync ends a stream so the next one relists from scratch.
 var errFleetResync = errors.New("the host's stream has a gap, so its Inbox is listed again")
 
-// hostFleet holds one pump per linked host.
 type hostFleet struct {
 	d *Daemon
 
@@ -109,31 +55,20 @@ type hostFleet struct {
 	started bool
 	wg      sync.WaitGroup
 
-	// pushHosts and pushTimer gather host changes into one MsgHostsChanged to
-	// the attached clients, so a host coming up, being listed and settling is
-	// one relisting in each client rather than three.
 	pushHosts map[string]bool
 	pushTimer *time.Timer
 }
 
-// fleetPushDelay is how long host changes gather before the clients are told.
 const fleetPushDelay = 250 * time.Millisecond
 
-// fleetHost is what the hub knows about one host's agents.
 type fleetHost struct {
 	name   string
 	cancel context.CancelFunc
 	wake   chan struct{}
 
-	// The fields below are guarded by hostFleet.mu.
-	events string
-	note   string
-	// seenAt is when the host last said anything on the stream or answered a
-	// listing.
-	seenAt time.Time
-	// bootID and cursor are where the stream is: the last seq delivered, and
-	// the daemon start it belongs to. cursorOK says a resume from them is
-	// worth trying.
+	events   string
+	note     string
+	seenAt   time.Time
 	bootID   string
 	cursor   uint64
 	cursorOK bool
@@ -150,8 +85,6 @@ func newHostFleet(d *Daemon) *hostFleet {
 	return &hostFleet{d: d, hosts: make(map[string]*fleetHost)}
 }
 
-// start begins following every host in the table. It is called once the links
-// have been started.
 func (f *hostFleet) start(ctx context.Context) {
 	if f == nil || f.d.federation == nil {
 		return
@@ -159,9 +92,6 @@ func (f *hostFleet) start(ctx context.Context) {
 	f.mu.Lock()
 	f.ctx = ctx
 	f.started = true
-	// A start after stop, for a live upgrade that was put back, finds the
-	// hosts it had, with their pumps ended. Each follows on from where its
-	// stream was.
 	for _, h := range f.hosts {
 		f.pump(h)
 	}
@@ -169,7 +99,6 @@ func (f *hostFleet) start(ctx context.Context) {
 	f.reconcile(f.d.federation.Table().Names(), nil)
 }
 
-// pump starts h's pump. f.mu is held.
 func (f *hostFleet) pump(h *fleetHost) {
 	ctx, cancel := context.WithCancel(f.ctx)
 	h.cancel = cancel
@@ -178,7 +107,6 @@ func (f *hostFleet) pump(h *fleetHost) {
 	})
 }
 
-// stop ends every pump and waits for them.
 func (f *hostFleet) stop() {
 	if f == nil {
 		return
@@ -199,9 +127,6 @@ func (f *hostFleet) stop() {
 	f.wg.Wait()
 }
 
-// reconcile starts a pump for every name without one and ends the pumps of
-// names that are gone. reset names hosts that now point at another machine:
-// what was known about the old one is dropped and the pump starts over.
 func (f *hostFleet) reconcile(names, reset []string) {
 	if f == nil {
 		return
@@ -237,8 +162,6 @@ func (f *hostFleet) reconcile(names, reset []string) {
 	}
 }
 
-// onStatus is the link layer's report of a status change. It wakes the host's
-// pump and tells the clients.
 func (f *hostFleet) onStatus(host string, status federation.Status) {
 	if f == nil {
 		return
@@ -252,18 +175,15 @@ func (f *hostFleet) onStatus(host string, status federation.Status) {
 		default:
 		}
 	}
-	// Mail kept for the host while its link was down goes now.
 	if status == federation.StatusUp {
 		f.d.outbox.kick(host)
 	}
-	// The outbox item says why the link is down, so it follows the state.
 	if f.d.outbox.count(host) > 0 {
 		f.d.outbox.noteAttention(host)
 	}
 	f.publishChanged(host, status)
 }
 
-// publishChanged puts a host-changed event on this daemon's stream.
 func (f *hostFleet) publishChanged(host string, status federation.Status) {
 	if status == "" && f.d.federation != nil {
 		if r, ok := f.d.federation.Report(host); ok {
@@ -274,8 +194,6 @@ func (f *hostFleet) publishChanged(host string, status federation.Status) {
 	f.schedulePush(host)
 }
 
-// schedulePush arranges one MsgHostsChanged to the attached clients naming
-// host, gathered with any other host that changes within fleetPushDelay.
 func (f *hostFleet) schedulePush(host string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -306,14 +224,11 @@ func (f *hostFleet) schedulePush(host string) {
 	})
 }
 
-// hostUp reports whether a host's link is up now.
 func (f *hostFleet) hostUp(host string) bool {
 	r, ok := f.d.federation.Report(host)
 	return ok && r.Status == federation.StatusUp
 }
 
-// run is one host's pump: wait for the link, follow the host until the stream
-// ends, mark what it knew stale, and go again.
 func (f *hostFleet) run(ctx context.Context, h *fleetHost) {
 	for ctx.Err() == nil {
 		if !f.hostUp(h.name) {
@@ -352,8 +267,6 @@ func (f *hostFleet) run(ctx context.Context, h *fleetHost) {
 	}
 }
 
-// setMode records how the host is followed and tells the clients when that
-// changed.
 func (f *hostFleet) setMode(h *fleetHost, mode, note string) {
 	f.mu.Lock()
 	changed := h.events != mode || h.note != note
@@ -364,8 +277,6 @@ func (f *hostFleet) setMode(h *fleetHost, mode, note string) {
 	}
 }
 
-// lost is the stream ending with the host's link down or broken. What the hub
-// knew is kept, marked stale.
 func (f *hostFleet) lost(h *fleetHost) {
 	f.mu.Lock()
 	seen := h.seenAt
@@ -378,8 +289,6 @@ func (f *hostFleet) lost(h *fleetHost) {
 	f.d.attention.hostStale(h.name, at)
 }
 
-// follow opens a stream to one host and delivers its events until the stream
-// ends. It returns errFleetOld for a host that cannot stream.
 func (f *hostFleet) follow(ctx context.Context, h *fleetHost) error {
 	conn, err := f.d.federation.OpenConnection(ctx, h.name)
 	if err != nil {
@@ -404,8 +313,6 @@ func (f *hostFleet) follow(ctx context.Context, h *fleetHost) error {
 	}
 	if err := fc.subscribe(cursor, boot); err != nil {
 		if resume && !isFleetOld(err) {
-			// The host may have restarted with a boot id this side has no
-			// record of seq for. A fresh listing settles it.
 			f.forgetCursor(h)
 			return errFleetResync
 		}
@@ -432,9 +339,6 @@ func (f *hostFleet) follow(ctx context.Context, h *fleetHost) error {
 			continue
 		}
 		if ev.Type == EventGap {
-			// A gap on the host's side: the resume could not be exact, the
-			// host restarted, or this stream was read too slowly. The Inbox
-			// is listed again rather than guessed at.
 			f.forgetCursor(h)
 			return errFleetResync
 		}
@@ -442,14 +346,12 @@ func (f *hostFleet) follow(ctx context.Context, h *fleetHost) error {
 	}
 }
 
-// forgetCursor drops the resume point, so the next stream lists first.
 func (f *hostFleet) forgetCursor(h *fleetHost) {
 	f.mu.Lock()
 	h.cursorOK = false
 	f.mu.Unlock()
 }
 
-// fleetEvent is the part of a host's event this daemon reads.
 type fleetEvent struct {
 	Seq       uint64         `json:"seq"`
 	BootID    string         `json:"boot_id"`
@@ -461,7 +363,6 @@ type fleetEvent struct {
 	Attention *AttentionItem `json:"attention"`
 }
 
-// note applies one event from a host.
 func (f *hostFleet) note(h *fleetHost, ev fleetEvent) {
 	f.mu.Lock()
 	h.seenAt = time.Now()
@@ -472,9 +373,6 @@ func (f *hostFleet) note(h *fleetHost, ev fleetEvent) {
 
 	switch ev.Type {
 	case EventAttention:
-		// Only the host's own items. A host that is a hub itself also
-		// streams the items it mirrors from its own hosts, and those are
-		// that machine's to report, not this one's to pass along.
 		if ev.Attention != nil && ev.Attention.Host == "" {
 			f.d.attention.hostApply(h.name, ev.Action, *ev.Attention)
 		}
@@ -501,8 +399,6 @@ func (f *hostFleet) note(h *fleetHost, ev fleetEvent) {
 	f.scheduleRefresh(h, fleetRefreshDelay)
 }
 
-// scheduleRefresh arranges one refresh of a host's cached listings after
-// delay. A refresh already pending absorbs the request.
 func (f *hostFleet) scheduleRefresh(h *fleetHost, delay time.Duration) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -521,8 +417,6 @@ func (f *hostFleet) scheduleRefresh(h *fleetHost, delay time.Duration) {
 	})
 }
 
-// refresh reads a host's session and agent listings into the cache, then tells
-// the clients.
 func (f *hostFleet) refresh(h *fleetHost) {
 	ctx, cancel := context.WithTimeout(f.d.ctx, fleetCallBudget)
 	defer cancel()
@@ -535,7 +429,6 @@ func (f *hostFleet) refresh(h *fleetHost) {
 	f.publishChanged(h.name, "")
 }
 
-// storeSessions keeps a host's session rows, for when the host cannot be asked.
 func (f *hostFleet) storeSessions(host string, rows []remoteSessionListRow) {
 	if f == nil {
 		return
@@ -551,7 +444,6 @@ func (f *hostFleet) storeSessions(host string, rows []remoteSessionListRow) {
 	}
 }
 
-// storeAgents keeps a host's agent rows, for when the host cannot be asked.
 func (f *hostFleet) storeAgents(host string, rows []remoteAgentRow) {
 	if f == nil {
 		return
@@ -567,7 +459,6 @@ func (f *hostFleet) storeAgents(host string, rows []remoteAgentRow) {
 	}
 }
 
-// cachedSessions is a host's last session listing and when it was taken.
 func (f *hostFleet) cachedSessions(host string) ([]remoteSessionListRow, time.Time) {
 	if f == nil {
 		return nil, time.Time{}
@@ -580,7 +471,6 @@ func (f *hostFleet) cachedSessions(host string) ([]remoteSessionListRow, time.Ti
 	return nil, time.Time{}
 }
 
-// cachedAgents is a host's last agent listing and when it was taken.
 func (f *hostFleet) cachedAgents(host string) ([]remoteAgentRow, time.Time) {
 	if f == nil {
 		return nil, time.Time{}
@@ -593,7 +483,6 @@ func (f *hostFleet) cachedAgents(host string) ([]remoteAgentRow, time.Time) {
 	return nil, time.Time{}
 }
 
-// mode is how a host is followed, for list-hosts and the host listings.
 func (f *hostFleet) mode(host string) (events, note string) {
 	if f == nil {
 		return "", ""
@@ -606,17 +495,12 @@ func (f *hostFleet) mode(host string) (events, note string) {
 	return "", ""
 }
 
-// fleetConn speaks the verb protocol on one connection to a host's daemon:
-// calls until the subscribe, then event lines.
 type fleetConn struct {
 	rw     io.ReadWriteCloser
 	br     *bufio.Reader
 	nextID int
 }
 
-// call sends one request and reads its answer. An answer that takes longer than
-// budget closes the connection, and the caller can also bound it by closing
-// the connection, which is what the pump's context does.
 func (c *fleetConn) call(verb string, params any, budget time.Duration) (json.RawMessage, error) {
 	c.nextID++
 	raw, err := jsonx.Marshal(params)
@@ -630,8 +514,6 @@ func (c *fleetConn) call(verb string, params any, budget time.Duration) (json.Ra
 	if _, err := c.rw.Write(append(req, '\n')); err != nil {
 		return nil, err
 	}
-	// A host that takes the request and never answers would hold the pump
-	// forever. Closing the connection ends the read, and the pump starts over.
 	timer := time.AfterFunc(budget, func() { _ = c.rw.Close() })
 	defer timer.Stop()
 	line, err := c.readLine()
@@ -651,25 +533,20 @@ func (c *fleetConn) call(verb string, params any, budget time.Duration) (json.Ra
 	return resp.Result, nil
 }
 
-// readLine reads one bounded line.
 func (c *fleetConn) readLine() ([]byte, error) {
 	return readLimitedLine(c.br, fleetMaxLine)
 }
 
-// fleetListing is a host's list-attention answer.
 type fleetListing struct {
 	Items  []AttentionItem `json:"items"`
 	Seq    uint64          `json:"seq"`
 	BootID string          `json:"boot_id"`
 }
 
-// listAttention lists a host's Inbox. A host that has none is errFleetOld.
 func (c *fleetConn) listAttention() (fleetListing, error) {
 	raw, err := c.call("list-attention", map[string]any{"host": localAttentionHost}, fleetCallBudget)
 	var verr *verbError
 	if errors.As(err, &verr) && verr.Code == ErrVerbInvalidParams {
-		// A host from before items of other machines were listed takes no
-		// host param, and lists only its own items anyway.
 		raw, err = c.call("list-attention", map[string]any{}, fleetCallBudget)
 	}
 	if err != nil {
@@ -688,8 +565,6 @@ func (c *fleetConn) listAttention() (fleetListing, error) {
 	return l, nil
 }
 
-// subscribe turns the connection into the host's event stream, from after seq
-// of boot.
 func (c *fleetConn) subscribe(after uint64, boot string) error {
 	_, err := c.call("subscribe", map[string]any{
 		"types":     fleetEventTypes,
@@ -704,7 +579,6 @@ func (c *fleetConn) subscribe(after uint64, boot string) error {
 	return err
 }
 
-// isFleetOld reports whether err says the host cannot stream.
 func isFleetOld(err error) bool {
 	var old errFleetOld
 	return errors.As(err, &old)

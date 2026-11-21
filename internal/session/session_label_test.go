@@ -32,8 +32,6 @@ func TestUnnamedSessionStateIsUnchanged(t *testing.T) {
 func TestPreChangeResurrectionStateLoads(t *testing.T) {
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 
-	// Verbatim shape of a pre-change state file: no display_name, no accent, no
-	// workspace_names, no resurrection_version.
 	const legacy = `{
   "name": "work",
   "windows": [{"id": "w1", "title": "shell", "x": 0, "y": 0, "width": 80, "height": 24, "z": 0, "workspace": 1, "pty_id": "p1"}],
@@ -85,8 +83,6 @@ func TestSessionLabelReachesEveryClient(t *testing.T) {
 		t.Fatalf("pushed accent = %q, want cyan", got[1].Accent)
 	}
 
-	// What a second client pushes: a snapshot with no label at all, which is every
-	// client today and every older client after this change.
 	incoming := sess.GetState()
 	incoming.DisplayName = ""
 	incoming.Accent = ""

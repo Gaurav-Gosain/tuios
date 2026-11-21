@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-// spaceNameMax caps a space name in bytes. A space is a heading of tuios ls,
-// and every session filed under it carries the name.
 const spaceNameMax = 64
 
 // GlobalSpaceRefusal is the one message for filing a global session under a
@@ -16,9 +14,6 @@ const spaceNameMax = 64
 // so a call can move a global session into a space in one step.
 const GlobalSpaceRefusal = "a global session cannot be in a space"
 
-// spaceName trims a space name as the sibling session verbs trim theirs, then
-// refuses one that breaks the session-name rules or the length cap. Empty
-// passes: it is no space. Keeping "/" out leaves room for a space/ filter.
 func spaceName(raw string) (string, *verbError) {
 	name := strings.TrimSpace(raw)
 	if err := ValidateSessionName(name); err != nil {
@@ -34,9 +29,7 @@ func (d *Daemon) verbSetSessionSpace(cs *connState, params json.RawMessage) (any
 	var p struct {
 		Session string `json:"session"`
 		Space   string `json:"space"`
-		// Global, when sent, sets or clears the global mark (#2203). A
-		// pointer, because an omitted global leaves the mark as it is.
-		Global *bool `json:"global"`
+		Global  *bool  `json:"global"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -56,9 +49,6 @@ func (d *Daemon) verbSetSessionSpace(cs *connState, params json.RawMessage) (any
 		})
 	}
 	if p.Global != nil {
-		// Marking a session global takes it out of its space, since a global
-		// session is filed in its own group. Clearing the mark comes before
-		// the space below, so one call can move it into a space.
 		if err := sess.SetGlobal(*p.Global); err != nil {
 			return nil, newVerbError(ErrVerbInternal, "could not set the global mark: "+err.Error())
 		}

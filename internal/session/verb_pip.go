@@ -6,15 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// The pip verb: pin a pane as the attached client's picture-in-picture view,
-// or unpin it.
-//
-// The view is the client's, not the session's. It is drawn by the client from
-// the cells its own copy of the pane holds, and it is not in session state, so
-// the daemon resolves the window and hands the rest to the client it routes
-// commands to. With several clients attached that is one of them, the same
-// one run-command reaches.
-
 func (d *Daemon) verbPiP(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -32,8 +23,6 @@ func (d *Daemon) verbPiP(cs *connState, params json.RawMessage) (any, *verbError
 		return nil, verr
 	}
 
-	// Resolved here, where names and list indexes are known, so the client is
-	// handed an id and a typo fails with the list of windows there are.
 	windowID := ""
 	if p.Window != "" {
 		var windows []WindowState

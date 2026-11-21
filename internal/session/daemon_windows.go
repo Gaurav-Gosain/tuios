@@ -13,10 +13,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// handleSignals handles Windows signals for daemon shutdown.
-// Windows only supports SIGINT and SIGTERM (via Ctrl+C and taskkill).
-// kill-server cannot send either to a detached daemon, so it sets the stop
-// event instead. See internal/stopevent.
 func (d *Daemon) handleSignals() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -55,7 +51,6 @@ func GetDaemonPID() int {
 		return 0
 	}
 
-	// On Windows, we need to use OpenProcess to check if the process exists
 	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
 		return 0

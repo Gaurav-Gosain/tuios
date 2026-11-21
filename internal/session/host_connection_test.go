@@ -19,15 +19,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// A connection through a host, proved with two real daemons in one process.
-//
-// The hub is the daemon this machine's clients dial. The far daemon stands in
-// for the daemon on host "build": it listens on its own socket, holds its own
-// sessions, and is reached only over the hub's link, which runs the real
-// stdio proxy over an in-process pipe instead of ssh. Nothing here reads the
-// developer's ssh configuration or touches a network.
-
-// pipeTransport is one end of an os.Pipe pair, as the hub's transport.
 type pipeTransport struct {
 	r    *os.File
 	w    *os.File
@@ -42,29 +33,21 @@ func (p *pipeTransport) Close() error {
 }
 func (p *pipeTransport) Diagnostic() string { return "" }
 
-// farSide is the daemon on host "build" and the handle that breaks the link
-// to it.
 type farSide struct {
 	daemon *Daemon
 	socket string
 
 	mu    sync.Mutex
 	links []*pipeTransport
-	// dials counts every transport the hub has opened to this side. It is
-	// what tells a redial from the link it replaced: the hub's status reads
-	// up for the old link until its supervisor has noticed the drop, so a
-	// test that wants the new link waits for the dial first.
 	dials int
 }
 
-// dialCount is how many times the hub has dialed this side so far.
 func (f *farSide) dialCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.dials
 }
 
-// waitForDial blocks until the hub has dialed this side more than n times.
 func (f *farSide) waitForDial(t *testing.T, n int) {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -77,7 +60,6 @@ func (f *farSide) waitForDial(t *testing.T, n int) {
 	t.Fatalf("the hub never dialed the far side again: %d dial(s), had %d", f.dialCount(), n)
 }
 
-// breakLink closes every link transport, which is the ssh child dying.
 func (f *farSide) breakLink() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -87,8 +69,6 @@ func (f *farSide) breakLink() {
 	f.links = nil
 }
 
-// dialer is the hub's transport to the far side: a pipe pair with the real
-// proxy on the other end, dialing the far daemon's socket per stream.
 func (f *farSide) dialer(dialFar func() (net.Conn, error)) federation.Dialer {
 	return func(_ context.Context, _ federation.Host) (federation.Transport, error) {
 		hubR, remoteW, err := os.Pipe()
@@ -113,15 +93,11 @@ func (f *farSide) dialer(dialFar func() (net.Conn, error)) federation.Dialer {
 	}
 }
 
-// startHubAndFar starts the two daemons. The hub is the one GetSocketPath
-// names, so every client in the test dials it the way a real client would.
 func startHubAndFar(t *testing.T) (hub *Daemon, far *farSide) {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 
-	// A unix socket path is short by law, so the far socket does not go under
-	// t.TempDir, whose path carries the test name.
 	dir, err := os.MkdirTemp("", "far")
 	if err != nil {
 		t.Fatalf("temp dir: %v", err)
@@ -149,7 +125,6 @@ func startHubAndFar(t *testing.T) (hub *Daemon, far *farSide) {
 	return hub, far
 }
 
-// waitForHostUp blocks until the hub reports the host up.
 func waitForHostUp(t *testing.T, hub *Daemon, host string) {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -169,7 +144,6 @@ func waitForHostUp(t *testing.T, hub *Daemon, host string) {
 	t.Fatalf("the hub never reported %s up: %+v", host, hub.federation.Reports(ctx))
 }
 
-// connectThrough is a TUI client attached to a far session through the hub.
 func connectThrough(t *testing.T, host, sessionName string) (*TUIClient, *SessionState) {
 	t.Helper()
 	c := NewTUIClient()
@@ -198,12 +172,9 @@ func TestARoutedCommandFromAHostCannotChangeThisMachine(t *testing.T) {
 	handled := make(chan string, 8)
 	c.OnRemoteCommand(func(p *RemoteCommandPayload) error {
 		handled <- p.CommandType + ":" + p.TapeCommand
-		// The app answers a send_keys itself once the keys are typed; here
-		// the answer is immediate so the verb returns.
 		return c.SendCommandResult(p.RequestID, true, "typed")
 	})
 
-	// The far daemon is asked directly, as an agent on that machine would ask.
 	vc := dialVerb(t, far.socket)
 	resp := vc.call(t, `{"id":1,"verb":"set-option","params":{"key":"appearance.theme","value":"dracula"}}`)
 	res := result(t, resp)
@@ -220,7 +191,6 @@ func TestARoutedCommandFromAHostCannotChangeThisMachine(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 	}
 
-	// Positive control: a command about the session is allowed through.
 	resp = vc.call(t, `{"id":2,"verb":"send-keys","params":{"keys":"ls"}}`)
 	if _, isErr := resp["error"]; isErr {
 		t.Fatalf("send-keys through the fence failed: %v", resp["error"])
@@ -235,8 +205,6 @@ func TestARoutedCommandFromAHostCannotChangeThisMachine(t *testing.T) {
 	}
 }
 
-// hostCommandFenceNames lists the commands hostCommandAllowed claims to refuse,
-// joined by commas.
 func hostCommandFenceNames() string {
 	refused := []tape.CommandType{
 		tape.CommandTypeSetConfig, tape.CommandTypeSetTheme, tape.CommandTypeSetDockbarPosition,
@@ -257,8 +225,6 @@ func TestTheHostCommandFenceRefusesEveryCommandItNames(t *testing.T) {
 			t.Errorf("ASSERTION: %s is allowed through a host and the fence says it is refused", name)
 		}
 	}
-	// The picture-in-picture view is this person's screen furniture, like a
-	// theme. A daemon on another machine does not get to pin panes on it.
 	if hostCommandAllowed(&RemoteCommandPayload{CommandType: "pip", TapeArgs: []string{"w1", "on"}}) {
 		t.Error("a host may set this client's picture-in-picture view")
 	}
@@ -271,7 +237,6 @@ func TestTheHostCommandFenceRefusesEveryCommandItNames(t *testing.T) {
 	if !hostCommandAllowed(&RemoteCommandPayload{CommandType: "send_keys", Keys: "ls"}) {
 		t.Errorf("send_keys is refused, so an agent on the host cannot type into its own session")
 	}
-	// The fence is only for connections through a host.
 	c := NewTUIClient()
 	if why := c.refuseHostCommand(&RemoteCommandPayload{CommandType: "set_config"}); why != "" {
 		t.Errorf("a local connection refused a command: %s", why)
@@ -286,9 +251,6 @@ func TestAHostileFarDaemonCannotSizeThisClientsBuffer(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 
-	// The "far daemon" is a goroutine on the other end of the proxy's dial. It
-	// answers the link's control stream honestly, so the link comes up, and
-	// answers a binary client's hello with a frame header claiming a gigabyte.
 	far := &farSide{}
 	hostile := func() (net.Conn, error) {
 		client, server := net.Pipe()
@@ -318,9 +280,6 @@ func TestAHostileFarDaemonCannotSizeThisClientsBuffer(t *testing.T) {
 					}
 				}
 			}
-			// A binary client. Take its hello, then answer with a length no
-			// honest message has, and keep the connection open the way a slow
-			// attacker would.
 			if _, err := ReadMessageBuffered(server, br, 5*time.Second, 5*time.Second); err != nil {
 				return
 			}
@@ -374,15 +333,11 @@ func TestOpenHostConnectionSendsNothingBeforeTheReply(t *testing.T) {
 	go func() {
 		br := bufio.NewReader(server)
 		line, _ := br.ReadString('\n')
-		// Nothing else may be in flight: a second read must block until the
-		// reply below is written.
 		extra := make(chan int, 1)
 		go func() {
 			n, _ := br.Read(make([]byte, 1))
 			extra <- n
 		}()
-		// The reply is written either way, so a client that spoke early is
-		// reported by the assertion below rather than by its own timeout.
 		select {
 		case n := <-extra:
 			line += " and " + string(rune('0'+n)) + " early byte(s)"

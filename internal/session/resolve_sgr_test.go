@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// mochaPalette is catppuccin_mocha's first 8 colours plus bright variants, as
-// a stand-in for the palette a themed client would send. Red is #f38ba8, the
-// exact example from issue #135.
 func mochaPalette() [16]color.Color {
 	hex := []string{
 		"#45475a", "#f38ba8", "#a6e3a1", "#f9e2af",
@@ -48,7 +45,6 @@ func TestResolveSGR(t *testing.T) {
 	for _, tc := range []struct {
 		name, in, want string
 	}{
-		// 107 = bright white = palette index 15 = #a6adc8.
 		{"bright background", "\x1b[107m", "\x1b[48;2;166;173;200m"},
 		{"256 low index uses the palette", "\x1b[38;5;1m", "\x1b[38;2;243;139;168m"},
 		{"sub-parameters preserved", "\x1b[1;4:3;31mMIX\x1b[0m", "\x1b[1;4:3;38;2;243;139;168mMIX\x1b[0m"},
@@ -76,10 +72,6 @@ func TestResolveSGR(t *testing.T) {
 }
 
 func TestResolveSGRBrightForegroundUsesBrightSlot(t *testing.T) {
-	// A palette whose bright slots differ from the normal ones, so a
-	// regression that maps 91 to pal[1] (normal red) instead of pal[9]
-	// (bright red) cannot hide behind a theme that repeats its colours
-	// in slots 8-15 (catppuccin, among others, does).
 	pal := mustPalette(t, []string{
 		"#111111", "#222222", "#333333", "#444444",
 		"#555555", "#666666", "#777777", "#888888",
@@ -87,7 +79,7 @@ func TestResolveSGRBrightForegroundUsesBrightSlot(t *testing.T) {
 		"#0000ff", "#ff00ff", "#00ffff", "#ffffff",
 	})
 	got := ResolveSGR("\x1b[91m", pal)
-	want := "\x1b[38;2;255;0;0m" // pal[9] = #ff0000, not pal[1] = #222222
+	want := "\x1b[38;2;255;0;0m"
 	if got != want {
 		t.Fatalf("ResolveSGR(91) = %q, want %q (bright slot, not normal slot)", got, want)
 	}
@@ -132,13 +124,10 @@ func TestResolveSGR256EveryIndex(t *testing.T) {
 }
 
 func TestPaletteFromParams(t *testing.T) {
-	// Empty → xterm default, no error.
 	pal, err := paletteFromParams(nil)
 	if err != nil {
 		t.Fatalf("paletteFromParams(nil) error: %v", err)
 	}
-	// The palette is a [16] array, so its length says nothing. Check the
-	// entries: an empty palette is the xterm table, not zero values.
 	for i, c := range pal {
 		if c == nil {
 			t.Fatalf("the default palette has no colour at %d", i)
@@ -148,12 +137,10 @@ func TestPaletteFromParams(t *testing.T) {
 		t.Fatalf("an empty palette resolved red to %q, want the xterm %q", got, want)
 	}
 
-	// Wrong length → error.
 	if _, err := paletteFromParams([]string{"#000000"}); err == nil {
 		t.Fatal("paletteFromParams(1 entry) should error")
 	}
 
-	// Bad hex → error.
 	bad := make([]string, 16)
 	for i := range bad {
 		bad[i] = "#000000"
@@ -163,7 +150,6 @@ func TestPaletteFromParams(t *testing.T) {
 		t.Fatal("paletteFromParams(bad hex) should error")
 	}
 
-	// Good palette round-trips through ResolveSGR.
 	good := make([]string, 16)
 	for i := range good {
 		good[i] = "#000000"

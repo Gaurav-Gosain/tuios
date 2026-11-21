@@ -15,14 +15,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// defaultWorkspaces bounds the workspace indices the daemon-side state
-// operations accept when the session state does not say how many it has. State
-// written by a client that reports its workspace count uses that instead, so the
-// bound is the session's own rather than a number this package guesses.
 const defaultWorkspaces = 9
 
-// workspaceBound returns how many workspaces this state has, for the range check
-// on the operations that take a workspace index.
 func (s *SessionState) workspaceBound() int {
 	if s.NumWorkspaces > 0 {
 		return s.NumWorkspaces
@@ -30,56 +24,21 @@ func (s *SessionState) workspaceBound() int {
 	return defaultWorkspaces
 }
 
-// These daemon-side operations mutate a session's canonical SessionState
-// directly, so mutating control verbs (create/close/focus/rename/move a window,
-// switch workspace, minimize/restore) work with no TUI client attached. When a
-// TUI client is attached the daemon keeps routing those verbs to it unchanged;
-// these methods are the headless path. The TUI, on its next attach, rebuilds
-// from this same state (the resurrection restore path), so a window created
-// headless shows up when a client later connects.
-//
-// Every mutation here runs inside Session.mutateState, which diffs the state
-// before and after and raises the window lifecycle events. None of these
-// operations emits an event itself: the diff is the single emit site shared with
-// the TUI's UpdateState path, which is what makes the events fire exactly once
-// and identically on both paths.
-
-// findWindowStateIndex resolves a window target string to an index into
-// state.Windows. It matches, in order: an exact window ID, the position that
-// list-windows prints when the target is all digits and in range, an exact
-// CustomName, an exact Title, then a unique window ID prefix. It returns -1
-// when there is no match, and an error when a name or prefix is ambiguous.
 func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 	if target == "" {
 		return -1, errfmt.Errorf("empty window target")
 	}
 
-	// Exact ID.
 	for i := range windows {
 		if windows[i].ID == target {
 			return i, nil
 		}
 	}
 
-	// The index list-windows prints. It is the position in the slice, so it is
-	// what a caller reading that output will reach for first. An out-of-range
-	// number falls through: a long digit run can still be a valid id prefix.
 	if idx, ok := WindowIndexTarget(target, len(windows)); ok {
 		return idx, nil
 	}
 
-	// Exact name, before the id prefix. A window id is a uuid, so any name
-	// made only of hex digits ("db", "cafe", "a1") is also a prefix of an id
-	// some of the time, about once in 256 windows for a two letter name. With
-	// the prefix tried first, a target naming one window reached whichever
-	// other window's id happened to start with it, and set-agent-state on
-	// "db" reported success for a pane that was never touched. A name is what
-	// a person typed on purpose; an id prefix that is also somebody's name is
-	// a coincidence.
-	//
-	// A name given with set-window or new-window wins over a title, which the
-	// program in the window sets and can change at any time, so a window's own
-	// name cannot be shadowed by another window's title.
 	for _, byName := range []func(w WindowState) bool{
 		func(w WindowState) bool { return w.CustomName == target },
 		func(w WindowState) bool { return w.Title == target },
@@ -100,7 +59,6 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 		}
 	}
 
-	// Unique ID prefix.
 	prefixIdx, prefixCount := -1, 0
 	for i := range windows {
 		if strings.HasPrefix(windows[i].ID, target) {
@@ -139,16 +97,6 @@ func WindowIndexTarget(target string, count int) (int, bool) {
 	return idx, true
 }
 
-// firstVisibleOnWorkspace returns the ID of the first window in slice order that
-// sits on the given workspace and is not minimized, or "" when the workspace has
-// no such window.
-//
-// This is the focus-repair rule, and it is deliberately the same rule the
-// renderer applies (OS.FocusNextVisibleWindow): first in order, minimized
-// windows skipped, no focus at all when nothing visible remains. The daemon used
-// to take the first window on the workspace whether or not it was minimized,
-// which put focus on a window sitting in the dock while a visible one went
-// unfocused. TestDaemonFocusRepairAfterClose pins every case.
 func firstVisibleOnWorkspace(windows []WindowState, workspace int) string {
 	for i := range windows {
 		if windows[i].Workspace == workspace && !windows[i].Minimized {
@@ -252,28 +200,11 @@ type NewWindowOptions struct {
 	// workspace and its process starts at RailWidth by RailHeight cells.
 	Rail                  string
 	RailWidth, RailHeight int
-	// stdout, when set, is the process's standard output in place of the PTY.
-	// See createPTY. It is unexported: only the popup verb's capture sets it.
-	stdout *os.File
-	// extraFiles, when set, are open files the process inherits as fd 3 and
-	// up. It is unexported: only verify-fan's status pipe sets it, and only
-	// for a local process on a platform that passes them (not Windows).
-	extraFiles []*os.File
-	// keepOpen keeps the window after its process exits and writes a line
-	// with the exit status under the last output. See keep_open.go. It is
-	// unexported: only new-window and a client's NewWindow with KeepOpen set
-	// it, and the caller's onExit must not close the window for it to mean
-	// anything.
-	keepOpen bool
-	// modeChecked says the caller already held Command's permission mode to
-	// the parent agent's (clampChildMode), so addWindowFor does not read it
-	// again. start-agent sets it.
-	modeChecked bool
-	// closeOnExit is new-window's close_on_exit: the daemon closes the
-	// window when its process exits. It is unexported, like keepOpen: the
-	// caller's onExit does the closing, and this only tells the PTY that its
-	// exit is not a person's close (see PTY.ownShell).
-	closeOnExit bool
+	stdout                *os.File
+	extraFiles            []*os.File
+	keepOpen              bool
+	modeChecked           bool
+	closeOnExit           bool
 	// Env is KEY=VALUE pairs the process gets on top of the daemon's own
 	// environment, from a caller that passed its own (fan, start-agent). The
 	// TUIOS_ variables are set after it, so it cannot change them. It is not
@@ -285,12 +216,7 @@ type NewWindowOptions struct {
 	// as a focus move. See ExecuteCommandPayload.FocusIfShown. It means
 	// nothing with Focus set.
 	FocusIfShown bool
-	// focusAskedBy is the push origin of the client connection that asked
-	// for the window, empty for none. With Focus set, the focus move counts
-	// as that client's own. See pushOwnsFocusLocked.
 	focusAskedBy string
-	// closeAskedBy names who asked for a CloseWindow command, for the line
-	// the close writes to the log (see CloseDaemonWindow).
 	closeAskedBy string
 	// TabKey names the workspace by its tab key, which follows it through a
 	// renumber, when the caller read the workspace's number before one it
@@ -352,8 +278,6 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	if opts.Kind != "" && len(opts.Command) == 0 {
 		opts.Command = PlaceholderCommand(opts.Kind, opts.URI)
 	}
-	// A scratch pane is an ordinary tiled window on its group's workspace, not
-	// a popup. See scratch_workspace.go.
 	if opts.Scratch {
 		opts.Popup = false
 	}
@@ -366,29 +290,15 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		height = 24
 	}
 
-	// WindowState dimensions are the outer window box (including the border);
-	// the shell gets the inner content size, matching restoreSession.
 	ptyWidth := max(width-2, 1)
 	ptyHeight := max(height-2, 1)
-	// A popup starts at the box a client will give it, so its command reads
-	// its real size when it starts. A program that reads its size once and
-	// then acts on it (a nested tuios client, a pager) otherwise starts at
-	// the whole session's size and is told the real one only after a client
-	// has placed the popup.
-	//
-	// The window's box is the popup's box too: the daemon sizes a PTY by
-	// its window's box, and the session's box would undo this at once.
 	if opts.Popup {
 		ptyWidth, ptyHeight = popupContentSize(width, height, s.LayoutReserve(), opts.PopupWidth, opts.PopupHeight)
 		width, height = ptyWidth+2, ptyHeight+2
 	} else if opts.Cols > 0 && opts.Rows > 0 {
-		// The box is the PTY's plus a border, for the reason a popup's is.
-		// The PTY is never larger than the session.
 		ptyWidth, ptyHeight = min(opts.Cols, ptyWidth+2), min(opts.Rows, ptyHeight+2)
 		width, height = ptyWidth+2, ptyHeight+2
 	}
-	// The rail pane starts at the size of the section it is drawn in, so its
-	// program draws its first frame for the rail and not for the session.
 	if opts.Rail != "" && opts.RailWidth > 0 && opts.RailHeight > 0 {
 		ptyWidth, ptyHeight = opts.RailWidth, opts.RailHeight
 		width, height = ptyWidth+2, ptyHeight+2
@@ -396,38 +306,21 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 
 	windowID := uuid.New().String()
 	if title == "" {
-		// The same default the renderer used when it still created windows
-		// itself, so a window looks the same however it was asked for.
 		title = "Terminal " + windowID[:8]
 	}
-	// Reject the workspace before spawning anything: a PTY created for a window
-	// that then fails to be placed is a process nothing owns.
 	if opts.Workspace != 0 {
 		if st := s.GetState(); !st.workspaceAccepts(opts.Workspace) {
 			return WindowState{}, errfmt.Errorf("workspace %d out of range (1-%d)", opts.Workspace, st.workspaceBound())
 		}
 	}
 
-	// A caller that named a directory gets it. One that did not inherits the
-	// focused pane's, which is what appearance.new_window_inherit_cwd asks for;
-	// with the setting off, or with nothing to inherit, this stays empty and
-	// the shell starts where the daemon did.
 	cwd := opts.Cwd
-	// Inheriting is the focused pane's directory, and that is a path on this
-	// machine. Handing it to another machine would start the shell somewhere
-	// unrelated on the rare occasion the path happens to exist there, so a
-	// window with a host inherits nothing and starts where its own shell would.
 	if cwd == "" && opts.Host == "" {
 		cwd = s.inheritedCwd(opts.CallerCwd)
 	}
-	// With nothing to inherit, use the directory set when the session was
-	// created. A local path, so a window with a host skips it
-	// for the reason above.
 	if cwd == "" && opts.Host == "" {
 		cwd = s.StartDir()
 	}
-	// A pane without admin cannot start a window whose folder is wider than
-	// its own, by cd before the call or by the focused pane's folder.
 	noStartDir := false
 	if opts.Bounded && opts.Host == "" {
 		switch {
@@ -436,18 +329,10 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		case cwd == "" || !pathUnder(realPath(cwd), opts.Bound):
 			cwd = opts.Bound
 		default:
-			// The process starts in the resolved folder, and that is the
-			// folder recorded for it: a link repointed after this check
-			// moves neither.
 			cwd = realPath(cwd)
 		}
 	}
 
-	// A command can exit before its window is in the state: one that fails
-	// at once does. onExit finds the window by its PTY (close_on_exit and
-	// plugin panes close it that way), so it waits until the window is
-	// added or refused. Without the wait it found nothing, and the window
-	// stayed open around a dead process.
 	added := make(chan struct{})
 	var addedOnce sync.Once
 	markAdded := func() { addedOnce.Do(func() { close(added) }) }
@@ -469,8 +354,6 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	if err != nil {
 		return WindowState{}, err
 	}
-	// createPTY started the pane with the session's cell, so this writes
-	// nothing unless the cell changed while the pane started.
 	if s.config != nil && s.config.CellSize != nil {
 		if w, h, ok := s.config.CellSize(s.ID); ok {
 			_ = pty.UpdatePixelDimensions(w, h)
@@ -480,10 +363,6 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		windowSpawnedHook(pty)
 	}
 
-	// The session's directory is its first window's, so the first window is
-	// the one that can make this a worktree session. Detection runs here,
-	// before the mutation, so the window and the record reach clients in one
-	// push rather than two.
 	first := len(s.GetState().Windows) == 0
 	var detected *WorktreeInfo
 	if first {
@@ -504,8 +383,6 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		box = s.layoutBox()
 	}
 	err = s.mutateState(func(state *SessionState) error {
-		// One scratch terminal per session, checked under the state lock so
-		// two calls that race cannot both add one.
 		scratch, scratchName := false, ""
 		if opts.Scratch {
 			key := WindowState{ScratchName: opts.ScratchName}.ScratchKey()
@@ -517,15 +394,12 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			scratch, scratchName = true, scratchNameIf(opts)
 			opts.Workspace = freeScratchWorkspace(state)
 		} else if IsScratchWorkspace(opts.Workspace) {
-			// A split inside a scratch group joins the group.
 			name, ok := scratchNameOnWorkspace(state, opts.Workspace)
 			if !ok {
 				return errNoScratchGroup(opts.Workspace)
 			}
 			scratch, scratchName = true, name
 		}
-		// One rail pane per session, checked under the state lock for the
-		// reason the scratch check is. It goes on a workspace nobody is on.
 		if opts.Rail != "" {
 			for i := range state.Windows {
 				if state.Windows[i].Rail != "" {
@@ -553,39 +427,23 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 				workspace = at
 			}
 		}
-		// The pane a switch to an empty workspace asks for is one per
-		// workspace, whatever asked: a second client that switched too, or a
-		// request sent again after the first one was slow. Checked under the
-		// state lock, so two that race cannot both add one.
 		if opts.FocusIfShown && !scratch && hasPanes(state, workspace) {
 			return ErrWorkspaceHasPane
 		}
 
 		win = WindowState{
-			ID:         windowID,
-			Title:      title,
-			CustomName: opts.Name,
-			X:          0,
-			Y:          0,
-			Width:      width,
-			Height:     height,
-			Workspace:  workspace,
-			PTYID:      pty.ID,
-			// The machine the process is on. Empty for a window of this
-			// daemon's own, which is what makes the field free for every
-			// session that is not global.
-			Host: opts.Host,
-			// Stamped here as well as on the detector's poll, because the pid is
-			// already in hand and a pane that waits a poll for it is a pane the
-			// rail cannot check for two seconds. The poll stays the authority: it
-			// corrects this and clears it when the shell goes.
-			ShellPID: pty.ShellPID(),
-			// The daemon has no viewport, so this box is a placeholder that keeps
-			// the PTY a usable size until a client places the window properly.
-			Unplaced: true,
-			// A popup is always floating. The daemon marks it here rather than
-			// leaving the client to infer it, because every peer reads the float
-			// as layout intent and a peer that missed it tiles the popup away.
+			ID:          windowID,
+			Title:       title,
+			CustomName:  opts.Name,
+			X:           0,
+			Y:           0,
+			Width:       width,
+			Height:      height,
+			Workspace:   workspace,
+			PTYID:       pty.ID,
+			Host:        opts.Host,
+			ShellPID:    pty.ShellPID(),
+			Unplaced:    true,
 			Popup:       opts.Popup,
 			IsFloating:  opts.Popup,
 			PopupWidth:  opts.PopupWidth,
@@ -597,14 +455,10 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			Kind:        opts.Kind,
 			URI:         opts.URI,
 		}
-		// A window on another machine holds what that machine gives it.
 		if opts.Host == "" {
 			win.Grants = grantNamesPtr(opts.Grants)
 		}
 		if opts.Split != nil {
-			// The tree is opened before the window joins the state, so the
-			// window goes in beside its pane and not where the scheme puts
-			// a pane the tree has not heard of.
 			split = newLayoutEdit(state, box)
 			if !split.tree(workspace).HasWindow(split.leaf(opts.Split.Target)) {
 				return errSplitNotTiled
@@ -622,17 +476,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 				win = state.Windows[len(state.Windows)-1]
 			}
 		}
-		// The workspace's own focus points at the new window either way: it is
-		// the only sensible thing to focus when that workspace is next shown.
-		// Session focus moves only when the caller asked for it, so a pane opened
-		// to work in later does not pull the user out of what they are doing.
 		state.WorkspaceFocus[workspace] = windowID
 		if opts.Focus {
 			s.markFocusIntentLocked()
 			s.focusAskedBy = opts.focusAskedBy
 			state.FocusedWindowID = windowID
-			// A scratch workspace is never the session's current one: a
-			// client shows it over the workspace it is on.
 			if !IsScratchWorkspace(workspace) {
 				state.CurrentWorkspace = workspace
 			}
@@ -649,15 +497,12 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	markAdded()
 	s.resizePanes(sizes)
 	if err != nil {
-		// The shell started for a window that was refused has no owner.
 		_ = s.ClosePTY(pty.ID)
 		return WindowState{}, err
 	}
 	return win, nil
 }
 
-// windowSpawnedHook, when set, runs after AddDaemonWindowWith has spawned the
-// window's process and before it adds the window to the state. Test-only.
 var windowSpawnedHook func(*PTY)
 
 // ErrWorkspaceHasPane is the refusal of a FocusIfShown window on a workspace
@@ -671,8 +516,6 @@ var ErrRailPaneExists = errors.New("this session already has a rail pane")
 // ErrScratchExists is the refusal of a second scratch terminal in a session.
 var ErrScratchExists = errors.New("this session already has a scratch terminal of this name. Press its key to show it")
 
-// scratchNameIf is the name a new window keeps, empty for any window that is
-// not a scratch pane and for the built-in scratch terminal.
 func scratchNameIf(opts NewWindowOptions) string {
 	if !opts.Scratch || opts.ScratchName == "scratch" {
 		return ""
@@ -690,9 +533,6 @@ func (s *Session) CloseDaemonWindow(target, by string) (string, error) {
 	return s.closeDaemonWindow(target, by, s.ClosePTY)
 }
 
-// closeDaemonWindow is CloseDaemonWindow with the call that closes the pane
-// given, so a caller that holds the pane lifecycle lock can pass one that does
-// not take it again.
 func (s *Session) closeDaemonWindow(target, by string, closePTY func(string) error) (string, error) {
 	var closed WindowState
 	err := s.mutateState(func(state *SessionState) error {
@@ -702,9 +542,6 @@ func (s *Session) closeDaemonWindow(target, by string, closePTY func(string) err
 		}
 
 		closed = s.removeWindowLocked(state, idx)
-		// The window is gone, so nothing owns its agent state any more. The
-		// detector sweeps stale claims on its own tick too, but only when it is
-		// running, and a claim can now come from a source that is not the detector.
 		s.dropPaneStatesLocked(closed.ID)
 		return nil
 	})
@@ -718,19 +555,12 @@ func (s *Session) closeDaemonWindow(target, by string, closePTY func(string) err
 	}
 	LogBasic("Window %s %q (PTY %s) in session %s closed, asked for by %s",
 		shortID(closed.ID), windowLabelOf(closed), shortID(closed.PTYID), s.Name(), by)
-	// Close the PTY outside the state lock.
 	if closed.PTYID != "" {
 		_ = closePTY(closed.PTYID)
 	}
 	return closed.ID, nil
 }
 
-// dropPaneStatesLocked drops what the session keeps for a window under
-// stateMu once the window is gone: its agent claim, harness process, shared
-// guard, the question it showed, its turn, its subagents and the completion it
-// last saw. The caller holds stateMu, inside a mutation. Whether the agent
-// detector runs makes no difference: it sweeps the first three on its own tick
-// too, and it is the only thing that does.
 func (s *Session) dropPaneStatesLocked(id string) {
 	delete(s.agentClaims, id)
 	delete(s.agentHarnessPIDs, id)
@@ -741,9 +571,6 @@ func (s *Session) dropPaneStatesLocked(id string) {
 	delete(s.completionSeen, id)
 }
 
-// dropPaneStores drops what the session keeps for a closed window under its
-// own locks: a held state, the idle gate, the folders its agents started in
-// and the start folder. The caller does not hold stateMu.
 func (s *Session) dropPaneStores(id string) {
 	s.dropAgentHold(id)
 	s.idle.forget(id)
@@ -753,17 +580,11 @@ func (s *Session) dropPaneStores(id string) {
 	s.agentDirsMu.Unlock()
 }
 
-// removeWindowLocked takes the window at idx out of the window set, repairs
-// the focus it held, and returns it. The caller holds stateMu, inside a
-// mutation. Closing a window and moving it to another session both leave
-// through here.
 func (s *Session) removeWindowLocked(state *SessionState, idx int) WindowState {
 	gone := state.Windows[idx]
 	workspace := gone.Workspace
 	state.Windows = append(state.Windows[:idx], state.Windows[idx+1:]...)
 	defer func() {
-		// The person was working zoomed, so the zoom goes to the pane that
-		// takes the focus. With no pane left there is nothing to zoom.
 		if !gone.Zoomed || gone.Popup || state.FocusedWindowID == "" {
 			return
 		}
@@ -774,24 +595,18 @@ func (s *Session) removeWindowLocked(state *SessionState, idx int) WindowState {
 		}
 	}()
 	state.FocusHistory = RemoveFocus(state.FocusHistory, gone.ID)
-	// A window that is gone keeps no BSP number. The map is replaced whole,
-	// never written into, as snapshots share it (see snapshotStateLocked).
-	// NextBSPWindowID does not go back, so the number is not given out again,
-	// and placeTree drops a leaf whose window is gone.
 	if _, ok := state.WindowToBSPID[gone.ID]; ok {
 		ids := maps.Clone(state.WindowToBSPID)
 		delete(ids, gone.ID)
 		state.WindowToBSPID = ids
 	}
 
-	// Repair focus if we removed the focused window.
 	if state.FocusedWindowID == gone.ID {
 		state.FocusedWindowID = focusAfterClose(state, workspace, gone.ID)
 	}
 	if state.WorkspaceFocus != nil && state.WorkspaceFocus[workspace] == gone.ID {
 		delete(state.WorkspaceFocus, workspace)
 		if state.FocusedWindowID != "" {
-			// Only re-point the workspace focus at a window that is actually on it.
 			for i := range state.Windows {
 				if state.Windows[i].ID == state.FocusedWindowID && state.Windows[i].Workspace == workspace {
 					state.WorkspaceFocus[workspace] = state.FocusedWindowID
@@ -800,8 +615,6 @@ func (s *Session) removeWindowLocked(state *SessionState, idx int) WindowState {
 			}
 		}
 	}
-	// The last pane on the workspace on screen takes the person back
-	// to where they came from. See empty_workspace.go.
 	s.returnFromEmptyLocked(state, workspace)
 	return gone
 }
@@ -817,9 +630,6 @@ func (s *Session) FocusDaemonWindow(target string) error {
 		win := state.Windows[idx]
 		s.markFocusIntentLocked()
 		state.FocusedWindowID = win.ID
-		// A scratch pane takes the focus without its workspace becoming the
-		// session's: a client that sees the focus on a scratch pane shows the
-		// group over the workspace it is on (OS.syncScratchView).
 		if !IsScratchWorkspace(win.Workspace) {
 			state.CurrentWorkspace = win.Workspace
 		}
@@ -837,14 +647,12 @@ func (s *Session) FocusDaemonWindow(target string) error {
 // current workspace has fewer than two windows.
 func (s *Session) CycleDaemonFocus(delta int) error {
 	return s.mutateState(func(state *SessionState) error {
-		// Collect indices of windows on the current workspace, in slice order.
 		var order []int
 		current := -1
 		for i := range state.Windows {
 			if state.Windows[i].Workspace != state.CurrentWorkspace {
 				continue
 			}
-			// The cycle never lands on a hidden scratch terminal.
 			if state.Windows[i].Scratch && state.Windows[i].Minimized {
 				continue
 			}
@@ -877,7 +685,6 @@ func (s *Session) CycleDaemonFocus(delta int) error {
 	})
 }
 
-// setStartedBy records ref as the pane that started window.
 func (s *Session) setStartedBy(window string, ref *PaneRef) {
 	_ = s.mutateState(func(state *SessionState) error {
 		idx, err := findWindowStateIndex(state.Windows, window)
@@ -889,9 +696,6 @@ func (s *Session) setStartedBy(window string, ref *PaneRef) {
 	})
 }
 
-// renameStartedBy follows a session rename in the started_by of this
-// session's panes, and in the root of their agent links. It changes nothing,
-// and publishes nothing, when no pane names the old session.
 func (s *Session) renameStartedBy(old, name string) {
 	hit := false
 	for _, w := range s.GetState().Windows {
@@ -908,8 +712,6 @@ func (s *Session) renameStartedBy(old, name string) {
 			if ref := state.Windows[i].StartedBy; ref != nil && ref.Session == old {
 				state.Windows[i].StartedBy = &PaneRef{Session: name, Window: ref.Window}
 			}
-			// The link is shared with older copies of the state, so it is
-			// replaced, never written in place.
 			if l := state.Windows[i].AgentLink; l != nil && l.Root.Session == old {
 				moved := *l
 				moved.Root.Session = name
@@ -942,15 +744,12 @@ func (s *Session) MoveDaemonWindowToWorkspace(target string, ws int) error {
 		if err != nil {
 			return err
 		}
-		// A scratch pane stays in its group: moved off its workspace, the
-		// group would lose it.
 		if state.Windows[idx].Scratch {
 			return errScratchPaneStays
 		}
 		oldWorkspace := state.Windows[idx].Workspace
 		state.Windows[idx].Workspace = ws
 
-		// If the moved window held its old workspace's focus, drop it there.
 		if state.WorkspaceFocus != nil && state.WorkspaceFocus[oldWorkspace] == state.Windows[idx].ID {
 			delete(state.WorkspaceFocus, oldWorkspace)
 		}
@@ -994,16 +793,11 @@ func (s *Session) SwitchDaemonWorkspace(ws int) error {
 				state.FocusHistory = RecordFocus(state.FocusHistory, ws, focus)
 			}
 		}
-		// A focus left on a scratch pane would show its group over the
-		// workspace just selected: the selection means the workspace.
 		unfocusScratchLocked(state)
 		return nil
 	})
 }
 
-// markRestoredScratch marks the window id as the session's scratch terminal,
-// hidden. A restore calls it: a push cannot set the mark, so the restore sets
-// it on canonical state after the push. See daemon_resurrect.go.
 func (s *Session) markRestoredScratch(panes map[string]scratchPane) {
 	_ = s.mutateState(func(state *SessionState) error {
 		for i := range state.Windows {
@@ -1014,7 +808,6 @@ func (s *Session) markRestoredScratch(panes map[string]scratchPane) {
 			}
 			w.Scratch, w.ScratchName, w.Workspace = true, p.name, p.workspace
 			w.Popup, w.IsFloating, w.Minimized = false, false, false
-			// A hidden group holds no focus, or the first client would show it.
 			if state.FocusedWindowID == w.ID {
 				state.FocusedWindowID = ""
 			}
@@ -1023,9 +816,6 @@ func (s *Session) markRestoredScratch(panes map[string]scratchPane) {
 	})
 }
 
-// markRestoredViews puts back the kind and uri of restored windows a renderer
-// draws natively. They are daemon-owned like the scratch mark, so UpdateState
-// keeps only what canonical state already has, and a new session has none.
 func (s *Session) markRestoredViews(views map[string][2]string) {
 	_ = s.mutateState(func(state *SessionState) error {
 		for i := range state.Windows {
@@ -1064,8 +854,6 @@ func (s *Session) SetDaemonWindowMinimized(target string, minimized bool) error 
 	})
 }
 
-// describeWindows lists the windows match accepts as index, short id and name,
-// for an error that has to say which windows a target could have meant.
 func describeWindows(windows []WindowState, match func(WindowState) bool) string {
 	var parts []string
 	for i := range windows {

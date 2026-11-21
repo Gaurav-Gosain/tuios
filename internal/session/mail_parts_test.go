@@ -39,7 +39,6 @@ func TestMailInPartsAttachesItsFiles(t *testing.T) {
 		t.Errorf("the paste's file holds %d bytes, want %d", len(data), len(big))
 	}
 
-	// Small: the block in its place, and no file.
 	entries, _ := os.ReadDir(dir)
 	before := len(entries)
 	res = result(t, callP(c, t, "send-agent-message", map[string]any{
@@ -54,7 +53,6 @@ func TestMailInPartsAttachesItsFiles(t *testing.T) {
 	}
 }
 
-// storedMessage is the message the ring of session work holds under id.
 func storedMessage(t *testing.T, d *Daemon, id uint64) AgentMessage {
 	t.Helper()
 	d.agents.mu.Lock()

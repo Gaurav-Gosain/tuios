@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// dialPaneMarkClient attaches a raw client to session, with a hello that asks
-// for pane marks or not, as a client from before them asks for none. It
-// returns the client and whether the welcome offered them.
 func dialPaneMarkClient(t *testing.T, socketPath, session string, asks bool) (*boundsClient, bool) {
 	t.Helper()
 	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
@@ -29,8 +26,6 @@ func dialPaneMarkClient(t *testing.T, socketPath, session string, asks bool) (*b
 	return c, welcome.PaneMarks
 }
 
-// paneMarksWithin reads every frame for d and returns the pane marks among
-// them.
 func paneMarksWithin(t *testing.T, c *boundsClient, d time.Duration) []PaneMarkPayload {
 	t.Helper()
 	var marks []PaneMarkPayload
@@ -54,8 +49,6 @@ func paneMarksWithin(t *testing.T, c *boundsClient, d time.Duration) []PaneMarkP
 	}
 }
 
-// awaitPaneMark writes cmd to the pane until a pane mark carrying want
-// arrives, and fails after the deadline.
 func awaitPaneMark(t *testing.T, c *boundsClient, pty *PTY, cmd string, want uint32) PaneMarkPayload {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second * testDeadlineScale)
@@ -108,7 +101,6 @@ func TestPaneMarkWire(t *testing.T) {
 		t.Fatalf("the mark names pane %q window %q, want pane %q and its window", m.PTYID, m.WindowID, pty.ID)
 	}
 
-	// Output again sends nothing: the edge was reported.
 	if _, err := pty.Write([]byte("echo again\n")); err != nil {
 		t.Fatal(err)
 	}
@@ -118,12 +110,8 @@ func TestPaneMarkWire(t *testing.T) {
 		}
 	}
 
-	// The bell has a bit of its own, so its first ring is still news.
 	awaitPaneMark(t, reader, pty, "printf '\\a'\n", PaneMarkBell)
 
-	// The reader looks at the pane, then stops. The next output is news again.
-	// While it streams the pane, the pane's output and bell are not marked
-	// for it, and they set the pane's bits.
 	reader.send(t, MsgSubscribePTY, &SubscribePTYPayload{PTYID: pty.ID})
 	reader.send(t, MsgPing, nil)
 	reader.await(t, MsgPong)
@@ -141,8 +129,6 @@ func TestPaneMarkWire(t *testing.T) {
 	if marks := paneMarksWithin(t, old, 500*time.Millisecond); len(marks) != 0 {
 		t.Errorf("a client whose hello did not ask for pane marks was sent %d: %+v", len(marks), marks)
 	}
-	// The other session's own pane may print its prompt, and that mark is
-	// the stranger's to hear. A mark for this session's pane is not.
 	for _, m := range paneMarksWithin(t, stranger, 500*time.Millisecond) {
 		if m.PTYID == pty.ID {
 			t.Errorf("a client of another session was sent a pane mark for this one: %+v", m)

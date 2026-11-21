@@ -24,8 +24,6 @@ import (
 // The negative controls are in e2e/tui/NEGATIVE_CONTROLS.md, "The owners of
 // hook and herdr plugin surfaces".
 func TestHookOfPeerMatchesTheStartTime(t *testing.T) {
-	// The trailing : keeps sh from running sleep in its own place, so
-	// sleep is a child of the shell.
 	shell := exec.Command("sh", "-c", "sleep 30; :")
 	if err := shell.Start(); err != nil {
 		t.Fatal(err)
@@ -99,8 +97,6 @@ func TestHookOfPeerMatchesTheStartTime(t *testing.T) {
 		}
 	}
 
-	// The chain above the sleep is given. These pids are above every
-	// kernel's pid limit, so no live process holds them.
 	const p, h = 1<<22 + 1, 1<<22 + 2
 	chain := func(pStart uint64) func(int) (int, uint64, bool) {
 		return func(pid int) (int, uint64, bool) {
@@ -131,7 +127,6 @@ func TestHookOfPeerMatchesTheStartTime(t *testing.T) {
 		}
 	}
 
-	// Both processes end by their own pids.
 	if err := syscall.Kill(b, syscall.SIGKILL); err != nil {
 		t.Fatal(err)
 	}

@@ -21,38 +21,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Shipping: from an agent's worktree to a merged change.
-//
-// ship-commit commits everything in a pane's work tree on its branch.
-// ship-merge merges the worktree's branch into its base in the main checkout.
-// ship-push sends the branch to a remote, and ship-pr also opens a pull
-// request for it through the person's own gh CLI. ship-status reads the pull
-// request the branch has, and its checks.
-//
-// The git work runs in the daemon with the daemon's environment, which is the
-// person's: their identity, their signing setup and their hooks. tuios sets no
-// identity and adds nothing to a message. Nothing is forced: a merge that
-// conflicts is aborted and reported, and a push that is not a fast-forward is
-// refused by git.
-//
-// Who may do what:
-//
-//   - ship-commit and ship-merge write files a pane's agent works on, as
-//     restore-checkpoint does. They are scopeWrite, and a pane without admin
-//     may name only a pane it could type into (typingRefusal).
-//   - ship-push and ship-pr send work off this machine. Each first answers
-//     confirm_required with what it would send and a token, and goes ahead
-//     only when called again with that token. The token is a hash of the
-//     branch, its commit, the remote and the pull request asked for, so what
-//     goes out is what the caller looked at. A caller the daemon cannot count
-//     as the person (one inside a pane, a restricted connection such as tuios
-//     mcp, a link) also needs the person's yes: the call puts the question in
-//     the Inbox and waits for it, as ask-human does. Only an attached client
-//     can answer it there.
-//   - ship-status reads, and is scopeRead.
-//
-// A pane on another machine is refused: its repository is there.
-
 // Error codes the ship verbs raise, on top of the shared ones.
 const (
 	// ErrVerbNothingToCommit reports a work tree with no change. Nothing was
@@ -71,21 +39,16 @@ const (
 	ErrVerbGhUnavailable = "gh_unavailable"
 )
 
-// shipTimeout bounds the git work of one commit or merge, hooks included.
-// shipPushTimeout bounds a push, and shipGhTimeout one gh call.
 const (
 	shipTimeout     = 2 * time.Minute
 	shipPushTimeout = 2 * time.Minute
 	shipGhTimeout   = 60 * time.Second
 )
 
-// shipMessageMax bounds a commit message.
 const shipMessageMax = 64 << 10
 
-// Merge modes as the verbs take them.
 var shipMergeModes = []string{"merge", "squash", "ff-only"}
 
-// shipVerbs are the registry entries of the ship verbs.
 func shipVerbs() map[string]verbEntry {
 	prFields := "number, url, state (open, merged or closed), checks (pass, fail or pending, omitted when there are none), passed, failed, pending, branch and checked_at (Unix nanoseconds)"
 	pushParams := []verbParam{
@@ -98,16 +61,7 @@ func shipVerbs() map[string]verbEntry {
 	}
 	return map[string]verbEntry{
 		"ship-commit": {
-			// From the ship work (verb_ship.go). A commit and a merge write the
-			// files a pane's agent works on, as a restore does. A push and a pull
-			// request send work off this machine: they are writes here, and the
-			// handler also asks the person in the Inbox for any caller on a
-			// restricted connection. The status is a read.
-			scope: scopeWrite,
-			// The ship verbs. A commit and a merge write files, so they need write.
-			// A push and a pull request are refused over any link by their handler:
-			// the person on the machine the repository is on allows those. The
-			// status carries a state and a URL, which list reaches.
+			scope:       scopeWrite,
 			link:        needWrite,
 			description: "Stage every change in a pane's git work tree, untracked files included and ignored ones not, and commit it on the branch checked out there. git runs with the person's own identity, signing and hooks, and the message is used as given. Refused while the pane's agent is working or waiting on a prompt, unless force is given.",
 			params: []verbParam{
@@ -218,8 +172,6 @@ func shipVerbs() map[string]verbEntry {
 	}
 }
 
-// shipMergeReturns are the result fields of ship-merge, which keep-fan
-// carries in its merge field.
 func shipMergeReturns() []verbParam {
 	return []verbParam{
 		{Name: "session", Type: "string", Description: "The session of the worktree."},
@@ -237,11 +189,6 @@ func shipMergeReturns() []verbParam {
 	}
 }
 
-// shipTarget resolves the pane a ship verb is about and the work tree under
-// it. A call that names neither a session nor a window from inside a pane is
-// about that pane, not the most recently active session: a push of whatever
-// someone else has focused is not what an agent in a worktree means. A pane
-// on another machine is refused.
 func (d *Daemon) shipTarget(cs *connState, sessionName, window string) (*Session, WindowState, reviewRepo, *verbError) {
 	if sessionName == "" && window == "" {
 		if fromPane, own := d.peerPane(cs); fromPane && own != "" {
@@ -265,8 +212,6 @@ func (d *Daemon) shipTarget(cs *connState, sessionName, window string) (*Session
 	return sess, target, repo, nil
 }
 
-// shipBranch is the branch checked out in the work tree, or the refusal for a
-// detached HEAD.
 func shipBranch(ctx context.Context, root string) (string, *verbError) {
 	branch, err := worktree.CurrentBranch(root)
 	if err != nil {
@@ -285,7 +230,6 @@ func shipBranch(ctx context.Context, root string) (string, *verbError) {
 	return branch, nil
 }
 
-// shipGitFailed is the refusal for a git call of a ship verb that failed.
 func shipGitFailed(ctx context.Context, err error) *verbError {
 	detail := "The repository is as it was."
 	if errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
@@ -294,8 +238,6 @@ func shipGitFailed(ctx context.Context, err error) *verbError {
 	return hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{Detail: detail})
 }
 
-// shipPaneRefusal holds a pane caller without admin to the panes it could
-// type into, as restore-checkpoint does.
 func (d *Daemon) shipPaneRefusal(cs *connState, verb string, target WindowState) *verbError {
 	if pa := d.paneAuthority(cs); pa != nil && !pa.hosted && !pa.grants.Has(GrantAdmin) {
 		if why := d.typingRefusal(pa, target, true); why != "" {
@@ -305,7 +247,6 @@ func (d *Daemon) shipPaneRefusal(cs *connState, verb string, target WindowState)
 	return nil
 }
 
-// shipBusy refuses a pane whose agent is mid-turn.
 func shipBusy(sess *Session, target WindowState, command string) *verbError {
 	if target.AgentState != AgentStateWorking && target.AgentState != AgentStateNeedsInput {
 		return nil
@@ -317,8 +258,6 @@ func shipBusy(sess *Session, target WindowState, command string) *verbError {
 	})
 }
 
-// shipCommitMessage is the default commit message: the pane's last prompt,
-// else the line its last turn ended with. Only the first line is kept.
 func (d *Daemon) shipCommitMessage(sess *Session, window string) string {
 	label := d.checkpointLabel(sess, window, "")
 	label, _, _ = strings.Cut(strings.TrimSpace(label), "\n")
@@ -329,7 +268,6 @@ func (d *Daemon) shipCommitMessage(sess *Session, window string) string {
 	return label
 }
 
-// verbShipCommit answers ship-commit.
 func (d *Daemon) verbShipCommit(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -397,7 +335,6 @@ func (d *Daemon) verbShipCommit(cs *connState, params json.RawMessage) (any, *ve
 	}, nil
 }
 
-// shortCommit is the first seven characters of a hash.
 func shortCommit(sha string) string {
 	if len(sha) > 7 {
 		return sha[:7]
@@ -405,9 +342,6 @@ func shortCommit(sha string) string {
 	return sha
 }
 
-// shipMergeTarget resolves the branch a worktree merges into: into when
-// given, else the recorded base when it is a local branch, else the branch
-// the main checkout is on.
 func shipMergeInto(repoRoot, recorded, into string) string {
 	if into != "" {
 		return into
@@ -415,7 +349,6 @@ func shipMergeInto(repoRoot, recorded, into string) string {
 	if recorded != "" && worktree.BranchExists(repoRoot, recorded) {
 		return recorded
 	}
-	// A jj repository checks out no branch: a merge goes into trunk's bookmark.
 	if b, ok := worktree.JJTrunkBookmark(repoRoot); ok {
 		return b
 	}
@@ -423,12 +356,6 @@ func shipMergeInto(repoRoot, recorded, into string) string {
 	return b
 }
 
-// shipMerge merges the branch checked out at root into into, in the main
-// checkout at repoRoot. sessionName names the worktree's session in the
-// result. ship-merge and keep-fan both call it.
-//
-// person says the person called it, so git runs with the repository's own
-// configuration and hooks (childproc.AsPerson).
 func (d *Daemon) shipMerge(person bool, sessionName, root, repoRoot, recorded, into, mode, message string) (map[string]any, *verbError) {
 	if root == "" || repoRoot == "" || canonRoot(root) == canonRoot(repoRoot) {
 		return nil, hintedVerbError(ErrVerbNotWorktree, "the pane is in the main checkout "+repoRoot+", not a linked worktree, so there is no branch to merge", &VerbHint{
@@ -516,7 +443,6 @@ func (d *Daemon) shipMerge(person bool, sessionName, root, repoRoot, recorded, i
 	}, nil
 }
 
-// verbShipMerge answers ship-merge.
 func (d *Daemon) verbShipMerge(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -555,7 +481,6 @@ func (d *Daemon) verbShipMerge(cs *connState, params json.RawMessage) (any, *ver
 	return res, nil
 }
 
-// shipPushParams are what ship-push takes, and ship-pr on top of them.
 type shipPushParams struct {
 	Session   string `json:"session"`
 	Window    string `json:"window"`
@@ -569,21 +494,17 @@ type shipPushParams struct {
 	Draft     bool   `json:"draft"`
 }
 
-// shipOutbound is what a push or a pull request would send, resolved.
 type shipOutbound struct {
-	sess   *Session
-	target WindowState
-	repo   reviewRepo
-	branch string
-	commit string
-	push   worktree.PushTarget
-	// base is the pull request's base, empty for the default branch.
-	base string
-	// existing is the branch's open pull request, for ship-pr.
+	sess     *Session
+	target   WindowState
+	repo     reviewRepo
+	branch   string
+	commit   string
+	push     worktree.PushTarget
+	base     string
 	existing *ghpr.PR
 }
 
-// token is the hash a confirm must carry: everything the call would send.
 func (o shipOutbound) token(verb string, p shipPushParams) string {
 	h := sha256.New()
 	for _, s := range []string{verb, o.repo.root, o.branch, o.commit, o.push.Remote, o.push.URL, o.base, p.Title, p.Body, strconv.FormatBool(p.Draft)} {
@@ -593,7 +514,6 @@ func (o shipOutbound) token(verb string, p shipPushParams) string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
-// shipResolveOutbound resolves what a push from the pane would send.
 func (d *Daemon) shipResolveOutbound(cs *connState, p shipPushParams) (shipOutbound, *verbError) {
 	var o shipOutbound
 	if p.Remote != "" && (strings.HasPrefix(p.Remote, "-") || strings.ContainsAny(p.Remote, " \t\n")) {
@@ -635,7 +555,6 @@ func (d *Daemon) shipResolveOutbound(cs *connState, p shipPushParams) (shipOutbo
 	return o, nil
 }
 
-// shipConfirmLines describe an outbound call for the person, one line each.
 func shipConfirmLines(ctx context.Context, verb string, o shipOutbound, p shipPushParams) []string {
 	lines := []string{"push " + o.branch + " at " + shortCommit(o.commit) + " to " + o.push.Remote + " (" + pushDestination(o.push.URL) + ")"}
 	base := o.push.Remote + "/" + o.branch
@@ -673,7 +592,6 @@ func shipConfirmLines(ctx context.Context, verb string, o shipOutbound, p shipPu
 	return lines
 }
 
-// oneLineOf is s on one line, cut to limit runes.
 func oneLineOf(s string, limit int) string {
 	s = strings.Join(strings.Fields(s), " ")
 	if r := []rune(s); len(r) > limit {
@@ -682,9 +600,6 @@ func oneLineOf(s string, limit int) string {
 	return s
 }
 
-// shipAsks remembers which Inbox question was put for which outbound call,
-// so a caller that comes back with request_id gets only the call the person
-// was asked about.
 type shipAsks struct {
 	mu    sync.Mutex
 	asked map[string]shipAsked
@@ -725,17 +640,11 @@ func (a *shipAsks) drop(id string) {
 	delete(a.asked, id)
 }
 
-// Answers to a ship question in the Inbox.
 const (
 	shipAllow = "allow"
 	shipDeny  = "deny"
 )
 
-// shipContext is a context for a ship verb's git, bounded by timeout. When
-// the person called the verb, git runs with the repository's own
-// configuration and hooks, as their own git would. A pane's call runs git
-// with the settings of childproc.Git, so the repository it controls names no
-// program the daemon runs.
 func (d *Daemon) shipContext(cs *connState, timeout time.Duration) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(d.ctx, timeout)
 	if d.shipCallerIsPerson(cs) {
@@ -744,9 +653,6 @@ func (d *Daemon) shipContext(cs *connState, timeout time.Duration) (context.Cont
 	return ctx, cancel
 }
 
-// shipCallerIsPerson reports whether the caller on cs counts as the person
-// for an outbound ship verb: a local process outside every pane, on a
-// connection it did not restrict.
 func (d *Daemon) shipCallerIsPerson(cs *connState) bool {
 	if cs == nil {
 		return true
@@ -757,9 +663,6 @@ func (d *Daemon) shipCallerIsPerson(cs *connState) bool {
 	return d.mayActAsHuman(cs)
 }
 
-// shipOutboundGate runs the confirm token and, for a caller that is not the
-// person, the Inbox question. It returns approvedBy ("human" when the person
-// allowed it in the Inbox, "" when the caller is the person), or the refusal.
 func (d *Daemon) shipOutboundGate(cs *connState, verb, cli string, o shipOutbound, p shipPushParams) (string, *verbError) {
 	ctx, cancel := context.WithTimeout(d.ctx, shipTimeout)
 	defer cancel()
@@ -791,13 +694,9 @@ func (d *Daemon) shipOutboundGate(cs *connState, verb, cli string, o shipOutboun
 	return d.shipAskPerson(cs, verb, o, p, token)
 }
 
-// shipAskPerson puts the outbound call to the person in the Inbox, as the
-// caller's own pane, and waits for the answer.
 func (d *Daemon) shipAskPerson(cs *connState, verb string, o shipOutbound, p shipPushParams, token string) (string, *verbError) {
 	fromPane, own := d.peerPane(cs)
 	if !fromPane || own == "" {
-		// A restricted connection outside every pane, or a pane the daemon
-		// could not name: the question is about the target pane.
 		own = o.target.ID
 	}
 	wait := 120 * time.Second
@@ -868,8 +767,6 @@ func (d *Daemon) shipAskPerson(cs *connState, verb string, o shipOutbound, p shi
 	return d.shipAskOutcome(verb, hold.id, askOutcome{Reason: status, Answer: answer})
 }
 
-// shipAskOutcome turns how the person's question ended into the go-ahead or
-// the refusal.
 func (d *Daemon) shipAskOutcome(verb, requestID string, out askOutcome) (string, *verbError) {
 	d.shipAsks.drop(requestID)
 	if out.Reason == AskAnswered && out.Answer == shipAllow {
@@ -884,10 +781,6 @@ func (d *Daemon) shipAskOutcome(verb, requestID string, out askOutcome) (string,
 	})
 }
 
-// shipQuestion is the one-line question the Inbox shows. It names where the
-// push goes, the remote and its address, since a remote's name says nothing
-// about where it points: an agent can point origin anywhere. A long address
-// keeps its start, which holds the host, and the end of its path.
 func shipQuestion(verb string, o shipOutbound) string {
 	dest := pushDestination(o.push.URL)
 	ask := func(dest string) string {
@@ -910,10 +803,6 @@ func shipQuestion(verb string, o shipOutbound) string {
 	return what
 }
 
-// pushDestination is a push URL as a person is shown it: its host and path,
-// with no user name, password or token, and no query or fragment. A local
-// path is shown as it is, and an scp-like address (user@host:path) loses the
-// user.
 func pushDestination(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -925,8 +814,6 @@ func pushDestination(raw string) string {
 		} else if err == nil && u.Scheme == "file" {
 			return oneLineOf(u.Path, 512)
 		}
-		// Unreadable as a URL: keep what follows the last @ of the
-		// authority, so no credential is shown.
 		authority, path, _ := strings.Cut(raw[i+3:], "/")
 		if at := strings.LastIndex(authority, "@"); at >= 0 {
 			authority = authority[at+1:]
@@ -935,9 +822,6 @@ func pushDestination(raw string) string {
 		path, _, _ = strings.Cut(path, "#")
 		return oneLineOf(authority+"/"+path, 512)
 	}
-	// scp-like: [user@]host:path, with a colon before the first slash once
-	// the user is gone. A local path has none. The user is cut at the last @
-	// before the first slash, since it may itself hold a colon.
 	rest := raw
 	before, _, _ := strings.Cut(raw, "/")
 	if at := strings.LastIndex(before, "@"); at >= 0 {
@@ -949,8 +833,6 @@ func pushDestination(raw string) string {
 	return oneLineOf(raw, 512)
 }
 
-// shortenDestination fits dest in about limit bytes, keeping its start and
-// its end, cut on rune boundaries.
 func shortenDestination(dest string, limit int) string {
 	const gap = "..."
 	limit = max(limit, 24)
@@ -969,7 +851,6 @@ func shortenDestination(dest string, limit int) string {
 	return dest[:head] + gap + dest[start:]
 }
 
-// verbShipPush answers ship-push.
 func (d *Daemon) verbShipPush(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p shipPushParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -1005,8 +886,6 @@ func (d *Daemon) verbShipPush(cs *connState, params json.RawMessage) (any, *verb
 	return res, nil
 }
 
-// shipPush pushes the resolved branch. person says the person called it
-// (shipMerge).
 func (d *Daemon) shipPush(person bool, o shipOutbound) *verbError {
 	ctx, cancel := context.WithTimeout(d.ctx, shipPushTimeout)
 	if person {
@@ -1024,7 +903,6 @@ func (d *Daemon) shipPush(person bool, o shipOutbound) *verbError {
 	return nil
 }
 
-// shipGhReady refuses when gh is not installed or not logged in.
 func shipGhReady(ctx context.Context, dir string) *verbError {
 	if _, err := ghpr.Path(); err != nil {
 		return hintedVerbError(ErrVerbGhUnavailable, "the gh CLI is not installed, and tuios opens pull requests only through it", &VerbHint{
@@ -1039,9 +917,6 @@ func shipGhReady(ctx context.Context, dir string) *verbError {
 	return nil
 }
 
-// shipPRBase is the base a pull request opens into: the parameter, else the
-// worktree's recorded base without a remote prefix, else empty for the
-// repository's default branch.
 func shipPRBase(base, recorded, remote string) string {
 	if base != "" {
 		return base
@@ -1052,7 +927,6 @@ func shipPRBase(base, recorded, remote string) string {
 	return strings.TrimPrefix(recorded, remote+"/")
 }
 
-// verbShipPR answers ship-pr.
 func (d *Daemon) verbShipPR(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p shipPushParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -1132,7 +1006,6 @@ func (d *Daemon) verbShipPR(cs *connState, params json.RawMessage) (any, *verbEr
 	return res, nil
 }
 
-// verbShipStatus answers ship-status.
 func (d *Daemon) verbShipStatus(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
