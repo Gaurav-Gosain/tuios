@@ -21,6 +21,8 @@ func TestRead(t *testing.T) {
 		{"Password for 'https://u@example.com': ", KindPassword, "https://u@example.com"},
 		{"Enter PIN for ECDSA-SK key /k: ", KindPIN, "/k"},
 		{"Enter the code: ", KindSecret, ""},
+		{"Are you sure you want to continue connecting (yes/no/[fingerprint])? ", KindConfirm, ""},
+		{"Username for 'https://github.com': ", KindUsername, "https://github.com"},
 		// A word that holds pin is not a PIN.
 		{"Spinning up, type the token:", KindSecret, ""},
 	}
@@ -65,7 +67,8 @@ func TestMaskCommandLine(t *testing.T) {
 		{[]string{"sshpass", "-p", "SECRET", "ssh", "-p", "2222", "host"}, "sshpass -p *** ssh -p 2222 host"},
 		{[]string{"tool", "--token", "SECRET", "--password=SECRET", "x"}, "tool --token *** --password=*** x"},
 		{[]string{"ssh", "-p", "2222", "git@github.com"}, "ssh -p 2222 git@github.com"},
-		{[]string{"git", "fetch", "ssh://git@host:22/r"}, "git fetch ssh://***@host:22/r"},
+		{[]string{"git", "fetch", "ssh://git@host:22/r"}, "git fetch ssh://git@host:22/r"},
+		{[]string{"git", "-c", "remote.o.url=https://ghp_SECRET@h/r", "fetch"}, "git -c remote.o.url=https://***@h/r fetch"},
 	}
 	for _, c := range cases {
 		if got := MaskCommandLine(c.args); got != c.want {

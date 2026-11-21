@@ -283,3 +283,49 @@ func noTokenIn(t *testing.T, base, s string) {
 		return nil
 	})
 }
+
+// TestAskpassDialogLetsGoWhenFocusMoves: the dialog is about one pane. When
+// the person moves to another pane it closes and gives the keys back, and the
+// prompt waits in the Inbox. Back on the pane, the dialog opens again.
+//
+// Negative control: with syncAskpass keeping an open dialog whatever pane is
+// in front, the dialog stays after the focus moves and the test fails.
+func TestAskpassDialogLetsGoWhenFocusMoves(t *testing.T) {
+	term, base := attachClientBase(t)
+	bin, out := askpassHelper(t)
+	if b, err := tuiosCLI(t, base, "split-window", "right", "-s", "e2e-ctrlp", "--name", "other", "--no-focus"); err != nil {
+		t.Fatalf("split-window: %v\n%s", err, b)
+	}
+	line := bin + " ask " + out + " \"Enter passphrase for key '/tmp/e2e/id_focus': \"\n"
+	if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", "-w", "0", line); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, b)
+	}
+	dialog := func(s tuitest.Screen) bool { return screenHas(s, "Unlock a key", "id_focus") }
+	if err := term.WaitFor(dialog, uiTimeout); err != nil {
+		t.Fatalf("the dialog never opened: %v\n%s", err, term.Snapshot())
+	}
+
+	if b, err := tuiosCLI(t, base, "focus-window", "-s", "e2e-ctrlp", "other"); err != nil {
+		t.Fatalf("focus-window: %v\n%s", err, b)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !dialog(s) }, uiTimeout); err != nil {
+		t.Fatalf("the dialog stayed open after the focus moved to another pane: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "askpass-focus-moved")
+	if b, _ := os.ReadFile(out); len(b) != 0 {
+		t.Fatalf("the prompt ended when the focus moved: %s", b)
+	}
+
+	if b, err := tuiosCLI(t, base, "focus-window", "-s", "e2e-ctrlp", "0"); err != nil {
+		t.Fatalf("focus-window back: %v\n%s", err, b)
+	}
+	if err := term.WaitFor(dialog, uiTimeout); err != nil {
+		t.Fatalf("the dialog did not open again on the pane that asks: %v\n%s", err, term.Snapshot())
+	}
+	pause(t, "let the dialog's settle time pass", answerSettle)
+	if err := term.SendKeys("\x1b"); err != nil {
+		t.Fatalf("esc: %v", err)
+	}
+	askpassResult(t, out, "ASKPASS=cancelled")
+	alive(t, term, "after the focus moved away from a prompt and back")
+}

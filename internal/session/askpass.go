@@ -2,12 +2,14 @@ package session
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/askpass"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // Secrets a program in a pane asks the person for.
@@ -83,6 +85,35 @@ func askpassPromptShown(s string) bool {
 	return true
 }
 
+// AskpassLinkName is the name tuios's askpass program runs by: a link to the
+// tuios binary, which main runs as the askpass program when it is called by
+// this name.
+const AskpassLinkName = "tuios-askpass"
+
+// askpassChainKnown reports whether a prompt comes from a program the person
+// can trust to ask: the caller, pid, is tuios's own askpass program, run by
+// the program asker at exe, which is a real ssh, git or gpg
+// (askpass.KnownProgram), and that program's SSH_ASKPASS names tuios's
+// askpass program. A process in a pane can make a real ssh its parent, as a
+// ProxyCommand or an SSH_ASKPASS of its own, and call askpass itself, so a
+// known parent alone proves nothing.
+func (d *Daemon) askpassChainKnown(pid, asker int, exe string) bool {
+	self, err := d.agentProtoExecutable()
+	if err != nil || exe == "" || !askpass.KnownProgram(exe) {
+		return false
+	}
+	callerExe, callerArgs := askingProgram(pid)
+	if callerExe != self || len(callerArgs) == 0 || filepath.Base(callerArgs[0]) != AskpassLinkName {
+		return false
+	}
+	named, ok := procinfo.EnvVar(asker, "SSH_ASKPASS")
+	if !ok || filepath.Base(named) != AskpassLinkName {
+		return false
+	}
+	resolved, err := filepath.EvalSymlinks(named)
+	return err == nil && resolved == self
+}
+
 // askpassRefused is askpass's refusal, with nothing asked.
 func askpassRefused(why string) *verbError {
 	return hintedVerbError(ErrVerbForbidden, why, &VerbHint{Detail: "Nothing was asked. Answer the prompt in a terminal where you can type."})
@@ -119,8 +150,7 @@ func (d *Daemon) verbAskpass(cs *connState, params json.RawMessage) (any, *verbE
 	if ppid, ok := askpassParent(cs.peerPID); ok {
 		exe, args := askingProgram(ppid)
 		item.Secret.Program = attentionText(askpass.MaskCommandLine(args), askpassMaxProgram)
-		self, _ := d.agentProtoExecutable()
-		item.Secret.Known = exe != "" && (askpass.KnownProgram(exe) || exe == self)
+		item.Secret.Known = d.askpassChainKnown(cs.peerPID, ppid, exe)
 	}
 	hold, err := d.attention.openAsk(item, true)
 	if err != nil {
@@ -130,13 +160,9 @@ func (d *Daemon) verbAskpass(cs *connState, params json.RawMessage) (any, *verbE
 
 	// A program that is killed while it waits, such as an ssh the agent
 	// stopped, takes its prompt with it.
-	gone := make(chan struct{})
-	if canWaitForeignExit && cs.peerPID > 0 {
-		go func(pid int) {
-			waitForeignExit(pid)
-			close(gone)
-		}(cs.peerPID)
-	}
+	stop := make(chan struct{})
+	defer close(stop)
+	gone := askpassWatch(cs.peerPID, stop)
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	var out askOutcome
