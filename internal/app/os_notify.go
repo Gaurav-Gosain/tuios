@@ -202,26 +202,35 @@ func notificationLifetime(notifType string, requested time.Duration, s *config.S
 //
 //go:noinline
 func (m *OS) ShowNotification(message, notifType string, duration time.Duration) {
-	m.showNotification(message, notifType, "", duration, nil, 0)
+	m.showNotification(message, notifType, "", duration, nil, 0, false)
+}
+
+// showAmbientNotification is ShowNotification for a notice tuios raises on its
+// own about what changed around this client: another client made or closed a
+// window, or the session took another size. It never covers a live message
+// that is not ambient, such as the answer to a key. See queueNotification.
+func (m *OS) showAmbientNotification(message, notifType string, duration time.Duration) {
+	m.showNotification(message, notifType, "", duration, nil, 0, true)
 }
 
 // ShowNotificationFrom is ShowNotification for a message that came from a pane.
 // The message becomes clickable and gains a keyboard jump; everything else about
 // it is identical.
 func (m *OS) ShowNotificationFrom(message, notifType string, duration time.Duration, target NotifTarget) {
-	m.showNotification(message, notifType, "", duration, &target, 0)
+	m.showNotification(message, notifType, "", duration, &target, 0, false)
 }
 
 // showAgentNotification is ShowNotificationFrom for a message announcing an
 // agent state: the dock marks it with that state's own mark.
 func (m *OS) showAgentNotification(message, notifType, agentState string, duration time.Duration, target NotifTarget) {
-	m.showNotification(message, notifType, agentState, duration, &target, 0)
+	m.showNotification(message, notifType, agentState, duration, &target, 0, false)
 }
 
 // showNotification is the one way a message reaches the dock. A limit above
 // zero caps the lifetime of a message that is not sticky, below the floor
-// notificationLifetime applies.
-func (m *OS) showNotification(message, notifType, agentState string, duration time.Duration, target *NotifTarget, limit time.Duration) {
+// notificationLifetime applies. ambient marks a notice tuios raises on its own
+// (see showAmbientNotification).
+func (m *OS) showNotification(message, notifType, agentState string, duration time.Duration, target *NotifTarget, limit time.Duration, ambient bool) {
 	// A pane writes the text of its own notifications, so it is held to the
 	// size the daemon holds a pane's notification to before anything wraps,
 	// logs or keeps it.
@@ -309,8 +318,9 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 
 		AgentState: agentState,
 		Source:     source,
+		Ambient:    ambient,
 	}
-	m.Notifications = append(m.Notifications, n)
+	m.Notifications = queueNotification(m.Notifications, n, n.StartTime)
 	// prefix+N reopens a message worth reading again: one from a pane, or one
 	// too long for the dock. tuios's own short notices ("Copied the
 	// message.", the mode names) are not kept, or the key would reopen its
@@ -325,6 +335,21 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 	if m.OnNotification != nil {
 		m.OnNotification(message, notifType)
 	}
+}
+
+// queueNotification adds n to the live messages, and the dock shows the last
+// one. An ambient notice does not cover a live message that is not ambient,
+// such as the answer to a key the person pressed: it goes in under it, and the
+// dock counts it in the +N. A size change once covered "Window management
+// mode" in the frame the key drew it, so the person pressed alt+esc and saw no
+// answer.
+func queueNotification(live []Notification, n Notification, now time.Time) []Notification {
+	if last := len(live) - 1; n.Ambient && last >= 0 && !live[last].Ambient && !live[last].NotificationExpired(now) {
+		live = append(live, live[last])
+		live[last] = n
+		return live
+	}
+	return append(live, n)
 }
 
 // ToggleLogViewer shows or hides the log overlay. Opening it lands on the
