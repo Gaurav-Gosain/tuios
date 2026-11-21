@@ -14,12 +14,14 @@ const canWaitForeignExit = true
 // askpassParent is the parent of pid.
 func askpassParent(pid int) (int, bool) { return procinfo.ParentPID(pid) }
 
-// askingProgram reads the executable of pid and its command line, with the
-// arguments joined by spaces, from the kernel. Either is empty when it cannot
-// be read.
-func askingProgram(pid int) (exe, line string) {
+// askingProgram reads the resolved executable of pid and its arguments from
+// the kernel. Either is empty when it cannot be read.
+func askingProgram(pid int) (exe string, args []string) {
 	dir := "/proc/" + strconv.Itoa(pid)
 	exe, _ = os.Readlink(dir + "/exe")
-	raw, _ := os.ReadFile(dir + "/cmdline")
-	return exe, strings.TrimSpace(strings.ReplaceAll(string(raw), "\x00", " "))
+	raw, err := os.ReadFile(dir + "/cmdline")
+	if err != nil || len(raw) == 0 {
+		return exe, nil
+	}
+	return exe, strings.Split(strings.TrimRight(string(raw), "\x00"), "\x00")
 }

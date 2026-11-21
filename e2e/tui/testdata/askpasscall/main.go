@@ -4,6 +4,11 @@
 //
 //	askpasscall ask OUT PROMPT   calls askpass and writes ASKPASS=<status>
 //	                             SHA=<sha256 of the answer, hex>
+//	askpasscall spawn OUT PROMPT ARGS...
+//	                             runs itself as ask OUT PROMPT, as ssh runs
+//	                             its askpass program, so the program that
+//	                             asks is this one, with ARGS on its command
+//	                             line
 //	askpasscall steal OUT        waits for a secret prompt in the Inbox, then
 //	                             answers it with the nonce of its own attach,
 //	                             and writes STEAL=<ok or the error code>
@@ -17,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"time"
 )
 
@@ -55,6 +61,13 @@ func main() {
 	if len(os.Args) < 3 {
 		fmt.Fprintln(os.Stderr, "usage: askpasscall ask OUT PROMPT | askpasscall steal OUT")
 		os.Exit(2)
+	}
+	if os.Args[1] == "spawn" {
+		self, _ := os.Executable()
+		cmd := exec.Command(self, "ask", os.Args[2], os.Args[3])
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		_ = cmd.Run()
+		return
 	}
 	out, err := os.OpenFile(os.Args[2], os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {

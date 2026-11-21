@@ -2,6 +2,8 @@ package askpass
 
 import (
 	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 )
 
@@ -30,16 +32,44 @@ func TestRead(t *testing.T) {
 	}
 }
 
+// TestKnownProgram: a program counts as known by where it lives, not by its
+// name. A copy of a binary named ssh in a folder a pane can write is not ssh.
 func TestKnownProgram(t *testing.T) {
-	for path, want := range map[string]bool{
-		"/usr/bin/ssh":                       true,
-		"/usr/lib/git-core/git-remote-https": true,
-		"/usr/bin/gpg":                       true,
-		"/tmp/fish":                          false,
-		"/usr/bin/python3":                   false,
-	} {
-		if got := KnownProgram(path); got != want {
-			t.Errorf("KnownProgram(%q) = %v, want %v", path, got, want)
+	fake := filepath.Join(t.TempDir(), "ssh")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if KnownProgram(fake) {
+		t.Errorf("a file named ssh in a temporary folder counts as ssh")
+	}
+	if KnownProgram("/usr/bin/python3") {
+		t.Errorf("python3 counts as a program that asks for passphrases")
+	}
+	if !KnownProgram("/usr/bin/ssh") {
+		t.Errorf("/usr/bin/ssh does not count as ssh")
+	}
+	if real, err := exec.LookPath("ssh-keygen"); err == nil {
+		if real, err = filepath.EvalSymlinks(real); err == nil && !KnownProgram(real) {
+			t.Errorf("the ssh-keygen PATH finds (%s) does not count", real)
+		}
+	}
+}
+
+func TestMaskCommandLine(t *testing.T) {
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"git", "push", "https://bob:ghp_SECRET@github.com/o/r.git"}, "git push https://bob:***@github.com/o/r.git"},
+		{[]string{"git", "clone", "https://ghp_SECRET@github.com/o/r"}, "git clone https://***@github.com/o/r"},
+		{[]string{"sshpass", "-p", "SECRET", "ssh", "-p", "2222", "host"}, "sshpass -p *** ssh -p 2222 host"},
+		{[]string{"tool", "--token", "SECRET", "--password=SECRET", "x"}, "tool --token *** --password=*** x"},
+		{[]string{"ssh", "-p", "2222", "git@github.com"}, "ssh -p 2222 git@github.com"},
+		{[]string{"git", "fetch", "ssh://git@host:22/r"}, "git fetch ssh://***@host:22/r"},
+	}
+	for _, c := range cases {
+		if got := MaskCommandLine(c.args); got != c.want {
+			t.Errorf("MaskCommandLine(%q) = %q, want %q", c.args, got, c.want)
 		}
 	}
 }

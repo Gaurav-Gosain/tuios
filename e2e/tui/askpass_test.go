@@ -206,3 +206,80 @@ func TestAskpassEscCancels(t *testing.T) {
 	}
 	alive(t, term, "after a cancelled prompt")
 }
+
+// TestAskpassWarnsAboutAFakeSSH is the prompt a program that fishes for a
+// passphrase would show. A copy of a binary named ssh, in a folder the pane
+// can write, asks for the passphrase of the person's key, with a token in a
+// URL on its command line. The dialog warns that tuios does not know the
+// program, though its name is ssh. The token is masked in the dialog, and it
+// is in no event of the session's stream, in no list-attention answer and in
+// no file.
+//
+// Negative control: with KnownProgram back to a check of the base name, the
+// warning is gone and the test fails. With MaskCommandLine cut, the token
+// shows in the dialog.
+func TestAskpassWarnsAboutAFakeSSH(t *testing.T) {
+	const token = "TOKEN-77xqZ"
+	term, base := attachClientBase(t)
+	events := askpassEvents(t, base, "e2e-ctrlp")
+	helper, out := askpassHelper(t)
+	fake := filepath.Join(t.TempDir(), "ssh")
+	b, err := os.ReadFile(helper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fake, b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// The token goes on the command line from a file, so the pane never
+	// shows it as typed.
+	urlFile := filepath.Join(t.TempDir(), "url")
+	if err := os.WriteFile(urlFile, []byte("https://bob:"+token+"@example.com/r.git"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	line := fake + " spawn " + out + " \"Enter passphrase for key '~/.ssh/id_ed25519': \" \"$(cat " + urlFile + ")\"\n"
+	if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, b)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "Unlock a key", "tuios does not know this program", "bob:***@example.com")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the dialog did not warn about a copy named ssh, or did not mask its token: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "askpass-fake-ssh")
+	if strings.Contains(term.Snapshot(), token) {
+		t.Errorf("the token is on the client's frame")
+	}
+	listed, err := tuiosCLI(t, base, "list-attention", "--json")
+	if err != nil {
+		t.Fatalf("list-attention: %v\n%s", err, listed)
+	}
+	if !strings.Contains(listed, "bob:***@example.com") || strings.Contains(listed, token) {
+		t.Errorf("list-attention does not hold the masked program line, or holds the token:\n%s", listed)
+	}
+	pause(t, "let the dialog's settle time pass", answerSettle)
+	if err := term.SendKeys("\x1b"); err != nil {
+		t.Fatalf("esc: %v", err)
+	}
+	askpassResult(t, out, "ASKPASS=cancelled")
+	stream := events()
+	if !strings.Contains(stream, "bob:***@example.com") || strings.Contains(stream, token) {
+		t.Errorf("the event stream does not hold the masked program line, or holds the token:\n%s", stream)
+	}
+	noTokenIn(t, base, token)
+}
+
+// noTokenIn fails when any file under base holds s.
+func noTokenIn(t *testing.T, base, s string) {
+	t.Helper()
+	_ = filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || !d.Type().IsRegular() {
+			return nil
+		}
+		if b, err := os.ReadFile(path); err == nil && bytes.Contains(b, []byte(s)) {
+			t.Errorf("%q is in %s", s, path)
+		}
+		return nil
+	})
+}
