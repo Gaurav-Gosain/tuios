@@ -44,8 +44,27 @@ const askpassWait = 5*time.Minute + 15*time.Second
 // runAsAskpass answers one prompt and returns the exit status.
 func runAsAskpass(args []string) int {
 	prompt := strings.Join(args, " ")
-	if tty, ok := foregroundTerminal(); ok {
+	// OpenSSH says what kind of prompt it is in SSH_ASKPASS_PROMPT. "none"
+	// is a notice, such as "Confirm user presence for key ...", which ssh
+	// stops on its own once the key is touched, and "confirm" is a yes or no
+	// question answered by the exit status.
+	kind := os.Getenv("SSH_ASKPASS_PROMPT")
+	tty, onTerminal := foregroundTerminal()
+	if onTerminal {
 		defer func() { _ = tty.Close() }()
+	}
+	switch {
+	case kind == "none":
+		if onTerminal {
+			_, _ = tty.WriteString(prompt + "\n")
+		}
+		return 0
+	case kind == "confirm" && onTerminal:
+		return askpassConfirm(tty, prompt)
+	case kind == "confirm":
+		fmt.Fprintln(os.Stderr, "tuios: the Inbox cannot ask this yes or no question yet. Run the command in a terminal.")
+		return 1
+	case onTerminal:
 		return askpassOnTerminal(tty, prompt)
 	}
 	sock := os.Getenv("TUIOS_SOCKET")
@@ -95,6 +114,19 @@ func askpassEnded(status string) string {
 		return "the tuios daemon gave no answer. Nothing was sent."
 	}
 	return "the prompt ended (" + strings.ReplaceAll(status, "_", " ") + "). Nothing was sent."
+}
+
+// askpassConfirm asks a yes or no question on tty. Yes is exit status 0.
+func askpassConfirm(tty *os.File, prompt string) int {
+	if _, err := tty.WriteString(prompt + " (yes/no) "); err != nil {
+		return 1
+	}
+	line, _ := bufio.NewReader(tty).ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "yes", "y":
+		return 0
+	}
+	return 1
 }
 
 // askpassOnTerminal asks on tty as ssh does: a yes or no question and a user
