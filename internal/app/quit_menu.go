@@ -72,6 +72,16 @@ func (m *OS) NextSessionName() string {
 	return others[0]
 }
 
+// leaveTarget picks the session this client goes to when the one it shows
+// is killed under it, from live, the sessions the daemon still has: the
+// session it showed before when live holds it, else the first of live.
+func (m *OS) leaveTarget(live []string) string {
+	if m.lastSession.host == m.attachedMachine() && slices.Contains(live, m.lastSession.name) {
+		return m.lastSession.name
+	}
+	return live[0]
+}
+
 // otherSessionNames lists the daemon sessions this client is not attached to,
 // by identity, from the listing this client already caches.
 //

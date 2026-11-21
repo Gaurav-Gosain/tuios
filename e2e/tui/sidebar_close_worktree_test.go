@@ -615,3 +615,54 @@ func TestQuitMenuDeleteFollowsASwitchDuringTheDwell(t *testing.T) {
 		t.Errorf("the feat/one branch did not survive the delete row: %v: %s", err, out)
 	}
 }
+
+// TestWorktreeRmMovesTheAttachedClient holds tuios worktree rm of the session
+// a client shows to what tmux users expect from a killed session: the client
+// goes back to the session it was on before, and only then is the session
+// killed. Before the fix the kill took the client off the daemon. A session
+// named aaa sorts first, so a client that took the first other session
+// instead of the previous one would land there.
+func TestWorktreeRmMovesTheAttachedClient(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+
+	for _, name := range []string{"aaa", "plain"} {
+		if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", name, "--detach"); err != nil {
+			t.Fatalf("create the %s session: %v: %s", name, err, out)
+		}
+	}
+	if out, err := tuiosCLI(t, base, "worktree", "new", "feat/one", "--repo", repo, "--detach"); err != nil {
+		t.Fatalf("worktree new feat/one: %v: %s", err, out)
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	waitShown(t, base, "plain", "the client attached")
+	if out, err := tuiosCLI(t, base, "switch-session", "-s", "plain", "repo-feat-one"); err != nil {
+		t.Fatalf("switch to the worktree session: %v: %s", err, out)
+	}
+	waitShown(t, base, "repo-feat-one", "the client switched to the worktree session")
+
+	out, err := tuiosCLI(t, base, "worktree", "rm", "repo-feat-one")
+	if err != nil {
+		t.Fatalf("worktree rm: %v: %s", err, out)
+	}
+	if !strings.Contains(out, "Switched 1 client") {
+		t.Errorf("worktree rm did not say it switched the client: %s", out)
+	}
+	waitShown(t, base, "plain", "worktree rm of the shown session")
+	alive(t, term, "after worktree rm of the session it showed")
+	if hasName(sessionNames(t, base), "repo-feat-one") {
+		t.Errorf("worktree rm left the repo-feat-one session running")
+	}
+	if _, err := os.Stat(filepath.Join(base, "worktrees", "repo", "feat-one")); !os.IsNotExist(err) {
+		t.Errorf("the feat/one worktree directory survived worktree rm: %v", err)
+	}
+	saveFrame(t, term, "worktree-rm-moves-client")
+}

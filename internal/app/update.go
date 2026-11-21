@@ -3571,6 +3571,21 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "command executed")
 			}
 			return m, tea.Batch(func() tea.Msg { return remoteSwitchSessionMsg{name: name} }, relisten)
+		case "leave_session":
+			// remove-worktree is about to kill the session this client
+			// shows. TapeArgs are that session and the live sessions it may
+			// go to. The answer names the one it picked and goes before the
+			// switch, as for switch_session, so the daemon kills only once
+			// the switch has shown. An error leaves the client to the kill.
+			if len(msg.TapeArgs) < 2 || msg.TapeArgs[0] != m.SessionName {
+				err = errfmt.Errorf("leave_session names a session this client does not show")
+				break
+			}
+			to := m.leaveTarget(msg.TapeArgs[1:])
+			if m.DaemonClient != nil && msg.RequestID != "" {
+				_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", map[string]any{"session": to})
+			}
+			return m, tea.Batch(func() tea.Msg { return remoteSwitchSessionMsg{name: to} }, relisten)
 		case "notice":
 			// A line from the daemon for the dock, such as why a split did
 			// not follow ssh. Nothing changed, so nothing is pushed.

@@ -3723,6 +3723,7 @@ Remove a worktree session's worktree with git worktree remove, and kill the sess
 | `stashed` | bool | True when the changes went into git stash. |
 | `discarded` | bool | True when the changes were discarded by force. |
 | `session_killed` | bool | True when the session was killed. |
+| `clients_switched` | int | How many clients that showed the session switched to another session before the kill. |
 | `branch_kept` | bool | Always true. |
 
 ```json

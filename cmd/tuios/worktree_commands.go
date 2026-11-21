@@ -232,6 +232,10 @@ removes them anyway.
 The branch is never deleted. Every commit made in the worktree stays in the
 repository.
 
+A client that shows the session switches to the session it showed before,
+or to another session, before the kill. With no other session, the client
+ends.
+
 HOST:SESSION removes a worktree session on another machine.`,
 		Example: `  tuios worktree rm api-feat-retry
   tuios worktree rm api-feat-retry --stash
@@ -813,8 +817,11 @@ type removedWorktree struct {
 	StashMessage  string `json:"stash_message"`
 	Discarded     bool   `json:"discarded"`
 	SessionKilled bool   `json:"session_killed"`
-	Gone          bool   `json:"gone"`
-	Note          string `json:"note"`
+	// ClientsSwitched counts the clients moved to another session before
+	// the kill.
+	ClientsSwitched int    `json:"clients_switched"`
+	Gone            bool   `json:"gone"`
+	Note            string `json:"note"`
 }
 
 // sentences says what was removed, what was kept, and where the changes went.
@@ -835,6 +842,9 @@ func (r removedWorktree) sentences() string {
 		// The part nothing saves: git never stashes ignored files, and the
 		// removal deleted them without --force.
 		fmt.Fprintf(&b, "%d ignored %s deleted, and git never stashes ignored files.\n", r.Ignored, plural.Word(r.Ignored, "file was", "files were"))
+	}
+	if r.ClientsSwitched > 0 {
+		fmt.Fprintf(&b, "Switched %d %s to another session.\n", r.ClientsSwitched, plural.Word(r.ClientsSwitched, "client", "clients"))
 	}
 	if r.SessionKilled {
 		fmt.Fprintf(&b, "Killed session '%s'.", r.Session)

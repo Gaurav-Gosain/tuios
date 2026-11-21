@@ -18586,3 +18586,17 @@ Run on 2026-11-19 on Linux, sim backend, against main at 61507834e. The control 
 TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -v -run '^(TestScreenshotRegionDragOpensThePreview|TestScreenshotTwoCapturesInOneSecondKeepBothFiles)$' .
 ```
+
+## worktree rm of the session a client shows
+
+`TestWorktreeRmMovesTheAttachedClient` attaches a client to `plain`, switches it to a worktree session, and runs `tuios worktree rm` on that session. The client must go back to `plain` and stay up. A session named `aaa` sorts first, so a client that took the first other session would fail too.
+
+Run on 2026-11-21 on Linux, real backend, against main at 6419a7d9f.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Main | `TestWorktreeRmMovesTheAttachedClient` | "worktree rm of the shown session: the client shows [], want plain". The client printed "Session \"repo-feat-one\" was terminated while you were attached." | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestWorktreeRmMovesTheAttachedClient$' .
+```

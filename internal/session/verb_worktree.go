@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
@@ -843,6 +844,7 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 		// directory to itself. Everywhere else the session outlives the verb
 		// when it is asked to, so the client can show the note before it kills.
 		if runtime.GOOS == "windows" && !p.KeepSession {
+			out["clients_switched"] = d.moveClientsOff(sess)
 			if err := d.manager.DeleteSession(sess.Name()); err == nil {
 				killed = true
 			}
@@ -874,11 +876,68 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 
 	out["session_killed"] = killed
 	if !killed && !p.KeepSession {
+		out["clients_switched"] = d.moveClientsOff(sess)
 		if err := d.manager.DeleteSession(sess.Name()); err == nil {
 			out["session_killed"] = true
 		}
 	}
 	return out, nil
+}
+
+// moveClientsOff asks every client that shows sess to switch to another
+// session before the kill, and reports how many did. A kill under a client
+// ends it, and a person who removes the worktree they are looking at wants
+// to land where they were before, as the quit menu's kill-and-go-next row
+// does. The client picks: the session it showed before, when that is still
+// here, else the first other one. The live names go with the request, so a
+// client never picks a session it only remembers, which a switch would
+// create. A client with nowhere to go, or one too old to know the command,
+// is left to the kill, as before.
+func (d *Daemon) moveClientsOff(sess *Session) int {
+	var tuis []*connState
+	d.clientsMu.RLock()
+	for _, c := range d.clients {
+		c.mu.Lock()
+		on := c.isTUIClient && c.attached && !c.passive && c.sessionID == sess.ID
+		c.mu.Unlock()
+		if on {
+			tuis = append(tuis, c)
+		}
+	}
+	d.clientsMu.RUnlock()
+	if len(tuis) == 0 {
+		return 0
+	}
+	args := []string{sess.Name()}
+	for _, name := range d.sessionNames() {
+		if name != sess.Name() {
+			args = append(args, name)
+		}
+	}
+	if len(args) == 1 {
+		return 0
+	}
+	moved := 0
+	for _, tui := range tuis {
+		res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
+			CommandType: "leave_session",
+			TapeArgs:    args,
+		}, routedVerbTimeout)
+		if err != nil || !res.Success {
+			continue
+		}
+		// The client answers before it switches, as for switch-session, so
+		// the kill waits for the switch to show on the session it went to.
+		to, _ := res.Data["session"].(string)
+		dest, _ := d.manager.ResolveSession(to)
+		if dest == nil || dest.ID == sess.ID {
+			continue
+		}
+		if dest.waitChange(routedVerbTimeout, func() bool { return connSessionID(tui) == dest.ID }) {
+			moved++
+		}
+	}
+	return moved
 }
 
 // worktreeRemoved tells the event stream, and with it the plugin hooks on

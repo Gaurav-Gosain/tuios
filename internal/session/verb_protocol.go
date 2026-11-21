@@ -862,6 +862,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "stashed", Type: "bool", Description: "True when the changes went into git stash."},
 				{Name: "discarded", Type: "bool", Description: "True when the changes were discarded by force."},
 				{Name: "session_killed", Type: "bool", Description: "True when the session was killed."},
+				{Name: "clients_switched", Type: "int", Description: "How many clients that showed the session switched to another session before the kill."},
 				{Name: "branch_kept", Type: "bool", Description: "Always true."},
 			},
 			examples: []string{
