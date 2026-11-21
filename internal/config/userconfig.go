@@ -1458,7 +1458,7 @@ func DefaultConfig() *UserConfig {
 			ViewList:          AgentsViewListColumn,
 			Mermaid:           AgentsMermaidAuto,
 			NameHint:          NameHintOn,
-			Askpass:           NameHintOn,
+			Askpass:           AskpassOn,
 			CardPreview:       CardPreviewAuto,
 			AskWaitSeconds:    DefaultAskWaitSeconds,
 			UndoWindowSeconds: DefaultUndoWindowSeconds,

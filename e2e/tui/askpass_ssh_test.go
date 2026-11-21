@@ -56,12 +56,8 @@ func TestAskpassAgentSSHAsksInTheInbox(t *testing.T) {
 	askpassCleanEnv(t)
 	key, pub := askpassKey(t)
 	term, base := attachClientBase(t)
-	dir := t.TempDir()
-	notty := filepath.Join(dir, "notty")
-	if b, err := exec.Command("go", "build", "-o", notty, "./testdata/notty").CombinedOutput(); err != nil {
-		t.Fatalf("build notty: %v\n%s", err, b)
-	}
-	out := filepath.Join(dir, "pub.txt")
+	notty := buildNotty(t)
+	out := filepath.Join(t.TempDir(), "pub.txt")
 
 	line := notty + " " + out + " ssh-keygen -y -f " + key + "\n"
 	if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
@@ -142,23 +138,114 @@ func TestAskpassSSHInAShellPaneAsksInThePane(t *testing.T) {
 	alive(t, term, "after ssh asked in the pane")
 }
 
-// TestAskpassKeepsThePersonsOwnProgram starts the daemon with an SSH_ASKPASS
-// of the person's own. A pane keeps it, and gets no SSH_ASKPASS_REQUIRE from
-// tuios.
+// TestAskpassKeepsThePersonsOwnChoice starts the daemon with the person's own
+// askpass settings. A pane keeps them, and gets nothing from tuios: an
+// SSH_ASKPASS of their own, and an SSH_ASKPASS_REQUIRE of never with no
+// SSH_ASKPASS, which tuios must not turn into force.
 //
-// Negative control: with the check for a set SSH_ASKPASS in buildEnvFor cut,
-// the pane's SSH_ASKPASS names the tuios-askpass link.
-func TestAskpassKeepsThePersonsOwnProgram(t *testing.T) {
-	t.Setenv("SSH_ASKPASS", "/usr/bin/my-askpass")
-	t.Setenv("SSH_ASKPASS_REQUIRE", "")
+// Negative control: with the check for a set SSH_ASKPASS or
+// SSH_ASKPASS_REQUIRE in buildEnvFor cut, the pane's SSH_ASKPASS names the
+// tuios-askpass link.
+func TestAskpassKeepsThePersonsOwnChoice(t *testing.T) {
+	for _, c := range []struct {
+		name, askpass, require, want string
+	}{
+		{"own program", "/usr/bin/my-askpass", "", "ASK=[/usr/bin/my-askpass] REQ=[]"},
+		{"require never", "", "never", "ASK=[] REQ=[never]"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("SSH_ASKPASS", c.askpass)
+			t.Setenv("SSH_ASKPASS_REQUIRE", c.require)
+			term, base := attachClientBase(t)
+			line := "echo ASK=[$SSH_ASKPASS] REQ=[$SSH_ASKPASS_REQUIRE]\n"
+			if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
+				t.Fatalf("send-text: %v\n%s", err, b)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return strings.Contains(s.Text(), c.want)
+			}, uiTimeout); err != nil {
+				t.Fatalf("the pane did not keep the person's settings, want %s: %v\n%s", c.want, err, term.Snapshot())
+			}
+		})
+	}
+}
+
+// buildNotty builds testdata/notty and returns its path.
+func buildNotty(t *testing.T) string {
+	t.Helper()
+	notty := filepath.Join(t.TempDir(), "notty")
+	if b, err := exec.Command("go", "build", "-o", notty, "./testdata/notty").CombinedOutput(); err != nil {
+		t.Fatalf("build notty: %v\n%s", err, b)
+	}
+	return notty
+}
+
+// TestAskpassGitTerminalPromptZeroFailsFast is a tool that wants a prompt to
+// fail at once, as go mod download does with GIT_TERMINAL_PROMPT=0. The
+// askpass program asks nothing: ssh-keygen fails within seconds, as it did
+// before tuios set SSH_ASKPASS, and no dialog opens.
+//
+// Negative control: with the GIT_TERMINAL_PROMPT check in runAsAskpass cut,
+// the dialog opens and ssh-keygen waits for the person.
+func TestAskpassGitTerminalPromptZeroFailsFast(t *testing.T) {
+	askpassCleanEnv(t)
+	key, _ := askpassKey(t)
 	term, base := attachClientBase(t)
-	line := "echo ASK=[$SSH_ASKPASS] REQ=[$SSH_ASKPASS_REQUIRE]\n"
+	notty := buildNotty(t)
+	out := filepath.Join(t.TempDir(), "pub.txt")
+	start := time.Now()
+	line := "GIT_TERMINAL_PROMPT=0 " + notty + " " + out + " ssh-keygen -y -f " + key + "\n"
+	if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, b)
+	}
+	waitFileHas(t, out+".exit", "ssh-keygen ended", uiTimeout, func(s string) bool { return s != "" })
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("ssh-keygen took %s to fail, want a fast failure", took)
+	}
+	if code, _ := os.ReadFile(out + ".exit"); string(code) == "0" {
+		t.Errorf("ssh-keygen unlocked the key with no answer")
+	}
+	stayTrue(t, "no dialog opens for a prompt GIT_TERMINAL_PROMPT=0 refuses", time.Second, func() (bool, string) {
+		snap := term.Snapshot()
+		return !strings.Contains(snap, "Unlock a key"), snap
+	})
+}
+
+// TestAskpassWarnsWhenARealSSHRunsAnotherAskpass is a prompt that a real
+// ssh-keygen asks through an askpass program of an agent's own, which calls
+// askpass itself. The parent is a real ssh-keygen, but the chain is not
+// tuios's: the dialog shows the warning.
+//
+// Negative control: with askpassChainKnown back to a check of the parent
+// alone, no warning shows and the test fails.
+func TestAskpassWarnsWhenARealSSHRunsAnotherAskpass(t *testing.T) {
+	askpassCleanEnv(t)
+	key, _ := askpassKey(t)
+	term, base := attachClientBase(t)
+	notty := buildNotty(t)
+	helper, _ := askpassHelper(t)
+	fish := filepath.Join(t.TempDir(), "fish")
+	b, err := os.ReadFile(helper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fish, b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "pub.txt")
+	line := "SSH_ASKPASS=" + fish + " " + notty + " " + out + " ssh-keygen -y -f " + key + "\n"
 	if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, b)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "ASK=[/usr/bin/my-askpass] REQ=[]")
+		return screenHas(s, "Unlock a key", "Program: ssh-keygen", "tuios cannot check that this program asks")
 	}, uiTimeout); err != nil {
-		t.Fatalf("the pane did not keep the person's SSH_ASKPASS: %v\n%s", err, term.Snapshot())
+		t.Fatalf("a real ssh-keygen running another askpass program got no warning: %v\n%s", err, term.Snapshot())
 	}
+	saveFrame(t, term, "askpass-other-askpass")
+	pause(t, "let the dialog's settle time pass", answerSettle)
+	if err := term.SendKeys("\x1b"); err != nil {
+		t.Fatalf("esc: %v", err)
+	}
+	waitFileHas(t, out+".exit", "ssh-keygen ended", uiTimeout, func(s string) bool { return s != "" })
 }

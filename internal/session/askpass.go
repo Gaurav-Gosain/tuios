@@ -103,6 +103,7 @@ func (d *Daemon) installAskpassLink(socketPath string) {
 		return
 	}
 	d.manager.SetAskpassBin(link)
+	d.manager.SetAskpassAgentsOn(d.agentsEnabled)
 }
 
 // askpassRefused is askpass's refusal, with nothing asked.

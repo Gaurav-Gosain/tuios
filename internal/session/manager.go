@@ -90,6 +90,9 @@ type Manager struct {
 	// askpass turned off. See AskpassEnv.
 	askpassBin atomic.Pointer[string]
 	askpassOff atomic.Bool
+	// askpassAgentsOn reports whether the agent features are on: the
+	// prompts go to the Inbox, which is one. Nil counts as on.
+	askpassAgentsOn atomic.Pointer[func() bool]
 	// paneTokenKey signs the TUIOS_PANE_TOKEN every pane is started with. It
 	// is picked at random for each manager and never leaves memory. See
 	// pane_token.go.
@@ -274,6 +277,12 @@ func (m *Manager) SetAskpass(mode string) {
 	m.askpassOff.Store(strings.EqualFold(strings.TrimSpace(mode), config.AskpassOff))
 }
 
+// SetAskpassAgentsOn gives the manager the daemon's agent switch. A pane gets
+// no SSH_ASKPASS while the agent features are off.
+func (m *Manager) SetAskpassAgentsOn(on func() bool) {
+	m.askpassAgentsOn.Store(&on)
+}
+
 // SetAskpassBin records the tuios-askpass link a pane's SSH_ASKPASS names.
 // "" gives no SSH_ASKPASS.
 func (m *Manager) SetAskpassBin(path string) {
@@ -294,6 +303,9 @@ func (m *Manager) AskpassEnv() []string {
 	// an agent's, so a shell pane's ssh would ask in a dialog. It is off
 	// there until that is solved.
 	if p == nil || *p == "" || m.askpassOff.Load() || runtime.GOOS == "windows" {
+		return nil
+	}
+	if on := m.askpassAgentsOn.Load(); on != nil && !(*on)() {
 		return nil
 	}
 	return []string{"SSH_ASKPASS=" + *p, "SSH_ASKPASS_REQUIRE=force"}

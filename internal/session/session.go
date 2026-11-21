@@ -4535,11 +4535,12 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 		env = append(env, s.config.HerdrEnv(s.ID, windowID, s.herdrTabFor(windowID, workspace), command)...)
 	}
 	// ssh, git and gpg ask the person in the Inbox when the pane's program
-	// has no terminal (askpass.go). An askpass program the person chose, in
-	// the daemon's environment or the caller's, is kept.
+	// has no terminal (askpass.go). The person's own choice wins: a pane
+	// whose environment, the daemon's or the caller's, sets SSH_ASKPASS or
+	// SSH_ASKPASS_REQUIRE (never, prefer or force) gets neither from tuios.
 	if s.config != nil && s.config.AskpassEnv != nil && !slices.ContainsFunc(env, func(kv string) bool {
-		v, ok := strings.CutPrefix(kv, "SSH_ASKPASS=")
-		return ok && v != ""
+		k, v, _ := strings.Cut(kv, "=")
+		return (k == "SSH_ASKPASS" || k == "SSH_ASKPASS_REQUIRE") && v != ""
 	}) {
 		if ask := s.config.AskpassEnv(); len(ask) > 0 {
 			env = slices.DeleteFunc(env, func(kv string) bool {

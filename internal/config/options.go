@@ -1284,8 +1284,8 @@ var optionSpecs = []Option{
 	{
 		Path: "agents.askpass", Type: OptionString, Section: "agents",
 		Description: "Whether ssh, git and gpg in a pane ask you for a passphrase in the Inbox when they have no terminal, as in an agent's command. A pane whose environment already names an SSH_ASKPASS program keeps it. The daemon reads it when it starts a pane",
-		Accepted:    NameHints,
-		Fallback:    NameHintOn, Normalize: trimLower,
+		Accepted:    AskpassModes,
+		Fallback:    AskpassOn, Normalize: trimLower,
 	},
 	{
 		Path: "agents.name_hint", Type: OptionString, Section: "agents",

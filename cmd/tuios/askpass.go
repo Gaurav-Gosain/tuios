@@ -49,6 +49,13 @@ func runAsAskpass(args []string) int {
 	// stops on its own once the key is touched, and "confirm" is a yes or no
 	// question answered by the exit status.
 	kind := os.Getenv("SSH_ASKPASS_PROMPT")
+	// A tool that sets GIT_TERMINAL_PROMPT=0, as go mod download does, wants
+	// a prompt to fail at once rather than wait for a person. git runs
+	// SSH_ASKPASS before it looks at the variable, so the program does.
+	if os.Getenv("GIT_TERMINAL_PROMPT") == "0" {
+		fmt.Fprintln(os.Stderr, "tuios: GIT_TERMINAL_PROMPT=0 is set, so nothing was asked.")
+		return 1
+	}
 	tty, onTerminal := foregroundTerminal()
 	if onTerminal {
 		defer func() { _ = tty.Close() }()
