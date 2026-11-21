@@ -74,16 +74,12 @@ sidebar_show_counts = false
 	if Global.SidebarShowGlyphs || Global.SidebarShowCounts {
 		t.Errorf("show glyphs/counts = %v/%v, want both false", Global.SidebarShowGlyphs, Global.SidebarShowCounts)
 	}
-	// sidebar_show_windows is two spellings old now: it folds into the table,
-	// and the table folds it into the layout. The section is gone from the rail
-	// and every other section is where it was.
 	if got := layoutNames(t); slices.Contains(got, "terminals") {
 		t.Errorf("layout = %v, want no terminals section", got)
 	}
 	if got := layoutNames(t); !slices.Contains(got, "sessions") || !slices.Contains(got, "agents") {
 		t.Errorf("layout = %v, want the sections the file never mentioned left alone", got)
 	}
-	// Knobs the old file never mentioned keep their defaults.
 	if !Global.SidebarMarquee || !Global.DockWorkspaceTabs {
 		t.Errorf("unmentioned knobs drifted: marquee=%v docktabs=%v", Global.SidebarMarquee, Global.DockWorkspaceTabs)
 	}
@@ -110,8 +106,6 @@ width = 20
 	}
 }
 
-// layoutNames is the section names of the live layout, in order, for a test
-// that cares which sections the rail was left with.
 func layoutNames(t *testing.T) []string {
 	t.Helper()
 	var out []string
@@ -121,10 +115,6 @@ func layoutNames(t *testing.T) []string {
 	return out
 }
 
-// loadTOML parses src the way LoadUserConfig does, defaults and all, so a test
-// exercises the same migration and fill order a real config file gets. It
-// calls the one parse function rather than repeating its fill list here, which
-// is how this helper had drifted to one fill of seven.
 func loadTOML(t *testing.T, src string) *UserConfig {
 	t.Helper()
 	cfg, err := ParseUserConfig([]byte(src))
@@ -134,8 +124,6 @@ func loadTOML(t *testing.T, src string) *UserConfig {
 	return cfg
 }
 
-// withSidebarGlobals restores every sidebar/dock global an apply pass writes, so
-// a test may drive ApplyAppearanceConfig without leaking into the next one.
 func withSidebarGlobals(t *testing.T) {
 	t.Helper()
 	e, p, w := Global.SidebarEnabled, Global.SidebarPosition, Global.SidebarWidth
@@ -169,19 +157,12 @@ workspaces = "off"
 	if Global.SidebarMarquee || Global.DockWorkspaceTabs {
 		t.Errorf("explicit false dropped: marquee=%v docktabs=%v", Global.SidebarMarquee, Global.DockWorkspaceTabs)
 	}
-	// show_agents = false is the migration this branch owes anybody whose config
-	// already carries it: the section is off the rail, by way of the layout.
 	if got := layoutNames(t); slices.Contains(got, "agents") {
 		t.Errorf("layout = %v, want no agents section", got)
 	}
-	// And the toggle is consumed, so the next save writes the layout and not the
-	// boolean. Leaving it in the file would fold it again over a layout the user
-	// had since put agents back into.
 	if cfg.Appearance.Sidebar.ShowAgents != nil {
 		t.Errorf("show_agents = %v, want it cleared once folded", *cfg.Appearance.Sidebar.ShowAgents)
 	}
-	// The deprecated key still parses into the struct (a config file written
-	// before it was dropped must not fail to load); nothing reads it any more.
 	if cfg.Appearance.Sidebar.Workspaces != "off" {
 		t.Errorf("workspaces = %q, want the deprecated key still parsed as off", cfg.Appearance.Sidebar.Workspaces)
 	}
@@ -214,7 +195,6 @@ sidebar_position = "right"
 	if s := round.Appearance.Sidebar; s.Enabled == nil || !*s.Enabled || s.Position != "right" {
 		t.Errorf("round trip lost the migrated values: %+v", s)
 	}
-	// The table is written last, so no [appearance] scalar falls inside it.
 	if round.Appearance.BorderStyle != cfg.Appearance.BorderStyle {
 		t.Errorf("border_style = %q after round trip, want %q", round.Appearance.BorderStyle, cfg.Appearance.BorderStyle)
 	}

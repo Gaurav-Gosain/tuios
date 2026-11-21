@@ -46,7 +46,6 @@ func DropLastWord(s string) string {
 	return s[:end]
 }
 
-// isWordRune reports whether r is part of a word for DropLastWord.
 func isWordRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r) || r == '_'
 }

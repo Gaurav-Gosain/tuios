@@ -8,14 +8,11 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// runAt runs one command line in a shell whose pane is cols wide and
-// returns what it printed.
 func runAt(t *testing.T, cols int, cwd, line string) string {
 	t.Helper()
 	p := NewPty(cols, 30)
 	tty := newTTY(p, nil)
 	defer tty.stop()
-	// A full-screen program draws a frame and then waits for a key.
 	_, _ = p.Write([]byte("q"))
 	s := &shell{t: tty, cwd: cwd}
 	done := make(chan struct{})
@@ -88,8 +85,6 @@ func TestLsKeepsNamesWhole(t *testing.T) {
 			got = append(got, strings.Fields(row)...)
 		}
 		if strings.Join(got, " ") == strings.Join(names, " ") {
-			// Row-major order would match too. ls is column-major, so with
-			// more than one row the first column holds the first names.
 			if strings.Count(out, "\r\n") > 1 {
 				t.Errorf("cols %d: names run across the rows, not down the columns:\n%s", cols, out)
 			}

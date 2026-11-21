@@ -49,9 +49,6 @@ func Open(path string) (*os.File, error) {
 	return openPrivate(path)
 }
 
-// on is the internal debug switch. It starts from TUIOS_DEBUG_INTERNAL=1 in
-// the environment, and Enable turns it on later, for a --debug flag that is
-// read after the packages start.
 var on atomic.Bool
 
 func init() { on.Store(os.Getenv("TUIOS_DEBUG_INTERNAL") == "1") }

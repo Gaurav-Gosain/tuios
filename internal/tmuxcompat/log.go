@@ -20,8 +20,6 @@ const (
 	EnvLogAll = "TUIOS_TMUX_SHIM_LOG_ALL"
 )
 
-// logCap is the size past which the log is moved to <path>.1 and started
-// again, so a tool that calls tmux in a loop cannot fill the disk.
 const logCap = 1 << 20
 
 // Outcomes a log entry records.
@@ -106,7 +104,6 @@ func (l *Logger) Record(argv []string, outcome string, detail []string) {
 	if err != nil {
 		return
 	}
-	// The log is best effort: a failed write or close has nowhere to go.
 	_, _ = f.Write(append(line, '\n'))
 	_ = f.Close()
 }

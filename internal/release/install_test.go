@@ -38,8 +38,6 @@ func TestStageAndCommitReplaceAFileThatIsOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stage: %v", err)
 	}
-	// Staging alone must change nothing: everything is downloaded and staged
-	// before anything is committed, so a failure part way leaves the old pair.
 	if got, _ := os.ReadFile(target); string(got) != "old build" { // #nosec G304
 		t.Fatalf("staging changed the target to %q", got)
 	}

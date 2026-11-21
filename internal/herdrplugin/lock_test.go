@@ -68,13 +68,11 @@ func TestLockPathsStayInside(t *testing.T) {
 		}
 	}
 
-	// A state dir must be one folder in plugins/<id>/.
 	for _, bad := range []string{"", "plugins/other/x", "plugins/e2e.probe/..", "plugins/e2e.probe/a/../../../x", "/etc", "plugins/e2e.probe/", "plugins/e2e.probe/a\\b"} {
 		if CheckDir(ok.ID, bad) == nil {
 			t.Errorf("CheckDir(%q) passed", bad)
 		}
 	}
-	// herdr's id rules allow "." and "..". PathComponent keeps them inside.
 	d := Dirs{TuiosData: t.TempDir()}
 	for _, id := range []string{ok.ID, "..", ".", "a..b"} {
 		e := ok

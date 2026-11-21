@@ -7,27 +7,6 @@ import (
 	"strings"
 )
 
-// Which-key menus: the menus a key opens, for keymaps that nest as deep as a
-// tmux which-key tree. A menu is a [menus.NAME] table (menus_config.go) whose
-// rows have keys, and any section binds the action open_menu:NAME to open
-// it, so a menu can sit under the leader, under another menu, or on a key of
-// its own:
-//
-//	[menus.split]
-//	title = "Split"
-//	items = [
-//	  { action = "split_vertical", key = "y" },
-//	  { action = "split_horizontal", key = "x" },
-//	]
-//
-//	[keybindings.window_prefix]
-//	"open_menu:split" = ["s"]
-//
-// leader, t, s, y then splits. The older spelling, [keybindings.menus.NAME]
-// with a keys table of action = [keys], is read as it always was; the loader
-// adds the [menus.NAME] ones to KeybindingsConfig.Menus. Nothing here ships
-// bound: a menu exists only when a config declares it.
-
 // OpenMenuPrefix starts the action that opens a declared menu.
 const OpenMenuPrefix = "open_menu:"
 
@@ -47,11 +26,7 @@ type MenuConfig struct {
 	// Keys binds actions to keys, as every other section does.
 	Keys map[string][]string `toml:"keys,omitempty"`
 
-	// labels are the rows' own labels of a [menus.NAME], which the panel
-	// shows in the place of the action's description.
 	labels map[string]string
-	// groups are the actions of a [menus.NAME] in the order the rows give
-	// them, split where a separator is. The panel shows them in that order.
 	groups [][]string
 }
 
@@ -64,9 +39,6 @@ func MenuNameOf(action string) (string, bool) {
 	return name, ok && name != ""
 }
 
-// validMenuName reports whether name can name a menu: lowercase letters,
-// digits, dash and underscore, so it is a bare TOML key and has no dot to
-// split a table path on.
 func validMenuName(name string) bool {
 	if name == "" {
 		return false
@@ -114,7 +86,6 @@ func (k *KeybindingsConfig) MenuTitle(name string) string {
 	return name
 }
 
-// menuSection is the keys of the menu a "menus.NAME" section name refers to.
 func (k *KeybindingsConfig) menuSection(section string) (map[string][]string, bool) {
 	name, ok := strings.CutPrefix(section, MenuSectionPrefix)
 	if !ok {
@@ -136,11 +107,6 @@ func (k *KeybindingsConfig) SectionNamesFor() []string {
 	return names
 }
 
-// menuScopes is the scope of each declared menu, for ScopesFor. Its chord is
-// what opens it: the chord of the scope that binds open_menu:NAME, then that
-// key, found through however many menus it sits under. A menu nothing opens
-// gets open_menu:NAME in the chord's place, which is what binding it would
-// take.
 func menuScopes(kb *KeybindingsConfig, scopes []Scope) []Scope {
 	names := kb.MenuNames()
 	if len(names) == 0 {
@@ -237,7 +203,7 @@ func MenuKeybindingGroups(kb *KeybindingsConfig, name string) []KeybindingGroup 
 		if a != b {
 			return a < b
 		}
-		return rows[i].Key > rows[j].Key // h before H
+		return rows[i].Key > rows[j].Key
 	})
 	if !escBound {
 		rows = append(rows, Keybinding{Key: "esc", Description: "Cancel", Action: "menu_cancel"})
@@ -245,8 +211,6 @@ func MenuKeybindingGroups(kb *KeybindingsConfig, name string) []KeybindingGroup 
 	return []KeybindingGroup{{Bindings: rows}}
 }
 
-// orderedMenuGroups lays rows out in the order of groups, one panel section
-// per group. The esc row goes last when the menu does not bind esc.
 func orderedMenuGroups(groups [][]string, rows []Keybinding, escBound bool) []KeybindingGroup {
 	var out []KeybindingGroup
 	for _, g := range groups {
@@ -267,7 +231,6 @@ func orderedMenuGroups(groups [][]string, rows []Keybinding, escBound bool) []Ke
 	return out
 }
 
-// menuRowDescription is the sentence for an action in a menu's panel.
 func menuRowDescription(kb *KeybindingsConfig, action string) string {
 	if c, ok := kb.CommandFor(action); ok {
 		return c.Label()
@@ -275,8 +238,6 @@ func menuRowDescription(kb *KeybindingsConfig, action string) string {
 	return describeAction(action)
 }
 
-// validateMenus warns about a menu tuios cannot use or a key that opens one
-// that is not there.
 func validateMenus(cfg *UserConfig, result *ValidationResult) {
 	kb := &cfg.Keybindings
 	for name := range kb.Menus {
@@ -293,8 +254,6 @@ func validateMenus(cfg *UserConfig, result *ValidationResult) {
 			if len(table[action]) == 0 {
 				continue
 			}
-			// A key that turns on a key mode (key_modes.go) is checked here
-			// too, so the two kinds of name share one walk of the tables.
 			if mode, ok := ModeNameOf(action); ok {
 				if _, declared := kb.Mode(mode); !declared {
 					result.Warnings = append(result.Warnings, ValidationError{
@@ -322,8 +281,6 @@ func validateMenus(cfg *UserConfig, result *ValidationResult) {
 		check(section.name, section.keys)
 	}
 	for _, name := range kb.MenuNames() {
-		// A [menus.NAME] may be opened by a right-click row, so only a
-		// [keybindings.menus.NAME] that no key opens is unused.
 		if !opened[name] && !cfg.foldedMenus[name] {
 			result.Warnings = append(result.Warnings, ValidationError{
 				Field: "menus", Key: name,
@@ -334,10 +291,6 @@ func validateMenus(cfg *UserConfig, result *ValidationResult) {
 	validateOverlayMenus(cfg, result)
 }
 
-// menuOverlayTables are the overlay tables open_menu works in (issue
-// #1590): the menu opens over the overlay, and its keys run that overlay's
-// own actions. The prefix and terminal tables open a menu through the
-// dispatcher, where a menu key runs any action.
 var menuOverlayTables = [...]Table{
 	TableSidebar, TableSidebarFiles, TableSidebarAgents, TableQuickLook, TableQuickLookInside,
 	TableInbox, TableInboxPeek, TableMail, TableTransfers, TableReview,
@@ -347,11 +300,6 @@ var menuOverlayTables = [...]Table{
 // that overlay, so that its keys run the overlay's actions.
 func MenuOverlayTable(t Table) bool { return slices.Contains(menuOverlayTables[:], t) }
 
-// validateOverlayMenus warns about a key of a menu opened over an overlay
-// whose action that overlay does not have: the overlay runs the menu's
-// actions, so new_window in a menu opened from [keybindings.inbox] does
-// nothing. A menu the overlay's menu opens runs over the same overlay, so it
-// is checked the same way.
 func validateOverlayMenus(cfg *UserConfig, result *ValidationResult) {
 	kb := &cfg.Keybindings
 	if len(kb.Menus) == 0 {

@@ -7,15 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// Turns: a thread read as the person's prompts and the work each one set
-// off. A turn is a prompt and every entry after it up to the next prompt. A
-// finished turn folds its work, the tool calls, the thinking and the words in
-// between, to one sentence such as "Edited 3 files, ran 4 commands and read 6
-// files". The prompt and the final answer always show.
-//
-// This part draws nothing. The TUI's thread and guios both fold turns with
-// it, so they fold the same turns and say the same sentence.
-
 // Action is what a tool call did, as a turn's summary counts it. The order
 // is the summary's: an edit is named first, then a command, a read, a search,
 // and any other tool last.
@@ -38,8 +29,6 @@ func ToolAction(tool string, edit bool) Action {
 	if edit {
 		return ActionEdit
 	}
-	// Claude Code's names, then those of the other harnesses whose
-	// transcripts this package reads.
 	switch strings.ToLower(tool) {
 	case "edit", "multiedit", "write", "notebookedit",
 		"apply_patch", "replace", "write_file", "edit_file", "search_replace", "create", "str_replace":
@@ -71,8 +60,6 @@ type Step struct {
 	At    int64
 }
 
-// interrupted reports whether a user entry marks an interrupt rather than a
-// prompt.
 func (s *Step) interrupted() bool {
 	return Interrupt(s.Role, s.Kind, s.Text)
 }
@@ -84,7 +71,6 @@ func Interrupt(role, kind, text string) bool {
 	return kind == KindInterrupt || role == RoleUser && kind == KindText && InterruptText(text)
 }
 
-// prompt reports whether the step starts a turn.
 func (s *Step) prompt() bool {
 	return s.Role == RoleUser && s.Kind == KindText && !s.Image && !s.interrupted()
 }
@@ -172,9 +158,6 @@ func Turns(steps []Step, resting bool) []Turn {
 		if j < len(steps) {
 			t.Finished = true
 		} else if resting {
-			// The last turn is over when its last entry, results aside, is
-			// the answer, or the person stopped the agent or declined its
-			// call there.
 			last := j - 1
 			for last > i && steps[last].Kind == KindToolResult {
 				last--
@@ -243,7 +226,6 @@ func (t *Turn) Summary() string {
 	return s
 }
 
-// actionWords says n calls of action a, in lower case.
 func actionWords(a Action, n int) string {
 	switch a {
 	case ActionEdit:
@@ -258,7 +240,6 @@ func actionWords(a Action, n int) string {
 	return "used " + plural.CountAs(n, "tool", "tools")
 }
 
-// times is "once" or "n times".
 func times(n int) string {
 	if n == 1 {
 		return "once"

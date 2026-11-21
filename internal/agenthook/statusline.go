@@ -22,21 +22,12 @@ type StatusLineOptions struct {
 	TurnEnd bool
 }
 
-// statusLineInterval is the shortest gap between two reports for one pane
-// while the values keep changing. A status line runs up to three times a
-// second during a turn, and the rail has no use for every one.
 const statusLineInterval = 15 * time.Second
 
-// statusLineRefresh is how long unchanged values go before they are sent
-// again, so a daemon that restarted gets them back.
 const statusLineRefresh = 10 * time.Minute
 
-// statusLineNoPaneWait is how long a process no pane was found for waits
-// before it asks the daemon again.
 const statusLineNoPaneWait = time.Minute
 
-// contextWarnAt is the context use the rail warns at. Crossing it is reported
-// at once, whatever the interval.
 const contextWarnAt = 80
 
 // StatusLineOutcome is what --explain prints.
@@ -103,10 +94,6 @@ func ReportStatusLine(o StatusLineOptions, harness string, payload []byte, sio I
 	case getenv("TUIOS_PANE_ID") != "":
 		out.Window, out.PaneBy = getenv("TUIOS_PANE_ID"), "env"
 	default:
-		// No pane named: ask the daemon which pane this process runs in,
-		// the way agent-hook does. A status line runs several times a
-		// second, so a process in no pane (a harness outside tuios) asks
-		// at most once a minute.
 		var sid int
 		var ancestors []int
 		if sio.Self != nil {
@@ -145,10 +132,6 @@ func ReportStatusLine(o StatusLineOptions, harness string, payload []byte, sio I
 	}
 	if due, why := statusLineDue(prev, values, now(), o.TurnEnd); !due {
 		out.Skip = why
-		// A change held back by the interval is kept as pending, so the
-		// end of the turn can send it: Claude Code runs the status line
-		// only while the conversation changes, and the last values of a
-		// turn are usually the ones held.
 		if stampPath != "" && statusLineChanged(prev, values) {
 			WritePending(stampPath, prev, values)
 		}
@@ -165,7 +148,6 @@ func ReportStatusLine(o StatusLineOptions, harness string, payload []byte, sio I
 	}
 	tokens := values.Tokens()
 	if prev != nil && prev.Session == values.Session {
-		// What a held run saw and this payload leaves out goes too.
 		for k, v := range prev.Pending {
 			if _, ok := tokens[k]; !ok {
 				tokens[k] = v
@@ -191,7 +173,6 @@ func ReportStatusLine(o StatusLineOptions, harness string, payload []byte, sio I
 	return out
 }
 
-// statusLineChanged reports whether values differ from what was last sent.
 func statusLineChanged(prev *Stamp, values integration.StatusLineValues) bool {
 	if prev == nil || values.Session != prev.Session {
 		return true
@@ -204,9 +185,6 @@ func statusLineChanged(prev *Stamp, values integration.StatusLineValues) bool {
 	return false
 }
 
-// statusLineDue says whether values should be sent now, given what was sent
-// last, and why not when they should not. turnEnd sends changed values at
-// once, so a turn's last cost is not held until the next turn.
 func statusLineDue(prev *Stamp, values integration.StatusLineValues, now time.Time, turnEnd bool) (bool, string) {
 	if prev == nil {
 		return true, ""
@@ -216,7 +194,6 @@ func statusLineDue(prev *Stamp, values integration.StatusLineValues, now time.Ti
 	}
 	since := now.Sub(time.UnixMilli(prev.At))
 	if since < 0 {
-		// The clock went back: treat the stamp as old.
 		return true, ""
 	}
 	next := values.Tokens()
@@ -236,14 +213,11 @@ func statusLineDue(prev *Stamp, values integration.StatusLineValues, now time.Ti
 		return true, ""
 	}
 	if prev.RestAt != 0 && prev.RestAt >= prev.At {
-		// The turn ended after the last report: the values a run after
-		// the end brings are the turn's last, so they go now.
 		return true, ""
 	}
 	return false, "changed, but reported " + since.Round(time.Millisecond).String() + " ago"
 }
 
-// warned reports whether a context value is at or over the rail's warning.
 func warned(context string) bool {
 	n, err := strconv.Atoi(strings.TrimSuffix(context, "%"))
 	return err == nil && n >= contextWarnAt

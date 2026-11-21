@@ -13,10 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/diffview/lexers"
 )
 
-// Limits past which a text is drawn plain rather than tokenised. chroma's
-// lexers are regular expressions, and a minified file or a generated one can
-// hold a line long enough to make one of them crawl. A diff that big is not
-// read for its colours.
 const (
 	maxHighlightBytes = 512 << 10
 	maxHighlightLine  = 4096
@@ -27,18 +23,12 @@ const (
 // the page.
 const Enabled = true
 
-// lexerCache holds the lexer for each file name, nil for none. Matching a
-// name runs every lexer's patterns, which is the slow part of a lookup, and
-// the answer for a name never changes.
-var lexerCache sync.Map // string -> chroma.Lexer (nil stored as noLexer)
+var lexerCache sync.Map
 
 type noLexerT struct{}
 
 var noLexer noLexerT
 
-// lexerFor finds the lexer for a path by its name, then by the first line of
-// the text for a file with no extension (a script with a #! line). It is nil
-// when nothing matches.
 func lexerFor(path, text string) chroma.Lexer {
 	name := filepath.Base(path)
 	if v, ok := lexerCache.Load(name); ok {
@@ -54,9 +44,6 @@ func lexerFor(path, text string) chroma.Lexer {
 		l = reg.Analyse(first)
 	}
 	if l == nil {
-		// A name with no extension is cached with its shebang's answer
-		// only when it had one, so a later file of the same name with a
-		// different first line is asked again.
 		if filepath.Ext(name) != "" {
 			lexerCache.Store(name, noLexer)
 		}
@@ -85,9 +72,6 @@ func Highlight(path string, lines []string) [][]Span {
 	if !ok {
 		return nil
 	}
-	// A lexer that changed the text (some normalise line endings or
-	// expand tabs) would leave spans that do not fit the lines. Such a line
-	// is drawn plain rather than with colours in the wrong places.
 	for i, spans := range out {
 		if n := len(spans); n > 0 && spans[n-1].End > len(lines[i]) {
 			out[i] = nil
@@ -96,12 +80,8 @@ func Highlight(path string, lines []string) [][]Span {
 	return out
 }
 
-// langCache holds the lexer for each language name a lexer answers to. The
-// names come from a fixed registry, so it stays small.
-var langCache sync.Map // string -> chroma.Lexer
+var langCache sync.Map
 
-// langMisses holds names no lexer answers to, at most langMissMax of them:
-// the names come from agents' text, so the set is emptied when it fills.
 var (
 	langMissMu sync.Mutex
 	langMisses = map[string]bool{}
@@ -109,9 +89,6 @@ var (
 
 const langMissMax = 64
 
-// lexerForLang finds the lexer for a language as a Markdown code fence
-// names it: a name or alias such as "go", "python" or "sh", or a file
-// extension.
 func lexerForLang(lang string) chroma.Lexer {
 	lang = strings.ToLower(lang)
 	if v, ok := langCache.Load(lang); ok {
@@ -209,8 +186,6 @@ func Tokens(path string, lines []string, skipLine int) [][]Token {
 	return out
 }
 
-// cssClass is chroma's short CSS class name for a token type, or for the
-// nearest type above it that has one. Plain text has none.
 func cssClass(t chroma.TokenType) string {
 	for _, tt := range []chroma.TokenType{t, t.SubCategory(), t.Category()} {
 		if c, ok := chroma.StandardTypes[tt]; ok {
@@ -220,19 +195,11 @@ func cssClass(t chroma.TokenType) string {
 	return ""
 }
 
-// tokenise runs the lexer for path over lines as one text and calls add for
-// each piece of a token on one line, in byte offsets of that line. It
-// reports false when the file type is not known, the text is past the
-// limits, or the lexer fails.
 func tokenise(path string, lines []string, add func(line, start, end int, t chroma.TokenType)) (ok bool) {
 	return tokeniseWith(func(text string) chroma.Lexer { return lexerFor(path, text) }, lines, add)
 }
 
-// tokeniseWith is tokenise with the lexer found by find from the text.
 func tokeniseWith(find func(text string) chroma.Lexer, lines []string, add func(line, start, end int, t chroma.TokenType)) (ok bool) {
-	// A lexer that hands text to one this build does not carry panics
-	// mid-tokenise. lexers/gen.go refuses to write such a set, and this
-	// keeps a mistake in it to a plain hunk rather than a crash.
 	defer func() {
 		if recover() != nil {
 			ok = false
@@ -281,8 +248,6 @@ func tokeniseWith(find func(text string) chroma.Lexer, lines []string, add func(
 	return true
 }
 
-// addSpan appends a span, merging it into the last one when they are of one
-// class and touch.
 func addSpan(spans []Span, start, end int, class Class) []Span {
 	if class == Plain {
 		return spans
@@ -294,7 +259,6 @@ func addSpan(spans []Span, start, end int, class Class) []Span {
 	return append(spans, Span{Start: start, End: end, Class: class})
 }
 
-// classOf maps chroma's token types onto the classes.
 func classOf(t chroma.TokenType) Class {
 	switch {
 	case t == chroma.CommentPreproc || t == chroma.CommentPreprocFile:

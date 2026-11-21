@@ -8,22 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The ink a per-type file icon burns on the rail.
-//
-// The hex a file icon arrives with is absolute. It comes from
-// nvim-web-devicons, which picked it against an editor's own dark ground and
-// knows nothing about the theme the user is running. Drawn as given, a ruby red
-// (#701516) measures 1.3:1 on a dark background and a dotenv yellow (#FAF743)
-// measures 1.1:1 on a light one, so one end of the palette or the other is
-// simply gone.
-//
-// So the hue is kept and the luminance is spent. ReadableAt carries the colour
-// toward the ground's own text end until it clears MarkFloor, which is the 3:1
-// WCAG 2.1 holds a non-text graphic to. An icon is a shape as well as a colour,
-// which is why it is held to the mark floor rather than to the 4.5:1 the name
-// beside it clears: lifting every colour to text contrast is what turns the
-// ruby red into pink and loses the thing the colour was for.
-
 // RailGround is what the rail's rows are drawn on.
 //
 // The rail paints no fill of its own, so a row sits on whatever the terminal's
@@ -40,14 +24,6 @@ func RailGround() color.Color {
 	return uiCanvas
 }
 
-// fileIconMemo holds the answers per ground. ReadableAt walks up to sixteen
-// blends measuring a contrast ratio at each, and the icons are read once per
-// drawn row on every rail rebuild, so the walk is done once per colour and kept.
-//
-// Four grounds rather than one because a rail draws on more than one at a time:
-// the resting rows sit on the terminal's background and the row under the
-// pointer sits on a band of its own, and a single slot would be cleared and
-// refilled on every one of those transitions.
 var fileIconMemo struct {
 	sync.Mutex
 	ground [4][4]uint32

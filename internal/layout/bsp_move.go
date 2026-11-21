@@ -1,18 +1,5 @@
 package layout
 
-// Edits for a client that rearranges panes by dragging them: put a pane beside
-// another, put it at one side of everything, and set one split's ratio. They
-// are pure tree edits with no tiling policy in them, so a renderer can run the
-// same edit on its own copy of the tree and show the result before the answer
-// comes back (see the GUI bridge's layout commands).
-//
-// Each edit keeps the node objects it does not have to replace. A node's ID is
-// what a renderer names a split by, so a split that survives an edit keeps its
-// ID, and a renderer holding the old tree can still match it up.
-
-// split is the split a pane on this side makes: a vertical divider for left and
-// right, a horizontal one for up and down. Side is the type focus steps by
-// (neighbour.go); here up means above and down means below.
 func (s Side) split() SplitType {
 	if s == SideLeft || s == SideRight {
 		return SplitVertical
@@ -36,12 +23,8 @@ func (s Side) Preselection() PreselectionDir {
 	return PreselectionNone
 }
 
-// near reports whether the pane on this side is the near (left or top) child.
 func (s Side) near() bool { return s == SideLeft || s == SideUp }
 
-// detach takes a leaf out of the tree and lets its sibling take the parent's
-// place, as RemoveWindow does, but keeps the leaf node itself so it can be put
-// back elsewhere with its ID. The window stays out of WindowToNode until it is.
 func (t *BSPTree) detach(leaf *TileNode) {
 	delete(t.WindowToNode, leaf.WindowID)
 	parent := leaf.Parent
@@ -67,8 +50,6 @@ func (t *BSPTree) detach(leaf *TileNode) {
 	parent.Left, parent.Right, parent.Parent = nil, nil, nil
 }
 
-// pair puts leaf next to other under a new split, on side, in other's place in
-// the tree. other may be a leaf or a whole subtree (the root).
 func (t *BSPTree) pair(leaf, other *TileNode, side Side, ratio float64) {
 	parent := other.Parent
 	var node *TileNode
@@ -157,8 +138,6 @@ func (t *BSPTree) SetSplitRatio(id uint64, ratio float64, bounds Rect, gap int) 
 	lo, hi = lo-origin, hi-origin
 	line := int(float64(extent) * ratio)
 	if line < lo || line > hi {
-		// Aim at the middle of the cell, as ResizeSplit does, so the layout's
-		// truncation lands the divider on the cell the clamp chose.
 		ratio = (float64(max(lo, min(line, hi))) + 0.5) / float64(extent)
 	}
 	node.SplitRatio = ratio
@@ -172,9 +151,6 @@ func SplitBounds(node *TileNode, bounds Rect, gap int) (near, far Rect) {
 	return childBounds(node, bounds, gap)
 }
 
-// shareRatio is the ratio of a split that gives the pane on side share of the
-// space: the near child's share, so a pane on the far side takes the rest.
-// share outside (0, 1) takes the tree's default.
 func (t *BSPTree) shareRatio(side Side, share float64) float64 {
 	if share <= 0 || share >= 1 {
 		return t.splitRatio()
@@ -246,8 +222,6 @@ func (t *BSPTree) NudgeBorder(windowID int, side Side, amount float64) bool {
 	if p == nil {
 		return false
 	}
-	// The split's own extent along the axis, as a share of the layout, turns
-	// the layout share into a change of the split's ratio.
 	span := 1.0
 	for c := p; c.Parent != nil; c = c.Parent {
 		if q := c.Parent; q.SplitType == axis {

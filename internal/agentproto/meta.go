@@ -12,12 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// What the pane reports about its agent beyond its state: the model, the
-// context use, the cost and the plan's progress as agent metadata, and each
-// tool call and turn as activity. Both are display only at the daemon, and
-// both are optional parts of a Reporter: one that does not implement them is
-// sent neither.
-
 // MetaReporter is a Reporter that also writes the pane's agent metadata.
 type MetaReporter interface {
 	// SetMeta sets metadata keys for the pane. A key missing from tokens is
@@ -73,11 +67,8 @@ const (
 	MetaContextWindow = "context_window"
 )
 
-// maxActivityText bounds the text of one activity. The daemon cleans and
-// cuts it again; this only keeps a long command from riding every report.
 const maxActivityText = 200
 
-// metaFromUsage is the metadata a Usage states, formatted for the rail.
 func metaFromUsage(u Usage) map[string]string {
 	out := map[string]string{}
 	if m := oneLine(u.Model); m != "" {
@@ -90,7 +81,6 @@ func metaFromUsage(u Usage) map[string]string {
 		out[MetaContextWindow] = strconv.FormatInt(u.ContextSize, 10)
 	}
 	if u.ClearCost {
-		// An empty value is sent as null, which removes the key.
 		out[MetaCost] = ""
 	}
 	if u.HasCost && u.Cost >= 0 && !math.IsNaN(u.Cost) && !math.IsInf(u.Cost, 0) {
@@ -105,7 +95,6 @@ func metaFromUsage(u Usage) map[string]string {
 	return out
 }
 
-// planProgress is a plan as done of total, "" for an empty plan.
 func planProgress(p Plan) string {
 	if len(p.Entries) == 0 {
 		return ""
@@ -119,9 +108,6 @@ func planProgress(p Plan) string {
 	return strconv.Itoa(done) + "/" + strconv.Itoa(len(p.Entries))
 }
 
-// activityTool is a tool call as an activity's tool and target: the kind in
-// the words the hooks use for the same thing (Bash, Edit, Read), and the
-// command, the files or the title.
 func activityTool(t Tool) (tool, target string) {
 	switch t.Kind {
 	case "execute":
@@ -158,56 +144,32 @@ func activityTool(t Tool) (tool, target string) {
 	return tool, clip(target)
 }
 
-// clip is s on one line, cut to maxActivityText cells.
 func clip(s string) string {
 	return ansi.Truncate(oneLine(clean(s)), maxActivityText, "...")
 }
 
-// feed sends metadata and activity on a goroutine of its own, so a slow
-// daemon never holds the pane's input and render loop.
-//
-// Activity waits in order, at most maxQueuedActivity of it: when the daemon
-// falls that far behind, the oldest is dropped. Metadata waits as the pane's
-// values as they stand now, so a burst of updates becomes one call, and each
-// call sends only the keys that changed since the last one the daemon took.
-//
-// What was sent is forgotten when a call fails and when resync is called, and
-// then every key goes again. A failed call is tried again after
-// feedRetryAfter, up to feedRetries times in a row, and the Session calls resync at each turn start, so values
-// the daemon lost (a restart, or a clear to none) come back without waiting
-// for the agent to change them.
 type feed struct {
-	meta MetaReporter
-	act  ActivityReporter
-	wake chan struct{}
-	done chan struct{}
-	// exited is closed when run returns.
+	meta   MetaReporter
+	act    ActivityReporter
+	wake   chan struct{}
+	done   chan struct{}
 	exited chan struct{}
 
-	mu   sync.Mutex
-	want map[string]string
-	acts []Activity
-	// forget says the next pass sends every key, not only the changed ones.
-	forget bool
-	// retry is set while a failed metadata call waits to be tried again,
-	// retryAfter later.
+	mu         sync.Mutex
+	want       map[string]string
+	acts       []Activity
+	forget     bool
 	retry      *time.Timer
 	retryAfter time.Duration
 }
 
-// maxQueuedActivity bounds the activity waiting for a slow daemon.
 const maxQueuedActivity = 64
 
-// feedRetryAfter is how long a failed metadata call waits before it is tried
-// again, and feedRetries how many times in a row. After that the values go
-// with the next change or the next turn.
 const (
 	feedRetryAfter = 5 * time.Second
 	feedRetries    = 3
 )
 
-// newFeed starts a feed for whichever of meta and act is not nil. It returns
-// nil when both are. retryAfter is feedRetryAfter when zero.
 func newFeed(meta MetaReporter, act ActivityReporter, retryAfter time.Duration) *feed {
 	if meta == nil && act == nil {
 		return nil
@@ -227,7 +189,6 @@ func (f *feed) poke() {
 	}
 }
 
-// setMeta hands the feed the pane's metadata as it stands now.
 func (f *feed) setMeta(all map[string]string) {
 	if f.meta == nil {
 		return
@@ -238,7 +199,6 @@ func (f *feed) setMeta(all map[string]string) {
 	f.poke()
 }
 
-// activity queues one activity.
 func (f *feed) activity(a Activity) {
 	if f.act == nil {
 		return
@@ -252,7 +212,6 @@ func (f *feed) activity(a Activity) {
 	f.poke()
 }
 
-// resync makes the next pass send every metadata key again.
 func (f *feed) resync() {
 	f.mu.Lock()
 	f.forget = true
@@ -306,8 +265,6 @@ func (f *feed) run() {
 			failures = 0
 			continue
 		}
-		// The daemon may have taken some of it, or be gone: send it all
-		// next time, and try again even if nothing changes.
 		clear(sent)
 		failures++
 		if failures > feedRetries {
@@ -326,7 +283,6 @@ func (f *feed) run() {
 	}
 }
 
-// stop ends the feed. What is still waiting is not sent.
 func (f *feed) stop() {
 	close(f.done)
 	<-f.exited

@@ -7,7 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// backlogWindow builds a daemon window with a drained data channel.
 func backlogWindow(t *testing.T, id string) *Window {
 	t.Helper()
 	ptyData := make(chan struct{}, 1)
@@ -42,7 +41,6 @@ func backlogWindow(t *testing.T, id string) *Window {
 func TestCoalescerPacesDownAPaneThatIsBehind(t *testing.T) {
 	w := backlogWindow(t, "coal-backlog")
 
-	// A cheap frame, so cost alone would put the pane at the floor.
 	w.ChargeRenderCost(time.Millisecond)
 	if got := w.coalesceInterval(); got != minCoalesceInterval {
 		t.Fatalf("a caught-up pane with a cheap frame paced at %v, want the %v floor", got, minCoalesceInterval)
@@ -58,16 +56,11 @@ func TestCoalescerPacesDownAPaneThatIsBehind(t *testing.T) {
 		t.Errorf("a pane at the backlog paced at %v, want %v", got, w.catchUpCoalesceInterval())
 	}
 
-	// An expensive frame keeps its own, longer interval while the pane is
-	// behind: the catch-up interval is a floor, so it never draws a pane
-	// that is behind faster than what its frames cost allows.
 	w.ChargeRenderCost(time.Second)
 	if got := w.coalesceInterval(); got != maxCoalesceInterval {
 		t.Errorf("a pane both behind and expensive paced at %v, want the %v ceiling", got, maxCoalesceInterval)
 	}
 
-	// And it lets go once the pane has caught up, so a pane is not left at 4fps
-	// by a burst it has already worked through.
 	w.queuedBytes.Store(0)
 	if got := w.coalesceInterval(); got != maxCoalesceInterval {
 		t.Errorf("a caught-up pane with an expensive frame paced at %v, want the %v ceiling", got, maxCoalesceInterval)
@@ -87,11 +80,8 @@ func TestPacedCoalescerStillEmitsWhileBehind(t *testing.T) {
 	}
 	t.Cleanup(w.Close)
 
-	// Hold the pane over the backlog for the whole burst, so every interval it
-	// arms is the catch-up one.
 	w.queuedBytes.Store(catchUpBacklog * 4)
 
-	// The signals as they arrive, each with its time.
 	signals := make(chan time.Time, 1024)
 	done := make(chan struct{})
 	drained := make(chan struct{})
@@ -111,11 +101,6 @@ func TestPacedCoalescerStillEmitsWhileBehind(t *testing.T) {
 		<-drained
 	}()
 
-	// The burst. lastNote is taken before the final noteOutput, not after
-	// the sleep that follows it: a signal for that output can land inside
-	// the sleep, and timed against the end of the sleep it looked early
-	// although it drew the final output (the CI failure saw one 4.5 us
-	// before such a lastNote).
 	var lastNote time.Time
 	deadline := time.Now().Add(600 * time.Millisecond)
 	for time.Now().Before(deadline) {
@@ -124,9 +109,6 @@ func TestPacedCoalescerStillEmitsWhileBehind(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// Wait for a signal after the final output, for at most one catch-up
-	// interval and a margin. Each signal is its own condition: the wait ends
-	// on the one that matters, not on a fixed sleep.
 	timeout := time.After(w.catchUpCoalesceInterval() + 400*time.Millisecond)
 	seen := 0
 	for {

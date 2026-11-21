@@ -15,20 +15,6 @@ import (
 	"github.com/charmbracelet/x/xpty"
 )
 
-// These tests pin the choice between conpty.dll and the inbox ConPTY: only
-// the folder of tuios.exe may supply the DLL (a planted one would run code in
-// the daemon), and a missing, unloadable or OpenConsole-less DLL leaves the
-// pane on the inbox ConPTY. Each case is told apart by the pty that comes
-// back and by the log, which is silent when there is no DLL to try. The E2E
-// suite does not run on Windows, so the windows job in go-test.yml runs these
-// as unit tests, with the real DLL from the Microsoft.Windows.Console.ConPTY
-// package for the two that need it.
-//
-// Negative control: cutting the lookup, the fallback, the OpenConsole.exe
-// check or Start's path helpers each fails the test named for it.
-
-// garbageDLL writes a conpty.dll that LoadLibraryEx refuses, and an
-// OpenConsole.exe beside it so the load is attempted.
 func garbageDLL(t *testing.T, dir string) {
 	t.Helper()
 	for _, name := range []string{conptyDLLName, openConsoleName} {
@@ -38,7 +24,6 @@ func garbageDLL(t *testing.T, dir string) {
 	}
 }
 
-// useConPTYDLL points the lookup at dir for the duration of the test.
 func useConPTYDLL(t *testing.T, dir string) {
 	t.Helper()
 	prev := sideBySideConPTY
@@ -46,28 +31,20 @@ func useConPTYDLL(t *testing.T, dir string) {
 	t.Cleanup(func() { sideBySideConPTY = prev })
 }
 
-// spawnEcho opens a pane that prints marker and returns the pty and the log
-// lines Spawn wrote, once marker has shown up.
 func spawnEcho(t *testing.T, marker string) (xpty.Pty, []string) {
 	t.Helper()
 	pty, logged, _ := spawnUntil(t, marker, command(os.Getenv("ComSpec"), "/c", "echo "+marker), printed(marker))
 	return pty, logged
 }
 
-// command is a newCmd for Spawn that runs argv.
 func command(argv ...string) func() *exec.Cmd {
 	return func() *exec.Cmd { return exec.Command(argv[0], argv[1:]...) }
 }
 
-// printed is a done for spawnUntil that waits for marker.
 func printed(marker string) func([]byte) bool {
 	return func(out []byte) bool { return bytes.Contains(out, []byte(marker)) }
 }
 
-// spawnUntil opens a pane running newCmd's command and reads it until done
-// says the output so far holds what the test waits for, named by what. It
-// returns the pty, the log lines Spawn wrote and the output. It answers the
-// DA1 query OpenConsole sends when it starts, as tuios's emulator would.
 func spawnUntil(t *testing.T, what string, newCmd func() *exec.Cmd, done func([]byte) bool) (xpty.Pty, []string, []byte) {
 	t.Helper()
 	var logged []string
@@ -109,8 +86,6 @@ func spawnUntil(t *testing.T, what string, newCmd func() *exec.Cmd, done func([]
 	return nil, nil, nil
 }
 
-// hasSixel reports whether out holds the start of a sixel image: a DCS whose
-// final byte is q, as in ESC P q or ESC P 0;0;0 q.
 func hasSixel(out []byte) bool {
 	for i := bytes.Index(out, []byte("\x1bP")); i >= 0; {
 		params := bytes.TrimLeft(out[i+2:], "0123456789;")
@@ -126,9 +101,6 @@ func hasSixel(out []byte) bool {
 	return false
 }
 
-// conptyTestDirEnv names a folder holding the conpty.dll and OpenConsole.exe
-// of the Microsoft.Windows.Console.ConPTY package (x64 runtime). The
-// repository does not carry them, so the tests that need them are opt-in.
 const conptyTestDirEnv = "TUIOS_E2E_CONPTY_DIR"
 
 // TestPaneUsesConPTYDLLWhenPresent is the positive half of the fallback
@@ -142,7 +114,6 @@ func TestPaneUsesConPTYDLLWhenPresent(t *testing.T) {
 	}
 	useConPTYDLL(t, dir)
 
-	// One sixel pixel column, six rows high, in colour 0.
 	draw := `[Console]::Out.Write([char]27 + 'Pq#0;2;100;0;0#0~~~~' + [char]27 + '\'); [Console]::Out.Flush(); Start-Sleep -Seconds 2`
 	pty, logged, out := spawnUntil(t, "a sixel image", command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", draw), hasSixel)
 	if _, ok := pty.(*dllPty); !ok {
@@ -165,15 +136,9 @@ func TestPaneOnConPTYDLLFindsProgramLikeInbox(t *testing.T) {
 	if dllDir == "" {
 		t.Skipf("set %s to a folder holding %s and %s from the Microsoft.Windows.Console.ConPTY package", conptyTestDirEnv, conptyDLLName, openConsoleName)
 	}
-	root := os.Getenv("SystemRoot") // C:\Windows
+	root := os.Getenv("SystemRoot")
 	vol := filepath.VolumeName(root)
-	// A rooted path names a file on the current drive, and a runner checks
-	// the repository out on D:, so the test runs from the root of the
-	// program's drive. No System32 sits there, so the relative forms still
-	// need cmd.Dir.
 	t.Chdir(vol + `\`)
-	// A cmd.Dir on the program's drive, under which the rooted path joined
-	// as a relative one names nothing.
 	elsewhere := filepath.Join(root, "System32")
 	forms := []struct{ name, dir, path string }{
 		{"relative", root, `System32\cmd.exe`},
@@ -224,17 +189,11 @@ func TestConPTYDLLIsNotTakenFromWorkingDirOrPath(t *testing.T) {
 	t.Chdir(planted)
 	t.Setenv("PATH", planted+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	// The test binary's folder has no conpty.dll, so the lookup must find
-	// nothing at all. Finding the planted file shows up as a load error.
 	dll, err := exeConPTYDLL()
 	if dll != nil || err != nil {
 		t.Fatalf("lookup beside the executable found something: dll=%v err=%v", dll, err)
 	}
 
-	// The positive half: the same files beside the test binary are found,
-	// so the lookup above did look, and looked in the right folder. They
-	// have to be written there, the only folder the lookup reads; the skip
-	// above keeps this from replacing files already there.
 	garbageDLL(t, beside)
 	t.Cleanup(func() {
 		_ = os.Remove(filepath.Join(beside, conptyDLLName))

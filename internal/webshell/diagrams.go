@@ -16,20 +16,12 @@ import (
 	sketchtext "tuios.dev/sketch/text"
 )
 
-// Diagrams and charts in the demo, drawn by the real libraries:
-// tuios mermaid and sketch draw Mermaid as text with tuios.dev/sketch, and
-// tplot draws CSV data with tuios.dev/plot. A real terminal that shows
-// pictures gets a picture from tuios mermaid. The browser draws text, at the
-// pane's width, and draws it again when the pane changes width.
-
-// cmdMermaid is tuios mermaid.
 func cmdMermaid(s *shell, in []string) int {
 	return drawDiagrams(s, "tuios mermaid", in,
 		[]string{"cols", "rows", "diagram", "theme", "format", "f", "out", "o", "background", "scale"},
 		[]string{"fit", "watch", "w", "split", "demo", "loop"})
 }
 
-// cmdSketch is the sketch command of tuios.dev/sketch.
 func cmdSketch(s *shell, in []string, _ string) int {
 	return drawDiagrams(s, "sketch", in[1:],
 		[]string{"cols", "diagram", "theme", "f", "o", "color", "scale"},
@@ -99,8 +91,6 @@ func drawDiagrams(s *shell, cmd string, in []string, valued, bools []string) int
 			}
 			lines, err := sketchtext.Draw(d, sketchtext.Options{Cols: w, Color: color})
 			if errors.Is(err, sketchtext.ErrTooWide) {
-				// The real command draws it at its full width and lets the
-				// terminal wrap it. Here a line too wide is cut.
 				lines, err = sketchtext.Draw(d, sketchtext.Options{Color: color})
 				if err == nil {
 					out = append(out, wrapWords(fmt.Sprintf("%sdiagram %d: the text drawing is wider than %d columns.%s", yellow, i+1, w, reset), cols)...)
@@ -124,8 +114,6 @@ func drawDiagrams(s *shell, cmd string, in []string, valued, bools []string) int
 	return 0
 }
 
-// mermaidSources is the diagrams of a file: a Markdown file gives each of
-// its mermaid code blocks, any other file is one diagram.
 func mermaidSources(name, data string) []string {
 	lower := strings.ToLower(name)
 	if !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".markdown") {
@@ -152,8 +140,6 @@ func mermaidSources(name, data string) []string {
 	return out
 }
 
-// plotTable is CSV data as tplot reads it: the labels of the rows, from the
-// first text column, and a series per number column.
 type plotTable struct {
 	labels []string
 	series []plotSeries
@@ -165,8 +151,6 @@ type plotSeries struct {
 	values []float64
 }
 
-// cmdTplot is the tplot command of tuios.dev/plot, for CSV, TSV and plain
-// numbers.
 func cmdTplot(s *shell, in []string, _ string) int {
 	a, err := parseArgs(in[1:], []string{"kind", "k", "width", "w", "height", "mode", "color", "input", "title", "columns", "min", "max"},
 		[]string{"log", "no-header", "version", "help", "h"})
@@ -264,7 +248,6 @@ type plotOptions struct {
 	log      bool
 }
 
-// readPlotTable reads CSV, TSV or numbers with spaces between them.
 func readPlotTable(data []byte, name string, noHeader bool) (*plotTable, error) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 {
@@ -356,8 +339,6 @@ func readPlotTable(data []byte, name string, noHeader bool) (*plotTable, error) 
 	return t, nil
 }
 
-// plotNumber parses a cell: a number, with a trailing % allowed. An empty
-// cell is a missing value. ok is false for text.
 func plotNumber(s string) (float64, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -367,8 +348,6 @@ func plotNumber(s string) (float64, bool) {
 	return v, err == nil
 }
 
-// plotHasHeader says whether the first record names the columns: one of its
-// cells is text where the rest of that column is numbers.
 func plotHasHeader(records [][]string) bool {
 	if len(records) < 2 {
 		return false
@@ -395,7 +374,6 @@ func plotHasHeader(records [][]string) bool {
 	return false
 }
 
-// pick keeps the series a list names, by name or by number from 1.
 func (t *plotTable) pick(list string) error {
 	var out []plotSeries
 	for want := range strings.SplitSeq(list, ",") {
@@ -419,7 +397,6 @@ func (t *plotTable) pick(list string) error {
 	return nil
 }
 
-// guess picks a chart for the shape of the data.
 func (t *plotTable) guess() string {
 	switch {
 	case len(t.series) > 1:
@@ -430,7 +407,6 @@ func (t *plotTable) guess() string {
 	return "line"
 }
 
-// needsColor says whether a chart tells its parts apart only by colour.
 func (t *plotTable) needsColor(kind string) bool {
 	switch kind {
 	case "heatmap", "pie", "donut", "map":
@@ -441,8 +417,6 @@ func (t *plotTable) needsColor(kind string) bool {
 	return false
 }
 
-// draw picks the chart and draws it at a height that fits the data, as
-// tplot does.
 func (t *plotTable) draw(o plotOptions, m plot.Mode, w, termRows int) (*plot.Grid, error) {
 	first := t.series[0]
 	fit := func(want int) int {
@@ -521,7 +495,6 @@ func (t *plotTable) draw(o plotOptions, m plot.Mode, w, termRows int) (*plot.Gri
 	return nil, errfmt.Errorf("unknown kind %q", o.kind)
 }
 
-// withLegend puts a legend row above g.
 func withLegend(g *plot.Grid, items []plot.LegendItem, m plot.Mode) *plot.Grid {
 	out := plot.NewGrid(g.W, g.H+1)
 	plot.DrawLegend(out, 0, 0, items, m)
@@ -529,8 +502,6 @@ func withLegend(g *plot.Grid, items []plot.LegendItem, m plot.Mode) *plot.Grid {
 	return out
 }
 
-// plotSlots maps each role to an ANSI colour slot, as tplot does, so a
-// chart takes the colours of the tuios theme.
 var plotSlots map[plot.Role]int
 
 func initPlotSlots() {
@@ -543,8 +514,6 @@ func initPlotSlots() {
 	}
 }
 
-// plotSlot is the ANSI slot of a role, or -1. A faded bright colour is its
-// normal slot from fade 2.
 func plotSlot(r plot.Role) int {
 	base, k := r.Faded()
 	c, ok := plotSlots[base]
@@ -580,7 +549,6 @@ func plotSGR(fg, bg int, bold bool) string {
 	return "\x1b[" + strings.Join(p, ";") + "m"
 }
 
-// renderGrid writes a grid as lines, with SGR colours when color is set.
 func renderGrid(g *plot.Grid, color bool) []string {
 	if !color {
 		return strings.Split(strings.TrimRight(g.String(), "\n"), "\n")

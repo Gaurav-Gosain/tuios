@@ -13,21 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
-// This is the standalone half of the spawn story. A pane created without a
-// daemon used to allocate its own PTY and start its own process inline, with no
-// retry, so the kernel's transient controlling-terminal refusal came back as a
-// nil window: a pane the user asked for that never appeared, and no error
-// anywhere saying why. The daemon path had learned about the refusal months
-// earlier; this path had not, because the knowledge lived in a copy.
-//
-// Negative control, confirmed against the tree before this change: both tests
-// fail there, and they fail on the injection never being consumed. That is the
-// finding stated as an assertion: NewWindow called xpty.NewPty and pty.Start
-// itself, so a refusal aimed at the shared door never reached it, and no policy
-// written at that door could have covered this path.
-
-// failNextStarts makes the next n starts fail with err, then delegates to the
-// real start. It returns a counter of injected failures.
 func failNextStarts(t *testing.T, n int, err error) *int {
 	t.Helper()
 	real := ptyspawn.StartProcess

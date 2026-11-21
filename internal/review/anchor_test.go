@@ -56,7 +56,6 @@ func TestAnchorHunk(t *testing.T) {
 	if h, ok := AnchorHunk(hunks, SideNew, "@@ -88,4 +100,6 @@ func Do", 1); !ok || h.NewStart != 100 {
 		t.Errorf("same header = %+v %v", h, ok)
 	}
-	// The hunk grew: its header changed, and it still holds the note's line.
 	if h, ok := AnchorHunk(hunks, SideNew, "@@ -88,4 +100,3 @@ func Do", 103); !ok || h.NewStart != 100 {
 		t.Errorf("changed header = %+v %v", h, ok)
 	}
@@ -167,8 +166,6 @@ func TestComposeLabelsNotesTheSenderDidNotWrite(t *testing.T) {
 		}
 	}
 
-	// Sent by the pane that wrote n2: its own note is not labelled, the
-	// person's is.
 	got = Compose(Message{From: "pane lead", SenderBy: "w-1234", Notes: notes[:2]})
 	if !strings.Contains(got, "1. a.go:1\n   (written by the person)\n   mine\n") || !strings.Contains(got, "2. a.go:2\n   the pane's\n") {
 		t.Errorf("a pane's message =\n%s", got)

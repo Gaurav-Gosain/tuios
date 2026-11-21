@@ -6,11 +6,6 @@ import (
 	"strings"
 )
 
-// canonicalizeKeybindings rewrites every action name in the keybinding
-// tables and the repeat list to the action's own name, so an older name a
-// config file, a preset or a tape still uses binds the action itself. When a
-// table names an action by both names, the keys of both stay, its own name's
-// first.
 func canonicalizeKeybindings(kb *KeybindingsConfig) {
 	v := reflect.ValueOf(kb).Elem()
 	mapType := reflect.TypeFor[map[string][]string]()
@@ -39,7 +34,6 @@ func canonicalizeKeybindings(kb *KeybindingsConfig) {
 	}
 }
 
-// canonicalizeTable rewrites one table's action names in place.
 func canonicalizeTable(table map[string][]string) {
 	for name, keys := range table {
 		canon := CanonicalAction(name)
@@ -47,8 +41,6 @@ func canonicalizeTable(table map[string][]string) {
 			continue
 		}
 		delete(table, name)
-		// An empty list unbinds the action, so the action's own name has to
-		// be there even with no keys, or the defaults fill it back in.
 		if _, ok := table[canon]; !ok {
 			table[canon] = []string{}
 		}
@@ -60,10 +52,6 @@ func canonicalizeTable(table map[string][]string) {
 	}
 }
 
-// canonicalizeMenus rewrites the action names in the [menus.NAME] tables to
-// the action's own name: each row's action, after and remove. A row that
-// names an older name then matches the shipped row, which names the action
-// itself, and the which-key panel and the hint look up one name.
 func canonicalizeMenus(menus map[string]MenuSpec) {
 	for name, spec := range menus {
 		canonicalizeMenuRows(spec.Items)
@@ -78,8 +66,6 @@ func canonicalizeMenus(menus map[string]MenuSpec) {
 	}
 }
 
-// canonicalizeMenuRows rewrites one list of rows in place. A row it cannot
-// read stays as it is, for the validator to name.
 func canonicalizeMenuRows(rows []any) {
 	for i, row := range rows {
 		switch row := row.(type) {

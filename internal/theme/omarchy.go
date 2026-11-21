@@ -12,28 +12,13 @@ import (
 	"tuios.dev/swatch/omarchy"
 )
 
-// Omarchy themes.
-//
-// Omarchy applies one theme to the whole desktop and keeps it in a
-// colors.toml (see tuios.dev/swatch/omarchy). tuios reads it in two ways:
-//
-//   - "omarchy" is the theme Omarchy has applied. It is a live id: its
-//     colours change when the person switches the Omarchy theme, and the
-//     client follows (internal/app/omarchy_follow.go). An empty
-//     appearance.theme means the same on a machine with Omarchy, so tuios
-//     follows Omarchy unless told otherwise. "none" keeps the terminal's own
-//     colours even there.
-//   - "omarchy/NAME" is one installed Omarchy theme, fixed, for the picker and
-//     for screenshots.
-
 // Reserved theme ids.
 const (
 	// OmarchyID follows the theme Omarchy has applied.
 	OmarchyID = "omarchy"
 	// NoneID keeps the terminal's own colours, even where an empty theme
 	// would follow Omarchy.
-	NoneID = "none"
-	// omarchyPrefix starts the id of one installed Omarchy theme.
+	NoneID        = "none"
 	omarchyPrefix = "omarchy/"
 )
 
@@ -46,15 +31,12 @@ var ErrOmarchyNotFound = errors.New("omarchy is not installed on this machine")
 // the same for a whole process.
 var OmarchySource = func() swatch.Source { return omarchy.Current() }
 
-// omarchyState is the palette the omarchy id was last registered with.
 var omarchyState struct {
 	sync.Mutex
 	palette swatch.Palette
 	valid   bool
 }
 
-// generation counts every change of the active theme, a live one's new
-// colours included. See Generation.
 var generation atomic.Uint64
 
 // Generation is a number that changes whenever the active theme or its
@@ -94,7 +76,6 @@ func Themed(name string) bool {
 	return true
 }
 
-// loadOmarchy reads the applied Omarchy theme.
 func loadOmarchy() (swatch.Palette, error) {
 	p, err := OmarchySource().Load()
 	if errors.Is(err, swatch.ErrNotFound) {
@@ -103,8 +84,6 @@ func loadOmarchy() (swatch.Palette, error) {
 	return p, err
 }
 
-// refreshOmarchy reads the applied Omarchy theme and registers it under the
-// omarchy id. It reports whether the id now holds new colours.
 func refreshOmarchy() (bool, error) {
 	p, err := loadOmarchy()
 	if err != nil {
@@ -118,8 +97,6 @@ func refreshOmarchy() (bool, error) {
 // whether they differ from the ones registered before, and does nothing when
 // they do not, so the memos keyed on the theme stay valid.
 func SetOmarchyPalette(p swatch.Palette) bool {
-	// Before the lock: building the registry registers the omarchy id too,
-	// and takes the lock to do it.
 	EnsureRegistry()
 	omarchyState.Lock()
 	defer omarchyState.Unlock()
@@ -140,8 +117,6 @@ func SetOmarchyPalette(p swatch.Palette) bool {
 	return true
 }
 
-// registerOmarchyThemes registers every installed Omarchy theme as
-// omarchy/NAME, and the applied one as omarchy. Runs with the registry, once.
 func registerOmarchyThemes() {
 	for _, th := range omarchyThemes() {
 		p, err := th.Load()
@@ -166,18 +141,13 @@ func registerOmarchyThemes() {
 	}
 }
 
-// omarchyThemes lists the installed Omarchy themes. A variable for tests.
 var omarchyThemes = func() []omarchy.Theme {
 	if os.Getenv(omarchy.EnvDir) != "" {
-		// A test that points at a current directory of its own does not
-		// want the machine's themes in the list either.
 		return nil
 	}
 	return omarchy.Themes()
 }
 
-// initOmarchy makes the applied Omarchy theme the active one. On a machine
-// without Omarchy it costs a failed open, and the registry is not built.
 func initOmarchy() error {
 	if _, err := refreshOmarchy(); err != nil {
 		return err

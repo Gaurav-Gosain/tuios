@@ -5,19 +5,6 @@ import (
 	"strings"
 )
 
-// Where a binary came from, and therefore whether it is ours to replace.
-//
-// This is the first question `tuios update` asks and the one it must not get
-// wrong. Writing over a file a package manager owns leaves that manager's
-// database describing a file that is no longer there: the next upgrade puts the
-// old build back, the next removal deletes a binary it did not install, and
-// nothing in between says anything is wrong. Refusing and printing the right
-// command is a worse experience for one run and a better one for every run
-// after it.
-//
-// Detect is a pure function over Facts so every case below is a table row in a
-// test rather than a filesystem to be built.
-
 // Origin is how a tuios binary got onto this machine.
 type Origin int
 
@@ -101,10 +88,6 @@ func Detect(f Facts) Provenance {
 			Fix:    "nix profile upgrade tuios",
 		}
 	case isHomebrewPath(p, f.BrewPrefix):
-		// `brew install tuios` is the homebrew-core formula, built from source
-		// into the Cellar. The tap ships casks of the release archives, which
-		// live in the Caskroom. Each is upgraded by its own command, and the
-		// ghostty cask by its own name.
 		fix := "brew upgrade tuios"
 		switch {
 		case strings.Contains(p, "/Caskroom/tuios-ghostty/"):
@@ -149,13 +132,6 @@ func Detect(f Facts) Provenance {
 	}
 }
 
-// isHomebrewPath reports whether the resolved path is inside a Homebrew tree.
-//
-// Cellar and Caskroom are matched wherever they are, because a Homebrew prefix
-// can be anywhere: /opt/homebrew on Apple silicon, /usr/local on Intel, and a
-// user-chosen directory for a per-user install. The prefix is used as well when
-// the environment supplies one, which is the case the two directory names miss:
-// a formula that installs straight into <prefix>/bin.
 func isHomebrewPath(p, brewPrefix string) bool {
 	if strings.Contains(p, "/Cellar/") || strings.Contains(p, "/Caskroom/") {
 		return true
@@ -165,9 +141,6 @@ func isHomebrewPath(p, brewPrefix string) bool {
 	}
 	if brewPrefix != "" {
 		prefix := strings.TrimSuffix(filepath.ToSlash(brewPrefix), "/")
-		// Only <prefix>/bin, not the whole prefix: on Intel macOS the prefix is
-		// /usr/local, and treating all of it as Homebrew's would misreport a
-		// curl-script install into /usr/local/bin.
 		if strings.HasPrefix(p, prefix+"/bin/") || strings.HasPrefix(p, prefix+"/Cellar/") {
 			return true
 		}
@@ -175,13 +148,6 @@ func isHomebrewPath(p, brewPrefix string) bool {
 	return false
 }
 
-// isSystemPath reports whether the path is one a distribution's package manager
-// owns.
-//
-// /usr/local is deliberately absent. It is the one directory under /usr that
-// the packaging conventions reserve for things the local administrator put
-// there, and it is the curl script's first choice, so treating it as
-// package-owned would refuse the exact case this command exists for.
 func isSystemPath(p string) bool {
 	for _, dir := range []string{"/usr/bin/", "/usr/sbin/", "/bin/", "/sbin/", "/usr/lib/"} {
 		if strings.HasPrefix(p, dir) {

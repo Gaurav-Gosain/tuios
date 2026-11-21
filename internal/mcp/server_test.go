@@ -14,10 +14,6 @@ import (
 	"time"
 )
 
-// The tests drive the server the way a harness does: JSON-RPC lines on its
-// stdin, answers read from its stdout. The daemon is a fake that records every
-// call, so a test can say what reached it and in which order.
-
 type call struct {
 	verb   string
 	params map[string]any
@@ -88,7 +84,6 @@ func (c *fakeConn) Close() error {
 	return nil
 }
 
-// testVerbs is a slice of the real verb table's shape.
 var testVerbs = []VerbDoc{
 	{Verb: "list-windows", Description: "List the windows in a session.", Params: []ParamDoc{{Name: "session", Type: "string", Description: "Session name."}}},
 	{Verb: "list-agents", Description: "List the agent panes.", Params: []ParamDoc{
@@ -129,7 +124,6 @@ var testVerbs = []VerbDoc{
 	}},
 }
 
-// client is a scripted MCP client on the server's stdio.
 type client struct {
 	t     *testing.T
 	in    *io.PipeWriter
@@ -279,7 +273,6 @@ func TestInitializeNegotiatesTheProtocol(t *testing.T) {
 	c.send(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
 	c.quiet(100 * time.Millisecond)
 
-	// A version the server does not know gets its newest.
 	c2 := startServer(t, Options{})
 	res = c2.rpc(1, "initialize", map[string]any{"protocolVersion": "1999-01-01"})["result"].(map[string]any)
 	if res["protocolVersion"] != protocolVersions[0] {
@@ -302,7 +295,6 @@ func TestDefaultToolsAreReadMostly(t *testing.T) {
 		}
 	}
 
-	// The schema is the verb's, less what an agent cannot use.
 	capture := props(toolByName(resp, "tuios_capture_pane"))
 	if _, ok := capture["palette"]; ok {
 		t.Error("capture_pane offers palette")
@@ -465,13 +457,10 @@ func TestTheCallersOwnPaneIsTheOneTheDaemonPlaced(t *testing.T) {
 	if got := last()["from"]; got != "win-kernel" {
 		t.Errorf("send-agent-message from = %v, want the caller's pane", got)
 	}
-	// A pane the caller names is kept.
 	c.toolCall(3, "tuios_set_agent_state", map[string]any{"state": "idle", "window": "other"})
 	if got := last()["window"]; got != "other" {
 		t.Errorf("set-agent-state window = %v, want the one named", got)
 	}
-	// In another session the caller's pane does not resolve, so no sender is
-	// filled in there.
 	c.toolCall(4, "tuios_set_agent_state", map[string]any{"state": "idle", "session": "sibling"})
 	if _, ok := last()["window"]; ok {
 		t.Errorf("set-agent-state in another session = %v, want no window filled in", last())
@@ -509,7 +498,6 @@ func TestEventsReturnWhatArrivedAndWhereToResume(t *testing.T) {
 		t.Error("a first call resumed from a seq")
 	}
 
-	// Resuming passes the point back.
 	c.toolCall(2, "tuios_events", map[string]any{"after_seq": 7, "boot_id": "b1", "wait_ms": 50})
 	calls := f.log()
 	resume := calls[len(calls)-1]
@@ -604,7 +592,6 @@ func TestACancelledCallClosesItsConnectionAndAnswersNothing(t *testing.T) {
 	f := &fakeDaemon{block: make(chan struct{})}
 	c := startServer(t, Options{Dial: f.dial})
 	c.send(`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"tuios_wait_for","arguments":{"condition":"agent-state"}}}`)
-	// The call is blocked in the daemon; a ping still answers.
 	if resp := c.rpc(8, "ping", nil); resp["result"] == nil {
 		t.Fatalf("ping = %v", resp)
 	}

@@ -58,8 +58,6 @@ func DepthOf(p colorprofile.Profile) Depth {
 	return DepthTrueColor
 }
 
-// depth holds the active depth. Atomic because every session's render loop
-// reads it and a client learning its terminal's profile writes it.
 var depth atomic.Uint32
 
 // SetDepth records the depth the chrome is drawn for. The palette, the
@@ -88,8 +86,6 @@ func Grey(i int) color.Color {
 	return ansi.IndexedColor(uint8(232 + min(max(i, 0), 23)))
 }
 
-// isNoColor reports whether c is the terminal's default colour: nil, or a
-// lipgloss.NoColor, which is what every ground is at 16 colours.
 func isNoColor(c color.Color) bool {
 	switch c.(type) {
 	case nil, lipgloss.NoColor, *lipgloss.NoColor:
@@ -103,10 +99,6 @@ func isNoColor(c color.Color) bool {
 // colour unset.
 func IsNoColor(c color.Color) bool { return isNoColor(c) }
 
-// terminalOwned reports whether the terminal decides what c looks like: the
-// default colour or one of the sixteen slots. tuios cannot measure such a
-// colour, because the RGB it would measure is the xterm default and not what
-// the user's palette holds.
 func terminalOwned(c color.Color) bool {
 	if isNoColor(c) {
 		return true
@@ -161,10 +153,6 @@ func To256(c color.Color) color.Color {
 	}
 	q := nearest256(c)
 	if ch < tintChroma {
-		// A tinted near-neutral, such as a dark theme's ground: the cube's
-		// coloured entries are far more saturated than it at low lightness,
-		// so solarized's #001e27 went to the navy 17 and h4x0r's #200101 to
-		// the red 52, with red text on it. The grey wins when it is nearer.
 		if g := nearestGrey(c); Distance(g, c) < Distance(q, c) {
 			return g
 		}
@@ -172,13 +160,8 @@ func To256(c color.Color) color.Color {
 	return q
 }
 
-// tintChroma is the OKLab chroma below which To256 lets a grey compete with
-// the coloured entries. The least saturated accent tuios ships sits at 0.06.
 const tintChroma = 0.06
 
-// xterm256Lab is entries 16 to 255 of the xterm palette in OKLab. It is
-// built on first use rather than at package initialisation, like the
-// transfer tables toLab reads.
 var xterm256Lab = sync.OnceValue(func() (t [240]lab) {
 	for i := range t {
 		t[i] = toLab(ansi.IndexedColor(uint8(16 + i))) // #nosec G115 -- i is within [0, 239].
@@ -186,11 +169,6 @@ var xterm256Lab = sync.OnceValue(func() (t [240]lab) {
 	return t
 })
 
-// nearest256 is the coloured entry from 16 to 255 nearest c in OKLab. The
-// sixteen below 16 are left out because the terminal's palette decides them,
-// and so are the greys: To256 sends only a colour with chroma here, and a
-// dark or a pale one could otherwise land on a grey nearer it in lightness,
-// which is how a dark navy came out as 236.
 func nearest256(c color.Color) color.Color {
 	v := toLab(c)
 	vc := math.Hypot(v.a, v.b)
@@ -205,17 +183,11 @@ func nearest256(c color.Color) color.Color {
 	return ansi.IndexedColor(best)
 }
 
-// colouredEntry is an entry of the xterm palette that is not a grey, in OKLab
-// with its chroma worked out.
 type colouredEntry struct {
 	l, a, b, c float64
 	idx        uint8
 }
 
-// xterm256Coloured is the entries from 16 to 255 that are not greys, built on
-// first use. nearest256 runs once per colour a palette or a theme is built
-// from, and the review overlay steps its mixes down each time it draws, so
-// the chroma is computed here once rather than for each entry on every call.
 var xterm256Coloured = sync.OnceValue(func() []colouredEntry {
 	table := xterm256Lab()
 	out := make([]colouredEntry, 0, len(table))
@@ -228,20 +200,8 @@ var xterm256Coloured = sync.OnceValue(func() []colouredEntry {
 	return out
 })
 
-// hueWeight is how much more a step in hue counts than the same step in
-// lightness or chroma when nearest256 chooses an entry.
-//
-// The cube has six levels per channel, so a dark or a muted colour is often
-// about as far from an entry of its own hue as from one of another hue that is
-// nearer it in lightness. Plain OKLab distance then took the other hue: a dark
-// green went to a dark red, and a slate blue to a purple. A hue change is what
-// a reader notices, a lightness step is not, so hue is weighted. The hue part
-// of the distance is the part of the a-b distance that chroma does not
-// explain.
 const hueWeight = 4
 
-// neutralEntry reports whether entry 16+i of the xterm palette is a grey: the
-// ramp from 232, or a cube entry with three equal channels.
 func neutralEntry(i int) bool {
 	if i >= 216 {
 		return true
@@ -249,13 +209,8 @@ func neutralEntry(i int) bool {
 	return i/36 == (i/6)%6 && (i/6)%6 == i%6
 }
 
-// greyChroma is the OKLab chroma below which a colour is placed on the grey
-// ramp. charmtone's neutrals sit at 0.01 to 0.02 and the least saturated
-// accent tuios ships at 0.06, so the line falls between them.
 const greyChroma = 0.035
 
-// nearestGrey returns the entry of the grey ramp, or black 16 or white 231 at
-// the ends, whose luminance is nearest c's.
 func nearestGrey(c color.Color) color.Color {
 	target := relativeLuminance(c)
 	best, bestD := ansi.IndexedColor(16), 2.0
@@ -298,10 +253,6 @@ func ReadableEntry256(c color.Color, grounds []color.Color, floor float64) color
 	v := toLab(c)
 	table := xterm256Lab()
 	if okChroma(c) < greyChroma {
-		// A neutral has no hue to keep. Searching by hue picked whichever
-		// cube entry the noise in a grey's a and b pointed at, so a grey
-		// accent on a light ground came out green. The neutral entry nearest
-		// in lightness that reads is the answer.
 		var best color.Color
 		bestD := math.Inf(1)
 		for i, e := range table {
@@ -329,8 +280,6 @@ func ReadableEntry256(c color.Color, grounds []color.Color, floor float64) color
 		if dh > math.Pi {
 			dh = 2*math.Pi - dh
 		}
-		// A radian of hue weighs as much as the whole lightness range, so the
-		// hue decides and lightness breaks the ties.
 		dl := v.l - e.l
 		d := dh*dh + dl*dl
 		if d >= bestD {
@@ -344,17 +293,10 @@ func ReadableEntry256(c color.Color, grounds []color.Color, floor float64) color
 	return best
 }
 
-// warningApartHue is the least OKLab hue gap, in degrees, a 256-colour warning
-// keeps from the error ink. #af0000 and #af005f are 30 degrees apart and read
-// as the same red in one cell.
 const warningApartHue = 35
 
-// amberHue is the OKLab hue, in degrees, of the cube's ambers (#875f00,
-// #af8700), the hue a warning is moved to when it would read as an error.
 const amberHue = 75
 
-// amberBand is how far, in degrees, from amberHue an entry may sit and still
-// read as a warning: from orange to olive.
 const amberBand = 40
 
 // WarningApart256 keeps a 256-colour warning from reading as the error ink.
@@ -382,8 +324,6 @@ func WarningApart256(warning, errInk color.Color, grounds []color.Color, floor f
 	if gap*180/math.Pi >= warningApartHue {
 		return warning
 	}
-	// The cube entries from yellow to orange that read, nearest amber in hue,
-	// and nearest warning's lightness among equals.
 	table := xterm256Lab()
 	var best color.Color
 	bestD := math.Inf(1)

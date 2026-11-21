@@ -10,8 +10,6 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// writeThemeDir writes theme files into a fresh directory, reads it as the
-// themes directory, and unregisters what it read when the test ends.
 func writeThemeDir(t *testing.T, files map[string]string) (loaded, problems []string) {
 	t.Helper()
 	EnsureRegistry()

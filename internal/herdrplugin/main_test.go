@@ -11,20 +11,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// helperEnv selects a helper mode. The modes run this test binary as a
-// plugin's processes, for the tests in proc_test.go.
 const helperEnv = "TUIOS_HERDRPLUGIN_HELPER"
 
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == ReaperArg {
-		// The test binary stands in for tuios as a reaper.
 		os.Exit(RunReaper(os.Args[2:]))
 	}
 	switch os.Getenv(helperEnv) {
 	case "":
 		os.Exit(testutil.RunIsolated(m))
 	case "parent", "parent-exits":
-		// Start a child that sleeps, write its pid, then sleep or exit.
 		child := exec.Command(os.Args[0])
 		child.Env = append(os.Environ(), helperEnv+"=child")
 		if err := child.Start(); err != nil {
@@ -40,7 +36,6 @@ func TestMain(m *testing.M) {
 		time.Sleep(time.Minute)
 		os.Exit(0)
 	case "host":
-		// A daemon: a runner with one plugin command, which never stops it.
 		r := NewRunner()
 		self, _ := os.Executable()
 		_, perr := r.Start(Job{

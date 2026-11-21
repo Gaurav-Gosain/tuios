@@ -13,16 +13,6 @@ import (
 	"time"
 )
 
-// The ways stopping a plugin can fail, which these tests hold it to:
-//
-//   - StopPlugin kills the command and not the process it started, so a
-//     plugin's helper outlives it (Windows has no process group);
-//   - a program a finished command opened for the person, such as an editor
-//     or a browser, is killed when the plugin stops or the daemon ends;
-//   - the daemon ends without running StopAll, as kill-server's
-//     TerminateProcess makes it, and a running command outlives it;
-//   - without a job, the command never starts, or StopPlugin misses it.
-
 func readPid(t *testing.T, path string) int {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
@@ -85,7 +75,6 @@ func TestAFinishedCommandLeavesItsProgramRunning(t *testing.T) {
 	r := NewRunner()
 	child := startHelper(t, r, "parent-exits")
 	defer killPid(child)
-	// The command itself has exited once its log entry is finished.
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		logs := r.Logs("test.plugin", 1)
@@ -123,7 +112,6 @@ func TestPluginProcessesEndWithTheDaemon(t *testing.T) {
 		t.Fatal(err)
 	}
 	child := readPid(t, pidfile)
-	// TerminateProcess, as kill-server did: no StopAll runs.
 	_ = host.Process.Kill()
 	_ = host.Wait()
 	waitGone(t, child, "a plugin's process after the daemon was terminated")

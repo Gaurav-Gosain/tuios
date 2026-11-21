@@ -10,26 +10,11 @@ import (
 	"github.com/charmbracelet/x/xpty"
 )
 
-// These tests pin the retry policy at the one door every PTY-backed process in
-// tuios goes through. The real event cannot be provoked on demand (it needs a
-// pts index to be recycled out from under a dying session at the exact moment
-// of the fork), so the seam injects the refusal the way the kernel delivers it:
-// as an EPERM-wrapped start error.
-//
-// Negative control for all four: with the retry removed from Spawn, the
-// transient case fails (one refusal becomes a returned error) and the
-// fresh-PTY case fails (there is no second attempt to compare). The two that
-// assert a refusal still surfaces pass either way and are there to keep the
-// bound honest, not to detect its absence.
-
-// spawnRecord is what the seam saw: one entry per start attempt.
 type spawnRecord struct {
 	pty xpty.Pty
 	cmd *exec.Cmd
 }
 
-// failStarts makes the next n starts fail with err, then delegates to the real
-// start. It returns the record of every attempt.
 func failStarts(t *testing.T, n int, err error) *[]spawnRecord {
 	t.Helper()
 	real := StartProcess
@@ -45,8 +30,6 @@ func failStarts(t *testing.T, n int, err error) *[]spawnRecord {
 	return &seen
 }
 
-// trueCommand builds a command that exits immediately and is on every machine
-// this runs on. What is under test is the start, not what the process does.
 func trueCommand() *exec.Cmd { return exec.Command("/bin/sh", "-c", "exit 0") }
 
 // TestTheRetryUsesAFreshPTY is the part of the policy that is about the cause

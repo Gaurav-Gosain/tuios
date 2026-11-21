@@ -25,15 +25,12 @@ const (
 	ActionReviewUndoStage   = "review_undo_stage"
 )
 
-// getDefaultReviewKeybinds returns the review overlay's bindable keys.
 func getDefaultReviewKeybinds() map[string][]string {
 	return map[string][]string{
-		ActionReviewNextHunk: {"]"},
-		ActionReviewPrevHunk: {"["},
-		ActionReviewNextFile: {"}"},
-		ActionReviewPrevFile: {"{"},
-		// s, S and u were the overlay's own keys before staging came, so
-		// stage is a (git add), unstage d, and undo z.
+		ActionReviewNextHunk:    {"]"},
+		ActionReviewPrevHunk:    {"["},
+		ActionReviewNextFile:    {"}"},
+		ActionReviewPrevFile:    {"{"},
 		ActionReviewStageHunk:   {"a"},
 		ActionReviewUnstageHunk: {"d"},
 		ActionReviewStageFile:   {"A"},
@@ -42,11 +39,6 @@ func getDefaultReviewKeybinds() map[string][]string {
 	}
 }
 
-// reviewFixedKeys are the keys the review overlay reads itself, in
-// internal/input/review_input.go, outside the compare view and the note
-// editor. A [keybindings.review] binding is looked up before them, so a
-// binding on one of them takes the key from the overlay. Bind esc and q both
-// and nothing closes it.
 var reviewFixedKeys = map[string]bool{
 	"j": true, "k": true, "down": true, "up": true,
 	"pgdown": true, "pgup": true, "ctrl+d": true, "ctrl+u": true, "space": true,
@@ -80,8 +72,6 @@ func (k *KeybindingsConfig) ReviewProblems() []ReviewProblem {
 	return out
 }
 
-// validateReviewKeys warns about each review key that the review overlay
-// also reads itself.
 func validateReviewKeys(cfg *UserConfig, result *ValidationResult) {
 	for _, p := range cfg.Keybindings.ReviewProblems() {
 		result.Warnings = append(result.Warnings, ValidationError{Field: "keybindings.review." + p.Action, Key: p.Key, Message: p.Problem})

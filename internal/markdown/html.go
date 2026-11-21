@@ -24,8 +24,6 @@ type Options struct {
 	Dark bool
 }
 
-// htmlExprs is the expressions of this file, compiled on first use: a client that
-// never meets HTML does not pay for them at startup.
 type htmlExprs struct {
 	htmlComment, htmlDropped, htmlDetails, htmlLink, htmlIndent, htmlImage, htmlAlt, htmlSrc, htmlPicture, htmlSource, htmlSrcset, htmlMedia, htmlType, htmlHeading, htmlTag, refDefLine, noteDefLine, noteMark, refFull, alertLine, imageMark, imageLine *regexp.Regexp
 }
@@ -57,15 +55,11 @@ var rx = sync.OnceValue(func() *htmlExprs {
 	}
 })
 
-// htmlInline is the tags that have a Markdown form, as what opens and closes them.
 var htmlInline = map[string]string{
 	"b": "**", "strong": "**", "i": "*", "em": "*", "code": "`", "kbd": "`",
 	"s": "~~", "del": "~~", "strike": "~~",
 }
 
-// clean turns the HTML, reference links and footnotes of a text into the Markdown
-// the parser reads. It leaves code alone. A text with none of them costs a scan for
-// two bytes.
 func clean(src string, opt Options) string {
 	if strings.IndexByte(src, '<') < 0 && !strings.Contains(src, "]") {
 		return src
@@ -134,8 +128,6 @@ func clean(src string, opt Options) string {
 	return out
 }
 
-// splitFences cuts a text at its fenced code: the even parts are text, and the odd
-// parts are fences with their code.
 func splitFences(src string) []string {
 	var parts []string
 	lines := strings.SplitAfter(src, "\n")
@@ -162,11 +154,7 @@ func splitFences(src string) []string {
 	return append(parts, src[start:])
 }
 
-// cleanHTML turns HTML into Markdown. A tag with no Markdown form goes, and its text
-// stays. Each pass is one regular expression over the text, so the cost is linear.
 func cleanHTML(s string, opt Options) string {
-	// A line that starts with a tag is HTML laid out for the eye: its indent
-	// would make it a code block once the tags go.
 	s = rx().htmlIndent.ReplaceAllString(s, "$1")
 	s = rx().htmlComment.ReplaceAllString(s, "")
 	s = rx().htmlDropped.ReplaceAllString(s, "")
@@ -179,7 +167,6 @@ func cleanHTML(s string, opt Options) string {
 		return "\n\n" + strings.Replace(head, "▸", "▾", 1) + "\n\n" + g[3] + "\n\n"
 	})
 	s = rx().htmlPicture.ReplaceAllStringFunc(s, func(m string) string { return picture(m, opt.Dark) })
-	// An image inside a link is the link's words: the link stays one link.
 	s = rx().htmlLink.ReplaceAllStringFunc(s, func(m string) string {
 		g := rx().htmlLink.FindStringSubmatch(m)
 		return "[" + rx().htmlImage.ReplaceAllStringFunc(g[2], htmlImageWords) + "](" + g[1] + ")"
@@ -190,8 +177,6 @@ func cleanHTML(s string, opt Options) string {
 		return "\n\n" + strings.Repeat("#", n) + " " + strings.TrimSpace(rx().htmlTag.ReplaceAllString(g[2], "")) + "\n\n"
 	})
 	s = rx().htmlImage.ReplaceAllStringFunc(s, func(m string) string {
-		// A reader that draws pictures gets an image it can read as a
-		// paragraph of its own.
 		if g := rx().htmlSrc.FindStringSubmatch(m); opt.Images && g != nil && Drawable(g[1], "") {
 			alt := "image"
 			if a := rx().htmlAlt.FindStringSubmatch(m); a != nil && a[1] != "" {
@@ -232,7 +217,6 @@ func cleanHTML(s string, opt Options) string {
 	})
 }
 
-// alert reads the first line of a quote's text: GitHub's [!NOTE] and the other four.
 func alert(text string) (kind, rest string) {
 	m := rx().alertLine.FindString(text)
 	if m == "" {
@@ -241,7 +225,6 @@ func alert(text string) (kind, rest string) {
 	return strings.ToUpper(rx().alertLine.FindStringSubmatch(text)[1]), text[len(m):]
 }
 
-// htmlImageWords is an <img> as its short words.
 func htmlImageWords(m string) string {
 	alt := ""
 	if g := rx().htmlAlt.FindStringSubmatch(m); g != nil {
@@ -250,8 +233,6 @@ func htmlImageWords(m string) string {
 	return imageWords(alt)
 }
 
-// imageWords is an image as one short line of its words: at most
-// imageWordsMax characters, cut at a space.
 func imageWords(alt string) string {
 	alt = strings.Join(strings.Fields(alt), " ")
 	if alt == "" {
@@ -267,12 +248,8 @@ func imageWords(alt string) string {
 	return "\\[Image: " + strings.NewReplacer("[", "\\[", "]", "\\]").Replace(alt) + "\\]"
 }
 
-// imageWordsMax bounds the words of an image shown in its place.
 const imageWordsMax = 40
 
-// picture is a <picture> as the <img> to show: the first <source> that suits
-// the reader's ground and holds a picture a reader can draw, or the <img> in
-// it.
 func picture(m string, dark bool) string {
 	alt := ""
 	img := rx().htmlImage.FindString(m)
@@ -331,8 +308,6 @@ func Drawable(src, typ string) bool {
 	return false
 }
 
-// plainImages shows a Markdown image as its words. keep leaves a line that is
-// one image alone, which the parser reads as an Image block.
 func plainImages(s string, keep bool) string {
 	if !strings.Contains(s, "![") {
 		return s

@@ -58,12 +58,10 @@ func (r ReviewConfig) FocusInUse() string {
 	return ReviewOpenOnDiff
 }
 
-// defaultReviewConfig returns the section DefaultConfig carries.
 func defaultReviewConfig() ReviewConfig {
 	return ReviewConfig{Focus: ReviewOpenOnDiff, Scope: ReviewScopeBase}
 }
 
-// fillMissingReview fills an absent value with its default.
 func fillMissingReview(cfg, defaultCfg *UserConfig) {
 	if strings.TrimSpace(cfg.Review.Focus) == "" {
 		cfg.Review.Focus = defaultCfg.Review.Focus

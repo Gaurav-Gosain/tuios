@@ -30,13 +30,8 @@ const Deadline = 500 * time.Millisecond
 // kilobytes; the cap only guards against a harness piping something else.
 const MaxPayload = 4 << 20
 
-// agentHookHoldMax bounds the wait for an answer from the Inbox. The daemon
-// ends every hold within 300 seconds; this only guards against a daemon that
-// stops answering, and stays under the 310 second limit the Claude Code
-// integration gives the hook, so the hook still exits on its own.
 const agentHookHoldMax = 305 * time.Second
 
-// timedCaller is a Caller whose call can wait longer than the default.
 type timedCaller interface {
 	CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error)
 }
@@ -78,66 +73,37 @@ type IO struct {
 	Now      func() time.Time
 }
 
-// agentHookOutcome is what --explain prints: the decision, the pane it went
-// to and how that pane was found, and what the daemon said.
 type agentHookOutcome struct {
 	integration.Decision
-	Session string `json:"session,omitempty"`
-	Window  string `json:"window,omitempty"`
-	PaneBy  string `json:"pane_by,omitempty"`
-	// HarnessPID is the harness process the hook ran under, 0 when unknown.
-	HarnessPID int `json:"harness_pid,omitempty"`
-	// Unsupported lists the report's fields the daemon does not know, which
-	// were left out of the call.
-	Unsupported []string `json:"unsupported,omitempty"`
-	Applied     *bool    `json:"applied,omitempty"`
-	State       string   `json:"state,omitempty"`
-	Reason      string   `json:"reason,omitempty"`
-	// ActivityRecorded says whether the daemon kept the event's activity,
-	// nil when none was sent.
-	ActivityRecorded *bool `json:"activity_recorded,omitempty"`
-	// TranscriptRefused is why the daemon did not join the pane to the
-	// transcript the hook named.
-	TranscriptRefused string `json:"transcript_refused,omitempty"`
-	// Subagents is how many subagents the pane holds after a
-	// report-agent-activity call, nil when none was made.
-	Subagents *int `json:"subagents,omitempty"`
-	// ActivityError is why the report-agent-activity call that followed a
-	// state report failed. The state report stands.
-	ActivityError string `json:"activity_error,omitempty"`
-	// Updates is how many of the report's subagent updates the daemon
-	// answered.
-	Updates int    `json:"updates,omitempty"`
-	Error   string `json:"error,omitempty"`
-	// Hold is what happened to a prompt the Inbox could answer, when the
-	// hook asked for one.
-	Hold *approvalTrace `json:"hold,omitempty"`
-	// StatusLineFlushed says the turn end sent values the pane's status line
-	// feed had held back.
-	StatusLineFlushed bool `json:"status_line_flushed,omitempty"`
-	// MailNotice is the line about the pane's unread mail the hook adds to
-	// the agent's context, empty for none. MailError is why the hook could
-	// not ask for one.
-	MailNotice string `json:"mail_notice,omitempty"`
-	MailError  string `json:"mail_error,omitempty"`
-	// MailLease is the token that makes the notice announced for good once
-	// it is written. MailCommitted says that was done.
-	MailLease     uint64 `json:"mail_lease,omitempty"`
-	MailCommitted bool   `json:"mail_committed,omitempty"`
-	// NameHintOff says [agents] name_hint is off, so the start hint leaves
-	// out the line that names the pane. Unread, or any failure to read it,
-	// means on.
-	NameHintOff bool `json:"name_hint_off,omitempty"`
+	Session           string         `json:"session,omitempty"`
+	Window            string         `json:"window,omitempty"`
+	PaneBy            string         `json:"pane_by,omitempty"`
+	HarnessPID        int            `json:"harness_pid,omitempty"`
+	Unsupported       []string       `json:"unsupported,omitempty"`
+	Applied           *bool          `json:"applied,omitempty"`
+	State             string         `json:"state,omitempty"`
+	Reason            string         `json:"reason,omitempty"`
+	ActivityRecorded  *bool          `json:"activity_recorded,omitempty"`
+	TranscriptRefused string         `json:"transcript_refused,omitempty"`
+	Subagents         *int           `json:"subagents,omitempty"`
+	ActivityError     string         `json:"activity_error,omitempty"`
+	Updates           int            `json:"updates,omitempty"`
+	Error             string         `json:"error,omitempty"`
+	Hold              *approvalTrace `json:"hold,omitempty"`
+	StatusLineFlushed bool           `json:"status_line_flushed,omitempty"`
+	MailNotice        string         `json:"mail_notice,omitempty"`
+	MailError         string         `json:"mail_error,omitempty"`
+	MailLease         uint64         `json:"mail_lease,omitempty"`
+	MailCommitted     bool           `json:"mail_committed,omitempty"`
+	NameHintOff       bool           `json:"name_hint_off,omitempty"`
 }
 
-// approvalTrace is the Inbox half of a hook run, for --explain.
 type approvalTrace struct {
 	RequestID string `json:"request_id,omitempty"`
 	Decision  string `json:"decision,omitempty"`
 	Reason    string `json:"reason,omitempty"`
-	// Printed says the hook printed the harness's decision.
-	Printed bool   `json:"printed"`
-	Error   string `json:"error,omitempty"`
+	Printed   bool   `json:"printed"`
+	Error     string `json:"error,omitempty"`
 }
 
 // Run runs one hook event under the deadline. It returns nothing,
@@ -145,9 +111,6 @@ type approvalTrace struct {
 func Run(o Options, args []string, hio IO) {
 	harness := args[0]
 	if answer := integration.StdoutAnswer(harness); answer != "" {
-		// Gemini CLI and Antigravity CLI parse a hook's stdout as JSON. An
-		// empty object is the answer that changes nothing, and it goes out
-		// first so a deadline cannot leave the hook with no answer at all.
 		_, _ = io.WriteString(hio.Stdout, answer)
 	}
 	timeout := o.Timeout
@@ -174,23 +137,14 @@ func Run(o Options, args []string, hio IO) {
 	}
 }
 
-// startHint reports whether a hook run tells the agent where it runs: a
-// SessionStart for a harness that reads the hook's output as context, reported
-// for a pane the hook found. Outside tuios, or when the report failed, it
-// prints nothing. A pane named with --window is a run by hand or by a script,
-// and the name it was given is not the pane's id, so that prints nothing too.
 func startHint(out agentHookOutcome) bool {
 	return out.Event == "SessionStart" && integration.StartsWithContext(out.Harness) &&
 		out.Error == "" && (out.Report != nil || out.Context != integration.ContextNone) &&
 		out.Window != "" && out.Session != "" && out.PaneBy != "flag"
 }
 
-// mailCommitDeadline bounds the call that makes a written notice announced
-// for good. Past it the lease runs out, and the next hook announces the mail
-// again: a repeat, never a notice lost.
 const mailCommitDeadline = 300 * time.Millisecond
 
-// commitMailNotice tells the daemon the notice was written.
 func commitMailNotice(out agentHookOutcome, hio IO) bool {
 	done := make(chan bool, 1)
 	go func() {
@@ -216,9 +170,6 @@ func commitMailNotice(out agentHookOutcome, hio IO) bool {
 	}
 }
 
-// writeContext prints what the hook adds to the agent's context: where it
-// runs, on a SessionStart, and the line about its unread mail, in the form
-// the harness reads for the event. It reports whether it wrote the notice.
 func writeContext(out agentHookOutcome, w io.Writer) bool {
 	var text string
 	if startHint(out) {
@@ -237,11 +188,6 @@ func writeContext(out agentHookOutcome, w io.Writer) bool {
 	return err == nil && out.MailNotice != ""
 }
 
-// mayNotice reports whether a hook run asks for the notice about the pane's
-// unread mail: the harness reads this event's output as context, and the
-// hook found the pane by itself, and the daemon did not refuse the report as
-// another agent's. A pane named with --window is a run by hand, which must
-// not use up the notice the pane's agent would get.
 func mayNotice(out agentHookOutcome) bool {
 	if out.Context == integration.ContextNone || out.Error != "" || out.Window == "" || out.Session == "" || out.PaneBy == "flag" {
 		return false
@@ -253,17 +199,11 @@ func mayNotice(out agentHookOutcome) bool {
 	return true
 }
 
-// fetchMailNotice asks the daemon for the line about the pane's unread mail.
-// A conversation that starts, resumes or compacts asks with reset, since the
-// agent no longer holds an earlier notice. A daemon from before the verb
-// answers unknown_verb, and the hook prints nothing.
 func fetchMailNotice(out *agentHookOutcome, client Caller) {
 	params := map[string]any{"session": out.Session, "window": out.Window, "lease": true, "harness": out.Harness}
 	if out.Event == "SessionStart" {
 		params["reset"] = true
 	}
-	// The same guard a report from this hook meets: the compact
-	// SessionStart sends no report, so this is its only check.
 	if id := hookSessionID(*out); id != "" {
 		params["agent_session_id"] = id
 		if out.HarnessPID > 1 {
@@ -291,8 +231,6 @@ func fetchMailNotice(out *agentHookOutcome, client Caller) {
 	out.MailNotice, out.MailLease = res.Notice, res.Lease
 }
 
-// hookSessionID is the conversation id the hook event names, which a skip
-// such as the compact SessionStart keeps only in its context decision.
 func hookSessionID(out agentHookOutcome) string {
 	if out.Report != nil {
 		return out.Report.SessionID
@@ -300,21 +238,11 @@ func hookSessionID(out agentHookOutcome) string {
 	return out.ContextSessionID
 }
 
-// holdable reports whether a hook run may wait for an answer from the Inbox:
-// the event is a prompt the harness takes a decision for, and the pane is now
-// on needs_input by this hook's own report. A report that failed or was
-// refused, a nested harness's for one, holds nothing. A harness outside the
-// pane holds nothing even when the pane's own agent is on needs_input: the
-// prompt on the pane is not its prompt.
 func holdable(out agentHookOutcome) bool {
 	return out.Approval != nil && out.Error == "" && out.Report != nil &&
 		out.State == "needs_input" && out.Window != "" && out.Reason != "foreign_pane"
 }
 
-// holdForAnswer asks the daemon to hold the pane's prompt for the person and
-// prints the harness's decision when one comes back. Whatever goes wrong, it
-// prints nothing: a harness that gets no answer asks in its own pane, so
-// silence is always safe and an approval can only come from the person.
 func holdForAnswer(out agentHookOutcome, hio IO) *approvalTrace {
 	limit := hio.HoldMax
 	if limit <= 0 {
@@ -335,8 +263,6 @@ func holdForAnswer(out agentHookOutcome, hio IO) *approvalTrace {
 	select {
 	case a = <-done:
 	case <-time.After(limit):
-		// The call may still come back; nothing reads it, so nothing it says
-		// is printed.
 		return &approvalTrace{Error: "gave up after " + limit.String()}
 	}
 	if a.decision == "" {
@@ -355,8 +281,6 @@ func holdForAnswer(out agentHookOutcome, hio IO) *approvalTrace {
 	return &a.trace
 }
 
-// requestAnswer is the request-approval call. It returns the decision, empty
-// for none, and what happened.
 func requestAnswer(out agentHookOutcome, hio IO, limit time.Duration) (string, string, approvalTrace) {
 	var trace approvalTrace
 	client, err := hio.Dial()
@@ -372,17 +296,11 @@ func requestAnswer(out agentHookOutcome, hio IO, limit time.Duration) (string, s
 		"window":  out.Window,
 		"harness": out.Harness,
 		"options": out.Approval.Options,
-		// The line the person answers from. The daemon shows it on the
-		// held item and refuses a hold whose line it would have to cut.
 		"summary": out.Report.Message,
 	}
 	if len(out.Approval.Scope) > 0 {
 		params["always_scope"] = out.Approval.Scope
 	}
-	// The fields the risk rules, plans and deny reasons need go only to a
-	// daemon whose request-approval lists them. An older daemon would ignore
-	// them, which for a plan would hold it as a plain approval the person
-	// could allow without reading, so a plan is not sent to one at all.
 	extra := map[string]any{}
 	if a := out.Approval; a.IsPlan() {
 		extra["kind"], extra["plan"] = integration.KindPlan, a.Plan
@@ -423,7 +341,6 @@ func requestAnswer(out agentHookOutcome, hio IO, limit time.Duration) (string, s
 		raw, err = client.Call("request-approval", params)
 	}
 	if err != nil {
-		// unknown_verb from a daemon older than approvals lands here too.
 		trace.Error = err.Error()
 		return "", "", trace
 	}
@@ -441,11 +358,9 @@ func requestAnswer(out agentHookOutcome, hio IO, limit time.Duration) (string, s
 	return res.Decision, res.Message, trace
 }
 
-// agentHook reads, decides, resolves and reports.
 func agentHook(o Options, args []string, hio IO) agentHookOutcome {
 	in := integration.Input{Getenv: hio.Getenv}
 	rest := args[1:]
-	// Codex's notify command appends its JSON payload as the last argument.
 	if n := len(rest); n > 0 && strings.HasPrefix(strings.TrimSpace(rest[n-1]), "{") {
 		in.Payload = []byte(rest[n-1])
 		rest = rest[:n-1]
@@ -498,10 +413,6 @@ func agentHook(o Options, args []string, hio IO) agentHookOutcome {
 	return out
 }
 
-// nameHintOff asks the daemon for [agents] name_hint, which holds the
-// session's override and config.toml. Any failure reads as on, the default: a
-// daemon from before the option answers unknown_option, and a hook must not
-// fail for want of a line.
 func nameHintOff(out agentHookOutcome, client Caller) bool {
 	raw, err := client.Call("get-option", map[string]any{"session": out.Session, "key": "agents.name_hint"})
 	if err != nil {
@@ -513,7 +424,6 @@ func nameHintOff(out agentHookOutcome, client Caller) bool {
 	return jsonx.Unmarshal(raw, &res) == nil && config.NormalizeNameHint(res.Value) == config.NameHintOff
 }
 
-// reportHookEvent sends what one hook event reports, once the pane is found.
 func reportHookEvent(out agentHookOutcome, client Caller, hio IO) agentHookOutcome {
 	if out.Report.SessionOnly {
 		res, dropped, err := reportHookSession(client, out.Session, out.Window, out.Harness, out.HarnessPID, *out.Report)
@@ -526,10 +436,6 @@ func reportHookEvent(out agentHookOutcome, client Caller, hio IO) agentHookOutco
 		out.TranscriptRefused = res.TranscriptRefused
 		return out
 	}
-	// An event set-agent-state does not take goes with report-agent-activity:
-	// on its own for a report with no state, and after the state report for
-	// one with a state, so a new conversation has taken the pane over by
-	// the time its session_start is checked against it.
 	r := *out.Report
 	var alone *integration.Activity
 	if r.Activity != nil && !integration.StateActivity(r.Activity.Event) {
@@ -547,8 +453,6 @@ func reportHookEvent(out agentHookOutcome, client Caller, hio IO) agentHookOutco
 		default:
 			out.Applied, out.State, out.Reason = &res.Applied, res.State, res.Reason
 			if res.Window != "" {
-				// The rest of the event, and the start hint, are about the
-				// pane the report reached.
 				out.Session, out.Window = cmp.Or(res.Session, out.Session), res.Window
 			}
 			out.ActivityRecorded = res.ActivityRecorded
@@ -571,10 +475,6 @@ func reportHookEvent(out agentHookOutcome, client Caller, hio IO) agentHookOutco
 			}
 		}
 	}
-	// The subagent updates the same event carries, in order. A daemon from
-	// before subagent_update refuses each with invalid_params, which changes
-	// nothing; the first refusal ends the run, since the rest would be
-	// refused alike.
 	for _, a := range r.Extra {
 		res, err := reportHookActivity(client, out.Session, out.Window, out.Harness, out.HarnessPID, r.SessionID, a)
 		if err != nil {
@@ -587,8 +487,6 @@ func reportHookEvent(out agentHookOutcome, client Caller, hio IO) agentHookOutco
 	return out
 }
 
-// hookActivityResult is the part of report-agent-activity's answer the hook
-// reads.
 type hookActivityResult struct {
 	State     string `json:"state"`
 	Recorded  bool   `json:"recorded"`
@@ -596,10 +494,6 @@ type hookActivityResult struct {
 	Subagents int    `json:"subagents"`
 }
 
-// reportHookActivity sends one hook event with report-agent-activity. A
-// daemon from before the verb answers unknown_verb, which changes nothing, so
-// the hook does not ask list-verbs first; the error says why nothing was
-// recorded.
 func reportHookActivity(client Caller, sess, window, harness string, harnessPID int, sessionID string, a integration.Activity) (hookActivityResult, error) {
 	params := map[string]any{
 		"session":  sess,
@@ -627,11 +521,6 @@ func reportHookActivity(client Caller, sess, window, harness string, harnessPID 
 	return res, nil
 }
 
-// flushAtTurnEnd sends what the pane's status line feed held back when this
-// report ends a turn, since the status line does not run again until the
-// conversation changes. A report the identity guard refused is a nested
-// run's, or a harness's that runs outside the pane, and its turn is not the
-// pane's.
 func flushAtTurnEnd(out agentHookOutcome, res hookReportResult, client Caller, hio IO) bool {
 	if hio.StampDir == nil || out.Report == nil {
 		return false
@@ -682,43 +571,22 @@ func ResolvePane(o Options, hio IO, client Caller, sid int, ancestors []int) (se
 	return res.Session, res.WindowID, res.By, nil
 }
 
-// hookReportResult is the part of set-agent-state's answer the hook reads.
 type hookReportResult struct {
-	Applied          bool   `json:"applied"`
-	State            string `json:"state"`
-	Reason           string `json:"reason"`
-	ActivityRecorded *bool  `json:"activity_recorded"`
-	// TranscriptRefused is why the daemon did not join the pane to the
-	// transcript_path the report named, "" when it did or none was named.
+	Applied           bool   `json:"applied"`
+	State             string `json:"state"`
+	Reason            string `json:"reason"`
+	ActivityRecorded  *bool  `json:"activity_recorded"`
 	TranscriptRefused string `json:"transcript_refused"`
-	// Session and Window name the pane the daemon placed the report on, when
-	// the pane the hook named is gone: a shared server's hook, whose
-	// TUIOS_PANE_ID is the pane that started the server. Empty otherwise.
-	Session string `json:"session"`
-	Window  string `json:"window"`
+	Session           string `json:"session"`
+	Window            string `json:"window"`
 }
 
-// hookFields are the set-agent-state params a hook report may carry beyond
-// the ones every daemon takes. activity is the hook event for the pane's
-// activity ring; a daemon from before it drops it, and the report goes
-// without it.
 var hookFields = []string{"kind", "agent_session_id", "transcript_path", "transcript_leaf", "if_state", "subagent_id", "if_subagent_id", "harness_pid", "activity", "agent_cwd", "session_start", "notification"}
 
-// setAgentStateParams asks the daemon which params its set-agent-state takes.
-//
-// A daemon decodes params leniently and ignores a name it does not know, so a
-// daemon older than the hook fields would not refuse them: it would take the
-// report and drop the fields without a word. For most of them that only loses
-// information, but dropping if_state turns a conditional report into an
-// unconditional one, and Claude Code's idle_prompt would then overwrite done
-// about a minute after every turn. So the hook asks first. The daemon keeps
-// running across a tuios upgrade, which makes a new hook talking to an older
-// daemon the ordinary case right after one.
 func setAgentStateParams(client Caller) (map[string]bool, error) {
 	return verbParams(client, "set-agent-state")
 }
 
-// verbParams asks the daemon which params its verb takes, by name.
 func verbParams(client Caller, verb string) (map[string]bool, error) {
 	raw, err := client.Call("list-verbs", map[string]any{"verb": verb})
 	if err != nil {
@@ -760,16 +628,8 @@ func RequireIfState(client Caller) error {
 	return nil
 }
 
-// errConditionUnsupported is reportHook's error for a report whose condition
-// the daemon predates, which is not sent. What else the event reports still
-// goes.
 var errConditionUnsupported = errors.New("the daemon predates if_subagent_id, so the subagent's report was not sent. It works once the daemon restarts")
 
-// reportHook sends one report. The hook fields go only to a daemon whose
-// set-agent-state lists them, and the ones it does not are returned as
-// dropped. A report with if_state is not sent at all to a daemon without it,
-// since sent without its condition it could turn a finished pane back to
-// working.
 func reportHook(client Caller, sess, window, harness string, harnessPID int, r integration.Report) (hookReportResult, []string, error) {
 	params := map[string]any{
 		"session": sess,
@@ -829,8 +689,6 @@ func reportHook(client Caller, sess, window, harness string, harnessPID int, r i
 			return hookReportResult{}, dropped, errors.New("the daemon predates if_state, so a conditional report was not sent")
 		}
 		if r.IfSubagentID != "" && !known["if_subagent_id"] {
-			// Sent without it, a subagent's report would clear the main
-			// agent's prompt as well.
 			return hookReportResult{}, dropped, errConditionUnsupported
 		}
 	}
@@ -845,10 +703,6 @@ func reportHook(client Caller, sess, window, harness string, harnessPID int, r i
 	return res, dropped, nil
 }
 
-// reportHookSession sends an identity-only report with set-agent-session. A
-// daemon older than the verb would answer unknown_verb, which costs nothing,
-// but the hook asks list-verbs first anyway so --explain can say why nothing
-// was stored.
 func reportHookSession(client Caller, sess, window, harness string, harnessPID int, r integration.Report) (hookReportResult, []string, error) {
 	raw, err := client.Call("list-verbs", map[string]any{"verb": "set-agent-session"})
 	if err != nil {
@@ -916,20 +770,13 @@ func reportHookSession(client Caller, sess, window, harness string, harnessPID i
 	return res, dropped, nil
 }
 
-// codedError is a verb error that carries the daemon's stable error code,
-// such as session.VerbCallError.
 type codedError interface {
 	error
 	ErrorCode() string
 }
 
-// codeUnknownVerb is the daemon's error code for a verb it does not have
-// (session.ErrVerbUnknownVerb). Error codes are part of the protocol and do
-// not change.
 const codeUnknownVerb = "unknown_verb"
 
-// shortWindowID is the first eight characters of a window id, the form the
-// hint names a pane by.
 func shortWindowID(id string) string {
 	const prefix = 8
 	if len(id) <= prefix {

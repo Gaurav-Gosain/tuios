@@ -8,8 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// rlo and pdf are the bidi override and its end, built from their code points
-// so the source holds no invisible character.
 var (
 	rlo = string(rune(0x202e))
 	pdf = string(rune(0x202c))
@@ -66,8 +64,6 @@ func TestRendererShowsNoAgentEscape(t *testing.T) {
 	assertOnlyOwnSGR(t, out.String())
 }
 
-// assertOnlyOwnSGR fails on any escape in s that is not one of the
-// transcript's SGR sequences.
 func assertOnlyOwnSGR(t *testing.T, s string) {
 	t.Helper()
 	for _, sgr := range []string{sgrReset, sgrBold, sgrDim, sgrRed, sgrGreen, sgrYellow, sgrCyan} {
@@ -113,8 +109,6 @@ func TestInboxLine(t *testing.T) {
 			t.Errorf("%s: InboxLine = %q, want %q", tc.name, got, tc.want)
 		}
 	}
-	// A request the Inbox cannot answer still reports a line, cleaned, which
-	// the Inbox shows without answer keys.
 	p := NewPermission(Tool{Title: "Run\x1b[2J  command", Kind: "execute", Input: map[string]string{"command": "rm -rf /"}}, once, func(int) {}, func() {})
 	if got := StateLine(p); got != "approve execute: Run[2J command" {
 		t.Errorf("StateLine = %q", got)

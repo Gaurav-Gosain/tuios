@@ -65,12 +65,8 @@ type MobileButton struct {
 	Order uint8
 }
 
-// actionTable is every action tuios knows. A new action is one entry here.
 var actionTable = [...]ActionSpec{
 	{Name: "file_search", Desc: "Search files below the folder the sidebar shows", Run: RunView},
-	// The rail's files section. They act only while the cursor is on a row of
-	// the listing, which is why three of them share a key with a rail binding
-	// above and neither loses it.
 	{Name: "file_create", Desc: "Files: new file, or a folder with a trailing /"},
 	{Name: "file_rename", Desc: "Files: rename this file"},
 	{Name: "file_delete", Desc: "Files: delete this file"},
@@ -105,14 +101,12 @@ var actionTable = [...]ActionSpec{
 	{Name: "go_to", Desc: "Preview: go to a line", Run: RunView},
 	{Name: "wrap", Desc: "Preview: wrap long lines, or cut them", Run: RunView},
 	{Name: "open_editor", Desc: "Preview: open the file in your editor, in a new pane", Run: RunView},
-	// The menu of a right click on a selection in the agents view's thread.
 	{Name: "selection_copy", Desc: "Agents view: copy the selected text"},
 	{Name: "selection_copy_markdown", Desc: "Agents view: copy the selected entries as Markdown"},
 	{Name: "selection_search", Desc: "Agents view: search the thread for the selected text"},
 	{Name: "end", Desc: "Preview: go to the end of the file", Run: RunView},
 	{Name: "file_send", Desc: "Files: send this file or folder to a host"},
 	{Name: "file_insert_path", Desc: "Files: paste the path into the focused pane"},
-	// The Copies panel: the copies between machines.
 	{Name: "transfers_down", Desc: "Copies: next copy", Run: RunView},
 	{Name: "transfers_up", Desc: "Copies: previous copy", Run: RunView},
 	{Name: "transfers_pause", Desc: "Copies: pause or go on with the copy", Run: RunView},
@@ -129,10 +123,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "list_first", Desc: "Lists: first row", Run: RunView},
 	{Name: "list_last", Desc: "Lists: last row", Run: RunView},
 
-	// The agents view, the prompt open over it, and the mailbox. Each acts
-	// only while its overlay is up. The action names keep the inbox_ prefix
-	// they had before the Inbox became the agents view, so configs keep
-	// working.
 	{Name: "inbox_down", Desc: "Agents view: next row", Run: RunView},
 	{Name: "inbox_up", Desc: "Agents view: previous row", Run: RunView},
 	{Name: "inbox_page_down", Desc: "Agents view: ten rows down", Run: RunView},
@@ -204,9 +194,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "inbox_view_list", Desc: "Agents view: show the agents as a column or as a strip above the focus", Run: RunView},
 	{Name: "inbox_artifact", Desc: "Agents view: open what the agent has shown, such as a TML form, and use it", Run: RunView},
 
-	// The rail's agent rows. They act only while the cursor is on an agent
-	// row, and a key they share with a rail binding keeps its rail meaning on
-	// every other row.
 	{Name: "agent_unread", Desc: "Agents: mark the pane's finished turn unread", Run: RunView},
 	{Name: "agent_snooze", Desc: "Agents: snooze what needs you in the pane", Run: RunView},
 	{Name: "agent_reply", Desc: "Agents: reply to the agent", Run: RunView},
@@ -230,19 +217,14 @@ var actionTable = [...]ActionSpec{
 	{Name: "mail_new", Desc: "Mailbox: write a new message to an agent", Run: RunView},
 	{Name: "mail_back", Desc: "Mailbox: back, or close", Run: RunView},
 
-	// The rail's reorder actions. They are here for the machine header's menu,
-	// which resolves every row's label and key hint from this table.
 	{Name: "reorder_up", Desc: "Rail: move this session or machine up"},
 	{Name: "reorder_down", Desc: "Rail: move this session or machine down"},
 
-	// Window Management
 	{Name: "new_window", Desc: "New window", GUI: true, Mobile: MobileButton{Label: "new", Order: 1}, Aliases: []Action{"prefix_new_window", "window_prefix_new"}},
 	{Name: "new_window_ssh", Desc: "New window that runs the focused pane's ssh"},
 	{Name: "close_window", Desc: "Close window", GUI: true, Mobile: MobileButton{Label: "close", Order: 2}, Aliases: []Action{"prefix_close_window", "window_prefix_close"}},
 	{Name: "rename_window", Desc: "Rename window"},
 	{Name: "set_accent", Desc: "Accent color"},
-	// Reached from the rail's session row and its menu; the row carries which
-	// session, so it has no key of its own.
 	{Name: "set_session_accent", Desc: "Session color"},
 	{Name: "set_note", Desc: "Write a note for the session: what it is for or what comes next"},
 	{Name: "minimize_window", Desc: "Minimize window", GUI: true},
@@ -259,21 +241,17 @@ var actionTable = [...]ActionSpec{
 	{Name: "last_pane", Desc: "Back to the previous pane", GUI: true},
 	{Name: "select_window_", Desc: "Select window %d", Count: 9, GUI: true},
 
-	// Multifocus. Neither action has a default key.
 	{Name: "toggle_multifocus_active", Desc: "Add or remove the focused pane from multifocus", GUI: true},
 	{Name: "toggle_multifocus_all", Desc: "Add all panes on the workspace to multifocus, or clear it", GUI: true},
 	{Name: "close_workspace", Desc: "Close every pane on a workspace, after a confirmation"},
 
-	// Workspaces
 	{Name: "next_workspace", Desc: "Switch to the next workspace that has panes", Repeat: true},
 	{Name: "prev_workspace", Desc: "Switch to the previous workspace that has panes", Repeat: true},
 	{Name: "switch_workspace_", Desc: "Switch to workspace %d", Count: 9, GUI: true},
 	{Name: "move_and_follow_", Desc: "Move to workspace %d and follow", Count: 9, GUI: true},
-	// Reached by the chord and by a dock pill's menu, so both name it the same.
 	{Name: "workspace_prefix_rename", Desc: "Rename workspace"},
 	{Name: "workspace_pill_switch", Desc: "Switch to workspace"},
 
-	// Layout
 	{Name: "snap_left", Desc: "Snap or focus left", GUI: true},
 	{Name: "snap_right", Desc: "Snap or focus right", GUI: true},
 	{Name: "focus_up", Desc: "Focus the pane above", GUI: true, Repeat: true, Aliases: []Action{"terminal_focus_up"}},
@@ -316,7 +294,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "resize_height_80", Desc: "Set focused window height to 80%", GUI: true},
 	{Name: "resize_height_90", Desc: "Set focused window height to 90%", GUI: true},
 
-	// BSP Tiling
 	{Name: "split_horizontal", Desc: "Split the window horizontally (top/bottom)", GUI: true, Mobile: MobileButton{Label: "hsplit", Order: 9}, Aliases: []Action{"prefix_split_horizontal"}},
 	{Name: "split_vertical", Desc: "Split the window vertically (left/right)", GUI: true, Mobile: MobileButton{Label: "vsplit", Order: 8}, Aliases: []Action{"prefix_split_vertical"}},
 	{Name: "split_ssh_horizontal", Desc: "Split top/bottom, and run the focused pane's ssh in the new pane"},
@@ -333,7 +310,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "set_tiling_scheme_alternate", Desc: "Set the workspace's tiling scheme to alternate", GUI: true},
 	{Name: "set_tiling_scheme_smart_split", Desc: "Set the workspace's tiling scheme to smart split", GUI: true},
 
-	// Master-stack
 	{Name: "cycle_master_position", Desc: "Move the master panes to the next side: left, right, top, bottom, center", GUI: true},
 	{Name: "set_master_position_left", Desc: "Put the master panes on the left", GUI: true},
 	{Name: "set_master_position_right", Desc: "Put the master panes on the right", GUI: true},
@@ -345,7 +321,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "swap_with_master", Desc: "Swap the focused pane with the master pane", GUI: true},
 	{Name: "focus_master", Desc: "Focus the master pane", GUI: true},
 
-	// Mode Control
 	{Name: "enter_terminal_mode", Desc: "Enter terminal mode"},
 	{Name: "enter_window_mode", Desc: "Enter window management mode"},
 	{Name: "hold_window_mode", Desc: "Hold for window management mode", Run: RunView},
@@ -361,7 +336,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "prev_agent", Desc: "Previous agent pane, in the rail's order", GUI: true},
 	{Name: "switch_session_", Desc: "Switch to session %d", Count: 9, GUI: true},
 
-	// Clipboard
 	{Name: "copy_selection", Desc: "Copy selection to clipboard"},
 	{Name: "paste_clipboard", Desc: "Paste from clipboard"},
 	{Name: "paste_image", Desc: "Paste the clipboard image as a file path"},
@@ -376,12 +350,9 @@ var actionTable = [...]ActionSpec{
 	{Name: ActionLeaveMode, Desc: "Turn off the key mode on top"},
 	{Name: "hints_all_panes", Desc: "Label the text on all panes to copy it"},
 
-	// The scrollback in the editor (prefix E, ctrl+g in copy mode)
 	{Name: ActionEditScrollback, Desc: "Open the scrollback in the editor"},
-	// No default key (cmd+k in other terminals)
 	{Name: ActionClearScrollback, Desc: "Clear the scrollback and the screen above the prompt"},
 
-	// Copy mode search (no default keybinding)
 	{Name: ActionCopyModeSearchForward, Desc: "Enter copy mode and search forward"},
 	{Name: ActionCopyModeSearchBackward, Desc: "Enter copy mode and search backward"},
 	{Name: ActionCopyModeLeft, Desc: "Copy mode: move left", Run: RunMotion},
@@ -421,23 +392,18 @@ var actionTable = [...]ActionSpec{
 	{Name: ActionReviewUnstageFile, Desc: "Review: unstage the whole file", Run: RunView},
 	{Name: ActionReviewUndoStage, Desc: "Review: undo the last stage or unstage", Run: RunView},
 
-	// Session lifecycle (context menu rows; no default keybinding)
 	{Name: "settings_sidebar", Desc: "Sidebar settings"},
 	{Name: "rename_session", Desc: "Rename the session the menu was opened on"},
 	{Name: "rename_workspace", Desc: "Rename the workspace the session is showing"},
 	{Name: "kill_session", Desc: "Kill the session the menu was opened on"},
 	{Name: "kill_session_next", Desc: "Kill session, go to next"},
 	{Name: "kill_session_quit", Desc: "Kill session and quit"},
-	// The palette, the settings, the rail's menu for this machine and the
-	// version notice; no default key.
 	{Name: "restart_daemon", Desc: "Restart the daemon with the newest tuios installed"},
 
-	// System
 	{Name: "toggle_logs", Desc: "Toggle log viewer"},
 	{Name: "toggle_cache_stats", Desc: "Toggle cache statistics"},
 	{Name: "toggle_spotlight", Desc: "Toggle spotlight", Aliases: []Action{"prefix_toggle_spotlight"}},
 
-	// Prefix Mode
 	{Name: "prefix_rename_window", Desc: "Rename window"},
 	{Name: "prefix_keybinds", Desc: "Open the keybind manager"},
 	{Name: "prefix_next_window", Desc: "Next window", GUI: true, Mobile: MobileButton{Label: "next", Order: 3}, Aliases: []Action{"window_prefix_next"}},
@@ -513,23 +479,19 @@ var actionTable = [...]ActionSpec{
 	{Name: "new_worktree", Desc: "Make a worktree session in the focused pane's repository"},
 	{Name: "prefix_layout", Desc: "Enter layout prefix"},
 
-	// Tape Prefix
 	{Name: "prefix_cancel", Desc: "Leave the prefix menu", Aliases: []Action{"debug_prefix_cancel", "layout_prefix_cancel", "minimize_prefix_cancel", "tape_prefix_cancel", "window_prefix_cancel", "workspace_prefix_cancel"}},
 	{Name: "tape_prefix_review", Desc: "Review project tape"},
 	{Name: "tape_prefix_record", Desc: "Start recording"},
 	{Name: "tape_prefix_stop", Desc: "Stop recording"},
 
-	// Tape Actions
 	{Name: "toggle_tape_manager", Desc: "Toggle tape manager", Aliases: []Action{"tape_prefix_manager"}},
 	{Name: "stop_recording", Desc: "Stop tape recording"},
 
-	// Debug Prefix
 	{Name: "debug_prefix_logs", Desc: "Toggle log viewer"},
 	{Name: "debug_prefix_cache", Desc: "Toggle cache statistics"},
 	{Name: "debug_prefix_animations", Desc: "Toggle animations"},
 	{Name: "debug_prefix_showkeys", Desc: "Toggle showkeys overlay"},
 
-	// Terminal Mode (direct keybinds, no prefix required)
 	{Name: "terminal_next_window", Desc: "Next window (terminal mode)", Repeat: true},
 	{Name: "terminal_prev_window", Desc: "Previous window (terminal mode)", Repeat: true},
 	{Name: "terminal_exit_mode", Desc: "Exit terminal mode (to window mode)"},
@@ -541,15 +503,12 @@ var actionTable = [...]ActionSpec{
 	{Name: "terminal_scroll_page_down", Desc: "Scroll down one page", Run: RunView},
 	{Name: "terminal_paste_host", Desc: "Paste from the host clipboard", Run: RunView},
 
-	// Global (window mode and terminal mode alike)
 	{Name: "command_palette", Desc: "Open the command palette", Mobile: MobileButton{Label: "cmds", Order: 6}, Aliases: []Action{"prefix_command_palette"}},
 	{Name: "launcher", Desc: "Open the app launcher"},
 	{Name: "new_session", Desc: "Make a session, asking which machine"},
 
-	// Script playback
 	{Name: "script_pause", Desc: "Pause or resume the playing tape", Run: RunView},
 
-	// Layout Prefix
 	{Name: "layout_prefix_load", Desc: "Open the layout picker"},
 	{Name: "layout_prefix_save", Desc: "Save the current layout"},
 	{Name: "window_prefix_rename", Desc: "Rename the window"},
@@ -558,8 +517,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "open_keybind_presets", Desc: "Choose the keys: tuios, tmux, screen or zellij"},
 	{Name: "use_simple_controls", Desc: "Use simple controls: buttons on the dock, no window mode"},
 	{Name: "use_keyboard_controls", Desc: "Use keyboard controls: the leader key and window mode"},
-	// Command palette rows that had their own code and no action. As actions
-	// they can be bound to a key and named in a tape. None has a default key.
 	{Name: "new_window_on_host", Desc: "Open a new window on another machine"},
 	{Name: "toggle_shared_borders", Desc: "Toggle shared borders between neighbouring panes"},
 	{Name: "next_saved_layout", Desc: "Load the next saved layout"},
@@ -581,10 +538,6 @@ var actionTable = [...]ActionSpec{
 	{Name: "dispatch_resume", Desc: "Start task dispatch again"},
 	{Name: "multi_copy_mode", Desc: "Copy mode in every pane of the multifocus set"},
 
-	// The names the dispatcher runs that have no description of their own:
-	// the prefix sub-menus' copies of window and workspace actions, and the
-	// scrolling layout's keys. A key bound to one in config.toml runs it,
-	// and a tape may name it, but no list shows it.
 	{Name: "minimize_prefix_focus_only", Hidden: true, GUI: true},
 	{Name: "minimize_prefix_focused", Hidden: true, GUI: true},
 	{Name: "minimize_prefix_restore_", Count: 9, Hidden: true, GUI: true},
@@ -635,7 +588,6 @@ func CanonicalAction(name string) string {
 	return name
 }
 
-// actionIndex maps every action name, family members included, to its spec.
 var actionIndex = sync.OnceValue(func() map[string]ActionSpec {
 	idx := make(map[string]ActionSpec, len(actionTable)+40)
 	for _, spec := range actionTable {
@@ -664,8 +616,6 @@ func GUIRunnable(name string) bool {
 	return ok && spec.GUI
 }
 
-// prefixRepeatActions is DefaultPrefixRepeat: the actions with Repeat set,
-// family members included, in table order.
 func prefixRepeatActions() []string {
 	var names []string
 	for _, spec := range actionTable {
@@ -705,8 +655,6 @@ func MobileCommands() []MobileCommand {
 	return out
 }
 
-// actionDescriptions is ActionDescriptions: every name and its line, for the
-// actions that are not Hidden.
 func actionDescriptions() map[string]string {
 	idx := actionIndex()
 	out := make(map[string]string, len(idx))

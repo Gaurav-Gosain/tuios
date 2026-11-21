@@ -49,8 +49,6 @@ func detectHostTerminal(getenv func(string) string) HostTerminal {
 	case prog == "WarpTerminal":
 		return HostWarp
 	case prog == "tern":
-		// Tern answers XTVERSION as kitty and sets KITTY_WINDOW_ID, so it has
-		// to be named before the kitty checks below.
 		return HostTern
 	}
 	if getenv("KITTY_WINDOW_ID") != "" {

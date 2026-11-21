@@ -37,20 +37,10 @@ const (
 // stops the list here and the list there drifting apart.
 var ScreensaverEffects = append([]string{ScreensaverRandomEffect}, tfx.Names()...)
 
-// retiredScreensaverEffects are names that used to be accepted and are not any
-// more. A config naming one still loads: the name maps to its replacement
-// rather than tripping the enum validator with a warning about a value the
-// person never chose and cannot look up.
-//
-// colorshift was dropped because it made a poor screen saver. It never moved a
-// character, so nothing happened on screen except a hue sweep, and being the
-// only effect that restyled every cell of every frame it was also the most
-// expensive one to draw.
 var retiredScreensaverEffects = map[string]string{
 	"colorshift": ScreensaverRandomEffect,
 }
 
-// defaultScreensaverConfig returns the section DefaultConfig carries.
 func defaultScreensaverConfig() ScreensaverConfig {
 	return ScreensaverConfig{
 		IdleMinutes: ScreensaverDefaultIdleMinutes,
@@ -58,9 +48,6 @@ func defaultScreensaverConfig() ScreensaverConfig {
 	}
 }
 
-// fillMissingScreensaver fills empty strings with defaults. Pointer fields stay
-// nil on purpose: the accessors below treat nil as "the default", so an absent
-// key needs no repair.
 func fillMissingScreensaver(cfg, defaultCfg *UserConfig) {
 	s, d := &cfg.Screensaver, &defaultCfg.Screensaver
 	if s.Effect == "" {

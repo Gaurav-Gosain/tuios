@@ -38,7 +38,6 @@ func main() {
 	b.WriteString("var builtinTintTable = [...]builtinTintInfo{\n")
 	for _, t := range all {
 		fmt.Fprintf(&b, "\t{%q, %q, %v, ", t.DisplayName, t.ID, t.Dark)
-		// nil and empty differ in bubbletint's data, so they differ here.
 		if t.CreditSources == nil {
 			b.WriteString("nil},\n")
 		} else {
@@ -76,8 +75,6 @@ func main() {
 	fmt.Printf("wrote %d tints\n", len(all))
 }
 
-// tintSlots must list the fields in the order tints.go's builtinTints reads
-// them back.
 func tintSlots(t *tint.Tint) []*tint.Color {
 	return []*tint.Color{
 		t.Fg, t.Bg, t.SelectionBg, t.Cursor,

@@ -9,23 +9,18 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/linediff"
 )
 
-// A read-only file viewer that behaves enough like less and vim for a tour:
-// scrolling, jumping, searching, and the ways out people know (q, :q, :wq).
-// It never writes, and it says so kindly when someone tries to edit.
-
 type viewer struct {
 	t      *TTY
 	name   string
 	lines  []string
-	vim    bool // vim look: line numbers, tildes, a vim status line
+	vim    bool
 	top    int
 	msg    string
-	cmd    []rune // the : or / line being typed
+	cmd    []rune
 	cmdOn  bool
 	search string
 }
 
-// cmdView is less, more, view, vim and friends.
 func cmdView(s *shell, args []string) int {
 	name := args[0]
 	var target string
@@ -96,7 +91,6 @@ func (v *viewer) run() int {
 	}
 }
 
-// body is how many rows of text fit above the status line.
 func (v *viewer) body() int {
 	_, rows := v.t.Size()
 	return max(rows-1, 1)
@@ -107,7 +101,6 @@ func (v *viewer) scroll(d int) {
 	v.top = min(max(v.top+d, 0), maxTop)
 }
 
-// feed handles one chunk of input and reports whether to quit.
 func (v *viewer) feed(b []byte) bool {
 	for i := 0; i < len(b); i++ {
 		c := b[i]
@@ -118,7 +111,6 @@ func (v *viewer) feed(b []byte) bool {
 			continue
 		}
 		if c == 0x1b {
-			// Arrow and page keys; a lone Esc just clears the message.
 			if i+2 < len(b) && (b[i+1] == '[' || b[i+1] == 'O') {
 				j := i + 2
 				for j < len(b) && (b[j] < 0x40 || b[j] > 0x7e) {
@@ -189,7 +181,6 @@ func (v *viewer) key(seq string) {
 	}
 }
 
-// feedCmd handles a key while the : or / line is open.
 func (v *viewer) feedCmd(c byte) bool {
 	switch c {
 	case 0x1b, 0x03:
@@ -321,8 +312,6 @@ func padLeft(s string, w int) string {
 	return strings.Repeat(" ", w-len(s)) + s
 }
 
-// clip expands tabs and cuts a line to width cells. The files are ASCII and
-// box drawing, so one rune is one cell.
 func clip(s string, width int) string {
 	s = strings.ReplaceAll(s, "\t", "    ")
 	if width <= 0 {
@@ -347,8 +336,6 @@ func initGoKeywords() {
 	}
 }
 
-// highlight colours one line: Go keywords, strings and comments, Markdown
-// headings and bullets, and the current search matches.
 func highlight(ext, line, search string) string {
 	var out string
 	switch ext {

@@ -7,19 +7,14 @@ import (
 	"strings"
 )
 
-// headLimit bounds how much of a ".git" file or HEAD is read. Each is one
-// line, and a directory that puts something else under those names is not a
-// checkout worth stalling on.
 const headLimit = 4096
 
-// readFirstLine is the first line of a small file, trimmed. It reads at most
-// headLimit bytes.
 func readFirstLine(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
+	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(io.LimitReader(f, headLimit))
 	if err != nil {
 		return "", err

@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// prefixTables pairs every which-key panel with the config section it
-// describes.
 var prefixTables = []struct {
 	name    string
 	section func(*UserConfig) map[string][]string
@@ -29,9 +27,6 @@ var prefixTables = []struct {
 // an action that prefix binds, in both the local and the daemon layout.
 func TestWhichKeyTablesMatchTheKeymap(t *testing.T) {
 	cfg := DefaultConfig()
-	// A leader row may name an action only a preset binds: the row is left
-	// out where the action has no key. Every action a preset binds after the
-	// leader needs a row as much as a default one does.
 	presetBound := map[string]map[string]bool{}
 	for _, table := range prefixTables {
 		presetBound[table.name] = map[string]bool{}

@@ -14,16 +14,12 @@ import (
 
 const allowLayer = "//tuios:allow-layer"
 
-// cockpitLayerPredicates are the per-layer checks of the agents view. Each
-// says one sub-view is open. Which one is on top is CockpitTop's to decide.
 var cockpitLayerPredicates = []string{
 	"CockpitCopyOn", "CockpitImageOpen", "CockpitSpawnOpen", "CockpitCompareOpen", "CockpitArtifactFocused",
 	"CockpitNewCardOpen", "InboxConfirmOpen", "InboxPeeking", "InboxReplyOpen", "InboxReasonOpen",
 	"InboxSelecting", "CockpitMenuOpen", "CockpitShipOpen", "InboxSnoozePicking", "InboxAgentsSheetOpen",
 }
 
-// cockpitLayerReaders are the functions that act on the layer on top: the
-// key router, the key bar and the click handler.
 var cockpitLayerReaders = []struct{ file, fn string }{
 	{"internal/input/inbox_input.go", "handleInboxInput"},
 	{"internal/app/render_cockpit.go", "cockpitHints"},
@@ -110,8 +106,6 @@ func other(o *app.OS) { _ = o.CockpitShipOpen() }
 	}
 }
 
-// layerPredicateCalls returns file:line for every call of a per-layer
-// predicate inside function fn of src, and whether fn is there.
 func layerPredicateCalls(t *testing.T, name string, src []byte, fn string) ([]string, bool) {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -154,8 +148,6 @@ func layerPredicateCalls(t *testing.T, name string, src []byte, fn string) ([]st
 	return out, seen
 }
 
-// cockpitLayerConsts are the CockpitLayer constants of file, CockpitBase and
-// the unexported count left out.
 func cockpitLayerConsts(t *testing.T, file string) []string {
 	t.Helper()
 	f, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
@@ -179,7 +171,6 @@ func cockpitLayerConsts(t *testing.T, file string) []string {
 	return out
 }
 
-// funcSource is the source text of function fn in file.
 func funcSource(t *testing.T, file, fn string) string {
 	t.Helper()
 	src, err := os.ReadFile(file)

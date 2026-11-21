@@ -10,8 +10,6 @@ func TestParseProjectHeaderUnknownScopeDefaults(t *testing.T) {
 }
 
 func TestParseProjectHeaderStopsAtFirstCommand(t *testing.T) {
-	// A directive appearing after an action command is not part of the header:
-	// header directives must precede any action command.
 	content := "Type \"x\" Enter\nSession \"late\"\n"
 	h, _ := ParseProjectHeader(content)
 	if h.Session != "" {

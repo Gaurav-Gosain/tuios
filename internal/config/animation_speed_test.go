@@ -5,7 +5,7 @@ import "testing"
 func TestAnimationSpeedScalesDurations(t *testing.T) {
 	cases := []struct {
 		speed int
-		want  int64 // ms for DefaultAnimationDuration
+		want  int64
 	}{
 		{0, 300}, {100, 300}, {200, 150}, {50, 600}, {1000, 75}, {10, 1200},
 	}

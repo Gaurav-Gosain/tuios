@@ -10,9 +10,6 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// glyphsTempDir points XDG at a fresh directory and returns the glyphs
-// directory inside it. xdg resolves the config home once at init, so setting
-// the variable without reloading leaves it reading the real one.
 func glyphsTempDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -60,11 +57,6 @@ func TestABorderRuneWiderThanOneCellIsDropped(t *testing.T) {
 }
 
 func TestEveryBuiltinSetIsDrawableWhereItSaysItIs(t *testing.T) {
-	// A built-in never goes through the sanitizer a file does, because it is
-	// written here rather than read from disk. So the widths a file would be
-	// checked against are checked here instead: a built-in with a two-cell
-	// glyph in a one-cell role would move a window control out from under the
-	// pointer with nothing to catch it.
 	for _, id := range []string{GlyphSetNone, "unicode", "heavy", "ascii"} {
 		set := ResolveGlyphSet(id)
 		probe := *set
@@ -96,8 +88,6 @@ func TestAMissingSetLeavesTheBuiltInsRatherThanBlankingTheChrome(t *testing.T) {
 	}
 }
 
-// writeGlyphSet puts a set file in a temporary glyphs directory and points XDG
-// at it, so a test exercises the same read path a user's file takes.
 func writeGlyphSet(t *testing.T, id string, body map[string]any) {
 	t.Helper()
 	glyphs := glyphsTempDir(t)

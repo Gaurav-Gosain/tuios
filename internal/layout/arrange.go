@@ -6,14 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// Arrangements rebuild a BSP tree so its panes sit in one of tmux's
-// select-layout shapes. tuios xpanes uses them to lay out the panes it opens.
-//
-// A chain of k panes cut along one axis is even when the first cut gives the
-// first pane 1/k of the space and the rest of the chain the other (k-1)/k.
-// EqualizeRatios cannot do that: it sets every cut to one half, which gives a
-// chain of four panes 1/2, 1/4, 1/8, 1/8.
-
 // The arrangements, under tmux's names.
 const (
 	ArrangeTiled          = "tiled"
@@ -57,7 +49,6 @@ func leaves(ids []int) []*TileNode {
 	return out
 }
 
-// evenChain cuts along one axis so each node gets the same share.
 func evenChain(split SplitType, nodes []*TileNode) *TileNode {
 	switch len(nodes) {
 	case 0:
@@ -70,7 +61,6 @@ func evenChain(split SplitType, nodes []*TileNode) *TileNode {
 	return NewInternalNode(split, 1/float64(len(nodes)), nodes[0], rest)
 }
 
-// tiledGrid is rows of up to cols panes, stacked evenly.
 func tiledGrid(ids []int) *TileNode {
 	n := len(ids)
 	if n == 0 {
@@ -85,7 +75,6 @@ func tiledGrid(ids []int) *TileNode {
 	return evenChain(SplitHorizontal, rows)
 }
 
-// indexLeaves fills WindowToNode from the subtree at n.
 func (t *BSPTree) indexLeaves(n *TileNode) {
 	if n == nil {
 		return

@@ -12,27 +12,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
-// fileFormat is how tuios's part of one file is written, found and removed.
-// Every harness keeps its hooks somewhere different, in a different shape, and
-// each shape is one of these. apply and state never touch the disk: the target
-// reads the file, hands its bytes over, and writes what comes back, so every
-// format gets the same atomic write, backup and symlink handling.
 type fileFormat interface {
-	// apply returns the file with tuios's part as this build installs it
-	// (install) or with it removed. changed says the content differs from
-	// have; remove says the file should be deleted rather than written. have
-	// is nil when the file does not exist.
 	apply(t *Target, have []byte, run Runner, install bool) (out []byte, changed, remove bool, err error)
-	// state reads what is installed: whether any of tuios's part is there,
-	// whether it is exactly what tuios would install, and the integration
-	// version it carries (0 when it names none).
 	state(t *Target, have []byte, run Runner) (installed, current bool, version int, err error)
-	// owned reports whether tuios owns the whole file, so there is no user
-	// content in it to back up.
 	owned() bool
 }
 
-// maxVersion is the highest integration version data names, 0 when none.
 func maxVersion(data []byte) int {
 	best := 0
 	for _, m := range versionRe.FindAllStringSubmatch(string(data), -1) {
@@ -45,9 +30,6 @@ func maxVersion(data []byte) int {
 	return best
 }
 
-// nestedHooks is Claude Code's hooks shape, which Codex, Gemini CLI, Qwen
-// Code, Qoder CLI, Droid and Devin CLI share: a "hooks" object keyed by event,
-// each an array of matcher groups holding command hooks.
 type nestedHooks struct {
 	matcher string
 }
@@ -83,16 +65,11 @@ func (nestedHooks) state(t *Target, have []byte, run Runner) (bool, bool, int, e
 
 func (nestedHooks) owned() bool { return false }
 
-// flatHooks is the shape where each event's array holds the hook objects
-// themselves, with no matcher group around them: Crush's crush.json and
-// Cursor's hooks.json. entry builds the object for one event. version1 adds a
-// top-level "version": 1 to a file that has none, which Cursor's format needs.
 type flatHooks struct {
 	entry    func(command string, ev HookEvent) map[string]any
 	version1 bool
 }
 
-// flatManaged lists the managed commands in a flat hooks document.
 func flatManaged(root *orderedObject) ([]managedEntry, error) {
 	raw, ok := root.get("hooks")
 	if !ok {
@@ -219,16 +196,10 @@ func (flatHooks) state(t *Target, have []byte, run Runner) (bool, bool, int, err
 
 func (flatHooks) owned() bool { return false }
 
-// ownedFile is a file tuios writes whole: a plugin, an extension, or a hook
-// file in a directory the harness merges. A file at the path that tuios did
-// not write is refused and never removed.
 type ownedFile struct {
 	render func(t *Target, run Runner) []byte
 }
 
-// isManagedFile reports whether a file is one tuios wrote: a plugin carries
-// TUIOS_INTEGRATION_ID, and a JSON hook file, which has nowhere for a comment,
-// carries the managed command.
 func isManagedFile(data []byte) bool {
 	if bytes.Contains(data, []byte("TUIOS_INTEGRATION_ID=")) {
 		return true
@@ -241,7 +212,6 @@ func isManagedFile(data []byte) bool {
 	return false
 }
 
-// managedCommandRe finds an agent-hook command with its version marker.
 var managedCommandRe = lazyre.New(` agent-hook [a-z-]+ ` + managedMarker + ` \d+`)
 
 func (f ownedFile) apply(t *Target, have []byte, run Runner, install bool) ([]byte, bool, bool, error) {
@@ -267,12 +237,8 @@ func (f ownedFile) state(t *Target, have []byte, run Runner) (bool, bool, int, e
 
 func (ownedFile) owned() bool { return true }
 
-// errNotOurs is a file at a path tuios owns that tuios did not write.
 var errNotOurs = errors.New("exists and was not written by tuios, so it is left alone")
 
-// namedBlock is a JSON object keyed by hook name, where tuios owns one key:
-// Antigravity CLI's hooks.json. The block maps each event to a flat list of
-// command handlers.
 type namedBlock struct {
 	key string
 }
@@ -342,11 +308,6 @@ func (f namedBlock) state(t *Target, have []byte, run Runner) (bool, bool, int, 
 
 func (namedBlock) owned() bool { return false }
 
-// tomlBlock is a run of [[hooks]] tables tuios appends to a TOML config
-// between two marker comments: Kimi Code CLI's config.toml and Mistral Vibe's
-// hooks.toml. Everything outside the markers is the user's and is kept byte
-// for byte. When named is true, each entry carries name = "tuios-<event>" and
-// type = "<event>" (Mistral Vibe's schema); otherwise event = "<event>".
 type tomlBlock struct {
 	named bool
 }
@@ -356,7 +317,6 @@ const (
 	tomlBlockEnd   = "# <<< tuios integration"
 )
 
-// tomlString quotes s as a TOML basic string.
 func tomlString(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')
@@ -399,8 +359,6 @@ func (f tomlBlock) block(t *Target, run Runner) string {
 	return b.String()
 }
 
-// inlineHooksRe finds a top-level hooks = [...] key, which [[hooks]] tables
-// cannot be added to.
 var inlineHooksRe = lazyre.New(`(?m)^\s*hooks\s*=`)
 
 func (f tomlBlock) apply(t *Target, have []byte, run Runner, install bool) ([]byte, bool, bool, error) {

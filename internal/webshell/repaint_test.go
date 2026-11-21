@@ -38,8 +38,6 @@ func TestRepaintFitsThePane(t *testing.T) {
 			}
 		}
 	}()
-	// waitFor waits until ok holds for what the shell printed from offset
-	// from on, and returns that.
 	waitFor := func(from int, what string, ok func(string) bool) string {
 		t.Helper()
 		deadline := time.Now().Add(5 * time.Second)
@@ -82,7 +80,6 @@ func TestRepaintFitsThePane(t *testing.T) {
 		got := waitFor(from, "a repaint at "+strconv.Itoa(cols)+" columns", func(s string) bool {
 			return strings.Contains(s, "\x1b[3J") && strings.HasSuffix(s, markInput)
 		})
-		// The screen is what was drawn after the last clear.
 		screen := got[strings.LastIndex(got, "\x1b[3J")+len("\x1b[3J"):]
 		for i, line := range strings.Split(screen, "\r\n") {
 			if w := ansi.StringWidth(line); w > cols {
@@ -115,7 +112,6 @@ func TestLogStaysBounded(t *testing.T) {
 	if !strings.HasSuffix(l.replay(80), "last\r\n") {
 		t.Fatal("the log lost the newest output")
 	}
-	// One write bigger than the bound.
 	l.write(strings.Repeat(line, 2*maxLogBytes/len(line)))
 	if l.size > maxLogBytes {
 		t.Fatalf("after one big write the log holds %d bytes, bound %d", l.size, maxLogBytes)

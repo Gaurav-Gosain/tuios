@@ -8,20 +8,14 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// pagerExtraRows is how many more rows the open block takes than the editor
-// grows to.
 const pagerExtraRows = 4
 
-// pager is an open block: a paste's text, read only, with a scroll, or an
-// image's view.
 type pager struct {
-	block *block
-	// viewCols and viewRows are an image view's picture box as last drawn.
+	block              *block
 	viewCols, viewRows int
 	top                int
-	// lines is the text broken for width, kept until the width changes.
-	lines []string
-	width int
+	lines              []string
+	width              int
 }
 
 // Open shows the selected block's text in place of the editor. It reports
@@ -33,8 +27,6 @@ func (m *Model) Open() bool {
 	}
 	m.pager = &pager{block: b}
 	if b.img != nil {
-		// The view's box as the next frame draws it, so the host can
-		// prepare the picture before that frame.
 		m.pager.viewCols, m.pager.viewRows = fitBox(b.img, m.cellAspect(), m.width+1, m.pagerRows(), false)
 	}
 	return true
@@ -43,12 +35,8 @@ func (m *Model) Open() bool {
 // Opened reports whether a block is open.
 func (m *Model) Opened() bool { return m.pager != nil }
 
-// pagerRows is how many rows of text the open block shows.
 func (m *Model) pagerRows() int { return m.opt.MaxRows + pagerExtraRows }
 
-// pagerKey handles a key while a block is open: the arrows and the page keys
-// scroll, ctrl+e expands the block, backspace removes it, and esc, q or
-// ctrl+o go back to the draft.
 func (m *Model) pagerKey(msg tea.KeyPressMsg) Event {
 	p := m.pager
 	if p.block.img != nil {
@@ -65,8 +53,6 @@ func (m *Model) pagerKey(msg tea.KeyPressMsg) Event {
 		return EventNone
 	}
 	page := m.pagerRows()
-	// The list keys scroll the block, letters included: a block is read
-	// only, so no key of its is typed.
 	if delta, ok := m.listKey(msg.String(), page); ok {
 		p.top += delta
 		p.top = min(max(p.top, 0), max(len(p.lines)-page, 0))
@@ -75,7 +61,6 @@ func (m *Model) pagerKey(msg tea.KeyPressMsg) Event {
 	switch msg.String() {
 	case "esc", "q", "ctrl+o", "enter":
 		m.pager = nil
-	// The pager keys of less, besides the list keys.
 	case "b":
 		p.top -= page
 	case "space", "f":
@@ -91,8 +76,6 @@ func (m *Model) pagerKey(msg tea.KeyPressMsg) Event {
 	return EventNone
 }
 
-// renderPager draws the open block: a heading with where the view is, and
-// the block's text broken to the width.
 func (m *Model) renderPager(width int, in inks) []string {
 	p := m.pager
 	textW := width - gutter
@@ -120,16 +103,12 @@ func (m *Model) renderPager(width int, in inks) []string {
 	return out
 }
 
-// breakLines splits text into rows of at most width cells: at each line
-// break, and inside a line too long for the width. Tabs are drawn as spaces.
 func breakLines(text string, width int) []string {
 	width = max(width, 1)
 	text = strings.TrimRight(text, "\n")
 	var out []string
 	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.ReplaceAll(line, "\t", strings.Repeat(" ", tabWidth))
-		// One pass over the line, so a megabyte on one line is not read
-		// again for every row it makes.
 		start, w := 0, 0
 		for i := 0; i < len(line); {
 			cluster, cw := ansi.FirstGraphemeCluster(line[i:], ansi.GraphemeWidth)
@@ -149,11 +128,8 @@ func breakLines(text string, width int) []string {
 	return out
 }
 
-// pagerJump is how far home and end move: further than any block is long.
 const pagerJump = 1 << 30
 
-// listKey is Options.ListKey, or the default list keys when the host gave
-// none.
 func (m *Model) listKey(key string, page int) (int, bool) {
 	if m.opt.ListKey != nil {
 		return m.opt.ListKey(key, page)

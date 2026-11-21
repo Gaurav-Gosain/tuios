@@ -47,7 +47,6 @@ func TestSettingsKeyReclaimedFromLegacyRename(t *testing.T) {
 					t.Fatalf("Action(TablePrefixMode, \",\") = %q, want open_settings", got)
 				}
 			}
-			// The rename chord keeps the key it was re-homed onto.
 			if got := r.Action(config.TablePrefixMode, "r"); got != "prefix_rename_window" {
 				t.Fatalf("Action(TablePrefixMode, \"r\") = %q, want prefix_rename_window", got)
 			}
@@ -83,20 +82,9 @@ func TestUserOwnedDuplicateKeyIsLeftAlone(t *testing.T) {
 	}
 }
 
-// writeConfig points XDG at a throwaway tree holding src as the user's
-// config.toml, so a test loads through the same path a real file takes.
-//
-// The XDG search paths are resolved once at package init, so the reload is what
-// makes the redirect take: without it LoadUserConfig reads the developer's own
-// ~/.config/tuios/config.toml and the test asserts against whatever happens to
-// be there.
 func writeConfig(t *testing.T, src string) *config.UserConfig {
 	t.Helper()
 	dir := t.TempDir()
-	// Registered before t.Setenv so it runs after it: cleanups are LIFO, and a
-	// reload that ran first would re-resolve against the temp dir and leave the
-	// xdg globals pointing at it for the rest of the binary, after the directory
-	// is gone.
 	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	xdg.Reload()

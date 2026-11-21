@@ -8,40 +8,16 @@ import (
 	"strings"
 )
 
-// The opencode reader sends the service's password only over a connection
-// whose server side is shown to belong to this user. The kernel's socket
-// table is read after the connect and before the first byte goes out, so
-// there is no gap between the check and the use: whatever socket the table
-// shows at the far end of this connection is the one the request reaches.
-// The server side of a TCP connection takes its owner from the listening
-// socket, also while it still waits in the accept queue.
-//
-// This file holds the parsers of the three tables, which have no build tag
-// so that every one of them is tested and fuzzed on every machine. The
-// system calls that fill them are in opencode_conn_*.go.
-
-// serverSide names the server side of one loopback connection: local
-// 127.0.0.1:port, remote 127.0.0.1:peer.
 type serverSide struct{ port, peer int }
 
-// owner is what a socket table says about one connection.
 type owner int
 
 const (
-	// ownerNone: the table has no row for the connection (yet).
 	ownerNone owner = iota
-	// ownerMine: every row for it belongs to this user, and there is one.
 	ownerMine
-	// ownerOther: a row for it belongs to someone else, or cannot be read.
 	ownerOther
 )
 
-// procNetOwner reads a Linux /proc/net/tcp table. The table writes the
-// address as the hex of the address word in host order, so 127.0.0.1 is
-// 0100007F on a little-endian machine and 7F000001 on a big-endian one. The
-// port is %04X. The state is 01 (ESTABLISHED) for a connection, or 03
-// (SYN_RECV) for one the listener has not finished; both carry the
-// listener's uid.
 func procNetOwner(r io.Reader, c serverSide, uid int) owner {
 	if !c.valid() {
 		return ownerOther
@@ -53,7 +29,6 @@ func procNetOwner(r io.Reader, c serverSide, uid int) owner {
 	sc.Buffer(make([]byte, 0, 512), 4096)
 	got := ownerNone
 	for sc.Scan() {
-		// sl local_address rem_address st tx_queue:rx_queue tr:tm->when retrnsmt uid ...
 		fields := strings.Fields(sc.Text())
 		if len(fields) < 8 || (fields[3] != "01" && fields[3] != "03") {
 			continue
@@ -81,34 +56,23 @@ func (c serverSide) valid() bool {
 	return c.port > 0 && c.port <= 65535 && c.peer > 0 && c.peer <= 65535
 }
 
-// The records of the macOS sysctl net.inet.tcp.pcblist_n, from XNU's
-// bsd/netinet/in_pcblist.c (get_pcblist_n) and the structs in
-// bsd/netinet/in_pcb.h and bsd/sys/socketvar.h, all under #pragma pack(4).
-// The buffer is a struct xinpgen, then for each socket a group of records,
-// then a struct xinpgen again. Each record starts with its length and kind,
-// and the next one starts at the length rounded up to 8. A group is an
-// XSO_INPCB record, then XSO_SOCKET, two XSO_RCVBUF/XSO_SNDBUF, XSO_STATS,
-// and for TCP XSO_TCPCB. The offsets below are the same from XNU 6153
-// (macOS 10.15) to the current source; xsocket_n has grown at its end only.
 const (
 	xinpgenLen = 24
 
 	xsoSocket = 0x001
 	xsoInpcb  = 0x010
 
-	// struct xinpcb_n
-	xiFport  = 16 // u_short, network order
-	xiLport  = 18 // u_short, network order
-	xiVflag  = 44 // u_char; INP_IPV4 is 0x1
-	xiFaddr4 = 60 // inp_dependfaddr.inp46_foreign.ia46_addr4
-	xiLaddr4 = 76 // inp_dependladdr.inp46_local.ia46_addr4
+	xiFport  = 16
+	xiLport  = 18
+	xiVflag  = 44
+	xiFaddr4 = 60
+	xiLaddr4 = 76
 	xiMinLen = 80
 
-	// struct xsocket_n
-	xsoSo       = 8  // u_int64_t; 0 when the pcb has no socket
-	xsoProtocol = 36 // int
-	xsoFamily   = 40 // int
-	xsoUID      = 64 // uid_t
+	xsoSo       = 8
+	xsoProtocol = 36
+	xsoFamily   = 40
+	xsoUID      = 64
 	xsoMinLen   = 68
 
 	inpIPv4   = 0x1
@@ -117,10 +81,6 @@ const (
 	recordMax = 1 << 16
 )
 
-// pcblistOwner reads a net.inet.tcp.pcblist_n buffer. The numbers in it are
-// in host order, which is little-endian on every Mac Go builds for. Anything
-// in the buffer it does not expect makes the answer ownerOther: a password
-// is never sent on a table this reader is unsure of.
 func pcblistOwner(buf []byte, c serverSide, uid uint32) owner {
 	if !c.valid() || len(buf) < 2*xinpgenLen {
 		return ownerOther
@@ -131,12 +91,8 @@ func pcblistOwner(buf []byte, c serverSide, uid uint32) owner {
 	}
 	body := buf[xinpgenLen : len(buf)-xinpgenLen]
 	got := ownerNone
-	// match is the state of the group the walk is in: whether its pcb is
-	// the server side of c, and whether its socket record was seen.
 	inGroup, match, sawSocket := false, false, false
 	finish := func() bool {
-		// A pcb of c with no socket record is a table this reader does not
-		// understand.
 		return !(inGroup && match && !sawSocket)
 	}
 	for len(body) > 0 {
@@ -150,8 +106,6 @@ func pcblistOwner(buf []byte, c serverSide, uid uint32) owner {
 		rec := body[:n]
 		step := (int(n) + 7) &^ 7
 		if step > len(body) {
-			// The last record of the walk may end without its padding only
-			// if nothing follows, and the trailing xinpgen always follows.
 			return ownerOther
 		}
 		body = body[step:]
@@ -176,9 +130,6 @@ func pcblistOwner(buf []byte, c serverSide, uid uint32) owner {
 				continue
 			}
 			if le.Uint64(rec[xsoSo:]) == 0 {
-				// A pcb with no socket, such as one in TIME_WAIT, holds no
-				// listener's uid and cannot be the far end of a live
-				// connection.
 				continue
 			}
 			if le.Uint32(rec[xsoProtocol:]) != protoTCP || le.Uint32(rec[xsoFamily:]) != afInet {
@@ -189,8 +140,6 @@ func pcblistOwner(buf []byte, c serverSide, uid uint32) owner {
 			}
 			got = ownerMine
 		default:
-			// Socket buffers, statistics and the TCP control block carry
-			// nothing this check needs.
 			if !inGroup {
 				return ownerOther
 			}
@@ -206,21 +155,12 @@ func be16(b []byte) uint16 { return binary.BigEndian.Uint16(b) }
 
 func isLoopback4(b []byte) bool { return b[0] == 127 && b[1] == 0 && b[2] == 0 && b[3] == 1 }
 
-// The Windows MIB_TCPTABLE_OWNER_PID that GetExtendedTcpTable fills for
-// TCP_TABLE_OWNER_PID_ALL: a DWORD count, then that many
-// MIB_TCPROW_OWNER_PID rows of six DWORDs each: dwState, dwLocalAddr,
-// dwLocalPort, dwRemoteAddr, dwRemotePort, dwOwningPid. An address is in
-// network order. A port is in network order in the first two bytes of its
-// DWORD, and the documentation leaves the other two undefined.
 const (
 	tcpRowLen      = 24
 	tcpStateSynRcv = 4
 	tcpStateEstab  = 5
 )
 
-// tcpTableOwner reads a MIB_TCPTABLE_OWNER_PID buffer and gives the pid that
-// owns the server side of c. Two rows with different pids, or a table it
-// cannot read, give false.
 func tcpTableOwner(buf []byte, c serverSide) (uint32, owner) {
 	if !c.valid() || len(buf) < 4 {
 		return 0, ownerOther

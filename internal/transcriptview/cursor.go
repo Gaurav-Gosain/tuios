@@ -18,7 +18,6 @@ import "strings"
 // wraps the person's words in <user_query>, and only those words show.
 const FormatCursor = "cursor-jsonl"
 
-// cursorLine decodes one transcript line.
 func cursorLine(r *reader, line []byte, off int64) (decoded, bool) {
 	rec, ok := parseObj(line)
 	if !ok {
@@ -56,10 +55,6 @@ func cursorLine(r *reader, line []byte, off int64) (decoded, bool) {
 				name, in := b.str("name"), args(b["input"])
 				class := cursorClass(name)
 				if class == classEdit && in.str("old_string", "old_str", "oldString") == "" {
-					// Cursor's edit_file sends the edit as code_edit, the new
-					// text with markers for the code it keeps, and no old
-					// text. A search_replace with empty old text makes a
-					// file of its new text. Each shows as the text it writes.
 					class, in = classWrite, jobj{"target_file": fileOf(in), "content": in.str("code_edit", "new_string", "newString", "new_str")}
 				}
 				out = append(out, callEntry(name, b.str("id"), class, in)...)
@@ -76,9 +71,6 @@ func cursorLine(r *reader, line []byte, off int64) (decoded, bool) {
 	return decoded{entries: out}, true
 }
 
-// cursorText adds a text entry. A user's text is the part inside
-// <user_query> when it has one, and context Cursor adds in a tag of its own
-// is left out.
 func cursorText(role, s string, out []Entry) []Entry {
 	if role == RoleUser {
 		if _, rest, ok := strings.Cut(s, "<user_query>"); ok {
@@ -94,8 +86,6 @@ func cursorText(role, s string, out []Entry) []Entry {
 	return out
 }
 
-// blockText is a tool result's content as text: a string, or its text
-// blocks joined.
 func blockText(v any) string {
 	if s, ok := v.(string); ok {
 		return s
@@ -112,14 +102,11 @@ func blockText(v any) string {
 	return strings.Join(parts, "\n")
 }
 
-// asList is v as an array, nil when it is not one.
 func asList(v any) []any {
 	l, _ := v.([]any)
 	return l
 }
 
-// cursorClass is what a Cursor Agent tool does, under the names its tools
-// have had.
 func cursorClass(name string) toolClass {
 	switch name {
 	case "edit_file", "search_replace", "Edit", "StrReplace":

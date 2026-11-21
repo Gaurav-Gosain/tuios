@@ -11,33 +11,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// run-shell and if-shell.
-//
-// tmux runs these commands in its server. The shim has no server: it runs
-// them itself, as the caller, from the caller's own process, in the caller's
-// directory and environment. So they reach nothing the caller could not
-// reach by running the command directly, and they do not go through the
-// daemon at all. A read-only control client may not run either. Formats in
-// the command are expanded first, as in tmux, so a value a program in a pane
-// set (a title, say) lands in a shell command unquoted unless the format
-// quotes it with #{q:...}, also as in tmux.
-//
-// Where tmux shows run-shell's output in the target pane's view mode, the
-// shim prints it to its standard output, which is where tmux prints it when
-// there is no pane to show it in.
-
-// maxShellDepth caps if-shell and run-shell -C nested in each other.
 const maxShellDepth = 10
 
-// The two run other commands through runOne, which reads commands, so they
-// join the table here rather than in its literal.
 func init() {
 	commands["run-shell"] = (*Shim).runShell
 	commands["if-shell"] = (*Shim).ifShell
 }
 
-// statusError ends a call with a given exit status and prints nothing more:
-// run-shell's command failed and tmux exits with its status.
 type statusError struct {
 	code int
 	msg  string
@@ -45,7 +25,6 @@ type statusError struct {
 
 func (e statusError) Error() string { return e.msg }
 
-// shellVars is the format context of -t, or of the caller's pane.
 func (s *Shim) shellVars(p Parsed) (map[string]string, error) {
 	tv, _ := p.Value('t')
 	v, err := s.loadView()
@@ -63,14 +42,12 @@ func (s *Shim) shellVars(p Parsed) (map[string]string, error) {
 	return s.paneVars(target), nil
 }
 
-// shellCommand is a shell command line run with /bin/sh, as tmux's jobs are.
 func (s *Shim) shellCommand(line, cwd string) *exec.Cmd {
 	c := exec.Command("/bin/sh", "-c", line)
 	c.Dir = cmpOr(cwd, s.Cwd)
 	return c
 }
 
-// runCommands parses a tmux command line and runs each command in it.
 func (s *Shim) runCommands(line string) (string, []string, error) {
 	if s.depth >= maxShellDepth {
 		return OutcomeError, nil, errors.New("too many nested commands")
@@ -94,10 +71,6 @@ func (s *Shim) runCommands(line string) (string, []string, error) {
 	return outcome, detail, nil
 }
 
-// runShell runs a shell command, or with -C a tmux command line. -d waits
-// that many seconds first. -b starts the command and returns without waiting
-// for it. Without -b, a command that fails makes the call fail with its exit
-// status, as tmux's client does.
 func (s *Shim) runShell(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -150,10 +123,6 @@ func (s *Shim) runShell(name string, args []string) (string, []string, error) {
 	return outcomeFor(detail), detail, nil
 }
 
-// ifShell runs the first command when the shell command succeeds (or with -F
-// when the format is true), and the second, if given, when it does not. -b
-// is accepted and the shim waits for the shell command anyway, since it has
-// no server to finish the job in after it exits.
 func (s *Shim) ifShell(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {

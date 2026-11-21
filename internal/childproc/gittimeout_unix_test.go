@@ -33,9 +33,6 @@ func TestGitTimeoutHoldsWithAHungChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin)
-	// The clock starts before the context does. The deadline is measured from
-	// inside WithTimeout, so a start taken after it is later than the
-	// deadline's own start, and a Git that returned on time read as early.
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -46,7 +43,6 @@ func TestGitTimeoutHoldsWithAHungChild(t *testing.T) {
 	if took := time.Since(start); err == nil || took < 500*time.Millisecond || took > 500*time.Millisecond+gitWaitDelay+2*time.Second {
 		t.Fatalf("Git returned after %v with %v, want an error within the timeout and the wait delay", took, err)
 	}
-	// On Linux the child git started is killed too, not left running.
 	if runtime.GOOS == "linux" {
 		b, _ := os.ReadFile(pidFile)
 		pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))

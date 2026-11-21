@@ -9,8 +9,6 @@ import "github.com/Gaurav-Gosain/tuios/internal/config"
 // which closes the rail, so a step that opens it opens it.
 func Config() *config.UserConfig {
 	cfg := config.DefaultConfig()
-	// A browser tab has no desktop notifications. Left on, the default warns
-	// about it at startup, which is noise in a tutorial.
 	cfg.Notifications.Agent.Notify = new(false)
 	return cfg
 }

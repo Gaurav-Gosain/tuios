@@ -11,10 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// burstPayload is line-heavy on purpose. The dominant cost of writing PTY
-// output into the emulator is scrolling the cell buffer once per line, not
-// parsing the bytes, so a payload of long lines would understate by a wide
-// margin how long a real burst holds the I/O lock.
 func burstPayload() []byte {
 	var b []byte
 	for i := range 64 {
@@ -23,9 +19,6 @@ func burstPayload() []byte {
 	return b
 }
 
-// startBurst floods a window's output path the way the daemon read loop does
-// for a pane running something like a recursive find. It returns a stop
-// function and a counter of how many payloads were offered.
 func startBurst(w *Window) (stop func(), offered *atomic.Int64) {
 	done := make(chan struct{})
 	var count atomic.Int64
@@ -48,8 +41,6 @@ func startBurst(w *Window) (stop func(), offered *atomic.Int64) {
 	}, &count
 }
 
-// newBurstTestWindow builds a daemon-mode window with its output writer running
-// and the render signal drained, which is the shape the compositor sees.
 func newBurstTestWindow(t *testing.T, id string) *Window {
 	t.Helper()
 	ptyDataChan := make(chan struct{}, 1)
@@ -97,8 +88,6 @@ func TestBackgroundBurstDoesNotStarveCompositor(t *testing.T) {
 	stop, offered := startBurst(w)
 	defer stop()
 
-	// Let the burst reach steady state so the first samples are not measuring
-	// an idle window.
 	time.Sleep(200 * time.Millisecond)
 
 	const frames = 120
@@ -106,15 +95,12 @@ func TestBackgroundBurstDoesNotStarveCompositor(t *testing.T) {
 	for range frames {
 		start := time.Now()
 		w.RLockIO()
-		// The real render path reads the cell buffer here. Touching the
-		// emulator keeps the critical section honest without being slow.
 		if w.Terminal != nil {
 			_ = w.Terminal.CursorPosition()
 		}
 		w.RUnlockIO()
 		waits = append(waits, time.Since(start))
 
-		// Ask again at roughly 60fps, as the renderer does.
 		time.Sleep(16 * time.Millisecond)
 	}
 
@@ -133,13 +119,6 @@ func TestBackgroundBurstDoesNotStarveCompositor(t *testing.T) {
 	t.Logf("compositor wait on a bursting pane: mean %v, p50 %v, p95 %v, worst %v over %d frames",
 		mean, waits[len(waits)/2], p95, waits[len(waits)-1], len(waits))
 
-	// Bounds sit between the two measured behaviours with room on both sides.
-	// On the code that had the defect this loop measured mean 73ms and p95
-	// 77ms, and the compositor spent 8.8 of the 10 seconds it ran waiting for
-	// one background pane. With the lock hold bounded it measures mean 1.2ms
-	// and p95 4ms. The limits below are an order of magnitude above the healthy
-	// figures, so a loaded machine does not flake them, and comfortably under
-	// the broken ones, so the defect cannot come back unnoticed.
 	const (
 		maxMean = 20 * time.Millisecond
 		maxP95  = 30 * time.Millisecond

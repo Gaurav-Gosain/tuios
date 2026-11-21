@@ -8,8 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// reset ends every piece the view draws, so nothing it set leaks into what
-// the caller draws next.
 const reset = "\x1b[m"
 
 // Code draws a line's text in exactly width cells, from column xOff of the
@@ -66,8 +64,6 @@ func (t *Theme) CodeRanges(text string, spans []Span, changed []Range, kind Kind
 	}
 	plain := codes[0][Plain]
 	styled := b.String()
-	// Printable ASCII is one cell a byte, so the widths are known without
-	// walking the text; the styled result's follows from the branch taken.
 	ascii := xOff >= 0 && printableASCII(text)
 	textW := len(text)
 	if !ascii {
@@ -86,9 +82,6 @@ func (t *Theme) CodeRanges(text string, spans []Span, changed []Range, kind Kind
 		known = 0
 	case left > width && width > ellW:
 		cut := ansi.Truncate(styled, width-ellW, "")
-		// A wide character that would cross the cut is dropped whole, and
-		// leaves a cell before the ellipsis. The gap goes before it, so the
-		// ellipsis is in the last cell, as it is on every other cut line.
 		gap := 0
 		if !ascii {
 			gap = max(width-ellW-ansi.StringWidth(cut), 0)
@@ -109,8 +102,6 @@ func (t *Theme) CodeRanges(text string, spans []Span, changed []Range, kind Kind
 	return styled + reset
 }
 
-// printableASCII reports whether s holds only bytes 0x20 to 0x7E, each one
-// cell wide.
 func printableASCII(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] < 0x20 || s[i] > 0x7e {

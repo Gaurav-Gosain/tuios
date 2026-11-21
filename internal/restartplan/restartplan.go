@@ -192,7 +192,6 @@ func Lines(r *Report, window string) []Line {
 	return out
 }
 
-// resumeNote says what the new daemon does with the agents.
 func resumeNote(mode string) string {
 	switch mode {
 	case ResumeAuto:

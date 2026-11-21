@@ -120,11 +120,11 @@ func (f Filter) sees(b Buffer) bool { return f == nil || f(b) }
 // concurrent use.
 type Store struct {
 	mu       sync.Mutex
-	bufs     []Buffer // newest first
+	bufs     []Buffer
 	bytes    int
 	limit    int
 	maxBytes int
-	next     int // the number of the next automatic name
+	next     int
 }
 
 // New makes a store with the given limits. A negative limit or a byte cap
@@ -158,10 +158,6 @@ func (s *Store) Limits() (limit, maxBytes int) {
 	return s.limit, s.maxBytes
 }
 
-// trim drops buffers until the limits hold: the oldest automatic buffers
-// past the count limit, the oldest named ones past MaxNamed, and past the
-// byte cap the oldest automatic buffer, or the oldest named one when no
-// automatic buffer is left. s.mu is held.
 func (s *Store) trim() int {
 	dropped := 0
 	for {
@@ -195,7 +191,6 @@ func (s *Store) trim() int {
 	}
 }
 
-// remove takes the buffer at i out. s.mu is held.
 func (s *Store) remove(i int) {
 	s.bytes -= len(s.bufs[i].Data)
 	s.bufs = append(s.bufs[:i], s.bufs[i+1:]...)
@@ -252,7 +247,6 @@ func (s *Store) Set(name, data string, appendTo bool, owner Owner, change Filter
 	return s.set(name, data, appendTo, owner, change)
 }
 
-// set is Set with s.mu held.
 func (s *Store) set(name, data string, appendTo bool, owner Owner, change Filter) (Buffer, error) {
 	if s.limit == 0 {
 		return Buffer{}, ErrOff
@@ -288,18 +282,12 @@ func (s *Store) set(name, data string, appendTo bool, owner Owner, change Filter
 	return b, nil
 }
 
-// newName is the next automatic name, bufferN as tmux names them. The
-// number only goes up and never skips. No other buffer can hold the name: an
-// automatic name the counter gave before is lower, and no caller may make a
-// buffer named like one (automaticName). s.mu is held.
 func (s *Store) newName() string {
 	name := fmt.Sprintf("buffer%d", s.next)
 	s.next++
 	return name
 }
 
-// automaticName reports whether name has the form of an automatic name:
-// buffer and digits.
 func automaticName(name string) bool {
 	n, ok := strings.CutPrefix(name, "buffer")
 	if !ok || n == "" {
@@ -313,7 +301,6 @@ func automaticName(name string) bool {
 	return true
 }
 
-// newVersion is a random version under 2^53.
 func newVersion() uint64 {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
@@ -324,8 +311,6 @@ func newVersion() uint64 {
 	return v
 }
 
-// index is the position of the buffer called name, -1 for none. s.mu is
-// held.
 func (s *Store) index(name string) int {
 	for i, b := range s.bufs {
 		if b.Name == name {
@@ -335,9 +320,6 @@ func (s *Store) index(name string) int {
 	return -1
 }
 
-// find is the position of the buffer called name, when f sees it, or of the
-// newest automatic buffer f sees when name is "". A name f does not see
-// answers as a missing one. s.mu is held.
 func (s *Store) find(name string, f Filter) (int, error) {
 	if name == "" {
 		for i, b := range s.bufs {

@@ -95,21 +95,17 @@ type Result struct {
 	Reason  string // why a tape is ineligible, for the notice; empty otherwise
 }
 
-// trustEntry is a trusted (path, hash) record. Only the latest hash per path is
-// kept; re-trusting an edited tape replaces it.
 type trustEntry struct {
 	Path      string    `toml:"path"`
 	SHA256    string    `toml:"sha256"`
 	TrustedAt time.Time `toml:"trusted_at"`
 }
 
-// denyEntry is a "never for this path" record. It carries no hash by design.
 type denyEntry struct {
 	Path     string    `toml:"path"`
 	DeniedAt time.Time `toml:"denied_at"`
 }
 
-// trustFile is the on-disk shape of the store.
 type trustFile struct {
 	Trusted []trustEntry `toml:"trusted"`
 	Denied  []denyEntry  `toml:"denied"`
@@ -157,8 +153,6 @@ func Load() (*Store, error) {
 // user, its contents are ignored and Warning is set, so tampering downgrades
 // trust to nothing rather than being honored.
 func LoadFromPath(path string) (*Store, error) {
-	// A save that died before its rename leaves a temporary file beside the
-	// store. Old ones are removed here; a young one may be another save.
 	atomicfile.SweepStale(filepath.Dir(path), 10*time.Minute)
 	s := &Store{
 		path:    path,
@@ -172,8 +166,6 @@ func LoadFromPath(path string) (*Store, error) {
 
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		// First run: materialize an empty, correctly-permissioned store so the
-		// mode is right from the start rather than after the first write.
 		if werr := s.save(); werr != nil {
 			return s, werr
 		}
@@ -188,14 +180,10 @@ func LoadFromPath(path string) (*Store, error) {
 			"tape trust store %s has unsafe owner or permissions (want 0600, owned by you); ignoring its contents",
 			path,
 		)
-		// Re-tighten what we can so the next legitimate write starts from a safe
-		// mode, but do not trust anything the tampered file claimed.
 		_ = os.Chmod(path, 0o600)
 		return s, nil
 	}
 
-	// Read from a descriptor that did not wait on the open, and only from a
-	// regular file: a FIFO or a device would block the read or never end it.
 	f, err := openNoBlock(path)
 	if err != nil {
 		return s, errfmt.Errorf("reading tape trust store: %w", err)
@@ -212,8 +200,6 @@ func LoadFromPath(path string) (*Store, error) {
 
 	var file trustFile
 	if err := toml.Unmarshal(data, &file); err != nil {
-		// A corrupt store is treated like a tampered one: ignore its contents
-		// rather than crashing or silently honoring half of it.
 		s.Warning = fmt.Sprintf("tape trust store %s is corrupt (%v); ignoring its contents", path, err)
 		return s, nil
 	}
@@ -266,9 +252,6 @@ func (s *Store) Check(tapePath string) (Result, error) {
 		return Result{Status: StatusDenied, Path: real}, nil
 	}
 
-	// Open once and stat the descriptor. Doing hygiene on the fd (not a second
-	// path stat) ties the checks to the same inode the bytes come from.
-	// It does not wait on a FIFO: the hygiene rules turn one away.
 	f, err := openNoBlock(real)
 	if err != nil {
 		return Result{
@@ -292,8 +275,6 @@ func (s *Store) Check(tapePath string) (Result, error) {
 		return Result{Status: StatusIneligible, Path: real, Reason: reason, Size: info.Size()}, nil
 	}
 
-	// Read from the same descriptor, capped one byte past the limit so an
-	// oversize file is detected without reading it all.
 	content, err := io.ReadAll(io.LimitReader(f, MaxTapeSize+1))
 	if err != nil {
 		return Result{
@@ -382,15 +363,12 @@ func (s *Store) TrustedHash(path string) (string, bool) {
 	return e.SHA256, true
 }
 
-// save persists the store, taking the lock.
 func (s *Store) save() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.saveLocked()
 }
 
-// saveLocked writes the store atomically (temp file plus rename) with 0600
-// permissions. The caller holds s.mu.
 func (s *Store) saveLocked() error {
 	file := trustFile{}
 	for _, e := range s.trusted {

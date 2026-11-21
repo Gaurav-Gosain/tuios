@@ -44,8 +44,8 @@ func DefaultColorScheme(c lipgloss.LightDarkFunc) ColorScheme {
 		Comment:        c(tone.Squid, lipgloss.Color("#747282")),
 		Flag:           c(lipgloss.Color("#0CB37F"), tone.Guac),
 		Argument:       c(tone.Charcoal, tone.Ash),
-		Description:    c(tone.Charcoal, tone.Ash), // flag and command descriptions
-		FlagDefault:    c(tone.Smoke, tone.Squid),  // flag default values in descriptions
+		Description:    c(tone.Charcoal, tone.Ash),
+		FlagDefault:    c(tone.Smoke, tone.Squid),
 		QuotedString:   c(tone.Coral, tone.Salmon),
 		ErrorHeader: [2]color.Color{
 			tone.Butter,
@@ -180,15 +180,6 @@ func titleFirstWord(s string) string {
 	return strings.Join(words, " ")
 }
 
-// title upper-cases the first letter of each word in s and lower-cases the
-// rest, as cases.Title(language.AmericanEnglish) from golang.org/x/text
-// does, without the Unicode tables that package links (258 KB). It follows
-// the same rules: a cased letter after a break starts a word; a digit, an
-// uncased letter or an underscore neither starts nor breaks one; ' . : join
-// the letters around them unless two come together. A test that compared the
-// two on random text in several scripts was removed, so a change here should
-// be checked against x/text by hand. Special cases x/text knows and the
-// unicode package does not (a title-cased ß, a final sigma) differ.
 func title(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -234,8 +225,6 @@ func isBreakRune(r rune) bool {
 	if r < utf8.RuneSelf {
 		return !isCasedRune(r) && !isMidRune(r) && (r < '0' || r > '9') && r != '_'
 	}
-	// Ideographs and kana stand alone in Unicode word breaking; every other
-	// letter, digit and mark joins a word.
 	if unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana) {
 		return true
 	}

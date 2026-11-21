@@ -84,43 +84,26 @@ func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 	case "theme":
 		m.setTheme(arg(0))
 	case "themeJSON":
-		// A theme a look carries, as the JSON of a theme file. It is checked
-		// as tuios look apply checks it, registered in this tab only as
-		// look-<id>, and selected. A theme that fails the check does nothing.
 		id := config.LookAssetPrefix + strings.TrimPrefix(arg(0), config.LookAssetPrefix)
 		if err := theme.RegisterLookTheme(id, []byte(arg(1))); err == nil {
 			m.setTheme(id)
 		}
 	case "set":
-		// Any option tuios set-config takes, by the same path, such as
-		// appearance.glyphs or appearance.background. It changes this tab's
-		// copy of the config and nothing on disk. A docs page uses it to
-		// start a demo in the look the page is about.
-		// Only an option that changes how the screen looks goes through. See
-		// pageSettable for the ones refused.
 		path, ok := pageSettable(arg(0))
 		switch {
 		case !ok:
 		case config.CheckLookItems(path, arg(1)) != nil:
-			// A list item a look leaves out, such as a custom dock cell.
 		case path == "appearance.theme":
-			// The theme command's path, which also recolours the panes.
 			m.setTheme(arg(1))
 		case path == "startup.tiled":
-			// A tab has no new session to start, so tiling changes now.
 			if on, err := strconv.ParseBool(arg(1)); err == nil && on != o.AutoTiling {
 				o.ToggleAutoTiling()
 			}
 		case path == "startup.layout":
-			// Only a scheme tuios look apply takes. The layout command
-			// cycles three times on a name it does not know, which ends
-			// where it started but flashes three notifications.
 			if slices.Contains(config.LayoutModes, arg(1)) {
 				m.RunCommand("layout", arg(1))
 			}
 		case config.IsLookFileKey(path):
-			// The dock's lists and its tabs table: the dock reads them from
-			// the config on each frame.
 			if err := config.SetLookValue(o.UserConfig, path, arg(1)); err == nil {
 				o.MarkAllDirty()
 			}
@@ -130,13 +113,10 @@ func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 			}
 		}
 	case "type":
-		// Types into the focused pane, for a step that plays itself.
 		if id := o.GetFocusedWindowID(); id != "" {
 			_ = o.SendToWindow(id, []byte(arg(0)))
 		}
 	case "action":
-		// Any registry action, through the same dispatcher a key reaches, so
-		// the page sees the same action event a key press would produce.
 		d := input.GetDispatcher()
 		if d.HasAction(arg(0)) {
 			next, cmd := d.Dispatch(arg(0), tea.KeyPressMsg{}, o)
@@ -144,8 +124,6 @@ func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 			return cmd
 		}
 	case "agent":
-		// Sets the focused pane's agent state, for a step about the rail that
-		// does not want to wait for the fake agent.
 		_ = o.ReportAgentState(app.AgentReport{
 			WindowID: o.GetFocusedWindowID(), State: arg(0), Message: arg(1), Kind: arg(2),
 			Harness: "claude-code",
@@ -165,9 +143,6 @@ func (m *Model) RunCommand(name string, args ...string) tea.Cmd {
 	return nil
 }
 
-// reset puts the tour back where it started: no windows, workspace 1, tiling
-// on, window mode, the starting theme, the shipped keys, the rail closed, and
-// no overlay, beam or picture-in-picture.
 func (m *Model) reset() {
 	o := m.OS
 	o.HideShownScratch()
@@ -215,17 +190,10 @@ func (m *Model) reset() {
 	if m.theme != "" && m.theme != take(o).Theme {
 		_ = o.SetTheme(m.theme)
 	}
-	// A lesson can switch to another preset. The next one starts on the
-	// shipped keys.
 	_ = o.LearnApplyPreset(config.PresetTuios)
 	o.MarkAllDirty()
 }
 
-// cascade turns tiling off and slides the windows on the current workspace
-// into an overlapping diagonal, back to front in their stacking order, so the
-// focused window ends on top at the bottom right. It sets the scene for a
-// tiling step: turning tiling off alone leaves every window where the tiler
-// put it, and turning it on again would then change nothing on screen.
 func (m *Model) cascade() {
 	o := m.OS
 	if o.AutoTiling {
@@ -245,8 +213,6 @@ func (m *Model) cascade() {
 	left, top := o.GetLeftMargin(), o.GetTopMargin()
 	areaW, areaH := o.GetContentWidth(), o.GetUsableHeight()
 	width, height := areaW*3/5, areaH*3/5
-	// Spread the windows over the free space, with a small margin, so each
-	// one shows its title bar and a corner of the window under it.
 	stepX, stepY := 0, 0
 	if n := len(wins) - 1; n > 0 {
 		stepX = (areaW - width - 4) / n
@@ -267,14 +233,6 @@ func (m *Model) cascade() {
 	o.MarkAllDirty()
 }
 
-// celebrate runs the in-app confetti burst. Each argument is one of:
-//
-//	"big"    the larger finale burst
-//	"still"  a static sparkle, for a page that honours prefers-reduced-motion
-//	"x,y"    burst from that screen cell
-//	anything else is a window id to burst from
-//
-// With no cell and no window it bursts from the focused pane.
 func (m *Model) celebrate(args []string) tea.Cmd {
 	var opts app.CelebrateOptions
 	windowID := ""
@@ -331,17 +289,6 @@ func Actions() map[string]string {
 	return out
 }
 
-// pageSection reports the config sections whose options only change how the
-// screen looks or how input moves through it.
-//
-// The rest name a host program, a file or folder, the daemon, or startup:
-// tape.autorun, screenshot.directory, launcher.gui_command,
-// notifications.agent.command, daemon.*. None of them work in a browser tab,
-// where os/exec and the file system fail, but a page has no reason to reach
-// them, and a section added later stays shut until it is listed here.
-//
-// A switch, not a map: a map is built at package init, in every tuios
-// process, and only the tour reads it.
 func pageSection(name string) bool {
 	switch name {
 	case "appearance", "dock", "sidebar", "scrollbar", "selection", "screensaver",
@@ -351,11 +298,6 @@ func pageSection(name string) bool {
 	return false
 }
 
-// pageSettable reports the registry path the page's set command may change
-// for path, or false. It takes the spellings OS.SetConfig takes: the full
-// path, or the bare name of an appearance option. Every look key goes
-// through as well, so the gallery's Try it shows what tuios look apply sets.
-// An unknown path is refused, so it does nothing.
 func pageSettable(path string) (string, bool) {
 	if config.IsLookKey(path) {
 		return path, true
@@ -374,18 +316,12 @@ func pageSettable(path string) (string, bool) {
 	return path, true
 }
 
-// setTheme switches the theme and records it in the tab's config. A set call
-// re-applies that config, so without the record the next set would put back
-// the theme the config held.
 func (m *Model) setTheme(name string) {
 	if err := m.OS.SetTheme(name); err == nil && m.OS.UserConfig != nil {
 		_ = config.SetOptionValue(m.OS.UserConfig, "appearance.theme", name)
 	}
 }
 
-// argAt is args[i], or empty past the end. Out of line, because the command
-// switch reads an argument at dozens of places.
-//
 //go:noinline
 func argAt(args []string, i int) string {
 	if i < len(args) {

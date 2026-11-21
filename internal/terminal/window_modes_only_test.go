@@ -8,12 +8,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// What the bridge's model reads from a pane's emulator must come out the same
-// whether the emulator sees the whole stream or only what modesOnly passes.
-// The ways it could go wrong: a title, cwd, notification, clipboard or bell
-// lost; the alternate screen state wrong; a sequence split between reads lost;
-// an OSC-looking string inside a DCS, APC or text let through; an OSC that
-// ESC cancels let through.
 type seen struct {
 	titles, cwds, notes, clips []string
 	alt                        []bool
@@ -37,13 +31,13 @@ const stream = "plain text \x1b[1;31mred\x1b[0m\r\n" +
 	"\x1b]0;first title\x07" +
 	"\x1b]2;second title\x1b\\" +
 	"\x1b]7;file://host/home/me/src\x07" +
-	"\x1bP+q\x1b]2;not a title\x07\x1b\\" + // inside a DCS
-	"\x1b_Ga=T;AAAA\x1b\\" + // kitty APC
+	"\x1bP+q\x1b]2;not a title\x07\x1b\\" +
+	"\x1b_Ga=T;AAAA\x1b\\" +
 	"\x1b]9;build done\x07" +
 	"\x1b]777;notify;Agent;needs you\x07" +
 	"\x1b]52;c;aGVsbG8=\x07" +
-	"\x1b]2;cancelled\x1b[2Jafter\r\n" + // an OSC that ESC cancels
-	"\x07" + // a bell
+	"\x1b]2;cancelled\x1b[2Jafter\r\n" +
+	"\x07" +
 	"\x1b[?1049h\x1b[Hfull screen\x1b[?25l\x1b[?1049l" +
 	"\x1b[?1047h\x1b[?1047l" +
 	"text with ] and ; and \x1b[5;5H moves\r\n" +
@@ -70,7 +64,6 @@ func TestModesOnlyKeepsWhatTheModelReads(t *testing.T) {
 	}
 	r := rand.New(rand.NewSource(1))
 	for round := range 200 {
-		// The stream cut at random places, as reads cut it.
 		var cuts []int
 		for c := 1 + r.Intn(9); c < len(stream); c += 1 + r.Intn(17) {
 			cuts = append(cuts, c)

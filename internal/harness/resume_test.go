@@ -117,14 +117,12 @@ func TestResumeKeepsOnlyListedFlags(t *testing.T) {
 	if err != nil || !slices.Equal(argv, append([]string{"claude", "--resume", "3f2a-9c"}, want...)) {
 		t.Fatalf("ResumeArgv = %q, %v", argv, err)
 	}
-	// The same flags under another harness's list keep only what it names.
 	if got := r.KeptFlags("pi", started); !slices.Equal(got, []string{"--model", "opus"}) {
 		t.Fatalf("pi KeptFlags = %q", got)
 	}
 	if got := r.KeptFlags("aider", started); got != nil {
 		t.Fatalf("a harness with no list kept %q", got)
 	}
-	// Only the marked flags and values are named as turning approvals off.
 	if got := r.RiskyFlags("claude-code", argv); !slices.Equal(got, []string{"--dangerously-skip-permissions"}) {
 		t.Fatalf("RiskyFlags = %q", got)
 	}

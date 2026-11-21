@@ -1,28 +1,5 @@
 package integration
 
-// The Cursor Agent event map. Source: the hooks reference
-// (https://cursor.com/docs/hooks, read for this change as its markdown,
-// https://cursor.com/docs/hooks.md). Hooks are in ~/.cursor/hooks.json,
-// version 1, each event a list of {command}. Every payload carries
-// hook_event_name and conversation_id; sessionStart and sessionEnd carry
-// session_id, which the reference says is the same as conversation_id.
-//
-//	sessionStart                      idle, and the session id
-//	beforeSubmitPrompt                working
-//	postToolUse, postToolUseFailure   working
-//	stop completed                    done
-//	stop aborted                      idle (the person stopped the turn)
-//	stop error                        errored
-//	sessionEnd                        none
-//
-// Only events Cursor treats as observations are registered. The reference
-// calls preToolUse, beforeShellExecution, beforeMCPExecution, beforeReadFile
-// and subagentStart permission hooks and blocks the action on output that is
-// not a valid answer, so a hook that prints nothing there would block every
-// call. None of them fires when Cursor shows its own approval prompt either,
-// so they could not say the agent is waiting. That state, and answering the
-// prompt, stay with the pane's screen rules, which may take over a working
-// report while a prompt is on screen.
 func translateCursor(in Input, p fields) Decision {
 	event := eventName(in, p)
 	id := func(r Report) Report {

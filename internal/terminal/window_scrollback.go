@@ -78,13 +78,6 @@ func (w *Window) EnterCopyModeCentered() {
 	w.enterCopyMode(0, w.ContentHeight()/2)
 }
 
-// copyEntryCursor is the terminal cursor clamped to the pane's content area.
-//
-// The lock is a try, not a wait, for the reason cursor rendering gives: a pane
-// in an output burst holds the exclusive side almost continuously, and entering
-// copy mode must not stall behind it. When the lock is busy the cursor the last
-// frame saw is used, which is at most a frame stale. The try also means a
-// caller that already holds the read lock cannot deadlock here.
 func (w *Window) copyEntryCursor() (int, int) {
 	pos, _, _ := w.GuestCursor()
 	maxX := max(w.ContentWidth()-1, 0)
@@ -101,7 +94,7 @@ func (w *Window) enterCopyMode(x, y int) {
 	w.CopyMode.State = CopyModeNormal
 	w.CopyMode.CursorX = x
 	w.CopyMode.CursorY = y
-	w.CopyMode.ScrollOffset = 0 // Start at live content
+	w.CopyMode.ScrollOffset = 0
 	w.CopyMode.Search.Set("")
 	w.CopyMode.SearchMatches = nil
 	w.CopyMode.CurrentMatch = 0
@@ -202,7 +195,6 @@ func (w *Window) ExitCopyMode() {
 		w.CopyMode.SearchCache.Valid = false
 	}
 
-	// CRITICAL: Return to live content (bottom of scrollback)
 	w.ScrollbackOffset = 0
 	w.InvalidateCache()
 }

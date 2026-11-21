@@ -11,40 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The agent row's tokens and how each is drawn, from [appearance.sidebar.agent_row].
-//
-// Which facts an agent row shows, in what order and in what ink, is set by the
-// config. Like herdr's sidebar, each token can be styled by its value with
-// ordered text and numeric rules:
-//
-//	[appearance.sidebar.agent_row]
-//	tokens = ["session", "need", "harness", "name", "progress", "elapsed", "context", "subagents", "pr", "meta", "now", "message"]
-//
-//	[appearance.sidebar.agent_row.name]
-//	fg = "text"
-//	bold = false
-//
-//	[[appearance.sidebar.agent_row.elapsed.rule]]
-//	gt = 30
-//	fg = "warning"
-//
-// Every token starts with the rail's own style. A token's fg, bold and dim
-// replace it. Its rules replace it again, first match wins, each rule with
-// exactly one test: equals, contains, starts_with, gt or lt. Text tests read
-// the token as drawn; gt and lt read it as a number, which for elapsed is the
-// minutes since the state was entered. There is no regular expression here on
-// purpose: a config file is not a place to hand someone a regex engine, and
-// the five tests cover what a rule about one word or one number needs.
-//
-// # Fail safely
-//
-// The table is decoded as generic TOML and read here rather than into a typed
-// struct, because a typed decode refuses the whole config file on one wrong
-// type, and a rail that draws in the wrong colour is a smaller failure than a
-// tuios that starts with every setting at its default. A value this reader
-// does not understand is dropped and named in Problems, which the validator
-// prints, and the rest of the table stands.
-
 // SidebarAgentRowTokens is every token an agent row can carry, in the order a
 // person is most likely to want them listed.
 // Beside these, "$key" names one key of the pane's agent metadata (see
@@ -110,7 +76,6 @@ func SidebarMetaTokenKey(name string) (string, bool) {
 	return key, true
 }
 
-// sidebarKnownToken reports whether name is a token a row can draw.
 func sidebarKnownToken(name string) bool {
 	if slices.Contains(SidebarAgentRowTokens, name) {
 		return true
@@ -119,12 +84,10 @@ func sidebarKnownToken(name string) bool {
 	return ok
 }
 
-// sidebarTokenNames is the list a problem about an unknown token offers.
 func sidebarTokenNames() string {
 	return strings.Join(SidebarAgentRowTokens, ", ") + ", or $key for one metadata key"
 }
 
-// sidebarTokenTests are the tests a rule may carry, exactly one per rule.
 var sidebarTokenTests = []string{"equals", "contains", "starts_with", "gt", "lt"}
 
 // SidebarAgentRowMaxRules is how many rules one token may carry. Eight is
@@ -327,7 +290,6 @@ func ParseSidebarAgentRow(table map[string]any) SidebarAgentRowSpec {
 	return spec
 }
 
-// parseTokenStyle reads one token's table: its look, and its rule list.
 func parseTokenStyle(token string, table map[string]any, problem func(string, ...any)) SidebarTokenStyle {
 	var style SidebarTokenStyle
 	style.Base = parseLook(token, table, problem)
@@ -360,7 +322,6 @@ func parseTokenStyle(token string, table map[string]any, problem func(string, ..
 	return style
 }
 
-// parseLook reads fg, bold and dim off a table.
 func parseLook(where string, table map[string]any, problem func(string, ...any)) SidebarTokenLook {
 	var look SidebarTokenLook
 	if raw, ok := table["fg"]; ok {
@@ -370,8 +331,6 @@ func parseLook(where string, table map[string]any, problem func(string, ...any))
 		case !isString:
 			problem("%s.fg must be a colour in quotes. The row ignores it", where)
 		case theme.IsColor(s):
-			// A role such as text or accent is read off the rail's own
-			// palette when the row is drawn, so it is the rail's ink.
 			look.Fg = s
 		default:
 			problem("%s.fg: %s. The row ignores it", where, ColourProblem(s))
@@ -397,7 +356,6 @@ func parseLook(where string, table map[string]any, problem func(string, ...any))
 	return look
 }
 
-// parseRule reads one rule table: exactly one test, ignore_case, and a look.
 func parseRule(token string, n int, table map[string]any, problem func(string, ...any)) (SidebarTokenRule, bool) {
 	where := fmt.Sprintf("%s rule %d", token, n)
 	var rule SidebarTokenRule
@@ -458,8 +416,6 @@ func parseRule(token string, n int, table map[string]any, problem func(string, .
 	return rule, true
 }
 
-// fingerprint writes the spec out in a fixed order, so two specs that draw the
-// same rows fold to the same string.
 func (s *SidebarAgentRowSpec) fingerprint() string {
 	var b strings.Builder
 	b.WriteString(strings.Join(s.Tokens, ","))
@@ -488,7 +444,6 @@ func lookString(l SidebarTokenLook) string {
 	return l.Fg + "/" + tri(l.Bold) + "/" + tri(l.Dim)
 }
 
-// stringList reads a TOML array of strings.
 func stringList(raw any) ([]string, bool) {
 	switch v := raw.(type) {
 	case []string:
@@ -507,7 +462,6 @@ func stringList(raw any) ([]string, bool) {
 	return nil, false
 }
 
-// tableList reads a TOML array of tables, however the decoder spelled it.
 func tableList(raw any) ([]map[string]any, bool) {
 	switch v := raw.(type) {
 	case []map[string]any:
@@ -523,14 +477,11 @@ func tableList(raw any) ([]map[string]any, bool) {
 		}
 		return out, true
 	case map[string]any:
-		// A single [token.rule] table rather than a [[token.rule]] entry: one
-		// rule, written without the doubled brackets.
 		return []map[string]any{v}, true
 	}
 	return nil, false
 }
 
-// number reads any numeric TOML value as a float.
 func number(raw any) (float64, bool) {
 	switch v := raw.(type) {
 	case int64:

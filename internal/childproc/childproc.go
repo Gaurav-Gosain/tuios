@@ -22,15 +22,7 @@ import (
 	"strings"
 )
 
-// gitArgs puts the settings every git the daemon runs gets in front of args.
-//
-// A repository's own config can name programs git runs: core.fsmonitor runs
-// one on every status and diff. The daemon runs git in folders a pane
-// controls, and a program git starts runs outside every pane, so a pane could
-// get code run as a child of the daemon. core.fsmonitor only speeds git up,
-// so it is off.
 func gitArgs(name string, args []string) []string {
-	// A path to git is git too, here or in a later caller.
 	if base := strings.TrimSuffix(filepath.Base(name), ".exe"); base != "git" {
 		return args
 	}

@@ -56,8 +56,6 @@ func TestParseSSHGateRefusesAnUntrustedLink(t *testing.T) {
 	if g == nil || g.URL != "" || !g.Refused {
 		t.Fatalf("ParseSSHGate kept an untrusted link: %+v", g)
 	}
-	// The words with nothing after them on their line: the next line's first
-	// word is not the link.
 	g = ParseSSHGate("# Tailscale SSH requires an additional check.\n# To authenticate, visit:\nhttps://login.tailscale.com/a/x\n")
 	if g == nil || g.URL != "" {
 		t.Fatalf("ParseSSHGate took a link from the next line: %+v", g)

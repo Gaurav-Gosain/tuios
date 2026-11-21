@@ -8,9 +8,6 @@ import (
 	"tuios.dev/harness"
 )
 
-// The flags a new agent starts with, from the person's choice and the
-// manifest's [launch] block (harness.Launch).
-
 // LaunchChoice is what the person chose for a new agent. An empty field is
 // the harness's own default.
 type LaunchChoice struct {

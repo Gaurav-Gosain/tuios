@@ -9,19 +9,6 @@ import (
 	"testing"
 )
 
-// The e2e suite installs and uninstalls integrations against a home of its
-// own. An environment variable that names a harness's directory outright
-// beats that home, so one set in the developer's shell points the suite at
-// their real agent config, which it then rewrites and removes. The suite
-// clears a fixed list of them (harnessDirKeys in e2e/tui/harness_test.go) and
-// redirects the XDG ones (xdgKeys). It is a separate module, so this test
-// reads that file as text and holds the list to what this package reads.
-//
-// How it could pass wrongly: a pattern that finds no reads at all. So it also
-// requires the reads it is known to find.
-
-// dirVarRe finds a variable read for a directory: dirFromEnv("X"), and
-// env("X") where X ends in _HOME, _DIR or APPDATA.
 var dirVarRe = regexp.MustCompile(`(?:dirFromEnv|\.env)\("([A-Z_]+(?:_HOME|_DIR|APPDATA))"`)
 
 func TestE2EClearsEveryDirOverride(t *testing.T) {
@@ -62,8 +49,6 @@ func TestE2EClearsEveryDirOverride(t *testing.T) {
 	}
 }
 
-// stringList is the quoted strings in the var name = []string{...} block of
-// a Go source file.
 func stringList(t *testing.T, src, name string) []string {
 	t.Helper()
 	start := strings.Index(src, "var "+name+" = []string{")

@@ -6,8 +6,6 @@ import (
 	"sync"
 )
 
-// pathMatcher finds paths with the hints mode pattern, and URLs beside them,
-// so the path inside a URL is the URL's and not a path of its own.
 var pathMatcher = sync.OnceValue(func() *Matcher {
 	m, _ := New([]string{URL, Path}, nil)
 	return m

@@ -6,20 +6,6 @@ import (
 	"testing"
 )
 
-// The ways a preset can go wrong, and the test that holds each:
-//
-//   - Two actions share a key in one scope, so the key runs whichever comes
-//     first by name: TestEveryPresetLoadsCleanly, on a Linux and a macOS host.
-//   - A preset binds alt+[ or alt+], which a terminal sends as the start of an
-//     escape sequence: the same test.
-//   - A preset names an action nothing runs: TestEveryPresetActionIsRegistered
-//     in internal/input.
-//   - The preset's key takes a key the user bound, or a user's own binding of
-//     an action is lost: TestTheUserWinsOverThePreset.
-//   - A tuios feature vanishes because the preset took its key and put it
-//     nowhere: TestEveryDisplacedFeatureMoves.
-
-// presetConfig parses a config that names preset and adds body.
 func presetConfig(t *testing.T, preset, body string) *UserConfig {
 	t.Helper()
 	cfg, err := ParseUserConfig([]byte("[keybindings]\npreset = \"" + preset + "\"\n" + body))
@@ -45,8 +31,6 @@ func TestEveryPresetLoadsCleanly(t *testing.T) {
 				t.Errorf("preset %s (mac %v): %s runs %s and hides %v", name, mac, c.Press, c.Winner, c.Losers)
 			}
 			for _, b := range r.Bindings() {
-				// alt+[ and alt+] reach tuios as ESC [ and ESC ], the starts
-				// of a CSI and an OSC, without the Kitty protocol.
 				if b.Key == "alt+[" || b.Key == "alt+]" {
 					t.Errorf("preset %s (mac %v): %s [%s] is on %s, which a terminal sends as the start of an escape sequence",
 						name, mac, b.Action, b.Section, b.Key)
@@ -85,18 +69,11 @@ func TestTheUserWinsOverThePreset(t *testing.T) {
 	if cfg.Keybindings.LeaderKey != "ctrl+b" {
 		t.Errorf("leader is %q, want the preset's ctrl+b", cfg.Keybindings.LeaderKey)
 	}
-	// keybinds doctor names the preset key the user's binding took.
-	// Negative control: fillMapDefaultsYielding returning nil leaves the
-	// report without it.
 	want := YieldedDefault{Section: "prefix_mode", Action: "prev_workspace", Key: "p", TakenBy: "prefix_prev_window", Preset: "tmux"}
 	if rep := r.Report(PaneFacts{}); !slices.Contains(rep.Yielded, want) {
 		t.Errorf("the doctor report does not name the preset key the user took: %+v", rep.Yielded)
 	}
 
-	// A config.toml an older tuios wrote on its first start holds every
-	// default. Those entries are not the user's choice and must not hide the
-	// preset. Negative control: without dropPresetShadows, c and n keep the
-	// tuios actions.
 	old := presetConfig(t, "tmux", "[keybindings.prefix_mode]\nprefix_new_window = [\"c\"]\nprefix_next_window = [\"n\", \"tab\"]\n")
 	r = NewKeybindRegistry(old)
 	for key, want := range map[string]string{"c": "new_workspace", "n": "next_workspace", "o": "prefix_next_window"} {
@@ -105,12 +82,6 @@ func TestTheUserWinsOverThePreset(t *testing.T) {
 		}
 	}
 
-	// The same file holds leader_key = 'ctrl+b', the tuios default. Under a
-	// preset with another leader it gives way. A leader the user changed
-	// stays, and so does ctrl+b in a file that holds no other default: a
-	// person chose it. Negative controls: without the leader check in
-	// fillMissingKeybinds, screen keeps ctrl+b in the old file. Without the
-	// shadows > 0 condition, the chosen ctrl+b becomes ctrl+a.
 	oldFile := "[keybindings.prefix_mode]\nprefix_new_window = [\"c\"]\n"
 	for _, tc := range []struct{ leader, body, want string }{
 		{"ctrl+b", oldFile, "ctrl+a"},

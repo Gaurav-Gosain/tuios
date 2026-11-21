@@ -32,12 +32,7 @@ import (
 // for tests, and nothing in cmd/tuios makes one, so its code is not in the
 // binary.
 type Terminal interface {
-	// out is where the frames go.
 	out() io.Writer
-	// attach gives the client the terminal's options: those of the shared
-	// list and those of Bubble Tea, what to call once the program exists,
-	// and what to call when it has ended. prw is the writer the frames go
-	// through.
 	attach(m *app.OS, prw *app.PostRenderWriter) (opts []app.ProgramOption, topts []tea.ProgramOption, started func(*tea.Program), ended func())
 }
 
@@ -48,11 +43,6 @@ type stdio struct{}
 
 func (*stdio) out() io.Writer { return os.Stdout }
 
-// attach gives the local client a screen of its own when
-// appearance.cell_frames asks for it (all, or TUIOS_CELL_FRAME=1): its frames
-// are written as diffed cells and Bubble Tea runs without its renderer. Not
-// offered on Windows. Bubble Tea and the screen ask this terminal for its
-// size, profile and resizes themselves.
 func (*stdio) attach(m *app.OS, prw *app.PostRenderWriter) ([]app.ProgramOption, []tea.ProgramOption, func(*tea.Program), func()) {
 	none := func(*tea.Program) {}
 	if runtime.GOOS == "windows" || !m.Settings.CellFramesFor(false) ||
@@ -101,9 +91,6 @@ type Size struct{ Width, Height int }
 
 func (t Pipe) out() io.Writer { return t.Out }
 
-// attach gives the program the pipe's input, environment, profile and size.
-// Each new size is stored before it is sent, as the servers do. See
-// app.WithCurrentSize.
 func (t Pipe) attach(m *app.OS, prw *app.PostRenderWriter) ([]app.ProgramOption, []tea.ProgramOption, func(*tea.Program), func()) {
 	profile := t.Profile
 	if profile == colorprofile.Unknown {
@@ -159,15 +146,10 @@ func LoadConfig(getenv func(string) string, ov config.Overrides) (*config.UserCo
 	if err != nil {
 		log.Printf("Warning: Failed to load config, using defaults: %v", err)
 		userConfig = config.DefaultConfig()
-		// The log line above is wiped by the first frame. LoadWarnings reach
-		// the TUI, so the person learns why none of the file applies.
 		userConfig.LoadWarnings = append(userConfig.LoadWarnings,
 			fmt.Sprintf("tuios cannot load config.toml and uses the default settings: %v", err))
 	}
 
-	// What this terminal can draw, from its locale and TERM. It only decides
-	// the glyphs when the config chose no set and --ascii-only was not given;
-	// ApplyAppearanceConfig folds it in. See config.DetectGlyphEnv.
 	env, why := config.DetectGlyphEnv(getenv)
 	seed := config.DefaultSettings()
 	seed.GlyphEnv = env
@@ -175,8 +157,6 @@ func LoadConfig(getenv func(string) string, ov config.Overrides) (*config.UserCo
 		log.Printf("glyphs: %s, so the chrome is drawn with %s glyphs unless a glyph set or --ascii-only is chosen", why, env)
 	}
 
-	// The file is the baseline and the flags win: the option flags are laid
-	// over a copy of the file, and the rest are applied after it.
 	settings := config.ResolveFrom(seed, userConfig, ov)
 	return userConfig, &settings
 }
@@ -206,18 +186,12 @@ func New(t Terminal, opts app.OSOptions, state *session.SessionState) *Client {
 	opts.GraphicsOutput = prw
 	m := app.NewOS(opts)
 	m.PostRenderWriter = prw
-	// Sixel images follow the frame they sit on, in the same write.
 	m.ConnectFrameWriter(prw)
 	if opts.DaemonClient != nil {
-		// Everything the daemon sends an attached client, queued for Update.
-		// The same call the SSH server and tuios-web make.
 		m.WireDaemonClient(opts.DaemonClient)
 		m.RestoreAttachedSession(state)
 	}
 
-	// The shared list, then the options that are this transport's: the
-	// writer every frame and every graphics sequence serialize on, then the
-	// terminal's own.
 	popts, topts, started, ended := t.attach(m, prw)
 	p := tea.NewProgram(m, append(append(app.ProgramOptions(popts...), tea.WithOutput(prw.Output())), topts...)...)
 	m.BindProgram(p)

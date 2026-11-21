@@ -28,7 +28,6 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("%s returned %d %s", e.URL, e.Status, statusText[e.Status])
 }
 
-// statusText is the reason phrase of the statuses GitHub answers with.
 var statusText = map[int]string{
 	400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
 	405: "Method Not Allowed", 406: "Not Acceptable", 408: "Request Timeout",
@@ -51,9 +50,6 @@ type GitHub struct {
 	BaseURL string
 }
 
-// httpTimeout bounds the whole request. Generous enough for a release archive
-// on a slow link and short enough that a black hole is reported rather than
-// waited on.
 const httpTimeout = 60 * time.Second
 
 // NewGitHub is a GitHub source with the usual settings, including a token from
@@ -87,9 +83,6 @@ func (g *GitHub) baseURL() string {
 	return "https://api.github.com"
 }
 
-// ghRelease is the subset of the API's release object this reads. Everything
-// else in that payload is ignored rather than modelled: a field this does not
-// need is a field that can change shape without breaking anything.
 type ghRelease struct {
 	TagName    string `json:"tag_name"`
 	Prerelease bool   `json:"prerelease"`
@@ -132,9 +125,6 @@ func (g *GitHub) Latest(ctx context.Context, withPrerelease bool) (Release, erro
 	if err := g.getJSON(ctx, g.baseURL()+"/repos/"+g.repo()+"/releases?per_page=20", &list); err != nil {
 		return Release{}, err
 	}
-	// The API returns newest first, so the first non-draft is the answer. A
-	// draft is skipped rather than reported: its assets are not public and
-	// downloading one would need the token that listed it.
 	for _, rel := range list {
 		if !rel.Draft && rel.TagName != "" {
 			return rel.toRelease(), nil
@@ -176,8 +166,6 @@ func (g *GitHub) getJSON(ctx context.Context, url string, into any) error {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	// Bounded, so a wrong URL that answers with something enormous cannot be
-	// read into memory. A release listing is a few tens of kilobytes.
 	body := io.LimitReader(resp.Body, 4<<20)
 	if err := json.NewDecoder(body).Decode(into); err != nil {
 		return errfmt.Errorf("failed to read the release listing: %w", err)
@@ -194,8 +182,6 @@ func (g *GitHub) do(ctx context.Context, url, accept string) (*response, error) 
 		return resp, nil
 	}
 	_ = resp.Body.Close()
-	// 403 and 429 are both how a spent allowance arrives, and the remaining
-	// header is what tells them apart from a genuine refusal.
 	if resp.StatusCode == 403 || resp.StatusCode == 429 {
 		if resp.Header["X-Ratelimit-Remaining"] == "0" {
 			return nil, &RateLimitError{Reset: parseResetHeader(resp.Header["X-Ratelimit-Reset"])}
@@ -204,9 +190,6 @@ func (g *GitHub) do(ctx context.Context, url, accept string) (*response, error) 
 	return nil, &HTTPError{Status: resp.StatusCode, URL: url}
 }
 
-// parseResetHeader reads GitHub's reset stamp, which is seconds since the
-// epoch. A header that is missing or unparsable gives the zero time, and
-// RateLimitError says nothing about a time it does not have.
 func parseResetHeader(v string) time.Time {
 	secs, err := strconv.ParseInt(v, 10, 64)
 	if err != nil || secs <= 0 {

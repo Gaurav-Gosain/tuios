@@ -17,17 +17,8 @@ import (
 	"tuios.dev/vt"
 )
 
-// debugInternal reports whether TUIOS_DEBUG_INTERNAL=1 is set, read once on
-// first use. The switch is set at startup, before any window exists, and
-// every call site below checks it before building its arguments: a
-// time.Now().Format, a string(input) and a hex rendering were being made on
-// every keystroke and every terminal response for a log line that was then
-// thrown away.
 var debugInternal = debuglog.Enabled
 
-// debugLogf appends one formatted line to /tmp/tuios-debug.log when
-// TUIOS_DEBUG_INTERNAL=1, and is a no-op otherwise. One helper instead of a
-// getenv+open at every call site, and one file instead of several.
 func debugLogf(format string, v ...any) {
 	if !debugInternal() {
 		return
@@ -40,58 +31,27 @@ func debugLogf(format string, v ...any) {
 	_ = f.Close()
 }
 
-// debugLine is debugLogf for callers that pass a line rather than a fragment.
-// debugLogf writes exactly what it is given, so every one of its call sites
-// carries its own "\n"; a helper handed to another package cannot rely on that.
 func debugLine(format string, v ...any) {
 	debugLogf(format+"\n", v...)
 }
 
 const (
-	// maxBatch caps how much pending PTY output one pass of outputWriter
-	// coalesces before writing it to the emulator.
 	maxBatch = 256 * 1024
 
-	// maxVTChunk caps how much of that batch is written to the emulator under a
-	// single acquisition of ioMu. It bounds how long the compositor can be kept
-	// out of a pane by that pane's own output. It is a latency knob, not a
-	// throughput one: the whole batch is still written before the next one is
-	// read, so shrinking it costs only extra lock round trips and buys a
-	// proportionally shorter worst-case stall for the renderer.
 	maxVTChunk = 8 * 1024
 
-	// outputBatchKeep is the batch capacity outputWriter keeps across an idle
-	// spell. A larger batch is let go once the pane has stayed idle for
-	// outputQueueTrimAfter, and the next output grows a new one.
 	outputBatchKeep = 32 * 1024
 
-	// queueRoomPoll is how often a sender blocked on a full queue looks again.
 	queueRoomPoll = time.Millisecond
 )
 
-// maxQueuedBytes bounds the daemon output queued for one pane's emulator and
-// not yet written to it. The queue is bounded by slots as well, and a slot
-// holds one daemon batch of up to 256 KiB, so slots alone let a pane whose
-// emulator was slower than the socket hold a gigabyte. Past this the sender
-// waits for outputWriter to take some of it back off. That is backpressure on
-// the socket the daemon writes rather than a drop: a client cannot recover a
-// dropped chunk, while the daemon holds the ring and can resume a stream it
-// had to stall. A variable so a test can lower it.
 var maxQueuedBytes int64 = 16 << 20
 
-// outputChunk is one queued batch of daemon output and the epoch it was queued
-// under. See Window.outputEpoch.
 type outputChunk struct {
-	data  []byte
-	epoch uint64
-	// width and height, both set, mark the size the daemon's emulator took at
-	// this point in the stream instead of bytes to write. Applying it here
-	// rather than when the layout asked for it is what keeps this emulator
-	// wrapping every line where the daemon wrapped it.
+	data          []byte
+	epoch         uint64
 	width, height int
-	// drained, when set, is closed once everything queued in front of it has
-	// been applied to the emulator. See DrainPendingOutput.
-	drained chan struct{}
+	drained       chan struct{}
 }
 
 func (c outputChunk) isResize() bool { return c.width > 0 && c.height > 0 }
@@ -108,37 +68,17 @@ func (w *Window) DiscardPendingOutput() {
 	w.outputEpoch.Add(1)
 }
 
-// applyStreamResize takes the emulator to the size the daemon's emulator took
-// at this point in the stream. Dropped when the epoch has moved, because a
-// restore has since put a whole snapshot in, and that snapshot's size is newer
-// than this.
 func (w *Window) applyStreamResize(chunk outputChunk) {
 	w.writesBegun.Add(1)
 	w.ioMu.Lock()
-	// Re-checked under the lock the restore also takes, for the same reason
-	// the batch write below re-checks it.
-	//
-	// A resize to the size the emulator already has is not a no-op inside the
-	// emulator: it resets the scroll region and the tab stops, which the guest
-	// set and the daemon has not been told to forget. A subscribe states the
-	// pane's size whether or not the client has it already, so this is the
-	// common case rather than an odd one.
 	if w.Terminal != nil && w.outputEpoch.Load() == chunk.epoch &&
 		(w.Terminal.Width() != chunk.width || w.Terminal.Height() != chunk.height) {
 		w.Terminal.Resize(chunk.width, chunk.height)
 	}
 	w.ioMu.Unlock()
-	// Dirty flags belong to the UI goroutine; the write path only says that
-	// something arrived, and MarkTerminalsWithNewContent does the rest.
 	w.noteWrite(false)
 }
 
-// noteWrite is noteOutput for a change a writer made to the emulator. With
-// graphics set it is a write graphicsOnly accepted: the render signal goes
-// out, so the passthrough's queued commands are drawn, but the pane is not
-// marked as having new cells. The change is counted as noted after its flag is
-// set and before the wake, so the pass the wake asks for reads the count. See
-// EmulatorWrites.
 func (w *Window) noteWrite(graphics bool) {
 	if graphics {
 		w.HasGraphicsOutput.Store(true)
@@ -164,20 +104,11 @@ func (w *Window) EmulatorWrites() (begun, noted uint64) {
 // waited for its drawing budget, is ready now. Safe from any goroutine.
 func (w *Window) NoteRedraw() { w.noteOutput() }
 
-// noteOutput records that the pane has produced something worth drawing and
-// wakes the coalescer.
-//
-// HasNewOutput is the UI goroutine's flag, consumed by
-// MarkTerminalsWithNewContent. coalesceSignal is the coalescer's own, kept
-// separate so consuming one does not consume the other. The wake is what lets
-// the coalescer sleep between bursts rather than poll a flag that is false
-// almost every time it looks.
 func (w *Window) noteOutput() {
 	w.HasNewOutput.Store(true)
 	w.wakeCoalescer()
 }
 
-// wakeCoalescer tells the coalescer the pane has something to draw.
 func (w *Window) wakeCoalescer() {
 	w.coalesceSignal.Store(true)
 	if w.coalesceWake != nil {
@@ -188,16 +119,6 @@ func (w *Window) wakeCoalescer() {
 	}
 }
 
-// outputWriter is a goroutine that serializes writes to the terminal emulator.
-// It batches pending chunks into capped VT writes and coalesces render
-// signals to prevent partial-frame flickering.
-//
-// The anti-flicker mechanism: instead of signaling a re-render on every
-// VT write (which shows incomplete frames mid-sync-update), we defer the
-// signal. A separate renderCoalescer goroutine fires at a capped rate and
-// only signals when there's actually new output. The cap is ~120fps while
-// frames are cheap and widens with what a frame actually costs; see
-// coalesceInterval.
 func (w *Window) outputWriter() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -209,14 +130,7 @@ func (w *Window) outputWriter() {
 		return
 	}
 
-	// Grown by the first output. Made up front it was 256 KiB for every pane,
-	// including the ones that never print. A flood grows it to maxBatch, so it
-	// is let go once the pane has stayed idle for outputQueueTrimAfter, unless
-	// it is no larger than outputBatchKeep.
 	var batch []byte
-	// trim fires once a queue the backlog grew, or a batch a flood grew, has
-	// stayed empty for outputQueueTrimAfter. Made the first time either
-	// drains.
 	var trim *time.Timer
 	defer func() {
 		if trim != nil {
@@ -226,15 +140,8 @@ func (w *Window) outputWriter() {
 
 	for {
 		var epoch uint64
-		// A resize ends the batch in front of it and is applied after that
-		// batch is written. Folding it into the bytes either side would lay
-		// one of them out at a width the daemon never used them at.
 		var resize outputChunk
-		// A drain sentinel is answered whatever its epoch: it asks about queue
-		// position, not about whether the bytes around it are still wanted.
 		var drained chan struct{}
-		// Checked before every pop, not only when the queue is empty, so a
-		// closed window does not work through the chunks still queued.
 		select {
 		case <-w.outputDone:
 			return
@@ -245,8 +152,6 @@ func (w *Window) outputWriter() {
 			if closed {
 				return
 			}
-			// Wait only after a pop found the queue empty: the next push
-			// leaves a token on wake.
 			var trimC <-chan time.Time
 			if w.outputQ.oversized() || cap(batch) > outputBatchKeep {
 				if trim == nil {
@@ -309,28 +214,7 @@ func (w *Window) outputWriter() {
 		}
 
 	write:
-		// Snapshot and dereference Terminal entirely under ioMu: Close()
-		// nils the field under the same lock, so an unlocked check-then-use
-		// would panic once teardown races an in-flight batch.
-		//
-		// Write the batch in bounded chunks, taking the lock once per chunk
-		// rather than once for the whole batch. Terminal.Write parses the bytes
-		// and mutates the cell buffer, and for a pane emitting thousands of
-		// lines a second most of that cost is scrolling the buffer once per
-		// line, so a full 256KiB batch holds the exclusive lock for tens of
-		// milliseconds. The compositor must take the read side of this same
-		// lock on every window on every frame, and sync.RWMutex parks readers
-		// behind a queued writer. A pane whose output queue always has more data
-		// therefore re-queues the writer immediately and starves the renderer
-		// indefinitely: frames stop, and the keystroke echo the user is waiting
-		// for is never composited, however promptly the input itself was
-		// delivered. Unlock releases the readers waiting at that moment, so
-		// chunking hands the renderer a turn between chunks and bounds the
-		// stall at one chunk's parse instead of one batch's.
 		var t vt.Terminal
-		// Whether the parser was between sequences before this batch, for
-		// graphicsOnly. Only this goroutine writes, so it holds until the
-		// batch is written.
 		ground := w.parserAtGround()
 		data := batch
 		if f := w.modesOnly.Load(); f != nil {
@@ -341,9 +225,6 @@ func (w *Window) outputWriter() {
 			end := min(off+maxVTChunk, len(data))
 			w.ioMu.Lock()
 			t = w.Terminal
-			// Re-checked under the lock the restore also takes, so a batch that
-			// was already in hand when the epoch moved is dropped rather than
-			// written over what the restore just put there.
 			if w.outputEpoch.Load() != epoch {
 				w.ioMu.Unlock()
 				break
@@ -365,16 +246,6 @@ func (w *Window) outputWriter() {
 		}
 
 		if t != nil {
-			// HasNewOutput drives the UI goroutine's dirty-marking;
-			// coalesceSignal drives the render trigger. Do NOT mark the
-			// window dirty here: Dirty/ContentDirty/CachedContent are
-			// window model fields owned by the UI goroutine, and writing
-			// them from this background goroutine races the renderer and
-			// Close(). MarkTerminalsWithNewContent marks them on the UI
-			// goroutine once the coalescer fires PTYDataChan.
-			// Don't signal PTYDataChan here. The renderCoalescer
-			// goroutine holds the rate cap and signals on its own,
-			// which is what prevents partial-frame renders.
 			w.noteWrite(!resize.isResize() && graphicsOnly(ground, batch) && w.cursorHidden())
 		} else {
 			w.writesNoted.Add(1)
@@ -399,7 +270,6 @@ func (w *Window) SetFrameInterval(d time.Duration) {
 	w.frameInterval.Store(int64(d))
 }
 
-// minFrameInterval is the coalescer's floor now.
 func (w *Window) minFrameInterval() time.Duration {
 	if d := w.frameInterval.Load(); d > 0 {
 		return time.Duration(d)
@@ -408,71 +278,19 @@ func (w *Window) minFrameInterval() time.Duration {
 }
 
 const (
-	// minCoalesceInterval is the default floor: ~120fps, the rate the
-	// coalescer used unconditionally before it learned what a frame costs.
 	minCoalesceInterval = 8 * time.Millisecond
 
-	// maxCoalesceInterval is the ceiling, so one pathological frame cannot
-	// leave a pane looking frozen while it still has output to show.
 	maxCoalesceInterval = 96 * time.Millisecond
 
-	// catchUpBacklog is how far behind a pane's emulator has to fall before the
-	// coalescer treats the frames it is being asked for as already spent. It is
-	// about a tenth of a second of the client's own parsing, so an ordinary
-	// burst (a paste, a large directory listing) passes under it and only a
-	// pane the client has genuinely stopped keeping up with trips it.
 	catchUpBacklog = 4 << 20
 
-	// catchUpFrames is the interval a pane that far behind is paced at, in
-	// frames. See catchUpCoalesceInterval.
 	catchUpFrames = 2
 
-	// coalescePaceFactor is how much host capacity a flooding pane may take.
-	// At 2 a frame that costs the client 20ms buys a 40ms interval, so the UI
-	// goroutine spends about half its time composing and the other half
-	// available to whatever else needs it, which in practice is the keyboard.
 	coalescePaceFactor = 2
 )
 
-// catchUpCoalesceInterval is the shortest interval a pane far behind is paced
-// at: two frames, slow enough that the renderer does not take the pane's read
-// lock from its own output writer at every frame, fast enough that the flood
-// scrolls rather than jumps. A frame that costs more keeps its own, longer
-// interval (see coalesceInterval).
-//
-// It was 250 ms, four frames a second. A pane printing as fast as the client
-// can parse falls behind within seconds and stayed there, so a long flood was
-// drawn at 10 to 15 frames a second. At two frames it is drawn at about 68 a
-// second, and the guest wrote as many lines in the same time (1.28 million in
-// 5 s either way), so the writer did not lose to the renderer.
 func (w *Window) catchUpCoalesceInterval() time.Duration { return catchUpFrames * w.minFrameInterval() }
 
-// coalesceInterval is how long this pane must wait between render signals,
-// derived from what the client's last frame actually cost.
-//
-// A fixed 8ms cap is only a cap when frames are cheaper than 8ms. Under a
-// full-screen repaint a frame costs the UI goroutine far more than that, and
-// since that goroutine is also the one that carries keystrokes, asking it for
-// another frame the instant it finishes one leaves no gap for a keypress to
-// land in: the pane's output wins every scheduling race and input waits behind
-// a frame it did not cause. Charging the pane an interval proportional to the
-// cost it imposes is what reopens that gap. It is the same debt the kitty
-// passthrough charges itself for graphics floods, in the units this path has.
-//
-// It also paces by what the pane is behind, not only by what a frame costs.
-// The two are the same problem seen from either end. A client that has fallen
-// behind the daemon is drawing states the bytes already queued behind them are
-// about to overwrite, and every one of those frames holds the pane's read lock
-// for the length of a compose, which is time the pane's own output writer
-// spends waiting rather than catching up. Measured on a 192 MiB flood, the
-// writer waited 1117ms in total for that lock and the pane went on painting
-// for 1215ms after the flooding program was gone: the backlog a client builds
-// is very nearly the time its own renderer took from it.
-//
-// So a pane far enough behind is paced right down. Nothing is thrown away and
-// the emulator still sees every byte, so the scrollback the user can scroll
-// back to is exactly what it would have been. What stops is the drawing of
-// frames that were never going to be looked at.
 func (w *Window) coalesceInterval() time.Duration {
 	cost := time.Duration(w.renderCostNanos.Load()) * coalescePaceFactor
 	interval := min(max(cost, w.minFrameInterval()), maxCoalesceInterval)
@@ -493,23 +311,6 @@ func (w *Window) ChargeRenderCost(d time.Duration) {
 	w.renderCostNanos.Store(int64(d))
 }
 
-// renderCoalescer runs for every PTY-backed window, daemon or local, and fires
-// render signals at a capped rate. Multiple VT writes inside one interval coalesce into a single
-// render that shows the latest complete frame.
-//
-// It emits on the leading edge and rate-limits after it, rather than polling a
-// flag on a free-running ticker. The distinction is the difference between
-// "at most one render per 8 ms" and "every render waits for the next tick
-// edge", and only the first of those is what the cap is for. A ticker charges
-// a pane that has been silent for a minute the same 0 to 8 ms as one
-// mid-flood, and a pane that has been silent is exactly the state a pane is in
-// when a user types at it: measured at p50 4.03 ms and p99 8.04 ms on every
-// echoed keystroke, for a burst that was never going to flicker.
-//
-// A pane that is genuinely bursting still emits no faster than once per
-// interval, so the anti-flicker guarantee holds. Sleeping between bursts
-// instead of ticking also means an idle pane costs no wakeups at all, where a
-// ticker wakes every open pane 125 times a second forever.
 func (w *Window) renderCoalescer() {
 	defer crashexit.Recover()
 	timer := time.NewTimer(w.minFrameInterval())
@@ -518,27 +319,9 @@ func (w *Window) renderCoalescer() {
 	}
 	defer timer.Stop()
 
-	// armed says the timer is holding the tail of an interval that has already
-	// emitted. last is the time the last emit stands for; its zero value is
-	// what makes the very first output take the leading edge.
 	var armed bool
 	var last time.Time
 
-	// emit consumes the coalescer's own flag, not HasNewOutput, so the latter
-	// survives for the UI goroutine's MarkTerminalsWithNewContent.
-	//
-	// An emit before the end of the interval stands for the end of the
-	// interval, and the next interval is counted from there; one after it
-	// stands for itself. A signal up to FrameSlack before the end is emitted
-	// at once, and the timer of one that came earlier fires FrameSlack before
-	// the end.
-	//
-	// Counted from the moment of the emit, every timer that fired late (Go's
-	// timers are often a fraction of a millisecond late) started the next
-	// interval late: the intervals of a pane drawing at the frame rate came
-	// out 9 ms long at 120 frames a second, and a 120 Hz guest showed 111 of
-	// its frames. Counted from the end, the slack absorbs the lateness, and
-	// the emits still come no faster than one an interval on average.
 	emit := func(now time.Time, interval time.Duration) {
 		if !w.coalesceSignal.CompareAndSwap(true, false) {
 			return
@@ -558,8 +341,6 @@ func (w *Window) renderCoalescer() {
 			return
 
 		case <-w.coalesceWake:
-			// Already inside an interval that has emitted: the flag is set and
-			// the armed timer will pick it up when the interval ends.
 			if armed {
 				continue
 			}
@@ -603,8 +384,6 @@ func NextFrameTime(last time.Time, interval time.Duration, now time.Time) time.T
 	return now
 }
 
-// parserAtGround reports whether the emulator's parser is between sequences.
-// A backend that cannot tell answers false.
 func (w *Window) parserAtGround() bool {
 	w.ioMu.RLock()
 	defer w.ioMu.RUnlock()
@@ -612,25 +391,12 @@ func (w *Window) parserAtGround() bool {
 	return ok && g.AtGround()
 }
 
-// cursorHidden reports whether the guest has hidden its cursor.
 func (w *Window) cursorHidden() bool {
 	w.ioMu.RLock()
 	defer w.ioMu.RUnlock()
 	return w.Terminal != nil && w.Terminal.IsCursorHidden()
 }
 
-// terminalRef returns the emulator, or nil once Close() has taken it away.
-//
-// Close() owns w.Terminal: it closes the emulator and nils the field under
-// ioMu, and nobody may observe the field after that without the same lock.
-// Every reader outside Close() therefore goes through ioMu, and a goroutine
-// that has to block on the emulator takes one reference here and then uses
-// that reference rather than the field, so the lock is never held across a
-// blocking call and cannot deadlock against Close()'s own wait for the I/O
-// goroutines. A reference outliving Close() is safe: Terminal.Close() unblocks
-// a pending Read with an error, so a late reader observes a closed emulator
-// instead of a nil one. This mirrors the snapshot discipline the w.Pty readers
-// already use.
 func (w *Window) terminalRef() vt.Terminal {
 	w.ioMu.RLock()
 	defer w.ioMu.RUnlock()
@@ -664,25 +430,16 @@ func (w *Window) StartDaemonResponseReader() {
 			}
 		}()
 
-		// One reference, taken under the lock Close() writes the field under.
-		// Reading w.Terminal unlocked raced Close() even as a single snapshot,
-		// and re-reading it per iteration would dereference the nil Close()
-		// leaves behind. Terminal.Close() unblocks the pending Read with an
-		// error, so a reader holding a stale reference sees the emulator as
-		// closed and exits promptly.
 		term := w.terminalRef()
 		if term == nil {
 			return
 		}
 		buf := make([]byte, 4096)
 		for {
-			// Terminal.Read() blocks, so we can't use select here.
-			// The goroutine will exit when Terminal is closed (returns error).
 			_, err := term.Read(buf)
 			if err != nil {
 				return
 			}
-			// Drain responses. Don't send to PTY to avoid escape sequence leaks.
 		}
 	}()
 }
@@ -691,8 +448,6 @@ func (w *Window) StartDaemonResponseReader() {
 // Used in daemon mode to process PTY output received from the daemon.
 func (w *Window) WriteOutput(data []byte) {
 	w.writesBegun.Add(1)
-	// Snapshot and write under ioMu so Close() nilling w.Terminal cannot
-	// slip between the check and the dereference.
 	w.ioMu.Lock()
 	t := w.Terminal
 	if t != nil {
@@ -722,41 +477,22 @@ func (w *Window) WriteOutput(data []byte) {
 // The window takes ownership of data: the caller must not write to it after
 // the call, because the bytes are read later on the writer goroutine.
 func (w *Window) WriteOutputAsync(data []byte) {
-	// outputQ is set once at construction and never nilled, so reading it
-	// here is safe. w.Terminal must NOT be read: Close() nils it under ioMu,
-	// so an unlocked read would race teardown. The closed flag below is the
-	// real lifecycle guard, and outputWriter drops the batch under ioMu if
-	// Terminal is already gone.
 	if w.outputQ == nil {
 		return
 	}
-	// Close() runs on the UI goroutine while this runs on the daemon readLoop
-	// goroutine. The closed flag, and the queue Close closes, stop queuing
-	// for a writer that is already gone.
 	if w.closed.Load() {
 		return
 	}
-	// data is queued as it is, not copied. The daemon client hands each frame
-	// its own freshly read payload and never writes to it again, and a copy
-	// here was about 30% of all bytes the client allocated during a flood.
 	chunk := outputChunk{data: data, epoch: w.outputEpoch.Load()}
 
 	if !w.waitForQueueRoom(int64(len(data))) {
 		return
 	}
-	// Queue the chunk without blocking. A full queue drops it, as the
-	// channel's default case did. The queue holds outputQueueSlots chunks and
-	// maxQueuedBytes is 16 MiB, so chunks averaging under 4 KiB reach the
-	// slot bound before the byte bound holds the sender, and are dropped
-	// there.
 	if w.outputQ.push(chunk) {
 		w.queuedBytes.Add(int64(len(data)))
 	}
 }
 
-// waitForQueueRoom blocks the sender until n more bytes fit under
-// maxQueuedBytes. It reports false when the window closed while it waited,
-// in which case there is nothing to queue the bytes for.
 func (w *Window) waitForQueueRoom(n int64) bool {
 	if w.queuedBytes.Load()+n <= maxQueuedBytes {
 		return true
@@ -825,7 +561,6 @@ func (w *Window) ResizeEmulatorToSnapshot(width, height int) {
 		return
 	}
 	w.ioMu.Lock()
-	// Re-check under the lock; Close() nils Terminal while holding it.
 	if w.Terminal != nil && (w.Terminal.Width() != width || w.Terminal.Height() != height) {
 		w.Terminal.Resize(width, height)
 	}
@@ -849,18 +584,10 @@ func (w *Window) handleIOOperations() {
 	ctx, cancel := context.WithCancel(context.Background())
 	w.cancelFunc = cancel
 
-	// PTY to Terminal copy (output from shell), with proper context handling
 	w.ioWg.Go(func() {
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("window %s goroutine panic: %v\n%s", w.ID, r, debug.Stack())
-				// A panic here leaves a zombie pane: the reader is dead so
-				// the window no longer renders, but nothing marks it for
-				// cleanup. Mirror the normal process-exit path (see the
-				// monitor goroutine in NewWindow) by marking ProcessExited so
-				// the maintenance tick in Update removes the window via
-				// DeleteWindow, and signal PTYDataChan so cleanup happens
-				// promptly instead of on the next poll.
 				w.SetProcessExited(true)
 				if w.PTYDataChan != nil {
 					select {
@@ -871,8 +598,6 @@ func (w *Window) handleIOOperations() {
 			}
 		}()
 
-		// Signal bubbletea when PTY reader exits so the tick handler
-		// can detect ProcessExited and close the window promptly.
 		defer func() {
 			if w.PTYDataChan != nil {
 				select {
@@ -886,12 +611,6 @@ func (w *Window) handleIOOperations() {
 		buf := *bufPtr
 		defer pool.PutByteSlice(bufPtr)
 
-		// Snapshot the PTY once under the lock. Close() nils w.Pty under
-		// ioMu; re-reading the interface value each iteration without the
-		// lock is a torn read (undefined behaviour) and calling Read on a
-		// nilled interface panics. Pty.Close() unblocks the pending Read,
-		// so the snapshot still tears down promptly. The sibling
-		// Terminal->PTY goroutine below uses the same discipline.
 		w.ioMu.RLock()
 		pty := w.Pty
 		w.ioMu.RUnlock()
@@ -917,17 +636,10 @@ func (w *Window) handleIOOperations() {
 							time.Now().Format("15:04:05.000"), string(buf[:n]), buf[:n])
 					}
 
-					// Terminal.Write mutates the cell buffer, so it needs the
-					// exclusive lock, not the shared read lock the renderer uses
-					// (two RLock holders do not exclude each other).
 					w.writesBegun.Add(1)
 					w.ioMu.Lock()
 					if w.Terminal != nil {
 						_, _ = w.Terminal.Write(buf[:n])
-						// A guest that turns on focus reporting is told at once
-						// that it has focus, as xterm and kitty do. Only the
-						// focused state is sent here. Later focus changes are
-						// reported by the app (reportFocusChange).
 						on := w.Terminal.FocusReportingEnabled()
 						if on && !w.focusReporting && w.hasFocus.Load() {
 							w.Terminal.WriteResponse([]byte("\x1b[I"))
@@ -936,30 +648,12 @@ func (w *Window) handleIOOperations() {
 					}
 					w.ioMu.Unlock()
 
-					// Said after the write, never before it.
-					//
-					// MarkTerminalsWithNewContent consumes HasNewOutput with a
-					// Swap on the UI goroutine. Set before the write, a UI pass
-					// that lands in between takes the flag away and composes the
-					// grid the bytes have not reached yet, so the pane holds
-					// output that nothing will ever draw. Only more output sets
-					// the flag again, and a shell that has printed its prompt and
-					// is waiting for a key produces none: the prompt then stays
-					// invisible until the user types. The daemon path has always
-					// said this after its write (see noteOutput in
-					// outputWriter); this reader had it the other way round.
-					//
-					// The render signal goes through the coalescer, as it does
-					// for a daemon pane. Sent here directly it was one frame
-					// composed per PTY read, about 1 KiB on macOS, during a
-					// flood.
 					w.noteWrite(false)
 				}
 			}
 		}
 	})
 
-	// Terminal to PTY copy (input to shell), with proper context handling
 	w.ioWg.Go(func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -967,7 +661,6 @@ func (w *Window) handleIOOperations() {
 			}
 		}()
 
-		// Use a smaller buffer for terminal-to-PTY operations
 		buf := make([]byte, 4096)
 		for {
 			select {
@@ -1000,11 +693,6 @@ func (w *Window) handleIOOperations() {
 						}
 					}
 
-					// Write to PTY. Snapshot the handle under the read lock
-					// and write outside it: Pty.Write blocks on a full kernel
-					// input buffer, and holding RLockIO across that block
-					// starves the renderer behind the PTY reader's queued
-					// LockIO. See SendInput for the full reasoning.
 					w.ioMu.RLock()
 					pty := w.Pty
 					w.ioMu.RUnlock()
@@ -1026,10 +714,9 @@ func (w *Window) SendInput(input []byte) error {
 	}
 
 	if len(input) == 0 {
-		return nil // Nothing to send
+		return nil
 	}
 
-	// In daemon mode, use the callback to send input to daemon PTY
 	if w.DaemonMode {
 		if w.DaemonWriteFunc == nil {
 			if debugInternal() {
@@ -1046,21 +733,6 @@ func (w *Window) SendInput(input []byte) error {
 			time.Now().Format("15:04:05.000"), shortID(w.ID), len(input), string(input), input)
 	}
 
-	// Local mode: write directly to PTY.
-	//
-	// Snapshot the PTY under the read lock and write OUTSIDE it. Pty.Write
-	// blocks once the kernel input buffer fills (a guest that is not reading
-	// stdin, e.g. a paste into a stopped process), and holding the read lock
-	// across that block wedges the whole UI: the render path cannot take its
-	// own read side, because a queued LockIO writer (the PTY reader, which
-	// runs constantly) starves all later readers on a sync.RWMutex.
-	//
-	// Snapshotting is what makes this safe: Close() nils w.Pty under the
-	// exclusive lock, so an unlocked field read would be a torn read of an
-	// interface value and a nil dereference. The snapshot keeps the handle
-	// alive for the call; a concurrent Close() closes the descriptor and the
-	// write just returns an error, which is the same discipline the PTY
-	// reader and Terminal->PTY goroutines already use.
 	w.ioMu.RLock()
 	pty := w.Pty
 	w.ioMu.RUnlock()
@@ -1078,23 +750,18 @@ func (w *Window) SendInput(input []byte) error {
 		return errfmt.Errorf("partial write to PTY: wrote %d of %d bytes", n, len(input))
 	}
 
-	// Only mark as dirty. Don't clear cache here, for better input performance.
-	// Cache will be invalidated during render if content actually changed
 	w.Dirty = true
 	w.ContentDirty = true
 
 	return nil
 }
 
-// waitForCmd waits for the command to exit, ensuring Wait() is only called once.
-// This prevents race conditions when both the process monitor goroutine and Close()
-// try to wait for the process.
 func (w *Window) waitForCmd() {
 	if w == nil || w.Cmd == nil {
 		return
 	}
 	w.cmdWaitOnce.Do(func() {
-		_ = waitProcess(w) // Best effort, ignore error
+		_ = waitProcess(w)
 	})
 }
 
@@ -1104,24 +771,12 @@ func (w *Window) Close() {
 		return
 	}
 
-	// Mark closed before stopping the output queue so the external sender
-	// (WriteOutputAsync on the daemon readLoop goroutine) stops queuing.
-	// CompareAndSwap makes Close idempotent: a second (or concurrent) call
-	// returns early instead of double-closing outputDone below.
 	if !w.closed.CompareAndSwap(false, true) {
 		return
 	}
 
 	w.disableTerminalFeatures()
 
-	// Stop daemon output writer goroutine if running. Closing outputDone
-	// stops outputWriter and renderCoalescer, which select on it; closing the
-	// queue makes a late WriteOutputAsync, ResizeFromStream or drain sentinel
-	// queue nothing.
-	// The field is deliberately NOT nilled: both goroutines re-read it on
-	// every select iteration, and a nil channel blocks forever (leaking the
-	// goroutines, the 8ms ticker, and the whole Window/Emulator). The CAS
-	// above guarantees this close runs exactly once.
 	if w.outputDone != nil {
 		close(w.outputDone)
 	}
@@ -1134,10 +789,6 @@ func (w *Window) Close() {
 		w.cancelFunc = nil
 	}
 
-	// Close PTY and Terminal to unblock I/O goroutines
-	// Must close both because:
-	// - PTY close unblocks the PTY->Terminal goroutine
-	// - Terminal close unblocks the Terminal->PTY goroutine (reads from emulator response pipe)
 	w.ioMu.Lock()
 	if w.Pty != nil {
 		_ = w.Pty.Close()
@@ -1149,7 +800,6 @@ func (w *Window) Close() {
 	}
 	w.ioMu.Unlock()
 
-	// Wait briefly for I/O goroutines (they should exit fast after PTY/Terminal close)
 	done := make(chan struct{})
 	go func() {
 		w.ioWg.Wait()
@@ -1160,10 +810,6 @@ func (w *Window) Close() {
 	case <-time.After(10 * time.Millisecond):
 	}
 
-	// Kill the process. w.Cmd is deliberately left set: the process-monitor
-	// goroutine reads it unlocked for as long as it lives, and nilling it here
-	// would race that read. Nothing treats a nil Cmd as "closed", and the exec.Cmd
-	// dies with the Window anyway, so leaving it costs nothing.
 	if w.Cmd != nil && w.Cmd.Process != nil {
 		_ = w.Cmd.Process.Kill()
 		w.waitForCmd()
@@ -1180,7 +826,5 @@ func (w *Window) Close() {
 		w.CopyMode = nil
 	}
 
-	// Give the window's memory back once the client settles. A burst of
-	// closes is one trim. See memtrim.
 	memtrim.Request()
 }

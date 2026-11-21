@@ -8,19 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// An Amp thread, ~/.local/share/amp/threads/T-<id>.json: one JSON document,
-// {v, id, created, messages, env, title, ...}, that Amp rewrites whole as the
-// thread changes (checked against Amp 0.0.1768018268's files). A message is
-// {role, messageId, content, meta: {sentAt}}, with content blocks shaped like
-// the Anthropic API's: text, thinking, image, tool_use {id, name, input} in an
-// assistant message, and tool_result {toolUseID, run: {status, result}} in a
-// user message. A finished edit_file's result carries a unified diff.
-//
-// The file is read whole (ampDoc) and each message becomes a line,
-// {"i": index, "m": message}, so its entries keep their ids when an earlier
-// message changes length.
-
-// ampLine decodes one message of a thread.
 func ampLine(r *reader, line []byte, off int64) (decoded, bool) {
 	rec, ok := parseObj(line)
 	if !ok {
@@ -71,7 +58,6 @@ func ampLine(r *reader, line []byte, off int64) (decoded, bool) {
 	return decoded{entries: out}, true
 }
 
-// ampResult is a tool result once the run finished.
 func ampResult(id string, run jobj) (Entry, bool) {
 	failed := false
 	switch run.str("status") {
@@ -79,7 +65,6 @@ func ampResult(id string, run jobj) (Entry, bool) {
 	case "error", "cancelled", "rejected-by-user":
 		failed = true
 	default:
-		// queued, in-progress, blocked-on-user: still running.
 		return Entry{}, false
 	}
 	var text string
@@ -111,7 +96,6 @@ func ampResult(id string, run jobj) (Entry, bool) {
 	return e, true
 }
 
-// ampClass is what an Amp tool does.
 func ampClass(name string) toolClass {
 	switch name {
 	case "edit_file":
@@ -124,8 +108,6 @@ func ampClass(name string) toolClass {
 	return classOther
 }
 
-// ampDoc turns a thread into its messages, one per line, each with its
-// index.
 func ampDoc(data []byte) []byte {
 	var doc struct {
 		Messages []json.RawMessage `json:"messages"`

@@ -7,15 +7,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// gutter is the cells in front of each row: the sigil on the first row of the
-// draft, a scroll mark on a row with more draft past it.
 const gutter = 2
 
-// blockMix is how far a block's ground is carried from the editor's ground
-// toward the accent.
 const blockMix = 0.18
 
-// inks are the colours one frame is drawn with, worked out once per frame.
 type inks struct {
 	st                   Styles
 	surface, field       color.Color
@@ -24,14 +19,10 @@ type inks struct {
 	blockText, blockNum  color.Color
 	blockDim             color.Color
 	selected             color.Color
-	// span and spanText are the ground and ink of selected text.
-	span, spanText color.Color
-	// blank is the gutter of a row with no mark, drawn once a frame.
-	blank string
+	span, spanText       color.Color
+	blank                string
 }
 
-// newInks takes a frame's colours from the styles. surface is the ground
-// around the editor, the panel's.
 func newInks(st Styles, surface color.Color) inks {
 	in := inks{st: st, surface: surface, field: st.Field}
 	in.text = st.readable(st.Text, in.field)
@@ -86,10 +77,7 @@ func (m *Model) FrameSize() (width, lines int) { return m.frameAt.width, len(m.f
 // that wraps the lines keeps its own copy until this changes.
 func (m *Model) Drawn() uint64 { return m.drawn }
 
-// render draws a frame the cache does not hold.
 func (m *Model) render(width int, st Styles, surface color.Color) []string {
-	// While the @ list is open its selected entry is the one lit row: the
-	// draft is drawn on the panel's own ground, as a plain caret line.
 	if m.mention != nil {
 		st.Field = surface
 	}
@@ -134,8 +122,6 @@ func (m *Model) render(width int, st Styles, surface color.Color) []string {
 		}
 		out = append(out, fill(b.String(), width, in.field))
 	}
-	// Full, the editor takes the whole room, so the rows under a short
-	// draft are blank field.
 	if m.full {
 		for r := shown; r < limit; r++ {
 			out = append(out, fill(in.blank, width, in.field))
@@ -145,8 +131,6 @@ func (m *Model) render(width int, st Styles, surface color.Color) []string {
 	if m.hsearch != nil {
 		out = append(out, m.renderHistorySearch(width, in)...)
 	}
-	// A problem is in the warning colour. A line that only says what
-	// happened is quiet.
 	line, ink := m.notice, st.Warning
 	if line == "" {
 		line, ink = m.info, st.Dim
@@ -161,9 +145,6 @@ func (m *Model) render(width int, st Styles, surface color.Color) []string {
 	return out
 }
 
-// gutterMark is the two cells in front of row r: the sigil on the draft's
-// first row, an arrow on the first or last row shown when more of the draft
-// is past it.
 func (m *Model) gutterMark(r, rows, shown int, in inks) string {
 	style := on(in.field)
 	switch {
@@ -177,7 +158,6 @@ func (m *Model) gutterMark(r, rows, shown int, in inks) string {
 	return in.blank
 }
 
-// arrowKeys names the up and down keys.
 func arrowKeys(ascii bool) string {
 	if ascii {
 		return "up/down"
@@ -185,13 +165,10 @@ func arrowKeys(ascii bool) string {
 	return "↑↓"
 }
 
-// renderRow writes one row of the draft. Text is drawn in runs, so a row
-// costs a few styled strings and not one per character.
 func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW int, sel *block, in inks) {
 	plainStyle := on(in.field).Foreground(in.text)
 	spanStyle := on(in.span).Foreground(in.spanText)
 	if in.st.Plain {
-		// At 16 colours no ground shows, so selected text is reversed.
 		spanStyle = on(in.field).Foreground(in.text).Reverse(true)
 	}
 	lo, hi, selecting := m.Selection()
@@ -216,19 +193,11 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 		if hasCursor && i == m.cur {
 			flush()
 			if inSpan {
-				// The cursor at the start of a selection, a selection
-				// grown to the left, keeps the selection's colours like
-				// every selected cell, and is marked as the caret the way
-				// the caret after a selection grown to the right is: bold
-				// and underlined. Drawn reversed it read as a dim cell, and
-				// the selection as one cell short.
 				b.WriteString(spanStyle.Bold(true).Underline(true).Render(cursorText(c)))
 			} else {
 				b.WriteString(m.caretAt(cursorText(c), selecting, in))
 			}
 			if c.block != nil {
-				// The cursor cell took the bracket. The rest of the
-				// label follows it.
 				b.WriteString(renderBlock(c.block, textW, false, true, in))
 			}
 			continue
@@ -250,8 +219,6 @@ func (m *Model) renderRow(b *strings.Builder, row vline, hasCursor bool, textW i
 	}
 }
 
-// cursorText is what the cursor cell shows over c: the character itself, a
-// space over a tab or a line break, and the bracket that opens a block.
 func cursorText(c cell) string {
 	switch {
 	case c.block != nil:
@@ -262,11 +229,6 @@ func cursorText(c cell) string {
 	return c.s
 }
 
-// renderBlock draws a block's label. The number is in the accent and the
-// measure is quieter. The selected block, the one before the cursor, is drawn
-// as a list draws its cursor row, so it reads as selected at every depth.
-//
-// skipOpen leaves out the opening bracket, which the cursor cell drew.
 func renderBlock(bl *block, maxW int, selected, skipOpen bool, in inks) string {
 	ground, text, num, dim := in.block, in.blockText, in.blockNum, in.blockDim
 	if selected {
@@ -294,15 +256,11 @@ func renderBlock(bl *block, maxW int, selected, skipOpen bool, in inks) string {
 			st.Foreground(dim).Render(tail[numEnd:])
 	}
 	if selected {
-		// At 16 colours a selected block is underlined, not reversed: the
-		// cursor right after it is drawn in reverse video, and two reversed
-		// spans side by side read as one bar with no cursor in it.
 		s = in.st.underline(s)
 	}
 	return s
 }
 
-// wrapWords breaks plain text onto lines of at most width cells, at spaces.
 func wrapWords(s string, width int) []string {
 	width = max(width, 1)
 	var out []string
@@ -342,7 +300,6 @@ func (m *Model) Hints(ascii bool) []Hint {
 	return m.hints
 }
 
-// The editor's states, as its keys tell them apart.
 const (
 	hintsDraft = iota
 	hintsPager
@@ -353,13 +310,11 @@ const (
 	hintsPasteBlock
 )
 
-// hintsKey is what the hints depend on.
 type hintsKey struct {
 	state                int
 	ascii, canOpen, full bool
 }
 
-// hintState is the state the editor is in, for its keys.
 func (m *Model) hintState() int {
 	switch {
 	case m.pager != nil && m.pager.block.img == nil:
@@ -378,7 +333,6 @@ func (m *Model) hintState() int {
 	return hintsDraft
 }
 
-// hints are the keys of one state.
 func (o Options) hints(k hintsKey) []Hint {
 	ascii := k.ascii
 	switch k.state {
@@ -441,10 +395,6 @@ func (o Options) hints(k hintsKey) []Hint {
 	)
 }
 
-// caretAt draws the cursor cell outside a selection. While a selection is up
-// the caret is bold and underlined in the field's colours, the look it has on
-// a selected cell, so it reads the same whichever way the selection grew. With
-// none it is the block.
 func (m *Model) caretAt(ch string, selecting bool, in inks) string {
 	if selecting {
 		return on(in.field).Foreground(in.text).Bold(true).Underline(true).Render(ch)

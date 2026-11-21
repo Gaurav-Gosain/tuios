@@ -21,9 +21,6 @@ func TestMain(m *testing.M) {
 	os.Exit(testutil.RunIsolated(m))
 }
 
-// fakeOpenCodeEnv makes the test binary act as opencode. "tree" starts a
-// child, as opencode starts its private server, and hangs. "child" writes
-// its pid to the file fakeOpenCodePIDEnv names and hangs.
 const (
 	fakeOpenCodeEnv    = "TUIOS_TEST_FAKE_OPENCODE"
 	fakeOpenCodePIDEnv = "TUIOS_TEST_FAKE_OPENCODE_PID"

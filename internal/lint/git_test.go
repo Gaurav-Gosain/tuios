@@ -13,8 +13,6 @@ import (
 	"testing"
 )
 
-// gitExempt are the directories that may start git without childproc.Git:
-// childproc builds it, and testutil sets up test repositories.
 var gitExempt = map[string]bool{"internal/childproc": true, "internal/testutil": true}
 
 // TestGitGoesThroughChildprocGit is the git lint. tuios runs git in folders a
@@ -88,8 +86,6 @@ func f(ctx context.Context) {
 	}
 }
 
-// gitStarts returns file:line for every Command or CommandContext call in src
-// whose program is the literal "git".
 func gitStarts(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()

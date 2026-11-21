@@ -8,15 +8,6 @@ import (
 	"time"
 )
 
-// What is proved here is the reliability of a link that has already worked:
-// that an idle one is held open, that a dropped one says why it dropped and
-// reads as reconnecting rather than as an offline machine, and that the things
-// which are merely slow (a listing, a reader that fell behind) do not end it.
-//
-// The failure these exist for is a specific one. A session on a cloud host kept
-// being taken away from the person using it, and the three causes below all
-// presented as the same sentence: "the link closed".
-
 // TestTwoListingsAtOnceDoNotReadEachOthersAnswers is a correctness bug the
 // reliability work turned up.
 //
@@ -40,7 +31,6 @@ func TestTwoListingsAtOnceDoNotReadEachOthersAnswers(t *testing.T) {
 			Mark string `json:"mark"`
 		}
 		_ = json.Unmarshal(params, &p)
-		// A little work, so two calls really do overlap.
 		time.Sleep(5 * time.Millisecond)
 		return map[string]any{"mark": p.Mark}, nil
 	})
@@ -120,8 +110,6 @@ func TestAQuietLinkIsTornDownWhenAListingFails(t *testing.T) {
 	t.Cleanup(func() { close(hang) })
 	opts := testOptions(proxyDialer(t, stub))
 	opts.CallTimeout = 200 * time.Millisecond
-	// The pipe is quiet the moment the handshake is done, so the first failed
-	// listing is enough.
 	opts.linkQuietLimit = time.Millisecond
 	opts.InitialBackoff = 30 * time.Second
 	opts.MaxBackoff = 30 * time.Second
@@ -132,7 +120,6 @@ func TestAQuietLinkIsTornDownWhenAListingFails(t *testing.T) {
 	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
 		t.Fatalf("status is %q, want up", r.Status)
 	}
-	// Give the handshake's own frames time to age past the quiet limit.
 	time.Sleep(20 * time.Millisecond)
 	if _, err := m.Call(ctx, "build", "list-sessions", nil); err == nil {
 		t.Fatal("the listing answered; the timeout cannot be forced")

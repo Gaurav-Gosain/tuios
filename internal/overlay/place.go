@@ -17,7 +17,6 @@ func (s Side) Opposite() Side {
 	return s ^ 1
 }
 
-// vertical reports whether s places on the vertical axis.
 func (s Side) vertical() bool {
 	return s <= SideAbove
 }
@@ -120,8 +119,6 @@ func Clamp(x, y, w, h int, screen Rect) (int, int) {
 	return shiftOnto(x, max(w, 0), screen.X0, screen.X1), shiftOnto(y, max(h, 0), screen.Y0, screen.Y1)
 }
 
-// sidePos is the box's first row (Below, Above) or column (Right, Left) when
-// it opens on side.
 func sidePos(a Rect, w, h int, side Side, gap int) int {
 	switch side {
 	case SideBelow:
@@ -135,8 +132,6 @@ func sidePos(a Rect, w, h int, side Side, gap int) int {
 	}
 }
 
-// fits reports whether the box lies inside screen on the side's axis when it
-// opens on side.
 func fits(a Rect, w, h int, s Rect, side Side, gap int) bool {
 	pos := sidePos(a, w, h, side, gap)
 	if side.vertical() {
@@ -145,8 +140,6 @@ func fits(a Rect, w, h int, s Rect, side Side, gap int) bool {
 	return pos >= s.X0 && pos+w <= s.X1
 }
 
-// room is the number of cells between the anchor (and its gap) and the
-// screen's edge on side.
 func room(a Rect, s Rect, side Side, gap int) int {
 	switch side {
 	case SideBelow:
@@ -160,8 +153,6 @@ func room(a Rect, s Rect, side Side, gap int) int {
 	}
 }
 
-// alignPos is the box's first cell along the other axis: n cells long against
-// an anchor from a0 to a1, on a screen from s0 to s1.
 func alignPos(a0, a1, n, s0, s1 int, al Align, flip bool) int {
 	start, end := a0, a1-n
 	switch al {
@@ -180,8 +171,6 @@ func alignPos(a0, a1, n, s0, s1 int, al Align, flip bool) int {
 	}
 }
 
-// shiftOnto moves a run n cells long that starts at pos inside [s0, s1). A
-// run longer than the screen starts at s0.
 func shiftOnto(pos, n, s0, s1 int) int {
 	return max(min(pos, s1-n), s0)
 }

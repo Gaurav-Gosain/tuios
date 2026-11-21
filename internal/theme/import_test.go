@@ -100,8 +100,6 @@ brights = ["#928374", "#fb4934", "#b8bb26", "#fabd2f", "#83a598", "#d3869b", "#8
 				t.Errorf("read as %s, want %s", format, tt.format)
 			}
 
-			// The slots every sample fills, checked by name so a colour landing
-			// in the wrong one is caught rather than counted.
 			for _, want := range []struct {
 				name string
 				hex  string

@@ -7,10 +7,6 @@ import (
 	"testing"
 )
 
-// optionWalkSkips are the config paths the registry deliberately does not
-// carry, each with the reason. A path that is skipped here has to be skipped
-// for a reason a reader can check, so the walk below cannot quietly grow a
-// hole.
 var optionWalkSkips = map[string]string{
 	"workspaces.base_index":            "file configuration resolved together with default keybindings at load time",
 	"keybindings":                      "maps of action to keys, not scalar paths",
@@ -45,26 +41,19 @@ var optionWalkSkips = map[string]string{
 	"tasks.stages":                     "a list of stages, which a value arriving as one string cannot spell",
 	"files.open":                       "commands tuios starts outside every pane with the person's rights, which set-option, a verb any pane can call, must not be able to change",
 	"scratch.session":                  "no longer used: read only so a config from the first scratch design loads and validation can say to remove it",
-	// [agents] is file-plane config the daemon reads from the file, like
-	// [hosts], apart from agents.enabled, which is a plain switch.
-	"agents.approvals":      "which harnesses hold their prompts for the Inbox is not for a pane to change over the control protocol",
-	"agents.permissions":    "what a pane may do through tuios is not for a pane to change over the control protocol",
-	"agents.recap":          "file-plane config the daemon reads from the file, like [hosts]",
-	"agents.queue":          "file-plane config the daemon reads from the file, like [hosts]",
-	"agents.checkpoints":    "file-plane config the daemon reads from the file, like [hosts]",
-	"agents.mail":           "whether tuios types into an agent's pane is not for a pane to change over the control protocol",
-	"agents.herdr_protocol": "file-plane config the daemon reads from the file, like [hosts]",
-	"agents.presets":        "a map of preset name to a start-agent, which no single settable path can spell, like [hosts]",
-	"agents.silent_after":   "file-plane config the daemon reads from the file, like [hosts]",
-	// Read by a client when it starts, which is when it asks its terminal.
-	"agents.host_program_status": "file-plane config a client reads from the file when it starts, like [hosts]",
-	// A set of defaults applied when the file is parsed, so the value a
-	// running session holds is the defaults it gave, not the one string.
-	"profile": "a set of defaults the parse applies; the welcome screen and the palette write it to the file",
+	"agents.approvals":                 "which harnesses hold their prompts for the Inbox is not for a pane to change over the control protocol",
+	"agents.permissions":               "what a pane may do through tuios is not for a pane to change over the control protocol",
+	"agents.recap":                     "file-plane config the daemon reads from the file, like [hosts]",
+	"agents.queue":                     "file-plane config the daemon reads from the file, like [hosts]",
+	"agents.checkpoints":               "file-plane config the daemon reads from the file, like [hosts]",
+	"agents.mail":                      "whether tuios types into an agent's pane is not for a pane to change over the control protocol",
+	"agents.herdr_protocol":            "file-plane config the daemon reads from the file, like [hosts]",
+	"agents.presets":                   "a map of preset name to a start-agent, which no single settable path can spell, like [hosts]",
+	"agents.silent_after":              "file-plane config the daemon reads from the file, like [hosts]",
+	"agents.host_program_status":       "file-plane config a client reads from the file when it starts, like [hosts]",
+	"profile":                          "a set of defaults the parse applies; the welcome screen and the palette write it to the file",
 }
 
-// optionWalkInsideSkips are the paths inside a table optionWalkSkips skips
-// that the registry carries all the same, each with the reason.
 var optionWalkInsideSkips = map[string]string{
 	"keybindings.window_mode": "one switch, not a key map, which the settings page turns off (discussion #2249)",
 }
@@ -99,15 +88,13 @@ func TestOptionRegistryCoversEveryScalarField(t *testing.T) {
 	}
 }
 
-// walkScalarPaths collects the dotted toml path of every scalar field reachable
-// from t, recursing into nested tables and honouring optionWalkSkips.
 func walkScalarPaths(t *testing.T, structType reflect.Type, prefix string) []string {
 	t.Helper()
 
 	var paths []string
 	for field := range structType.Fields() {
 		name := tomlFieldName(field)
-		if name == "" || name == "-" { // "-" is a field toml never reads or writes
+		if name == "" || name == "-" {
 			continue
 		}
 		path := name
@@ -115,8 +102,6 @@ func walkScalarPaths(t *testing.T, structType reflect.Type, prefix string) []str
 			path = prefix + "." + name
 		}
 		if _, skip := optionWalkSkips[path]; skip {
-			// A path inside a skipped table that the registry carries on
-			// purpose is still a field the walk has to find.
 			for inside := range optionWalkInsideSkips {
 				if strings.HasPrefix(inside, path+".") {
 					paths = append(paths, inside)
@@ -175,14 +160,14 @@ func TestSetOptionValueRoundTrips(t *testing.T) {
 	cases := []struct {
 		path, set, want string
 	}{
-		{"appearance.hide_window_buttons", "on", "true"},   // bool
-		{"appearance.sidebar.enabled", "false", "false"},   // *bool, and an explicit false
-		{"appearance.scrollback_lines", "500", "500"},      // int
-		{"notifications.agent.settle_seconds", "0", "0"},   // *int, and an explicit zero
-		{"appearance.border_style", "double", "double"},    // string
-		{"appearance.word_characters", "", ""},             // *string, and an explicit empty
-		{"appearance.sidebar.position", "right", "right"},  // nested table
-		{"notifications.agent.states.idle", "yes", "true"}, // twice-nested table
+		{"appearance.hide_window_buttons", "on", "true"},
+		{"appearance.sidebar.enabled", "false", "false"},
+		{"appearance.scrollback_lines", "500", "500"},
+		{"notifications.agent.settle_seconds", "0", "0"},
+		{"appearance.border_style", "double", "double"},
+		{"appearance.word_characters", "", ""},
+		{"appearance.sidebar.position", "right", "right"},
+		{"notifications.agent.states.idle", "yes", "true"},
 	}
 
 	for _, tc := range cases {

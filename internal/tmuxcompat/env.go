@@ -14,20 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// show-environment and set-environment.
-//
-// tmux keeps a global environment and one per session, and gives both to
-// every pane it starts. The shim keeps what set-environment sets in its
-// runtime directory, one file per scope, readable only by the user, and
-// gives it to the panes it opens (split-window, new-window, respawn-pane and
-// new-session) through the pane holder. The global environment is the
-// caller's own environment with those changes on top, as tmux's is the
-// environment the server started with. A session's environment is what was
-// set on it: tuios copies nothing into it on attach, so tmux's
-// update-environment has no counterpart.
-
-// envVar is one entry of an environment: a value, or a mark that the
-// variable is removed from new panes (set-environment -r).
 type envVar struct {
 	Name   string `json:"name"`
 	Value  string `json:"value,omitempty"`
@@ -35,7 +21,6 @@ type envVar struct {
 	Hidden bool   `json:"hidden,omitempty"`
 }
 
-// envScope names an environment: "" for the global one, else the session.
 func envScope(sv *sessionView) string {
 	if sv == nil {
 		return ""
@@ -43,8 +28,6 @@ func envScope(sv *sessionView) string {
 	return cmpOr(sv.id, sv.name)
 }
 
-// envFile is where an environment is kept, "" when the shim keeps them in
-// memory.
 func (s *Shim) envFile(scope string) string {
 	if s.Dir == "" {
 		return ""
@@ -56,7 +39,6 @@ func (s *Shim) envFile(scope string) string {
 	return filepath.Join(s.Dir, "env", name+".json")
 }
 
-// readEnv reads the entries set on one environment.
 func (s *Shim) readEnv(scope string) ([]envVar, error) {
 	path := s.envFile(scope)
 	if path == "" {
@@ -76,7 +58,6 @@ func (s *Shim) readEnv(scope string) ([]envVar, error) {
 	return list, nil
 }
 
-// writeEnv stores the entries of one environment.
 func (s *Shim) writeEnv(scope string, list []envVar) error {
 	path := s.envFile(scope)
 	if path == "" {
@@ -100,8 +81,6 @@ func (s *Shim) writeEnv(scope string, list []envVar) error {
 	return atomicfile.Write(path, data, 0o600, false)
 }
 
-// fullEnv is an environment as show-environment lists it: the global one is
-// the caller's environment with the set entries on top.
 func (s *Shim) fullEnv(scope string) ([]envVar, error) {
 	set, err := s.readEnv(scope)
 	if err != nil || scope != "" {
@@ -119,8 +98,6 @@ func (s *Shim) fullEnv(scope string) ([]envVar, error) {
 	return out, nil
 }
 
-// paneEnvFor is what the panes the shim opens in session sv get: the global
-// entries, then the session's, as KEY=VALUE or -KEY to remove.
 func (s *Shim) paneEnvFor(sv *sessionView) []string {
 	var out []string
 	scopes := []string{""}
@@ -143,7 +120,6 @@ func (s *Shim) paneEnvFor(sv *sessionView) []string {
 	return out
 }
 
-// envTarget is the environment -g or -t names.
 func (s *Shim) envTarget(p Parsed) (string, error) {
 	if p.Has('g') {
 		return "", nil
@@ -161,8 +137,6 @@ func (s *Shim) envTarget(p Parsed) (string, error) {
 	return envScope(sv), nil
 }
 
-// showEnvironment prints one variable or every one, as NAME=value, -NAME for
-// a removed one, or with -s as shell commands.
 func (s *Shim) showEnvironment(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -209,8 +183,6 @@ func (s *Shim) showEnvironment(name string, args []string) (string, []string, er
 	return OutcomeOK, nil, nil
 }
 
-// escapeDoubleQuoted escapes the characters POSIX reads inside double quotes
-// ($ ` " and \), as tmux's show-environment -s does.
 func escapeDoubleQuoted(v string) string {
 	var b strings.Builder
 	for i := 0; i < len(v); i++ {
@@ -222,8 +194,6 @@ func escapeDoubleQuoted(v string) string {
 	return b.String()
 }
 
-// setEnvironment sets, removes (-r) or unsets (-u) a variable of the global
-// (-g) or a session's environment. -F expands the value as a format.
 func (s *Shim) setEnvironment(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {

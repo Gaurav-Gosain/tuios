@@ -14,12 +14,6 @@ import (
 // driven sessions do) and never write state into the real home.
 func TestMain(m *testing.M) { os.Exit(testutil.RunIsolated(m, pinStartupConfig)) }
 
-// pinStartupConfig writes a config that opens one window and starts in
-// terminal mode on session start. The kitty graphics crash test depends on
-// this: it types a command straight into the startup pane's shell, which only
-// exists when these options are on. With the developer's config this was true
-// by accident; in a bare environment (CI) the defaults are false and the test
-// would drive nothing.
 func pinStartupConfig(dir string) {
 	cfgDir := filepath.Join(dir, "tuios")
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {

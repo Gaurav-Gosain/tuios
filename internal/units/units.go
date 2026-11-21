@@ -32,7 +32,6 @@ func Bytes(n int64) string {
 	}
 	s := strconv.FormatFloat(v, 'f', prec, 64)
 	if prec > 0 {
-		// 8 MiB and 1.5 MiB, not 8.00 MiB and 1.50 MiB.
 		s = strings.TrimSuffix(strings.TrimRight(s, "0"), ".")
 	}
 	return s + " " + units + "iB"

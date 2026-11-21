@@ -19,13 +19,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
-// The holder tests run RunPane in a child process: this test binary run
-// again with holderEnvKey set, so the holder is a real process with real
-// children and signals, as it is in a pane.
 const holderEnvKey = "TMUXCOMPAT_TEST_HOLDER"
 
-// runHolderIfAsked runs the holder and exits when this binary was started as
-// one. TestMain calls it before anything else.
 func runHolderIfAsked() {
 	if os.Getenv(holderEnvKey) == "1" {
 		var cmd []string
@@ -56,19 +51,12 @@ func runHolderIfAsked() {
 	}
 }
 
-// authGrantsEnvKey gives a holder child an Authorize that asks holderDaemon,
-// which places every caller in another pane holding these grants.
-// authLogEnvKey names a file where it writes the params it was asked with.
-// authNoEchoEnvKey makes holderDaemon answer as a daemon from before
-// peer_pid: about the holder itself, with no peer_pid in the answer.
 const (
 	authGrantsEnvKey = "TMUXCOMPAT_TEST_AUTH_GRANTS"
 	authLogEnvKey    = "TMUXCOMPAT_TEST_AUTH_LOG"
 	authNoEchoEnvKey = "TMUXCOMPAT_TEST_AUTH_NO_ECHO"
 )
 
-// holderDaemon answers pane-grants as a daemon would for a process in
-// another pane that holds grants.
 type holderDaemon struct {
 	grants string
 	log    string
@@ -84,7 +72,6 @@ func (h *holderDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		return nil, fmt.Errorf("unexpected verb %s", verb)
 	}
 	if h.noEcho {
-		// The holder's own pane, which it may always respawn.
 		return json.Marshal(map[string]any{"pane": true, "window": os.Getenv("TUIOS_PANE_ID"), "grants": []string{"read"}})
 	}
 	var p struct {
@@ -94,17 +81,11 @@ func (h *holderDaemon) Call(verb string, params any) (json.RawMessage, error) {
 	return json.Marshal(map[string]any{"pane": true, "window": "win-other", "grants": strings.Split(h.grants, ","), "peer_pid": p.PeerPID})
 }
 
-// Hooks for a holder child. replyDelayEnvKey holds a duration the holder
-// sleeps before it writes each respawn reply. exitGateEnvKey names a
-// directory for exitGate.
 const (
 	replyDelayEnvKey = "TMUXCOMPAT_TEST_REPLY_DELAY"
 	exitGateEnvKey   = "TMUXCOMPAT_TEST_EXIT_GATE"
 )
 
-// exitGate holds a holder whose command has ended until a request waits on
-// its queue: it writes <dir>/exited, then waits until waiting is above zero.
-// The deadline is only a failsafe for a test that never sends.
 func exitGate(dir string, waiting *atomic.Int32) {
 	_ = os.WriteFile(filepath.Join(dir, "exited"), []byte("1"), 0o600)
 	deadline := time.Now().Add(10 * time.Second)
@@ -113,8 +94,6 @@ func exitGate(dir string, waiting *atomic.Int32) {
 	}
 }
 
-// shortDir is a temporary directory with a short path: a unix socket path is
-// capped near 104 bytes on macOS, and t.TempDir there is long.
 func shortDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "tc")
@@ -130,7 +109,6 @@ func startHolder(t *testing.T, dir, window string, cmd ...string) (*exec.Cmd, ch
 	return startHolderEnv(t, dir, window, nil, cmd...)
 }
 
-// startHolderEnv is startHolder with extra KEY=VALUE for the holder itself.
 func startHolderEnv(t *testing.T, dir, window string, env []string, cmd ...string) (*exec.Cmd, chan error) {
 	t.Helper()
 	c := exec.Command(os.Args[0], "-test.run=^$")
@@ -140,16 +118,12 @@ func startHolderEnv(t *testing.T, dir, window string, env []string, cmd ...strin
 		"TMUXCOMPAT_TEST_CMD="+strings.Join(cmd, "\x1f"),
 		"TUIOS_PANE_ID="+window,
 	)
-	// No stdout or stderr: a command the holder leaves running must not hold
-	// the test binary's output open.
 	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := c.Start(); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
 	go func() { done <- c.Wait() }()
-	// SIGTERM, which the holder passes to its command's process group, as it
-	// does when the pane is closed; then SIGKILL for anything left.
 	t.Cleanup(func() {
 		pid := c.Process.Pid
 		_ = syscall.Kill(pid, syscall.SIGTERM)
@@ -436,7 +410,6 @@ func TestHolderSendsTheCallersStartTime(t *testing.T) {
 	}
 }
 
-// sendRespawn sends one request line to a holder and returns its reply.
 func sendRespawn(t *testing.T, dir, window, line string) string {
 	t.Helper()
 	conn, err := net.Dial("unix", paneSocket(dir, window))

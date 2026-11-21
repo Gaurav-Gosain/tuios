@@ -1,16 +1,5 @@
 package transcriptview
 
-// The socket table parsers decide whether the opencode password goes out on
-// a connection, so they are a security boundary. Ways they can fail, which
-// the cases below cover:
-//   - call a connection this user's when another user's socket is at its far
-//     end (the uid, SID or pid differs: must refuse);
-//   - take the client side of the connection, which is always this user's,
-//     for the server side;
-//   - read past the end of a short or lying buffer, or loop on a record of
-//     length 0;
-//   - call a table it does not understand this user's instead of refusing.
-
 import (
 	"bytes"
 	"encoding/binary"
@@ -20,8 +9,6 @@ import (
 	"testing"
 )
 
-// The connection in every fixture: the service listens on 127.0.0.1:49374,
-// and the client's side is 127.0.0.1:51234. pcblist_n/gen.c writes the same.
 var fixtureConn = serverSide{port: 49374, peer: 51234}
 
 const fixtureUID = 501
@@ -43,12 +30,9 @@ func TestPcblistOwner(t *testing.T) {
 	}{
 		{"mine.bin", fixtureConn, fixtureUID, ownerMine},
 		{"old.bin", fixtureConn, fixtureUID, ownerMine},
-		// Negative controls: the same tables, read as another user.
 		{"mine.bin", fixtureConn, fixtureUID + 1, ownerOther},
 		{"old.bin", fixtureConn, fixtureUID + 1, ownerOther},
 		{"other.bin", fixtureConn, fixtureUID, ownerOther},
-		// The client side matches the reversed connection, and must not be
-		// taken for the server side.
 		{"absent.bin", fixtureConn, fixtureUID, ownerNone},
 		{"timewait.bin", fixtureConn, fixtureUID, ownerNone},
 		{"mine.bin", serverSide{port: 49374, peer: 51235}, fixtureUID, ownerNone},
@@ -65,8 +49,6 @@ func TestPcblistOwner(t *testing.T) {
 		mine := read(t, "mine.bin")
 		le := binary.LittleEndian
 		edit := func(f func(b []byte) []byte) []byte { return f(bytes.Clone(mine)) }
-		// The first group starts after the 24-byte xinpgen; its socket
-		// record after the 104-byte xinpcb_n.
 		const group, sock = 24, 24 + 104
 		broken := map[string][]byte{
 			"empty":              nil,
@@ -103,7 +85,6 @@ func TestPcblistOwner(t *testing.T) {
 	})
 }
 
-// procNetRow is one row of /proc/net/tcp, as the kernel prints it.
 func procNetRow(local, remote string, state string, uid int) string {
 	return fmt.Sprintf("   0: %s %s %s 00000000:00000000 00:00000000 00000000 %5d        0 1 1 0000000000000000 100 0 0 10 0\n", local, remote, state, uid)
 }
@@ -111,7 +92,6 @@ func procNetRow(local, remote string, state string, uid int) string {
 const procNetHeader = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
 
 func TestProcNetOwner(t *testing.T) {
-	// 49374 is C0DE and 51234 is C822.
 	listener := procNetRow("0100007F:C0DE", "00000000:0000", "0A", 1000)
 	client := procNetRow("0100007F:C822", "0100007F:C0DE", "01", 1000)
 	server := procNetRow("0100007F:C0DE", "0100007F:C822", "01", 1000)
@@ -142,17 +122,14 @@ func TestProcNetOwner(t *testing.T) {
 	}
 }
 
-// tcpTable is a MIB_TCPTABLE_OWNER_PID, as GetExtendedTcpTable writes it:
-// a DWORD count, then six DWORDs a row. An address is in network order; a
-// port is in network order in the low two bytes of its DWORD.
 func tcpTable(rows ...[6]uint32) []byte {
 	buf := binary.LittleEndian.AppendUint32(nil, uint32(len(rows)))
 	for _, r := range rows {
 		for i, v := range r {
 			switch i {
-			case 1, 3: // address
+			case 1, 3:
 				buf = binary.BigEndian.AppendUint32(buf, v)
-			case 2, 4: // port, with junk in the bytes the docs leave undefined
+			case 2, 4:
 				buf = binary.BigEndian.AppendUint16(buf, uint16(v))
 				buf = append(buf, 0xAB, 0xCD)
 			default:

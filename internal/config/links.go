@@ -37,9 +37,6 @@ func (c LinksConfig) Specs() []hints.LinkRuleSpec {
 	return specs
 }
 
-// validateLinks warns about a rule that does not compile. Each is skipped at
-// run time, so without a warning a typo would look like the rule being
-// ignored.
 func validateLinks(cfg *UserConfig, result *ValidationResult) {
 	for i, r := range cfg.Links.Rules {
 		unknown, err := hints.UnknownGroups(hints.LinkRuleSpec{Regex: r.Regex, URL: r.URL})
@@ -63,7 +60,6 @@ func validateLinks(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// quotedGroups writes group names as a template would: $1, $name.
 func quotedGroups(names []string) string {
 	out := make([]string, len(names))
 	for i, n := range names {

@@ -2,7 +2,6 @@ package terminal
 
 import "tuios.dev/vt"
 
-// Bracketed paste delimiters, DECSET 2004.
 const (
 	bracketedPasteStart = "\x1b[200~"
 	bracketedPasteEnd   = "\x1b[201~"

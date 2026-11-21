@@ -75,9 +75,7 @@ type Line struct {
 	// the line it pairs with, [start, end] in bytes of Text, filled in like
 	// HL. Absent when there is no such part.
 	Changed []int `json:"changed,omitempty"`
-	// raw is the line's text as git printed it, a carriage return kept,
-	// which a patch built from the line has to carry to apply.
-	raw string
+	raw     string
 }
 
 // Hunk is one hunk of a file's diff.
@@ -105,11 +103,8 @@ type File struct {
 	Truncated bool `json:"truncated,omitempty"`
 	// Skipped marks an untracked file larger than Options.MaxUntracked. It
 	// was never read, so it has no counts and no hunks.
-	Skipped bool   `json:"skipped,omitempty"`
-	Hunks   []Hunk `json:"hunks"`
-	// oldMode and newMode are the file's modes on each side, as git's raw
-	// listing gives them ("000000" for none). A patch that creates the file
-	// in the index needs its mode.
+	Skipped          bool   `json:"skipped,omitempty"`
+	Hunks            []Hunk `json:"hunks"`
 	oldMode, newMode string
 }
 

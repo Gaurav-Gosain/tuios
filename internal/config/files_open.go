@@ -99,8 +99,6 @@ type FileOpenRule struct {
 // FileOpenPathToken is the word in a rule's command that the path replaces.
 const FileOpenPathToken = "{path}"
 
-// matches reports whether the rule applies to path. A pattern filepath.Match
-// cannot read matches nothing; validation names it.
 func (r FileOpenRule) matches(path string, isDir bool) bool {
 	pattern, forDirs := strings.CutSuffix(strings.TrimSpace(r.Match), "/")
 	if pattern == "" || forDirs != isDir {
@@ -114,7 +112,6 @@ func (r FileOpenRule) matches(path string, isDir bool) bool {
 	return err == nil && ok
 }
 
-// argv is the rule's command with the path put in.
 func (r FileOpenRule) argv(path string) []string {
 	argv := make([]string, len(r.Command))
 	placed := false
@@ -131,8 +128,6 @@ func (r FileOpenRule) argv(path string) []string {
 	return argv
 }
 
-// usable reports whether a rule can run at all. Validation warns about the
-// others, and OpenArgv skips them.
 func (r FileOpenRule) usable() bool {
 	if len(r.Command) == 0 || strings.TrimSpace(r.Command[0]) == "" {
 		return false
@@ -153,8 +148,6 @@ func (c FilesConfig) OpenArgv(path string, isDir bool) []string {
 	return nil
 }
 
-// validateFilesOpen warns about a [[files.open]] rule that can never run. Such
-// a rule is skipped, so a file it was meant for goes to the system opener.
 func validateFilesOpen(cfg *UserConfig, result *ValidationResult) {
 	for i, r := range cfg.Files.Open {
 		key := fmt.Sprintf("open[%d]", i+1)

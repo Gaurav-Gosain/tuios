@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// item carries a key with many ties and its starting position, so two sorts
-// that agree on keys but not on how they break ties show up as different.
 type item struct {
 	key int
 	pos int
@@ -18,7 +16,6 @@ func items(n int, seed uint64) []item {
 	r := rand.New(rand.NewPCG(seed, 1))
 	out := make([]item, n)
 	for i := range out {
-		// Half as many keys as items: most keys repeat.
 		out[i] = item{key: r.IntN(n/2 + 1), pos: i}
 	}
 	return out

@@ -65,8 +65,6 @@ func RunReaper(argv []string) int {
 	return code
 }
 
-// commandEnv is the reaper's environment as the command gets it: GODEBUG as
-// the runner had it before reaperEnv.
 func commandEnv(env []string) []string {
 	keep := ""
 	out := make([]string, 0, len(env))

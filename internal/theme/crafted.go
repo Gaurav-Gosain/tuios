@@ -6,32 +6,6 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// The crafted themes: five looks drawn for tuios, three dark and two light.
-// Like Gilt, each names its chrome accent, which a bubbletint tint cannot, so
-// they are registered here rather than added to that library.
-//
-//   - ember:  warm charcoal with an orange accent, like the last coals of a fire.
-//   - boreal: a deep night blue with a mint and violet accent, like the northern lights.
-//   - plum:   a muted aubergine with an orchid accent.
-//   - dune:   a light theme of warm sand with a terracotta accent.
-//   - fjord:  a light theme of cold mist with a deep blue accent.
-//
-// Contrast on each ground: the foreground clears 10:1 and every normal colour
-// but black and white clears 4.5:1. Bright black, the colour shells draw
-// suggestions and comments in, sits between 3.1:1 and 3.9:1. On the light
-// grounds the bright colours sit between 3.3:1 and 4.2:1, as on most light
-// themes; bright white is a pale grey there, not a text colour.
-//
-// Each colour is saturated enough, or grey enough, to keep its kind at 256
-// and 16 colours (TestThemeColorsKeepTheirKindAtEveryDepth). Black is one
-// step above the dark grounds, so a cell painted black still reads as a panel.
-//
-// The dark themes name their whole neutral ramp, as Gilt does, so dialogs sit
-// on the theme's own steps. The light ones name none and get the ramp tuios
-// builds from a light ground.
-
-// craftedTheme is one crafted theme. ansi is in slot order, 0 to 15. surface,
-// canvas and panel are empty for a theme that leaves the ramp to tuios.
 type craftedTheme struct {
 	id, name                 string
 	dark                     bool
@@ -86,9 +60,6 @@ var craftedThemes = [...]craftedTheme{{
 	accent: "#2F64A8", accentBright: "#1F4F8F",
 }}
 
-// registerCraftedThemes registers the crafted themes and their chrome. Runs
-// with the registry, before the custom themes, so a file with the same id
-// replaces one.
 func registerCraftedThemes() {
 	for _, th := range craftedThemes {
 		c := tint.FromHex

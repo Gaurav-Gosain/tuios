@@ -11,13 +11,6 @@ import (
 	"tuios.dev/swatch/termconfig"
 )
 
-// Converting a terminal's colour scheme into a tuios theme is the most common
-// thing anyone means by "rice this to match my setup": the palette already
-// exists on disk, in kitty's conf or ghostty's config or an alacritty or
-// wezterm toml, and what is needed is the parsing between there and a theme
-// file. The parsers live in tuios.dev/swatch/termconfig, which reads all four
-// formats into one palette. What is left here is turning that into a theme.
-
 // ImportFormat names a terminal's colour scheme format.
 type ImportFormat = termconfig.Format
 
@@ -51,8 +44,6 @@ func Import(path, id string) (*tint.Tint, ImportFormat, error) {
 
 	t := &tint.Tint{ID: id, DisplayName: id}
 	assign(t, p)
-	// A scheme that names no background is taken as dark, which is what all
-	// four formats default to and what every scheme that omits it means.
 	t.Dark = isDark(t.Bg)
 	fillDefaults(t)
 	return t, format, nil
@@ -61,8 +52,6 @@ func Import(path, id string) (*tint.Tint, ImportFormat, error) {
 // WriteTheme writes a theme into the custom themes directory and registers it,
 // returning the file it wrote.
 func WriteTheme(t *tint.Tint) (string, error) {
-	// The id becomes a file name in the themes directory. A shared theme
-	// names its own id, so one with a path in it could write elsewhere.
 	if t.ID == "" || t.ID != filepath.Base(t.ID) || strings.HasPrefix(t.ID, ".") || strings.ContainsAny(t.ID, `/\`) {
 		return "", errfmt.Errorf("theme name %q cannot be a file name. Use a name with no / or \\ that does not start with a dot", t.ID)
 	}
@@ -70,21 +59,16 @@ func WriteTheme(t *tint.Tint) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Hex strings and every colour, in the order a person reads a theme.
 	body := fullDoc(t, chromeRaw{}).encode(true)
 	path := filepath.Join(dir, t.ID+".json")
 	if err := os.WriteFile(path, body, 0o600); err != nil {
 		return "", errfmt.Errorf("write %s: %w", path, err)
 	}
-	// Register it here as well as on disk so the process that imported it can
-	// select the theme without re-reading the directory.
 	EnsureRegistry()
 	tint.Register(t)
 	return path, nil
 }
 
-// assign writes the colours a scheme named onto a theme. Only those: a slot
-// the scheme left out keeps fillDefaults' answer, as it always did.
 func assign(t *tint.Tint, p swatch.Palette) {
 	slots := map[string]**tint.Color{
 		termconfig.KeyForeground: &t.Fg,
@@ -105,10 +89,6 @@ func assign(t *tint.Tint, p swatch.Palette) {
 	}
 }
 
-// isDark reports whether a background wants light text on it. ContrastText
-// already answers exactly that question for the chrome, so asking it here means
-// an imported theme's dark flag and what the renderer does with the background
-// cannot disagree.
 func isDark(bg *tint.Color) bool {
 	if bg == nil {
 		return true

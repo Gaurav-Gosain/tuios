@@ -18,36 +18,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// wait-for: tmux's channels, between calls of the shim.
-//
-// tmux keeps a channel in its server. Each shim call is a process of its own,
-// so a channel is a directory in the shim's runtime directory, private to
-// the user, and the calls coordinate under an flock on a file in it:
-//
-//   - wait-for CHANNEL listens on a unix socket in the channel's directory,
-//     named w and the time, and blocks until something connects. A channel
-//     signalled while nobody waited carries a woken file, and the next wait
-//     takes it and returns at once, as in tmux.
-//   - wait-for -S connects to every waiter's socket, which wakes it, and
-//     removes the sockets. With no waiter it leaves the woken file.
-//   - wait-for -L takes the lock (the locked file), or queues a socket named
-//     l and the time, and blocks. wait-for -U hands the lock to the oldest
-//     queued locker by connecting to it, or frees it.
-//
-// The waiter listens before it lets go of the flock, so a signal cannot fall
-// between its check and its wait. A socket whose process died refuses the
-// connection, and is removed as stale. The paths are short, since a unix
-// socket path is capped near 104 bytes: tmux/w/HASH/lTIME.
-
-// channelDir is the directory of a channel, named by a hash of the channel,
-// so any name is a short, safe path.
 func (s *Shim) channelDir(channel string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(channel))
 	return filepath.Join(s.Dir, "w", fmt.Sprintf("%08x", h.Sum32()))
 }
 
-// lockChannel takes the channel's flock and returns its release.
 func lockChannel(dir string) (func(), error) {
 	f, err := os.OpenFile(filepath.Join(dir, "lock"), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
@@ -63,8 +39,6 @@ func lockChannel(dir string) (func(), error) {
 	}, nil
 }
 
-// listenIn makes a socket in dir to be woken on, its name kind (w or l) and
-// the time in base 36, so lockers are served in the order they queued.
 func listenIn(dir string, kind byte) (net.Listener, string, error) {
 	for {
 		stamp := strconv.FormatInt(time.Now().UnixNano(), 36)
@@ -77,8 +51,6 @@ func listenIn(dir string, kind byte) (net.Listener, string, error) {
 	}
 }
 
-// wake connects to the socket at path, which wakes the call waiting on it.
-// It reports false for a socket nobody listens on any more.
 func wake(path string) bool {
 	c, err := net.DialTimeout("unix", path, time.Second)
 	_ = os.Remove(path)
@@ -89,7 +61,6 @@ func wake(path string) bool {
 	return true
 }
 
-// sockets lists the sockets of kind queued in dir, oldest first.
 func sockets(dir string, kind byte) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -105,8 +76,6 @@ func sockets(dir string, kind byte) []string {
 	return out
 }
 
-// waitFor answers wait-for: wait on a channel, signal it (-S), or lock (-L)
-// and unlock (-U) it.
 func (s *Shim) waitFor(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -150,7 +119,6 @@ func (s *Shim) waitFor(name string, args []string) (string, []string, error) {
 			return OutcomeError, nil, errfmt.Errorf("channel %s not locked", channel)
 		}
 		if slices.ContainsFunc(sockets(dir, 'l'), wake) {
-			// The lock passes to that locker and stays taken.
 			return OutcomeOK, nil, nil
 		}
 		_ = os.Remove(locked)
@@ -172,8 +140,6 @@ func (s *Shim) waitFor(name string, args []string) (string, []string, error) {
 	return block(dir, 'w', unlock)
 }
 
-// block queues a socket of kind in dir, lets go of the channel's flock, and
-// waits for a connection on it.
 func block(dir string, kind byte, unlock func()) (string, []string, error) {
 	l, path, err := listenIn(dir, kind)
 	unlock()

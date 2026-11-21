@@ -70,9 +70,6 @@ func Changed(old, new string) (Range, Range) {
 	for suf < len(old)-pre && suf < len(new)-pre && old[len(old)-1-suf] == new[len(new)-1-suf] {
 		suf++
 	}
-	// Back out of the middle of a character or a word on either line, so
-	// the mark never splits one. The prefix and suffix are the same bytes on
-	// both lines, so a step back is the same step on both.
 	for pre > 0 && (splits(old, pre) || splits(new, pre)) {
 		pre--
 	}
@@ -80,8 +77,6 @@ func Changed(old, new string) (Range, Range) {
 		suf--
 	}
 	oe, ne := len(old)-suf, len(new)-suf
-	// Indentation both lines share says nothing about whether they are the
-	// same line edited, so it counts on neither side of the comparison.
 	indent := 0
 	for indent < pre && (old[indent] == ' ' || old[indent] == '\t') {
 		indent++
@@ -93,7 +88,6 @@ func Changed(old, new string) (Range, Range) {
 	return Range{pre, oe}, Range{pre, ne}
 }
 
-// splits reports whether a cut of s at i would split a character or a word.
 func splits(s string, i int) bool {
 	if i <= 0 || i >= len(s) {
 		return false
@@ -101,11 +95,8 @@ func splits(s string, i int) bool {
 	return continuation(s[i]) || wordByte(s[i-1]) && wordByte(s[i])
 }
 
-// wordByte reports whether b is part of a word: a letter, a digit, an
-// underscore, or any byte of a multi-byte character.
 func wordByte(b byte) bool {
 	return b == '_' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= 0x80
 }
 
-// continuation reports whether b is a UTF-8 continuation byte.
 func continuation(b byte) bool { return b&0xC0 == 0x80 }

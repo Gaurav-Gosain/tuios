@@ -29,7 +29,6 @@ const (
 	InstallNone = "none"
 )
 
-// The install script. Its address is the one the docs give.
 const installScriptURL = "https://raw.githubusercontent.com/" + release.Repo + "/main/install.sh"
 
 // Command is one command a step runs, and where.
@@ -58,16 +57,9 @@ type InstallOption struct {
 	NeedsPerson bool `json:"needs_person,omitempty"`
 	// SameVersion says the option installs the version this machine runs.
 	SameVersion bool `json:"same_version,omitempty"`
-	// remote is the command the far side runs for a package manager or the
-	// script.
-	remote string
+	remote      string
 }
 
-// recipe is one way to install tuios, as data. In the strings, {name} is
-// the far machine, {tag} this version's release tag, {exe} this binary,
-// {asset} the release archive, {fetch} curl or wget, and {repo} the
-// GitHub repository. need is what the machine must have: a package manager,
-// "fetch", "copy" or "release".
 type recipe struct {
 	id, manager, need, label, note, remote string
 	person, same                           bool
@@ -84,9 +76,6 @@ var recipes = []recipe{
 	{id: InstallScript, need: "fetch", label: "The install script.", remote: "{fetch} " + installScriptURL + " | bash", note: "It installs the newest release. {name} needs internet."},
 }
 
-// installOptions lists every way to install tuios on the machine the probe
-// read, in the order a list shows them. The first available one is the
-// default. A package manager the machine does not have is left out.
 func (s *Setup) installOptions() []InstallOption {
 	p := s.probe
 	here := runtime.GOOS + "/" + runtime.GOARCH
@@ -118,7 +107,6 @@ func (s *Setup) installOptions() []InstallOption {
 		case "release":
 			o.Commands = []Command{{"here", "download " + asset + ", check it against " + release.ChecksumFile + ", send it to " + target}}
 			if !isRelease {
-				// A dev build has no release to fetch, so it is never offered.
 				continue
 			}
 			if assetErr != nil {
@@ -155,8 +143,6 @@ type PersonStep struct {
 	URL string `json:"url,omitempty"`
 }
 
-// personSSH is a person step that runs remote on the far machine over an
-// interactive ssh, with a terminal, so sudo and a package manager can ask.
 func (s *Setup) personSSH(why, remote string) *PersonStep {
 	argv := append([]string{"ssh", "-t"}, s.host.SSHOptions...)
 	argv = append(argv, s.host.Addr, remote)
@@ -169,8 +155,6 @@ func (s *Setup) personSSH(why, remote string) *PersonStep {
 	}
 }
 
-// runRemote runs one package manager or script command on the far machine
-// in a login shell, with no terminal, and returns what it printed.
 func (s *Setup) runRemote(ctx context.Context, remote string) (string, error) {
 	script := `for s in "$SHELL" sh; do if [ -x "$s" ] || command -v "$s" >/dev/null 2>&1; then exec "$s" -l -c "` + remote + `" </dev/null 2>&1; fi; done`
 	out, stderr, err := s.runner.Run(ctx, script, nil, nil)

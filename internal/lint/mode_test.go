@@ -13,10 +13,8 @@ import (
 
 const allowMode = "//tuios:allow-mode"
 
-// modeDirs are the packages that hold an *app.OS and change its mode.
 var modeDirs = []string{"internal/app", "internal/input"}
 
-// modeWriter is the one file that may write OS.Mode.
 const modeWriter = "internal/app/mode.go"
 
 // TestOnlyModeGoWritesTheClientMode is the mode lint. The client's input mode
@@ -92,7 +90,6 @@ func j() any { return accent{Mode: compact} }
 	}
 }
 
-// modeWrites returns file:line for every write of the client mode in src.
 func modeWrites(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -166,7 +163,6 @@ func modeWrites(t *testing.T, name string, src []byte) []string {
 	return out
 }
 
-// isOSType reports whether expr is OS, *OS, app.OS or *app.OS.
 func isOSType(expr ast.Expr) bool {
 	if star, isStar := expr.(*ast.StarExpr); isStar {
 		expr = star.X
@@ -181,7 +177,6 @@ func isOSType(expr ast.Expr) bool {
 	return false
 }
 
-// namesClientMode reports whether expr is one of the two client modes.
 func namesClientMode(expr ast.Expr) bool {
 	name := ""
 	switch e := expr.(type) {

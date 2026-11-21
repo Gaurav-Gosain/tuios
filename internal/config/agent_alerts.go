@@ -144,17 +144,8 @@ func ParseAgentSoundMode(s string) (AgentSoundMode, bool) {
 	}
 }
 
-// defaultAgentSoundMode is what sound = true means when nothing says otherwise.
-//
-// It is audio rather than bell because a BEL on a modern terminal with default
-// settings is usually nothing at all, and a user who asked for sound and got
-// silence has been told the feature works when it does not. "bell" selects the
-// terminal bell in one line.
 const defaultAgentSoundMode = AgentSoundAudio
 
-// defaultAgentSoundCooldown is the gap between two audible cues. Long enough
-// that a workspace finishing at once makes one sound, short enough that two
-// genuinely separate events a few seconds apart are both heard.
 const defaultAgentSoundCooldown = 3 * time.Second
 
 // AgentAlertPolicy is AgentAlertsConfig with every default resolved and the
@@ -172,13 +163,8 @@ type AgentAlertPolicy struct {
 	SuppressFocused bool
 	Settle          time.Duration
 
-	// states maps an agent-state wire name to whether it alerts. A name that is
-	// absent does not alert, so a state added later is silent until someone opts
-	// in rather than noisy on upgrade.
 	states map[string]bool
 
-	// quietFrom and quietTo are minutes since local midnight. Equal values mean
-	// no quiet window.
 	quietFrom, quietTo int
 }
 
@@ -306,7 +292,6 @@ func ParseQuietHours(s string) (from, to int, err error) {
 	return from, to, nil
 }
 
-// parseClock parses one "HH:MM" into minutes since midnight.
 func parseClock(s string) (int, error) {
 	h, m, ok := strings.Cut(strings.TrimSpace(s), ":")
 	if !ok {

@@ -1,17 +1,5 @@
 package transcriptview
 
-// A Qwen Code chat, as its ChatRecordingService writes it (the
-// @qwen-code/qwen-code package, read at 0.25.2), at
-// ~/.qwen/projects/<cwd with "/" as "-">/chats/<session id>.jsonl. Qwen Code
-// began as a Gemini CLI fork and keeps its genai parts, in records shaped
-// like Claude Code's: {uuid, parentUuid, sessionId, timestamp, type, cwd,
-// version, message}, where type is user, assistant, tool_result or system
-// and message is a genai Content ({role, parts}). An assistant's parts are
-// text, thoughts (thought: true) and functionCall. A tool_result's are
-// functionResponse, and its toolCallResult says the status and carries the
-// result display: a FileDiff for an edit.
-
-// qwenLine decodes one chat record.
 func qwenLine(r *reader, line []byte, off int64) (decoded, bool) {
 	rec, ok := parseObj(line)
 	if !ok {

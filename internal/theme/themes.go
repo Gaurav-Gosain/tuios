@@ -10,8 +10,6 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// defaultSwatch is the preview palette shown for the "no theme" option (the
-// standard xterm-ish bright colors).
 var defaultSwatch = []color.Color{
 	lipgloss.Color("#ff5555"), lipgloss.Color("#f1fa8c"), lipgloss.Color("#50fa7b"),
 	lipgloss.Color("#8be9fd"), lipgloss.Color("#6272a4"), lipgloss.Color("#bd93f9"),

@@ -1,9 +1,5 @@
 package herdrcli
 
-// The help text of each command group: herdr's own usage lines at v0.9.5
-// (print_*_help in src/cli), so a person who reads them sees the grammar
-// herdr documents.
-
 const topHelp = `herdr ` + Version + `+tuios: herdr's command line, answered by tuios
 
 This herdr runs in a tuios pane through HERDR_BIN_PATH. It sends herdr's

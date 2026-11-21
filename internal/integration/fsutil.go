@@ -16,7 +16,6 @@ import (
 // first rewrites it.
 const BackupSuffix = ".tuios.bak"
 
-// readOptional reads a file, returning nil and no error when it does not exist.
 func readOptional(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -25,13 +24,6 @@ func readOptional(path string) ([]byte, error) {
 	return data, err
 }
 
-// resolveWriteTarget returns the file a write to path should replace. A
-// symlink is followed to the file it names, so a settings file a dotfile
-// manager (stow, home-manager, a bare repo) links into place stays a link and
-// the change lands in the linked file. A path that does not exist yet is
-// written where it is. A link whose target does not exist is refused: writing
-// through it would create a file somewhere the user may not expect, and
-// replacing it would drop the link.
 func resolveWriteTarget(path string) (string, error) {
 	fi, err := os.Lstat(path)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -55,8 +47,6 @@ func resolveWriteTarget(path string) (string, error) {
 // the other program's change.
 var ErrFileChanged = errors.New("the file changed while tuios was editing it, so tuios did not write it. Try again")
 
-// sameAsRead reports whether the file at target still holds have, the bytes
-// the edit was worked out from. A nil have means the file did not exist.
 func sameAsRead(target string, have []byte) (bool, error) {
 	now, err := readOptional(target)
 	if err != nil {
@@ -65,13 +55,6 @@ func sameAsRead(target string, have []byte) (bool, error) {
 	return (now == nil) == (have == nil) && bytes.Equal(now, have), nil
 }
 
-// retryChanged runs op, and once more when the file changed under it, so an
-// edit worked out from a file another program was saving is worked out again
-// from the saved file. A second change in a row is reported.
-//
-// An integration can span several files, and a failure can come after some
-// of them were written. The error then names the files changed, over both
-// tries, and the ones not reached, so nobody reads it as "nothing changed".
 func retryChanged(op func() (Result, error)) (Result, error) {
 	res, err := op()
 	if errors.Is(err, ErrFileChanged) {
@@ -94,25 +77,8 @@ func retryChanged(op func() (Result, error)) (Result, error) {
 	return res, err
 }
 
-// beforeRename, when set, runs just before writeAtomic checks the file a last
-// time. The tests use it to change the file at the worst moment.
 var beforeRename func(target string)
 
-// writeAtomic replaces path with data so a reader, the harness included, sees
-// either the old file or the new one and never half of each: the data goes to
-// a temporary file in the same directory, is synced, and is renamed over the
-// target. When path is a symlink the file it points to is the one replaced,
-// so the link itself is kept.
-//
-// The first time tuios rewrites a file, the file as it was is copied to
-// path+BackupSuffix. A later write keeps that copy rather than overwriting
-// it, so the backup is always the file from before tuios touched it. Its
-// permissions are kept.
-//
-// have is the file as it was read when the edit was worked out, nil when it
-// did not exist. The file is read again just before the rename, and a file
-// that no longer holds have is left alone with ErrFileChanged: the harness or
-// the person saved it in between, and renaming over it would drop that save.
 func writeAtomic(path string, have, data []byte) error {
 	target, err := resolveWriteTarget(path)
 	if err != nil {

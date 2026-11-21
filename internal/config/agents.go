@@ -6,22 +6,6 @@ import (
 	"time"
 )
 
-// The [agents] table: how tuios treats the coding agents in its panes.
-//
-//	[agents.approvals]
-//	enabled = ["claude-code", "opencode"]
-//	hold_seconds = 120
-//
-//	[agents.permissions]
-//	mode = "strict"
-//	grants = ["read", "write", "fan"]
-//
-// Apart from enabled, it is file-plane config, outside the option registry,
-// for the same reason [hosts] is: a list of harness names is not a scalar
-// with one settable path. enabled is a plain bool, so it is in the registry
-// and on the settings page. The daemon reads the table at start and again
-// whenever the file changes.
-
 // AgentsConfig is the [agents] table.
 type AgentsConfig struct {
 	// Enabled turns every agent feature on or off: agent detection, the

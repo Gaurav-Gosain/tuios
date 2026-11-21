@@ -19,9 +19,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// noPlatformsWarning is herdr's warning on a manifest with no platforms. A
-// tuios manifest leaves platforms out to mean every platform, so it does not
-// get it.
 const noPlatformsWarning = "manifest does not declare platforms; platform support unknown"
 
 // HostVersion is the herdr release whose plugin format this package follows.
@@ -32,7 +29,6 @@ const HostVersion = "0.9.5"
 // ManifestName is the file name of a plugin manifest.
 const ManifestName = "herdr-plugin.toml"
 
-// Limits on ids, as herdr has them.
 const (
 	maxPluginIDChars = 120
 	maxLocalIDChars  = 120
@@ -72,10 +68,8 @@ const (
 // Placements is every placement herdr knows.
 var Placements = []string{PlacementOverlay, PlacementPopup, PlacementSplit, PlacementTab, PlacementZoomed}
 
-// Platforms herdr knows.
 var platformNames = []string{"linux", "macos", "windows"}
 
-// actionContexts are the values of an action's contexts list.
 var actionContexts = []string{"global", "workspace", "tab", "pane", "selection"}
 
 // HookEvents are the event names an [[events]] entry can name: herdr's
@@ -138,8 +132,6 @@ func ParseSize(v string) (Size, error) {
 	return Size(strconv.FormatUint(n, 10)), nil
 }
 
-// sizeOf reads a decoded TOML or JSON value as a size, as herdr's
-// deserializer does: an integer is cells, a string must be a percentage.
 func sizeOf(v any) (Size, error) {
 	switch x := v.(type) {
 	case int64:
@@ -282,8 +274,6 @@ type Plugin struct {
 	Approval string `json:"approval,omitempty"`
 }
 
-// rawManifest is herdr-plugin.toml as written. Unknown keys are ignored, as
-// herdr's serde types ignore them.
 type rawManifest struct {
 	ID              *string          `toml:"id"`
 	Name            *string          `toml:"name"`
@@ -338,8 +328,6 @@ type rawLinkHandler struct {
 	Platforms *[]string `toml:"platforms"`
 }
 
-// missingField is serde's message for a required field that is absent,
-// which herdr reports as plugin_manifest_parse_failed.
 func missingField(name string) *Error {
 	return errf("plugin_manifest_parse_failed", "missing field `%s`", name)
 }
@@ -367,8 +355,6 @@ func Load(path string) (*Plugin, *Error) {
 	} else {
 		return nil, errf("plugin_manifest_not_found", "%v", err)
 	}
-	// herdr's plugins.json names a manifest by its \\?\ path on Windows, and
-	// the plugin's commands run in the folder taken from it (issue #654).
 	abs = winpath.StripExtended(abs)
 	data, err := os.ReadFile(abs) //nolint:gosec // the path is a plugin the person listed
 	if err != nil {
@@ -391,8 +377,6 @@ func Load(path string) (*Plugin, *Error) {
 
 // Parse validates manifest bytes. The paths of the result are empty.
 func Parse(data []byte) (*Plugin, *Error) {
-	// herdr's toml crate skips a UTF-8 byte order mark. go-toml refuses one,
-	// and some manifests written on Windows start with it.
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	var raw rawManifest
 	if err := toml.Unmarshal(data, &raw); err != nil {
@@ -401,8 +385,6 @@ func Parse(data []byte) (*Plugin, *Error) {
 	return parseRaw(&raw)
 }
 
-// parseRaw validates a decoded manifest. A native manifest is checked here
-// too, after it is turned into herdr's shape.
 func parseRaw(raw *rawManifest) (*Plugin, *Error) {
 	for _, f := range []struct {
 		name string
@@ -412,8 +394,6 @@ func parseRaw(raw *rawManifest) (*Plugin, *Error) {
 			return nil, missingField(f.name)
 		}
 	}
-	// Every command is required, so a missing one is a parse failure before
-	// any field is checked, as serde reports it.
 	if perr := checkRawCommands(raw); perr != nil {
 		return nil, perr
 	}
@@ -426,10 +406,6 @@ func parseRaw(raw *rawManifest) (*Plugin, *Error) {
 	if p.Name, perr = nonEmpty(*raw.Name, "invalid_plugin_name", "plugin name is required"); perr != nil {
 		return nil, perr
 	}
-	// The name is shown in the approval dialog, the install question and
-	// the listings. A control or bidi character is dropped, so the name
-	// cannot hide or move text, and it is cut to MaxNameRunes, so it
-	// cannot push the grants off the screen.
 	p.Name = ShownName(p.Name)
 	if p.Name == "" {
 		return nil, errf("invalid_plugin_name", "plugin name is required")
@@ -437,8 +413,6 @@ func parseRaw(raw *rawManifest) (*Plugin, *Error) {
 	if p.Version, perr = nonEmpty(*raw.Version, "invalid_plugin_version", "plugin version is required"); perr != nil {
 		return nil, perr
 	}
-	// tuios shows the version, the argv, the events and the placements in
-	// the install prompt, so none of them may hold a terminal control.
 	if hasControl(p.Version) {
 		return nil, errf("invalid_plugin_version", "plugin version must not contain control characters")
 	}
@@ -526,7 +500,6 @@ func parseRaw(raw *rawManifest) (*Plugin, *Error) {
 	return p, nil
 }
 
-// checkRawCommands reports the first entry with no command.
 func checkRawCommands(raw *rawManifest) *Error {
 	for _, c := range raw.Build {
 		if c.Command == nil {
@@ -711,7 +684,6 @@ func linkHandler(r rawLinkHandler) (LinkHandler, *Error) {
 	return LinkHandler{ID: id, Title: title, Pattern: pattern, Action: act, Platforms: pl}, nil
 }
 
-// checkMinVersion is herdr's validate_min_herdr_version against HostVersion.
 func checkMinVersion(v *string) (string, *Error) {
 	if v == nil {
 		return "", errf("invalid_plugin_min_herdr_version", "plugin min_herdr_version is required")
@@ -731,8 +703,6 @@ func checkMinVersion(v *string) (string, *Error) {
 	return fmt.Sprintf("%d.%d.%d", want[0], want[1], want[2]), nil
 }
 
-// parseVersion reads major.minor.patch with an optional leading v, as
-// herdr's Version::parse does. Nothing else is accepted.
 func parseVersion(s string) ([3]uint64, bool) {
 	var out [3]uint64
 	parts := strings.Split(strings.TrimPrefix(s, "v"), ".")
@@ -749,8 +719,6 @@ func parseVersion(s string) ([3]uint64, bool) {
 	return out, true
 }
 
-// platforms reads a platforms list. Absent is nil: every platform. Present
-// and empty is refused, as herdr refuses it.
 func platforms(raw *[]string) ([]string, *Error) {
 	if raw == nil {
 		return nil, nil
@@ -846,7 +814,6 @@ func CurrentPlatform() string {
 	case "windows":
 		return "windows"
 	}
-	// herdr builds for the three. Another unix runs what linux runs.
 	return "linux"
 }
 

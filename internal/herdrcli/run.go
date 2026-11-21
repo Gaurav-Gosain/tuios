@@ -15,18 +15,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// Timeouts for one request. A report must never hold its reporter up, which
-// is what herdr's agent hooks rely on. A wait runs as long as its own
-// timeout says, and the daemon bounds that.
 const (
-	reportTimeout  = 2 * time.Second
-	requestTimeout = 30 * time.Second
-	// agentStartDefault is how long agent start waits for the agent, as in
-	// herdr, when --timeout is not given.
+	reportTimeout     = 2 * time.Second
+	requestTimeout    = 30 * time.Second
 	agentStartDefault = 30 * time.Second
-	// agentStartRetry is the pause before agent start asks again about a
-	// pane that does not hold an agent yet.
-	agentStartRetry = 250 * time.Millisecond
+	agentStartRetry   = 250 * time.Millisecond
 )
 
 // Options are what Main needs from its process.
@@ -132,8 +125,6 @@ func errorResponse(id, code, msg string) map[string]any {
 	return map[string]any{"id": id, "error": map[string]any{"code": code, "message": msg}}
 }
 
-// printJSON writes v on one line the way herdr's CLI does: serde_json, whose
-// maps are sorted by key and which escapes no HTML.
 func printJSON(w io.Writer, v any) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -144,13 +135,10 @@ func printJSON(w io.Writer, v any) {
 	_, _ = w.Write(b.Bytes())
 }
 
-// connError is a request that could not reach the socket, in herdr's
-// server_not_running shape.
 type connError map[string]any
 
 func (e connError) Error() string { return fmt.Sprint(map[string]any(e)) }
 
-// request sends one call and reads its answer as a JSON object.
 func request(path string, c *Call) (map[string]any, connError) {
 	return send(path, c.ID, c.Method, c.Params, deadlineFor(c))
 }
@@ -204,11 +192,6 @@ func send(path, id, method string, params map[string]any, timeout time.Duration)
 	return out, nil
 }
 
-// waitAgentStart waits, after agent.start, for the agent in the pane to be
-// ready for a prompt, as herdr's agent start does: at rest (idle or done)
-// it is ready, blocked is an error, and the wait ends at the timeout. The
-// answer is the start's, with the agent's record as it is now. The server
-// holds the wait (agent.wait), so the wait is one request, not a poll.
 func waitAgentStart(path string, c *Call, started map[string]any) map[string]any {
 	timeout := agentStartDefault
 	if n, ok := c.Params["timeout_ms"].(uint64); ok {
@@ -227,10 +210,6 @@ func waitAgentStart(path string, c *Call, started map[string]any) map[string]any
 		if err != nil {
 			return map[string]any(err)
 		}
-		// The pane does not hold an agent yet: the agent has not started,
-		// or tuios has not identified it. Ask again until the deadline, as
-		// herdr waits through a startup. Any other error is the wait's
-		// timeout, or a pane that went away, which never comes ready either.
 		result, ok := resp["result"].(map[string]any)
 		if !ok {
 			if e, _ := resp["error"].(map[string]any); e["code"] == "agent_not_found" {
@@ -249,14 +228,9 @@ func waitAgentStart(path string, c *Call, started map[string]any) map[string]any
 		case "blocked":
 			return errorResponse("cli:agent:start", "agent_not_ready", "agent "+name+" is blocked during startup and is not ready for prompts")
 		}
-		// The agent moved on between the wait and its record: wait again.
 	}
 }
 
-// printStatus answers herdr status. A ping says whether the server
-// answers. The client part describes this front: herdr's version and
-// protocol, with +tuios. tuios does not serve herdr's endpoint protocol, so
-// endpoint_compatible is false, and no restart changes that.
 func printStatus(o Options, path string, c *Call) int {
 	asJSON, _ := c.Params["json"].(bool)
 	running := false
@@ -326,8 +300,6 @@ func printStatus(o Options, path string, c *Call) int {
 	return 0
 }
 
-// printSessions answers herdr session list: one session, default, at the
-// socket the front talks to, running when it answers a ping.
 func printSessions(o Options, path string, c *Call) int {
 	running := false
 	if resp, err := send(path, c.ID, "ping", map[string]any{}, requestTimeout); err == nil {

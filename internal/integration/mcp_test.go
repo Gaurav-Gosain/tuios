@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// mcpHome makes the harness's configuration directory, which install needs.
 func mcpHome(t *testing.T, id string) (Env, *Target) {
 	t.Helper()
 	env := testEnv(t)
@@ -61,7 +60,6 @@ func TestMCPInstallClaudeKeepsTheUsersServersAndRoundTrips(t *testing.T) {
 		t.Errorf("a second install changed the file: %+v, %v", again, err)
 	}
 
-	// --write is a different entry, and status says so.
 	if _, err := tg.InstallMCP(env, "tuios", true); err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +146,6 @@ func TestMCPInstallCodexKeepsTheUsersTOML(t *testing.T) {
 		t.Errorf("uninstall left:\n%q\nwant\n%q", got, user)
 	}
 
-	// A table the user wrote under the same name is left alone.
 	own := user + "\n[mcp_servers.tuios]\ncommand = \"mine\"\n"
 	writeFile(t, path, own)
 	if _, err := tg.InstallMCP(env, "tuios", false); err == nil {

@@ -33,8 +33,6 @@ func TestALookupRefusesASubstitute(t *testing.T) {
 	}
 }
 
-// hostPostScriptNameOf asks fontconfig what PostScript name a file carries, so
-// the test can feed a host answer that is real on this machine.
 func hostPostScriptNameOf(t *testing.T, file string) string {
 	t.Helper()
 	out, err := exec.Command("fc-query", file, "-f", "%{postscriptname}").Output()

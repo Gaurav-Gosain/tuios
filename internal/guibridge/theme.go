@@ -53,7 +53,6 @@ func hex(c color.Color) string {
 	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
 }
 
-// paletteMap lists every colour field of an overlay.Palette by name.
 func paletteMap(p overlay.Palette) map[string]string {
 	out := map[string]string{}
 	v := reflect.ValueOf(p)

@@ -34,7 +34,6 @@ func TestDeclaredMenusReadFromConfig(t *testing.T) {
 	if got := r.GetMenuAction("resize", "h"); got != "resize_pane_left_5" {
 		t.Errorf("resize h = %q, want resize_pane_left_5", got)
 	}
-	// A key lives in its own menu alone.
 	if got := r.GetMenuAction("resize", "y"); got != "" {
 		t.Errorf("resize y = %q, want unbound", got)
 	}

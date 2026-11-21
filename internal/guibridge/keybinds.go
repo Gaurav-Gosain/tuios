@@ -5,11 +5,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The user's keys, for a renderer that resolves them itself: the leader and
-// the prefix tables run in the renderer's own key handler, and every key ends
-// as a tuios action name it sends back with the action command, or as a gui_
-// action it runs itself.
-
 // Keybinds is the keybinds event.
 type Keybinds struct {
 	// Leader is the key that starts a prefix, such as "ctrl+b".
@@ -76,7 +71,6 @@ type MenuItem struct {
 	Submenu bool `json:"submenu,omitempty"`
 }
 
-// prefixScopes maps the actions that open a sub-prefix to its scope.
 var prefixScopes = map[string]string{
 	"prefix_window":    config.ScopePrefixWindow,
 	"prefix_minimize":  config.ScopePrefixMinimize,
@@ -87,11 +81,8 @@ var prefixScopes = map[string]string{
 	"prefix_tuios":     config.ScopePrefixTuios,
 }
 
-// menuNames are the which-key menus, by the name PrefixMenuGroups takes.
 var menuNames = []string{"", "window", "minimize", "workspace", "debug", "tape", "layout", "tuios"}
 
-// exportKeybinds builds the keybinds event from the model's registry and
-// config, so it shows what this session's keys do now.
 func exportKeybinds(o *app.OS) *Keybinds {
 	reg := o.KeybindRegistry
 	cfg := o.UserConfig
@@ -131,8 +122,6 @@ func exportKeybinds(o *app.OS) *Keybinds {
 	}
 	st := config.MenuState{Daemon: true, Minimized: -1}
 	for _, name := range menuNames {
-		// An empty list, never null: a prefix with no keys still has a menu,
-		// and a renderer may read null as a broken event.
 		groups := []MenuGroup{}
 		for _, g := range config.PrefixMenuGroups(reg, name, st) {
 			mg := MenuGroup{Title: g.Title, Rows: []MenuItem{}}

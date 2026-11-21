@@ -214,7 +214,6 @@ func TestLogRedactsFailedCalls(t *testing.T) {
 		if code, _ := h.run(c.args...); code != 1 {
 			t.Errorf("%q succeeded", c.args)
 		}
-		// stderr is the caller's own, and still names the unknown word.
 		if i == 3 && !strings.Contains(h.err.String(), "unknown command: hunter2") {
 			t.Errorf("stderr = %q, want it to name the unknown command", h.err)
 		}
@@ -247,7 +246,7 @@ func TestLogRedactsFailedCalls(t *testing.T) {
 func TestSendKeys(t *testing.T) {
 	cases := []struct {
 		args []string
-		want []string // "text:..." for send-text, "keys:..." for send-keys
+		want []string
 	}{
 		{[]string{"echo hi", "Enter"}, []string{"text:echo hi", "keys:Enter"}},
 		{[]string{"-l", "Enter"}, []string{"text:Enter"}},
@@ -354,8 +353,6 @@ func TestSelectPaneAndWindow(t *testing.T) {
 		t.Errorf("focus-window = %v", fw)
 	}
 	h.run("select-pane", "-L")
-	// The neighbour is found from the panes' positions, so the daemon is
-	// asked to focus a window, not a direction it answers only with a client.
 	if fw := h.fake.last("focus-window"); fw["direction"] != nil || fw["window"] == nil {
 		t.Errorf("select-pane -L sent %v", fw)
 	}

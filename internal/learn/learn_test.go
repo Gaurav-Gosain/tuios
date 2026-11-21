@@ -21,22 +21,16 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// The browser build's setup: every pane is the fake shell on an
-	// in-memory pty, and keys go through the real input handler.
 	ptyspawn.NewGuestPty = func(w, h int) (xpty.Pty, error) { return webshell.NewPty(w, h), nil }
 	app.SetInputHandler(input.HandleInput)
-	// The tour loads the real config, so it must not read the developer's.
 	os.Exit(testutil.RunIsolated(m))
 }
 
-// tour is a Model driven the way the program drives it, with the events it
-// emits and the messages it sends back recorded.
 type tour struct {
-	t  *testing.T
-	m  *Model
-	mu sync.Mutex
-	ev []Event
-	// seen is how many events earlier waits have consumed.
+	t    *testing.T
+	m    *Model
+	mu   sync.Mutex
+	ev   []Event
 	seen int
 	msgs chan tea.Msg
 }
@@ -70,9 +64,6 @@ func newTour(t *testing.T) *tour {
 	return tr
 }
 
-// update runs one message through the model, and runs the command it returns
-// in the background the way the program would, feeding the result back
-// through the program's filter on a later pump.
 func (tr *tour) update(msg tea.Msg) tea.Cmd {
 	_, cmd := tr.m.Update(msg)
 	tr.run(cmd)
@@ -101,7 +92,6 @@ func (tr *tour) run(cmd tea.Cmd) {
 	}()
 }
 
-// pump delivers what the background commands and the fake shell sent.
 func (tr *tour) pump() {
 	for {
 		select {
@@ -121,7 +111,6 @@ func (tr *tour) press(keys ...tea.KeyPressMsg) {
 	}
 }
 
-// typeText presses one key per character, the way a person types into a pane.
 func (tr *tour) typeText(s string) {
 	for _, r := range s {
 		if r == '\r' {
@@ -149,15 +138,11 @@ func key(s string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: r[0], Text: s}
 }
 
-// waitFor returns the first event after the last one waited for that matches,
-// pumping the messages the fake shell sends into the model meanwhile, the way
-// the program would.
 func (tr *tour) waitFor(typ string, match func(Event) bool) Event {
 	tr.t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		tr.pump()
-		// Output from the panes reaches the model as it would in the program.
 		tr.update(app.PTYDataMsg{})
 		tr.mu.Lock()
 		for i := tr.seen; i < len(tr.ev); i++ {
@@ -189,7 +174,6 @@ func TestEventContract(t *testing.T) {
 	tr := newTour(t)
 	tr.update(nil)
 
-	// A window.
 	tr.press(key("n"))
 	tr.waitFor(EventAction, func(e Event) bool { return data(e, "name") == "new_window" })
 	open := tr.waitFor(EventWindowOpen, nil)
@@ -198,7 +182,6 @@ func TestEventContract(t *testing.T) {
 		t.Fatalf("window.open = %+v", open)
 	}
 
-	// Typing mode, and a command in the fake shell with its exit code.
 	tr.press(key("i"))
 	tr.waitFor(EventMode, func(e Event) bool { return data(e, "to") == "terminal" })
 	tr.typeText("ls\r")
@@ -212,7 +195,6 @@ func TestEventContract(t *testing.T) {
 		t.Errorf("unknown command exit = %v", done.Data["exitCode"])
 	}
 
-	// The prefix, then a second window through it.
 	tr.press(key("ctrl+b"))
 	tr.waitFor(EventPrefix, func(e Event) bool { return data(e, "to") == "prefix" })
 	tr.press(key("c"))
@@ -220,31 +202,26 @@ func TestEventContract(t *testing.T) {
 	second := tr.waitFor(EventWindowOpen, nil).WindowID
 	tr.waitFor(EventWindowFocus, func(e Event) bool { return data(e, "to") == second })
 
-	// Tiling off and on.
 	tr.press(key("ctrl+b"), key("space"))
 	tr.waitFor(EventTiling, func(e Event) bool { return data(e, "to") == false })
 	tr.press(key("ctrl+b"), key("space"))
 	tr.waitFor(EventTiling, func(e Event) bool { return data(e, "to") == true })
 
-	// The layout mode.
 	tr.m.RunCommand("layout", "master-stack")
 	tr.update(nil)
 	tr.waitFor(EventLayout, func(e Event) bool { return data(e, "to") == "master-stack" })
 
-	// Help opens and closes.
 	tr.press(key("ctrl+b"), key("?"))
 	tr.waitFor(EventOverlayOpen, func(e Event) bool { return data(e, "name") == OverlayHelp })
 	tr.press(key("esc"))
 	tr.waitFor(EventOverlayClose, func(e Event) bool { return data(e, "name") == OverlayHelp })
 
-	// Back to window mode for the plain keys.
 	tr.press(key("esc"))
 	if tr.m.OS.Mode != app.WindowManagementMode {
 		tr.press(key("ctrl+b"), key("esc"))
 	}
 	tr.waitFor(EventMode, func(e Event) bool { return data(e, "to") == "window" })
 
-	// Zoom and minimize, through the dispatcher as a key would.
 	tr.m.RunCommand("action", "toggle_zoom")
 	tr.update(nil)
 	tr.waitFor(EventAction, func(e Event) bool { return data(e, "name") == "toggle_zoom" })
@@ -256,34 +233,28 @@ func TestEventContract(t *testing.T) {
 	tr.update(nil)
 	tr.waitFor(EventWindowMinimize, func(e Event) bool { return data(e, "minimized") == true })
 
-	// Rename.
 	_ = tr.m.OS.RenameWindowByID(first, "logs")
 	tr.update(nil)
 	tr.waitFor(EventWindowRename, func(e Event) bool { return data(e, "to") == "logs" })
 
-	// A workspace, through its prefix.
 	tr.press(key("ctrl+b"), key("w"))
 	tr.waitFor(EventPrefix, func(e Event) bool { return data(e, "to") == "workspace" })
 	tr.press(key("2"))
 	tr.waitFor(EventWorkspace, func(e Event) bool { return data(e, "to") == 2 })
 
-	// The theme.
 	tr.m.RunCommand("theme", "dracula")
 	tr.update(nil)
 	tr.waitFor(EventTheme, func(e Event) bool { return data(e, "to") == "dracula" })
 
-	// A notification.
 	tr.m.RunCommand("notify", "hello from the page")
 	tr.update(nil)
 	tr.waitFor(EventNotification, func(e Event) bool { return data(e, "message") == "hello from the page" })
 
-	// Closing a window.
 	tr.m.RunCommand("workspace", "1")
 	tr.m.RunCommand("closeWindow", second)
 	tr.update(nil)
 	tr.waitFor(EventWindowClose, func(e Event) bool { return e.WindowID == second })
 
-	// The command palette, and the key that opened it.
 	tr.m.RunCommand("action", "command_palette")
 	tr.update(nil)
 	tr.waitFor(EventOverlayOpen, func(e Event) bool { return data(e, "name") == OverlayCommandPalette })
@@ -360,7 +331,6 @@ func TestSetRefusesHostOptions(t *testing.T) {
 		}
 	}
 
-	// The options the docs page uses still go through, by both spellings.
 	tr.m.RunCommand("set", "appearance.border_style", "double")
 	tr.m.RunCommand("set", "glyphs", "ascii")
 	after := snapshot()
@@ -369,8 +339,6 @@ func TestSetRefusesHostOptions(t *testing.T) {
 			after["appearance.border_style"], after["appearance.glyphs"])
 	}
 
-	// A later set must not put back an older theme: set re-applies the
-	// tab's config, which has to hold the theme the page chose last.
 	o.UserConfig.Appearance.Theme = "gruvbox_dark"
 	tr.m.RunCommand("theme", "dracula")
 	tr.m.RunCommand("set", "appearance.gap", "1")
@@ -378,8 +346,6 @@ func TestSetRefusesHostOptions(t *testing.T) {
 		t.Errorf("theme after theme dracula and set gap = %q, want dracula", got)
 	}
 
-	// themeJSON takes a look's theme through the tuios look apply check. A
-	// theme that fails it changes nothing.
 	for _, bad := range [][2]string{
 		{"../evil", `{"base":"nord"}`},
 		{"x", `{"base":"no-such-theme"}`},
@@ -397,8 +363,6 @@ func TestSetRefusesHostOptions(t *testing.T) {
 		t.Errorf("theme after themeJSON amber = %q, want look-amber", got)
 	}
 
-	// An option added later that names a program or a path has to be refused
-	// on purpose, or refused by config.ReachesHost.
 	for _, opt := range config.Options() {
 		if _, ok := pageSettable(opt.Path); !ok {
 			continue
@@ -456,8 +420,6 @@ func TestSetLookItems(t *testing.T) {
 	if !o.AutoTiling || o.LayoutModeName() != "master-stack" {
 		t.Errorf("tiling %v, layout %q, want tiled master-stack", o.AutoTiling, o.LayoutModeName())
 	}
-	// A name tuios look apply refuses does nothing: no layout cycle and no
-	// notification.
 	before := len(o.Notifications)
 	tr.m.RunCommand("set", "startup.layout", "spiral")
 	if o.LayoutModeName() != "master-stack" || len(o.Notifications) != before {
@@ -492,8 +454,6 @@ func TestCockpitAllowIsAskThenEnter(t *testing.T) {
 	tr.update(CommandMsg{Name: "mode", Args: []string{"window"}})
 	tr.press(key("ctrl+b"), key("i"))
 	tr.waitFor("agents.select", func(e Event) bool { return data(e, "harness") == "claude-code" })
-	// An answer key is refused until the prompt has been drawn long enough to
-	// read, so draw frames and press a until it asks.
 	deadline := time.Now().Add(10 * time.Second)
 	asked := false
 	for !asked && time.Now().Before(deadline) {

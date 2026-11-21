@@ -7,13 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
-// cwdRefreshInterval bounds how often the shell's working directory is read
-// from the OS. The value is only consulted while rendering a window title, so a
-// readlink per window per frame would be pure overhead; a directory that
-// changed a moment ago catching up on the next second is not noticeable.
 const cwdRefreshInterval = time.Second
 
-// cwdCache memoises the last working directory read for a window.
 type cwdCache struct {
 	mu        sync.Mutex
 	value     string

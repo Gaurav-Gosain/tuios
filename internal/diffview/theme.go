@@ -28,9 +28,6 @@ type Palette struct {
 	Syntax [NumClasses]color.Color
 }
 
-// How strongly each ground is tinted, as the share of the tint mixed into
-// the ground. A share rather than a fixed colour, so a dark ground gets a
-// dark green and a light one a pale green from the same theme colour.
 const (
 	tintLine   = 0.16
 	tintGutter = 0.26
@@ -39,11 +36,6 @@ const (
 	tintQuiet  = 0.05
 )
 
-// The grounds at 256 colours. A tint mixed and then stepped down lands an
-// added and a removed line on the same grey, so each is a fixed palette entry
-// instead, the ones Codex uses: a dark green and a dark red on a dark ground,
-// a pale green and a pale red on a light one, and the changed words one step
-// brighter.
 const (
 	add256Dark      = ansi.IndexedColor(22)
 	addWord256Dark  = ansi.IndexedColor(28)
@@ -55,23 +47,17 @@ const (
 	delWord256Light = ansi.IndexedColor(217)
 )
 
-// The slots the 16-colour diff takes its inks from. The terminal paints them
-// from the user's own palette.
 const (
 	slotRed   = 1
 	slotGreen = 2
 	slotMuted = 8
 )
 
-// Contrast floors. Code is text and clears the floor text does. A comment
-// and a line number are read less closely and hold more of their hue at the
-// floor a mark is held to.
 const (
 	floorCode  = overlay.ContrastFloor
 	floorQuiet = overlay.MarkFloor
 )
 
-// attrs are the attributes a run carries besides its colours.
 type attrs uint8
 
 const (
@@ -92,18 +78,13 @@ const (
 // green and a removed line's red, the changed words are bold and underlined,
 // and the cursor is left to the caller, which reverses the gutter.
 type Theme struct {
-	pal Palette
-	// code is the sequence a run of each class starts with.
-	code [numKinds][2][2][NumClasses]string
-	// gutterBg and gutter are the line number column's ground and sequence.
+	pal      Palette
+	code     [numKinds][2][2][NumClasses]string
 	gutterBg [numKinds][2]color.Color
 	gutter   [numKinds][2]string
-	// sign is the sequence of the "+" or "-" before the code.
-	sign [numKinds][2]string
+	sign     [numKinds][2]string
 }
 
-// grounds are the backgrounds of one kind of line: its code, the part of it
-// that changed, and its number column.
 type grounds struct {
 	line, word, gutter color.Color
 }
@@ -166,8 +147,6 @@ func NewTheme(p Palette) *Theme {
 	return t
 }
 
-// groundsTrueColor are the grounds in truecolor: each kind's colour mixed
-// into the ground, and the accent mixed into those for the cursor.
 func groundsTrueColor(p Palette) [numKinds][2]grounds {
 	var g [numKinds][2]grounds
 	quiet := overlay.MixColors(p.Ground, p.Fg, tintQuiet)
@@ -201,11 +180,6 @@ func groundsTrueColor(p Palette) [numKinds][2]grounds {
 	return g
 }
 
-// grounds256 are the grounds at 256 colours. Added and removed lines are
-// fixed palette entries, picked for a dark or a light ground, and keep them
-// under the cursor, where the number column takes the accent instead. A
-// context line and the empty side of a split row are the ground and a step
-// off it, both as the palette shows them.
 func grounds256(p Palette) [numKinds][2]grounds {
 	ground := overlay.Shown(p.Ground)
 	light := overlay.ContrastRatio(ground, color.Black) > overlay.ContrastRatio(ground, color.White)
@@ -217,7 +191,6 @@ func grounds256(p Palette) [numKinds][2]grounds {
 	}
 	quiet := overlay.Shown(overlay.MixColors(p.Ground, p.Fg, tintQuiet))
 	if quiet == ground {
-		// The quiet tint is finer than the palette: take the next step.
 		if light {
 			quiet = overlay.Shown(overlay.Darker(p.Ground, 1.12))
 		} else {
@@ -245,11 +218,6 @@ func grounds256(p Palette) [numKinds][2]grounds {
 	return g
 }
 
-// newTheme16 is the Theme at 16 colours. No ground is painted: every one is
-// the terminal's own. The inks are slots the terminal paints from the user's
-// palette, so nothing is measured, and what a ground said at the other depths
-// is said by attributes and by the line numbers' colour. The cursor is the
-// same as the rest; the caller reverses the gutter (see overlay.Palette.Mark).
 func newTheme16(p Palette) *Theme {
 	p.Ground, p.Fg = overlay.NoColor, overlay.NoColor
 	p.Accent, p.Add, p.Delete = overlay.Slot(5), overlay.Slot(slotGreen), overlay.Slot(slotRed)
@@ -281,7 +249,6 @@ func newTheme16(p Palette) *Theme {
 	return t
 }
 
-// classAttrs are the attributes a class is drawn with at every depth.
 func classAttrs(class Class) attrs {
 	switch class {
 	case Comment, Meta:
@@ -292,7 +259,6 @@ func classAttrs(class Class) attrs {
 	return 0
 }
 
-// classSeq is the sequence for a class's ink on bg.
 func (t *Theme) classSeq(class Class, bg color.Color) string {
 	fg := t.pal.Syntax[class]
 	if fg == nil {
@@ -351,8 +317,6 @@ func DefaultSyntax() [NumClasses]color.Color {
 	return s
 }
 
-// seq is the SGR sequence that sets every attribute a cell can carry, so a
-// run never inherits one from the run before it.
 func seq(fg, bg color.Color, a attrs) string {
 	st := ansi.Style{}.Reset().ForegroundColor(emit(fg)).BackgroundColor(emit(bg))
 	if a&attrBold != 0 {
@@ -367,9 +331,6 @@ func seq(fg, bg color.Color, a attrs) string {
 	return st.String()
 }
 
-// emit is c as seq writes it: nil for the terminal's default colour, a slot
-// or a palette entry as the index it is, so the frame writer passes it on
-// unchanged, and anything else as opaque RGB.
 func emit(c color.Color) color.Color {
 	if c == nil || overlay.IsNoColor(c) {
 		return nil
@@ -381,9 +342,6 @@ func emit(c color.Color) color.Color {
 	return solid(c)
 }
 
-// solid is c as an opaque RGB colour. A basic or indexed ANSI colour would
-// leave the host terminal to choose it, and the contrast measured against
-// it would be a guess.
 func solid(c color.Color) color.Color {
 	if c == nil {
 		return nil

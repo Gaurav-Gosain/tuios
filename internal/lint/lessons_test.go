@@ -158,7 +158,6 @@ func TestLessonsMatchTheApp(t *testing.T) {
 		}
 	}
 
-	// The words: no em or en dashes, and no hyphens standing in for them.
 	dash := regexp.MustCompile(`[–—]| - | -- `)
 	for _, tr := range f.Tracks {
 		texts := []string{tr.Title, tr.Blurb, tr.Audience}
@@ -180,7 +179,6 @@ func TestLessonsMatchTheApp(t *testing.T) {
 		}
 	}
 
-	// The coach's nudges are the reasons the engine gives.
 	for _, n := range []string{"idle", "wrongKeys", "wrongModeWindow", "wrongModeTerminal", "showMe", "altBlocked", "noWindow"} {
 		if len(f.Coach.Nudges[n]) == 0 {
 			t.Errorf("tracks.json: the coach has no lines for the %q nudge", n)
@@ -235,9 +233,6 @@ func TestLessonContractListsAreWhole(t *testing.T) {
 	}
 }
 
-// knownActions is every keybinding action: the described ones, and every
-// action the shipped keybindings bind, such as the prefix menus' numbered
-// rows.
 func knownActions() map[string]string {
 	out := maps.Clone(config.ActionDescriptions)
 	var walk func(v reflect.Value)

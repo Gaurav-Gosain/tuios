@@ -2,9 +2,6 @@
 
 package service
 
-// Render, Install and the rest need systemd, launchd or Task Scheduler.
-// Elsewhere a client starts the daemon when it needs one.
-
 func Render(Spec) (string, string, error)    { return "", "", ErrUnsupported }
 func ManagerEnv() (map[string]string, error) { return nil, ErrUnsupported }
 func Install(Spec, bool) error               { return ErrUnsupported }

@@ -14,36 +14,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The Rex integration: tuios.lua in Rex's config folder, required from
-// init.lua, so Rex's command palette has tuios actions. Rex is a terminal, not
-// a harness, so it is not one of Targets: it has no hooks and reports no
-// state. integration install, status and uninstall take it by the name rex.
-//
-// integrations/rex/tuios.lua is the source. assets/rex/tuios.lua is a copy
-// for the archive, and TestRexLuaMatchesItsSource keeps the two the same.
-
 // RexID is the name integration install, status and uninstall take for Rex.
 const RexID = "rex"
 
-// rexLuaAsset is tuios.lua in assetArchive.
 const rexLuaAsset = "assets/rex/tuios.lua"
 
-// rexMarker ends the line install adds to init.lua. Uninstall removes only
-// lines that end with it.
 const rexMarker = "-- added by tuios integration"
 
-// rexRequireLine is the line install adds to init.lua.
 const rexRequireLine = `require("tuios").setup{} ` + rexMarker
 
-// rexHeader starts every tuios.lua tuios shipped, the ones before M.version
-// too, so a copy tuios wrote is told from a file of the person's own.
 const rexHeader = "-- tuios for Rex:"
 
-// rexRequireRE finds a require of tuios in init.lua that is not commented
-// out: the person's own line or the marked one.
 var rexRequireRE = regexp.MustCompile(`(?m)^[ \t]*[^-\n]*require[ \t]*\(?[ \t]*["']tuios["']`)
 
-// rexVersionRE reads M.version from a tuios.lua.
 var rexVersionRE = regexp.MustCompile(`(?m)^M\.version[ \t]*=[ \t]*([0-9]+)`)
 
 // RexRunner runs the rex CLI with args and returns what it printed on
@@ -53,8 +36,6 @@ type RexRunner func(args ...string) (string, error)
 // RexLua is the tuios.lua this build ships.
 func RexLua() []byte { return assets()[rexLuaAsset] }
 
-// rexLuaVersion reads M.version from a tuios.lua: 0 for a copy from before
-// it had one, -1 for a file that is not tuios's.
 func rexLuaVersion(data []byte) int {
 	if !bytes.HasPrefix(data, []byte(rexHeader)) {
 		return -1
@@ -141,7 +122,6 @@ type RexResult struct {
 	Check *RexCheck
 }
 
-// rexLuaState sorts the tuios.lua at path against the one this build ships.
 func rexLuaState(path string) (state string, version int, data []byte, err error) {
 	data, err = readOptional(path)
 	if err != nil {
@@ -162,7 +142,6 @@ func rexLuaState(path string) (state string, version int, data []byte, err error
 	}
 }
 
-// rexLine sorts init.lua's require of tuios.
 func rexLine(init []byte) string {
 	for _, line := range strings.Split(string(init), "\n") {
 		if strings.HasSuffix(strings.TrimSpace(line), rexMarker) {
@@ -246,8 +225,6 @@ func RexInstall(env Env, rex RexRunner, force bool) (RexResult, error) {
 	return res, nil
 }
 
-// rexUndo puts back the files install changed, after a later step failed,
-// and returns cause with what was put back.
 func rexUndo(res RexResult, cause error, lua string, oldLua []byte, luaChanged bool, cfg string, oldInit []byte, initChanged bool) error {
 	var failed []string
 	restore := func(path string, old []byte) {
@@ -347,8 +324,6 @@ func RexStatusOf(env Env, rex RexRunner) (RexStatus, error) {
 		st.LoadedNote = "rex actions failed" + rexErr(err)
 		return st, nil
 	}
-	// tuios_check is in every version of tuios.lua, and in the fallback
-	// actions too.
 	st.Loaded = strings.Contains(out, "tuios_check")
 	if st.Loaded {
 		st.Check, st.CheckNote = RexRunCheck(rex)
@@ -377,7 +352,6 @@ func RexRunCheck(rex RexRunner) (*RexCheck, string) {
 	return &c, ""
 }
 
-// rexErr is err as ": message", for a sentence that names what failed.
 func rexErr(err error) string {
 	if err == nil {
 		return ""
@@ -385,5 +359,4 @@ func rexErr(err error) string {
 	return ": " + oneLine(err.Error())
 }
 
-// oneLine joins s onto one line for a message.
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }

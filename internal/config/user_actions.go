@@ -12,39 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// User actions: the [[actions]] entries, one thing a person can bind to a key,
-// put in a menu or run from the CLI.
-//
-//	[[actions]]
-//	name = "open-in-editor"
-//	label = "Open folder in editor"
-//	key = "prefix+alt+e"
-//	run = ["code", "{pane.cwd}"]
-//	in = "silent"
-//
-// An entry is the action "user:<name>". Its body is one of:
-//
-//   - action: a built-in action, which runs as its key would;
-//   - run: a command as an argument list, in a popup, a pane, a scratch pane
-//     or silently (in), the [[keybindings.command]] rules for where it runs;
-//   - plugin: a herdr plugin action, as type = "plugin_action" names it.
-//
-// A placeholder such as {pane.cwd} fills from the target when the action
-// runs. It is replaced in one pass, so text a placeholder brings in (a
-// selection, a pane title) is never read for placeholders itself, and it is
-// never given to a shell: an argument stays one argument. A shell runs only
-// when the person writes one into run, and then a placeholder may not stand
-// in the shell's script: pass it as an argument after the script and read it
-// as $1.
-//
-// A [[keybindings.command]] entry is a user action too: user:NAME runs the
-// entry called NAME when no [[actions]] entry has that name, and tuios
-// actions list shows both.
-//
-// User actions are read from config.toml only. They are not options, so
-// set-option, which any pane may call, cannot add or change one: an action a
-// pane could write would run as the person at the next key press.
-
 // UserActionPrefix starts the action name of every user action.
 const UserActionPrefix = "user:"
 
@@ -165,17 +132,12 @@ func (a UserAction) AsCommand() CommandBinding {
 	return c
 }
 
-// userActionNameRE is a name an action may have.
 var userActionNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
-// placeholderRE finds {name} in an argument.
 var placeholderRE = regexp.MustCompile(`\{([a-z][a-z0-9._]*)\}`)
 
-// shells are the programs whose -c script a placeholder may not stand in.
 var shells = []string{"sh", "bash", "zsh", "dash", "ksh", "fish", "nu", "pwsh", "powershell", "cmd", "cmd.exe"}
 
-// userActionProblem is what is wrong with a, "" when nothing is. builtin
-// reports whether a name is a built-in action.
 func userActionProblem(a UserAction, normalizer *KeyNormalizer, builtin func(string) bool) string {
 	if !userActionNameRE.MatchString(a.Name) {
 		return fmt.Sprintf("The name %q is not valid. Use lowercase letters, digits, dash and underscore, for example name = \"open-in-editor\".", a.Name)
@@ -234,8 +196,6 @@ func userActionProblem(a UserAction, normalizer *KeyNormalizer, builtin func(str
 	return keyAndBoxProblem(normalizer, key, a.Width, a.Height)
 }
 
-// runPlaceholderProblem refuses an unknown placeholder, and a placeholder in
-// the script of a shell's -c.
 func runPlaceholderProblem(run, args []string) string {
 	shell := slices.Contains(shells, strings.ToLower(filepath.Base(run[0])))
 	for i, arg := range run {
@@ -311,8 +271,6 @@ func (c *UserConfig) UserActionFor(action string) (UserAction, bool) {
 	return UserAction{}, false
 }
 
-// validateUserActions warns about every [[actions]] entry tuios leaves out,
-// and about one whose name a [[keybindings.command]] entry has too.
 func validateUserActions(cfg *UserConfig, result *ValidationResult) {
 	normalizer := NewKeyNormalizer()
 	seen := map[string]bool{}
@@ -345,15 +303,10 @@ func IsBuiltinAction(name string) bool {
 	return ok
 }
 
-// keyedEntry is a [[keybindings.command]] entry or a keyed [[actions]] entry
-// as the key map and the binding report read it: the command entries first,
-// in file order, then the user actions.
 type keyedEntry struct {
 	section, key, action, desc, report string
 }
 
-// keyedEntries is every entry with a key that runs a command or a user
-// action.
 func (c *UserConfig) keyedEntries() []keyedEntry {
 	var out []keyedEntry
 	for _, cb := range c.Keybindings.Commands() {
@@ -369,7 +322,6 @@ func (c *UserConfig) keyedEntries() []keyedEntry {
 	return out
 }
 
-// whenProblem is why a when table cannot be read, or "".
 func whenProblem(when map[string]any) string {
 	for _, k := range slices.Sorted(maps.Keys(when)) {
 		if !slices.Contains(UserActionWhenKeys, k) {
@@ -382,7 +334,6 @@ func whenProblem(when map[string]any) string {
 	return ""
 }
 
-// whenValues is a when value as its strings.
 func whenValues(v any) ([]string, bool) {
 	switch v := v.(type) {
 	case string:

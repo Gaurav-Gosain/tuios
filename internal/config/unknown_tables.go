@@ -7,9 +7,6 @@ import (
 	"sync"
 )
 
-// keybindTableNames are the keys the [keybindings] table takes: its own
-// settings and the names of its tables. It is read from the toml tags of
-// KeybindingsConfig, so a new table is known here as soon as it is added.
 var keybindTableNames = sync.OnceValue(func() []string {
 	t := reflect.TypeFor[KeybindingsConfig]()
 	names := make([]string, 0, t.NumField())
@@ -64,8 +61,6 @@ func UnknownKeybindTables(lc *LayeredConfig) []string {
 	return out
 }
 
-// keybindActionTables are the [keybindings] tables that map an action name
-// to its keys, read from KeybindingsConfig like keybindTableNames.
 var keybindActionTables = sync.OnceValue(func() []string {
 	t := reflect.TypeFor[KeybindingsConfig]()
 	var names []string
@@ -80,10 +75,6 @@ var keybindActionTables = sync.OnceValue(func() []string {
 	return names
 })
 
-// knownActionNames are the names a keybinding table may bind besides the
-// [[keybindings.command]] and open_menu: families: every action of the
-// action table, and the actions only a GUI client runs. Sorted, for
-// nearestName.
 var knownActionNames = sync.OnceValue(func() []string {
 	names := make([]string, 0, len(actionIndex())+len(GUIActionDescriptions))
 	for name := range actionIndex() {
@@ -96,10 +87,6 @@ var knownActionNames = sync.OnceValue(func() []string {
 	return slices.Compact(names)
 })
 
-// isBindableAction reports whether the keybinding table named table may
-// bind name: an action, a [[keybindings.command]] or open_menu: name, or a
-// name only that table knows, such as the rail's "exit" and jump_1 (see
-// scopedDescriptions).
 func isBindableAction(table, name string) bool {
 	if strings.HasPrefix(name, CommandActionPrefix) || strings.HasPrefix(name, OpenMenuPrefix) || strings.HasPrefix(name, EnterModePrefix) {
 		return true
@@ -118,8 +105,6 @@ func isBindableAction(table, name string) bool {
 	return false
 }
 
-// tableActionNames are the names nearestAction may suggest for table: the
-// actions, and the names only that table knows.
 func tableActionNames(table string) []string {
 	scoped := scopedDescriptions[table]
 	if len(scoped) == 0 {
@@ -133,24 +118,17 @@ func tableActionNames(table string) []string {
 	return names
 }
 
-// retiredActions are action names that were deleted after an older tuios wrote
-// them into the config.toml it generated. A person's file still holds them, on
-// lines the person did not write, so naming them as unknown would put a
-// warning on the first start after an upgrade for something tuios did itself.
-// The loader skips them without a word. A name that was never an action is
-// still a typo and still warns. Add a name here only when a release wrote it
-// into a generated config before the action was deleted.
 var retiredActions = map[string]bool{
-	"nav_up":                 true, // deleted in fc6678d09, no-ops on every path
+	"nav_up":                 true,
 	"nav_down":               true,
 	"nav_left":               true,
 	"nav_right":              true,
-	"extend_up":              true, // selection mode, replaced by copy mode in c13a329ee
+	"extend_up":              true,
 	"extend_down":            true,
 	"extend_left":            true,
 	"extend_right":           true,
-	"debug_prefix_keyevents": true, // key events overlay, removed in d1749a97a
-	"prefix_focus_sidebar":   true, // removed by 6e731a17d
+	"debug_prefix_keyevents": true,
+	"prefix_focus_sidebar":   true,
 }
 
 // UnknownKeybindActions returns a warning for each action name in a
@@ -194,9 +172,6 @@ func UnknownKeybindActions(lc *LayeredConfig) []string {
 	return out
 }
 
-// nearestName is the name in names that name most likely meant: one that
-// starts with it or that it starts with, or else one at most two edits away.
-// It is "" when none is close.
 func nearestName(name string, names []string) string {
 	for _, n := range names {
 		if strings.HasPrefix(n, name+"_") || strings.HasPrefix(name, n+"_") {
@@ -212,12 +187,6 @@ func nearestName(name string, names []string) string {
 	return best
 }
 
-// nearestAction is the action in names that name most likely meant. Action
-// names are long and share their beginnings, so a typo is measured against
-// the start of each name as long as the typo, with two swapped letters as one
-// edit: copy_mode_wrod is one edit from the copy_mode_word actions. Among the
-// names that close, the one nearest in full wins, then the first in order.
-// It is "" when none is within two edits.
 func nearestAction(name string, names []string) string {
 	best, bestHead, bestFull := "", 3, 0
 	for _, n := range names {
@@ -234,8 +203,6 @@ func nearestAction(name string, names []string) string {
 	return best
 }
 
-// swapDistance is the edit distance between a and b in which two adjacent
-// letters swapped count as one edit (optimal string alignment), by byte.
 func swapDistance(a, b string) int {
 	d := make([][]int, len(a)+1)
 	for i := range d {
@@ -260,8 +227,6 @@ func swapDistance(a, b string) int {
 	return d[len(a)][len(b)]
 }
 
-// editDistance is the Levenshtein distance between a and b, by byte. The
-// names it compares are ASCII.
 func editDistance(a, b string) int {
 	prev := make([]int, len(b)+1)
 	cur := make([]int, len(b)+1)

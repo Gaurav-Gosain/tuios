@@ -9,7 +9,6 @@ import (
 	"tuios.dev/acp"
 )
 
-// startACP runs the ACP handshake against the peer and returns the client.
 func startACP(t *testing.T) (*ACP, *peer, *events) {
 	t.Helper()
 	r, w, p := newPeer(t)
@@ -27,7 +26,6 @@ func startACP(t *testing.T) (*ACP, *peer, *events) {
 	if params["protocolVersion"] != float64(1) {
 		t.Errorf("protocolVersion = %v, want 1", params["protocolVersion"])
 	}
-	// The client offers the agent nothing: no file system, no terminal.
 	caps, _ := json.Marshal(params["clientCapabilities"])
 	if string(caps) != `{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false}` {
 		t.Errorf("clientCapabilities = %s, want nothing offered", caps)
@@ -107,7 +105,6 @@ func TestACPPermission(t *testing.T) {
 	if out, _ := json.Marshal(resp["result"]); string(out) != `{"outcome":{"optionId":"no","outcome":"selected"}}` {
 		t.Errorf("result = %s", out)
 	}
-	// A second answer is dropped.
 	perm.Choose(0)
 	perm.Cancel()
 	p.quiet()

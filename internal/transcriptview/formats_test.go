@@ -1,23 +1,5 @@
 package transcriptview
 
-// The decoders read files another program wrote, which hold whatever its
-// model, its tools and the person put there. That makes them a security
-// boundary: every string that leaves must go through Clean and be bounded, a
-// record that does not decode must cost only itself, and no input may panic
-// or grow without bound. Each format has a scrubbed fixture in testdata,
-// written from that harness's real files or published source, and the same
-// hostile records.
-//
-// Ways a decoder can fail, which the cases below cover:
-//   - drop or misplace a part of the conversation (fixture tables);
-//   - show a message twice that its harness wrote twice (Gemini), or keep
-//     one the person took back ($rewindTo);
-//   - show the harness's own injected context as the person's words (Codex);
-//   - give a tool call the wrong status, or none while it runs;
-//   - lose a diff, or pass a string out without Clean (hostile: escapes);
-//   - panic or fail the page on a malformed or mistyped record (hostile);
-//   - read a document past the bound, or a line past lineMax (hostile).
-
 import (
 	"bytes"
 	"encoding/base64"
@@ -30,8 +12,6 @@ import (
 	"time"
 )
 
-// summary is an entry in one line: role, kind, tool, target, status, and the
-// diff's file and counts.
 func summary(e Entry) string {
 	s := e.Role + " " + e.Kind
 	if e.Tool != "" {
@@ -238,9 +218,6 @@ func TestFormatPaging(t *testing.T) {
 	}
 }
 
-// hostile is what every format is fed besides its fixture: records that are
-// not JSON, that have the wrong types, and strings with escapes in every
-// field a page carries.
 func hostile(format string) []string {
 	esc := "\x1b[31mred\x1b[0m \u202ehidden"
 	s := func(v string) string { b, _ := json.Marshal(v); return string(b) }
@@ -364,7 +341,6 @@ func TestFormatBounds(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// A sparse file: the size is past the bound and no disk is used.
 		if err := f.Truncate(scanMax + 1); err != nil {
 			t.Fatal(err)
 		}
@@ -485,7 +461,6 @@ func TestGeminiRewrites(t *testing.T) {
 		t.Fatalf("entries:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 
-	// A read after the cursor with nothing new gives nothing and no reset.
 	after, err := Read(path, Options{Format: FormatGemini, After: page.Cursor})
 	if err != nil || after.Reset || len(after.Entries) != 0 {
 		t.Fatalf("read after the cursor: %d entries, reset %v, err %v", len(after.Entries), after.Reset, err)

@@ -17,7 +17,6 @@ const (
 	bubbleTea = "charm.land/bubbletea/v2"
 )
 
-// quitDirs are the packages that decide the client should quit.
 var quitDirs = []string{"internal/app", "internal/input"}
 
 // TestEveryClientQuitGoesThroughQuitCmd is the quit lint. Closing the quit
@@ -110,7 +109,6 @@ func f() any { return tea.Quit } // no import of Bubble Tea, so tea is something
 	}
 }
 
-// bareQuits returns file:line for every tea.Quit in src outside QuitCmd.
 func bareQuits(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -118,9 +116,6 @@ func bareQuits(t *testing.T, name string, src []byte) []string {
 	if err != nil {
 		t.Fatalf("parse %s: %v", name, err)
 	}
-	// The name Bubble Tea is imported under in this file. A file that does not
-	// import it has no name for it, so an identifier called tea is not mistaken
-	// for the package.
 	local := ""
 	for _, imp := range f.Imports {
 		if p, _ := strconv.Unquote(imp.Path.Value); p == bubbleTea {
@@ -163,7 +158,6 @@ func bareQuits(t *testing.T, name string, src []byte) []string {
 	return out
 }
 
-// asExpr is n as an expression, or nil.
 func asExpr(n ast.Node) ast.Expr {
 	e, _ := n.(ast.Expr)
 	return e

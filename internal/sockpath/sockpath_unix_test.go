@@ -10,18 +10,6 @@ import (
 	"testing"
 )
 
-// Without XDG_RUNTIME_DIR, Dir now uses a folder it did not make,
-// /run/user/<uid>, and a client may dial a socket in /tmp/tuios-<uid>. The
-// ways that could hand a client a socket someone else controls:
-//
-//  1. The folder belongs to another user.
-//  2. The folder is open to others (group or world bits set).
-//  3. The folder is a symlink, which can point anywhere.
-//  4. The path is not a folder.
-//
-// Each must make PrivateDir false, and a /run/user/<uid> that fails it must
-// not be used.
-
 func TestPrivateDirRefusesWhatSomeoneElseControls(t *testing.T) {
 	uid := os.Getuid()
 	base := t.TempDir()
@@ -98,12 +86,10 @@ func TestDirUsesRunUserOnlyWhenItIsPrivate(t *testing.T) {
 		t.Fatalf("OtherDir is %q, want %s", got, legacy)
 	}
 
-	// The variable names the same folder: the other folder is still looked at.
 	t.Setenv("XDG_RUNTIME_DIR", mine)
 	if got := OtherDir(); got != legacy {
 		t.Fatalf("with XDG_RUNTIME_DIR=/run/user/<uid>, OtherDir is %q, want %s", got, legacy)
 	}
-	// A folder of its own: a separate daemon, and nothing else to look at.
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 	if got := OtherDir(); got != "" {
 		t.Fatalf("with a private XDG_RUNTIME_DIR, OtherDir is %q, want none", got)

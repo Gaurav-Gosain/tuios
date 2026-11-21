@@ -4,9 +4,6 @@ import (
 	"testing"
 )
 
-// outside reports the rectangles that leave the region, and overlapping reports
-// the pairs that sit on top of each other. Between them they are the tiler's
-// whole contract.
 func outside(layouts []TileLayout, w, h, topMargin int) []TileLayout {
 	var out []TileLayout
 	for _, r := range layouts {
@@ -54,11 +51,6 @@ func TestPanesShrinkRatherThanOverlap(t *testing.T) {
 		for _, r := range outside(layouts, c.w, c.h, 1) {
 			t.Errorf("%d panes on %dx%d: %+v is outside the region", c.n, c.w, c.h, r)
 		}
-		// At least one pane is smaller than the old minimum on at least one
-		// axis, which is the whole point: there was no room for it and the
-		// tiler used to take it anyway. Without this the two sizes could drift
-		// into ones the old minimum happened to fit, and the case above would
-		// stop demonstrating anything.
 		narrowest, shortest := layouts[0].Width, layouts[0].Height
 		for _, r := range layouts {
 			narrowest, shortest = min(narrowest, r.Width), min(shortest, r.Height)

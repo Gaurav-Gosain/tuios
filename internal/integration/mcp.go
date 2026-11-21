@@ -14,46 +14,22 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
-// MCP registration: the entry that makes a harness start tuios mcp.
-//
-// It is separate from the hooks. The hooks report the pane's state and are
-// wanted on every machine with the harness; the MCP server adds tools to every
-// session of the harness, which costs context, so it is only written when the
-// install asks for it with --mcp. Uninstall removes it with the hooks.
-//
-// Each harness keeps its MCP servers in its own place and shape:
-//
-//   - Claude Code: mcpServers in ~/.claude.json (or $CLAUDE_CONFIG_DIR/.claude.json),
-//     the user scope that claude mcp add --scope user writes.
-//   - Gemini CLI: mcpServers in ~/.gemini/settings.json.
-//   - opencode: mcp in ~/.config/opencode/opencode.json, a local server whose
-//     command is one array.
-//   - Codex: an [mcp_servers.tuios] table in ~/.codex/config.toml, between
-//     marker comments, the way the Kimi hooks are written.
-//
-// tuios owns the one server named tuios. The entry it writes runs tuios mcp
-// with --integration and a version, which is how a later install, uninstall
-// or status tells it from an entry the user wrote under the same name; an
-// entry named tuios without the marker is never overwritten or removed.
-
 // MCPVersion is the version of the MCP registration this build writes.
 const MCPVersion = 1
 
 // MCPServerName is the name tuios registers its server under.
 const MCPServerName = "tuios"
 
-// mcpShape is how one harness lists its MCP servers.
 type mcpShape int
 
 const (
-	mcpClaudeJSON   mcpShape = iota // "mcpServers": {"tuios": {"type": "stdio", "command", "args"}}
-	mcpGeminiJSON                   // "mcpServers": {"tuios": {"command", "args"}}
-	mcpOpenCodeJSON                 // "mcp": {"tuios": {"type": "local", "command": [...], "enabled": true}}
-	mcpCodexTOML                    // [mcp_servers.tuios] command, args
-	mcpVibeTOML                     // [[mcp_servers]] name = "tuios", transport = "stdio", command, args
+	mcpClaudeJSON mcpShape = iota
+	mcpGeminiJSON
+	mcpOpenCodeJSON
+	mcpCodexTOML
+	mcpVibeTOML
 )
 
-// mcpTarget is where one harness reads its MCP servers.
 type mcpTarget struct {
 	shape mcpShape
 	path  func(t *Target, env Env) string
@@ -109,13 +85,10 @@ func MCPArgs(write bool) []string {
 	return append(args, managedMarker, strconv.Itoa(MCPVersion))
 }
 
-// isManagedMCPArgs reports whether args are ones tuios wrote: they run mcp
-// and carry the version marker.
 func isManagedMCPArgs(args []string) bool {
 	return len(args) >= 3 && args[0] == "mcp" && slices.Contains(args, managedMarker)
 }
 
-// mcpEntry is the server entry for one JSON shape.
 func mcpEntry(shape mcpShape, tuios string, write bool) map[string]any {
 	args := MCPArgs(write)
 	switch shape {
@@ -128,7 +101,6 @@ func mcpEntry(shape mcpShape, tuios string, write bool) map[string]any {
 	}
 }
 
-// mcpKey is the object that holds the servers in a JSON shape.
 func mcpKey(shape mcpShape) string {
 	if shape == mcpOpenCodeJSON {
 		return "mcp"
@@ -136,7 +108,6 @@ func mcpKey(shape mcpShape) string {
 	return "mcpServers"
 }
 
-// readJSONEntry reads the command and args of the tuios entry in a JSON shape.
 func readJSONEntry(shape mcpShape, raw json.RawMessage) (command string, args []string, ok bool) {
 	var e struct {
 		Command json.RawMessage `json:"command"`
@@ -173,8 +144,6 @@ type MCPStatus struct {
 	Foreign bool `json:"foreign,omitempty"`
 }
 
-// mcpPlan works out the file's new content. install false removes tuios's
-// entry.
 func (t *Target) mcpPlan(env Env, tuios string, write, install bool) (path string, have, out []byte, changed bool, err error) {
 	m, ok := mcpTargets[t.ID]
 	if !ok {
@@ -311,8 +280,6 @@ func (t *Target) MCPState(env Env, tuios string) MCPStatus {
 	return st
 }
 
-// editMCPJSON sets or removes the tuios server in a JSON settings file,
-// keeping every other key as it was.
 func editMCPJSON(shape mcpShape, have []byte, tuios string, write, install bool) ([]byte, error) {
 	root, err := parseObject(have)
 	if err != nil {
@@ -365,8 +332,6 @@ const (
 	mcpTOMLEnd   = "# <<< tuios mcp"
 )
 
-// splitBlock returns the file without the block between begin and end, and
-// the block.
 func splitBlock(text, begin, end string) (outside, block string, err error) {
 	start := strings.Index(text, begin)
 	if start < 0 {
@@ -394,11 +359,8 @@ func splitBlock(text, begin, end string) (outside, block string, err error) {
 	return outside, block, nil
 }
 
-// codexTableRe finds a [mcp_servers.tuios] table header, however quoted.
 var codexTableRe = lazyre.New(`(?m)^\s*\[\s*mcp_servers\s*\.\s*(?:tuios|"tuios"|'tuios')\s*\]`)
 
-// codexForeignTable reports whether a tuios server table sits outside tuios's
-// block.
 func codexForeignTable(text string) bool {
 	outside, _, err := splitBlock(text, mcpTOMLBegin, mcpTOMLEnd)
 	if err != nil {
@@ -432,7 +394,6 @@ var (
 	tomlItemRe    = lazyre.New(`"((?:[^"\\]|\\.)*)"`)
 )
 
-// parseMCPTOMLBlock reads back the command and args of a block tuios wrote.
 func parseMCPTOMLBlock(block string) (string, []string, bool) {
 	cm := tomlCommandRe().FindStringSubmatch(block)
 	am := tomlArgsRe().FindStringSubmatch(block)
@@ -453,8 +414,6 @@ func parseMCPTOMLBlock(block string) (string, []string, bool) {
 	return unquote(cm[1]), args, true
 }
 
-// editMCPTOML sets or removes tuios's block in Codex's config.toml. Everything
-// outside the markers is the user's and is kept byte for byte.
 func editMCPTOML(have []byte, tuios string, write, install bool) ([]byte, error) {
 	outside, _, err := splitBlock(string(have), mcpTOMLBegin, mcpTOMLEnd)
 	if err != nil {

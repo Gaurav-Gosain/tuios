@@ -6,10 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// A selection is the cells between the anchor and the cursor. The anchor is
-// -1 when nothing is selected, and a selection whose ends meet selects
-// nothing. A block is one cell, so it is selected whole or not at all.
-
 // Selection reports the selected cells as [lo, hi). ok is false when nothing
 // is selected.
 func (m *Model) Selection() (lo, hi int, ok bool) {
@@ -49,11 +45,8 @@ func (m *Model) SelectAll() {
 	m.joinTyping = false
 }
 
-// unselect drops the selection.
 func (m *Model) unselect() { m.anchor = -1 }
 
-// extendTo moves the cursor to i and keeps the anchor where the cursor was,
-// so the selection grows or shrinks from there.
 func (m *Model) extendTo(i int) {
 	if m.anchor < 0 {
 		m.anchor = m.cur
@@ -65,8 +58,6 @@ func (m *Model) extendTo(i int) {
 	}
 }
 
-// deleteSelection takes the selection out as one undo step and reports
-// whether there was one.
 func (m *Model) deleteSelection() bool {
 	lo, hi, ok := m.Selection()
 	if !ok {
@@ -78,8 +69,6 @@ func (m *Model) deleteSelection() bool {
 	return true
 }
 
-// replaceSelection puts ins in place of the selection as one undo step, the
-// cursor after it. It reports whether there was a selection to replace.
 func (m *Model) replaceSelection(ins []cell) bool {
 	lo, hi, ok := m.Selection()
 	if !ok {
@@ -91,8 +80,6 @@ func (m *Model) replaceSelection(ins []cell) bool {
 	return true
 }
 
-// selectedBytes is the size of the selection, for the MaxBytes check of a
-// paste that replaces it.
 func (m *Model) selectedBytes() int {
 	lo, hi, ok := m.Selection()
 	if !ok {
@@ -105,8 +92,6 @@ func (m *Model) selectedBytes() int {
 	return n
 }
 
-// wordAround is the word, the run of spaces or the block the cell at i is in,
-// for a double click.
 func (m *Model) wordAround(i int) (lo, hi int) {
 	n := len(m.cells)
 	if n == 0 {
@@ -128,8 +113,6 @@ func (m *Model) wordAround(i int) (lo, hi int) {
 	return lo, hi
 }
 
-// lineAround is the logical line the cell at i is on, between line breaks,
-// for a triple click.
 func (m *Model) lineAround(i int) (lo, hi int) {
 	i = min(max(i, 0), len(m.cells))
 	lo, hi = i, i
@@ -142,10 +125,6 @@ func (m *Model) lineAround(i int) (lo, hi int) {
 	return lo, hi
 }
 
-// pointAt is the cell index at line and column of the last frame Render drew:
-// line counted from the frame's first line, col from its left edge. A point
-// above the draft's rows is its first row, a point below them its last, and a
-// point left of the text its start.
 func (m *Model) pointAt(line, col int) int {
 	rows := m.rows(m.width)
 	r := m.top + line - m.rowLine
@@ -177,7 +156,6 @@ func (m *Model) Click(line, col, count int, shift bool) {
 	if m.anchor == m.cur {
 		m.anchor = -1
 	}
-	// A drag runs from where the press landed.
 	m.dragFrom = m.anchor
 	if m.dragFrom < 0 {
 		m.dragFrom = m.cur
@@ -209,9 +187,6 @@ func (m *Model) Drag(line, col int) {
 	m.syncMention()
 }
 
-// selectionKey handles the keys that make, use or drop a selection. done is
-// false for a key the rest of Update handles; a plain motion or edit key then
-// still sees the selection dropped or replaced as fits.
 func (m *Model) selectionKey(msg tea.KeyPressMsg, key string) (Event, bool) {
 	switch key {
 	case "shift+left":
@@ -265,9 +240,6 @@ func (m *Model) selectionKey(msg tea.KeyPressMsg, key string) (Event, bool) {
 	return EventNone, true
 }
 
-// withSelection is what a key that is not a selection key does to a
-// selection: an edit replaces or deletes it, a motion drops it. With no
-// selection it does nothing and Update goes on.
 func (m *Model) withSelection(msg tea.KeyPressMsg, key string) (Event, bool) {
 	lo, hi, ok := m.Selection()
 	if !ok {
@@ -297,8 +269,6 @@ func (m *Model) withSelection(msg tea.KeyPressMsg, key string) (Event, bool) {
 		return EventNone, true
 	case "ctrl+z", "ctrl+_", "ctrl+shift+z", "alt+z", "enter", "alt+enter", "esc", "ctrl+v", "ctrl+r",
 		"ctrl+g", "ctrl+o", "tab", "shift+tab":
-		// Undo restores its own selection; the rest act on the draft or
-		// the editor, and a send takes the whole draft.
 		m.unselect()
 		return EventNone, false
 	}
@@ -306,14 +276,10 @@ func (m *Model) withSelection(msg tea.KeyPressMsg, key string) (Event, bool) {
 		m.typeOver(msg.Text)
 		return EventNone, true
 	}
-	// Any other motion drops the selection and moves as usual.
 	m.unselect()
 	return EventNone, false
 }
 
-// typeOver types text in place of the selection: the replace is the first
-// step of a run of typing, so undo takes back the replace and the typing
-// after it together.
 func (m *Model) typeOver(text string) {
 	text = clean(text)
 	if text == "" {
@@ -331,8 +297,6 @@ func (m *Model) typeOver(text string) {
 	}
 }
 
-// verticalKeep moves the cursor by d rows as vertical does, but never walks
-// the history: a selection stays in the draft.
 func (m *Model) verticalKeep(d int) {
 	width := m.width
 	rows := m.rows(width)

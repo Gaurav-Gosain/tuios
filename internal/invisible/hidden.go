@@ -33,7 +33,7 @@ func StripHidden(s string) (string, int) {
 	var b strings.Builder
 	b.Grow(len(s))
 	removed := 0
-	base := rune(-1) // the last kept rune that is not a variation selector
+	base := rune(-1)
 	prevVS := false
 	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
@@ -77,16 +77,11 @@ func StripHidden(s string) (string, int) {
 	return b.String(), removed
 }
 
-// flagBase is the waving black flag a subdivision flag starts with, and
-// tagCancel the tag that ends its sequence.
 const (
 	flagBase  = 0x1f3f4
 	tagCancel = 0xe007f
 )
 
-// flagTagsLen is the byte length of the flag tag sequence s starts with: one
-// to seven tag letters or digits and the cancel tag. It is 0 when s does not
-// start with one.
 func flagTagsLen(s string) int {
 	n, count := 0, 0
 	for n < len(s) {
@@ -104,7 +99,6 @@ func flagTagsLen(s string) int {
 	return 0
 }
 
-// nextBase is the first rune of s, past any variation selector.
 func nextBase(s string) rune {
 	for _, r := range s {
 		if !variationSelector(r) {
@@ -114,18 +108,15 @@ func nextBase(s string) rune {
 	return -1
 }
 
-// hiddenCandidate reports whether r is one StripHidden may remove.
 func hiddenCandidate(r rune) bool {
 	return (r >= 0xe0000 && r <= 0xe007f) || bidiControl(r) || r == 0x200b || r == 0x200c ||
 		r == zwj || r == 0x2060 || r == 0xfeff || variationSelector(r)
 }
 
-// bidiControl reports whether r is one of the Bidi_Control characters.
 func bidiControl(r rune) bool {
 	return r == 0x061c || r == 0x200e || r == 0x200f || (r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069)
 }
 
-// variationSelector reports whether r is a variation selector.
 func variationSelector(r rune) bool {
 	return (r >= 0xfe00 && r <= 0xfe0f) || (r >= 0xe0100 && r <= 0xe01ef)
 }

@@ -8,9 +8,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// countingPty records every window-size write a window makes to its PTY. The
-// embedded interface is nil, so any other method panics, which keeps the test
-// honest about what tellGuest touches.
 type countingPty struct {
 	xpty.Pty
 	resizes  int
@@ -24,8 +21,6 @@ func (p *countingPty) SetWinsize(cols, rows, xpixel, ypixel int) error {
 	return nil
 }
 
-// Fd is an invalid descriptor, so a raw ioctl on it fails rather than
-// touching a real file.
 func (p *countingPty) Fd() uintptr { return ^uintptr(0) }
 
 // A standalone pane resize is one winsize write carrying the pixels. It used

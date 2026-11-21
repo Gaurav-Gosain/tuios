@@ -29,8 +29,6 @@ func TestOwnerForgetsAnEmptiedGroup(t *testing.T) {
 		if os.Getenv("TUIOS_TEST_PIDNS") != "" {
 			t.Fatal("unshare did not make this process pid 1")
 		}
-		// Under CI the workflow allows user namespaces, and a skip there
-		// would hide that the test never ran.
 		skip := t.Skipf
 		if os.Getenv("CI") != "" {
 			skip = t.Fatalf
@@ -70,14 +68,10 @@ func TestOwnerForgetsAnEmptiedGroup(t *testing.T) {
 		sid = s
 	}
 	r.mu.Unlock()
-	// The command exits at once. What it left still runs, so the session
-	// is still the plugin's.
 	time.Sleep(500 * time.Millisecond)
 	if got := r.Owner(sid); got != p {
 		t.Fatalf("while the command's child runs, session %d belongs to %v, want the plugin", sid, got)
 	}
-	// The child ends. The reaper exits with it, and the entry goes then,
-	// with nobody asking Owner and no timer.
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		r.mu.Lock()
 		_, kept := r.owners[sid]

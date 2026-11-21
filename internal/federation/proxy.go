@@ -51,15 +51,11 @@ type PurposeCloser interface {
 	NoteClosedOnPurpose()
 }
 
-// serveStream connects one link stream to one daemon socket connection.
 func serveStream(s *Stream, dial func(StreamOpen) (net.Conn, error)) {
 	defer func() { _ = s.Close() }()
 
 	conn, err := dial(s.open)
 	if err != nil {
-		// Closing the stream is the whole report. The hub reads the closed
-		// stream as "this host has no daemon to answer with", which is what it
-		// then shows, and no text from this side is needed or trusted.
 		return
 	}
 	defer func() { _ = conn.Close() }()
@@ -68,10 +64,6 @@ func serveStream(s *Stream, dial func(StreamOpen) (net.Conn, error)) {
 	go func() {
 		defer close(done)
 		_, _ = io.Copy(conn, s)
-		// The far side closed the stream on purpose, and the daemon hears
-		// that before it sees the end of the connection. A connection that
-		// can say so says it now. One that ends without it ended because the
-		// link dropped, which the daemon treats as a viewer coming back.
 		if s.ClosedByPeer() {
 			if n, ok := conn.(PurposeCloser); ok {
 				n.NoteClosedOnPurpose()
@@ -83,31 +75,10 @@ func serveStream(s *Stream, dial func(StreamOpen) (net.Conn, error)) {
 	}()
 	_, _ = io.Copy(s, conn)
 
-	// The daemon on this machine has stopped talking, so the stream is closed
-	// here rather than left to the deferred close below.
-	//
-	// The deferred one cannot do it: it runs after the wait, and the wait is
-	// for a goroutine blocked reading this same stream for bytes from the far
-	// side. So a daemon that closed its connection was never reported. The
-	// caller sat on a stream that would not end until it happened to write
-	// something, which made the write fail, which ended the other copy, which
-	// finally released the close.
-	//
-	// The shape that showed it: a pane running here for another machine, ended
-	// with ctrl+D. The shell printed "exit" and went, this side heard nothing,
-	// and the window stayed open until the next key was pressed. Attaching a
-	// session over a link has the same shape and the same fault.
-	//
-	// Closing after the copy loses nothing. The copy ran until the connection
-	// gave end of file, so everything the daemon sent is already on the
-	// stream. Close is idempotent, so the defer is still correct.
 	_ = s.Close()
 	<-done
 }
 
-// rwc glues a separate reader and writer into the io.ReadWriteCloser the mux
-// wants. Closing it is a no-op: stdin and stdout belong to the process, and the
-// mux closing its pipe must not take the process's own handles down.
 type rwc struct {
 	r io.Reader
 	w io.Writer
@@ -117,14 +88,6 @@ func (p *rwc) Read(b []byte) (int, error)  { return p.r.Read(b) }
 func (p *rwc) Write(b []byte) (int, error) { return p.w.Write(b) }
 func (p *rwc) Close() error                { return nil }
 
-// readPreamble consumes lines from br until it sees the link preamble, so
-// banner text ahead of the proxy is discarded. It gives up after
-// preambleScanLimit bytes rather than reading a remote that will never send it.
-//
-// The lines ahead of the preamble are where the probe script says which binary
-// it chose, or that it found none. Those are kept; everything else ahead of
-// the preamble is noise and is dropped. The note is returned with the error
-// too, because "found nothing" arrives as a note followed by no preamble.
 func readPreamble(br *bufio.Reader) (preambleNote, error) {
 	var note preambleNote
 	read := 0

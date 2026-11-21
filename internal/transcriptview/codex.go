@@ -5,25 +5,6 @@ import (
 	"strings"
 )
 
-// A Codex rollout, as codex-rs writes it (codex-rs/rollout/src/recorder.rs
-// and codex-rs/history/src/rollout_payload.rs in openai/codex). Each line is
-// {"timestamp", "type", "payload"}. The types that hold the conversation:
-//
-//   - session_meta: the session's id, cwd and cli_version, first in the file.
-//   - response_item: what the model saw and said. Its payload is a message
-//     (role user, assistant or developer, content of input_text, output_text
-//     and input_image items), a reasoning summary, a function_call (name,
-//     arguments as a JSON string, call_id), a custom_tool_call (input as
-//     text, apply_patch's patch), a local_shell_call, a web_search_call, and
-//     the function_call_output or custom_tool_call_output that answers a call.
-//   - event_msg: what the UI showed. user_message and agent_message repeat the
-//     response items, so they are left out. turn_aborted and error say a turn
-//     ended badly.
-//
-// Rollouts written before the payload wrapper hold the response items bare,
-// one per line, and those decode too.
-
-// codexLine decodes one rollout line.
 func codexLine(r *reader, line []byte, off int64) (decoded, bool) {
 	rec, ok := parseObj(line)
 	if !ok {
@@ -35,7 +16,6 @@ func codexLine(r *reader, line []byte, off int64) (decoded, bool) {
 	case "session_meta", "turn_context", "compacted", "":
 		return decoded{}, true
 	default:
-		// A bare response item, as older rollouts write them.
 		it = rec
 	}
 	var out []Entry
@@ -51,7 +31,6 @@ func codexLine(r *reader, line []byte, off int64) (decoded, bool) {
 	return decoded{entries: out}, true
 }
 
-// codexItem turns one response item into entries.
 func codexItem(it jobj) []Entry {
 	switch it.str("type") {
 	case "message":
@@ -61,8 +40,6 @@ func codexItem(it jobj) []Entry {
 			role = RoleAssistant
 		case "user":
 		default:
-			// developer and system: the instructions Codex sends, not the
-			// conversation.
 			return nil
 		}
 		var out []Entry
@@ -109,8 +86,6 @@ func codexItem(it jobj) []Entry {
 	return nil
 }
 
-// codexEvent turns the events that are not repeats of response items into
-// entries.
 func codexEvent(it jobj) []Entry {
 	switch it.str("type") {
 	case "error", "stream_error":
@@ -128,7 +103,6 @@ func codexEvent(it jobj) []Entry {
 	return nil
 }
 
-// codexClass is what a Codex tool does.
 func codexClass(name string) toolClass {
 	switch name {
 	case "apply_patch":
@@ -139,10 +113,6 @@ func codexClass(name string) toolClass {
 	return classOther
 }
 
-// codexOutput is a call's output as text, and whether it failed. The output
-// is a string or a list of content items. A shell call's string is either
-// {"output", "metadata": {"exit_code"}} as JSON, or text that starts with
-// "Exit code: N".
 func codexOutput(v any) (string, bool) {
 	var text string
 	switch v := v.(type) {
@@ -179,8 +149,6 @@ func codexOutput(v any) (string, bool) {
 	return text, false
 }
 
-// codexInjected reports a user message Codex wrote itself: the environment,
-// the AGENTS.md instructions and the like, each in a tag of its own.
 func codexInjected(s string) bool {
 	s = strings.TrimSpace(s)
 	if strings.HasPrefix(s, "# AGENTS.md instructions") {

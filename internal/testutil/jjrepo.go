@@ -42,8 +42,6 @@ revset-aliases."trunk()" = "main"
 	}
 	JJ(t, dir, "commit", "-m", "base")
 	JJ(t, dir, "bookmark", "create", "main", "-r", "@-")
-	// A process that does not get JJ_CONFIG, such as a tuios daemon in the
-	// e2e suite, still finds trunk(): jj's default is main@origin.
 	Git(t, tmp, "init", "-q", "--bare", "origin.git")
 	JJ(t, dir, "git", "remote", "add", "origin", filepath.Join(tmp, "origin.git"))
 	JJ(t, dir, "git", "push", "-b", "main")

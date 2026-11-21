@@ -97,7 +97,6 @@ token = "` + hookToken + `"
 				t.Errorf("a validation message shows %q:\n%s", s, out)
 			}
 		}
-		// The positive half: the validator did look at the table.
 		for _, key := range []string{"content", "web_url", "ntfy.token", "webhook.url"} {
 			if !strings.Contains(out, key+":") {
 				t.Errorf("no warning for %s:\n%s", key, out)

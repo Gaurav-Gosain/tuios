@@ -46,11 +46,6 @@ func unsafeRune(r rune) bool {
 		return false
 	case r < 0x20, r >= 0x7f && r <= 0x9f, r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == '\uFFFD',
 		r == 0x200e, r == 0x200f, r == 0x061c, r == 0x2028, r == 0x2029:
-		// U+200E, U+200F and U+061C are the bidi marks, and U+2028 and
-		// U+2029 break a line: none steers the terminal, but each can
-		// reorder or split what the line shows.
-		// U+FFFD is listed so that invalid UTF-8, which ranges as U+FFFD,
-		// is written as the valid encoding.
 		return true
 	}
 	return false
@@ -82,10 +77,6 @@ func ReadSource(name string) ([]byte, error) {
 		if info.Size() > MaxSource {
 			return nil, errfmt.Errorf("the file is larger than %s", units.Bytes(int64(MaxSource)))
 		}
-		// O_NONBLOCK: a file swapped for a FIFO between the stat and the open
-		// would block a plain open until a writer came. Opened this way it
-		// returns at once, and the check of the open file below refuses it.
-		// The flag changes nothing for a regular file.
 		f, err := os.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 		if err != nil {
 			return nil, err

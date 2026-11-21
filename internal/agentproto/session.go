@@ -11,24 +11,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The pane program: one agent over its protocol, shown as a transcript with a
-// prompt line under it.
-//
-// The pane is where the person talks to the agent, and it is also what tuios
-// already knows how to drive: a prompt ask-agent or start-agent types arrives
-// as a paste and a carriage return, the transcript is plain text capture-pane
-// reads, and the agent's state reaches the rail and the Inbox as reports from
-// this process for its own pane, the way a hook reports.
-//
-// A permission request is shown in the pane with a numbered key per answer,
-// and reported as needs_input. When its line is the whole request (InboxLine),
-// the Inbox is asked to hold it with request-approval as well, and whichever
-// answers first, the pane or the Inbox, answers the agent. The other is then
-// told: an answer in the pane ends the hold by closing its connection, and an
-// answer from the Inbox is written into the pane. A hold that ends without a
-// decision leaves the pane's question up, so the person can always answer
-// there.
-
 // Reporter carries the session's state to the daemon. A nil Reporter reports
 // nothing, which is how the program runs outside tuios.
 type Reporter interface {
@@ -66,61 +48,42 @@ type Session struct {
 	// Now is the clock, time.Now when nil.
 	Now func() time.Time
 
-	r       *renderer
-	buf     []rune
-	shown   bool
-	work    workPhase
-	ready   bool
-	queued  string
-	reply   strings.Builder
-	perms   []*Permission
-	shownAt time.Time
-	hold    context.CancelFunc
-	holds   chan holdResult
-	// meta is the pane's agent metadata as the agent last stated it. feed
-	// sends it, when the Reporter is a MetaReporter, and the activity, when
-	// it is an ActivityReporter, off the pane's loop.
-	meta map[string]string
-	feed *feed
-	// feedRetry is how long a failed metadata call waits to be tried again,
-	// feedRetryAfter when zero. Tests shorten it.
-	feedRetry time.Duration
-	// toolPhase is how far each tool call of the turn has been reported as
-	// activity: 1 started, 2 ended.
-	toolPhase map[string]int
-	// keysHandled, when set, is called after Run has handled the keys of one
-	// read. Tests use it to know a key was handled, not only read.
+	r           *renderer
+	buf         []rune
+	shown       bool
+	work        workPhase
+	ready       bool
+	queued      string
+	reply       strings.Builder
+	perms       []*Permission
+	shownAt     time.Time
+	hold        context.CancelFunc
+	holds       chan holdResult
+	meta        map[string]string
+	feed        *feed
+	feedRetry   time.Duration
+	toolPhase   map[string]int
 	keysHandled func()
-	// waiting is set while an ACP version 2 agent reports requires_action.
-	waiting bool
+	waiting     bool
 }
 
-// workPhase is what the agent is doing as far as the pane knows.
 type workPhase uint8
 
 const (
 	workNone workPhase = iota
-	// workTurn is a turn of the person's.
 	workTurn
-	// workOwn is work the agent started with no turn of the person's.
 	workOwn
 )
 
-// workEvent is what can change a workPhase.
 type workEvent uint8
 
 const (
-	// evPrompt is the person sending a prompt.
 	evPrompt workEvent = iota
-	// evTurnEnd is a turn's Prompt call returning.
 	evTurnEnd
 	evAgentRunning
 	evAgentIdle
 )
 
-// after is the one place that decides a move. A move it does not allow
-// returns the phase unchanged and false. A prompt takes own work in as its
-// turn; the agent's reports never move a turn.
 func (p workPhase) after(ev workEvent) (next workPhase, moved bool) {
 	switch {
 	case ev == evPrompt && p != workTurn:
@@ -135,13 +98,8 @@ func (p workPhase) after(ev workEvent) (next workPhase, moved bool) {
 	return p, false
 }
 
-// defaultSettle is how long a permission is on screen before a key answers it,
-// the Inbox's own wait (inboxAnswerSettle in internal/app) less a little, since
-// the pane prompt is read where it is typed.
 const defaultSettle = 500 * time.Millisecond
 
-// reportTimeout bounds one state report, so a slow daemon slows the pane by at
-// most this much.
 const reportTimeout = 2 * time.Second
 
 // Emit is the emit function to make the agent's client with.
@@ -151,14 +109,12 @@ func (s *Session) Emit(ev Event) { s.Events <- ev }
 // does not wait on the pane in a burst.
 func NewEvents() chan Event { return make(chan Event, 4096) }
 
-// holdResult is how an Inbox hold ended.
 type holdResult struct {
 	perm     *Permission
 	decision string
 	by       string
 }
 
-// turnResult is how a Prompt call returned.
 type turnResult struct {
 	res TurnResult
 	err error
@@ -236,17 +192,12 @@ func (s *Session) Run(ctx context.Context) int {
 		case ev := <-s.Events:
 			s.onEvent(ev)
 		case t := <-turns:
-			// The agent's updates for the turn were emitted before its
-			// Prompt call returned, and select picks between ready channels
-			// at random, so show what is already queued first: the reply's
-			// last words belong to the turn that is ending.
 			s.drain()
 			s.endTurn(t)
 		case h := <-s.holds:
 			s.onHold(h)
 		case ks, ok := <-keys:
 			if !ok {
-				// The pane's terminal is gone: nobody can answer here.
 				s.cancelAll()
 				return 0
 			}
@@ -256,13 +207,11 @@ func (s *Session) Run(ctx context.Context) int {
 					return 0
 				}
 			}
-			// One redraw for what one read brought, not one per key.
 			s.redrawInput()
 			if s.keysHandled != nil {
 				s.keysHandled()
 			}
 		case <-gone:
-			// Show whatever it said before it went.
 			s.drain()
 			s.cancelAll()
 			msg := "the agent exited"
@@ -277,7 +226,6 @@ func (s *Session) Run(ctx context.Context) int {
 	}
 }
 
-// startedLine says what started.
 func startedLine(info Info) string {
 	parts := []string{"connected"}
 	if info.Agent != "" {
@@ -293,8 +241,6 @@ func startedLine(info Info) string {
 	return line
 }
 
-// drain shows events already emitted, so the agent's last words come before
-// the line saying it exited.
 func (s *Session) drain() {
 	for {
 		select {
@@ -337,10 +283,6 @@ func (s *Session) onEvent(ev Event) {
 	}
 }
 
-// onAgentState takes the state an ACP version 2 agent reports for its
-// foreground work. A turn of the person's ends when its Prompt call returns,
-// not here; this reports what happens between: the agent waiting for the
-// person with no question on screen, and work the agent starts on its own.
 func (s *Session) onAgentState(state string) {
 	switch state {
 	case "requires_action":
@@ -348,8 +290,6 @@ func (s *Session) onAgentState(state string) {
 			return
 		}
 		s.waiting = true
-		// A permission on screen has reported needs_input already, and says
-		// what it waits for.
 		if len(s.perms) == 0 {
 			s.report("needs_input", "", "the agent is waiting for input", "")
 		}
@@ -377,7 +317,6 @@ func (s *Session) onAgentState(state string) {
 	}
 }
 
-// onWithdrawn drops a permission the agent took back.
 func (s *Session) onWithdrawn(p *Permission) {
 	i := slices.Index(s.perms, p)
 	if i < 0 {
@@ -400,15 +339,11 @@ func (s *Session) onWithdrawn(p *Permission) {
 	s.report("working", "", "", "needs_input")
 }
 
-// showPermission puts the first queued permission on screen and reports it.
 func (s *Session) showPermission() {
 	p := s.perms[0]
 	s.write(s.r.permission(p))
 	s.shownAt = s.Now()
 	line := InboxLine(p)
-	// The report comes first and is waited for: a hold is only opened on a
-	// pane already on needs_input, and a later report must not land before
-	// this one.
 	s.report("needs_input", "approval", StateLine(p), "")
 	if line == "" || s.Reporter == nil {
 		return
@@ -428,8 +363,6 @@ func (s *Session) showPermission() {
 	}()
 }
 
-// onHold takes an Inbox hold's result: a decision answers the permission it
-// was for, if that is still the one on screen.
 func (s *Session) onHold(h holdResult) {
 	if len(s.perms) == 0 || s.perms[0] != h.perm || h.decision == "" {
 		return
@@ -445,8 +378,6 @@ func (s *Session) onHold(h holdResult) {
 	s.answer(i, how)
 }
 
-// answer answers the permission on screen with option i, or cancels it when i
-// is negative, and moves to the next.
 func (s *Session) answer(i int, how string) {
 	p := s.perms[0]
 	s.endHold()
@@ -463,8 +394,6 @@ func (s *Session) answer(i int, how string) {
 	}
 }
 
-// endHold ends a running Inbox hold, which the daemon sees as its caller
-// gone and clears from the Inbox item.
 func (s *Session) endHold() {
 	if s.hold != nil {
 		s.hold()
@@ -519,16 +448,9 @@ func (s *Session) onKey(ctx context.Context, k key, turns chan turnResult) bool 
 	return false
 }
 
-// permissionKey handles a key while a permission is on screen. Only a digit
-// answers, and only once the question has been on screen for Settle: a paste,
-// an Enter or a key typed before it appeared answers nothing.
 func (s *Session) permissionKey(k key) bool {
 	switch k.kind {
 	case keyCtrlC:
-		// ACP: when the client cancels a turn it must answer every pending
-		// session/request_permission with outcome cancelled, not only the one
-		// on screen. The queued ones are answered first, so the agent sees no
-		// permission left open when the cancel arrives.
 		queued := s.perms[1:]
 		s.perms = s.perms[:1]
 		s.answer(-1, "in the pane, which cancels the turn")
@@ -559,8 +481,6 @@ func (s *Session) startTurn(ctx context.Context, text string, turns chan turnRes
 	s.reply.Reset()
 	s.write(s.r.prompt(text))
 	s.report("working", "", "", "")
-	// Metadata the daemon lost since the last turn (a restart, or a clear
-	// to none) comes back with the turn, not only when a value changes.
 	if s.feed != nil && len(s.meta) > 0 {
 		s.feed.resync()
 	}
@@ -574,7 +494,6 @@ func (s *Session) startTurn(ctx context.Context, text string, turns chan turnRes
 
 func (s *Session) endTurn(t turnResult) {
 	s.work, _ = s.work.after(evTurnEnd)
-	// A permission still up belongs to a turn that is over.
 	if len(s.perms) > 0 {
 		s.endHold()
 		for _, p := range s.perms {
@@ -606,7 +525,6 @@ func (s *Session) endTurn(t turnResult) {
 	s.activity(end)
 }
 
-// setMeta takes metadata the agent stated and sends what changed.
 func (s *Session) setMeta(tokens map[string]string) {
 	if len(tokens) == 0 {
 		return
@@ -626,8 +544,6 @@ func (s *Session) setMeta(tokens map[string]string) {
 	}
 }
 
-// toolActivity reports a tool call as activity once when it starts and once
-// when it ends, however many updates the protocol sends about it.
 func (s *Session) toolActivity(t Tool) {
 	if t.ID == "" {
 		return
@@ -658,9 +574,6 @@ func (s *Session) toolActivity(t Tool) {
 	}
 }
 
-// activity hands one activity to the feed, when the Reporter takes activity.
-// It is sent off the pane's loop, so a slow daemon does not hold the pane at
-// every tool call.
 func (s *Session) activity(a Activity) {
 	if s.feed == nil {
 		return
@@ -671,8 +584,6 @@ func (s *Session) activity(a Activity) {
 	s.feed.activity(a)
 }
 
-// firstLine is the first non-empty line of s, cleaned and clipped for a state
-// message.
 func firstLine(s string) string {
 	for l := range strings.SplitSeq(clean(s), "\n") {
 		if l = oneLine(l); l != "" {
@@ -682,7 +593,6 @@ func firstLine(s string) string {
 	return ""
 }
 
-// cancelAll answers every permission with cancelled and ends the hold.
 func (s *Session) cancelAll() {
 	s.endHold()
 	for _, p := range s.perms {
@@ -694,14 +604,11 @@ func (s *Session) cancelAll() {
 	}
 }
 
-// fail shows why the session cannot go on and reports it.
 func (s *Session) fail(msg string) {
 	s.write(s.r.event(Notice{Text: msg, Error: true}))
 	s.report("errored", "", oneLine(msg), "")
 }
 
-// waitToClose keeps the pane open, so what went wrong can be read, until the
-// person presses Enter, Ctrl+C or Ctrl+D.
 func (s *Session) waitToClose(keys chan []key) int {
 	s.write(s.r.line("Press Enter to close this pane."))
 	for ks := range keys {
@@ -724,7 +631,6 @@ func (s *Session) report(state, kind, message, ifState string) {
 	_ = s.Reporter.Report(ctx, state, kind, message, ifState)
 }
 
-// write puts transcript text on screen above the prompt line.
 func (s *Session) write(text string) {
 	if text == "" {
 		return
@@ -741,8 +647,6 @@ func (s *Session) hideInput() {
 	}
 }
 
-// showInput draws the prompt line, unless the transcript has a line open: the
-// reply is streaming, and the prompt line comes back when the line ends.
 func (s *Session) showInput() {
 	if s.r.midLine {
 		return
@@ -756,8 +660,6 @@ func (s *Session) redrawInput() {
 	s.showInput()
 }
 
-// inputLine is the prompt line as drawn: the end of what is typed when it is
-// wider than the pane, and a hint when nothing is.
 func (s *Session) inputLine() string {
 	width := 80
 	if s.Width != nil {
@@ -778,8 +680,6 @@ func (s *Session) inputLine() string {
 		}
 		return ansi.Truncate(sgrBold+"> "+sgrReset+sgrDim+hint+sgrReset, width-1, "")
 	}
-	// What is typed is shown cleaned too: a paste into the pane must not
-	// become output the pane's terminal acts on.
 	text := strings.ReplaceAll(clean(string(s.buf)), "\n", "↵")
 	avail := width - 3
 	if w := ansi.StringWidth(text); avail > 0 && w > avail {

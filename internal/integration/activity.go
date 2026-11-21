@@ -7,31 +7,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
-// Hook activity: what a hook event says the agent did, beyond the state it
-// puts the pane in. It feeds the pane's activity ring in the daemon, which the
-// rail's "now" line, the away recap and `tuios agent-log` read. It is display
-// only, so it is read from fields a harness documents and left out when a
-// field is missing, never guessed.
-
-// toolTargetKeys are the tool_input keys that name what a tool acts on, in
-// the order ToolSummary reads them, plus notebook_path for Claude Code's
-// NotebookEdit.
 var toolTargetKeys = []string{"command", "file_path", "filePath", "path", "url", "pattern", "query", "description", "notebook_path"}
 
-// editTools are the Claude Code tools that write the file their tool_input
-// names in file_path (notebook_path for NotebookEdit).
 var editTools = []string{"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
-// applyPatchTool is Codex's file editing tool. Its tool_input carries the
-// patch text in command, and the patch names each file it touches on a
-// header line.
 const applyPatchTool = "apply_patch"
 
-// patchFileHeaders are the header lines of a Codex patch that name a file.
 var patchFileHeaders = []string{"*** Update File: ", "*** Add File: ", "*** Delete File: ", "*** Move to: "}
 
-// activityFilesMax bounds the files one event reports. The daemon keeps no
-// more than this either.
 const activityFilesMax = 16
 
 // FirstLine is s up to its first line break, trimmed.
@@ -73,8 +56,6 @@ func SaidLine(s string) string {
 	return lines[0]
 }
 
-// plainLine is one line of Markdown as plain words. A line in a code block is
-// kept as written.
 func plainLine(l string, code bool) string {
 	if code {
 		return l
@@ -87,8 +68,6 @@ func plainLine(l string, code bool) string {
 	return strings.TrimSpace(l)
 }
 
-// activityText is agent text as an activity entry carries it: the first
-// line, redacted and clipped.
 func activityText(s string) string {
 	return oneline.Clip(FirstLine(s))
 }
@@ -112,9 +91,6 @@ func ToolTarget(tool string, input fields) string {
 	return ""
 }
 
-// toolFiles are the files a finished tool call wrote: the file an edit tool
-// names, or every file an apply_patch touched. Other tools write nothing
-// this can see.
 func toolFiles(tool string, input fields) []string {
 	switch {
 	case tool == applyPatchTool:
@@ -127,13 +103,10 @@ func toolFiles(tool string, input fields) []string {
 	return nil
 }
 
-// patchText is the patch an apply_patch call carries.
 func patchText(input fields) string {
 	return input.first("command", "input", "patch")
 }
 
-// patchFiles reads the files a Codex patch names from its header lines, in
-// order and without repeats.
 func patchFiles(patch string) []string {
 	var out []string
 	for line := range strings.SplitSeq(patch, "\n") {
@@ -151,8 +124,6 @@ func patchFiles(patch string) []string {
 	return out
 }
 
-// toolActivity is the activity of a tool event: the tool, what it acts on,
-// and for a finished call the files it wrote.
 func toolActivity(event string, p fields) *Activity {
 	tool := p.str("tool_name")
 	if tool == "" {
@@ -166,8 +137,6 @@ func toolActivity(event string, p fields) *Activity {
 	return a
 }
 
-// exitCode reads a numeric exit_code from a tool_response object, reporting
-// whether there was one.
 func exitCode(p fields) (int, bool) {
 	resp := p.obj("tool_response")
 	for _, key := range []string{"exit_code", "exitCode"} {

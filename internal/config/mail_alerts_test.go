@@ -26,7 +26,6 @@ func TestMailAlertsFollowTheAgentTableWhenUnset(t *testing.T) {
 	if !p.Notify || !p.Dock || p.Sound || p.Enabled || !p.BetweenAgents {
 		t.Errorf("the mail table's own keys did not win: %+v", p)
 	}
-	// Quiet hours stay the agent table's: one clock for every alert.
 	if p.quietFrom != agent.quietFrom || p.quietTo != agent.quietTo {
 		t.Error("the mail policy lost the agent table's quiet hours")
 	}
@@ -51,8 +50,6 @@ func TestNotificationsAreRegisteredAndValidated(t *testing.T) {
 	if got, _ := GetOptionValue(DefaultConfig(), "notifications.mail.dock"); got != "" {
 		t.Errorf("an unset mail key reads back %q, want empty for unset", got)
 	}
-	// The empty string clears a following option, back to following. An
-	// option that follows nothing still refuses it.
 	for _, path := range []string{"notifications.mail.enabled", "notifications.mail.notify", "notifications.mail.dock", "notifications.mail.sound"} {
 		if err := SetOptionValue(cfg, path, ""); err != nil {
 			t.Errorf("clear %s: %v", path, err)
@@ -83,7 +80,7 @@ func TestNotificationsAreRegisteredAndValidated(t *testing.T) {
 
 	durations := []struct {
 		toml     string
-		warnKey  string // empty: no warning expected
+		warnKey  string
 		info     time.Duration
 		warnings time.Duration
 	}{
@@ -127,8 +124,6 @@ func TestNotificationsAreRegisteredAndValidated(t *testing.T) {
 		t.Error("a string duration parsed without an error")
 	}
 
-	// notifications.style: plain is applied, an unknown value warns and
-	// falls back to full.
 	for _, tc := range []struct {
 		value, want string
 		warns       bool

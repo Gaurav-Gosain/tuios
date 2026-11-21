@@ -8,9 +8,6 @@ import (
 	"tuios.dev/harness"
 )
 
-// Resuming a conversation: the command tuios types into a pane to reopen it,
-// built from the manifest's [resume] block (harness.Resume).
-
 // ErrNoResume says a harness has no [resume] block, or is not known.
 var ErrNoResume = errors.New("the harness has no resume command")
 
@@ -92,7 +89,6 @@ func (r *Registry) ResumedSessionID(id string, argv []string) (string, bool) {
 			continue
 		}
 		if at > 0 {
-			// "--resume={session_id}": the same prefix on the process's token.
 			prefix := tok[:at]
 			for _, a := range argv {
 				if v, ok := strings.CutPrefix(a, prefix); ok && v != "" {

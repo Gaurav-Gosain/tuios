@@ -8,12 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// The tape hygiene preconditions model a POSIX threat (owner and group/other
-// permission bits, world-writable shared directories). Windows has no
-// equivalent of these bits through os.FileInfo, so the ownership and
-// permission checks degrade to best-effort: the regular-file and size caps
-// still apply, but ownership and writability cannot be asserted here.
-
 func ownedByCurrentUser(_ os.FileInfo) bool { return true }
 
 func isGroupOrWorldAccessible(_ os.FileInfo) bool { return false }

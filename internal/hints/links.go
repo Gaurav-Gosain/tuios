@@ -11,14 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// Link rules turn plain text that is not a URL, such as a ticket ID, into a
-// link whose target is built from the match, the way WezTerm's
-// hyperlink_rules do. They plug into the one detector the pointer, the OSC 8
-// output and hints mode share (urls.go), so a rule match is hovered, clicked,
-// written to the outer terminal and labelled exactly like a bare URL. What
-// differs is that the text on screen and the address it opens are not the
-// same string, so a detected link carries its Target.
-
 // LinkRuleSpec is one rule as the config file writes it: a regular expression
 // in Go syntax, and a URL in which $0 is the whole match and $1, $2, ... (or
 // ${name}) are its groups.
@@ -27,20 +19,12 @@ type LinkRuleSpec struct {
 	URL   string
 }
 
-// linkRule is one compiled rule.
 type linkRule struct {
-	re  *regexp.Regexp
-	url string
-	// first is the set of bytes a match can start with, or nil when that is
-	// not known (a match can start with any byte, or with a rune past ASCII).
-	// A line holding none of them cannot match, which lets the frame skip
-	// most lines without running the regex.
+	re    *regexp.Regexp
+	url   string
 	first *[256]bool
 }
 
-// firstBytes works out the bytes a match of expr can start with. It is
-// conservative: nil means "any", and a set is only returned when every match
-// must begin with one of its bytes.
 func firstBytes(expr string) *[256]bool {
 	re, err := syntax.Parse(expr, syntax.Perl)
 	if err != nil {
@@ -53,9 +37,6 @@ func firstBytes(expr string) *[256]bool {
 	return &set
 }
 
-// addFirst adds to set the bytes a match of re can start with, and reports
-// whether it could tell. A node that can match empty text, or start with a
-// rune past ASCII, makes the answer unknown.
 func addFirst(re *syntax.Regexp, set *[256]bool) bool {
 	switch re.Op {
 	case syntax.OpLiteral:
@@ -86,8 +67,6 @@ func addFirst(re *syntax.Regexp, set *[256]bool) bool {
 		}
 		return true
 	case syntax.OpConcat:
-		// Zero-width assertions in front (\b, ^, $) do not consume a byte, so
-		// the first byte comes from what follows them.
 		for _, sub := range re.Sub {
 			switch sub.Op {
 			case syntax.OpBeginLine, syntax.OpEndLine, syntax.OpBeginText, syntax.OpEndText,
@@ -101,8 +80,6 @@ func addFirst(re *syntax.Regexp, set *[256]bool) bool {
 	return false
 }
 
-// addRune adds r (and its other case, under case folding) to set, and reports
-// whether r is ASCII.
 func addRune(r rune, fold bool, set *[256]bool) bool {
 	if r >= utf8.RuneSelf {
 		return false
@@ -118,7 +95,6 @@ func addRune(r rune, fold bool, set *[256]bool) bool {
 	return true
 }
 
-// holdsAny reports whether line holds a byte of set.
 func holdsAny(line []byte, set *[256]bool) bool {
 	for _, c := range line {
 		if set[c] {
@@ -172,9 +148,6 @@ func UnknownGroups(spec LinkRuleSpec) ([]string, error) {
 	return unknown, nil
 }
 
-// templateGroups lists the group names a regexp Expand template refers to, as
-// regexp.Expand reads them: $name or ${name}, where name is a run of letters,
-// digits and underscores, and $$ is a literal dollar.
 func templateGroups(tmpl string) []string {
 	var names []string
 	for {
@@ -200,7 +173,6 @@ func templateGroups(tmpl string) []string {
 			n++
 		}
 		if n == 0 || (brace && (n >= len(rest) || rest[n] != '}')) {
-			// Not a reference; Expand writes it out as it is.
 			continue
 		}
 		names = append(names, rest[:n])
@@ -212,8 +184,6 @@ func groupNameByte(c byte) bool {
 	return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
-// hasGroup reports whether name is a group of re, as Expand resolves it: a
-// number is an index, anything else a group name.
 func hasGroup(re *regexp.Regexp, name string) bool {
 	if n, ok := groupIndex(name); ok {
 		return n <= re.NumSubexp()
@@ -221,7 +191,6 @@ func hasGroup(re *regexp.Regexp, name string) bool {
 	return re.SubexpIndex(name) >= 0
 }
 
-// groupIndex reads name as a group number, the way Expand does: all digits.
 func groupIndex(name string) (int, bool) {
 	n := 0
 	for i := 0; i < len(name); i++ {
@@ -270,10 +239,6 @@ type Link struct {
 	Rule bool
 }
 
-// linkOpenSchemes is the set of schemes a click may hand to the desktop. It is
-// the one list tuios checks, both before it opens a link (internal/app) and
-// before it accepts a target a link rule built, so a rule can never produce a
-// link that a click would then refuse.
 var linkOpenSchemes = []string{"http", "https", "mailto", "ftp", "ftps"}
 
 // OpenableScheme reports whether rawURL has a scheme tuios hands to the
@@ -363,7 +328,6 @@ func MayHoldLink(line []byte, rules *LinkRules) bool {
 	return false
 }
 
-// schemeSep is what every scheme the URL detector knows holds.
 var schemeSep = []byte("://")
 
 // RuleLinks returns only the rule matches on line, as Links settles them.
@@ -381,12 +345,6 @@ func RuleLinks(line string, rules *LinkRules) []Link {
 	return out
 }
 
-// linkTargetOK reports whether a target a rule built may become a link: an
-// openable scheme, and nothing in it that would end a bare URL (urlStop and
-// urlStopRune). The groups go into the template as they are, so without this a
-// broad rule could build an address with quotes, backticks or angle brackets
-// in it, which no bare URL can hold and which would reach the opener and the
-// OSC 8 output.
 func linkTargetOK(target string) bool {
 	if !OpenableScheme(target) || !utf8.ValidString(target) {
 		return false

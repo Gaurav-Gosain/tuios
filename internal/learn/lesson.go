@@ -25,21 +25,13 @@ const (
 	EventLessonFinish = "lesson.finish"
 )
 
-// The lesson's pacing.
 const (
-	// doneHold is the least time a finished step's card stays up.
-	doneHold = 700 * time.Millisecond
-	// settle is how long after a step starts its events still belong to the
-	// step before, unless the person presses a key first.
-	settle = 150 * time.Millisecond
-	// untilLimit is the longest a setup waits for its event.
+	doneHold   = 700 * time.Millisecond
+	settle     = 150 * time.Millisecond
 	untilLimit = 3 * time.Second
-	// setupGap is the pause after a setup entry with no event to wait for.
-	setupGap = 120 * time.Millisecond
-	// skipLimit is how long skip lets "show me" try before moving on.
-	skipLimit = 2500 * time.Millisecond
-	hintTick  = 250 * time.Millisecond
-	// readyLimit is the longest show me waits for a step's After events.
+	setupGap   = 120 * time.Millisecond
+	skipLimit  = 2500 * time.Millisecond
+	hintTick   = 250 * time.Millisecond
 	readyLimit = time.Minute
 )
 
@@ -65,14 +57,10 @@ type Lessons struct {
 	file    *lessons.File
 	hooks   LessonHooks
 
-	mu sync.Mutex
-	// gen ends the goroutines of an earlier lesson: each one stops once gen
-	// moved on.
-	gen    int
-	phase  string // "", "booting", "running", "finished"
-	lesson *lessons.Lesson
-	// shown is the step whose card is up. It lags lesson.Index while the
-	// next step's scene is set.
+	mu          sync.Mutex
+	gen         int
+	phase       string
+	lesson      *lessons.Lesson
 	shown       int
 	settingUp   bool
 	settleUntil time.Time
@@ -118,15 +106,12 @@ func (r *Lessons) Observe(e Event) {
 		r.mu.Unlock()
 		return
 	}
-	// Every event counts toward a step's After events, also a setup's.
 	if l.Observe(le, now) && r.shown == l.Index {
 		out = append(out, r.hintEvent(now, true)...)
 	}
 	if e.Type == EventKey && !r.settingUp {
 		r.settleUntil = time.Time{}
 	}
-	// A setup's events are the scene's, and events right after a step are
-	// the step's that just finished.
 	if r.settingUp || now.Before(r.settleUntil) {
 		r.mu.Unlock()
 		r.emit(out...)
@@ -237,7 +222,6 @@ func (r *Lessons) start(id string, from int) error {
 	r.lastHint, r.log = "", nil
 	r.mu.Unlock()
 	go func() {
-		// A clean screen: no windows, the shipped keys, the rail closed.
 		if !r.runSetup(g, []lessons.Setup{{Command: "reset"}}) || !r.runSetup(g, t.Setup) {
 			return
 		}
@@ -269,8 +253,6 @@ func (r *Lessons) alive(g int) bool {
 	return r.gen == g
 }
 
-// runSetup runs setup entries in order, each after the one before has had
-// its effect. It reports false once the lesson was replaced.
 func (r *Lessons) runSetup(g int, list []lessons.Setup) bool {
 	for _, s := range list {
 		r.mu.Lock()
@@ -312,8 +294,6 @@ func (r *Lessons) runSetup(g int, list []lessons.Setup) bool {
 	return r.alive(g)
 }
 
-// startStep sets the scene of step i and shows its card, no sooner than
-// doneHold after doneAt, when the step before finished.
 func (r *Lessons) startStep(g, i int, doneAt time.Time) {
 	r.mu.Lock()
 	l := r.lesson
@@ -349,8 +329,6 @@ func (r *Lessons) startStep(g, i int, doneAt time.Time) {
 	r.emit(out...)
 }
 
-// stepDone reports a finished step and moves the lesson on. The caller
-// holds r.mu, and has advanced the lesson past index.
 func (r *Lessons) stepDone(index int, ev *lessons.Event, lastAction string, now time.Time) []Event {
 	l := r.lesson
 	if r.skipping {
@@ -382,7 +360,6 @@ func (r *Lessons) stepDone(index int, ev *lessons.Event, lastAction string, now 
 	return out
 }
 
-// next ends an explainer step: the person read it.
 func (r *Lessons) next() {
 	r.mu.Lock()
 	l := r.lesson
@@ -454,7 +431,6 @@ func (r *Lessons) skip() {
 			r.mu.Unlock()
 			return
 		}
-		// Playing the keys did not finish it: move on anyway.
 		r.skipping = false
 		now := time.Now()
 		r.logMark("lesson.skip")
@@ -465,8 +441,6 @@ func (r *Lessons) skip() {
 	}()
 }
 
-// play types the step's keys for the person, from the first one not yet
-// pressed.
 func (r *Lessons) play(g int, fast bool) {
 	r.mu.Lock()
 	l := r.lesson
@@ -482,8 +456,6 @@ func (r *Lessons) play(g int, fast bool) {
 		r.playing = false
 		r.mu.Unlock()
 	}()
-	// A step that waits on an event, such as an agent asking, is played
-	// once it came: the keys before it would do nothing.
 	for end := time.Now().Add(readyLimit); ; time.Sleep(100 * time.Millisecond) {
 		r.mu.Lock()
 		gone := r.gen != g || r.lesson.Index != index
@@ -517,7 +489,6 @@ func (r *Lessons) play(g int, fast bool) {
 		r.hooks.Send(CommandMsg{Name: "mode", Args: []string{step.Needs}})
 		pace(300*time.Millisecond, 80*time.Millisecond)
 	}
-	// Once the step is done, the keys left over belong to no step.
 	moved := func() bool {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -552,8 +523,6 @@ func (r *Lessons) play(g int, fast bool) {
 	}
 }
 
-// catchUp plays the steps done on an earlier visit at speed, so the scene
-// is the one the next step expects.
 func (r *Lessons) catchUp(g, n int) {
 	for i := range n {
 		r.startStep(g, i, time.Time{})
@@ -597,7 +566,6 @@ func (r *Lessons) catchUp(g, n int) {
 	}
 }
 
-// tick sends lesson.hint as the hint ladder moves with time.
 func (r *Lessons) tick(g int) {
 	for {
 		time.Sleep(hintTick)
@@ -612,8 +580,6 @@ func (r *Lessons) tick(g int) {
 	}
 }
 
-// hintData is where the person stands on the hint ladder. The caller holds
-// r.mu.
 func (r *Lessons) hintData(now time.Time) map[string]any {
 	l := r.lesson
 	step := l.Step()
@@ -622,8 +588,6 @@ func (r *Lessons) hintData(now time.Time) map[string]any {
 		return out
 	}
 	if !l.Ready() {
-		// The step waits on something to happen first: the card says
-		// what, and there is nothing to hint yet.
 		out["waiting"] = true
 		return out
 	}
@@ -635,8 +599,6 @@ func (r *Lessons) hintData(now time.Time) map[string]any {
 	return out
 }
 
-// hintEvent is a lesson.hint event when the ladder moved since the last
-// one, or always when force is set. The caller holds r.mu.
 func (r *Lessons) hintEvent(now time.Time, force bool) []Event {
 	if r.lesson == nil {
 		return nil
@@ -651,7 +613,6 @@ func (r *Lessons) hintEvent(now time.Time, force bool) []Event {
 	return []Event{{Type: EventLessonHint, Data: d}}
 }
 
-// keysEvent is the step's keycaps after a key. The caller holds r.mu.
 func (r *Lessons) keysEvent() Event {
 	l := r.lesson
 	return Event{Type: EventLessonKeys, Data: map[string]any{
@@ -659,8 +620,6 @@ func (r *Lessons) keysEvent() Event {
 	}}
 }
 
-// stepEvent is the current step's card, in this surface's words. The caller
-// holds r.mu.
 func (r *Lessons) stepEvent() Event {
 	l := r.lesson
 	s := l.Step().For(r.surface)
@@ -683,8 +642,6 @@ func (r *Lessons) stepEvent() Event {
 	return Event{Type: EventLessonStep, Data: data}
 }
 
-// logMark notes in the log a lesson command that changed the step, so a
-// replay of the log can do the same. The caller holds r.mu.
 func (r *Lessons) logMark(kind string) {
 	if r.logging {
 		r.log = append(r.log, map[string]any{"type": kind, "t": time.Now().UnixMilli()})

@@ -31,24 +31,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// ioMu guards the emulator cell buffer: the PTY reader and the daemon output
-// path write it, Resize reallocates it, and the renderer reads it.
-//
-// It is NOT reentrant, and that is not a style preference but a hard
-// correctness rule. sync.RWMutex starves readers once a writer is queued, so a
-// goroutine that holds RLockIO and then takes RLockIO again on the same window
-// parks behind that queued writer while still holding the read lock the writer
-// is waiting for. Neither side can proceed and the process wedges at zero CPU.
-// A live PTY produces output constantly, so the writer is queued often and the
-// window for this is wide.
-//
-// The rule for callers: never take either lock while already holding either
-// lock on the same window, and do not call a helper that takes one from inside
-// a locked region. Where a value is needed on both sides of that boundary,
-// follow the split this package already uses (a locking entry point plus a
-// lock-free variant for callers that are already inside, as with
-// ScrollbackLenSync and ScrollbackLen), or hoist the read out of the locked region entirely.
-
 // LockIO takes the exclusive lock for PTY writes, which mutate the cell buffer.
 func (w *Window) LockIO() { w.ioMu.Lock() }
 
@@ -85,10 +67,6 @@ func (w *Window) SetTiled(tiled bool) {
 	w.Resize(w.Width, w.Height)
 	w.InvalidateCache()
 }
-
-// The following scalar/string fields are written by the VT callbacks on the
-// PTY/monitor goroutine and read on the Bubble Tea UI goroutine, so they are
-// stored atomically and accessed only through these methods.
 
 // ProcessExited reports whether the window's process has exited.
 func (w *Window) ProcessExited() bool { return w.processExited.Load() }
@@ -127,8 +105,6 @@ func (w *Window) IsAltScreen() bool { return w.isAltScreen.Load() }
 // SetAltScreen records whether the application is using the alternate screen buffer.
 func (w *Window) SetAltScreen(v bool) { w.isAltScreen.Store(v) }
 
-// Cache for local terminal environment variables (detect once, reuse for local windows)
-// SSH sessions will detect per-connection based on their environment
 var (
 	localTermType  string
 	localColorTerm string
@@ -139,14 +115,12 @@ var (
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
 // Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
-	// modesOnly, when set, filters the stream before the emulator sees it
-	// (window_modes_only.go).
 	modesOnly modesFilter
 
-	title         atomic.Pointer[string]           // Written on PTY/monitor goroutine, read on UI goroutine
-	iconName      atomic.Pointer[string]           // OSC 1 name; written like title
-	geomSnap      atomic.Pointer[GeometrySnapshot] // See PublishGeometry
-	CustomName    string                           // User-defined window name
+	title         atomic.Pointer[string]
+	iconName      atomic.Pointer[string]
+	geomSnap      atomic.Pointer[GeometrySnapshot]
+	CustomName    string // User-defined window name
 	Width         int
 	Height        int
 	X             int
@@ -157,7 +131,7 @@ type Window struct {
 	Pty           xpty.Pty
 	Cmd           *exec.Cmd // Write-once; the monitor goroutine reads it unlocked, see waitForCmd
 	ShellPgid     int       // Process group ID of the shell
-	cwd           cwdCache  // Memoised working directory, see CWD
+	cwd           cwdCache
 	LastUpdate    time.Time
 	Dirty         bool
 	ContentDirty  bool
@@ -170,9 +144,7 @@ type Window struct {
 	// it wants matches this one. Issue #642: entering terminal mode on an idle
 	// pane kept the window mode border until the guest drew something.
 	CachedLayerBorder color.Color
-	// reportKey names the OSC 10 and 11 answer the emulator was last given.
-	// Written on the UI goroutine only. See SetReportColors.
-	reportKey string
+	reportKey         string
 	// RenderedCols and RenderedRows are the display geometry of the pane body
 	// the renderer produced last: the column count every one of its lines
 	// fills, and its line count. Zero means the renderer cannot vouch for the
@@ -185,15 +157,7 @@ type Window struct {
 	// CachedContent. They are written only where CachedContent is, so a
 	// rectangle can never be read against a frame it does not describe.
 	CachedContentCols, CachedContentRows int
-	// cachedContentDim is the dim percentage CachedContent was rendered at,
-	// zero for an undimmed frame. It belongs with the two above for the same
-	// reason: a cached frame is only usable by a caller that wants the frame it
-	// actually holds, and once unfocused panes can be dimmed, focus is one of
-	// the things that decides what it holds.
-	//
-	// Unexported behind accessors because nothing outside the render path has
-	// any business setting it, and setting it wrong serves a stale frame.
-	cachedContentDim int
+	cachedContentDim                     int
 	// CachedCursor is what this window's cursor was the last time the render
 	// loop could read it outside a synchronized update: where it is, whether it
 	// is hidden, and the shape the guest asked for. Reading the live one needs
@@ -214,82 +178,29 @@ type Window struct {
 	// leave the renderer nothing to hold and it composed the half-drawn buffer.
 	// Replaced by the next complete frame and dropped on close; deliberately
 	// untouched by MarkContentDirty, MarkPositionDirty and InvalidateCache.
-	SyncHoldContent    string
-	LastTerminalSeq    int
-	IsBeingManipulated bool // True when being dragged or resized
-	// announcedW/H are the emulator dimensions last handed downstream: to the
-	// PTY, to the daemon, and to the guest as a redraw. Resize used to decide
-	// "did the size change" by comparing against Width and Height, which is
-	// wrong the moment a resize is split in two. ResizeVisual sets Width and
-	// Height for the live preview, so by the time the deferred half runs they
-	// already match, Resize concludes nothing changed, and nothing downstream is
-	// told: the guest keeps drawing to the size it had before the drag.
-	//
-	// INVARIANT: this is the size the real PTY has, and Resize skips announcing
-	// on the strength of it. So the two must move together. Resize and
-	// SeedAnnouncedSize are the only things allowed to write these fields, and
-	// nothing outside this file may call Pty.Resize or DaemonResizeFunc without
-	// recording the result: a caller that announces a size behind Resize's back
-	// leaves the record naming a size the shell no longer has, and the next
-	// Resize back to that size is skipped as redundant when it is the only thing
-	// that would have corrected the shell. That is exactly how a full-screen
-	// pane ended up running an 80x24 shell.
+	SyncHoldContent        string
+	LastTerminalSeq        int
+	IsBeingManipulated     bool // True when being dragged or resized
 	announcedW, announcedH int
-	// toldW/H are the size the guest has actually been sent, which equals
-	// announcedW/H except while a hold is open. A layout update walks a pane
-	// through several rectangles and only the last one is real, so the hold lets
-	// Resize record the intent step by step and sends the settled size once.
-	// See HoldAnnouncements.
-	toldW, toldH int
-	// announceHolds counts the holds currently open on this pane. It is a depth
-	// count rather than a flag because two holds now overlap: a layout update
-	// holds for the length of one call (settleSizes), and a pointer gesture
-	// holds from the press until the button comes up, which spans many. A
-	// retile inside a gesture must not end the gesture's hold, so the inner one
-	// releases to a depth of one and only the outer release reaches the guest.
-	announceHolds int
-	UpdateCounter int                // Counter for throttling background updates
-	cancelFunc    context.CancelFunc // For graceful goroutine cleanup
-	// ioMu guards the emulator cell buffer and the Pty/Terminal handles. See
-	// the block comment above LockIO for the full contract; the short version:
-	//
-	//   LOCK ORDER (global, whole process):
-	//       app.OS.terminalMu  ->  Window.ioMu  ->  KittyPassthrough.mu / SixelPassthrough.mu
-	//
-	//   May be held together: terminalMu and ioMu, in that order only
-	//   (renderTerminal does exactly this). Never take terminalMu while
-	//   holding ioMu. Never take ioMu inside a passthrough callback: the PTY
-	//   reader already holds ioMu across Terminal.Write, which dispatches
-	//   those callbacks under kp.mu/sp.mu, so the reverse order closes a
-	//   cycle (see OS.snapshotPlacementScrollbackLens).
-	//
-	//   NOT REENTRANT, either side, on the same window. sync.RWMutex starves
-	//   readers behind a queued writer, so RLock-inside-RLock deadlocks
-	//   against a writer waiting on the outer RLock.
-	//
-	//   NEVER BLOCK WHILE HOLDING IT. No Pty.Write, no Pty.Read, no channel
-	//   send, no Cmd.Wait. Snapshot the handle under the lock, release, then
-	//   block (SendInput and both handleIOOperations goroutines do this). A
-	//   blocking write under the read lock wedges the renderer, because the
-	//   PTY reader's queued LockIO starves every later RLock.
-	//
-	//   Two windows' ioMu are never held simultaneously, so there is no
-	//   window-to-window ordering to respect.
+	toldW, toldH           int
+	announceHolds          int
+	UpdateCounter          int // Counter for throttling background updates
+	cancelFunc             context.CancelFunc
 	ioMu                   sync.RWMutex
-	Minimized              bool        // True when window is minimized to dock
-	MinimizedAt            int64       // When the daemon saw it minimized (Unix ns), for the dock's order; 0 outside a daemon session
-	MinimizeHighlightUntil time.Time   // Highlight dock tab until this time
-	PreMinimizeX           int         // Store position before minimizing
-	PreMinimizeY           int         // Store position before minimizing
-	PreMinimizeWidth       int         // Store size before minimizing
-	PreMinimizeHeight      int         // Store size before minimizing
-	Workspace              int         // Workspace this window belongs to
-	Zoomed                 bool        // True when window is zoomed (fullscreen)
-	PreZoomX               int         // Store position before zooming
-	PreZoomY               int         // Store position before zooming
-	PreZoomWidth           int         // Store size before zooming
-	PreZoomHeight          int         // Store size before zooming
-	processExited          atomic.Bool // Written on PTY/monitor goroutine, read on UI goroutine
+	Minimized              bool      // True when window is minimized to dock
+	MinimizedAt            int64     // When the daemon saw it minimized (Unix ns), for the dock's order; 0 outside a daemon session
+	MinimizeHighlightUntil time.Time // Highlight dock tab until this time
+	PreMinimizeX           int       // Store position before minimizing
+	PreMinimizeY           int       // Store position before minimizing
+	PreMinimizeWidth       int       // Store size before minimizing
+	PreMinimizeHeight      int       // Store size before minimizing
+	Workspace              int       // Workspace this window belongs to
+	Zoomed                 bool      // True when window is zoomed (fullscreen)
+	PreZoomX               int       // Store position before zooming
+	PreZoomY               int       // Store position before zooming
+	PreZoomWidth           int       // Store size before zooming
+	PreZoomHeight          int       // Store size before zooming
+	processExited          atomic.Bool
 	// Multi-click tracking. What a press selects is decided by how many clicks
 	// it makes; the selection itself is copy mode's, see CopyMode below.
 	LastClickTime time.Time
@@ -298,25 +209,10 @@ type Window struct {
 	ClickCount    int
 	// ScrollbackOffset mirrors CopyMode.ScrollOffset for rendering
 	ScrollbackOffset int // Number of lines scrolled back (0 = at bottom, viewing live output)
-	// scrollAnchorLine is the same viewport top said as a place in the history
-	// rather than as a distance from its end: the absolute scrollback line the
-	// first drawn row holds. It means nothing unless scrollAnchored is set, so
-	// a zero-valued window is on live output rather than pinned to the oldest
-	// line it ever had.
-	//
-	// ScrollbackOffset alone cannot hold a scrolled pane still, because the end
-	// it counts back from moves. See window_scroll_anchor.go.
 	scrollAnchorLine int
-	// scrollAnchored says the pane is parked in its history. Only a scrolled
-	// pane has an anchor; a live one follows the end of the output by design.
-	scrollAnchored bool
-	// scrollOffsetSeen is the offset this window had the last time the anchor
-	// was reconciled, so the record half can tell a deliberate scroll from an
-	// offset it derived itself.
+	scrollAnchored   bool
 	scrollOffsetSeen int
-	// Alternate screen buffer tracking for TUI detection.
-	// Written on PTY/monitor goroutine, read on UI goroutine.
-	isAltScreen atomic.Bool // True when application is using alternate screen buffer (nvim, vim, etc.)
+	isAltScreen      atomic.Bool
 	// Opening marks a pane that has just been created and has not yet been
 	// placed by the tiling layout. The layout consumes it to decide where the
 	// pane's open animation starts from, and clears it, so it is true for
@@ -383,17 +279,12 @@ type Window struct {
 	NvimNavStateFunc  func(active bool)        // Callback for nvim navigation state (OSC 7777)
 	NvimNavResetFunc  func()                   // Callback when the alternate screen exits
 	DnDFunc           func(dnd.Command)        // Callback for a drag and drop message (OSC 72)
-	outputQ           *outputQueue             // Queue for serializing daemon PTY output writes
-	outputDone        chan struct{}            // Signal to stop the output writer and render coalescer goroutines
-	suppressCallbacks atomic.Bool              // Suppress VT emulator callbacks during state restoration (prevents race conditions)
-	closed            atomic.Bool              // Set by Close() so the external output queue sender (WriteOutputAsync) stops before teardown
+	outputQ           *outputQueue
+	outputDone        chan struct{}
+	suppressCallbacks atomic.Bool
+	closed            atomic.Bool
 
-	// hasFocus is whether this pane has focus on a screen someone could be
-	// looking at, as the app last set it. The PTY reader reads it when the
-	// guest turns on focus reporting. See SetHasFocus.
-	hasFocus atomic.Bool
-	// focusReporting is whether the guest had focus reporting on after the
-	// last PTY read. Only the PTY reader goroutine touches it.
+	hasFocus       atomic.Bool
 	focusReporting bool
 
 	// HasNewOutput is set when new data is written to the terminal.
@@ -405,59 +296,22 @@ type Window struct {
 	// graphicsOnly.
 	HasGraphicsOutput atomic.Bool
 
-	// frameInterval is the coalescer's floor in nanoseconds, 0 for the
-	// default. See SetFrameInterval.
 	frameInterval atomic.Int64
 
-	// coalesceSignal is the renderCoalescer's own render-trigger flag.
-	// outputWriter (daemon panes) or the PTY reader (local panes) sets it after
-	// each write; renderCoalescer consumes it at a
-	// capped rate to fire PTYDataChan. It is separate from HasNewOutput so the
-	// coalescer no longer consumes that flag: HasNewOutput survives for the UI
-	// goroutine's MarkTerminalsWithNewContent, which does the dirty-marking.
-	// This keeps window model fields (Dirty/ContentDirty/CachedContent) off the
-	// background goroutine, which otherwise races the renderer and Close().
 	coalesceSignal atomic.Bool
 
-	// coalesceWake wakes the coalescer when the flag above is set, so it can
-	// sleep between bursts instead of polling for a flag that is almost always
-	// false. Buffered 1 with a non-blocking send: the coalescer only needs to
-	// know that something arrived, not how much.
 	coalesceWake chan struct{}
 
-	// renderCostNanos is what the client's last composed frame cost, written by
-	// the UI goroutine after every real compose. The coalescer paces itself
-	// against it so a pane cannot keep asking for frames faster than the client
-	// can draw them; see coalesceInterval.
 	renderCostNanos atomic.Int64
 
-	// queuedBytes is how much daemon output has been queued for this pane's
-	// emulator and not yet written to it. WriteOutputAsync adds what it
-	// managed to queue, outputWriter subtracts what it takes back off, so it
-	// is the pane's backlog in bytes rather than in channel slots, which vary
-	// in size by two orders of magnitude. The coalescer reads it to find out
-	// whether the frame it is about to ask for has already been superseded;
-	// see coalesceInterval.
 	queuedBytes atomic.Int64
 
-	// outputEpoch stamps every chunk queued for the emulator. DiscardPendingOutput
-	// bumps it, and outputWriter throws away anything stamped with an older one,
-	// which is how a pane that has just been restored from a daemon snapshot
-	// avoids having output from before the snapshot applied on top of it.
 	outputEpoch atomic.Uint64
 
-	// writesBegun and writesNoted count the output writer's changes to the
-	// emulator: begun before each one, noted once its output flag is set. See
-	// EmulatorWrites.
 	writesBegun, writesNoted atomic.Uint64
 
-	// streamOwnsSize is set while a daemon subscription feeds this emulator,
-	// which is when the stream is what resizes it. See SetStreamOwnsSize.
 	streamOwnsSize atomic.Bool
 
-	// lastScrollbackLen is the most recent scrollback length ScrollbackLenSync
-	// managed to read. It answers that call when the I/O lock is busy, so the
-	// compositor never waits on a bursting pane just to size a scrollbar.
 	lastScrollbackLen atomic.Int64
 
 	// PTYDataChan is a shared channel (buffered 1) that PTY readers signal
@@ -567,10 +421,7 @@ type Window struct {
 	// same line is a different act on a build box than on a laptop. So the
 	// frame says which machine, and it says it whether or not the shell is
 	// cooperating about its prompt.
-	Host string
-	// hostElsewhere mirrors Host != "" for the PTY reader goroutine, which
-	// may not read Host while the update loop writes it. See
-	// ProcessElsewhere.
+	Host          string
 	hostElsewhere atomic.Bool
 	// HostLink is "reconnecting" while the link to Host is lost and the far
 	// machine keeps the process for its grace, and empty otherwise. The frame
@@ -587,10 +438,8 @@ type Window struct {
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)
 
-	// cmdWaitOnce ensures cmd.Wait() is only called once to prevent race conditions
 	cmdWaitOnce sync.Once
-	// ioWg tracks I/O goroutines for clean shutdown
-	ioWg sync.WaitGroup
+	ioWg        sync.WaitGroup
 }
 
 // CopyModeState represents the current state within copy mode
@@ -748,9 +597,6 @@ func (cm *CopyMode) BeginSearch(backward bool, scrollbackLen int) {
 	}
 }
 
-// shortID trims an ID for a title or a log line. IDs reach this package from
-// restored session state and from the daemon wire, where nothing guarantees
-// they are UUID-length, so a plain id[:8] slice would panic.
 func shortID(id string) string {
 	if len(id) < 8 {
 		return id
@@ -758,21 +604,13 @@ func shortID(id string) string {
 	return id[:8]
 }
 
-// newWindowBase builds the part of a window both constructors share: the
-// emulator sized to the inner area, the common fields, the cursor cache, the
-// title, the theme and the emulator callbacks. It starts no goroutine and
-// touches no PTY.
 func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan chan struct{}, scrollbackLines int) *Window {
 	if title == "" {
 		title = "Terminal " + shortID(id)
 	}
 
-	// Create VT terminal with inner dimensions (accounting for borders)
 	terminalWidth := max(width-2, 1)
 	terminalHeight := max(height-2, 1)
-	// How deep the scrollback goes is the session's setting, handed in rather
-	// than read from a package global: one server process holds several
-	// sessions and they need not agree about it.
 	terminal := vt.NewWithScrollback(terminalWidth, terminalHeight, scrollbackLines)
 	scrollclear.Apply(terminal)
 
@@ -790,9 +628,6 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 		ContentDirty:  true,
 		PositionDirty: true,
 	}
-	// The cursor cache is served whenever the render loop cannot take the I/O
-	// lock, including on the very first frame, so it starts on what the fresh
-	// emulator reports rather than on a zero value that means a blinking block.
 	window.CachedCursorStyle, window.CachedCursorSteady = terminal.CursorStyle()
 	window.SetTitle(title)
 
@@ -800,8 +635,6 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 
 	terminal.SetCallbacks(vt.Callbacks{
 		AltScreen: func(enabled bool) {
-			// Suppress callback during state restoration to prevent race conditions
-			// where buffered PTY output overwrites restored state
 			if !window.suppressCallbacks.Load() {
 				window.SetAltScreen(enabled)
 				if !enabled && window.NvimNavResetFunc != nil {
@@ -814,8 +647,6 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 				window.SetTitle(title)
 			}
 		},
-		// A daemon window's comes with the daemon's state instead, so an
-		// older sync and this emulator never take turns setting it.
 		ExplicitIconName: func(name string) {
 			if !window.DaemonMode {
 				window.SetIconName(name)
@@ -826,9 +657,6 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 				window.ClipboardSetFunc(content)
 			}
 		},
-		// No ClipboardQuery: an OSC 52 query is answered with empty content,
-		// as xterm answers by default. The answer is written to the pane's
-		// input, so it must not carry text a program in the pane chose.
 		Notify: func(title, body string) {
 			if window.NotifyFunc != nil {
 				window.NotifyFunc(title, body)
@@ -846,8 +674,6 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 		},
 		PrivateOSC: func(cmd int, data []byte) {
 			if cmd == dnd.Code {
-				// The drag and drop protocol. Parsed here, where the body is
-				// still valid; the chunks are joined by the app.
 				if window.DnDFunc != nil {
 					if dnd, ok := dnd.Parse(data); ok {
 						window.DnDFunc(dnd)
@@ -910,7 +736,6 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 	terminalWidth := max(width-2, 1)
 	terminalHeight := max(height-2, 1)
 
-	// Get cached terminal environment (detected once on first window creation)
 	termType, colorTerm := getTerminalEnv()
 
 	if debuglog.Enabled() {
@@ -922,15 +747,6 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 		}
 	}
 
-	// The PTY and its process are created together by ptyspawn, which is also
-	// where the kernel's transient refusal of the controlling terminal is
-	// absorbed. This path used to allocate and start them here, with no retry,
-	// so a refusal the daemon path shrugged off left a standalone pane with no
-	// shell in it and nothing on screen to say why. See the ptyspawn package
-	// comment.
-	//
-	// The command is rebuilt per attempt: an exec.Cmd that failed to start
-	// cannot be started again.
 	ptyInstance, cmd, err := ptyspawn.SpawnTTY(terminalWidth, terminalHeight, cellWidth, cellHeight, func(string) *exec.Cmd {
 		// #nosec G204 - the command is the user's own shell or a program they chose
 		var cmd *exec.Cmd
@@ -945,12 +761,11 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 		cmd.Env = append(guestBaseEnv(),
 			"TERM="+termType,
 			"COLORTERM="+colorTerm,
-			"TERM_PROGRAM="+guestTermProgram(command),             // Terminal identity guests can act on
-			"TERM_PROGRAM_VERSION="+guestenv.TermProgramVersion(), // Version for compatibility checking
+			"TERM_PROGRAM="+guestTermProgram(command),
+			"TERM_PROGRAM_VERSION="+guestenv.TermProgramVersion(),
 			"TUIOS_WINDOW_ID="+id,
-			guestKittyAnimation(), // whether a=f frame edits reach the host
+			guestKittyAnimation(),
 		)
-		// The shell starts with the prompt marks on, as a daemon pane's does.
 		if integration {
 			if args, env, ok := shellinteg.Setup(shell, cmd.Env); ok {
 				cmd.Args = append(cmd.Args, args...)
@@ -966,17 +781,7 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 		return nil, err
 	}
 
-	// Resize PTY after process starts to ensure size is properly set
-	// Some PTY implementations require the process to be running before accepting resize.
-	//
-	// Through SetWinsize, with the pixels Spawn gave it: a bare Resize writes
-	// zero pixels, and the next real announcement then changes the winsize
-	// at the same cell size, which SIGWINCHes a shell that may still be
-	// starting (#1205).
 	_ = ptyspawn.SetWinsize(ptyInstance, terminalWidth, terminalHeight, terminalWidth*cellWidth, terminalHeight*cellHeight)
-	// The PTY has this size now, so a Resize to it tells the guest nothing.
-	// Unseeded, the first layout announced the size the pane was born at,
-	// and tellGuest SIGWINCHes the shell on every announcement.
 	window.SeedAnnouncedSize(terminalWidth, terminalHeight)
 
 	_, cancel := context.WithCancel(context.Background())
@@ -985,24 +790,14 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 	window.Cmd = cmd
 	window.cancelFunc = cancel
 
-	// Store shell's process group ID for later detection of foreground processes
 	if cmd.Process != nil {
 		if pgid, err := getPgid(cmd.Process.Pid); err == nil {
 			window.ShellPgid = pgid
 		}
 	}
 
-	// Publish the initial geometry before the PTY reader starts, so the
-	// passthrough callbacks running on that goroutine always have a snapshot
-	// to read instead of the live fields the update loop mutates.
 	window.PublishGeometry()
 
-	// Output reaches the renderer through the same coalescer a daemon pane
-	// uses, so a flooding local pane asks for at most one frame per interval
-	// instead of one per PTY read. Close closes outputDone, which stops it.
-	// outputQ stays nil: that is what tells the daemon-only paths
-	// (WriteOutputAsync, outputWriter, the drain and resize sentinels) that
-	// this pane has no daemon stream.
 	window.outputDone = make(chan struct{})
 	window.coalesceWake = make(chan struct{}, 1)
 	go window.renderCoalescer()
@@ -1018,28 +813,17 @@ func NewWindowInCell(dir, id, title string, x, y, width, height, z int, exitChan
 			}
 		}()
 
-		// Wait for process to exit using sync.Once to prevent race conditions
-		// with Close() which may also wait for the process.
 		window.waitForCmd()
 
 		window.SetProcessExited(true)
 
 		cancel()
 
-		// Give a small delay to ensure final output is captured
 		time.Sleep(config.ProcessWaitDelay)
 
-		// Notify exit channel (ctx is already cancelled above, so don't
-		// include ctx.Done: it would randomly win the select and drop
-		// the exit notification, causing the window to stay open)
 		select {
 		case exitChan <- id:
 		default:
-			// Safe to drop only here: SetProcessExited above is already true,
-			// so the maintenance tick's exit sweep closes this window even if
-			// nobody ever reads the signal. A daemon-backed pane has no such
-			// backstop, which is why its exits are queued instead (see
-			// app.OS.queueWindowExit).
 		}
 	}()
 
@@ -1053,17 +837,11 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 	window := newWindowBase(id, title, x, y, width, height, z, ptyDataChan, scrollbackLines)
 	window.PTYID = ptyID
 	window.DaemonMode = true
-	// Each item is one batch off the daemon stream, up to 256 KiB.
-	// maxQueuedBytes bounds the bytes; the slots only bound the count. The
-	// queue starts empty and grows with the backlog (output_queue.go).
 	window.outputQ = newOutputQueue()
 	window.outputDone = make(chan struct{})
 	window.coalesceWake = make(chan struct{}, 1)
 
-	// The goroutines start last, after the theme and callbacks are in place.
-	// Start output writer goroutine to serialize writes
 	go window.outputWriter()
-	// Start render coalescer to prevent partial-frame flickering
 	go window.renderCoalescer()
 
 	return window
@@ -1085,7 +863,6 @@ func (w *Window) GuestCursor() (pos uv.Position, hidden, ok bool) {
 	}
 	if w.TryRLockIO() {
 		if w.Terminal == nil {
-			// Close nils Terminal while it holds the lock.
 			w.RUnlockIO()
 			return pos, false, false
 		}

@@ -35,8 +35,6 @@ type Set struct {
 	once   sync.Once
 }
 
-// selfGone is the set of events that end a watch: the directory itself went,
-// or the kernel says it dropped the watch.
 const selfGone = unix.IN_DELETE_SELF | unix.IN_MOVE_SELF | unix.IN_IGNORED
 
 // NewSet starts an empty set. notify runs on the set's own goroutine with the
@@ -72,9 +70,6 @@ func (s *Set) Add(dir string) error {
 	if err != nil {
 		return err
 	}
-	// Two paths can name one inode, and inotify then answers both with one
-	// descriptor. The later name wins, which costs at most a re-read of the
-	// other one's listing when it is next opened.
 	if old, ok := s.byWD[int32(wd)]; ok {
 		delete(s.byID, old)
 	}
@@ -108,8 +103,6 @@ func (s *Set) run() {
 		if err != nil {
 			return
 		}
-		// One read is one batch. Each directory named in it is reported once,
-		// however many of its entries the batch touched.
 		var seen [8]int32
 		count := 0
 		for off := 0; off+unix.SizeofInotifyEvent <= n; {
@@ -120,9 +113,6 @@ func (s *Set) run() {
 			s.mu.Lock()
 			dir, ok := s.byWD[wd]
 			if ok && mask&selfGone != 0 {
-				// The kernel ends this watch, and may hand its number to the
-				// next one. The directory is forgotten so Refresh can watch
-				// whatever has the path by then.
 				delete(s.byWD, wd)
 				delete(s.byID, dir)
 			}

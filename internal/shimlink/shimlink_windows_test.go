@@ -34,7 +34,7 @@ func TestInstallReplacesARunningLink(t *testing.T) {
 	v1 := filepath.Join(dir, "v1", "tuios.exe")
 	v2 := filepath.Join(dir, "v2", "tuios.exe")
 	copyExe(t, self, v1, nil)
-	copyExe(t, self, v2, []byte("v2")) // trailing bytes: still a program, another file
+	copyExe(t, self, v2, []byte("v2"))
 
 	link, err := Install(filepath.Join(dir, "run"), "herdr.exe", v1)
 	if err != nil {
@@ -46,7 +46,7 @@ func TestInstallReplacesARunningLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = run.Process.Kill(); _ = run.Wait() }()
-	time.Sleep(500 * time.Millisecond) // the image is mapped once it runs
+	time.Sleep(500 * time.Millisecond)
 
 	if _, err := Install(filepath.Join(dir, "run"), "herdr.exe", v2); err != nil {
 		t.Fatalf("Install over a running link: %v", err)
@@ -57,7 +57,6 @@ func TestInstallReplacesARunningLink(t *testing.T) {
 
 	_ = run.Process.Kill()
 	_ = run.Wait()
-	// Windows can take a moment to let go of an ended program's file.
 	var left []string
 	for deadline := time.Now().Add(5 * time.Second); ; {
 		if _, err := Install(filepath.Join(dir, "run"), "herdr.exe", v2); err != nil {

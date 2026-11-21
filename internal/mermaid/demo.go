@@ -64,9 +64,6 @@ func Type(steps []string) []Keystroke {
 		for suffix < len(src)-prefix && suffix < len(target)-prefix && src[len(src)-suffix-1] == target[len(target)-suffix-1] {
 			suffix++
 		}
-		// A new line is typed the way a person adds one: at the end of the
-		// line before, Enter first. Without this, a line put in above another
-		// is typed onto the front of it ("subgIdea --> Build").
 		if k := len(target) - len(src); k > 0 && len(src)-suffix == prefix && strings.Contains(target[prefix:prefix+k], "\n") {
 			for p := prefix; p >= 0; p-- {
 				if target[p] == '\n' && src[p:] == target[p+k:] {
@@ -86,7 +83,6 @@ func Type(steps []string) []Keystroke {
 					end++
 				}
 			}
-			// Bytes of one character arrive together.
 			for end < len(target)-suffix && end > 0 && target[end]&0xc0 == 0x80 {
 				end++
 			}
@@ -147,7 +143,6 @@ func isIDByte(c byte) bool {
 	return c == '_' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
-// ids lists the words of a source outside labels: [..], {..}, (..), |..| and quotes.
 func ids(src string) []string {
 	var out []string
 	depth, pipe, quote := 0, false, false

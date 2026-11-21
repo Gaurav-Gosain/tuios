@@ -31,8 +31,6 @@ const Env = "TUIOS_TEST_KNOBS"
 // "1". A later pair of one name wins.
 func Parse(s string) map[string]string {
 	k := map[string]string{}
-	// strings.Split, not SplitSeq: the iterator adds about 300 bytes to the
-	// binary, and this runs once.
 	for _, pair := range strings.Split(s, ",") {
 		pair = strings.TrimSpace(pair)
 		if pair == "" {

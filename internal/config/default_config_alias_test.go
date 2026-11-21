@@ -5,13 +5,6 @@ import (
 	"testing"
 )
 
-// Each DefaultConfig call must return memory of its own. tuios ssh and
-// tuios-web hold one config per connection, built from DefaultConfig, and
-// SetOptionValue writes through a pointer field that is already set. A
-// pointer, map or slice that two calls share is one setting for every
-// connection: one client's settings page changed prefix_repeat_time for the
-// other clients, and a reset to the default restored the changed value.
-
 // TestSetOptionDoesNotReachAnotherDefaultConfig is the reported case: a set on
 // one config must not change a second config or a later default.
 func TestSetOptionDoesNotReachAnotherDefaultConfig(t *testing.T) {

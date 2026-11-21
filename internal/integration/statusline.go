@@ -14,28 +14,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// Status line feed: the model, context use and cost a harness shows the
-// person, written to the pane's agent metadata.
-//
-// Claude Code runs one status line command with a JSON object on stdin every
-// time the conversation changes (https://code.claude.com/docs/en/statusline).
-// tuios can own that one slot, statusLine in the same settings.json the hooks
-// live in, with a command that runs "tuios agent-statusline claude-code". It is
-// opt in, through integration install --statusline, because the slot is the
-// person's: a status line they wrote is never replaced. They can keep it by
-// installing with --then and their command, which the wrapper runs with the
-// same stdin, printing its output unchanged. Uninstall puts their command back.
-//
-// The opencode plugin feeds the same wrapper from its message events, since
-// opencode has no status line command (see assets/opencode).
-//
-// Every field of every payload is optional. A field that is missing, null or
-// of another type is left out, and a payload with none of them writes nothing.
-
 // StatusLineVersion is the version of the statusLine entry this build writes.
 const StatusLineVersion = 1
 
-// statusLineVerb is the subcommand the managed entry runs.
 const statusLineVerb = "agent-statusline"
 
 // StatusLineMaxPayload caps what the wrapper reads from stdin (the cap
@@ -140,14 +121,8 @@ func ParseStatusLine(harness string, payload []byte) (StatusLineValues, error) {
 	return v, nil
 }
 
-// maxContextTokens bounds a token count the feed writes, far past any
-// window a model has, so a field that is not a count writes nothing.
 const maxContextTokens = 1e9
 
-// claudeContextTokens is the context's size from a status line's
-// current_usage: input_tokens, cache_creation_input_tokens and
-// cache_read_input_tokens. The object is null before the first response and
-// after /compact, and then nothing is written.
 func claudeContextTokens(u fields) string {
 	var sum float64
 	seen := false
@@ -163,7 +138,6 @@ func claudeContextTokens(u fields) string {
 	return strconv.FormatInt(int64(sum), 10)
 }
 
-// num reads a finite number.
 func (f fields) num(key string) (float64, bool) {
 	v, ok := f[key].(float64)
 	if !ok || math.IsNaN(v) || math.IsInf(v, 0) {
@@ -209,7 +183,6 @@ func StatusLineForeign(harness string, getenv func(string) string) (string, bool
 	if !known {
 		return "", false
 	}
-	// Kilo is an opencode fork that shares its plugin.
 	if owner == id || (owner == OpenCode && id == Kilo) || (owner == Kilo && id == OpenCode) {
 		return "", false
 	}
@@ -226,15 +199,12 @@ func StatusLineCommand(tuios, then string) string {
 	return cmd
 }
 
-// managedStatusLine reads a statusLine command tuios wrote: the program it
-// runs, the version, and the chained command. ok is false for anything else.
 func managedStatusLine(cmd string) (program string, version int, then string, ok bool) {
 	words, err := splitWords(cmd)
 	if err != nil || len(words) < 4 {
 		return "", 0, "", false
 	}
 	if words[0] == "sh" && words[1] == "-c" && words[3] == statusLineArg0 && len(words) <= 5 {
-		// A forwarder line: the plain command is its last fallback.
 		script := words[2]
 		i := strings.LastIndex(script, "| exec ")
 		if i < 0 {
@@ -270,9 +240,6 @@ func managedStatusLine(cmd string) (program string, version int, then string, ok
 	return words[0], version, then, true
 }
 
-// splitWords splits a command line the way a POSIX shell splits words:
-// single quotes, double quotes with backslash escapes, and backslashes. It
-// expands nothing. It is enough to read back what shellWord wrote.
 func splitWords(s string) ([]string, error) {
 	var words []string
 	var cur strings.Builder
@@ -356,7 +323,6 @@ func (e *StatusLineOwnedError) Error() string {
 	return e.Path + " has a status line of your own, so it is left alone. To keep it and feed tuios too, install with --then and your command"
 }
 
-// statusLineSlot reads the statusLine entry of a settings document.
 type statusLineSlot struct {
 	present bool
 	obj     *orderedObject
@@ -371,7 +337,6 @@ func readStatusLineSlot(root *orderedObject) statusLineSlot {
 	}
 	obj, err := parseObject(raw)
 	if err != nil {
-		// Present, but not an object: it is not ours, and not a command.
 		return statusLineSlot{present: true}
 	}
 	s := statusLineSlot{present: true, obj: obj}
@@ -387,9 +352,6 @@ func readStatusLineSlot(root *orderedObject) statusLineSlot {
 	return s
 }
 
-// editStatusLine installs or removes the managed statusLine entry. It keeps
-// every other key of the settings file, and every key of the entry but its
-// command, byte for byte.
 func editStatusLine(path string, have []byte, run Runner, then string, install bool) ([]byte, error) {
 	root, err := parseObject(have)
 	if err != nil {
@@ -422,13 +384,10 @@ func editStatusLine(path string, have []byte, run Runner, then string, install b
 		typ, _ := marshalPlain("command")
 		slot.obj.set("type", typ)
 	case managed:
-		// A chain installed before stays unless a new one is named: it is
-		// the person's command.
 		if then == "" {
 			then = managedThen
 		}
 	case slot.isCmd && then != "" && then == slot.command:
-		// The person asked to chain to the command already there.
 	default:
 		cmd := ""
 		if slot.isCmd {

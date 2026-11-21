@@ -60,7 +60,6 @@ func TestToolAnnotationsFollowTheSpec(t *testing.T) {
 			t.Errorf("%s openWorldHint = %v, want %v", name, a["openWorldHint"], w.openWorld)
 		}
 		if w.readOnly {
-			// The spec gives these two a meaning only when readOnlyHint is false.
 			for _, k := range []string{"destructiveHint", "idempotentHint"} {
 				if _, present := a[k]; present {
 					t.Errorf("%s lists %s although it is read-only", name, k)
@@ -72,7 +71,6 @@ func TestToolAnnotationsFollowTheSpec(t *testing.T) {
 			t.Errorf("%s destructive/idempotent = %v/%v, want %v/%v", name, a["destructiveHint"], a["idempotentHint"], w.destructive, w.idempotent)
 		}
 	}
-	// Every tool that types into a pane is destructive, whatever else changes.
 	for _, spec := range catalog {
 		if spec.write && (spec.hints == nil || !spec.hints.destructive) {
 			t.Errorf("%s types into a pane and is not marked destructive", spec.name)

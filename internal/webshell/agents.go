@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-// The record each pretend agent keeps of its run: the conversation as entries
-// in the shape tuios's agent-transcript verb sends, the prompt it waits on,
-// and the checkpoints of its turns. The tour's fleet (internal/learn) reads
-// it to answer the agents view's verbs in place of a daemon, and answers a
-// prompt or sends a reply by typing into the agent's pane, as a person would.
-
 // AgentEntry is one entry of an agent's conversation. The JSON is what
 // agent-transcript sends: see internal/transcriptview.
 type AgentEntry struct {
@@ -166,7 +160,6 @@ func (a *Agent) Type(text string) bool {
 // its state. It is for tuios's fleet and not for the page. Data is empty.
 const EventAgentChanged = "agent.changed"
 
-// startAgent records a new agent in t's pane.
 func startAgent(t *TTY, name, harness string) *Agent {
 	a := &Agent{Window: t.env["TUIOS_WINDOW_ID"], Name: name, Harness: harness, pty: t.pty}
 	if a.Window != "" {
@@ -177,7 +170,6 @@ func startAgent(t *TTY, name, harness string) *Agent {
 	return a
 }
 
-// end drops the record: the agent has exited.
 func (a *Agent) end(t *TTY) {
 	agentsMu.Lock()
 	if agentsBy[a.Window] == a {
@@ -187,7 +179,6 @@ func (a *Agent) end(t *TTY) {
 	t.Emit(EventAgentChanged, nil)
 }
 
-// change runs f on the record and tells the fleet.
 func (a *Agent) change(t *TTY, f func()) {
 	a.mu.Lock()
 	f()
@@ -196,7 +187,6 @@ func (a *Agent) change(t *TTY, f func()) {
 	t.Emit(EventAgentChanged, nil)
 }
 
-// add appends an entry and returns its id.
 func (a *Agent) add(t *TTY, e AgentEntry) string {
 	a.change(t, func() {
 		a.ids++
@@ -209,7 +199,6 @@ func (a *Agent) add(t *TTY, e AgentEntry) string {
 	return e.ID
 }
 
-// setStatus sets the status of the entries of a tool call.
 func (a *Agent) setStatus(t *TTY, toolID, status string) {
 	a.change(t, func() {
 		for i := range a.entries {

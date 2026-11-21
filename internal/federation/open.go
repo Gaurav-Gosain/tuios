@@ -9,19 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
-// Opening a session on another machine, the way a person does it by hand.
-//
-// Nothing here crosses the daemon's link. The link carries listings and refuses
-// writes, and that rule is unchanged. What this file builds is the argv of a
-// plain interactive ssh that runs tuios on the far side, so the session is
-// attached by the remote tuios in a local terminal or pane. That is the
-// tmux-over-ssh a person already types, spelled from the [hosts] table so the
-// address, the options and the remote binary are typed once.
-//
-// Two things are deliberately not the link's: the ssh has a tty, so the far
-// side can draw, and BatchMode is off, so ssh may ask a question. A pane can
-// answer a prompt. A daemon cannot, which is why the link forbids them.
-
 // SSHBinary is the ssh program to run. TUIOS_SSH overrides it, which is what
 // the tests use to put a stand-in on the far end of every link and every open.
 func SSHBinary() string {
@@ -31,8 +18,6 @@ func SSHBinary() string {
 	return "ssh"
 }
 
-// remoteArgPattern is what a remote argument may be without quoting. It is
-// the set every shell on the far side reads literally.
 var remoteArgPattern = lazyre.New(`^[A-Za-z0-9._@%+=:,/-]+$`)
 
 // ErrUnsafeRemoteArg reports an argument the remote shell could read as more
@@ -88,8 +73,6 @@ func (h Host) OpenArgs(remote ...string) ([]string, error) {
 		}
 		quoted = append(quoted, q)
 	}
-	// -- ends ssh's options, which ssh otherwise reads after the host name
-	// too. See linkArgs.
 	args = append(args, "--", h.Addr, h.remoteCommand(false, quoted...))
 	return args, nil
 }

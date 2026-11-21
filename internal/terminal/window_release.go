@@ -1,22 +1,13 @@
 package terminal
 
-// reflowScratchReleaser is an emulator that keeps buffers from one reflow to
-// the next. The pure Go emulator is one. libghostty-vt manages its own memory
-// and is not.
 type reflowScratchReleaser interface {
 	ReleaseReflowScratch()
 }
 
-// altScreenReleaser is an emulator that can drop its alternate screen's cells
-// while the main screen is shown. The pure Go emulator is one. libghostty-vt
-// manages its own memory and is not.
 type altScreenReleaser interface {
 	ReleaseAltScreen()
 }
 
-// scrollbackCacheReleaser is an emulator that can drop the decoded history
-// lines its scrollback keeps for readers. The pure Go emulator is one.
-// libghostty-vt keeps its own cache and is not.
 type scrollbackCacheReleaser interface {
 	ReleaseScrollbackCache()
 }

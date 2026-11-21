@@ -9,13 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// The subagent options of a rail: how the rows under an agent row look, which
-// fields they carry, how many there may be, whether a heading line folds them,
-// and how long a finished one stays. Each is a key of [appearance.sidebar],
-// and [appearance.sidebar.left] and [appearance.sidebar.right] may set any of
-// them again for the rail on that edge. Every default draws what the rail drew
-// before the options existed.
-
 // SidebarSubagentRowsTree draws the rows on tree lines (├─, └─).
 const SidebarSubagentRowsTree = "tree"
 
@@ -147,8 +140,6 @@ func DefaultSidebarSubagentView() SidebarSubagentView {
 	return ResolveSidebarSubagentView(SidebarConfig{}, nil)
 }
 
-// sidebarSubagentKeys are the subagent keys of one table, [appearance.sidebar]
-// or one of its edge tables.
 type sidebarSubagentKeys struct {
 	rows, collapse, fields, hide string
 	maxRows                      *int
@@ -214,7 +205,6 @@ func ResolveSidebarSubagentView(sb SidebarConfig, edge *SidebarEdgeConfig) Sideb
 	return v
 }
 
-// sidebarSubagentProblems are the warnings for one table's subagent keys.
 func sidebarSubagentProblems(k sidebarSubagentKeys) map[string]string {
 	out := map[string]string{}
 	if k.rows != "" && !slices.Contains(SidebarSubagentRowsValues, k.rows) {
@@ -238,12 +228,7 @@ func sidebarSubagentProblems(k sidebarSubagentKeys) map[string]string {
 	return out
 }
 
-// validateSidebarSubagents warns about the subagent keys of
-// [appearance.sidebar] and of each edge table.
 func validateSidebarSubagents(sb SidebarConfig, result *ValidationResult) {
-	// The rows, collapse and max_rows keys of [appearance.sidebar] have
-	// registry entries, so validateOptions checks them. The edge tables have
-	// none, so they are checked here.
 	main := sb.subagentKeys()
 	main.rows, main.collapse, main.maxRows = "", "", nil
 	tables := []struct {

@@ -95,7 +95,6 @@ func (c *Command) Stop() {
 	}
 }
 
-// processRW is a started agent as one connection.
 type processRW struct{ p *Process }
 
 func (r processRW) Read(b []byte) (int, error)  { return r.p.Stdout.Read(b) }
@@ -124,8 +123,6 @@ func StartProcess(argv []string, dir string, env []string) (*Process, error) {
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
 	detach(cmd)
-	// Plain pipes rather than StdoutPipe, so reaping the process does not
-	// close its stdout before the last message on it has been read.
 	inR, inW, err := os.Pipe()
 	if err != nil {
 		return nil, err
@@ -140,8 +137,6 @@ func StartProcess(argv []string, dir string, env []string) (*Process, error) {
 	tail := &tailBuffer{max: 4096}
 	cmd.Stderr = tail
 	err = cmd.Start()
-	// The child has its ends now; the parent's copies would keep the pipes
-	// open after it exits.
 	_ = inR.Close()
 	_ = outW.Close()
 	if err != nil {
@@ -166,7 +161,6 @@ func (p *Process) Stop() {
 	})
 }
 
-// tailBuffer keeps the last max bytes written to it.
 type tailBuffer struct {
 	mu  sync.Mutex
 	max int

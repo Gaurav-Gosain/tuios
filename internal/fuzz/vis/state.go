@@ -7,33 +7,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz"
 )
 
-// The observer half. Everything here runs on the engine's own goroutine, so the
-// rule is that no method allocates, blocks, or grows anything: the state is
-// fixed-size, written in place, and the renderer copies a snapshot out of it on
-// its own cadence. The engine never waits for a frame, and a display that fell
-// behind loses frames rather than actions.
-//
-// One mutex covers it. It is held for the few nanoseconds a counter bump takes
-// and never across a render, so it cannot become backpressure. Losing frames is
-// fine; losing a violation is not, which is why every failure latches: a rule
-// that goes red between two frames is still red at the next one.
-
-// tapeRows and tapeCols size the action tape. The product is how many actions
-// the ring holds, and it is exact: one cell is one action.
 const (
 	tapeRows = 7
 	tapeCols = 80
 	tapeCap  = tapeRows * tapeCols
 
-	// ledgerCap is how many recent actions are shown with their payloads. The
-	// tape carries rate, the ledger carries meaning, and five is what fits
-	// beside the other rail sections without evicting one.
 	ledgerCap = 5
 
-	// funnelHead and funnelTail bound the shrink funnel's memory. A long
-	// minimisation runs to thousands of candidates and the interesting ones are
-	// the first few, which show the collapse, and the last few, which show where
-	// it settled. The count between them is kept exactly and shown as a figure.
 	funnelHead = 6
 	funnelTail = 22
 )
@@ -56,8 +36,6 @@ type Attempt struct {
 	Accepted bool
 }
 
-// state is the whole display model. It is written by the engine goroutine and
-// read, by copy, from the renderer.
 type state struct {
 	mu sync.Mutex
 
@@ -73,12 +51,8 @@ type state struct {
 	actions int
 	checks  int
 
-	// tape is a ring of class indexes, one per action, offset by one so a zero
-	// means a cell no action has reached yet.
-	tape [tapeCap]uint8
-	head int
-	// violationCell is the ring position of the action that broke a rule, so
-	// the exact gesture stays visible in the stream.
+	tape          [tapeCap]uint8
+	head          int
 	violationCell int
 
 	ledger  [ledgerCap]fuzz.Action
@@ -86,7 +60,6 @@ type state struct {
 
 	mix []int
 
-	// ruleBroken latches per rule, indexed like the registry.
 	ruleBroken []bool
 	ruleIndex  map[string]int
 	failedRule string
@@ -105,20 +78,12 @@ type state struct {
 	done   bool
 	result fuzz.Result
 
-	// gen bumps on every event. The renderer draws only when it moved, so a
-	// stalled engine costs no frames at all.
-	gen uint64
-	// sinceBatch counts actions toward the per-batch cadence.
+	gen        uint64
 	sinceBatch int
 
-	// wake nudges the per-batch renderer. The send is non-blocking against a
-	// buffered channel, so a renderer that is behind loses a nudge rather than
-	// stalling the engine holding the other end.
 	wake chan struct{}
 }
 
-// nudge tells the renderer something happened. It must never block: the whole
-// no-backpressure claim comes down to this one send.
 func (s *state) nudge() {
 	if s.wake == nil {
 		return
@@ -140,9 +105,6 @@ func newState(rules []fuzz.RuleInfo, classes []Class) *state {
 		failedStep:    -1,
 	}
 	for i, r := range rules {
-		// A duplicate name would make one dot unreachable. The registry test on
-		// the target side rejects that; here the first wins so the display
-		// cannot panic on a target that ships one anyway.
 		if _, ok := s.ruleIndex[r.Name]; !ok {
 			s.ruleIndex[r.Name] = i
 		}
@@ -171,7 +133,6 @@ func (s *state) Step(i int, a fuzz.Action, vs []fuzz.Violation) {
 	s.sinceBatch++
 	s.mix[c]++
 
-	// Newest first, so the ledger reads down from now.
 	copy(s.ledger[1:], s.ledger[:ledgerCap-1])
 	s.ledger[0] = a
 	if s.ledgerN < ledgerCap {
@@ -188,9 +149,6 @@ func (s *state) Step(i int, a fuzz.Action, vs []fuzz.Violation) {
 			s.ruleBroken[idx] = true
 			s.failedInfo = s.rules[idx]
 		} else {
-			// A violation the registry does not carry. Showing it under a rule
-			// that did not break would be the lie this display exists to avoid,
-			// so it is named as itself and no dot is inked.
 			s.failedInfo = fuzz.RuleInfo{Name: vs[0].Rule, Family: "unregistered"}
 		}
 	}
@@ -214,8 +172,6 @@ func (s *state) Shrink(pass string, size int, accepted bool) {
 	defer s.mu.Unlock()
 	if s.phase == PhaseGenerating {
 		s.phase = PhaseShrinking
-		// The sequence the funnel is scaled against is the one minimisation
-		// started from, which is the run up to and including the failing action.
 		s.initialLen = s.failedStep + 1
 		if s.initialLen <= 0 {
 			s.initialLen = s.actions
@@ -328,8 +284,6 @@ func (s *state) snapshot() Snapshot {
 	snap.Mix = append([]int(nil), s.mix...)
 	snap.Broken = append([]bool(nil), s.ruleBroken...)
 
-	// The funnel keeps the opening and the tail; whatever fell between them is
-	// reported as a count rather than dropped silently.
 	head := min(s.runsSeen, funnelHead)
 	snap.Runs = append(snap.Runs, s.headRuns[:head]...)
 	if s.runsSeen > funnelHead {
@@ -340,17 +294,12 @@ func (s *state) snapshot() Snapshot {
 	return snap
 }
 
-// takeFrame reports whether anything happened since the last frame, and resets
-// the batch counter when the caller is drawing on a per-batch cadence.
 func (s *state) takeFrame(lastGen uint64) (uint64, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.gen, s.gen != lastGen
 }
 
-// batchReady reports whether n actions have run since the last batch frame, and
-// consumes them when they have. A phase change always draws, because the phase
-// changing is the most interesting thing that happens in a run.
 func (s *state) batchReady(n int, lastPhase Phase) (Phase, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

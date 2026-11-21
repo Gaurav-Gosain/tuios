@@ -10,37 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// The tables of the agent review, triage, queue and approval work:
-//
-//	[agents.approvals]
-//	hold_plans = true
-//
-//	[agents.approvals.risk]
-//	builtin = true
-//	panes_may_allow = false
-//
-//	[[agents.approvals.risk.rule]]
-//	name = "kubectl apply"
-//	tools = ["Bash"]
-//	pattern = '\bkubectl\s+(apply|delete)\b'
-//
-//	[agents.recap]
-//	mode = "toast"
-//	away = "10m"
-//	test_patterns = ["go test", "pytest"]
-//
-//	[agents.queue]
-//	max = 8
-//
-//	[agents.checkpoints]
-//	enabled = true
-//	keep = 50
-//
-// They are file-plane config like the rest of [agents]: read from the file and
-// again when it changes, and never settable with set-option, so a pane cannot
-// switch the risk rules off through tuios. Every field has a default, so a
-// file without any of them behaves as the defaults below say.
-
 // RiskConfig is the [agents.approvals.risk] table.
 type RiskConfig struct {
 	// Builtin keeps the rules tuios ships. Unset means true.
@@ -231,8 +200,6 @@ func (c CheckpointsConfig) KeepCount() int {
 	return c.Keep
 }
 
-// validateAgentWork warns about the values of the tables above that read as
-// their default, and about risk rules that cannot be used.
 func validateAgentWork(cfg *UserConfig, result *ValidationResult) {
 	warn := func(field, key, msg string) {
 		result.Warnings = append(result.Warnings, ValidationError{Field: field, Key: key, Message: msg})
@@ -304,8 +271,6 @@ func ParseAgentRestFold(v string) (d time.Duration, ok bool) {
 	return d, true
 }
 
-// checkAgentRestFold is the error for an agent_rest_fold value that is
-// neither a duration nor off.
 func checkAgentRestFold(v string) error {
 	if _, ok := ParseAgentRestFold(v); !ok {
 		return errfmt.Errorf("%q is not a duration such as 1h, or off", v)

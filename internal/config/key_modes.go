@@ -5,33 +5,6 @@ import (
 	"strings"
 )
 
-// Key modes: named key sets that stay on until they are left, as Rex and
-// zellij have them. A mode is a [keybindings.modes.NAME] table:
-//
-//	[keybindings.modes.resize]
-//	title = "Resize"
-//	exclusive = true
-//
-//	[keybindings.modes.resize.keys]
-//	resize_pane_left_5 = ["h"]
-//	resize_pane_right_5 = ["l"]
-//
-//	[keybindings.prefix_mode]
-//	"enter_mode:resize" = ["R"]
-//
-// leader R turns the mode on, and h and l then resize until esc. Any section
-// binds enter_mode:NAME, a mode or a menu too, so modes stack: the mode on
-// top reads a key first, and a mode that is not exclusive passes a key it
-// does not bind to the mode under it, and then to the pane or the window
-// keys. An exclusive mode drops the keys it does not bind. once turns the
-// mode off after one key it reads. esc always turns off the mode on top, and
-// leave_mode does the same from a key.
-//
-// A menu closes after one key and a sticky menu after a key it does not
-// bind. A mode stays on through any key, so the pane can be typed into while
-// a mode that is not exclusive is on. Nothing here ships: a mode exists
-// only when a config declares it.
-
 // EnterModePrefix starts the action that turns on a declared key mode.
 const EnterModePrefix = "enter_mode:"
 
@@ -102,7 +75,6 @@ func (k *KeybindingsConfig) ModeTitle(name string) string {
 	return name
 }
 
-// modeSection is the keys of the mode a "modes.NAME" section name refers to.
 func (k *KeybindingsConfig) modeSection(section string) (map[string][]string, bool) {
 	name, ok := strings.CutPrefix(section, ModeSectionPrefix)
 	if !ok {
@@ -112,9 +84,6 @@ func (k *KeybindingsConfig) modeSection(section string) (map[string][]string, bo
 	return m.Keys, ok
 }
 
-// modeScopes is the scope of each declared mode, for ScopesFor. Its chord is
-// the action that turns it on. A mode that is not exclusive takes its keys
-// from the pane while it is on; an exclusive one owns the keyboard.
 func modeScopes(kb *KeybindingsConfig) []Scope {
 	names := kb.ModeNames()
 	out := make([]Scope, 0, len(names))

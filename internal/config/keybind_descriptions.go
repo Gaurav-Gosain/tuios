@@ -6,16 +6,6 @@ import (
 	"strings"
 )
 
-// scopedDescriptions are the descriptions of actions whose name means
-// something only inside one scope. The rail's "exit", "kill" and "help", and
-// the prefix sub-menus' numbered actions, have no entry in
-// ActionDescriptions: a name such as "help" is not unique enough to describe
-// there, and a name such as "new_window" means a different thing on the rail.
-// Without these, a listing fell back to the action name with its underscores
-// opened ("window prefix new").
-//
-// The rail's texts are the help overlay's (see generateSidebarBindings in
-// internal/app, which reads them from here), so the two cannot drift.
 var scopedDescriptions = map[string]map[string]string{
 	ScopeSidebar: {
 		"exit":          "Leave the rail, back to the panes",
@@ -66,8 +56,6 @@ var scopedDescriptions = map[string]map[string]string{
 	},
 }
 
-// numberedDescriptions describe the numbered action families by their
-// prefix, per scope. The number is the action name's last character.
 var numberedDescriptions = map[string]map[string]string{
 	ScopeSidebar:        {"jump_": "Jump to session %s in the rail"},
 	ScopePrefixMinimize: {"minimize_prefix_restore_": "Restore minimized window %s"},

@@ -22,8 +22,6 @@ func TestGeneratedPayloadsCannotDriveTheTerminal(t *testing.T) {
 	d.Step(0, fuzz.Action{Kind: fuzz.Guest, S: "\x1b[2J\x1b[?1049h\x1b]0;pwned\x07"}, nil)
 	d.Step(1, fuzz.Action{Kind: fuzz.Rename, S: "\x1b[31mred"}, nil)
 	frame := d.Frame()
-	// The display's own escapes are colour and cursor control; the payload's
-	// were a screen clear, an alt-screen switch and a title set.
 	for _, forbidden := range []string{"\x1b[2J", "\x1b[?1049h", "\x1b]0;"} {
 		if strings.Contains(frame, forbidden) {
 			t.Errorf("a generated payload put %q into the frame", forbidden)

@@ -19,13 +19,6 @@ import (
 // and the one that is in charge is the one the user named.
 const BorderStyleGlyphs = "glyphs"
 
-// glyphOr returns the active set's glyph for one role, or a default: the ASCII
-// one in a terminal that cannot draw more, and the shipped one otherwise.
-//
-// The ASCII test is per glyph rather than per set, so a set that is 7-bit in the
-// roles it can be keeps those roles under --ascii-only and gives up only the
-// ones it cannot draw. A set-wide test would have thrown away a whole
-// hand-written set over one arrow.
 func (s *Settings) glyphOr(role func(*theme.GlyphSet) string, def, asciiDef string) string {
 	if g := role(theme.Glyphs()); g != "" && (!s.UseASCIIOnly || overlay.IsASCII(g)) {
 		return g
@@ -35,10 +28,6 @@ func (s *Settings) glyphOr(role func(*theme.GlyphSet) string, def, asciiDef stri
 	}
 	return def
 }
-
-// The rail's marks. They were literals in two sidebar files with an ASCII
-// branch beside each, which is why a rail could not be restyled without
-// editing Go.
 
 // GetRailFocusMark is the one-cell gutter mark saying "you are here".
 func (s *Settings) GetRailFocusMark() string {
@@ -75,14 +64,6 @@ func (s *Settings) GetRailTreeLast() string {
 func (s *Settings) GetRailAddGlyph() string {
 	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Add }, "+", "+")
 }
-
-// The files section's three marks. Each is one cell, so a row of the listing
-// lands on the same spine every other rail row does.
-//
-// They are the fallback the per-type nerd-font icons degrade to, and they are
-// the whole listing on a terminal that cannot draw those. The ASCII defaults
-// are ">" for a folder, "^" for the parent and "." for a file, so the three
-// kinds of row stay apart with no font at all.
 
 // GetRailFolderGlyph is the mark on a directory row.
 func (s *Settings) GetRailFolderGlyph() string {
@@ -269,13 +250,6 @@ func (s *Settings) ResolvedGlyphs() map[string]string {
 	for state := range agentMarkDefaults {
 		out["state_"+state] = AgentStateMark(state, s.UseASCIIOnly)
 	}
-	// The border is reported through the set's own resolution rather than
-	// through GetBorderForStyle, because the two answer different questions.
-	// GetBorderForStyle says what is on screen now, which is border_style's
-	// answer unless border_style is "glyphs"; this says what the set would
-	// draw, which is what a caller inspecting a set is asking. The describe
-	// verb reports border_style alongside so the caller can tell whether the
-	// two are currently the same thing.
 	b := s.glyphSetBorder()
 	maps.Copy(out, map[string]string{
 		"border.top": b.Top, "border.bottom": b.Bottom,
@@ -289,8 +263,6 @@ func (s *Settings) ResolvedGlyphs() map[string]string {
 	return out
 }
 
-// glyphBorrowMu serialises the borrow in GlyphsForSet, so two callers cannot
-// leave the selection somewhere neither of them asked for.
 var glyphBorrowMu sync.Mutex
 
 // GlyphsForSet is what a set would draw if it were selected, without selecting

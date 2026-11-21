@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// liveHeap is the heap still reachable after two collections. The second one
-// sweeps what the first one's finalizers let go.
 func liveHeap() int64 {
 	runtime.GC()
 	runtime.GC()
@@ -20,7 +18,6 @@ func liveHeap() int64 {
 	return int64(ms.HeapAlloc)
 }
 
-// memoryWindow is a daemon pane closed when the test ends.
 func memoryWindow(t *testing.T, id string, width, height, scrollback int) *Window {
 	t.Helper()
 	w := NewDaemonWindow(id, "pane", 0, 0, width, height, 0, "pty-"+id, nil, scrollback)
@@ -31,11 +28,6 @@ func memoryWindow(t *testing.T, id string, width, height, scrollback int) *Windo
 	return w
 }
 
-// stallWriter holds the window's I/O lock, which outputWriter takes for every
-// write, so the writer stops on the first chunk it takes and everything sent
-// after that stays queued. The returned release lets it go; it may be called
-// more than once, and it runs before the window's Close when the test ends, so
-// a test that fails while stalled does not leave Close waiting on the lock.
 func stallWriter(t *testing.T, w *Window) (release func()) {
 	t.Helper()
 	w.LockIO()
@@ -45,21 +37,16 @@ func stallWriter(t *testing.T, w *Window) (release func()) {
 	return release
 }
 
-// numberedLine is chunk n of a flood: one line holding its number.
 func numberedLine(n int) []byte {
 	return fmt.Appendf(nil, "%d\r\n", n)
 }
 
-// sendLines queues the numbered lines from..to, one chunk each.
 func sendLines(w *Window, from, to int) {
 	for n := from; n <= to; n++ {
 		w.WriteOutputAsync(numberedLine(n))
 	}
 }
 
-// drainWithin runs DrainPendingOutput and fails the test if it has not
-// returned within limit, so a drain that never returns fails rather than
-// hangs.
 func drainWithin(t *testing.T, w *Window, limit time.Duration) {
 	t.Helper()
 	done := make(chan struct{})
@@ -74,9 +61,6 @@ func drainWithin(t *testing.T, w *Window, limit time.Duration) {
 	}
 }
 
-// paneLines is the text of the pane's scrollback and then its screen, one
-// string per line, with trailing blanks dropped from each line and blank lines
-// dropped from the end.
 func paneLines(w *Window) []string {
 	w.RLockIO()
 	defer w.RUnlockIO()
@@ -107,8 +91,6 @@ func paneLines(w *Window) []string {
 	return lines
 }
 
-// queueBoundLines is how many numbered lines a stalled pane keeps: the one the
-// writer took before it stalled and the 4096 the queue holds behind it.
 const queueBoundLines = 4097
 
 // TestIdleDaemonPanesReserveNoOutputQueue holds what a daemon pane that never
@@ -144,7 +126,6 @@ func TestAStalledPaneKeepsItsOutputInOrderUpToTheBound(t *testing.T) {
 
 	release := stallWriter(t, w)
 	sendLines(w, 1, 1)
-	// The writer takes the first chunk and stops on the lock.
 	time.Sleep(200 * time.Millisecond)
 	sendLines(w, 2, sent)
 	release()
@@ -219,7 +200,6 @@ func TestFloodedDaemonPanesGiveBackTheirQueue(t *testing.T) {
 		releases[i] = stallWriter(t, windows[i])
 		sendLines(windows[i], 1, 1)
 	}
-	// Every writer takes its first chunk and stops on the lock.
 	time.Sleep(200 * time.Millisecond)
 	for _, w := range windows {
 		sendLines(w, 2, flood+1)
@@ -281,9 +261,6 @@ func TestDrainPendingOutputWaitsForTheWriter(t *testing.T) {
 	}
 }
 
-// floodPanes fills the output queue of every pane to its bound the way
-// TestFloodedDaemonPanesGiveBackTheirQueue does, releases every writer, and
-// waits for every pane to drain. It reports when the first writer was let go.
 func floodPanes(t *testing.T, windows []*Window, flood int) (released time.Time) {
 	t.Helper()
 	releases := make([]func(), len(windows))
@@ -315,10 +292,7 @@ func TestFloodedDaemonPanesKeepTheirQueueForASecondAfterEveryFlood(t *testing.T)
 	const panes = 10
 	const flood = 5000
 	const budget = 150_000
-	// A queue grown to its bound is 4096 slots of about 56 bytes; half of
-	// that is well clear of the noise between two readings.
 	const kept = 100_000
-	// The early reading must come well inside the second the queue is kept.
 	const earlyBy = 600 * time.Millisecond
 
 	before := liveHeap()

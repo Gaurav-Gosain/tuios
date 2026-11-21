@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// configLeaves walks UserConfig and calls fn with the dotted path and the Go
-// type of every key a person can write. A map of tables adds NAME as a part
-// of the path. A map of values, a list and a list of tables are one key each.
 func configLeaves(fn func(path string, t reflect.Type)) {
 	var walk func(t reflect.Type, prefix string)
 	walk = func(t reflect.Type, prefix string) {
@@ -54,9 +51,6 @@ func configLeaves(fn func(path string, t reflect.Type)) {
 	walk(reflect.TypeFor[UserConfig](), "")
 }
 
-// skipped reports whether fileKeysSkipped names the key: a key under a
-// skipped table whose value is a map or a list, such as a section of
-// bindings. A plain key under such a table still needs a row.
 func skipped(path string, t reflect.Type) bool {
 	for prefix := range fileKeysSkipped {
 		if path != prefix && !strings.HasPrefix(path, prefix+".") {
@@ -89,8 +83,6 @@ func TestEveryConfigKeyIsDocumented(t *testing.T) {
 	}
 }
 
-// fileKeyType is the Go type of the field a fileKeys path names. NAME walks
-// into a map.
 func fileKeyType(path string) (reflect.Type, bool) {
 	t := reflect.TypeFor[UserConfig]()
 	for p := range strings.SplitSeq(path, ".") {
@@ -180,7 +172,6 @@ func TestFileKeyDefaultsComeFromTheCode(t *testing.T) {
 	}
 }
 
-// fileKeySample is a path that a fileKeys row covers, with NAME as a name.
 func fileKeySample(k FileKey) string {
 	p := strings.ReplaceAll(k.Path, "NAME", "sample")
 	if k.Type == FileKeyTable || k.Type == FileKeyTables || k.Type == FileKeyMap {

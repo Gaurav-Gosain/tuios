@@ -117,8 +117,6 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		return nil
 	}
 
-	// sendRepeated sends data to the focused window once per repeat count. Basic
-	// key commands carry an optional trailing count (e.g. Down 5, Backspace 10).
 	sendRepeated := func(data []byte) error {
 		id := ce.executor.GetFocusedWindowID()
 		for i := 0; i < repeatCount(cmd); i++ {
@@ -172,14 +170,12 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	case CommandTypeEnd:
 		return sendRepeated([]byte{0x1b, '[', 'F'})
 
-	// Mode switching
 	case CommandTypeTerminalMode:
 		return ce.executor.SetMode("terminal")
 
 	case CommandTypeWindowManagementMode:
 		return ce.executor.SetMode("window")
 
-	// Window management
 	case CommandTypeNewWindow:
 		if len(cmd.Args) > 0 && cmd.Args[0] != "" {
 			return ce.executor.CreateNewWindowWithName(cmd.Args[0])
@@ -202,9 +198,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		if len(cmd.Args) == 0 || cmd.Args[0] == "" {
 			return errMissingArg("Focus", "a window name or id")
 		}
-		// Try as name first (more user-friendly), fall back to ID
 		if err := ce.executor.FocusWindowByName(cmd.Args[0]); err != nil {
-			// If name lookup fails, try as ID
 			return ce.executor.FocusWindowByID(cmd.Args[0])
 		}
 		return nil
@@ -214,10 +208,8 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		case 0:
 			return errMissingArg("RenameWindow", "a new name")
 		case 1:
-			// One arg: rename focused window
 			return ce.executor.RenameWindowByID(ce.executor.GetFocusedWindowID(), cmd.Args[0])
 		default:
-			// Two args: old name, new name
 			return ce.executor.RenameWindowByName(cmd.Args[0], cmd.Args[1])
 		}
 
@@ -233,7 +225,6 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		}
 		return ce.executor.RestoreWindowByID(ce.executor.GetFocusedWindowID())
 
-	// Tiling
 	case CommandTypeToggleTiling:
 		return ce.executor.ToggleTiling()
 
@@ -252,7 +243,6 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	case CommandTypeSnapFullscreen:
 		return ce.executor.SnapByDirection("fullscreen")
 
-	// BSP Tiling
 	case CommandTypeSplit:
 		if len(cmd.Args) == 0 {
 			return errMissingArg("Split", "horizontal or vertical")
@@ -289,7 +279,6 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	case CommandTypeSetMultifocus:
 		return ce.executor.SetMultifocusExec(cmd.Args)
 
-	// Workspace
 	case CommandTypeSwitchWS:
 		ws, err := workspaceArg("Switch", cmd)
 		if err != nil {
@@ -316,7 +305,6 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 			return errMissingArg("key combo", "a combination such as ctrl+b")
 		}
 		comboStr := cmd.Args[0]
-		// Alt+N, in any spelling of Alt, switches to workspace N.
 		if mod, rest, ok := strings.Cut(comboStr, "+"); ok {
 			if name, isMod := config.ParseModifier(mod); isMod && name == config.ModAlt {
 				ws := 0
@@ -325,15 +313,9 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 				}
 			}
 		}
-		// For other key combos, convert to proper bytes and send to the focused window
 		return ce.executor.SendToWindow(ce.executor.GetFocusedWindowID(), convertKeyComboToBytes(comboStr))
 
 	case CommandTypeWait, CommandTypeWaitUntilRegex:
-		// Wait (a Sleep alias) and WaitUntilRegex are handled by the interactive
-		// playback loop (internal/app/update.go), which needs to block across
-		// ticks while checking timers and screen contents. They are intentionally
-		// no-ops here so the remote/daemon exec path (which is fire-and-forget)
-		// simply skips them.
 		return nil
 
 	case CommandTypeEnableAnimations:
@@ -345,7 +327,6 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	case CommandTypeToggleAnimations:
 		return ce.executor.ToggleAnimations()
 
-	// New feature commands
 	case CommandTypeToggleZoom:
 		return ce.executor.ToggleZoomExec()
 
@@ -383,7 +364,6 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		}
 		return ce.executor.LoadLayoutExec(cmd.Args[0])
 
-	// Config commands
 	case CommandTypeSetConfig:
 		if len(cmd.Args) < 2 {
 			return errMissingArg("Set", "a config path and a value")
@@ -460,9 +440,6 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		return nil
 
 	case CommandTypeWaitFor:
-		// The player waits across ticks and never hands WaitFor to Execute.
-		// Anything that does is running one command on its own, with nothing
-		// to wait in.
 		return errfmt.Errorf("a WaitFor line works only in a tape. From a shell, use tuios wait-for")
 
 	case CommandTypeSet:
@@ -472,22 +449,16 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 		return ce.executor.SetConfig(cmd.Args[0], cmd.Args[1])
 
 	case CommandTypeSource:
-		// A tape loaded from a file has its Source lines replaced by the file
-		// they name (see LoadFile). One that reaches here came as text, with
-		// no directory to find the file in.
 		return errfmt.Errorf("a Source line works only in a tape file run with tuios tape play or tuios tape exec")
 
 	case CommandTypeSleep, CommandTypeComment:
 		return nil
 
 	default:
-		// Every command the parser produces has a case above. A new one
-		// that does not is reported, never run as nothing.
 		return errfmt.Errorf("%s cannot run here", cmd.Type)
 	}
 }
 
-// enterBytes is the Enter key as the focused pane's shell expects it.
 func enterBytes() []byte {
 	if runtime.GOOS == "windows" {
 		return []byte{'\r', '\n'}
@@ -495,17 +466,10 @@ func enterBytes() []byte {
 	return []byte{'\n'}
 }
 
-// errMissingArg reports a tape command that was given no argument to act on.
-// Returning nil instead would make a mistyped or truncated command do nothing
-// and report nothing, which is indistinguishable from the command having
-// worked.
 func errMissingArg(command, want string) error {
 	return errfmt.Errorf("%s needs %s", command, want)
 }
 
-// workspaceArg parses a workspace number argument. It returns the parse error
-// rather than discarding it, because a non-numeric argument would otherwise
-// become workspace 0 and be silently dropped by the range check downstream.
 func workspaceArg(command string, cmd *Command) (int, error) {
 	if len(cmd.Args) == 0 {
 		return 0, errMissingArg(command, "a workspace number")
@@ -517,8 +481,6 @@ func workspaceArg(command string, cmd *Command) (int, error) {
 	return ws, nil
 }
 
-// repeatCount returns the trailing repeat count of a basic key command, taken
-// from its first argument. It defaults to 1 when absent or not a positive int.
 func repeatCount(cmd *Command) int {
 	if len(cmd.Args) == 0 {
 		return 1
@@ -530,8 +492,6 @@ func repeatCount(cmd *Command) int {
 	return n
 }
 
-// convertKeyComboToBytes converts a key combination string to actual bytes to send to the PTY
-// Examples: "Ctrl+b" -> [0x02], "Alt+x" -> [0x1b, 'x']
 func convertKeyComboToBytes(comboStr string) []byte {
 	parts := strings.Split(comboStr, "+")
 	if len(parts) < 2 {
@@ -542,7 +502,6 @@ func convertKeyComboToBytes(comboStr string) []byte {
 	var ctrlModifier, altModifier, shiftModifier bool
 	var keyStr string
 
-	// Parse modifiers and key
 	for i := range len(parts) {
 		part := strings.TrimSpace(parts[i])
 		name, isMod := config.ParseModifier(part)
@@ -562,41 +521,31 @@ func convertKeyComboToBytes(comboStr string) []byte {
 		return []byte(comboStr)
 	}
 
-	// Convert the key string to bytes
 	if len(keyStr) == 1 {
 		keyChar := keyStr[0]
 
-		// Apply Ctrl modifier: produces ASCII control characters (0x00-0x1F)
 		if ctrlModifier {
-			// Ctrl+letter: subtract 64 from uppercase, or use bitwise AND with 0x1F
 			if unicode.IsLetter(rune(keyChar)) {
-				// Convert to uppercase equivalent and apply Ctrl
 				upperChar := byte(unicode.ToUpper(rune(keyChar)))
 				result = append(result, upperChar&0x1F)
 			} else if unicode.IsDigit(rune(keyChar)) {
-				// Ctrl+digit
 				result = append(result, keyChar&0x1F)
 			}
 		} else if altModifier {
-			// Alt modifier: send ESC followed by the character
-			result = append(result, 0x1b) // ESC
+			result = append(result, 0x1b)
 			result = append(result, keyChar)
 		} else if shiftModifier {
-			// Shift without Ctrl/Alt: send the upper-case form of the key
 			result = append(result, byte(unicode.ToUpper(rune(keyChar))))
 		} else {
 			result = append(result, keyChar)
 		}
 	} else {
-		// Multi-character key (like "space", "enter", etc.)
 		lowerKey := strings.ToLower(keyStr)
 
-		// Shift+Tab is the back-tab sequence ESC [ Z
 		if lowerKey == "tab" && shiftModifier && !ctrlModifier && !altModifier {
 			return []byte{0x1b, '[', 'Z'}
 		}
 
-		// Map special keys
 		specialKeys := map[string][]byte{
 			"space":     {' '},
 			"enter":     {'\n'},
@@ -610,11 +559,10 @@ func convertKeyComboToBytes(comboStr string) []byte {
 
 		if keyBytes, exists := specialKeys[lowerKey]; exists {
 			if altModifier {
-				result = append(result, 0x1b) // ESC prefix for Alt
+				result = append(result, 0x1b)
 			}
 			result = append(result, keyBytes...)
 		} else {
-			// Unknown key, just send it as-is
 			result = append(result, []byte(keyStr)...)
 		}
 	}

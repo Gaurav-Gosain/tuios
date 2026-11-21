@@ -6,33 +6,6 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// The CharmTone themes: Charm's colour system as a terminal palette.
-//
-// The colours are CharmTone's, copied from charm.land/tone v0.1.0 (commit
-// b528027a84fe), Copyright 2026 Charmbracelet, Inc., Apache License 2.0. They
-// are baked in as hex rather than imported so the theme adds no dependency;
-// charm.land/tone, which the chrome already uses, holds the same values at the
-// version go.mod pins.
-//
-// The dark theme is the ANSI mapping Crush ships for its default theme,
-// charmtone-panther (charmtoneOpts in internal/ui/styles/themes.go of
-// github.com/charmbracelet/crush), with one change: bright black is Squid
-// rather than Iron. Iron measures 1.93:1 on Pepper, and bright black is the
-// colour shells draw autosuggestions and many programs draw comments in.
-// Squid is the step Crush itself uses for its quiet text. The cursor is Dolly
-// and the selection Charple, Crush's cursor and text selection colours.
-//
-// Crush ships no light CharmTone theme. The light one keeps the same hue for
-// each slot and takes the shade of it that reads on Salt, CharmTone's light
-// ground. Two hues have no such shade: yellow is Cumin at 2.48:1 and green is
-// Pickle at 2.97:1, the darkest yellow and the darkest true green CharmTone has.
-//
-// Neither theme names a chrome ramp. The constant ramp tuios draws its dialogs
-// on is CharmTone's own neutrals (see UI), with a hand-set grey ramp at 256
-// colours that a named ramp would replace with BBQ's nearest entry, navy. On
-// the light theme the ramp is built from Salt, as for any light theme.
-
-// charmToneHex are the CharmTone colours the themes use.
 var charmToneHex = map[string]string{
 	"Cumin":    "#BF976F",
 	"Coral":    "#FF577D",
@@ -70,8 +43,6 @@ var charmToneHex = map[string]string{
 	"Pom":      "#AB2454",
 }
 
-// charmToneTheme is one CharmTone theme by colour name. ansi is in slot
-// order, 0 to 15.
 type charmToneTheme struct {
 	id, name                 string
 	dark                     bool
@@ -102,9 +73,6 @@ var charmToneThemes = [...]charmToneTheme{{
 	success: "Pickle", warning: "Cumin", error: "Sriracha", info: "Damson",
 }}
 
-// registerCharmToneThemes registers the CharmTone themes and their chrome.
-// Runs with the registry, before the custom themes, so a file with the same
-// id replaces one.
 func registerCharmToneThemes() {
 	for _, th := range charmToneThemes {
 		c := func(name string) *tint.Color { return tint.FromHex(charmToneHex[name]) }

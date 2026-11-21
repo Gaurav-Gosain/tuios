@@ -105,84 +105,46 @@ const (
 type Model struct {
 	opt Options
 
-	cells []cell
-	// cur is the cursor, an index into cells from 0 to len(cells).
-	cur int
-	// anchor is the other end of the selection, -1 when nothing is selected
-	// (selection.go). dragFrom is where the last mouse press landed.
+	cells            []cell
+	cur              int
 	anchor, dragFrom int
-	// copied is the text the last copy or cut took.
-	copied string
-	// rowLine is the frame line the draft's first shown row was drawn on.
-	rowLine int
-	// ver changes with every edit, for the layout cache.
-	ver uint64
-	// size is the draft's bytes, blocks included.
-	size int
-	lay  layout
+	copied           string
+	rowLine          int
+	ver              uint64
+	size             int
+	lay              layout
 
 	undo, redo []edit
 	undoSize   int
-	// joinTyping says the next typed character may join the last undo step.
 	joinTyping bool
 
-	// goal is the column up and down aim for, -1 when the last key was not
-	// up or down.
-	goal int
-	// top is the first row shown when the draft is taller than MaxRows.
-	top int
-	// room is how many lines the host can give the editor's frame, set
-	// with SetRoom before each Render; 0 when the host has not said. full
-	// says the editor takes all of it, toggled with alt+m.
-	room int
-	full bool
-	// width is the text width of the last frame, which up, down, home and
-	// end move by.
+	goal  int
+	top   int
+	room  int
+	full  bool
 	width int
 
-	// automated says a key that did not come from the keyboard touched the
-	// draft. The host must not send such a draft as the person.
 	automated bool
-	// notice is a line under the editor that says what went wrong, and info
-	// one that says what happened when nothing went wrong. The next edit
-	// clears both.
-	notice string
-	info   string
+	notice    string
+	info      string
 
-	// pager is the open block, nil when none is.
 	pager *pager
 
-	// frame is the last frame Render drew, and frameAt what it was drawn
-	// from. The lines are shared: the host must not change them.
 	frame   []string
 	frameAt frameKey
 	drawn   uint64
-	// hints is the last list Hints made, and hintsAt what it was made for.
 	hints   []Hint
 	hintsAt hintsKey
 
-	// preview draws pictures of the images, nil for words only. places is
-	// where the last frame put them.
 	preview Previewer
 	places  []Placement
-	// caret is the line and column the last frame drew the cursor cell at,
-	// counted from the frame's first line. caretOK is false when the frame
-	// drew no cursor: the pager or the image view was open.
 	caret   Caret
 	caretOK bool
 
-	// completer gives the @ list's entries, nil for no @ completion.
-	// mention is the open list, nil when it is closed, and dismissedAt the
-	// @ that esc closed the list of, so it stays closed while the cursor is
-	// in that word. See mention.go.
 	completer   Completer
 	mention     *mention
 	dismissedAt int
 
-	// hist is the target's history, oldest first, and histAt the entry the
-	// draft shows, -1 when it shows no entry; histDraft is the draft the walk
-	// started from. hsearch is the open ctrl+r search. cleared is the draft
-	// ctrl+c cleared last. See history.go.
 	hist      []HistoryEntry
 	histAt    int
 	histDraft []cell
@@ -282,9 +244,6 @@ func (m *Model) Submit() (string, bool) {
 	return m.Text(), true
 }
 
-// stripInvisible removes invisible characters from the draft as one undo
-// step and returns how many went. A block with any gets a new block in its
-// place, so undo brings back the block as it was.
 func (m *Model) stripInvisible() int {
 	found := false
 	for _, c := range m.cells {
@@ -381,11 +340,7 @@ func (m *Model) Paste(text string, remote bool) {
 	if text == "" {
 		return
 	}
-	// A paste replaces the selection, so the selected bytes are room. The
-	// check comes first: a refused paste leaves the selection as it was.
 	if m.size-m.selectedBytes()+len(text) > m.opt.MaxBytes {
-		// The room left can be a few bytes, so the line names no size: a
-		// paste of one character must not read as larger than a kilobyte.
 		m.notice = "The paste is too large for the message. Save it to a file and type the path."
 		return
 	}
@@ -401,15 +356,11 @@ func (m *Model) Paste(text string, remote bool) {
 	}
 }
 
-// measure counts text's lines, a final line break not making a line of its
-// own, and its characters.
 func measure(text string) (lines, chars int) {
 	body := strings.TrimRight(text, "\n")
 	return strings.Count(body, "\n") + 1, utf8.RuneCountInString(text)
 }
 
-// nextNumber is the number a new block of a kind takes, image or paste: the
-// highest of that kind in the draft plus one.
 func (m *Model) nextNumber(image bool) int {
 	n := 0
 	for _, c := range m.cells {
@@ -420,7 +371,6 @@ func (m *Model) nextNumber(image bool) int {
 	return n + 1
 }
 
-// newBlock makes block n of text.
 func newBlock(n int, text string) *block {
 	lines, chars := measure(text)
 	b := &block{n: n, text: text, lines: lines, chars: chars}
@@ -428,8 +378,6 @@ func newBlock(n int, text string) *block {
 	return b
 }
 
-// measureWords is the block's measure as its label says it: lines when it has
-// more than one, characters when it is one long line.
 func (b *block) measureWords() string {
 	if b.lines > 1 {
 		return thousands(b.lines) + " lines"
@@ -437,12 +385,10 @@ func (b *block) measureWords() string {
 	return thousands(b.chars) + " chars"
 }
 
-// blockCell is the cell that holds b.
 func blockCell(b *block) cell {
 	return cell{block: b, w: ansi.StringWidth(b.label)}
 }
 
-// thousands writes n with a comma between each group of three digits.
 func thousands(n int) string {
 	s := strconv.Itoa(n)
 	if len(s) <= 3 {
@@ -462,14 +408,11 @@ func thousands(n int) string {
 	return b.String()
 }
 
-// edited clears what an edit makes stale: the notice and the column up and
-// down aim for.
 func (m *Model) edited() {
 	m.notice, m.info = "", ""
 	m.goal = -1
 }
 
-// selectedPaste is the selected block when it is a paste, nil otherwise.
 func (m *Model) selectedPaste() *block {
 	if b := m.selectedBlock(); b != nil && b.img == nil {
 		return b
@@ -477,8 +420,6 @@ func (m *Model) selectedPaste() *block {
 	return nil
 }
 
-// selectedBlock is the block just before the cursor, the one its keys act
-// on, or nil.
 func (m *Model) selectedBlock() *block {
 	if m.cur > 0 && m.cur <= len(m.cells) {
 		return m.cells[m.cur-1].block
@@ -547,8 +488,6 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 	}
 	switch key {
 	case "enter":
-		// A backslash right before the cursor asks for a new line, for a
-		// terminal that reports no modifier with enter.
 		if !m.opt.SingleLine && m.cur > 0 && m.cells[m.cur-1].s == `\` && m.cells[m.cur-1].block == nil {
 			m.edited()
 			m.change(m.cur-1, 1, []cell{{s: "\n", space: true}}, m.cur)
@@ -556,13 +495,6 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 		}
 		return EventSend
 	case "alt+enter", "ctrl+alt+j", "alt+ctrl+j", "ctrl+enter":
-		// Send now. alt+enter is ESC CR, or CSI 13;3u from a terminal that
-		// speaks the kitty keyboard protocol; a few send ESC LF. On a Mac
-		// whose terminal does not use Option as Alt, which is the default in
-		// Ghostty, kitty, Terminal.app and iTerm2, Option+Enter is a plain
-		// CR, the same as enter, so ctrl+enter sends now too where the
-		// protocol reports it (CSI 13;5u). Without the protocol ctrl+enter
-		// is LF, which reads as ctrl+j: a new line.
 		if m.opt.SendNow {
 			return EventSendNow
 		}
@@ -651,7 +583,6 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 	case "space":
 		m.typeKey(" ")
 	case "tab", "shift+tab":
-		// Kept for completion.
 	default:
 		if msg.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModSuper|tea.ModMeta|tea.ModHyper) != 0 {
 			return EventNone
@@ -661,8 +592,6 @@ func (m *Model) Update(msg tea.KeyPressMsg, remote bool) Event {
 	return EventNone
 }
 
-// typeKey types text one cluster at a time, joining the run of typing for
-// undo. An input method can commit several characters in one key.
 func (m *Model) typeKey(text string) {
 	text = clean(text)
 	if text == "" {
@@ -673,9 +602,6 @@ func (m *Model) typeKey(text string) {
 		return
 	}
 	m.edited()
-	// A key that continues the cluster before the cursor, a combining mark
-	// or the rest of an emoji sequence, joins it, so one character on
-	// screen stays one cell.
 	if m.cur > 0 {
 		if prev := m.cells[m.cur-1]; prev.block == nil && prev.s != "\n" && prev.s != "\t" {
 			if joined := segment(nil, prev.s+text); len(joined) > 0 && len(joined[0].s) > len(prev.s) {
@@ -690,14 +616,11 @@ func (m *Model) typeKey(text string) {
 	}
 }
 
-// move puts the cursor at i, kept inside the draft.
 func (m *Model) move(i int) {
 	m.cur = min(max(i, 0), len(m.cells))
 	m.joinTyping = false
 }
 
-// deleteTo deletes the cells between the cursor and i, on either side, as
-// one undo step.
 func (m *Model) deleteTo(i int) {
 	i = min(max(i, 0), len(m.cells))
 	if i == m.cur {
@@ -708,8 +631,6 @@ func (m *Model) deleteTo(i int) {
 	m.change(lo, hi-lo, nil, lo)
 }
 
-// wordLeft is where a word motion to the left lands: past the spaces before
-// the cursor, then to the start of the word. A block is a word by itself.
 func (m *Model) wordLeft() int {
 	i := m.cur
 	for i > 0 && m.cells[i-1].isSpace() {
@@ -724,8 +645,6 @@ func (m *Model) wordLeft() int {
 	return i
 }
 
-// wordRight is where a word motion to the right lands: past the spaces after
-// the cursor, then to the end of the word.
 func (m *Model) wordRight() int {
 	i, n := m.cur, len(m.cells)
 	for i < n && m.cells[i].isSpace() {
@@ -740,8 +659,6 @@ func (m *Model) wordRight() int {
 	return i
 }
 
-// logicalStart and logicalEnd are the ends of the line the cursor is on,
-// between line breaks, however it wraps.
 func (m *Model) logicalStart() int {
 	i := m.cur
 	for i > 0 && m.cells[i-1].s != "\n" {
@@ -758,8 +675,6 @@ func (m *Model) logicalEnd() int {
 	return i
 }
 
-// lineStart and lineEnd are the ends of the row the cursor is on, as the
-// draft was last drawn.
 func (m *Model) lineStart() int {
 	rows := m.rows(m.width)
 	return rows[rowOf(rows, m.cur)].start
@@ -774,9 +689,6 @@ func (m *Model) lineEnd() int {
 	return r.end
 }
 
-// vertical moves the cursor by d rows, as the draft was last drawn, keeping
-// the column it started from. Past the first or the last row it goes to the
-// start or the end of the draft.
 func (m *Model) vertical(d int) {
 	width := m.width
 	rows := m.rows(width)
@@ -851,7 +763,6 @@ func (m *Model) Clone() *Model {
 	return c
 }
 
-// oneLine makes text one line: each run of line breaks and tabs a space.
 func oneLine(text string) string {
 	if !strings.ContainsAny(text, "\n\t") {
 		return text
@@ -892,12 +803,9 @@ func (m *Model) SetRoom(lines int) { m.room = max(lines, 0) }
 // Full reports whether the editor takes the whole room (alt+m).
 func (m *Model) Full() bool { return m.full }
 
-// textRows is how many text rows the frame shows, given the lines the strip
-// above them takes: MaxRows held to the room, or all of the room when full.
 func (m *Model) textRows(strip int) int {
 	limit := m.opt.MaxRows
 	if m.room > 0 {
-		// One line under the rows for a notice or the line it leaves.
 		avail := max(m.room-strip-1, 1)
 		if m.full {
 			limit = avail

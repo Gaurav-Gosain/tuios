@@ -33,10 +33,6 @@ sleep 30`
 	}
 	defer w.Close()
 
-	// Each pass reads the screen once, so the checks below all see the same
-	// moment. A failure says what the pane showed: the answer without ESC and
-	// BEL, and the answer's bytes in hex on the H: row, so a wrong terminator
-	// or a split answer is named in the log.
 	const want = "R:]52;c;END"
 	deadline := time.Now().Add(10 * time.Second)
 	var seen []string
@@ -61,8 +57,6 @@ sleep 30`
 	t.Fatalf("the pane never showed %q; the pane showed:\n%s", want, shown)
 }
 
-// clipboardRows is the screen's R: and H: rows, quoted so a control
-// character in them is visible, read under one lock.
 func clipboardRows(w *Window) []string {
 	w.RLockIO()
 	defer w.RUnlockIO()

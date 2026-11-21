@@ -28,7 +28,6 @@ type DiffLine struct {
 	Text string `json:"text"`
 }
 
-// diffLineMax bounds the text of one DiffLine.
 const diffLineMax = 200
 
 // WorkingDetail is what a worktree changed against base, file by file, the
@@ -57,7 +56,6 @@ func WorkingDetail(ctx context.Context, path, base string, maxFiles, maxLines in
 		r, _ := strconv.Atoi(f[1])
 		files = append(files, FileStat{Path: f[2], Added: a, Removed: r})
 	}
-	// The files that changed most first, so a short list says the most.
 	for i := 1; i < len(files); i++ {
 		for j := i; j > 0 && files[j].Added+files[j].Removed > files[j-1].Added+files[j-1].Removed; j-- {
 			files[j], files[j-1] = files[j-1], files[j]
@@ -76,8 +74,6 @@ func WorkingDetail(ctx context.Context, path, base string, maxFiles, maxLines in
 	return files, firstChanges(diff, maxLines), nil
 }
 
-// firstChanges reads the first n added or removed lines of a unified diff
-// with no context, numbered from their hunk headers.
 func firstChanges(diff string, n int) []DiffLine {
 	var out []DiffLine
 	oldLine, newLine := 0, 0
@@ -88,12 +84,10 @@ func firstChanges(diff string, n int) []DiffLine {
 		}
 		switch {
 		case strings.HasPrefix(line, "diff --git "):
-			// diff --git a/PATH b/PATH: the new path, after " b/".
 			if i := strings.LastIndex(line, " b/"); i > 0 {
 				file = clipLine(line[i+3:])
 			}
 		case strings.HasPrefix(line, "@@"):
-			// @@ -a,b +c,d @@
 			f := strings.Fields(line)
 			if len(f) >= 3 {
 				oldLine = hunkStart(f[1])
@@ -111,7 +105,6 @@ func firstChanges(diff string, n int) []DiffLine {
 	return out
 }
 
-// hunkStart is the first line number of "-12,3" or "+12".
 func hunkStart(s string) int {
 	s = strings.TrimLeft(s, "+-")
 	s, _, _ = strings.Cut(s, ",")
@@ -119,7 +112,6 @@ func hunkStart(s string) int {
 	return n
 }
 
-// clipLine bounds a line's text.
 func clipLine(s string) string {
 	s = strings.TrimRight(s, "\r")
 	if len(s) > diffLineMax {

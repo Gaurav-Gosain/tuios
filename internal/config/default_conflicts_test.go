@@ -30,7 +30,6 @@ snap_corner_4 = ["4"]
 	if got := NewKeybindRegistry(cfg).Collisions(); len(got) != 0 {
 		t.Errorf("an old config still has %d conflict(s) after loading: %+v", len(got), got)
 	}
-	// And the feature came back under the chord.
 	if got := NewKeybindRegistry(cfg).Action(TableLayoutPrefix, "1"); got != "snap_corner_1" {
 		t.Errorf("the layout chord then 1 runs %q after the migration", got)
 	}
@@ -100,7 +99,6 @@ func TestDefaultConfigLeavesNoActionUnbound(t *testing.T) {
 // report reports.
 func TestValidateAgreesWithTheKeybindReport(t *testing.T) {
 	cfg := DefaultConfig()
-	// The exact clash that shipped: corner snapping back on the bare digits.
 	cfg.Keybindings.Layout["snap_corner_1"] = []string{"1"}
 
 	report := NewKeybindRegistry(cfg).Collisions()

@@ -6,7 +6,6 @@ import (
 	"github.com/charmbracelet/x/xpty"
 )
 
-// hostPty allocates a real pseudo-terminal from the kernel.
 func hostPty(width, height int, _ func(string, ...any)) (xpty.Pty, error) {
 	return xpty.NewPty(width, height)
 }

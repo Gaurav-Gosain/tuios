@@ -68,14 +68,8 @@ type State struct {
 // HasUpstream reports whether the divergence counts mean anything.
 func (s State) HasUpstream() bool { return s.Upstream != "" }
 
-// countTimeout bounds the one subprocess this package runs. A repository whose
-// object store is on a stalled network mount must cost a sidebar one refresh,
-// not the session.
 const countTimeout = 2 * time.Second
 
-// missTTL is how long a directory that is not in a repository is remembered as
-// not being in one. Without it every refresh walks to the filesystem root for
-// every pane sitting in a home directory.
 const missTTL = 30 * time.Second
 
 type entry struct {
@@ -110,8 +104,6 @@ func Read(dir string) (State, bool) {
 	}
 
 	gitdir, commondir, root, ok := Locate(dir)
-	// A jj workspace wins over the git directory beside it or above it: in a
-	// colocated one git's HEAD is a bare hash that names nothing.
 	if jroot, repoDir, jok := locateJJ(dir); jok && jjWins(jroot, root, ok) {
 		if st, found := readJJ(jroot, repoDir); found {
 			if missed {
@@ -123,9 +115,6 @@ func Read(dir string) (State, bool) {
 		}
 	}
 	if !ok {
-		// Remember it. Otherwise every refresh walks from a home directory to
-		// the filesystem root, stat-ing a ".git" at every level, for a pane
-		// that is never going to be in a repository.
 		mu.Lock()
 		misses[dir] = time.Now()
 		mu.Unlock()
@@ -161,9 +150,6 @@ func Read(dir string) (State, bool) {
 		upSHA = resolveRef(gitdir, commondir, root, st.Upstream)
 	}
 
-	// The whole point. Two commits that have not moved cannot have diverged
-	// differently, so the counts from last time still hold and the subprocess
-	// is not run.
 	if hadPrev && prev.ok && prev.headSHA == headSHA && prev.upSHA == upSHA &&
 		prev.state.Upstream == st.Upstream {
 		st.Ahead, st.Behind = prev.state.Ahead, prev.state.Behind
@@ -223,13 +209,11 @@ func Locate(dir string) (gitdir, commondir, root string, ok bool) {
 		}
 		switch {
 		case err != nil:
-			// keep walking
 		case st.IsDir():
 			return entry, entry, p, true
 		case !st.Mode().IsRegular():
 			return "", "", "", false
 		default:
-			// A linked worktree: the file names the git directory.
 			line, err := readFirstLine(entry)
 			if err != nil {
 				return "", "", "", false
@@ -253,9 +237,6 @@ func Locate(dir string) (gitdir, commondir, root string, ok bool) {
 	}
 }
 
-// commonDirOf reads a worktree git directory's "commondir" pointer, which names
-// the repository's shared git directory. Without it every worktree looks like a
-// repository of its own with no remotes.
 func commonDirOf(gitdir string) string {
 	data, err := os.ReadFile(filepath.Join(gitdir, "commondir"))
 	if err != nil {
@@ -271,8 +252,6 @@ func commonDirOf(gitdir string) string {
 	return filepath.Clean(filepath.Join(gitdir, rel))
 }
 
-// readHead reads the checked out branch and the commit it points at. root is
-// the working tree, where git is asked when the refs are in reftable.
 func readHead(gitdir, commondir, root string) (branch, sha string, detached bool) {
 	line, err := readFirstLine(filepath.Join(gitdir, "HEAD"))
 	if err != nil {
@@ -283,8 +262,6 @@ func readHead(gitdir, commondir, root string) (branch, sha string, detached bool
 	}
 	ref, isSymbolic := strings.CutPrefix(line, "ref:")
 	if !isSymbolic {
-		// Detached. The row still needs a name, and the short hash is the only
-		// one there is.
 		if len(line) >= 7 {
 			return line[:7], line, true
 		}
@@ -294,11 +271,6 @@ func readHead(gitdir, commondir, root string) (branch, sha string, detached bool
 	return strings.TrimPrefix(ref, "refs/heads/"), resolveRef(gitdir, commondir, root, ref), false
 }
 
-// resolveRef answers the commit a ref names, reading the loose file first and
-// falling back to packed-refs, which is where a ref goes once git has packed it
-// and is therefore where most remote-tracking refs live in a repository that
-// has been fetched more than a few times. A repository whose refs are in
-// reftable has neither, and git in root is asked.
 func resolveRef(gitdir, commondir, root, ref string) string {
 	if usesReftable(commondir) {
 		return reftableRef(gitdir, commondir, root, ref)
@@ -314,7 +286,7 @@ func resolveRef(gitdir, commondir, root, ref string) string {
 	if err != nil {
 		return ""
 	}
-	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
+	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := sc.Text()
@@ -326,22 +298,16 @@ func resolveRef(gitdir, commondir, root, ref string) string {
 			return sha
 		}
 	}
-	// A read error leaves the ref unknown, the same as a ref that is not there.
 	_ = sc.Err()
 	return ""
 }
 
-// upstreamOf reads the remote-tracking ref a branch follows out of the config.
-//
-// This is a small hand-rolled read of the two keys that matter rather than a
-// general INI parser, because the alternative is asking git, and asking git is
-// a subprocess for a fact that is three lines of a file.
 func upstreamOf(commondir, branch string) string {
 	f, err := os.Open(filepath.Join(commondir, "config"))
 	if err != nil {
 		return ""
 	}
-	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
+	defer func() { _ = f.Close() }()
 
 	want := `[branch "` + branch + `"]`
 	inSection := false
@@ -368,34 +334,21 @@ func upstreamOf(commondir, branch string) string {
 		}
 	}
 	if sc.Err() != nil {
-		// Half a section can pair a remote with the wrong merge ref.
 		return ""
 	}
 	if remote == "" || merge == "" {
 		return ""
 	}
-	// A branch can track another branch in the same repository, which git spells
-	// with a remote of ".". There is no remote-tracking ref in that case: the
-	// upstream is the local branch itself.
 	if remote == "." {
 		return merge
 	}
 	return "refs/remotes/" + remote + "/" + strings.TrimPrefix(merge, "refs/heads/")
 }
 
-// countCommits asks git how far the two commits have diverged. This is the one
-// place this package spends a subprocess, and Read only reaches it when the two
-// commits have moved since the last answer.
-//
-// It is a variable so a test can count how often it runs. Not spending this
-// subprocess is the reason the package exists, and a cost model nothing checks
-// is a cost model that quietly stops holding.
 var countCommits = func(root, head, upstream string) (ahead, behind int, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), countTimeout)
 	defer cancel()
 	cmd := childproc.Git(ctx, root, "rev-list", "--left-right", "--count", head+"..."+upstream)
-	// A repository is read with the user's git but never with the user's
-	// pager, editor or prompt: this runs unattended behind a sidebar.
 	cmd.Env = append(cmd.Env, "GIT_PAGER=cat", "GIT_OPTIONAL_LOCKS=0")
 	out, err := cmd.Output()
 	if err != nil {
@@ -436,18 +389,11 @@ func ReadDirty(root string) (Dirty, bool) {
 	if root == "" {
 		return Dirty{}, false
 	}
-	// In a jj workspace git's index is jj's export, not a record of what was
-	// staged, and a sparse workspace leaves every path outside its patterns
-	// in it: git status called 142801 files deleted on one, at 1.5 s a read.
 	if st, err := os.Stat(filepath.Join(root, ".jj")); err == nil && st.IsDir() {
 		return Dirty{}, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), countTimeout)
 	defer cancel()
-	// Porcelain v1 because its two status columns are fixed width and the
-	// format is frozen by git's own compatibility promise. Untracked files are
-	// counted but not walked into: a directory of a thousand new files is one
-	// line and one number, not a thousand.
 	cmd := childproc.Git(ctx, root, "status", "--porcelain",
 		"--untracked-files=normal", "--no-renames")
 	cmd.Env = append(cmd.Env, "GIT_PAGER=cat", "GIT_OPTIONAL_LOCKS=0")

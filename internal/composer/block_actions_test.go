@@ -10,7 +10,6 @@ func TestBlockOpenExpandRemove(t *testing.T) {
 	typeText(m, "see ")
 	m.Paste(lines(42), false)
 
-	// The keys act on the block right before the cursor, and only then.
 	if hints := m.Hints(false); hints[0].Key != "ctrl+o" {
 		t.Fatalf("hints after a block = %+v, want its keys", hints)
 	}
@@ -20,7 +19,6 @@ func TestBlockOpenExpandRemove(t *testing.T) {
 	}
 	press(m, "right")
 
-	// Open shows the text, read only, and scrolls.
 	press(m, "ctrl+o")
 	if !m.Opened() {
 		t.Fatal("ctrl+o did not open the block")
@@ -44,7 +42,6 @@ func TestBlockOpenExpandRemove(t *testing.T) {
 		t.Fatal("esc did not close the block")
 	}
 
-	// Expand makes the text editable in place, as one undo step.
 	press(m, "ctrl+e")
 	if m.Blocks() != 0 || m.Text() != "see "+lines(42) {
 		t.Fatalf("expand: blocks %d text %q", m.Blocks(), m.Text())
@@ -54,7 +51,6 @@ func TestBlockOpenExpandRemove(t *testing.T) {
 		t.Fatal("undo of an expand did not bring the block back")
 	}
 
-	// Remove from the open block.
 	press(m, "ctrl+o", "backspace")
 	if m.Opened() || m.Blocks() != 0 || m.Text() != "see " {
 		t.Fatalf("remove from the open block: opened %v text %q", m.Opened(), m.Text())

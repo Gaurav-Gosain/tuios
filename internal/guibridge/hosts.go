@@ -11,22 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The machines the renderer shows (plan 9, remote-files 3.3): every host in
-// the [hosts] table, with its link, the round trip to its daemon, how healthy
-// that makes it, and its sessions.
-//
-// The link layer measures no round trip, so the bridge measures one itself:
-// a prober per host that is up keeps a verb connection through the link and
-// times a list-sessions call on the far daemon every few seconds. The answer
-// also carries the host's sessions, so the renderer can offer them. The round
-// trip is smoothed as TCP smooths its own (alpha 1/8).
-//
-// Health is one word: good, slow (over 300 ms, back under 200 ms), stalled (a
-// probe out for 5 s with no answer), reconnecting, signin or down. A stalled
-// host carries silent_since, when its probe went out, and the renderer counts
-// up from there. A probe that comes back ends the stall at once, so the row
-// recovers the moment the link does, not at the next period.
-
 // Hosts is the "hosts" event.
 type Hosts struct {
 	// Live is false until the bridge holds a listing, and while the daemon
@@ -54,8 +38,7 @@ type HostRow struct {
 	ApprovalURL string `json:"approval_url,omitempty"`
 	// Sessions are the host's sessions, from the last answer.
 	Sessions []HostSession `json:"sessions,omitempty"`
-	// detail is ssh's own last line, which linkHealth reads.
-	detail string
+	detail   string
 }
 
 // HostSession is one session on a host.
@@ -68,28 +51,19 @@ type HostSession struct {
 }
 
 const (
-	// hostsPeriod is how often the link table is read.
-	hostsPeriod = time.Second
-	// probePeriod is the time between two probes of a host that answers.
-	probePeriod = 5 * time.Second
-	// stallAfter is how long a probe may be out before the host is stalled.
-	stallAfter = 5 * time.Second
-	// probeTimeout ends a probe that never answers, so a new connection is
-	// tried.
+	hostsPeriod  = time.Second
+	probePeriod  = 5 * time.Second
+	stallAfter   = 5 * time.Second
 	probeTimeout = 30 * time.Second
-	// slowEnter and slowLeave are the hysteresis of slow, as mosh's.
-	slowEnter = 300.0
-	slowLeave = 200.0
+	slowEnter    = 300.0
+	slowLeave    = 200.0
 )
 
-// prober measures one host.
 type prober struct {
 	host    string
 	version string
 	stop    chan struct{}
-	// poke sends the next probe now: the renderer typed into a pane on the
-	// host and wants to know at once whether the link still answers.
-	poke chan struct{}
+	poke    chan struct{}
 
 	mu       sync.Mutex
 	rtt      float64
@@ -140,9 +114,6 @@ func (p *prober) run() {
 			}
 			continue
 		}
-		// A probe that waited out a stall measured the stall, not the
-		// link: it is not a sample, and the next probe goes out at once for
-		// a fresh one.
 		stalled := time.Duration(took*float64(time.Millisecond)) >= stallAfter
 		if !stalled {
 			if p.rtt == 0 {
@@ -179,10 +150,8 @@ func (p *prober) wait(d time.Duration) bool {
 	}
 }
 
-// probers are the running probers by host, for pokeHost.
 var probers sync.Map
 
-// pokeHost sends the host's next probe now, if one is not out already.
 func pokeHost(host string) {
 	if v, ok := probers.Load(host); ok {
 		select {
@@ -192,7 +161,6 @@ func pokeHost(host string) {
 	}
 }
 
-// row fills in what the prober knows.
 func (p *prober) row(r *HostRow, now time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -232,11 +200,6 @@ func hostSessions(raw []byte) []HostSession {
 	return rows
 }
 
-// linkHealth is the health word of a host whose link is not up. detail is
-// ssh's own last line. The links run ssh with BatchMode, so a key with a
-// passphrase, a password or a second factor fails with "Permission denied"
-// once the master the person opened is gone: that host waits for the person
-// to sign in again, which the renderer offers.
 func linkHealth(status, detail string) string {
 	switch status {
 	case "connecting", "reconnecting":
@@ -250,20 +213,11 @@ func linkHealth(status, detail string) string {
 	return "down"
 }
 
-// needsSignIn says whether ssh's words mean that it reached the host and
-// could not sign in without a person.
 func needsSignIn(detail string) bool {
 	d := strings.ToLower(detail)
 	return strings.Contains(d, "permission denied") || strings.Contains(d, "no more authentication methods") || strings.Contains(d, "too many authentication failures")
 }
 
-// watchHosts keeps the renderer's machines current until stop closes.
-//
-// It reads list-hosts when the daemon pushes a change (wake), and on a timer
-// only while there is something a push does not cover: a link that is up,
-// whose probe and sessions move without a push, or a daemon it cannot reach
-// yet. With no hosts configured it waits for a push and reads nothing, so an
-// idle GUI with no hosts costs the daemon nothing.
 func watchHosts(stop <-chan struct{}, wake <-chan struct{}, out *frameWriter, version string) {
 	running := map[string]*prober{}
 	defer func() {
@@ -331,8 +285,6 @@ func watchHosts(stop <-chan struct{}, wake <-chan struct{}, out *frameWriter, ve
 			last = b
 			out.Frame(KindJSON, b)
 		}
-		// A stalled host is checked four times a second, so the row comes
-		// back as soon as its probe does.
 		wait := hostsPeriod
 		for _, p := range running {
 			p.mu.Lock()
@@ -357,7 +309,6 @@ func watchHosts(stop <-chan struct{}, wake <-chan struct{}, out *frameWriter, ve
 	}
 }
 
-// hostRows reads a list-hosts answer.
 func hostRows(raw []byte) []HostRow {
 	var out struct {
 		Hosts []struct {

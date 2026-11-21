@@ -2,15 +2,6 @@ package transcriptview
 
 import "strings"
 
-// The live activity row: one line at the bottom of a thread that says what
-// the agent does now, between the transcript's writes. A transcript gets a
-// tool call when the harness writes it, which can be long after the call
-// started, so a thread drawn from the transcript alone shows nothing while a
-// test suite runs. The row fills that gap from what the client already has:
-// the daemon's "now" metadata key (a hook's or a protocol pane's current
-// tool), or a program's OSC 7501 message. These functions are the model part,
-// shared by the TUI and guios. Each client draws the row its own way.
-
 // Activity kinds: the verb the row starts with.
 const (
 	ActivityRunning   = "Running"
@@ -55,7 +46,6 @@ func ActivityRow(tool, target string) string {
 	case kind != ActivityWorking && target != "":
 		return kind + " " + target
 	case kind != ActivityWorking:
-		// "Running" alone says less than the tool's own name.
 		return kind + " " + tool
 	case tool != "" && target != "":
 		return ActivityWorking + ": " + tool + " " + target
@@ -97,8 +87,6 @@ func ActivityShown(state, tool, target string, lastCall *Entry) bool {
 	return !strings.EqualFold(strings.TrimSpace(tool), strings.TrimSpace(lastCall.Tool)) && (a == "" || b == "")
 }
 
-// activityTarget is a target as the two sides compare it: trimmed, and
-// without the mark a cut leaves at its end.
 func activityTarget(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimSuffix(s, "…")

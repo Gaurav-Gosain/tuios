@@ -190,7 +190,6 @@ func (tt TokenType) IsNavigationKey() bool {
 
 // KeywordTokenMap maps string keywords to token types
 var KeywordTokenMap = map[string]TokenType{
-	// Basic commands
 	"Type":      TokenTypeCmd,
 	"Sleep":     TokenSleep,
 	"Enter":     TokenEnter,
@@ -200,7 +199,6 @@ var KeywordTokenMap = map[string]TokenType{
 	"Tab":       TokenTab,
 	"Escape":    TokenEscape,
 
-	// Navigation
 	"Up":    TokenUp,
 	"Down":  TokenDown,
 	"Left":  TokenLeft,
@@ -208,16 +206,13 @@ var KeywordTokenMap = map[string]TokenType{
 	"Home":  TokenHome,
 	"End":   TokenEnd,
 
-	// Modifiers
 	"Ctrl":  TokenCtrl,
 	"Alt":   TokenAlt,
 	"Shift": TokenShift,
 
-	// Mode switching
 	"TerminalMode":         TokenTerminalMode,
 	"WindowManagementMode": TokenWindowManagementMode,
 
-	// Window management
 	"NewWindow":      TokenNewWindow,
 	"CloseWindow":    TokenCloseWindow,
 	"NextWindow":     TokenNextWindow,
@@ -227,7 +222,6 @@ var KeywordTokenMap = map[string]TokenType{
 	"MinimizeWindow": TokenMinimizeWindow,
 	"RestoreWindow":  TokenRestoreWindow,
 
-	// Tiling
 	"ToggleTiling":   TokenToggleTiling,
 	"EnableTiling":   TokenEnableTiling,
 	"DisableTiling":  TokenDisableTiling,
@@ -235,12 +229,10 @@ var KeywordTokenMap = map[string]TokenType{
 	"SnapRight":      TokenSnapRight,
 	"SnapFullscreen": TokenSnapFullscreen,
 
-	// Workspace
 	"SwitchWorkspace":        TokenSwitchWS,
 	"MoveToWorkspace":        TokenMoveToWS,
 	"MoveAndFollowWorkspace": TokenMoveAndFollowWS,
 
-	// Other actions
 	"Split":          TokenSplit,
 	"Focus":          TokenFocus,
 	"RotateSplit":    TokenRotateSplit,
@@ -252,26 +244,21 @@ var KeywordTokenMap = map[string]TokenType{
 	"SaveLayout":     TokenSaveLayout,
 	"LoadLayout":     TokenLoadLayout,
 
-	// Synchronization
 	"Wait":           TokenWait,
 	"WaitUntilRegex": TokenWaitUntilRegex,
 
-	// Settings
 	"Set":    TokenSet,
 	"Output": TokenOutput,
 	"Source": TokenSource,
 
-	// Animations
 	"EnableAnimations":  TokenEnableAnimations,
 	"DisableAnimations": TokenDisableAnimations,
 	"ToggleAnimations":  TokenToggleAnimations,
 
-	// Literals
 	"true":  TokenTrue,
 	"false": TokenFalse,
 }
 
-// keywordTokenMapLower is a lowercase version of KeywordTokenMap for case-insensitive lookup
 var keywordTokenMapLower = make(map[string]TokenType)
 
 func init() {
@@ -283,11 +270,9 @@ func init() {
 // LookupKeyword returns the token type for a keyword, or TokenIdentifier if not a keyword
 // This function is case-insensitive
 func LookupKeyword(ident string) TokenType {
-	// Try exact match first
 	if tt, ok := KeywordTokenMap[ident]; ok {
 		return tt
 	}
-	// Try case-insensitive match
 	if tt, ok := keywordTokenMapLower[strings.ToLower(ident)]; ok {
 		return tt
 	}

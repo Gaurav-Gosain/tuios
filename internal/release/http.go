@@ -9,29 +9,14 @@ import (
 	"net/http"
 )
 
-// maxRedirects bounds the redirects one release request follows. A GitHub
-// release asset takes one or two, to objects.githubusercontent.com.
 const maxRedirects = 10
 
-// response is what a request answered: the status and headers of the last
-// response after redirects, and its body.
 type response struct {
 	StatusCode int
-	Header     map[string]string // canonical name -> first value
+	Header     map[string]string
 	Body       io.ReadCloser
 }
 
-// httpClient is the client every release request uses. It is not
-// http.DefaultClient, so nothing else in the process can change its
-// behaviour. It reads HTTP_PROXY, HTTPS_PROXY and NO_PROXY, and the system
-// certificate store. Timeout bounds the whole request including the body,
-// so a stalled download ends instead of hanging.
-//
-// A redirect goes only to https, unless the first request was plain http
-// (a test server or a mirror the person chose). That keeps a release
-// download from falling back to plain text. net/http drops the
-// Authorization header when a redirect leaves the host, so the API token is
-// never sent to objects.githubusercontent.com.
 var httpClient = &http.Client{
 	Timeout:       httpTimeout,
 	Transport:     &http.Transport{Proxy: http.ProxyFromEnvironment},
@@ -48,7 +33,6 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// httpGet fetches url. The token, when set, goes in an Authorization header.
 func httpGet(ctx context.Context, url, accept, token string) (*response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

@@ -6,8 +6,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// processName reads p_comm from the process's kinfo_proc, empty when it
-// cannot be read.
 func processName(pid int) string {
 	kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
 	if err != nil || kp == nil {

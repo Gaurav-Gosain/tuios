@@ -8,8 +8,8 @@ import (
 // app.OS.ScriptPaused, not here.
 type Player struct {
 	commands []Command
-	index    int  // Current command index
-	finished bool // Whether all commands have been played
+	index    int
+	finished bool
 }
 
 // NewPlayer creates a new script player from a list of commands

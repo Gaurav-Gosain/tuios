@@ -43,7 +43,6 @@ const (
 	SSHDefaultMaxSessions      = 64
 )
 
-// defaultSSHConfig returns the section DefaultConfig carries.
 func defaultSSHConfig() SSHConfig {
 	return SSHConfig{
 		HandshakeTimeout: SSHDefaultHandshakeTimeout.String(),
@@ -109,8 +108,6 @@ func ParseSSHDuration(v string, def time.Duration) (d time.Duration, ok bool) {
 	return d, true
 }
 
-// validateSSH warns about an [ssh] value the server cannot use. Each one falls
-// back to its default, so a typo never removes a limit.
 func validateSSH(cfg *UserConfig, result *ValidationResult) {
 	s := cfg.SSH
 	durations := []struct {

@@ -22,7 +22,7 @@ import (
 // SetWinsize both given a cell of 0 x 0, as before, the pty holds 400 x 200
 // pixels (the fallback cell) here and the test fails every time.
 func TestAStandaloneWindowIsBornWithTheHostCell(t *testing.T) {
-	const cellW, cellH = 9, 19 // not the fallback cell (10 x 20)
+	const cellW, cellH = 9, 19
 	exit := make(chan string, 4)
 	data := make(chan struct{}, 64)
 	w, err := NewWindowInCell("", "cell-test", "cell", 0, 0, 42, 12, 0, exit, data, 100, cellW, cellH, "/bin/sh", "-c", "sleep 30")
@@ -43,7 +43,6 @@ func TestAStandaloneWindowIsBornWithTheHostCell(t *testing.T) {
 		t.Fatalf("the pty was born at %dx%d cells and %dx%d pixels, want %dx%d cells and %dx%d pixels (the host's %dx%d cell)",
 			ws.Col, ws.Row, ws.Xpixel, ws.Ypixel, cols, rows, cols*cellW, rows*cellH, cellW, cellH)
 	}
-	// Setting the same cell after the start writes the same winsize.
 	w.SetCellPixelDimensions(cellW, cellH)
 	again, err := unix.IoctlGetWinsize(int(fd.Fd()), unix.TIOCGWINSZ)
 	if err != nil {

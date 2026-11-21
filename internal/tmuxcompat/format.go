@@ -10,27 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Format expansion: tmux's format language, ported from format.c of tmux 3.4
-// for the parts a tool driving tmux reads.
-//
-// Supported: #{name}, the one-letter aliases (#D #F #H #h #I #P #S #T #W),
-// the escapes ##, #, and #}, conditionals #{?cond,then,else}, the
-// comparisons ==, !=, <, >, <=, >=, || and &&, and the modifiers m (glob or
-// regular expression match, with the r and i flags), l (literal), b and d
-// (base and directory name), =N and =/N/marker (truncate), pN (pad), n
-// (length), w (width), q (quote for the shell), E and T (expand again),
-// t (time, with p for the short form), a (character) and s/pattern/with/flags
-// (regular expression substitution). Several modifiers are separated by ";".
-//
-// Not supported, and reported as missing: the loops (S, W, P, L), N, C, c,
-// e (arithmetic), q/e, and the strftime form of t. #(command) runs no
-// command and is passed through, as are #[style] blocks, which mean
-// something only to tmux's own status line.
-//
-// A variable the context does not hold expands to the empty string, as in
-// tmux, and is reported back so the caller can log it.
-
-// shortAliases are tmux's one-letter format aliases.
 var shortAliases = map[byte]string{
 	'D': "pane_id",
 	'F': "window_flags",
@@ -43,8 +22,6 @@ var shortAliases = map[byte]string{
 	'W': "window_name",
 }
 
-// formatLoopLimit stops a format that expands itself (#{E:} of a value that
-// holds the same #{E:}) the way tmux's FORMAT_LOOP_LIMIT does.
 const formatLoopLimit = 100
 
 // Expand expands format against vars. It returns the text and the names of
@@ -53,8 +30,6 @@ func Expand(format string, vars map[string]string) (string, []string) {
 	return expandWith(format, vars, nil)
 }
 
-// expandWith is Expand with more, consulted for a name vars does not hold:
-// the values that cost a daemon call, read only when a format asks.
 func expandWith(format string, vars map[string]string, more func(string) (string, bool)) (string, []string) {
 	e := expander{vars: vars, more: more, seen: map[string]bool{}}
 	return e.expand(format), e.missing
@@ -68,7 +43,6 @@ type expander struct {
 	loop    int
 }
 
-// miss records name as a value the format asked for and did not get.
 func (e *expander) miss(name string) {
 	if !e.seen[name] {
 		e.seen[name] = true
@@ -123,7 +97,6 @@ func (e *expander) expand(s string) string {
 	return b.String()
 }
 
-// lookup is a variable's value, "" and recorded as missing when there is none.
 func (e *expander) lookup(name string) string {
 	v, ok := e.find(name)
 	if !ok {
@@ -132,8 +105,6 @@ func (e *expander) lookup(name string) string {
 	return v
 }
 
-// formatSkip is tmux's format_skip: the index of the first byte of s in end
-// that is outside every nested #{...} and not escaped by "#", or -1.
 func formatSkip(s, end string) int {
 	brackets := 0
 	for i := 0; i < len(s); i++ {
@@ -154,25 +125,19 @@ func formatSkip(s, end string) int {
 	return -1
 }
 
-// modifier is one modifier of a #{...}: its name and arguments.
 type modifier struct {
 	name string
 	args []string
 }
 
-// isEnd reports whether key[i] ends a modifier.
 func isEnd(key string, i int) bool {
 	return i < len(key) && (key[i] == ';' || key[i] == ':')
 }
 
-// isPunct is C's ispunct for ASCII.
 func isPunct(c byte) bool {
 	return c > ' ' && c < 0x7f && !(c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z')
 }
 
-// modifiers reads the modifier list at the front of key, as
-// format_build_modifiers does, and returns it with the rest of key. A key
-// with no complete list before a ":" has no modifiers and is returned whole.
 func (e *expander) modifiers(key string) ([]modifier, string) {
 	var list []modifier
 	cp := 0
@@ -218,7 +183,6 @@ func (e *expander) modifiers(key string) ([]modifier, string) {
 			cp = end
 			continue
 		}
-		// Arguments between a wrapper character: s/a/b/, =/5/..., m/ri.
 		wrap := key[cp+1]
 		m := modifier{name: key[cp : cp+1]}
 		cp++
@@ -246,12 +210,10 @@ func (e *expander) modifiers(key string) ([]modifier, string) {
 	return list, key[cp+1:]
 }
 
-// valueFlags are the modifiers that change a looked-up value.
 type valueFlags struct {
 	base, dir, quote, timeString, pretty bool
 }
 
-// replace expands the inside of one #{...}: format_replace.
 func (e *expander) replace(key string) string {
 	mods, copy := e.modifiers(key)
 	var cmp *modifier
@@ -308,7 +270,6 @@ func (e *expander) replace(key string) string {
 		case "E", "T":
 			again = true
 		default:
-			// The loops, N, C, c and e.
 			e.miss("modifier " + m.name)
 			return ""
 		}
@@ -359,7 +320,6 @@ func (e *expander) replace(key string) string {
 			value = e.expand(rest[cut+1:])
 		}
 	case strings.Contains(copy, "#{"):
-		// An inner format: #{=5:#{pane_title}}.
 		value = e.expand(copy)
 	default:
 		v, ok := e.find(copy)
@@ -418,9 +378,6 @@ func abs(n int) int {
 	return n
 }
 
-// apply changes a found value as format_find does for the b, d, q and t
-// modifiers. t of a value that is not a positive number finds nothing, so ok
-// turns false.
 func (vf valueFlags) apply(v string, ok *bool) string {
 	if vf.timeString {
 		t, err := strconv.ParseInt(v, 10, 64)
@@ -446,7 +403,6 @@ func (vf valueFlags) apply(v string, ok *bool) string {
 	return v
 }
 
-// prettyTime is format_pretty_time without seconds.
 func prettyTime(t, now time.Time) string {
 	age := now.Sub(t)
 	switch {
@@ -461,8 +417,6 @@ func prettyTime(t, now time.Time) string {
 	return t.Format("Jan06")
 }
 
-// quoteShell escapes the characters a shell reads specially, as tmux's
-// format_quote_shell does.
 func quoteShell(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
@@ -474,12 +428,10 @@ func quoteShell(s string) string {
 	return b.String()
 }
 
-// formatTrue is tmux's format_true: not empty and not "0".
 func formatTrue(s string) bool {
 	return s != "" && s != "0"
 }
 
-// compare answers a comparison modifier.
 func compare(m *modifier, left, right string) string {
 	switch m.name {
 	case "||":
@@ -499,8 +451,6 @@ func compare(m *modifier, left, right string) string {
 	case ">=":
 		return boolString(left >= right)
 	}
-	// m: a glob, or with the r flag a regular expression, matched against
-	// right. The i flag ignores case.
 	flags := ""
 	if len(m.args) > 0 {
 		flags = m.args[0]
@@ -519,8 +469,6 @@ func compare(m *modifier, left, right string) string {
 	return boolString(re.MatchString(right))
 }
 
-// globRegexp turns an fnmatch pattern (no FNM_PATHNAME, so * matches /) into
-// a regular expression.
 func globRegexp(glob string) string {
 	var b strings.Builder
 	for i := 0; i < len(glob); i++ {
@@ -557,11 +505,6 @@ func globRegexp(glob string) string {
 	return b.String()
 }
 
-// regsub replaces the matches of pattern in text with with, where \0 to \9
-// name the match and its groups. It is a port of tmux's regsub, quirks
-// included: an empty match is skipped when it follows another, and a
-// pattern anchored with ^ stops after its first match. A pattern that does
-// not compile leaves text as it is.
 func regsub(pattern, with, text string, icase bool) string {
 	if text == "" {
 		return ""
@@ -604,8 +547,6 @@ func regsub(pattern, with, text string, icase bool) string {
 	return b.String()
 }
 
-// regsubExpand writes with for one match: \N is group N when that group
-// matched something, and a backslash before anything else is dropped.
 func regsubExpand(b *strings.Builder, with, text string, m []int) {
 	for i := 0; i < len(with); i++ {
 		if with[i] == '\\' {
@@ -625,8 +566,6 @@ func regsubExpand(b *strings.Builder, with, text string, m []int) {
 	}
 }
 
-// formatUnescape is tmux's format_unescape: the escapes outside nested
-// #{...} lose their "#".
 func formatUnescape(s string) string {
 	var b strings.Builder
 	brackets := 0

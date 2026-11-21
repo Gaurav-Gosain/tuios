@@ -59,11 +59,6 @@ const (
 	SettingShowKeys = "showkeys"
 )
 
-// lookPaths are the config options a lesson can check for a change, beyond
-// the glyph set and the border style: the looks the settings page and a look
-// change. Each one is a setting event named by its path when its value moves.
-// Reading one walks the config by reflection, so the list stays short and is
-// read only after input (see Model.looksDue).
 var lookPaths = [...]string{
 	"appearance.window_title_style",
 	"appearance.window_title_position",
@@ -83,12 +78,8 @@ var lookPaths = [...]string{
 	"appearance.dock_mode_pill",
 }
 
-// looks holds the value of each of lookPaths, in that order. An array, so a
-// snapshot still compares and copies as a value.
 type looks [len(lookPaths)]string
 
-// readLooks reads lookPaths from the config, each as the value in force: an
-// enum left empty reads as its default, as the settings page shows it.
 func readLooks(cfg *config.UserConfig) looks {
 	var out looks
 	if cfg == nil {
@@ -108,38 +99,31 @@ func readLooks(cfg *config.UserConfig) looks {
 	return out
 }
 
-// keysSnap is the keymap in use: the preset, the leader and lock mode.
 type keysSnap struct {
-	Preset string // "tuios", "tmux", "screen" or "zellij"
-	Leader string // such as "ctrl+b"
-	Lock   bool   // keybindings.lock: every key but the leader goes to the pane
+	Preset string
+	Leader string
+	Lock   bool
 }
 
 func (k keysSnap) toMap() map[string]any {
 	return map[string]any{"preset": k.Preset, "leader": k.Leader, "lock": k.Lock}
 }
 
-// agentsSnap is the agents view's cursor: the pane of the agent under it and
-// the focus tab, both "" while the view is closed.
 type agentsSnap struct {
 	Selected string
-	Tab      string // "thread", "changes", "checkpoints", "artifacts" or "pane"
+	Tab      string
 }
 
 func (a agentsSnap) toMap() map[string]any {
 	return map[string]any{"selected": a.Selected, "tab": a.Tab}
 }
 
-// filesSnap is the rail's files section: the folder it lists and the path
-// of the row under the rail's cursor, "" for none.
 type filesSnap struct{ Dir, Cursor string }
 
 func (f filesSnap) toMap() map[string]any {
 	return map[string]any{"dir": f.Dir, "cursor": f.Cursor}
 }
 
-// reviewSnap is the review overlay: the file it shows and the hunk the
-// cursor is in, -1 for none.
 type reviewSnap struct {
 	File string
 	Hunk int
@@ -149,14 +133,12 @@ func (r reviewSnap) toMap() map[string]any {
 	return map[string]any{"file": r.File, "hunk": r.Hunk}
 }
 
-// rect is a window's place and size in cells.
 type rect struct{ X, Y, W, H int }
 
 func (r rect) toMap() map[string]any {
 	return map[string]any{"x": r.X, "y": r.Y, "width": r.W, "height": r.H}
 }
 
-// windowSnap is one window as the page sees it.
 type windowSnap struct {
 	ID        string
 	Title     string
@@ -170,10 +152,8 @@ type windowSnap struct {
 	AgentNote string
 	AgentKind string
 	Harness   string
-	// Kind is "tml" for a window that draws a TML surface, "" for a pane
-	// with a program in it. Popup says the window floats as a popup.
-	Kind  string
-	Popup bool
+	Kind      string
+	Popup     bool
 }
 
 // Snapshot is the part of the app state a lesson checks steps against. It is
@@ -302,7 +282,6 @@ func take(o *app.OS) Snapshot {
 	if b := o.ScrollbackBrowser; o.ShowScrollbackBrowser && b != nil && b.SearchActive {
 		ov[OverlaySearch] = true
 	}
-	// Leaving copy mode keeps the CopyMode struct and clears Active.
 	if f := o.GetFocusedWindow(); f != nil && f.CopyMode != nil && f.CopyMode.Active {
 		ov[OverlayCopyMode] = true
 		if f.CopyMode.State == terminal.CopyModeSearch {
@@ -411,7 +390,6 @@ func (s Snapshot) ToMap() map[string]any {
 	}
 }
 
-// reviewMap is the review in the state: nil while it is closed.
 func (s Snapshot) reviewMap() any {
 	if !s.Overlays[OverlayReview] {
 		return nil
@@ -419,7 +397,6 @@ func (s Snapshot) reviewMap() any {
 	return s.Review.toMap()
 }
 
-// diff lists the events that take prev to now, in a fixed order.
 func diff(prev, now Snapshot) []Event {
 	var out []Event
 	add := func(typ, windowID string, data map[string]any) { appendEvent(&out, typ, windowID, data) }
@@ -556,9 +533,6 @@ func diff(prev, now Snapshot) []Event {
 	return out
 }
 
-// moves lists a window.move event for every window whose place or size
-// changed between two settled snapshots. A window that opened or closed in
-// between is left out: window.open and window.close already cover it.
 func moves(rest, now Snapshot) []Event {
 	var out []Event
 	for _, w := range now.Windows {
@@ -578,8 +552,6 @@ func moves(rest, now Snapshot) []Event {
 	return out
 }
 
-// appendEvent is out of line, because diff adds an event at dozens of places.
-//
 //go:noinline
 func appendEvent(out *[]Event, typ, windowID string, data map[string]any) {
 	*out = append(*out, Event{Type: typ, WindowID: windowID, Data: data})

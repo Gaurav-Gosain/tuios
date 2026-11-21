@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// found runs the matcher with every built-in on and returns the matched texts
-// with their kinds, as "kind:text".
 func found(t *testing.T, line string, custom ...string) []string {
 	t.Helper()
 	m, errs := New(Names(), custom)
@@ -145,8 +143,6 @@ func TestLabels(t *testing.T) {
 		{1, []string{"a"}},
 		{3, []string{"a", "s", "d"}},
 		{9, strings.Split(DefaultAlphabet, "")},
-		// One more than the alphabet: the last letter is split, and the
-		// first eight stay one key long.
 		{10, []string{"a", "s", "d", "f", "g", "h", "j", "k", "la", "ls"}},
 	}
 	for _, c := range cases {
@@ -155,7 +151,6 @@ func TestLabels(t *testing.T) {
 		}
 	}
 
-	// At any count: exactly n, unique, prefix-free, shortest first.
 	for _, n := range []int{2, 9, 17, 80, 81, 82, 200, 800} {
 		got := Labels(n, DefaultAlphabet)
 		if len(got) != n {
@@ -171,7 +166,6 @@ func TestLabels(t *testing.T) {
 				}
 			}
 		}
-		// As short as possible: n labels need ceil(log_9 n) keys at most.
 		limit := 1
 		for c := 9; c < n; c *= 9 {
 			limit++
@@ -202,7 +196,6 @@ func TestAssign(t *testing.T) {
 		{Text: "far", Distance: 30},
 		{Text: "near", Distance: 1},
 		{Text: "mid", Distance: 5},
-		// The same text again, nearer than its first appearance.
 		{Text: "far", Distance: 0},
 	}
 	got := Assign(targets, DefaultAlphabet)
@@ -211,7 +204,6 @@ func TestAssign(t *testing.T) {
 		t.Errorf("Assign = %q, want %q (same text same label, nearest first)", got, want)
 	}
 
-	// Ties keep the order the texts were seen in.
 	got = Assign([]Target{{Text: "x", Distance: 2}, {Text: "y", Distance: 2}, {Text: "z", Distance: 1}}, "ab")
 	if !slices.Equal(got, []string{"a", "ba", "b"}) && !slices.Equal(got, []string{"ba", "bb", "a"}) {
 		t.Errorf("Assign with ties = %q", got)

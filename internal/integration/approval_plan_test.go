@@ -6,9 +6,6 @@ import (
 	"testing"
 )
 
-// planPayload is an ExitPlanMode PermissionRequest the way the hooks
-// reference describes it: tool_input carries the plan and the file Claude Code
-// wrote it to.
 func planPayload(input map[string]any, suggestions any) map[string]any {
 	p := map[string]any{
 		"hook_event_name": "PermissionRequest",
@@ -42,8 +39,6 @@ func TestExitPlanModeIsAPlan(t *testing.T) {
 		t.Errorf("options %v scope %v, want once and deny with no always", a.Options, a.Scope)
 	}
 
-	// Allow hands back the input unchanged as updatedInput, which Claude
-	// Code needs for a tool that asks the user.
 	out, ok := a.Answer("claude-code", DecisionOnce, "")
 	if !ok {
 		t.Fatal("once printed nothing")
@@ -76,7 +71,6 @@ func TestExitPlanModeIsAPlan(t *testing.T) {
 		t.Error("always printed a decision for a plan that was not offered it")
 	}
 
-	// Keep planning, with and without a reason.
 	out, _ = a.Answer("claude-code", DecisionDeny, "split step 2 in two")
 	want := `{"hookSpecificOutput":{"decision":{"behavior":"deny","message":"split step 2 in two"},"hookEventName":"PermissionRequest"}}` + "\n"
 	if out != want {
@@ -149,7 +143,6 @@ func TestPlansTheInboxDoesNotHold(t *testing.T) {
 			}
 		})
 	}
-	// An empty allowedPrompts asks for nothing.
 	d := translatePayload(t, "claude", planPayload(map[string]any{"plan": testPlan, "allowedPrompts": []any{}}, nil))
 	if d.Approval == nil {
 		t.Error("an empty allowedPrompts kept the plan from the Inbox")

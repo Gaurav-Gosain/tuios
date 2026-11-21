@@ -5,11 +5,6 @@ import (
 	"strings"
 )
 
-// The rail's pane section: a live terminal pane drawn in the rail, under the
-// heading the table gives it. Its program runs in a real PTY in the session,
-// so the daemon owns it and it survives a detach. See app/rail_pane.go for
-// where the pane lives and how input reaches it.
-
 // SidebarSectionPane is the rail section that draws a live pane, configured
 // in [appearance.sidebar.pane].
 const SidebarSectionPane = "pane"
@@ -64,8 +59,6 @@ func SidebarPanePlaced(sections string) bool {
 	return false
 }
 
-// validateSidebarPane appends the pane section's problems to result as
-// warnings, the way validateSidebarCustom does.
 func validateSidebarPane(cfg *UserConfig, result *ValidationResult) {
 	sidebar := cfg.Appearance.Sidebar
 	placed := SidebarPanePlaced(sidebar.Sections)

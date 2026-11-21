@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// stubSystemctl puts a systemctl first on PATH that logs each call and
-// answers show-environment with env, as the user manager would. It returns
-// the log's path. No test of this package reaches the real manager.
 func stubSystemctl(t *testing.T, env ...string) string {
 	t.Helper()
 	dir := t.TempDir()

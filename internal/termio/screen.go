@@ -32,35 +32,22 @@ type Screen struct {
 	body bytes.Buffer
 	out  *writer
 
-	rb      uv.RenderBuffer
-	touched []uv.LineData
-	// scratch holds a frame that arrived as a string: the screen saver, the
-	// fullscreen fast path, the crash screen.
-	scratch uv.ScreenBuffer
-	w, h    int
-	// rows marks the rows of the last diff that differed from the frame
-	// shown, and diffed counts them. maybe marks the rows the frames staged
-	// since that diff may have changed, every row when maybeAll is set.
+	rb       uv.RenderBuffer
+	touched  []uv.LineData
+	scratch  uv.ScreenBuffer
+	w, h     int
 	rows     []bool
 	diffed   int
 	maybe    []bool
 	maybeAll bool
-	// passed is the buffer of the frame passed last, which a frame's rows
-	// are marked against.
-	passed *uv.Buffer
+	passed   *uv.Buffer
 
-	// started: the alternate screen is entered and its sequences are in
-	// pre. query: ask for synchronized output and the unicode core at
-	// start. syncd: the terminal has synchronized output.
 	started, query, syncd bool
 	pre                   bytes.Buffer
-	// staged is the frame composed last, not yet diffed, and shown a copy
-	// of the frame last diffed: what the terminal shows. view and framed
-	// are what the next Commit writes the modes, the cursor and the debt by.
-	staged *uv.Buffer
-	shown  uv.Buffer
-	view   *tea.View
-	framed bool
+	staged                *uv.Buffer
+	shown                 uv.Buffer
+	view                  *tea.View
+	framed                bool
 
 	last   *tea.View
 	closed bool
@@ -69,7 +56,6 @@ type Screen struct {
 	restore  func()
 	released bool
 
-	// What a fresh terminal renderer is made from, for Restore.
 	environ   []string
 	profile   colorprofile.Profile
 	output    Output
@@ -102,13 +88,9 @@ func New(out io.Writer, environ []string, profile colorprofile.Profile, o Output
 	return s
 }
 
-// freshRenderer is a terminal renderer that knows nothing of the screen yet.
 func (s *Screen) freshRenderer() *uv.TerminalRenderer {
 	r := uv.NewTerminalRenderer(&s.body, s.environ)
 	r.SetColorProfile(s.profile)
-	// Hard tabs stay off: tmux drops the background under one. Backspace
-	// moves the cursor on a raw Linux terminal, whose termios leaves BS0
-	// set, as Bubble Tea finds it there.
 	r.SetTabStops(-1)
 	r.SetBackspace(s.output.Raw && runtime.GOOS == "linux")
 	r.SetMapNewline(!s.output.Raw && runtime.GOOS != "windows")
@@ -119,8 +101,6 @@ func (s *Screen) freshRenderer() *uv.TerminalRenderer {
 	return r
 }
 
-// shouldQuerySync is Bubble Tea's rule for asking a terminal about
-// synchronized output: some terminals answer the query on the screen.
 func shouldQuerySync(environ []string) bool {
 	env := uv.Environ(environ)
 	termType := env.Getenv("TERM")
@@ -155,7 +135,6 @@ func (s *Screen) ModeReport(msg tea.ModeReportMsg) {
 	}
 }
 
-// start enters the alternate screen the way Bubble Tea's first flush does.
 func (s *Screen) start() {
 	if s.started {
 		return
@@ -264,9 +243,6 @@ func (s *Screen) Commit() {
 		_ = s.scr.Flush()
 	}
 
-	// Cursor visibility as Bubble Tea writes it: with synchronized output,
-	// hidden before and shown after only when it changes; without it, also
-	// around every write while the cursor is shown, against flicker.
 	didShow := !first && lv.Cursor != nil
 	show := v.Cursor != nil
 	change := first || didShow != show
@@ -293,17 +269,6 @@ func (s *Screen) Commit() {
 	s.view = nil
 }
 
-// diff renders buf against what the terminal shows into body, and keeps a
-// copy of it as the frame shown.
-//
-// Only the rows that differ from the frame shown are diffed and copied. The
-// terminal renderer's scroll check hashes every row, and it keeps the hashes
-// of rows it is not told were touched from its last call, so it may only run
-// with every row touched. With one changed row it is turned off instead: a
-// scroll pairs a new row with a different old row whose line is the same, and
-// both rows of such a pair have changed, so one changed row has no scroll to
-// find and the bytes are the same without the check. With more than one
-// changed row every row is touched and the check runs, as it always did.
 func (s *Screen) diff(buf *uv.Buffer) {
 	w, h := buf.Width(), buf.Height()
 	full := s.shown.Width() != w || s.shown.Height() != h
@@ -368,7 +333,6 @@ func (s *Screen) diff(buf *uv.Buffer) {
 // terminal renderer, for the frame cost benchmarks and budgets.
 func (s *Screen) DiffedRows() int { return s.diffed }
 
-// sameCells reports whether a and b hold the same cells.
 func sameCells(a, b *uv.Buffer) bool {
 	if a.Width() != b.Width() || a.Height() != b.Height() {
 		return false
@@ -405,10 +369,6 @@ func SameCell(a, b *uv.Cell) bool {
 		a.Link == b.Link
 }
 
-// sameColor is uv's colour equality: nil equals only nil, and two colours
-// are equal when their RGBA values are. Two equal values of one of the
-// common types are equal without the conversion; anything else is compared
-// by RGBA, since two palette indices can name one colour.
 func sameColor(a, b color.Color) bool {
 	switch x := a.(type) {
 	case nil:
@@ -438,7 +398,6 @@ func sameColor(a, b color.Color) bool {
 	return ar == br && ag == bg && ab == bb && aa == ba
 }
 
-// copyCells makes dst a copy of src, reusing its lines where it can.
 func copyCells(dst, src *uv.Buffer) {
 	if dst.Width() != src.Width() || dst.Height() != src.Height() {
 		*dst = *uv.NewBuffer(src.Width(), src.Height())
@@ -492,8 +451,6 @@ func (s *Screen) Restore() {
 	s.scr = s.freshRenderer()
 }
 
-// leave is the sequences that undo what the frames set, for the modes of the
-// last frame. It moves the terminal renderer's cursor to the last row.
 func (s *Screen) leave() []byte {
 	lv := s.last
 	if lv == nil {
@@ -531,8 +488,6 @@ func (s *Screen) leave() []byte {
 	return b.Bytes()
 }
 
-// writeModes appends the mode changes from lv to v, in Bubble Tea's order.
-// A nil lv is the first frame.
 func writeModes(b *bytes.Buffer, lv, v *tea.View) {
 	first := lv == nil
 	if first || v.DisableBracketedPasteMode != lv.DisableBracketedPasteMode {
@@ -617,7 +572,6 @@ func writeModes(b *bytes.Buffer, lv, v *tea.View) {
 	}
 }
 
-// keyboardFlags is Bubble Tea's kitty keyboard flags for ke.
 func keyboardFlags(ke tea.KeyboardEnhancements) int {
 	flags := 1
 	if ke.ReportEventTypes {
@@ -635,7 +589,6 @@ func keyboardFlags(ke tea.KeyboardEnhancements) int {
 	return flags
 }
 
-// cursorStyle is the DECSCUSR value for cur, 0 for none.
 func cursorStyle(cur *tea.Cursor) int {
 	if cur == nil {
 		return 0
@@ -647,7 +600,6 @@ func cursorStyle(cur *tea.Cursor) int {
 	return style
 }
 
-// modesEqual reports whether a and b ask for the same modes and cursor.
 func modesEqual(a, b *tea.View) bool {
 	if a == nil || b == nil {
 		return false

@@ -13,19 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
 )
 
-// A repository made with the reftable ref backend (git init or clone
-// --ref-format=reftable, git 2.45 and later) keeps its refs in binary tables
-// under reftable/, and git writes the placeholder below to HEAD so that an
-// older git refuses the directory rather than misreads it. A reader of the
-// file sees a branch that cannot exist, and finds no loose ref and no
-// packed-refs for any other.
-//
-// The tables can only be read by asking git, which costs a subprocess. The
-// cost model of this package still holds: git rewrites tables.list on every
-// ref update, so the list's contents are a file read that says whether the
-// last answer still stands, and git is only asked again when it does not.
-
-// reftablePlaceholder is the line git writes to HEAD in a reftable repository.
 const reftablePlaceholder = "ref: refs/heads/.invalid"
 
 // IsReftableHead reports whether a HEAD line is the reftable placeholder.
@@ -33,20 +20,13 @@ func IsReftableHead(line string) bool {
 	return strings.TrimSpace(line) == reftablePlaceholder
 }
 
-// usesReftable reports whether the repository keeps its refs in reftable.
 func usesReftable(commondir string) bool {
 	_, err := os.Stat(filepath.Join(commondir, "reftable", "tables.list"))
 	return err == nil
 }
 
-// tablesListLimit bounds how much of a tables.list is read. git compacts the
-// stack as it grows, so the list holds a few names, each under 60 bytes.
 const tablesListLimit = 64 << 10
 
-// reftableStamp is the contents of the worktree's and the repository's
-// tables.list. Every ref update adds a table and every compaction replaces
-// some, and both rename a new list into place, so two equal stamps mean no
-// ref in either stack has moved.
 func reftableStamp(gitdir, commondir string) string {
 	var b strings.Builder
 	dirs := []string{gitdir}
@@ -60,10 +40,8 @@ func reftableStamp(gitdir, commondir string) string {
 			continue
 		}
 		data, err := io.ReadAll(io.LimitReader(f, tablesListLimit))
-		_ = f.Close() // opened read-only: nothing to flush
+		_ = f.Close()
 		if err != nil {
-			// A read error counts as no list, the same as a stack that is
-			// not there.
 			b.WriteString("-\x00")
 			continue
 		}
@@ -73,8 +51,6 @@ func reftableStamp(gitdir, commondir string) string {
 	return b.String()
 }
 
-// reftableAnswers is what git last said about one git directory's refs, and
-// the stamp it was said under.
 type reftableAnswers struct {
 	stamp    string
 	headOK   bool
@@ -89,8 +65,6 @@ var (
 	reftableCache = map[string]*reftableAnswers{}
 )
 
-// reftableFor is the answers kept for gitdir, emptied when its stamp has
-// moved. The caller holds reftableMu.
 func reftableFor(gitdir, stamp string) *reftableAnswers {
 	ans := reftableCache[gitdir]
 	if ans == nil || ans.stamp != stamp {
@@ -100,11 +74,6 @@ func reftableFor(gitdir, stamp string) *reftableAnswers {
 	return ans
 }
 
-// askGit runs git in root, the working tree, and answers its trimmed output.
-//
-// It is a variable so a test can count how often it runs, as countCommits
-// is: answering from the cache while no ref moves is what keeps a reftable
-// repository as cheap to show as any other.
 var askGit = func(root string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), countTimeout)
 	defer cancel()
@@ -130,8 +99,6 @@ func ReftableHead(gitdir, commondir, root string) (branch, sha string, detached 
 	}
 	reftableMu.Unlock()
 
-	// One git for the usual case: the commit, then the ref HEAD names, which
-	// is "HEAD" itself when it is detached.
 	if out, err := askGit(root, "rev-parse", "HEAD", "--symbolic-full-name", "HEAD"); err == nil {
 		lines := strings.Split(out, "\n")
 		if len(lines) == 2 {
@@ -143,7 +110,6 @@ func ReftableHead(gitdir, commondir, root string) (branch, sha string, detached 
 			}
 		}
 	} else if ref, err := askGit(root, "symbolic-ref", "-q", "HEAD"); err == nil {
-		// A branch with no commit yet, which rev-parse cannot resolve.
 		branch = strings.TrimPrefix(ref, "refs/heads/")
 	}
 	if branch == "" {
@@ -158,8 +124,6 @@ func ReftableHead(gitdir, commondir, root string) (branch, sha string, detached 
 	return branch, sha, detached
 }
 
-// reftableRef answers the commit ref names in a reftable repository, empty
-// when it names none.
 func reftableRef(gitdir, commondir, root, ref string) string {
 	stamp := reftableStamp(gitdir, commondir)
 	reftableMu.Lock()
@@ -171,8 +135,6 @@ func reftableRef(gitdir, commondir, root, ref string) string {
 
 	sha, err := askGit(root, "rev-parse", "-q", "--verify", ref+"^{commit}")
 	if err != nil {
-		// git exits 1 for a ref that does not exist, which is an answer worth
-		// keeping. Anything else, a timeout included, is asked again.
 		if exit, ok := errors.AsType[*exec.ExitError](err); !ok || exit.ExitCode() != 1 {
 			return ""
 		}

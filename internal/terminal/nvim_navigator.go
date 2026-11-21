@@ -2,16 +2,8 @@ package terminal
 
 import "bytes"
 
-// nvimNavigatorOSC is the private OSC number the tuios nvim navigator plugin
-// talks on: "7777;tuios-nvim-navigator;focus;<direction>" asks tuios to focus
-// the neighbouring pane, and "...;state;active|inactive" says whether the
-// pane takes the navigation keys itself. The emulator knows nothing of it and
-// hands the body over through vt.Callbacks.PrivateOSC.
 const nvimNavigatorOSC = 7777
 
-// nvimNavigatorParts splits a navigator body into its name, verb and
-// argument. The emulator passes the body with its number, and the number is
-// optional so a body without it parses too.
 func nvimNavigatorParts(data []byte) ([][]byte, bool) {
 	parts := bytes.Split(data, []byte{';'})
 	if len(parts) == 4 && string(parts[0]) == "7777" {
@@ -23,8 +15,6 @@ func nvimNavigatorParts(data []byte) ([][]byte, bool) {
 	return parts, true
 }
 
-// handleNvimNavigatorOSC calls nav for a focus request and state for a state
-// report. Anything else is ignored.
 func handleNvimNavigatorOSC(data []byte, nav func(direction string), state func(active bool)) {
 	parts, ok := nvimNavigatorParts(data)
 	if !ok {

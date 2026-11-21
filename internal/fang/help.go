@@ -52,8 +52,6 @@ func helpFn(c *cobra.Command, w *colorprofile.Writer, styles Styles) {
 	blockWidth = min(width()-padding, blockWidth+padding)
 	blockStyle := styles.Codeblock.Base.Width(blockWidth)
 
-	// if the color profile is ascii or notty, or if the block has no
-	// background color set, remove the vertical padding.
 	if w.Profile <= colorprofile.Ascii || reflect.DeepEqual(blockStyle.GetBackground(), lipgloss.NoColor{}) {
 		blockStyle = blockStyle.PaddingTop(0).PaddingBottom(0)
 	}
@@ -110,8 +108,6 @@ func helpFn(c *cobra.Command, w *colorprofile.Writer, styles Styles) {
 // DefaultErrorHandler is the default [ErrorHandler] implementation.
 func DefaultErrorHandler(w io.Writer, styles Styles, err error) {
 	if w, ok := w.(term.File); ok {
-		// if stderr is not a tty, simply print the error without any
-		// styling or going through an [ErrorHandler]:
 		if !term.IsTerminal(w.Fd()) {
 			_, _ = fmt.Fprintln(w, err.Error())
 			return
@@ -131,8 +127,6 @@ func DefaultErrorHandler(w io.Writer, styles Styles, err error) {
 	}
 }
 
-// XXX: this is a hack to detect usage errors.
-// See: https://github.com/spf13/cobra/pull/2266
 func isUsageError(err error) bool {
 	s := err.Error()
 	for _, prefix := range []string{
@@ -159,7 +153,6 @@ func writeLongShort(w *colorprofile.Writer, styles Styles, longShort string) {
 
 var otherArgsRe = lazyre.New(`(\[.*\])`)
 
-// styleUsage stylized styleUsage line for a given command.
 func styleUsage(c *cobra.Command, styles Program, complete bool) string {
 	u := c.Use
 	if complete {
@@ -221,8 +214,6 @@ func styleUsage(c *cobra.Command, styles Program, complete bool) string {
 	return lipgloss.JoinHorizontal(lipgloss.Left, useLine...)
 }
 
-// styleExamples for a given command.
-// will print both the cmd.Use and cmd.Example bits.
 func styleExamples(c *cobra.Command, styles Styles) []string {
 	if c.Example == "" {
 		return nil
@@ -334,10 +325,8 @@ func styleExample(c *cobra.Command, line string, indent bool, styles Codeblock) 
 			isQuotedString = !isQuoteEnd
 			continue
 		}
-		// handle a flag
 		if isFlag {
 			name, value, ok := strings.Cut(arg, "=")
-			// it is --flag=value
 			if ok {
 				args[i] += lipgloss.JoinHorizontal(
 					lipgloss.Left,
@@ -346,7 +335,6 @@ func styleExample(c *cobra.Command, line string, indent bool, styles Codeblock) 
 				)
 				continue
 			}
-			// it is either --bool-flag or --flag value
 			args[i] += lipgloss.JoinHorizontal(
 				lipgloss.Left,
 				styles.Program.Flag.Render(name),
@@ -394,8 +382,6 @@ func evalFlags(c *cobra.Command, styles Styles) (map[string]string, []string) {
 		}
 		key := lipgloss.JoinHorizontal(lipgloss.Left, parts...)
 
-		// Handle multiline flag descriptions by processing each line separately
-		// to preserve the transform while maintaining line breaks
 		usage := FlagUsage(f)
 		noTransform := styles.FlagDescription.UnsetTransform()
 		var helpLines []string
@@ -421,8 +407,6 @@ func evalFlags(c *cobra.Command, styles Styles) (map[string]string, []string) {
 	return flags, keys
 }
 
-// result is map[groupID]map[styled cmd name]styled cmd help, and the keys in
-// the order they are defined.
 func evalCmds(c *cobra.Command, styles Styles) (map[string](map[string]string), []string) {
 	padStyle := lipgloss.NewStyle().PaddingLeft(0) //nolint:mnd
 	keys := []string{}
@@ -443,9 +427,6 @@ func evalCmds(c *cobra.Command, styles Styles) (map[string](map[string]string), 
 }
 
 func evalGroups(c *cobra.Command) (map[string]string, []string) {
-	// Named groups come first, in the order they were added, and the
-	// commands with no group after them: a named group is one a command
-	// asked to stand out in, such as getting started.
 	var ids []string
 	groups := map[string]string{"": "commands"}
 	for _, g := range c.Groups() {

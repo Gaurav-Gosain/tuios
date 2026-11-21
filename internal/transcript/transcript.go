@@ -74,43 +74,18 @@ func (t Turn) String() string {
 	}
 }
 
-// record is every field this package will look at, and the reason no other
-// field can be looked at by accident.
-//
-// stop_reason is the one thing taken from message. Nesting a struct with a
-// single scalar in it is what lets the decoder step into the message object,
-// find that field, and skip content without materialising it; declaring the
-// whole of message as json.RawMessage would keep the conversation in memory in
-// exchange for nothing.
-//
-// toolUseResult is absent rather than ignored. A tool result lands after the
-// assistant record that called the tool, which has already said the turn is
-// running, so the field is not needed to derive a state, and a field that is
-// not declared cannot be read.
 type record struct {
-	Type      string `json:"type"`
-	SessionID string `json:"sessionId"`
-	CWD       string `json:"cwd"`
-	Version   string `json:"version"`
-	Timestamp string `json:"timestamp"`
-	// IsSidechain marks a subagent's turn. A subagent's records are written to
-	// the same file as its parent's, so without this a Task tool finishing would
-	// report the whole pane done while the agent that spawned it kept working.
-	IsSidechain bool `json:"isSidechain"`
-	// PromptSource and TurnOrigin mark a user record as a prompt that starts a
-	// turn: where it came from ("typed", "queued", "sdk") and what started the
-	// turn ("human", "task_notification"). Claude Code writes one or both on
-	// every prompt, and neither on a local command such as /effort, its
-	// output, or a line typed after !, which are user records too and start no
-	// turn. Both are short labels Claude Code chooses, never what the prompt
-	// says.
+	Type         string `json:"type"`
+	SessionID    string `json:"sessionId"`
+	CWD          string `json:"cwd"`
+	Version      string `json:"version"`
+	Timestamp    string `json:"timestamp"`
+	IsSidechain  bool   `json:"isSidechain"`
 	PromptSource string `json:"promptSource"`
 	TurnOrigin   string `json:"turnOrigin"`
 	Message      struct {
 		StopReason string `json:"stop_reason"`
-		// Usage is the API's token count for the response: how much
-		// context the request carried. Four integers, never the content.
-		Usage struct {
+		Usage      struct {
 			Input         int64 `json:"input_tokens"`
 			CacheCreation int64 `json:"cache_creation_input_tokens"`
 			CacheRead     int64 `json:"cache_read_input_tokens"`
@@ -118,12 +93,6 @@ type record struct {
 	} `json:"message"`
 }
 
-// contextTokens is how many tokens the agent's context held when the record
-// was written: the input side of the response's usage, the sum Claude Code's
-// own used_percentage is computed from. It is 0 for a record that is not the
-// main agent's response, and for one with no input tokens, such as the
-// synthetic record an API error is written as, which says nothing about the
-// context.
 func (r record) contextTokens() int64 {
 	if r.Type != "assistant" || r.IsSidechain {
 		return 0
@@ -157,12 +126,6 @@ type Observation struct {
 	ContextTokens int64
 }
 
-// tailWindow bounds the first read of a file this package has not seen before.
-//
-// These files reach a hundred megabytes and the newest record is the only one
-// that matters, so a cold read looks at the last window and no further. After
-// that the reader knows where it stopped and reads only what was appended,
-// which is a few kilobytes a turn.
 const tailWindow = 128 << 10
 
 // ErrNoFile reports that the transcript is gone: deleted, or never there. The
@@ -175,19 +138,10 @@ var ErrNoFile = errors.New("transcript: file does not exist")
 // (the debounce callback, the read on join, the output-driven fallback), and
 // those reads share buf and off, so Read serializes them.
 type Reader struct {
-	path string
-	// mu serializes Read. A second read refilling or zeroing buf while the first
-	// decodes from it is a panic inside encoding/json.
-	mu sync.Mutex
-	// off is where the last read stopped, always immediately after a newline, so
-	// a resumed read never begins inside a record.
-	off int64
-	// buf is the read buffer, kept here and zeroed after every parse. See the
-	// package comment for why it is a field.
-	buf []byte
-	// skipped counts lines that did not parse. It exists so a file this package
-	// cannot read at all is visible as a number, without the number costing
-	// anyone a line of their conversation in a log.
+	path    string
+	mu      sync.Mutex
+	off     int64
+	buf     []byte
 	skipped int
 }
 
@@ -248,8 +202,6 @@ func (r *Reader) Read() (Observation, bool, error) {
 	}
 	size := info.Size()
 	if size < r.off {
-		// Shorter than where we stopped: truncated, or a new file at the same
-		// path. Either way the offset means nothing now, so start over.
 		r.off = 0
 	}
 	if size == r.off {
@@ -272,12 +224,7 @@ func (r *Reader) Read() (Observation, bool, error) {
 	}
 	buf = buf[:read]
 
-	// start == r.off means we read from where we stopped, which is either byte
-	// zero or the byte after a newline: a record boundary either way. It is only
-	// the jump forward to the tail window that lands mid-record.
 	obs, ok, consumed := r.scan(buf, start == r.off)
-	// Zeroed before returning, on every path, so the page holding someone's
-	// prompts does not outlive the call that needed it.
 	clear(r.buf[:read])
 	if consumed >= 0 {
 		r.off = start + int64(consumed)
@@ -285,18 +232,9 @@ func (r *Reader) Read() (Observation, bool, error) {
 	return obs, ok, nil
 }
 
-// scan walks complete lines in buf and returns the newest record that speaks to
-// the turn, plus how many bytes were consumed (through the final newline), or
-// -1 when there was no complete line to consume.
-//
-// atBoundary says the buffer begins where a record begins. When it does not,
-// the leading partial record is dropped.
 func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
 	end := bytes.LastIndexByte(buf, '\n')
 	if end < 0 {
-		// No complete line. Consume nothing and wait for the newline; a file
-		// whose single record is longer than the window would otherwise stall
-		// forever, but the window is 128 KB and a record is a few kilobytes.
 		return Observation{}, false, -1
 	}
 	consumed := end + 1
@@ -325,8 +263,6 @@ func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
 		}
 		var rec record
 		if err := jsonx.Unmarshal(line, &rec); err != nil {
-			// Dropped without the error, which would quote the line. The count is
-			// the whole diagnostic this package is willing to keep.
 			r.skipped++
 			continue
 		}
@@ -350,21 +286,6 @@ func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
 	return obs, found, consumed
 }
 
-// turn maps one record to what it says about the turn, reporting whether it
-// says anything at all.
-//
-// The alternation these three cases read is the one the files actually show: an
-// assistant record calling a tool, a user record carrying that tool's result,
-// repeated, and then an assistant record with end_turn followed by the human's
-// next prompt. Everything else in the file (titles, modes, queue operations,
-// snapshots) is bookkeeping and is silent here.
-//
-// Of the user records only the prompt speaks. A local command run at rest
-// (/effort, /model) is written as user records, its output too, and no turn
-// follows: read as a prompt, it showed a pane at rest as working until the
-// stall timer, and when the command's picker had been read as a prompt, the
-// move to working held the pane as still on it, refusing every pane without
-// respond that tried to type into it.
 func (r record) turn() (Turn, bool) {
 	if r.IsSidechain {
 		return TurnUnknown, false
@@ -375,19 +296,11 @@ func (r record) turn() (Turn, bool) {
 		case "end_turn":
 			return TurnDone, true
 		case "":
-			// A streamed record whose stop reason has not been decided yet. It is
-			// evidence the agent is talking, which is evidence it is working, but
-			// it must never be read as a finished turn.
 			return TurnWorking, true
 		default:
-			// tool_use, max_tokens, stop_sequence: all mid-turn.
 			return TurnWorking, true
 		}
 	case "user":
-		// A prompt starts a turn. A tool result lands inside one, after an
-		// assistant record that said so already, so it adds nothing. Any other
-		// user record, a local command, its output or a line typed after !,
-		// starts none.
 		if r.PromptSource == "" && r.TurnOrigin == "" {
 			return TurnUnknown, false
 		}
@@ -397,9 +310,6 @@ func (r record) turn() (Turn, bool) {
 	}
 }
 
-// firstRecordWindow bounds how much of a file FirstRecordTime reads. A
-// transcript's first records are small: the first one carrying a timestamp is
-// in the first few kilobytes.
 const firstRecordWindow = 64 << 10
 
 // FirstRecordTime is the timestamp of the first record in the file that has

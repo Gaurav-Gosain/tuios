@@ -29,8 +29,6 @@ func AuthorizedKeysHas(path string, pub ssh.PublicKey) (bool, error) {
 	for len(data) > 0 {
 		k, _, _, rest, err := ssh.ParseAuthorizedKey(data)
 		if err != nil {
-			// The parser stops at the first line it cannot read. Skip that
-			// line and go on.
 			i := strings.IndexByte(string(data), '\n')
 			if i < 0 {
 				break

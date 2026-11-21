@@ -13,12 +13,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// label is the agent's launchd label.
 func label(name string) string { return "dev.tuios." + name }
 
-// plistPath is the agent's file under this process's home. A process with a
-// home of its own, such as a test, never reads or writes the agents of the
-// person's login (see checkHome).
 func plistPath(name string) string {
 	home := ownHome()
 	if useManagerHome() {
@@ -37,13 +33,10 @@ func launchctl(args ...string) error {
 	return nil
 }
 
-// plist is the agent that runs the spec's daemon at login, and again after
-// a crash. A clean exit, as after kill-server, leaves it stopped.
 func plist(s Spec) string {
 	argv := LoginCommand(s.Shell, s.Binary)
 	keepAlive := "\t<key>KeepAlive</key>\n\t<dict>\n\t\t<key>SuccessfulExit</key>\n\t\t<false/>\n\t</dict>\n"
 	if s.App != "" {
-		// open(1) returns at once, so launchd cannot see the daemon end.
 		argv = []string{"/usr/bin/open", "-g", "-a", s.App, "--args", "daemon", "--service"}
 		keepAlive = ""
 	}
@@ -160,8 +153,6 @@ func Get(name string) Status {
 	}
 	st.File, st.Installed, st.Enabled = path, true, true
 	st.Socket, st.Binary = readMarkers(path)
-	// launchd's state is of the agent of the login, not of this file, when
-	// this process has a home of its own.
 	if checkHome() != nil {
 		return st
 	}
@@ -185,5 +176,4 @@ func Get(name string) Status {
 // UsesLinger reports whether this system has the linger setting.
 func UsesLinger() bool { return false }
 
-// unescapeMarker reads a marker from the XML comment it is in.
 func unescapeMarker(s string) string { return html.UnescapeString(s) }

@@ -17,33 +17,17 @@ func (w *Window) TriggerRedraw() {
 		return
 	}
 
-	// Send SIGWINCH signal immediately to notify the shell of the resize.
-	// PTY.Resize() is synchronous, so the kernel PTY size is updated immediately.
-	// Shells query the new size via ioctl(TIOCGWINSZ) when they receive SIGWINCH.
-	//
-	// No lock: w.Cmd is write-once, so ioMu guarded nothing here. Signalling a
-	// process Close() already reaped just returns an error, which is ignored.
 	process := w.Cmd.Process
 
 	if process != nil {
-		// Send SIGWINCH (window change signal) to the process
-		// Applications should handle this and redraw as needed
-		_ = process.Signal(os.Signal(syscall.SIGWINCH)) // Best effort, ignore error
+		_ = process.Signal(os.Signal(syscall.SIGWINCH))
 	}
 }
 
-// getPgid gets the process group ID of a given process ID.
-// Returns the PGID or an error if unable to determine it.
 func getPgid(pid int) (int, error) {
 	return syscall.Getpgid(pid)
 }
 
-// foregroundPgrp returns the foreground process group of the terminal open on
-// fd, and whether the kernel gave one.
-//
-// The kernel writes a pid_t, which is 32 bits on every unix Go supports, so it
-// is read into an int32. Reading it into a Go int, which is 64 bits, leaves the
-// upper half zero on little-endian and gets the wrong number on big-endian.
 func foregroundPgrp(fd uintptr) (int, bool) {
 	var pgrp int32
 	_, _, errno := syscall.Syscall(
@@ -67,11 +51,8 @@ func (w *Window) HasForegroundProcess() bool {
 	}
 	fgpgrp, ok := foregroundPgrp(w.Pty.Fd())
 	if !ok {
-		// If we can't determine, assume no foreground process
 		return false
 	}
-	// If foreground process group is different from shell's process group,
-	// there's an active foreground process running
 	return fgpgrp != w.ShellPgid
 }
 

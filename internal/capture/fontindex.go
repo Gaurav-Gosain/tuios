@@ -12,38 +12,9 @@ import (
 	"golang.org/x/image/font/sfnt"
 )
 
-// The font files on this machine, keyed by the names they carry inside
-// themselves.
-//
-// fc-match is fontconfig's command line, and macOS does not ship fontconfig.
-// Terminals do not have this problem because they link the platform's font API
-// instead: CoreText on macOS, DirectWrite on Windows, libfontconfig on Linux.
-// All three want cgo, and tuios is built without it, which is what left the
-// screenshot font lookup reaching for the one font database a Mac reliably does
-// not have. Every capture on an untouched Mac therefore fell back to Go Mono,
-// which has no icons in it.
-//
-// The way out is that a font database is more than this package needs. It needs
-// a path for a name, and a font file already states its own names in its
-// OpenType `name` table. Reading them directly needs no cgo, no installed
-// tool, and no process: it is the same answer on every platform, and it is
-// available where fontconfig is not installed at all.
-//
-// fontconfig is still asked when it is there and the index came up empty. It
-// knows about directories configured by hand and about fonts installed
-// somewhere no convention would look for them, and giving that up to gain the
-// Mac would be a trade, not a fix.
-
-// indexedFace is one face as its own name table describes it.
 type indexedFace struct {
-	File string
-	// Index is which face inside File this is. A collection holds several and
-	// the file path alone does not say which one was wanted.
-	Index int
-	// Family is the name a config file uses. A face whose typographic family
-	// differs from its family name is recorded under both: a four-weight
-	// family names every weight in NameIDFamily ("Iosevka Term SemiBold")
-	// while NameIDTypographicFamily stays the name a person would type.
+	File             string
+	Index            int
 	Family           string
 	TypographicFamly string
 	PostScript       string
@@ -52,19 +23,14 @@ type indexedFace struct {
 	Italic           bool
 }
 
-// weightClass is as much of a face's weight as choosing between the faces of
-// one family needs: the plain one, the bold one, and all the others.
 type weightClass int
 
 const (
-	// weightOther is any named weight that is neither of the two a terminal
-	// asks for: Thin, Light, Medium, SemiBold, ExtraBold, Black.
 	weightOther weightClass = iota
 	weightRegular
 	weightBold
 )
 
-// fontIndex is every face found under the system font directories.
 type fontIndex struct {
 	byFamily     map[string][]indexedFace
 	byPostScript map[string]indexedFace
@@ -75,27 +41,18 @@ var (
 	fontIndexVal  *fontIndex
 )
 
-// loadFontIndex builds the index once. A machine does not grow fonts while
-// tuios is running, and the scan is the expensive half of a lookup.
 func loadFontIndex() *fontIndex {
 	fontIndexOnce.Do(func() { fontIndexVal = buildFontIndex(fontDirs()) })
 	return fontIndexVal
 }
 
-// resetFontIndex drops the scan so the next lookup rebuilds it. Tests own this;
-// nothing else needs it.
 func resetFontIndex() {
 	fontIndexOnce = sync.Once{}
 	fontIndexVal = nil
 }
 
-// maxFontFiles bounds the walk. A large machine has a few thousand faces; a
-// number far past that means the walk wandered somewhere it should not have,
-// and a capture drawn in the fallback face beats one that never arrives.
 const maxFontFiles = 8000
 
-// fontDirs is where each platform keeps fonts, most specific first so a user's
-// own copy of a family wins over the system's.
 func fontDirs() []string {
 	home, _ := os.UserHomeDir()
 	var dirs []string
@@ -131,9 +88,6 @@ func fontDirs() []string {
 	return dirs
 }
 
-// fontFileExts are the container formats x/image/font/sfnt can read. A
-// collection holds several faces in one file and is how macOS ships most of
-// its own monospace faces, so skipping it would skip Menlo.
 var fontFileExts = map[string]bool{
 	".ttf": true, ".otf": true, ".ttc": true, ".otc": true, ".dfont": true,
 }
@@ -142,15 +96,10 @@ func buildFontIndex(dirs []string) *fontIndex {
 	return indexFonts(dirs, fontCachePath())
 }
 
-// scanFontIndex is buildFontIndex with no file kept: every font file is read.
 func scanFontIndex(dirs []string) *fontIndex {
 	return indexFonts(dirs, "")
 }
 
-// indexFonts walks the folders and files the faces of the fonts it finds into
-// an index. When cachePath names a file made from the same fonts (see
-// fontcache.go), the faces come from it and no font file is opened; otherwise
-// they are read, and the file is written.
 func indexFonts(dirs []string, cachePath string) *fontIndex {
 	idx := &fontIndex{
 		byFamily:     map[string][]indexedFace{},
@@ -166,8 +115,6 @@ func indexFonts(dirs []string, cachePath string) *fontIndex {
 	fingerprint := fontFingerprint(dirs, w.stamps)
 	faces, ok := loadFontCache(cachePath, fingerprint)
 	if !ok {
-		// The files are read side by side and filed in the order the walk
-		// found them, so the index is the one a serial scan made.
 		for _, fileFaces := range readFontFaces(w.files) {
 			faces = append(faces, fileFaces...)
 		}
@@ -179,16 +126,8 @@ func indexFonts(dirs []string, cachePath string) *fontIndex {
 	return idx
 }
 
-// fontReaders is how many font files are read at once. A scan opens every
-// font on the machine and reads a few small pieces of each, so what it waits
-// on is the disk's answer to each read, and a cold disk (a fresh machine, a
-// network home, a runner that has not touched the fonts) answers one read at a
-// time slowly. Reading side by side makes those waits overlap. On one
-// machine, 1090 files took 1.1 s cold and 110 ms warm, one after the other.
 const fontReaders = 16
 
-// readFontFaces reads the faces of each file and returns them in the order of
-// files.
 func readFontFaces(files []string) [][]indexedFace {
 	out := make([][]indexedFace, len(files))
 	var next atomic.Int64
@@ -208,19 +147,12 @@ func readFontFaces(files []string) [][]indexedFace {
 	return out
 }
 
-// fontWalk reads font folders the way a person means them, links included.
-// filepath.WalkDir does not follow a symbolic link, not even at the root, so
-// a fonts folder that is a link (a dotfile manager makes one, and so does a
-// scratch home) gave no fonts at all. Every folder is read once by its real
-// path, which also stops a link that points back up the tree.
 type fontWalk struct {
 	seenDirs  map[string]bool
 	seenFiles map[string]bool
 	count     int
-	// files are the font files found, in the order the walk met them, and
-	// stamps their sizes and modification times in the same order.
-	files  []string
-	stamps []fontFileStamp
+	files     []string
+	stamps    []fontFileStamp
 }
 
 func (w *fontWalk) dir(dir string) {
@@ -229,8 +161,6 @@ func (w *fontWalk) dir(dir string) {
 		return
 	}
 	w.seenDirs[real] = true
-	// An unreadable directory is one place with no fonts in it, not a reason
-	// to abandon the places that are readable.
 	entries, err := os.ReadDir(real)
 	if err != nil {
 		return
@@ -244,7 +174,7 @@ func (w *fontWalk) dir(dir string) {
 		if e.Type()&fs.ModeSymlink != 0 {
 			info, err := os.Stat(path)
 			if err != nil {
-				continue // a broken link
+				continue
 			}
 			isDir = info.IsDir()
 		}
@@ -274,7 +204,6 @@ func (w *fontWalk) dir(dir string) {
 	}
 }
 
-// add files one face under every name it answers to.
 func (idx *fontIndex) add(f indexedFace) {
 	if ps := foldFontName(f.PostScript); ps != "" {
 		if _, taken := idx.byPostScript[ps]; !taken {
@@ -286,16 +215,10 @@ func (idx *fontIndex) add(f indexedFace) {
 		if key == "" {
 			continue
 		}
-		// A collection lists the same family once per face; the slice is the
-		// weights, and picking between them is the lookup's job.
 		idx.byFamily[key] = append(idx.byFamily[key], f)
 	}
 }
 
-// readFontNames opens one font file and reads what each face inside calls
-// itself. A file that will not parse contributes nothing and is not an error:
-// a font directory holds bitmap fonts, Type 1 leftovers and the occasional
-// truncated download, and none of them should stop the scan.
 func readFontNames(path string) []indexedFace {
 	f, err := os.Open(path) // #nosec G304 - a file found by walking the system font directories
 	if err != nil {
@@ -303,8 +226,6 @@ func readFontNames(path string) []indexedFace {
 	}
 	defer func() { _ = f.Close() }()
 
-	// ParseCollectionReaderAt answers a plain TTF or OTF with a collection of
-	// one, so this is the single path for every container.
 	coll, err := sfnt.ParseCollectionReaderAt(newBlockReaderAt(f))
 	if err != nil {
 		return nil
@@ -344,22 +265,6 @@ func readFontNames(path string) []indexedFace {
 	return out
 }
 
-// styleTraits reads weight and slant off the style name.
-//
-// The subfamily is the honest source for this: "Regular", "Bold", "Bold
-// Italic", "ExtraBold". The PostScript name is the backstop for a face that
-// leaves its subfamily blank, where the style rides after the hyphen
-// ("JetBrainsMonoNF-Bold").
-//
-// The trap is that a weight is not a word. "Extra Bold", "ExtraBold" and
-// "extrabold" are one weight spelled three ways, and a face that merely
-// contains "bold" is as likely to be SemiBold as Bold. Both halves are folded
-// to bare letters and then read whole: only the name that is exactly a bold
-// with nothing else attached is this family's bold cut, and everything from
-// Thin to Black is a weight nobody asked for. Reading "bold" out of
-// "ExtraBold" is what made a plain request for JetBrainsMono Nerd Font
-// rasterize in ExtraBold, because ExtraBold was neither bold nor italic and so
-// passed for regular.
 func styleTraits(style, postScript string) (weightClass, bool) {
 	name := foldStyleName(style)
 	if name == "" {
@@ -382,8 +287,6 @@ func styleTraits(style, postScript string) (weightClass, bool) {
 	}
 }
 
-// foldStyleName reduces a style name to bare lowercase letters, so the several
-// ways of writing one weight land on one answer.
 func foldStyleName(s string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(s) {
@@ -394,8 +297,6 @@ func foldStyleName(s string) string {
 	return b.String()
 }
 
-// afterHyphen returns the style half of a PostScript name, which is everything
-// past the last hyphen. A name with no hyphen has no style half to read.
 func afterHyphen(s string) string {
 	if i := strings.LastIndex(s, "-"); i >= 0 {
 		return s[i+1:]
@@ -403,14 +304,10 @@ func afterHyphen(s string) string {
 	return ""
 }
 
-// foldFontName is the key two font names are compared under: case and the
-// spaces between words do not tell two fonts apart, and neither do the naming
-// habits of whoever built the file.
 func foldFontName(s string) string {
 	return strings.ToLower(squeezeSpace(s))
 }
 
-// indexPostScript finds an exact PostScript name.
 func indexPostScript(name string) (FontFace, bool) {
 	f, ok := loadFontIndex().byPostScript[foldFontName(name)]
 	if !ok {
@@ -419,12 +316,6 @@ func indexPostScript(name string) (FontFace, bool) {
 	return FontFace{File: f.File, Index: f.Index, Name: f.PostScript}, true
 }
 
-// indexFamily finds the face a family name on its own asks for: the upright,
-// regular-weight one.
-//
-// A family that ships no regular at all still resolves, to its lightest upright
-// face. Some families are only ever a Light or a Medium, and drawing one of
-// those beats falling back to Go Mono and losing every icon.
 func indexFamily(name string) (FontFace, bool) {
 	if face, ok := pickFace(name, func(f indexedFace) bool {
 		return f.Weight == weightRegular && !f.Italic
@@ -434,17 +325,12 @@ func indexFamily(name string) (FontFace, bool) {
 	return pickFace(name, func(f indexedFace) bool { return !f.Italic })
 }
 
-// indexBoldFamily finds the upright bold cut of a family, and nothing else. A
-// family with no bold is better double-struck than drawn in its ExtraBold.
 func indexBoldFamily(name string) (FontFace, bool) {
 	return pickFace(name, func(f indexedFace) bool {
 		return f.Weight == weightBold && !f.Italic
 	})
 }
 
-// pickFace takes the first face of a family that want accepts. Nothing
-// acceptable is a miss, not an excuse to substitute: answering with a face
-// nobody asked for is the habit this package exists to avoid.
 func pickFace(name string, want func(indexedFace) bool) (FontFace, bool) {
 	for _, f := range loadFontIndex().byFamily[foldFontName(name)] {
 		if want(f) {
@@ -454,8 +340,6 @@ func pickFace(name string, want func(indexedFace) bool) (FontFace, bool) {
 	return FontFace{}, false
 }
 
-// familyLabel is the name a resolved face reports back, preferring the
-// typographic family because that is the name that was typed to find it.
 func familyLabel(f indexedFace) string {
 	if f.TypographicFamly != "" {
 		return f.TypographicFamly

@@ -80,25 +80,21 @@ func FromPOSIX(p string, m Mounts) (string, bool) {
 	return under(m.Root, p), true
 }
 
-// windowsDrive splits "C:" or "C:/rest" into the drive letter and the rest.
 func windowsDrive(p string) (drive, rest string, ok bool) {
 	if len(p) < 2 || p[1] != ':' || !isLetter(p[:1]) {
 		return "", "", false
 	}
 	if len(p) > 2 && p[2] != '/' {
-		// C:x is relative to the current folder on drive C.
 		return "", "", false
 	}
 	return p[:1], strings.TrimPrefix(p[2:], "/"), true
 }
 
-// onDrive is rest on the drive, cleaned, never above the drive's root.
 func onDrive(letter, rest string) string {
 	clean := strings.TrimPrefix(path.Clean("/"+rest), "/")
 	return strings.ToUpper(letter) + `:\` + strings.ReplaceAll(clean, "/", `\`)
 }
 
-// unc converts //host/share/rest. Both the host and the share are required.
 func unc(p string) (string, bool) {
 	host, rest, _ := strings.Cut(p[2:], "/")
 	share, tail, _ := strings.Cut(rest, "/")
@@ -112,7 +108,6 @@ func unc(p string) (string, bool) {
 	return out, true
 }
 
-// under joins the clean POSIX path rest onto the Windows folder base.
 func under(base, rest string) string {
 	base = strings.TrimRight(base, `\/`)
 	if len(base) == 2 && base[1] == ':' {
@@ -128,7 +123,6 @@ func under(base, rest string) string {
 	return base + strings.ReplaceAll(rest, "/", `\`)
 }
 
-// cutDir reports whether p is dir or inside it, and returns the part after it.
 func cutDir(p, dir string) (string, bool) {
 	if p == dir {
 		return "", true
@@ -139,7 +133,6 @@ func cutDir(p, dir string) (string, bool) {
 	return "", false
 }
 
-// isLetter reports whether s is one ASCII letter.
 func isLetter(s string) bool {
 	return len(s) == 1 && (s[0]|0x20) >= 'a' && (s[0]|0x20) <= 'z'
 }
@@ -187,17 +180,12 @@ func FileURL(raw string) (host, p string, ok bool) {
 	if err != nil || !strings.EqualFold(u.Scheme, "file") || u.Path == "" {
 		return "", "", false
 	}
-	// The path is decoded, so %00 or %1b is a control character now. No
-	// folder name needs one, and the folder is shown on the rail and handed
-	// to commands, so a report that carries one is refused.
 	if strings.ContainsFunc(u.Path, func(r rune) bool { return r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) }) {
 		return "", "", false
 	}
 	return u.Hostname(), dropDriveSlash(u.Path), true
 }
 
-// dropDriveSlash turns /C: and /C:/x into C: and C:/x. Any other path, /C:x
-// among them, is returned unchanged: that is a folder named C:x.
 func dropDriveSlash(p string) string {
 	if len(p) >= 3 && p[0] == '/' && p[2] == ':' && isLetter(p[1:2]) &&
 		(len(p) == 3 || p[3] == '/' || p[3] == '\\') {
@@ -224,8 +212,6 @@ func ForOS(p, goos string) (string, bool) {
 	}
 	p = strings.ReplaceAll(p, `\`, "/")
 	if w, ok := FromPOSIX(p, Mounts{}); ok {
-		// A drive path, a UNC path or a Windows path: no root needed, so the
-		// environment is not searched for one.
 		return w, true
 	}
 	if runtime.GOOS != "windows" {
@@ -234,9 +220,6 @@ func ForOS(p, goos string) (string, bool) {
 	return FromPOSIX(p, localMounts())
 }
 
-// localMounts is the tree this process runs under, found on first use and
-// kept. cygpath is asked only when the environment says nothing, and only
-// once.
 var localMounts = sync.OnceValue(func() Mounts {
 	exists := func(p string) bool {
 		info, err := os.Stat(p)
@@ -249,7 +232,6 @@ var localMounts = sync.OnceValue(func() Mounts {
 	return Mounts{Root: cygpathRoot()}
 })
 
-// cygpathRoot asks cygpath where / is, or returns "" when it cannot.
 func cygpathRoot() string {
 	bin, err := exec.LookPath("cygpath")
 	if err != nil {

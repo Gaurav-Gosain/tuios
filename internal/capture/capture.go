@@ -161,16 +161,12 @@ func WithPaneBackground(p *shot.Palette, setting, themeID string) *shot.Palette 
 	return &out
 }
 
-// toShot converts a theme colour to a shot colour, falling back when the value
-// carries no channels of its own. A tint entry is normally a concrete hex, but
-// an unthemed palette holds bare ansi indices, which resolve to nothing here.
 func toShot(c color.Color, def shot.Color) shot.Color {
 	if c == nil {
 		return def
 	}
 	switch c.(type) {
 	case ansi.BasicColor, ansi.IndexedColor:
-		// A palette index cannot say what colour it is; only the host can.
 		return def
 	}
 	r, g, b, a := c.RGBA()
@@ -206,10 +202,6 @@ func Frame(s Settings, p *shot.Palette, g *shot.Grid, plain bool) (*shot.Frame, 
 	regular, bold, fontWarn := resolveFontFiles(s)
 	warnings = append(warnings, fontWarn...)
 	spec.Font, spec.BoldFont = regular, bold
-	// Only a font the user named by file is written into SVG and HTML output.
-	// A font found by asking the terminal was found so the raster has icons in
-	// it; copying three megabytes of it into every exported SVG is a different
-	// decision, and one nobody made.
 	spec.EmbedFont = s.FontFile != "" && len(regular.Data) > 0
 	in := shot.FrameInputs{Palette: p, Accents: accentsOf(p)}
 	if s.HostCellW > 0 && s.HostCellH > 0 {
@@ -233,13 +225,6 @@ func Frame(s Settings, p *shot.Palette, g *shot.Grid, plain bool) (*shot.Frame, 
 // the user can already see.
 const FontFallbackNotice = "Icons need your terminal font. Set screenshot.font_family."
 
-// resolveFontFiles picks the faces to rasterize with, in order of how much the
-// user asked for them: an explicit font_file first, then the font the host
-// terminal says it draws with, then the configured family, then nothing, which
-// leaves the renderer on its embedded face.
-//
-// A file that will not read is a warning and a fallthrough, not a failure. The
-// capture is the point; the font is how it looks.
 func resolveFontFiles(s Settings) (regular, bold shot.Font, warnings []string) {
 	if s.FontFile != "" {
 		data, err := readFontFile(s.FontFile)
@@ -251,9 +236,6 @@ func resolveFontFiles(s Settings) (regular, bold shot.Font, warnings []string) {
 	if face, ok := FontByPostScriptName(s.HostFontFamily); ok {
 		if data, err := readFontFile(face.File); err == nil {
 			boldFace, boldOK := FontByPostScriptName(s.HostBoldFamily)
-			// Two faces of one collection share a path, so the file being the
-			// same no longer means the font is. The index is what tells the
-			// bold cut apart from the regular one it lives beside.
 			if boldOK && (boldFace.File != face.File || boldFace.Index != face.Index) {
 				bold = readFontBytes(boldFace)
 			}
@@ -271,7 +253,6 @@ func resolveFontFiles(s Settings) (regular, bold shot.Font, warnings []string) {
 	return shot.Font{}, shot.Font{}, warnings
 }
 
-// readFontBytes loads a resolved face, or nothing when the file will not read.
 func readFontBytes(face FontFace) shot.Font {
 	data, err := readFontFile(face.File)
 	if err != nil {
@@ -280,10 +261,6 @@ func readFontBytes(face FontFace) shot.Font {
 	return shot.Font{Data: data, Index: face.Index}
 }
 
-// accentsOf picks the wash seeds: the theme's blue and magenta, the two
-// entries a palette author treats as accent rather than as status. The wash
-// derivation quiets them against the pane background, so a loud theme gets a
-// quiet version of its own colours rather than a house gradient.
 func accentsOf(p *shot.Palette) []shot.Color {
 	return []shot.Color{p.ANSI[4], p.ANSI[5]}
 }
@@ -300,7 +277,6 @@ func FileName(label string, format shot.Format, now time.Time) string {
 	return "tuios-" + label + "-" + stamp + "." + format.Ext()
 }
 
-// cleanLabel reduces a window title to a short filename-safe slug.
 func cleanLabel(s string) string {
 	var b strings.Builder
 	lastDash := true
@@ -335,9 +311,6 @@ func Save(path string, data []byte) error {
 	if path == "" {
 		return errfmt.Errorf("no output path")
 	}
-	// The name's claim goes once the capture is in place, or when it could not
-	// be written and holds nothing. An explicit path was never claimed, and
-	// removing a claim that is not there does nothing.
 	defer func() { _ = os.Remove(claimPath(path)) }()
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -376,27 +349,8 @@ func ResolvePath(out, dir, label string, format shot.Format, now time.Time) (str
 	return freeName(dir, FileName(label, format, now)), nil
 }
 
-// freeNameLimit is how many same-second captures get a name of their own. Past
-// it the name repeats, because a directory scan that never ends is worse than
-// an overwritten file, and nobody takes a thousand captures in one second.
 const freeNameLimit = 1000
 
-// freeName returns name, or name with a counter before its extension when the
-// directory already holds it.
-//
-// The name is claimed as it is chosen, with an exclusive create, rather than
-// tested for absence and used a moment later. Two captures now overlap on
-// purpose: the preview panel opens on the gesture and the write finishes in a
-// command, so a second capture can be started while the first is still being
-// written. Looking and then writing would let both look at the same empty
-// second and both pick the same name, and the second write would silently take
-// the first one's file.
-//
-// The claim is a hidden file beside the name, not the name itself. A claim on
-// the name was an empty file under the capture's own name until Save filled
-// it, and a reader that found it in that moment (a file manager, a watcher, a
-// test) read an empty capture. Save removes the claim once the capture is in
-// place.
 func freeName(dir, name string) string {
 	path := filepath.Join(dir, name)
 	if claimName(path) {
@@ -413,18 +367,10 @@ func freeName(dir, name string) string {
 	return path
 }
 
-// claimPath is the hidden file that holds path for a capture being written.
 func claimPath(path string) string {
 	return filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".claim")
 }
 
-// claimName takes path for one capture and reports whether it could. It fails
-// when a finished capture holds the name, or another capture is writing it.
-//
-// The claim is taken before the name is checked, and it is released only after
-// Save has renamed the capture into place. So a capture that checks the name
-// while another is writing it fails on the claim, and one that checks it after
-// finds the finished file.
 func claimName(path string) bool {
 	f, err := os.OpenFile(claimPath(path), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {

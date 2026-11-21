@@ -13,8 +13,6 @@ import (
 // internal/session/herdr_api.go).
 const Version = "0.9.5"
 
-// protocolVersion is herdr's private protocol at Version, which the daemon
-// reports in a pong (herdrTargetProtocol in internal/session/herdr_api.go).
 const protocolVersion = 22
 
 // Output is what a call prints when it is answered.
@@ -108,8 +106,6 @@ func Parse(args []string, getenv Env, cwd string) (*Call, *UsageError) {
 		}
 		return nil, usage("unknown herdr command: " + group + ". Run herdr --help for the commands tuios answers")
 	}
-	// herdr prints a command's long help for --help anywhere after it,
-	// before a "--".
 	if flags, _, _ := splitDashDash(rest); slices.Contains(flags, "--help") || slices.Contains(flags, "-h") {
 		return &Call{Output: OutText, Text: groupHelp[group]}, nil
 	}
@@ -126,12 +122,8 @@ func Parse(args []string, getenv Env, cwd string) (*Call, *UsageError) {
 	return parse(rest[0], rest[1:], getenv, cwd)
 }
 
-// launchOptions are herdr's options for its own app and server, which the
-// front does not run.
 var launchOptions = []string{"--session", "--machine", "--remote", "--remote-keybindings", "--handoff", "--default-config", "--skill"}
 
-// local is a command herdr runs on its own machine, which tuios answers with
-// herdr's error shape and code unsupported.
 func local(id, msg string) *Call {
 	return &Call{ID: id, Output: OutLocal, Text: msg}
 }
@@ -153,8 +145,6 @@ var groups = map[string]groupParser{
 	"plugin":       parsePlugin,
 }
 
-// localGroups are herdr's commands that do their work on herdr's own
-// machine, with what tuios says about each.
 var localGroups = map[string]string{
 	"completion":  "tuios's herdr front has no shell completions",
 	"completions": "tuios's herdr front has no shell completions",
@@ -165,7 +155,6 @@ var localGroups = map[string]string{
 	"integration": "herdr integration installs herdr's agent hooks. Use tuios integration",
 }
 
-// call is a request whose answer is printed whole.
 func call(id, method string, params map[string]any) *Call {
 	if params == nil {
 		params = map[string]any{}
@@ -173,21 +162,14 @@ func call(id, method string, params map[string]any) *Call {
 	return &Call{ID: id, Method: method, Params: params}
 }
 
-// okCall is a request herdr makes for its effect: nothing is printed on
-// success.
 func okCall(id, method string, params map[string]any) *Call {
 	c := call(id, method, params)
 	c.Output = OutOK
 	return c
 }
 
-// valueFn reads the value of the flag it is given: the next argument.
 type valueFn = func(flag string) (string, *UsageError)
 
-// walk calls fn for each argument in turn. fn reads a flag's value with the
-// value func it is given, which takes the next argument, as herdr's parsers
-// do with args.get(index + 1).
-//
 //go:noinline
 func walk(args []string, fn func(arg string, value valueFn) *UsageError) *UsageError {
 	for i := 0; i < len(args); i++ {
@@ -209,8 +191,6 @@ func walk(args []string, fn func(arg string, value valueFn) *UsageError) *UsageE
 	return nil
 }
 
-// expandEquals splits --flag=value into --flag value for the flags in
-// valueFlags, as herdr's expand_equals_args does.
 func expandEquals(args []string, valueFlags ...string) []string {
 	out := make([]string, 0, len(args))
 	for _, a := range args {
@@ -223,13 +203,10 @@ func expandEquals(args []string, valueFlags ...string) []string {
 	return out
 }
 
-// flagKey is the params key of a flag: --agent-session-id is
-// agent_session_id.
 func flagKey(flag string) string {
 	return strings.ReplaceAll(strings.TrimPrefix(flag, "--"), "-", "_")
 }
 
-// envPane is HERDR_PANE_ID, nil when it is unset or blank.
 func envPane(getenv Env) any {
 	if v := getenv("HERDR_PANE_ID"); strings.TrimSpace(v) != "" {
 		return v
@@ -243,8 +220,6 @@ func setOpt(p map[string]any, key string, v any) {
 	}
 }
 
-// parseUint reads an unsigned integer of the given bits, as herdr's u32
-// and u64 flags do.
 func parseUint(flag, v string, bits int) (uint64, *UsageError) {
 	n, err := strconv.ParseUint(v, 10, bits)
 	if err != nil {
@@ -253,8 +228,6 @@ func parseUint(flag, v string, bits int) (uint64, *UsageError) {
 	return n, nil
 }
 
-// parseFloat reads a finite f32, as herdr's --ratio and --amount do. what is
-// the word herdr's message uses.
 func parseFloat(what, v string) (float64, *UsageError) {
 	f, err := strconv.ParseFloat(v, 32)
 	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
@@ -313,7 +286,6 @@ func paneAgentState(v string) (string, *UsageError) {
 	return "", usage("invalid pane agent state: " + v + " (expected idle, working, blocked, or unknown)")
 }
 
-// envAssignment reads --env KEY=VALUE.
 func envAssignment(v string) (string, string, *UsageError) {
 	key, val, ok := strings.Cut(v, "=")
 	if !ok {
@@ -328,7 +300,6 @@ func envAssignment(v string) (string, string, *UsageError) {
 	return key, val, nil
 }
 
-// tokenAssignment reads --token NAME=VALUE.
 func tokenAssignment(v string) (string, string, *UsageError) {
 	key, val, ok := strings.Cut(v, "=")
 	if !ok {
@@ -340,8 +311,6 @@ func tokenAssignment(v string) (string, string, *UsageError) {
 	return key, val, nil
 }
 
-// absPath makes a worktree path absolute the way herdr does: a leading ~ is
-// the home directory, and a relative path is taken from cwd.
 func absPath(v string, getenv Env, cwd string) string {
 	if v == "~" || strings.HasPrefix(v, "~/") {
 		if home := getenv("HOME"); home != "" {
@@ -354,7 +323,6 @@ func absPath(v string, getenv Env, cwd string) string {
 	return v
 }
 
-// splitDashDash splits args at the first "--".
 func splitDashDash(args []string) ([]string, []string, bool) {
 	if i := slices.Index(args, "--"); i >= 0 {
 		return args[:i], args[i+1:], true

@@ -9,9 +9,6 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-// colorProfile is the colour profile the frame reaches the terminal with.
-// Zero is colorprofile.Unknown, which is what "not learned yet" looks like.
-// Atomic because every session's render goroutine reads it.
 var colorProfile atomic.Uint32
 
 // SetColorProfile records the colour profile the frame is written through, and
@@ -49,10 +46,6 @@ func Depth() overlay.Depth {
 	return overlay.CurrentDepth()
 }
 
-// slotAt16 returns ANSI slot i at 16 colours and c at every other depth. It is
-// for a chrome colour that stands for one of the theme's sixteen: at 16 colours
-// the terminal paints the slot from its own palette, which is the user's
-// colour, where c stepped down would be a guess from the xterm defaults.
 func slotAt16(i int, c color.Color) color.Color {
 	if Depth() == overlay.Depth16 {
 		return overlay.Slot(i)

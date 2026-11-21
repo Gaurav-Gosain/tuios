@@ -9,19 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The verb proxy: the renderer calls any daemon verb through the bridge, so
-// the Inbox can peek a prompt, answer it, snooze an item or queue a reply
-// without attaching to the pane (plan 2.13).
-//
-// The verbs that only the person may call take the attach nonce the daemon
-// issued to this bridge's client. The bridge adds it itself, and it drops any
-// nonce the renderer sent, so the renderer never sees the nonce and cannot
-// pass another. The daemon checks the nonce against a client attached right
-// now and refuses a caller inside any pane, so a bridge that a pane starts
-// gets not_human however its renderer asks. The bridge reads commands only
-// from its own stdin, the pipe of the renderer that started it.
-
-// personVerbs are the verbs that act for the person and carry the nonce.
 var personVerbs = map[string]bool{
 	"respond":               true,
 	"reply-approval":        true,
@@ -32,32 +19,20 @@ var personVerbs = map[string]bool{
 	"queue-prompt":          true,
 	"cancel-queued":         true,
 	"send-agent-message":    true,
-	// The conversation a pane's agent had: a client reads it to show it.
-	"agent-transcript": true,
-	// The review verbs the GUI writes with: a note and a send are the
-	// person's only with the nonce, and review-stage checks a nonce it is
-	// given.
-	"review-note":  true,
-	"send-review":  true,
-	"review-stage": true,
+	"agent-transcript":      true,
+	"review-note":           true,
+	"send-review":           true,
+	"review-stage":          true,
 }
 
-// heldVerbs answer once, but only when the person decides, which can be
-// never within a proxied call, so the proxy refuses them. The verbs that keep
-// the connection after the reply are read from the verb table.
 var heldVerbs = map[string]bool{
 	"request-approval": true,
 }
 
-// personOnlyVerbs are for the person at a key, which a renderer never is,
-// so the proxy refuses them. The bridge's connection is outside every pane,
-// so the daemon would take daemon-upgrade from it with no dialog.
 var personOnlyVerbs = map[string]bool{
 	"daemon-upgrade": true,
 }
 
-// verbTimeout bounds one proxied call. respond waits up to 30 s for the pane
-// to settle, so the bound is above that.
 const verbTimeout = 35 * time.Second
 
 // VerbResult answers one verb command.
@@ -74,13 +49,10 @@ type VerbResult struct {
 	Error string `json:"error,omitempty"`
 }
 
-// verbDial opens a verb connection to the daemon. Tests replace it.
 var verbDial = func(version string) (verbCaller, error) {
 	return session.DialVerbClientAs(version)
 }
 
-// verbDialHost opens a verb connection to a host's daemon through this
-// machine's daemon. Tests replace it.
 var verbDialHost = func(host, version string) (verbCaller, error) {
 	c, _, err := session.DialVerbClientThroughHost(host, version)
 	if err != nil {
@@ -89,20 +61,14 @@ var verbDialHost = func(host, version string) (verbCaller, error) {
 	return c, nil
 }
 
-// verbCaller is the part of session.VerbClient the proxy uses.
 type verbCaller interface {
 	CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error)
 	Close() error
 }
 
-// verbParams returns the params the bridge sends for a verb: the renderer's,
-// without any nonce or upgrade_dialog it gave, and with this client's nonce
-// for a person verb.
 func verbParams(verb string, in map[string]any, nonce string) (map[string]any, error) {
 	params := make(map[string]any, len(in)+1)
 	for k, v := range in {
-		// upgrade_dialog says a key was pressed in a client's upgrade dialog,
-		// which a renderer never is.
 		if k == "human_nonce" || k == "upgrade_dialog" {
 			continue
 		}
@@ -117,8 +83,6 @@ func verbParams(verb string, in map[string]any, nonce string) (map[string]any, e
 	return params, nil
 }
 
-// runVerb proxies one verb command and sends its result. It runs on its own
-// goroutine: a verb can wait for seconds, and the model must not.
 func runVerb(out *frameWriter, version, nonce string, c Command) {
 	res := VerbResult{Req: c.Req, Verb: c.Verb}
 	defer func() { out.JSON(Event{Type: "verb_result", VerbResult: &res}) }()
@@ -143,8 +107,6 @@ func runVerb(out *frameWriter, version, nonce string, c Command) {
 		host = ""
 	}
 	if host != "" && personVerbs[c.Verb] {
-		// The nonce is this machine's daemon's word about this client. It
-		// means nothing to another machine's daemon, and must not reach it.
 		res.Code, res.Error = "not_human", c.Verb+" answers for the person on this machine only; attach the session on "+host+" to answer there"
 		return
 	}

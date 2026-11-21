@@ -10,53 +10,26 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// Editing a TOML file line by line.
-//
-// A save changes a few keys. Rewriting the whole file for that would drop
-// every comment and every blank line the person put there, and in an included
-// file that is somebody's hand-written work. So a change is made to the lines
-// that hold the key: a value is replaced where it stands, a new key goes under
-// the header of its table, a new table goes at the end, and a removed key takes
-// its lines with it.
-//
-// The editor knows tables, arrays of tables, dotted keys and values that run
-// over several lines. It does not know everything TOML allows, such as a table
-// defined by a dotted key and then given a header. So every edit is checked:
-// the edited text is parsed, and it has to say exactly what the change asked
-// for. When it does not, the caller writes the file again from the parsed
-// values, which is correct and loses the comments.
-
-// tomlEdit is a file being edited.
 type tomlEdit struct {
 	lines []string
-	// crlf is true for a file whose lines end in CR LF. The lines are held
-	// without the CR and get it back when the file is written.
-	crlf bool
+	crlf  bool
 }
 
-// docHeader is one table header in a file.
 type docHeader struct {
 	line  int
 	path  []string
 	array bool
 }
 
-// docKey is one key and the lines its value takes.
 type docKey struct {
 	start, end int
-	// path is the full path: the table's path and then the dotted key.
-	path []string
-	// header is the index of the header the key is under, -1 for the root.
-	header int
-	// inArray is true for a key under an [[array]] header.
-	inArray bool
-	// keyText is the line up to the =, indentation and key spelling kept.
-	keyText string
-	// comment is the trailing comment of a one-line value, with its #.
-	comment string
+	path       []string
+	header     int
+	inArray    bool
+	keyText    string
+	comment    string
 }
 
-// docScan is what scan found.
 type docScan struct {
 	headers []docHeader
 	keys    []docKey
@@ -80,7 +53,6 @@ func (e *tomlEdit) bytes() []byte {
 	return []byte(s)
 }
 
-// scan finds every header and key.
 func (e *tomlEdit) scan() docScan {
 	var d docScan
 	cur := -1
@@ -122,7 +94,6 @@ func (e *tomlEdit) scan() docScan {
 	return d
 }
 
-// parseHeaderLine reads a [table] or [[array]] header.
 func parseHeaderLine(s string) ([]string, bool, bool) {
 	if !strings.HasPrefix(s, "[") {
 		return nil, false, false
@@ -149,7 +120,6 @@ func parseHeaderLine(s string) ([]string, bool, bool) {
 	return splitDotted(body), array, true
 }
 
-// valueScan follows a value over lines: open brackets and multi-line strings.
 type valueScan struct {
 	depth int
 	ml    string
@@ -157,7 +127,6 @@ type valueScan struct {
 
 func (v *valueScan) done() bool { return v.depth <= 0 && v.ml == "" }
 
-// feed reads one line of a value. It returns where a comment starts, or -1.
 func (v *valueScan) feed(s string) int {
 	for i := 0; i < len(s); i++ {
 		if v.ml != "" {
@@ -197,9 +166,6 @@ func (v *valueScan) feed(s string) int {
 	return -1
 }
 
-// blockEnd is the line after the last line of the table that header h
-// starts. For an [[array]] entry the block takes in the sub-tables of that
-// entry.
 func (d docScan) blockEnd(e *tomlEdit, h int) int {
 	hd := d.headers[h]
 	for _, next := range d.headers[h+1:] {
@@ -211,10 +177,6 @@ func (d docScan) blockEnd(e *tomlEdit, h int) int {
 	return len(e.lines)
 }
 
-// lastCode is the line after the last line in [from, to) that is neither
-// blank nor a comment, or from when there is none. The comments and blank
-// lines after it belong to whatever comes next: a comment above a [table]
-// header is about that table.
 func (e *tomlEdit) lastCode(from, to int) int {
 	for i := to; i > from; i-- {
 		s := strings.TrimSpace(e.lines[i-1])
@@ -225,23 +187,16 @@ func (e *tomlEdit) lastCode(from, to int) int {
 	return from
 }
 
-// cut removes the lines [from, to) and closes the gap: when the lines on both
-// sides of it are blank, one of them goes, so two blocks stay one blank line
-// apart.
 func (e *tomlEdit) cut(from, to int) {
 	e.splice(from, to, nil)
 	if from >= len(e.lines) || strings.TrimSpace(e.lines[from]) != "" {
 		return
 	}
-	// At the top of the file a blank line leads nowhere; between two
-	// blocks one blank line is enough.
 	if from == 0 || strings.TrimSpace(e.lines[from-1]) == "" {
 		e.splice(from, from+1, nil)
 	}
 }
 
-// lastContent is the line after the last line in [from, to) that is not
-// blank, or from when there is none.
 func (e *tomlEdit) lastContent(from, to int) int {
 	for i := to; i > from; i-- {
 		if strings.TrimSpace(e.lines[i-1]) != "" {
@@ -255,7 +210,6 @@ func (e *tomlEdit) splice(from, to int, repl []string) {
 	e.lines = slices.Concat(e.lines[:from], repl, e.lines[to:])
 }
 
-// setLeaf sets a key whose value is not a table.
 func (e *tomlEdit) setLeaf(path []string, v any) {
 	d := e.scan()
 	for _, k := range d.keys {
@@ -304,13 +258,11 @@ func (e *tomlEdit) setLeaf(path []string, v any) {
 	e.appendBlock(append([]string{"[" + dottedKey(parent) + "]"}, line))
 }
 
-// setTable puts a whole table at path, replacing what is there.
 func (e *tomlEdit) setTable(path []string, m map[string]any) {
 	e.remove(path)
 	e.appendBlock(renderTable(path, m))
 }
 
-// appendBlock adds lines at the end, after one blank line.
 func (e *tomlEdit) appendBlock(block []string) {
 	end := e.lastContent(0, len(e.lines))
 	e.lines = e.lines[:end]
@@ -320,7 +272,6 @@ func (e *tomlEdit) appendBlock(block []string) {
 	e.lines = append(e.lines, block...)
 }
 
-// remove deletes the key or table at path, and everything under it.
 func (e *tomlEdit) remove(path []string) {
 	for {
 		d := e.scan()
@@ -348,8 +299,6 @@ func (e *tomlEdit) remove(path []string) {
 	}
 }
 
-// entryAt finds the [[array]] header whose entry the segment names, or -1.
-// With tomb it finds a tombstone for the entry instead of the entry.
 func (e *tomlEdit) entryAt(d docScan, arr []string, seg string, tomb bool) int {
 	name, key, _ := elemOf(seg)
 	for h, hd := range d.headers {
@@ -365,14 +314,10 @@ func (e *tomlEdit) entryAt(d docScan, arr []string, seg string, tomb bool) int {
 	return -1
 }
 
-// tombstoneBlock is the [[array]] entry that removes the entry seg names.
 func tombstoneBlock(arr []string, seg string) []string {
 	return append([]string{"[[" + dottedKey(arr) + "]]"}, renderEntryBody(tombstoneFor(seg))...)
 }
 
-// setEntry replaces the entry of the array at arr that seg names, or adds it.
-// With shadow, a tombstone for the entry comes first in the file, so the
-// entry does not merge with the one an earlier file holds.
 func (e *tomlEdit) setEntry(arr []string, seg string, entry map[string]any, shadow bool) {
 	d := e.scan()
 	h := e.entryAt(d, arr, seg, false)
@@ -399,7 +344,6 @@ func (e *tomlEdit) setEntry(arr []string, seg string, entry map[string]any, shad
 	e.appendBlock(append([]string{"[[" + dottedKey(arr) + "]]"}, body...))
 }
 
-// removeEntry deletes the entry of the array at arr that seg names.
 func (e *tomlEdit) removeEntry(arr []string, seg string) {
 	d := e.scan()
 	if h := e.entryAt(d, arr, seg, false); h >= 0 {
@@ -407,8 +351,6 @@ func (e *tomlEdit) removeEntry(arr []string, seg string) {
 	}
 }
 
-// dropEmptyTables removes [table] headers that hold nothing: no key, no
-// comment, and no table under them.
 func (e *tomlEdit) dropEmptyTables() {
 	for {
 		d := e.scan()
@@ -421,8 +363,6 @@ func (e *tomlEdit) dropEmptyTables() {
 			if h+1 < len(d.headers) {
 				end = d.headers[h+1].line
 			}
-			// Empty means no key, and no comment that sits under the
-			// header. Comments after a blank line belong to what follows.
 			empty := e.lastCode(hd.line+1, end) == hd.line+1
 			if empty && hd.line+1 < end && strings.HasPrefix(strings.TrimSpace(e.lines[hd.line+1]), "#") {
 				empty = false
@@ -451,7 +391,6 @@ func (e *tomlEdit) dropEmptyTables() {
 	}
 }
 
-// apply makes one change.
 func (e *tomlEdit) apply(ch configChange) {
 	last := ch.path[len(ch.path)-1]
 	if _, _, ok := elemOf(last); ok {
@@ -489,9 +428,6 @@ func (e *tomlEdit) apply(ch configChange) {
 	}
 }
 
-// editFile makes the changes to a file's text and checks the result. ok is
-// false when the edited text does not parse to what the changes ask for; the
-// caller then writes want instead.
 func editFile(data []byte, changes []configChange) (out []byte, want map[string]any, ok bool, err error) {
 	want, err = parseLayer(data)
 	if err != nil {
@@ -515,9 +451,6 @@ func editFile(data []byte, changes []configChange) (out []byte, want map[string]
 	return out, want, perr == nil && reflect.DeepEqual(got, want), nil
 }
 
-// shadowEntry puts a tombstone for the entry at path into the parsed file,
-// before the entry, unless one is already there: the same thing setEntry does
-// to the lines.
 func shadowEntry(m map[string]any, path []string) {
 	arrPath, seg := path[:len(path)-1], path[len(path)-1]
 	v, _ := lookupPath(m, arrPath)
@@ -534,7 +467,6 @@ func shadowEntry(m map[string]any, path []string) {
 	setPath(m, arrPath, slices.Insert(slices.Clone(arr), at, any(tomb)))
 }
 
-// tombstoneFor is the entry that removes the entry seg names.
 func tombstoneFor(seg string) map[string]any {
 	name, key, _ := elemOf(seg)
 	entry := map[string]any{tombstoneKey: true}
@@ -547,7 +479,6 @@ func tombstoneFor(seg string) map[string]any {
 	return entry
 }
 
-// dottedKey writes a path as a TOML dotted key.
 func dottedKey(path []string) string {
 	parts := make([]string, len(path))
 	for i, p := range path {
@@ -556,8 +487,6 @@ func dottedKey(path []string) string {
 	return strings.Join(parts, ".")
 }
 
-// encodeValue writes a value the way it goes after the = of a key. A table is
-// an inline table.
 func encodeValue(v any) string {
 	switch v := v.(type) {
 	case map[string]any:
@@ -585,8 +514,6 @@ func encodeValue(v any) string {
 	return strings.TrimSpace(strings.TrimPrefix(string(out), "v = "))
 }
 
-// renderTable is a table as lines: its header, its plain keys, and then its
-// sub-tables and arrays of tables.
 func renderTable(path []string, m map[string]any) []string {
 	out := []string{"[" + dottedKey(path) + "]"}
 	var subs, arrays []string
@@ -617,8 +544,6 @@ func renderTable(path []string, m map[string]any) []string {
 	return out
 }
 
-// renderEntryBody is the keys of an array entry, name and key first. A table
-// inside an entry is written inline.
 func renderEntryBody(m map[string]any) []string {
 	keys := slices.Sorted(maps.Keys(m))
 	order := func(k string) int {

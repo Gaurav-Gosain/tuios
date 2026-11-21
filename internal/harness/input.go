@@ -2,9 +2,6 @@ package harness
 
 import "tuios.dev/harness"
 
-// How tuios types a prompt into a harness, from the manifest's [input] block
-// (harness.Input).
-
 // InputProfile is what the prompt submitter needs from a harness's [input]
 // block, with the defaults applied.
 type InputProfile struct {

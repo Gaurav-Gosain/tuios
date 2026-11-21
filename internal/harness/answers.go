@@ -10,9 +10,6 @@ import (
 	"tuios.dev/harness"
 )
 
-// The answer to a prompt: which keys a reply presses, read from the rule's
-// [answers] block (harness.Answers) and the numbered options on the screen.
-
 // AnswerActions lists the actions in the order a peek offers them.
 var AnswerActions = []string{ActionApprove, ActionApproveAlways, ActionDeny, ActionChoose, ActionText}
 
@@ -75,8 +72,6 @@ func (p *Prompt) Actions() []string {
 	return out
 }
 
-// sampleValue is a value that resolves for an action when anything does, so
-// Actions can ask Resolve rather than repeat its rules.
 func (p *Prompt) sampleValue(action string) string {
 	switch action {
 	case ActionChoose:
@@ -147,7 +142,6 @@ func (p *Prompt) Resolve(action, value string) (Reply, error) {
 	return Reply{}, ErrNoAnswer{"unknown action " + strconv.Quote(action)}
 }
 
-// resolveAnswer is Resolve for approve, approve_always and deny.
 func (p *Prompt) resolveAnswer(action string, ans *harness.Answer) (Reply, error) {
 	digit := 0
 	if want := strings.ToLower(strings.TrimSpace(ans.Option)); want != "" {
@@ -186,9 +180,6 @@ func (r *Registry) ScreenPrompt(id string, tail, context []string) (Prompt, bool
 	rl := &m.Screen.Rule[rule]
 	lines := r.RuleLines(id, rule, tail)
 	options, first := parseOptions(context)
-	// A rule can read only the footer of a menu. The prompt a person reads is
-	// the menu and the question over it, so when the options reach further up
-	// than the region, the lines run from a little above the first option.
 	if first >= 0 {
 		if start := max(first-linesAboveOptions, 0); len(context)-start > len(lines) {
 			lines = context[start:]
@@ -196,9 +187,6 @@ func (r *Registry) ScreenPrompt(id string, tail, context []string) (Prompt, bool
 	}
 	answers := &rl.Answers
 	if rl.Show == harness.ShowDialog {
-		// The answers press keys into the dialog, so they are offered only
-		// while the one dialog the rule reads is on the screen. RulePrompt
-		// reads the same box.
 		if inside, ok := r.RuleDialog(id, rule, tail); ok {
 			lines = inside
 		} else {
@@ -220,8 +208,6 @@ func (r *Registry) ScreenPrompt(id string, tail, context []string) (Prompt, bool
 	}, true
 }
 
-// linesAboveOptions is how many lines over a menu's first option belong to
-// the prompt: the question, and the command or file it asks about.
 const linesAboveOptions = 6
 
 // TitlePrompt reads the prompt a harness's title rules find in a pane's title.
@@ -249,21 +235,10 @@ func (r *Registry) TitlePrompt(id, title string) (Prompt, bool) {
 // Inbox peek keeps them when it cleans a dialog line for the panel.
 const OptionCursors = "❯›>▶→*"
 
-// optionLine matches one numbered option: an optional cursor mark (one of
-// OptionCursors), the number with a dot or a parenthesis after it ("1." as
-// Claude Code draws it) or in brackets ("[1]" as Kimi Code CLI draws it), and
-// the label.
 var optionLine = lazyre.New(`^(?:[` + OptionCursors + `]\s*)?(?:([0-9]{1,2})[.)]|\[([0-9]{1,2})\])\s+(\S.*)$`)
 
-// maxOptionGap is how many lines that are not options may sit between two
-// options of one menu: a label that wraps, or a description under it.
 const maxOptionGap = 3
 
-// parseOptions reads the numbered menu nearest the bottom of lines: options
-// numbered 1 to N with at most maxOptionGap other lines between two of them.
-// A run that does not count down to 1 is not a menu and gives nothing, which
-// is what keeps a numbered list in the transcript above from posing as one.
-// It also returns the index of option 1's line, -1 when there is no menu.
 func parseOptions(lines []string) ([]Option, int) {
 	var out []Option
 	want, gap, first := 0, 0, -1
@@ -295,8 +270,6 @@ func parseOptions(lines []string) ([]Option, int) {
 	return out, first
 }
 
-// parseOptionLine reads one line as an option, with the box a TUI draws around
-// a menu taken off first.
 func parseOptionLine(line string) (int, string, bool) {
 	trimmed := strings.TrimFunc(line, func(r rune) bool {
 		return unicode.IsSpace(r) || (r >= 0x2500 && r <= 0x259f)

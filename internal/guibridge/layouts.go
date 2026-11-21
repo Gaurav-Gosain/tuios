@@ -8,12 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// Saved layouts: tuios's layout templates (Save layout, Load layout), for
-// the renderer's palette. The layouts command answers with the layouts
-// event; layout-save, layout-load and layout-delete answer with a result.
-// A load builds the panes the template names in the workspace on screen,
-// as the terminal client's layout picker does.
-
 // SavedLayout is one layout template.
 type SavedLayout struct {
 	Name        string `json:"name"`
@@ -25,8 +19,6 @@ type SavedLayout struct {
 	Tiling  bool  `json:"tiling"`
 }
 
-// sendLayouts reads the templates off the model's goroutine and sends the
-// layouts event.
 func sendLayouts(out *frameWriter, req int64) {
 	go func() {
 		tmpls, err := app.LoadLayoutTemplates()
@@ -50,7 +42,6 @@ func sendLayouts(out *frameWriter, req int64) {
 	}()
 }
 
-// layoutTemplate runs layout-save, layout-load or layout-delete.
 func (m *model) layoutTemplate(op, name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {

@@ -10,11 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// orderedObject is a JSON object that keeps its keys in the order it read
-// them and every value it does not touch byte for byte. A harness's settings
-// file is the user's, so rewriting it has to change only the entries tuios
-// owns: a map would sort every key the user wrote, and a struct would drop
-// every key tuios does not know.
 type orderedObject struct {
 	keys []string
 	vals map[string]json.RawMessage
@@ -24,8 +19,6 @@ func newObject() *orderedObject {
 	return &orderedObject{vals: map[string]json.RawMessage{}}
 }
 
-// parseObject reads a JSON object. An empty or blank document is an empty
-// object, which is what a harness that has no settings file yet means.
 func parseObject(data []byte) (*orderedObject, error) {
 	o := newObject()
 	if len(bytes.TrimSpace(data)) == 0 {
@@ -90,7 +83,6 @@ func (o *orderedObject) del(key string) {
 
 func (o *orderedObject) empty() bool { return len(o.keys) == 0 }
 
-// compact writes the object on one line, values as they were read.
 func (o *orderedObject) compact() json.RawMessage {
 	var b bytes.Buffer
 	b.WriteByte('{')
@@ -107,8 +99,6 @@ func (o *orderedObject) compact() json.RawMessage {
 	return b.Bytes()
 }
 
-// render writes the object indented by two spaces with a final newline, the
-// layout every one of these harnesses writes its own settings in.
 func (o *orderedObject) render() ([]byte, error) {
 	var out bytes.Buffer
 	if err := json.Indent(&out, o.compact(), "", "  "); err != nil {
@@ -126,25 +116,17 @@ type HookEvent struct {
 	Timeout int
 }
 
-// managedMarker is in every command tuios writes. It is how a later install,
-// uninstall or status tells tuios's entries from the user's own, and it
-// carries the integration version. `tuios agent-hook` accepts and ignores it.
 const managedMarker = "--integration"
 
-// isManagedCommand reports whether a hook command is one tuios wrote.
 func isManagedCommand(cmd string) bool {
 	return strings.Contains(cmd, " agent-hook ") && strings.Contains(cmd, " "+managedMarker+" ")
 }
 
-// managedEntry is one managed command found in a hooks file.
 type managedEntry struct {
 	Event   string
 	Command string
 }
 
-// hookGroups decodes an event's array of matcher groups. A value that is not
-// an array is an error: rewriting it would destroy something tuios does not
-// understand.
 func hookGroups(event string, raw json.RawMessage) ([]json.RawMessage, error) {
 	var groups []json.RawMessage
 	if err := jsonx.Unmarshal(raw, &groups); err != nil {
@@ -153,7 +135,6 @@ func hookGroups(event string, raw json.RawMessage) ([]json.RawMessage, error) {
 	return groups, nil
 }
 
-// groupCommands lists the command of every command hook in a matcher group.
 func groupCommands(group json.RawMessage) []string {
 	var g struct {
 		Hooks []struct {
@@ -173,7 +154,6 @@ func groupCommands(group json.RawMessage) []string {
 	return out
 }
 
-// findManaged lists the managed commands in a settings document.
 func findManaged(doc []byte) ([]managedEntry, error) {
 	root, err := parseObject(doc)
 	if err != nil {
@@ -204,13 +184,9 @@ func findManaged(doc []byte) ([]managedEntry, error) {
 	return out, nil
 }
 
-// stripManaged removes every managed command from a matcher group. It returns
-// the group to keep, or nil when the group held nothing but managed commands,
-// and whether it changed anything.
 func stripManaged(group json.RawMessage) (json.RawMessage, bool, error) {
 	obj, err := parseObject(group)
 	if err != nil {
-		// Not an object: not something tuios wrote, so kept as it is.
 		return group, false, nil
 	}
 	rawHooks, ok := obj.get("hooks")
@@ -243,11 +219,6 @@ func stripManaged(group json.RawMessage) (json.RawMessage, bool, error) {
 	return obj.compact(), true, nil
 }
 
-// marshalPlain encodes v as json.Marshal does, except that it leaves &, < and
-// > as they are. json.Marshal writes them as &, < and >, and it
-// does so even inside a json.RawMessage, so a user's hook command such as
-// `make lint && echo ok > /tmp/x` would come back rewritten. The document is
-// the same JSON either way, but the user's text is not.
 func marshalPlain(v any) (json.RawMessage, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -258,9 +229,6 @@ func marshalPlain(v any) (json.RawMessage, error) {
 	return bytes.TrimRight(b.Bytes(), "\n"), nil
 }
 
-// joinArray writes a JSON array of elements exactly as they are. Each element
-// is compacted the way compact writes object values, and nothing is escaped
-// or reordered.
 func joinArray(elems []json.RawMessage) json.RawMessage {
 	var b bytes.Buffer
 	b.WriteByte('[')
@@ -274,16 +242,6 @@ func joinArray(elems []json.RawMessage) json.RawMessage {
 	return b.Bytes()
 }
 
-// editHooks rewrites a settings document's hooks object: every managed
-// command is removed, and when install is set one managed group is added per
-// event. Everything else in the document is kept as it was, in its order.
-//
-// It returns the new document and whether it differs from the old one, so a
-// caller writes nothing when nothing changed: installing twice is a no-op.
-//
-// matcher, when not empty, is written on each managed group. Qwen Code and
-// Qoder CLI match every tool with "*"; the other harnesses take a group with
-// no matcher as matching everything.
 func editHooks(doc []byte, events []HookEvent, command string, install bool, matcher string) ([]byte, bool, error) {
 	root, err := parseObject(doc)
 	if err != nil {
@@ -351,7 +309,6 @@ func editHooks(doc []byte, events []HookEvent, command string, install bool, mat
 	case !hooks.empty():
 		root.set("hooks", hooks.compact())
 	case hadHooks && removedAny:
-		// Emptied by removing tuios's own entries, so the key goes too.
 		root.del("hooks")
 	}
 	out, err := root.render()
@@ -361,7 +318,6 @@ func editHooks(doc []byte, events []HookEvent, command string, install bool, mat
 	return out, !sameJSON(doc, out), nil
 }
 
-// sameJSON reports whether two documents hold the same JSON, ignoring layout.
 func sameJSON(a, b []byte) bool {
 	var ca, cb bytes.Buffer
 	if len(bytes.TrimSpace(a)) == 0 {

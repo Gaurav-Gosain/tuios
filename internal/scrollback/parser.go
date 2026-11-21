@@ -63,8 +63,6 @@ func ParseBlocks(term vt.Terminal) []CommandBlock {
 	return parseWithRegex(term)
 }
 
-// parseWithMarkers uses OSC 133 markers to precisely segment commands.
-// Marker sequence: A (prompt start) -> B (command start) -> C (output start) -> D (command done)
 func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBlock {
 	var blocks []CommandBlock
 
@@ -74,7 +72,6 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 			continue
 		}
 
-		// Find B (command start) after this A
 		var bMarker, cMarker, dMarker *vt.SemanticMarker
 		nextPromptAbsLine := -1
 		for j := i + 1; j < len(markers); j++ {
@@ -92,7 +89,6 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 					dMarker = &markers[j]
 				}
 			case vt.MarkerPromptStart:
-				// Next prompt starts: record its position and stop looking
 				nextPromptAbsLine = markers[j].AbsLine
 				goto buildBlock
 			}
@@ -101,9 +97,6 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 			}
 		}
 
-		// If we found D but not the next prompt, scan ahead for it.
-		// After CSI 2J (clear), the next prompt's AbsLine can be before D's
-		// AbsLine because the cursor resets to screen row 0.
 		if nextPromptAbsLine < 0 {
 			for j := i + 1; j < len(markers); j++ {
 				if markers[j].Type == vt.MarkerPromptStart && markers[j].AbsLine > m.AbsLine {
@@ -118,24 +111,15 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 			continue
 		}
 
-		// Require C (command executed) or D (command finished). Without either,
-		// this is an unexecuted prompt (e.g., initial shell prompt, current input line).
-		// Reading text from these positions is unreliable because the line content
-		// may have changed since the marker was created (overwritten by output).
 		if cMarker == nil && dMarker == nil {
 			debugLog("  skipping A→B (absLine=%d col=%d): no C or D marker (unexecuted prompt)", bMarker.AbsLine, bMarker.Col)
 			continue
 		}
 
-		// Prefer command text captured at C-marker time (before output overwrites buffer).
-		// Fall back to reading from the terminal buffer if no capture available.
 		command := ""
 		if cMarker != nil && cMarker.CapturedText != "" {
 			command = cMarker.CapturedText
 		} else {
-			// Fallback: extract from terminal buffer (may be overwritten by TUI programs)
-			// At most maxFallbackCommandLines lines: a long span from B is
-			// output, and reading all of it grew with the output.
 			var sb strings.Builder
 			sb.WriteString(extractTextFromCol(term, bMarker.AbsLine, bMarker.Col))
 			end := min(cmdEndLine(cMarker, dMarker, bMarker), bMarker.AbsLine+maxFallbackCommandLines)
@@ -150,7 +134,6 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 			continue
 		}
 
-		// Extract output (between C and D)
 		output := ""
 		styledOutput := ""
 		if cMarker != nil {
@@ -161,27 +144,14 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 				outEnd = term.ScrollbackLen() + term.Height() - 1
 			}
 
-			// Cap output at the next prompt boundary. After CSI 2J (clear/ctrl+l),
-			// the cursor resets to screen row 0 so the next prompt's AbsLine can
-			// be BEFORE the current command's D marker. Without this cap we'd
-			// read the new prompt content as part of the old command's output.
 			if nextPromptAbsLine >= 0 && outEnd >= nextPromptAbsLine {
 				outEnd = nextPromptAbsLine - 1
 				debugLog("  capping output at next prompt: outEnd=%d (nextPrompt=%d)", outEnd, nextPromptAbsLine)
 			}
 
-			// If this command completed and a subsequent command was executed,
-			// cap output at the scrollback boundary. On-screen lines may have
-			// been overwritten by later programs that use cursor repositioning
-			// (e.g. neofetch, htop). Scrollback lines are safe since they
-			// can't be overwritten by cursor movement.
 			if dMarker != nil && outEnd >= term.ScrollbackLen() {
 				hasSubsequentExec := false
 				for j := i + 1; j < len(markers); j++ {
-					// Look for a C marker from a DIFFERENT (later) command.
-					// Our own C marker has AbsLine < dMarker.AbsLine (since C
-					// fires before output and D fires after). A subsequent
-					// command's C marker will be at or after our D marker.
 					if markers[j].Type == vt.MarkerCommandExecuted && markers[j].AbsLine >= dMarker.AbsLine {
 						hasSubsequentExec = true
 						break
@@ -219,8 +189,6 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 	return blocks
 }
 
-// maxFallbackCommandLines is the most lines read for a command whose C
-// marker captured no text. It matches the bound in vt.
 const maxFallbackCommandLines = 64
 
 func cmdEndLine(c, d, b *vt.SemanticMarker) int {
@@ -243,39 +211,34 @@ func endLineForBlock(d, c, b *vt.SemanticMarker, term vt.Terminal) int {
 	return b.AbsLine
 }
 
-// promptPattern matches common shell prompts at the start of a line.
-// Very conservative to avoid false positives on command output.
 var promptPattern = lazyre.New(
 	`^(\s*)` +
 		`(` +
-		`\w+@[\w.-]+\s*[$#]\s+|` + // user@host$ or user@host# (ssh, bash default)
-		`\[[\w@. ~/-]{1,60}\]\s*[$#]\s+|` + // [user@host dir]$ (bash with brackets)
-		`\$\s+` + // bare "$ " (very common default)
+		`\w+@[\w.-]+\s*[$#]\s+|` +
+		`\[[\w@. ~/-]{1,60}\]\s*[$#]\s+|` +
+		`\$\s+` +
 		`)`,
 )
 
-// looksLikeOutput detects lines that are clearly command output, not prompts.
 var looksLikeOutput = lazyre.New(
 	`^(?:` +
-		`[\s]*[drwx.\-lbcps]{10}|` + // ls -l permissions
-		`[\s]*total\s+\d|` + // "total 48" from ls -l
-		`[\s]*[│├└─┌┐┘┬┤┼╭╮╰╯]+|` + // box drawing
-		`[\s]*\d+\s+\d+\s+\d+|` + // numeric columns
-		`[\s]*[■●◆▪▸▹►▻→←↑↓＞]+` + // icon chars from eza/tree (including fullwidth >)
+		`[\s]*[drwx.\-lbcps]{10}|` +
+		`[\s]*total\s+\d|` +
+		`[\s]*[│├└─┌┐┘┬┤┼╭╮╰╯]+|` +
+		`[\s]*\d+\s+\d+\s+\d+|` +
+		`[\s]*[■●◆▪▸▹►▻→←↑↓＞]+` +
 		`)`,
 )
 
-// looksLikeFileEntry detects "commands" that are really file listing entries.
 var looksLikeFileEntry = lazyre.New(
 	`(?:` +
-		`\d+\.?\d*\s*[KMGT]i?B|` + // file sizes: "29.1 MB", "4.0K", "10KiB"
-		`\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s|` + // dates in file listings
-		`^[.\-/~]\S*\s+\d|` + // filename followed by numbers (eza grid)
-		`^-{3,}` + // lines starting with dashes (permission strings, separators)
+		`\d+\.?\d*\s*[KMGT]i?B|` +
+		`\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s|` +
+		`^[.\-/~]\S*\s+\d|` +
+		`^-{3,}` +
 		`)`,
 )
 
-// parseWithRegex uses prompt pattern matching as a fallback.
 func parseWithRegex(term vt.Terminal) []CommandBlock {
 	totalLines := term.ScrollbackLen() + term.Height()
 	if totalLines == 0 {
@@ -357,10 +320,8 @@ func parseWithRegex(term vt.Terminal) []CommandBlock {
 	return blocks
 }
 
-// extractTextFromCol extracts plain text from a line starting at the given column.
 func extractTextFromCol(term vt.Terminal, absLine, col int) string {
 	full := extractAbsLineText(term, absLine)
-	// Convert column (cell position) to rune offset
 	runes := []rune(full)
 	if col >= len(runes) {
 		return ""
@@ -368,7 +329,6 @@ func extractTextFromCol(term vt.Terminal, absLine, col int) string {
 	return strings.TrimSpace(string(runes[col:]))
 }
 
-// extractAbsLineText extracts plain text from an absolute line index.
 func extractAbsLineText(term vt.Terminal, absLine int) string {
 	sbLen := term.ScrollbackLen()
 	if absLine < sbLen {
@@ -391,7 +351,6 @@ func extractAbsLineText(term vt.Terminal, absLine int) string {
 	return strings.TrimRight(sb.String(), " ")
 }
 
-// extractAbsLineStyledText extracts ANSI-styled text from an absolute line index.
 func extractAbsLineStyledText(term vt.Terminal, absLine int) string {
 	sbLen := term.ScrollbackLen()
 	if absLine < sbLen {
@@ -457,7 +416,6 @@ func cellsToStyledText(cells []uv.Cell) string {
 		return ""
 	}
 
-	// Find last non-space cell
 	lastContent := -1
 	for i, cell := range slices.Backward(cells) {
 		c := string(cell.Content)
@@ -524,11 +482,6 @@ func buildCellANSI(cell *uv.Cell) string {
 	return te.String()
 }
 
-// cleanCommandText strips output garbage from extracted command text.
-// Programs like neofetch overwrite the command line with TUI output,
-// so the raw extraction may include box drawing, CJK, emoji, etc.
-// This function truncates at the first character that's clearly not
-// part of a typed shell command.
 func cleanCommandText(text string) string {
 	runes := []rune(text)
 	for i, r := range runes {
@@ -537,28 +490,25 @@ func cleanCommandText(text string) string {
 			if cleaned != "" {
 				return cleaned
 			}
-			// If everything before was whitespace, return original
 			return text
 		}
 	}
 	return text
 }
 
-// isOutputGarbage returns true for characters that are very unlikely to appear
-// in typed shell commands but commonly appear in TUI program output.
 func isOutputGarbage(r rune) bool {
 	switch {
-	case r >= 0x2500 && r <= 0x259F: // Box drawing + block elements
+	case r >= 0x2500 && r <= 0x259F:
 		return true
-	case r >= 0x2800 && r <= 0x28FF: // Braille patterns
+	case r >= 0x2800 && r <= 0x28FF:
 		return true
-	case r >= 0x3000 && r <= 0x9FFF: // CJK ideographs + symbols
+	case r >= 0x3000 && r <= 0x9FFF:
 		return true
-	case r >= 0xF900 && r <= 0xFAFF: // CJK compatibility
+	case r >= 0xF900 && r <= 0xFAFF:
 		return true
-	case r >= 0xE000 && r <= 0xF8FF: // Private Use Area (Nerd Font icons)
+	case r >= 0xE000 && r <= 0xF8FF:
 		return true
-	case r >= 0x1F000: // Emoji, supplementary symbols
+	case r >= 0x1F000:
 		return true
 	}
 	return false

@@ -10,16 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// The palette event: tuios's own command palette, so the renderer's palette
-// offers the same commands as the terminal client's (plan 2.14).
-//
-// A row either names an action, which the renderer runs the way it runs the
-// key bound to it (a registry action through the action command, or a gui_
-// action it draws itself), or it names nothing and runs through the palette
-// command, which calls the row's own code in the model. A row whose only
-// effect is a view the bridge cannot show, and that the renderer has no view
-// for, is left out: offered, it would do nothing a person can see.
-
 // PaletteRow is one row of the palette event.
 type PaletteRow struct {
 	// Name is the row's text, and what the palette command names it by.
@@ -35,9 +25,6 @@ type PaletteRow struct {
 	Action string `json:"action,omitempty"`
 }
 
-// paletteActions maps the rows that do what one action does to the action.
-// The renderer runs these itself, so a row and its key never differ, and the
-// row shows the user's own key for it.
 var paletteActions = map[string]string{
 	"Run a program":                              "gui_launcher",
 	"New window":                                 "new_window",
@@ -93,9 +80,6 @@ var paletteActions = map[string]string{
 	"Load layout":                                "gui_load_layout",
 }
 
-// paletteRuns are the rows with no action of their own that the palette
-// command runs in the model. Each changes the session, which the next state
-// shows.
 var paletteRuns = map[string]bool{
 	"Smart split":                                       true,
 	"Next layout":                                       true,
@@ -113,7 +97,6 @@ var paletteRuns = map[string]bool{
 	"Picture in picture: pin or unpin the focused pane": true,
 }
 
-// palette returns the rows of the palette event.
 func (m *model) palette() []PaletteRow {
 	items := m.os.BridgePaletteItems()
 	rows := make([]PaletteRow, 0, len(items))
@@ -129,12 +112,10 @@ func (m *model) palette() []PaletteRow {
 	return rows
 }
 
-// paletteRunnable says whether the palette command runs a row.
 func paletteRunnable(it app.CommandPaletteItem) bool {
 	return paletteRuns[it.Name] || it.Category == app.PaletteCategoryCommands || it.Category == app.PaletteCategoryPlugins
 }
 
-// sendPalette sends the palette event when its rows changed.
 func (m *model) sendPalette() {
 	rows := m.palette()
 	key := fmt.Sprint(rows)
@@ -145,7 +126,6 @@ func (m *model) sendPalette() {
 	m.out.JSON(Event{Type: "palette", Palette: rows})
 }
 
-// runPalette runs one row of the palette by its name.
 func (m *model) runPalette(name string) (tea.Cmd, error) {
 	if name == "" {
 		return nil, errfmt.Errorf("palette needs name, a row of the palette event")

@@ -62,8 +62,6 @@ func Builtin() []Rule {
 	}
 }
 
-// flags collects a command's short flag letters and long flags. Words after
-// a bare -- are not flags.
 func flags(args []string) (short string, long []string) {
 	for _, a := range args {
 		switch {
@@ -79,7 +77,6 @@ func flags(args []string) (short string, long []string) {
 	return short, long
 }
 
-// operands are the words that are not flags.
 func operands(args []string) []string {
 	var out []string
 	dashes := false
@@ -107,8 +104,6 @@ func recursiveDelete(c command, _ Call) bool {
 	return recursive && force
 }
 
-// gitArgs returns the git subcommand and the words after it, skipping git's
-// own options (-C dir, -c key=value and the like).
 func gitArgs(c command) (string, []string) {
 	if c.name() != "git" {
 		return "", nil
@@ -127,8 +122,6 @@ func gitArgs(c command) (string, []string) {
 	return "", nil
 }
 
-// jjValueFlags are the jj flags, global or of the subcommands the rules
-// read, that take a value as the next word.
 var jjValueFlags = []string{
 	"-R", "--repository", "--at-op", "--at-operation", "--config", "--config-file", "--color",
 	"-r", "--revision", "--revisions", "-f", "--from", "-t", "--to", "--into", "-c", "--changes-in",
@@ -136,9 +129,6 @@ var jjValueFlags = []string{
 	"--depth", "-m", "--message",
 }
 
-// jjOperands returns the words of a jj command line that are neither flags
-// nor a flag's value: the subcommand and its operands. jj takes its global
-// options anywhere on the line.
 func jjOperands(c command) []string {
 	if c.name() != "jj" {
 		return nil
@@ -160,14 +150,11 @@ func jjOperands(c command) []string {
 	return out
 }
 
-// jjIs reports whether ops start with the subcommand words.
 func jjIs(ops []string, words ...string) bool {
 	return len(ops) >= len(words) && slices.Equal(ops[:len(words)], words)
 }
 
 func forcePush(c command, _ Call) bool {
-	// jj pushes as --force-with-lease does: a bookmark rewritten here
-	// replaces the remote's. --dry-run only prints what would be sent.
 	if jjIs(jjOperands(c), "git", "push") {
 		return !slices.Contains(c.args(), "--dry-run")
 	}
@@ -182,7 +169,6 @@ func forcePush(c command, _ Call) bool {
 	if slices.Contains(long, "--force") || slices.Contains(long, "--force-with-lease") {
 		return true
 	}
-	// A refspec with a leading + forces that one ref.
 	for _, o := range operands(args) {
 		if strings.HasPrefix(o, "+") {
 			return true
@@ -192,7 +178,6 @@ func forcePush(c command, _ Call) bool {
 }
 
 func hardReset(c command, _ Call) bool {
-	// Every workspace's commits and working copy go back to that operation.
 	if jjIs(jjOperands(c), "op", "restore") {
 		return true
 	}
@@ -213,7 +198,6 @@ func discardChanges(c command, _ Call) bool {
 	if ops := jjOperands(c); jjIs(ops, "abandon") {
 		return true
 	} else if jjIs(ops, "restore") {
-		// No paths restores every file.
 		paths := ops[1:]
 		return len(paths) == 0 || slices.ContainsFunc(paths, func(p string) bool { return p == "." || p == "root:" || p == `root:""` })
 	}
@@ -229,24 +213,18 @@ func discardChanges(c command, _ Call) bool {
 	return false
 }
 
-// pipeTargets are programs that run what arrives on their stdin.
 var pipeTargets = []string{"sh", "bash", "zsh", "dash", "ksh", "fish", "python", "python3", "node"}
 
 func pipeToShell(c command, _ Call) bool {
-	// A download a shell or eval runs as its script or command line:
-	// bash <(curl x), sh -c "$(curl x)", eval "$(wget -O- x)".
 	if slices.ContainsFunc(c.fedBy, isDownload) {
 		return true
 	}
-	// sudo in the target seat counts whatever it runs: a download piped to
-	// sudo tee is still a download written with privilege.
 	if !slices.Contains(pipeTargets, c.name()) && !c.sudo {
 		return false
 	}
 	return slices.ContainsFunc(c.pipedFrom, isDownload)
 }
 
-// isDownload reports whether argv runs curl or wget.
 func isDownload(argv []string) bool {
 	if len(argv) == 0 {
 		return false
@@ -265,7 +243,6 @@ func baseName(p string) string {
 	return p
 }
 
-// diskDevice matches a whole-disk device path.
 var diskDevice = lazyre.New(`^/dev/(sd[a-z]|nvme\d|disk\d|rdisk\d|hd[a-z]|vd[a-z]|xvd[a-z]|mmcblk\d)`)
 
 func disk(c command, _ Call) bool {
@@ -307,7 +284,6 @@ func widePermissions(c command, call Call) bool {
 	return false
 }
 
-// dropTable matches the SQL that removes or empties a table.
 var dropTable = lazyre.New(`(?i)\bDROP\s+(TABLE|DATABASE|SCHEMA)\b|\bTRUNCATE\s+(TABLE\b|[A-Za-z_"` + "`" + `])`)
 
 func database(c command, _ Call) bool {
@@ -323,7 +299,6 @@ func infrastructure(c command, _ Call) bool {
 	case "terraform", "tofu":
 		return first("apply", "destroy")
 	case "kubectl":
-		// kubectl -n prod delete pod: a flag's value can come first.
 		return slices.Contains(ops, "delete")
 	case "docker", "podman":
 		return len(ops) >= 2 && ops[0] == "system" && ops[1] == "prune"
@@ -333,8 +308,6 @@ func infrastructure(c command, _ Call) bool {
 	return false
 }
 
-// writesOutside is the outside-the-worktree rule for a command: a redirect,
-// or a program that writes the files it names, pointing outside the root.
 func writesOutside(c command, call Call) bool {
 	for _, w := range c.writes {
 		if outside(w, call) {
@@ -359,7 +332,6 @@ func writesOutside(c command, call Call) bool {
 			return true
 		}
 	case "git":
-		// git clone <repository> <folder>: the folder is written.
 		if len(ops) >= 3 && ops[0] == "clone" {
 			dir := ops[len(ops)-1]
 			if !strings.Contains(dir, "://") && !strings.Contains(dir, "@") && outside(dir, call) {
@@ -367,7 +339,6 @@ func writesOutside(c command, call Call) bool {
 			}
 		}
 	case "jj":
-		// jj git clone <source> <folder>, jj workspace add <folder>.
 		ops := jjOperands(c)
 		if jjIs(ops, "git", "clone") && len(ops) >= 4 && outside(ops[len(ops)-1], call) {
 			return true
@@ -379,7 +350,6 @@ func writesOutside(c command, call Call) bool {
 		if anyOutside(flagValues(args, "", "--target-directory"), call) {
 			return true
 		}
-		// The destination is the last operand.
 		if len(ops) >= 2 && outside(ops[len(ops)-1], call) {
 			return true
 		}
@@ -409,13 +379,10 @@ func writesOutside(c command, call Call) bool {
 	return false
 }
 
-// anyOutside reports whether any of paths is outside the root.
 func anyOutside(paths []string, call Call) bool {
 	return slices.ContainsFunc(paths, func(p string) bool { return outside(p, call) })
 }
 
-// flagValues are the values given to a flag that takes one: -o X, -oX (short
-// is the letter, "" for none), --output X and --output=X (long).
 func flagValues(args []string, short, long string) []string {
 	var out []string
 	for i := 0; i < len(args); i++ {
@@ -431,8 +398,6 @@ func flagValues(args []string, short, long string) []string {
 		case long != "" && strings.HasPrefix(a, long+"="):
 			out = append(out, strings.TrimPrefix(a, long+"="))
 		case short != "" && strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && len(a) > 1:
-			// The letter may close a bundle (-xzC dir) or carry its value
-			// (-oFILE).
 			j := strings.Index(a[1:], short)
 			if j < 0 {
 				continue

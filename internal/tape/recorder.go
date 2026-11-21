@@ -12,11 +12,11 @@ type Recorder struct {
 	startTime        time.Time
 	lastEventTime    time.Time
 	enabled          bool
-	minDelayMs       int    // Minimum delay to record between events (to filter out very fast inputs)
-	typingBuffer     string // Buffer for accumulating typed characters
-	initialMode      string // Initial mode when recording started
-	initialWorkspace int    // Initial workspace when recording started
-	initialTiling    bool   // Initial tiling state when recording started
+	minDelayMs       int
+	typingBuffer     string
+	initialMode      string
+	initialWorkspace int
+	initialTiling    bool
 }
 
 // NewRecorder creates a new tape recorder
@@ -26,7 +26,7 @@ func NewRecorder() *Recorder {
 		startTime:     time.Now(),
 		lastEventTime: time.Now(),
 		enabled:       false,
-		minDelayMs:    10, // Min 10ms between recorded events
+		minDelayMs:    10,
 	}
 }
 
@@ -35,7 +35,7 @@ func (r *Recorder) Start() {
 	r.enabled = true
 	r.startTime = time.Now()
 	r.lastEventTime = time.Now()
-	r.commands = []Command{} // Reset commands
+	r.commands = []Command{}
 }
 
 // StartWithState begins recording and records the initial state
@@ -43,12 +43,11 @@ func (r *Recorder) StartWithState(mode string, workspace int, tilingEnabled bool
 	r.enabled = true
 	r.startTime = time.Now()
 	r.lastEventTime = time.Now()
-	r.commands = []Command{} // Reset commands
+	r.commands = []Command{}
 	r.initialMode = mode
 	r.initialWorkspace = workspace
 	r.initialTiling = tilingEnabled
 
-	// Record initial workspace if not workspace 1
 	if workspace > 1 {
 		r.commands = append(r.commands, Command{
 			Type:   CommandTypeSwitchWS,
@@ -59,7 +58,6 @@ func (r *Recorder) StartWithState(mode string, workspace int, tilingEnabled bool
 		})
 	}
 
-	// Record initial tiling state
 	if tilingEnabled {
 		r.commands = append(r.commands, Command{
 			Type:   CommandTypeEnableTiling,
@@ -78,7 +76,6 @@ func (r *Recorder) StartWithState(mode string, workspace int, tilingEnabled bool
 		})
 	}
 
-	// Record initial mode
 	if mode == "terminal" {
 		r.commands = append(r.commands, Command{
 			Type:   CommandTypeTerminalMode,
@@ -100,7 +97,7 @@ func (r *Recorder) StartWithState(mode string, workspace int, tilingEnabled bool
 
 // Stop ends recording
 func (r *Recorder) Stop() {
-	r.flushTypingBuffer() // Flush any pending typed text
+	r.flushTypingBuffer()
 	r.enabled = false
 }
 
@@ -115,14 +112,11 @@ func (r *Recorder) RecordKey(key string) {
 		return
 	}
 
-	// Flush any pending typed text first
 	r.flushTypingBuffer()
 
-	// Calculate delay since last event
 	now := time.Now()
 	delay := now.Sub(r.lastEventTime)
 
-	// Convert key to command
 	cmd := r.keyToCommand(key)
 	if cmd != nil {
 		cmd.Delay = delay
@@ -137,12 +131,10 @@ func (r *Recorder) RecordType(text string) {
 		return
 	}
 
-	// Accumulate typed characters
 	r.typingBuffer += text
 	r.lastEventTime = time.Now()
 }
 
-// flushTypingBuffer writes accumulated typed text as a Type command
 func (r *Recorder) flushTypingBuffer() {
 	if r.typingBuffer == "" {
 		return
@@ -151,11 +143,10 @@ func (r *Recorder) flushTypingBuffer() {
 	cmd := Command{
 		Type:   CommandTypeType,
 		Args:   []string{r.typingBuffer},
-		Delay:  0, // Delay is captured between commands
+		Delay:  0,
 		Line:   len(r.commands) + 1,
 		Column: 1,
-		// %q escapes quotes, backslashes, and newlines so the tape round-trips.
-		Raw: fmt.Sprintf("Type %q", r.typingBuffer),
+		Raw:    fmt.Sprintf("Type %q", r.typingBuffer),
 	}
 
 	r.commands = append(r.commands, cmd)
@@ -168,7 +159,6 @@ func (r *Recorder) RecordModeSwitch(cmdType CommandType) {
 		return
 	}
 
-	// Flush any pending typed text first
 	r.flushTypingBuffer()
 
 	now := time.Now()
@@ -188,11 +178,6 @@ func (r *Recorder) RecordModeSwitch(cmdType CommandType) {
 	r.lastEventTime = now
 }
 
-// actionToCommand maps an action to the tape command that does the same
-// thing, for the ones where the two are the same. Every other action is
-// recorded as Action and its name, which replays exactly what the key did.
-// restore_all, snap_fullscreen and select_window_N are not in the map:
-// RestoreWindow, SnapFullscreen and FocusWindow N do something else.
 var actionToCommand = map[string]struct {
 	cmdType CommandType
 	raw     string
@@ -205,10 +190,6 @@ var actionToCommand = map[string]struct {
 	"toggle_tiling":   {CommandTypeToggleTiling, "ToggleTiling"},
 }
 
-// recordableAction reports whether an action belongs in a recording. Left out
-// are the ones that drive the recorder or the player, the ones whose effect
-// is recorded by other means (a mode switch, a workspace switch), and the ones
-// that only open a prefix, whose follow-up action is recorded on its own.
 func recordableAction(action string) bool {
 	switch action {
 	case "toggle_tape_manager", "stop_recording", "script_pause",
@@ -234,7 +215,6 @@ func (r *Recorder) RecordAction(action string, args ...string) {
 		return
 	}
 
-	// Flush any pending typed text first
 	r.flushTypingBuffer()
 
 	now := time.Now()
@@ -247,9 +227,6 @@ func (r *Recorder) RecordAction(action string, args ...string) {
 		cmdType = mapping.cmdType
 		raw = mapping.raw
 	} else {
-		// Every other action replays by name. Before Action existed these
-		// were dropped, so a recording kept only the ten actions above and
-		// lost the rest of what the person did.
 		cmdType = CommandTypeAction
 		raw = "Action " + action
 		args = []string{action}
@@ -274,7 +251,6 @@ func (r *Recorder) RecordWorkspaceSwitch(workspace int) {
 		return
 	}
 
-	// Flush any pending typed text first
 	r.flushTypingBuffer()
 
 	now := time.Now()
@@ -303,17 +279,13 @@ func (r *Recorder) String(header string) string {
 	var sb strings.Builder
 
 	if header != "" {
-		// Add header with timestamp
 		fmt.Fprintf(&sb, "# %s\n", header)
 		fmt.Fprintf(&sb, "# Recorded: %s\n\n", r.startTime.Format(time.RFC3339))
 	}
 
-	// Always start with DisableAnimations for reproducibility
-	// This ensures tape playback is consistent regardless of user's animation settings
 	sb.WriteString("# Disable animations for consistent playback\n")
 	sb.WriteString("DisableAnimations\n\n")
 
-	// Write commands
 	for _, cmd := range r.commands {
 		if cmd.Delay > 0 && cmd.Delay.Milliseconds() > 100 {
 			fmt.Fprintf(&sb, "Sleep %v\n", cmd.Delay.Round(time.Millisecond))
@@ -323,7 +295,6 @@ func (r *Recorder) String(header string) string {
 		sb.WriteByte('\n')
 	}
 
-	// Re-enable animations at the end to restore user's preference
 	sb.WriteString("\n# Re-enable animations\n")
 	sb.WriteString("EnableAnimations\n")
 
@@ -335,7 +306,6 @@ func (r *Recorder) CommandCount() int {
 	return len(r.commands)
 }
 
-// keyToCommand converts a key string to a Command
 func (r *Recorder) keyToCommand(key string) *Command {
 	var cmdType CommandType
 	var raw string
@@ -378,14 +348,11 @@ func (r *Recorder) keyToCommand(key string) *Command {
 		cmdType = CommandTypeEnd
 		raw = "End"
 	default:
-		// Check if it's a modifier combination
 		if isModifierCombo(key) {
 			cmdType = CommandTypeKeyCombo
 			raw = key
 		} else if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			// Single printable character: record as a Type command
 			cmdType = CommandTypeType
-			// %q escapes quotes, backslashes, and newlines so the tape round-trips.
 			raw = fmt.Sprintf("Type %q", key)
 			return &Command{
 				Type:   cmdType,
@@ -395,7 +362,6 @@ func (r *Recorder) keyToCommand(key string) *Command {
 				Raw:    raw,
 			}
 		} else {
-			// Unknown key
 			return nil
 		}
 	}
@@ -409,9 +375,7 @@ func (r *Recorder) keyToCommand(key string) *Command {
 	}
 }
 
-// isModifierCombo checks if a key string is a modifier combination
 func isModifierCombo(key string) bool {
-	// Simple check for Ctrl+, Alt+, Shift+ prefixes
 	return len(key) > 0 && ((len(key) > 5 && key[:5] == "ctrl+") ||
 		(len(key) > 4 && key[:4] == "alt+") ||
 		(len(key) > 6 && key[:6] == "shift+"))

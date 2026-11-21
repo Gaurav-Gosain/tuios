@@ -26,14 +26,11 @@ func TestPacedCoalescerStillEmitsAfterTheFloodStops(t *testing.T) {
 	}
 	t.Cleanup(w.Close)
 
-	// A frame this expensive pins the interval to its ceiling, which is the
-	// longest a trailing frame can ever be made to wait.
 	w.ChargeRenderCost(time.Second)
 	if got := w.coalesceInterval(); got != maxCoalesceInterval {
 		t.Fatalf("coalesceInterval() = %v, want the %v ceiling", got, maxCoalesceInterval)
 	}
 
-	// Drain signals the way the UI goroutine does, recording when each arrived.
 	var mu sync.Mutex
 	var signals []time.Time
 	drainDone := make(chan struct{})
@@ -51,10 +48,6 @@ func TestPacedCoalescerStillEmitsAfterTheFloodStops(t *testing.T) {
 		}
 	})
 
-	// lastWrite is read just before the final write is queued. Reading it
-	// after the loop's sleep instead put it up to a scheduler delay past that
-	// write, and a signal the final chunk raised at once, which is the right
-	// behaviour, then looked like one that came before it.
 	var lastWrite time.Time
 	deadline := time.Now().Add(300 * time.Millisecond)
 	for time.Now().Before(deadline) {
@@ -63,8 +56,6 @@ func TestPacedCoalescerStillEmitsAfterTheFloodStops(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// The trailing signal has to land within one interval of the last write,
-	// plus room for the output writer to get to that final chunk.
 	time.Sleep(maxCoalesceInterval + 400*time.Millisecond)
 	close(drainDone)
 	wg.Wait()

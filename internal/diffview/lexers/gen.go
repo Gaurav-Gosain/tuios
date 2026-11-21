@@ -42,36 +42,23 @@ import (
 	"strings"
 )
 
-// wanted is the list of chroma definitions to carry, by file name. Go and
-// Markdown are not here: chroma defines them in Go rather than XML, and
-// coded.go carries a copy.
 var wanted = []string{
-	// Shells and build files.
 	"bash", "fish", "powershell", "batchfile", "makefile", "cmake", "docker",
 	"meson", "awk", "sed", "nix",
-	// Systems languages.
 	"c", "c++", "c#", "objective-c", "rust", "zig", "d", "nim", "odin", "v",
 	"swift", "java", "kotlin", "scala", "groovy", "dart",
-	// Scripting languages.
 	"python", "ruby", "php", "perl", "lua", "tcl", "r", "julia", "crystal",
-	// The web.
 	"javascript", "typescript", "react", "html", "css", "scss", "sass", "vue",
 	"graphql", "templ",
-	// Functional languages.
 	"haskell", "ocaml", "fsharp", "elixir", "erlang", "clojure", "elm", "gleam",
-	// Data and configuration.
 	"json", "yaml", "toml", "ini", "xml", "dtd", "properties", "hcl",
 	"terraform", "protocol_buffer", "thrift", "cue", "jsonnet", "kdl", "rego",
 	"systemd", "nginx_configuration_file",
-	// Other.
 	"sql", "diff", "bash_session", "vhs", "tex", "typst", "viml", "matlab", "fortran", "solidity",
 	"glsl", "hlsl", "verilog", "systemverilog", "vhdl",
-	// Go's text/template, which the Go lexer uses for raw strings.
 	"go_template",
 }
 
-// coded names the lexers chroma defines in Go, which coded.go carries. A
-// reference to one of them is resolved without a file.
 var coded = map[string]bool{"go": true, "golang": true, "markdown": true, "md": true}
 
 var (
@@ -106,7 +93,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	byName := map[string]string{} // lower-case name or alias -> file stem
+	byName := map[string]string{}
 	for _, e := range entries {
 		stem, ok := strings.CutSuffix(e.Name(), ".xml")
 		if !ok {
@@ -184,8 +171,6 @@ func run() error {
 	return nil
 }
 
-// loadDict returns the dictionary: the one in train when given, which it
-// also writes to dict.z, else the one dict.z holds.
 func loadDict(dst, train string) ([]byte, error) {
 	path := filepath.Join(dst, "dict.z")
 	if train == "" {
@@ -209,7 +194,6 @@ func loadDict(dst, train string) ([]byte, error) {
 	return dict, os.WriteFile(path, z, 0o644)
 }
 
-// deflate is data as raw deflate at the best level, against dict.
 func deflate(data, dict []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	zw, err := flate.NewWriterDict(&buf, flate.BestCompression, dict)

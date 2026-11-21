@@ -6,21 +6,8 @@ import (
 	"unicode/utf8"
 )
 
-// The label of a shell command: the program a tool call ran, with the
-// wrappers a harness puts around it taken off. Codex runs every command as
-// bash -lc '...', agents prefix cd dir && to most of theirs, and sudo, env,
-// time and nice hide the program behind them. CommandLabel is for display
-// only. What runs, what a risk rule reads and what goes back to a harness
-// keep the command as it was.
-
-// labelSteps bounds how many wrappers one label takes off. Each step eats
-// at least one word, so the bound only matters for a pathological input.
 const labelSteps = 32
 
-// shellTools are the tool names harnesses give a shell command: Claude Code
-// and Amp Bash, pi bash, Codex shell, shell_command, exec_command and
-// local_shell, Gemini CLI run_shell_command, Cursor run_terminal_cmd, and
-// Copilot on Windows powershell.
 var shellTools = map[string]bool{
 	"Bash": true, "bash": true, "shell": true, "shell_command": true, "exec_command": true,
 	"local_shell": true, "run_shell_command": true, "run_terminal_cmd": true, "powershell": true,
@@ -87,15 +74,12 @@ func ControlPictures(s string) string {
 		case r == 0x7f:
 			b.WriteRune('␡')
 		default:
-			// An invalid byte comes as RuneError, written as U+FFFD.
 			b.WriteRune(r)
 		}
 	}
 	return b.String()
 }
 
-// unwrap takes one wrapper off the front of s. It reports false when s
-// starts with no wrapper it knows, and then s is the label.
 func unwrap(s string) (string, bool) {
 	word, raw, rest := shellWord(s)
 	if raw == "" {
@@ -120,7 +104,6 @@ func unwrap(s string) (string, bool) {
 	case "nice":
 		return skipFlags(rest, "n", []string{"--adjustment"}), true
 	case "command":
-		// command -v and -V look a name up and run nothing.
 		if w, _, _ := shellWord(rest); w == "-v" || w == "-V" {
 			return "", false
 		}
@@ -148,9 +131,6 @@ func unwrap(s string) (string, bool) {
 	return "", false
 }
 
-// unwrapShell is the script a shell's -c runs, unquoted one level. A shell
-// that runs a file, or a -c whose line goes on into a pipe or a list, is not
-// taken off.
 func unwrapShell(s string) (string, bool) {
 	for {
 		_, raw, rest := shellWord(s)
@@ -162,8 +142,6 @@ func unwrapShell(s string) (string, bool) {
 			if sraw == "" {
 				return "", false
 			}
-			// Words after the script are its $0 and arguments. An operator
-			// means the line goes on past the shell.
 			if a := strings.TrimSpace(after); a != "" && strings.ContainsRune("|&;<>()", rune(a[0])) {
 				return "", false
 			}
@@ -178,8 +156,6 @@ func unwrapShell(s string) (string, bool) {
 	}
 }
 
-// unwrapPowerShell is the script of powershell -Command or pwsh -c, past
-// switches such as -NoProfile and -ExecutionPolicy Bypass.
 func unwrapPowerShell(s string) (string, bool) {
 	for {
 		_, raw, rest := shellWord(s)
@@ -201,14 +177,11 @@ func unwrapPowerShell(s string) (string, bool) {
 		case raw[0] == '-':
 			s = rest
 		default:
-			// A bare script after the switches is a command.
 			return s, true
 		}
 	}
 }
 
-// slicesHasPrefix reports whether low is one of the switches, written out or
-// cut short as PowerShell allows (-ExecutionPolicy as -Exec).
 func slicesHasPrefix(low string, switches ...string) bool {
 	for _, sw := range switches {
 		if low == sw || len(low) >= 4 && strings.HasPrefix(sw, low) {
@@ -218,7 +191,6 @@ func slicesHasPrefix(low string, switches ...string) bool {
 	return false
 }
 
-// unwrapCmd is the command of cmd /c or cmd /k.
 func unwrapCmd(s string) (string, bool) {
 	for {
 		_, raw, rest := shellWord(s)
@@ -234,9 +206,6 @@ func unwrapCmd(s string) (string, bool) {
 	}
 }
 
-// skipFlags is s past its leading flags, X=Y assignments and a "--". A short
-// flag cluster that ends in one of withArg, or a long flag in long written
-// without "=", takes the next word as its value.
 func skipFlags(s, withArg string, long []string) string {
 	for {
 		_, raw, rest := shellWord(s)
@@ -255,9 +224,6 @@ func skipFlags(s, withArg string, long []string) string {
 				}
 			}
 		case raw[0] == '-' && len(raw) > 1:
-			// A cluster of letters that ends in a flag with a value takes
-			// the next word: sudo -Eu root. nice -10 and nice -n10 carry
-			// the value in the word.
 			s = rest
 			if letters(raw[1:]) && strings.IndexByte(withArg, raw[len(raw)-1]) >= 0 {
 				_, _, s = shellWord(rest)
@@ -270,7 +236,6 @@ func skipFlags(s, withArg string, long []string) string {
 	}
 }
 
-// letters reports whether s is only ASCII letters.
 func letters(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if c := s[i] | 0x20; c < 'a' || c > 'z' {
@@ -280,7 +245,6 @@ func letters(s string) bool {
 	return true
 }
 
-// isAssignment reports whether a word, as written, is NAME=value.
 func isAssignment(raw string) bool {
 	name, _, ok := strings.Cut(raw, "=")
 	if !ok || name == "" {
@@ -295,11 +259,6 @@ func isAssignment(raw string) bool {
 	return true
 }
 
-// shellWord splits the first word off s as a POSIX shell reads it: word is
-// its value with one level of quotes and escapes taken off, raw is how it is
-// written, and rest is what follows. A word ends at unquoted space or at an
-// operator character. An operator at the start is a word of its own, so
-// "&&" is never mistaken for a program. An unclosed quote runs to the end.
 func shellWord(s string) (word, raw, rest string) {
 	s = strings.TrimLeft(s, " \t\n")
 	if s == "" {

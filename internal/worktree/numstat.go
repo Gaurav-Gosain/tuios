@@ -11,22 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
 
-// Comparing the attempts of a fan: how much each one changed against its
-// base, and what two of them did differently.
-//
-// Both read a worktree's working state, committed or not, untracked files
-// included and ignored files left out, as one git tree. The tree is written
-// through a temporary index, so the worktree's own index and files are as they
-// were: what the agent staged stays staged and nothing is added. The objects
-// the tree needs are written to the repository's object store as loose
-// objects, which git gc collects like any other unreferenced object.
-//
-// An untracked file larger than the caller's limit is left out and never
-// read. Staging a file copies it into the object store, and a clean filter
-// such as Git LFS's copies it again into its own store, so a multi-gigabyte
-// data file the repository does not track would otherwise be copied on every
-// read, and a read cut off by its timeout would leave a partial copy behind.
-
 // Numstat is how much a worktree changed against a base: the files that
 // differ and the lines added and removed in them. A binary file counts as a
 // file with no lines.
@@ -58,10 +42,6 @@ func SnapshotTree(ctx context.Context, path string, maxUntracked int64) (string,
 		if err != nil {
 			return "", nil, err
 		}
-		// jj writes a conflicted commit's tree with a .jjconflict-* folder for
-		// each side, while the files on disk hold the conflict markers. The
-		// files are the working state, and jj reads markers written back as
-		// the same conflict.
 		tree, err := runCtx(ctx, path, nil, "rev-parse", "--verify", id+"^{tree}")
 		if err != nil {
 			return "", nil, err
@@ -80,9 +60,6 @@ func SnapshotTree(ctx context.Context, path string, maxUntracked int64) (string,
 	return tree, skipped, nil
 }
 
-// jjMaterialize returns tree, jj's tree of the working-copy commit in the
-// workspace at root, with each conflicted file as it is on disk. Other paths
-// keep jj's entries, so a path a sparse workspace leaves off disk stays.
 func jjMaterialize(ctx context.Context, root, tree string) (string, error) {
 	out, err := runCtx(ctx, root, nil, "ls-tree", "-r", "-z", "--name-only", tree)
 	if err != nil {
@@ -97,7 +74,6 @@ func jjMaterialize(ctx context.Context, root, tree string) (string, error) {
 			drop = append(drop, p)
 		case strings.HasPrefix(dir, ".jjconflict-") && rest != "":
 			drop = append(drop, p)
-			// A side that deletes the file leaves nothing on disk to write.
 			if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rest))); err == nil && !seen[rest] {
 				seen[rest] = true
 				write = append(write, rest)
@@ -129,8 +105,6 @@ func jjMaterialize(ctx context.Context, root, tree string) (string, error) {
 	return strings.TrimSpace(out), err
 }
 
-// snapshotTreeExcluding is SnapshotTree with the paths in exclude, relative
-// to path, left out. They are never read, so a large file costs nothing.
 func snapshotTreeExcluding(ctx context.Context, path string, exclude []string) (string, error) {
 	tmp, ctx, err := newTemp(ctx, "index")
 	if err != nil {
@@ -146,10 +120,7 @@ func snapshotTreeExcluding(ctx context.Context, path string, exclude []string) (
 			return "", err
 		}
 	}
-	// git refuses an empty file as an index, so it starts from nothing.
 	_ = os.Remove(index)
-	// A repository with no commit yet has no HEAD to start from, and every
-	// file is new, so the index starts empty.
 	if _, err := runCtx(ctx, path, env, "rev-parse", "--verify", "--quiet", "HEAD^{commit}"); err == nil {
 		if _, err := runCtx(ctx, path, env, "read-tree", "HEAD"); err != nil {
 			return "", err
@@ -158,8 +129,6 @@ func snapshotTreeExcluding(ctx context.Context, path string, exclude []string) (
 	return addAndWriteTree(ctx, path, env, exclude)
 }
 
-// copyIndex copies the index of the worktree at path over dest, and reports
-// whether it did. The worktree's index is only read.
 func copyIndex(ctx context.Context, path, dest string) bool {
 	out, err := runCtx(ctx, path, nil, "rev-parse", "--git-path", "index")
 	if err != nil {
@@ -183,15 +152,10 @@ func copyIndex(ctx context.Context, path, dest string) bool {
 	if os.WriteFile(dest, data, 0o600) != nil {
 		return false
 	}
-	// git trusts an entry's stat data only when the file is older than the
-	// index. The copy keeps the original's time, so a file changed just after
-	// the agent's last git call is still hashed again.
 	_ = os.Chtimes(dest, info.ModTime(), info.ModTime())
 	return true
 }
 
-// addAndWriteTree stages every file of the worktree at path into the index env
-// names and writes it as a tree.
 func addAndWriteTree(ctx context.Context, path string, env []string, exclude []string) (string, error) {
 	if err := StageAll(ctx, path, env, nil, exclude); err != nil {
 		return "", err
@@ -230,8 +194,6 @@ func StageAll(ctx context.Context, dir string, env, specs, exclude []string) err
 	var in strings.Builder
 	seen := map[string]bool{}
 	for p := range strings.SplitSeq(out, "\x00") {
-		// A path that ends in a slash is a repository inside the work tree
-		// that is not a submodule; git add records only a warning for it.
 		if p == "" || skip[p] || seen[p] || strings.HasSuffix(p, "/") {
 			continue
 		}
@@ -308,7 +270,6 @@ func DiffWorking(ctx context.Context, a, b string, stat bool, maxUntracked int64
 
 // HeadCommitCtx is HeadCommit bounded by ctx.
 func HeadCommitCtx(ctx context.Context, path string) (string, error) {
-	// A jj workspace's HEAD is @-; without a ".git" git has none for it.
 	if r := gitstate.Find(path); r.JJ {
 		return gitstate.JJCommit(ctx, r.Root, "@-", false)
 	}
@@ -379,9 +340,6 @@ func ChangesCtx(ctx context.Context, path string) (int, error) {
 	return n, nil
 }
 
-// runCtx is runEnv bounded by ctx: a git that takes longer than the caller
-// can wait is killed.
-//
 //go:noinline
 func runCtx(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 	return runGit(ctx, dir, env, nil, args...)

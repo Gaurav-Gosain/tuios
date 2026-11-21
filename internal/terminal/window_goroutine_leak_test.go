@@ -35,28 +35,16 @@ func TestDaemonWindowOpenCloseLeaksNoGoroutines(t *testing.T) {
 
 		w := NewDaemonWindow("leak-window-0001", "leak", 0, 0, 80, 24, 0, "pty-leak-0001", ptyDataChan, config.DefaultScrollbackLines)
 
-		// Drive real work through both goroutines before teardown, so the test
-		// covers the interesting case (a window that was actually used) rather
-		// than one whose goroutines never left their first select.
 		w.WriteOutputAsync([]byte("hello \x1b[32mworld\x1b[0m\r\n"))
 
-		// Let outputWriter drain the queue and renderCoalescer emit at least
-		// once. synctest.Wait blocks until every other bubble goroutine is
-		// durably blocked; fake time then advances to any pending timer.
 		synctest.Wait()
 
 		w.Close()
 
-		// Post-close writes must be dropped, not queued into a channel whose
-		// reader is gone.
 		w.WriteOutputAsync([]byte("after close"))
 		w.WriteOutput([]byte("after close"))
 
-		// Close is idempotent; a second call must not double-close outputDone.
 		w.Close()
-
-		// Returning from here ends the bubble. If outputWriter or
-		// renderCoalescer is still alive, synctest fails the test.
 	})
 }
 

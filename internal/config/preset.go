@@ -12,25 +12,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// Keybind presets: the keys of another multiplexer, for a person whose hands
-// already know them. keybindings.preset names one.
-//
-// A preset is an embedded file in the config's own syntax, a delta over the
-// tuios defaults (see presets/tmux.toml). It is applied to the defaults before
-// the user's own config is filled from them, so from then on the preset is the
-// default: the keybind manager's reset, keybinds doctor, the which-key rows
-// and the duplicate repair all read it, and a preset's empty list is not a key
-// the user took away.
-//
-// A preset changes only the leader, the keys after the leader and the
-// terminal-mode keys. Window mode, the rail, copy mode and the Inbox keep the
-// tuios keys. A tuios feature whose key the preset uses moves to the tuios
-// menu, the leader then ctrl+t, under the key it had.
-//
-// The user's own config wins over the preset. An action the user binds keeps
-// the user's keys, and a key the user binds keeps its action: the preset's
-// action for that key is left without it (see fillMapDefaultsYielding).
-
 // PresetTuios is the preset of the tuios defaults themselves.
 const PresetTuios = "tuios"
 
@@ -49,18 +30,15 @@ type PresetAbout struct {
 	Notes   []string `toml:"notes"`
 }
 
-// keybindPreset is one preset file.
 type keybindPreset struct {
-	LeaderKey    string              `toml:"leader_key"`
-	LeaderTwice  string              `toml:"leader_twice"`
-	Repeat       []string            `toml:"repeat"`
-	Lock         *bool               `toml:"lock"`
-	About        PresetAbout         `toml:"about"`
-	PrefixMode   map[string][]string `toml:"prefix_mode"`
-	TerminalMode map[string][]string `toml:"terminal_mode"`
-	TuiosPrefix  map[string][]string `toml:"tuios_prefix"`
-	// The window and workspace menus, for a preset whose mode keys open
-	// them (zellij's pane and tab modes).
+	LeaderKey       string              `toml:"leader_key"`
+	LeaderTwice     string              `toml:"leader_twice"`
+	Repeat          []string            `toml:"repeat"`
+	Lock            *bool               `toml:"lock"`
+	About           PresetAbout         `toml:"about"`
+	PrefixMode      map[string][]string `toml:"prefix_mode"`
+	TerminalMode    map[string][]string `toml:"terminal_mode"`
+	TuiosPrefix     map[string][]string `toml:"tuios_prefix"`
 	WindowPrefix    map[string][]string `toml:"window_prefix"`
 	WorkspacePrefix map[string][]string `toml:"workspace_prefix"`
 }
@@ -72,7 +50,6 @@ func Presets() []string {
 	for _, e := range entries {
 		names = append(names, strings.TrimSuffix(e.Name(), ".toml"))
 	}
-	// The multiplexers by how many people come from them, then any other.
 	rank := func(n string) int {
 		if i := slices.Index([]string{PresetTuios, "tmux", "screen", "zellij"}, n); i >= 0 {
 			return i
@@ -84,7 +61,6 @@ func Presets() []string {
 	return names
 }
 
-// loadPreset reads one preset file. The tuios preset is no file.
 func loadPreset(name string) (*keybindPreset, error) {
 	data, err := presetFiles.ReadFile("presets/" + name + ".toml")
 	if err != nil {
@@ -124,8 +100,6 @@ func PresetSource(name string) ([]byte, error) {
 	return presetFiles.ReadFile("presets/" + name + ".toml")
 }
 
-// applyPreset writes a preset over the default keybindings kb. An unknown
-// name leaves kb as it is and says so.
 func applyPreset(kb *KeybindingsConfig, name string) error {
 	if name == "" || name == PresetTuios {
 		return nil
@@ -155,9 +129,6 @@ func applyPreset(kb *KeybindingsConfig, name string) error {
 	return nil
 }
 
-// overlayPresetSection is the defaults of one section with a preset's actions
-// written over them, as a new map: the defaults are shared with every other
-// caller of DefaultConfig.
 func overlayPresetSection(defaults, preset map[string][]string) map[string][]string {
 	out := maps.Clone(defaults)
 	if out == nil {
@@ -225,8 +196,6 @@ func PresetCheatSheet(name string) (CheatSheet, error) {
 			sheet.Same = append(sheet.Same, CheatSheetLine{Keys: leader + " " + strings.Join(keys, " or "), Does: describe(action)})
 		}
 	}
-	// A preset's window and workspace menu keys, behind the key that opens
-	// the menu: ctrl+g p r under zellij.
 	for _, sub := range []struct {
 		gate    string
 		preset  map[string][]string
@@ -267,11 +236,7 @@ func PresetCheatSheet(name string) (CheatSheet, error) {
 	return sheet, nil
 }
 
-// collapseNumbered sorts lines by key and folds a run like "ctrl+b 1" to
-// "ctrl+b 9", with the same words but the number, into one line.
 func collapseNumbered(lines []CheatSheetLine) []CheatSheetLine {
-	// sort.SliceStable rather than slices.SortStableFunc: a generic stable
-	// sort is several KB of code per element type, for a list of fifty lines.
 	sort.SliceStable(lines, func(i, j int) bool { return lines[i].Keys < lines[j].Keys })
 	digit := func(s string) (string, byte, bool) {
 		if n := len(s); n > 0 && s[n-1] >= '0' && s[n-1] <= '9' && (n == 1 || s[n-2] == ' ') {

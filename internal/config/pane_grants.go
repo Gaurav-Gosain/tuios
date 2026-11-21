@@ -6,22 +6,6 @@ import (
 	"strings"
 )
 
-// What a process in a pane may do through tuios.
-//
-//	[agents.permissions]
-//	mode = "strict"                    # open (the default) or strict
-//	grants = ["read", "write", "fan"]  # what a pane holds under strict
-//
-// Every pane holds a set of grants. A pane started with grants of its own
-// (tuios start-agent --grants, fan --grants, new-window --grants, or
-// set-pane-grants afterwards) holds those. A pane started with none holds the
-// default, which is the mode's: admin under open, which is everything a pane
-// could do before grants existed, and the grants list under strict.
-//
-// The daemon reads the table at start and again when the file changes. A
-// change reaches every pane that holds the default at its next call. The
-// grant names and what each allows are in docs/AGENT_STATE.md.
-
 // Pane grants, the values of grants.
 const (
 	// PaneGrantRead reads the pane's own session and the sessions of its fan
@@ -128,9 +112,6 @@ func CanonicalPaneGrants(names []string) (valid, unknown []string) {
 	return valid, unknown
 }
 
-// validatePanePermissions warns about a mode or grant name the daemon does
-// not know. An unknown mode is read as strict and an unknown grant is dropped,
-// so both fail toward less authority, and the warning says so.
 func validatePanePermissions(cfg *UserConfig, result *ValidationResult) {
 	p := cfg.Agents.Permissions
 	if mode := strings.ToLower(strings.TrimSpace(p.Mode)); mode != "" && !slices.Contains(PaneModes, mode) {

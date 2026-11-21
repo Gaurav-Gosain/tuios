@@ -92,118 +92,60 @@ type Load struct {
 // Known reports whether l holds a load to rank a machine by.
 func (l Load) Known() bool { return l.Cores > 0 && (l.LoadOK == nil || *l.LoadOK) }
 
-// bounded is l with every value held to what a machine can report: the far
-// daemon is untrusted.
 func (l Load) bounded() Load {
 	l.Cores = min(max(l.Cores, 0), 1<<16)
 	l.Load1 = min(max(l.Load1, 0), 1<<20)
 	l.MemPct = min(max(l.MemPct, 0), 100)
 	l.Working = min(max(l.Working, 0), 1<<16)
 	if l.Load1 != l.Load1 || l.MemPct != l.MemPct {
-		// NaN.
 		l.Load1, l.MemPct = 0, 0
 	}
 	return l
 }
 
-// link is one host's supervised connection. Exactly one supervisor goroutine
-// owns the dial/redial cycle; every reader takes the mutex and sees a snapshot.
 type link struct {
 	host Host
 	opts Options
 
-	mu     sync.Mutex
-	status Status
-	// reason is the short sentence shown to a user. It is plain English on
-	// purpose: it lands in `tuios hosts` and in the sidebar.
-	reason string
-	detail string
-	// failure is the class of the ssh failure behind an unreachable status,
-	// read from ssh's own words. Empty for any other status, and when the
-	// words match no class. See sshfail.go.
-	failure SSHFailure
-	// approvalURL is the Tailscale SSH check URL while status is
-	// StatusApproval.
-	approvalURL string
-	// approvalRefused says the banner named a sign-in address tuios does not
-	// trust. See SignInURLAllowed.
+	mu              sync.Mutex
+	status          Status
+	reason          string
+	detail          string
+	failure         SSHFailure
+	approvalURL     string
 	approvalRefused bool
 	shake           Handshake
-	// held is the mail the far machine holds for this one, from its last
-	// hello. See MailHeld.
-	held MailHeld
-	// load is the far machine's load from its last hello, at loadAt, and
-	// rtt the round trip of that hello. Zero until a hello carried one.
-	load    Load
-	loadAt  time.Time
-	rtt     time.Duration
-	lastOK  time.Time
-	lastTry time.Time
+	held            MailHeld
+	load            Load
+	loadAt          time.Time
+	rtt             time.Duration
+	lastOK          time.Time
+	lastTry         time.Time
 
-	// drops counts the times a link that was up went down, and dropReason is
-	// the plain sentence for the last of them. They are reported so a person
-	// whose link keeps dropping can see how often and why, which is the
-	// difference between a keepalive timeout, a stalled stream and a dead
-	// sshd. Without them all three read as "the link closed".
-	drops      int
-	dropReason string
-	// stalls counts streams dropped for a reader that stopped reading, over
-	// the life of this link.
-	stalls int
-	// ctrlFailures counts control calls that failed in a row on the live
-	// link. It resets on any call that answers.
+	drops        int
+	dropReason   string
+	stalls       int
 	ctrlFailures int
 
-	// ctrl is the live control stream's caller, nil unless status is up.
-	ctrl *caller
-	// mux is the live link's multiplexer, nil unless status is up. It is what
-	// a connection to the remote daemon is opened on.
-	mux *mux
-	// tearDown ends the current attempt. The supervisor waits on it.
+	ctrl     *caller
+	mux      *mux
 	tearDown func()
 
-	// resolved is the tuios path the probe found on this host. It is kept for
-	// the life of the link so a redial runs it directly instead of probing
-	// again, and dropped when a dial that used it reached the machine and
-	// still found no program there. Unused when the host has a configured
-	// command.
 	resolved string
-	// command is the binary the last dial that reached one ran on the host,
-	// for the report.
-	command string
+	command  string
 
-	// settled closes after the first attempt finishes either way, so a listing
-	// can wait for first contact instead of reporting "connecting" forever.
 	settled     chan struct{}
 	settledOnce sync.Once
 
-	// wake cuts the wait between two dials short. Retry sends on it.
-	wake chan struct{}
-	// probe asks the heartbeat of a link that is up to ping now. Retry sends
-	// on it, so a person who asks for a host that looks up but is not finds
-	// out in the heartbeat timeout instead of KeepaliveWindow.
-	probe chan struct{}
-	// lastProbe is when Retry last sent on probe.
-	lastProbe time.Time
-	// asked says Retry ran since the last dial started. The wait after a
-	// failed dial then starts again from InitialBackoff.
-	asked bool
-	// lossNote is the sentence the heartbeat left when it ended the link.
-	// The next drop report uses it in place of lossCause, which would blame
-	// the ssh the teardown killed.
-	lossNote string
-	// fresh makes the next dial skip a shared ssh master. See Host.fresh.
-	fresh bool
-	// eagerUntil is when the quick redial that Retry asked for ends. Until
-	// then a link that waits for a Tailscale sign-in dials again after
-	// approvalRetry at most, so the new sign-in page shows up in seconds and
-	// a link whose sign-in went through comes up without anyone asking.
+	wake       chan struct{}
+	probe      chan struct{}
+	lastProbe  time.Time
+	asked      bool
+	lossNote   string
+	fresh      bool
 	eagerUntil time.Time
-	// waiting says the link holds an ssh to a host that has no daemon, and
-	// asks the host again over it (see waitForDaemon). ask hands that loop
-	// a request to ask now, which it closes once the answer is in.
-	waiting bool
-	ask     chan chan struct{}
+	waiting    bool
+	ask        chan chan struct{}
 }
 
 func newLink(h Host, opts Options) *link {
@@ -221,20 +163,10 @@ func newLink(h Host, opts Options) *link {
 
 func (l *link) markSettled() { l.settledOnce.Do(func() { close(l.settled) }) }
 
-// set records a new state under the lock.
-//
-// Reaching any state other than connecting settles the link: a listing waits
-// for first contact, and first contact is the moment the status is decided, not
-// the moment the attempt ends. Settling only when the attempt ended would make
-// every listing wait out its own context against a host that is working, which
-// is the opposite of what the wait is for.
 func (l *link) set(status Status, reason, detail string) {
 	l.setFailure(status, reason, detail, "")
 }
 
-// setUnreachable is set for a dial that ssh itself gave up on. When ssh's
-// words name a class of failure, the class's sentence replaces reason, so the
-// person reads which of the six things went wrong instead of "did not answer".
 func (l *link) setUnreachable(reason, detail string) {
 	f := ClassifySSHFailure(detail)
 	if f != "" {
@@ -243,7 +175,6 @@ func (l *link) setUnreachable(reason, detail string) {
 	l.setFailure(StatusUnreachable, reason, detail, f)
 }
 
-// setFailure is set with the class of the failure.
 func (l *link) setFailure(status Status, reason, detail string, failure SSHFailure) {
 	l.mu.Lock()
 	changed := l.status != status
@@ -262,21 +193,14 @@ func (l *link) setFailure(status Status, reason, detail string, failure SSHFailu
 	if status != StatusConnecting {
 		l.markSettled()
 	}
-	// Outside the lock, so a callback that reads the report cannot deadlock
-	// on it. Only a change is reported: a redial that fails the same way
-	// every backoff period is one fact, not one per attempt.
 	if changed && l.opts.OnStatus != nil {
 		l.opts.OnStatus(l.host.Name, status)
 	}
-	// What the far machine said it holds for this one is known only while
-	// the link is up. A stale count is worse than none.
 	if status != StatusUp {
 		l.noteMailHeld(MailHeld{})
 	}
 }
 
-// noteHello keeps the load a hello carried and the hello's round trip. A
-// hello with no load leaves the last one as it was.
 func (l *link) noteHello(load *Load, rtt time.Duration) {
 	if load == nil {
 		return
@@ -296,11 +220,8 @@ type MailHeld struct {
 	Status Status `json:"status,omitempty"`
 }
 
-// maxMailHeldCount bounds the count a far machine may claim.
 const maxMailHeldCount = 100000
 
-// bounded is h as this machine keeps it: a count in range and a status that
-// is one of the names this build knows.
 func (h MailHeld) bounded() MailHeld {
 	if h.Count <= 0 {
 		return MailHeld{}
@@ -315,8 +236,6 @@ func (h MailHeld) bounded() MailHeld {
 	return h
 }
 
-// noteMailHeld keeps what the last hello said about held mail, and reports a
-// change to OnMailHeld.
 func (l *link) noteMailHeld(h MailHeld) {
 	l.mu.Lock()
 	changed := l.held != h
@@ -327,17 +246,12 @@ func (l *link) noteMailHeld(h MailHeld) {
 	}
 }
 
-// loadStale reports whether the load is older than loadMaxAgeBeats
-// heartbeats, so the
-// heartbeat pings a busy link for a new one.
 func (l *link) loadStale() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	// A daemon whose hello carries no load is not asked again for one.
 	return !l.loadAt.IsZero() && time.Since(l.loadAt) > loadMaxAgeBeats*l.opts.Heartbeat
 }
 
-// report snapshots the link for a listing.
 func (l *link) report() HostReport {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -380,7 +294,6 @@ func (l *link) report() HostReport {
 	return r
 }
 
-// supervise runs the dial, serve, redial cycle until ctx ends.
 func (l *link) supervise(ctx context.Context) {
 	backoff := l.opts.InitialBackoff
 	for {
@@ -403,9 +316,6 @@ func (l *link) supervise(ctx context.Context) {
 		}
 		wait := backoff
 		if l.eager() {
-			// The person just opened the sign-in page. A minute of backoff
-			// here would leave them looking at a host that is still not up
-			// after they signed in.
 			wait = min(wait, approvalRetry)
 		}
 		if !l.waitToDial(ctx, wait) {
@@ -414,13 +324,6 @@ func (l *link) supervise(ctx context.Context) {
 	}
 }
 
-// waitToDial waits wait before the next dial. Retry ends the wait, and so
-// does a wake from sleep: the monotonic clock the wait runs on stops while
-// the machine sleeps, so without the check a link that was waiting a minute
-// before the sleep still waits out the rest of it after the wake. The wait
-// is cut into heartbeat pieces to check the clocks, which costs a
-// link that is down four wakeups a minute and a link that is up none. It
-// reports false when ctx ends.
 func (l *link) waitToDial(ctx context.Context, wait time.Duration) bool {
 	clock := newSleepWatch()
 	deadline := time.Now().Add(wait)
@@ -438,7 +341,6 @@ func (l *link) waitToDial(ctx context.Context, wait time.Duration) bool {
 			l.logf("host %s: the computer woke from sleep, so the link is dialed now.", l.host.Name)
 			l.mu.Lock()
 			l.asked = true
-			// A master connection from before the sleep is likely dead.
 			l.fresh = true
 			l.mu.Unlock()
 			return true
@@ -451,28 +353,12 @@ func (l *link) waitToDial(ctx context.Context, wait time.Duration) bool {
 	}
 }
 
-// approvalRetry is the longest wait between two dials while a Retry is fresh
-// and the link waits for a Tailscale sign-in.
 const approvalRetry = 5 * time.Second
 
-// retryWindow is how long a Retry keeps the redial quick.
 const retryWindow = 2 * time.Minute
 
-// retryMinGap is the least time between the start of a dial and a dial that
-// Retry wakes.
 const retryMinGap = 2 * time.Second
 
-// retry ends the wait before the next dial, starts the backoff again from
-// InitialBackoff, and keeps the redial quick for retryWindow while the link
-// waits for a sign-in. A dial in progress is left alone: a dial that holds a
-// Tailscale check open is the one that goes on when the person signs in.
-//
-// A link that is up is pinged at once instead. After a sleep a link can look
-// up and carry nothing, and the ping is what finds that out in seconds.
-//
-// A wake within retryMinGap of the last dial's start, or a ping within
-// retryMinGap of the last one, is dropped, so a caller that calls in a loop
-// cannot make the link spawn ssh in a loop.
 func (l *link) retry() {
 	l.mu.Lock()
 	now := l.opts.now()
@@ -500,20 +386,13 @@ func (l *link) retry() {
 	}
 }
 
-// eager reports whether a fresh Retry keeps the redial quick.
 func (l *link) eager() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.status == StatusApproval && l.opts.now().Before(l.eagerUntil)
 }
 
-// attempt dials once, handshakes, and then blocks until the link dies. It
-// returns whether the link was ever up, which is what decides whether the
-// backoff resets.
 func (l *link) attempt(ctx context.Context) bool {
-	// The host dialed is the configured one, with the path an earlier probe
-	// found filled in as its command. That is what makes a redial run the
-	// binary directly: the probe happens once per link, not once per dial.
 	h := l.host
 	l.mu.Lock()
 	l.lastTry = l.opts.now()
@@ -539,10 +418,6 @@ func (l *link) attempt(ctx context.Context) bool {
 	closeAll := func() { closeOnce.Do(func() { _ = tr.Close(); close(closed) }) }
 	defer closeAll()
 
-	// The preamble read is bounded by the dial context, so a host that accepts
-	// the connection and then says nothing is a failed dial rather than a
-	// goroutine parked forever. This is the "accepts then hangs" case, and it
-	// is the one that would otherwise look like success.
 	br := bufio.NewReaderSize(tr, 32<<10)
 	type preambleResult struct {
 		note preambleNote
@@ -554,9 +429,6 @@ func (l *link) attempt(ctx context.Context) bool {
 		preambleDone <- preambleResult{note, err}
 	}()
 	var note preambleNote
-	// The dial's deadline holds until Tailscale asks for an approval. Then the
-	// approval wait replaces it: the connection is held open, and the same ssh
-	// goes on when the person approves. See sshgate.go.
 	waitCtx := dialCtx
 	gateTick := time.NewTicker(gatePoll)
 	defer gateTick.Stop()
@@ -575,24 +447,14 @@ preamble:
 				case gate != nil && gate.Kind == GateTailscaleCheck && !gate.Approved:
 					l.setApproval("", false, "Tailscale ended the sign-in before you finished it. tuios asks again and shows a new sign-in page.")
 				case note.missing:
-					// The machine answered, ran the probe, and the probe found
-					// nothing. That is a state of the machine, not of the link,
-					// and it is reported as its own status so the listing says
-					// where the problem is.
 					l.set(StatusNoBinary, "The link cannot find tuios on the host.", trimDetail(tr.Diagnostic()))
 				case exited && code == sshExitCode:
-					// 255 is ssh's own code, so the words on stderr are
-					// ssh's and say which failure it was.
 					l.setUnreachable("The host did not answer.", trimDetail(tr.Diagnostic()))
 				case exited:
 					l.set(StatusUnreachable, "The host did not answer.", trimDetail(tr.Diagnostic()))
 				default:
 					l.set(StatusUnreachable, "The host did not answer as a tuios link.", trimDetail(tr.Diagnostic()))
 				}
-				// A cached path that reached the machine and ran nothing is
-				// stale: the binary moved or was removed. The next dial probes
-				// again. 255 is ssh's own code and means the machine was never
-				// reached, so the path it knows is kept for when it is.
 				if fromCache && exited && code != sshExitCode {
 					l.mu.Lock()
 					l.resolved = ""
@@ -619,9 +481,6 @@ preamble:
 				return false
 			}
 			l.set(StatusUnreachable, "The host did not answer in time.", trimDetail(tr.Diagnostic()))
-			// A dial that rides a dead master waits here, because the
-			// master still answers on its socket. The next dial opens a
-			// connection of its own. Without a master it is the same dial.
 			if !h.fresh {
 				l.mu.Lock()
 				l.fresh = true
@@ -631,8 +490,6 @@ preamble:
 		}
 	}
 
-	// What the far side runs is known now: the path the probe announced, or
-	// the command that was sent when no probe ran.
 	l.mu.Lock()
 	l.command = h.command()
 	if note.command != "" {
@@ -643,8 +500,6 @@ preamble:
 	}
 	l.mu.Unlock()
 
-	// nil accept: the hub answers an inbound open with a close and never hands
-	// a peer a stream. Section 1, invariant 1 of the design document.
 	m := newMuxRW(br, tr, tr, nil, dialerFirstID)
 	m.stallLimit = l.opts.stallLimit
 	m.self = l.opts.Self
@@ -688,7 +543,6 @@ preamble:
 		return false
 	}
 
-	// The load of a daemon this one can use, not of one it refused.
 	l.noteHello(shake.Load, shakeRTT)
 	l.mu.Lock()
 	l.shake = shake
@@ -697,16 +551,12 @@ preamble:
 	l.tearDown = closeAll
 	l.mu.Unlock()
 	l.set(StatusUp, "The host is answering.", "")
-	// A ping left over from a Retry before this dial is not a request for
-	// this link.
 	select {
 	case <-l.probe:
 	default:
 	}
 	go l.heartbeat(ctx, m, closed, closeAll)
 
-	// Hold the link until it dies, the manager stops, or a call or the
-	// heartbeat declared it hung and tore it down.
 	select {
 	case <-muxDone:
 	case <-ctx.Done():
@@ -725,9 +575,6 @@ preamble:
 	if ctx.Err() != nil {
 		return true
 	}
-	// Why the link went down, said in one sentence a person can act on. The
-	// three causes need three different fixes and look identical from outside, so
-	// the reason is worked out here rather than left as "the link closed".
 	reason, detail := lossCause(tr, m.Err())
 	l.mu.Lock()
 	if l.lossNote != "" {
@@ -738,24 +585,12 @@ preamble:
 	drops := l.drops
 	l.mu.Unlock()
 	l.logf("host %s: the link dropped after %d up. %s %s", l.host.Name, drops, reason, detail)
-	// Reconnecting, not unreachable. The machine answered a moment ago, this
-	// daemon is about to dial it again, and a listing that called that offline
-	// would be reporting a failure that has not happened yet.
 	l.set(StatusReconnecting, reason, detail)
 	return true
 }
 
-// gatePoll is how often a dial that waits for its preamble reads ssh's stderr
-// for a Tailscale gate.
 const gatePoll = 100 * time.Millisecond
 
-// setApproval records a Tailscale SSH check the link waits on, with the URL
-// that approves it. The URL is stored first, so a listing never sees the state
-// without it.
-//
-// A new URL under the same status is reported to OnStatus as well. A client
-// that opens the sign-in page for the person waits for that URL, and set only
-// reports a change of status.
 func (l *link) setApproval(url string, refused bool, reason string) {
 	l.mu.Lock()
 	moved := l.status == StatusApproval && (l.approvalURL != url || l.approvalRefused != refused)
@@ -768,13 +603,6 @@ func (l *link) setApproval(url string, refused bool, reason string) {
 	}
 }
 
-// lossCause turns a dead link into the sentence its report carries.
-//
-// Three failures end a link and they are not the same event. ssh gave up, which
-// its own stderr explains and its exit code confirms. The pipe ended with ssh
-// still running, which is the far proxy or the far daemon going away. Or this
-// side read a frame it could not use, which is a protocol fault and not a
-// network one. Naming which is what lets a person fix the right thing.
 func lossCause(tr Transport, muxErr error) (reason, detail string) {
 	diag := trimDetail(tr.Diagnostic())
 	exited, code := awaitChildExit(tr)
@@ -790,31 +618,17 @@ func lossCause(tr Transport, muxErr error) (reason, detail string) {
 	}
 }
 
-// logf writes one line to whatever the manager was given, or nowhere.
 func (l *link) logf(format string, args ...any) {
 	if l.opts.Log != nil {
 		l.opts.Log(format, args...)
 	}
 }
 
-// awaitChildExit tells the two no-preamble failures apart. A child that has
-// already exited is ssh giving up, or the remote tuios being missing, and its
-// stderr says which. A child still running that never identified itself
-// reached something that is not a tuios proxy. The exit code comes back with
-// the answer, because it is what says whether ssh reached the machine.
-//
-// A transport that is not a child process is reported as still running, which
-// is the answer that blames the link rather than the machine.
 func awaitChildExit(tr Transport) (exited bool, code int) {
 	er, ok := tr.(exitReporter)
 	if !ok {
 		return false, 0
 	}
-	// The pipe closing and the child being reaped are two events, and the pipe
-	// wins the race often enough that asking once would misreport ssh's own
-	// failure as a bad remote command. A child that is going to exit does so
-	// within milliseconds of its pipe closing, so this waits a moment and no
-	// longer.
 	deadline := time.Now().Add(exitGrace)
 	for {
 		if exited, err := er.Exited(); exited {
@@ -830,31 +644,10 @@ func awaitChildExit(tr Transport) (exited bool, code int) {
 	}
 }
 
-// exitGrace is how long awaitChildExit waits for a child that closed its pipe
-// to be reaped.
 const exitGrace = 250 * time.Millisecond
 
-// sshExitCode is what ssh exits with for its own failures: it could not reach
-// the machine, or was refused by it. Any other code came from the far side.
 const sshExitCode = 255
 
-// waitForDaemon keeps the ssh of a link whose host is up with no daemon,
-// and asks the host again over it until a daemon answers, the ssh ends, or
-// ctx ends. It returns what the last ask returned.
-//
-// A dial to such a host costs a login: a new ssh, a new key authentication,
-// and with an agent that asks for each one (1Password), a question to the
-// person. Redialing it every backoff step asked them every minute (#1820).
-// The proxy on the far side dials the daemon socket for each stream it is
-// given, so a new control stream over the same ssh reaches a daemon that
-// started since, and costs no login.
-//
-// The asks follow the dial backoff. Retry asks at once, and so does
-// askWaiting, which the hosts listing calls. When the ssh ends (the network,
-// a sleep) the link dials again as before, under the same backoff, so a host
-// that keeps dropping still costs at most one login per backoff step. After
-// a sleep the link asks at once, and a connection that does not answer is
-// not reused: the next dial skips any shared master.
 func (l *link) waitForDaemon(ctx context.Context, m *mux, muxDone <-chan struct{}, last *handshakeError) (*caller, Handshake, time.Duration, *handshakeError) {
 	l.mu.Lock()
 	l.waiting = true
@@ -863,14 +656,12 @@ func (l *link) waitForDaemon(ctx context.Context, m *mux, muxDone <-chan struct{
 		l.mu.Lock()
 		l.waiting = false
 		l.mu.Unlock()
-		// A request that came as the wait ended is answered by what ends it.
 		select {
 		case done := <-l.ask:
 			close(done)
 		default:
 		}
 	}()
-	// The host answered: a listing need not wait for this attempt to end.
 	l.markSettled()
 
 	backoff := l.opts.InitialBackoff
@@ -916,7 +707,6 @@ func (l *link) waitForDaemon(ctx context.Context, m *mux, muxDone <-chan struct{
 			last = verr
 			backoff = min(backoff*2, l.opts.MaxBackoff)
 		default:
-			// The ssh did not carry the ask. It is not used again.
 			l.mu.Lock()
 			l.fresh = true
 			l.mu.Unlock()
@@ -925,7 +715,6 @@ func (l *link) waitForDaemon(ctx context.Context, m *mux, muxDone <-chan struct{
 	}
 }
 
-// askOver opens a control stream over m and runs the handshake on it.
 func (l *link) askOver(ctx context.Context, m *mux) (*caller, Handshake, time.Duration, *handshakeError) {
 	l.mu.Lock()
 	l.lastTry = l.opts.now()
@@ -946,10 +735,6 @@ func (l *link) askOver(ctx context.Context, m *mux) (*caller, Handshake, time.Du
 	return c, shake, rtt, verr
 }
 
-// askWaiting makes a link that waits for its host's daemon ask now, over the
-// ssh it holds, and waits for the answer until ctx ends. A link that does not
-// wait is left alone: for it an ask would be a new dial, and a new login.
-// An ask within retryMinGap of the last one is not made again.
 func (l *link) askWaiting(ctx context.Context) {
 	l.mu.Lock()
 	ok := l.waiting && (l.lastTry.IsZero() || l.opts.now().Sub(l.lastTry) >= retryMinGap)
@@ -969,14 +754,12 @@ func (l *link) askWaiting(ctx context.Context) {
 	}
 }
 
-// handshakeError carries the state a failed handshake should leave behind.
 type handshakeError struct {
 	status Status
 	reason string
 	detail string
 }
 
-// handshake runs the hello verb and decides whether this daemon is usable.
 func handshake(ctx context.Context, c *caller, opts Options) (Handshake, *handshakeError) {
 	raw, err := c.call(ctx, "hello", map[string]any{
 		"client":   opts.ClientName,
@@ -987,8 +770,6 @@ func handshake(ctx context.Context, c *caller, opts Options) (Handshake, *handsh
 		var rerr *RemoteError
 		switch {
 		case errors.As(err, &rerr) && rerr.Code == "unknown_verb":
-			// A daemon from before the handshake verb. Usable, and its version
-			// is simply not knowable from here.
 			return Handshake{}, nil
 		case errors.As(err, &rerr) && rerr.Code == "protocol_mismatch":
 			return Handshake{}, &handshakeError{
@@ -997,10 +778,6 @@ func handshake(ctx context.Context, c *caller, opts Options) (Handshake, *handsh
 				detail: rerr.Message,
 			}
 		case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, ErrStreamClosed):
-			// The proxy answered and then closed the control stream without a
-			// word, which is what it does when it cannot reach the daemon
-			// socket. On a fresh link nothing else closes that stream, so this
-			// is the machine being up with tuios not running on it.
 			return Handshake{}, &handshakeError{
 				status: StatusNoDaemon,
 				reason: "The host is up and no tuios daemon is running on it.",
@@ -1040,9 +817,6 @@ func handshake(ctx context.Context, c *caller, opts Options) (Handshake, *handsh
 	return shake, nil
 }
 
-// call runs one verb on this link. A link that is not up fails immediately,
-// which is section 7's rule: nothing is queued and nothing waits on a machine
-// that is not there.
 func (l *link) call(ctx context.Context, verb string, params any) (json.RawMessage, error) {
 	l.mu.Lock()
 	c, status, reason := l.ctrl, l.status, l.reason
@@ -1066,29 +840,11 @@ func (l *link) call(ctx context.Context, verb string, params any) (json.RawMessa
 	return raw, err
 }
 
-// maxControlFailures is how many control calls may fail in a row on a link
-// whose pipe is still carrying traffic before the link is torn down anyway.
-// Three is enough to tell a slow answer from a wedged remote and small enough
-// that a genuinely stuck daemon is redialed within a minute.
 const maxControlFailures = 3
 
-// controlStreamFailed runs when a call on the control stream did not answer.
-//
-// It does not tear the whole link down. The control stream is one stream among
-// many on a shared pipe, and an attached session is another. A busy pane on a
-// long link can miss the eight second listing deadline on its own, and the rail
-// polls that listing every five seconds while it is open. Killing the ssh child
-// on a miss would throw away the session the person is typing into.
-//
-// Instead the stream is replaced, because a stream with an unanswered request
-// on it can never be reused, and the link is left alone while the pipe is
-// still carrying frames. Only a pipe that has gone quiet, or a remote that has
-// failed maxControlFailures calls in a row, ends the link.
 func (l *link) controlStreamFailed(failed *caller) {
 	l.mu.Lock()
 	if l.ctrl != failed {
-		// Another call already replaced this stream. Nothing to do, and
-		// nothing to count twice.
 		l.mu.Unlock()
 		return
 	}
@@ -1112,10 +868,6 @@ func (l *link) controlStreamFailed(failed *caller) {
 		}
 	}
 
-	// The pipe is quiet or the remote has stopped answering. The status is set
-	// here rather than left to the supervisor, which notices a moment later. A
-	// listing taken in that moment would say the host is up when the call that
-	// just failed proved otherwise.
 	l.mu.Lock()
 	l.ctrl = nil
 	l.mu.Unlock()
@@ -1126,19 +878,6 @@ func (l *link) controlStreamFailed(failed *caller) {
 	}
 }
 
-// openConnection opens a fresh stream on the live link. On the far side the
-// proxy answers it by dialing that machine's daemon socket, so what comes back
-// is a raw connection to the remote daemon: whatever is written on it reaches
-// that daemon exactly as a local client's bytes would, and whatever the daemon
-// writes comes back the same way.
-//
-// It is the one primitive under every verb that is not a listing. Nothing here
-// reads or interprets what crosses; the caller that owns the two ends does.
-//
-// Like call, a link that is not up fails at once with UnreachableError. A link
-// that is up but cannot take another stream fails with RefusedError, which is a
-// different remedy: the machine is fine, this side has too many connections
-// open to it.
 func (l *link) openConnection(info StreamOpen) (*Stream, error) {
 	l.mu.Lock()
 	m, status, reason := l.mux, l.status, l.reason
@@ -1146,13 +885,6 @@ func (l *link) openConnection(info StreamOpen) (*Stream, error) {
 	if m == nil {
 		return nil, &UnreachableError{Host: l.host.Name, Status: status, Reason: reason}
 	}
-	// What this stream carries is an attached session, not a listing, so it
-	// gets the limit that was chosen for one. See connectionStallLimit.
-	//
-	// It also gets a window, so a pane that writes faster than this side
-	// reads waits for its own reader and never for the link's read loop,
-	// which every other pane and every listing on the machine shares. The
-	// limit then only applies to a proxy that predates windows.
 	if !info.Bulk {
 		info.Window = true
 	}
@@ -1198,7 +930,6 @@ func (e *UnreachableError) Error() string {
 	return fmt.Sprintf("host %s is %s", e.Host, e.Status)
 }
 
-// joinDetail folds a transport diagnostic onto an error string.
 func joinDetail(parts ...string) string {
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
@@ -1209,9 +940,6 @@ func joinDetail(parts ...string) string {
 	return strings.Join(out, ": ")
 }
 
-// trimDetail bounds and flattens a detail line. It comes from another machine,
-// so it is treated as data: newlines collapse, and it cannot be long enough to
-// push anything off a listing.
 func trimDetail(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	const limit = 200

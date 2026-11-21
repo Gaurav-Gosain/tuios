@@ -37,7 +37,6 @@ func ParseGlobal(args []string) (Global, []string, error) {
 		if len(a) < 2 || a[0] != '-' {
 			break
 		}
-		// Clustered flags: -2u, -uS path, -Spath.
 		j := 1
 		for j < len(a) {
 			c := a[j]
@@ -59,8 +58,6 @@ func ParseGlobal(args []string) (Global, []string, error) {
 				case 'f':
 					g.Ignored = append(g.Ignored, "-f")
 				case 'c':
-					// -c shell-command runs a command in the default shell,
-					// the way sh -c does. It is not a tmux command.
 					return g, nil, errfmt.Errorf("-c is not supported by the tuios tmux shim")
 				case 'T':
 					g.Ignored = append(g.Ignored, "-T")
@@ -113,7 +110,6 @@ func SplitCommands(words []string) [][]string {
 	return out
 }
 
-// spec is the flags one command accepts: bools take no value, values take one.
 type spec struct {
 	bools  string
 	values string
@@ -142,7 +138,6 @@ func (p Parsed) Value(c byte) (string, bool) {
 // Values returns every value given for flag c, in order.
 func (p Parsed) Values(c byte) []string { return p.vals[c] }
 
-// errUnknownFlag is a flag the command's spec does not name.
 type errUnknownFlag struct {
 	cmd  string
 	flag byte
@@ -152,10 +147,6 @@ func (e errUnknownFlag) Error() string {
 	return fmt.Sprintf("%s: unknown flag -%c", e.cmd, e.flag)
 }
 
-// parseFlags reads a command's argv (the command name excluded) the way tmux's
-// getopt does: flags first, clustered or not, a value attached or in the next
-// word, "--" ending them, and the first word that is not a flag starting the
-// positional arguments.
 func parseFlags(cmd string, sp spec, args []string) (Parsed, error) {
 	p := Parsed{flags: map[byte]bool{}, vals: map[byte][]string{}}
 	i := 0

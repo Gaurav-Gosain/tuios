@@ -12,18 +12,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The control stream speaks the daemon's own line-delimited JSON verb protocol.
-// This is a second, small implementation of the caller rather than a reuse of
-// session.VerbClient, because that one dials a unix socket and lives in the
-// package that will import this one. Duplicating fifty lines is cheaper than a
-// dependency cycle, and it keeps the rule that nothing about a remote answer is
-// decoded by code that also serves local clients.
-
-// maxResponseLine bounds one response line from a remote daemon. The peer is
-// untrusted, so its answer is not allowed to size this side's buffer. The local
-// daemon's own limit is 16 MiB; a listing is kilobytes, and anything past this
-// is a peer misbehaving.
-const maxResponseLine = 4 << 20 // 4 MiB
+const maxResponseLine = 4 << 20
 
 // RemoteError is a remote daemon's error envelope. Its code is the daemon's own
 // stable string, reported unchanged so a caller sees what the far side said.
@@ -39,20 +28,10 @@ func (e *RemoteError) Error() string {
 	return e.Message + " (" + e.Code + ")"
 }
 
-// caller runs verb calls over one stream. One call is in flight at a time.
-//
-// A lock enforces one call at a time. The stream is a
-// single line of request and reply with no way to pair one with the other, so
-// two callers running at once read each other's answers: two clients polling
-// the rail five seconds apart is enough, and what it produces is one host's
-// session list reported under another host's name. Holding the lock across the
-// write and the read makes the pairing true instead of hoped for.
 type caller struct {
 	rw io.ReadWriteCloser
 	br *bufio.Reader
 
-	// one serialises whole calls. mu guards nextID alone, which is taken
-	// inside one.
 	one sync.Mutex
 
 	mu     sync.Mutex
@@ -63,16 +42,7 @@ func newCaller(rw io.ReadWriteCloser) *caller {
 	return &caller{rw: rw, br: bufio.NewReaderSize(rw, 64<<10)}
 }
 
-// call sends one verb and returns the raw result object.
-//
-// The context is the whole point of this function. A remote machine can accept
-// the connection and then never answer, and the hub must not wait on it: when
-// ctx ends first, call returns immediately with ctx.Err() and closes the
-// stream, because a stream with an unanswered request on it can never be
-// reused. The link supervisor reads that as a dead link and redials.
 func (c *caller) call(ctx context.Context, verb string, params any) (json.RawMessage, error) {
-	// A caller waiting its turn must still give up when its context does,
-	// otherwise a call queued behind a wedged one waits past its own deadline.
 	if !lockOrDone(ctx, &c.one) {
 		return nil, ctx.Err()
 	}
@@ -111,14 +81,11 @@ func (c *caller) call(ctx context.Context, verb string, params any) (json.RawMes
 	case a := <-done:
 		return a.raw, a.err
 	case <-ctx.Done():
-		// The stream is unusable from here: the answer, if it ever comes, would
-		// be read as the reply to the next call.
 		_ = c.rw.Close()
 		return nil, ctx.Err()
 	}
 }
 
-// readResponse reads and decodes one response line.
 func (c *caller) readResponse() (json.RawMessage, error) {
 	line, err := readBoundedLine(c.br, maxResponseLine)
 	if err != nil {
@@ -140,9 +107,6 @@ func (c *caller) readResponse() (json.RawMessage, error) {
 // ErrResponseTooLarge reports a response line past maxResponseLine.
 var ErrResponseTooLarge = errors.New("federation: the remote daemon sent an oversized response")
 
-// readBoundedLine reads one newline-terminated line, refusing to grow past
-// limit. bufio.Reader.ReadString would happily assemble a line of any length,
-// which is exactly the allocation an untrusted peer must not control.
 func readBoundedLine(br *bufio.Reader, limit int) ([]byte, error) {
 	var buf []byte
 	for {
@@ -164,8 +128,6 @@ func readBoundedLine(br *bufio.Reader, limit int) ([]byte, error) {
 	}
 }
 
-// lockOrDone takes mu unless ctx ends first. It reports whether the lock was
-// taken, so the caller knows whether it owes an Unlock.
 func lockOrDone(ctx context.Context, mu *sync.Mutex) bool {
 	got := make(chan struct{})
 	go func() {
@@ -176,9 +138,6 @@ func lockOrDone(ctx context.Context, mu *sync.Mutex) bool {
 	case <-got:
 		return true
 	case <-ctx.Done():
-		// The goroutine still holds the lock once it wins the race, so it is
-		// released rather than leaked. Waiting for it here would be waiting on
-		// exactly the call this one is giving up on.
 		go func() {
 			<-got
 			mu.Unlock()

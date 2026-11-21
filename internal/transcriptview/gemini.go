@@ -8,27 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// A Gemini CLI chat, as packages/core/src/services/chatRecordingService.ts
-// in google-gemini/gemini-cli writes it, under ~/.gemini/tmp/<project>/chats.
-//
-// Since 0.3x it is JSONL (session-<time>-<id>.jsonl). The first line is the
-// session's metadata (sessionId, projectHash, startTime). Each other line is
-// a message, written whole again each time it changes: a tool call's status
-// and result land by writing the message again, under the same id. Lines
-// with $set change metadata, $rewindTo takes the conversation back to a
-// message, and $patch rewrites history for a resumed session.
-//
-// Before that it was one JSON document, {sessionId, projectHash, ...,
-// messages: [...]}, rewritten whole on every change (session-*.json). That
-// file is read whole and its messages are read as lines (geminiDoc).
-//
-// A message is {id, timestamp, type, content, displayContent}, where type is
-// user, gemini, info, error or warning, and content is a string, a part or a
-// list of parts. A gemini message also has thoughts ({subject, description})
-// and toolCalls ({id, name, args, result, status, resultDisplay}). A tool's
-// resultDisplay is text, or a FileDiff ({fileDiff, fileName}) for an edit.
-
-// geminiLine decodes one chat line.
 func geminiLine(r *reader, line []byte, off int64) (decoded, bool) {
 	m, ok := parseObj(line)
 	if !ok {
@@ -39,7 +18,6 @@ func geminiLine(r *reader, line []byte, off int64) (decoded, bool) {
 	}
 	id := m.str("id")
 	if id == "" {
-		// Metadata, $set and $patch.
 		return decoded{}, true
 	}
 	at := parseAt(m.str("timestamp"))
@@ -86,7 +64,6 @@ func geminiLine(r *reader, line []byte, off int64) (decoded, bool) {
 	return decoded{entries: out, key: id}, true
 }
 
-// gmCall is a tool call and, once it finished, its result.
 func gmCall(tc jobj) []Entry {
 	name, id := tc.str("name"), tc.str("id")
 	out := callEntry(name, id, gmClass(name), args(tc["args"]))
@@ -96,8 +73,6 @@ func gmCall(tc jobj) []Entry {
 	case "error", "cancelled":
 		failed = true
 	default:
-		// scheduled, validating, awaiting_approval, executing: no result
-		// yet, so the call shows running.
 		return out
 	}
 	res := resultEntry(id, genaiResponseText(tc["result"]), failed)
@@ -105,7 +80,6 @@ func gmCall(tc jobj) []Entry {
 	return append(out, res)
 }
 
-// gmClass is what a Gemini CLI or Qwen Code tool does.
 func gmClass(name string) toolClass {
 	switch name {
 	case "replace", "edit", "smart_edit":
@@ -120,9 +94,6 @@ func gmClass(name string) toolClass {
 	return classOther
 }
 
-// genaiEntries turns a content (a string, a part or a list of parts) into
-// text, thinking and image entries. Calls and responses are left out: the
-// tool calls carry them.
 func genaiEntries(v any, role string) []Entry {
 	switch v := v.(type) {
 	case string:
@@ -152,8 +123,6 @@ func genaiEntries(v any, role string) []Entry {
 	return nil
 }
 
-// genaiResponseText is the text of a tool's result: the output or error of
-// each functionResponse, or the text of the other parts.
 func genaiResponseText(v any) string {
 	items, ok := v.([]any)
 	if !ok {
@@ -178,10 +147,8 @@ func genaiResponseText(v any) string {
 	return b.String()
 }
 
-// responseText is a function response's output, or its error, or its text.
 func responseText(o jobj) string { return o.str("output", "error", "content") }
 
-// fileDiffOf is the diff of a FileDiff result display, nil for any other.
 func fileDiffOf(v any) *diffSrc {
 	d := asObj(v)
 	diff := d.str("fileDiff")
@@ -196,7 +163,6 @@ func fileDiffOf(v any) *diffSrc {
 	return &diffSrc{file: name, patch: files[0].hunks}
 }
 
-// geminiDoc turns an older chat document into its messages, one per line.
 func geminiDoc(data []byte) []byte {
 	var doc struct {
 		Messages []json.RawMessage `json:"messages"`
@@ -207,7 +173,6 @@ func geminiDoc(data []byte) []byte {
 	return docLines(doc.Messages)
 }
 
-// docLines writes each message compacted, one per line.
 func docLines(msgs []json.RawMessage) []byte {
 	var b bytes.Buffer
 	for _, m := range msgs {

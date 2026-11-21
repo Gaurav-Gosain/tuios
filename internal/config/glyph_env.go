@@ -68,27 +68,15 @@ func DetectGlyphEnv(getenv func(string) string) (GlyphEnv, string) {
 	return GlyphEnvFull, ""
 }
 
-// localeIsUTF8 reports whether a locale name selects UTF-8: en_US.UTF-8,
-// C.utf8, en_US.utf-8@euro and the like.
 func localeIsUTF8(v string) bool {
 	v = strings.ToLower(v)
 	return strings.Contains(v, "utf-8") || strings.Contains(v, "utf8")
 }
 
-// glyphsChosen reports whether the config names a glyph set of its own. The
-// default id is not a choice: it is what an untouched config carries, so it
-// is the one the environment may replace.
 func glyphsChosen(id string) bool {
 	return id != "" && id != theme.GlyphSetNone
 }
 
-// applyGlyphEnv folds the environment into the glyphs after the config has
-// named its set. An explicit choice always wins: --ascii-only, or any set
-// other than the default.
-//
-// It returns the set to activate. s.GlyphSet keeps the configured id, so
-// get-config reports what the user wrote rather than what the terminal
-// forced.
 func (s *Settings) applyGlyphEnv() string {
 	chosen := glyphsChosen(s.GlyphSet)
 	s.NoNerdFont = !chosen && s.GlyphEnv == GlyphEnvUnicode

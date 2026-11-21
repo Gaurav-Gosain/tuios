@@ -10,8 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// ANSI styling kept short on purpose. The shell draws with the 16 ANSI colours
-// so tuios themes recolour it the way they recolour a real shell.
 const (
 	reset  = "\x1b[0m"
 	bold   = "\x1b[1m"
@@ -24,26 +22,16 @@ const (
 	cyan   = "\x1b[36m"
 )
 
-// command is one thing the shell runs, at the prompt or as a pane's own
-// process. args[0] is the name it was called by and line is the whole command
-// line. It returns the exit status.
 type command func(s *shell, args []string, line string) int
 
-// commands is the one table of what the shell runs, aliases included. run
-// dispatches from it, and the highlighter and completion read it through
-// runnable, so a command that runs is never drawn as unknown. Filled in init
-// so entries can refer to the table (help lists it).
 var commands map[string]command
 
-// shellNames are the names a pane asks for when it wants a shell. Typed at the
-// prompt they say you already have one.
 var shellNames map[string]bool
 
 func initShellNames() {
 	shellNames = map[string]bool{"sh": true, "bash": true, "zsh": true, "fish": true}
 }
 
-// summaries are the lines help prints, in the order it prints them.
 var summaries = [][2]string{
 	{"ls, cd, pwd", "look around"},
 	{"cat, less, vim", "read a file (q or :q to quit)"},
@@ -66,7 +54,6 @@ var summaries = [][2]string{
 	{"exit", "close this window"},
 }
 
-// fromTTY adapts a program that needs only the terminal.
 func fromTTY(f func(t *TTY, args []string) int) command {
 	return func(s *shell, args []string, _ string) int { return f(s.t, args[1:]) }
 }
@@ -165,7 +152,7 @@ func initCommands() {
 		"codex":     cmdAgent,
 		"gemini":    cmdAgent,
 		"agent":     cmdAgent,
-		"neofetch":  fromTTY(cmdFastfetch), // the old name, kept for muscle memory and older lessons
+		"neofetch":  fromTTY(cmdFastfetch),
 		"fastfetch": fromTTY(cmdFastfetch),
 		"top":       fromTTY(cmdTop),
 		"htop":      fromTTY(cmdTop),
@@ -217,7 +204,6 @@ func Programs() []Program {
 	}
 }
 
-// shell is one prompt's state.
 type shell struct {
 	t       *TTY
 	cwd     string
@@ -227,11 +213,9 @@ type shell struct {
 	histPos int
 	status  int
 	exiting bool
-	pending []byte // an escape sequence split across reads
-	paste   bool   // inside a bracketed paste
-	// row is the row the cursor is on, counted from the first row of the
-	// prompt, while a line longer than the pane wraps under it.
-	row int
+	pending []byte
+	paste   bool
+	row     int
 }
 
 func runShell(t *TTY, dir string) int {
@@ -258,7 +242,6 @@ func runShell(t *TTY, dir string) int {
 				return s.status
 			}
 		case <-t.Resized():
-			// A change of height alone needs no new layout.
 			if t.relaidNeeded() {
 				s.repaint()
 			}
@@ -266,12 +249,8 @@ func runShell(t *TTY, dir string) int {
 	}
 }
 
-// repaint draws the screen again for the pane's new width, with the line
-// being edited under it.
 func (s *shell) repaint() { s.t.repaint(s.editLine()) }
 
-// runProgram runs one command as a pane's own process, the way a real
-// terminal runs a program it was asked for instead of a shell.
 func runProgram(t *TTY, dir, name string, args []string) int {
 	s := &shell{t: t, cwd: startDir(dir)}
 	announceCwd(t, s.cwd)
@@ -290,10 +269,6 @@ func (s *shell) promptText() string {
 	return cyan + bold + promptPath(s.cwd) + reset + branch + " " + mark + " "
 }
 
-// promptPath is the folder as the prompt shows it. A long one is cut the way
-// fish cuts it, to the first letter of each folder but the last, so a
-// worktree's prompt leaves room for the command:
-// ~/.local/share/tuios/worktrees/hello/shout is ~/.l/s/t/w/h/shout.
 func promptPath(dir string) string {
 	p := prettyPath(dir)
 	if len(p) <= 28 {
@@ -313,10 +288,6 @@ func promptPath(dir string) string {
 	return strings.Join(parts, "/")
 }
 
-// OSC 133 marks, the ones a configured real shell prints: where a prompt
-// starts, where the typed command starts, where its output starts, and where
-// it ended with which status. tuios's scrollback browser splits the history
-// into commands on them.
 const (
 	markPrompt = "\x1b]133;A\x07"
 	markInput  = "\x1b]133;B\x07"
@@ -333,9 +304,6 @@ func (s *shell) prompt() {
 	s.t.write(markPrompt + s.promptText() + markInput)
 }
 
-// editLine is the prompt and the line being edited, with the cursor moved
-// back to where it is in the line. It is drawn outside the log while it
-// changes, and kept with keepLine once it is done.
 func (s *shell) editLine() string {
 	var b strings.Builder
 	prompt := s.promptText()
@@ -347,16 +315,11 @@ func (s *shell) editLine() string {
 	return b.String()
 }
 
-// spans is where the line being edited ends and where its cursor is, as
-// cells from the start of the prompt.
 func (s *shell) spans(prompt string) (end, at int) {
 	pw := visibleLen(prompt)
 	return pw + ansi.StringWidth(string(s.line)), pw + ansi.StringWidth(string(s.line[:s.cursor]))
 }
 
-// lastRow is the row the end of the line being edited is on, counted from
-// the prompt's first row. A line that fills its last row exactly leaves the
-// cursor on that row, at the right edge, until the next character.
 func lastRow(end, cols int) int {
 	if end > 0 && end%cols == 0 {
 		return end/cols - 1
@@ -364,9 +327,6 @@ func lastRow(end, cols int) int {
 	return end / cols
 }
 
-// place moves the cursor from the end of the line just written to where it
-// is in the line, across the rows a long line wraps over, and records the
-// row it is on.
 func (s *shell) place(b *strings.Builder, prompt string) {
 	cols, _ := s.t.Size()
 	cols = max(cols, 1)
@@ -374,8 +334,6 @@ func (s *shell) place(b *strings.Builder, prompt string) {
 	from := lastRow(end, cols)
 	if at == end {
 		if end > 0 && end%cols == 0 {
-			// The cursor belongs at the start of a row the text has not
-			// opened yet.
 			b.WriteString("\r\n")
 			from++
 		}
@@ -393,15 +351,12 @@ func (s *shell) place(b *strings.Builder, prompt string) {
 	s.row = row
 }
 
-// csi writes a cursor move of n cells or rows, final naming the direction.
 func csi(b *strings.Builder, n int, final byte) {
 	b.WriteString("\x1b[")
 	b.WriteString(strconv.Itoa(n))
 	b.WriteByte(final)
 }
 
-// toEnd moves the cursor to the end of the line being edited, so the output
-// of the command starts under all of it.
 func (s *shell) toEnd() {
 	cols, _ := s.t.Size()
 	cols = max(cols, 1)
@@ -412,14 +367,10 @@ func (s *shell) toEnd() {
 	s.row = 0
 }
 
-// keepLine puts the finished prompt line in the log. It is on the screen
-// already.
 func (s *shell) keepLine() {
 	s.t.keep(markPrompt + s.promptText() + markInput + s.highlighted())
 }
 
-// redraw repaints the line from the prompt, over every row a line longer
-// than the pane wraps onto.
 func (s *shell) redraw() {
 	var b strings.Builder
 	if s.row > 0 {
@@ -433,9 +384,6 @@ func (s *shell) redraw() {
 	s.t.write(b.String())
 }
 
-// highlighted colours each command word green when the shell runs it and red
-// when it does not, the way fish does. A line of several commands joined with
-// && has each command word coloured.
 func (s *shell) highlighted() string {
 	text := string(s.line)
 	var b strings.Builder
@@ -466,7 +414,6 @@ func (s *shell) highlighted() string {
 	return b.String()
 }
 
-// feed handles one chunk of input and reports whether the shell should exit.
 func (s *shell) feed(chunk []byte) bool {
 	data := append(s.pending, chunk...)
 	s.pending = nil
@@ -496,34 +443,34 @@ func (s *shell) feed(chunk []byte) bool {
 				s.cursor--
 				s.redraw()
 			}
-		case 0x03: // Ctrl+C
+		case 0x03:
 			s.toEnd()
 			s.keepLine()
 			s.t.Print("^C\r\n")
 			s.status = 130
 			s.prompt()
-		case 0x04: // Ctrl+D
+		case 0x04:
 			if len(s.line) == 0 {
 				s.toEnd()
 				s.keepLine()
 				s.t.Print("exit\r\n")
 				return true
 			}
-		case 0x0c: // Ctrl+L
+		case 0x0c:
 			s.t.Print("\x1b[H\x1b[2J")
 			s.row = 0
 			s.redraw()
-		case 0x01: // Ctrl+A
+		case 0x01:
 			s.cursor = 0
 			s.redraw()
-		case 0x05: // Ctrl+E
+		case 0x05:
 			s.cursor = len(s.line)
 			s.redraw()
-		case 0x15: // Ctrl+U
+		case 0x15:
 			s.line = append(s.line[:0], s.line[s.cursor:]...)
 			s.cursor = 0
 			s.redraw()
-		case 0x17: // Ctrl+W
+		case 0x17:
 			j := s.cursor
 			for j > 0 && s.line[j-1] == ' ' {
 				j--
@@ -540,7 +487,6 @@ func (s *shell) feed(chunk []byte) bool {
 			if c < 0x20 {
 				continue
 			}
-			// Decode one UTF-8 rune.
 			size := utf8Len(c)
 			start := i - 1
 			if start+size > len(data) {
@@ -576,14 +522,12 @@ func (s *shell) insert(r ...rune) {
 	s.redraw()
 }
 
-// escape consumes one escape sequence and reports its length, or that more
-// bytes are needed.
 func (s *shell) escape(b []byte) (int, bool) {
 	if len(b) < 2 {
 		return 0, false
 	}
 	if b[1] != '[' && b[1] != 'O' {
-		return 2, true // Alt+key: ignored
+		return 2, true
 	}
 	j := 2
 	for j < len(b) && (b[j] < 0x40 || b[j] > 0x7e) {
@@ -641,7 +585,6 @@ func (s *shell) historyMove(d int) {
 	s.redraw()
 }
 
-// complete fills in a command name or a path.
 func (s *shell) complete() {
 	text := string(s.line[:s.cursor])
 	space := strings.LastIndexByte(text, ' ')
@@ -694,7 +637,6 @@ func (s *shell) complete() {
 	s.redraw()
 }
 
-// enter runs the line and reports whether the shell should exit.
 func (s *shell) enter() bool {
 	s.toEnd()
 	s.keepLine()
@@ -725,8 +667,6 @@ func (s *shell) enter() bool {
 	return false
 }
 
-// run runs one command and reports whether the shell should exit. It tells
-// the page when the command starts and when it finishes, with its status.
 func (s *shell) run(line string) bool {
 	args := splitArgs(line)
 	if len(args) == 0 {
@@ -745,13 +685,11 @@ func (s *shell) run(line string) bool {
 	return s.exiting
 }
 
-// runnable reports whether the shell runs name at the prompt.
 func runnable(name string) bool {
 	_, ok := commands[name]
 	return ok
 }
 
-// commandNames lists every name runnable accepts.
 func commandNames() []string {
 	names := make([]string, 0, len(commands))
 	for name := range commands {
@@ -771,22 +709,14 @@ func (s *shell) cd(args []string, _ string) int {
 	}
 	s.cwd = target
 	s.t.Emit(EventCwd, map[string]any{"cwd": s.cwd})
-	// OSC 7 tells tuios the directory, the way a configured real shell does.
 	s.t.Print(cwdReport(s.cwd))
 	return 0
 }
 
-// cwdReport is the OSC 7 report of dir. It names no host, which is this
-// machine: tuios takes a report from another host as a shell on another
-// machine, and does not list its files.
 func cwdReport(dir string) string { return "\x1b]7;file://" + dir + "\x1b\\" }
 
-// announceCwd tells tuios where a pane's program starts. On a real machine
-// tuios reads that from the process, which this pane does not have.
 func announceCwd(t *TTY, dir string) { t.write(cwdReport(dir)) }
 
-// startDir is where a pane's program starts: the folder the pane asked for
-// when it is one, home otherwise.
 func startDir(dir string) string {
 	if dir != "" && isDir(dir) {
 		return dir
@@ -816,7 +746,6 @@ func (s *shell) cat(name string, paths []string) int {
 }
 
 func (s *shell) echo(args []string, line string) int {
-	// Redirection is the one piece of shell syntax worth faking.
 	if k := strings.Index(line, ">"); k >= 0 {
 		appendTo := strings.HasPrefix(line[k:], ">>")
 		target := strings.TrimSpace(strings.TrimLeft(line[k:], ">"))
@@ -830,8 +759,6 @@ func (s *shell) echo(args []string, line string) int {
 	return 0
 }
 
-// fail prints msg in red and returns status 1, for a command to return.
-//
 //go:noinline
 func (s *shell) fail(msg string) int {
 	s.t.Print(red + msg + reset + "\r\n")
@@ -861,7 +788,7 @@ func (s *shell) ls(args []string, long bool) int {
 		return s.fail("ls: no such file or directory")
 	}
 	var parts []string
-	var rows [][3]string // mode and owner, size, name
+	var rows [][3]string
 	for _, e := range list(target) {
 		if strings.HasPrefix(e.name, ".") && !showAll {
 			continue
@@ -890,9 +817,6 @@ func (s *shell) ls(args []string, long bool) int {
 	return 0
 }
 
-// longListing lays out ls -l rows for a pane cols cells wide. When a row
-// does not fit, the mode and owner go first, then the size, so the names
-// stay whole as long as they can.
 func longListing(rows [][3]string, cols int) []string {
 	for _, from := range []int{0, 1, 2} {
 		lines := make([]string, len(rows))
@@ -933,7 +857,6 @@ func argOr(args []string, i int, def string) string {
 	return def
 }
 
-// splitArgs splits on spaces, honouring single and double quotes.
 func splitArgs(line string) []string {
 	var out []string
 	var cur strings.Builder

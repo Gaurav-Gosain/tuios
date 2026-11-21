@@ -7,15 +7,6 @@ import (
 	"testing/synctest"
 )
 
-// blockingPty is a fake xpty.Pty whose Write parks until the test releases it.
-// It models the real failure: a guest that has stopped reading its stdin, so
-// the kernel PTY input buffer fills and Pty.Write blocks indefinitely. A paste
-// into a suspended process does exactly this.
-//
-// The park is a receive on a channel created inside the synctest bubble, which
-// is what makes the test deterministic: synctest.Wait returns only once every
-// other goroutine in the bubble is durably blocked, so when it returns we know
-// SendInput has reached the write and is sitting in it.
 type blockingPty struct {
 	entered  chan struct{}
 	release  chan struct{}
@@ -81,8 +72,6 @@ func TestSendInputDoesNotHoldIOLockAcrossPtyWrite(t *testing.T) {
 			sendDone <- w.SendInput([]byte("ls -la\r"))
 		}()
 
-		// Deterministic barrier: returns once the sender goroutine is parked
-		// inside blockingPty.Write, with no timing assumptions.
 		synctest.Wait()
 
 		select {
@@ -91,9 +80,6 @@ func TestSendInputDoesNotHoldIOLockAcrossPtyWrite(t *testing.T) {
 			t.Fatal("SendInput never reached Pty.Write")
 		}
 
-		// The whole point of the fix. If SendInput still held the read lock
-		// across the write, no exclusive acquisition could succeed here, and
-		// on the real UI that is the PTY reader and the renderer wedging.
 		if !w.ioMu.TryLock() {
 			close(pty.release)
 			t.Fatal("SendInput is holding ioMu across the blocking PTY write: " +
@@ -102,7 +88,6 @@ func TestSendInputDoesNotHoldIOLockAcrossPtyWrite(t *testing.T) {
 		}
 		w.ioMu.Unlock()
 
-		// A reader must get in too: that is literally the render path.
 		if !w.ioMu.TryRLock() {
 			close(pty.release)
 			t.Fatal("ioMu read side unavailable while SendInput blocks in Pty.Write")
@@ -119,7 +104,6 @@ func TestSendInputDoesNotHoldIOLockAcrossPtyWrite(t *testing.T) {
 	})
 }
 
-// nopPty is a non-blocking fake PTY for the teardown race test.
 type nopPty struct{ blockingPty }
 
 func (p *nopPty) Write(b []byte) (int, error) { return len(b), nil }
@@ -141,9 +125,6 @@ func TestSendInputSnapshotsPtyUnderTeardown(t *testing.T) {
 	w := &Window{ID: "lock-discipline-0002"}
 	w.Pty = &nopPty{}
 
-	// One sender, matching reality: SendInput's trailing Dirty/ContentDirty
-	// writes are UI-goroutine-owned window model fields, so a multi-sender
-	// test would flag those instead of the field read under test.
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		for range 4000 {
@@ -151,7 +132,6 @@ func TestSendInputSnapshotsPtyUnderTeardown(t *testing.T) {
 		}
 	})
 
-	// Teardown lands in the middle of the flood, exactly as Close() does.
 	wg.Go(func() {
 		for range 200 {
 			w.ioMu.Lock()

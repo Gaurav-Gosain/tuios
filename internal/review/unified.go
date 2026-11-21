@@ -6,11 +6,6 @@ import (
 	"strings"
 )
 
-// unifiedReader fills in the hunks of a listing from git's unified diff of
-// the same files, in the same order: git writes both from one comparison,
-// so the n-th "diff --git" block is the n-th file of the listing. Matching by
-// order rather than by the paths in the block headers means no quoting rule
-// or prefix setting of the repository changes which file a hunk lands in.
 type unifiedReader struct {
 	files []File
 	lim   Limits
@@ -28,10 +23,6 @@ type unifiedReader struct {
 	truncated bool
 }
 
-// readUnified reads r into files and reports whether any file was truncated
-// and whether it stopped before the end of r. Past lim.Files, or once
-// lim.Bytes of text is read, every file left keeps its counts only; a file
-// past lim.LinesPerFile does too.
 func readUnified(r io.Reader, files []File, lim Limits) (truncated, stopped bool, err error) {
 	u := &unifiedReader{files: files, lim: lim, idx: -1}
 	br := bufio.NewReaderSize(r, 64<<10)
@@ -51,7 +42,6 @@ func readUnified(r io.Reader, files []File, lim Limits) (truncated, stopped bool
 	}
 }
 
-// cutRest leaves every file from i on with its counts only.
 func (u *unifiedReader) cutRest(i int) {
 	for j := i; j < len(u.files); j++ {
 		if !u.files[j].Binary {
@@ -62,7 +52,6 @@ func (u *unifiedReader) cutRest(i int) {
 	}
 }
 
-// line takes one line of the diff, and reports whether reading stops.
 func (u *unifiedReader) line(raw string) bool {
 	u.total += len(raw)
 	full := strings.TrimSuffix(raw, "\n")
@@ -127,8 +116,6 @@ func (u *unifiedReader) line(raw string) bool {
 	}
 	body := text
 	if body != "" {
-		// A context line starts with a space; an empty one may have lost
-		// it (diff.suppressBlankEmpty).
 		body = body[1:]
 	}
 	if !u.skipping {
@@ -170,8 +157,6 @@ func (u *unifiedReader) line(raw string) bool {
 	return false
 }
 
-// markNoNewline marks the line a "\ No newline at end of file" marker
-// follows, which is always the last line read into the file.
 func (u *unifiedReader) markNoNewline() {
 	if u.skipping || u.cur == nil || len(u.cur.Hunks) == 0 {
 		return

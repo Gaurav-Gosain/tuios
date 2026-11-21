@@ -24,25 +24,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// Tailscale SSH in check mode, for the commands that run ssh on a host.
-//
-// The gate is read in internal/federation (sshgate.go). This file is what a
-// command does about it. `hosts sync` runs several ssh calls on each host, and
-// Tailscale asks for an approval on each new connection, so two things are
-// done here:
-//
-//   - The calls of one run share a connection per host (Share), so one
-//     approval covers the run.
-//   - On a terminal, the run prints every URL at once and offers to wait
-//     (ApprovalDesk). The waiting connection is the one that goes on when the
-//     person approves, so nothing is dialed again. Off a terminal, or with
-//     --json, the run fails the host at once and reports the URL.
-
-// syncApprovalWait is how long sync waits for the person to approve a login.
 const syncApprovalWait = 5 * time.Minute
 
-// approvalGather is how long the desk waits for the other hosts to reach the
-// gate before it asks, so the person sees every URL in one list.
 const approvalGather = 3 * time.Second
 
 // ApprovalDesk decides, once per run, whether to wait for Tailscale
@@ -53,9 +36,7 @@ type ApprovalDesk struct {
 	interactive bool
 	wait        time.Duration
 
-	mu sync.Mutex
-	// active counts the ssh calls in flight. When every one of them waits at
-	// the gate, nothing else is coming and the desk asks at once.
+	mu      sync.Mutex
 	active  int
 	pending []approvalRequest
 	timer   *time.Timer
@@ -96,8 +77,6 @@ func (d *ApprovalDesk) leave() {
 	}
 }
 
-// await is called by an ssh call that Tailscale holds. It returns whether the
-// call should keep waiting for the approval.
 func (d *ApprovalDesk) await(host string, g federation.SSHGate) bool {
 	if d == nil || !d.interactive {
 		return false
@@ -126,7 +105,6 @@ func (d *ApprovalDesk) await(host string, g federation.SSHGate) bool {
 	return d.waitFor
 }
 
-// decide lists the URLs and asks once.
 func (d *ApprovalDesk) decide() {
 	d.mu.Lock()
 	if d.decided {
@@ -169,7 +147,6 @@ func (d *ApprovalDesk) decide() {
 	close(d.done)
 }
 
-// approved tells the person a host goes on.
 func (d *ApprovalDesk) approved(host string) {
 	if d == nil || !d.interactive {
 		return
@@ -177,8 +154,6 @@ func (d *ApprovalDesk) approved(host string) {
 	fmt.Fprintf(d.out, "%s: Tailscale approved the login.\n", host)
 }
 
-// gateBuffer is ssh's stderr, kept bounded and safe to read while ssh still
-// writes it.
 type gateBuffer struct {
 	mu  sync.Mutex
 	buf limitedBuffer
@@ -196,7 +171,6 @@ func (b *gateBuffer) String() string {
 	return b.buf.String()
 }
 
-// gatePoll is how often a running ssh call reads its stderr for the gate.
 const gatePoll = 100 * time.Millisecond
 
 // RunGatedSSH runs one ssh call and handles a Tailscale check on the way. The
@@ -224,8 +198,6 @@ func RunGatedSSH(ctx context.Context, cmd *exec.Cmd, stdin io.Reader, host strin
 	if dl, ok := ctx.Deadline(); ok {
 		budget = time.Until(dl)
 	}
-	// waitCtx is the call's own bound until Tailscale holds the login. Then
-	// it is the approval wait, and after the approval the budget again.
 	waitCtx := ctx
 	var cancelWait context.CancelFunc = func() {}
 	defer func() { cancelWait() }()
@@ -245,7 +217,6 @@ func RunGatedSSH(ctx context.Context, cmd *exec.Cmd, stdin io.Reader, host strin
 		select {
 		case err := <-done:
 			if gate != nil && !approved {
-				// The call can end between two reads of stderr.
 				if g := federation.ParseSSHGate(errb.String()); g != nil && g.Approved {
 					desk.approved(host)
 				}
@@ -301,8 +272,6 @@ func NewShare(bin string) *Share {
 	}
 	base := sockpath.RuntimeDir()
 	if base == "" {
-		// The socket path is limited to about 100 bytes, and the temp
-		// folder of macOS is long, so /tmp comes first.
 		base = "/tmp"
 		if st, err := os.Stat(base); err != nil || !st.IsDir() {
 			base = os.TempDir()
@@ -312,8 +281,6 @@ func NewShare(bin string) *Share {
 	if err != nil {
 		return nil
 	}
-	// ssh reads % in a ControlPath as a token, and a socket path has a
-	// length limit. A folder that breaks either is not used.
 	if strings.Contains(dir, "%") || len(dir)+4 > 100 {
 		_ = os.Remove(dir)
 		return nil

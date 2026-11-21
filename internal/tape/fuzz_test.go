@@ -10,10 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
 
-// tapeSeeds are hand-written shapes covering each command form plus the
-// malformed variants a hand-edited tape file produces: unterminated strings and
-// regexes, truncated commands at EOF, and counts or durations that do not fit a
-// machine integer.
 var tapeSeeds = []string{
 	"",
 	"\n\n\n",
@@ -45,7 +41,6 @@ var tapeSeeds = []string{
 	"WaitUntilRegex //\n",
 	"WaitUntilRegex /(((((((((((/\n",
 	"WaitUntilRegex /" + strings.Repeat("a*", 512) + "/\n",
-	// The generic commands, their arguments and the errors they report.
 	"Split horizontal\nSplit v\nSplit diagonal\nSplit\n",
 	"NewWindow \"editor\"\nCloseWindow editor\nMinimizeWindow 'a b'\nRestoreWindow\n",
 	"ToggleTiling 3\nEnableTiling extra words here\n",
@@ -61,33 +56,26 @@ var tapeSeeds = []string{
 	"Type@50ms \"abc\"\nDown@100ms 3\nNewWindow@1s\nEnter@\n",
 	"Shift+Tab\nCtrl+Backspace\nAlt+Escape\nCtrl+Delete\n",
 	"  Type \"indented\"\n\tEnter\n",
-	// Unterminated literals.
 	"Type \"unterminated",
 	"Type 'unterminated",
 	"Type `unterminated",
-	// Escapes inside strings.
 	`Type "a\"b\\c\nd\te"` + "\n",
 	`Type "trailing backslash \`,
-	// Operators in isolation.
 	"+\n@\n,\n/\n(\n)\n",
 	"@@@@@@\n",
 	"////////\n",
-	// Numbers.
 	"1234567890\n",
 	"1.2.3.4.5\n",
 	".....\n",
 	"1e999\n",
-	// Non-UTF-8 and control bytes in the source text.
 	"Type \"\xff\xfe\"\n",
 	"\x00\x01\x02\n",
 	"Type \"\xe4\xb8\x96\xe7\x95\x8c\"\n",
-	// Deeply repeated input.
 	strings.Repeat("Enter\n", 2048),
 	strings.Repeat("Type \"x\" ", 2048),
 	strings.Repeat("+", 4096),
 	strings.Repeat("\"", 4096),
 	strings.Repeat("/", 4096),
-	// Unknown identifiers.
 	"NotACommand arg1 arg2\n",
 	strings.Repeat("Unknown\n", 1024),
 }
@@ -99,8 +87,6 @@ func FuzzTapeParse(f *testing.F) {
 	for _, s := range tapeSeeds {
 		f.Add(s)
 	}
-	// Seed with the tape files shipped in the repo, which are the sequences the
-	// parser actually sees in practice.
 	for _, dir := range []string{"../../examples", "../../assets"} {
 		matches, err := filepath.Glob(filepath.Join(dir, "*.tape"))
 		if err != nil {
@@ -137,8 +123,6 @@ func FuzzTapeParse(f *testing.F) {
 			t.Fatalf("parsing %d bytes did not terminate", len(src))
 		}
 
-		// The parser consumes at least one token per command, so it can never
-		// emit more commands than the source has bytes.
 		if len(cmds) > len(src)+1 {
 			t.Fatalf("parsed %d commands from %d bytes of source", len(cmds), len(src))
 		}
@@ -185,8 +169,6 @@ func FuzzTapeTokenize(f *testing.F) {
 		if last := toks[len(toks)-1]; last.Type != tape.TokenEOF {
 			t.Fatalf("token stream ends with %v, want EOF", last.Type)
 		}
-		// Every byte is consumed by at most one token's literal, plus the
-		// delimiters the lexer drops, so the stream cannot outgrow the source.
 		if len(toks) > len(src)+2 {
 			t.Fatalf("produced %d tokens from %d bytes", len(toks), len(src))
 		}

@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-// The report tuios doctor agents prints and the settings page's Agents tab
-// draws. Both read it from here, so the two can never disagree about what is
-// installed, what is out of date and what has no integration at all.
-
 // Overview is every harness tuios can integrate with, as this machine has it.
 type Overview struct {
 	// TuiosOnPath says the program the hooks run can be found.

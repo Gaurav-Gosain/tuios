@@ -13,20 +13,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The component timeout, tested against the thing that actually breaks it.
-//
-// A bare `sleep 30` is one simple command, and a shell execs a lone final
-// command instead of forking it. That case passes with no kill of the process
-// group at all, so on its own it is a false green.
-// Every command below forks a child that inherits the stdout pipe, which is the
-// shape reported in issue 141 and the shape almost every real component has.
-
-// dockTimeoutSlack is how long after the deadline a component still counts as
-// killed. Generous, because the assertion under test is seconds against tens of
-// seconds, not milliseconds against milliseconds.
 const dockTimeoutSlack = 4 * time.Second
 
-// awaitDockUpdate waits for one update, failing with why if none arrives.
 func awaitDockUpdate(t *testing.T, e *Engine, wait time.Duration, why string) Update {
 	t.Helper()
 	select {
@@ -111,7 +99,6 @@ func TestDockComponentTimeoutLeavesNoOrphan(t *testing.T) {
 		t.Fatalf("a hung component reported success: %+v", u)
 	}
 
-	// Past the orphan's own deadline, so its absence is a kill and not a race.
 	time.Sleep(4 * time.Second)
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatalf("the orphaned child outlived the timeout and wrote %s", marker)

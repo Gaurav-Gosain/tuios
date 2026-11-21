@@ -7,14 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// The rail's custom section: a section whose rows are what a command of the
-// user's prints. It borrows the dock's component contract (environment in,
-// text out, the same refresh grammar, the same sanitiser and the same failure
-// rule) and differs where a rail section is not a bar cell: every line of
-// stdout is a row, and there is no push mode, because a command that stays
-// running keeps the environment it started with and cannot see the focus or
-// the section's size change.
-
 // SidebarCustomConfig is [appearance.sidebar.custom].
 //
 // It stays out of the option registry on purpose, so set-option and
@@ -75,15 +67,8 @@ func SidebarCustomPlaced(sections string) bool {
 	return false
 }
 
-// validateSidebarCustom appends the custom section's problems to result, as
-// warnings, the way validateDock does for dock components: a section that
-// draws nothing and says nothing about why is the failure mode the dock's
-// warnings exist to stop.
 func validateSidebarCustom(cfg *UserConfig, result *ValidationResult) {
 	sidebar := cfg.Appearance.Sidebar
-	// An explicit command on the legacy edge replaces, rather than joins, the
-	// legacy command. The edge validator reports problems with that override;
-	// warning about the replaced command here would point at the wrong table.
 	var override *SidebarEdgeConfig
 	if sidebar.Position == "left" {
 		override = sidebar.Left

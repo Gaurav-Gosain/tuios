@@ -13,8 +13,6 @@ import (
 // rendered overlapping instead of simply small. This was the tiling failure a
 // daemon session showed when several windows were created on a modest screen.
 func TestApplyLayoutNeverOverlaps(t *testing.T) {
-	// Small enough that a spiral of several panes drives the smallest tiles well
-	// below the old fixed minimum, which is exactly where the overlap lived.
 	bounds := Rect{X: 0, Y: 0, W: 120, H: 40}
 
 	for _, n := range []int{2, 3, 4, 6, 8, 12} {
@@ -82,8 +80,6 @@ func TestParseAutoSchemeRoundTrips(t *testing.T) {
 			t.Errorf("%v.String() = %q, want %q", tc.want, got, tc.text)
 		}
 	}
-	// An unrecognised value falls back rather than panicking or zeroing
-	// silently to something a caller would not expect.
 	if got := ParseAutoScheme("nonsense"); got != SchemeLongestSide {
 		t.Errorf("ParseAutoScheme(\"nonsense\") = %v, want the longest_side fallback", got)
 	}

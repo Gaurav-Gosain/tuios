@@ -10,11 +10,6 @@ import (
 	"testing"
 )
 
-// These tests cover the integrations beyond the first four: every target's
-// round trip, and each file shape's handling of the user's own content.
-
-// userFiles is a file of the user's own for each target that edits a shared
-// file, with something tuios must keep in it.
 var userFiles = map[string]string{
 	ClaudeCode:  userClaudeSettings,
 	Codex:       `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}`,
@@ -30,7 +25,6 @@ var userFiles = map[string]string{
 	Vibe:        "[[hooks]]\nname = \"user-audit\"\ntype = \"pre_tool\"\ncommand = \"~/.vibe/hooks/audit.sh\"\ntimeout = 10\n",
 }
 
-// keeps says what of the user's file must survive install and uninstall.
 func keeps(t *testing.T, id, got string) {
 	t.Helper()
 	want := map[string][]string{
@@ -198,7 +192,6 @@ func TestAntigravityOwnsOneNamedBlock(t *testing.T) {
 		t.Fatalf("hooks.json = %s", got)
 	}
 
-	// A block named tuios that tuios did not write is refused and kept.
 	own := `{"tuios": {"PreInvocation": [{"type": "command", "command": "my-script"}]}}`
 	writeFile(t, tg.Path(env), own)
 	if _, err := tg.Install(env, "tuios"); err == nil {
@@ -235,7 +228,6 @@ func TestOwnedJSONHookFilesAreWholeFiles(t *testing.T) {
 			if readFile(t, mine) != `{"hooks":{}}` {
 				t.Fatal("uninstall touched another hook file")
 			}
-			// A file of the user's at tuios's path is never overwritten.
 			writeFile(t, tg.Path(env), `{"hooks":{"SessionStart":[]}}`)
 			if _, err := tg.Install(env, "tuios"); err == nil {
 				t.Fatal("overwrote a file tuios did not write")
@@ -399,8 +391,6 @@ func compactRaw(raw []byte) []byte {
 	return b.Bytes()
 }
 
-// compactJSON writes a document on one line with every object's keys sorted,
-// so a test can compare it with a literal.
 func compactJSON(t *testing.T, s string) string {
 	t.Helper()
 	root, err := parseObject([]byte(s))

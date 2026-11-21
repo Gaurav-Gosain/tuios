@@ -9,10 +9,6 @@ import (
 )
 
 func TestClientToHostCapabilities_NeverForwardsFiles(t *testing.T) {
-	// The client is remote, so it cannot read a server-local file path. The host
-	// capabilities projected for the passthrough must always report
-	// KittyFileTransfer=false so file-medium transmissions are re-encoded as
-	// direct data.
 	in := buildClientCapabilities("xterm-kitty", nil, ssh.Window{Width: 80, Height: 24, WidthPixels: 800, HeightPixels: 480}, config.ImageSymbolsAuto)
 	host := clientToHostCapabilities(in)
 	if host == nil {

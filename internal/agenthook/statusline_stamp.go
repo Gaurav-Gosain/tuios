@@ -92,8 +92,6 @@ func WritePending(path string, prev *Stamp, values integration.StatusLineValues)
 			}
 		}
 		if same {
-			// Already recorded: a status line runs several times a
-			// second, and the file need not be written for each.
 			return
 		}
 	}
@@ -141,7 +139,6 @@ func FlushStatusLine(client Caller, sessionName, window, dir string, now time.Ti
 	return sent, nil
 }
 
-// saveStamp writes a stamp file, 0600, replaced whole.
 func saveStamp(path string, st Stamp) {
 	data, err := jsonx.Marshal(st)
 	if err != nil {

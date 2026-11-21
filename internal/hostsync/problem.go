@@ -32,9 +32,6 @@ func (e *Problem) Error() string {
 	return b.String()
 }
 
-// plainText strips control characters and invisible characters from text
-// another machine wrote. It is a copy of plainText in cmd/tuios
-// (agent_commands.go).
 func plainText(s string) string {
 	s = invisible.Strip(s)
 	var b strings.Builder
@@ -51,8 +48,6 @@ func plainText(s string) string {
 	return b.String()
 }
 
-// plainLine is plainText for a value that must stay on one line. It is a copy
-// of plainLine in cmd/tuios (agent_commands.go).
 func plainLine(s string) string {
 	return strings.NewReplacer("\n", " ", "\t", " ").Replace(plainText(s))
 }

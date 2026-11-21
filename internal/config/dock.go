@@ -47,9 +47,6 @@ const DockCustomPrefix = "custom/"
 // draws nothing and earns no warning.
 const DockPluginPrefix = "plugin/"
 
-// dockBuiltins is every name the lists accept without the custom/ prefix. It is
-// the set the warning path checks against, so a typo says what it should have
-// been instead of drawing nothing and saying nothing.
 var dockBuiltins = []string{
 	DockComponentMode,
 	DockComponentWorkspaces,
@@ -80,16 +77,6 @@ func IsDockBuiltin(name string) bool {
 	return slices.Contains(dockBuiltins, name)
 }
 
-// dockFixedSides names the built-ins that are drawn on one side whatever list
-// they are written in.
-//
-// They are not cells. The minimized entries are the centre block and are
-// measured against the room the two ends leave; the message and the copy-mode
-// help are transient claims on the right-hand end rather than segments; and the
-// session controls hold the bar's last columns and are never truncated. Listing
-// one of them elsewhere is taken as "draw it", not as "draw it there", because
-// the alternative is a segment that reserves width on one side and draws on
-// another.
 var dockFixedSides = map[string]string{
 	DockComponentWindows:         "center",
 	DockComponentNotifications:   "right",
@@ -102,14 +89,6 @@ var dockFixedSides = map[string]string{
 // wherever it is listed.
 func DockFixedSide(name string) string { return dockFixedSides[name] }
 
-// Default dock arrangements. These reproduce the bar exactly as it was drawn
-// before the lists existed, which is what lets a session with no [dock] table
-// stay byte-for-byte unchanged.
-//
-// Each built-in keeps whatever conditional it always had (the strip needs two
-// workspaces, the meters need show_cpu), so membership here is a second gate
-// and never a first one: naming a component makes it eligible to draw, not
-// certain to.
 var (
 	defaultDockLeft   = []string{DockComponentMode, DockComponentWorkspaces, DockComponentTrail, DockComponentTape}
 	defaultDockCenter = []string{DockComponentWindows}
@@ -369,15 +348,6 @@ func (k DockRefreshKind) String() string {
 	}
 }
 
-// dockEventTypes is every event a refresh contract may watch. Both spellings
-// are here: the hook table names the event after-focus-change and the daemon's
-// event hub names the same thing window-focused, and a component author should
-// not have to know which of the two they are talking to.
-//
-// The list lives in this package rather than beside the alias map in
-// internal/app so the config warning can check a name at load, which is the
-// only moment anyone is looking. An event a component watches and nothing ever
-// fires is a cell that never updates and says nothing about why.
 var dockEventTypes = []string{
 	"after-agent-state", "after-attach", "after-close-window", "after-detach",
 	"after-focus-change", "after-layout-change", "after-new-window",
@@ -443,11 +413,6 @@ func (c DockConfig) DockClockFormat(s *Settings) string {
 	if f := strings.TrimSpace(c.Clock.Format); f != "" {
 		return f
 	}
-	// Falls through to appearance.clock_format rather than straight to the
-	// default: the two settings arrived by different doors for the same
-	// question, and a session that set the appearance one and never opened
-	// [dock.clock] would otherwise watch it do nothing. The specific table
-	// still wins over the general one when it says anything at all.
 	return s.GetClockFormat()
 }
 
@@ -461,9 +426,6 @@ func DockClockInterval(format string) time.Duration {
 	return time.Minute
 }
 
-// clockFormatHasSeconds reports whether a Go time layout renders seconds.
-// "05" is the reference second and ".000"/".999" its fractions; nothing else in
-// a layout moves faster than a minute.
 func clockFormatHasSeconds(format string) bool {
 	return strings.Contains(format, "05") || strings.Contains(format, ".0") ||
 		strings.Contains(format, ".9") || strings.Contains(format, "5.")
@@ -491,12 +453,6 @@ func (c DockConfig) DockList(side string) []string {
 	}
 }
 
-// validateDock appends the dock section's problems to result. Every one of them
-// is a warning: a mistyped component name should cost the user that cell, not
-// the session, and the config's own error path refuses to start at all.
-//
-// The lesson here was learned on keybindings, where an action typo silently
-// bound nothing and looked exactly like a broken feature.
 func validateDock(cfg *UserConfig, result *ValidationResult) {
 	seen := map[string]string{}
 	for _, side := range []string{"left", "center", "right"} {
@@ -611,8 +567,6 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 					DockCustomMaxWidthLimit, DockCustomDefaultMaxWidth),
 			})
 		}
-		// A table nobody placed is the other half of the typo: the script is
-		// right, the list entry is missing, and the cell never appears.
 		if _, placed := seen[DockCustomPrefix+name]; !placed {
 			result.Warnings = append(result.Warnings, ValidationError{
 				Field: "dock.custom." + name,
@@ -624,9 +578,6 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// validateDockColors warns about every set colour that is not a colour (see
-// theme.ParseColor). The value is dropped where it is drawn, so the cell still
-// draws, without that colour.
 func validateDockColors(result *ValidationResult, field string, colors map[string]string) {
 	keys := make([]string, 0, len(colors))
 	for k := range colors {

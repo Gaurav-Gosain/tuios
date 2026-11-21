@@ -9,12 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The frame. Two bands: the app under test and the action stream on Canvas at
-// the left, the instruments on a Panel band at the right. That figure/ground
-// split is the whole reason the harness is never mistaken for the app it is
-// hammering: app content sits on Canvas inside a hairline, instruments sit on
-// their own ground, and one accent chip is the only fill at rest.
-
 // Render draws one frame from one snapshot. It is pure, which is what lets the
 // tests assert on the drawn output rather than on the state behind it. Two of
 // the display's bugs were only ever visible in the drawn frame.
@@ -29,9 +23,6 @@ func Render(s Snapshot, o Options) string {
 		left := renderLeft(s, o, pal, leftW, h)
 		lines = zip(left, rail)
 	} else {
-		// Too narrow to carry the app beside the instruments. The instruments
-		// alone are still the whole truth of the run, so they take the frame
-		// rather than both halves being squeezed into something unreadable.
 		lines = renderRail(s, o, pal, w, h)
 	}
 
@@ -41,15 +32,7 @@ func Render(s Snapshot, o Options) string {
 	return strings.Join(lines, "\n")
 }
 
-// renderLeft is the app viewport over the action stream. During minimisation
-// the funnel takes the stream's rows, because generation has stopped and replay
-// is what is happening.
 func renderLeft(s Snapshot, o Options, pal overlay.Palette, w, h int) []string {
-	// The stream is budgeted first. The fuzzer resizes the app under test, and
-	// it will happily resize it larger than the terminal doing the recording; a
-	// viewport that took what it wanted then left the tape two rows turned the
-	// best thing in the run into a sliver. The app is shown in whatever is left,
-	// and says so when that is less than all of it.
 	streamH := min(tapeRows+1, h)
 	var top []string
 	if o.Screen != nil {
@@ -66,14 +49,6 @@ func renderLeft(s Snapshot, o Options, pal overlay.Palette, w, h int) []string {
 	return fit(append(top, stream...), w, h, pal.Canvas)
 }
 
-// renderViewport puts the app's own frame inside a hairline. The app keeps its
-// own colours untouched: this display never restyles the thing it is testing,
-// because a screenshot of a recoloured app is a screenshot of something that
-// does not exist.
-//
-// The border and its title are the harness speaking, so they carry the phase.
-// When a rule breaks they go Cherry, which says the harness found something
-// rather than that the app drew something red.
 func renderViewport(s Snapshot, o Options, pal overlay.Palette, w, h int) []string {
 	screen := o.Screen()
 	if screen == "" || h < 3 {
@@ -81,10 +56,6 @@ func renderViewport(s Snapshot, o Options, pal overlay.Palette, w, h int) []stri
 	}
 	g := glyphs()
 	body := strings.Split(strings.TrimRight(screen, "\n"), "\n")
-	// The app's own size, which the title reports. It is the size the engine
-	// last resized the app to, so it moves when a resize action lands. Reporting
-	// the width the frame happened to have room for instead would put a number
-	// on screen that is about this display rather than about the app.
 	appW, appH := 0, len(body)
 	for _, l := range body {
 		appW = max(appW, lipgloss.Width(l))
@@ -98,8 +69,6 @@ func renderViewport(s Snapshot, o Options, pal overlay.Palette, w, h int) []stri
 	if s.Violated {
 		edge = pal.Warn
 	}
-	// Rows are budgeted the same way columns are: the frame shows what it has
-	// room for, from the top.
 	rows := h - 2
 	if len(body) > rows {
 		body = body[:max(rows, 0)]
@@ -107,10 +76,6 @@ func renderViewport(s Snapshot, o Options, pal overlay.Palette, w, h int) []stri
 
 	size := itoa(appW) + g.times + itoa(appH)
 	if inner < appW || len(body) < appH {
-		// Saying the app is 178 wide while showing 79 of it is the kind of quiet
-		// lie this display exists to avoid. The fuzzer resizes the app past the
-		// recording terminal often enough that this is the common case, not an
-		// edge one.
 		size += " " + g.sep + " showing " + itoa(inner) + g.times + itoa(len(body))
 	}
 	title := " under test " + g.sep + " " + size + " "
@@ -130,7 +95,6 @@ func renderViewport(s Snapshot, o Options, pal overlay.Palette, w, h int) []stri
 	return out
 }
 
-// zip lays two columns of equal height side by side.
 func zip(left, right []string) []string {
 	out := make([]string, 0, max(len(left), len(right)))
 	for i := range max(len(left), len(right)) {
@@ -146,9 +110,6 @@ func zip(left, right []string) []string {
 	return out
 }
 
-// fit forces a block to exact dimensions on its own ground. Every band is
-// squared off this way, because a row one cell short is a transparent gap that
-// shows whatever the terminal had there before.
 func fit(lines []string, w, h int, bg color.Color) []string {
 	out := make([]string, 0, h)
 	for i := range h {
@@ -161,10 +122,6 @@ func fit(lines []string, w, h int, bg color.Color) []string {
 	return out
 }
 
-// ghost re-renders a frame at mute weight so the end card has something honest
-// behind it: the final state of the run it is reporting on, not a decoration.
-// It is a redraw rather than an SGR rewrite because rewriting the escape codes
-// of a frame is a capture shortcut that mangles the app's own colours.
 func ghost(lines []string, pal overlay.Palette) []string {
 	dim := ink(pal.Canvas, pal.FgMute)
 	out := make([]string, len(lines))

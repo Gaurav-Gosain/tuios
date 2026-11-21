@@ -52,8 +52,6 @@ func Recover() {
 		panic(r)
 	}
 	stack := debug.Stack()
-	// A second goroutine that panics at the same time waits here until the
-	// first one has ended the process.
 	exiting.Lock()
 	(*f)()
 	fmt.Fprintf(os.Stderr, "panic: %v\n\n%s", r, stack)

@@ -10,33 +10,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 )
 
-// herdr 0.9.4 and later install a GitHub plugin into a folder of its own for
-// each install, plugins/github-installations/<plugin>/<install>/checkout, and
-// mark the install with an empty .in-use file. Every herdr server and every
-// plugin command herdr runs holds a shared lock on that file. herdr deletes an
-// install that its registry no longer names, after an update or an uninstall,
-// only when it gets an exclusive lock on the file without waiting
-// (src/plugin_installations.rs in herdr: create_lease, retain_checkout,
-// command_lease, reclaim).
-//
-// A command tuios runs from such a folder holds the same shared lock, so herdr
-// leaves the files of a running command in place. herdr takes the lock with
-// Rust's File::lock_shared: flock(LOCK_SH) on Unix, LockFileEx over the whole
-// file on Windows. lockShared takes it the same way.
-
 const (
-	// leaseName is herdr's marker file in an install folder.
-	leaseName = ".in-use"
-	// registryLockName is the file herdr locks while it reads or changes
-	// plugins.json, and while it deletes installs.
+	leaseName        = ".in-use"
 	registryLockName = ".plugins.lock"
 )
 
-// leaseInstall is the install folder that holds root, when root is in a
-// checkout herdr installed: <herdr>/plugins/github-installations/<a>/<b>
-// for a root at <b>/checkout or below it. Both paths have their links
-// resolved first, as herdr's lease_path canonicalizes them, so a path that
-// does not exist names no install.
 func leaseInstall(herdrConfig, root string) (string, bool) {
 	if herdrConfig == "" || root == "" {
 		return "", false
@@ -90,7 +68,6 @@ func HoldLease(herdrConfig, root string) (release func(), err error) {
 	if err != nil {
 		return release, err
 	}
-	// Closing the file drops the registry lock.
 	defer func() { _ = reg.Close() }()
 	if err := lockExclusive(reg); err != nil {
 		return release, err

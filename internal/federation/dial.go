@@ -22,14 +22,7 @@ type Transport interface {
 	Diagnostic() string
 }
 
-// exitReporter is implemented by a transport that runs a child process. It
-// separates two failures that look identical from the pipe: the program gave up
-// (ssh could not reach the machine, or the remote tuios is missing), and the
-// program is running but is not a tuios link. Both end the read with no
-// preamble; only one of them is the machine's fault.
 type exitReporter interface {
-	// Exited reports whether the child has already finished, and its wait
-	// error when it has.
 	Exited() (bool, error)
 }
 
@@ -79,7 +72,6 @@ func SSHDialerEnv(sshBinary string, env func(Host) []string) Dialer {
 	}
 }
 
-// linkArgs is the argv SSHDialer runs, split out so a test can read it.
 func linkArgs(h Host) []string {
 	return SSHArgs(h, h.remoteCommand(true, "stdio-proxy"))
 }
@@ -94,30 +86,16 @@ func SSHArgs(h Host, remoteCmd string) []string {
 	args := []string{
 		"-o", "BatchMode=yes",
 		"-o", "ConnectTimeout=" + strconv.Itoa(secs),
-		// No pseudo-terminal: the pipe carries frames, and a pty would
-		// translate them.
 		"-T",
 	}
 	args = append(args, h.SSHOptions...)
 	args = append(args, sharingOptions(h)...)
 	args = append(args, keepaliveOptions()...)
-	// One string: ssh joins its command words with spaces and the far
-	// side's login shell re-parses them, so what is sent is what that
-	// shell reads. See remote.go for what it says when no command is
-	// configured.
-	// -- ends ssh's options. Without it ssh reads options after the host
-	// name as well, so a command starting with a dash would be one.
 	return append(args, "--", h.Addr, remoteCmd)
 }
 
-// sharingPersist is how long a shared master connection outlives its last
-// ssh. It covers the gaps of a run, such as the build of a binary between the
-// probe and the install, and it is the limit on a master the run did not stop.
 const sharingPersist = "10m"
 
-// sharingOptions are the options that make ssh share the connection at
-// h.ControlPath. A host with no path rides a master the person opened, when
-// there is one (see reuseOptions).
 func sharingOptions(h Host) []string {
 	if h.ControlPath == "" && h.fresh {
 		return freshOptions()
@@ -138,40 +116,11 @@ func StopSharingArgs(h Host) []string {
 	return []string{"-o", "ControlPath=" + h.ControlPath, "-O", "exit", "--", h.Addr}
 }
 
-// The keepalive settings.
-//
-// A link to a cloud host sits idle whenever nobody types, and an idle TCP
-// connection through a NAT or a stateful firewall is dropped without either end
-// being told. ssh notices only when something tries to write, which for an
-// attached session is the next keystroke: the person types, and the link they
-// were using turns out to have been dead for twenty minutes. That is the
-// failure these three options exist to stop.
-//
-// ServerAliveInterval sends an encrypted probe when the connection has been
-// quiet that long. Fifteen seconds is chosen against the two numbers that
-// matter. Middlebox idle timeouts start around thirty seconds at the
-// aggressive end, so the probe has to be comfortably under that to hold the
-// mapping open. And the cost is four small packets a minute per host, which a
-// laptop radio does not notice; going to sixty seconds would save nothing worth
-// having and would sit above the timeouts that cause this.
-//
-// ServerAliveCountMax is how many unanswered probes end the connection, so the
-// pair decides how long a dead path stays undetected: 15 x 3 is forty-five
-// seconds. Detection is what starts the client's reconnect, so it is a floor on
-// how long a person stares at a frozen pane. Three is the smallest count that
-// still rides out a couple of lost packets on a mobile link, which is what
-// stops a brief drop-out from being reported as a dead host.
-//
-// TCPKeepAlive is the kernel's own probe. It is redundant with the two above
-// while the link is up and it is not redundant when ssh is blocked writing:
-// it is what makes the socket fail rather than block forever.
 const (
 	sshServerAliveInterval = 15
 	sshServerAliveCountMax = 3
 )
 
-// keepaliveOptions is the -o list that keeps an idle link alive and reports a
-// dead one.
 func keepaliveOptions() []string {
 	return []string{
 		"-o", "ServerAliveInterval=" + strconv.Itoa(sshServerAliveInterval),
@@ -193,13 +142,8 @@ func CommandDialer(name string, args ...string) Dialer {
 	return commandDialerEnv(nil, name, args...)
 }
 
-// commandDialerEnv is CommandDialer with the child's environment. Nil keeps
-// this process's.
 func commandDialerEnv(env []string, name string, args ...string) Dialer {
 	return func(ctx context.Context, _ Host) (Transport, error) {
-		// The context is not attached to the command: a dial context expires
-		// once the handshake is done, and CommandContext would kill the child
-		// at that moment. Close ends the process.
 		cmd := childproc.Command(name, args...)
 		cmd.Env = env
 		stdin, err := cmd.StdinPipe()
@@ -223,8 +167,6 @@ func commandDialerEnv(env []string, name string, args ...string) Dialer {
 	}
 }
 
-// diagnosticLimit bounds captured stderr. The far side is untrusted and stderr
-// is unframed, so it gets a ceiling like everything else that crosses.
 const diagnosticLimit = 4 << 10
 
 type cmdTransport struct {
@@ -232,9 +174,6 @@ type cmdTransport struct {
 	in  io.WriteCloser
 	out io.ReadCloser
 
-	// done closes when the child has been reaped. exitErr is its wait error,
-	// read only after done is closed, so Exited never blocks and Close never
-	// calls Wait twice.
 	done    chan struct{}
 	exitErr error
 	once    sync.Once
@@ -250,8 +189,6 @@ func (t *cmdTransport) Close() error {
 		if t.cmd.Process != nil {
 			_ = t.cmd.Process.Kill()
 		}
-		// Wait is owned by the goroutine started at dial, so Close waits on it
-		// rather than calling Wait a second time.
 		select {
 		case <-t.done:
 		case <-time.After(2 * time.Second):
@@ -260,8 +197,6 @@ func (t *cmdTransport) Close() error {
 	return nil
 }
 
-// Exited reports whether the child process has already finished. It never
-// blocks: a still-running child is reported as running.
 func (t *cmdTransport) Exited() (bool, error) {
 	select {
 	case <-t.done:
@@ -278,9 +213,6 @@ func (t *cmdTransport) Diagnostic() string {
 	return ""
 }
 
-// boundedBuffer keeps at most limit bytes of what is written to it and drops
-// the rest. It is what stops a remote that writes forever on stderr from
-// growing the hub's memory.
 type boundedBuffer struct {
 	mu    sync.Mutex
 	buf   []byte

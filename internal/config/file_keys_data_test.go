@@ -9,45 +9,15 @@ import (
 	"time"
 )
 
-// FileKey is a config.toml key that the option registry (optionSpecs) does
-// not carry: a list, a table under a name such as [hosts.NAME], or a key that
-// must not change while tuios runs.
-//
-// fileKeys is kept apart from optionSpecs on purpose. Every caller that
-// changes a setting at run time reads optionSpecs: set-option and set-config,
-// the settings page, look apply, the browser tour and the CLI flags. A key
-// that is not there cannot be set by any of them, so a pane cannot widen its
-// own grants with set-option agents.permissions.mode. fileKeys exists so that
-// docs/config-options.md describes these keys too, from the code, and the
-// hand-written tables in docs/CONFIGURATION.md can go.
-// TestFileKeysCannotBeSetAtRunTime fails if a later change lets one of them
-// through.
-//
-// This is a test file on purpose: nothing in tuios reads fileKeys at run
-// time, so the shipped binary does not carry the table. The tests and the
-// generator of docs/config-options.md read it. internal/app's settings test
-// reads the same paths from that generated page.
 type FileKey struct {
-	// Path is the dotted path. NAME stands for a name the person chooses,
-	// such as the name of a host.
-	Path string
-	// Type is bool, int, string, list (of values), map (of a name to a
-	// value), table (a table whose keys Description names) or tables (a list
-	// of such tables).
-	Type    string
-	Section string
-	// Description is one or two sentences of plain English.
+	Path        string
+	Type        string
+	Section     string
 	Description string
-	// Default is what the key is when the file does not set it. It is
-	// derived from DefaultConfig when DefaultConfig sets the field. Write
-	// it only for a field DefaultConfig leaves unset, in words when the
-	// default is not a value ("the receive folder").
-	Default  string
-	Accepted []string
+	Default     string
+	Accepted    []string
 }
 
-// The types a FileKey can have, besides OptionBool, OptionInt and
-// OptionString.
 const (
 	FileKeyList   = "list"
 	FileKeyMap    = "map"
@@ -55,7 +25,6 @@ const (
 	FileKeyTables = "tables"
 )
 
-// tomlList writes a list of text as TOML writes it.
 func tomlList(items []string) string {
 	quoted := make([]string, len(items))
 	for i, s := range items {
@@ -64,15 +33,12 @@ func tomlList(items []string) string {
 	return "[" + strings.Join(quoted, ", ") + "]"
 }
 
-// goDuration writes a duration as a person writes it in the file: 10m, 2h.
 func goDuration(d time.Duration) string {
 	s := d.String()
 	s = strings.TrimSuffix(s, "0s")
 	return strings.TrimSuffix(s, "0m")
 }
 
-// dockLookKey is a [dock] key that a look may set too (see lookFileKeys).
-// Its description and default come from that table.
 func dockLookKey(path string) FileKey {
 	k := lookFileKeys[path]
 	desc := strings.TrimSuffix(k.Description, ".") + ". A look can set it."
@@ -83,13 +49,10 @@ func dockLookKey(path string) FileKey {
 	return FileKey{Path: path, Type: typ, Section: "dock", Description: desc, Default: k.Default, Accepted: slices.DeleteFunc(slices.Clone(k.Accepted), func(s string) bool { return s == "" })}
 }
 
-// fileKeys is every config.toml key outside optionSpecs, but for the two
-// kinds of table that have a reference of their own (see fileKeysSkipped).
 var fileKeys = []FileKey{
 	{Path: "workspaces.base_index", Type: OptionInt, Section: "workspaces", Default: "1", Accepted: []string{"0", "1"},
 		Description: "Number workspaces and their default digit keys from 0 or 1. The daemon's workspace IDs stay one-based."},
 
-	// [keybindings]: the keys that are not a section of bindings.
 	{Path: "keybindings.preset", Type: OptionString, Section: "keybindings", Accepted: []string{"tuios", "tmux", "screen", "zellij"},
 		Description: "The keys of another multiplexer, put over the tuios defaults. Empty is tuios. See KEYBINDINGS.md."},
 	{Path: "keybindings.leader_key", Type: OptionString, Section: "keybindings",
@@ -107,7 +70,6 @@ var fileKeys = []FileKey{
 	{Path: "keybindings.repeat", Type: FileKeyList, Section: "keybindings", Default: "built in",
 		Description: "The actions that stay armed after the leader, as tmux bind -r does. The same key again runs the action again. An empty list turns repeat off."},
 
-	// [daemon]
 	{Path: "daemon.agent_binaries", Type: FileKeyList, Section: "daemon", Default: "[]",
 		Description: "More program names to treat as agents, added to the built-in list."},
 	{Path: "daemon.single_client", Type: OptionBool, Section: "daemon", Default: "false",
@@ -119,7 +81,6 @@ var fileKeys = []FileKey{
 	{Path: "daemon.respond_from_shell", Type: OptionBool, Section: "daemon", Default: "false",
 		Description: "Let tuios respond, run from a shell outside every pane, answer the prompt of an agent. tuios refuses a caller inside a pane either way."},
 
-	// [hosts.NAME]
 	{Path: "hosts.NAME.addr", Type: OptionString, Section: "hosts", Default: "required",
 		Description: "The address of the machine: anything ssh accepts, an ssh_config alias too. tuios ignores and logs a host with no addr, or with one that starts with -."},
 	{Path: "hosts.NAME.connect_timeout", Type: OptionInt, Section: "hosts", Default: "10",
@@ -147,7 +108,6 @@ var fileKeys = []FileKey{
 	{Path: "hosts.NAME.files_max_entries", Type: OptionInt, Section: "hosts", Default: strconv.Itoa(DefaultFilesMaxEntries),
 		Description: "The most new files and folders the machine may make here in ten minutes. Past it, a copy waits. 0 turns the bound off."},
 
-	// [tailscale]
 	{Path: "tailscale.enabled", Type: OptionBool, Section: "tailscale", Default: "true",
 		Description: "Offer the machines of your tailnet as addresses. The list is empty on a machine that is not on a tailnet."},
 	{Path: "tailscale.addr", Type: OptionString, Section: "tailscale", Default: "dns", Accepted: []string{"dns", "name", "ip"},
@@ -173,8 +133,6 @@ var fileKeys = []FileKey{
 	{Path: "tailscale.socket", Type: OptionString, Section: "tailscale",
 		Description: "The path to the tailscaled socket, when it is not in the usual place."},
 
-	// [agents]: the tables under it, and its keys that hold a word with a
-	// meaning of its own.
 	{Path: "agents.herdr_protocol", Type: OptionString, Section: "agents", Default: "always", Accepted: []string{"always", "agents", "off"},
 		Description: "Which panes learn about the socket for the herdr pane state protocol: always for every pane, agents for a pane that starts such a harness, off for none."},
 	{Path: "agents.host_program_status", Type: OptionString, Section: "agents", Default: "session", Accepted: []string{"session", "panes", "off"},
@@ -218,7 +176,6 @@ var fileKeys = []FileKey{
 	{Path: "agents.presets.NAME", Type: FileKeyTable, Section: "agents", Default: "none",
 		Description: "A way to start one kind of agent: tuios start-agent --preset NAME. It names the agent and any of args, add_dirs, grants, model, effort, permission_mode, env, after_ready and ready_timeout."},
 
-	// [notify]
 	{Path: "notify.enabled", Type: OptionBool, Section: "notify", Default: "true",
 		Description: "Send notifications to your phone. false turns every notification off. tuios sends nothing without a provider."},
 	{Path: "notify.web_url", Type: OptionString, Section: "notify",
@@ -251,7 +208,6 @@ var fileKeys = []FileKey{
 	{Path: "notify.webpush.allow_insecure", Type: OptionBool, Section: "notify", Default: "false",
 		Description: "Let tuios send to a push service on a loopback or private address, by https or http."},
 
-	// [dock]
 	dockLookKey("dock.left"),
 	dockLookKey("dock.center"),
 	dockLookKey("dock.right"),
@@ -290,8 +246,6 @@ var fileKeys = []FileKey{
 	dockLookKey("dock.tabs.bell_marker"),
 	dockLookKey("dock.tabs.activity_marker"),
 
-	// The session rail. Its commands are file-only so that a pane cannot
-	// replace a command that runs in the client.
 	{Path: "appearance.sidebar.custom.title", Type: OptionString, Section: "sidebar", Default: SidebarCustomDefaultTitle,
 		Description: "The heading of the custom section of the rail."},
 	{Path: "appearance.sidebar.custom.command", Type: OptionString, Section: "sidebar",
@@ -313,7 +267,6 @@ var fileKeys = []FileKey{
 	{Path: "appearance.scroll_column_presets", Type: FileKeyList, Section: "appearance", Default: "[33, 50, 55, 67, 90, 100]",
 		Description: "The widths that scroll_cycle_width steps through in the scrolling layout, in percent of the screen."},
 
-	// Lists and tables of other sections.
 	{Path: "notifications.agent.sounds.done", Type: OptionString, Section: "notifications", Default: "built in",
 		Description: "A sound file to play when an agent stops."},
 	{Path: "notifications.agent.sounds.needs_input", Type: OptionString, Section: "notifications", Default: "built in",
@@ -346,20 +299,11 @@ var fileKeys = []FileKey{
 		Description: "More plugin folders, or manifests, to list. tuios plugins link adds to it."},
 }
 
-// fileKeysSkipped are the parts of UserConfig that neither optionSpecs nor
-// fileKeys describes, each with the reason.
 var fileKeysSkipped = map[string]string{
-	// Each section of [keybindings] maps an action to keys. KEYBINDINGS.md
-	// and docs/keybindings-defaults.md (written from the keymaps) are their
-	// reference. The keys of [keybindings] that are not bindings are in
-	// fileKeys.
 	"keybindings": "a binding section; see KEYBINDINGS.md",
-	// [hooks] maps an event to commands. HOOKS.md lists the events.
-	"hooks": "a map of event to commands; see HOOKS.md",
+	"hooks":       "a map of event to commands; see HOOKS.md",
 }
 
-// FileKeys returns fileKeys with the defaults that DefaultConfig gives
-// filled in.
 func FileKeys() []FileKey {
 	def := DefaultConfig()
 	out := slices.Clone(fileKeys)
@@ -371,8 +315,6 @@ func FileKeys() []FileKey {
 	return out
 }
 
-// IsFileKey reports whether path is a file-only key, or a key inside a
-// file-only table. NAME matches any one part of the path.
 func IsFileKey(path string) bool {
 	parts := strings.Split(path, ".")
 	for _, k := range fileKeys {
@@ -388,9 +330,6 @@ func IsFileKey(path string) bool {
 	return false
 }
 
-// fileKeyDefault is the value that DefaultConfig sets at path, as the file
-// writes it. ok is false for a path under a NAME, and for a field that
-// DefaultConfig leaves unset or empty.
 func fileKeyDefault(cfg *UserConfig, path string) (string, bool) {
 	if strings.Contains(path, "NAME") {
 		return "", false
@@ -447,7 +386,6 @@ func fileKeyDefault(cfg *UserConfig, path string) (string, bool) {
 	return "", false
 }
 
-// fieldByTOMLNameDeep is fieldByTOMLName, inside embedded structs too.
 func fieldByTOMLNameDeep(v reflect.Value, name string) (reflect.Value, bool) {
 	if f, ok := fieldByTOMLName(v, name); ok {
 		return f, true

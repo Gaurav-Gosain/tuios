@@ -144,7 +144,6 @@ func InstallFile(fsys FS, link, exe, tag string) (Method, error) {
 	}
 
 	if err := fsys.Rename(tmp, link); err != nil {
-		// The old file may be running. Move it aside, then try again.
 		aside := link + ".old-" + tag
 		_ = fsys.Remove(aside)
 		if aerr := fsys.Rename(link, aside); aerr != nil {
@@ -161,7 +160,6 @@ func InstallFile(fsys FS, link, exe, tag string) (Method, error) {
 	return m, nil
 }
 
-// current reports whether link already runs exe, and how it does.
 func current(fsys FS, link, exe string) (Method, bool) {
 	lst, err := fsys.Lstat(link)
 	if err != nil {
@@ -187,8 +185,6 @@ func current(fsys FS, link, exe string) (Method, bool) {
 	return "", false
 }
 
-// sameBytes reports whether two files hold the same bytes. An error is a
-// difference, so the link is made again.
 func sameBytes(fsys FS, a, b string) bool {
 	fa, err := fsys.Open(a)
 	if err != nil {
@@ -219,11 +215,6 @@ func sameBytes(fsys FS, a, b string) bool {
 	}
 }
 
-// sweep removes the files an earlier InstallFile left beside link: a file
-// moved aside while it ran, or a half-made one from a process that died.
-// A file moved aside that still runs cannot be removed, and stays until a
-// later start. A half-made file whose process still runs is that process's
-// work in progress, and is left alone.
 func sweep(fsys FS, link string) {
 	for _, suffix := range []string{".old-", ".new-"} {
 		names, err := fsys.Glob(globEscape(link) + suffix + "*")
@@ -242,9 +233,6 @@ func sweep(fsys FS, link string) {
 	}
 }
 
-// globEscape quotes the glob metacharacters in a path. On Windows a
-// backslash is a separator and filepath.Glob has no escape, so there the
-// characters are put in a class instead.
 func globEscape(p string) string {
 	var b strings.Builder
 	for _, r := range p {

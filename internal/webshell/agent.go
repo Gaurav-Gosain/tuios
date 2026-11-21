@@ -7,14 +7,6 @@ import (
 	"unicode/utf8"
 )
 
-// Scripted coding agents in the style of Claude Code, Codex and Gemini CLI.
-// Each one works through a short script: it reads files, thinks, edits, and
-// for some steps asks the person first. It draws what its harness manifest
-// keys on, reports each state to tuios the way a hooked agent does, so the
-// rail, the title glyph and the alerts all follow it, and keeps a record of
-// its run (agents.go) for the agents view. When a turn ends it waits at its
-// input line, and the next line typed there is a new turn.
-
 // AgentHarness is the harness id the claude agent reports as.
 const AgentHarness = "claude-code"
 
@@ -42,22 +34,16 @@ const indexDark = `<!doctype html>
 <h1>it works</h1>
 `
 
-// persona is one pretend agent: how it looks and what its first turn does.
 type persona struct {
-	name    string // the command, such as "claude"
-	harness string // the harness id it reports as
-	product string // the name in its welcome box
-	accent  string // its ink
-	task    string // the task when none is given
-	// you, say and result start the person's prompt, an agent message and
-	// a tool's result. pick marks the chosen option of a menu.
+	name                   string
+	harness                string
+	product                string
+	accent                 string
+	task                   string
 	you, say, result, pick string
-	// tool is the line for a tool call.
-	tool func(name, target string) string
-	// spin is the line shown while it thinks.
-	spin func(i, secs int) string
-	// first is the first turn. It reports false when the person stopped it.
-	first func(r *agentRun, task string) bool
+	tool                   func(name, target string) string
+	spin                   func(i, secs int) string
+	first                  func(r *agentRun, task string) bool
 }
 
 var personas map[string]*persona
@@ -104,26 +90,19 @@ func initPersonas() {
 	}
 }
 
-// agentRun is one agent running in a pane.
 type agentRun struct {
-	t *TTY
-	p *persona
-	a *Agent
-	// pending is input read and not used yet: the rest of a chunk after the
-	// key that answered a menu, which is the next prompt's.
-	pending []byte
-	// changed says the turn edited a file, so its end takes a checkpoint.
-	changed bool
-	// lastFile is the file the agent last read or edited.
+	t        *TTY
+	p        *persona
+	a        *Agent
+	pending  []byte
+	changed  bool
 	lastFile string
 	turns    int
 	tools    int
 	prompts  int
-	// start is when the turn started.
-	start time.Time
+	start    time.Time
 }
 
-// cmdAgent runs the agent args[0] names. "agent" is another name for claude.
 func cmdAgent(s *shell, args []string, _ string) int {
 	t := s.t
 	p := personas[args[0]]
@@ -141,8 +120,6 @@ func cmdAgent(s *shell, args []string, _ string) int {
 	r.startTurn(task)
 	first := p.first
 	if !strings.EqualFold(task, p.task) {
-		// A task of the person's own: the scripted turn is for the task
-		// the agent shows off.
 		first = genericTurn
 	}
 	if !first(r, task) {
@@ -162,7 +139,6 @@ func cmdAgent(s *shell, args []string, _ string) int {
 	}
 }
 
-// welcome is the box the agent opens with.
 func (r *agentRun) welcome(cols int) []string {
 	w := agentWidth(cols)
 	ink := r.p.accent
@@ -175,14 +151,10 @@ func (r *agentRun) welcome(cols int) []string {
 	}
 }
 
-// setTitle names the pane after the task, in a word or two, the way a
-// real agent sets the terminal title.
 func (r *agentRun) setTitle(task string) {
 	r.t.write("\x1b]2;" + agentTitle(task) + "\x07")
 }
 
-// titleSkip are the words a title leaves out: the small ones, and the verb
-// most tasks start with.
 var titleSkip map[string]bool
 
 func initTitleSkip() {
@@ -194,8 +166,6 @@ func initTitleSkip() {
 	}
 }
 
-// agentTitle is a short name for a task: its first words that say
-// something, at most two and 16 cells, so an agents view row shows it whole.
 func agentTitle(task string) string {
 	var words []string
 	for w := range strings.FieldsSeq(strings.ToLower(task)) {
@@ -217,21 +187,17 @@ func agentTitle(task string) string {
 	return fit(strings.Join(words, " "), 16)
 }
 
-// report tells tuios what state this pane's agent is in. See
-// app.ReportAgentState, which the browser build routes this to.
 func (t *TTY) report(state, message, kind, harness string) {
 	t.Emit(EventAgentReport, map[string]any{
 		"state": state, "message": message, "kind": kind, "harness": harness,
 	})
 }
 
-// report records the state and tells tuios.
 func (r *agentRun) report(state, message, kind string) {
 	r.a.change(r.t, func() { r.a.state, r.a.message = state, message })
 	r.t.report(state, message, kind, r.p.harness)
 }
 
-// startTurn shows the person's prompt and records it.
 func (r *agentRun) startTurn(text string) {
 	r.turns++
 	r.changed = false
@@ -241,8 +207,6 @@ func (r *agentRun) startTurn(text string) {
 	r.report("working", "Reading the files", "")
 }
 
-// followUp is every turn after the first: the agent reads the file it last
-// worked on, thinks, and says it did what it was asked.
 func (r *agentRun) followUp(text string) bool {
 	file := r.lastFile
 	if file == "" {
@@ -256,7 +220,6 @@ func (r *agentRun) followUp(text string) bool {
 	return true
 }
 
-// read shows and records a tool that reads a file.
 func (r *agentRun) read(file, note string) bool {
 	r.lastFile = file
 	id := r.toolID()
@@ -267,7 +230,6 @@ func (r *agentRun) read(file, note string) bool {
 	return r.pause(450 * time.Millisecond)
 }
 
-// readName is what the agent calls reading a file.
 func (r *agentRun) readName() string {
 	switch r.p.name {
 	case "codex":
@@ -278,7 +240,6 @@ func (r *agentRun) readName() string {
 	return "Read"
 }
 
-// shell shows and records a command the agent ran.
 func (r *agentRun) shell(cmd, out string) bool {
 	id := r.toolID()
 	name := "Bash"
@@ -297,8 +258,6 @@ func (r *agentRun) toolID() string {
 	return "t" + strconv.Itoa(r.tools)
 }
 
-// think shows the spinner for steps of 110 ms, with thought as the agent's
-// hidden reasoning when it is not empty.
 func (r *agentRun) think(steps int, thought string) bool {
 	r.report("working", "Thinking", "")
 	if thought != "" {
@@ -306,8 +265,6 @@ func (r *agentRun) think(steps int, thought string) bool {
 	}
 	r.t.Print("\r\n")
 	start := time.Now()
-	// The spinner is drawn outside the log: it is gone once the agent has
-	// thought, and a line that wrapped would leave half of it behind.
 	for i := range steps {
 		cols, _ := r.t.Size()
 		r.t.write("\r\x1b[K" + fit(r.p.spin(i, int(time.Since(start).Seconds())), max(cols-1, 1)))
@@ -320,7 +277,6 @@ func (r *agentRun) think(steps int, thought string) bool {
 	return true
 }
 
-// say shows and records a message from the agent.
 func (r *agentRun) say(text string) {
 	lead := r.p.say
 	r.t.Lay(func(cols int) []string {
@@ -337,9 +293,6 @@ func (r *agentRun) say(text string) {
 	r.a.add(r.t, AgentEntry{Role: "assistant", Kind: "text", Text: text})
 }
 
-// edit shows an edit and records it. With ask, the agent asks before it
-// makes it, and approved says what the person chose. content, when not
-// empty, is what the file holds after the edit.
 func (r *agentRun) edit(file string, d AgentDiff, content string, ask bool) (approved, ok bool) {
 	r.lastFile = file
 	id := r.toolID()
@@ -407,16 +360,10 @@ func (r *agentRun) edit(file string, d AgentDiff, content string, ask bool) (app
 	return true, r.pause(400 * time.Millisecond)
 }
 
-// ask asks the person a question with options, and reports the index of
-// the answer, or -1 when they stopped the agent instead.
 func (r *agentRun) ask(question string, options []string) int {
 	return r.menu("question", question, []string{bold + question + reset}, options, false)
 }
 
-// menu draws a box of lines with numbered options under it, reports
-// needs_input of kind, and waits for an answer. It returns the index of the
-// option chosen, or -1 when the person stopped the agent. For an approval,
-// y approves and n or esc chooses the last option.
 func (r *agentRun) menu(kind, summary string, lines, options []string, approval bool) int {
 	t := r.t
 	ink := agentGrey
@@ -435,9 +382,6 @@ func (r *agentRun) menu(kind, summary string, lines, options []string, approval 
 		}
 		return append(out, inkBoxLine(ink, w, ""), ink+"╰"+strings.Repeat("─", w-2)+"╯"+reset)
 	}
-	// The box is drawn outside the log while the menu moves. Every line fits
-	// the pane, so moving up its length lands on its first line. The log
-	// keeps the box with the answer marked once there is one.
 	sel, drawn := 0, 0
 	draw := func() {
 		cols, _ := t.Size()
@@ -470,7 +414,6 @@ func (r *agentRun) menu(kind, summary string, lines, options []string, approval 
 		message = "Edit " + baseName(strings.TrimPrefix(summary, "approve Edit: ")) + "?"
 	}
 	r.report("needs_input", message, kind)
-	// A bell is how a real agent asks for attention.
 	t.Print("\a")
 
 	choice := -2
@@ -532,8 +475,6 @@ func (r *agentRun) menu(kind, summary string, lines, options []string, approval 
 	return choice
 }
 
-// next is the next input: what a menu left, else the next chunk from the
-// pane. resized says the pane changed size instead.
 func (r *agentRun) next() (b []byte, resized, ok bool) {
 	if len(r.pending) > 0 {
 		b, r.pending = r.pending, nil
@@ -547,8 +488,6 @@ func (r *agentRun) next() (b []byte, resized, ok bool) {
 	}
 }
 
-// finish ends a turn: the summary, a checkpoint when the turn changed a
-// file, and done.
 func (r *agentRun) finish(summary string) {
 	if r.changed {
 		r.a.change(r.t, func() {
@@ -559,17 +498,13 @@ func (r *agentRun) finish(summary string) {
 	r.report("done", summary, "")
 }
 
-// interrupted ends a turn the person stopped.
 func (r *agentRun) interrupted() {
 	r.t.Print("\r\n" + agentGrey + "  ⎿  Interrupted by user" + reset + "\r\n")
 	r.report("idle", "Interrupted", "")
 }
 
-// restHint is the line under the input while the agent waits.
 const restHint = "Type the next task. ctrl+d goes back to the shell."
 
-// rest waits at the input line for the next task, and reports false when
-// the person leaves the agent.
 func (r *agentRun) rest() (string, bool) {
 	t := r.t
 	r.a.change(t, func() { r.a.resting, r.a.rests = true, r.a.rests+1 })
@@ -616,7 +551,6 @@ func (r *agentRun) rest() (string, bool) {
 					line = line[:len(line)-1]
 				}
 			case c == 0x1b:
-				// An escape sequence moves nothing here: skip it whole.
 				if i+1 < len(b) && (b[i+1] == '[' || b[i+1] == 'O') {
 					i += 2
 					for i < len(b) && (b[i] < 0x40 || b[i] > 0x7e) {
@@ -635,7 +569,6 @@ func (r *agentRun) rest() (string, bool) {
 	}
 }
 
-// pause waits, and reports false when Ctrl+C or Esc interrupted it.
 func (r *agentRun) pause(d time.Duration) bool {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
@@ -660,8 +593,6 @@ func (r *agentRun) pause(d time.Duration) bool {
 	}
 }
 
-// claudeTurn adds a dark mode toggle to the website, and asks before it
-// edits style.css.
 func claudeTurn(r *agentRun, _ string) bool {
 	if !r.read("projects/website/index.html", "Read 4 lines") || !r.read("projects/website/style.css", "Read 1 line") {
 		return false
@@ -698,14 +629,12 @@ func claudeTurn(r *agentRun, _ string) bool {
 	return true
 }
 
-// darkPalettes are the colours geminiTurn offers.
 var darkPalettes = []struct{ name, bg, fg, accent string }{
 	{"Catppuccin Mocha", "#1e1e2e", "#cdd6f4", "#cba6f7"},
 	{"Tokyo Night", "#1a1b26", "#c0caf5", "#7aa2f7"},
 	{"Gruvbox Dark", "#282828", "#ebdbb2", "#fabd2f"},
 }
 
-// geminiTurn picks the colours of the dark theme, and asks which ones.
 func geminiTurn(r *agentRun, _ string) bool {
 	if !r.read("projects/website/style.css", "Read 1 line") || !r.think(14, "") {
 		return false
@@ -741,7 +670,6 @@ func geminiTurn(r *agentRun, _ string) bool {
 	return true
 }
 
-// codexTurn adds a test to the Go project, and runs go vet.
 func codexTurn(r *agentRun, _ string) bool {
 	if !r.read("projects/hello/greet.go", "Read greet.go") || !r.read("projects/hello/greet_test.go", "Read greet_test.go") {
 		return false
@@ -769,7 +697,6 @@ func codexTurn(r *agentRun, _ string) bool {
 	return true
 }
 
-// planSteps are the lines genericTurn writes, a few of them for each task.
 var planSteps = []string{
 	"Find the files the change touches.",
 	"Keep the change small, one thing at a time.",
@@ -780,9 +707,6 @@ var planSteps = []string{
 	"Ask before anything that deletes a file.",
 }
 
-// genericTurn is the first turn for a task the agent has no script for: it
-// reads the README, thinks, and writes a short plan for the task to a notes
-// file. Each pane picks its own steps, so the attempts of a fan differ.
 func genericTurn(r *agentRun, task string) bool {
 	if !r.read("projects/website/index.html", "Read 4 lines") || !r.think(16, "") {
 		return false
@@ -812,8 +736,6 @@ func genericTurn(r *agentRun, task string) bool {
 	return true
 }
 
-// diffLines draws a diff as the edit box shows it: the line number, the
-// sign and the text, added lines in green.
 func diffLines(d AgentDiff) []string {
 	var out []string
 	for _, h := range d.Hunks {
@@ -836,7 +758,6 @@ func diffLines(d AgentDiff) []string {
 	return out
 }
 
-// baseName is the last element of a slash-separated path.
 func baseName(p string) string {
 	if i := strings.LastIndexByte(p, '/'); i >= 0 {
 		return p[i+1:]
@@ -844,7 +765,6 @@ func baseName(p string) string {
 	return p
 }
 
-// stripEscapes removes the CSI escapes from s.
 func stripEscapes(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
@@ -861,22 +781,17 @@ func stripEscapes(s string) string {
 	return b.String()
 }
 
-// agentWidth is the width of the agent's boxes in a pane cols cells wide:
-// the pane, up to 60 cells.
 func agentWidth(cols int) int { return max(min(cols, 60), 4) }
 
-// inkBoxLine draws one row of a box in ink, padded to width w.
 func inkBoxLine(ink string, w int, content string) string {
 	return ink + "│" + reset + " " + padVisible(content, w-4) + " " + ink + "│" + reset
 }
 
-// padVisible pads or cuts a string with escapes in it to width visible cells.
 func padVisible(s string, width int) string {
 	n := visibleLen(s)
 	if n <= width {
 		return s + strings.Repeat(" ", width-n)
 	}
-	// Cut: walk the runes, copying escapes whole, until width cells are out.
 	var b strings.Builder
 	cells := 0
 	for i := 0; i < len(s) && cells < width; {
@@ -897,7 +812,6 @@ func padVisible(s string, width int) string {
 	return b.String() + reset
 }
 
-// visibleLen counts the cells a string takes, skipping CSI escapes.
 func visibleLen(s string) int {
 	n := 0
 	for i := 0; i < len(s); {

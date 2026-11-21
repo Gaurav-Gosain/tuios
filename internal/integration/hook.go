@@ -65,12 +65,6 @@ func HarnessIDs() []string {
 	}
 }
 
-// hintOwner resolves a TUIOS_AGENT value to a harness id: any harness the
-// bundled manifests describe, with or without a hook mapping here. A
-// TUIOS_AGENT naming one of them names the pane's owner even when that owner
-// has no integration, so a hook from any other harness in the pane is
-// foreign. It reports false for a name no manifest knows, which says nothing
-// about who owns the pane.
 func hintOwner(hint string) (string, bool) {
 	return harness.BundledCanonical(hint)
 }
@@ -264,13 +258,6 @@ const (
 	ContextJSON ContextOutput = "json"
 )
 
-// contextFor is how harness id adds context for event. Sources: the Claude
-// Code hooks reference (plain stdout is context for SessionStart and
-// UserPromptSubmit; additionalContext lands next to the tool result for
-// PostToolUse and PostToolUseFailure), and the Codex hooks guide ("Plain text
-// on stdout is added as extra developer context" for SessionStart and
-// UserPromptSubmit; "Plain text on stdout is ignored" for PostToolUse, which
-// takes additionalContext).
 func contextFor(id, event string) ContextOutput {
 	if id != ClaudeCode && id != Codex {
 		return ContextNone
@@ -356,10 +343,6 @@ func Translate(harnessName string, in Input) Decision {
 			return skip(id, in.Event, "foreign harness: "+AgentHintEnv+" names "+owner)
 		}
 	}
-	// Every harness hands its hooks a JSON object. Anything else, an empty
-	// stdin included, means the payload was lost on the way, and the event
-	// named on the command line is not enough to act on: a Stop that cannot
-	// be read might be a subagent's.
 	trimmed := strings.TrimSpace(string(in.Payload))
 	if trimmed == "" {
 		return skip(id, in.Event, "empty payload")
@@ -402,16 +385,11 @@ func Translate(harnessName string, in Input) Decision {
 	}
 }
 
-// withContext marks a decision whose event the harness reads as context. A
-// skip is marked only when it is Claude Code's compact SessionStart, the one
-// skip of a pane's own agent: the others are a nested or foreign harness, a
-// subagent, or a payload that did not parse.
 func withContext(d Decision, p fields) Decision {
 	if d.Report == nil && d.Skip != SkipCompact {
 		return d
 	}
 	if d.Report != nil && d.Report.State == "" {
-		// A subagent's event, which has no state of its own.
 		return d
 	}
 	d.Context = contextFor(d.Harness, d.Event)
@@ -482,8 +460,6 @@ func SessionStartHint(pane, session string, naming bool) string {
 		hintReach + hintSafety + name + "Run `tuios --skill` for everything else.\n"
 }
 
-// The fixed lines of the start hint. They name $TUIOS_SESSION rather than the
-// session, so a command copied from them stays right after a rename.
 const (
 	hintReach = "Agents here: `tuios list-agents -s \"$TUIOS_SESSION\"`. Ask one: `tuios ask-agent -s \"$TUIOS_SESSION\" -w NAME 'QUESTION'`. " +
 		"Leave mail: `tuios send-agent-message -s \"$TUIOS_SESSION\" -w NAME 'TEXT'`.\n"
@@ -494,15 +470,10 @@ const (
 	hintName   = "Name your pane after the task on the first request: `tuios set-window -w \"$TUIOS_PANE_ID\" --name 'TASK'`.\n"
 )
 
-// maxHintSession is the most runes of a session name the start hint shows.
 const maxHintSession = 64
 
-// fields reads a decoded payload without panicking on a field of the wrong
-// type: a harness that changes a field's type costs that field, not the hook.
 type fields map[string]any
 
-// str is the string at key, or "" when it is missing or not a string.
-//
 //go:noinline
 func (f fields) str(key string) string {
 	if v, ok := f[key].(string); ok {
@@ -518,9 +489,6 @@ func (f fields) obj(key string) fields {
 	return fields{}
 }
 
-// eventName is the event the command line named, else the payload's
-// hook_event_name, else the spellings other harnesses use for it: Copilot's
-// camelCase payloads say hookEventName and Crush's say event.
 func eventName(in Input, p fields) string {
 	if in.Event != "" {
 		return in.Event
@@ -528,8 +496,6 @@ func eventName(in Input, p fields) string {
 	return p.first("hook_event_name", "hookEventName", "event")
 }
 
-// first is the first of keys holding a non-empty string.
-//
 //go:noinline
 func (f fields) first(keys ...string) string {
 	for _, k := range keys {
@@ -540,8 +506,6 @@ func (f fields) first(keys ...string) string {
 	return ""
 }
 
-// identity copies the session id and transcript path every Claude-shaped
-// payload carries onto a report.
 func identity(r Report, p fields) Report {
 	r.SessionID = p.str("session_id")
 	r.TranscriptPath = p.str("transcript_path")

@@ -30,7 +30,6 @@ func TestOpenCodeExportTree(t *testing.T) {
 	t.Setenv(fakeOpenCodeEnv, "tree")
 	t.Setenv(fakeOpenCodePIDEnv, pidFile)
 
-	// The context ends once the child runs, as a timeout would end it.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
@@ -60,7 +59,7 @@ func TestOpenCodeExportTree(t *testing.T) {
 	}
 	h, err := windows.OpenProcess(windows.SYNCHRONIZE|windows.PROCESS_TERMINATE, false, uint32(pid))
 	if err != nil {
-		return // The child is gone.
+		return
 	}
 	defer func() { _ = windows.CloseHandle(h) }()
 	if ev, _ := windows.WaitForSingleObject(h, 5000); ev != windows.WAIT_OBJECT_0 {

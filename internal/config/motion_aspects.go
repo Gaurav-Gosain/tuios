@@ -32,8 +32,6 @@ const (
 	numAspects
 )
 
-// aspectLevels is the least appearance.motion level each aspect runs at.
-// Decoration needs full. Motion that says where something went needs basic.
 var aspectLevels = [numAspects]string{MotionBasic, MotionBasic, MotionBasic, MotionFull, MotionFull, MotionBasic, MotionBasic, MotionFull}
 
 // AspectSetting is one aspect as configured.
@@ -95,17 +93,12 @@ type MotionConfig struct {
 	Confetti    string `toml:"confetti"`
 }
 
-// fields returns the switch and the length of each aspect, in aspect order. A
-// nil length is an aspect with none.
 func (m *MotionConfig) fields() (sw [numAspects]*string, ms [numAspects]**int) {
 	sw = [numAspects]*string{&m.Workspace, &m.Layout, &m.Zoom, &m.Overlays, &m.Sidebar, &m.Scroll, &m.Copy, &m.Confetti}
 	ms = [numAspects]**int{&m.WorkspaceMs, &m.LayoutMs, &m.ZoomMs, &m.OverlaysMs, nil, &m.ScrollMs, nil, nil}
 	return
 }
 
-// foldOldMotionKeys moves the keys that [motion] replaced into it, and clears
-// them: appearance.workspace_transition, workspace_transition_ms and
-// zoom_animation. A [motion] key that is set wins.
 func foldOldMotionKeys(cfg *UserConfig) {
 	a, m := &cfg.Appearance, &cfg.Motion
 	if a.WorkspaceTransition != "" && m.Workspace == "" {
@@ -123,8 +116,6 @@ func foldOldMotionKeys(cfg *UserConfig) {
 	a.WorkspaceTransition, a.WorkspaceTransitionMs, a.ZoomAnimation = "", nil, nil
 }
 
-// fillMissingMotion folds the old keys, then replaces a bad or missing value
-// with the default.
 func fillMissingMotion(cfg *UserConfig) {
 	foldOldMotionKeys(cfg)
 	sw, ms := cfg.Motion.fields()
@@ -142,9 +133,6 @@ func fillMissingMotion(cfg *UserConfig) {
 	}
 }
 
-// applyMotionConfig copies [motion] into the settings. The old appearance keys
-// still count when they are set, which only a runtime set-config does after a
-// load has cleared them.
 func applyMotionConfig(cfg *UserConfig, s *Settings) {
 	c := cfg.Motion
 	a := &cfg.Appearance

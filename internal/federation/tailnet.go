@@ -7,27 +7,6 @@ import (
 	"strings"
 )
 
-// Address discovery on a tailnet: the machines a user could reasonably type as
-// a host's addr, read from the tailscaled already running on this machine.
-//
-// This is the same idea as sshalias.go and obeys the same rule. Nothing is
-// added automatically, and a host exists only because the user named it
-// (federation design, section 3). What is offered is a list of names to pick
-// from, so nobody has to remember what a machine is called or type out a
-// MagicDNS name by hand.
-//
-// It reads and never writes. The only call made is `tailscale status --json`,
-// which needs no root and no operator setting: the local API grants read to
-// any connection on the socket. If tailscaled is
-// not running, or the machine is not on a tailnet, the list is empty and
-// nothing else changes.
-//
-// Nothing here dials a tailnet address. A machine offered from this list is
-// reached the same way every other host is, by ssh, which already works over a
-// tailnet because MagicDNS names resolve like any other name. The tailnet is
-// how the name resolves and how the traffic is carried, not a second transport
-// inside tuios.
-
 // DefaultTailnetMax bounds the list. A large tailnet holds hundreds of
 // machines and a candidate list that long helps nobody.
 const DefaultTailnetMax = 50
@@ -185,7 +164,6 @@ func TailnetAddrFor(ctx context.Context, name string, opt TailnetOptions) (strin
 	return "", false
 }
 
-// tailnetAddr builds what a person would type for this machine.
 func tailnetAddr(m TailnetMachine, opt TailnetOptions) string {
 	addr := m.DNSName
 	switch opt.Addr {
@@ -210,8 +188,6 @@ func tailnetUser(m TailnetMachine, opt TailnetOptions) string {
 	return opt.User
 }
 
-// tailnetSkipReason is why a machine is not offered, in the words a person
-// would want to read on the row. Empty means it is offered.
 func tailnetSkipReason(m TailnetMachine, opt TailnetOptions) string {
 	switch {
 	case m.Self && !opt.Self:
@@ -242,9 +218,6 @@ func tailnetOSAllowed(os string, allowed []string) bool {
 	return false
 }
 
-// tailnetMatchesAny matches a pattern against both names a person might have
-// written it for. A pattern that does not compile matches nothing rather than
-// everything: a typo in a filter must not quietly widen it.
 func tailnetMatchesAny(m TailnetMachine, patterns []string) bool {
 	for _, pat := range patterns {
 		pat = strings.TrimSpace(pat)

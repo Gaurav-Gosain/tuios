@@ -14,13 +14,10 @@ import (
 
 const allowMenu = "//tuios:allow-menu"
 
-// menuDirs are the packages that open and close the leader's menus.
 var menuDirs = []string{"internal/app", "internal/input", "internal/learn"}
 
-// menuWriter is the one file that may write the leader's menu state.
 const menuWriter = "internal/app/menu_state.go"
 
-// menuFields are the fields of the leader's menu state.
 var menuFields = []string{"PrefixActive", "SubMenu", "Menu", "LastPrefixTime"}
 
 // TestOnlyMenuStateWritesTheLeader is the leader lint. The leader, its
@@ -88,7 +85,6 @@ func g(s *state)  { s.MenuOpen = true }
 	}
 }
 
-// menuWrites returns file:line for every write of a menu field in src.
 func menuWrites(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()

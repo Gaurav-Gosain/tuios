@@ -11,8 +11,6 @@ import (
 	"testing"
 )
 
-// globalSettingsReader is the one production file that may read
-// config.Global: app.NewOS falls back to it when it is given no Settings.
 const globalSettingsReader = "internal/app/factory.go"
 
 // TestNoProductionReadOfGlobalSettings is the Settings lint. config.Global was
@@ -73,7 +71,6 @@ func e() int    { return other.Global.PaneGap }
 	}
 }
 
-// globalSettingsUses lists each config.Global selector in src.
 func globalSettingsUses(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()

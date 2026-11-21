@@ -5,10 +5,6 @@ import (
 	"sync"
 )
 
-// What an agent shows, whatever protocol it speaks. The two clients translate
-// their protocol's messages into these, and the Session renders and reports
-// them.
-
 // Event is one thing the agent showed.
 type Event interface{ isEvent() }
 

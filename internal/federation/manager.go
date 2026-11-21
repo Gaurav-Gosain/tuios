@@ -57,18 +57,9 @@ type Options struct {
 	// when the link goes down. Same rules as OnStatus. Nil reports nothing.
 	OnMailHeld func(host string, held MailHeld)
 
-	// now is the clock, so tests can freeze it. Zero means time.Now.
-	now func() time.Time
-	// stallLimit is how long a full stream may hold the link's read loop
-	// before it is dropped. Zero means defaultStallLimit; tests shorten it.
-	stallLimit time.Duration
-	// connStallLimit is the same for a relayed connection, which carries an
-	// attached session rather than a listing. Zero means
-	// connectionStallLimit; tests shorten it.
+	now            func() time.Time
+	stallLimit     time.Duration
 	connStallLimit time.Duration
-	// linkQuietLimit is how long a link's pipe may carry no frame at all
-	// before a failed control call is read as a dead link rather than a slow
-	// one. Zero means defaultLinkQuietLimit; tests shorten it.
 	linkQuietLimit time.Duration
 }
 
@@ -78,13 +69,6 @@ type Options struct {
 // A dial that gives up shows a new URL on the next one.
 const DefaultApprovalWait = 10 * time.Minute
 
-// defaultLinkQuietLimit is the silence that makes a link dead rather than slow.
-//
-// It is set above KeepaliveWindow on purpose. ssh's own keepalives end a
-// connection whose path has died within that window, so a pipe that is quiet
-// for longer than it, with ssh still running, is a remote that has stopped
-// talking rather than a network that has gone. Below it, this side would give
-// up on links ssh was about to recover on its own.
 const defaultLinkQuietLimit = KeepaliveWindow + 15*time.Second
 
 func (o Options) withDefaults() Options {
@@ -232,21 +216,14 @@ type Manager struct {
 	table *Table
 	links map[string]*supervised
 
-	// ctx is the parent of every link context, set by Start.
-	ctx    context.Context
-	cancel context.CancelFunc
-	// started guards Start so a second call is a no-op. stopped is set by Stop,
-	// after which SetTable changes nothing: a manager that is shutting down
-	// must not start another supervisor.
+	ctx     context.Context
+	cancel  context.CancelFunc
 	started bool
 	stopped bool
 
 	wg sync.WaitGroup
 }
 
-// supervised is one host's link and the handle that ends it. Each link has its
-// own context, which is what lets one host be dropped or redialed while the
-// others keep running.
 type supervised struct {
 	link *link
 	stop context.CancelFunc
@@ -275,8 +252,6 @@ func (m *Manager) Start(ctx context.Context) {
 		return
 	}
 	m.started = true
-	// The context is kept even for an empty table, because SetTable can add the
-	// first host later and its supervisor needs a parent to run under.
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	for _, name := range m.table.Names() {
 		h, err := m.table.Lookup(name)
@@ -288,7 +263,6 @@ func (m *Manager) Start(ctx context.Context) {
 	m.mu.Unlock()
 }
 
-// startLink builds one link and runs its supervisor. Called with the lock held.
 func (m *Manager) startLink(h Host) {
 	ctx, cancel := context.WithCancel(m.ctx)
 	s := &supervised{link: newLink(h, m.opts), stop: cancel, done: make(chan struct{})}
@@ -343,9 +317,6 @@ func (m *Manager) SetTable(t *Table) TableChange {
 	old := m.table
 	m.table = t
 
-	// Every host that is gone or has changed loses its supervisor. Collected
-	// first and waited for outside the lock: a supervisor takes the link's own
-	// mutex, and waiting under this one while it does is how a deadlock starts.
 	for _, name := range old.Names() {
 		prev, _ := old.Lookup(name)
 		next, err := t.Lookup(name)
@@ -371,8 +342,6 @@ func (m *Manager) SetTable(t *Table) TableChange {
 		change.Added = append(change.Added, name)
 	}
 
-	// Nothing is dialed until Start has run. Start builds a link for every name
-	// in the table it finds, so an edit before then only has to change the set.
 	if m.started {
 		for _, name := range append(append([]string{}, change.Added...), change.Redialed...) {
 			h, err := t.Lookup(name)
@@ -403,9 +372,6 @@ func SameHost(a, b Host) bool {
 	return sameHost(a, b)
 }
 
-// sameHost reports whether two host entries would dial the same way. Only the
-// fields that reach ssh count: a link is redialed because the connection it
-// holds is to the wrong place, not because a name was retyped.
 func sameHost(a, b Host) bool {
 	if a.Addr != b.Addr || a.Command != b.Command || a.ConnectTimeout != b.ConnectTimeout {
 		return false
@@ -455,7 +421,6 @@ func (m *Manager) Resume(ctx context.Context) {
 	m.Start(ctx)
 }
 
-// link returns the supervised link for a host name.
 func (m *Manager) link(name string) *link {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -578,8 +543,6 @@ func (m *Manager) OpenConnectionAs(ctx context.Context, host string, info Stream
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	// openConnection returns a nil *Stream with its error. Returned as it is,
-	// that would be a non-nil io.ReadWriteCloser holding a nil pointer.
 	stream, err := l.openConnection(info)
 	if err != nil {
 		return nil, err

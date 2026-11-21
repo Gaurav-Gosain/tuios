@@ -68,8 +68,8 @@ type TTY struct {
 	In   <-chan []byte
 	quit chan struct{}
 	once sync.Once
-	log  screenLog // the main screen, for the shell to draw again on a resize
-	laid int       // the width the main screen was last laid out for
+	log  screenLog
+	laid int
 }
 
 func newTTY(p *Pty, env map[string]string) *TTY {
@@ -128,22 +128,11 @@ func (t *TTY) Lay(lay func(cols int) []string) {
 	t.write(b.String())
 }
 
-// write writes a string without keeping it in the log, for the line being
-// edited, which the shell draws again itself.
 func (t *TTY) write(s string) { _, _ = t.pty.out.Write([]byte(s)) }
 
-// keep puts s in the log without writing it: it is on the screen already.
 func (t *TTY) keep(s string) { t.log.write(s) }
 
-// repaint draws the main screen again for the pane's width: everything the
-// log kept, then tail, which is what the caller is drawing live. Output laid
-// out for an old width would otherwise be rewrapped by the terminal and
-// break. The scrollback is cleared with the screen because the log holds it
-// too.
 func (t *TTY) repaint(tail string) {
-	// This repaint answers any resize still waiting to be read. The signal
-	// is taken before the size is read, so a resize that lands after the
-	// read leaves a signal for the next repaint.
 	select {
 	case <-t.Resized():
 	default:
@@ -153,16 +142,11 @@ func (t *TTY) repaint(tail string) {
 	t.write("\x1b[H\x1b[2J\x1b[3J" + t.log.replay(cols) + tail)
 }
 
-// relaidNeeded reports whether the pane changed width since the main screen
-// was last laid out: a full-screen program reads the resize itself, and the
-// main screen it returns to is still laid out for the old width.
 func (t *TTY) relaidNeeded() bool {
 	cols, _ := t.Size()
 	return cols != t.laid
 }
 
-// keepLay puts a layout in the log without writing it: it is on the screen
-// already.
 func (t *TTY) keepLay(lay func(cols int) []string) { t.log.layout(lay) }
 
 // Printf writes a formatted string.

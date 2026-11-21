@@ -47,9 +47,6 @@ func (f *Failure) Error() string {
 	return f.Reason + " " + f.Fix
 }
 
-// failureOf turns an error from a run over ssh into a Failure about the
-// machine called name at addr with opts. An error that is not an ssh failure
-// is returned as it is.
 func failureOf(err error, name, addr string, opts []string) error {
 	if err == nil {
 		return nil
@@ -64,7 +61,6 @@ func failureOf(err error, name, addr string, opts []string) error {
 	return sshFailure(fe.Failure, name, addr, opts, fe.Said)
 }
 
-// sshFailure is the Failure of one class of ssh failure.
 func sshFailure(class federation.SSHFailure, name, addr string, opts []string, said string) *Failure {
 	f := &Failure{
 		Class:       string(class),
@@ -82,7 +78,6 @@ func sshFailure(class federation.SSHFailure, name, addr string, opts []string, s
 	return f
 }
 
-// gateFailure is the Failure of a Tailscale gate.
 func gateFailure(g federation.SSHGate, name string) *Failure {
 	if g.Kind == federation.GateTailscalePolicy {
 		user := "this user"
@@ -104,9 +99,6 @@ func gateFailure(g federation.SSHGate, name string) *Failure {
 	}
 }
 
-// named puts the machine's name in a sentence about "the host". "the host
-// key" names the key, not the machine, so it stays: the replacer tries its
-// pairs in order at each place, and those come first.
 func named(sentence, name string) string {
 	return strings.NewReplacer(
 		"The host key", "The host key", "the host key", "the host key",
@@ -114,7 +106,6 @@ func named(sentence, name string) string {
 	).Replace(sentence)
 }
 
-// said is the last line of what ssh wrote, cleaned.
 func said(stderr string) string {
 	return clean(strings.TrimSpace(hostsync.LastLine(stderr)))
 }

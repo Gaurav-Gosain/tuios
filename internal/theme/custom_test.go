@@ -31,7 +31,6 @@ func TestLoadCustomThemeFile_Partial(t *testing.T) {
 		t.Errorf("expected ID 'minimal-dark', got %q", theme.ID)
 	}
 
-	// fillDefaults should have populated all ANSI colors
 	colors := map[string]*tint.Color{
 		"Cursor":      theme.Cursor,
 		"Black":       theme.Black,
@@ -56,7 +55,6 @@ func TestLoadCustomThemeFile_Partial(t *testing.T) {
 		t.Error("Cursor should default to Fg color")
 	}
 
-	// Bright variants should default to normal variants
 	if theme.BrightBlack.R != theme.Black.R {
 		t.Error("BrightBlack should default to Black")
 	}

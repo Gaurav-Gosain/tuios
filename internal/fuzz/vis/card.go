@@ -9,13 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The end card. It is the frame a recording ends on and the frame somebody
-// shares, so every figure on it comes straight off the Result the engine
-// returned. On a failure it carries the seed and the minimal script, which
-// makes it a complete claim: a reader can run the command and get the same
-// failure.
-
-// overlayCard centres the verdict panel over a ghost of the final frame.
 func overlayCard(lines []string, s Snapshot, o Options, pal overlay.Palette, w, h int) []string {
 	back := ghost(lines, pal)
 	card, _ := cardPanel(s, o, pal, w).Render(pal)
@@ -29,10 +22,6 @@ func overlayCard(lines []string, s Snapshot, o Options, pal overlay.Palette, w, 
 		}
 		cw := lipgloss.Width(r)
 		x := max((w-cw)/2, 0)
-		// The backdrop has to survive on both sides of the card. Keeping only
-		// the left of it blanked the rest of the row, which read as the frame
-		// having been cleared to draw the card rather than the card sitting on
-		// the run it is reporting.
 		left := ansi.Truncate(back[y], x, "")
 		right := ansi.TruncateLeft(back[y], x+cw, "")
 		back[y] = overlay.Fill(ansi.Truncate(left+r+right, w, ""), w, pal.Canvas)
@@ -64,8 +53,6 @@ func cardPanel(s Snapshot, o Options, pal overlay.Palette, w int) overlay.Panel 
 			line(value.Render(l))
 		}
 	} else {
-		// FgMute is the furniture tier and measured 1.81:1 on Surface when the
-		// polish pass caught it, so card text never uses it.
 		line(bold(bg, pal.Success).Render(g.pass + " " + itoa(len(s.Rules)) + " invariants held"))
 	}
 	line("")
@@ -107,8 +94,6 @@ func cardPanel(s Snapshot, o Options, pal overlay.Palette, w int) overlay.Panel 
 	}
 }
 
-// hex16 is the seed as the sixteen hex digits the replay command carries, so
-// the number on the card is the number a reader types.
 func hex16(v uint64) string {
 	const digits = "0123456789abcdef"
 	var buf [16]byte
@@ -130,13 +115,8 @@ func duration(d time.Duration) string {
 	}
 }
 
-// measureFloor is the elapsed time under which rate reports "measuring".
 const measureFloor = 250 * time.Millisecond
 
-// rate is the trailing measured throughput: actions divided by the elapsed time
-// of the run so far. Under measureFloor there is not enough elapsed time for
-// the figure to mean anything, and a run that has been going for a millisecond
-// will happily report three million actions a second, so it says so instead.
 func rate(v float64, d time.Duration, suffix string) string {
 	if d < measureFloor {
 		return "measuring"

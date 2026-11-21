@@ -8,16 +8,6 @@ import (
 	"testing"
 )
 
-// A harness or the person can save its settings file while tuios edits it.
-// The rename must not drop that save. These are deterministic race
-// regressions: beforeRename changes the file at the moment before the last
-// check, which is the window a real save lands in.
-//
-// Failure modes written down first: the check reads the wrong path (a
-// symlink's link instead of its target) and passes; the retry re-uses the old
-// read and overwrites the save; a change on every try loops for ever or
-// writes anyway.
-
 func TestInstallKeepsASaveMadeWhileItWrites(t *testing.T) {
 	env := testEnv(t)
 	tg := mustTarget(t, ClaudeCode)

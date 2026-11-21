@@ -17,10 +17,6 @@ import (
 	"github.com/lrstanley/go-nf/glyphs/ple"
 )
 
-// =============================================================================
-// Window Defaults
-// =============================================================================
-
 const (
 	// DefaultWindowWidth is the default width for new terminal windows
 	DefaultWindowWidth = layout.DefaultWindowWidth
@@ -31,10 +27,6 @@ const (
 	// MinWindowWidth is the minimum width a window can be resized to
 	MinWindowWidth = 10
 )
-
-// =============================================================================
-// Animation Durations
-// =============================================================================
 
 const (
 	// DefaultAnimationDuration is the standard animation duration for minimize/restore operations
@@ -51,14 +43,6 @@ const (
 	AnimationSpeedMax     = 400
 )
 
-// =============================================================================
-// Notification Lifetimes
-// =============================================================================
-
-// =============================================================================
-// Timeouts and Intervals
-// =============================================================================
-
 const (
 	// CPUUpdateInterval is the interval between CPU usage updates
 	CPUUpdateInterval = 500 * time.Millisecond
@@ -66,10 +50,6 @@ const (
 	// ProcessWaitDelay is the delay when waiting for process cleanup
 	ProcessWaitDelay = 50 * time.Millisecond
 )
-
-// =============================================================================
-// FPS and Refresh Rates
-// =============================================================================
 
 var (
 
@@ -91,10 +71,6 @@ var (
 	// the UI stops feeling like it is responding to the keyboard at all.
 	MinConfiguredFPS = 10
 )
-
-// =============================================================================
-// UI Layout Dimensions
-// =============================================================================
 
 const (
 	// DockFullHeight is the rows a full dock takes: the rule between the panes
@@ -143,11 +119,6 @@ const (
 	// less a small margin instead.
 	NotificationMinWidth = 14
 )
-
-// =============================================================================
-// Dock Visual Characters: Nerd Font Icons (Default)
-// Initialized from go-nf library in init()
-// =============================================================================
 
 var (
 	// DockPillLeftChar is the left character for pill-style indicators
@@ -230,13 +201,7 @@ func init() {
 	NotificationGlyphInfo = fa.InfoCircle.String()
 }
 
-// =============================================================================
-// Dock Visual Characters: ASCII Fallback
-// =============================================================================
-
 const (
-	// ASCII fallback characters (used when --ascii-only flag is set)
-
 	// DockPillLeftCharASCII is the ASCII fallback for pill left
 	DockPillLeftCharASCII = "["
 
@@ -286,18 +251,10 @@ const (
 	DockWorkspaceMoreRightASCII = ">"
 )
 
-// =============================================================================
-// Tape Manager Icons
-// =============================================================================
-
 const (
 	// TapeRecordingIndicator is the recording indicator
 	TapeRecordingIndicator = "[REC]"
 )
-
-// =============================================================================
-// Notification Icons (ASCII-safe)
-// =============================================================================
 
 const (
 	// NotificationIconError is the error notification icon
@@ -394,10 +351,6 @@ func (s *Settings) GetNotificationRule(stroke string) string {
 	return stroke
 }
 
-// =============================================================================
-// Runtime Configuration
-// =============================================================================
-
 // The zoom box's size as a percent of the content region, and its range.
 //
 // 100 is the whole region, which is what zoom was before v0.8.0. Below it the
@@ -451,9 +404,6 @@ func (s *Settings) GetFastAnimationDuration() time.Duration {
 	return s.GetAnimationDuration() * 2 / 3
 }
 
-// scaleAnimation divides d by the animation_speed percent. Zero, which a
-// Settings built by hand carries, reads as the default speed. Any other value
-// outside the range moves to the nearest end, as the config loader does.
 func (s *Settings) scaleAnimation(d time.Duration) time.Duration {
 	speed := s.AnimationSpeed
 	if speed == 0 {
@@ -660,8 +610,6 @@ func (s *Settings) FormatHostTitle(title string, index int, cwd, session, worksp
 	return expandTitle(s.HostTitle, title, index, cwd, "{session}", session, "{workspace}", workspace)
 }
 
-// expandTitle replaces the placeholders every title template has in format,
-// and the extra old, new pairs after them.
 func expandTitle(format, title string, index int, cwd string, extra ...string) string {
 	return strings.NewReplacer(append([]string{
 		"{title}", title,
@@ -705,18 +653,10 @@ func (s *Settings) FormatWorkspaceTab(name string, index int, icon, zoom string)
 	return label
 }
 
-// emptyTabField stands in for an empty {name} until its separators are
-// dropped. A NUL cannot come from a format, a glyph or a marker.
 const emptyTabField = "\x00"
 
-// tabFieldSeparators are the characters that separate the fields of a tab
-// format.
 const tabFieldSeparators = " :-·|"
 
-// dropEmptyTabFields removes each empty field from label with the separators
-// around it. A field at either end takes its separators with it. A field
-// between two others leaves one run of separators, the one after it when it
-// has one, so "{index} {name} {zoom}" reads "7 Z".
 func dropEmptyTabFields(label string) string {
 	for {
 		i := strings.Index(label, emptyTabField)
@@ -1097,11 +1037,6 @@ func DockModeIconUsable(value string) bool {
 	return lipgloss.Width(value) <= DockModeIconMaxWidth
 }
 
-// dockModeIcon is the icon for one mode: the configured one when it is set
-// and usable, and otherwise the built-in for the glyph set. The configured
-// value wins over use_ascii_only, since the person wrote it for the terminal
-// they have. The word default, written in config.toml by hand, reads as
-// unset, the way the settings page and set-config treat it.
 func (s *Settings) dockModeIcon(set *string, nerd, ascii string) string {
 	if set != nil && strings.TrimSpace(*set) != DockModeIconDefault && DockModeIconUsable(*set) {
 		return *set
@@ -1192,10 +1127,6 @@ func (s *Settings) GetDockWorkspaceMoreRight() string {
 	return s.glyphOr(func(g *theme.GlyphSet) string { return g.ArrowRight }, DockWorkspaceMoreRight, DockWorkspaceMoreRightASCII)
 }
 
-// =============================================================================
-// Window Decoration Characters
-// =============================================================================
-
 const (
 	// WindowBorderTopLeft is the top-left corner character for window borders (Nerd Font / Unicode).
 	WindowBorderTopLeft = "╭" // U+256D
@@ -1285,9 +1216,6 @@ func (s *Settings) BorderJoinsChromeRules() bool {
 	case "block", "outer-half-block", "inner-half-block", "hidden":
 		return false
 	case BorderStyleGlyphs:
-		// A set's border is answered for by the set. Reported as joining
-		// because a set naming no junctions still gets the rounded border's,
-		// and one that names them means them to be used.
 		return true
 	}
 	return true
@@ -1350,21 +1278,6 @@ func (s *Settings) OverlayBorder() lipgloss.Border {
 	}
 }
 
-// glyphSetBorder is the border the active glyph set draws, with any rune it
-// leaves unnamed taken from the rounded border.
-//
-// Rounded rather than nothing, because a half-specified border is the likely
-// case: a set that wants square corners says four runes and means "the rest as
-// usual". Falling back per rune also means a set naming no border at all under
-// border_style = "glyphs" draws the default frame rather than a hole.
-//
-// In ASCII mode the fallback is the ASCII border instead. GetBorderForStyle
-// short-circuits to the ASCII border before it reaches here, so what draws was
-// never wrong; what was wrong is what this reports. The rune check below
-// rejects a set's non-ASCII runes in ASCII mode and every rejected rune was
-// then replaced by a rounded one, so ResolvedGlyphs answered "what would this
-// set draw" with ╭ corners that ASCII mode would never put on screen. That is
-// the answer list-glyphs prints and the glyph picker previews.
 func (s *Settings) glyphSetBorder() lipgloss.Border {
 	b := lipgloss.RoundedBorder()
 	if s.UseASCIIOnly {
@@ -1395,32 +1308,17 @@ func (s *Settings) glyphSetBorder() lipgloss.Border {
 	return b
 }
 
-// Per-style scrollbar glyphs. The thin style's pair is one stroke at two
-// weights: the same box-drawing vertical, light for the track and heavy for the
-// thumb, so the bar reads as a single line that thickens where the viewport is
-// rather than as two different shapes stacked in a column. Box-drawing
-// verticals are drawn cell-height, so the track is an unbroken hairline, and
-// they sit centred in the cell, which keeps the bar clear of the pane border
-// instead of thickening it. Half and eighth blocks would hug the right edge and
-// read as part of the frame.
-//
-// The track style fills its column instead, so its thumb is a whole block and
-// its track is the surface fill behind it rather than a glyph.
 const (
-	scrollbarThinThumb  = "┃" // U+2503 BOX DRAWINGS HEAVY VERTICAL
-	scrollbarThinTrack  = "│" // U+2502 BOX DRAWINGS LIGHT VERTICAL
+	scrollbarThinThumb  = "┃"
+	scrollbarThinTrack  = "│"
 	scrollbarTrackThumb = "█"
 	scrollbarASCIIThumb = "|"
 )
 
-// scrollbarASCII reports whether the bar has to stay inside ASCII.
 func (s *Settings) scrollbarASCII() bool {
 	return s.UseASCIIOnly || s.BorderStyle == "ascii"
 }
 
-// scrollbarGlyphOverride returns a configured glyph if it can be drawn: exactly
-// one cell wide, and plain ASCII when the rest of the frame is. Anything else
-// falls back to the default, matching the warning validation raises for it.
 func (s *Settings) scrollbarGlyphOverride(glyph string) (string, bool) {
 	if glyph == "" || lipgloss.Width(glyph) != 1 {
 		return "", false
@@ -1441,9 +1339,6 @@ func (s *Settings) GetScrollbarThumbChar() string {
 	if glyph, ok := s.scrollbarGlyphOverride(s.ScrollbarThumb); ok {
 		return glyph
 	}
-	// The set is consulted under the explicit option and over the style's own
-	// default: appearance.scrollbar.thumb is the narrower statement and keeps
-	// winning, and a set the user chose is still a statement about the bar.
 	if g, ok := s.scrollbarGlyphOverride(theme.Glyphs().ScrollbarThumb); ok {
 		return g
 	}
@@ -1556,8 +1451,6 @@ func (s *Settings) GetScrollbarTrackChar() string {
 	return scrollbarThinTrack
 }
 
-// Window decoration getter functions
-
 // GetWindowBorderTopLeft returns the appropriate top-left border character
 func (s *Settings) GetWindowBorderTopLeft() string {
 	return s.GetBorderForStyle().TopLeft
@@ -1592,16 +1485,6 @@ func (s *Settings) GetWindowBorderBottom() string {
 func (s *Settings) GetWindowBorderLeft() string {
 	return s.GetBorderForStyle().Left
 }
-
-// The window controls resolve in two steps: a one-cell mark, which is what a
-// glyph set names and what a user means by "the close button", and the padded
-// button the title bar draws.
-//
-// Splitting them is what makes a set safe here. The press rectangles below are
-// fixed offsets from the border's trailing corner, measured against buttons of
-// exactly three and four cells, so a set able to name the padded string could
-// move a button out from under the pointer with one two-cell glyph. Naming the
-// mark leaves the padding to the renderer and the widths cannot drift.
 
 // GetWindowButtonCloseMark returns the one-cell close mark.
 func (s *Settings) GetWindowButtonCloseMark() string {
@@ -1643,18 +1526,10 @@ func (s *Settings) GetWindowSeparatorChar() string {
 	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Rule }, WindowSeparatorChar, WindowSeparatorCharASCII)
 }
 
-// =============================================================================
-// Limits
-// =============================================================================
-
 const (
 	// MaxLogMessages is the maximum number of log messages to keep in memory
 	MaxLogMessages = 100
 )
-
-// =============================================================================
-// Z-Index Layers
-// =============================================================================
 
 const (
 	// ZIndexSeparators is the z-index for shared border separator lines. It is

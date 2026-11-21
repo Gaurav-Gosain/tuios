@@ -44,7 +44,6 @@ const (
 	HintsMaxDim          = 90
 )
 
-// defaultHintsConfig returns the section DefaultConfig carries.
 func defaultHintsConfig() HintsConfig {
 	return HintsConfig{
 		Builtins: HintsDefaultBuiltins,
@@ -53,8 +52,6 @@ func defaultHintsConfig() HintsConfig {
 	}
 }
 
-// fillMissingHints fills an absent value with its default. Open stays nil,
-// which OpenEnabled reads as on.
 func fillMissingHints(cfg, defaultCfg *UserConfig) {
 	h, d := &cfg.Hints, &defaultCfg.Hints
 	if strings.TrimSpace(h.Builtins) == "" {
@@ -82,8 +79,6 @@ func (h HintsConfig) DimPercent() int {
 // LabelAlphabet is the effective alphabet.
 func (h HintsConfig) LabelAlphabet() string { return hints.NormalizeAlphabet(h.Alphabet) }
 
-// droppedAlphabet is every character of an alphabet that labels cannot use:
-// anything but a to z (upper case counts as its lower case letter).
 func droppedAlphabet(a string) string {
 	var b strings.Builder
 	for _, r := range a {
@@ -94,10 +89,6 @@ func droppedAlphabet(a string) string {
 	return b.String()
 }
 
-// validateHints warns about a built-in name nobody knows, a pattern that does
-// not compile, and an alphabet that falls back to the default. Each is
-// skipped at run time, so without a warning a typo would look like hints mode
-// ignoring the config.
 func validateHints(cfg *UserConfig, result *ValidationResult) {
 	h := cfg.Hints
 	if _, unknown := hints.ParseBuiltins(h.Builtins); len(unknown) > 0 {

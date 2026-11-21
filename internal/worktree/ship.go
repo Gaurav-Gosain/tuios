@@ -14,21 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// Shipping: what takes an agent's work from its worktree to the base branch
-// and to a remote. CommitAll commits the work tree on its own branch,
-// MergeBranch merges a branch into the branch the main checkout has checked
-// out, and Push sends a branch to a remote.
-//
-// When the person calls a ship verb, its ctx carries childproc.AsPerson and
-// every git call here runs with the person's own configuration. Unlike a
-// checkpoint, no identity is set and no signing flag is passed: the commit is
-// the person's, made the way their git makes one, hooks included, and its
-// message is what the caller gave with nothing added. A pane's call runs git
-// with the settings of childproc.Git: no hooks, and no program the
-// repository's own config names. Nothing is ever forced:
-// a merge that conflicts is aborted and a push that is not a fast-forward is
-// refused by git and reported.
-
 // ErrNothingToCommit reports a work tree with no change to commit.
 var ErrNothingToCommit = errors.New("nothing to commit")
 
@@ -88,8 +73,6 @@ func CommitAll(ctx context.Context, dir, message string) (string, error) {
 	if n == 0 {
 		return "", ErrNothingToCommit
 	}
-	// The index as it is now, so a failed commit can put it back. write-tree
-	// refuses an index with conflicts, which a commit would refuse as well.
 	saved, err := runCtx(ctx, dir, nil, "write-tree")
 	if err != nil {
 		return "", err
@@ -124,7 +107,6 @@ type MergeResult struct {
 	Commits int `json:"commits"`
 }
 
-// dirtyShown bounds the paths a DirtyError carries.
 const dirtyShown = 5
 
 // MergeBranch merges branch into into, in the main checkout at repoRoot,
@@ -207,8 +189,6 @@ func MergeBranch(ctx context.Context, repoRoot, branch, into string, mode MergeM
 		if message != "" {
 			commit = append(commit, "-m", message)
 		} else {
-			// git merge --squash leaves its summary in SQUASH_MSG, which
-			// commit uses as the message when none is given.
 			commit = append(commit, "--no-edit")
 		}
 		if _, err := runCtx(ctx, repoRoot, nil, commit...); err != nil {
@@ -224,9 +204,6 @@ func MergeBranch(ctx context.Context, repoRoot, branch, into string, mode MergeM
 	return res, nil
 }
 
-// checkClean refuses a checkout with a tracked change or a merge in
-// progress. Untracked files do not count: git merge itself refuses one the
-// merge would write over, before it changes anything.
 func checkClean(ctx context.Context, dir string) error {
 	out, err := runCtx(ctx, dir, nil, "status", "--porcelain", "--untracked-files=no")
 	if err != nil {
@@ -258,10 +235,6 @@ func checkClean(ctx context.Context, dir string) error {
 	return nil
 }
 
-// abortMerge undoes a merge that failed part of the way and returns the error
-// to report: a ConflictError when files conflicted, else cause. The checkout
-// is put back to before with git reset --merge, which keeps nothing of the
-// merge and leaves alone what the merge did not touch.
 func abortMerge(ctx context.Context, dir, before string, cause error) error {
 	bg := context.WithoutCancel(ctx)
 	out, _ := runCtx(bg, dir, nil, "diff", "--name-only", "--diff-filter=U")
@@ -305,8 +278,6 @@ func ResolvePush(ctx context.Context, dir, branch, remote string) (PushTarget, e
 		return t, err
 	}
 	remotes := strings.Fields(out)
-	// The remotes ovnfs adds for its checkouts are not where a branch ships,
-	// so the choice below leaves them out. Named, or followed, they still work.
 	shippable := slices.DeleteFunc(slices.Clone(remotes), isCheckoutRemote)
 	configured, _ := runCtx(ctx, dir, nil, "config", "--get", "branch."+branch+".remote")
 	configured = strings.TrimSpace(configured)
@@ -357,8 +328,6 @@ func Push(ctx context.Context, dir string, t PushTarget, commit string) error {
 	if _, err := runCtx(ctx, dir, nil, "push", "--porcelain", t.Remote, commit+":refs/heads/"+t.Branch); err != nil {
 		return err
 	}
-	// git push --set-upstream sets nothing for a source that is a commit
-	// rather than a branch, so the upstream is set the way it would have.
 	if _, err := runCtx(ctx, dir, nil, "config", "branch."+t.Branch+".remote", t.Remote); err != nil {
 		return err
 	}
@@ -408,7 +377,4 @@ func Subjects(ctx context.Context, dir, base, tip string, limit int) ([]string, 
 	return subjects, nil
 }
 
-// isCheckoutRemote reports whether name is a remote ovnfs adds to a repository
-// for one of its checkouts, ovnfs/NAME. ovnfs 0.4.0 adds one per live checkout
-// by default, pointing at the checkout's private git folder.
 func isCheckoutRemote(name string) bool { return strings.HasPrefix(name, "ovnfs/") }

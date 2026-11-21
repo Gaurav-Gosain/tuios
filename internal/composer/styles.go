@@ -60,7 +60,6 @@ type Hint struct {
 	Optional bool
 }
 
-// readable is s.Readable, or fg as it is.
 func (s *Styles) readable(fg, bg color.Color) color.Color {
 	if s.Readable == nil {
 		return fg
@@ -68,7 +67,6 @@ func (s *Styles) readable(fg, bg color.Color) color.Color {
 	return s.Readable(fg, bg)
 }
 
-// ground is the ground of a list row on bg.
 func (s *Styles) ground(selected bool, bg color.Color) color.Color {
 	if selected {
 		return s.Selected
@@ -76,8 +74,6 @@ func (s *Styles) ground(selected bool, bg color.Color) color.Color {
 	return bg
 }
 
-// row pads a list row to width on its ground, and marks it at 16 colours
-// when it is selected.
 func (s *Styles) row(content string, width int, selected bool, bg color.Color) string {
 	row := fill(content, width, s.ground(selected, bg))
 	if selected && s.Plain && s.Reverse != nil {
@@ -86,7 +82,6 @@ func (s *Styles) row(content string, width int, selected bool, bg color.Color) s
 	return row
 }
 
-// underline marks a selected span at 16 colours.
 func (s *Styles) underline(span string) string {
 	if !s.Plain || span == "" || s.Underline == nil {
 		return span
@@ -94,7 +89,6 @@ func (s *Styles) underline(span string) string {
 	return s.Underline(span, ansi.StringWidth(span))
 }
 
-// arrow is glyph, or ascii where the terminal draws only ASCII.
 func (s *Styles) arrow(glyph, ascii string) string {
 	if s.ASCII {
 		return ascii
@@ -102,13 +96,10 @@ func (s *Styles) arrow(glyph, ascii string) string {
 	return glyph
 }
 
-// on returns a style with the ground bg. Every span on a row carries the
-// row's ground, or its reset would punch a hole through the row's fill.
 func on(bg color.Color) lipgloss.Style {
 	return lipgloss.NewStyle().Background(bg)
 }
 
-// fill pads s with spaces on bg to width cells.
 func fill(s string, width int, bg color.Color) string {
 	w := lipgloss.Width(s)
 	if w >= width {
@@ -117,8 +108,6 @@ func fill(s string, width int, bg color.Color) string {
 	return s + on(bg).Render(strings.Repeat(" ", width-w))
 }
 
-// cursor draws one cell as the text cursor: reverse video over the row's
-// colours, so it shows on a terminal with no colours at all.
 func cursor(ch string, bg, fg color.Color) string {
 	if ch == "" {
 		ch = " "
@@ -126,7 +115,6 @@ func cursor(ch string, bg, fg color.Color) string {
 	return on(bg).Foreground(fg).Reverse(true).Render(ch)
 }
 
-// enterKey names the return key.
 func enterKey(ascii bool) string {
 	if ascii {
 		return "enter"
@@ -134,7 +122,6 @@ func enterKey(ascii bool) string {
 	return "↵"
 }
 
-// noColor reports whether c is the terminal's default colour.
 func noColor(c color.Color) bool {
 	switch c.(type) {
 	case nil, lipgloss.NoColor, *lipgloss.NoColor:

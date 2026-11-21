@@ -10,13 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
 
-// The launcher event: the programs tuios's launcher offers (the desktop
-// entries and the programs on $PATH), so the renderer's palette can start
-// them (plan 2.14, "Run a program"). The launcher command scans the machine
-// off the model's goroutine; the event follows when the scan lands. The
-// launch command starts one in a new pane, or types its command line at a
-// new pane's prompt, as the terminal client's Enter and Tab do.
-
 // LauncherEntry is one program.
 type LauncherEntry struct {
 	// Name is the program's name, what a person types. Path names the entry
@@ -37,7 +30,6 @@ type LauncherEntry struct {
 	Terminal bool `json:"terminal,omitempty"`
 }
 
-// launcherEntries converts the model's programs to the event's rows.
 func launcherEntries(es []applist.Entry) []LauncherEntry {
 	out := make([]LauncherEntry, 0, len(es))
 	for _, e := range es {
@@ -46,24 +38,20 @@ func launcherEntries(es []applist.Entry) []LauncherEntry {
 	return out
 }
 
-// askLauncher starts a scan. The event goes out when its answer lands.
 func (m *model) askLauncher() tea.Cmd {
 	m.launcherWanted = true
 	if cmd := m.os.ScanPathApps(); cmd != nil {
 		return cmd
 	}
-	// No scanner (an OS built without one): answer with what it knows.
 	m.sendLauncher()
 	return nil
 }
 
-// sendLauncher sends the launcher event.
 func (m *model) sendLauncher() {
 	m.launcherWanted = false
 	m.out.JSON(Event{Type: "launcher", Launcher: launcherEntries(m.os.BridgeLauncherEntries())})
 }
 
-// launch starts the program at path, or types it at a new prompt.
 func (m *model) launch(path string, typeIt bool) (tea.Cmd, error) {
 	if path == "" {
 		return nil, errors.New("launch needs path, a program of the launcher event")
@@ -80,7 +68,6 @@ func (m *model) launch(path string, typeIt bool) (tea.Cmd, error) {
 	return nil, errfmt.Errorf("no program %s in the launcher", path)
 }
 
-// isPathApps says whether a message is a finished launcher scan.
 func isPathApps(msg tea.Msg) bool {
 	_, ok := msg.(app.PathAppsMsg)
 	return ok

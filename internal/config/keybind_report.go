@@ -136,9 +136,6 @@ func (r *KeybindRegistry) Collisions() []Collision {
 	var order []string
 
 	for _, b := range r.Bindings() {
-		// An unbound action has no key, so it contests nothing. Left in, every
-		// one of them would group under the empty key and the first would be
-		// reported as winning a contest that does not exist.
 		if b.Unbound {
 			continue
 		}
@@ -164,9 +161,6 @@ func (r *KeybindRegistry) Collisions() []Collision {
 			continue
 		}
 		if g.winner.Action == "" {
-			// The key is lost to a binding of another scope that acts
-			// first: a global one over the agents view. See
-			// shadowInboxByGlobal.
 			l := g.losers[0]
 			g.winner = Binding{Scope: l.Scope, Key: l.Key, Press: l.Press, Action: l.ShadowedBy,
 				Desc: describeAction(l.ShadowedBy), Section: SectionGlobal}
@@ -191,7 +185,6 @@ func (r *KeybindRegistry) Collisions() []Collision {
 		out = append(out, c)
 	}
 
-	// Cross-section first: those are the ones the config file gives no hint of.
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].CrossSection != out[j].CrossSection {
 			return out[i].CrossSection
@@ -320,9 +313,6 @@ func (r *KeybindRegistry) Fate(key string, facts PaneFacts) KeyFate {
 
 	fate.Ambiguity = AmbiguityVerdict(want, facts.HostDisambiguates)
 
-	// Only the curated table is consulted here, and only for a key tuios keeps
-	// from the pane: a key that is forwarded costs the guest nothing whoever
-	// else binds it.
 	if fate.SwallowedInTerminal {
 		live, _ := GuestProgramByComm(facts.Command)
 		for _, p := range GuestPrograms {
@@ -440,7 +430,6 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 
 	seen := map[string]bool{}
 	for _, b := range rep.Bindings {
-		// Only the surprising spelling: see AmbiguitySurprises.
 		if !AmbiguitySurprises(b.Key) {
 			continue
 		}
@@ -504,9 +493,6 @@ func (rep KeybindReport) Summary() string {
 	return strings.Join(parts, ", ")
 }
 
-// readAs returns the canonical spelling of key when it differs from what the
-// user wrote by more than case, and "" when it does not. A key the validator
-// rejects gets "" too, and the doctor lists it as a key tuios cannot read.
 func readAs(key string) string {
 	trimmed := strings.TrimSpace(key)
 	if ok, _ := (&KeyNormalizer{isMacOS: macOSHost}).ValidateKey(trimmed); !ok {

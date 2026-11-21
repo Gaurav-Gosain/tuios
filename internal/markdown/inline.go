@@ -50,20 +50,14 @@ func Inline(src string) []Run {
 	return p.out
 }
 
-// inline is the state of one Inline call.
 type inline struct {
-	out []Run
-	buf strings.Builder
-	// linkWork is how many bytes the link searches have read. Past
-	// linkWorkMax no more links are looked for, so a text of many open
-	// brackets costs a bounded amount.
+	out      []Run
+	buf      strings.Builder
 	linkWork int
 }
 
-// linkWorkMax bounds the bytes the link searches of one Inline call read.
 const linkWorkMax = 256 << 10
 
-// flush ends the plain text gathered so far as a run of st.
 func (p *inline) flush(st Style, url string) {
 	if p.buf.Len() == 0 {
 		return
@@ -77,16 +71,11 @@ func (p *inline) flush(st Style, url string) {
 	p.out = append(p.out, Run{Text: t, Style: st, URL: url})
 }
 
-// misses remembers the closer searches that failed in one parse call. A
-// search that found nothing from one offset finds nothing from a later one,
-// so a text of many unmatched openers is read once, not once per opener.
 type misses struct {
-	delim [3][4]int // by char (* _ ~) and run length: the offset searched from
-	tick  [16]int   // by backtick run length
+	delim [3][4]int
+	tick  [16]int
 }
 
-// parse reads s as text of style st and link url. depth is the nesting of
-// styles.
 func (p *inline) parse(s string, st Style, url string, depth int) {
 	var miss misses
 	for i := 0; i < len(s); {
@@ -103,7 +92,6 @@ func (p *inline) parse(s string, st Style, url string, depth int) {
 			i += 2
 			continue
 		case c == '\n':
-			// Two spaces before a line break make it a hard break.
 			if strings.HasSuffix(p.buf.String(), "  ") {
 				t := strings.TrimRight(p.buf.String(), " ")
 				p.buf.Reset()
@@ -112,8 +100,6 @@ func (p *inline) parse(s string, st Style, url string, depth int) {
 				p.buf.WriteByte('\n')
 				p.flush(st, url)
 			} else if treeRow(strings.TrimLeft(s[i+1:], " ")) {
-				// A row of a tree an agent draws, ├── or └──, goes on a
-				// line of its own under the row before it.
 				p.flush(st, url)
 				p.buf.WriteByte('\n')
 				p.flush(st, url)
@@ -227,8 +213,6 @@ func (p *inline) parse(s string, st Style, url string, depth int) {
 	p.flush(st, url)
 }
 
-// emphasis finds the closer of a delimiter run of n of s[i] at i: where the
-// closer starts, and the style the pair adds.
 func (p *inline) emphasis(s string, i, n, depth int, miss *misses) (end int, add Style, ok bool) {
 	c := s[i]
 	if depth >= maxDepth || n > 3 || c == '~' && n != 2 || !leftFlanking(s, i, n) {
@@ -247,15 +231,11 @@ func (p *inline) emphasis(s string, i, n, depth int, miss *misses) (end int, add
 	if miss.delim[ci][k] != 0 && i >= miss.delim[ci][k] {
 		return 0, 0, false
 	}
-	// From the byte after the run: a code span can start right after the
-	// opener, as in **`main.go`:**, and has to be seen whole so its
-	// backticks hide what is inside it and nothing outside it.
 	for j := i + n; j < len(s); j++ {
 		switch s[j] {
 		case '\\':
 			j++
 		case '`':
-			// A code span hides its delimiters.
 			m := run(s, j, '`')
 			if e := closeTicks(s, j+m, m); e >= 0 {
 				j = e + m - 1
@@ -274,20 +254,14 @@ func (p *inline) emphasis(s string, i, n, depth int, miss *misses) (end int, add
 	return 0, 0, false
 }
 
-// treeRow reports a line that starts with a tree glyph: ├, └ or │.
 func treeRow(s string) bool {
 	return strings.HasPrefix(s, "├") || strings.HasPrefix(s, "└") || strings.HasPrefix(s, "│")
 }
 
-// marker reads a reply marker at the start of s: [[label]], where the label
-// is text of 1 to MarkerMax runes on one line, with no bracket or backtick in
-// it and no space at either end. It returns the label and the marker's
-// length in bytes, or 0.
 func marker(s string) (label string, n int) {
 	if !strings.HasPrefix(s, "[[") {
 		return "", 0
 	}
-	// MarkerMax runes are at most 4 bytes each.
 	end := strings.Index(s[2:min(len(s), 2+4*MarkerMax+2)], "]]")
 	if end <= 0 {
 		return "", 0
@@ -299,7 +273,6 @@ func marker(s string) (label string, n int) {
 	return label, end + 4
 }
 
-// run is the length of the run of c at s[i].
 func run(s string, i int, c byte) int {
 	n := 0
 	for i+n < len(s) && s[i+n] == c {
@@ -308,7 +281,6 @@ func run(s string, i int, c byte) int {
 	return n
 }
 
-// closeTicks finds a run of exactly n backticks from i, or -1.
 func closeTicks(s string, i, n int) int {
 	for i < len(s) {
 		j := strings.IndexByte(s[i:], '`')
@@ -325,8 +297,6 @@ func closeTicks(s string, i, n int) int {
 	return -1
 }
 
-// before and after are the runes either side of a delimiter run, a space at
-// the ends of the text.
 func before(s string, i int) rune {
 	if i == 0 {
 		return ' '
@@ -343,8 +313,6 @@ func after(s string, i int) rune {
 	return r
 }
 
-// leftFlanking reports a run that can open: text follows it, and an
-// underscore is not inside a word, so snake_case names stay as they are.
 func leftFlanking(s string, i, n int) bool {
 	a, b := after(s, i+n), before(s, i)
 	if unicode.IsSpace(a) {
@@ -356,7 +324,6 @@ func leftFlanking(s string, i, n int) bool {
 	return s[i] != '_' || !isWordRune(b)
 }
 
-// rightFlanking reports a run that can close.
 func rightFlanking(s string, i, n int) bool {
 	b, a := before(s, i), after(s, i+n)
 	if unicode.IsSpace(b) {
@@ -368,13 +335,8 @@ func rightFlanking(s string, i, n int) bool {
 	return s[i] != '_' || !isWordRune(a)
 }
 
-// linkTextMax bounds the search for the bracket that ends a link's text, so
-// a text of many open brackets costs at most this much per bracket.
 const linkTextMax = 1 << 10
 
-// link reads [text](dest "title") at s[i]: where the text ends, the
-// destination, where the link ends, and how many bytes the search read. A
-// text with no destination after it is not a link.
 func link(s string, i int) (end int, dest string, next, read int, ok bool) {
 	depth := 0
 	end = -1
@@ -434,7 +396,6 @@ func link(s string, i int) (end int, dest string, next, read int, ok bool) {
 		dest = s[start:min(j, len(s))]
 		read += j - start
 	}
-	// A title in quotes may follow.
 	for j < len(s) && (s[j] == ' ' || s[j] == '\n') {
 		j++
 	}
@@ -456,7 +417,6 @@ func link(s string, i int) (end int, dest string, next, read int, ok bool) {
 	return end, dest, j + 1, read, true
 }
 
-// autolink reports the inside of <...> that is a URL or an email address.
 func autolink(t string) bool {
 	if strings.ContainsAny(t, " <>\n") {
 		return false
@@ -473,9 +433,6 @@ func autolink(t string) bool {
 	return at > 0 && strings.IndexByte(t[at:], '.') > 0
 }
 
-// bareURL is the length of a URL at the start of s with no markup around
-// it, http://, https:// or www., without the punctuation that ends a
-// sentence after it. It is 0 when s does not start with one.
 func bareURL(s string) int {
 	var rest string
 	switch {
@@ -496,8 +453,6 @@ func bareURL(s string) int {
 		}
 		n++
 	}
-	// Trailing punctuation belongs to the sentence, and a closing
-	// parenthesis only when the URL opened none.
 	for n > len(s)-len(rest) {
 		c := s[n-1]
 		if strings.IndexByte(".,:;!?\"'*_~", c) >= 0 {
@@ -516,18 +471,14 @@ func bareURL(s string) int {
 	return n
 }
 
-// isPunct reports an ASCII punctuation character, which a backslash
-// escapes.
 func isPunct(c byte) bool {
 	return c >= '!' && c <= '/' || c >= ':' && c <= '@' || c >= '[' && c <= '`' || c >= '{' && c <= '~'
 }
 
-// isWordByte reports an ASCII letter, digit or underscore.
 func isWordByte(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_'
 }
 
-// isWordRune reports a letter or digit.
 func isWordRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r)
 }

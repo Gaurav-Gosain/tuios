@@ -26,8 +26,6 @@ const (
 // MotionLevels is what appearance.motion accepts, from least motion to most.
 var MotionLevels = []string{MotionNone, MotionBasic, MotionFull}
 
-// motionRank orders the levels. An unknown or empty level ranks as none, so a
-// Settings built by hand, which carries the empty string, animates nothing.
 func motionRank(level string) int {
 	switch level {
 	case MotionBasic:
@@ -98,13 +96,6 @@ const (
 	PopupDimMax = 90
 )
 
-// migrateAnimationsEnabled folds the old on/off appearance.animations_enabled
-// into appearance.motion, and clears it.
-//
-// false becomes none, which is what it meant: nothing moves. true becomes
-// nothing at all, because true was the default and the default level is full;
-// writing full into the file would turn a key the user never chose into one
-// they had. A config that sets both keeps its motion.
 func migrateAnimationsEnabled(a *AppearanceConfig) {
 	if a.AnimationsEnabled == nil {
 		return

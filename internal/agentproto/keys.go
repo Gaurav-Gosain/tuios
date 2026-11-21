@@ -8,12 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
-// Keyboard input for the pane's prompt line. The pane's terminal is in raw
-// mode with bracketed paste on, so a prompt typed by tuios (ask-agent,
-// start-agent's first prompt, send-text) arrives as one paste followed by a
-// carriage return, and a person's keys arrive one by one.
-
-// keyKind is what a key does.
 type keyKind int
 
 const (
@@ -26,24 +20,19 @@ const (
 	keyPaste
 )
 
-// key is one key, or one paste.
 type key struct {
 	kind keyKind
 	r    rune
 	text string
 }
 
-// Paste delimiters, DECSET 2004.
 const (
 	pasteStart = "\x1b[200~"
 	pasteEnd   = "\x1b[201~"
 )
 
-// maxPaste bounds one paste. A longer one is cut there.
 const maxPaste = 1 << 20
 
-// keyParser turns bytes from the terminal into keys. It keeps state across
-// reads, since a sequence or a paste can be split between two.
 type keyParser struct {
 	state   int
 	seq     []byte
@@ -60,14 +49,11 @@ const (
 	stPaste
 )
 
-// feed parses b and returns the keys it completes.
 func (p *keyParser) feed(b []byte) []key {
 	var out []key
 	for _, c := range b {
 		switch p.state {
 		case stPaste:
-			// The text is kept up to the bound; past it only the last bytes
-			// are, to find the end marker.
 			if p.paste.Len() < maxPaste+len(pasteEnd) {
 				p.paste.WriteByte(c)
 			}
@@ -97,7 +83,6 @@ func (p *keyParser) feed(b []byte) []key {
 			case 'O':
 				p.state = stSS3
 			default:
-				// Alt and a key: nothing the prompt line uses.
 				p.state = stGround
 			}
 		case stCSI:
@@ -108,7 +93,6 @@ func (p *keyParser) feed(b []byte) []key {
 					p.paste.Reset()
 					p.tail = p.tail[:0]
 				} else {
-					// Arrows, function keys and reports are dropped.
 					p.state = stGround
 				}
 				p.seq = p.seq[:0]
@@ -163,9 +147,6 @@ func (p *keyParser) ground(c byte, out []key) []key {
 	return out
 }
 
-// typedRune reports whether a rune the person typed goes into the prompt.
-// Controls and invisible characters do not, except the zero-width joiner and
-// the emoji variation selectors, which are part of an emoji the person typed.
 func typedRune(r rune) bool {
 	switch {
 	case isControl(r):

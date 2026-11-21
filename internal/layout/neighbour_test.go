@@ -14,18 +14,12 @@ func (s Side) String() string {
 	return [...]string{"left", "right", "up", "down"}[s]
 }
 
-// touching is every rectangle in rects that meets from along the side, with
-// at least one cell in common across it. slack is how far past from's edge the
-// facing edge may start: the gap between panes, plus one. A shared border puts
-// it one cell before from's edge, which also counts.
 func touching(from Rect, rects map[int]Rect, side Side, slack int) []int {
 	var out []int
 	for id, r := range rects {
 		if r == from {
 			continue
 		}
-		// Turned so that side is right: dist is how far r starts past from's
-		// right edge, negative when r starts before it.
 		f, c := towardRight(from, side), towardRight(r, side)
 		dist := c.X - (f.X + f.W)
 		overlap := min(c.Y+c.H, f.Y+f.H) - max(c.Y, f.Y)
@@ -36,9 +30,6 @@ func touching(from Rect, rects map[int]Rect, side Side, slack int) []int {
 	return out
 }
 
-// checkEveryStep steps from every pane in every direction and checks that
-// focus lands on a pane touching it on that side, that it stays put only at
-// the edge of the layout, and that every pane can be reached from the first.
 func checkEveryStep(t *testing.T, rects map[int]Rect, slack int) {
 	t.Helper()
 	ids := make([]int, 0, len(rects))
@@ -119,16 +110,12 @@ func TestNeighbourOnNestedBSPTrees(t *testing.T) {
 	h := func(ratio float64, l, r *TileNode) *TileNode { return NewInternalNode(SplitHorizontal, ratio, l, r) }
 
 	trees := map[string]*TileNode{
-		// Left column of three, right column of two: the rows do not line up.
 		"3 beside 2": v(0.5, h(0.33, leaf(1), h(0.5, leaf(2), leaf(3))), h(0.5, leaf(4), leaf(5))),
-		// A 2x2 grid whose top right is split again both ways.
 		"grid nested twice": h(0.5,
 			v(0.5, leaf(1), h(0.5, leaf(2), v(0.5, leaf(3), leaf(4)))),
 			v(0.5, leaf(5), leaf(6))),
-		// A wide top row over three columns, the middle one stacked.
 		"banner over columns": h(0.3, leaf(1), v(0.33, leaf(2), v(0.5, h(0.5, leaf(3), leaf(4)), leaf(5)))),
-		// Uneven ratios, so the edges of neighbours are offset by odd amounts.
-		"uneven": v(0.7, h(0.2, leaf(1), v(0.4, leaf(2), leaf(3))), h(0.8, v(0.3, leaf(4), leaf(5)), leaf(6))),
+		"uneven":              v(0.7, h(0.2, leaf(1), v(0.4, leaf(2), leaf(3))), h(0.8, v(0.3, leaf(4), leaf(5)), leaf(6))),
 	}
 	for name, root := range trees {
 		for _, gap := range []int{0, 1} {
@@ -167,8 +154,8 @@ func TestNeighbourOnMasterStack(t *testing.T) {
 func TestNeighbourIgnoresASharedCorner(t *testing.T) {
 	p := Rect{X: 60, Y: 0, W: 30, H: 4}
 	cands := []Rect{
-		{X: 0, Y: 0, W: 61, H: 40},  // l
-		{X: 60, Y: 3, W: 30, H: 37}, // b
+		{X: 0, Y: 0, W: 61, H: 40},
+		{X: 60, Y: 3, W: 30, H: 37},
 	}
 	if got := Neighbour(p, cands, SideDown, false); got != 1 {
 		t.Fatalf("down from the short pane went to %d, want 1 (the pane under it)", got)
@@ -197,13 +184,11 @@ func TestNeighbourFallbackForFloatingWindows(t *testing.T) {
 		t.Fatalf("left went to %d, but nothing lies that way", got)
 	}
 
-	// A facing window beats a nearer diagonal one.
 	cands := []Rect{{X: 42, Y: 11, W: 10, H: 5}, {X: 80, Y: 2, W: 20, H: 6}}
 	if got := Neighbour(from, cands, SideRight, true); got != 1 {
 		t.Fatalf("right went to %d, want the facing window 1", got)
 	}
 
-	// A window that half covers the focused one still lies that way.
 	over := []Rect{{X: 20, Y: 3, W: 40, H: 10}}
 	if got := Neighbour(from, over, SideRight, true); got != 0 {
 		t.Fatalf("right went to %d, want the overlapping window", got)
@@ -218,9 +203,9 @@ func TestNeighbourFallbackForFloatingWindows(t *testing.T) {
 func TestNeighbourPrefersTheAlignedPane(t *testing.T) {
 	from := Rect{X: 0, Y: 20, W: 50, H: 10}
 	cands := []Rect{
-		{X: 50, Y: 0, W: 50, H: 22},  // shares 2 rows at the top
-		{X: 50, Y: 22, W: 50, H: 6},  // centred on from
-		{X: 50, Y: 28, W: 50, H: 20}, // shares 2 rows at the bottom
+		{X: 50, Y: 0, W: 50, H: 22},
+		{X: 50, Y: 22, W: 50, H: 6},
+		{X: 50, Y: 28, W: 50, H: 20},
 	}
 	if got := Neighbour(from, cands, SideRight, false); got != 1 {
 		t.Fatalf("right went to %d, want the centred pane 1", got)
@@ -234,14 +219,12 @@ func TestNeighbourPrefersTheAlignedPane(t *testing.T) {
 // A pane can meet its only neighbour on a side along a single row. That one
 // row is enough to step there. Both layouts come from the BSP tiler.
 func TestNeighbourAcrossASingleSharedRow(t *testing.T) {
-	// 200x60, gap 1: both panes on the right share one row with from.
 	from := Rect{X: 0, Y: 8, W: 92, H: 3}
 	right := []Rect{{X: 93, Y: 0, W: 107, H: 9}, {X: 93, Y: 10, W: 21, H: 20}}
 	if got := Neighbour(from, right, SideRight, false); got != 0 {
 		t.Fatalf("right went to %d, want 0 (centred nearest)", got)
 	}
 
-	// 81x23, gap 2: the pane on the left shares one row with from.
 	from = Rect{X: 27, Y: 12, W: 14, H: 3}
 	left := []Rect{{X: 0, Y: 14, W: 25, H: 9}}
 	if got := Neighbour(from, left, SideLeft, false); got != 0 {
@@ -254,8 +237,8 @@ func TestNeighbourAcrossASingleSharedRow(t *testing.T) {
 func TestNeighbourPrefersTheWiderOverlap(t *testing.T) {
 	from := Rect{X: 0, Y: 10, W: 50, H: 10}
 	cands := []Rect{
-		{X: 50, Y: 0, W: 50, H: 11},  // one row, centred closer
-		{X: 50, Y: 18, W: 50, H: 30}, // two rows
+		{X: 50, Y: 0, W: 50, H: 11},
+		{X: 50, Y: 18, W: 50, H: 30},
 	}
 	if got := Neighbour(from, cands, SideRight, false); got != 1 {
 		t.Fatalf("right went to %d, want 1 (two shared rows)", got)

@@ -34,9 +34,6 @@ func SocketPath(dir string) string { return filepath.Join(dir, "socket") }
 // PATH.
 func BinDir(dir string) string { return filepath.Join(dir, "bin") }
 
-// paneSocket is where the pane holder for a window listens for respawn-pane.
-// The number keeps the path short: a unix socket path is capped near 104
-// bytes on macOS.
 func paneSocket(dir, windowID string) string {
 	return filepath.Join(dir, "p", strconv.FormatUint(uint64(PaneNumber(windowID)), 10)+".sock")
 }
@@ -118,10 +115,6 @@ func ExplicitSocket(args []string) string {
 	return sock
 }
 
-// sessionNumber is the number in a session's tmux id ($N) when the shim
-// serves every session of the daemon: 20 bits of FNV-1a over the tuios
-// session id, so it survives a rename. It is 0 in no case, since $0 is the
-// id of the one session the shim serves in a pane.
 func sessionNumber(sessionID string) uint32 {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(sessionID))
@@ -132,10 +125,6 @@ func sessionNumber(sessionID string) uint32 {
 	return n
 }
 
-// windowStride separates the sessions in a window number when the shim
-// serves every session: window N is workspace N%windowStride of the session
-// whose number is N/windowStride. tmux window ids are unique on the server,
-// and workspace numbers repeat in every session.
 const windowStride = 1000
 
 // InShimDir reports whether path is the shim's socket or any path inside the
@@ -155,8 +144,6 @@ func IsShimSocket(path, dir string) bool {
 	return path != "" && dir != "" && canonPath(path) == canonPath(SocketPath(dir))
 }
 
-// canonPath is path made absolute, with every link in it followed. The part
-// that does not exist yet (a socket nothing listens on) is kept as given.
 func canonPath(path string) string {
 	if !filepath.IsAbs(path) {
 		if abs, err := filepath.Abs(path); err == nil {

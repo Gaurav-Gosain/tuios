@@ -19,12 +19,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
 )
 
-// TML surfaces in the demo: tuios tml show, render and validate, and the tml
-// command of tuios.dev/loom. render, validate and tml draw with the real
-// libraries here. show hands the document to the surface host, which the
-// browser build installs: it opens the surface in the tuios this shell runs
-// in, and tells this shell how it closed.
-
 // SurfaceRequest is a tuios tml show, for the surface host.
 type SurfaceRequest struct {
 	// Doc is the document, checked already.
@@ -71,8 +65,6 @@ func SetSurfaceHost(fn func(SurfaceRequest) (SurfaceOpened, error)) {
 	surfaceMu.Unlock()
 }
 
-// holders are the programs a pane runs that are not commands: nobody types
-// them, so help, completion and the launcher leave them out.
 var holders map[string]func(t *TTY) int
 
 func initHolders() {
@@ -81,17 +73,12 @@ func initHolders() {
 	}
 }
 
-// holdTML holds the pane of a TML window, as the daemon's placeholder
-// program does. tuios draws the surface over it and keeps the keys, so it
-// reads nothing until the pane closes.
 func holdTML(t *TTY) int {
 	for range t.In {
 	}
 	return 0
 }
 
-// args is a command line split into its files and its flags. Flags may come
-// before or after the files, as the real commands take them.
 type args struct {
 	files []string
 	flags map[string]string
@@ -104,8 +91,6 @@ func (a args) int(name string) int {
 	return n
 }
 
-// parseArgs reads -x, --x, --x=v and --x v. valued names the flags that
-// take a value, bools the ones that do not. Any other flag is an error.
 func parseArgs(in []string, valued, bools []string) (args, error) {
 	a := args{flags: map[string]string{}}
 	for i := 0; i < len(in); i++ {
@@ -134,8 +119,6 @@ func parseArgs(in []string, valued, bools []string) (args, error) {
 	return a, nil
 }
 
-// readSource reads the one file a command takes. It prints why when it
-// cannot and returns false.
 func (s *shell) readSource(cmd string, a args) (name string, data []byte, ok bool) {
 	if len(a.files) != 1 {
 		s.fail(cmd + ": give one file, such as " + bold + "deploy.tml" + reset)
@@ -154,8 +137,6 @@ func (s *shell) readSource(cmd string, a args) (name string, data []byte, ok boo
 	return name, []byte(content), true
 }
 
-// checkTML checks a document and prints its problems, as the real commands
-// do. It returns the document, or nil when it has errors.
 func (s *shell) checkTML(name string, src []byte) *tml.Node {
 	lim := tml.PersonLimits()
 	if len(src) > lim.DocBytes {
@@ -185,7 +166,6 @@ func (s *shell) checkTML(name string, src []byte) *tml.Node {
 	return doc
 }
 
-// cmdTuiosTML is tuios tml.
 func cmdTuiosTML(s *shell, in []string) int {
 	sub := argOr(in, 0, "")
 	rest := []string{}
@@ -228,10 +208,6 @@ func cmdTuiosTML(s *shell, in []string) int {
 	return 0
 }
 
-// tmlShow is tuios tml show. The surface host opens the surface. With
-// --wait it blocks until the surface closes and prints the close value as
-// JSON: exit 0 for the person's answer, 1 when they closed it with no value,
-// 2 when a program closed it.
 func tmlShow(s *shell, in []string) int {
 	t := s.t
 	a, err := parseArgs(in, []string{"name", "width", "height", "timeout", "session", "s", "workspace"},
@@ -291,8 +267,6 @@ func tmlShow(s *shell, in []string) int {
 		return s.fail("tuios tml show: the surface was still open when the wait ended. Close it, or raise --timeout.")
 	}
 	if interrupted {
-		// The real command ends and the surface stays open, as the daemon
-		// keeps it.
 		t.Print("^C\r\n")
 		return 130
 	}
@@ -318,8 +292,6 @@ func tmlShow(s *shell, in []string) int {
 	return 0
 }
 
-// waitSurface blocks until done has the result, the person presses ctrl+c
-// in this pane, or timeout fires.
 func waitSurface(t *TTY, done <-chan SurfaceResult, timeout <-chan time.Time) (res SurfaceResult, interrupted, late bool) {
 	for {
 		select {
@@ -342,12 +314,8 @@ func shortID(id string) string {
 	return id
 }
 
-// tmlRenderTallest bounds the height render draws at when no height is
-// given, as the real command does.
 const tmlRenderTallest = 400
 
-// tmlRender is tuios tml render: the document drawn as text, at the pane's
-// width unless --width says otherwise.
 func tmlRender(s *shell, in []string) int {
 	a, err := parseArgs(in, []string{"width", "height", "state", "tab"}, []string{"ansi", "e", "ascii", "popup"})
 	if err != nil {
@@ -408,8 +376,6 @@ func tmlRender(s *shell, in []string) int {
 	return 0
 }
 
-// trimBlankTail drops the blank lines at the end but one, the margin under
-// the document.
 func trimBlankTail(lines []string) []string {
 	end := len(lines)
 	for end > 0 && strings.TrimSpace(ansi.Strip(lines[end-1])) == "" {
@@ -421,9 +387,6 @@ func trimBlankTail(lines []string) []string {
 	return lines[:end]
 }
 
-// cmdTML is the tml command of tuios.dev/loom. A real terminal opens the
-// document full screen. Here it prints the document once, as tml --print
-// does, and says how to open it in tuios.
 func cmdTML(s *shell, in []string, _ string) int {
 	a, err := parseArgs(in[1:], []string{"width", "height", "depth"}, []string{"check", "print", "plain", "version", "help", "h"})
 	if err != nil {

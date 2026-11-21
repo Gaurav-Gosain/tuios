@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// herdr's pane commands, from src/cli/pane.rs at v0.9.5.
-
 func parsePane(sub string, args []string, getenv Env, _ string) (*Call, *UsageError) {
 	switch sub {
 	case "list":
@@ -119,8 +117,6 @@ func parsePane(sub string, args []string, getenv Env, _ string) (*Call, *UsageEr
 	return nil, &UsageError{Msg: groupHelp["pane"], Code: 2}
 }
 
-// optionalPane reads [--pane ID|--current], where --current names
-// HERDR_PANE_ID.
 func optionalPane(args []string, getenv Env) (any, *UsageError) {
 	var pane any
 	err := walk(args, func(arg string, value valueFn) *UsageError {
@@ -138,9 +134,6 @@ func optionalPane(args []string, getenv Env) (any, *UsageError) {
 	return pane, err
 }
 
-// paneDirectionArgs reads --direction D [--pane ID|--current], where
-// --current leaves the pane to the server's focused one, and --amount when
-// amount is allowed. A missing direction is the usage line.
 func paneDirectionArgs(args []string, usageLine string, extra []string) (map[string]any, *UsageError) {
 	p := map[string]any{}
 	err := walk(args, func(arg string, value valueFn) *UsageError {
@@ -593,8 +586,6 @@ func paneWaitOutput(args []string) (*Call, *UsageError) {
 	return c, nil
 }
 
-// paneReportAgent is pane report-agent and pane report-agent-session. A
-// resume command after "--" goes as resume_argv.
 func paneReportAgent(sub string, args []string) (*Call, *UsageError) {
 	withState := sub == "report-agent"
 	usageLine := "usage: herdr pane report-agent <pane_id> --source ID --agent LABEL --state idle|working|blocked|unknown [--message TEXT] [--seq N] [--agent-session-id ID] [--agent-session-path PATH] [-- <resume-command...>]"
@@ -659,7 +650,6 @@ func paneReportAgent(sub string, args []string) (*Call, *UsageError) {
 	return c, nil
 }
 
-// requireSource checks --source, trimmed, as herdr does.
 func requireSource(p map[string]any) *UsageError {
 	s, _ := p["source"].(string)
 	if s = strings.TrimSpace(s); s == "" {

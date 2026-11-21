@@ -7,13 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// Named colours for the few pieces of furniture that are not drawn from the
-// chrome palette (UI) because they stand for something outside it: the macOS
-// window controls, the link under the pointer, the key-cast pills. They were
-// literals in the render code; they live here so every colour a frame can
-// hold is defined in the token packages, and each answers for the 16-colour
-// depth with a slot the terminal paints from its own palette.
-
 // WindowDots are the close, minimise and zoom controls' colours: the macOS
 // traffic lights. The render code measures them against the ground they land
 // on and lifts one that misses its floor.
@@ -24,7 +17,6 @@ func WindowDots() (closeDot, minimise, zoom color.Color) {
 		slotAt16(10, chromeFurnitureOr(RoleDotZoom, tokDotZoom))
 }
 
-// chromeFurnitureOr is the theme's colour for role r, or fallback.
 func chromeFurnitureOr(r Role, fallback color.Color) color.Color {
 	if c := chromeFurniture(r); c != nil {
 		return c
@@ -88,12 +80,8 @@ func ShimmerInk() color.Color {
 // black, the model of a light going out.
 func SpotlightShade() color.Color { return spotlightShade }
 
-// spotlightShade is boxed once, because the spotlight reads it for every cell.
 var spotlightShade color.Color = color.RGBA{A: 0xFF}
 
-// The literals behind the tokens above, parsed once: lipgloss.Color parses its
-// string on every call, and the window dots and the cursor are asked for on
-// every frame.
 var (
 	tokDotClose        = lipgloss.Color("#ff5f57")
 	tokDotMinimise     = lipgloss.Color("#febc2e")

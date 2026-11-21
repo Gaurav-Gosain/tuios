@@ -66,7 +66,6 @@ const (
 	KindInput  = 2
 )
 
-// maxFrame bounds a frame read from the renderer.
 const maxFrame = 16 << 20
 
 // Options configures one bridge run.
@@ -397,7 +396,6 @@ func Run(opts Options) error {
 	if opts.Cols <= 0 || opts.Rows <= 0 {
 		opts.Cols, opts.Rows = 120, 40
 	}
-	// Before the first layout, so the panes start at the size they keep.
 	setInsets(opts.Insets, opts.CellWidth, opts.CellHeight)
 	out := newFrameWriter(opts.Out)
 	defer out.Close()
@@ -408,20 +406,10 @@ func Run(opts Options) error {
 		CellWidth:    opts.CellWidth,
 		CellHeight:   opts.CellHeight,
 	}
-	// The renderer draws pictures itself, from the bytes in the stream:
-	// kitty images, frame edits, and sixel, which it turns into kitty
-	// images. The daemon is told so, so it answers a guest's kitty query
-	// and lists sixel in DA1. The model here draws nothing, so caps stays
-	// without graphics and its passthrough stays off.
-	// The bridge's model draws nothing, so image_symbols is left at its
-	// default, as the process value it used to read always was here.
 	hello := app.ClientCapabilitiesOf(caps, config.ImageSymbolsAuto)
 	hello.KittyGraphics, hello.SixelGraphics, hello.KittyAnimation = true, true, true
 	client := session.NewTUIClient()
-	// The size is the renderer's window, not this process's terminal, which
-	// it has none of.
 	client.Served = true
-	// The renderer runs where the person is, so its agent socket is theirs.
 	client.SSHAuthSock = os.Getenv("SSH_AUTH_SOCK")
 	if opts.Host == "" {
 		if err := client.ConnectWithCapabilities(opts.Version, opts.Cols, opts.Rows, hello); err != nil {
@@ -432,7 +420,6 @@ func Run(opts Options) error {
 	}
 	cached := client.CachedSessions()
 	if opts.SessionID != "" {
-		// The handshake's listing can come after this point; ask.
 		if listed := listSessions(opts.Version, opts.Host); len(listed) > 0 {
 			cached = listed
 		}
@@ -446,8 +433,6 @@ func Run(opts Options) error {
 	if name == "" && state != nil {
 		name = state.Name
 	}
-	// From the listing made before the attach, which clears the restored
-	// mark.
 	info := attachedInfo(cached, name, opts.Host)
 	client.StartReadLoop()
 
@@ -470,14 +455,8 @@ func Run(opts Options) error {
 	osModel.SnapshotScrollback = max(opts.Scrollback, 0)
 	osModel.WireDaemonClient(client)
 	osModel.RestoreAttachedSession(state)
-	// The renderer's window opening is the person turning to the session,
-	// as each later resize is. A session that kept the size of a client
-	// that has left takes the renderer's size now, with no key typed.
 	reportResize(client)
 
-	// The model swaps its daemon client when it dials a dropped host link
-	// again. Input, the person nonce and the detach must use the one in
-	// force, or keys go to a closed connection after the link comes back.
 	cur := &atomic.Pointer[session.TUIClient]{}
 	cur.Store(client)
 	m := &model{os: osModel, out: out, version: opts.Version, nonce: func() string { return cur.Load().HumanNonce() }, host: opts.Host, tap: streams, client: cur, hostsWake: make(chan struct{}, 1)}
@@ -495,8 +474,6 @@ func Run(opts Options) error {
 	streams.program.Store(program)
 	osModel.BindProgram(program)
 
-	// The renderer has a truecolor display whatever this process's stdout
-	// says, and the theme it gets is worked out for that depth.
 	theme.SetColorProfile(colorprofile.TrueColor)
 	if opts.Theme != "" {
 		_ = theme.Initialize(opts.Theme)
@@ -508,7 +485,6 @@ func Run(opts Options) error {
 	th := CurrentTheme()
 	out.JSON(Event{Type: "theme", Theme: &th})
 	m.sendKeybinds()
-	// Runs before out closes: deferred calls run last first.
 	stopFleet := make(chan struct{})
 	defer close(stopFleet)
 	go watchFleet(stopFleet, out, opts.Version)
@@ -519,9 +495,6 @@ func Run(opts Options) error {
 		if !errors.Is(err, io.EOF) {
 			log.Printf("gui-bridge: renderer input: %v", err)
 		}
-		// The renderer is gone. Leave the session as a detach does, so the
-		// daemon counts this client out at once and the session size follows
-		// the clients that are still there.
 		if err := cur.Load().Detach(); err != nil {
 			log.Printf("gui-bridge: detach: %v", err)
 		}
@@ -529,7 +502,6 @@ func Run(opts Options) error {
 	}()
 
 	_, err = program.Run()
-	// The daemon ended the attach: say why, before the pipe closes.
 	if d := detachedEvent(m.os); d != nil {
 		out.JSON(Event{Type: "detached", Detached: d})
 	}
@@ -538,8 +510,6 @@ func Run(opts Options) error {
 	return err
 }
 
-// newModel is served.NewModel with the chrome a native renderer draws itself
-// turned off, so the layout gives the panes the whole grid.
 func newModel(opts app.OSOptions) *app.OS {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -555,21 +525,13 @@ func newModel(opts app.OSOptions) *app.OS {
 	opts.Settings = &seed
 	o := app.NewOS(opts)
 	o.ReloadFilter = withOwnChrome
-	// The renderer draws a zoom itself, over the other panes, and they keep
-	// their sizes. A zoom of part of the screen would resize them for every
-	// client of the session.
 	o.FullZoom = true
-	// The renderer draws its own sidebar and frames, and gives the guest the
-	// whole tile. Both stay this model's own: the session keeps the rail and
-	// the shared borders its terminal clients chose.
 	o.NoRail = true
 	o.OwnPaneBorders = true
 	o.SessionSharedBorders = sessionBorders
 	return o
 }
 
-// chromeOverrides turn off the chrome the renderer draws itself: the dock,
-// the borders between panes and the animations. The sidebar goes too.
 var chromeOverrides = config.Overrides{
 	Sets: []config.OptionSet{
 		{Path: "appearance.dockbar_position", Value: "hidden"},
@@ -578,12 +540,6 @@ var chromeOverrides = config.Overrides{
 	NoAnimations: true,
 }
 
-// withOwnChrome is a reloaded config with the chrome the renderer draws
-// itself turned off. A reload applies the file's appearance to the model
-// whole, and lays the panes out and tells the daemon before anything else
-// runs: the dock came back above the panes, the session's panes moved down
-// two rows for every client, and the renderer drew them short. A change to
-// any option, or a host added, reloads the file. Only the copy changes.
 func withOwnChrome(cfg *config.UserConfig) *config.UserConfig {
 	c := *chromeOverrides.Config(cfg)
 	off := false
@@ -591,63 +547,36 @@ func withOwnChrome(cfg *config.UserConfig) *config.UserConfig {
 	return &c
 }
 
-// cmdMsg carries a renderer command into the Update loop.
 type cmdMsg Command
 
-// resyncMsg says the renderer has read everything the writer held after it
-// fell behind and pane output was dropped. Every pane gets a fresh snapshot.
 type resyncMsg struct{}
 
-// model wraps the client model: every message goes through it, and after each
-// one the session's layout is sent to the renderer if it changed.
 type model struct {
-	os      *app.OS
-	out     *frameWriter
-	last    []byte
-	gitSeen map[string]gitEntry
-	// gitBusy marks the folders a read is out for, and program is where the
-	// read's answer goes. See git.
-	gitBusy map[string]bool
-	program *tea.Program
-	// gitNext is when the earliest reading export used goes stale, and
-	// gitArmed says a gitDueMsg is on its way. See armGitRefresh.
-	gitNext  time.Time
-	gitArmed bool
-	// keysFrom is the config the last keybinds event was built from. A
-	// reload replaces the registry's config, and the next message sends the
-	// keys again.
-	keysFrom *config.UserConfig
-	// results wait for the state that shows their effect.
-	results []Result
-	// version is this build's, for the verb connections. nonce reads the
-	// attach nonce the daemon issued to this client, for the person verbs.
-	version string
-	nonce   func() string
-	// attentionSent, attentionGen and attentionLive are the Inbox as last
-	// sent, and notified the alerts already sent. See inbox.go.
-	attentionSent bool
-	attentionGen  uint64
-	attentionLive bool
-	notified      map[string]bool
-	// paletteSent is the palette as last sent, and paletteKey what it was
-	// built from. See palette.go.
-	paletteSent string
-	paletteKey  paletteInputs
-	// launcherWanted is set while a launcher command waits for its scan.
+	os             *app.OS
+	out            *frameWriter
+	last           []byte
+	gitSeen        map[string]gitEntry
+	gitBusy        map[string]bool
+	program        *tea.Program
+	gitNext        time.Time
+	gitArmed       bool
+	keysFrom       *config.UserConfig
+	results        []Result
+	version        string
+	nonce          func() string
+	attentionSent  bool
+	attentionGen   uint64
+	attentionLive  bool
+	notified       map[string]bool
+	paletteSent    string
+	paletteKey     paletteInputs
 	launcherWanted bool
-	// host is the machine the session is on, empty for this one, and tap
-	// the stream tap, which a switch-session hands its resume positions.
-	host string
-	tap  *tap
-	// client is the daemon client in force, which readCommands writes
-	// input to. See Run.
-	client *atomic.Pointer[session.TUIClient]
-	// hostsWake tells watchHosts the daemon pushed a change to its hosts
-	// table or a link, so it reads list-hosts at once. See hosts.go.
-	hostsWake chan struct{}
+	host           string
+	tap            *tap
+	client         *atomic.Pointer[session.TUIClient]
+	hostsWake      chan struct{}
 }
 
-// sendKeybinds sends the keybinds event and notes the config it came from.
 func (m *model) sendKeybinds() {
 	if r := m.os.KeybindRegistry; r != nil {
 		m.keysFrom = r.GetConfig()
@@ -656,42 +585,26 @@ func (m *model) sendKeybinds() {
 	m.paletteKey = paletteInputs{}
 }
 
-// paletteInputs is what the palette rows are built from. The config counts by
-// identity: a reload replaces it, and sendKeybinds follows the same pointer.
-// It was a fmt.Sprint of these with the config printed field by field, on
-// every message: over half of this process's work while idle, and while a
-// pane redrew at 60 Hz.
 type paletteInputs struct {
 	keys          *config.UserConfig
 	agents, group bool
 	set           bool
 }
 
-// gitEntry is a cached reading of a folder's checkout.
 type gitEntry struct {
 	repo, branch string
 	at           time.Time
 }
 
-// gitReadMsg carries a finished read of a folder's checkout into Update.
 type gitReadMsg struct {
 	dir   string
 	entry gitEntry
 }
 
-// gitStaleAfter is how old a reading of a folder's checkout can get before
-// export asks for a new one.
 const gitStaleAfter = 4 * time.Second
 
-// gitDueMsg says a reading export used has gone stale. Update runs export on
-// it, which reads the folder again.
 type gitDueMsg struct{}
 
-// git names the repository and branch of dir from the last reading, and
-// starts a new reading when that one is older than a few seconds. The read
-// runs on its own goroutine, because it can run git, and export runs after
-// every message on the model's goroutine. Until the first reading lands the
-// folder has no repository, and the state that follows the reading has it.
 func (m *model) git(dir string) (string, string) {
 	if dir == "" {
 		return "", ""
@@ -721,12 +634,6 @@ func (m *model) git(dir string) (string, string) {
 	return e.repo, e.branch
 }
 
-// armGitRefresh adds a gitDueMsg for when the earliest reading export used
-// goes stale. A checkout can change while nothing else happens: a branch
-// switched in another terminal, or a command that prints nothing. The
-// refresh used to ride the client's idle tick and then the session listing
-// poll, and neither runs at idle any more. One timer serves every folder,
-// and none runs while no pane sits in a folder.
 func (m *model) armGitRefresh(cmd tea.Cmd) tea.Cmd {
 	if m.gitArmed || m.gitNext.IsZero() {
 		return cmd
@@ -803,13 +710,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) handle(c Command) tea.Cmd {
 	switch c.Cmd {
 	case "action", "focus", "workspace":
-		// A key or a click the renderer handled itself: the person using
-		// the session, as a terminal client counts its window management
-		// keys (app.OS.reportActivity).
 		reportInput(m.client.Load())
 	case "resize":
-		// The renderer's window changed size, or it sent its first size
-		// after the attach. See reportResize.
 		reportResize(m.client.Load())
 	}
 	switch c.Cmd {
@@ -825,9 +727,6 @@ func (m *model) handle(c Command) tea.Cmd {
 			m.os = o
 		}
 		if changed {
-			// The layout may not move when only the insets change, so each
-			// pane is told its new size here. Resize sends nothing for a
-			// pane whose size stays the same.
 			for _, w := range m.os.Windows {
 				if w != nil {
 					w.Resize(w.Width, w.Height)
@@ -836,18 +735,12 @@ func (m *model) handle(c Command) tea.Cmd {
 		}
 		return cmd
 	case "focus":
-		// The daemon keeps the session's focus. A terminal client tells it
-		// after every key and click. Without this, the next push from the
-		// daemon (a reattach, or a resync after a burst of output) hands the
-		// old focus back and the renderer's focus jumps to another pane.
 		if m.os.FocusPane(c.Window) == nil {
 			m.os.SyncStateToDaemon()
 		}
 	case "workspace":
 		_ = m.os.SwitchWorkspace(c.N)
 	case "tape":
-		// The routed-command path the daemon uses for `tuios run-command`, so
-		// the renderer can run anything a tape can.
 		if dropped := m.os.QueueRemoteCommand(&session.RemoteCommandPayload{
 			CommandType: "tape_command",
 			TapeCommand: c.Command,
@@ -856,9 +749,6 @@ func (m *model) handle(c Command) tea.Cmd {
 			log.Printf("gui-bridge: command queue full, dropped %s", c.Command)
 		}
 	case "theme":
-		// The theme is this client's own setting, as in the terminal
-		// client. With persist it is also written to the config file, as the
-		// terminal client's theme picker writes it.
 		res := Result{Req: c.Req, Cmd: c.Cmd, Name: c.Theme}
 		err := theme.Initialize(c.Theme)
 		if err != nil {
@@ -924,19 +814,13 @@ func (m *model) handle(c Command) tea.Cmd {
 			nonce = m.nonce()
 		}
 		if c.Verb == "reply-approval" {
-			// This client answers it: the close that follows is not news.
 			id, _ := c.Params["request_id"].(string)
 			m.os.NoteInboxReplied(id)
 		}
 		go runVerb(m.out, m.version, nonce, c)
 	case "resync":
-		// The renderer dropped what it held of one pane's stream (its
-		// backlog passed its cap, or a key went to a pane far behind). The
-		// pane gets a "seq" event and a fresh snapshot, and streams on from
-		// there. ID is the pane's PTY id.
 		m.os.ResyncPaneStream(c.ID)
 	case "probe-host":
-		// The renderer typed into a pane on the host: probe it now.
 		pokeHost(c.Name)
 	case "quit":
 		return tea.Quit
@@ -944,7 +828,6 @@ func (m *model) handle(c Command) tea.Cmd {
 	return nil
 }
 
-// answer queues a command's result, sent after the state that shows it.
 func (m *model) answer(res Result, err error) {
 	res.OK = err == nil
 	if err != nil {
@@ -957,8 +840,6 @@ func (m *model) export() {
 	o := m.os
 	view := o.CurrentSessionView()
 	st := &State{
-		// The model's own name for the session, which follows a switch made
-		// inside the session (a pane running tuios switch, say).
 		Session:        o.SessionName,
 		Cols:           o.GetRenderWidth(),
 		Rows:           o.Height,
@@ -1038,8 +919,6 @@ func (m *model) export() {
 
 var insetsNow terminal.PixelInsets
 
-// setInsets applies the renderer's insets and reports whether they changed.
-// Anything other than four values turns them off.
 func setInsets(v []int, cellW, cellH int) bool {
 	var in terminal.PixelInsets
 	if len(v) == 4 && cellW > 0 && cellH > 0 {
@@ -1057,14 +936,11 @@ func setInsets(v []int, cellW, cellH int) bool {
 	return true
 }
 
-// tap forwards the panes' streams to the renderer, in order. resume and
-// from are the positions the renderer's kept emulators hold; see resume.go.
 type tap struct {
-	out    *frameWriter
-	mu     sync.Mutex
-	resume map[string]int64
-	from   map[string]int64
-	// program gets a ptyResizedMsg for each resize, once it runs.
+	out     *frameWriter
+	mu      sync.Mutex
+	resume  map[string]int64
+	from    map[string]int64
 	program atomic.Pointer[tea.Program]
 }
 
@@ -1087,9 +963,6 @@ func (t *tap) Snapshot(ptyID string, state *session.TerminalState) {
 }
 
 func (t *tap) Output(ptyID string, data []byte) {
-	// data is queued as it is, not copied: the daemon client hands each
-	// callback a payload of its own and never writes to it again, and the
-	// pane's emulator only reads it. See Window.WriteOutputAsync.
 	t.out.frameWith(KindOutput, appendID(make([]byte, 0, 1+len(ptyID)), ptyID), data)
 }
 
@@ -1098,29 +971,16 @@ func (t *tap) Resized(ptyID string, width, height int) {
 	b = binary.BigEndian.AppendUint16(b, uint16(width))
 	b = binary.BigEndian.AppendUint16(b, uint16(height))
 	t.out.Frame(KindResize, b)
-	// Sent from a goroutine of its own: the daemon client can call this on
-	// the model's goroutine, and Send blocks until Update takes the message.
 	if p := t.program.Load(); p != nil {
 		go p.Send(ptyResizedMsg{pty: ptyID, cols: width, rows: height})
 	}
 }
 
-// ptyResizedMsg says the daemon resized a pane's PTY, by this client or by
-// another one.
 type ptyResizedMsg struct {
 	pty        string
 	cols, rows int
 }
 
-// refit gives a pane back the size this bridge lays it out at, when another
-// client of the session resized its PTY. Only the renderer takes its insets
-// off each pane, so a terminal client that lays the panes out gives every
-// guest the whole rectangle, and the renderer then draws a grid larger than
-// its tile. While this client sets the session's size its layout is the one
-// in force, so it says its size again. In any other case it says nothing.
-// Another client's sizes stand while it sets the size. And when no one client
-// sets it, two bridges with different insets would each answer the other, and
-// resize the pane without end.
 func (m *model) refit(r ptyResizedMsg) {
 	if !m.client.Load().SessionSizedBySelf() {
 		return
@@ -1132,8 +992,6 @@ func (m *model) refit(r ptyResizedMsg) {
 		if cols, rows := w.AnnouncedSize(); cols == r.cols && rows == r.rows {
 			return
 		}
-		// The PTY has the size the daemon reports, whatever this window last
-		// announced. Recording it makes Resize send the layout's size again.
 		w.SeedAnnouncedSize(r.cols, r.rows)
 		w.Resize(w.Width, w.Height)
 		return
@@ -1148,8 +1006,6 @@ func appendID(b []byte, id string) []byte {
 	return append(b, id...)
 }
 
-// readCommands reads renderer frames until EOF. Input goes straight to the
-// daemon; everything else runs on the Update loop.
 func readCommands(r io.Reader, client *atomic.Pointer[session.TUIClient], p *tea.Program) error {
 	br := bufio.NewReaderSize(r, 64<<10)
 	var hdr [5]byte
@@ -1186,11 +1042,6 @@ func readCommands(r io.Reader, client *atomic.Pointer[session.TUIClient], p *tea
 	}
 }
 
-// reportInput tells the daemon the person typed in the renderer, as a
-// terminal client does for a key (app.OS.reportActivity). Under window_size
-// latest it makes this client the latest one, so the session takes the
-// renderer's size while the person uses it. Both reports are throttled in the
-// client.
 func reportInput(c *session.TUIClient) {
 	if c == nil {
 		return
@@ -1202,16 +1053,6 @@ func reportInput(c *session.TUIClient) {
 	}
 }
 
-// reportResize makes this client the latest one under window_size latest
-// when the renderer attaches or its window changes size. A terminal client
-// counts neither one (see window_size.go). The renderer counts both, because a
-// person who opens the window or drags it larger expects the panes to fill it.
-// Without this, a session whose last client with input has left keeps that
-// client's size, and the renderer shows a small layout in a large window until
-// someone types in a pane. The cost is that a compositor that retiles the
-// window, with nobody at it, takes the session from a terminal client in use
-// once that client's hold has passed. It is not use of the session
-// (ReportUsed): that stays with input.
 func reportResize(c *session.TUIClient) {
 	if c == nil {
 		return
@@ -1221,40 +1062,24 @@ func reportResize(c *session.TUIClient) {
 	}
 }
 
-// frameWriter serializes frames onto the renderer's pipe from any goroutine.
-// Frames queue in memory, so a tap callback never blocks on the pipe.
-//
-// The queue is bounded. A renderer that stops reading while a pane floods
-// would otherwise hold every byte the pane prints in this process. Past
-// maxQueued bytes the writer drops the pane frames it holds (output,
-// snapshots and resizes) and takes no more, and the control frames go on.
-// Once the renderer has read everything left, the writer calls onResync,
-// and the model sends a fresh snapshot of every pane and streams on from it
-// (resyncMsg). After a failed write the renderer is gone: the queue is
-// dropped and nothing more is taken.
 type frameWriter struct {
-	mu     sync.Mutex
-	cond   *sync.Cond
-	queue  []queuedFrame
-	queued int
-	closed bool
-	failed bool
-	// stale is set when pane frames were dropped, until the resync.
+	mu       sync.Mutex
+	cond     *sync.Cond
+	queue    []queuedFrame
+	queued   int
+	closed   bool
+	failed   bool
 	stale    bool
 	max      int
 	onResync func()
 	done     chan struct{}
 }
 
-// queuedFrame is one frame, or one part of one, and whether it belongs to a
-// pane's stream (dropped on a stall) or is a control frame (kept).
 type queuedFrame struct {
 	b    []byte
 	pane bool
 }
 
-// defaultQueueMax is how much the writer holds for a renderer that does not
-// read. TUIOS_GUI_BRIDGE_QUEUE_MAX sets another size in bytes, for tests.
 const defaultQueueMax = 32 << 20
 
 func newFrameWriter(w io.Writer) *frameWriter {
@@ -1267,7 +1092,6 @@ func newFrameWriter(w io.Writer) *frameWriter {
 	return f
 }
 
-// paneKind reports whether a frame of kind belongs to a pane's stream.
 func paneKind(kind byte) bool {
 	return kind == KindOutput || kind == KindSnap || kind == KindResize
 }
@@ -1280,10 +1104,6 @@ func (f *frameWriter) Frame(kind byte, payload []byte) {
 	f.push(paneKind(kind), b)
 }
 
-// frameWith queues a frame whose payload is head then body, as two queue
-// entries put in under one hold of the lock, so frames never interleave.
-// body is written from where it is, so the caller must not change it
-// afterwards.
 func (f *frameWriter) frameWith(kind byte, head, body []byte) {
 	b := make([]byte, 5, 5+len(head))
 	binary.BigEndian.PutUint32(b, uint32(1+len(head)+len(body)))
@@ -1303,8 +1123,6 @@ func (f *frameWriter) push(pane bool, parts ...[]byte) {
 		n += len(b)
 	}
 	if pane && f.queued+n > f.max {
-		// The renderer is not keeping up. What it has not read of the
-		// panes is dropped; the resync replaces it.
 		kept := f.queue[:0]
 		f.queued = 0
 		for _, q := range f.queue {
@@ -1328,8 +1146,6 @@ func (f *frameWriter) push(pane bool, parts ...[]byte) {
 	f.cond.Signal()
 }
 
-// endResync lets pane frames in again. The model calls it on the Update
-// goroutine just before it sends the fresh snapshots.
 func (f *frameWriter) endResync() {
 	f.mu.Lock()
 	f.stale = false
@@ -1358,7 +1174,6 @@ func (f *frameWriter) run(w io.Writer) {
 		f.mu.Lock()
 		for len(f.queue) == 0 && !f.closed {
 			if f.stale && !resyncAsked && f.onResync != nil {
-				// Everything held has been read: the renderer is back.
 				resyncAsked = true
 				go f.onResync()
 			}
@@ -1395,8 +1210,6 @@ func (f *frameWriter) Close() {
 	<-f.done
 }
 
-// startedByRef is a pane's started_by for a state row, nil when no pane
-// started it.
 func startedByRef(sessionName, window string) *session.PaneRef {
 	if window == "" {
 		return nil

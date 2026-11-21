@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// countingReaderAt counts the reads that reach the file.
 type countingReaderAt struct {
 	r     io.ReaderAt
 	reads int
@@ -44,9 +43,6 @@ func TestBlockReaderAnswersLikeTheFile(t *testing.T) {
 		gn, gerr := b.ReadAt(got, int64(off))
 		en, eerr := want.ReadAt(exp, int64(off))
 		if n == 0 {
-			// A read of no bytes returns none. What error it comes with at the
-			// end of the file differs between readers (bytes.Reader says EOF,
-			// os.File says nothing), and a caller has nothing to read in it.
 			if gn != 0 {
 				t.Fatalf("ReadAt(0 bytes at %d) = %d", off, gn)
 			}

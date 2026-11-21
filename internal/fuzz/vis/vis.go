@@ -32,8 +32,6 @@ const (
 	DefaultFPS   = 30
 	DefaultBatch = 12
 
-	// railWidth is fixed. The instruments are the whole truth of the run, so
-	// they keep their columns and the app viewport flexes around them.
 	railWidth = 39
 
 	// MinWidth and MinHeight are the smallest frame worth drawing. Below this
@@ -156,8 +154,6 @@ func (d *Display) loop() {
 	d.loopTimed()
 }
 
-// loopTimed coalesces to a frame rate. It draws only when the generation moved,
-// so an engine that has stopped costs no frames.
 func (d *Display) loopTimed() {
 	tick := time.NewTicker(time.Second / time.Duration(d.opts.fps()))
 	defer tick.Stop()
@@ -177,10 +173,6 @@ func (d *Display) loopTimed() {
 	}
 }
 
-// loopBatch draws every N actions and on every phase change. It is what makes a
-// recording legible: at thirty frames a second over thousands of actions a
-// second the tape is a blur, and a blur of real work still reads as a fake
-// animation.
 func (d *Display) loopBatch() {
 	phase := PhaseGenerating
 	for {
@@ -207,8 +199,6 @@ func (d *Display) Frame() string {
 func (d *Display) draw() {
 	frame := d.Frame()
 	var b strings.Builder
-	// Synchronized output: the terminal holds the frame until it is complete,
-	// so a recording never catches a half-drawn instrument.
 	b.WriteString("\x1b[?2026h\x1b[H")
 	for i, line := range strings.Split(frame, "\n") {
 		if i > 0 {

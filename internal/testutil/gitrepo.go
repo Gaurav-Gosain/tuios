@@ -23,8 +23,6 @@ func GitRepo(t *testing.T) string {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
 	}
-	// A test that creates a repository must not read the user's config: a
-	// template directory or a hook there would change what the test sees.
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
 	for _, k := range []string{"GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
@@ -34,12 +32,6 @@ func GitRepo(t *testing.T) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Hand back the path with its symlinks resolved, because that is the form
-	// git reports and therefore the form a caller compares against. On macOS
-	// $TMPDIR sits under /var, which is a symlink to /private/var, so
-	// rev-parse answers /private/var/... for a repository the test knows as
-	// /var/..., and every assertion on a repo root or a worktree root fails on
-	// a difference that is not there.
 	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
 		dir = resolved
 	}

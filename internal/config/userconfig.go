@@ -121,15 +121,9 @@ type UserConfig struct {
 	// DroppedKeys are the keys the load took out because tuios cannot read
 	// them. Worked out on load and never written. See DropUnreadableKeys.
 	DroppedKeys []DroppedKey `toml:"-"`
-	// baseline is this config as TOML when it was parsed, or when it was last
-	// saved. A save writes the difference from it to now and nothing else.
-	baseline []byte
-	// layers are the files the config was read from, when known. They say
-	// where a key binding is set (BindingSource).
-	layers *LayeredConfig
-	// holds are the options set without saving, which every save leaves
-	// alone. See hold.go.
-	holds *optionHolds
+	baseline    []byte
+	layers      *LayeredConfig
+	holds       *optionHolds
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
@@ -142,10 +136,6 @@ type UserConfig struct {
 	// change. See menus_config.go.
 	Menus map[string]MenuSpec `toml:"menus,omitempty"`
 
-	// foldedMenus names the Keybindings.Menus the loader made from
-	// [menus.NAME], which a save leaves out, and shadowedMenus keeps the
-	// [keybindings.menus.NAME] one of them took the place of, which a save
-	// keeps.
 	foldedMenus   map[string]bool
 	shadowedMenus map[string]MenuConfig
 	// Hosts is the [hosts.NAME] set: the other machines this daemon may ask for
@@ -1390,26 +1380,22 @@ func DefaultConfig() *UserConfig {
 			NvimNavigation: new(false),
 			FocusWrap:      new(false),
 			Sidebar: SidebarConfig{
-				// A fresh pointer per call, so a caller that flips it in place
-				// cannot change the next DefaultConfig.
-				Enabled:        new(true),
-				Position:       DefaultSidebarPosition,
-				Width:          SidebarDefaultWidth,
-				GitRefreshMS:   SidebarGitRefreshMSDefault,
-				MarqueePauseMS: MarqueePauseMSDefault,
-				MarqueeStepMS:  MarqueeStepMSDefault,
-				Sections:       SidebarDefaultSections,
-				FolderClick:    SidebarFolderClickNavigate,
-				FilesStyle:     SidebarFilesList,
-				HeaderCase:     RailHeaderLowercase,
-				RowStyle:       RailRowBar,
-				HeaderStyle:    RailHeaderAuto,
-				Density:        RailDensityNormal,
-				FileDelete:     SidebarFileDeleteTrash,
-				AgentRestFold:  "1h",
-				SubagentRows:   SidebarSubagentRowsRows,
-				// The other subagent keys as they ship: no heading line, the
-				// row's four fields, no cap and no early hide.
+				Enabled:              new(true),
+				Position:             DefaultSidebarPosition,
+				Width:                SidebarDefaultWidth,
+				GitRefreshMS:         SidebarGitRefreshMSDefault,
+				MarqueePauseMS:       MarqueePauseMSDefault,
+				MarqueeStepMS:        MarqueeStepMSDefault,
+				Sections:             SidebarDefaultSections,
+				FolderClick:          SidebarFolderClickNavigate,
+				FilesStyle:           SidebarFilesList,
+				HeaderCase:           RailHeaderLowercase,
+				RowStyle:             RailRowBar,
+				HeaderStyle:          RailHeaderAuto,
+				Density:              RailDensityNormal,
+				FileDelete:           SidebarFileDeleteTrash,
+				AgentRestFold:        "1h",
+				SubagentRows:         SidebarSubagentRowsRows,
 				SubagentCollapse:     SidebarSubagentCollapseOff,
 				SubagentFields:       DefaultSubagentFields,
 				SubagentHideFinished: SubagentHideOff,
@@ -1485,13 +1471,7 @@ func DefaultConfig() *UserConfig {
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
-				"new_window": {"n"},
-				// Capital N, one shift away from the n that makes a window.
-				// Making a session was reachable from a one-cell "+" on a rail
-				// heading and from nowhere else a keyboard could find, which
-				// made the first thing anybody does the least reachable thing
-				// in the interface. It asks which machine when there is more
-				// than one, and offers a global session alongside them.
+				"new_window":        {"n"},
 				"new_session":       {"N"},
 				"close_window":      {"w", "x"},
 				"rename_window":     {"r"},
@@ -1499,85 +1479,40 @@ func DefaultConfig() *UserConfig {
 				"restore_all":       {"M"},
 				"toggle_zoom":       {"z"},
 				"start_screensaver": {"S"},
-				// p pins the focused pane as the picture-in-picture view and
-				// unpins it again. p for pin. It was free in window mode.
-				"toggle_pip": {"p"},
-				// P gives the keyboard to the rail's pane section, next to
-				// the p that pins a pane in the corner.
-				"focus_rail_pane": {"P"},
-				// Finishing a mouse selection has always told the user to press
-				// 'c' to copy it. Until this binding existed, nothing was
-				// listening.
-				"copy_selection": {"c"},
-				"next_window":    {"tab"},
-				"prev_window":    {"shift+tab"},
-				// tmux's last-pane key. Alternating presses flip between the
-				// last two panes, which is how a jump lands back where it left.
-				// 'l' was the other candidate and is snap_right.
-				"last_pane":       {";"},
-				"select_window_1": {"1"},
-				"select_window_2": {"2"},
-				"select_window_3": {"3"},
-				"select_window_4": {"4"},
-				"select_window_5": {"5"},
-				"select_window_6": {"6"},
-				"select_window_7": {"7"},
-				"select_window_8": {"8"},
-				"select_window_9": {"9"},
-				// Enter the sidebar rail's keyboard scope; s is free in window mode.
-				"focus_sidebar": {"s"},
-				// Walking sessions is a chord, not a letter, so it also works while
-				// typing in a shell (see TerminalSafeAction). Spell the shift out:
-				// "alt+N" normalizes to alt+n, which is already next-window.
-				"next_session": {"alt+shift+n"},
-				"prev_session": {"alt+shift+p"},
-				// Walking agent panes, on the vim pair, terminal-safe for the
-				// same reason. On macOS Option+Shift+j and k compose Ô and ,
-				// which the glyph table maps back to these chords.
-				"next_agent": {"alt+shift+j"},
-				"prev_agent": {"alt+shift+k"},
+				"toggle_pip":        {"p"},
+				"focus_rail_pane":   {"P"},
+				"copy_selection":    {"c"},
+				"next_window":       {"tab"},
+				"prev_window":       {"shift+tab"},
+				"last_pane":         {";"},
+				"select_window_1":   {"1"},
+				"select_window_2":   {"2"},
+				"select_window_3":   {"3"},
+				"select_window_4":   {"4"},
+				"select_window_5":   {"5"},
+				"select_window_6":   {"6"},
+				"select_window_7":   {"7"},
+				"select_window_8":   {"8"},
+				"select_window_9":   {"9"},
+				"focus_sidebar":     {"s"},
+				"next_session":      {"alt+shift+n"},
+				"prev_session":      {"alt+shift+p"},
+				"next_agent":        {"alt+shift+j"},
+				"prev_agent":        {"alt+shift+k"},
 			},
 			Workspaces: getDefaultWorkspaceKeybinds(),
 			Layout:     getDefaultLayoutKeybinds(),
 			ModeControl: map[string][]string{
-				"enter_terminal_mode": {"i", "enter"},
-				"enter_window_mode":   {"esc"},
-				"toggle_help":         {"?"},
-				"quit":                {"q"},
-				// "," is resize_master_shrink_left by default too. mode_control is
-				// consulted after layout, so settings wins and the doctor reports
-				// the resize bind as dead, which is the honest description of what
-				// the input path was already doing behind a literal.
-				"open_settings": {","},
-				// U opens the keybind preset picker. The welcome screen shows
-				// it, so a tmux or screen user finds their keys on day one.
+				"enter_terminal_mode":  {"i", "enter"},
+				"enter_window_mode":    {"esc"},
+				"toggle_help":          {"?"},
+				"quit":                 {"q"},
+				"open_settings":        {","},
 				"open_keybind_presets": {"U"},
-				// hold_window_mode is deliberately absent rather than present and
-				// empty. An empty list is how a user says they took a key away
-				// (see keybind_unbind.go), and a default must not say that on
-				// their behalf: it would show up in the keybind manager as a
-				// binding they had removed. Holding a modifier key is only
-				// reportable under the
-				// Kitty protocol's report-all-keys mode, which turns every
-				// keystroke in the session into an escape code, so it is not
-				// something everyone should pay for. The config header says how
-				// to turn it on.
 			},
 			System: map[string][]string{
-				// The log viewer and the cache stats are reached through the
-				// debug submenu (leader, D) rather than a key of their own.
-				//
-				// The spotlight is not a debug command, and it is switched on
-				// while somebody is watching the screen, so it is one key. B for
-				// beam, capital because the lower case b started words people
-				// typed into window mode by mistake ("bash", "build"), and the
-				// beam that came on dimmed the screen with no visible way out.
-				// Esc turns it off in window mode; leader, B in either mode.
 				"toggle_spotlight": {"B"},
 			},
-			// The arrow keys belong to whatever overlay is up, and each overlay
-			// takes them by key before any binding is consulted. The section
-			// stays so a file that names it still parses.
 			Navigation: map[string][]string{},
 			RestoreMinimized: map[string][]string{
 				"restore_minimized_1": {"shift+1", "!"},
@@ -1591,169 +1526,84 @@ func DefaultConfig() *UserConfig {
 				"restore_minimized_9": {"shift+9", "("},
 			},
 			PrefixMode: map[string][]string{
-				"new_window":           {"c"},
-				"close_window":         {"x"},
-				"prefix_rename_window": {"r"},
-				"open_settings":        {","},
-				"prefix_keybinds":      {"k"},
-				"prefix_next_window":   {"n", "tab"},
-				"prefix_prev_window":   {"p", "shift+tab"},
-				// Walking panes from the prefix, on the arrows, which is what
-				// tmux binds and what every tmux user reaches for first.
-				//
-				// They matter most on macOS. The direct chords for this are
-				// alt+left and alt+right, and those are the two a macOS
-				// terminal is most likely to rewrite into the readline word
-				// motions before tuios ever sees them, so the prefix is the
-				// path that works with no terminal settings at all.
-				//
-				// The arrows rather than hjkl: j is the jump-to-message key
-				// and k opens the keybindings, both already bound here, and
-				// taking either would be trading one familiar thing for
-				// another. The arrows were free.
-				//
-				// One prefix press covers a run of them; see the repeat window
-				// in internal/input/prefix_repeat.go.
-				"terminal_focus_left":  {"left"},
-				"terminal_focus_right": {"right"},
-				"focus_up":             {"up"},
-				"focus_down":           {"down"},
-				// Stepping through sessions, which tmux puts on the same pair
-				// of brackets. The direct chords are alt+shift+n and
-				// alt+shift+p, and the first of those is dead on macOS: the
-				// Option+Shift glyph for n is the dead tilde, so it is left
-				// out of the glyph table on purpose and nothing matches it.
-				"next_session": {")"},
-				"prev_session": {"("},
-				// Stepping through agent panes, shifted j and k as on the
-				// direct chords. Lower j and k are taken here.
-				"next_agent": {"J"},
-				"prev_agent": {"K"},
-				// The launcher's direct chord is alt+space, which macOS turns
-				// into a non-breaking space that matches nothing. This is the
-				// way in that does not depend on the terminal.
-				"launcher":             {"a"},
-				"prefix_select_0":      {"0"},
-				"prefix_select_1":      {"1"},
-				"prefix_select_2":      {"2"},
-				"prefix_select_3":      {"3"},
-				"prefix_select_4":      {"4"},
-				"prefix_select_5":      {"5"},
-				"prefix_select_6":      {"6"},
-				"prefix_select_7":      {"7"},
-				"prefix_select_8":      {"8"},
-				"prefix_select_9":      {"9"},
-				"prefix_toggle_tiling": {"space"},
-				"prefix_workspace":     {"w"},
-				"prefix_minimize":      {"m"},
-				"prefix_window":        {"t"},
-				"prefix_detach":        {"d"},
-				// Capital X, one shift away from the x that closes a single pane.
-				// The two verbs sound alike and only one of them is recoverable, so
-				// the slip that matters costs a pane and never the session.
-				"prefix_close_session": {"X"},
-				"prefix_exit_mode":     {"esc"},
-				"prefix_selection":     {"["},
-				"toggle_help":          {"?"},
-				"prefix_debug":         {"D"},
-				"prefix_tape":          {"T"},
-				"prefix_quit":          {"q"},
-				"prefix_fullscreen":    {"z"},
-				"split_horizontal":     {"-"},
-				"split_vertical":       {"|", "\\"},
-				"rotate_split":         {"R"},
-				"equalize_splits":      {"="},
-				"prefix_scrollback":    {"s"},
-				// s is the scrollback browser, so the capture takes capital C,
-				// one shift away from the c that creates a window. Nothing here
-				// is destructive either way.
-				"prefix_screenshot":        {"C"},
-				"command_palette":          {"P"},
-				"prefix_file_search":       {"f"},
-				"prefix_toggle_sidebar":    {"b"},
-				"prefix_toggle_other_rail": {"H"},
-				// B turns the spotlight on and off from either mode. In
-				// terminal mode it is the way out of the beam, since esc
-				// belongs to the program in the pane there.
-				"toggle_spotlight":        {"B"},
-				"prefix_session_switcher": {"S"},
-				// + adds a task card from anywhere. N, the design's first
-				// pick, is the last message.
+				"new_window":                {"c"},
+				"close_window":              {"x"},
+				"prefix_rename_window":      {"r"},
+				"open_settings":             {","},
+				"prefix_keybinds":           {"k"},
+				"prefix_next_window":        {"n", "tab"},
+				"prefix_prev_window":        {"p", "shift+tab"},
+				"terminal_focus_left":       {"left"},
+				"terminal_focus_right":      {"right"},
+				"focus_up":                  {"up"},
+				"focus_down":                {"down"},
+				"next_session":              {")"},
+				"prev_session":              {"("},
+				"next_agent":                {"J"},
+				"prev_agent":                {"K"},
+				"launcher":                  {"a"},
+				"prefix_select_0":           {"0"},
+				"prefix_select_1":           {"1"},
+				"prefix_select_2":           {"2"},
+				"prefix_select_3":           {"3"},
+				"prefix_select_4":           {"4"},
+				"prefix_select_5":           {"5"},
+				"prefix_select_6":           {"6"},
+				"prefix_select_7":           {"7"},
+				"prefix_select_8":           {"8"},
+				"prefix_select_9":           {"9"},
+				"prefix_toggle_tiling":      {"space"},
+				"prefix_workspace":          {"w"},
+				"prefix_minimize":           {"m"},
+				"prefix_window":             {"t"},
+				"prefix_detach":             {"d"},
+				"prefix_close_session":      {"X"},
+				"prefix_exit_mode":          {"esc"},
+				"prefix_selection":          {"["},
+				"toggle_help":               {"?"},
+				"prefix_debug":              {"D"},
+				"prefix_tape":               {"T"},
+				"prefix_quit":               {"q"},
+				"prefix_fullscreen":         {"z"},
+				"split_horizontal":          {"-"},
+				"split_vertical":            {"|", "\\"},
+				"rotate_split":              {"R"},
+				"equalize_splits":           {"="},
+				"prefix_scrollback":         {"s"},
+				"prefix_screenshot":         {"C"},
+				"command_palette":           {"P"},
+				"prefix_file_search":        {"f"},
+				"prefix_toggle_sidebar":     {"b"},
+				"prefix_toggle_other_rail":  {"H"},
+				"toggle_spotlight":          {"B"},
+				"prefix_session_switcher":   {"S"},
 				"prefix_new_task":           {"+"},
 				"prefix_workspace_switcher": {"W"},
-				// G for go to, one shift from the g that shows the scratch
-				// terminal.
-				"goto_picker": {"G"},
-				// U makes a worktree of the focused pane's repository, herdr's
-				// leader+G. G is the go-to picker here, ctrl+g is the zellij
-				// preset's leader, and the multifocus docs suggest Y. U is
-				// free in every preset.
-				"new_worktree": {"U"},
-				// /, which searches everywhere else too. tmux puts its tree on
-				// s, which is the scrollback browser here.
-				"choose_tree":       {"/"},
-				"prefix_layout":     {"L"},
-				"prefix_explore":    {"e"}, // the same key goes to the rail and comes back
-				"prefix_jump_notif": {"j"}, // the keyboard twin of clicking a message
-				// N for notification. It reopens the newest message the dock
-				// showed, in full, also after it has gone from the dock.
-				"prefix_last_message": {"N"},
-				// Capital M: m is the minimize prefix, and a slip into it costs
-				// nothing. It opens the Inbox on its mail filter, one key (m)
-				// from the whole mailbox.
-				"prefix_mail": {"M"},
-				// i for the Inbox, the key the rail already uses for mail. The
-				// Inbox is everything waiting for the person in every session.
-				"prefix_inbox": {"i"},
-				// o for the oldest item that needs you. a would have been the
-				// obvious letter and is the launcher's, which on macOS is the
-				// only way into it. The prefix stays armed after it, so o o o
-				// walks everything waiting.
-				"prefix_next_attention": {"o"},
-				// v reviews what the focused pane's agent changed. O is o's
-				// twin: the newest finished turn nobody has seen, and the
-				// prefix stays armed so O O O walks back through them.
-				"prefix_review":        {"v"},
-				"prefix_next_finished": {"O"},
-				// A opens the settings page on its Agents tab, where each
-				// harness's integration is shown, installed and updated.
-				"prefix_agents_settings": {"A"},
-				// F, as in tmux-fingers. f searches files.
-				"hints": {"F"},
-				// . as in the current folder: the path picker lists it.
-				"pick_path": {"."},
-				// enter, as tmux-matryoshka's prefix Enter. Free in every
-				// preset.
-				"nest": {"enter"},
-				// Q, as in tmux's display-panes, which is q there. q is the
-				// quit menu here, and the slip from Q to q opens a menu that
-				// asks first.
-				"display_panes": {"Q"},
-				// g shows or hides the scratch terminal in a popup. It was
-				// free here, and f is kept free for the reason above.
-				"toggle_scratch": {"g"},
-				// Z for calm (zen): no motion, no blinking, and only the
-				// messages that need you. z zooms, and the slip from Z to z
-				// costs nothing.
-				"toggle_calm": {"Z"},
-				// V pastes the clipboard's image into the pane as the path of a
-				// file on the pane's machine. Capital, one shift from the v
-				// that reviews.
-				"paste_image": {"V"},
-				// ] pastes the newest paste buffer, as in tmux. tmux lists
-				// the buffers on =, which is equalize splits here, so the
-				// list takes #, the key tmux gives list-buffers.
-				"paste_buffer":  {"]"},
-				"choose_buffer": {"#"},
-				// u for the copies between machines. f searches files, c
-				// makes a window and t is the window prefix. y is the key the
-				// multifocus docs tell people to bind, so it stays free.
-				"prefix_transfers": {"u"},
-				// E opens the scrollback in the editor, one shift from the e
-				// that focuses the rail. Copy mode has it on ctrl+g.
-				ActionEditScrollback: {"E"},
-				// I writes the session's return note. i is the Inbox.
-				"set_note": {"I"},
+				"goto_picker":               {"G"},
+				"new_worktree":              {"U"},
+				"choose_tree":               {"/"},
+				"prefix_layout":             {"L"},
+				"prefix_explore":            {"e"},
+				"prefix_jump_notif":         {"j"},
+				"prefix_last_message":       {"N"},
+				"prefix_mail":               {"M"},
+				"prefix_inbox":              {"i"},
+				"prefix_next_attention":     {"o"},
+				"prefix_review":             {"v"},
+				"prefix_next_finished":      {"O"},
+				"prefix_agents_settings":    {"A"},
+				"hints":                     {"F"},
+				"pick_path":                 {"."},
+				"nest":                      {"enter"},
+				"display_panes":             {"Q"},
+				"toggle_scratch":            {"g"},
+				"toggle_calm":               {"Z"},
+				"paste_image":               {"V"},
+				"paste_buffer":              {"]"},
+				"choose_buffer":             {"#"},
+				"prefix_transfers":          {"u"},
+				ActionEditScrollback:        {"E"},
+				"set_note":                  {"I"},
 			},
 			WindowPrefix: map[string][]string{
 				"new_window":           {"n"},
@@ -1764,10 +1614,6 @@ func DefaultConfig() *UserConfig {
 				"toggle_tiling":        {"t"},
 				"window_prefix_float":  {"f"},
 				"prefix_cancel":        {"esc"},
-				// The swap and resize keys of window mode, under the leader,
-				// so a config with window mode off (keybindings.window_mode)
-				// can still move and size a pane from the keyboard. The same
-				// letters as in window mode.
 				"swap_left":            {"H"},
 				"swap_down":            {"J"},
 				"swap_up":              {"K"},
@@ -1829,33 +1675,23 @@ func DefaultConfig() *UserConfig {
 				"prefix_cancel":       {"esc"},
 			},
 			LayoutPrefix: map[string][]string{
-				"layout_prefix_load": {"l"},
-				"layout_prefix_save": {"s"},
-				"prefix_cancel":      {"esc"},
-				// Corner snapping lives here rather than on the bare digits in
-				// window mode, where it would shadow select_window_1 through
-				// _4. See getDefaultLayoutKeybinds for why it lost that contest.
-				"snap_corner_1": {"1"},
-				"snap_corner_2": {"2"},
-				"snap_corner_3": {"3"},
-				"snap_corner_4": {"4"},
-				// Percentage resizing of the focused pane: a digit sizes the
-				// width, shift+digit the height. The action names
-				// carry the percent, so any of them can be rebound or bound to
-				// another key entirely; alt+1..9 are already the workspaces.
-				"resize_width_50":  {"5"},
-				"resize_width_60":  {"6"},
-				"resize_width_70":  {"7"},
-				"resize_width_80":  {"8"},
-				"resize_width_90":  {"9"},
-				"resize_height_50": {"shift+5"},
-				"resize_height_60": {"shift+6"},
-				"resize_height_70": {"shift+7"},
-				"resize_height_80": {"shift+8"},
-				"resize_height_90": {"shift+9"},
-				// The master-stack keys, after dwm and Hyprland's master
-				// layout: o for orientation, enter for dwm's zoom, i and d for
-				// dwm's incnmaster and decnmaster.
+				"layout_prefix_load":    {"l"},
+				"layout_prefix_save":    {"s"},
+				"prefix_cancel":         {"esc"},
+				"snap_corner_1":         {"1"},
+				"snap_corner_2":         {"2"},
+				"snap_corner_3":         {"3"},
+				"snap_corner_4":         {"4"},
+				"resize_width_50":       {"5"},
+				"resize_width_60":       {"6"},
+				"resize_width_70":       {"7"},
+				"resize_width_80":       {"8"},
+				"resize_width_90":       {"9"},
+				"resize_height_50":      {"shift+5"},
+				"resize_height_60":      {"shift+6"},
+				"resize_height_70":      {"shift+7"},
+				"resize_height_80":      {"shift+8"},
+				"resize_height_90":      {"shift+9"},
 				"cycle_master_position": {"o"},
 				"swap_with_master":      {"enter"},
 				"focus_master":          {"m"},
@@ -1876,11 +1712,6 @@ func DefaultConfig() *UserConfig {
 			Review:          getDefaultReviewKeybinds(),
 			GUI:             getDefaultGUIKeybinds(),
 			Global: map[string][]string{
-				// ctrl+p is fish's history-back and vim's keyword completion, and
-				// alt+space is readline's set-mark. Both are taken on purpose and
-				// both live here rather than in the input path so a user who wants
-				// them back can have them: set the action to [] and the key is
-				// forwarded again.
 				"command_palette": {"ctrl+p"},
 				"launcher":        {"alt+space"},
 			},
@@ -1890,7 +1721,6 @@ func DefaultConfig() *UserConfig {
 			Lists: getDefaultListsKeybinds(),
 		},
 	}
-	// Written out so the file shows the key and its default.
 	cfg.Notifications.Bell = BellToast
 	cfg.Notifications.Style = NotificationStyleFull
 	cfg.Notifications.Level = NotificationLevelInfo
@@ -1908,9 +1738,6 @@ const (
 	ActionListLast     = "list_last"
 )
 
-// getDefaultListsKeybinds returns the keys that move every list. A single
-// printable character is a letter key: a list with a filter keeps its letters
-// for the filter, so it reads only the other keys.
 func getDefaultListsKeybinds() map[string][]string {
 	return map[string][]string{
 		ActionListUp:       {"up", "ctrl+p", "k"},
@@ -1922,53 +1749,43 @@ func getDefaultListsKeybinds() map[string][]string {
 	}
 }
 
-// getDefaultSidebarKeybinds returns the rail's scope-local keybindings, active
-// only while the rail owns the keyboard (SidebarFocused). Each mirrors a mouse
-// affordance so the two devices reach the same OS mutation. Case matters: J/K
-// reorder, j/k move the cursor.
 func getDefaultSidebarKeybinds() map[string][]string {
 	return map[string][]string{
-		"cursor_down":  {"j", "down"},
-		"cursor_up":    {"k", "up"},
-		"first":        {"g", "home"},
-		"last":         {"G", "end"},
-		"expand":       {"l", "right"},
-		"collapse":     {"h", "left"},
-		"activate":     {"enter"},
-		"reorder_down": {"J", "shift+down"},
-		"reorder_up":   {"K", "shift+up"},
-		"section":      {"tab", "shift+tab"},
-		"switch_edge":  {"e"}, // switch keyboard focus between two visible rails
-		// The agents section's own two controls, which is why they are single
-		// letters rather than a chord: they are the section's shape, and changing
-		// it is a browse, not a command.
+		"cursor_down":   {"j", "down"},
+		"cursor_up":     {"k", "up"},
+		"first":         {"g", "home"},
+		"last":          {"G", "end"},
+		"expand":        {"l", "right"},
+		"collapse":      {"h", "left"},
+		"activate":      {"enter"},
+		"reorder_down":  {"J", "shift+down"},
+		"reorder_up":    {"K", "shift+up"},
+		"section":       {"tab", "shift+tab"},
+		"switch_edge":   {"e"},
 		"agents_filter": {"f"},
 		"agents_sort":   {"o"},
-		// The mailbox for the pane under the cursor: i as in inbox.
-		"mail": {"i"},
-		// The rail lists; the palette searches. "/" is what searches everywhere
-		// else, and the rail is the one scope with nothing else to spend it on.
-		"palette":     {"/"},
-		"file_search": {"ctrl+f"},
-		"narrow":      {"<"},
-		"widen":       {">"},
-		"jump_1":      {"1"},
-		"jump_2":      {"2"},
-		"jump_3":      {"3"},
-		"jump_4":      {"4"},
-		"jump_5":      {"5"},
-		"jump_6":      {"6"},
-		"jump_7":      {"7"},
-		"jump_8":      {"8"},
-		"jump_9":      {"9"},
-		"new_session": {"n"},
-		"new_window":  {"t"},
-		"rename":      {"r"},
-		"accent":      {"c"},
-		"kill":        {"x"},
-		"menu":        {"m"},
-		"help":        {"?"},
-		"exit":        {"esc", "s"},
+		"mail":          {"i"},
+		"palette":       {"/"},
+		"file_search":   {"ctrl+f"},
+		"narrow":        {"<"},
+		"widen":         {">"},
+		"jump_1":        {"1"},
+		"jump_2":        {"2"},
+		"jump_3":        {"3"},
+		"jump_4":        {"4"},
+		"jump_5":        {"5"},
+		"jump_6":        {"6"},
+		"jump_7":        {"7"},
+		"jump_8":        {"8"},
+		"jump_9":        {"9"},
+		"new_session":   {"n"},
+		"new_window":    {"t"},
+		"rename":        {"r"},
+		"accent":        {"c"},
+		"kill":          {"x"},
+		"menu":          {"m"},
+		"help":          {"?"},
+		"exit":          {"esc", "s"},
 	}
 }
 
@@ -2128,48 +1945,35 @@ const (
 	ActionMailBack      = "mail_back"
 )
 
-// getDefaultInboxKeybinds returns the Inbox's keys, live while it is open.
-// They were literals in the input path, so the one list KEYBINDINGS.md said
-// could all be rebound had a part that could not.
 func getDefaultInboxKeybinds() map[string][]string {
 	return map[string][]string{
-		// ctrl+p is the palette's, over the view too, so the moves are
-		// the letters and the arrows only.
-		ActionInboxDown:     {"j", "down"},
-		ActionInboxUp:       {"k", "up"},
-		ActionInboxPageDown: {"pgdown"},
-		ActionInboxPageUp:   {"pgup"},
-		ActionInboxFirst:    {"g", "home"},
-		ActionInboxLast:     {"G", "end"},
-		ActionInboxGo:       {"enter"},
-		ActionInboxPeek:     {"space"},
-		ActionInboxDismiss:  {"d", "delete"},
-		ActionInboxReply:    {"r"},
-		ActionInboxResume:   {"y"},
-		ActionInboxPassOn:   {"p"},
-		ActionInboxFilter:   {"f"},
-		ActionInboxSelect:   {"/"},
-		ActionInboxMailbox:  {"m"},
-		// esc goes back one step, q closes at once. tab steps the
-		// regions; i and r open the reply.
-		ActionInboxClose:        {"q"},
-		ActionInboxEscape:       {"esc"},
-		ActionInboxWrite:        {"i"},
-		ActionInboxRegionNext:   {"tab"},
-		ActionInboxRegionPrev:   {"shift+tab"},
-		ActionInboxNextNeeds:    {"N"},
-		ActionInboxListNarrower: {"<"},
-		ActionInboxListWider:    {">"},
-		ActionInboxSide:         {"w"},
-		ActionInboxZoom:         {"Z"},
-		ActionInboxSort:         {"s"},
-		ActionInboxViewPane:     {"ctrl+]"},
-		// Review, triage and approvals. z snoozes and waits for a digit; u
-		// undoes a dismiss or snooze made a moment ago; S shows what is
-		// snoozed; R rejects with a reason, after the a A X R of the
-		// approval card, where 3 stays the plain reject; n starts a new
-		// agent; J and K scroll a long detail such as a plan. r always
-		// replies: on a held approval it says which keys answer.
+		ActionInboxDown:          {"j", "down"},
+		ActionInboxUp:            {"k", "up"},
+		ActionInboxPageDown:      {"pgdown"},
+		ActionInboxPageUp:        {"pgup"},
+		ActionInboxFirst:         {"g", "home"},
+		ActionInboxLast:          {"G", "end"},
+		ActionInboxGo:            {"enter"},
+		ActionInboxPeek:          {"space"},
+		ActionInboxDismiss:       {"d", "delete"},
+		ActionInboxReply:         {"r"},
+		ActionInboxResume:        {"y"},
+		ActionInboxPassOn:        {"p"},
+		ActionInboxFilter:        {"f"},
+		ActionInboxSelect:        {"/"},
+		ActionInboxMailbox:       {"m"},
+		ActionInboxClose:         {"q"},
+		ActionInboxEscape:        {"esc"},
+		ActionInboxWrite:         {"i"},
+		ActionInboxRegionNext:    {"tab"},
+		ActionInboxRegionPrev:    {"shift+tab"},
+		ActionInboxNextNeeds:     {"N"},
+		ActionInboxListNarrower:  {"<"},
+		ActionInboxListWider:     {">"},
+		ActionInboxSide:          {"w"},
+		ActionInboxZoom:          {"Z"},
+		ActionInboxSort:          {"s"},
+		ActionInboxViewPane:      {"ctrl+]"},
 		ActionInboxReview:        {"v"},
 		ActionInboxSnooze:        {"z"},
 		ActionInboxUndo:          {"u"},
@@ -2209,12 +2013,10 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxCodeCopy:      {"C"},
 		ActionInboxBlockSource:   {"V"},
 		ActionInboxBlockPicture:  {"T"},
-		// [ and ] step the tabs, so the prompt jumps take the braces.
-		ActionInboxPromptPrev: {"{"},
-		ActionInboxPromptNext: {"}"},
-		ActionInboxChild:      {"."},
-		// ctrl+o is vim's jump back.
-		ActionInboxJumpBack: {"ctrl+o"},
+		ActionInboxPromptPrev:    {"{"},
+		ActionInboxPromptNext:    {"}"},
+		ActionInboxChild:         {"."},
+		ActionInboxJumpBack:      {"ctrl+o"},
 	}
 }
 
@@ -2231,10 +2033,6 @@ const (
 	ActionTransfersClose  = "transfers_close"
 )
 
-// getDefaultTransfersKeybinds returns the Copies panel's keys, live while it
-// is open. p pauses and resumes, x cancels after it asks, r tries a failed
-// copy again, c clears the copies that ended, and enter answers a copy that
-// waits for an answer.
 func getDefaultTransfersKeybinds() map[string][]string {
 	return map[string][]string{
 		ActionTransfersDown:   {"j", "down"},
@@ -2248,11 +2046,6 @@ func getDefaultTransfersKeybinds() map[string][]string {
 	}
 }
 
-// getDefaultSidebarAgentsKeybinds returns the keys of the rail's agent rows,
-// live only while the rail owns the keyboard and the cursor is on an agent
-// row. They are consulted before the rail's own, like the files section's, so
-// r and x mean the agent on an agent row and keep their rail meaning (rename,
-// the destructive menu) everywhere else.
 func getDefaultSidebarAgentsKeybinds() map[string][]string {
 	return map[string][]string{
 		ActionAgentUnread:       {"u"},
@@ -2264,9 +2057,6 @@ func getDefaultSidebarAgentsKeybinds() map[string][]string {
 	}
 }
 
-// getDefaultInboxPeekKeybinds returns the keys of the prompt open over the
-// Inbox. A digit chooses that option and is not bindable, for the reason the
-// Inbox's digits are not.
 func getDefaultInboxPeekKeybinds() map[string][]string {
 	return map[string][]string{
 		ActionPeekApprove:       {"a"},
@@ -2279,8 +2069,6 @@ func getDefaultInboxPeekKeybinds() map[string][]string {
 	}
 }
 
-// getDefaultMailKeybinds returns the mailbox's keys, live while it is open and
-// no reply is being written.
 func getDefaultMailKeybinds() map[string][]string {
 	return map[string][]string{
 		ActionMailDown:      {"j", "down", "ctrl+n"},
@@ -2295,25 +2083,6 @@ func getDefaultMailKeybinds() map[string][]string {
 	}
 }
 
-// getDefaultSidebarFilesKeybinds returns the files section's own keys, live
-// only while the rail owns the keyboard and the cursor is on a row of the
-// listing.
-//
-// They are neo-tree's keys and yeetui's: a adds, r renames, d deletes, y
-// copies, x cuts, p pastes. Both tools agree on five of the six and the
-// maintainer wrote one of them, so this is the set his hands already know.
-//
-// A section of their own, and not entries in [keybindings.sidebar], because
-// three of them collide with a rail key that already exists: r renames a pane
-// or a session, x opens a row's destructive menu, and a makes nothing yet. One
-// map cannot hold two actions on one key, so the two maps are consulted in
-// order instead, and the row under the cursor decides which one answers. That
-// is the same rule the rail's own rename already follows, where r means the
-// pane on a pane row and the session on a session row.
-//
-// D is the permanent delete. It is a key of its own rather than a second answer
-// inside the dialog, because a file on another disk cannot go to the home trash
-// at all, and somebody who means it should not have to edit a config file.
 func getDefaultSidebarFilesKeybinds() map[string][]string {
 	return map[string][]string{
 		"file_create":         {"a"},
@@ -2323,36 +2092,16 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		"file_copy":           {"y"},
 		"file_cut":            {"x"},
 		"file_paste":          {"p"},
-		// enter is what already opens a listing row through the rail's own
-		// activate binding, so this names what that row does rather than adding
-		// a second way to do it: the menu's Open row shows the key the user is
-		// already pressing. The files scope is consulted first, so on a listing
-		// row this answers and everywhere else activate does, unchanged.
-		"file_open": {"enter"},
-		"file_edit": {"shift+enter"},
-		// Enter on a folder opens it, so a folder's path needs a key of its
-		// own. Y is yank with shift, next to y for the file itself.
-		"file_copy_path": {"Y"},
-		// S sends the file or folder to another machine. Capital, because it
-		// starts a copy over a link, and one shift from nothing else here.
-		"file_send": {"S"},
-		// I pastes the path into the focused pane, quoted for its shell: the
-		// keyboard form of dragging the row onto the pane.
-		"file_insert_path": {"I"},
-		// space previews the row, as Finder and yazi do. Free in the rail:
-		// nothing else in the rail's scope takes it.
-		"file_quick_look": {"space"},
-		// o opens the row with a program on the desktop, as yazi and ranger
-		// do. The rail binds o to agents_sort, and this one answers first only
-		// on a file row, where sorting the agents has nothing to do.
-		"file_open_system": {"o"},
+		"file_open":           {"enter"},
+		"file_edit":           {"shift+enter"},
+		"file_copy_path":      {"Y"},
+		"file_send":           {"S"},
+		"file_insert_path":    {"I"},
+		"file_quick_look":     {"space"},
+		"file_open_system":    {"o"},
 	}
 }
 
-// getDefaultQuickLookKeybinds returns the keys that move inside a file while
-// its preview is open and the keyboard is still on the list. j and k stay with
-// the list, so these are the capitals and chords nothing else on a file row
-// uses. J and K are reorder keys, which do nothing on a file row.
 func getDefaultQuickLookKeybinds() map[string][]string {
 	return map[string][]string{
 		"seek_down": {"J", "shift+down"},
@@ -2366,9 +2115,6 @@ func getDefaultQuickLookKeybinds() map[string][]string {
 	}
 }
 
-// getDefaultQuickLookInsideKeybinds returns the keys while the keyboard is
-// inside the file: plain keys act on the file, and the scope takes every key,
-// so d here cannot reach the rail's delete.
 func getDefaultQuickLookInsideKeybinds() map[string][]string {
 	return map[string][]string{
 		"line_down":    {"j", "down"},
@@ -2394,8 +2140,6 @@ func getDefaultQuickLookInsideKeybinds() map[string][]string {
 	}
 }
 
-// getDefaultTerminalModeKeybinds returns platform-specific terminal mode keybindings
-// These are direct keybinds that work in terminal mode without the prefix key
 func getDefaultTerminalModeKeybinds() map[string][]string {
 	if isMacOS() {
 		return map[string][]string{
@@ -2415,14 +2159,9 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 		}
 	}
 	return map[string][]string{
-		"terminal_next_window": {"alt+n"},
-		"terminal_prev_window": {"alt+p"},
-		"terminal_exit_mode":   {"alt+esc"},
-		// alt+left and alt+right are word-wise cursor movement in readline, fish
-		// and zsh, and taking them costs a user that. They are bound because
-		// directional focus on the arrows is what zellij and most tiling window
-		// managers do, and because each of the four is a separate action a user
-		// can set to [] to hand back. See docs/KEYBINDINGS.md.
+		"terminal_next_window":      {"alt+n"},
+		"terminal_prev_window":      {"alt+p"},
+		"terminal_exit_mode":        {"alt+esc"},
 		"terminal_focus_left":       {"alt+left"},
 		"terminal_focus_right":      {"alt+right"},
 		"focus_up":                  {"alt+up"},
@@ -2431,33 +2170,15 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 		"terminal_scroll_down":      {"shift+down"},
 		"terminal_scroll_page_up":   {"shift+pgup"},
 		"terminal_scroll_page_down": {"shift+pgdown"},
-		// Plain ctrl+v is deliberately not here: it has to reach the pane as 0x16
-		// for vim's visual block, which is the tmux and zellij convention.
-		//
-		// The third spelling is "shift+super+v". Written "super+shift+v" it is
-		// dead: a key event names its modifiers in one fixed order, shift
-		// before super, and the lookup compares the spelling as written. The
-		// chord was dead for as long as it was written the other way round, and
-		// nothing said so until the reachability table pressed it.
-		"terminal_paste_host": {"ctrl+shift+v", "super+v", "shift+super+v", "middle"},
-		// alt+; is free in bash, zsh and fish, and no preset binds it. The
-		// picker types a path at the prompt, so its key has to work while
-		// typing into the shell.
-		"pick_path": {"alt+;"},
+		"terminal_paste_host":       {"ctrl+shift+v", "super+v", "shift+super+v", "middle"},
+		"pick_path":                 {"alt+;"},
 	}
 }
 
-// getDefaultWorkspaceKeybinds returns platform-specific workspace keybindings
 func getDefaultWorkspaceKeybinds() map[string][]string {
-	// On macOS, use opt+N, which the normalizer reads as alt+N. The character
-	// Option composes for it is read by the input path (see OptionGlyphKey and
-	// BareOptionGlyphKey).
-	// On Linux/other, use alt+N
 	var base map[string][]string
 
 	if isMacOS() {
-		// macOS users think in terms of Option key
-		// The KeyNormalizer expands opt+1 to [opt+1, alt+1]
 		base = map[string][]string{
 			"switch_workspace_1":  {"opt+1"},
 			"switch_workspace_2":  {"opt+2"},
@@ -2488,7 +2209,6 @@ func getDefaultWorkspaceKeybinds() map[string][]string {
 			"send_to_workspace_9": {"ctrl+opt+9"},
 		}
 	} else {
-		// Linux and other platforms use alt
 		base = map[string][]string{
 			"switch_workspace_1":  {"alt+1"},
 			"switch_workspace_2":  {"alt+2"},
@@ -2523,58 +2243,30 @@ func getDefaultWorkspaceKeybinds() map[string][]string {
 	return base
 }
 
-// getDefaultLayoutKeybinds returns platform-specific layout keybindings
 func getDefaultLayoutKeybinds() map[string][]string {
 	layout := map[string][]string{
-		"snap_left":  {"h"},
-		"snap_right": {"l"},
-		// j and k complete the vim row h and l start. Up and down have nothing
-		// to snap to, so these only move focus, tiled or floating. H, J, K, L
-		// swap the same ways and alt+h/j/k/l preselect there.
-		"focus_down":      {"j"},
-		"focus_up":        {"k"},
-		"snap_fullscreen": {"f"},
-		"unsnap":          {"u"},
-		// snap_corner_1 through _4 are deliberately absent here. The layout
-		// table is merged into the window-mode keymap after window_management,
-		// so "1" through "4" here would win those keys outright and
-		// select_window_1 through _4 would never fire in a default install.
-		//
-		// Window mode has room for four ordinal digit rows and it already has
-		// four: plain digits select a window, shift+digits restore a minimized
-		// one, alt+digits switch workspace, alt+shift+digits move a window
-		// there. Corner snapping was the fifth claimant, and it is the one of
-		// the five whose meaning is not ordinal (a 2x2 grid, not a list) and
-		// the only one that does nothing at all in half the modes:
-		// makeSnapCornerHandler returns early when tiling is on. So it is the
-		// one that gives the digits up.
-		//
-		// It keeps its action, its handler and this table; it is bound under
-		// the layout prefix (leader, L, then 1-4), which is where a layout
-		// operation belongs and where the which-key panel can show it.
-		"toggle_tiling":        {"t"},
-		"swap_left":            {"H", "ctrl+left"},
-		"swap_right":           {"L", "ctrl+right"},
-		"swap_up":              {"K", "ctrl+up"},
-		"swap_down":            {"J", "ctrl+down"},
-		"resize_master_shrink": {"<", "shift+,"},
-		"resize_master_grow":   {">", "shift+."},
-		"resize_height_shrink": {"{", "shift+["},
-		"resize_height_grow":   {"}", "shift+]"},
-		// resize_master_shrink_left is deliberately absent rather than present and
-		// empty: "," is open_settings, and has been since the settings shortcut
-		// was a literal checked ahead of the registry, so this binding was
-		// already dead. Leaving it in the defaults would put a conflict warning
-		// on every fresh config for a key that never worked. Bind it to a free
-		// key to get it back.
+		"snap_left":                {"h"},
+		"snap_right":               {"l"},
+		"focus_down":               {"j"},
+		"focus_up":                 {"k"},
+		"snap_fullscreen":          {"f"},
+		"unsnap":                   {"u"},
+		"toggle_tiling":            {"t"},
+		"swap_left":                {"H", "ctrl+left"},
+		"swap_right":               {"L", "ctrl+right"},
+		"swap_up":                  {"K", "ctrl+up"},
+		"swap_down":                {"J", "ctrl+down"},
+		"resize_master_shrink":     {"<", "shift+,"},
+		"resize_master_grow":       {">", "shift+."},
+		"resize_height_shrink":     {"{", "shift+["},
+		"resize_height_grow":       {"}", "shift+]"},
 		"resize_master_grow_left":  {"."},
 		"resize_height_shrink_top": {"["},
 		"resize_height_grow_top":   {"]"},
-		// BSP tiling
-		"split_horizontal": {"-"},
-		"split_vertical":   {"|", "\\"},
-		"rotate_split":     {"R"},
-		"equalize_splits":  {"="},
+		"split_horizontal":         {"-"},
+		"split_vertical":           {"|", "\\"},
+		"rotate_split":             {"R"},
+		"equalize_splits":          {"="},
 	}
 
 	if isMacOS() {
@@ -2592,13 +2284,8 @@ func getDefaultLayoutKeybinds() map[string][]string {
 	return layout
 }
 
-// isMacOS detects if the current platform is macOS. See macOSHost.
 func isMacOS() bool { return macOSHost }
 
-// clampPercent folds a configured percentage into its range, treating zero as
-// "not written" and answering with the default. A percentage option's floor is
-// well above zero, so clamping an unwritten value would silently pin it to the
-// floor and there would be no way to spell "whatever the default is".
 func clampPercent(v, lo, hi, fallback int) int {
 	if v == 0 {
 		return fallback
@@ -2624,8 +2311,6 @@ func LoadUserConfig() (*UserConfig, error) {
 		return createDefaultConfig()
 	}
 
-	// Read and parse the config file, with the files it includes and the
-	// config.d files merged in.
 	cfg, lc, err := loadConfigFile(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -2634,16 +2319,9 @@ func LoadUserConfig() (*UserConfig, error) {
 		return nil, err
 	}
 
-	// A key tuios cannot read on this platform costs that key, not the file.
-	// The lines reach the TUI through ConfigWarnings.
 	cfg.LoadWarnings = append(cfg.LoadWarnings, DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
 	cfg.FirstRun = wroteFirstConfig.Load()
 
-	// Loading is pure: it never mutates package globals. Callers apply the
-	// appearance globals exactly once, on the Bubble Tea goroutine, via
-	// ApplyOverrides (which lets CLI flags win) and/or ApplyAppearanceConfig.
-	// This keeps a second load (e.g. inside NewOS) from clobbering CLI flags and
-	// stops the per-connection server paths from racing other sessions' globals.
 	return cfg, nil
 }
 
@@ -2659,10 +2337,6 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	// A key the file leaves out has its default value, the same as in
-	// DefaultConfig. For most keys the fills below already do that. The keys
-	// they cannot tell apart from a zero the person chose are put in the file
-	// before a second parse, as if the person had written the default.
 	if seeded, ok := seedDefaults(data, cfg); ok {
 		if again, err := parseUserConfigOnce(seeded); err == nil {
 			cfg = again
@@ -2673,14 +2347,11 @@ func ParseUserConfig(data []byte) (*UserConfig, error) {
 	return cfg, nil
 }
 
-// parseUserConfigOnce is the parse and the fills, without the seeding.
 func parseUserConfigOnce(data []byte) (*UserConfig, error) {
 	var cfg UserConfig
 	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return nil, errfmt.Errorf("failed to parse config file: %w", err)
 	}
-	// go-toml sets a quoted max_fps straight into the string field, past
-	// UnmarshalText, so the spelling is settled here for both forms.
 	cfg.Appearance.MaxFPS = cfg.Appearance.MaxFPS.canonical()
 	defaultCfg := DefaultConfig()
 	fillMissingAppearance(&cfg, defaultCfg)
@@ -2700,22 +2371,14 @@ func parseUserConfigOnce(data []byte) (*UserConfig, error) {
 	return &cfg, nil
 }
 
-// legacyEmptyKeys keep the value an empty file gives them, not the value of
-// DefaultConfig. A config without [startup] is an install from before the
-// table existed, and it keeps its floating, standalone session. A first start
-// writes the two keys on (see FirstRunConfig).
 var legacyEmptyKeys = map[string]bool{
-	"startup.tiled":  true,
-	"startup.daemon": true,
-	// An empty text colour keeps the colour the text already has. A config
-	// from before these keys had defaults reads that way, and keeps it.
+	"startup.tiled":                  true,
+	"startup.daemon":                 true,
 	"appearance.selection.search_fg": true,
 	"appearance.selection.match_fg":  true,
 	"appearance.selection.cursor_fg": true,
 }
 
-// seedTables holds what seeding compares against: the defaults, and what an
-// empty file parses to.
 var seedTables = sync.OnceValues(func() (map[string]any, [][]string) {
 	empty, err := parseUserConfigOnce(nil)
 	if err != nil {
@@ -2746,15 +2409,10 @@ var seedTables = sync.OnceValues(func() (map[string]any, [][]string) {
 		}
 		paths = append(paths, p)
 	}
-	// Each path holds the empty-file value too, to tell "nothing in the file
-	// touched this" from "the file changed it", which a legacy key can do.
 	out := map[string]any{"default": d, "empty": e}
 	return out, paths
 })
 
-// seedDefaults puts the default of every key in seedTables that the file
-// does not set, and that nothing in the file changed, into the file's table.
-// ok is false when there is nothing to seed.
 func seedDefaults(data []byte, parsed *UserConfig) ([]byte, bool) {
 	tables, paths := seedTables()
 	if tables == nil || len(paths) == 0 {
@@ -2797,14 +2455,6 @@ func seedDefaults(data []byte, parsed *UserConfig) ([]byte, bool) {
 	return out, true
 }
 
-// createDefaultConfig writes the first-start config.toml and loads the config
-// it makes with the other files. The first-start file holds no settings, so
-// a config.d directory or an include from a dotfiles repo applies in full. A
-// config.toml that cannot be written is not an error: the config loads
-// without it.
-// wroteFirstConfig is set once this process wrote the first-start
-// config.toml. A later load in the same process, such as the attach path
-// after the client loaded, is still the first start.
 var wroteFirstConfig atomic.Bool
 
 func createDefaultConfig() (*UserConfig, error) {
@@ -2832,24 +2482,16 @@ func createDefaultConfig() (*UserConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	// A config.d file or an include can hold a key tuios cannot read on the
-	// first start too.
 	cfg.LoadWarnings = append(cfg.LoadWarnings, DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
 	cfg.FirstRun = true
 	wroteFirstConfig.Store(true)
 	return cfg, nil
 }
 
-// fillMissingAppearance fills in any missing appearance settings with defaults.
-// It only mutates cfg and has no package-global side effects, so it is safe to
-// call off the Bubble Tea goroutine (e.g. from the config file watcher).
-// Applying the parsed values to package globals is done separately by
-// ApplyAppearanceConfig, which must run on the Bubble Tea goroutine.
 func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	migrateLegacySidebar(cfg)
 	migrateAnimationsEnabled(&cfg.Appearance)
 
-	// An unknown level falls back to the default; validation reports it.
 	if !slices.Contains(MotionLevels, cfg.Appearance.Motion) {
 		cfg.Appearance.Motion = defaultCfg.Appearance.Motion
 	}
@@ -2925,17 +2567,11 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	} else if cfg.Appearance.Gap > PaneGapMax {
 		cfg.Appearance.Gap = PaneGapMax
 	}
-	// Zero is "not written", which is the common case, so it falls back to the
-	// default rather than being clamped up to the floor: a config that never
-	// mentioned the master ratio must not read as one that asked for the
-	// narrowest master there is.
 	if cfg.Appearance.MasterRatio == 0 {
 		cfg.Appearance.MasterRatio = MasterRatioDefault
 	} else {
 		cfg.Appearance.MasterRatio = min(max(cfg.Appearance.MasterRatio, MasterRatioMin), MasterRatioMax)
 	}
-	// The cap is settled before the width, because it is what the width is
-	// clamped against.
 	if cfg.Appearance.ScrollColumnMax == 0 {
 		cfg.Appearance.ScrollColumnMax = ScrollColumnWidthMax
 	} else {
@@ -2970,13 +2606,10 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.Scrollbar.Tint == "" {
 		cfg.Appearance.Scrollbar.Tint = defaultCfg.Appearance.Scrollbar.Tint
 	}
-	// Only the default for every surface is filled in. A surface's own key is
-	// left empty, because empty is what makes it follow that default.
 	if cfg.Appearance.Background == "" {
 		cfg.Appearance.Background = defaultCfg.Appearance.Background
 	}
 
-	// Validate and set scrollback lines (min: 100, max: 1000000)
 	if cfg.Appearance.ScrollbackLines <= 0 {
 		cfg.Appearance.ScrollbackLines = defaultCfg.Appearance.ScrollbackLines
 	} else if cfg.Appearance.ScrollbackLines < 100 {
@@ -2985,7 +2618,6 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.ScrollbackLines = 1000000
 	}
 
-	// Validate and set wheel scroll speed (min: 1, max: 50)
 	if cfg.Appearance.ScrollLines <= 0 {
 		cfg.Appearance.ScrollLines = defaultCfg.Appearance.ScrollLines
 	} else if cfg.Appearance.ScrollLines > 50 {
@@ -3008,20 +2640,13 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 // keep winning where they are set.
 func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	applyOptionFields(cfg, s)
-	// base_index shifts the number shown and the digit keys by the same
-	// amount. Keep the offset in Settings so every renderer reads one value.
 	s.WorkspaceIndexOffset = cfg.Workspaces.IndexOffset()
 	if cfg.Appearance.WhichKeyPosition != "" {
 		s.WhichKeyPosition = cfg.Appearance.WhichKeyPosition
 	}
 
-	// Links takes the same shape: a typo falls back to the default rather than
-	// leaving the pointer with no policy at all.
-	// Rules that do not compile are skipped here and reported by the
-	// validator, so a reload with a typo keeps the rest working.
 	s.LinkRules, _ = hints.CompileLinkRules(cfg.Links.Specs())
 	s.LinkOpener = strings.TrimSpace(cfg.Appearance.LinkOpener)
-	// A typo lands on the default, which is what the validator says.
 	if slices.Contains(DropPreviewModes, cfg.Appearance.DropPreview) {
 		s.DropPreview = cfg.Appearance.DropPreview
 	} else {
@@ -3029,23 +2654,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	s.DropPreviewDelay, _ = ParseDropPreviewDelay(cfg.Appearance.DropPreviewDelay)
 
-	// Sidebar. Also runs for a config that never went through LoadUserConfig (the
-	// settings page builds one in memory), so an old flat key reaches the globals
-	// whichever way the config got here.
 	migrateLegacySidebar(cfg)
 
-	// Position, width and the band mode fall back to their defaults when unset;
-	// the toggles are pointer bools so turning one off in the settings page
-	// survives a reload just as turning it on does.
 	sb := cfg.Appearance.Sidebar
-	// The legacy rail keeps its runtime settings and controls. An explicit
-	// table for that same edge overrides only fields it names; the opposite
-	// edge has its own model and must not overwrite the legacy rail here.
-	// When the legacy rail is hidden, the resolver can still enable either
-	// explicit edge. Use the first enabled edge as the existing rail and the
-	// other as the opt-in rail, rather than letting a hidden "left" placeholder
-	// steal the right table. This is runtime presentation only: the file still
-	// says position = "hidden" and neither explicit override is rewritten.
 	var primary *SidebarEdgeConfig
 	if sb.Position == "hidden" {
 		left, right := ResolveSidebarEdges(sb)
@@ -3078,8 +2689,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.SidebarEnabled = *sb.Enabled
 	}
 	s.SidebarPerSession = sb.PerSession != nil && *sb.PerSession
-	// An unknown position reads as the default; an unset one keeps the
-	// session's.
 	if slices.Contains(SidebarPositions, sb.Position) {
 		s.SidebarPosition = sb.Position
 	} else if sb.Position != "" {
@@ -3088,30 +2697,15 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if sb.Width > 0 {
 		s.SidebarWidth = sb.Width
 	}
-	// Assigned whatever the file says, so a key removed from it turns the
-	// peek back on at the next reload.
 	s.SidebarPeekEnabled = sb.Peek == nil || *sb.Peek
-	// The layout falls back to the shipped one when unset, so a config file
-	// written before the files section existed lays the rail out the way it
-	// always did plus the new section, rather than drawing nothing at all.
-	//
-	// Assigned rather than left alone, so an empty value puts the rail back on
-	// the shipped layout instead of leaving it on whatever was set last. That
-	// is what lets the editor's undo hand a layout it never wrote back to the
-	// default, rather than writing today's four sections into a file that named
-	// none and pinning that user to them for good.
 	s.SidebarSections = SidebarDefaultSections
 	if sb.Sections != "" {
 		s.SidebarSections = sb.Sections
 	}
-	// A typo reads as the default, the same contract the other enum options
-	// keep, and the validator says so.
 	s.SidebarFilesStyle = SidebarFilesList
 	if slices.Contains(SidebarFilesStyles, sb.FilesStyle) {
 		s.SidebarFilesStyle = sb.FilesStyle
 	}
-	// A typo reads as the default, the same contract the other enum options
-	// keep.
 	s.RailRowStyle = RailRowBar
 	if slices.Contains(RailRowStyles, sb.RowStyle) {
 		s.RailRowStyle = sb.RowStyle
@@ -3122,18 +2716,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	s.RailRoomy = sb.Density == RailDensityRoomy
 	s.SidebarAgentRow = ParseSidebarAgentRow(sb.AgentRow)
-	// Assigned whatever the file says, so a value removed from it goes back
-	// to the default. A bad value reads as the default and validation says so.
 	s.SidebarAgentRestFold, _ = ParseAgentRestFold(sb.AgentRestFold)
-	// Anything but count draws rows, the default; validation names a typo.
 	s.SidebarSubagents = ResolveSidebarSubagentView(cfg.Appearance.Sidebar, primary)
-	// DockWorkspaceTabFormat is assigned unconditionally: an empty string is the
-	// "{name}" default, and clearing it on reload has to be possible too.
 	if cfg.Appearance.DockWorkspaceLabelMax != nil {
 		s.DockWorkspaceLabelMax = max(*cfg.Appearance.DockWorkspaceLabelMax, 0)
 	}
-	// A typo or an empty value lands on the default, and a key removed from
-	// the file goes back to it on reload.
 	if slices.Contains(DockPrefixIndicators, cfg.Appearance.DockPrefixIndicator) {
 		s.DockPrefixIndicator = cfg.Appearance.DockPrefixIndicator
 	} else {
@@ -3144,18 +2731,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	} else {
 		s.DockModePill = DefaultDockModePill
 	}
-	// The mode icons are pointers so an empty string can hide the icon, which is
-	// different from unset. They are assigned unconditionally so a key removed
-	// from the file goes back to the built-in on reload.
 	s.DockModeIconWindow = cfg.Appearance.DockModeIconWindow
 	s.DockModeIconTerminal = cfg.Appearance.DockModeIconTerminal
 	s.DockModeIconTiling = cfg.Appearance.DockModeIconTiling
 
-	// The selection colours. A background that is empty falls back to the
-	// default, because a pane with no colour behind a selection shows no
-	// selection at all. A foreground that is empty is a decision: it means
-	// keep the colour the program wrote the text in, so it is assigned as
-	// written.
 	if cfg.Appearance.Selection.FlashMs > 0 {
 		s.CopyFlashMs = cfg.Appearance.Selection.FlashMs
 	}
@@ -3168,14 +2747,8 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if slices.Contains(OSC52WriteModes, cfg.Appearance.Selection.OSC52Write) {
 		s.OSC52Write = cfg.Appearance.Selection.OSC52Write
 	}
-	// Assigned always, so clearing the setting survives a reload.
 	s.CopyCommand = strings.TrimSpace(cfg.Appearance.Selection.CopyCommand)
 
-	// The hide/show toggles are plain bools with no "unset" state, so they are
-	// assigned unconditionally: turning one off in the settings page has to
-	// survive a reload just as turning it on does.
-	// A typo in the position falls back to left, and an unset count to one,
-	// which is the layout as it was before either existed.
 	s.MasterPosition = ValidMasterPosition(cfg.Appearance.MasterPosition)
 	s.MasterCount = ClampMasterCount(cfg.Appearance.MasterCount)
 	s.MasterNoGrid = cfg.Appearance.MasterGrid != nil && !*cfg.Appearance.MasterGrid
@@ -3185,29 +2758,17 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	applyMotionConfig(cfg, s)
 	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, s.ScrollColumnMax, ScrollColumnWidthDefault)
-	// Assigned unconditionally, so a reload that removes the list goes back to
-	// the built-in presets.
 	s.ScrollColumnPresets = ScrollColumnPresetFractions(cfg.Appearance.ScrollColumnPresets)
-	// DimForeground defaults to true, so it is a pointer: an unset key has to
-	// read as on, and only an explicit false turns it off.
 	s.DimForeground = cfg.Appearance.DimForeground == nil || *cfg.Appearance.DimForeground
 	overlay.SetPanelPadding(cfg.Appearance.PanelPadding)
-	// The glyph set is selected here rather than beside the theme, because it
-	// is read through the config globals the render path already goes to and
-	// this is the one funnel those come through. Re-selecting an unchanged id
-	// costs a resolve of a handful of strings.
 	if s.GlyphSet == "" {
 		s.GlyphSet = theme.GlyphSetNone
 	}
-	// The terminal's own limits, when the config chose no set. See
-	// DetectGlyphEnv.
 	theme.SetActiveGlyphs(s.applyGlyphEnv())
 
 	if cfg.Appearance.ScrollbackLines > 0 {
 		s.ScrollbackLines = cfg.Appearance.ScrollbackLines
 	}
-	// A process global, as the glyph set above: every pane emulator of this
-	// process reads it when a program sends ED 3.
 	scrollclear.SetKeep(cfg.Appearance.KeepsScrollbackOnClear())
 
 	s.CellFrames = cfg.Appearance.CellFrames
@@ -3217,13 +2778,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	} else if n, ok := cfg.Appearance.MaxFPS.Number(); ok && n > 0 {
 		s.NormalFPS = clampMaxFPS(n)
 	} else {
-		// 0 and a value that is not a number both mean the default. Set rather
-		// than left alone, so a reload from auto or from 144 back to 0 lands.
 		s.NormalFPS = DefaultFPS
 	}
 
-	// LeaderKey lives in [keybindings] rather than [appearance], but it is a
-	// package global fed by the same file and it had the same gap.
 	if cfg.Keybindings.LeaderKey != "" {
 		s.LeaderKey = cfg.Keybindings.LeaderKey
 	}
@@ -3234,9 +2791,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.Simple = cfg.Simple()
 	s.NestExitKey = cfg.Keybindings.NestExitKey
 
-	// The motion level. A config that was not run through the load path (one
-	// built in code) can still carry the old boolean, so it is folded here as
-	// well as on load.
 	a := cfg.Appearance
 	migrateAnimationsEnabled(&a)
 	if slices.Contains(MotionLevels, a.Motion) {
@@ -3272,8 +2826,6 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.ScrollLines = cfg.Appearance.ScrollLines
 	}
 
-	// The pause key keeps only ctrl or alt. Off, empty and a typo all leave
-	// hover focus unpaused, which is what the validator warns a typo becomes.
 	switch cfg.Appearance.FocusFollowsMousePause {
 	case FocusFollowsMousePauseCtrl, FocusFollowsMousePauseAlt:
 		s.FocusFollowsMousePause = cfg.Appearance.FocusFollowsMousePause
@@ -3281,22 +2833,15 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.FocusFollowsMousePause = ""
 	}
 
-	// KittyPlaceholders takes one of three words; anything else is the
-	// default, which is to decide from the host terminal.
 	switch cfg.Appearance.KittyPlaceholders {
 	case KittyPlaceholdersOn, KittyPlaceholdersOff, KittyPlaceholdersAuto:
 		s.KittyPlaceholders = cfg.Appearance.KittyPlaceholders
 	}
 
-	// ImageSymbols takes one of its words; anything else is the default.
 	if slices.Contains(ImageSymbolModes, cfg.Appearance.ImageSymbols) {
 		s.ImageSymbols = cfg.Appearance.ImageSymbols
 	}
 
-	// AutoEnterTerminalOnFocus only takes one of its three values, so a typo
-	// in the config lands on the default the validator warned it would fall
-	// back to. Empty (an older file, or DefaultConfig before the key existed)
-	// leaves this session's default.
 	if slices.Contains(AutoEnterTerminalModes, string(cfg.Appearance.AutoEnterTerminalOnFocus)) {
 		s.AutoEnterTerminalOnFocus = cfg.Appearance.AutoEnterTerminalOnFocus
 	} else if cfg.Appearance.AutoEnterTerminalOnFocus != "" {
@@ -3307,18 +2852,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.ZoomMaxWidth = cfg.Appearance.ZoomMaxWidth
 	}
 
-	// Theme. An empty name follows Omarchy on a machine with Omarchy, so it
-	// is applied there too: a reload that removed the theme puts that
-	// default back. Elsewhere an empty name is the startup state and the
-	// initialize is skipped. A live reload does not run ApplyOverrides, so
-	// the --theme flag's name stands in for an empty one here, or a save of
-	// any setting would drop the flag's theme.
 	name := cfg.Appearance.Theme
 	if name == "" {
 		name = flagTheme()
 	}
-	// A light and dark pair: theme_light while the local terminal is light.
-	// A --theme flag is an explicit choice and wins over the pair.
 	if cfg.Appearance.ThemeLight != "" && theme.SchemeLight() && flagTheme() == "" {
 		name = cfg.Appearance.ThemeLight
 	}
@@ -3328,27 +2865,15 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		}
 	}
 
-	// Custom border colors override the theme-derived colors. Empty strings
-	// clear any override and restore theme colors. This runs after the theme
-	// switch above, which resets the derived colors.
 	theme.SetBorderOverrides(cfg.Appearance.BorderOverrides())
 	s.BorderGradientAngle = DefaultBorderGradientAngle
 	if a := cfg.Appearance.BorderGradientAngle; a != nil {
 		s.BorderGradientAngle = ((*a % 360) + 360) % 360
 	}
 
-	// [notifications] rides along here rather than in its own funnel because
-	// this is the one function every path that loads a config file already
-	// calls: the tape runner, the SSH server, the command palette's save, and
-	// the live reload. A second entry point is a second thing to forget.
 	ApplyNotificationConfig(cfg, s)
 }
 
-// clampMaxFPS folds a configured max_fps into the range the tick loop can
-// actually drive. Both apply passes call it, so a config file cannot mean two
-// different frame rates depending on which one ran: ApplyOverrides runs alone
-// for the entrypoints that have no ApplyAppearanceConfig, and both run (in that
-// order) for cmd/tuios.
 func clampMaxFPS(fps int) int {
 	return max(min(fps, MaxFPSCap), MinConfiguredFPS)
 }
@@ -3381,7 +2906,6 @@ func (f *FPSLimit) UnmarshalText(text []byte) error {
 	return nil
 }
 
-// canonical is the one spelling of f. See UnmarshalText.
 func (f FPSLimit) canonical() FPSLimit {
 	if f.IsAuto() {
 		return FPSAuto
@@ -3408,8 +2932,6 @@ func (f FPSLimit) MarshalTOML() ([]byte, error) {
 	if n, ok := f.Number(); ok {
 		return []byte(strconv.Itoa(n)), nil
 	}
-	// A JSON string is a TOML basic string: the same quotes and escapes, and
-	// encoding/json never writes the one escape TOML lacks (\/).
 	return jsonx.Marshal(string(f))
 }
 
@@ -3437,9 +2959,6 @@ func (f FPSLimit) Valid() bool {
 	return ok
 }
 
-// notificationDurationMax is the longest lifetime, in seconds, that
-// notifications.KEY takes: the Max the option registry gives it, which is also
-// what the settings page and set-config allow.
 func notificationDurationMax(key string) int {
 	if opt, ok := LookupOption("notifications." + key); ok && opt.Max > 0 {
 		return opt.Max
@@ -3461,12 +2980,9 @@ func ApplyNotificationConfig(cfg *UserConfig, s *Settings) {
 	apply("duration", cfg.Notifications.Duration, &s.NotificationDuration)
 	apply("warning_duration", cfg.Notifications.WarningDuration, &s.NotificationWarningDuration)
 	apply("error_duration", cfg.Notifications.ErrorDuration, &s.NotificationErrorDuration)
-	// ErrorSticky defaults to true, so nil means "keep the default" and only an
-	// explicit false turns it off.
 	if cfg.Notifications.ErrorSticky != nil {
 		s.NotificationErrorSticky = *cfg.Notifications.ErrorSticky
 	}
-	// An unknown value keeps the default; validation already warned about it.
 	s.Bell = BellToast
 	if slices.Contains(BellModes, cfg.Notifications.Bell) {
 		s.Bell = cfg.Notifications.Bell
@@ -3486,22 +3002,16 @@ func ApplyNotificationConfig(cfg *UserConfig, s *Settings) {
 	s.NotificationMachineOffer = cfg.Notifications.MachineOfferOn()
 }
 
-// fillMissingTape fills in any missing tape settings with defaults. An unset or
-// unrecognized autorun mode falls back to the safe default ("ask"); validation
-// reports the unrecognized value separately as a warning.
 func fillMissingTape(cfg, defaultCfg *UserConfig) {
 	if !slices.Contains(TapeAutorunModes, cfg.Tape.Autorun) {
 		cfg.Tape.Autorun = defaultCfg.Tape.Autorun
 	}
 }
 
-// fillMissingDaemon fills in any missing daemon settings with defaults
 func fillMissingDaemon(cfg, defaultCfg *UserConfig) {
 	if cfg.Daemon.LogLevel == "" {
 		cfg.Daemon.LogLevel = defaultCfg.Daemon.LogLevel
 	}
-	// An unset or unknown mode falls back to ask, which types nothing without
-	// the person; validation reports an unknown value as a warning.
 	if !slices.Contains(ResumeAgentsModes, cfg.Daemon.ResumeAgents) {
 		cfg.Daemon.ResumeAgents = defaultCfg.Daemon.ResumeAgents
 	}
@@ -3510,11 +3020,6 @@ func fillMissingDaemon(cfg, defaultCfg *UserConfig) {
 	}
 }
 
-// migrateLegacySidebar folds the flat appearance.sidebar_* keys into the
-// [appearance.sidebar] table, so a config written before the table existed keeps
-// behaving identically. The table wins where both are present, and each legacy
-// field is cleared once read: that makes the migration idempotent and keeps the
-// next save from writing the old spelling back out.
 func migrateLegacySidebar(cfg *UserConfig) {
 	a := &cfg.Appearance
 	s := &a.Sidebar
@@ -3542,19 +3047,6 @@ func migrateLegacySidebar(cfg *UserConfig) {
 	migrateSidebarSectionToggles(s)
 }
 
-// migrateSidebarSectionToggles folds show_windows and show_agents into the
-// layout string, and clears them.
-//
-// There used to be two ways to turn a section off: leave its name out of
-// sections, or set the boolean named after it. Neither could express the other.
-// The layout knows where a section goes and the boolean does not, and a layout
-// may carry two spacers while a boolean per section has nowhere to put the
-// second one, so the layout is the one that survives. A file still carrying a
-// boolean keeps its meaning here, once, and the next save writes only sections.
-//
-// Only false is folded. A boolean that says true is saying nothing the layout
-// does not already say, and adding a section back on the strength of it would
-// put a section on the rail of somebody who had taken it off the layout.
 func migrateSidebarSectionToggles(s *SidebarConfig) {
 	for _, legacy := range []struct {
 		flag    *bool
@@ -3575,17 +3067,6 @@ func migrateSidebarSectionToggles(s *SidebarConfig) {
 	s.ShowWindows, s.ShowAgents = nil, nil
 }
 
-// migrateLegacyKeybinds rewrites bindings whose meaning changed, so a config
-// written by an older version keeps behaving the way its author expects.
-//
-// Older defaults bound prefix_detach to both "d" and "esc" while the prefix
-// handler hard-coded esc to leave terminal mode and never detach. Now that the
-// binding is what actually runs, leaving esc on prefix_detach would start
-// detaching the session on a key that used to just switch modes, so it moves to
-// the prefix_exit_mode action that carries the old behaviour.
-// It must run before the defaults are filled in, so that the presence of
-// prefix_exit_mode still distinguishes a config written by a version that knew
-// about the split (leave it alone) from an older one (migrate it).
 func migrateLegacyKeybinds(cfg *UserConfig) {
 	if _, ok := cfg.Keybindings.PrefixMode["prefix_exit_mode"]; ok {
 		return
@@ -3601,50 +3082,20 @@ func migrateLegacyKeybinds(cfg *UserConfig) {
 	cfg.Keybindings.PrefixMode["prefix_exit_mode"] = []string{"esc"}
 }
 
-// migrateSettingsComma takes "," off resize_master_shrink_left in a config
-// written while the settings shortcut was a literal in the input path.
-//
-// That literal was checked ahead of the registry, so the layout binding it
-// shadowed had not run since the shortcut landed. Now that settings is
-// open_settings in mode_control the two are a visible clash, and a user who
-// never chose either would get a startup warning about a key that had already
-// stopped working. Removing the dead claim leaves the config saying what the
-// program was already doing.
-//
-// Only the exact stale default is touched. A user who put "," on the resize
-// action themselves has it alongside their own keys, and taking someone's
-// deliberate binding away to quiet a warning would be the worse bug.
 func migrateSettingsComma(cfg *UserConfig) {
 	if _, ok := cfg.Keybindings.ModeControl["open_settings"]; ok {
-		return // written by a version that knew about open_settings
+		return
 	}
 	if keys := cfg.Keybindings.Layout["resize_master_shrink_left"]; len(keys) == 1 && keys[0] == "," {
 		delete(cfg.Keybindings.Layout, "resize_master_shrink_left")
 	}
 }
 
-// migrateCornerSnapDigits takes the bare digits off snap_corner_1 through _4 in
-// a config written before corner snapping moved to the layout prefix.
-//
-// The old defaults put snap_corner_N on "1" through "4" in the layout table.
-// That table is merged into the window-mode keymap after window_management, so
-// it won those keys outright and select_window_1 through _4 never fired. Every
-// config ever written carries those four lines, and fillMapDefaults only adds
-// actions that are missing, so without this the fix would reach new installs
-// only and everyone else would go on seeing four conflicts they never caused.
-//
-// It must run before the defaults are filled in, so that the presence of a
-// corner binding under layout_prefix still distinguishes a config written by a
-// version that knew about the move (leave it alone) from an older one.
-//
-// Only the exact stale default is removed. A user who put snap_corner_1
-// somewhere of their own, or who kept the digit alongside another key, has made
-// a choice, and taking it away to quiet a warning would be the worse bug.
 func migrateCornerSnapDigits(cfg *UserConfig) {
 	for i := 1; i <= 4; i++ {
 		action := "snap_corner_" + strconv.Itoa(i)
 		if _, ok := cfg.Keybindings.LayoutPrefix[action]; ok {
-			return // written by a version that knew about the move
+			return
 		}
 	}
 	for i := 1; i <= 4; i++ {
@@ -3655,13 +3106,6 @@ func migrateCornerSnapDigits(cfg *UserConfig) {
 	}
 }
 
-// migrateInboxKeys takes the Inbox keys the agents cockpit moved off a config
-// an older tuios wrote. inbox_agents switched the Inbox to the agents view,
-// which the Inbox now always is: it is dropped, and a key the user gave it
-// other than the old tab is listed in RetiredKeybinds for keybinds doctor.
-// inbox_deny_reason on the old n, exactly, is the stale default, so it is
-// dropped too and takes R with the fill, and n starts a new agent. Like
-// migrateCornerSnapDigits it runs before the fill.
 func migrateInboxKeys(cfg *UserConfig) {
 	t := cfg.Keybindings.Inbox
 	if t == nil {
@@ -3675,9 +3119,6 @@ func migrateInboxKeys(cfg *UserConfig) {
 			})
 		}
 	}
-	// v0.12 wrote ctrl+p and ctrl+n into these two as defaults. The palette
-	// owns ctrl+p now, so the exact old lists are stale defaults: dropped, and
-	// the fill gives the current keys. Any other list is the user's own.
 	if slices.Equal(t[ActionInboxUp], []string{"k", "up", "ctrl+p"}) {
 		delete(t, ActionInboxUp)
 	}
@@ -3706,15 +3147,8 @@ type RetiredKeybind struct {
 	Note string `json:"note,omitempty"`
 }
 
-// fillMissingKeybinds fills in any missing keybindings with defaults
 func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
-	// An older action name in the user's tables becomes the action's own
-	// name first, so it replaces the default's keys as it always did rather
-	// than adding to them.
 	canonicalizeKeybindings(&cfg.Keybindings)
-	// A preset is applied to the defaults first, so everything below fills
-	// from it. The user's keys after the leader and in terminal mode win over
-	// the preset's: there the fill yields.
 	fillPrefix := func(section string, target, defaults map[string][]string) []YieldedDefault {
 		fillMapDefaults(target, defaults)
 		return nil
@@ -3727,13 +3161,6 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 				dropPresetShadows(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode, kb.TerminalMode) +
 				dropPresetShadows(cfg.Keybindings.WindowPrefix, defaultCfg.Keybindings.WindowPrefix, kb.WindowPrefix) +
 				dropPresetShadows(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix, kb.WorkspacePrefix)
-			// A config.toml an older tuios wrote on its first start sets
-			// leader_key to the tuios default, and every key beside it. The
-			// value alone cannot tell that file from a person who chose
-			// ctrl+b under screen, so the leader gives way to the preset's
-			// only where the file also held a default key the preset
-			// changes: the mark of the old full file. A leader the user
-			// changed stays, and so does ctrl+b in a file without the mark.
 			if l := cfg.Keybindings.LeaderKey; shadows > 0 && l != "" && sameKeyPress(l, defaultCfg.Keybindings.LeaderKey) &&
 				!sameKeyPress(kb.LeaderKey, defaultCfg.Keybindings.LeaderKey) {
 				cfg.Keybindings.LeaderKey = ""
@@ -3781,16 +3208,11 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	}
 
 	fillMapDefaults(cfg.Keybindings.WindowManagement, defaultCfg.Keybindings.WindowManagement)
-	// The workspaces table is part of the window-mode keymap as well, so a new
-	// workspace default yields the same way a new layout default does.
 	workspaceYield := yieldTakenDefaults("workspaces", windowModeTables(cfg), defaultCfg.Keybindings.Workspaces)
 	fillMapDefaults(cfg.Keybindings.Workspaces, defaultCfg.Keybindings.Workspaces)
 	for _, y := range workspaceYield {
 		delete(cfg.Keybindings.Workspaces, y.Action)
 	}
-	// The layout table is one of several that make up the window-mode keymap,
-	// and it wins a key over window_management. So a new layout default yields
-	// to the user's own binding for its key in any of those tables.
 	layoutYield := yieldTakenDefaults("layout", windowModeTables(cfg), defaultCfg.Keybindings.Layout)
 	fillMapDefaults(cfg.Keybindings.Layout, defaultCfg.Keybindings.Layout)
 	for _, y := range layoutYield {
@@ -3820,39 +3242,22 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 		return cmp.Compare(a.Section+"\x00"+a.Action+"\x00"+a.Key, b.Section+"\x00"+b.Action+"\x00"+b.Key)
 	})
 	for _, y := range presetYield {
-		// A new default the user's key took is already listed once.
 		if !slices.ContainsFunc(cfg.YieldedDefaults, func(o YieldedDefault) bool {
 			return o.Section == y.Section && o.Action == y.Action && o.Key == y.Key
 		}) {
 			cfg.YieldedDefaults = append(cfg.YieldedDefaults, y)
 		}
 	}
-	// A config written before the global and script sections existed has neither,
-	// so existing users would get the palette and the launcher unbound instead of
-	// keeping the keys they had.
 	fillMapDefaults(cfg.Keybindings.Global, defaultCfg.Keybindings.Global)
 	fillMapDefaults(cfg.Keybindings.Script, defaultCfg.Keybindings.Script)
 	fillMapDefaults(cfg.Keybindings.Lists, defaultCfg.Keybindings.Lists)
-	// A config written before the rail scope existed has no sidebar section. Left
-	// unfilled it resolves every rail key to nothing, and since the scope swallows
-	// unbound keys that traps the keyboard in the rail with no way out.
 	fillMapDefaults(cfg.Keybindings.Sidebar, defaultCfg.Keybindings.Sidebar)
-	// And the files section's own keys, for the same reason: a config written
-	// before they existed has no sidebar_files section, and left unfilled the
-	// listing would have no way to create, rename or delete anything.
 	fillMapDefaults(cfg.Keybindings.SidebarFiles, defaultCfg.Keybindings.SidebarFiles)
-	// The agent rows' keys are newer still, and every config before them has
-	// no sidebar_agents section.
 	fillMapDefaults(cfg.Keybindings.SidebarAgents, defaultCfg.Keybindings.SidebarAgents)
 	fillMapDefaults(cfg.Keybindings.QuickLook, defaultCfg.Keybindings.QuickLook)
 	fillMapDefaults(cfg.Keybindings.QuickLookInside, defaultCfg.Keybindings.QuickLookInside)
-	// The Inbox, its peek and the mailbox had their keys written into the
-	// input path before these sections existed, so every config written
-	// before them has none and has to get the keys it always had.
-	// The cockpit's new Inbox keys yield to a key the user already holds.
 	inboxYield := yieldTakenDefaults("inbox", cfg.Keybindings.Inbox, defaultCfg.Keybindings.Inbox)
 	fillMapDefaults(cfg.Keybindings.Inbox, defaultCfg.Keybindings.Inbox)
-	// Only the taken key yields: an action keeps its other default keys.
 	for _, y := range inboxYield {
 		keys := slices.DeleteFunc(slices.Clone(cfg.Keybindings.Inbox[y.Action]), func(k string) bool { return sameKeyPress(k, y.Key) })
 		if len(keys) == 0 {
@@ -3864,13 +3269,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	cfg.YieldedDefaults = append(cfg.YieldedDefaults, inboxYield...)
 	fillMapDefaults(cfg.Keybindings.InboxPeek, defaultCfg.Keybindings.InboxPeek)
 	fillMapDefaults(cfg.Keybindings.Mail, defaultCfg.Keybindings.Mail)
-	// The Copies panel's section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.Transfers, defaultCfg.Keybindings.Transfers)
-	// Copy mode's section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.CopyMode, defaultCfg.Keybindings.CopyMode)
-	// The review overlay's section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.Review, defaultCfg.Keybindings.Review)
-	// The GUI section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.GUI, defaultCfg.Keybindings.GUI)
 
 	var dropped []RetiredKeybind
@@ -3882,9 +3283,6 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 			})
 		}
 	}
-	// The drops come out of a map walk; sorted, the report reads the same on
-	// every run.
-	// sort.Slice, not slices.SortFunc: see docs/perf.md, "Where the bytes go".
 	sort.Slice(dropped, func(i, j int) bool {
 		a, b := dropped[i], dropped[j]
 		return cmp.Or(cmp.Compare(a.Section, b.Section), cmp.Compare(a.Action, b.Action), cmp.Compare(a.Keys[0], b.Keys[0])) < 0
@@ -3893,106 +3291,68 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 
 }
 
-// yieldingDefaults are the actions whose default key arrived after users could
-// already have bound that key themselves. Filled in as usual, such a default
-// would take the key from the user's own binding: dropStaleDuplicateKeys
-// hands a contested key to the action that owns it by default. So when the
-// key is already bound to another action in the same table, the new action is
-// left unbound instead, and keybinds doctor says so.
 var yieldingDefaults = map[string]bool{
-	"hints":          true,
-	"toggle_scratch": true,
-	// alt+; and prefix ., new in the release after v0.10.1.
-	"pick_path": true,
-	// Z after the prefix, new with calm mode.
-	"toggle_calm": true,
-	// Q after the prefix, new in the release after v0.8.5.
-	"display_panes": true,
-	// U in window mode, new with the keybind presets.
+	"hints":                true,
+	"toggle_scratch":       true,
+	"pick_path":            true,
+	"toggle_calm":          true,
+	"display_panes":        true,
 	"open_keybind_presets": true,
-	// / after the prefix, new in the release after v0.8.5.
-	"choose_tree": true,
-	// enter after the prefix, new with nest mode.
-	"nest": true,
-	// G after the prefix, new with the go-to picker.
-	"goto_picker": true,
-	// U after the prefix, new with the worktree key.
-	"new_worktree": true,
-	// I after the prefix, new with the return notes.
-	"set_note": true,
-	// p in window mode, new in the release after v0.8.2.
-	"toggle_pip": true,
-	// P in window mode, new with the rail's pane section.
-	"focus_rail_pane": true,
-	// V after the prefix, new in the release after v0.8.2.
-	"paste_image": true,
-	// ] and # after the prefix, new in the release after v0.8.5.
-	"paste_buffer":  true,
-	"choose_buffer": true,
-	// u after the prefix and S on a rail file row, new with the copies
-	// between machines.
-	"prefix_transfers": true,
-	"file_send":        true,
-	// E after the prefix and ctrl+g in copy mode, new with the scrollback
-	// editor keys.
-	ActionEditScrollback: true,
-	// j and k in window mode, new in the release after v0.8.0.
-	"focus_down": true,
-	"focus_up":   true,
-	// J and K after the prefix, new with the agent walk.
-	"next_agent": true,
-	"prev_agent": true,
-	// The Inbox keys new with the agents cockpit, after v0.10.1. R and n
-	// changed hands: R was free and n was inbox_deny_reason's.
-	"inbox_new_agent":    true,
-	"inbox_deny_reason":  true,
-	"inbox_write":        true,
-	"inbox_allow":        true,
-	"inbox_allow_always": true,
-	// X, new when reject left r.
-	"inbox_reject":     true,
-	"inbox_open":       true,
-	"inbox_back":       true,
-	"inbox_help":       true,
-	"inbox_mark":       true,
-	"inbox_mark_all":   true,
-	"inbox_tab_prev":   true,
-	"inbox_tab_next":   true,
-	"inbox_expand":     true,
-	"inbox_fold":       true,
-	"inbox_code_wrap":  true,
-	"inbox_code_left":  true,
-	"inbox_code_right": true,
-	"inbox_code_copy":  true,
-	"inbox_child":      true,
-	// V, new with the rich blocks (it was P until the pins took P).
-	"inbox_block_source": true,
-	// P, new with the pins.
-	"inbox_pin": true,
-	// T, new with the Mermaid pictures.
-	"inbox_block_picture": true,
-	// ctrl+o, new with the message cards.
-	"inbox_jump_back": true,
-	// ctrl+alt+N (ctrl+opt+N on macOS), the first default for
-	// send_to_workspace_N.
-	"send_to_workspace_1": true,
-	"send_to_workspace_2": true,
-	"send_to_workspace_3": true,
-	"send_to_workspace_4": true,
-	"send_to_workspace_5": true,
-	"send_to_workspace_6": true,
-	"send_to_workspace_7": true,
-	"send_to_workspace_8": true,
-	"send_to_workspace_9": true,
-	// c, new with the fan comparison.
-	"inbox_compare": true,
-	// { and }, new with the thread's prompt ruler.
-	"inbox_prompt_prev": true,
-	"inbox_prompt_next": true,
+	"choose_tree":          true,
+	"nest":                 true,
+	"goto_picker":          true,
+	"new_worktree":         true,
+	"set_note":             true,
+	"toggle_pip":           true,
+	"focus_rail_pane":      true,
+	"paste_image":          true,
+	"paste_buffer":         true,
+	"choose_buffer":        true,
+	"prefix_transfers":     true,
+	"file_send":            true,
+	ActionEditScrollback:   true,
+	"focus_down":           true,
+	"focus_up":             true,
+	"next_agent":           true,
+	"prev_agent":           true,
+	"inbox_new_agent":      true,
+	"inbox_deny_reason":    true,
+	"inbox_write":          true,
+	"inbox_allow":          true,
+	"inbox_allow_always":   true,
+	"inbox_reject":         true,
+	"inbox_open":           true,
+	"inbox_back":           true,
+	"inbox_help":           true,
+	"inbox_mark":           true,
+	"inbox_mark_all":       true,
+	"inbox_tab_prev":       true,
+	"inbox_tab_next":       true,
+	"inbox_expand":         true,
+	"inbox_fold":           true,
+	"inbox_code_wrap":      true,
+	"inbox_code_left":      true,
+	"inbox_code_right":     true,
+	"inbox_code_copy":      true,
+	"inbox_child":          true,
+	"inbox_block_source":   true,
+	"inbox_pin":            true,
+	"inbox_block_picture":  true,
+	"inbox_jump_back":      true,
+	"send_to_workspace_1":  true,
+	"send_to_workspace_2":  true,
+	"send_to_workspace_3":  true,
+	"send_to_workspace_4":  true,
+	"send_to_workspace_5":  true,
+	"send_to_workspace_6":  true,
+	"send_to_workspace_7":  true,
+	"send_to_workspace_8":  true,
+	"send_to_workspace_9":  true,
+	"inbox_compare":        true,
+	"inbox_prompt_prev":    true,
+	"inbox_prompt_next":    true,
 }
 
-// windowModeTables is every binding the user's config holds in the tables
-// that make up the window-mode keymap, in one map for yieldTakenDefaults.
 func windowModeTables(cfg *UserConfig) map[string][]string {
 	out := map[string][]string{}
 	for _, table := range []map[string][]string{
@@ -4020,11 +3380,6 @@ type YieldedDefault struct {
 	Preset string `json:"preset,omitempty"`
 }
 
-// yieldTakenDefaults finds each yielding action the user's table does not
-// name whose default key another action in the table already holds. The
-// caller removes those actions again after fillMapDefaults, so they are
-// neither bound nor written into the file: the check runs on every load, and
-// freeing the key brings the default back.
 func yieldTakenDefaults(section string, target, defaults map[string][]string) []YieldedDefault {
 	var out []YieldedDefault
 	for action := range yieldingDefaults {
@@ -4046,10 +3401,6 @@ func yieldTakenDefaults(section string, target, defaults map[string][]string) []
 	return out
 }
 
-// sameKeyPress reports whether two binding spellings name the same key press:
-// the same once canonical (modifier aliases and order), or one the shifted
-// spelling of the other, the way the registry matches them. F, shift+f and
-// shift+F are one press.
 func sameKeyPress(a, b string) bool {
 	sa, sb := keySpellings(a), keySpellings(b)
 	for _, x := range sa {
@@ -4060,7 +3411,6 @@ func sameKeyPress(a, b string) bool {
 	return false
 }
 
-// keySpellings is a key's canonical spelling and its shift aliases.
 func keySpellings(key string) []string {
 	c := CanonicalKey(key)
 	return append([]string{c}, shiftAliases(c, strings.ToLower(c))...)
@@ -4074,17 +3424,6 @@ func fillMapDefaults(target, defaults map[string][]string) {
 	}
 }
 
-// fillMapDefaultsYielding is fillMapDefaults for a section where a binding
-// the user wrote keeps its key. A default key the user's section already binds
-// to another action is left out, so a new default never takes a key from the
-// user: toggle_tiling = ["o"] under layout_prefix keeps o after o became the
-// default key of cycle_master_position. An action whose every default key is
-// taken is not added.
-//
-// It is not the rule for every section, because some sections reclaim a key
-// on purpose: open_settings takes "," back from a config written when ","
-// was a second key for prefix_rename_window (see the migration below), and
-// that needs the default filled in first.
 func fillMapDefaultsYielding(target, defaults map[string][]string) []YieldedDefault {
 	taken := make(map[string]string)
 	for action, keys := range target {
@@ -4114,13 +3453,6 @@ func fillMapDefaultsYielding(target, defaults map[string][]string) []YieldedDefa
 	return yielded
 }
 
-// dropPresetShadows removes the user's entries that hold the tuios default
-// keys of an action the preset changes. A config.toml that an older tuios
-// wrote on its first start sets every key to its default, so without this the
-// preset would yield every key it changes to those entries and do almost
-// nothing. An entry
-// the user changed from the default stays, and wins over the preset. It
-// returns how many entries it removed.
 func dropPresetShadows(user, tuios, preset map[string][]string) int {
 	n := 0
 	for action, keys := range user {
@@ -4132,7 +3464,6 @@ func dropPresetShadows(user, tuios, preset map[string][]string) int {
 	return n
 }
 
-// keybindSection pairs a config section with the defaults for that section.
 type keybindSection struct {
 	name             string
 	target, defaults map[string][]string
@@ -4147,25 +3478,6 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 	return pairs
 }
 
-// dropStaleDuplicateKeys resolves a key that two actions in the same section
-// both claim, in favour of the action that owns it by default.
-//
-// A default binding that moves from one action to another leaves the old key
-// behind in every config written before the move: the file already names the
-// old action with the key, and fillMapDefaults only adds the new action, so
-// both end up on it. That is how "," ended up on prefix_rename_window and
-// open_settings at once, which made the leader chord a coin flip between
-// renaming a pane and opening settings. Dropping the key from the action whose
-// own default no longer lists it leaves the binding a fresh config would have.
-//
-// A key no default claims, or one two defaults claim, is left alone: the first
-// is the user's own arrangement to resolve, the second is a defaults bug that
-// silently picking a winner would hide. Nor is an action's last key ever taken,
-// however the defaults read: a sole binding is a deliberate choice, and only a
-// redundant extra one can be residue. ValidateConfig warns about what is left.
-//
-// It returns the keys it took, for keybinds doctor: a key the user wrote on
-// purpose is taken the same way, and would otherwise vanish without a word.
 func dropStaleDuplicateKeys(section, defaults map[string][]string) []droppedKey {
 	var dropped []droppedKey
 	claimants := make(map[string][]string)
@@ -4206,7 +3518,6 @@ func dropStaleDuplicateKeys(section, defaults map[string][]string) []droppedKey 
 	return dropped
 }
 
-// droppedKey is a key dropStaleDuplicateKeys took from action and left to owner.
 type droppedKey struct{ action, key, owner string }
 
 // ConfigWarnings returns the non-fatal problems in cfg as human-readable lines,

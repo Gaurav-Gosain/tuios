@@ -5,14 +5,6 @@ import (
 	"strings"
 )
 
-// Comparing two tuios versions.
-//
-// Deliberately small. The tags this has to order are v0.7.0 and v0.7.1-rc1, and
-// a full semver implementation would be a dependency and a lot of rules for
-// build metadata that these tags never carry. Anything this cannot parse is
-// reported as such rather than guessed at, and the command then says "this is
-// not a release build" instead of comparing nonsense.
-
 // ParsedVersion is a tag broken into its parts.
 type ParsedVersion struct {
 	Major, Minor, Patch int
@@ -34,8 +26,6 @@ func ParseVersion(v string) (ParsedVersion, bool) {
 		return ParsedVersion{}, false
 	}
 	core, pre, _ := strings.Cut(v, "-")
-	// Build metadata is dropped rather than compared, which is what semver
-	// itself says to do with it.
 	core, _, _ = strings.Cut(core, "+")
 
 	parts := strings.Split(core, ".")
@@ -72,7 +62,7 @@ func Compare(a, b ParsedVersion) int {
 	case a.Pre == b.Pre:
 		return 0
 	case a.Pre == "":
-		return 1 // a is the final release, b is a prerelease of it
+		return 1
 	case b.Pre == "":
 		return -1
 	case a.Pre < b.Pre:

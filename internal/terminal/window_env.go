@@ -11,10 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 )
 
-// Graphics capabilities of the host terminal, set by the app once passthrough
-// has been initialised and read when building a guest shell's environment.
-// Guarded because windows can be created from the update loop while the
-// capabilities are refreshed on reattach.
 var (
 	graphicsMu         sync.RWMutex
 	kittyGraphicsHost  bool
@@ -34,33 +30,22 @@ func SetGraphicsCapabilities(kitty, sixel, animation bool) {
 	kittyAnimationHost = animation
 }
 
-// guestKittyAnimation returns the TUIOS_KITTY_ANIMATION value for a newly
-// spawned shell.
 func guestKittyAnimation() string {
 	graphicsMu.RLock()
 	defer graphicsMu.RUnlock()
 	return guestenv.KittyAnimationVar(kittyGraphicsHost && kittyAnimationHost)
 }
 
-// guestTermProgram returns the TERM_PROGRAM value for a newly spawned pane
-// that runs command, nil for the user's shell.
 func guestTermProgram(command []string) string {
 	graphicsMu.RLock()
 	defer graphicsMu.RUnlock()
 	return guestenv.TermProgramFor(command, kittyGraphicsHost, sixelGraphicsHost)
 }
 
-// guestBaseEnv is the environment a standalone pane starts from: this
-// process's, without the variables of a tmux that tuios itself runs inside,
-// so the pane does not read as a tmux pane. See
-// guestenv.WithoutHostMultiplexer.
 func guestBaseEnv() []string {
 	return guestenv.WithoutHostMultiplexer(os.Environ())
 }
 
-// detectShell returns the shell a standalone pane runs, honouring
-// appearance.preferred_shell, and whether [shell] integration is on. The
-// config is read on every call so an edit applies to the next pane.
 func detectShell() (shell string, integration, login bool) {
 	cfg, err := config.LoadUserConfig()
 	if err != nil {
@@ -69,33 +54,23 @@ func detectShell() (shell string, integration, login bool) {
 	return config.ResolveShell(cfg), cfg == nil || config.ShellIntegrationOn(cfg.Shell.Integration), cfg != nil && cfg.Shell.Login
 }
 
-// getTerminalEnv returns TERM and COLORTERM values for the current environment.
-// It is detected once per process and cached.
 func getTerminalEnv() (termType, colorTerm string) {
 	localEnvOnce.Do(func() {
 		localTermType, localColorTerm = guestenv.DetectTerm()
-		// A server with no terminal of its own (a service manager, nohup, a
-		// log file) detects NoTTY, which makes every pane TERM=dumb even though
-		// the panes are drawn on a client's real terminal. A real terminal that
-		// answers dumb keeps its answer.
 		if localTermType == "dumb" && !term.IsTerminal(int(os.Stdout.Fd())) {
 			if d := headlessGuestTerm.Load(); d != nil {
 				localTermType, localColorTerm = d.term, d.colorTerm
 			}
 		}
-		// The outer terminal's TERM is only useful to a pane when this
-		// machine has a terminfo entry for it. See guestenv.PaneTerm.
 		localTermType = guestenv.PaneTerm(localTermType)
 	})
 	return localTermType, localColorTerm
 }
 
-// guestTermDefault is a TERM and COLORTERM pair for panes.
 type guestTermDefault struct {
 	term, colorTerm string
 }
 
-// headlessGuestTerm is what SetHeadlessGuestTerm installed, or nil.
 var headlessGuestTerm atomic.Pointer[guestTermDefault]
 
 // SetHeadlessGuestTerm sets the TERM and COLORTERM a pane gets when this
@@ -111,31 +86,14 @@ func SetHeadlessGuestTerm(termType, colorTerm string) {
 	headlessGuestTerm.Store(&guestTermDefault{term: termType, colorTerm: colorTerm})
 }
 
-// enableTerminalFeatures enables advanced terminal features
 func (w *Window) enableTerminalFeatures() {
 	if w.Pty == nil {
 		return
 	}
-
-	// Bracketed paste mode is handled by wrapping paste content with escape sequences
-	// when pasting (see input.go handleClipboardPaste). We don't need to enable it
-	// via the PTY as that sends the sequence to the shell's stdin, which can cause
-	// the escape codes to be echoed back and appear as garbage in the terminal.
-	// The shell/application running in the PTY will handle bracketed paste mode
-	// if it supports it, based on receiving the wrapped paste content.
-
-	// Don't enable mouse modes automatically. Let applications request them.
-	// Applications like vim, less, htop will enable mouse support themselves
-	// by sending the appropriate escape sequences
 }
 
-// disableTerminalFeatures disables advanced terminal features before closing
 func (w *Window) disableTerminalFeatures() {
 	if w.Pty == nil {
 		return
 	}
-
-	// No terminal features to explicitly disable
-	// Bracketed paste is handled at the application level
-	// Mouse tracking is managed by applications themselves
 }

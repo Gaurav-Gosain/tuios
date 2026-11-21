@@ -50,7 +50,6 @@ func TestWorkingNumstatCountsCommitsAndUncommittedWork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WorkingNumstat: %v", err)
 	}
-	// README +2, new.txt +2, .gitignore +1. ignored.log is not counted.
 	if want := (Numstat{Files: 3, Added: 5, Removed: 0}); n != want {
 		t.Errorf("WorkingNumstat = %+v, want %+v", n, want)
 	}
@@ -85,8 +84,6 @@ func TestSnapshotTreeStartsFromTheWorktreeIndex(t *testing.T) {
 	}
 	testutil.Git(t, path, "add", "cached.txt")
 	testutil.Git(t, path, "commit", "-q", "-m", "cached")
-	// The index now holds the file's stat data, written after the file's
-	// modification time, so git trusts it.
 	testutil.Git(t, path, "update-index", "--refresh")
 	want := testutil.Git(t, path, "rev-parse", "HEAD^{tree}")
 

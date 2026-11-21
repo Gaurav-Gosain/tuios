@@ -55,24 +55,10 @@ func NewModel(opts app.OSOptions, ov config.Overrides) *app.OS {
 // ephemeral session.
 func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *session.ClientCapabilities, pick func(available []string) string) (*app.OS, error) {
 	client := session.NewTUIClient()
-	// The size this client reports is the remote viewer's, not the size of
-	// the terminal this process runs in, so running in a pane of the session
-	// cannot start the resize loop and the daemon does not refuse it.
 	client.Served = true
-	// A viewer whose input is dropped sends no input, so under the largest
-	// and latest window_size policies it does not size the session.
 	client.ViewOnly = opts.ViewOnly
-	// The remote viewer's keys reach the model as the person's, so the live
-	// upgrade dialog shows to them and takes their answer.
 	client.UpgradeDialog = true
-	// The hint over a larger client's leftover names this client by what
-	// serves it, since its machine is the server's.
 	client.Kind = session.ClientKindWeb
-	// An SSH client could still run in a pane of the session it asks for: ssh
-	// from a pane into this server. Its process is the ssh client in that
-	// pane, which the daemon cannot see, so the probe goes down the channel to
-	// be seen in the pane instead. A browser never feeds a pane, so the web
-	// server writes none.
 	if opts.SSHSession != nil {
 		client.Kind = session.ClientKindSSH
 	}
@@ -103,8 +89,6 @@ func Attach(opts app.OSOptions, ov config.Overrides, version string, caps *sessi
 	opts.SessionName = name
 	model := NewModel(opts, ov)
 
-	// Everything the daemon sends an attached client, then the windows it
-	// handed over. The same two calls every client makes.
 	model.WireDaemonClient(client)
 	model.RestoreAttachedSession(state)
 	if opts.OpenInboxItem != "" {

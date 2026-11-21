@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/shimlink"
 )
 
-// holderSupported reports whether this platform runs pane holders. On
-// Windows the shim runs a pane's command directly, and respawn-pane fails.
 const holderSupported = false
 
 var errNoHolder = errors.New("the tmux shim's pane holder is not supported on Windows")

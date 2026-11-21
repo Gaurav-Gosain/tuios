@@ -9,12 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The instrument rail. Its voice is the rail grammar the app already uses:
-// lowercase section headers in FgMute, figures in FgDim, one accent chip, and
-// nothing saturated until something is actually wrong.
-
-// renderRail builds the whole right-hand band. Every row is filled to width on
-// Panel, so the band is a solid ground with no interior gaps.
 func renderRail(s Snapshot, o Options, pal overlay.Palette, w, h int) []string {
 	bg := pal.Panel
 	var out []string
@@ -27,8 +21,6 @@ func renderRail(s Snapshot, o Options, pal overlay.Palette, w, h int) []string {
 	value := ink(bg, pal.FgDim)
 	pad := ink(bg, bg).Render("  ")
 
-	// Header: the one accent fill at rest, and a status word that is derived
-	// from the events rather than announced by them.
 	status, statusInk := "generating", ink(bg, pal.FgDim)
 	switch {
 	case s.Violated && s.Phase == PhaseShrinking:
@@ -53,8 +45,6 @@ func renderRail(s Snapshot, o Options, pal overlay.Palette, w, h int) []string {
 	rule()
 	out = append(out, renderLedger(s, pal, w)...)
 
-	// The hint strip sits on the last row whatever the height, so a recording
-	// always ends with the keys visible.
 	body := fit(out, w, max(h-1, 0), bg)
 	hints := []overlay.Hint{{Key: "q", Label: "quit"}}
 	if s.Done {
@@ -73,10 +63,6 @@ func hintStrip(hints []overlay.Hint, bg color.Color, pal overlay.Palette) string
 	return strings.Join(parts, ink(bg, bg).Render("  "))
 }
 
-// renderInvariants is the oracle at rest and the oracle when it breaks. At rest
-// it is a family x dot matrix and two figures, and it is deliberately quiet:
-// the resting state is what is on screen for 99% of a run, and a resting state
-// that shouts has nothing left to say when something is actually wrong.
 func renderInvariants(s Snapshot, pal overlay.Palette, w int) []string {
 	bg := pal.Panel
 	g := glyphs()
@@ -92,7 +78,6 @@ func renderInvariants(s Snapshot, pal overlay.Palette, w int) []string {
 		}
 	}
 
-	// Verdict figure, right aligned against the section header.
 	verdict, verdictInk := itoa(len(s.Rules))+" ok", ink(bg, pal.FgDim)
 	if broken > 0 {
 		verdict, verdictInk = itoa(broken)+" failed", bold(bg, pal.Warn)
@@ -101,8 +86,6 @@ func renderInvariants(s Snapshot, pal overlay.Palette, w int) []string {
 	gap := max(w-4-lipgloss.Width("invariants")-lipgloss.Width(verdict), 1)
 	add(pad, head, ink(bg, bg).Render(strings.Repeat(" ", gap)), verdictInk.Render(verdict))
 
-	// One row per family, in the order the registry first mentions it, one dot
-	// per rule in registry order. A dot is a rule the target says it checks.
 	for _, fam := range families(s.Rules) {
 		marks := make([]string, 0, len(fam.idx))
 		for _, i := range fam.idx {
@@ -117,8 +100,6 @@ func renderInvariants(s Snapshot, pal overlay.Palette, w int) []string {
 			strings.Join(marks, ink(bg, bg).Render(" ")))
 	}
 
-	// The checks figure is the count of rule results the engine reported, which
-	// is actions times rules up to the break. It is a counter, not an estimate.
 	failWord, failInk := "0 failed", ink(bg, pal.FgDim)
 	if broken > 0 {
 		failWord, failInk = itoa(broken)+" failed", bold(bg, pal.Warn)
@@ -132,10 +113,6 @@ func renderInvariants(s Snapshot, pal overlay.Palette, w int) []string {
 	return out
 }
 
-// renderCallout names what broke. It is the only saturated thing on the band
-// when it appears, and it carries the failure three ways at once, so a
-// monochrome terminal and a compressed recording both keep the message: the
-// glyph, the weight, and the words.
 func renderCallout(s Snapshot, pal overlay.Palette, w int) []string {
 	bg := pal.Panel
 	g := glyphs()
@@ -159,9 +136,6 @@ type family struct {
 	idx  []int
 }
 
-// families groups the registry in first-appearance order. Grouping is by the
-// registry's own Family field, so a display cannot invent a group the target
-// did not declare.
 func families(rules []fuzz.RuleInfo) []family {
 	var out []family
 	at := map[string]int{}
@@ -177,10 +151,6 @@ func families(rules []fuzz.RuleInfo) []family {
 	return out
 }
 
-// renderMix is the only distribution the engine owns for free: what its
-// generator actually emitted, per class, summing to the action counter. Bars
-// are furniture weight because the shape is the message and the figures are
-// beside them. Nothing else is plotted, because nothing else is measured.
 func renderMix(s Snapshot, pal overlay.Palette, w int) []string {
 	bg := pal.Panel
 	g := glyphs()
@@ -205,8 +175,6 @@ func renderMix(s Snapshot, pal overlay.Palette, w int) []string {
 			cells = n * barCells / peak
 		}
 		bar := strings.Repeat(g.block, cells) + strings.Repeat(" ", barCells-cells)
-		// Burn-down: with an alarm on the band the histogram steps back, so the
-		// only saturated thing left on Panel is the thing that went wrong.
 		figure := pal.FgDim
 		if s.Violated {
 			figure = pal.FgMute
@@ -220,9 +188,6 @@ func renderMix(s Snapshot, pal overlay.Palette, w int) []string {
 	return out
 }
 
-// renderLedger is the five most recent actions with their payloads. The tape
-// carries rate; this carries meaning, and it is where a reader sees that the
-// thing on screen really is keys and drags and resizes.
 func renderLedger(s Snapshot, pal overlay.Palette, w int) []string {
 	bg := pal.Panel
 	var out []string
@@ -230,15 +195,11 @@ func renderLedger(s Snapshot, pal overlay.Palette, w int) []string {
 	pad := ink(bg, bg).Render("  ")
 	add(pad, ink(bg, pal.FgMute).Render("last"))
 	for i := range s.LedgerN {
-		// Newest at full weight, the rest dimmed, so "now" is unambiguous
-		// without anything moving.
 		fg := pal.FgDim
 		if i == 0 {
 			fg = pal.Fg
 		}
 		if s.Violated {
-			// Burn-down: with an alarm on the band, everything that is not the
-			// alarm steps back so the alarm is the only saturated thing left.
 			fg = pal.FgMute
 		}
 		add(pad, ink(bg, fg).Render(launder(s.Ledger[i].String(), w-4)))

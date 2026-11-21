@@ -6,20 +6,6 @@ import (
 	"strings"
 )
 
-// Agent calls: a tool call that talks to another agent or to the person
-// through tuios. A shell call that runs tuios send-agent-message, ask-agent,
-// read-agent-messages, ask-human, start-agent, delegate or queue, or one of
-// the tuios MCP tools of the same verbs, carries what it said and to whom, so
-// a client can draw it as a message and not as a command line.
-//
-// A command line is read the way a shell and the command read it: shellWord
-// splits the words, a list or a pipeline is cut into its simple commands, the
-// wrappers CommandLabel knows (bash -lc, env, sudo, cd dir &&) come off, and
-// the words after the tuios program are read with the command's own flags as
-// pflag reads them. A command line this cannot read, such as one with an
-// unknown flag or a subshell, gives no call, and the client draws the plain
-// command card.
-
 // The verbs of an agent call.
 const (
 	CallSend     = "send"
@@ -31,7 +17,6 @@ const (
 	CallQueue    = "queue"
 )
 
-// callsMax bounds the calls one command line carries.
 const callsMax = 4
 
 // AgentCall is one call to another agent or to the person. Every field is
@@ -65,8 +50,6 @@ type AgentCall struct {
 	JSON bool `json:"json,omitempty"`
 }
 
-// callSpec is a command's flags as pflag reads them: each long name and
-// whether it takes a value, and the one-letter forms.
 type callSpec struct {
 	verb  string
 	flags map[string]bool
@@ -94,12 +77,8 @@ func TalkShorthands() map[string]map[byte]string {
 	return out
 }
 
-// globalFlags are the root command's persistent flags, which come before or
-// after the command's own.
 var globalFlags = map[string]bool{"debug": false, "server": true, "cpuprofile": true, "pprof": true, "help": false}
 
-// flagSet builds a flag map from names, a "=" after a name meaning it takes
-// a value.
 func flagSet(names ...string) map[string]bool {
 	out := make(map[string]bool, len(names)+1)
 	for _, n := range names {
@@ -110,7 +89,6 @@ func flagSet(names ...string) map[string]bool {
 	return out
 }
 
-// sw are the -s and -w forms most of the commands share.
 var sw = map[byte]string{'s': "session", 'w': "window", 'h': "help"}
 
 var talkSpecs = map[string]callSpec{
@@ -128,9 +106,6 @@ var talkSpecs = map[string]callSpec{
 	"queue": {CallQueue, flagSet("session=", "window=", "json"), sw},
 }
 
-// mcpTalk are the tuios MCP tools of an agent call, by the end of the
-// tool's name: a harness puts its own prefix in front, such as Claude Code's
-// mcp__tuios__.
 var mcpTalk = map[string]string{
 	"tuios_send_agent_message":  CallSend,
 	"tuios_ask_agent":           CallAsk,
@@ -159,8 +134,6 @@ func AgentCallsOf(tool, command string, input map[string]any) []AgentCall {
 	return nil
 }
 
-// mcpCall is an MCP tool's input as an agent call. The tools take the JSON
-// verbs' arguments.
 func mcpCall(verb string, in map[string]any) (AgentCall, bool) {
 	str := func(k string) string {
 		s, _ := in[k].(string)
@@ -200,8 +173,6 @@ func mcpCall(verb string, in map[string]any) (AgentCall, bool) {
 	return c, true
 }
 
-// shellCalls is the agent calls of a command line, at most callsMax. depth
-// counts the shells it went into, such as bash -lc.
 func shellCalls(cmd string, depth int) []AgentCall {
 	var out []AgentCall
 	for _, seg := range simpleCommands(cmd) {
@@ -214,7 +185,6 @@ func shellCalls(cmd string, depth int) []AgentCall {
 			s = next
 		}
 		if s != seg && depth < 3 && (strings.ContainsAny(s, "|&;\n")) {
-			// A script a shell ran: its own list of commands.
 			out = append(out, shellCalls(s, depth+1)...)
 		} else if c, ok := talkCall(commandWords(s)); ok {
 			out = append(out, c)
@@ -226,9 +196,6 @@ func shellCalls(cmd string, depth int) []AgentCall {
 	return out
 }
 
-// simpleCommands cuts a command line at its list and pipe operators and at
-// its unquoted line breaks. A part with a subshell or a group is left out,
-// and so is a comment.
 func simpleCommands(cmd string) []string {
 	var out []string
 	s := cmd
@@ -242,13 +209,11 @@ func simpleCommands(cmd string) []string {
 	for {
 		lead := len(s) - len(strings.TrimLeft(s, " \t\n"))
 		if i := strings.IndexByte(s[:lead], '\n'); i >= 0 && !(i > 0 && s[i-1] == '\\') {
-			// A line break ends a command, as ; does.
 			at := len(cmd) - len(s) + i
 			cut(at)
 			start = at + 1
 		}
 		if lead < len(s) && s[lead] == '#' {
-			// A comment runs to the end of the line.
 			at := len(cmd) - len(s) + lead
 			cut(at)
 			nl := strings.IndexByte(s[lead:], '\n')
@@ -271,7 +236,6 @@ func simpleCommands(cmd string) []string {
 		case "(", ")":
 			bad = true
 		case ">", "<":
-			// 2>&1: the & is the redirection's, not a list's.
 			if _, r, after := shellWord(rest); r == "&" {
 				rest = after
 			}
@@ -282,11 +246,8 @@ func simpleCommands(cmd string) []string {
 	return out
 }
 
-// word is one word of a simple command: its value and how it is written.
 type word struct{ value, raw string }
 
-// commandWords is a simple command's words, without its redirections. An
-// unquoted command substitution makes it nil: what it prints is not known.
 func commandWords(s string) []word {
 	var out []word
 	for {
@@ -296,8 +257,6 @@ func commandWords(s string) []word {
 		}
 		switch {
 		case raw == ">" || raw == ">>" || raw == "<" || raw == "<<":
-			// A redirection and its file, and an fd number written
-			// against it (2>&1).
 			if n := len(out); n > 0 && digits(out[n-1].raw) && strings.HasSuffix(s[:len(s)-len(rest)-len(raw)], out[n-1].raw) {
 				out = out[:n-1]
 			}
@@ -308,7 +267,6 @@ func commandWords(s string) []word {
 		case raw == "(" || raw == ")" || strings.HasSuffix(raw, "$") && strings.HasPrefix(strings.TrimLeft(rest, " "), "("):
 			return nil
 		case raw == "\\\n":
-			// A line that goes on.
 		default:
 			out = append(out, word{value: heredocValue(value), raw: raw})
 		}
@@ -316,7 +274,6 @@ func commandWords(s string) []word {
 	}
 }
 
-// digits reports whether s is only ASCII digits.
 func digits(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] < '0' || s[i] > '9' {
@@ -326,8 +283,6 @@ func digits(s string) bool {
 	return s != ""
 }
 
-// heredocValue is the body of a "$(cat <<'EOF' ... EOF)" value, the way
-// agents pass a long message, and v itself for any other value.
 func heredocValue(v string) string {
 	rest, ok := strings.CutPrefix(v, "$(cat <<")
 	if !ok {
@@ -355,8 +310,6 @@ func heredocValue(v string) string {
 	return body[:end]
 }
 
-// talkCall reads a simple command that runs tuios and one of the commands of
-// an agent call.
 func talkCall(words []word) (AgentCall, bool) {
 	if len(words) < 2 {
 		return AgentCall{}, false
@@ -365,7 +318,6 @@ func talkCall(words []word) (AgentCall, bool) {
 	if prog = strings.TrimSuffix(strings.ToLower(prog), ".exe"); prog != "tuios" {
 		return AgentCall{}, false
 	}
-	// The root's persistent flags may come before the command.
 	i := 1
 	for i < len(words) && strings.HasPrefix(words[i].value, "--") {
 		name, _, eq := strings.Cut(words[i].value[2:], "=")
@@ -434,7 +386,6 @@ func talkCall(words []word) (AgentCall, bool) {
 		}
 		c.Harness, c.Name = first("agent"), first("name")
 		if c.Name == "" {
-			// The child's window name is its role.
 			c.Name = first("role")
 		}
 	case CallQueue:
@@ -454,8 +405,6 @@ func talkCall(words []word) (AgentCall, bool) {
 	return c, true
 }
 
-// selfRef reports whether a value is the caller's own pane or session, as
-// agents write it.
 func selfRef(v string) bool {
 	switch v {
 	case "$TUIOS_PANE_ID", "${TUIOS_PANE_ID}", "$TUIOS_SESSION", "${TUIOS_SESSION}":
@@ -464,10 +413,6 @@ func selfRef(v string) bool {
 	return false
 }
 
-// parseFlags reads a command's words as pflag does: --name=value, --name
-// value, -w value, -wvalue, a bool flag alone, and -- before the arguments.
-// Flags may come after arguments. An unknown flag, or one without its value,
-// fails the read.
 func parseFlags(sp callSpec, words []word) (map[string][]string, []string, bool) {
 	vals := map[string][]string{}
 	var args []string

@@ -10,12 +10,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// wantsServicePID: on Windows the owner of the socket is a pid, which must
-// be the pid in service.json.
 const wantsServicePID = true
 
-// asOtherUser makes the checks look for LocalSystem, which the test does not
-// run as.
 func asOtherUser(t *testing.T) {
 	sys, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
 	if err != nil {
@@ -39,7 +35,6 @@ func TestOpenCodeServiceDACL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// icacls is found before noOpenCode empties the PATH.
 	icaclsBin, err := exec.LookPath("icacls")
 	if err != nil {
 		t.Fatal(err)
@@ -62,8 +57,6 @@ func TestOpenCodeServiceDACL(t *testing.T) {
 	}
 	checkOpenCodePage(t, p)
 
-	// S-1-1-0 is Everyone. The read above is shared with later reads of the
-	// same file for a moment, so it is dropped first.
 	icacls("/grant", "*S-1-1-0:(W)")
 	openCodeFlights.Lock()
 	openCodeFlights.m = nil

@@ -17,76 +17,37 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
 
-// The fleet stands in for the daemon behind the agents view (ctrl+b i). The
-// browser build has no daemon, so the view's verbs come here, through the
-// same seam the app's tests use, and are answered from the pretend agents'
-// own records (webshell/agents.go):
-//
-//   - agent-transcript reads an agent's conversation, and the thread reads
-//     it again when the agent writes (app.LearnTranscriptGrewMsg);
-//   - peek-prompt and respond read the prompt an agent waits on and press
-//     the answer into its pane;
-//   - reply-approval answers the approval of an agent whose hook tuios
-//     holds: claude's edits are held, as with the tuios hooks installed;
-//   - queue-prompt types a reply into the agent's pane once it is at rest;
-//   - dismiss-attention, list-checkpoints and artifact-list do what the
-//     daemon's do, for these agents;
-//   - start-agent and fan start agents in new panes, for the New agent
-//     sheet.
-//
-// It also feeds the Inbox as the daemon's attention watcher does: an item
-// for each agent that needs the person, and one for each finished turn not
-// seen yet. Any other verb is unknown, as on a daemon too old to have it.
-
-// learnSession is the session every pane of the tour is in.
 const learnSession = "local"
 
-// learnNonce is the attach nonce the tour's client has. The fleet takes any
-// answer: every key in the tab is the person's.
 const learnNonce = "learn"
 
-// fleetWait is how long respond waits for the agent to move on.
 const fleetWait = 1500 * time.Millisecond
 
-// fleet is the pretend daemon behind the agents view.
 type fleet struct {
-	send func(tea.Msg)
-	feed chan tea.Msg
-	poke chan struct{}
-	// spawn opens panes running an agent, on the program's goroutine, and
-	// close closes panes.
+	send  func(tea.Msg)
+	feed  chan tea.Msg
+	poke  chan struct{}
 	spawn func(msg spawnAgentsMsg)
 	close func(windows []string)
 
-	mu sync.Mutex
-	// items are the open items by id, and published what the Inbox was
-	// last told.
+	mu               sync.Mutex
 	items, published map[string]session.AttentionItem
-	// unheld are the approvals the person sent back to the pane with enter.
-	unheld map[string]bool
-	// dismissed are the finished turns the person dismissed or saw.
-	dismissed map[string]bool
-	// queued are the replies waiting for an agent to rest, by pane, and
-	// typedAt the rest each pane's last reply was typed in.
-	queued  map[string][]string
-	typedAt map[string]int
-	seq     uint64
-	since   map[string]int64
-	// fans are the fans the New agent sheet started, and attempts each
-	// attempt's fan and pane, by the name it has in place of a session.
-	fans     map[string]*learnFan
-	attempts map[string]fanAttempt
+	unheld           map[string]bool
+	dismissed        map[string]bool
+	queued           map[string][]string
+	typedAt          map[string]int
+	seq              uint64
+	since            map[string]int64
+	fans             map[string]*learnFan
+	attempts         map[string]fanAttempt
 }
 
-// learnFan is a fan of agents on one task.
 type learnFan struct {
 	id, group, task, agent string
-	// sessions are the attempts' names, in order.
-	sessions []string
-	verdict  map[string]any
+	sessions               []string
+	verdict                map[string]any
 }
 
-// fanAttempt is one attempt: its fan and its pane.
 type fanAttempt struct {
 	fan    string
 	window string
@@ -107,15 +68,11 @@ func newFleet(send func(tea.Msg)) *fleet {
 		fans:      map[string]*learnFan{},
 		attempts:  map[string]fanAttempt{},
 	}
-	// The first listing: nothing waits yet, and the view is connected.
 	f.feed <- app.InboxSnapshotMsg{}
 	go f.run()
 	return f
 }
 
-// run tells the Inbox what changed, whenever something did. It sends the
-// difference between the items now and the items last sent, so a burst of
-// changes is one message and none is lost.
 func (f *fleet) run() {
 	for range f.poke {
 		f.mu.Lock()
@@ -147,15 +104,11 @@ func sameItem(a, b session.AttentionItem) bool {
 	return a.Kind == b.Kind && a.Summary == b.Summary && a.RequestID == b.RequestID && a.Name == b.Name
 }
 
-// changed is a pretend agent's record changing: the Inbox items follow it,
-// a reply waiting for it is typed once it rests, and the thread is read
-// again.
 func (f *fleet) changed(window string) {
 	f.reconcile()
 	f.send(app.LearnTranscriptGrewMsg{Session: learnSession, Window: window})
 }
 
-// reconcile works the items out again from every agent's record.
 func (f *fleet) reconcile() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -173,7 +126,6 @@ func (f *fleet) reconcile() {
 		case v.Prompt != nil:
 			it.ID, it.Kind, it.Summary, it.Since = v.Prompt.ID, v.Prompt.Kind, v.Prompt.Summary, v.Prompt.Since
 			if it.Kind == session.AttentionApproval && a.Harness == webshell.AgentHarness && !f.unheld[it.ID] {
-				// claude's hook holds its approvals for the Inbox to answer.
 				it.RequestID = it.ID
 				it.Options = []string{session.ApprovalOnce, session.ApprovalAlways, session.ApprovalDeny}
 				it.AlwaysScope = []string{"Edit(projects/website/**)"}
@@ -211,7 +163,6 @@ func (f *fleet) reconcile() {
 	}
 }
 
-// call answers one verb, as the daemon would.
 func (f *fleet) call(verb string, params map[string]any, _ time.Duration) (json.RawMessage, error) {
 	str := func(k string) string {
 		s, _ := params[k].(string)
@@ -230,8 +181,6 @@ func (f *fleet) call(verb string, params map[string]any, _ time.Duration) (json.
 			return nil, err
 		}
 		v := a.View()
-		// Every page is the whole conversation, which is short: the thread
-		// takes it in place of what it had.
 		return reply(map[string]any{"entries": v.Entries, "cursor": strconv.FormatUint(v.Rev, 10), "reset": true, "more": false})
 	case "peek-prompt":
 		return f.peek(str("window"))
@@ -281,14 +230,11 @@ func reply(v any) (json.RawMessage, error) {
 	return b, err
 }
 
-// recap is what an agent did in its last turn, as agent-activity's recap
-// says it: the files it wrote, the commands it ran and what it said last.
 func recap(v webshell.AgentView) session.AgentActivityRecap {
 	rc := session.AgentActivityRecap{Files: []string{}, State: v.State, LastSaid: v.Message}
 	start := 0
 	for i, e := range v.Entries {
 		if e.Kind == "text" && e.Role == "user" {
-			// The recap is of the last turn.
 			start, rc.Turns = i, 1
 		}
 	}
@@ -308,7 +254,6 @@ func recap(v webshell.AgentView) session.AgentActivityRecap {
 	return rc
 }
 
-// peek reads the prompt an agent waits on.
 func (f *fleet) peek(window string) (json.RawMessage, error) {
 	a := webshell.FindAgent(window)
 	res := session.PromptPeek{Session: learnSession, Window: window, Lines: []string{}, Options: []harness.Option{}, Actions: []string{}}
@@ -338,8 +283,6 @@ func (f *fleet) peek(window string) (json.RawMessage, error) {
 	return reply(res)
 }
 
-// respond presses an answer to the prompt the peek read, and waits a moment
-// for the agent to move on.
 func (f *fleet) respond(window, action, value, promptID string) (json.RawMessage, error) {
 	a := webshell.FindAgent(window)
 	var p *webshell.AgentPrompt
@@ -369,8 +312,6 @@ func (f *fleet) respond(window, action, value, promptID string) (json.RawMessage
 	return reply(session.PromptResponse{Window: window, Action: action, Sent: keys, PromptID: promptID, SettledBy: "state", State: state})
 }
 
-// waitMoved waits up to fleetWait for the agent to leave the prompt, and
-// reports its state then.
 func waitMoved(a *webshell.Agent, promptID string) string {
 	until := time.Now().Add(fleetWait)
 	for {
@@ -382,7 +323,6 @@ func waitMoved(a *webshell.Agent, promptID string) string {
 	}
 }
 
-// replyApproval answers a held approval.
 func (f *fleet) replyApproval(requestID, decision, message string) (json.RawMessage, error) {
 	f.mu.Lock()
 	it, ok := f.items[requestID]
@@ -396,7 +336,6 @@ func (f *fleet) replyApproval(requestID, decision, message string) (json.RawMess
 	}
 	switch decision {
 	case session.ApprovalAsk:
-		// The person answers in the pane: the prompt is there already.
 		f.mu.Lock()
 		f.unheld[requestID] = true
 		f.mu.Unlock()
@@ -407,8 +346,6 @@ func (f *fleet) replyApproval(requestID, decision, message string) (json.RawMess
 	case session.ApprovalAlways:
 		a.Type("2")
 	case session.ApprovalDeny:
-		// No, then what to do differently, which the agent takes as its
-		// next task.
 		text := "3"
 		if m := strings.TrimSpace(message); m != "" {
 			text += m + "\r"
@@ -420,7 +357,6 @@ func (f *fleet) replyApproval(requestID, decision, message string) (json.RawMess
 	return reply(map[string]any{"decision": decision, "applied": true})
 }
 
-// queue types a reply into the agent's pane once it is at rest.
 func (f *fleet) queue(window, text string) (json.RawMessage, error) {
 	if webshell.FindAgent(window) == nil {
 		return nil, &session.VerbCallError{Code: session.ErrVerbInvalidParams, Message: "no agent runs in this pane"}
@@ -439,7 +375,6 @@ func (f *fleet) queue(window, text string) (json.RawMessage, error) {
 	return reply(map[string]any{"id": id, "position": n, "queued": waiting, "delivering": waiting < n})
 }
 
-// dismiss closes an item.
 func (f *fleet) dismiss(id string) (json.RawMessage, error) {
 	f.mu.Lock()
 	_, ok := f.items[id]
@@ -454,9 +389,6 @@ func (f *fleet) dismiss(id string) (json.RawMessage, error) {
 	return reply(map[string]any{})
 }
 
-// start opens n panes, each running an agent of specs with task: the first
-// spec for every attempt when there is one, else one spec each. With a group,
-// the panes are the attempts of a fan.
 func (f *fleet) start(specs []string, task string, n int, group string) (json.RawMessage, error) {
 	if task == "" {
 		return nil, &session.VerbCallError{Code: session.ErrVerbInvalidParams, Message: "a task is required"}
@@ -499,7 +431,6 @@ func (f *fleet) start(specs []string, task string, n int, group string) (json.Ra
 	return reply(res)
 }
 
-// placed records the pane an attempt runs in.
 func (f *fleet) placed(session, window string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -509,7 +440,6 @@ func (f *fleet) placed(session, window string) {
 	}
 }
 
-// fanOf is the fan of an attempt.
 func (f *fleet) fanOf(name string) (*learnFan, error) {
 	if a, ok := f.attempts[name]; ok {
 		if fan := f.fans[a.fan]; fan != nil {
@@ -519,8 +449,6 @@ func (f *fleet) fanOf(name string) (*learnFan, error) {
 	return nil, &session.VerbCallError{Code: session.ErrVerbInvalidParams, Message: name + " is not an attempt of a fan"}
 }
 
-// compare is compare-fan: each attempt side by side, from its agent's
-// record.
 func (f *fleet) compare(name string) (json.RawMessage, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -580,8 +508,6 @@ func (f *fleet) compare(name string) (json.RawMessage, error) {
 	return reply(res)
 }
 
-// judge is judge-fan. The tour's judge reads the attempts at once: it picks
-// the one that changed the most lines, which is a pretend reason.
 func (f *fleet) judge(name string) (json.RawMessage, error) {
 	raw, err := f.compare(name)
 	if err != nil {
@@ -616,7 +542,6 @@ func (f *fleet) judge(name string) (json.RawMessage, error) {
 	return reply(map[string]any{"judge_session": "judge", "ready": true})
 }
 
-// keep is keep-fan: it keeps one attempt and closes the panes of the others.
 func (f *fleet) keep(name string) (json.RawMessage, error) {
 	f.mu.Lock()
 	fan, err := f.fanOf(name)
@@ -642,16 +567,12 @@ func (f *fleet) keep(name string) (json.RawMessage, error) {
 	return reply(map[string]any{"removed": removed, "left": 0})
 }
 
-// spawnAgentsMsg asks for new panes, one for each agent in agents, each with
-// task, from the New agent sheet. With fan, the panes are its attempts.
 type spawnAgentsMsg struct {
 	agents []string
 	task   string
 	fan    *learnFan
 }
 
-// spawnAgents opens the panes: each one a shell with the agent's command
-// typed into it, as a person would start it.
 func (m *Model) spawnAgents(msg spawnAgentsMsg) {
 	o := m.OS
 	for i, agent := range msg.agents {
@@ -674,11 +595,8 @@ func (m *Model) spawnAgents(msg spawnAgentsMsg) {
 	o.MarkAllDirty()
 }
 
-// closeWindowsMsg closes panes, for keep-fan.
 type closeWindowsMsg struct{ windows []string }
 
-// spawnInfo is what the New agent sheet offers in the tour: the three
-// pretend agents, in the website folder.
 func spawnInfo() app.LearnSpawnInfo {
 	return app.LearnSpawnInfo{
 		Agents: []app.LearnSpawnAgent{

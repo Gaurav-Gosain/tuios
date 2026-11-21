@@ -21,8 +21,6 @@ import (
 // block's widest, so one long path would pad every other line past the
 // terminal's edge too, and each would wrap onto a blank row.
 func RenderErrorText(style lipgloss.Style, s string) string {
-	// A transform, such as fang's capital on the first word, is for the text
-	// as a whole, not for each line it wraps onto.
 	if transform := style.GetTransform(); transform != nil {
 		s = transform(s)
 		style = style.UnsetTransform()
@@ -39,8 +37,6 @@ func RenderErrorText(style lipgloss.Style, s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// wrapWords wraps every line of s to limit cells, breaking only at spaces. A
-// line's leading indent is kept on the lines it wraps onto.
 func wrapWords(s string, limit int) string {
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {

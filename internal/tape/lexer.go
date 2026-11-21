@@ -10,11 +10,11 @@ import (
 // Lexer tokenizes .tape file input
 type Lexer struct {
 	input   string
-	pos     int  // current position
-	nextPos int  // next position
-	ch      byte // current character
-	line    int  // current line
-	column  int  // current column
+	pos     int
+	nextPos int
+	ch      byte
+	line    int
+	column  int
 }
 
 // New creates a new Lexer for the given input
@@ -30,15 +30,8 @@ func New(input string) *Lexer {
 	return l
 }
 
-// readChar reads the next character and updates position tracking.
-//
-// line and column always describe l.ch, the character about to be read. The
-// position moves when a character is left behind, not when the next one is
-// read: leaving a newline starts the next line at column 1. Counting it the
-// other way round put the newline itself on the line after it, and every
-// token past the first line one column to the right of where it is.
 func (l *Lexer) readChar() {
-	if l.pos < l.nextPos { // a character is being left behind
+	if l.pos < l.nextPos {
 		if l.ch == '\n' {
 			l.line++
 			l.column = 1
@@ -50,7 +43,7 @@ func (l *Lexer) readChar() {
 	}
 
 	if l.nextPos >= len(l.input) {
-		l.ch = 0 // EOF
+		l.ch = 0
 	} else {
 		l.ch = l.input[l.nextPos]
 	}
@@ -59,7 +52,6 @@ func (l *Lexer) readChar() {
 	l.nextPos++
 }
 
-// peekChar returns the next character without consuming it
 func (l *Lexer) peekChar() byte {
 	if l.nextPos >= len(l.input) {
 		return 0
@@ -67,24 +59,21 @@ func (l *Lexer) peekChar() byte {
 	return l.input[l.nextPos]
 }
 
-// skipWhitespace skips spaces and tabs (not newlines)
 func (l *Lexer) skipWhitespace() {
 	for l.ch == ' ' || l.ch == '\t' || l.ch == '\r' {
 		l.readChar()
 	}
 }
 
-// skipComment skips a comment line (from # to end of line)
 func (l *Lexer) skipComment() {
 	for l.ch != '\n' && l.ch != 0 {
 		l.readChar()
 	}
 }
 
-// readString reads a quoted string (single, double, or backtick)
 func (l *Lexer) readString(quote byte) string {
 	var sb strings.Builder
-	l.readChar() // skip opening quote
+	l.readChar()
 
 	for l.ch != quote && l.ch != 0 {
 		if l.ch == '\\' {
@@ -113,13 +102,6 @@ func (l *Lexer) readString(quote byte) string {
 			case 'v':
 				sb.WriteByte('\v')
 			case 'x', 'u', 'U':
-				// The recorder writes a Type line with %q, which spells a
-				// byte or rune strconv does not call printable as \xHH,
-				// \uHHHH or \UHHHHHHHH: an escape byte, a no-break space, the
-				// zero-width joiner inside an emoji. Read without these, the
-				// tape typed the letters instead. A backslash and letter not
-				// followed by enough hex digits keep their old meaning, the
-				// letter itself.
 				if !l.readHexEscape(&sb) {
 					sb.WriteByte(l.ch)
 				}
@@ -133,17 +115,12 @@ func (l *Lexer) readString(quote byte) string {
 	}
 
 	if l.ch == quote {
-		l.readChar() // skip closing quote
+		l.readChar()
 	}
 
 	return sb.String()
 }
 
-// readHexEscape reads the hex digits of a \x, \u or \U escape, the lexer
-// sitting on the letter, and writes what they name: \x a single byte, which
-// is how %q spells a byte that is not valid UTF-8, and \u and \U a rune. It
-// leaves the lexer on the last digit and reports false, consuming nothing,
-// when the digits are not all there or \u and \U name no valid rune.
 func (l *Lexer) readHexEscape(sb *strings.Builder) bool {
 	n := map[byte]int{'x': 2, 'u': 4, 'U': 8}[l.ch]
 	if l.nextPos+n > len(l.input) {
@@ -167,12 +144,8 @@ func (l *Lexer) readHexEscape(sb *strings.Builder) bool {
 	return true
 }
 
-// readIdentifier reads an identifier or keyword
 func (l *Lexer) readIdentifier() string {
 	var sb strings.Builder
-	// After its first character a word may hold dots and dashes, so a config
-	// path (appearance.border_style), a file name (lib.tape) and a value
-	// such as even-horizontal or tokyo-night are each one word.
 	for isIdentifierChar(l.ch) || ((l.ch == '.' || l.ch == '-') && sb.Len() > 0) {
 		sb.WriteByte(l.ch)
 		l.readChar()
@@ -180,14 +153,12 @@ func (l *Lexer) readIdentifier() string {
 	return sb.String()
 }
 
-// readNumberWithDecimal reads a number literal including decimals
 func (l *Lexer) readNumberWithDecimal() string {
 	var sb strings.Builder
 	for isDigit(l.ch) {
 		sb.WriteByte(l.ch)
 		l.readChar()
 	}
-	// Check for decimal point
 	if l.ch == '.' && isDigit(l.peekChar()) {
 		sb.WriteByte(l.ch)
 		l.readChar()
@@ -199,10 +170,9 @@ func (l *Lexer) readNumberWithDecimal() string {
 	return sb.String()
 }
 
-// readRegex reads a regex pattern /pattern/
 func (l *Lexer) readRegex() string {
 	var sb strings.Builder
-	l.readChar() // skip opening /
+	l.readChar()
 
 	for l.ch != '/' && l.ch != 0 {
 		if l.ch == '\\' {
@@ -219,7 +189,7 @@ func (l *Lexer) readRegex() string {
 	}
 
 	if l.ch == '/' {
-		l.readChar() // skip closing /
+		l.readChar()
 	}
 
 	return sb.String()
@@ -231,8 +201,6 @@ func (l *Lexer) NextToken() Token {
 
 	l.skipWhitespace()
 
-	// The position is taken after the blanks, so it names the token's first
-	// character and an error can point at it.
 	tok.Line = l.line
 	tok.Column = l.column
 
@@ -248,7 +216,7 @@ func (l *Lexer) NextToken() Token {
 
 	case '#':
 		l.skipComment()
-		return l.NextToken() // Skip comments and get next token
+		return l.NextToken()
 
 	case '+':
 		tok.Type = TokenPlus
@@ -266,9 +234,7 @@ func (l *Lexer) NextToken() Token {
 		l.readChar()
 
 	case '/':
-		// Could be division or regex: peek ahead
 		if l.peekChar() == '/' || isIdentifierChar(l.peekChar()) {
-			// Likely regex for Wait command
 			regex := l.readRegex()
 			tok.Type = TokenSlash
 			tok.Literal = regex
@@ -296,15 +262,11 @@ func (l *Lexer) NextToken() Token {
 
 	default:
 		if isDigit(l.ch) {
-			// Could be a number or duration
 			num := l.readNumberWithDecimal()
 
-			// Check if it's a duration (has a letter after the number)
 			if unicode.IsLetter(rune(l.ch)) {
 				var sb strings.Builder
 				sb.WriteString(num)
-				// Consume alternating unit/number runs so compound Go durations
-				// like 1m30s tokenize as a single duration rather than splitting.
 				for unicode.IsLetter(rune(l.ch)) {
 					for unicode.IsLetter(rune(l.ch)) {
 						sb.WriteByte(l.ch)
@@ -326,9 +288,6 @@ func (l *Lexer) NextToken() Token {
 			tok.Literal = literal
 		} else {
 			tok.Type = TokenIllegal
-			// l.ch is a byte, so string(l.ch) would re-encode it as a rune:
-			// a stray 0xA8 came back as the two bytes of U+00A8, and the error
-			// pointed at a character that was never in the file. Keep the byte.
 			tok.Literal = string([]byte{l.ch})
 			l.readChar()
 		}
@@ -337,12 +296,10 @@ func (l *Lexer) NextToken() Token {
 	return tok
 }
 
-// isDigit returns true if ch is a digit
 func isDigit(ch byte) bool {
 	return ch >= '0' && ch <= '9'
 }
 
-// isIdentifierChar returns true if ch is valid in an identifier
 func isIdentifierChar(ch byte) bool {
 	return unicode.IsLetter(rune(ch)) || isDigit(ch) || ch == '_'
 }

@@ -7,10 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
-// checkTree asserts the structural invariants: every internal node has two
-// children, every leaf is the one WindowToNode points at, and nothing is
-// stranded off the root. A tree that fails these renders panes at stale sizes or
-// drops them from the layout entirely.
 func checkTree(t *testing.T, tree *layout.BSPTree, what string) {
 	t.Helper()
 
@@ -55,9 +51,6 @@ func checkTree(t *testing.T, tree *layout.BSPTree, what string) {
 	}
 }
 
-// checkPartition asserts the rects exactly tile bounds: inside it, positive,
-// non-overlapping, and leaving nothing uncovered. Overlap alone is too weak a
-// check, since a layout that loses a pane's space passes it.
 func checkPartition(t *testing.T, rects map[int]layout.Rect, bounds layout.Rect, what string) {
 	t.Helper()
 
@@ -85,15 +78,11 @@ func checkPartition(t *testing.T, rects map[int]layout.Rect, bounds layout.Rect,
 	}
 }
 
-// splitStep is one leader+- or leader+| on a given pane, the way the app issues
-// it: the new window is inserted next to the focused one.
 type splitStep struct {
 	target int
 	dir    layout.PreselectionDir
 }
 
-// buildSplits replays a sequence of splits from a single window, exactly as
-// SplitFocusedHorizontal/Vertical do.
 func buildSplits(bounds layout.Rect, steps []splitStep) *layout.BSPTree {
 	tree := layout.NewBSPTree()
 	tree.InsertWindow(1, 0, layout.SplitNone, 0.5, bounds, 0)
@@ -112,8 +101,6 @@ func TestUnevenSplitsSurviveEveryCloseOrder(t *testing.T) {
 
 	down, right := layout.PreselectionDown, layout.PreselectionRight
 	layouts := map[string][]splitStep{
-		// A vertical split, then a horizontal one inside the right child, then
-		// another inside that: the "unconventional" shape from the report.
 		"nested right":  {{1, right}, {2, down}, {3, right}},
 		"nested left":   {{1, right}, {1, down}, {3, right}},
 		"stairs":        {{1, down}, {2, right}, {3, down}, {4, right}},
@@ -134,8 +121,6 @@ func TestUnevenSplitsSurviveEveryCloseOrder(t *testing.T) {
 					checkTree(t, tree, what+" (before)")
 					checkPartition(t, tree.ApplyLayout(bounds, 0), bounds, what+" (before)")
 
-					// Close every pane, starting at victim and wrapping, so each
-					// layout is torn down in n different orders.
 					for k := range n {
 						id := (victim-1+k)%n + 1
 						tree.RemoveWindow(id)
@@ -152,8 +137,6 @@ func TestUnevenSplitsSurviveEveryCloseOrder(t *testing.T) {
 	}
 }
 
-// skewRatios walks every split off centre so a redistribution bug has something
-// to lose. Alternating the direction keeps sibling splits from cancelling out.
 func skewRatios(tree *layout.BSPTree, ratio float64) {
 	i := 0
 	var walk func(n *layout.TileNode)

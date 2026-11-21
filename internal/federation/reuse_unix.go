@@ -29,22 +29,6 @@ func SharedMasterDir() string {
 	return filepath.Join(sockpath.Dir(), "cm")
 }
 
-// reuseOptions make ssh use a live master in SharedMasterDir, or are nil
-// when the link must not:
-//
-//   - A socket path in the folder would be too long. ssh refuses a
-//     ControlPath that does not fit sun_path and exits, so every link would
-//     fail.
-//   - The folder or its parent is not the user's alone, as ensureSocketDir
-//     in internal/session demands of the socket folder. Whoever can write
-//     there can put a socket that is not the person's connection in place.
-//   - The person's ssh config gives the host a ControlPath of its own.
-//     Options on the command line win over the config, so these would take
-//     the link off the master the person opens in a terminal.
-//   - The host forwards the agent. A connection through a master gets the
-//     master's forwarding, not the link's, so the agent the link forwards
-//     (the daemon's per-host agent link among them) would silently stop.
-//   - ssh -G cannot answer, so neither of the last two is known.
 func reuseOptions(h Host) []string {
 	dir := SharedMasterDir()
 	if len(dir)+1+masterNameLen > sockpath.MaxLen() {
@@ -66,27 +50,10 @@ func reuseOptions(h Host) []string {
 	return reuseArgs(dir)
 }
 
-// freshOptions make ssh open a connection of its own, past any master the
-// person's ssh config or SharedMasterDir names. The link uses them for one
-// dial after its heartbeat found the connection dead.
-//
-// A master outlives the path under it. After a laptop sleeps, the master
-// process still runs and still answers on its socket, so a new ssh that rides
-// it waits on a TCP connection that is gone. The link's ServerAlive options
-// do not reach the master, so nothing ends that wait until the master's own
-// keepalives do, which can take many minutes or never happen.
-//
-// ControlPath=none is not used on every dial. A host that needs a password
-// or a second factor is reached through a master the person opened, because
-// the link runs ssh with BatchMode and cannot prompt. For that host the fresh
-// dial fails at once with ssh's exit code, and the next dial rides the master
-// again.
 func freshOptions() []string {
 	return []string{"-o", "ControlPath=none"}
 }
 
-// privateDir reports whether path is a directory, not a symbolic link,
-// owned by this user and closed to everyone else.
 func privateDir(path string) bool {
 	st, err := os.Lstat(path)
 	if err != nil || !st.Mode().IsDir() {
@@ -99,13 +66,8 @@ func privateDir(path string) bool {
 	return st.Mode().Perm()&0o077 == 0
 }
 
-// masterNameLen is the length of the name ssh's %C gives a master socket:
-// a SHA-1 in hex.
 const masterNameLen = 40
 
-// reuseArgs are the options that make ssh use a live master in dir and
-// otherwise connect as it always did: ControlMaster=no never opens a master
-// and never fails for want of one.
 func reuseArgs(dir string) []string {
 	return []string{
 		"-o", "ControlMaster=no",

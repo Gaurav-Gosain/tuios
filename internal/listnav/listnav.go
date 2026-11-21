@@ -32,8 +32,6 @@ const (
 	End
 )
 
-// jump is the delta Home and End stand for: further than any list is long, so
-// it clamps to the end rather than wrapping.
 const jump = 1 << 30
 
 // Delta is the delta Step takes for a motion, given how many rows a page is.
@@ -104,8 +102,6 @@ func StepSkip(cur, delta, n int, wrap bool, rest func(int) bool) int {
 			if !single || !wrap {
 				break
 			}
-			// Off the end: come in from the other end to its first row that
-			// can hold the cursor.
 			next = 0
 			if dir < 0 {
 				next = n - 1
@@ -143,13 +139,9 @@ func Scroll(scroll, selected, n, visible int) int {
 type Keymap struct {
 	keys    map[string]Motion
 	letters map[string]Motion
-	// order is each motion's keys in the order they were given, for a
-	// footer that names them. See Names.
-	order map[Motion][]string
+	order   map[Motion][]string
 }
 
-// defaults are the keys a list moves on when nothing has been configured:
-// the same ones [keybindings.lists] starts with.
 var defaults = map[Motion][]string{
 	Up:       {"up", "ctrl+p", "k"},
 	Down:     {"down", "ctrl+n", "j"},
@@ -191,8 +183,6 @@ func NewKeymap(bindings map[Motion][]string) *Keymap {
 	return k
 }
 
-// add binds one key to m. An upper-case letter is also read as shift and the
-// lower-case letter, the spelling some terminals send it as.
 func (k *Keymap) add(key string, m Motion) {
 	if !isLetter(key) {
 		k.keys[key] = m
@@ -204,7 +194,6 @@ func (k *Keymap) add(key string, m Motion) {
 	}
 }
 
-// isLetter reports whether key is a single printable character.
 func isLetter(key string) bool {
 	r, n := utf8.DecodeRuneInString(key)
 	return n == len(key) && r != utf8.RuneError && unicode.IsPrint(r) && r != ' '

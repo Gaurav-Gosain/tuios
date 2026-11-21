@@ -16,23 +16,18 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// sshExitRun is one real SSH client attached to one real daemon session, with
-// everything the far end has written so far kept for the assertions.
 type sshExitRun struct {
 	daemon  *session.Daemon
 	session *gossh.Session
 	client  *gossh.Client
 	name    string
 
-	mu   sync.Mutex
-	seen strings.Builder
-	done chan error
-	// readDone closes when the reader has taken everything the server wrote.
+	mu       sync.Mutex
+	seen     strings.Builder
+	done     chan error
 	readDone chan struct{}
 }
 
-// startSSHExitRun brings up a daemon, an SSH server in front of it, and a real
-// SSH client attached to a session on it, and waits until the client has painted.
 func startSSHExitRun(t *testing.T, name string) *sshExitRun {
 	t.Helper()
 	if testing.Short() {
@@ -57,7 +52,7 @@ func startSSHExitRun(t *testing.T, name string) *sshExitRun {
 			KeyPath:        filepath.Join(t.TempDir(), "host_key"),
 			DefaultSession: name,
 			Version:        "test",
-			NoAuth:         true, // this test is about daemon exit, not who may connect
+			NoAuth:         true,
 		})
 	}()
 	t.Cleanup(func() {
@@ -124,7 +119,6 @@ func startSSHExitRun(t *testing.T, name string) *sshExitRun {
 	}()
 	go func() { run.done <- sess.Wait() }()
 
-	// The client has to be up before anything is taken away from it.
 	run.waitForOutput(t, 15*time.Second, "the SSH client never painted a frame")
 	return run
 }
@@ -139,8 +133,6 @@ func (r *sshExitRun) waitForOutput(t *testing.T, d time.Duration, what string) {
 	t.Helper()
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
-		// A frame, not the nesting probe the server writes first: the probe
-		// is an OSC and holds no CSI, and a frame always does.
 		if strings.Contains(r.text(), "\x1b[") {
 			return
 		}
@@ -149,24 +141,17 @@ func (r *sshExitRun) waitForOutput(t *testing.T, d time.Duration, what string) {
 	t.Fatalf("%s", what)
 }
 
-// waitForExit waits for the SSH session to close and returns everything the
-// server wrote. A session that never closes is the bug: the user is left looking
-// at a frame of a session that no longer exists.
 func (r *sshExitRun) waitForExit(t *testing.T, d time.Duration) string {
 	t.Helper()
 	select {
 	case err := <-r.done:
 		if err != nil && err != io.EOF {
-			// A non-zero exit or a closed channel is still an exit.
 			t.Logf("ssh session ended: %v", err)
 		}
 	case <-time.After(d):
 		t.Fatalf("the SSH client never exited: it is still rendering a session that is gone\n--- last output ---\n%s",
 			tailPrintable(r.text()))
 	}
-	// The session ending does not mean its output has been read. The last
-	// frame, the one with the reason in it, can still be in the channel when
-	// Wait returns, so the reader is waited for until it reaches the end.
 	select {
 	case <-r.readDone:
 	case <-time.After(d):
@@ -176,8 +161,6 @@ func (r *sshExitRun) waitForExit(t *testing.T, d time.Duration) string {
 	return r.text()
 }
 
-// tailPrintable keeps the last printable characters of a frame dump so a failure
-// message is readable.
 func tailPrintable(s string) string {
 	var b strings.Builder
 	for _, r := range s {

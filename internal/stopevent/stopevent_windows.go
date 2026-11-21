@@ -39,8 +39,6 @@ func create(name string) (windows.Handle, error) {
 	return ev, nil
 }
 
-// wait closes stop when the event is set. It polls, since a wait on the
-// event alone could not be ended when the daemon stops for another reason.
 func wait(done <-chan struct{}, ev windows.Handle, stop chan<- struct{}) {
 	defer func() { _ = windows.CloseHandle(ev) }()
 	for {

@@ -27,7 +27,6 @@ func TestGitHeadReadsOnlyItsLimit(t *testing.T) {
 
 	t.Run("a long diff stops at the limit", func(t *testing.T) {
 		const limit = 256 << 10
-		// The whole diff is read before the measured window.
 		want, err := Git(ctx, repo, nil, "diff", "HEAD", "--", "big")
 		if err != nil || len(want) < 8<<20 {
 			t.Fatalf("git diff gave %d bytes (%v), want about 8 MB", len(want), err)
@@ -37,7 +36,6 @@ func TestGitHeadReadsOnlyItsLimit(t *testing.T) {
 			runtime.ReadMemStats(&ms)
 			return ms.TotalAlloc
 		}
-		// rchar counts every byte this process read, from git's pipe too.
 		readBytes := func() (uint64, bool) {
 			b, err := os.ReadFile("/proc/self/io")
 			if err != nil {

@@ -9,9 +9,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// controller is a PTY that hands out its master descriptor for the length of
-// one call. xpty.UnixPty and AdoptedPty are; ConPTY and a pane whose bytes
-// come from another machine are not.
 type controller interface {
 	Control(fn func(fd uintptr)) error
 }
@@ -50,8 +47,6 @@ func Adopt(fd int, slaveName string) (*AdoptedPty, error) {
 	if _, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err != nil {
 		return nil, errfmt.Errorf("adopt pty fd %d: %w", fd, err)
 	}
-	// The descriptor stops being inherited by anything this process starts
-	// from here on, as every descriptor Go opens does.
 	unix.CloseOnExec(fd)
 	return &AdoptedPty{master: os.NewFile(uintptr(fd), "/dev/ptmx"), slaveName: slaveName}, nil
 }

@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
-// maxAncestors bounds the parent walk. A hook is rarely more than a handful of
-// processes below the pane's shell; the bound only matters for a cycle a racy
-// read could make.
 const maxAncestors = 32
 
 // SelfProcess reports what the current process can say about where it runs:
@@ -46,8 +43,6 @@ func ProcessAt(pid int) (sid int, ancestors []int) {
 	return sid, ancestorsFrom(pid)
 }
 
-// ancestorsFrom walks up from pid, nearest first, to the first process at or
-// below init.
 func ancestorsFrom(pid int) []int {
 	var ancestors []int
 	seen := map[int]bool{}
@@ -58,8 +53,6 @@ func ancestorsFrom(pid int) []int {
 	return ancestors
 }
 
-// parentPID returns the parent of pid, and the current process's parent for
-// pid 0. It is 0 when the platform cannot read it.
 func parentPID(pid int) int {
 	if pid == 0 {
 		return os.Getppid()
@@ -68,8 +61,6 @@ func parentPID(pid int) int {
 	return ppid
 }
 
-// launcherNames are the programs a harness may start a hook command through:
-// the shell that runs the command line, and env. None of them is the harness.
 var launcherNames = map[string]bool{
 	"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true, "mksh": true,
 	"fish": true, "tcsh": true, "csh": true, "ash": true, "busybox": true, "env": true,

@@ -108,7 +108,6 @@ func TestBundleAndPatchCarryAWorktreesWorkToAnotherCheckout(t *testing.T) {
 		t.Fatal(err)
 	}
 	testutil.Git(t, path, "commit", "-q", "-am", "commit on the branch")
-	// Uncommitted: one staged edit, one unstaged new file, one binary file.
 	if err := os.WriteFile(filepath.Join(path, "README"), []byte("committed\nstaged\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -142,8 +141,6 @@ func TestBundleAndPatchCarryAWorktreesWorkToAnotherCheckout(t *testing.T) {
 	if n != 3 {
 		t.Errorf("WorkingPatch counted %d paths, want 3", n)
 	}
-	// The sender's index is as it was: the staged edit is still the only
-	// staged thing, and the new files are still untracked.
 	if after := testutil.Git(t, path, "status", "--porcelain"); after != statusBefore {
 		t.Errorf("WorkingPatch changed the worktree's status:\nbefore:\n%s\nafter:\n%s", statusBefore, after)
 	}
@@ -174,7 +171,6 @@ func TestBundleAndPatchCarryAWorktreesWorkToAnotherCheckout(t *testing.T) {
 		}
 	}
 
-	// A branch with nothing past the base makes no bundle.
 	if err := Bundle(path, "feat/x", head, filepath.Join(dir, "empty.bundle")); !errors.Is(err, ErrEmptyBundle) {
 		t.Errorf("Bundle with nothing to carry = %v, want ErrEmptyBundle", err)
 	}

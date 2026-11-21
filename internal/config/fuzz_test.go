@@ -6,9 +6,6 @@ import (
 	"time"
 )
 
-// keySeeds are key spellings the normalizer has to survive: the ordinary
-// chords, the multi-byte AZERTY letters and shifted spellings it recently
-// gained, and the malformed shapes a hand-edited config produces.
 var keySeeds = []string{
 	"",
 	" ",
@@ -25,23 +22,17 @@ var keySeeds = []string{
 	"enter", "esc", "escape", "space",
 	"f1", "f12", "f99",
 	"up", "down", "left", "right",
-	// Malformed.
 	"+", "++", "+++", "shift+", "+a", "ctrl+",
 	"shift+shift+shift+a",
 	strings.Repeat("ctrl+", 512) + "a",
 	strings.Repeat("+", 4096),
 	strings.Repeat("a", 4096),
-	// Invalid UTF-8: a config file is bytes and TOML does not guarantee the
-	// key survived as valid UTF-8 through every path.
 	"\xff", "\xff\xfe", "shift+\xff", "\xed\xa0\x80",
 	"\xc3", "a\xc3",
-	// Separator and case interactions.
 	"SHIFT+\xff",
 	"Shift+É",
 	"shift+0", "shift+9", "shift+-", "shift+=",
 	"!", "@", "#", "$", "%", "^", "&", "*", "(", ")",
-	// The French AZERTY number row with Option, unshifted and shifted, and the
-	// US Option characters.
 	"opt+&", "opt+shift+&", "opt+é", "opt+\"", "opt+'", "opt+(", "opt+§",
 	"opt+è", "opt+!", "opt+ç", "opt+à", "alt+shift+(", "alt+shift+!",
 	"•", "¡", "˜", "π", "opt+•", "alt+shift+•",
@@ -66,9 +57,6 @@ func FuzzNormalizeKey(f *testing.F) {
 
 		got := kn.NormalizeKey(key)
 
-		// The normalizer produces the key itself plus a fixed, small set of
-		// platform aliases. An input-proportional result would mean it is
-		// expanding rather than normalizing.
 		const maxAliases = 8
 		if len(got) > maxAliases {
 			t.Fatalf("NormalizeKey(%q) returned %d aliases: %q", key, len(got), got)
@@ -80,17 +68,11 @@ func FuzzNormalizeKey(f *testing.F) {
 				t.Fatalf("NormalizeKey(%q) returned duplicate %q in %q", key, k, got)
 			}
 			seen[k] = true
-			// An alias is never longer than the trimmed key plus the longest
-			// prefix the normalizer prepends ("option+"). The factor of three
-			// covers case folding: strings.ToLower rewrites each byte of an
-			// invalid UTF-8 sequence as a three-byte U+FFFD.
 			if len(k) > 3*len(strings.TrimSpace(key))+len("option+") {
 				t.Fatalf("NormalizeKey(%q) produced oversized alias %q", key, k)
 			}
 		}
 
-		// A non-blank key must normalize to something usable, or the binding
-		// silently disappears from the table.
 		if trimmed := strings.TrimSpace(key); trimmed != "" {
 			if len(got) == 0 {
 				t.Fatalf("NormalizeKey(%q) returned no aliases", key)
@@ -100,9 +82,6 @@ func FuzzNormalizeKey(f *testing.F) {
 			}
 		}
 
-		// Normalizing is idempotent: feeding the primary alias back in must
-		// keep producing that same primary alias, or a config reload would
-		// drift the binding table.
 		if len(got) > 0 && got[0] != "" {
 			again := kn.NormalizeKey(got[0])
 			if len(again) == 0 || again[0] != got[0] {
@@ -110,9 +89,6 @@ func FuzzNormalizeKey(f *testing.F) {
 			}
 		}
 
-		// The US aliases are other keys, never a spelling of the key itself:
-		// one in NormalizeKey would match on every layout (opt+& would run
-		// move_and_follow_7 on AZERTY).
 		aliases := kn.USAliasKeys(key)
 		if len(aliases) > maxAliases {
 			t.Fatalf("USAliasKeys(%q) returned %d aliases: %q", key, len(aliases), aliases)
@@ -129,8 +105,6 @@ func FuzzNormalizeKey(f *testing.F) {
 			}
 		}
 
-		// ValidateKey shares the same string handling and must not panic or
-		// return an empty reason alongside a failure.
 		if ok, reason := kn.ValidateKey(key); !ok && reason == "" {
 			t.Fatalf("ValidateKey(%q) rejected the key with no reason", key)
 		}
@@ -164,8 +138,6 @@ func FuzzExpandKeys(f *testing.F) {
 			}
 			seen[k] = true
 		}
-		// Each key contributes a bounded number of aliases, so the expansion
-		// stays proportional to the input rather than exploding.
 		if len(got) > len(keys)*8 {
 			t.Fatalf("ExpandKeys expanded %d keys into %d entries", len(keys), len(got))
 		}
@@ -227,11 +199,8 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 		var cfg *UserConfig
 		done := make(chan *ValidationResult, 1)
 		go func() {
-			// The one parse function, every fill included, so the fuzzer
-			// reaches all of them.
 			parsed, err := ParseUserConfig([]byte(src))
 			if err != nil {
-				// Malformed TOML is reported, not parsed. That is the contract.
 				done <- nil
 				return
 			}
@@ -249,17 +218,12 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 			return
 		}
 
-		// The fill stage exists so the rest of the app can read these without
-		// re-checking. A value that survives it out of range is a real defect:
-		// scrollback sizes the ring buffer and scroll_lines drives a loop.
 		if cfg.Appearance.ScrollbackLines < 100 || cfg.Appearance.ScrollbackLines > 1000000 {
 			t.Fatalf("scrollback_lines survived fill as %d", cfg.Appearance.ScrollbackLines)
 		}
 		if cfg.Appearance.ScrollLines < 1 || cfg.Appearance.ScrollLines > 50 {
 			t.Fatalf("scroll_lines survived fill as %d", cfg.Appearance.ScrollLines)
 		}
-		// Fill must never leave an enum blank; a blank one reaches the renderer
-		// as an unknown style.
 		if cfg.Appearance.BorderStyle == "" {
 			t.Fatalf("border_style survived fill as empty")
 		}
@@ -267,7 +231,6 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 			t.Fatalf("dockbar_position survived fill as empty")
 		}
 
-		// Every validation finding must be reportable to the user.
 		for _, e := range result.Errors {
 			if e.Message == "" {
 				t.Fatalf("validation error on %s/%s has no message", e.Field, e.Key)
@@ -279,13 +242,9 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 			}
 		}
 
-		// The registry builds its layout tiers from these keys and both
-		// keyboard options, whatever they hold.
 		registry := NewKeybindRegistry(cfg)
 		_ = registry.Fate("opt+&", PaneFacts{})
 
-		// Validating twice must agree: a second load of the same file cannot
-		// suddenly start rejecting it.
 		second := ValidateConfig(cfg)
 		if len(second.Errors) != len(result.Errors) {
 			t.Fatalf("re-validating changed the error count: %d then %d",

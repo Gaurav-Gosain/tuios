@@ -6,29 +6,11 @@ import (
 	"strings"
 )
 
-// A held option is one set on the running client without saving it, by
-// `tuios set-config --no-save`. Every save of the config leaves its keys
-// alone, so the file keeps the value it had, until the same option is set
-// again with saving or the client exits.
-//
-// A save writes the difference between the config as last loaded or saved and
-// the config now (see RenderUserConfig). A held value is in the config now, so
-// a save skips it or it would reach config.toml or the config.d file that sets
-// the key. The holds live on the config rather than on the caller, so every
-// path that saves it skips them.
-
-// optionHolds is what a config holds without saving.
 type optionHolds struct {
-	// groups maps each option set without saving to the keys the set changed.
 	groups map[string][]heldKey
-	// force are keys released since the last save. The next save writes their
-	// value even when the baseline already has it, since the baseline took the
-	// held value while the file kept the old one.
-	force map[string][]string
+	force  map[string][]string
 }
 
-// heldKey is one TOML key a held option changed, and its held value when the
-// key is an option of its own, so a reloaded config can take it again.
 type heldKey struct {
 	path  []string
 	value string
@@ -79,7 +61,6 @@ func (cfg *UserConfig) HoldOption(path string, change func() error) error {
 			hk.value, hk.known = GetOptionValue(cfg, dotted)
 		}
 		group = append(group, hk)
-		// A key held again is not one to write on the next save.
 		delete(cfg.holds.force, dotted)
 	}
 	cfg.holds.groups[path] = group
@@ -126,7 +107,6 @@ func (cfg *UserConfig) KeepHolds(from *UserConfig) {
 	}
 }
 
-// isHeld reports whether any held option covers the key at path.
 func (cfg *UserConfig) isHeld(path []string) bool {
 	if cfg.holds == nil {
 		return false
@@ -141,7 +121,6 @@ func (cfg *UserConfig) isHeld(path []string) bool {
 	return false
 }
 
-// heldPaths are the keys every save must leave alone.
 func (cfg *UserConfig) heldPaths() [][]string {
 	if cfg.holds == nil {
 		return nil
@@ -155,8 +134,6 @@ func (cfg *UserConfig) heldPaths() [][]string {
 	return out
 }
 
-// takeForced returns the released keys and clears them. A save that fails
-// puts them back (see RewindSave).
 func (cfg *UserConfig) takeForced() [][]string {
 	if cfg.holds == nil || len(cfg.holds.force) == 0 {
 		return nil
@@ -166,7 +143,6 @@ func (cfg *UserConfig) takeForced() [][]string {
 	return out
 }
 
-// restoreForced puts back keys a failed save took.
 func (cfg *UserConfig) restoreForced(keys [][]string) {
 	if len(keys) == 0 {
 		return
@@ -184,9 +160,6 @@ func (cfg *UserConfig) restoreForced(keys [][]string) {
 	}
 }
 
-// skipHeld drops from changes every change to a held key. A change to a
-// table that holds a held key, such as a table the baseline did not have,
-// keeps its other keys.
 func skipHeld(changes []configChange, held [][]string) []configChange {
 	if len(held) == 0 {
 		return changes
@@ -197,7 +170,6 @@ func skipHeld(changes []configChange, held [][]string) []configChange {
 		for _, h := range held {
 			switch {
 			case hasPrefix(ch.path, h):
-				// The held key, or a key inside it.
 				drop = true
 			case hasPrefix(h, ch.path) && !ch.deleted:
 				t, ok := ch.value.(map[string]any)
@@ -222,9 +194,6 @@ func skipHeld(changes []configChange, held [][]string) []configChange {
 	return out
 }
 
-// addForced adds a change for each released key that changes does not
-// already name, with the value want has for it, or a delete when want has
-// none.
 func addForced(changes []configChange, want map[string]any, forced [][]string) []configChange {
 	for _, k := range forced {
 		if slices.ContainsFunc(changes, func(ch configChange) bool { return hasPrefix(k, ch.path) }) {
@@ -239,13 +208,10 @@ func addForced(changes []configChange, want map[string]any, forced [][]string) [
 	return changes
 }
 
-// hasPrefix reports whether p starts with prefix.
 func hasPrefix(p, prefix []string) bool {
 	return len(p) >= len(prefix) && slices.Equal(p[:len(prefix)], prefix)
 }
 
-// removePath deletes the key at path from the nested table t, and each table
-// on the way that the delete leaves empty.
 func removePath(t map[string]any, path []string) {
 	if len(path) == 0 {
 		return

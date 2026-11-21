@@ -9,9 +9,6 @@ import (
 	"testing"
 )
 
-// repeatedHeadings returns a message for each level-2 heading of a Markdown
-// text that an earlier one already used, with both line numbers. A heading
-// inside a fenced code block is not a heading.
 func repeatedHeadings(text string) []string {
 	var out []string
 	seen := map[string]int{}

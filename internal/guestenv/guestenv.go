@@ -9,8 +9,6 @@ import (
 	"sync/atomic"
 )
 
-// buildVersion is the version TERM_PROGRAM_VERSION names. The main package
-// sets it once, before the first pane starts.
 var buildVersion atomic.Pointer[string]
 
 // SetBuildVersion records the build version, the one tuios --version prints.
@@ -100,8 +98,6 @@ func IsCodex(argv []string) bool {
 	return programName(argv) == "codex"
 }
 
-// programName is the base name of argv[0], lower-cased, without an .exe
-// suffix, or "" for no argv.
 func programName(argv []string) string {
 	if len(argv) == 0 {
 		return ""
@@ -140,53 +136,6 @@ func KittyAnimationVar(supported bool) string {
 	return "TUIOS_KITTY_ANIMATION=0"
 }
 
-// hostMultiplexerVars are the variables an enclosing tmux sets for its own
-// panes. A tuios started from inside tmux inherits them, and a pane that
-// inherits them in turn believes it is a tmux pane: Codex wraps its OSC 9
-// notifications in tmux DCS passthrough, which tuios drops, and an agent that
-// splits panes through tmux reaches the outer tmux instead of the pane it is
-// in. The pane is a tuios pane, so these are removed.
-//
-// The same holds for an enclosing herdr. HERDR_ENV and the pane ids name the
-// herdr pane tuios runs in: Crush, and herdr's own hooks, report to it when
-// they see them, so an agent in a tuios pane would set the state of the outer
-// herdr pane. HERDR_BIN_PATH goes too: under an outer tuios it names that
-// tuios, whose report commands would report to the outer pane. It is set
-// again for a pane this tuios tells about its own socket.
-// HERDR_SOCKET_PATH stays, since it names herdr's server and says nothing
-// about which pane a process is in; a pane tuios tells about its own herdr
-// protocol socket gets it replaced (see session.Manager.HerdrEnv).
-//
-// An enclosing tuios is the same case. A daemon or a standalone tuios started
-// from a tuios pane inherits that pane's TUIOS_ variables, and its own panes
-// would name the outer pane, session and socket where they set none of their
-// own. The ones a pane sets for itself are set again after this filter.
-//
-// Tern is a multiplexing terminal and the same case again. Its TERN_ pane and
-// window variables name the Tern pane the daemon started in, so `tern open`,
-// Tern's agent verbs and its lens and completion hooks in a tuios pane would
-// act on that pane. Tern also answers as kitty and sets KITTY_WINDOW_ID and
-// KITTY_PID, which send `kitty @` to the same outer pane; a real kitty sets
-// them too, with the same effect. TERN_DAEMON_SOCKET, TERN_CONFIG_DIR and
-// TERN_BLOB_DIR stay: they name Tern's daemon and folders, not a pane.
-//
-// An agent's tool call is the same case again. A command such as `tuios new
-// --detach` starts the daemon when none runs, and when an agent ran it, every
-// pane got the call's variables. Codex's CODEX_THREAD_ID made a Codex started
-// in a pane look nested, so tuios's Codex hook dropped its events; the other
-// CODEX_ and CLAUDE_ ones name the outer session, process or tool call, and
-// CLAUDE_CODE_MESSAGING_TOKEN is that session's credential. CODEX_SANDBOX and
-// CODEX_SANDBOX_NETWORK_DISABLED describe the call's sandbox, and AI_AGENT
-// tells a program an agent is driving it, which a person's pane is not. Tool
-// calls also set NO_COLOR and its kin for their own captured output, which
-// turned colour off in every pane, though tuios describes the pane through
-// TERM and COLORTERM. CODEX_HOME, CODEX_API_KEY and CLAUDE_CONFIG_DIR stay: they name
-// the user's folders and keys, not a session.
-//
-// A daemon that a service manager started (tuios daemon install-service) is
-// the last case. systemd gives it INVOCATION_ID, JOURNAL_STREAM and the
-// rest, which name the daemon's own unit and log stream. A program in a pane
-// that reads them would log to the daemon's journal or report to its unit.
 var hostMultiplexerVars = []string{
 	"TMUX", "TMUX_PANE", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HERDR_BIN_PATH",
 	"TUIOS_SESSION", "TUIOS_SESSION_REMOTE", "TUIOS_SOCKET", "TUIOS_PANE_ID", "TUIOS_WINDOW_ID",

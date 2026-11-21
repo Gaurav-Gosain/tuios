@@ -23,7 +23,6 @@ func (d *Dist) Add(v time.Duration) { *d = append(*d, v) }
 // AddSince appends the time elapsed since t0.
 func (d *Dist) AddSince(t0 time.Time) { *d = append(*d, time.Since(t0)) }
 
-// sorted returns a sorted copy, leaving the caller's sample order alone.
 func (d Dist) sorted() Dist {
 	s := append(Dist(nil), d...)
 	slices.Sort(s)
@@ -93,9 +92,6 @@ func (d Dist) Line(what string) string {
 	return fmt.Sprintf("PERF %-38s %s", what, d.Stats())
 }
 
-// round trims a duration to a resolution worth printing. Sub-microsecond
-// digits on a wall-clock measurement that crossed a socket are noise dressed
-// as precision.
 func round(v time.Duration) time.Duration {
 	switch {
 	case v < time.Microsecond:

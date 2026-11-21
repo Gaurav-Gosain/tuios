@@ -79,8 +79,6 @@ func NewVimState(lines, styledLines []string, startY int) *VimState {
 	return v
 }
 
-// --- Helpers ---
-
 func (v *VimState) lineLen(y int) int {
 	if y < 0 || y >= len(v.Lines) {
 		return 0
@@ -118,7 +116,6 @@ func (v *VimState) clampCursorX() {
 	}
 }
 
-// vimCharType classifies a rune: 0=space/null, 1=word, 2=punctuation.
 func vimCharType(r rune) int {
 	if r == 0 || unicode.IsSpace(r) {
 		return 0
@@ -138,8 +135,6 @@ func (v *VimState) ConsumeCount() int {
 	}
 	return c
 }
-
-// --- Viewport ---
 
 // EnsureVisible adjusts ScrollY to keep cursor in viewport.
 func (v *VimState) EnsureVisible() {
@@ -162,8 +157,6 @@ func (v *VimState) CenterView() {
 	}
 	v.ScrollY = max(v.CursorY-v.ViewHeight/2, 0)
 }
-
-// --- Basic movement ---
 
 func (v *VimState) MoveLeft() {
 	if v.CursorX > 0 {
@@ -192,8 +185,6 @@ func (v *VimState) MoveUp() {
 	}
 }
 
-// --- Line movement ---
-
 func (v *VimState) MoveToLineStart() {
 	v.CursorX = 0
 }
@@ -218,8 +209,6 @@ func (v *VimState) MoveToLineEnd() {
 	}
 }
 
-// --- Jump movement ---
-
 func (v *VimState) MoveToTop() {
 	v.CursorY = 0
 	v.CursorX = 0
@@ -233,11 +222,9 @@ func (v *VimState) MoveToBottom() {
 }
 
 func (v *VimState) MoveToLine(n int) {
-	v.CursorY = n - 1 // 1-indexed
+	v.CursorY = n - 1
 	v.clampCursor()
 }
-
-// --- Screen position ---
 
 func (v *VimState) MoveToScreenTop() {
 	v.CursorY = v.ScrollY
@@ -253,8 +240,6 @@ func (v *VimState) MoveToScreenBottom() {
 	v.CursorY = v.ScrollY + v.ViewHeight - 1
 	v.clampCursor()
 }
-
-// --- Page movement ---
 
 func (v *VimState) HalfPageDown() {
 	v.CursorY += max(v.ViewHeight/2, 1)
@@ -276,8 +261,6 @@ func (v *VimState) PageUp() {
 	v.clampCursor()
 }
 
-// --- Paragraph movement ---
-
 func (v *VimState) ParagraphDown() {
 	n := len(v.Lines)
 	if n == 0 {
@@ -287,11 +270,9 @@ func (v *VimState) ParagraphDown() {
 	if i >= n {
 		return
 	}
-	// Skip blank lines at current position
 	for i < n && strings.TrimSpace(v.Lines[i]) == "" {
 		i++
 	}
-	// Skip non-blank lines to find next boundary
 	for i < n && strings.TrimSpace(v.Lines[i]) != "" {
 		i++
 	}
@@ -319,8 +300,6 @@ func (v *VimState) ParagraphUp() {
 	v.clampCursorX()
 }
 
-// --- Word movement ---
-
 func (v *VimState) WordForward() {
 	x, y := v.CursorX, v.CursorY
 	if y >= len(v.Lines) {
@@ -328,20 +307,17 @@ func (v *VimState) WordForward() {
 	}
 	runes := []rune(v.Lines[y])
 
-	// Get current char type
 	ct := 0
 	if x < len(runes) {
 		ct = vimCharType(runes[x])
 	}
 
-	// Phase 1: skip current word/punct group (if not on whitespace)
 	if ct != 0 {
 		for x < len(runes) && vimCharType(runes[x]) == ct {
 			x++
 		}
 	}
 
-	// Phase 2: skip whitespace, wrapping across lines
 	for {
 		if y >= len(v.Lines) {
 			v.CursorY = len(v.Lines) - 1
@@ -357,7 +333,6 @@ func (v *VimState) WordForward() {
 			}
 			x++
 		}
-		// End of line, wrap
 		y++
 		x = 0
 	}
@@ -366,7 +341,6 @@ func (v *VimState) WordForward() {
 func (v *VimState) WordBackward() {
 	x, y := v.CursorX, v.CursorY
 
-	// Move back at least one
 	x--
 	if x < 0 {
 		y--
@@ -378,7 +352,6 @@ func (v *VimState) WordBackward() {
 		x = max(v.lineLen(y)-1, 0)
 	}
 
-	// Phase 1: skip whitespace backward, wrapping
 	for {
 		if y < 0 {
 			v.CursorX = 0
@@ -399,7 +372,6 @@ func (v *VimState) WordBackward() {
 	}
 skipDone:
 
-	// Phase 2: find start of this word group
 	runes := []rune(v.Lines[y])
 	ct := vimCharType(runes[x])
 	for x > 0 && vimCharType(runes[x-1]) == ct {
@@ -413,7 +385,6 @@ skipDone:
 func (v *VimState) WordEnd() {
 	x, y := v.CursorX, v.CursorY
 
-	// Move forward at least one
 	x++
 	runes := []rune(v.Lines[y])
 	if x >= len(runes) {
@@ -426,7 +397,6 @@ func (v *VimState) WordEnd() {
 		}
 	}
 
-	// Phase 1: skip whitespace forward, wrapping
 	for {
 		if y >= len(v.Lines) {
 			v.CursorY = len(v.Lines) - 1
@@ -445,7 +415,6 @@ func (v *VimState) WordEnd() {
 	}
 skip2Done:
 
-	// Phase 2: find end of this word group
 	runes = []rune(v.Lines[y])
 	ct := vimCharType(runes[x])
 	for x < len(runes)-1 && vimCharType(runes[x+1]) == ct {
@@ -462,13 +431,11 @@ func (v *VimState) WORDForward() {
 		return
 	}
 
-	// Phase 1: skip current WORD (non-whitespace)
 	runes := []rune(v.Lines[y])
 	for x < len(runes) && !unicode.IsSpace(runes[x]) {
 		x++
 	}
 
-	// Phase 2: skip whitespace, wrapping
 	for {
 		if y >= len(v.Lines) {
 			v.CursorY = len(v.Lines) - 1
@@ -503,7 +470,6 @@ func (v *VimState) WORDBackward() {
 		x = max(v.lineLen(y)-1, 0)
 	}
 
-	// Skip whitespace backward
 	for {
 		if y < 0 {
 			v.CursorX = 0
@@ -524,7 +490,6 @@ func (v *VimState) WORDBackward() {
 	}
 wbSkipDone:
 
-	// Find start of WORD
 	runes := []rune(v.Lines[y])
 	for x > 0 && !unicode.IsSpace(runes[x-1]) {
 		x--
@@ -549,7 +514,6 @@ func (v *VimState) WORDEnd() {
 		}
 	}
 
-	// Skip whitespace forward
 	for {
 		if y >= len(v.Lines) {
 			v.CursorY = len(v.Lines) - 1
@@ -568,7 +532,6 @@ func (v *VimState) WORDEnd() {
 	}
 weSkipDone:
 
-	// Find end of WORD
 	runes = []rune(v.Lines[y])
 	for x < len(runes)-1 && !unicode.IsSpace(runes[x+1]) {
 		x++
@@ -577,8 +540,6 @@ weSkipDone:
 	v.CursorX = x
 	v.CursorY = y
 }
-
-// --- Character search (f/F/t/T) ---
 
 // FindChar searches for a character, crossing line boundaries.
 // dir: 1=forward, -1=backward. till: true=stop before char.
@@ -594,7 +555,6 @@ func (v *VimState) FindChar(ch rune, dir int, till bool) bool {
 			if runes[x] == ch {
 				if till {
 					tx := x - dir
-					// Clamp to current line bounds for edge cases at line boundaries
 					if tx < 0 {
 						tx = 0
 					} else if tx >= len(runes) {
@@ -611,7 +571,6 @@ func (v *VimState) FindChar(ch rune, dir int, till bool) bool {
 			}
 			x += dir
 		}
-		// Move to next/previous line
 		y += dir
 		if y >= 0 && y < len(v.Lines) {
 			if dir > 0 {
@@ -635,8 +594,6 @@ func (v *VimState) RepeatCharSearch(reverse bool) bool {
 	}
 	return v.FindChar(v.LastCharSearch, dir, v.LastCharSearchTill)
 }
-
-// --- Bracket matching ---
 
 func (v *VimState) MatchBracket() {
 	if v.CursorY >= len(v.Lines) {
@@ -676,7 +633,6 @@ func (v *VimState) MatchBracket() {
 	x, y := v.CursorX, v.CursorY
 
 	for i := 0; i < 10000 && depth > 0; i++ {
-		// Advance position
 		if dir > 0 {
 			x++
 			runes = []rune(v.Lines[y])
@@ -712,8 +668,6 @@ func (v *VimState) MatchBracket() {
 	}
 }
 
-// --- Search ---
-
 // SearchExecute runs the search query and jumps to the first match at or after cursor.
 func (v *VimState) SearchExecute() {
 	if v.Search.String() == "" {
@@ -730,11 +684,9 @@ func (v *VimState) SearchExecute() {
 		queryRunes := []rune(query)
 		qLen := len(queryRunes)
 
-		// Find all matches in this line by rune index
 		for x := 0; x <= len(lowerRunes)-qLen; x++ {
 			if string(lowerRunes[x:x+qLen]) == string(queryRunes) {
-				// Convert rune position
-				_ = runes // ensure runes is used for consistency
+				_ = runes
 				v.SearchMatches = append(v.SearchMatches, VimSearchMatch{
 					Line:   y,
 					StartX: x,
@@ -745,7 +697,6 @@ func (v *VimState) SearchExecute() {
 	}
 
 	if len(v.SearchMatches) > 0 {
-		// Jump to first match at or after cursor
 		v.SearchCurrent = 0
 		for i, m := range v.SearchMatches {
 			if m.Line > v.CursorY || (m.Line == v.CursorY && m.StartX >= v.CursorX) {
@@ -785,8 +736,6 @@ func (v *VimState) jumpToCurrentMatch() {
 	v.clampCursor()
 }
 
-// --- Visual mode ---
-
 // EnterVisualChar enters character-wise visual mode.
 func (v *VimState) EnterVisualChar() {
 	v.Mode = VimVisualChar
@@ -821,7 +770,6 @@ func (v *VimState) SelectedText() string {
 	case VimVisualChar:
 		sx, sy := v.VisualStartX, v.VisualStartY
 		ex, ey := v.CursorX, v.CursorY
-		// Normalize
 		if sy > ey || (sy == ey && sx > ex) {
 			sx, sy, ex, ey = ex, ey, sx, sy
 		}
@@ -831,7 +779,6 @@ func (v *VimState) SelectedText() string {
 			sx = max(sx, 0)
 			return string(runes[sx : ex+1])
 		}
-		// Multi-line
 		var parts []string
 		runes := []rune(v.Lines[sy])
 		sx = max(sx, 0)

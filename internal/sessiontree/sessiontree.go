@@ -61,8 +61,7 @@ const (
 
 // Node is one row in the tree: a session or a window under it.
 type Node struct {
-	Kind NodeKind
-	// agentUnnamed is WindowInput.AgentUnnamed.
+	Kind         NodeKind
 	agentUnnamed bool
 	// ID is the session name for a session node, or the window ID for a window.
 	ID    string
@@ -467,23 +466,11 @@ func BuildSession(s SessionInput) Node {
 	return node
 }
 
-// disambiguate makes every window row in a session self-identifying. Naming and
-// command detection answer "which pane is this" for most panes, but a session of
-// bare shells in one directory still resolves to one label repeated, and a list
-// of identical rows cannot do the only job it has. Rows that still collide get
-// their 1-based position appended, which is stable for a given window order and
-// so does not move under the eye between frames.
-//
-// An agent with no name of its own gets the start of its window id instead. A
-// position would change when an earlier pane closes, so "claude 7" would become
-// another agent's row. The id needs no new state, it is the same after a
-// reattach, and a -t selector accepts it.
 func disambiguate(children []Node) []Node {
 	counts := make(map[string]int, len(children))
 	for _, c := range children {
 		counts[c.Title]++
 	}
-	// Compared against the bare titles, so read them before any row grows.
 	var bare []string
 	for i := range children {
 		if counts[children[i].Title] <= 1 {
@@ -504,13 +491,8 @@ func disambiguate(children []Node) []Node {
 	return children
 }
 
-// shortRowIDLen is how much of a window id a repeated row shows: 16 bits of a
-// UUID, in the few cells a rail row has left after its label.
 const shortRowIDLen = 4
 
-// shortRowID is the start of row i's id, grown past shortRowIDLen only when
-// another row with the same label starts the same way. A row with no id, which
-// no real window is, falls back to its position.
 func shortRowID(children []Node, bare []string, i int) string {
 	id := children[i].ID
 	if id == "" {

@@ -8,10 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// cmdTuios is the tuios command inside the demo. tape play hands a tape to
-// the tuios this shell runs in, tml shows and draws TML surfaces (see
-// surfaces.go), and mermaid draws diagrams (see diagrams.go). The rest say
-// what they would do on a real machine.
 func cmdTuios(s *shell, args []string, _ string) int {
 	t := s.t
 	sub := argOr(args, 1, "")
@@ -73,9 +69,6 @@ func cmdTuios(s *shell, args []string, _ string) int {
 	return 0
 }
 
-// tuiosThemeShare is tuios theme share: the real share line, from the theme
-// package the tour runs on. A theme saved on a real machine is not here, so
-// only the shipped themes share.
 func tuiosThemeShare(s *shell, args []string) int {
 	if len(args) != 1 {
 		return s.fail("Which theme? Try " + bold + "tuios theme share gilt" + reset)
@@ -128,7 +121,6 @@ func tuiosTape(s *shell, args []string) int {
 	return 0
 }
 
-// tapeFiles lists every .tape file in the filesystem.
 func tapeFiles() []string {
 	fsMu.RLock()
 	defer fsMu.RUnlock()

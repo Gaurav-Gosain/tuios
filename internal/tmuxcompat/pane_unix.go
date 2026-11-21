@@ -24,7 +24,6 @@ import (
 	"golang.org/x/term"
 )
 
-// holderSupported reports whether this platform runs pane holders.
 const holderSupported = true
 
 // EnsureDir creates the shim's runtime directory, or checks an existing one.
@@ -50,8 +49,6 @@ func ExecCommand(argv, env []string) error {
 	return syscall.Exec(path, argv, env)
 }
 
-// lookPathIn finds name on the PATH of env, the way exec.LookPath does on the
-// process's own.
 func lookPathIn(name string, env []string) (string, error) {
 	if strings.Contains(name, "/") {
 		return name, nil
@@ -74,7 +71,6 @@ func lookPathIn(name string, env []string) (string, error) {
 	return "", errfmt.Errorf("%s: command not found", name)
 }
 
-// start starts one command of the pane on the holder's terminal.
 func (o PaneOptions) start(cmd []string, cwd string, extra []string) (*exec.Cmd, error) {
 	env := paneEnv(os.Environ(), o.Dir, o.Window, append(append([]string(nil), o.Env...), extra...))
 	path, argv := paneArgv(cmd, o.Shell)
@@ -83,14 +79,6 @@ func (o PaneOptions) start(cmd []string, cwd string, extra []string) (*exec.Cmd,
 		return nil, err
 	}
 	c := &exec.Cmd{Path: full, Args: argv, Env: env, Dir: cwd, Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr}
-	// The command gets its own process group, and on a terminal that group
-	// is made the foreground one, as a shell does for a job. Two things
-	// follow. The terminal's signals (ctrl+c, a resize) go to the command
-	// and not the holder. And the pane's foreground process is the command,
-	// which is what agent detection reads: with the holder in the
-	// foreground, the pane would look like a shell at its prompt. The child
-	// sets the foreground itself before it execs, with every signal blocked,
-	// so it works even while the holder is not in the foreground.
 	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if term.IsTerminal(int(os.Stdin.Fd())) {
 		c.SysProcAttr.Foreground = true
@@ -98,9 +86,6 @@ func (o PaneOptions) start(cmd []string, cwd string, extra []string) (*exec.Cmd,
 		if err := c.Start(); err == nil {
 			return c, nil
 		}
-		// A terminal that is not the holder's controlling one cannot take
-		// a foreground group. Run the command in the background group
-		// rather than not at all.
 		c = &exec.Cmd{Path: full, Args: argv, Env: env, Dir: cwd, Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr,
 			SysProcAttr: &syscall.SysProcAttr{Setpgid: true}}
 	}
@@ -110,23 +95,15 @@ func (o PaneOptions) start(cmd []string, cwd string, extra []string) (*exec.Cmd,
 	return c, nil
 }
 
-// errPaneEnded answers a respawn request that waited while the pane's
-// command ended.
 var errPaneEnded = errors.New("the pane's command ended")
 
-// Test hooks, nil in production. beforeReply runs just before the holder
-// writes a respawn reply. afterExit runs when the pane's command has ended,
-// before the holder answers the requests still waiting. It gets the count of
-// those requests.
 var (
 	beforeReply func()
 	afterExit   func(waiting *atomic.Int32)
 )
 
 type respawnCall struct {
-	req RespawnRequest
-	// reply writes the answer to the requester and returns once it is
-	// written, so the holder may exit right after it.
+	req   RespawnRequest
 	reply func(error)
 }
 
@@ -137,10 +114,6 @@ func RunPane(o PaneOptions) int {
 		fmt.Fprintln(os.Stderr, "tuios tmux-pane: TUIOS_PANE_ID is unset; the holder runs as a tuios pane's process")
 		return 1
 	}
-	// Signals from the terminal are for the command, not for the holder,
-	// which can hold the foreground for a moment between two commands. They
-	// are caught and dropped rather than ignored: an ignored signal stays
-	// ignored in every program the holder starts, and a caught one does not.
 	drop := make(chan os.Signal, 4)
 	signal.Notify(drop, syscall.SIGINT, syscall.SIGQUIT)
 	go func() {
@@ -151,17 +124,9 @@ func RunPane(o PaneOptions) int {
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGTERM)
 
 	calls := make(chan respawnCall)
-	// waiting counts the requests committed to a send on calls that this
-	// loop has not received yet. Each one is certain to arrive.
 	var waiting atomic.Int32
 	var ln net.Listener
-	// The socket is opened only in a directory that is the user's alone: a
-	// directory anyone else can write to would let them take its place.
-	// Without it the pane still runs, and respawn-pane reports it has no
-	// holder.
 	if EnsureDir(o.Dir) == nil && EnsureDir(filepath.Join(o.Dir, "p")) == nil {
-		// Keep the tmux link pointing at this binary, for a pane opened by
-		// `tuios tmux` with no launcher run before it.
 		if exe, err := os.Executable(); err == nil {
 			if r, err := filepath.EvalSymlinks(exe); err == nil {
 				exe = r
@@ -169,10 +134,6 @@ func RunPane(o PaneOptions) int {
 			_ = InstallLink(o.Dir, exe)
 		}
 		sock := paneSocket(o.Dir, o.Window)
-		// A socket some live holder answers on is left alone: it is another
-		// window whose number collides with this one's, and taking its
-		// socket would send its respawns here. This pane then cannot be
-		// respawned, which respawn-pane reports.
 		if c, err := net.DialTimeout("unix", sock, 500*time.Millisecond); err == nil {
 			_ = c.Close()
 		} else {
@@ -208,10 +169,6 @@ func RunPane(o PaneOptions) int {
 			if afterExit != nil {
 				afterExit(&waiting)
 			}
-			// A request can be waiting for this loop when the command ends.
-			// Stop taking new ones, then answer each waiting one, so its
-			// requester reads why and not a bare EOF. The receive blocks
-			// only for a request already committed to its send.
 			if ln != nil {
 				_ = ln.Close()
 			}
@@ -245,10 +202,6 @@ func RunPane(o PaneOptions) int {
 	}
 }
 
-// stop ends a running command the way closing its pane would: SIGHUP to its
-// process group, so a program a shell started goes with the shell, then
-// SIGKILL to the group if the command has not gone in two seconds. It
-// consumes the exit.
 func stop(c *exec.Cmd, done chan int) {
 	pgid := c.Process.Pid
 	_ = syscall.Kill(-pgid, syscall.SIGHUP)
@@ -271,17 +224,12 @@ func exitCode(c *exec.Cmd) int {
 	return c.ProcessState.ExitCode()
 }
 
-// acceptRespawns reads one request per connection and hands it to the holder.
-// A request authorize refuses is answered with the refusal and never reaches
-// the holder. It adds one to waiting before each send on calls.
 func acceptRespawns(ln net.Listener, window string, authorize func(int, uint64) error, calls chan<- respawnCall, waiting *atomic.Int32) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
-		// Who connected, pinned before anything is read: the pid, and the
-		// start time that tells that process from a later one with its pid.
 		pid := procinfo.PeerPID(conn)
 		start, _ := procinfo.StartTime(pid)
 		go func() {
@@ -306,11 +254,6 @@ func acceptRespawns(ln net.Listener, window string, authorize func(int, uint64) 
 					return
 				}
 			}
-			// The holder writes the reply itself, before it goes on. Handing
-			// the result back to this goroutine would race the holder's
-			// exit: a new command that ends at once (a quick printf) makes
-			// RunPane return, and the process exits before this goroutine
-			// writes, so respawn-pane reads EOF although the respawn ran.
 			replied := make(chan struct{})
 			waiting.Add(1)
 			calls <- respawnCall{req: req, reply: func(err error) {
@@ -334,8 +277,6 @@ func writeReply(w io.Writer, err error) {
 	_, _ = w.Write(append(line, '\n'))
 }
 
-// paneArgv turns a tmux command into an argv. It returns the argv and the
-// name argv[0] is shown as, which for a login shell is "-name".
 func paneArgv(cmd []string, shell string) (path string, argv []string) {
 	switch len(cmd) {
 	case 0:

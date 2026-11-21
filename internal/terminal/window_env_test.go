@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// detectTermWithStdout runs the pane TERM detection afresh with stdout
-// replaced, and puts the cache and stdout back afterwards.
 func detectTermWithStdout(t *testing.T, stdout *os.File) (termType, colorTerm string) {
 	t.Helper()
 	saved := os.Stdout

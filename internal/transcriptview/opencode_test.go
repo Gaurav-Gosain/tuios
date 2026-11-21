@@ -1,16 +1,5 @@
 package transcriptview
 
-// The opencode reader reads a file that holds a password and sends that
-// password over the network, so it is a security boundary as well as a
-// decoder. Ways it can fail, which the cases below cover:
-//   - decode a message wrong or lose a tool's status or diff (the page);
-//   - send the password to an address other than 127.0.0.1, or follow a
-//     service.json another user could have written (no request is made);
-//   - trust a port another process holds now (pid check);
-//   - put the password in an error or a page;
-//   - put a reported session id into a URL or an argument unchecked;
-//   - fail to fall back to the export when the service does not answer.
-
 import (
 	"encoding/json"
 	"fmt"
@@ -27,12 +16,8 @@ import (
 
 const ocSession = "ses_01Fixture"
 
-// ocPassword is made when the test runs, so no secret scanner reads a
-// literal password in the source.
 var ocPassword = strings.Repeat("x", 8) + strconv.Itoa(os.Getpid())
 
-// fakeOpenCode is a service that answers as opencode 2.0.32 does, from the
-// fixture, and counts the requests that reach it.
 type fakeOpenCode struct {
 	srv  *httptest.Server
 	hits atomic.Int32
@@ -41,8 +26,6 @@ type fakeOpenCode struct {
 
 func newFakeOpenCode(t *testing.T, page []byte) *fakeOpenCode {
 	t.Helper()
-	// The pid is this process's, which owns the listener, as opencode's
-	// service owns its own.
 	f := &fakeOpenCode{pid: os.Getpid()}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.hits.Add(1)
@@ -64,7 +47,6 @@ func newFakeOpenCode(t *testing.T, page []byte) *fakeOpenCode {
 	return f
 }
 
-// writeService writes a service.json for url with the given mode.
 func writeService(t *testing.T, url string, pid int, mode os.FileMode) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "service.json")
@@ -78,7 +60,6 @@ func writeService(t *testing.T, url string, pid int, mode os.FileMode) string {
 	return path
 }
 
-// noOpenCode leaves the PATH with no opencode, so the export cannot run.
 func noOpenCode(t *testing.T) { t.Setenv("PATH", t.TempDir()) }
 
 var openCodeWant = []string{
@@ -216,7 +197,6 @@ func TestOpenCodeService(t *testing.T) {
 	})
 }
 
-// fakeExport puts an opencode on the PATH that runs body.
 func fakeExport(t *testing.T, dir, body string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, "opencode"), []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {

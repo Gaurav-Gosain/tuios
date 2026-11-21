@@ -39,7 +39,6 @@ func plain(s string) bool {
 	return true
 }
 
-// assignment reports whether s starts with a shell variable name and "=".
 func assignment(s string) bool {
 	for i := range len(s) {
 		c := s[i]

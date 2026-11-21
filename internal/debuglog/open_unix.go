@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// openPrivate refuses a symlink at path (O_NOFOLLOW) and a file another user
-// owns, and closes a file of this user's that is open to others.
 func openPrivate(path string) (*os.File, error) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {

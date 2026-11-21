@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// withScrollbarGlobals restores the scrollbar globals after a test that moves
-// them, since they are package state shared with every other test in the run.
 func withScrollbarGlobals(t *testing.T) {
 	t.Helper()
 	style, thumb, track, tint := config.Global.ScrollbarStyle, config.Global.ScrollbarThumb, config.Global.ScrollbarTrack, config.Global.ScrollbarTint

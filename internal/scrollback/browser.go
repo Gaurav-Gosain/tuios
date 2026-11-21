@@ -73,7 +73,6 @@ func NewBrowser(blocks []CommandBlock) *Browser {
 }
 
 func (b *Browser) extractContent() {
-	// Aggregate all output for JSON/path extraction
 	var allOutput strings.Builder
 	for _, block := range b.Blocks {
 		if block.Output != "" {
@@ -217,7 +216,6 @@ func (b *Browser) SearchPaste(s string) {
 	}
 }
 
-// refilter rebuilds the filtered lists after the search changed.
 func (b *Browser) refilter() {
 	b.rebuildFiltered()
 	b.rebuildFilteredJSON()
@@ -316,7 +314,6 @@ func (b *Browser) SelectedCommandText() string {
 	return ""
 }
 
-// selectedRealIdx returns the real (unfiltered) index for the current selection.
 func (b *Browser) selectedRealIdx() int {
 	switch b.Mode {
 	case ModeJSON:
@@ -335,19 +332,9 @@ func (b *Browser) selectedRealIdx() int {
 	return -1
 }
 
-// containsFold does a case-insensitive substring match.
-//
-// This is the one search in the tree that deliberately does not use the scored
-// matcher in pkg/fuzzy. Two of its three fields are whole command outputs, and
-// a subsequence match over a multi-kilobyte blob admits almost every block, so
-// "err" would filter nothing out. Scrollback also reads in time order, and
-// reordering blocks by match quality would put a reply above the command that
-// produced it. Grep semantics are the right ones here.
 func containsFold(text, query string) bool {
 	return strings.Contains(strings.ToLower(text), strings.ToLower(query))
 }
-
-// --- Output mode methods ---
 
 // EnterOutputMode enters the output pane with vim-style navigation.
 func (b *Browser) EnterOutputMode() {
@@ -360,7 +347,6 @@ func (b *Browser) EnterOutputMode() {
 		return
 	}
 
-	// Get styled lines for colored rendering
 	var styledLines []string
 	if styled := b.SelectedStyledText(); styled != "" && styled != text {
 		styledLines = strings.Split(styled, "\n")

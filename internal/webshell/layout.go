@@ -6,14 +6,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The helpers here lay listings and tables out for the pane width, so a
-// name or a table row never wraps in the middle. A wrapped line breaks a
-// word in two and pushes the rest of the output out of line. They all
-// measure with ansi.StringWidth, so their input may carry colour.
-
-// columns lays items out top to bottom, then left to right, in as many
-// columns as fit in cols, the way GNU ls does. Columns are two cells apart.
-// An item wider than the pane gets a line of its own and is cut to fit.
 func columns(items []string, cols int) []string {
 	if len(items) == 0 {
 		return nil
@@ -23,10 +15,9 @@ func columns(items []string, cols int) []string {
 		widths[i] = ansi.StringWidth(it)
 	}
 	const gap = 2
-	// Try the most columns first. The widest layout that fits wins.
 	for ncols := len(items); ncols >= 1; ncols-- {
 		nrows := (len(items) + ncols - 1) / ncols
-		ncols := (len(items) + nrows - 1) / nrows // drop empty columns
+		ncols := (len(items) + nrows - 1) / nrows
 		colW := make([]int, ncols)
 		for i, w := range widths {
 			colW[i/nrows] = max(colW[i/nrows], w)
@@ -61,11 +52,6 @@ func columns(items []string, cols int) []string {
 	return nil
 }
 
-// table lays out rows of a key and a description, with the keys in one
-// column indent cells from the left. When any description does not fit
-// beside its key, every description goes on the lines below its key,
-// indented two more cells and wrapped at word boundaries. Deciding once
-// for the table keeps its rows alike.
 func table(rows [][2]string, indent int, keyColour string, cols int) []string {
 	keyW := 0
 	for _, r := range rows {
@@ -99,11 +85,8 @@ func table(rows [][2]string, indent int, keyColour string, cols int) []string {
 	return out
 }
 
-// wrapWords wraps s at spaces into lines at most w cells wide.
 func wrapWords(s string, w int) []string { return wrapTokens(strings.Fields(s), w) }
 
-// wrapTokens joins tokens with single spaces into lines at most w cells
-// wide. A token never breaks across lines. One wider than w is cut to fit.
 func wrapTokens(tokens []string, w int) []string {
 	w = max(w, 1)
 	var lines []string
@@ -128,7 +111,6 @@ func wrapTokens(tokens []string, w int) []string {
 	return lines
 }
 
-// fit cuts s to at most cols cells, ending in "…" when it cuts.
 func fit(s string, cols int) string {
 	if ansi.StringWidth(s) <= cols {
 		return s
@@ -136,7 +118,6 @@ func fit(s string, cols int) string {
 	return ansi.Truncate(s, max(cols, 1), "…")
 }
 
-// fitLines cuts each line to at most cols cells.
 func fitLines(lines []string, cols int) []string {
 	out := make([]string, len(lines))
 	for i, l := range lines {

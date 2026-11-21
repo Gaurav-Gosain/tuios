@@ -26,11 +26,9 @@ func TestCooldownCollapsesABurst(t *testing.T) {
 		t.Fatalf("a burst of 6 simultaneous alerts accepted %d cues, want 1", accepted)
 	}
 
-	// Still inside the window.
 	if accept(now+int64(cooldown)-1, cooldown) {
 		t.Error("a cue inside the cooldown was accepted")
 	}
-	// Past it, so two genuinely separate events are both heard.
 	if !accept(now+int64(cooldown), cooldown) {
 		t.Error("a cue past the cooldown was refused")
 	}

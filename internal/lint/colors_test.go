@@ -11,11 +11,8 @@ import (
 	"testing"
 )
 
-// renderDirs are the packages whose non-test files are render code.
 var renderDirs = []string{"internal/app", "internal/overlay", "internal/composer", "internal/tutor"}
 
-// tokenFiles are the files in renderDirs that define the tokens, and so are
-// where colour literals belong.
 var tokenFiles = map[string]bool{
 	"internal/overlay/palette.go":  true,
 	"internal/overlay/contrast.go": true,
@@ -101,7 +98,6 @@ func f() {
 	}
 }
 
-// colourLiterals returns file:line: form for every rejected colour in src.
 func colourLiterals(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -118,7 +114,6 @@ func colourLiterals(t *testing.T, name string, src []byte) []string {
 			}
 		}
 	}
-	// The local names CharmTone is imported under in this file.
 	tones := map[string]bool{}
 	for _, imp := range f.Imports {
 		path := strings.Trim(imp.Path.Value, `"`)
@@ -173,7 +168,6 @@ func colourLiterals(t *testing.T, name string, src []byte) []string {
 	return out
 }
 
-// selector splits pkg.Name, or returns empty strings for anything else.
 func selector(e ast.Expr) (pkg, name string) {
 	s, ok := e.(*ast.SelectorExpr)
 	if !ok {
@@ -186,7 +180,6 @@ func selector(e ast.Expr) (pkg, name string) {
 	return id.Name, s.Sel.Name
 }
 
-// constant reports whether e is a literal or built only from literals.
 func constant(e ast.Expr) bool {
 	switch v := e.(type) {
 	case *ast.BasicLit:
@@ -201,7 +194,6 @@ func constant(e ast.Expr) bool {
 	return false
 }
 
-// repoRoot is the directory holding go.mod, two levels above this package.
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := filepath.Abs(filepath.Join("..", ".."))

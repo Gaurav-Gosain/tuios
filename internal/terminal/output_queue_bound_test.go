@@ -19,8 +19,6 @@ func TestWriteOutputAsyncWaitsForRoom(t *testing.T) {
 	w := NewDaemonWindow("queue-bound", "t", 0, 0, 80, 24, 0, "pty-1", make(chan struct{}, 1), 1000)
 	defer w.Close()
 
-	// outputWriter takes ioMu for every write, so holding it stalls the
-	// writer on the first chunk it takes, and everything after that queues.
 	w.ioMu.Lock()
 	chunk := bytes.Repeat([]byte("x"), 8<<10)
 	w.WriteOutputAsync(chunk)
@@ -75,9 +73,6 @@ func TestWriteOutputAsyncStopsWaitingWhenTheWindowCloses(t *testing.T) {
 		close(done)
 	}()
 	time.Sleep(50 * time.Millisecond)
-	// Close marks the window closed and stops the writer before it takes
-	// ioMu, which this test still holds: the queue stays full and the writer
-	// stays stalled, so only the close can release the sender.
 	closed := make(chan struct{})
 	go func() {
 		w.Close()

@@ -23,24 +23,12 @@ type Chrome struct {
 	DashRule   string // a dialog's lighter divider
 }
 
-// chrome holds the pushed set. A pointer so the zero state is "nothing pushed"
-// and a swap is one store; atomic because every session's render loop reads it
-// while a set-config on another session writes it.
 var chrome atomic.Pointer[Chrome]
 
 // SetChrome records the glyphs the overlay furniture is drawn with. A nil
 // argument clears back to the built-ins.
 func SetChrome(c *Chrome) { chrome.Store(c) }
 
-// chromeOr returns the pushed glyph for one role, or def when no set is pushed
-// or the set leaves that role alone.
-//
-// Callers check UseASCII before reaching here, so a pushed glyph outside 7-bit
-// loses to ASCII mode. That is deliberate: the set a user chose says what their
-// font can draw, and --ascii-only says the running terminal cannot draw it,
-// which is the narrower claim and the one to believe. The test is per glyph
-// rather than per set, so a set that is ASCII in the roles it can be keeps them
-// in a terminal that has to be.
 func chromeOr(role func(*Chrome) string, def string) string {
 	if c := chrome.Load(); c != nil {
 		if g := role(c); g != "" && (!UseASCII() || IsASCII(g)) {
@@ -70,7 +58,6 @@ type Frame struct {
 	Horizontal, Vertical                       string
 }
 
-// frame holds the pushed Frame; nil draws the rounded built-in.
 var frame atomic.Pointer[Frame]
 
 // SetFrame records the glyphs dialog and panel frames are drawn with. A host
@@ -84,8 +71,6 @@ func SetFrame(f Frame) {
 	frame.Store(&stored)
 }
 
-// framePanels says a panel draws a frame round itself at every colour depth,
-// not only at 16 colours where its surface needs one.
 var framePanels atomic.Bool
 
 // SetFramePanels records whether every panel is framed. Derive reads it into

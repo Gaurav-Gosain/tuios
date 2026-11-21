@@ -13,11 +13,8 @@ import (
 // The caret is a byte offset into the text that always sits on a rune
 // boundary, so no edit ever cuts a character in two.
 type Line struct {
-	text  string
-	caret int
-	// anchor is the other end of the selection, a byte offset, and sel
-	// whether there is one. The selection is the text between anchor and
-	// caret. Only a field whose panel draws it (LineOpts.Select) makes one.
+	text   string
+	caret  int
 	anchor int
 	sel    bool
 }
@@ -74,8 +71,6 @@ func (l *Line) SelectAll() {
 	l.anchor, l.caret, l.sel = 0, len(l.text), l.text != ""
 }
 
-// deleteSelection takes the selected text out and puts the caret where it
-// was. It reports whether there was a selection.
 func (l *Line) deleteSelection() bool {
 	lo, hi, ok := l.Selection()
 	l.sel = false
@@ -107,7 +102,6 @@ func (l *Line) Insert(s string) bool {
 	if s == "" {
 		return false
 	}
-	// Typed or pasted text takes the place of the selection.
 	l.deleteSelection()
 	c := l.clampedCaret()
 	l.text = l.text[:c] + s + l.text[c:]
@@ -150,8 +144,6 @@ func (l *Line) Edit(key, text string, o LineOpts) (changed, consumed bool) {
 			l.caret = to
 			return false, true
 		}
-		// A plain left or right with text selected goes to that end of it,
-		// as a native field does. Every other move drops the selection.
 		if lo, hi, ok := l.Selection(); ok && (key == "left" || key == "right") {
 			to = lo
 			if key == "right" {
@@ -231,15 +223,6 @@ func (l *Line) Edit(key, text string, o LineOpts) (changed, consumed bool) {
 	return false, false
 }
 
-// motion is where a move key puts the caret, and whether it extends the
-// selection (the key holds shift). ok is false for a key that is not a move.
-//
-// A word move is the arrow with any of alt, ctrl or meta, because terminals
-// spell Option or Alt with an arrow differently: xterm, kitty, WezTerm and
-// Ghostty send alt, iTerm2 can send meta (CSI 1;9), and ctrl is the Linux
-// and Windows key. Terminal.app and iTerm2's Esc+ send alt+b and alt+f. A
-// move to the start or the end is home and end, ctrl+a and ctrl+e, and
-// super with an arrow, which is Command on a Mac.
 func (l *Line) motion(key string) (to int, extend, ok bool) {
 	mods, base := splitKey(key)
 	c := l.clampedCaret()
@@ -281,14 +264,11 @@ func (l *Line) motion(key string) (to int, extend, ok bool) {
 	return 0, false, false
 }
 
-// splitKey splits a key name such as "ctrl+shift+left" into its modifiers
-// and the key.
 func splitKey(key string) (map[string]bool, string) {
 	parts := strings.Split(key, "+")
 	base := parts[len(parts)-1]
 	parts = parts[:len(parts)-1]
 	if base == "" && len(parts) > 0 {
-		// The key is "+" itself, as in "ctrl++".
 		base, parts = "+", parts[:len(parts)-1]
 	}
 	mods := make(map[string]bool, len(parts))
@@ -298,9 +278,6 @@ func splitKey(key string) (map[string]bool, string) {
 	return mods, base
 }
 
-// nextWordEnd is how many bytes of s a move to the end of the next word
-// passes: the characters that are not part of a word, then the word, the
-// mirror of DropLastWord.
 func nextWordEnd(s string) int {
 	i := 0
 	for i < len(s) {
@@ -320,7 +297,6 @@ func nextWordEnd(s string) int {
 	return i
 }
 
-// clampedCaret is the caret, kept inside the text and on a rune boundary.
 func (l *Line) clampedCaret() int {
 	c := min(max(l.caret, 0), len(l.text))
 	for c > 0 && c < len(l.text) && !utf8.RuneStart(l.text[c]) {

@@ -60,13 +60,11 @@ func (f *Follow) Apply(l Layout) {
 	taken := l.Taken - f.taken
 	f.laid, f.lines, f.room, f.taken = true, l.Lines, l.Room, l.Taken
 	if !first && f.Held() {
-		// Rule 2: the lines above the view stay where they are.
 		f.Up += grew
 		if taken > 0 {
 			f.Unseen += taken
 		}
 	}
-	// Rule 1 needs nothing: Up stays 0, and the bottom stays in view.
 	f.clamp()
 }
 
@@ -133,8 +131,6 @@ func (f *Follow) Jump(prompts []int, dir int) bool {
 	return f.Up != before
 }
 
-// clamp keeps the view on the thread: no higher than its first line, and
-// no lower than its last.
 func (f *Follow) clamp() {
 	f.Up = max(min(f.Up, f.lines-f.room), 0)
 	if f.Up == 0 {

@@ -14,14 +14,11 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-// releaseReading is one look at what the server process holds.
 type releaseReading struct {
 	goroutines int
 	heap       uint64
 }
 
-// readRelease collects garbage twice, so what is left is what something still
-// reaches, and reads the goroutine count and the live heap.
 func readRelease() releaseReading {
 	runtime.GC()
 	runtime.GC()
@@ -34,13 +31,8 @@ func (r releaseReading) String() string {
 	return fmt.Sprintf("goroutines=%d heap=%s", r.goroutines, mib(int64(r.heap)))
 }
 
-// mib renders a byte count in MiB.
 func mib(n int64) string { return fmt.Sprintf("%.2f MiB", float64(n)/(1<<20)) }
 
-// openReleaseTerm opens one more interactive session with a PTY on client,
-// attached to the server's default tuios session, and returns it with a writer
-// for its keyboard. What the far end writes is kept the same way
-// startSSHExitRun keeps it, so waitForOutput works on it.
 func openReleaseTerm(t *testing.T, client *gossh.Client, name string) (*sshExitRun, io.Writer) {
 	t.Helper()
 	sess, err := client.NewSession()
@@ -82,7 +74,6 @@ func openReleaseTerm(t *testing.T, client *gossh.Client, name string) (*sshExitR
 	return term, stdin
 }
 
-// waitForText waits, bounded, until want appears in what the far end wrote.
 func waitForText(t *testing.T, term *sshExitRun, d time.Duration, want string) {
 	t.Helper()
 	deadline := time.Now().Add(d)
@@ -95,10 +86,6 @@ func waitForText(t *testing.T, term *sshExitRun, d time.Duration, want string) {
 	t.Fatalf("%q never reached the client within %s\n--- last output ---\n%s", want, d, tailPrintable(term.text()))
 }
 
-// probeWait is how long a typed probe line gets to come back through ten
-// attached clients. The line itself takes two seconds. Under the race detector
-// on a starved core it took 19 to 23 s to arrive, and it did arrive, so a line
-// that never comes still fails, only later.
 func probeWait() time.Duration {
 	if raceEnabled {
 		return 60 * time.Second
@@ -106,12 +93,6 @@ func probeWait() time.Duration {
 	return 15 * time.Second
 }
 
-// waitForPaneCursor waits, bounded, until the client shows the terminal cursor.
-// A client shows it only in terminal mode with a pane focused and nothing over
-// it, so from then on a key reaches the pane's shell. Before that the same key
-// is a window command: w closes a pane, s takes the rail, and the rest of a
-// typed line goes on from there. The first frame comes before that point. It
-// is the logo, and the pane arrives later through a state sync.
 func waitForPaneCursor(t *testing.T, term *sshExitRun, d time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(d)
@@ -146,7 +127,6 @@ func TestSSHSessionsWithTheScreensaverGiveBackWhenTheyEnd(t *testing.T) {
 		heapSlack      = 8 << 20
 		saverBound     = 50 * time.Second
 	)
-	// Registered before startSSHExitRun, so it runs after the server stops.
 	t.Cleanup(func() { pinStartupConfig(os.Getenv("XDG_CONFIG_HOME")) })
 	cfg := "[startup]\nopen_default_window = true\nstart_in_terminal_mode = true\n" +
 		"[screensaver]\nenabled = true\nidle_minutes = 1\n"
@@ -200,7 +180,6 @@ func TestSSHSessionsWithTheScreensaverGiveBackWhenTheyEnd(t *testing.T) {
 		term.waitForOutput(t, 15*time.Second, fmt.Sprintf("client %d never painted a frame", i+1))
 	}
 
-	// Positive half: a live client of this server still gets its pane's output.
 	typeLine(t, probeIn, "sleep 2; echo probe-$((1))")
 	waitForText(t, terms[0], probeWait(), "probe-1")
 	t.Log("live session painted probe-1")
@@ -210,9 +189,6 @@ func TestSSHSessionsWithTheScreensaverGiveBackWhenTheyEnd(t *testing.T) {
 		_ = c.Close()
 	}
 
-	// Negative half: everything the eight sessions held is given back within
-	// 10 s. The kept sessions' savers start a minute after the server did; a
-	// run that reaches the last poll past saverBound measures them too.
 	deadline := time.Now().Add(10 * time.Second)
 	for poll := 1; ; poll++ {
 		now := readRelease()
@@ -224,9 +200,6 @@ func TestSSHSessionsWithTheScreensaverGiveBackWhenTheyEnd(t *testing.T) {
 			elapsed := time.Since(started)
 			t.Logf("last poll at %s after the server started", elapsed.Round(time.Millisecond))
 			if elapsed > saverBound {
-				// A run this slow under the detector cannot tell a release from
-				// a screen saver that fired, so it decides nothing. The other
-				// test here holds the release without a saver.
 				if raceEnabled {
 					t.Skipf("the last poll came %s after the server started, past %s, so this run decides nothing",
 						elapsed.Round(time.Millisecond), saverBound)
@@ -262,10 +235,6 @@ func TestSSHSessionsGiveBackTheirGoroutinesAndMemoryWhenTheyEnd(t *testing.T) {
 
 	run := startSSHExitRun(t, "release")
 
-	// Warm up through the helper's own client, which stays connected, so the
-	// daemon's and the first client's caches and queues have grown before the
-	// baseline. A shell that is still starting can drop type-ahead, so the
-	// line is typed again, cleared first with ctrl+u, until its output shows.
 	warm, warmIn := openReleaseTerm(t, run.client, run.name)
 	warm.waitForOutput(t, 15*time.Second, "the warm-up client never painted a frame")
 	waitForPaneCursor(t, warm, 15*time.Second)
@@ -309,9 +278,6 @@ func TestSSHSessionsGiveBackTheirGoroutinesAndMemoryWhenTheyEnd(t *testing.T) {
 		term.waitForOutput(t, 15*time.Second, fmt.Sprintf("client %d never painted a frame", i+1))
 	}
 
-	// Positive half: the line is printed two seconds after its Enter key's
-	// frame, when the client has gone idle, so only pane output can paint it.
-	// The second one proves the pane listener was armed again after the first.
 	probe := terms[0]
 	typeLine(t, probeIn, "sleep 2; echo probe-$((1))")
 	waitForText(t, probe, probeWait(), "probe-1")
@@ -325,8 +291,6 @@ func TestSSHSessionsGiveBackTheirGoroutinesAndMemoryWhenTheyEnd(t *testing.T) {
 		_ = c.Close()
 	}
 
-	// Negative half: everything the eight sessions held is given back within
-	// 10 s of their clients closing.
 	deadline := time.Now().Add(10 * time.Second)
 	for poll := 1; ; poll++ {
 		now := readRelease()

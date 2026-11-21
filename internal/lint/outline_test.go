@@ -14,15 +14,10 @@ import (
 	"testing"
 )
 
-// outlineDirs are the trees whose packages the tuios binary links.
 var outlineDirs = []string{"internal", "cmd/tuios", "pkg"}
 
-// outlineSkip are folders inside outlineDirs that are not part of the binary,
-// and the wrappers themselves, in errfmt and jsonx.
 var outlineSkip = []string{"internal/errfmt", "internal/jsonx", "internal/lint"}
 
-// outlined maps each standard library call the compiler inlines at every
-// call site to the out-of-line copy to call instead.
 var outlined = map[[2]string]string{
 	{"fmt", "Errorf"}:              "errfmt.Errorf",
 	{"encoding/json", "Marshal"}:   "jsonx.Marshal",
@@ -113,7 +108,6 @@ func g() ([]byte, error) { return json.MarshalIndent(1, "", " ") }
 	}
 }
 
-// inlinedCalls returns file:line for every call in src that outlined names.
 func inlinedCalls(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -131,7 +125,6 @@ func inlinedCalls(t *testing.T, name string, src []byte) []string {
 			}
 		}
 	}
-	// The import path of each name a package is imported under here.
 	paths := map[string]string{}
 	for _, imp := range f.Imports {
 		p, _ := strconv.Unquote(imp.Path.Value)

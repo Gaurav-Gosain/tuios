@@ -42,8 +42,6 @@ func DialogFitWidth(preferred, screenW int) int {
 	return max(min(preferred, screenW-2), 1)
 }
 
-// dialogFrame returns the corner, horizontal and vertical border glyphs: the
-// pushed Frame (see SetFrame), or the rounded built-in when none is pushed.
 func dialogFrame() (tl, tr, bl, br, h, v string) {
 	if UseASCII() {
 		return "+", "+", "+", "+", "-", "|"
@@ -54,11 +52,6 @@ func dialogFrame() (tl, tr, bl, br, h, v string) {
 	return "╭", "╮", "╰", "╯", "─", "│"
 }
 
-// edgeFrame is dialogFrame for a frame that is the only edge its surface has:
-// a Box inside a panel, or a panel at 16 colours, whose ground is the
-// terminal's own. A blank frame (the hidden border style) would leave such a
-// surface with no edge at all, so it draws the rounded frame instead. A dialog
-// and a filled panel keep the blank frame, because their fill is an edge.
 func edgeFrame() (tl, tr, bl, br, h, v string) {
 	tl, tr, bl, br, h, v = dialogFrame()
 	if strings.TrimSpace(tl+tr+bl+br+h+v) == "" {
@@ -78,8 +71,6 @@ func EdgeBorder() lipgloss.Border {
 	}
 }
 
-// panelFrame is the frame a framed panel draws: edgeFrame at 16 colours,
-// where the frame is the panel's only edge, else dialogFrame.
 func panelFrame(pal Palette) (tl, tr, bl, br, h, v string) {
 	if pal.Depth == Depth16 {
 		return edgeFrame()
@@ -119,8 +110,6 @@ func EnterKey() string {
 // mode like a key named with EnterKey.
 const EnterGlyph = "↵"
 
-// hintKey is what a hint's key draws as: the return key as EnterKey draws it,
-// anything else as written.
 func hintKey(k string) string {
 	if k == EnterGlyph {
 		return EnterKey()
@@ -133,8 +122,6 @@ func hintKey(k string) string {
 	return k
 }
 
-// asciiArrowKeys are the arrow glyphs hint strips name keys with, spelled out
-// for a terminal that draws only ASCII.
 var asciiArrowKeys = map[string]string{
 	"↑↓": "up/down", "←→": "left/right",
 	"↑": "up", "↓": "down", "←": "left", "→": "right",
@@ -193,8 +180,6 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	frame := Style(bg).Foreground(pal.frameInk(pal.FgMute))
 	rule := func(n int) string { return frame.Render(strings.Repeat(h, max(n, 0))) }
 
-	// Top border: the title sits in it rather than on a row of its own, which
-	// is what keeps a three-row dialog three rows.
 	top := frame.Render(tl)
 	if title := Truncate(d.Title, max(w-3, 1)); title != "" {
 		top += rule(1) +
@@ -207,9 +192,6 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	}
 	top += frame.Render(tr)
 
-	// Bottom border: the hints ride in it, right-aligned, shortened in tiers
-	// when the frame runs out of room rather than wrapping onto a row. Three
-	// cells are the border's own: a rule cell and a pad each side.
 	fitted := fitHints(d.Hints, w-3, dialogSep)
 	hints := fitted.Hints
 	var strip string
@@ -235,9 +217,6 @@ func (d Dialog) Render(pal Palette) (string, Geometry) {
 	}
 	lines = append(lines, bottom)
 
-	// Where each hint landed on the bottom border, so a host can make them
-	// pressable: the strip is right-aligned with one pad cell and one rule cell
-	// after it, and the pairs are two cells apart.
 	var hintRects []Rect
 	if stripW > 0 {
 		hintRects = make([]Rect, len(d.Hints))
@@ -295,7 +274,6 @@ func FieldLineSelect(text string, caret, lo, hi, width int, bg, fg, selBg, selFg
 		return ""
 	}
 	caret = min(max(caret, 0), len(text))
-	// The caret's cell, " " past the end.
 	at := " "
 	if caret < len(text) {
 		at, _ = firstRune(text[caret:])
@@ -340,7 +318,6 @@ func FieldLineSelect(text string, caret, lo, hi, width int, bg, fg, selBg, selFg
 	return b.String()
 }
 
-// firstRune is the first character of s and its size in bytes.
 func firstRune(s string) (string, int) {
 	for i := range s {
 		if i > 0 {

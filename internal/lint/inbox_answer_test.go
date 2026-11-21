@@ -13,7 +13,6 @@ import (
 
 const allowAnswer = "//tuios:allow-answer"
 
-// answerWriter is the one file that may write the Inbox's answer step.
 const answerWriter = "internal/app/inbox_answer.go"
 
 // TestOnlyInboxAnswerWritesTheAnswerStep is the answer flow lint. Where an
@@ -76,9 +75,6 @@ func g(m *OS) { m.answer = nil }
 	}
 }
 
-// answerWrites returns file:line for every write of the answer step in src:
-// an assignment whose left side runs through approvals.answer, or through a
-// value named st, as the approval code names &m.Inbox.approvals.
 func answerWrites(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -114,8 +110,6 @@ func answerWrites(t *testing.T, name string, src []byte) []string {
 	return out
 }
 
-// throughAnswer reports whether e is answer, or a field under it, of
-// approvals or of st.
 func throughAnswer(e ast.Expr) bool {
 	for {
 		sel, ok := e.(*ast.SelectorExpr)
@@ -135,7 +129,6 @@ func throughAnswer(e ast.Expr) bool {
 	}
 }
 
-// exprString is e as source, for the report.
 func exprString(e ast.Expr) string {
 	switch x := e.(type) {
 	case *ast.Ident:

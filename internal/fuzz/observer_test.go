@@ -5,16 +5,6 @@ import (
 	"testing"
 )
 
-// The observer's whole claim is that attaching one does not change what the
-// fuzzer explores. Nothing enforces that except these tests: an observer that
-// perturbed the run would make every recorded demo a recording of a different
-// fuzzer than the one CI runs, and a finding shown on screen would not be a
-// finding the seed reproduces.
-
-// traceTarget hashes the actions it is applied, in order, so two runs can be
-// compared by one number. It fails at a fixed depth so the shrinker runs too:
-// minimisation is the part with the most engine state, and so the part most
-// likely to notice an observer.
 type traceTarget struct {
 	h     uint64
 	depth int
@@ -28,7 +18,6 @@ func (t *traceTarget) Reset() error { t.h, t.depth = fnv.New64a().Sum64(), 0; re
 func (t *traceTarget) Apply(a Action) error {
 	f := fnv.New64a()
 	_, _ = f.Write([]byte(a.String()))
-	// Order matters, so fold the running value in rather than summing.
 	t.h = t.h*1099511628211 ^ f.Sum64()
 	t.depth++
 	return nil
@@ -51,8 +40,6 @@ func (t *traceTarget) Rules() []RuleInfo {
 	}
 }
 
-// recorder is the shape a display's observer has: fixed state written per
-// event, nothing handed back to the engine.
 type recorder struct {
 	starts, steps, rules, shrinks, dones int
 	lastSeed                             uint64
@@ -76,8 +63,6 @@ func (r *recorder) Rule(_ int, rule string, ok bool) {
 func (r *recorder) Shrink(string, int, bool) { r.shrinks++ }
 func (r *recorder) Done(res Result)          { r.dones++; r.result = res }
 
-// runTrace runs one seed and returns the hash of the minimal sequence plus the
-// verdict, which together are everything the run decided.
 func runTrace(t *testing.T, seed uint64, obs Observer) (uint64, Result) {
 	t.Helper()
 	res, err := Run(func() (Target, error) { return newTraceTarget(120), nil },
@@ -126,22 +111,13 @@ func TestObserverDoesNotChangeTheRun(t *testing.T) {
 	}
 }
 
-// skipUnderRace opts an allocation assertion out of the detector build.
 func skipUnderRace(t *testing.T) {
 	t.Helper()
 	if raceEnabled {
-		// The detector's own allocations swamp the differences these tests
-		// measure: the figures wander by about ten either way between runs,
-		// and each difference here is one. Measured 8 of 12 runs failing for
-		// each test with the skip removed, so it is the instrument and not the
-		// code. The plain build still asserts them on every push.
 		t.Skip("allocation counts are not measurable under the race detector")
 	}
 }
 
-// allocsActions is the sequence the allocation tests replay. The target's own
-// per-action allocations are the bulk of every figure below, which is why each
-// assertion is a difference and not an absolute.
 var allocsActions = Generate(11, 200)
 
 func allocsRun(obs Observer) float64 {
@@ -176,8 +152,6 @@ func TestNilObserverAllocatesNothing(t *testing.T) {
 	if base < bare {
 		t.Fatalf("Run cannot allocate less than the target it drives: %.0f then %.0f", bare, base)
 	}
-	// The setup is one closure. Anything per-action would put this in the
-	// hundreds.
 	if extra := base - bare; extra > 8 {
 		t.Errorf("Run with no observer cost %.0f allocations over the bare target across %d actions, which is per-action work",
 			extra, len(allocsActions))
@@ -196,8 +170,6 @@ func TestAttachedObserverCostsNothingPerAction(t *testing.T) {
 	if withObs < base {
 		t.Fatalf("attaching an observer cannot reduce allocations: %.0f then %.0f", base, withObs)
 	}
-	// The registry fetch is one slice per replay. Anything per-action would put
-	// this in the hundreds.
 	if extra := withObs - base; extra > 8 {
 		t.Errorf("an attached observer cost %.0f extra allocations over %d actions, which is per-action work",
 			extra, len(allocsActions))

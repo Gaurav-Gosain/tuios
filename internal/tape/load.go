@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
-// maxSourceDepth bounds how deep Source lines may nest, which also stops a
-// tape that includes itself through a chain the cycle check has not seen yet.
 const maxSourceDepth = 16
 
 // Script is a tape read from a file, with every Source line replaced by the
@@ -30,12 +28,10 @@ type Script struct {
 	// Errors are the parse errors, each placed in the file it came from.
 	Errors []string
 
-	origins    []lineOrigin // origins[i] is where line i+1 of Text came from
+	origins    []lineOrigin
 	sourceErrs []sourceErr
 }
 
-// lineOrigin is the file and line one line of Script.Text was read from. file
-// is empty for the tape that was loaded.
 type lineOrigin struct {
 	file string
 	line int
@@ -72,10 +68,6 @@ func LoadFile(path string) (*Script, error) {
 	return s, nil
 }
 
-// inline appends content to text line by line, replacing each Source line
-// with the lines of the file it names. file is the name the errors give
-// content ("" for the loaded tape), dir is where its Source paths are
-// relative to, and stack holds the files being read, outermost first.
 func (s *Script) inline(text *strings.Builder, content, file, dir string, stack []string) {
 	lines := strings.Split(content, "\n")
 	if n := len(lines); n > 0 && lines[n-1] == "" {
@@ -88,8 +80,6 @@ func (s *Script) inline(text *strings.Builder, content, file, dir string, stack 
 			continue
 		}
 		fail := func(msg string) {
-			// The line stays as it is, so the error points at it. A tape with
-			// an error does not run, so the Source is never executed.
 			s.add(text, line, file, i+1)
 			s.sourceErrs = append(s.sourceErrs, sourceErr{line: len(s.origins), msg: msg})
 		}
@@ -119,21 +109,17 @@ func (s *Script) inline(text *strings.Builder, content, file, dir string, stack 
 	}
 }
 
-// sourceErr is a Source line that could not be resolved. The parser accepts
-// the line it is left as, so the error is added after parsing.
 type sourceErr struct {
 	line int
 	msg  string
 }
 
-// add appends one line of text and remembers where it came from.
 func (s *Script) add(text *strings.Builder, line, file string, n int) {
 	text.WriteString(line)
 	text.WriteByte('\n')
 	s.origins = append(s.origins, lineOrigin{file: file, line: n})
 }
 
-// sourceTarget reports whether line is a Source line, and the path it names.
 func sourceTarget(line string) (string, bool) {
 	commands, errs := ParseFile(line)
 	if len(errs) > 0 || len(commands) != 1 || commands[0].Type != CommandTypeSource || len(commands[0].Args) != 1 {
@@ -149,7 +135,6 @@ func (s *Script) origin(line int) (lineOrigin, bool) {
 	return s.origins[line-1], true
 }
 
-// linePrefix matches the place an error message starts with.
 var linePrefix = lazyre.New(`^line (\d+), column (\d+)`)
 
 // Locate rewrites the "line N, column C" an error message starts with, which

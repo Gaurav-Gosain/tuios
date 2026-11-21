@@ -50,11 +50,6 @@ func (w WorkspacesConfig) ReturnsWhenEmpty() bool {
 	return w.ReturnWhenEmpty == nil || *w.ReturnWhenEmpty
 }
 
-// workspaceDigitPrefixes are the action-name prefixes whose trailing digit is
-// a workspace number. base_index shifts that digit in their keys along with
-// the number drawn on the pill, so every way of addressing a workspace moves
-// together: the switch, move-and-follow, send-to-workspace and both prefix
-// chords.
 var workspaceDigitPrefixes = [...]string{
 	"switch_workspace_",
 	"move_and_follow_",
@@ -63,8 +58,6 @@ var workspaceDigitPrefixes = [...]string{
 	"workspace_prefix_move_",
 }
 
-// workspaceActionNumber is the workspace number named by an action such as
-// switch_workspace_3.
 func workspaceActionNumber(action string) (int, bool) {
 	for _, prefix := range workspaceDigitPrefixes {
 		if rest, ok := strings.CutPrefix(action, prefix); ok &&
@@ -75,10 +68,6 @@ func workspaceActionNumber(action string) (int, bool) {
 	return 0, false
 }
 
-// shiftWorkspaceDigitKey rewrites one default key so its workspace digit is
-// want ('0' to '9'). It handles the three spellings the defaults use: a digit
-// after '+', a bare digit, and the shifted character of a bare digit. A key
-// with no workspace digit, such as a hand-bound function key, is left alone.
 func shiftWorkspaceDigitKey(key string, want byte) (string, bool) {
 	if i := strings.LastIndexByte(key, '+'); i >= 0 && i+1 < len(key) {
 		d := key[i+1:]
@@ -97,8 +86,6 @@ func shiftWorkspaceDigitKey(key string, want byte) (string, bool) {
 	return key, false
 }
 
-// shiftedWorkspaceKeys is action's shipped keys with their workspace digit
-// moved to the number a person sees when base_index is 0.
 func shiftedWorkspaceKeys(keys []string, number int) []string {
 	out := make([]string, len(keys))
 	for i, key := range keys {
@@ -107,8 +94,6 @@ func shiftedWorkspaceKeys(keys []string, number int) []string {
 	return out
 }
 
-// zeroBasedWorkspaceDefaults shifts defaults before user bindings are merged,
-// so explicit bindings and the usual collision rules keep their precedence.
 func zeroBasedWorkspaceDefaults(kb KeybindingsConfig) KeybindingsConfig {
 	for _, table := range keybindTables {
 		target := maps.Clone(*table.field(&kb))
