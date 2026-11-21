@@ -42,7 +42,7 @@ func promptCount(s tuitest.Screen) int {
 // NEGATIVE CONTROL: fails on v0.8.5 and on main with the reconcilePaneStreams
 // call in ApplyStateSyncFrom cut, with 0 of 3 prompts on workspace 2.
 func TestALoadedLayoutShowsItsShells(t *testing.T) {
-	term, _ := start(t, startOpts{
+	term, base := start(t, startOpts{
 		args: []string{"new", "lay"},
 		env:  []string{"PS1=" + layoutPrompt + " "},
 	})
@@ -61,6 +61,13 @@ func TestALoadedLayoutShowsItsShells(t *testing.T) {
 	if err := term.WaitForText("Layout saved", uiTimeout); err != nil {
 		t.Fatalf("the layout was never saved: %v\n%s", err, term.Snapshot())
 	}
+	// The client says "Layout saved" when it asks the daemon, and the daemon
+	// saves the workspace the session shows when it gets there. The switch
+	// below waits until the file holds the layout.
+	waitUntil(t, "the daemon saves the layout", uiTimeout, func() (bool, string) {
+		out, err := tuiosCLI(t, base, "layout", "list", "--json")
+		return err == nil && strings.Contains(out, `"trio"`), out
+	})
 
 	sendKeys(t, term, tuitest.Alt("2"))
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
