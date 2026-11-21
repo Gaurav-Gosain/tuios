@@ -550,14 +550,15 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
-	inVisualMode := inCopyMode && window.CopyMode.State.InVisual()
+	// A selection stays drawn while the search prompt is open over it.
+	inVisualMode := inCopyMode && window.CopyMode.SelectionState().InVisual()
 
 	if inVisualMode {
 		visualSelection = pool.GetHighlightGrid()
 		visualSelection.Init(maxY, maxX)
 		defer pool.PutHighlightGrid(visualSelection)
 	}
-	if inVisualMode && window.CopyMode.State == terminal.CopyModeVisualBlock {
+	if inVisualMode && window.CopyMode.SelectionState() == terminal.CopyModeVisualBlock {
 		fillBlockSelection(visualSelection, window, screen, window.CopyMode.VisualStart, window.CopyMode.VisualEnd,
 			scrollbackLen, maxY, maxX)
 	} else if inVisualMode {

@@ -18772,3 +18772,19 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestLauncher
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestKeybindManagerChangesTheLeader$' .
 ```
+
+## Search in a copy-mode selection
+
+`TestCopyModeVisualOtherEnd` starts a line selection at ROW05, in the scrollback, and searches with `/ROW0`. The prompt must move the cursor to ROW06 with ROW05 still on the screen. Enter, `n` and `n` then end the selection on ROW08. `?` from ROW30 and esc from ROW40 are checked the same way (#2302).
+
+Run on 2026-11-21 on Linux, on main at 177fb9260 with this change.
+
+| Control | Failure | Verdict |
+| --- | --- | --- |
+| A build of main | `from ROW05, ["V" "/ROW0" "\r" "n" "n" "y"] copied "ROW05\nROW06"` | **caught** |
+| `jumpToMatch` scrolls the match to the top in a selection too | `the prompt did not move the cursor to ROW06 with ROW05 on screen` | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^TestCopyModeVisualOtherEnd$' -v .
+```
