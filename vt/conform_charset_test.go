@@ -1,18 +1,5 @@
 package vt_test
 
-// Conformance for character set designation and the shift states.
-//
-// This is the oldest machinery in a terminal and the least exercised by modern
-// programs, which is exactly why it rots quietly. It is not dead, though:
-// terminfo for `screen`, `linux` and `vt100` all spell smacs/rmacs as SO and SI
-// rather than as ESC ( 0 / ESC ( B, so anything running under those TERM values
-// draws its boxes through the locking shift. A multiplexer hosts whatever the
-// guest picked, so both spellings have to work.
-//
-// Cases follow esctest (tests/esctest/esctest/tests/{si,so,decsc}.py), ghostty's
-// src/terminal/charsets.zig, and the VT510 reference manual's tables for SCS,
-// LS0-LS3 and SS2/SS3.
-
 import (
 	"testing"
 )
@@ -20,8 +7,6 @@ import (
 func TestConform_CharsetDesignation(t *testing.T) {
 	runConform(t, []conformCase{
 		{
-			// The DEC Special Graphics set is what draws a box. ESC ( 0
-			// designates it as G0, which is what GL selects by default.
 			name: "ESC ( 0 designates DEC special graphics as G0",
 			in:   "\x1b(0lqk",
 			want: "┌─┐",
@@ -30,28 +15,19 @@ func TestConform_CharsetDesignation(t *testing.T) {
 			in:   "\x1b(0lqk\x1b(Bxyz",
 			want: "┌─┐xyz",
 		}, {
-			// The UK set differs from ASCII in exactly one place, which is the
-			// only way to tell it was selected at all.
 			name: "ESC ( A designates the UK set as G0",
 			in:   "\x1b(Aa#b",
 			want: "a£b",
 		}, {
-			// The dollar sign is the same in both sets.
 			name: "the UK set leaves the dollar sign alone",
 			in:   "\x1b(A$#",
 			want: "$£",
 		}, {
-			// A designator this emulator does not carry has to say so rather
-			// than silently leaving the previous set in place, because a guest
-			// that asked for a set it did not get will keep sending bytes for
-			// it.
 			name:      "an unknown final is rejected",
 			in:        "\x1b(<abc",
 			want:      "abc",
 			unhandled: true,
 		}, {
-			// Designation on its own changes nothing on screen: it loads a
-			// slot, and only a shift selects the slot.
 			name: "designating G1 alone does not change what prints",
 			in:   "\x1b)0lqk",
 			want: "lqk",
@@ -70,9 +46,6 @@ func TestConform_LockingShifts(t *testing.T) {
 			in:   "\x1b)0\x0elqk\x0flqk",
 			want: "┌─┐lqk",
 		}, {
-			// This is the terminfo shape: enacs designates, smacs shifts out,
-			// rmacs shifts in. It is what a curses program under TERM=screen
-			// sends for every line of every box it draws.
 			name: "the terminfo enacs/smacs/rmacs shape draws a box",
 			in:   "\x1b(B\x1b)0\x0eqqq\x0fab",
 			want: "───ab",
@@ -89,8 +62,6 @@ func TestConform_LockingShifts(t *testing.T) {
 			in:   "\x1b+0\x1bolqk",
 			want: "┌─┐",
 		}, {
-			// A locking shift is locked: it holds until another shift, not
-			// until the next character.
 			name: "a locking shift holds across a cursor move",
 			in:   "\x1b)0\x0eq\x1b[1;4Hq",
 			want: "─  ─",
@@ -116,8 +87,6 @@ func TestConform_SingleShifts(t *testing.T) {
 			in:   "\x1b+0\x1bOqq",
 			want: "─q",
 		}, {
-			// The single shift has to give GL back, not leave it pointing at
-			// G2 forever.
 			name: "SS2 does not disturb the locking shift underneath it",
 			in:   "\x1b)0\x1b*A\x0eq\x1bN#q",
 			want: "─£─",
@@ -130,9 +99,6 @@ func TestConform_SingleShifts(t *testing.T) {
 			in:   "\x1b+0\x8fqq",
 			want: "─q",
 		}, {
-			// The shift is spent on the first character whatever its length.
-			// A multi-byte cluster (U+00E1 here) used to leave it pending, so
-			// the next ASCII character came out of G2.
 			name: "SS2 is spent on a multi-byte cluster",
 			in:   "\x1b*0\x1bN\xc3\xa1b",
 			want: "\xc3\xa1b",
@@ -145,10 +111,6 @@ func TestConform_SingleShifts(t *testing.T) {
 			in:   "\x1b*0\x1bN\xe4\xb8\x96a",
 			want: "\xe4\xb8\x96a",
 		}, {
-			// A combining mark (U+0301) after a shifted character must not
-			// rebuild the cell from the raw byte and undo the mapping. The
-			// mark attaches to the mapped glyph (U+2592 for `a`), as it does
-			// under a locking shift.
 			name: "a mark after an SS2 character keeps the mapping",
 			in:   "\x1b*0\x1bNa\xcc\x81",
 			want: "\xe2\x96\x92\xcc\x81",
@@ -198,8 +160,6 @@ func TestConform_CharsetsAcrossSaveAndReset(t *testing.T) {
 // the ones in the VT100 programmer's manual, and they match ghostty's table in
 // src/terminal/charsets.zig.
 func TestConform_SpecialGraphicsTable(t *testing.T) {
-	// Rendered a few at a time so a failure prints a readable row rather than
-	// one 31-column wall.
 	for _, tc := range []struct{ in, want string }{
 		{"`abc", "◆▒␉␌"},
 		{"defg", "␍␊°±"},

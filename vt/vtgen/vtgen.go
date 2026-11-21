@@ -43,12 +43,6 @@ type Seq struct {
 	Cols, Rows int
 }
 
-// seqJSON is a Seq as a pinned script stores it. encoding/json writes each
-// byte of a string that is not UTF-8 as U+FFFD, and a script is full of such
-// bytes: eight-bit controls, overlong and CESU-8 encodings, lone continuation
-// bytes. A step carrying one is stored in BytesQuoted instead, as a Go string
-// literal without its quotes, so reading the file back gives the same bytes.
-// A step of valid UTF-8 keeps the plain Bytes field, which reads better.
 type seqJSON struct {
 	Kind        string
 	Bytes       string
@@ -148,7 +142,6 @@ func (s Script) String() string {
 	return b.String()
 }
 
-// quote renders bytes with escapes a reader can paste into a shell.
 func quote(s string) string {
 	if s == "" {
 		return "-"
@@ -157,19 +150,12 @@ func quote(s string) string {
 	return strings.ReplaceAll(q[1:len(q)-1], `\x1b`, `\e`)
 }
 
-// source is where the randomness comes from. Two implementations feed the same
-// generator: a seeded PRNG for a local sweep, and a byte reader so that a
-// `go test -fuzz` corpus entry always decodes to the same script and a
-// coverage-guided mutation of the bytes is a mutation of the script.
 type source interface{ next() uint64 }
 
 type prngSource struct{ r *rand.Rand }
 
 func (p prngSource) next() uint64 { return p.r.Uint64() }
 
-// byteSource reads eight bytes at a time and falls through to a PRNG seeded
-// from the input once the input is spent, so a short corpus entry still decodes
-// to a long run while the mutator keeps control of the prefix.
 type byteSource struct {
 	b    []byte
 	i    int
@@ -201,10 +187,6 @@ func (s *byteSource) next() uint64 {
 type Gen struct {
 	src source
 
-	// cols and rows track the size the generator last asked for, so that the
-	// parameters it picks are sometimes exactly wrong for the current screen
-	// rather than uniformly random. A region sized for the previous screen is
-	// the shape that has actually crashed terminals.
 	cols, rows int
 }
 
@@ -237,9 +219,6 @@ func (g *Gen) Script(n int) Script {
 	return out
 }
 
-// kinds are drawn with these weights. Text and CSI carry most of it because
-// that is what a program emits most of; DCS and APC are rarer but each one
-// exercises a whole separate parser state, so they are not left to chance.
 var kindWeights = []struct {
 	kind string
 	w    int
@@ -271,10 +250,6 @@ var kindWeightSum = func() int {
 // Next draws one step.
 func (g *Gen) Next() Seq {
 	seq := g.draw()
-	// A guest on an eight-bit channel introduces a sequence with one C1 byte
-	// rather than with ESC and a second byte. It means the same thing and it
-	// enters the parser through a different door, so an emulator can handle
-	// every seven-bit form and still drop every eight-bit one.
 	if g.u(20) == 0 {
 		if rewritten, ok := eightBit(seq); ok {
 			return rewritten
@@ -294,10 +269,6 @@ func (g *Gen) draw() Seq {
 	return g.text()
 }
 
-// eightBit rewrites a seven-bit introducer to the single C1 byte that means the
-// same thing, and the ST that closes a string with it. It reports whether it
-// found anything to rewrite, so a step with no introducer is left alone rather
-// than relabelled as something it is not.
 func eightBit(seq Seq) (Seq, bool) {
 	var b string
 	switch {
@@ -354,24 +325,15 @@ func (g *Gen) of(kind string) Seq {
 	return g.text()
 }
 
-// param draws a parameter value from a distribution weighted to the values that
-// have broken terminals rather than uniformly over the integers. A uniform draw
-// is almost always a number no code path treats specially.
-//
-// The empty return is a parameter the guest omitted, which is its own case:
-// omitted takes the default while an explicit zero often does not.
 func (g *Gen) param() string {
 	switch g.u(100) {
 	case 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11:
-		return "" // omitted
+		return ""
 	case 12, 13, 14, 15, 16, 17, 18, 19:
 		return "0"
 	case 20, 21, 22, 23:
 		return "1"
 	case 24, 25, 26:
-		// Exactly the current screen, and exactly one past it. A region or an
-		// address that fits the screen the guest thinks it has is the shape
-		// that survives a resize and then indexes off the end.
 		return strconv.Itoa(g.rows)
 	case 27, 28:
 		return strconv.Itoa(g.rows + 1)
@@ -394,9 +356,6 @@ func (g *Gen) param() string {
 	}
 }
 
-// params builds a parameter list. It sometimes uses a colon rather than a
-// semicolon, which is the separator SGR subparameters use and which every other
-// sequence has to survive seeing.
 func (g *Gen) params(maxN int) string {
 	n := g.u(maxN + 1)
 	if n == 0 {
@@ -412,16 +371,11 @@ func (g *Gen) params(maxN int) string {
 	}
 	s := strings.Join(parts, sep)
 	if g.u(24) == 0 {
-		// A trailing separator leaves an empty final parameter, which is a
-		// different thing from having one fewer.
 		s += sep
 	}
 	return s
 }
 
-// csiFinals are the final bytes worth spending draws on, paired with the name a
-// person would use. Reports are included: they write a reply into a bounded
-// pipe, and a run that fills that pipe is its own failure mode.
 var csiFinals = []struct {
 	final byte
 	name  string
@@ -483,13 +437,10 @@ func (g *Gen) csi() Seq {
 
 	bytes := "\x1b[" + prefix + p + inter + string(f.final)
 
-	// One in a while the sequence is cut off part-way, which leaves the parser
-	// in the middle of a state with the next sequence arriving behind it.
 	if g.u(30) == 0 {
 		bytes = "\x1b[" + prefix + p
 		return Seq{Kind: "csi", Bytes: bytes, Desc: "truncated CSI, no final byte"}
 	}
-	// And once in a while an abort lands inside it.
 	if g.u(40) == 0 {
 		bytes = "\x1b[" + prefix + p + "\x18" + string(f.final)
 		return Seq{Kind: "csi", Bytes: bytes, Desc: "CSI aborted by CAN, then " + string(f.final)}
@@ -515,7 +466,6 @@ func describeParams(prefix, p, inter string) string {
 	return " (" + strings.Join(parts, ", ") + ")"
 }
 
-// sgrPieces are the attribute codes, spelled out so a script says what it did.
 var sgrPieces = []struct {
 	body string
 	name string
@@ -577,7 +527,6 @@ func (g *Gen) sgr() Seq {
 	}
 }
 
-// modes worth toggling, with the number a person would recognise them by.
 var modes = []struct {
 	n    string
 	name string
@@ -602,9 +551,6 @@ var modes = []struct {
 	{"2004", "bracketed paste"},
 	{"1004", "focus reporting"},
 	{"2026", "synchronised output"},
-	// Grapheme clustering changes how wide a cluster is, so an emulator that
-	// honours it and one that does not lay the same text out differently. The
-	// ghostty differential harness turned that into its loudest finding.
 	{"2027", "grapheme clustering"},
 	{"2048", "in-band resize reports"},
 	{"9999", "a private mode nobody defines"},
@@ -621,8 +567,6 @@ func (g *Gen) mode() Seq {
 	}
 	private := "?"
 	if g.u(16) == 0 {
-		// The same numbers without the private marker are ANSI modes, a
-		// different table entirely, and a guest does emit them by mistake.
 		private = ""
 	}
 	return Seq{
@@ -701,8 +645,6 @@ func (g *Gen) esc() Seq {
 }
 
 func (g *Gen) osc() Seq {
-	// The terminator is its own axis: BEL and ST both end an OSC, and a string
-	// that never ends is what a truncated write looks like.
 	term, termName := "\x07", "BEL"
 	switch g.u(10) {
 	case 0, 1, 2, 3:
@@ -720,9 +662,6 @@ func (g *Gen) osc() Seq {
 }
 
 func (g *Gen) oscBody() (string, string) {
-	// One draw in three goes to the families the first table below does not
-	// reach: shell integration, text sizing, the colour resets and the
-	// pointer shape.
 	if g.u(3) == 0 {
 		return g.oscMore()
 	}
@@ -762,10 +701,6 @@ func (g *Gen) oscBody() (string, string) {
 	}
 }
 
-// oscMore draws the OSC families added after the first table: OSC 133 shell
-// integration, which the scrollback browser and the agent state read; OSC 66
-// text sizing, which changes how many cells a run takes; the colour resets;
-// OSC 22 pointer shape; and OSC 1337 SetUserVar.
 func (g *Gen) oscMore() (string, string) {
 	switch g.u(10) {
 	case 0:
@@ -815,10 +750,6 @@ var base64ish = []string{
 }
 
 func (g *Gen) dcs() Seq {
-	// The two multiplexer passthrough wrappings are the ones with a rule that
-	// is easy to get backwards: screen takes the inner sequence as-is, tmux
-	// requires every inner ESC to be doubled. A terminal that treats them the
-	// same corrupts one of them.
 	if g.u(4) == 0 {
 		return g.sixel()
 	}
@@ -875,9 +806,6 @@ func (g *Gen) dcs() Seq {
 	}
 }
 
-// sixel draws a sixel image with the parts a real encoder writes: raster
-// attributes declaring a size, colour registers in both colour spaces,
-// repeats, graphics carriage returns and new lines.
 func (g *Gen) sixel() Seq {
 	var b strings.Builder
 	b.WriteString("\x1bP")
@@ -937,11 +865,6 @@ var passthroughInner = []string{
 }
 
 func (g *Gen) apc() Seq {
-	// Half the draws go to the kitty graphics shapes a real sender produces:
-	// a transmission whose payload is exactly the size it declares, sent
-	// whole or in chunks, a placement of an image transmitted earlier, the
-	// delete specifiers, and the Unicode placeholder cells a virtual
-	// placement is drawn with. The other half are the malformed shapes below.
 	if g.u(2) == 0 {
 		return g.kitty()
 	}
@@ -973,13 +896,9 @@ func (g *Gen) apc() Seq {
 	}
 }
 
-// kittyB64 is standard base64 of n bytes of a fixed pattern, padded or not.
-// The generator carries no encoder of its own: the pattern repeats every three
-// bytes, so its encoding repeats every four characters, and only the tail
-// needs spelling out.
 func kittyB64(n int, pad bool) string {
 	var b strings.Builder
-	b.WriteString(strings.Repeat("AQID", n/3)) // 0x01 0x02 0x03
+	b.WriteString(strings.Repeat("AQID", n/3))
 	switch n % 3 {
 	case 1:
 		b.WriteString("AQ")
@@ -995,18 +914,14 @@ func kittyB64(n int, pad bool) string {
 	return b.String()
 }
 
-// kittyPlaceholderMarks are the first few row and column diacritics of kitty's
-// Unicode placeholder table, enough to name small grids.
 var kittyPlaceholderMarks = []string{"̅", "̍", "̎", "̐", "̒", "̽"}
 
-// kitty draws one kitty graphics step from the shapes real senders produce.
 func (g *Gen) kitty() Seq {
 	var c compose
 	id := strconv.Itoa(1 + g.u(4))
 	w, h := 1+g.u(8), 1+g.u(8)
 	switch g.u(8) {
 	case 0, 1:
-		// One whole transmission, sized to what it declares.
 		f, bpp := "24", 3
 		if g.u(2) == 0 {
 			f, bpp = "32", 4
@@ -1015,8 +930,6 @@ func (g *Gen) kitty() Seq {
 		c.add("\x1b_Ga="+action+",f="+f+",s="+strconv.Itoa(w)+",v="+strconv.Itoa(h)+",i="+id+",q="+g.pick([]string{"0", "1", "2"})+
 			";"+kittyB64(w*h*bpp, g.u(2) == 0)+"\x1b\\", "kitty graphics, transmit image "+id+" whole")
 	case 2:
-		// The same, in chunks: every chunk but the last is a multiple of
-		// four characters and carries m=1.
 		payload := kittyB64(w*h*3, false)
 		first := true
 		for len(payload) > 0 {
@@ -1050,9 +963,6 @@ func (g *Gen) kitty() Seq {
 	case 5:
 		c.add("\x1b_Ga=q,i="+id+",s=1,v=1,f=24;"+kittyB64(3, true)+"\x1b\\", "kitty graphics query")
 	case 6:
-		// A virtual placement and the placeholder cells that show it: the
-		// image id rides in the foreground colour and each cell names its
-		// row and column with diacritics.
 		c.add("\x1b_Ga=p,U=1,i="+id+",c=2,r=2\x1b\\", "kitty graphics virtual placement")
 		c.add("\x1b[38;5;"+id+"m", "SGR image id "+id+" in the foreground")
 		cells := 1 + g.u(4)
@@ -1071,8 +981,6 @@ func (g *Gen) kitty() Seq {
 		c.add(run.String(), "kitty unicode placeholder cells")
 		c.add("\x1b[39m", "SGR default foreground")
 	default:
-		// File and shared-memory media name a path the emulator must not
-		// read. None of these exist.
 		t := g.pick([]string{"f", "t", "s"})
 		c.add("\x1b_Ga=T,t="+t+",f=100,i="+id+";"+g.pick([]string{"L25vbmV4aXN0ZW50", "L3RtcC90dWlvcy1mdXp6LW5vbmU=", ""})+"\x1b\\",
 			"kitty graphics transmit from medium "+t)
@@ -1080,10 +988,6 @@ func (g *Gen) kitty() Seq {
 	return c.seq("apc")
 }
 
-// kbd draws the sequences that change how keys, the cursor and reports behave:
-// the kitty keyboard stack, modifyOtherKeys, the cursor style, and the mode
-// and version reports. They carry state a resize or a screen switch has to
-// keep, and each report writes into the response pipe.
 func (g *Gen) kbd() Seq {
 	switch g.u(10) {
 	case 0:
@@ -1116,10 +1020,6 @@ func (g *Gen) kbd() Seq {
 	}
 }
 
-// shown names a single parameter for a description, keeping an omitted one
-// visible. An omitted parameter takes the default where an explicit zero often
-// does not, so a report that renders both as nothing hides the difference that
-// mattered.
 func shown(p string) string {
 	if p == "" {
 		return "with the parameter omitted"
@@ -1127,7 +1027,6 @@ func shown(p string) string {
 	return "with parameter " + p
 }
 
-// pair names a two-parameter value the way a reader would say it back.
 func pair(a, b string) string {
 	name := func(s string) string {
 		if s == "" {
@@ -1138,9 +1037,6 @@ func pair(a, b string) string {
 	return name(a) + " and " + name(b)
 }
 
-// compose builds one step out of several sequences that only mean anything
-// together. Drawing them one at a time would reach the combination roughly
-// never, and the shrinker still works because it reduces whole steps.
 type compose struct {
 	bytes []string
 	names []string
@@ -1155,11 +1051,6 @@ func (c *compose) seq(kind string) Seq {
 	return Seq{Kind: kind, Bytes: strings.Join(c.bytes, ""), Desc: strings.Join(c.names, ", then ")}
 }
 
-// margin sets up left and right margins as a whole rather than one sequence at
-// a time. The failure being hunted needs several things true at once: DECLRMM
-// enabled, both margin pairs holding values sized for a screen that is about to
-// be resized, and a cursor addressed under origin mode so its coordinates are
-// read against margins that may no longer fit.
 func (g *Gen) margin() Seq {
 	var c compose
 
@@ -1185,27 +1076,15 @@ func (g *Gen) margin() Seq {
 		c.add("\x1b8", "DECRC restore cursor")
 	}
 	if g.u(5) == 0 {
-		// Turning the mode off while the margins it gated are still set leaves
-		// state a terminal has to decide about, and forgetting to clear it is
-		// how a margin outlives the mode that allowed it.
 		c.add("\x1b[?69l", "reset DECLRMM with the margins still set")
 	}
 	return c.seq("margin")
 }
 
-// eraseParams are the erase selectors worth drawing: the three values ED and EL
-// define, the scrollback one only some terminals have, and values past the end
-// of the table.
 var eraseParams = []string{"", "0", "1", "2", "3", "4", "9"}
 
-// decscaParams are the protection selectors, again with values nothing defines.
 var decscaParams = []string{"", "0", "1", "2", "3", "255"}
 
-// erase draws the erase family together with the protection attribute that
-// changes what erasing means and the resets meant to clear it. DECSCA on its
-// own does nothing visible. The case that breaks is a selective erase running
-// over cells marked protected, and then a reset that has to drop both the
-// protection on those cells and the attribute still being applied to new ones.
 func (g *Gen) erase() Seq {
 	var c compose
 
@@ -1235,12 +1114,8 @@ func (g *Gen) erase() Seq {
 	return c.seq("erase")
 }
 
-// tbcParams are the tab-clear selectors, including two nothing defines.
 var tbcParams = []string{"", "0", "2", "3", "5", "9"}
 
-// tabs walks the tab-stop table, which nothing else here touches. The table is
-// state a resize has to carry, and a stop left past the new width after a
-// shrink is what the next tab indexes with.
 func (g *Gen) tabs() Seq {
 	var c compose
 
@@ -1265,8 +1140,6 @@ func (g *Gen) tabs() Seq {
 		p := g.param()
 		c.add("\x1b["+p+"W", "tab-stop set "+shown(p))
 	default:
-		// Setting a stop and then jumping to it is the pair that says whether
-		// the table survived what came between them.
 		p := g.param()
 		c.add("\x1b["+p+"G", "CHA column address "+shown(p))
 		c.add("\x1bH", "HTS set a tab stop there")
@@ -1275,8 +1148,6 @@ func (g *Gen) tabs() Seq {
 	return c.seq("tabs")
 }
 
-// texts are drawn from the classes that decide layout: a width, a cluster
-// boundary, or an encoding the decoder has to reject.
 var texts = []struct {
 	s    string
 	name string
@@ -1336,9 +1207,6 @@ func (g *Gen) text() Seq {
 	return Seq{Kind: "text", Bytes: s, Desc: desc}
 }
 
-// sizes are the screens worth resizing to. The degenerate ones are included on
-// purpose: a zero or one column screen is what a pane gets when a layout is
-// squeezed, and it is where the arithmetic that assumes room stops holding.
 var sizes = [][2]int{
 	{80, 24}, {80, 10}, {120, 40}, {40, 12}, {20, 5},
 	{10, 4}, {6, 4}, {5, 3}, {3, 2}, {2, 2}, {1, 1}, {1, 24}, {80, 1},

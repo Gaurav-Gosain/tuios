@@ -6,12 +6,6 @@ import (
 	"sync"
 )
 
-// bufPipe is an in-memory pipe whose Write never blocks (it appends to an
-// internal buffer) and whose Read blocks until data is available or the pipe is
-// closed. The emulator writes query responses (mode reports, mouse, colors,
-// in-band resize) from inside Terminal.Write, which runs under the window IO
-// write lock; a blocking pipe there deadlocks the PTY reader against the
-// response drainer, so these writes must never block.
 type bufPipe struct {
 	mu     sync.Mutex
 	cond   *sync.Cond
@@ -20,16 +14,13 @@ type bufPipe struct {
 	notify func()
 }
 
-// setNotify sets the function Write calls after it queues data. nil clears it.
 func (p *bufPipe) setNotify(fn func()) {
 	p.mu.Lock()
 	p.notify = fn
 	p.mu.Unlock()
 }
 
-// maxBufPipeBytes bounds the buffer so a guest that spams query-generating
-// sequences while the drainer is stalled cannot grow it without limit.
-const maxBufPipeBytes = 1 << 22 // 4 MiB
+const maxBufPipeBytes = 1 << 22
 
 func newBufPipe() *bufPipe {
 	p := &bufPipe{}
@@ -37,9 +28,6 @@ func newBufPipe() *bufPipe {
 	return p
 }
 
-// Write appends data and never blocks. It drops the write if the pipe is closed
-// or the buffer is already at the cap (the drainer is not keeping up). The
-// notify function runs after the lock is released, so it may drain the pipe.
 func (p *bufPipe) Write(b []byte) (int, error) {
 	p.mu.Lock()
 	if p.closed {
@@ -60,8 +48,6 @@ func (p *bufPipe) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-// Read blocks until data is available or the pipe is closed, returning io.EOF
-// only once the buffer is drained and closed.
 func (p *bufPipe) Read(b []byte) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -74,9 +60,6 @@ func (p *bufPipe) Read(b []byte) (int, error) {
 	return p.buf.Read(b) //nolint:wrapcheck
 }
 
-// take removes and returns everything buffered without blocking, or nil when
-// the buffer is empty, so a caller that drains after every write allocates
-// nothing on the common path where the write produced no reply.
 func (p *bufPipe) take() []byte {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -88,7 +71,6 @@ func (p *bufPipe) take() []byte {
 	return out
 }
 
-// Close unblocks any waiting Read.
 func (p *bufPipe) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()

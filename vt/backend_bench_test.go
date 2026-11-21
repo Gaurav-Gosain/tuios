@@ -1,15 +1,5 @@
 package vt
 
-// Backend throughput benchmarks. They construct the emulator through vt.New,
-// so the same benchmark measures whichever backend the build selected:
-//
-//	go test ./vt/ -bench BenchmarkBackend                 # pure Go
-//	go test -tags ghostty ./vt/ -bench BenchmarkBackend   # libghostty
-//
-// The streams are synthesized, not stored: a DOOM-fire style full-screen
-// truecolor repaint (the maintainer's own stress test), a plain log scroll,
-// and an editor-style partial redraw.
-
 import (
 	"fmt"
 	"math/rand"
@@ -61,8 +51,6 @@ func synthTUI(cols, rows, frames int) []byte {
 	return []byte(b.String())
 }
 
-// benchBackendStream measures Write throughput in PTY-sized chunks, plus a
-// per-frame read of every cell the way a renderer consumes the grid.
 func benchBackendStream(b *testing.B, cols, rows int, data []byte, readEvery int) {
 	term := New(cols, rows)
 	defer func() { _ = term.Close() }()
@@ -117,10 +105,6 @@ func BenchmarkBackendTUI(b *testing.B) {
 	benchBackendStream(b, 120, 40, data, 0)
 }
 
-// synthApt is apt's progress output: a scroll region that stops above the
-// last row, and on every line a save of the cursor, a redraw of the status
-// line under the region, and a restore. A backend that pays for each save
-// and restore pays it once a line.
 func synthApt(rows, lines int) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\x1b[1;%dr", rows-1)

@@ -33,28 +33,24 @@ func TestGetModesCapturesAllStickyDECModes(t *testing.T) {
 	src := NewEmulator(80, 24)
 	defer func() { _ = src.Close() }()
 
-	// The modes a browser-class guest enables once at startup, plus the other
-	// sticky input/rendering modes.
 	if _, err := src.Write([]byte("\x1b[?1h\x1b[?1003h\x1b[?1006h\x1b[?1016h\x1b[?1004h\x1b[?2004h")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 
 	modes := src.GetModes()
 	for _, m := range []ansi.DECMode{
-		ansi.ModeCursorKeys,       // ?1
-		ansi.ModeMouseAnyEvent,    // ?1003
-		ansi.ModeMouseExtSgr,      // ?1006
-		ansi.ModeMouseExtSgrPixel, // ?1016
-		ansi.ModeFocusEvent,       // ?1004
-		ansi.ModeBracketedPaste,   // ?2004
+		ansi.ModeCursorKeys,
+		ansi.ModeMouseAnyEvent,
+		ansi.ModeMouseExtSgr,
+		ansi.ModeMouseExtSgrPixel,
+		ansi.ModeFocusEvent,
+		ansi.ModeBracketedPaste,
 	} {
 		if !modes[int(m)] {
 			t.Errorf("GetModes() lost DEC mode ?%d", int(m))
 		}
 	}
 
-	// Round trip into a fresh emulator, the way a reattaching client rebuilds
-	// its per-window emulator from the daemon's snapshot.
 	dst := NewEmulator(80, 24)
 	defer func() { _ = dst.Close() }()
 	dst.RestoreModes(modes)
@@ -68,8 +64,6 @@ func TestGetModesCapturesAllStickyDECModes(t *testing.T) {
 	if !dst.ApplicationCursorKeys() {
 		t.Fatal("restored emulator lost DECCKM")
 	}
-	// SGR-pixel drives the mouse encoder directly: with 1016 restored, a
-	// report must carry pixel coordinates, not cell indices.
 	dst.SetCellSize(10, 20)
 	report := dst.EncodeMouseEvent(MouseClick{Button: MouseLeft, X: 4, Y: 2})
 	if report != "\x1b[<0;46;51M" {
@@ -83,7 +77,6 @@ func TestKittyKeyboardStackRoundTrip(t *testing.T) {
 	src := NewEmulator(80, 24)
 	defer func() { _ = src.Close() }()
 
-	// Push disambiguate, then push the full flag set awrit uses.
 	if _, err := src.Write([]byte("\x1b[>1u\x1b[>31u")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -100,7 +93,6 @@ func TestKittyKeyboardStackRoundTrip(t *testing.T) {
 	if got := dst.KittyKeyboardFlags(); got != 31 {
 		t.Fatalf("restored flags = %d, want 31", got)
 	}
-	// The stack itself must survive so a later pop lands on the pushed entry.
 	if _, err := dst.Write([]byte("\x1b[<1u")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -108,8 +100,6 @@ func TestKittyKeyboardStackRoundTrip(t *testing.T) {
 		t.Fatalf("flags after pop = %d, want 1 (stack depth lost in round trip)", got)
 	}
 
-	// An empty snapshot (state from an older daemon) must leave the default
-	// state untouched rather than clearing the stack invariant.
 	fresh := NewEmulator(80, 24)
 	defer func() { _ = fresh.Close() }()
 	fresh.RestoreKittyKeyboardState(nil)

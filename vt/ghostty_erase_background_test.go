@@ -54,8 +54,6 @@ func TestGhosttyDiffErasedCellsKeepThePenBackground(t *testing.T) {
 		}
 	}
 
-	// The fast path has to be the one that shipped: a library whose manifest
-	// stopped naming the colour fields would drop every cell to cgo getters.
 	t.Run("the decoder reads the manifest", func(t *testing.T) {
 		g := NewGhosttyTerminal(20, 6)
 		defer func() { _ = g.Close() }()
@@ -74,8 +72,6 @@ func TestGhosttyDiffErasedCellsKeepThePenBackground(t *testing.T) {
 		}
 	})
 
-	// A palette slot the guest set with OSC 4 has to reach a cell the same way
-	// on an erase as on a write.
 	t.Run("osc 4", func(t *testing.T) {
 		g := NewGhosttyTerminal(20, 6)
 		defer func() { _ = g.Close() }()
@@ -91,7 +87,6 @@ func TestGhosttyDiffErasedCellsKeepThePenBackground(t *testing.T) {
 		}
 	})
 
-	// compareScrollback reads text only, so this reads the cells.
 	t.Run("history", func(t *testing.T) {
 		p := newDiffPair(t, 20, 4)
 		p.write(t, []byte("\x1b[48;2;34;36;54m\x1b[2J\x1b[H\x1b[48;5;200m\x1b[K\r\n\x1b[44m\x1b[K\r\n\r\n\r\n\r\n\r\n\x1b[0m"))

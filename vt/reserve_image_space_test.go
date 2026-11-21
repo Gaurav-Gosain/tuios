@@ -25,15 +25,12 @@ func TestPrintingScrollStillPaintsPenBackground(t *testing.T) {
 	if _, err := emu.WriteString("\x1b[41m"); err != nil {
 		t.Fatalf("set pen: %v", err)
 	}
-	// Print past the bottom so the guest's own output scrolls the screen.
 	for range rows * 2 {
 		if _, err := emu.WriteString("x\r\n"); err != nil {
 			t.Fatalf("print: %v", err)
 		}
 	}
 
-	// The column past the printed text on the last written row was exposed by
-	// the guest's scroll and must carry the guest's background.
 	c := emu.CellAt(cols-1, 0)
 	if c == nil || c.Style.Bg == nil {
 		t.Fatalf("guest scroll lost its background-colour erase at (%d,0): %#v", cols-1, c)
@@ -48,9 +45,9 @@ func TestSixelReservationLeavesBlankRows(t *testing.T) {
 		rows       = 8
 		cellW      = 10
 		cellH      = 20
-		imagePxH   = 120 // six rows at cellH
+		imagePxH   = 120
 		imageRows  = imagePxH / cellH
-		scrolledIn = imageRows - 1 // the cursor is already on the last row
+		scrolledIn = imageRows - 1
 	)
 
 	emu := vt.NewEmulator(cols, rows)
@@ -65,7 +62,6 @@ func TestSixelReservationLeavesBlankRows(t *testing.T) {
 		}
 	}
 
-	// A sixel 40px wide and 120px tall, so it needs imageRows rows.
 	if _, err := emu.WriteString("\x1bPq\"1;1;40;120#0;2;0;0;100#0~~~~\x1b\\"); err != nil {
 		t.Fatalf("sixel: %v", err)
 	}

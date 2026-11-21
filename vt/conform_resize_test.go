@@ -1,17 +1,5 @@
 package vt_test
 
-// Conformance for what a resize does to a double-width character it cuts.
-//
-// wide_cell_edge_test.go pins the visible screen. The same cut can land on a
-// row that has already scrolled into the scrollback, on the alternate screen
-// while the guest is not looking at the primary, and on a grapheme cluster
-// rather than a bare wide rune. Each of those is read by something that walks
-// cells and assumes a row is worth no more display columns than the screen has,
-// so a lead half left standing anywhere draws over the pane next door.
-//
-// Sizes here are small on purpose. A pane in a tiled layout is narrow, and the
-// squeeze that produces a cut is a layout change rather than a window resize.
-
 import (
 	"strings"
 	"testing"
@@ -21,8 +9,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// rowDisplayWidth is what a reader that walks the row and draws each cell whole
-// would produce.
 func rowDisplayWidth(cells func(x int) *uv.Cell, width int) int {
 	n := 0
 	for x := range width {
@@ -59,7 +45,6 @@ func TestConform_ResizeCuttingAWideCharacter(t *testing.T) {
 				t.Errorf("after narrowing %d to %d the row is worth %d display columns on a %d-column screen",
 					tc.from, tc.to, got, emu.Width())
 			}
-			// Widening again must not resurrect the half that was cut.
 			emu.Resize(tc.from, 3)
 			got = rowDisplayWidth(func(x int) *uv.Cell { return emu.CellAt(x, 0) }, emu.Width())
 			if got > emu.Width() {
@@ -80,8 +65,6 @@ func TestConform_ResizeCuttingAWideCharacter(t *testing.T) {
 // as an emoji that became a space after a client attached at another size.
 func TestConform_ResizeCuttingAWideCharacterInScrollback(t *testing.T) {
 	emu := vt.NewEmulator(6, 2)
-	// Eight rows of wide characters through a two-row screen, so six of them
-	// end up in the scrollback with a lead in the last column.
 	if _, err := emu.WriteString(strings.Repeat("世世世\r\n", 8)); err != nil {
 		t.Fatalf("write: %v", err)
 	}

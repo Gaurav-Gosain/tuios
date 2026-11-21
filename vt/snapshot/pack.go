@@ -5,46 +5,12 @@ import (
 	"fmt"
 )
 
-// The packed form of a snapshot's cells.
-//
-// A State carries its screen and history as [][]CellState, and gob
-// writes every cell as a struct: a field tag, a length and the bytes for the
-// content, a tag and a value for the width, and the same again for each colour
-// set, then a terminator. That is about thirteen bytes for a plain letter, so
-// a 207x55 screen is 147 KB and a thousand rows of history is 2.9 MB, per pane,
-// and the client decodes every one of those structs with reflection on its UI
-// goroutine during a workspace switch.
-//
-// The packed form is the same cells with the repetition taken out. Styles go in
-// a table once and each cell names its index, cells in one style are run
-// together, a plain letter is two bytes, and the blank tail of a row is left
-// off. The cells are the same on both sides: Pack and Unpack round trip
-// through the [][]CellState form, and Apply packs a snapshot that
-// arrived as cells before it reads it, so every fidelity test that covers the
-// cell form covers this one too.
-//
-// It is negotiated per request, with no protocol bump. A client that wants it
-// asks (GetTerminalStatePayload.Packed); a daemon that predates the field does
-// not see the request and answers with cells, which the client still reads;
-// and a client that predates it never asks, so a newer daemon answers it with
-// cells too.
-//
-// The client keeps the reply packed. Apply, the only reader of
-// the cells in production, walks the packed rows straight into the emulator:
-// unpacking first built every cell as a CellState and then turned each one
-// back into an emulator cell, which was most of what a restore allocated. A
-// reader that wants the cells, such as a test oracle, calls Unpack.
-
 // PackedFormatVersion names the packed layout below. Bump it with any change
 // to what pack writes or walkPacked reads: saved pane history
 // (scrollback_persist.go) stores packed rows on disk and takes its version
 // from this one.
 const PackedFormatVersion = 1
 
-// isBlank reports whether a cell is what a never-written cell looks like,
-// which is what a row's tail is trimmed down to. A wide rune's continuation is
-// empty too, but it is not blank: writing a blank over it would empty the
-// rune it belongs to, so a tail stops short of one.
 func (c *CellState) isBlank() bool {
 	return c.Content == " " && c.Width == 1 && c.StyleState == StyleState{}
 }
@@ -108,16 +74,11 @@ func (st *State) CheckPacked() error {
 	return nil
 }
 
-// rowPacker builds the style table and the blobs of one snapshot. The table is
-// shared by every grid of the snapshot and grows in the order styles are first
-// seen, so two packers fed the same rows in the same order give the same bytes.
 type rowPacker struct {
 	index  map[StyleState]uint32
 	styles []StyleState
 }
 
-// newRowPacker returns a packer whose style table holds the default style at
-// index zero, which is what a packed snapshot is recognised by.
 func newRowPacker() *rowPacker {
 	return &rowPacker{index: map[StyleState]uint32{{}: 0}, styles: []StyleState{{}}}
 }
@@ -132,14 +93,6 @@ func (p *rowPacker) styleIndex(s StyleState) uint32 {
 	return i
 }
 
-// pack writes rows as:
-//
-//	uvarint rows
-//	per row: uvarint width, uvarint cells kept, then runs until kept is used up
-//	per run: uvarint style index, uvarint run length, then that many cells
-//	per cell: uvarint len(content)<<2 | widthCode, [uvarint width], content
-//
-// widthCode is the cell width for 0, 1 and 2; 3 means the width follows.
 func (p *rowPacker) pack(rows [][]CellState) []byte {
 	if rows == nil {
 		return nil
@@ -151,7 +104,6 @@ func (p *rowPacker) pack(rows [][]CellState) []byte {
 	return b.blob()
 }
 
-// appendRow appends one row to buf in the form pack documents.
 func (p *rowPacker) appendRow(buf []byte, row []CellState) []byte {
 	kept := len(row)
 	for kept > 0 && row[kept-1].isBlank() {
@@ -184,10 +136,6 @@ func (p *rowPacker) appendRow(buf []byte, row []CellState) []byte {
 	return buf
 }
 
-// packedRows builds one blob a row at a time, for a writer that does not hold
-// the rows as [][]CellState. The row count leads the blob but is known only at
-// the end, so the buffer starts with room for the longest varint and the count
-// is written right-aligned into it.
 type packedRows struct {
 	rows int
 	buf  []byte
@@ -211,29 +159,14 @@ func (b *packedRows) blob() []byte {
 	return b.buf[start:]
 }
 
-// packedCell is one cell as the walker hands it out: the content as a
-// substring of the blob, the width, and the index into the style table.
 type packedCell struct {
 	content string
 	width   int
 	style   uint32
 }
 
-// packedBlank is the cell a trimmed row tail stands for, as the walker fills
-// it in.
 var packedBlank = packedCell{content: " ", width: 1}
 
-// walkPacked is the one reader of the packed form. It decodes blob row by row
-// and hands each row to fn at its full width, the trimmed tail refilled with
-// blanks, so a reader writes every row whole into an emulator that may still
-// be showing an older one. The row slice is reused between calls. Cell
-// contents are substrings of one copy of the blob, so a cell costs no
-// allocation of its own.
-//
-// A malformed blob stops at the first bad byte with an error. Rows already
-// handed out stay handed out, which is why the client runs CheckPacked on
-// receipt: a request whose reply does not decode fails whole, before any row
-// of it reaches an emulator.
 func walkPacked(blob []byte, nStyles int, fn func(y int, cells []packedCell) error) error {
 	if blob == nil {
 		return nil
@@ -259,8 +192,6 @@ func walkPacked(blob []byte, nStyles int, fn func(y int, cells []packedCell) err
 		if kept > width {
 			return fmt.Errorf("packed snapshot: row keeps %d cells of %d", kept, width)
 		}
-		// A blank row is two bytes whatever its width, so the width is not
-		// bounded by the blob; it is bounded here instead.
 		if width > 1<<16 {
 			return fmt.Errorf("packed snapshot: row of %d cells", width)
 		}
@@ -315,7 +246,6 @@ func walkPacked(blob []byte, nStyles int, fn func(y int, cells []packedCell) err
 	return nil
 }
 
-// packedRowCount reads how many rows a blob holds without decoding them.
 func packedRowCount(blob []byte) int {
 	if blob == nil {
 		return 0
@@ -327,9 +257,6 @@ func packedRowCount(blob []byte) int {
 	return int(n)
 }
 
-// unpackRows is walkPacked materialised as cells. Cell contents are
-// substrings of one copy of the blob, so a cell costs no allocation of its
-// own beyond the row arrays.
 func unpackRows(blob []byte, styles []StyleState) ([][]CellState, error) {
 	if blob == nil {
 		return nil, nil
@@ -349,7 +276,6 @@ func unpackRows(blob []byte, styles []StyleState) ([][]CellState, error) {
 	return rows, nil
 }
 
-// blobReader reads varints and substrings out of one string.
 type blobReader struct {
 	s   string
 	pos int

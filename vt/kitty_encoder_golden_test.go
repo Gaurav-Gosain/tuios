@@ -78,15 +78,10 @@ func TestEncoderMatchesKitty(t *testing.T) {
 			ev.IsRepeat = parts[2] == "repeat"
 			got = EncodeKeyCSIu(ev, flags)
 			if got == "" {
-				// tuios hands the key to the legacy encoder; kitty's bytes
-				// must then be the legacy ones.
 				got = legacyBytes(ev)
 			}
 		}
 		compared++
-		// kitty leaves the modifier field empty before associated text
-		// (CSI 97;;97u) where tuios writes 1. The protocol reads both the
-		// same, and the panes tuios serves accept either.
 		got = strings.Replace(got, ";1;", ";;", 1)
 		if got != want {
 			t.Errorf("flags %d %s %s: tuios %q, kitty %q", flags, parts[1], parts[2], got, want)
@@ -100,8 +95,6 @@ func TestEncoderMatchesKitty(t *testing.T) {
 	}
 }
 
-// legacyBytes is what the legacy encoder sends for the keys of the golden
-// matrix that EncodeKeyCSIu leaves to it.
 func legacyBytes(ev KeyPressEvent) string {
 	switch ev.Code {
 	case KeyEnter:
@@ -114,7 +107,6 @@ func legacyBytes(ev KeyPressEvent) string {
 	return ev.Text
 }
 
-// pyToGoLiteral turns a Python repr of a str into a Go quoted string.
 func pyToGoLiteral(s string) string {
 	if strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'") {
 		inner := s[1 : len(s)-1]

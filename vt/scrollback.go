@@ -38,130 +38,50 @@ const DefaultScrollbackSize = 10000
 // cache so a render of a scrolled pane, which asks for the same line once
 // per column, decodes each line once.
 type Scrollback struct {
-	// lines is the ring. While the ring is not full it holds only the lines
-	// pushed so far, head is 0 and tail is len(lines); once it holds maxLines
-	// entries a push overwrites the oldest.
-	lines [][]byte
-	// maxLines is the ring's capacity.
-	maxLines int
-	// head is the index of the oldest line.
-	head int
-	// tail is the index the next line lands at.
-	tail int
-	// full is set once tail has caught up with head.
-	full bool
-	// wraps holds, per ring slot, whether the line carried on to the next
-	// one by autowrap. It is indexed like lines and grown with it.
-	// It holds the same rowFlag bits a screen row has.
-	wraps []rowFlag
-	// onTrim is called when the ring overwrites its oldest line. The
-	// argument is the number of lines dropped.
-	onTrim func(int)
-	// holdTrims makes a push count the lines it drops in heldTrims instead
-	// of calling onTrim, for a reflow that reports them itself.
+	lines     [][]byte
+	maxLines  int
+	head      int
+	tail      int
+	full      bool
+	wraps     []rowFlag
+	onTrim    func(int)
 	holdTrims bool
 	heldTrims int
-	// discard drops every line pushed, before it is encoded. See Discard.
-	discard bool
+	discard   bool
 
-	// Intern table for colour values of a type the packer does not know. It
-	// is capped at internCap entries; past the cap a colour is reduced to RGB
-	// rather than the table growing without bound on a guest that
-	// manufactures distinct values. Only colour types no emulator path
-	// produces reach it.
-	//
-	// Grapheme clusters and hyperlinks are written inline in the lines that
-	// use them, so they go when the line does. They used to be interned here
-	// too, in tables nothing pruned: a pane printing a link to a different
-	// file on every line, as agents and compilers do, grew by about 150 bytes
-	// a link for its whole life, whatever the ring had let go of.
 	colors   []color.Color
 	colorIdx map[color.Color]uint32
 
-	// lineLinks is encodeLine's list of the links written so far in the line
-	// it is encoding, so a link the line returns to is written as a
-	// reference instead of again.
 	lineLinks []uv.Link
 
-	// cache holds decoded lines by index for the current generation. Every
-	// mutation bumps gen, which empties it on the next read. It is capped at
-	// cacheCap entries so a walk of the whole ring cannot pin a decoded copy
-	// of it.
-	// cacheMu guards the cache map below. Line() is reachable from capture
-	// paths that hold only terminalMu's read lock, so two captures can decode
-	// and cache at once; without its own lock the map is written by both and
-	// the runtime aborts the whole daemon on the concurrent map access.
-	cacheMu  sync.Mutex
-	cache    map[int]uv.Line
-	cacheGen uint64
-	// cacheCells is the number of cells the cache holds, which cacheCellCap
-	// bounds alongside the line count.
+	cacheMu    sync.Mutex
+	cache      map[int]uv.Line
+	cacheGen   uint64
 	cacheCells int
 	gen        uint64
 }
 
-// internCap bounds the colour intern table. Past it, the packer degrades the
-// colour instead of adding an entry.
 const internCap = 1 << 20
 
-// maxStoredLinkURL and maxStoredLinkParams bound a hyperlink the ring keeps,
-// at the limits VTE applies to OSC 8. A line writes each link it uses once,
-// so without a bound a guest could leave one link of several megabytes open
-// and have every line it prints afterwards store a copy. A longer link
-// scrolls into the ring without its link.
-//
-// The emulator keeps an address percent-encoded (see LinkURI), which makes a
-// CJK character nine bytes where it was three. The bound is on the address
-// the program wrote, so the stored form is measured decoded.
 const (
 	maxStoredLinkURL    = 2083
 	maxStoredLinkParams = 256
 )
 
-// cacheCap bounds the decoded-line cache: a few screens of rows.
 const cacheCap = 256
 
-// cacheCellCap bounds the decoded-line cache by its cells as well, since a
-// cell is 112 bytes and a line is as many cells as the pane was wide: 256
-// lines of a 207-column pane are 5.9 MB. 1<<16 cells, about 7 MB, is more than
-// the scrolled screen of any pane holds, which is what the cache is for, while
-// a narrow pane keeps the full count of lines.
 const cacheCellCap = 1 << 16
 
-// sbLineSlack is the room a line's buffer gets beyond one byte per cell: the
-// width header and a style change or two.
 const sbLineSlack = 16
 
-// Line encoding. A stored line is the line's width as a uvarint, then a
-// token stream. The bytes 0xF8 to 0xFF never start a UTF-8 sequence, so a
-// token that starts with any other byte is a plain cell: one rune of width
-// one, in the current style with the current link. Everything else starts
-// with one of these.
 const (
-	// sbStyle starts a style change: fg, bg and underline colour as uvarints
-	// (see packColor), then the attribute byte and the underline style byte.
-	// It applies to every cell after it.
-	sbStyle = 0xFF
-	// sbLink starts a link change: a uvarint that is 0 for no link, 1 for a
-	// link new to this line, whose URL and params follow as strings (see
-	// appendString), and 2+k for the k-th link new to this line, counting
-	// from zero.
-	sbLink = 0xFE
-	// sbCell starts a cell of some width other than one: the width as a
-	// byte, then the cell's content token.
-	sbCell = 0xFD
-	// sbGrapheme is a content token for a cell that is not one valid rune: a
-	// string (see appendString) follows. At the top level it is a cell of
-	// width one.
+	sbStyle    = 0xFF
+	sbLink     = 0xFE
+	sbCell     = 0xFD
 	sbGrapheme = 0xFC
-	// sbEmpty is the content token for the empty string, which is what a
-	// wide cell's spacer holds. At the top level it is a cell of width one.
-	sbEmpty = 0xFB
+	sbEmpty    = 0xFB
 )
 
-// Colour packing: the low three bits say what the rest holds. Small values
-// take one byte as a uvarint, which is what the tag being in the low bits is
-// for.
 const (
 	colorTagBits = 3
 	colorTagMask = 1<<colorTagBits - 1
@@ -169,15 +89,11 @@ const (
 	colorNil      = 0
 	colorBasic    = 1
 	colorIndexed  = 2
-	colorTrue     = 3 // ansi.RGBColor, 24-bit RGB
-	colorRGB      = 4 // color.RGBA with alpha 255, 24-bit RGB
+	colorTrue     = 3
+	colorRGB      = 4
 	colorInterned = 5
 )
 
-// packedStyle is a uv.Style with its colours packed, so two styles can be
-// compared without touching their colour interfaces. Comparing those with ==
-// panics on a colour of a type that is not comparable, and colorEqual costs
-// six RGBA calls.
 type packedStyle struct {
 	fg, bg, ul uint32
 	attrs      uint8
@@ -215,9 +131,6 @@ func (sb *Scrollback) PushLine(line uv.Line) {
 	sb.push(line[:n], len(line))
 }
 
-// pushTrimmed is PushLine for a grid row whose cells from column ext on are
-// known to be blank, so the search for the trailing blanks starts there
-// instead of at the end of the row.
 func (sb *Scrollback) pushTrimmed(line uv.Line, ext int) {
 	if len(line) == 0 {
 		return
@@ -248,12 +161,8 @@ func (sb *Scrollback) Discard() {
 	sb.discard = true
 }
 
-// push stores cells, the non-blank prefix of a line of the given width, as
-// the newest line.
 func (sb *Scrollback) push(cells uv.Line, width int) {
 	if sb.discard {
-		// A ring that holds nothing drops each line as it lands, and says
-		// so, so the semantic marks move as they would for a full ring.
 		if sb.holdTrims {
 			sb.heldTrims++
 		} else if sb.onTrim != nil {
@@ -261,32 +170,14 @@ func (sb *Scrollback) push(cells uv.Line, width int) {
 		}
 		return
 	}
-	// Once the ring's storage has reached its capacity, every line lands in
-	// a slot in place: the oldest when the ring is full, or one a reflow
-	// gave back with truncate.
 	inPlace := len(sb.lines) == sb.maxLines
 	var buf []byte
 	if inPlace {
 		buf = sb.lines[sb.tail][:0]
 	} else if len(sb.lines) < cap(sb.lines) {
-		// A slot truncate gave back still holds its line's storage.
 		buf = sb.lines[:len(sb.lines)+1][len(sb.lines)][:0]
 	}
-	// A slot in use is kept while it holds the line's cells: the slack is
-	// room a new slot is given, not room an old one must still have.
 	if cap(buf) < len(cells)+sbLineSlack && (cap(buf) == 0 || cap(buf) < len(cells)) {
-		// Sized for a plain line up front, so the common line is one
-		// allocation rather than the run of doublings append would make
-		// from nothing. A styled or non-ASCII line grows past it once.
-		//
-		// During a reflow a slot that held a line before gets room to spare,
-		// because the reflow pushes rows of other widths into the same slots
-		// at each step of a drag. Outside one it does not: in a full ring
-		// every push reuses the slot of the line it evicts, and doubling the
-		// slot whenever the new line is a few bytes longer left most slots of
-		// a busy pane at twice the size of their line, so a flood of log
-		// lines held 1.5 to 1.7 times the heap the same lines needed when
-		// the ring first filled.
 		size := len(cells) + sbLineSlack
 		if cap(buf) > 0 && sb.holdTrims {
 			size = max(size, 2*cap(buf))
@@ -323,17 +214,12 @@ func (sb *Scrollback) push(cells uv.Line, width int) {
 	sb.gen++
 }
 
-// truncate drops the newest lines until n are left. A reflow takes the rows
-// it lays out again this way, and pushes them back at the new width. The
-// storage of a dropped line stays in its slot for the next push to reuse.
 func (sb *Scrollback) truncate(n int) {
 	drop := sb.Len() - max(n, 0)
 	if drop <= 0 {
 		return
 	}
 	if len(sb.lines) < sb.maxLines {
-		// Storage that has not reached capacity holds exactly the lines,
-		// from slot 0, and push appends to it.
 		sb.lines = sb.lines[:len(sb.lines)-drop]
 		sb.wraps = sb.wraps[:len(sb.wraps)-drop]
 		sb.tail = len(sb.lines)
@@ -344,8 +230,6 @@ func (sb *Scrollback) truncate(n int) {
 	sb.gen++
 }
 
-// isBlankCell reports whether c is a plain space: the cell a line's unused
-// tail is made of, which the ring does not store.
 func isBlankCell(c *uv.Cell) bool {
 	return c.Content == " " && c.Width == 1 &&
 		c.Style.Fg == nil && c.Style.Bg == nil && c.Style.UnderlineColor == nil &&
@@ -353,9 +237,6 @@ func isBlankCell(c *uv.Cell) bool {
 		c.Link.URL == "" && c.Link.Params == ""
 }
 
-// isPlainASCIICell reports whether c is one narrow ASCII character with no
-// style and no link: a cell whose encoding, with no style or link in force, is
-// its one content byte.
 func isPlainASCIICell(c *uv.Cell) bool {
 	return c.Width == 1 && len(c.Content) == 1 && c.Content[0] < utf8.RuneSelf &&
 		c.Style.Fg == nil && c.Style.Bg == nil && c.Style.UnderlineColor == nil &&
@@ -363,8 +244,6 @@ func isPlainASCIICell(c *uv.Cell) bool {
 		c.Link.URL == "" && c.Link.Params == ""
 }
 
-// encodeLine appends the encoding of cells, a line of the given width whose
-// blank tail has been trimmed, to buf.
 func (sb *Scrollback) encodeLine(buf []byte, cells uv.Line, width int) []byte {
 	buf = binary.AppendUvarint(buf, uint64(width))
 	var style packedStyle
@@ -373,11 +252,6 @@ func (sb *Scrollback) encodeLine(buf []byte, cells uv.Line, width int) []byte {
 	sb.lineLinks = sb.lineLinks[:0]
 	for i := 0; i < len(cells); i++ {
 		if style == (packedStyle{}) && link == (uv.Link{}) {
-			// Plain letters while no style or link is in force: the path
-			// below would write no style, link or width token and then the
-			// one byte, so write the bytes. Most of a log line is this.
-			// The run is taken in one loop so the style and link in force
-			// are tested once per run and not once per cell.
 			for i < len(cells) && isPlainASCIICell(&cells[i]) {
 				buf = append(buf, cells[i].Content[0])
 				i++
@@ -407,9 +281,6 @@ func (sb *Scrollback) encodeLine(buf []byte, cells uv.Line, width int) []byte {
 	return buf
 }
 
-// appendLink appends a link token for l to the line encodeLine is writing: a
-// reference when the line has used l before, and l itself when it has not.
-// A link past the stored bounds is written as no link.
 func (sb *Scrollback) appendLink(buf []byte, l uv.Link) []byte {
 	buf = append(buf, sbLink)
 	if l == (uv.Link{}) || LinkURIDecodedLen(l.URL) > maxStoredLinkURL || len(l.Params) > maxStoredLinkParams {
@@ -426,14 +297,11 @@ func (sb *Scrollback) appendLink(buf []byte, l uv.Link) []byte {
 	return appendString(buf, l.Params)
 }
 
-// appendString appends s as a uvarint length and its bytes.
 func appendString(buf []byte, s string) []byte {
 	buf = binary.AppendUvarint(buf, uint64(len(s)))
 	return append(buf, s...)
 }
 
-// readString reads a string appendString wrote at i and returns its bytes,
-// which alias data, and the index after it.
 func readString(data []byte, i int) ([]byte, int, bool) {
 	if i >= len(data) {
 		return nil, i, false
@@ -446,9 +314,6 @@ func readString(data []byte, i int) ([]byte, int, bool) {
 	return data[i : i+int(n)], i + int(n), true
 }
 
-// readLink reads the body of a link token at i, given the links new to the
-// line before it, and returns the link, the line's links with a new one
-// appended, and the index after it.
 func readLink(data []byte, i int, seen []uv.Link) (uv.Link, []uv.Link, int, bool) {
 	k, m := binary.Uvarint(data[i:])
 	if m <= 0 {
@@ -475,7 +340,6 @@ func readLink(data []byte, i int, seen []uv.Link) (uv.Link, []uv.Link, int, bool
 	return uv.Link{}, seen, i, false
 }
 
-// skipLink returns the index after the body of a link token at i.
 func skipLink(data []byte, i int) (int, bool) {
 	k, m := binary.Uvarint(data[i:])
 	if m <= 0 {
@@ -493,11 +357,8 @@ func skipLink(data []byte, i int) (int, bool) {
 	return i, ok
 }
 
-// appendContent appends the content token for s: the rune itself when s is
-// exactly one valid rune, otherwise the empty marker or the string whole.
 func (sb *Scrollback) appendContent(buf []byte, s string) []byte {
 	if len(s) == 1 && s[0] < utf8.RuneSelf {
-		// Nearly every cell of a text screen, and the whole of a plain log.
 		return append(buf, s[0])
 	}
 	if s == "" {
@@ -535,8 +396,6 @@ func (sb *Scrollback) unpackStyle(st packedStyle) uv.Style {
 	}
 }
 
-// packColor packs the colour types the emulator produces into an integer and
-// interns anything else.
 func (sb *Scrollback) packColor(c color.Color) uint32 {
 	switch v := c.(type) {
 	case nil:
@@ -566,7 +425,6 @@ func (sb *Scrollback) internColor(c color.Color) uint32 {
 		}
 	}
 	if len(sb.colors) >= internCap || !comparable {
-		// No slot for it: keep what it looks like.
 		r, g, b, _ := c.RGBA()
 		return colorRGB | ((r>>8)<<16|(g>>8)<<8|b>>8)<<colorTagBits
 	}
@@ -595,7 +453,6 @@ func (sb *Scrollback) unpackColor(v uint32) color.Color {
 	return nil
 }
 
-// markNewest records the row flags of the line pushed last.
 func (sb *Scrollback) markNewest(f rowFlag) {
 	if sb.Len() == 0 {
 		return
@@ -603,8 +460,6 @@ func (sb *Scrollback) markNewest(f rowFlag) {
 	sb.wraps[(sb.tail-1+sb.maxLines)%sb.maxLines] = f
 }
 
-// setWrapped records whether the line at index, oldest first, carried on to
-// the next line by autowrap. An index outside the ring is ignored.
 func (sb *Scrollback) setWrapped(index int, wrapped bool) {
 	if index < 0 || index >= sb.Len() {
 		return
@@ -622,7 +477,6 @@ func (sb *Scrollback) LineWrapped(index int) bool {
 	return sb.wraps[sb.slot(index)]&rowWrapped != 0
 }
 
-// lineFlags returns the row flags of the line at index, oldest first.
 func (sb *Scrollback) lineFlags(index int) rowFlag {
 	if index < 0 || index >= sb.Len() {
 		return 0
@@ -641,7 +495,6 @@ func (sb *Scrollback) Len() int {
 	return sb.maxLines - sb.head + sb.tail
 }
 
-// slot returns the ring slot of the line at index, oldest first.
 func (sb *Scrollback) slot(index int) int {
 	return (sb.head + index) % sb.maxLines
 }
@@ -674,16 +527,12 @@ func (sb *Scrollback) Line(index int) uv.Line {
 	return line
 }
 
-// clearCacheLocked empties the decoded-line cache. The caller holds cacheMu.
 func (sb *Scrollback) clearCacheLocked() {
 	clear(sb.cache)
 	sb.cacheCells = 0
 	sb.cacheGen = sb.gen
 }
 
-// decodeLine decodes one stored line into a fresh uv.Line of its width. The
-// decoder stops at the first token it cannot read whole and leaves the rest
-// of the line blank, so a truncated record cannot take it out of bounds.
 func (sb *Scrollback) decodeLine(data []byte) uv.Line {
 	width, n := binary.Uvarint(data)
 	if n <= 0 {
@@ -692,8 +541,6 @@ func (sb *Scrollback) decodeLine(data []byte) uv.Line {
 	return sb.decodeInto(make(uv.Line, width), data[n:])
 }
 
-// lineWidth is the width a stored line was written at, and n the bytes its
-// width header takes.
 func lineWidth(data []byte) (width, n int) {
 	w, n := binary.Uvarint(data)
 	if n <= 0 {
@@ -702,10 +549,6 @@ func lineWidth(data []byte) (width, n int) {
 	return int(w), n
 }
 
-// decodeRows decodes the lines from index from to end-1 into one block of
-// cells, for a reader that wants many lines at once without a decode and an
-// allocation each. The lines do not go through the cache. block and out are
-// reused when they are large enough, and returned for the next call.
 func (sb *Scrollback) decodeRows(from, end int, block []uv.Cell, out []uv.Line) ([]uv.Line, []uv.Cell) {
 	from, end = max(from, 0), min(end, sb.Len())
 	if from >= end {
@@ -735,8 +578,6 @@ func (sb *Scrollback) decodeRows(from, end int, block []uv.Cell, out []uv.Line) 
 	return out, block
 }
 
-// decodeInto decodes the token stream of a stored line, its width header
-// already read, into line.
 func (sb *Scrollback) decodeInto(line uv.Line, data []byte) uv.Line {
 	x := 0
 	n := 0
@@ -794,8 +635,6 @@ func (sb *Scrollback) decodeInto(line uv.Line, data []byte) uv.Line {
 	return line
 }
 
-// readStyle reads the body of a style token starting at i and returns the
-// index after it.
 func readStyle(data []byte, i int) (packedStyle, int, bool) {
 	var st packedStyle
 	var vals [3]uint32
@@ -814,8 +653,6 @@ func readStyle(data []byte, i int) (packedStyle, int, bool) {
 	return st, i + 2, true
 }
 
-// readContent reads one content token starting at i and returns the index
-// after it.
 func (sb *Scrollback) readContent(data []byte, i int) (string, int, bool) {
 	if i >= len(data) {
 		return "", i, false
@@ -836,13 +673,9 @@ func (sb *Scrollback) readContent(data []byte, i int) (string, int, bool) {
 	if r == utf8.RuneError && size <= 1 {
 		return "", i, false
 	}
-	// A one-byte string converted from a byte slice comes from the runtime's
-	// table of single-byte strings and does not allocate. string(rune(r))
-	// does not use that table and allocated once per ASCII cell.
 	return string(data[i : i+size]), i + size, true
 }
 
-// skipContent returns the index after the content token at i.
 func skipContent(data []byte, i int) (int, bool) {
 	if i >= len(data) {
 		return i, false
@@ -952,7 +785,7 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 		newLines = make([][]byte, newLen)
 		newWraps = make([]rowFlag, newLen)
 	}
-	startIndex := oldLen - newLen // drop the oldest when shrinking
+	startIndex := oldLen - newLen
 	for i := range newLen {
 		newLines[i] = sb.lines[sb.slot(startIndex+i)]
 		newWraps[i] = sb.wraps[sb.slot(startIndex+i)]
@@ -971,7 +804,6 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 	}
 }
 
-// extractLine copies row y of buf into a fresh line of the given width.
 func extractLine(buf *grid, y, width int) uv.Line {
 	line := make(uv.Line, width)
 	for x := range width {

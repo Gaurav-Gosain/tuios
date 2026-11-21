@@ -13,9 +13,6 @@ import (
 	"tuios.dev/vt/vtgen"
 )
 
-// scrollbackByCells is the scrollback text the slow way: every line decoded
-// into cells and turned back into text. AppendScrollbackText has to produce
-// exactly this.
 func scrollbackByCells(e *Emulator) string {
 	var sb strings.Builder
 	for i := range e.ScrollbackLen() {
@@ -31,7 +28,6 @@ func scrollbackByText(e *Emulator) string {
 	return sb.String()
 }
 
-// ringByCells and ringByText are the same pair for a bare ring.
 func ringByCells(sb *Scrollback) string {
 	var out strings.Builder
 	for i := range sb.Len() {
@@ -50,9 +46,6 @@ func ringByText(sb *Scrollback) string {
 	return out.String()
 }
 
-// sameTextCells reports how the text reader's cells differ from a decoded
-// line, or "" when they agree: each cell's content and width, and past the
-// last text cell only the blank padding the decoder adds.
 func sameTextCells(line uv.Line, cells []TextCell) string {
 	if len(cells) > len(line) {
 		return fmt.Sprintf("%d text cells for a line of %d", len(cells), len(line))
@@ -70,8 +63,6 @@ func sameTextCells(line uv.Line, cells []TextCell) string {
 	return ""
 }
 
-// checkBulkReaders holds the bulk readers to Line on every line of a ring:
-// the row reader, the text reader, and both again on a copy of the ring.
 func checkBulkReaders(t *testing.T, sb *Scrollback) {
 	t.Helper()
 	n := sb.Len()
@@ -126,8 +117,6 @@ func checkBulkReaders(t *testing.T, sb *Scrollback) {
 	}
 }
 
-// firstDifference describes where two captures part, for a failure message a
-// person can act on.
 func firstDifference(want, got string) string {
 	wl, gl := strings.Split(want, "\n"), strings.Split(got, "\n")
 	for i := range max(len(wl), len(gl)) {

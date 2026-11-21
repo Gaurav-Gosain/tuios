@@ -1,12 +1,5 @@
 package vt_test
 
-// Conformance for OSC 7501, the Program Status Protocol (revision 0.2), on
-// the backend this build selects. The grammar and the discard rules are
-// tested in tuios.dev/progstatus; this is the emulator's part: the sequence is
-// recognised with either terminator and across writes, the query gets the one
-// fixed reply in the query's own form, a report gets no reply at all, and a
-// full reset (RIS) reaches the owner while a soft reset (DECSTR) does not.
-
 import (
 	"strings"
 	"testing"
@@ -15,8 +8,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// programStatusEvents writes each chunk to a fresh terminal of this build's
-// backend and returns the ProgramStatus events and what it wrote back.
 func programStatusEvents(t *testing.T, chunks ...string) ([]progstatus.Event, string) {
 	t.Helper()
 	term := vt.New(80, 24)
@@ -28,7 +19,6 @@ func programStatusEvents(t *testing.T, chunks ...string) ([]progstatus.Event, st
 			t.Fatalf("write %q: %v", c, err)
 		}
 	}
-	// A device status report marks the end of whatever the input provoked.
 	if _, err := term.Write([]byte("\x1b[5n")); err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +41,6 @@ func TestConform_ProgramStatusQueryReply(t *testing.T) {
 			t.Errorf("query ended with %q replied %q, want %q", term, reply, want)
 		}
 	}
-	// Only the exact query is answered: a report is never echoed, so no id,
-	// title or message can be read back.
 	for _, in := range []string{
 		"\x1b]7501;state=working:msg=aGk=\x1b\\",
 		"\x1b]7501;??\x1b\\",
@@ -66,8 +54,6 @@ func TestConform_ProgramStatusQueryReply(t *testing.T) {
 }
 
 func TestConform_ProgramStatusPureRecognisesTheSequence(t *testing.T) {
-	// replyChecked fails when the pure emulator logs the input as a sequence
-	// it did not recognise.
 	if got := replyChecked(t, "\x1b]7501;state=done:app=cargo\x1b\\\x1b]7501;?\x07"); got != "\x1b]7501;?\x07" {
 		t.Errorf("reply = %q", got)
 	}
@@ -109,9 +95,6 @@ func TestConform_ProgramStatusReports(t *testing.T) {
 			chunks: []string{"\x1b]7501;state=idle:x=" + strings.Repeat("a", 4096) + "\x1b\\"},
 			want:   nil,
 		},
-		// Control bytes inside the string, where both backends must agree:
-		// a C0 control is ignored, CAN and SUB cancel the report, and ESC
-		// followed by anything but \ starts a new sequence instead.
 		{
 			name:   "a C0 control inside the body is ignored",
 			chunks: []string{"\x1b]7501;state=wor\nki\x01ng:app=car\tgo\x1b\\"},

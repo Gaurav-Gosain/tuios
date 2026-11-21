@@ -16,7 +16,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// oddColor is a colour type the packer does not know, so it has to intern.
 type oddColor struct{ v uint8 }
 
 func (c oddColor) RGBA() (r, g, b, a uint32) {
@@ -43,7 +42,6 @@ func TestPlainLineCostsItsTextInBytes(t *testing.T) {
 	}
 }
 
-// styledLine is one of everything a cell can carry, followed by blanks.
 func styledLine(width int) uv.Line {
 	line := make(uv.Line, width)
 	for i := range line {
@@ -51,7 +49,7 @@ func styledLine(width int) uv.Line {
 	}
 	line[0] = uv.Cell{Content: "a", Width: 1}
 	line[1] = uv.Cell{Content: "漢", Width: 2}
-	line[2] = uv.Cell{Content: "", Width: 0} // the wide rune's spacer
+	line[2] = uv.Cell{Content: "", Width: 0}
 	line[3] = uv.Cell{Content: "é", Width: 1}
 	line[4] = uv.Cell{Content: "🇬🇧", Width: 2}
 	line[5] = uv.Cell{Content: "", Width: 0}
@@ -60,7 +58,7 @@ func styledLine(width int) uv.Line {
 	line[8] = uv.Cell{Content: "d", Width: 1, Style: uv.Style{Bg: color.RGBA{R: 9, G: 8, B: 7, A: 128}}}
 	line[9] = uv.Cell{Content: "e", Width: 1, Style: uv.Style{Fg: oddColor{7}}}
 	line[10] = uv.Cell{Content: "f", Width: 1, Link: uv.Link{URL: "https://example.test", Params: "id=1"}}
-	line[11] = uv.Cell{Content: " ", Width: 1, Style: uv.Style{Bg: ansi.BasicColor(1)}} // a painted blank
+	line[11] = uv.Cell{Content: " ", Width: 1, Style: uv.Style{Bg: ansi.BasicColor(1)}}
 	line[12] = uv.Cell{Content: "�", Width: 1}
 	line[13] = uv.Cell{Content: "\x00", Width: 1}
 	return line
@@ -102,14 +100,13 @@ func TestScrollbackLineCacheFollowsTheRing(t *testing.T) {
 		t.Fatalf("line 0 is %q, want A", got)
 	}
 	push("B")
-	push("C") // evicts A
+	push("C")
 	if got := sb.Line(0)[0].Content; got != "B" {
 		t.Fatalf("line 0 is %q after the ring moved, want B", got)
 	}
 	if got := sb.Line(1)[0].Content; got != "C" {
 		t.Fatalf("line 1 is %q, want C", got)
 	}
-	// Same index, same generation: the decoded line is shared.
 	if a, b := sb.Line(0), sb.Line(0); &a[0] != &b[0] {
 		t.Fatal("two reads of one line in one generation decoded twice")
 	}
@@ -127,8 +124,6 @@ func TestScrollbackCacheIsBounded(t *testing.T) {
 		t.Fatalf("cache holds %d decoded lines after a walk of the ring, want at most %d", n, cacheCap)
 	}
 
-	// Lines of a wide pane are bounded by their cells, 112 bytes each, and
-	// not only by their count.
 	wide := NewScrollback(cacheCap * 2)
 	for range cacheCap * 2 {
 		wide.PushBlankLine(400)
@@ -156,10 +151,6 @@ func TestScrollbackFullRingReusesEvictedStorage(t *testing.T) {
 	}
 }
 
-// storedCellWidth walks the token stream of a stored line to column x and
-// returns that cell's width without decoding the line. The tests use it to
-// look at the encoding itself. It reports false when
-// the line's stored cells end before x, which means the column is blank.
 func storedCellWidth(data []byte, x int) (int, bool) {
 	_, i := binary.Uvarint(data)
 	if i <= 0 {
@@ -304,8 +295,6 @@ func TestScrollbackRoundTripsRandomLines(t *testing.T) {
 	}
 }
 
-// encodeLineReference is encodeLine without its plain-ASCII shortcut: every
-// cell goes through the style, link, width and content tokens.
 func (sb *Scrollback) encodeLineReference(buf []byte, cells uv.Line, width int) []byte {
 	buf = binary.AppendUvarint(buf, uint64(width))
 	var style packedStyle
@@ -477,8 +466,6 @@ func TestScrollbackDropsAnOversizedLink(t *testing.T) {
 	}{
 		{uv.Link{URL: strings.Repeat("u", maxStoredLinkURL)}, true},
 		{uv.Link{URL: strings.Repeat("u", maxStoredLinkURL+1)}, false},
-		// The emulator keeps an address percent-encoded, so a CJK character
-		// is nine bytes stored. The bound is on the address as written.
 		{uv.Link{URL: strings.Repeat("%E6%8A%80", maxStoredLinkURL/3) + "u"}, true},
 		{uv.Link{URL: strings.Repeat("%E6%8A%80", maxStoredLinkURL/3) + "uu"}, false},
 		{uv.Link{URL: "u", Params: strings.Repeat("p", maxStoredLinkParams)}, true},

@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// packedGrid is cells of every kind the packed form treats apart.
 func packedGrid() [][]CellState {
 	red := StyleState{FgColor: "a1", Attrs: 1}
 	link := StyleState{LinkURL: "https://example.test", LinkParams: "id=1"}

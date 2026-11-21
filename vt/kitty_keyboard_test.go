@@ -80,8 +80,8 @@ func TestKittyKeyboardFlags(t *testing.T) {
 // The modifier weights are shift 1, alt 2, ctrl 4, super 8, plus one.
 func TestEncodeKeyCSIu(t *testing.T) {
 	const disambiguate = ansi.KittyDisambiguateEscapeCodes
-	const all = ansi.KittyAllFlags                    // 31: disambiguate|events|alternate|all-keys|assoc
-	const focus = ansi.KittyDisambiguateEscapeCodes | // 27: what terminal-browser pushes on text focus
+	const all = ansi.KittyAllFlags
+	const focus = ansi.KittyDisambiguateEscapeCodes |
 		ansi.KittyReportEventTypes |
 		ansi.KittyReportAllKeysAsEscapeCodes |
 		ansi.KittyReportAssociatedKeys
@@ -100,8 +100,6 @@ func TestEncodeKeyCSIu(t *testing.T) {
 		{"super+a with disambiguate", KeyPressEvent{Code: 'a', Mod: ModSuper}, disambiguate, "\x1b[97;9u"},
 		{"meta+a with disambiguate", KeyPressEvent{Code: 'a', Mod: ModMeta}, disambiguate, "\x1b[97;33u"},
 		{"shift+alt+ctrl+a with disambiguate", KeyPressEvent{Code: 'a', Mod: ModShift | ModAlt | ModCtrl}, disambiguate, "\x1b[97;8u"},
-		// kitty keeps a bare Enter as CR under disambiguate; only a
-		// modifier or report-all-keys makes it CSI 13 u.
 		{"enter with disambiguate stays legacy", KeyPressEvent{Code: KeyEnter}, disambiguate, ""},
 		{"ctrl+enter with disambiguate", KeyPressEvent{Code: KeyEnter, Mod: ModCtrl}, disambiguate, "\x1b[13;5u"},
 		{"escape with disambiguate", KeyPressEvent{Code: KeyEscape}, disambiguate, "\x1b[27u"},
@@ -110,16 +108,12 @@ func TestEncodeKeyCSIu(t *testing.T) {
 		{"ctrl+shift+up arrow", KeyPressEvent{Code: KeyUp, Mod: ModCtrl | ModShift}, disambiguate, "\x1b[1;6A"},
 		{"F5 without modifiers", KeyPressEvent{Code: KeyF5}, disambiguate, "\x1b[15~"},
 		{"ctrl+F5", KeyPressEvent{Code: KeyF5, Mod: ModCtrl}, disambiguate, "\x1b[15;5~"},
-		// F3 is CSI 13 ~, never CSI R, which is the cursor position report
-		// (issue #1615).
 		{"F3 without modifiers", KeyPressEvent{Code: KeyF3}, disambiguate, "\x1b[13~"},
 		{"ctrl+F3", KeyPressEvent{Code: KeyF3, Mod: ModCtrl}, disambiguate, "\x1b[13;5~"},
 		{"F3 with report-all-keys", KeyPressEvent{Code: KeyF3}, ansi.KittyReportAllKeysAsEscapeCodes, "\x1b[13~"},
 
 		{"plain letter carries its text (flags 31)", KeyPressEvent{Code: 'a', Text: "a"}, all, "\x1b[97;1;97u"},
 		{"plain letter carries its text (flags 27)", KeyPressEvent{Code: 'a', Text: "a"}, focus, "\x1b[97;1;97u"},
-		// Flags 31 include alternate keys, so the shifted key rides in the key
-		// field the way kitty sends it: CSI 97:65;2u for shift+a.
 		{"shifted letter reports the shifted key and text", KeyPressEvent{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: ModShift}, all, "\x1b[120:88;2;88u"},
 		{"shifted symbol reports the shifted key and text", KeyPressEvent{Code: ';', ShiftedCode: ':', Text: ":", Mod: ModShift}, all, "\x1b[59:58;2;58u"},
 		{"shifted letter without alternate keys", KeyPressEvent{Code: 'x', ShiftedCode: 'X', Text: "X", Mod: ModShift}, focus, "\x1b[120;2;88u"},
@@ -130,11 +124,7 @@ func TestEncodeKeyCSIu(t *testing.T) {
 		{"escape has no associated text", KeyPressEvent{Code: KeyEscape}, all, "\x1b[27u"},
 		{"ctrl+letter has no associated text", KeyPressEvent{Code: 'a', Mod: ModCtrl}, all, "\x1b[97;5u"},
 		{"up arrow is unchanged under all flags", KeyPressEvent{Code: KeyUp}, all, "\x1b[A"},
-		// A control character delivered as Text (never a real keypress, but
-		// worth pinning) must not become a text field.
 		{"control text is dropped", KeyPressEvent{Code: 'm', Text: "\r"}, all, "\x1b[109u"},
-		// disambiguate-only: the pane never asked for associated text, so a
-		// plain letter still goes as legacy text (empty CSI-u result).
 		{"no associated text without the flag", KeyPressEvent{Code: 'a', Text: "a"}, disambiguate, ""},
 	}
 	tests = append(tests, layoutKeyCases()...)
@@ -148,10 +138,6 @@ func TestEncodeKeyCSIu(t *testing.T) {
 	}
 }
 
-// layoutKeyCases pin what a pane gets for a key on a non-Latin layout: "ш" is
-// the I key on a Ukrainian layout, so tuios holds the base-layout key 'i' (105)
-// for it once the host reports alternate keys. Only a pane that asked for
-// alternate keys may see that base key.
 func layoutKeyCases() []struct {
 	name     string
 	key      KeyPressEvent
@@ -170,26 +156,18 @@ func layoutKeyCases() []struct {
 		flags    int
 		expected string
 	}{
-		// Text is sent as text under disambiguate, ASCII or not.
 		{"non-ascii letter is text with disambiguate", sha, disambiguate, ""},
 		{"non-ascii letter is text with alternate keys", sha, alternate, ""},
-		// A pane that did not ask for alternate keys never sees the base key.
 		{"ctrl chord without alternate keys has no base key", ctrlSha, disambiguate, "\x1b[1096;5u"},
 		{"plain key in report-all mode has no base key", sha, allKeys, "\x1b[1096u"},
-		// A pane that asked gets it, with the shifted key empty when Shift is
-		// not held.
 		{"ctrl chord with alternate keys carries the base key", ctrlSha, alternate, "\x1b[1096::105;5u"},
 		{"plain key with all flags carries the base key", sha, ansi.KittyAllFlags, "\x1b[1096::105;1;1096u"},
 		{"shifted key with all flags carries both", shiftSha, ansi.KittyAllFlags, "\x1b[1096:1064:105;2;1064u"},
-		// Caps Lock and Num Lock change the text, not the chord, so the key is
-		// still text.
 		{"numlock letter is text", KeyPressEvent{Code: 'a', Text: "a", Mod: ModNumLock}, disambiguate, ""},
 		{"capslock non-ascii letter is text", KeyPressEvent{Code: 'ш', BaseCode: 'i', Text: "Ш", Mod: ModCapsLock}, disambiguate, ""},
 		{"capslock shifted letter is text", KeyPressEvent{Code: 'a', Text: "a", Mod: ModCapsLock | ModShift}, disambiguate, ""},
-		// Modifier keys go out under their kitty codes.
 		{"left shift under all keys", KeyPressEvent{Code: KeyLeftShift, Mod: ModShift}, allKeys, "\x1b[57441;2u"},
 		{"right ctrl under all keys", KeyPressEvent{Code: KeyRightCtrl, Mod: ModCtrl}, allKeys, "\x1b[57448;5u"},
-		// A base key equal to the code is not repeated.
 		{"base equal to code is left out", KeyPressEvent{Code: 'a', BaseCode: 'a', Mod: ModCtrl}, alternate, "\x1b[97;5u"},
 	}
 }
@@ -318,20 +296,13 @@ func TestKittyTextUnderDisambiguate(t *testing.T) {
 		{"shift+keypad plus", "\x1b[57413;2u", disambiguate, ""},
 		{"ctrl+keypad 1 is still CSI u", "\x1b[57400;133u", disambiguate, "\x1b[57400;5u"},
 		{"keypad enter has no text", "\x1b[57414;129u", disambiguate, "\x1b[57414u"},
-		// Under report-all-keys the lock bits go through, as kitty sends them:
-		// a pane that treats the lock keys as keys keeps its own lock state.
 		{"keypad 1 under report-all-keys", "\x1b[57400;129u", allKeys, "\x1b[57400;129u"},
-		// The same rule for every text key, not just the keypad: the lock
-		// bits come along from a report-all-keys host and must not count.
 		{"a, numlock on", "\x1b[97;129u", disambiguate, ""},
 		{"a, capslock on", "\x1b[97;65u", disambiguate, ""},
 		{"ctrl+a, numlock on is still CSI u", "\x1b[97;133u", disambiguate, "\x1b[97;5u"},
 		{"non-ascii text", "\x1b[233u", disambiguate, ""},
 		{"alt+non-ascii is still CSI u", "\x1b[233;3u", disambiguate, "\x1b[233;3u"},
-		// Enter, Tab and Backspace stay legacy bytes under disambiguate, as
-		// kitty sends them; the caller sends CR.
 		{"enter, numlock on, stays legacy", "\x1b[13;129u", disambiguate, ""},
-		// The lock bits do not reach a pane without report-all-keys.
 		{"up, numlock on, has no lock bits", "\x1b[1;129A", disambiguate, "\x1b[A"},
 	}
 	for _, tt := range tests {

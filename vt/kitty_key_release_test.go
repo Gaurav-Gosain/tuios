@@ -48,9 +48,6 @@ func TestPressAndReleaseNameTheSameKey(t *testing.T) {
 
 	for _, k := range keys {
 		t.Run(k.name, func(t *testing.T) {
-			// Modified, so the press carries its key number and terminator too;
-			// unmodified letter- and tilde-terminated presses are spelled in the
-			// bare legacy form that has no number to compare.
 			key := KeyPressEvent{Code: k.code, Mod: ModCtrl}
 			press := EncodeKeyCSIu(key, flags)
 			release := EncodeKeyReleaseCSIu(key, flags)

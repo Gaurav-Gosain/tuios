@@ -13,10 +13,10 @@ func TestPerFrameModeSetsAllocateNothing(t *testing.T) {
 	e.WriteString("\x1b[?25l\x1b[?25h\x1b[?1h\x1b[?1l\x1b[>1u\x1b[<u")
 
 	for _, seq := range []string{
-		"\x1b[?25l\x1b[?25h", // DECTCEM, around every nvim redraw
-		"\x1b[?1h\x1b[?1l",   // DECCKM
-		"\x1b[>1u\x1b[<u",    // kitty keyboard push and pop
-		"\x1b[=1;1u",         // kitty keyboard set
+		"\x1b[?25l\x1b[?25h",
+		"\x1b[?1h\x1b[?1l",
+		"\x1b[>1u\x1b[<u",
+		"\x1b[=1;1u",
 	} {
 		if got := testing.AllocsPerRun(200, func() { e.WriteString(seq) }); got > 0 {
 			t.Errorf("%q allocates %.1f times per write, want 0", seq, got)

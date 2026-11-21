@@ -61,8 +61,6 @@ const Code = 72
 // megabytes in one chunk is a program misbehaving.
 const MaxChunk = 4096
 
-// base64PerChunk is the raw bytes that base64 to MaxChunk, and the
-// amount of data one chunk of a data stream carries. kitty uses the same.
 const base64PerChunk = 3072
 
 // Command is one message of the protocol, metadata and payload.
@@ -151,20 +149,14 @@ func Parse(body []byte) (Command, bool) {
 			}
 		}
 	}
-	// The slice is the parser's, valid for the callback only. The command
-	// outlives it.
 	cmd.Payload = bytes.Clone(payload)
 	return cmd, true
 }
 
-// dnDType reports whether t is a type the protocol names.
 func typeKnown(t byte) bool {
 	return strings.IndexByte("aAmMrRopPeEkq", t) >= 0
 }
 
-// dnDInt reads a signed decimal that fits in 32 bits, as the specification
-// requires of every integer. Anything else, an empty value included, is not
-// a number.
 func parseInt(b []byte) (int, bool) {
 	if len(b) == 0 || len(b) > 11 {
 		return 0, false
@@ -202,13 +194,10 @@ const MaxListBytes = 64 << 10
 // chunk completes nothing yet or belongs to a chain that was dropped.
 func (a *Assembler) Add(cmd Command) (Command, bool) {
 	if cmd.Type == 'q' {
-		// A query may come in the middle of a chain, by the specification,
-		// and is no part of it.
 		return cmd, true
 	}
 	if !a.active {
 		if cmd.Type == 0 {
-			// A continuation with no chain to continue. Nothing to do with it.
 			return Command{}, false
 		}
 		if !cmd.More {
@@ -223,9 +212,6 @@ func (a *Assembler) Add(cmd Command) (Command, bool) {
 		}
 		return a.appendList(cmd)
 	}
-	// In a chain: the first chunk's metadata, this chunk's m and payload. A
-	// chunk that names a type is still part of the chain, as it is in
-	// kitty's screen: the specification lets a chunk repeat the metadata.
 	out := a.first
 	out.More = cmd.More
 	out.Payload = cmd.Payload
@@ -238,7 +224,6 @@ func (a *Assembler) Add(cmd Command) (Command, bool) {
 	return a.appendList(out)
 }
 
-// appendList joins a list chunk and returns the list once it is whole.
 func (a *Assembler) appendList(cmd Command) (Command, bool) {
 	if len(a.list)+len(cmd.Payload) > MaxListBytes {
 		a.active = false
@@ -262,8 +247,6 @@ func (a *Assembler) Reset() {
 	a.list = nil
 }
 
-// dnDStreamType reports whether messages of type t carry a data stream, which
-// is read chunk by chunk, rather than a list, which is read whole.
 func streamType(t byte) bool {
 	switch t {
 	case 'p', 'e', 'k', 'r':
@@ -298,8 +281,6 @@ func (cmd Command) Encode() []byte {
 	return out
 }
 
-// appendChunk writes one escape code with cmd's metadata, more as its m and
-// payload as its payload.
 func (cmd Command) appendChunk(out, payload []byte, more bool) []byte {
 	out = append(out, "\x1b]72;t="...)
 	out = append(out, cmd.Type)
@@ -327,8 +308,6 @@ func (cmd Command) appendChunk(out, payload []byte, more bool) []byte {
 	if more {
 		out = append(out, ":m=1"...)
 	} else if len(payload) > 0 {
-		// A data chunk says it is the last one, as kitty's do, so a reader
-		// that ends a stream on m=0 ends it here.
 		out = append(out, ":m=0"...)
 	}
 	if len(payload) > 0 {

@@ -18,7 +18,6 @@ func TestScrollbackSetMaxLines(t *testing.T) {
 		sb.PushLine(uv.Line{{Content: string(rune('A' + i)), Width: 1}})
 	}
 
-	// Keep the last 5 of A..H: D, E, F, G, H.
 	sb.SetMaxLines(5)
 
 	if sb.Len() != 5 || sb.MaxLines() != 5 {

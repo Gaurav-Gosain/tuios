@@ -8,7 +8,6 @@ import (
 )
 
 func TestAnIdleReleaseGivesBackTheSequenceBuffer(t *testing.T) {
-	// payload is an APC body no built-in handler takes: X, then x bytes.
 	payload := func(n int) []byte {
 		p := bytes.Repeat([]byte{'x'}, n)
 		p[0] = 'X'
@@ -17,8 +16,6 @@ func TestAnIdleReleaseGivesBackTheSequenceBuffer(t *testing.T) {
 	apc := func(p []byte) []byte {
 		return append(append([]byte("\x1b_"), p...), "\x1b\\"...)
 	}
-	// recording returns an emulator whose APC handler keeps a copy of the
-	// last payload it is handed: the parser hands it its own buffer.
 	recording := func() (*Emulator, *[]byte) {
 		e := NewEmulator(80, 24)
 		got := new([]byte)
@@ -40,8 +37,6 @@ func TestAnIdleReleaseGivesBackTheSequenceBuffer(t *testing.T) {
 			t.Errorf("after the release the buffer has len %d cap %d, want %d", n, c, seqParserInitialData)
 		}
 	}
-	// stillWhole writes a further 1 MiB + 1 KiB payload and checks it arrives
-	// whole after the release.
 	stillWhole := func(t *testing.T, e *Emulator, got *[]byte) {
 		t.Helper()
 		want := payload(1<<20 + 1<<10)
@@ -110,10 +105,6 @@ func TestAReleaseMidSequenceKeepsThePayload(t *testing.T) {
 	body := bytes.Repeat([]byte{'x'}, 64<<10)
 	body[0] = 'X'
 
-	// Each case is one string sequence kind: its introducer, the payload its
-	// handler is handed, and a register that records a copy of it. An OSC
-	// reaches the buffer byte by byte through put, an APC or a DCS through
-	// putRun.
 	for _, tc := range []struct {
 		name     string
 		intro    string

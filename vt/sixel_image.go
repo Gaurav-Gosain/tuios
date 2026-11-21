@@ -34,9 +34,6 @@ type SixelImage struct {
 // Sixel limits. A guest controls every one of these numbers, so each is
 // bounded before anything is allocated.
 const (
-	// sixelDecodeRegisters is how many colour registers an image may define,
-	// xterm's own limit. A pane is told 256 (SixelMaxRegisters); an image
-	// that uses more is decoded whole and re-encoded to 256.
 	sixelDecodeRegisters = 1024
 	// SixelMaxDimension bounds either side of a decoded image in pixels. It
 	// is larger than any screen, so a real picture is never cut by it.
@@ -45,8 +42,6 @@ const (
 	SixelMaxPixels = 16 << 20
 )
 
-// sixelDefaultPalette is the VT340's sixteen colours, which a sixel image that
-// selects a register without defining it gets.
 var sixelDefaultPalette = [16]color.RGBA{
 	{0, 0, 0, 255}, {51, 51, 204, 255}, {204, 36, 36, 255}, {51, 204, 51, 255},
 	{204, 51, 204, 255}, {51, 204, 204, 255}, {204, 204, 51, 255}, {120, 120, 120, 255},
@@ -82,8 +77,6 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 	x, y := 0, 0
 	reg := 0
 	i := 0
-	// num reads a decimal parameter, bounded so a long digit run cannot
-	// overflow.
 	num := func() (int, bool) {
 		start := i
 		n := 0
@@ -97,8 +90,6 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 	}
 	paint := func(bits byte, count int) {
 		if bits != 0 && (x+count > w || y+5 >= h && bits>>max(0, h-y) != 0) {
-			// Pixels past the declared size: dropped here, and a reason not
-			// to send the guest's bytes, which would paint them.
 			img.Exact = false
 		}
 		if bits == 0 || y >= h {
@@ -135,8 +126,6 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 				n = 1
 			}
 			if i < len(data) && data[i] >= '?' && data[i] <= '~' {
-				// A repeat past the right edge only advances x; bound it so
-				// a huge count costs nothing.
 				paint(data[i]-'?', min(n, w+1))
 				i++
 			}
@@ -169,8 +158,6 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 			y += 6
 			i++
 		case c == '"':
-			// Raster attributes. The size they state is already in cmd; skip
-			// the parameters.
 			i++
 			for i < len(data) && (data[i] >= '0' && data[i] <= '9' || data[i] == ';') {
 				i++
@@ -180,9 +167,6 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 		}
 	}
 	if cmd.BackgroundMode != 1 {
-		// An opaque background: unpainted pixels take register 0, whatever
-		// the terminal would have done, so a crop and the whole image look
-		// the same.
 		for i, v := range img.Pix {
 			if v == 0 {
 				img.Pix[i] = 1
@@ -193,8 +177,6 @@ func DecodeSixel(cmd *SixelCommand) *SixelImage {
 	return img
 }
 
-// sixelColor turns a colour introducer's coordinates into RGB. Space 1 is HLS
-// (hue 0-360, lightness and saturation 0-100) and space 2 is RGB in percent.
 func sixelColor(space, a, b, c int) color.RGBA {
 	pct := func(v int) uint8 {
 		v = max(0, min(v, 100))
@@ -203,7 +185,6 @@ func sixelColor(space, a, b, c int) color.RGBA {
 	if space != 1 {
 		return color.RGBA{pct(a), pct(b), pct(c), 255}
 	}
-	// HLS as the VT340 defines it: hue 0 is blue, not red.
 	h := float64((a+240)%360) / 360
 	l := float64(max(0, min(b, 100))) / 100
 	s := float64(max(0, min(c, 100))) / 100

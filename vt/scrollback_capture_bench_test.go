@@ -9,15 +9,10 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// scrollbackTexter is the optional interface the daemon's plain capture looks
-// for. It is repeated here so these benchmarks build against a tree that does
-// not have it, which is how the before and after binaries are compared.
 type scrollbackTexter interface {
 	AppendScrollbackText(*strings.Builder)
 }
 
-// captureText is what the daemon's capture-pane and wait-for window-output do
-// for plain text with scrollback: every scrollback line, then the screen.
 func captureText(t Terminal) string {
 	var sb strings.Builder
 	if fast, ok := t.(scrollbackTexter); ok {
@@ -32,8 +27,6 @@ func captureText(t Terminal) string {
 	return sb.String()
 }
 
-// filledEmulator is a pane of the given width whose 10000-line scrollback ring
-// has wrapped with build-log lines.
 func filledEmulator(width int) *Emulator {
 	e := NewEmulator(width, 24)
 	e.SetScrollbackMaxLines(DefaultScrollbackSize)

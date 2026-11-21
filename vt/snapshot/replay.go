@@ -58,7 +58,6 @@ func Replay(st *State) []byte {
 	return replay(&cp)
 }
 
-// replay is Replay for a state that is not packed.
 func replay(st *State) []byte {
 	if st == nil {
 		return nil
@@ -67,12 +66,8 @@ func replay(st *State) []byte {
 	b.Grow(st.Width * (st.Height + len(st.Scrollback)) * 2)
 	w := &vtWriter{b: &b, width: st.Width}
 
-	// Autowrap on and the pen reset, whatever the client was left at.
 	b.WriteString("\x1b[0m\x1b[?7h\x1b[H")
 
-	// The rows from the top: history, then the screen the history belongs
-	// to. Under an alternate screen that is the main screen, whose wrap flags
-	// the state does not carry.
 	main, mainWraps := st.Screen, wrapFlags(st.ScreenWraps, len(st.Screen))
 	if st.IsAltScreen && st.MainScreen != nil {
 		main, mainWraps = st.MainScreen, make([]bool, len(st.MainScreen))
@@ -84,14 +79,10 @@ func replay(st *State) []byte {
 	w.rows(rows, wraps, false)
 
 	if st.IsAltScreen {
-		// 1049 saves the cursor on the main screen, which is where leaving
-		// the program puts it back.
 		if c := st.MainSavedCursor; c != nil {
 			w.cup(c.X, c.Y)
 		}
 		w.kittyStack(st.KittyKbdMainStack)
-		// Entered the way the guest entered it, so leaving it later does
-		// what the guest expects.
 		alt := "1049"
 		switch {
 		case st.Modes[1047]:
@@ -106,8 +97,6 @@ func replay(st *State) []byte {
 	}
 
 	if len(st.TabStops) > 0 {
-		// HTS sets a stop at the cursor, so the table goes before the
-		// cursor is placed.
 		b.WriteString("\x1b[3g")
 		for _, x := range tabStopCols(st.TabStops) {
 			if x < st.Width {
@@ -119,7 +108,6 @@ func replay(st *State) []byte {
 
 	top := 0
 	if m := st.Margins; len(m) == 4 && m[3] > 0 {
-		// DECSTBM homes the cursor, so it goes before the cursor is placed.
 		top = m[1]
 		b.WriteString("\x1b[")
 		b.WriteString(strconv.Itoa(m[1] + 1))
@@ -128,17 +116,12 @@ func replay(st *State) []byte {
 		b.WriteString("r")
 	}
 
-	// Origin mode homes the cursor too, and from here on a cursor position
-	// counts from the top margin.
 	cy := st.CursorY
 	if st.Modes[6] {
 		b.WriteString("\x1b[?6h")
 		cy -= top
 	}
 
-	// The cursor, with its pending wrap: printing the cell under it again
-	// leaves the cursor where it is with the wrap armed, which no cursor
-	// movement can do.
 	w.cup(st.CursorX, cy)
 	if st.PendingWrap && st.CursorX == st.Width-1 && st.CursorY < len(st.Screen) {
 		if row := st.Screen[st.CursorY]; st.CursorX < len(row) && row[st.CursorX].Width != 0 {
@@ -149,8 +132,6 @@ func replay(st *State) []byte {
 
 	charsets(&b, st.Charsets)
 	decModes(&b, st.Modes)
-	// The active screen's stack. Under the alternate screen the main
-	// screen's was pushed before the switch.
 	w.kittyStack(st.KittyKbdStack)
 	if st.ModifyOtherKeysKnown && st.ModifyOtherKeys > 0 {
 		b.WriteString("\x1b[>4;")
@@ -170,8 +151,6 @@ func replay(st *State) []byte {
 		b.WriteString(st.Title)
 		b.WriteString("\x1b\\")
 	}
-	// After everything printed above, which insert mode would push along
-	// the row.
 	for _, m := range []int{4, 20} {
 		if on, ok := st.ANSIModes[m]; ok {
 			b.WriteString("\x1b[")
@@ -189,27 +168,19 @@ func replay(st *State) []byte {
 	return b.Bytes()
 }
 
-// vtWriter writes rows of cells, keeping track of the pen and the link it
-// last set so a run of cells painted the same way costs one SGR.
 type vtWriter struct {
 	b     *bytes.Buffer
 	width int
 	cur   StyleState
-	set   bool // cur was written; false means the pen is the default
+	set   bool
 }
 
-// rows writes rows from the cursor down. absolute places each row with a
-// cursor movement instead of a newline, for a screen that must not scroll.
 func (w *vtWriter) rows(rows [][]CellState, wraps []bool, absolute bool) {
 	for i, row := range rows {
 		if absolute {
 			w.resetPen()
 			w.cup(0, i)
 		}
-		// A wrapped row is printed through its last column and the next row
-		// carries on from it. It counts as wrapped only when the next row
-		// prints something, or the newline after that row would land on the
-		// wrong line.
 		wrapped := !absolute && i < len(wraps) && wraps[i] && i+1 < len(rows) && len(rows[i+1]) > 0
 		w.row(row, wrapped, !absolute && i > 0 && i-1 < len(wraps) && wraps[i-1])
 		if absolute || i == len(rows)-1 || wrapped {
@@ -221,9 +192,6 @@ func (w *vtWriter) rows(rows [][]CellState, wraps []bool, absolute bool) {
 	w.resetPen()
 }
 
-// row writes one row's cells. full prints every column, for a wrapped row;
-// otherwise trailing blanks are left out. lead prints at least the first
-// cell, so a row a wrapped row carries on into starts on the next line.
 func (w *vtWriter) row(row []CellState, full, lead bool) {
 	n := min(len(row), w.width)
 	end := n
@@ -238,19 +206,15 @@ func (w *vtWriter) row(row []CellState, full, lead bool) {
 	for x := 0; x < end; x++ {
 		c := row[x]
 		if c.Width == 0 && c.Content == "" && x > 0 && row[x-1].Width > 1 {
-			// The second column of a wide character.
 			continue
 		}
 		if c.Width > 1 && x+c.Width > w.width {
-			// A wide character that no longer fits the width. Print a blank
-			// in its place rather than wrap it onto the next row.
 			c = CellState{Content: " ", Width: 1, StyleState: c.StyleState}
 		}
 		w.cell(c)
 	}
 }
 
-// cell prints one cell with its pen.
 func (w *vtWriter) cell(c CellState) {
 	if !w.set || c.StyleState != w.cur {
 		w.pen(c.StyleState)
@@ -262,12 +226,10 @@ func (w *vtWriter) cell(c CellState) {
 	w.b.WriteString(c.Content)
 }
 
-// blankCell reports whether a cell prints nothing and paints nothing.
 func blankCell(c CellState) bool {
 	return (c.Content == "" || c.Content == " ") && c.StyleState == (StyleState{})
 }
 
-// cup moves the cursor to column x, row y, counted from zero.
 func (w *vtWriter) cup(x, y int) {
 	w.b.WriteString("\x1b[")
 	w.b.WriteString(strconv.Itoa(y + 1))
@@ -276,7 +238,6 @@ func (w *vtWriter) cup(x, y int) {
 	w.b.WriteString("H")
 }
 
-// resetPen puts the pen back to the default and closes an open link.
 func (w *vtWriter) resetPen() {
 	if !w.set {
 		return
@@ -288,7 +249,6 @@ func (w *vtWriter) resetPen() {
 	w.cur, w.set = StyleState{}, false
 }
 
-// pen sets the pen to s: one SGR from a reset, and the link when it changed.
 func (w *vtWriter) pen(s StyleState) {
 	if s.LinkURL != w.cur.LinkURL || s.LinkParams != w.cur.LinkParams {
 		w.b.WriteString("\x1b]8;")
@@ -326,11 +286,6 @@ func (w *vtWriter) pen(s StyleState) {
 	w.cur, w.set = s, true
 }
 
-// sgrColor appends one colour in the wire form colorToWire writes: a<n> for
-// one of the 16 palette colours, i<n> for the 256-colour palette, #rrggbb
-// for truecolour. base and bright are the SGR codes of palette colour 0 and
-// 8; -1 means the colour has only the extended form, as the underline
-// colour does.
 func sgrColor(b *bytes.Buffer, wire string, base, bright int, ext string) {
 	if len(wire) < 2 {
 		return
@@ -372,12 +327,7 @@ func sgrColor(b *bytes.Buffer, wire string, base, bright int, ext string) {
 	}
 }
 
-// kittyStack pushes the kitty keyboard flags, base entry first.
 func (w *vtWriter) kittyStack(stack []int) {
-	// The state's stack starts with the base entry, which every emulator
-	// already has. It is set in place, and only the rest are pushed over it:
-	// pushing it too left a fresh emulator with one entry more than the
-	// guest's.
 	for i, flags := range stack {
 		if i == 0 {
 			w.b.WriteString("\x1b[=")
@@ -391,9 +341,6 @@ func (w *vtWriter) kittyStack(stack []int) {
 	}
 }
 
-// charsets designates G0 to G3 and shifts GL, in the layout of
-// State.Charsets. US ASCII in G0 shifted into GL is the default and
-// writes nothing.
 func charsets(b *bytes.Buffer, cs []int) {
 	if len(cs) != 6 {
 		return
@@ -408,41 +355,32 @@ func charsets(b *bytes.Buffer, cs []int) {
 	}
 	switch cs[4] {
 	case 1:
-		b.WriteByte(0x0e) // SO
+		b.WriteByte(0x0e)
 	case 2:
-		b.WriteString("\x1bn") // LS2
+		b.WriteString("\x1bn")
 	case 3:
-		b.WriteString("\x1bo") // LS3
+		b.WriteString("\x1bo")
 	}
 }
 
-// snapshotModes are the DEC private modes a SNAP frame sets, in the order it
-// sets them: what changes the bytes the client sends, and the two that
-// change how the screen shows (autowrap and the cursor's visibility).
-// Autowrap comes after the rows, which are painted with it on.
 var snapshotModes = []int{
-	1,    // DECCKM: application cursor keys
-	7,    // DECAWM: autowrap
-	25,   // DECTCEM: the cursor is shown
-	9,    // X10 mouse
-	1000, // mouse button tracking
-	1002, // mouse button and drag tracking
-	1003, // mouse any-motion tracking
-	1004, // focus reports
-	1005, // UTF-8 mouse encoding
-	1006, // SGR mouse encoding
-	1015, // urxvt mouse encoding
-	1016, // SGR pixel mouse encoding
-	1007, // alternate scroll
-	2004, // bracketed paste
+	1,
+	7,
+	25,
+	9,
+	1000,
+	1002,
+	1003,
+	1004,
+	1005,
+	1006,
+	1015,
+	1016,
+	1007,
+	2004,
 }
 
-// decModes writes the snapshot's DEC modes. The keypad mode is mode 66 in the
-// state and is written as DECKPAM or DECKPNM, which every emulator knows.
 func decModes(b *bytes.Buffer, modes map[int]bool) {
-	// Resets first, then sets: in ghostty the mouse tracking modes share one
-	// state, so resetting 1002 after setting 1000 would turn mouse reports
-	// off.
 	for _, want := range []bool{false, true} {
 		for _, m := range snapshotModes {
 			on, ok := modes[m]

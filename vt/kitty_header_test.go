@@ -62,21 +62,15 @@ func FuzzKittyHeader(f *testing.F) {
 		if head.FilePath != full.FilePath && (head.FilePath != "" || namesObject(full)) {
 			t.Fatalf("%q: the header parse named %q, the full parse %q", data, head.FilePath, full.FilePath)
 		}
-		// Everything else is the same.
 		a, b := *full, *head
 		a.Data, a.FilePath, a.RawPayload, a.PayloadErr = nil, "", "", nil
 		b.FilePath, b.RawPayload, b.PayloadErr = "", "", nil
-		// PayloadErr is nil on both sides, so no error is compared. The any
-		// conversions say so to the deepequalerrors check, which reads only
-		// the static type.
 		if !reflect.DeepEqual(any(a), any(b)) {
 			t.Fatalf("%q: the control keys differ:\n full   %+v\n header %+v", data, a, b)
 		}
 	})
 }
 
-// namesObject reports whether the header parse must name the object of cmd:
-// a shared memory, temp file or file transmission whose name decodes.
 func namesObject(cmd *vt.KittyCommand) bool {
 	return (cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile ||
 		cmd.Medium == vt.KittyMediumFile) &&
@@ -116,8 +110,6 @@ func TestKittyHeaderNamesTheObject(t *testing.T) {
 	}
 }
 
-// kittyStreamChunk is one 4096-byte chunk from the middle of a kitty graphics
-// stream sent with q=2: the shape of nearly every APC a compositor writes.
 func kittyStreamChunk() []byte {
 	px := bytes.Repeat([]byte{1, 2, 3, 255}, 1024)
 	enc := base64.StdEncoding.EncodeToString(px)[:4096]

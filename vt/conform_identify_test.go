@@ -1,14 +1,5 @@
 package vt_test
 
-// Conformance for the queries a guest uses to identify the terminal and read
-// its state back: XTVERSION, DA3, XTGETTCAP, and DECRQSS for the pen and the
-// cursor shape.
-//
-// Reply formats are xterm's ctlseqs: XTVERSION is DCS > | text ST, DA3 is
-// DCS ! | unit-id ST, XTGETTCAP is DCS 1 + r name=value ST per name with
-// DCS 0 + r ST for a name the terminal does not have, and DECRQSS is
-// DCS 1 $ r value ST.
-
 import (
 	"encoding/hex"
 	"strings"
@@ -17,10 +8,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// replyChecked runs input into a fresh emulator and returns what it wrote back
-// to the guest, failing the test if any part of the input was logged as an
-// unrecognised sequence. A query that is answered and also logged as
-// unhandled is answered by accident.
 func replyChecked(t *testing.T, in string) string {
 	t.Helper()
 	emu := vt.NewEmulator(80, 24)
@@ -35,9 +22,6 @@ func replyChecked(t *testing.T, in string) string {
 	return drainReply(emu)
 }
 
-// drainReply returns everything the emulator has written back so far. Replies
-// are written during the Write that provokes them, so they are all buffered by
-// now; a short sentinel query marks the end, so the read never blocks.
 func drainReply(emu *vt.Emulator) string {
 	const sentinel = "\x1b[5n"
 	_, _ = emu.WriteString(sentinel)
@@ -60,8 +44,6 @@ func TestConform_XTVERSION(t *testing.T) {
 		}
 	}
 
-	// The host names the program, and a release build names its version
-	// after it, as tmux and WezTerm do.
 	vt.SetTerminalName("tuios")
 	t.Cleanup(func() { vt.SetTerminalName("") })
 	vt.SetBuildVersion("1.2.3")
@@ -82,7 +64,6 @@ func TestConform_DA3(t *testing.T) {
 	}
 }
 
-// hexName spells a capability name the way XTGETTCAP carries it.
 func hexName(s string) string { return hex.EncodeToString([]byte(s)) }
 
 func TestConform_XTGETTCAP(t *testing.T) {
@@ -117,7 +98,6 @@ func TestConform_XTGETTCAP(t *testing.T) {
 		{"Se", query("Se"), ok("Se", "\x1b[2 q")},
 		{"Sync", query("Sync"), ok("Sync", "\x1b[?2026%?%p1%{1}%-%tl%eh%;")},
 
-		// One reply per name, in the order asked, a refusal included.
 		{"two names", query("TN", "RGB"), ok("TN", "xterm-256color") + boolean("RGB")},
 		{"an unknown name between two known ones", query("TN", "nope", "RGB"),
 			ok("TN", "xterm-256color") + refused + boolean("RGB")},
@@ -126,7 +106,6 @@ func TestConform_XTGETTCAP(t *testing.T) {
 		{"a name that is not hex is refused", "\x1bP+qzz\x1b\\", refused},
 		{"an empty request is refused", "\x1bP+q\x1b\\", refused},
 
-		// The name comes back as the guest spelled it, case included.
 		{"uppercase hex", "\x1bP+q544E\x1b\\", "\x1bP1+r544E=787465726D2D323536636F6C6F72\x1b\\"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -200,7 +179,6 @@ func TestConform_DECRQSS_DECSCUSR(t *testing.T) {
 		in   string
 		want string
 	}{
-		// A pane starts with a steady block, which DECSCUSR spells 2.
 		{"the default shape", "", "2 q"},
 		{"a blinking block", "\x1b[1 q", "1 q"},
 		{"DECSCUSR 0 is a blinking block", "\x1b[0 q", "1 q"},
@@ -216,8 +194,6 @@ func TestConform_DECRQSS_DECSCUSR(t *testing.T) {
 		})
 	}
 
-	// DECSCA is refused: nothing here protects a cell, so there is no
-	// attribute to report.
 	if got, want := replyChecked(t, "\x1bP$q\"q\x1b\\"), "\x1bP0$r\x1b\\"; got != want {
 		t.Errorf("DECSCA request replied %q, want the refusal %q", got, want)
 	}

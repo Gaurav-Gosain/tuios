@@ -7,12 +7,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// The sequences that carry a string payload: OSC, DCS and APC. They are the
-// ones a guest can make arbitrarily long, and the ones where the terminator is
-// a second thing to get wrong.
-
-// oscCapture collects what an OSC made the emulator do, so a case can assert on
-// the effect rather than on the absence of a crash.
 type oscCapture struct {
 	title       string
 	iconName    string
@@ -74,8 +68,6 @@ func TestConform_OSCTitleAndDirectory(t *testing.T) {
 			iconName: "hello",
 		},
 		{
-			// ST is as valid a terminator as BEL, and the one a program that
-			// cares about correctness uses.
 			name:  "a string terminator ends an OSC",
 			in:    "\x1b]2;hello\x1b\\",
 			title: "hello",
@@ -160,8 +152,6 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			},
 		},
 		{
-			// Programs reopen a link without closing the last one when they
-			// redraw. The second open replaces the first; it does not nest.
 			name: "a second open replaces the first without a close",
 			cols: 10,
 			in:   "\x1b]8;;" + url + "\x07a\x1b]8;;https://example.invalid/y\x07b\x1b]8;;\x07c",
@@ -173,9 +163,6 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			},
 		},
 		{
-			// The URI is everything after the second semicolon, so a query
-			// with semicolons and colons stays whole, and parameters with
-			// colons (id=a:foo=b) stay parameters.
 			name: "a URI keeps its semicolons and colons",
 			cols: 10,
 			in:   "\x1b]8;id=a:x=y;https://example.invalid/p;q=1:2\x1b\\b\x1b]8;;\x1b\\",
@@ -185,7 +172,6 @@ func TestConform_OSC8Hyperlinks(t *testing.T) {
 			},
 		},
 		{
-			// An empty URI closes the link whatever parameters come with it.
 			name: "an empty URI with parameters closes the link",
 			cols: 10,
 			in:   "\x1b]8;id=n1;" + url + "\x07a\x1b]8;id=n1;\x07b",
@@ -230,8 +216,6 @@ func TestConform_OSCClipboardAndNotifications(t *testing.T) {
 		if len(c.clipQueried) != 1 {
 			t.Fatalf("clipboard queries = %d, want 1", len(c.clipQueried))
 		}
-		// The answer goes back to the guest, which is the whole point of a
-		// query: a reply that never reaches the program is a hang.
 		buf := make([]byte, 256)
 		n, _ := emu.Read(buf)
 		if !strings.Contains(string(buf[:n]), "52;c;") {
@@ -316,8 +300,6 @@ func TestConform_StringSequencesDoNotReachTheScreen(t *testing.T) {
 			want: "AB",
 		},
 		{
-			// An ESC inside an OSC ends the string. What follows is a fresh
-			// sequence, not text, and the emulator says it does not know it.
 			name:      "an OSC payload holding an escape is not printed",
 			cols:      12,
 			in:        "A\x1b]0;a\x1bb\x07B",
@@ -352,10 +334,6 @@ func TestConform_StringSequencesDoNotReachTheScreen(t *testing.T) {
 			unhandled: true,
 		},
 		{
-			// GNU screen's passthrough wraps the inner sequence as-is, so the
-			// inner ESC is a single byte and the DCS ends at the first ST.
-			// Nothing here unwraps it; what matters for now is that none of it
-			// is drawn. See TestConform_Passthrough.
 			name:      "screen passthrough hides the inner sequence",
 			cols:      12,
 			in:        "A\x1bP\x1b[31m\x1b\\B",
@@ -363,8 +341,6 @@ func TestConform_StringSequencesDoNotReachTheScreen(t *testing.T) {
 			unhandled: true,
 		},
 		{
-			// tmux requires every inner ESC doubled, so an inner sequence
-			// arrives as ESC ESC and must not terminate the DCS early.
 			name:      "tmux passthrough hides the inner sequence",
 			cols:      12,
 			in:        "A\x1bPtmux;\x1b\x1b[31m\x1b\\B",
@@ -379,8 +355,6 @@ func TestConform_StringSequencesDoNotReachTheScreen(t *testing.T) {
 			unhandled: true,
 		},
 		{
-			// An oversized payload has to be bounded somewhere, and wherever
-			// that is, none of it may spill onto the screen.
 			name: "an oversized OSC payload is not printed",
 			cols: 12,
 			in:   "A\x1b]0;" + strings.Repeat("x", 1<<16) + "\x07B",
@@ -394,9 +368,6 @@ func TestConform_StringSequencesDoNotReachTheScreen(t *testing.T) {
 			unhandled: true,
 		},
 		{
-			// A payload that never ends swallows what follows, which is
-			// correct: the terminal cannot know the program crashed. What it
-			// must not do is print the payload.
 			name: "an unterminated OSC swallows what follows",
 			cols: 12,
 			in:   "A\x1b]0;never ends and then B",
@@ -426,9 +397,8 @@ func TestConform_StringSequencesDoNotReachTheScreen(t *testing.T) {
 // drawn as text.
 func TestConform_Passthrough(t *testing.T) {
 	tests := []struct {
-		name string
-		in   string
-		// executes says whether the wrapped sequence takes effect.
+		name     string
+		in       string
 		executes bool
 	}{
 		{
@@ -453,13 +423,10 @@ func TestConform_Passthrough(t *testing.T) {
 				t.Fatalf("write: %v", err)
 			}
 
-			// Nothing may be drawn from inside a payload, whatever else happens.
 			if got := dumpScreen(emu); got != "AB" {
 				t.Fatalf("screen = %q, want %q: part of the payload reached the screen", got, "AB")
 			}
 
-			// The inner sequence set a foreground colour, so B carries one if
-			// and only if it ran.
 			c := emu.CellAt(1, 0)
 			if c == nil {
 				t.Fatal("no cell where B should be")

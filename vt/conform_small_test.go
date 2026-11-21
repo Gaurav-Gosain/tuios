@@ -1,8 +1,5 @@
 package vt_test
 
-// Conformance for the title stack (XTWINOPS 22 and 23) and for SGR 53 and 55,
-// overline, which this emulator recognises as unimplemented.
-
 import (
 	"strings"
 	"testing"
@@ -32,7 +29,6 @@ func TestConform_Overline(t *testing.T) {
 	})
 }
 
-// titleLog records the titles and icon names the emulator announces.
 type titleLog struct{ titles, icons []string }
 
 func newTitleEmulator(t *testing.T) (*vt.Emulator, *titleLog, *unhandledLog) {
@@ -56,7 +52,7 @@ func TestConform_TitleStack(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		in            string
-		titles, icons string // what was announced, comma separated
+		titles, icons string
 	}{
 		{"push and pop both", "\x1b]0;shell\x07\x1b[22;0t\x1b]0;vim\x07\x1b[23;0t",
 			"shell,vim,shell", "shell,vim,shell"},
@@ -99,7 +95,6 @@ func TestConform_TitleStack(t *testing.T) {
 		in.WriteString("\x1b]2;end\x07")
 		in.WriteString(strings.Repeat("\x1b[23;2t", 11))
 		_, _ = emu.WriteString(in.String())
-		// The eleventh push dropped "a", so the pops end at "b".
 		if got, want := strings.Join(tl.titles[12:], ","), "k,j,i,h,g,f,e,d,c,b"; got != want {
 			t.Errorf("titles popped = %q, want %q", got, want)
 		}
@@ -122,7 +117,7 @@ func TestConform_TitleStack(t *testing.T) {
 func TestConform_ExplicitIconName(t *testing.T) {
 	for _, tc := range []struct {
 		name, in string
-		want     string // what was announced, comma separated
+		want     string
 	}{
 		{"OSC 1 announces it", "\x1b]1;api\x07", "api"},
 		{"OSC 0 does not", "\x1b]0;fish\x07", ""},

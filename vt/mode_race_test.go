@@ -19,7 +19,6 @@ func TestModeConcurrentAccess(t *testing.T) {
 	const iterations = 2000
 	var wg sync.WaitGroup
 
-	// Writer: toggle mouse, cursor-keys, focus and bracketed-paste modes.
 	toggles := [][]byte{
 		[]byte("\x1b[?1002h\x1b[?1003h\x1b[?1h\x1b[?1004h\x1b[?2004h"),
 		[]byte("\x1b[?1002l\x1b[?1003l\x1b[?1l\x1b[?1004l\x1b[?2004l"),
@@ -30,7 +29,6 @@ func TestModeConcurrentAccess(t *testing.T) {
 		}
 	})
 
-	// Readers: hit every accessor that reads the mode map.
 	readers := []func(){
 		func() { _ = emu.SupportsMotionEvents() },
 		func() { _ = emu.ApplicationCursorKeys() },

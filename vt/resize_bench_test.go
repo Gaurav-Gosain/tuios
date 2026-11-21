@@ -1,17 +1,5 @@
 package vt
 
-// Resize cost on a pane whose scrollback ring is full. Built through
-// NewWithScrollback, so the same benchmark measures whichever backend the
-// build selected:
-//
-//	go test ./vt/ -run XXX -bench BenchmarkResizeFullRing
-//	go test -tags ghostty ./vt/ -run XXX -bench BenchmarkResizeFullRing
-//
-// The ring holds 10,000 rows of a log whose lines are longer than the pane, so
-// every line wraps and a reflowing backend has every row to rewrap. Each
-// iteration is one step of a window drag: the width or height moves by one
-// column or row and back.
-
 import (
 	"fmt"
 	"runtime"
@@ -30,13 +18,10 @@ func fullRingTerminal(tb testing.TB, long bool) Terminal {
 	tm := NewWithScrollback(benchRingCols, benchRingRows, benchRingCap)
 	var b strings.Builder
 	if long {
-		// 300 columns of text at 207 wide: two rows a line, so 5,000 lines
-		// fill the ring and a little more scrolls it.
 		for i := range benchRingCap/2 + benchRingRows {
 			fmt.Fprintf(&b, "\x1b[3%dm%06d\x1b[m %s\r\n", i%7+1, i, strings.Repeat("lorem ipsum dolor sit amet ", 11)[:293])
 		}
 	} else {
-		// A build log: lines that fit, so nothing on the screen wraps.
 		for i := range benchRingCap + benchRingRows {
 			fmt.Fprintf(&b, "\x1b[3%dm%06d\x1b[m compiling package %d\r\n", i%7+1, i, i)
 		}
@@ -67,7 +52,6 @@ func benchResizeOn(b *testing.B, long bool, step func(i int) (int, int), frame b
 		w, h := step(i)
 		tm.Resize(w, h)
 		if frame {
-			// What the next frame reads: every cell of the screen.
 			for y := range h {
 				for x := range w {
 					_ = tm.CellAt(x, y)
@@ -108,8 +92,6 @@ func BenchmarkResizeFullRingShortLines(b *testing.B) {
 	benchResizeOn(b, false, func(i int) (int, int) { return benchRingCols - i%2, benchRingRows }, false)
 }
 
-// marksTerminal is a pane whose screen ends a line of 50,000 characters,
-// with marks OSC 133 marks placed through it.
 func marksTerminal(tb testing.TB, marks int) Terminal {
 	tb.Helper()
 	tm := NewWithScrollback(200, 50, benchRingCap)
@@ -141,7 +123,6 @@ func benchMarks(b *testing.B, marks int) {
 		if remap == nil {
 			b.Fatal("the resize did not reflow")
 		}
-		// What the client does with the remap: one call a placement.
 		for p := range 1000 {
 			_ = remap(p)
 		}

@@ -11,7 +11,7 @@ func TestSoftWrapFlag(t *testing.T) {
 	cases := []struct {
 		name  string
 		input string
-		want  []bool // rows 0.. of the screen
+		want  []bool
 	}{
 		{"a long line wraps", "0123456789abcde", []bool{true, false}},
 		{"a full row then a newline does not", "0123456789\r\nabcde", []bool{false, false}},
@@ -19,7 +19,6 @@ func TestSoftWrapFlag(t *testing.T) {
 		{"a wide glyph pushed off the edge wraps", "012345678漢x", []bool{true, false}},
 		{"two wraps in one line", "0123456789abcdefghijKL", []bool{true, true, false}},
 		{"erasing the row drops the wrap", "0123456789abc\x1b[1;1H\x1b[2K", []bool{false, false}},
-		// The rest pin what ghostty does, so the two backends agree.
 		{"erasing to the end drops the wrap", "0123456789abc\x1b[1;5H\x1b[K", []bool{false, false}},
 		{"erasing to the start keeps the wrap", "0123456789abc\x1b[1;5H\x1b[1K", []bool{true, false}},
 		{"DCH drops the wrap", "0123456789abc\x1b[1;3H\x1b[2P", []bool{false, false}},
@@ -53,8 +52,6 @@ func TestSoftWrapFlag(t *testing.T) {
 func TestSoftWrapFlagInScrollback(t *testing.T) {
 	term := NewWithScrollback(10, 2, 100)
 	defer term.Close()
-	// Row one wraps into row two; row three fills the width and ends with a
-	// newline; the last lines push all of it into the history.
 	input := "0123456789abc\r\n" + "ABCDEFGHIJ\r\n" + "x\r\ny\r\nz"
 	if _, err := term.Write([]byte(input)); err != nil {
 		t.Fatal(err)

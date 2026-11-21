@@ -7,10 +7,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// cellRow renders one row as "content/width" per occupied cell, so a test can
-// say exactly which cluster sits in which column and how wide the emulator
-// thinks it is. A screen dump alone cannot: a dropped wide character and a
-// wrapped one both leave the same blank column behind.
 func cellRow(emu *vt.Emulator, y int) string {
 	var b strings.Builder
 	for x := range emu.Width() {
@@ -138,8 +134,6 @@ func TestGrapheme_ASCIIBaseKeepsCombiningMarks(t *testing.T) {
 			want: "c/1 a/1 f/1 é/1  /1  /1",
 		},
 		{
-			// A PTY read can end anywhere, including between a base and its
-			// marks. The cluster has to survive the split.
 			name:  "split across writes",
 			split: []string{"e", "́X"},
 			want:  "é/1 X/1  /1  /1  /1  /1",
@@ -150,22 +144,11 @@ func TestGrapheme_ASCIIBaseKeepsCombiningMarks(t *testing.T) {
 			want:  "1️⃣/2 /0 X/1  /1  /1  /1",
 		},
 		{
-			// A cursor move closes the cluster, so a mark after one is not
-			// pulled back onto the character the cursor left. It combines
-			// with the cell before the cursor instead (a blank here), the
-			// way ghostty and xterm attach a mark that has no base of its
-			// own.
 			name: "cursor move ends the cluster",
 			in:   "e\x1b[1;4H́",
 			want: "e/1  /1  ́/1  /1  /1  /1",
 		},
 		{
-			// A designated character set maps the byte to something else, and
-			// rebuilding the cell from the byte the guest sent would undo the
-			// mapping. With a set designated the cluster is closed rather
-			// than left open, so the mark arrives with no base and combines
-			// with the cell before the cursor: the mapped glyph itself,
-			// which survives.
 			name: "a designated character set is not undone by a mark",
 			in:   "\x1b(0q́",
 			want: "─́/1  /1  /1  /1  /1  /1",
@@ -212,12 +195,6 @@ func TestGrapheme_CombiningAtRightMarginStaysInItsCell(t *testing.T) {
 		t.Errorf("row 1 = %q\n    want %q", got, want)
 	}
 
-	// A variation selector turns a narrow base wide. In the last column there
-	// is no room for the second cell, so the cluster wraps whole: the column
-	// it could not fill goes blank and the character lands at the start of
-	// the next line, which is where ghostty moves it too. Squeezing it into
-	// one cell instead made a cell whose content re-measures wider than the
-	// width it claims, which no frame can redraw.
 	emu2 := vt.NewEmulator(6, 2)
 	if _, err := emu2.WriteString("abcde#️⃣"); err != nil {
 		t.Fatalf("write: %v", err)

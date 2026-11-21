@@ -11,8 +11,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// tailTextFullScreen returns a 120x40 screen whose 40 rows each hold exactly
-// 100 ASCII characters followed by 20 blank cells, and those rows top-down.
 func tailTextFullScreen() (*vt.Emulator, []string) {
 	emu := vt.NewEmulator(120, 40)
 	letters := strings.Repeat("abcdefghijklmnopqrstuvwxyz", 4)
@@ -41,11 +39,6 @@ func TestTailTextAllocatesOnce(t *testing.T) {
 		}
 	}
 
-	// The budget at n=4096 is built from what the screen holds:
-	//   text    the rows' trimmed bytes,
-	//   k*16    one string header per kept row,
-	//   k*8     one int per kept row, for a length kept while walking the rows,
-	//   1024    slack for the allocator's size classes.
 	text := 0
 	for _, r := range rows {
 		text += len(strings.TrimRight(r, " \t"))
@@ -70,11 +63,9 @@ func TestTailTextAllocatesOnce(t *testing.T) {
 func TestTailTextRowsAreTheSame(t *testing.T) {
 	emu := vt.NewEmulator(120, 40)
 	_, _ = fmt.Fprintf(emu, "\x1b[3;1Hfirst line")
-	// Row 4 stays blank.
 	_, _ = fmt.Fprintf(emu, "\x1b[5;1H日本語 wide")
 	_, _ = fmt.Fprintf(emu, "\x1b[6;1Hspaces after   ")
 	_, _ = fmt.Fprintf(emu, "\x1b[7;1Htab ")
-	// Write moves the cursor for a tab, so the tab is set as a cell.
 	emu.SetCell(4, 6, &uv.Cell{Content: "\t", Width: 1})
 	_, _ = fmt.Fprintf(emu, "\x1b[9;1H╭──❯ ask ──╮")
 
@@ -99,7 +90,6 @@ func TestTailTextRowsAreTheSame(t *testing.T) {
 		}
 	}
 
-	// A first call's rows stay as they were after the screen changes.
 	first := emu.TailText(40)
 	_, _ = fmt.Fprintf(emu, "\x1b[3;1HFIRST LINE")
 	_, _ = fmt.Fprintf(emu, "\x1b[9;1H┌──❯ new ──┐")

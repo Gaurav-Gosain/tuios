@@ -8,10 +8,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// The existing emulator benchmarks all run at 80x24 and none report
-// allocations. The maintainer runs 207x55, and the write path is the one that
-// has to keep up with a command flooding output, so these measure it at the
-// real size with allocation counts, on the output shapes that actually arrive.
 const (
 	perfCols = 207
 	perfRows = 55
@@ -21,10 +17,8 @@ const (
 // output shapes a working day produces: a plain build log, a colourised one,
 // and a full-screen application repainting itself.
 func BenchmarkEmulatorWriteHeavyOutput(b *testing.B) {
-	// A plain log line, the shape of a compiler or test runner scrolling past.
 	plain := []byte(strings.Repeat("compiling package github.com/example/project/internal/thing\r\n", 32))
 
-	// The same volume with per-line colour, the shape of most modern tooling.
 	var colored strings.Builder
 	for i := range 32 {
 		fmt.Fprintf(&colored, "\x1b[38;5;%dmok\x1b[m   github.com/example/project/pkg%02d\t0.0%02ds\r\n",
@@ -32,8 +26,6 @@ func BenchmarkEmulatorWriteHeavyOutput(b *testing.B) {
 	}
 	coloredBytes := []byte(colored.String())
 
-	// A full-screen repaint: absolute cursor positioning per row and a styled
-	// run on each, which is what an editor or a dashboard emits per frame.
 	var repaint strings.Builder
 	repaint.WriteString("\x1b[H")
 	for y := 1; y <= perfRows; y++ {
@@ -109,7 +101,6 @@ func BenchmarkSemanticMarkerTrim(b *testing.B) {
 		b.Run(fmt.Sprintf("markers-%d", marks), func(b *testing.B) {
 			l := vt.NewSemanticMarkerList(10000)
 			for i := range marks {
-				// Far enough down that no trim in the run removes one.
 				l.Add(vt.SemanticMarker{Type: vt.MarkerPromptStart, AbsLine: 1<<40 + i})
 			}
 			b.ReportAllocs()
@@ -138,8 +129,6 @@ func BenchmarkEmulatorScrollThroughput(b *testing.B) {
 		}
 	})
 
-	// The alternate screen has no scrollback, so this isolates the write cost
-	// from the retention cost.
 	b.Run("alt-screen-no-scrollback", func(b *testing.B) {
 		emu := vt.NewEmulator(perfCols, perfRows)
 		_, _ = emu.Write([]byte("\x1b[?1049h"))

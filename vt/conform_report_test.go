@@ -1,18 +1,5 @@
 package vt_test
 
-// Conformance for the sequences that answer back: DSR, CPR, DECXCPR, DA and
-// DECRQM.
-//
-// These are the sequences where being wrong is invisible on screen and obvious
-// to the guest. A program that asks where the cursor is and gets the answer
-// transposed will draw its prompt in the wrong place forever after, and nothing
-// in a screen-dump test would ever notice.
-//
-// Cases are drawn from esctest (iTerm2's conformance suite,
-// tests/esctest/esctest/tests/{cpr,decrqm,dsr}.py), from the VT510 reference
-// manual entries for CPR, DECXCPR, DECRQM and DA, and from what xterm's
-// charproc.c actually sends for CASE_DSR.
-
 import (
 	"strings"
 	"testing"
@@ -21,9 +8,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// reply runs input into a fresh emulator and returns whatever the emulator
-// wrote back to the guest. It gives up after a moment rather than blocking,
-// because "no reply at all" is an answer a case wants to assert.
 func reply(t *testing.T, cols, rows int, in string) string {
 	t.Helper()
 	emu := vt.NewEmulator(cols, rows)
@@ -55,32 +39,19 @@ func TestConform_CursorPositionReport(t *testing.T) {
 		in   string
 		want string
 	}{
-		// Home is line 1, column 1, which is where esctest's tests/cpr.py
-		// starts too.
 		{"home", "\x1b[H\x1b[6n", "\x1b[1;1R"},
 
-		// The row and the column have to be told apart, so every case below
-		// puts the cursor somewhere the two numbers differ. A report that
-		// swapped them would pass a case addressing 3;3.
 		{"row 3 column 4", "\x1b[3;4H\x1b[6n", "\x1b[3;4R"},
 		{"row 5 column 2", "\x1b[5;2H\x1b[6n", "\x1b[5;2R"},
 		{"row 1 column 10", "\x1b[1;10H\x1b[6n", "\x1b[1;10R"},
 
-		// After printing, the column is one past the text.
 		{"after five characters", "hello\x1b[6n", "\x1b[1;6R"},
 
-		// With DECOM set the report is
-		// relative to the scroll region, so the guest reads back the same
-		// numbers it would use to address the cursor.
 		{"origin mode reports region-relative", "\x1b[10;20r\x1b[?6h\x1b[1;1H\x1b[6n", "\x1b[1;1R"},
 		{"origin mode, third row of the region", "\x1b[10;20r\x1b[?6h\x1b[3;5H\x1b[6n", "\x1b[3;5R"},
 
-		// Without DECOM the same cursor reports its absolute position.
 		{"absolute when origin mode is off", "\x1b[10;20r\x1b[3;5H\x1b[6n", "\x1b[3;5R"},
 
-		// DECXCPR is the same numbers behind a private marker, and the page
-		// number after them, as the VT510 manual has it and xterm sends.
-		// This emulator has one page, page 1. libghostty-vt answers the same.
 		{"DECXCPR", "\x1b[5;2H\x1b[?6n", "\x1b[?5;2;1R"},
 		{"DECXCPR in origin mode", "\x1b[10;20r\x1b[?6h\x1b[3;5H\x1b[?6n", "\x1b[?3;5;1R"},
 	} {
@@ -105,11 +76,6 @@ func TestConform_CursorPositionReportUnderLeftMargin(t *testing.T) {
 
 // TestConform_DeviceStatusReport covers the non-cursor half of DSR.
 func TestConform_DeviceStatusReport(t *testing.T) {
-	// DSR 5 asks whether the terminal is in working order. CSI 0 n means yes
-	// (VT510 reference manual, DSR-OS). The reply keeps the form of the
-	// query, as xterm's CASE_CPR and CASE_DSR do: the ANSI query gets
-	// CSI 0 n and the DEC private query gets CSI ? 0 n. ratatui-image reads
-	// only "[0n" and hung on the private answer (issue #253).
 	if got, want := reply(t, 80, 24, "\x1b[5n"), "\x1b[0n"; got != want {
 		t.Errorf("DSR 5 replied %q, want %q", got, want)
 	}
@@ -128,19 +94,11 @@ func TestConform_DeviceAttributes(t *testing.T) {
 	if !strings.HasPrefix(da1, "\x1b[?6") || !strings.HasSuffix(da1, "c") {
 		t.Errorf("DA1 replied %q, which is not a VT220-or-later device attributes report", da1)
 	}
-	// 22 is colour, which is implemented here, and a guest that reads the
-	// list is entitled to use it. Sixel (4) depends on the host and has its
-	// own test, TestSixelAdvertisedFollowsHost.
 	for _, want := range []string{";22c"} {
 		if !strings.Contains(da1, want) {
 			t.Errorf("DA1 replied %q, which does not contain %q", da1, want)
 		}
 	}
-	// The class has to stay VT220 or later: vim, neovim, notcurses and a tmux
-	// inside a pane read it before anything else. And every attribute after it
-	// has to be one this emulator implements, because a guest acts on each.
-	// The answer used to claim 132 columns (1), selective erase (6), national
-	// replacement sets (9), technical characters (15) and user windows (18).
 	fields := strings.Split(strings.TrimSuffix(strings.TrimPrefix(da1, "\x1b[?"), "c"), ";")
 	switch fields[0] {
 	case "62", "63", "64", "65":
@@ -190,8 +148,6 @@ func TestConform_DECRQSS(t *testing.T) {
 			"\x1b[?69h\x1b[10;40s\x1bP$qs\x1b\\",
 			"\x1bP1$r10;40s\x1b\\",
 		}, {
-			// A setting this emulator does not report still gets an answer.
-			// Zero says so, and the guest stops waiting.
 			"a setting this emulator does not report is refused, not ignored",
 			"\x1bP$q\"p\x1b\\",
 			"\x1bP0$r\x1b\\",
@@ -235,9 +191,6 @@ func TestConform_DECRQM(t *testing.T) {
 		{"the alternate screen reports set while in it", "\x1b[?1049h\x1b[?1049$p", "\x1b[?1049;1$y"},
 		{"synchronised output reports set", "\x1b[?2026h\x1b[?2026$p", "\x1b[?2026;1$y"},
 
-		// Modes this emulator acts on, which it used to report as not
-		// recognised because they were missing from its mode table. A guest
-		// that probes before enabling takes the answer at its word.
 		{"mode 47 reports reset by default", "\x1b[?47$p", "\x1b[?47;2$y"},
 		{"mode 47 reports set while in it", "\x1b[?47h\x1b[?47$p", "\x1b[?47;1$y"},
 		{"UTF-8 mouse reports reset by default", "\x1b[?1005$p", "\x1b[?1005;2$y"},
@@ -247,35 +200,20 @@ func TestConform_DECRQM(t *testing.T) {
 		{"SGR pixel mouse reports reset by default", "\x1b[?1016$p", "\x1b[?1016;2$y"},
 		{"SGR pixel mouse reports set after ?1016h", "\x1b[?1016h\x1b[?1016$p", "\x1b[?1016;1$y"},
 		{"in-band resize reports reset by default", "\x1b[?2048$p", "\x1b[?2048;2$y"},
-		// Setting 2048 sends the current size at once, ahead of the report.
 		{"in-band resize reports set after ?2048h", "\x1b[?2048h\x1b[?2048$p", "\x1b[48;24;80;480;800t\x1b[?2048;1$y"},
 
-		// A mode nobody defines has to report 0, not 2. Reporting reset says
-		// the terminal knows the mode and has it off, which is a different
-		// claim and one a guest acts on.
 		{"an unknown private mode reports not recognised", "\x1b[?9999$p", "\x1b[?9999;0$y"},
 
-		// Setting a mode does not make the emulator recognise it. Storing
-		// whatever the guest set had DECRQM report these as set, so a guest
-		// that set, probed and trusted the answer used an encoding or a
-		// feature nothing here produces.
 		{"an unknown private mode set first still reports not recognised", "\x1b[?9999h\x1b[?9999$p", "\x1b[?9999;0$y"},
 		{"DECCOLM set first reports not recognised", "\x1b[?3h\x1b[?3$p", "\x1b[?3;0$y"},
 		{"reverse wrap set first reports not recognised", "\x1b[?45h\x1b[?45$p", "\x1b[?45;0$y"},
 		{"an unknown ANSI mode set first reports not recognised", "\x1b[2h\x1b[2$p", "\x1b[2;0$y"},
 		{"a soft reset does not make KAM recognised", "\x1b[!p\x1b[2$p", "\x1b[2;0$y"},
 
-		// Widths are always measured by grapheme cluster (see WidthMethod),
-		// whatever the guest asks, so 2027 is permanently set: 3, before and
-		// after a reset, and after a RIS.
 		{"grapheme clustering reports permanently set", "\x1b[?2027$p", "\x1b[?2027;3$y"},
 		{"grapheme clustering stays permanently set after ?2027l", "\x1b[?2027l\x1b[?2027$p", "\x1b[?2027;3$y"},
 		{"grapheme clustering stays permanently set after RIS", "\x1bc\x1b[?2027$p", "\x1b[?2027;3$y"},
 
-		// The ANSI form has no private marker and is a separate table.
-		// Reset, not "not recognised": this emulator implements IRM, and
-		// telling a guest otherwise would send it down a fallback path it
-		// does not need.
 		{"ANSI IRM reports reset by default", "\x1b[4$p", "\x1b[4;2$y"},
 		{"ANSI IRM reports set after CSI 4 h", "\x1b[4h\x1b[4$p", "\x1b[4;1$y"},
 		{"ANSI LNM reports set after CSI 20 h", "\x1b[20h\x1b[20$p", "\x1b[20;1$y"},
@@ -372,10 +310,6 @@ func TestConform_PixelSizeReports(t *testing.T) {
 	})
 }
 
-// replies starts one reader of what the emulator writes back to the guest.
-// Each call of the function it returns is the next chunk, or "" when nothing
-// came within a short wait. One reader serves every call, so a call that
-// timed out cannot leave a reader behind that eats the next chunk.
 func replies(emu *vt.Emulator) func() string {
 	ch := make(chan string, 16)
 	go func() {

@@ -78,7 +78,6 @@ func TestSnapshotVTRebuildsThePane(t *testing.T) {
 			check("title", want.Title, got.Title)
 			check("pending wrap", want.PendingWrap, got.PendingWrap)
 			check("pending input", want.PendingInput, got.PendingInput)
-			// The modes Replay writes, and the screen switch.
 			for _, m := range append([]int{6, 47, 1047, 1049}, snapshotModes...) {
 				if want.Modes[m] != got.Modes[m] {
 					t.Errorf("mode %d: want %v got %v (want %v)", m, want.Modes[m], got.Modes[m], maps.Clone(want.Modes))

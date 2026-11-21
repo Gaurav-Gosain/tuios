@@ -27,8 +27,6 @@ func KittyMediumIsFrame(cmd *KittyCommand, info os.FileInfo) bool {
 	return ok && info.Size() == want
 }
 
-// kittyFrameSize is the size in bytes of the object cmd describes, and false
-// when the command does not tell.
 func kittyFrameSize(cmd *KittyCommand) (int64, bool) {
 	if cmd.Offset < 0 || cmd.Size < 0 {
 		return 0, false

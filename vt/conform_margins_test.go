@@ -2,14 +2,6 @@ package vt_test
 
 import "testing"
 
-// Scroll regions and origin mode. This is the family with the worst record in
-// this codebase: a region that outran the screen was a daemon-wide panic, and
-// the interaction between DECOM and cursor addressing is the kind of thing no
-// ordinary session exercises and every full-screen program depends on.
-//
-// The cases named after esctest follow that suite's expectations for DECSTBM,
-// which is the same behaviour xterm has.
-
 func TestConform_DECSTBM(t *testing.T) {
 	runConform(t, []conformCase{
 		{
@@ -26,8 +18,6 @@ func TestConform_DECSTBM(t *testing.T) {
 			cursor: "0,0",
 		},
 		{
-			// esctest: a region whose top equals its bottom is rejected and
-			// leaves the margins as they were.
 			name:      "top equal to bottom is rejected",
 			in:        "\x1b[3;3r",
 			want:      "",
@@ -49,9 +39,6 @@ func TestConform_DECSTBM(t *testing.T) {
 			unhandled: true,
 		},
 		{
-			// esctest: a bottom past the last row clamps to the screen. This is
-			// the shape that panicked here, reached by a guest that sized its
-			// region before it learned it had been resized smaller.
 			name:   "bottom past the screen clamps",
 			rows:   4,
 			in:     "\x1b[1;35r",
@@ -93,7 +80,6 @@ func TestConform_DECSTBM(t *testing.T) {
 }
 
 func TestConform_ScrollInRegion(t *testing.T) {
-	// Four rows of one letter each, so which row moved where is unambiguous.
 	const fill = "a\r\nb\r\nc\r\nd"
 
 	runConform(t, []conformCase{
@@ -192,8 +178,6 @@ func TestConform_OriginMode(t *testing.T) {
 			cursor: "1,0",
 		},
 		{
-			// Cursor motion stays inside the region while origin mode is on,
-			// so a program cannot walk out of the area it asked for.
 			name:   "CUU stops at the top of the region",
 			in:     "\x1b[2;3r\x1b[?6h\x1b[9A X",
 			want:   "\n X",
@@ -247,8 +231,6 @@ func TestConform_DECALN(t *testing.T) {
 			cursor: "0,0",
 		},
 		{
-			// The pattern covers the screen, not the region: it is an
-			// alignment check for the grid itself.
 			name: "ignores the scroll region",
 			cols: 4,
 			rows: 3,
@@ -318,8 +300,6 @@ func TestConform_ResizeToTheSameSizeKeepsTheMargins(t *testing.T) {
 			before, after)
 	}
 
-	// A real resize still resets them, which is the behaviour every terminal
-	// has and which this must not have quietly changed.
 	emu.Resize(20, 12)
 	if after := emu.ScrollRegion(); after == before {
 		t.Errorf("a resize that did change the height left the scroll region at %v; a real resize resets it", after)

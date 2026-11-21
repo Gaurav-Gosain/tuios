@@ -2,8 +2,6 @@ package vt
 
 import "sync/atomic"
 
-// debugLoggerBox holds the process-wide debug logger, because atomic.Pointer
-// cannot hold an interface value directly.
 type debugLoggerBox struct{ l Logger }
 
 var debugLog atomic.Pointer[debugLoggerBox]
@@ -20,7 +18,6 @@ func SetDebugLogger(l Logger) {
 	debugLog.Store(&debugLoggerBox{l: l})
 }
 
-// debugLogger returns the logger SetDebugLogger set, or nil.
 func debugLogger() Logger {
 	if b := debugLog.Load(); b != nil {
 		return b.l

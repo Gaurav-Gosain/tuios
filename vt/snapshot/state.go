@@ -11,9 +11,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// decscusrParam encodes a cursor shape as the DECSCUSR parameter a guest would
-// have sent to ask for it, which is how it travels. Never zero: zero on the
-// wire means the snapshot did not carry a shape.
 func decscusrParam(style vt.CursorStyle, steady bool) int {
 	n := int(style)*2 + 1
 	if steady {
@@ -22,7 +19,6 @@ func decscusrParam(style vt.CursorStyle, steady bool) int {
 	return n
 }
 
-// decscusrStyle is the inverse, for a parameter a snapshot actually carried.
 func decscusrStyle(n int) (vt.CursorStyle, bool) {
 	return vt.CursorStyle((n - 1) / 2), n%2 == 0
 }
@@ -214,8 +210,6 @@ type OpenClusterState struct {
 	Right int    `json:"right"`
 }
 
-// openClusters is an emulator that reports and restores its open cluster.
-// The pure Go emulator is one; libghostty-vt keeps its own.
 type openClusters interface {
 	OpenCluster() (vt.OpenCluster, bool)
 	RestoreOpenCluster(vt.OpenCluster)
@@ -290,8 +284,6 @@ func guestColorsFromWire(t vt.Terminal, s *GuestColorState) vt.GuestColors {
 	return c
 }
 
-// tabStopBits is the wire's bitset for a tab stop table width columns wide.
-// It always has a byte, so a table with no stop still says so.
 func tabStopBits(cols []int, width int) []byte {
 	out := make([]byte, max((width+7)/8, 1))
 	for _, x := range cols {
@@ -302,7 +294,6 @@ func tabStopBits(cols []int, width int) []byte {
 	return out
 }
 
-// tabStopCols reads the bitset back into the columns that hold a stop.
 func tabStopCols(bits []byte) []int {
 	cols := []int{}
 	for i, b := range bits {
@@ -363,8 +354,6 @@ func savedCursorFromWire(t vt.Terminal, s SavedCursorState) vt.SavedCursor {
 	return c
 }
 
-// runsToWire flattens protected runs into the wire's triples, or nil when
-// there are none.
 func runsToWire(runs []vt.CellRun) []int {
 	if len(runs) == 0 {
 		return nil
@@ -376,8 +365,6 @@ func runsToWire(runs []vt.CellRun) []int {
 	return out
 }
 
-// runsFromWire reads the wire's triples back. A trailing partial triple is
-// dropped; the emulator clips each run to its own grid.
 func runsFromWire(flat []int) []vt.CellRun {
 	runs := make([]vt.CellRun, 0, len(flat)/3)
 	for i := 0; i+2 < len(flat); i += 3 {
@@ -386,8 +373,6 @@ func runsFromWire(flat []int) []vt.CellRun {
 	return runs
 }
 
-// wrapBits packs soft-wrap flags into the wire's bitset, or nil when none is
-// set.
 func wrapBits(flags []bool) []byte {
 	var out []byte
 	for i, f := range flags {
@@ -402,8 +387,6 @@ func wrapBits(flags []bool) []byte {
 	return out
 }
 
-// wrapFlags unpacks n flags from the wire's bitset. Bits past the end of the
-// set read as false.
 func wrapFlags(bits []byte, n int) []bool {
 	out := make([]bool, max(n, 0))
 	for i := range out {
@@ -439,7 +422,6 @@ type StyleState struct {
 	LinkParams string `json:"lp,omitempty"` // OSC 8 hyperlink parameters
 }
 
-// styleToWire encodes a graphic rendition and the hyperlink that travels with it.
 func styleToWire(s uv.Style, link uv.Link) StyleState {
 	return StyleState{
 		FgColor:    colorToWire(s.Fg),
@@ -452,12 +434,7 @@ func styleToWire(s uv.Style, link uv.Link) StyleState {
 	}
 }
 
-// styleFromWire is styleToWire read back into the emulator that will hold it.
 func styleFromWire(t vt.Terminal, ss StyleState) (uv.Style, uv.Link) {
-	// The two values are named rather than returned as inline composite
-	// literals, because gofmt 1.26 and 1.27 indent that construct differently
-	// and each rejects the other's output. Naming them keeps the file
-	// formatted the same way under both toolchains.
 	style := uv.Style{
 		Fg:             colorFromWire(t, ss.FgColor),
 		Bg:             colorFromWire(t, ss.BgColor),
@@ -472,15 +449,6 @@ func styleFromWire(t vt.Terminal, ss StyleState) (uv.Style, uv.Link) {
 	return style, link
 }
 
-// colorToWire encodes a cell color so the client gets back the kind of color the
-// guest asked for, not merely the shade it resolves to.
-//
-// A palette entry follows the user's terminal theme and the RGB it happens to
-// resolve to does not. Flattening every color to hex meant a pane came back
-// repainted in whichever shades the default palette gives: `31m` red became a
-// fixed maroon, and a theme's own red was gone. That is the whole of the
-// "colours randomly changing after a switch" report, and it was invisible to a
-// comparison that read both sides through RGBA().
 func colorToWire(c color.Color) string {
 	switch v := c.(type) {
 	case nil:
@@ -493,10 +461,6 @@ func colorToWire(c color.Color) string {
 	case ansi.IndexedColor:
 		return indexedColorWire[v]
 	}
-	// A color.Color interface can hold a typed-nil pointer such as
-	// (*color.RGBA)(nil). The case nil above matches only an untyped nil, and
-	// RGBA has a value receiver, so reading it through a wrapped nil panics the
-	// daemon. Encode it as the absence of color, the same as an untyped nil.
 	if rv := reflect.ValueOf(c); rv.Kind() == reflect.Pointer && rv.IsNil() {
 		return ""
 	}
@@ -510,10 +474,6 @@ func colorToWire(c color.Color) string {
 	return string(buf[:])
 }
 
-// basicColorWire and indexedColorWire are every palette encoding colorToWire
-// can produce, built once. A snapshot encodes a colour per cell, so building
-// the string each time was one allocation per styled cell, per pane, per
-// workspace switch.
 var (
 	basicColorWire   = paletteWire('a', 16)
 	indexedColorWire = paletteWire('i', 256)
@@ -527,18 +487,11 @@ func paletteWire(prefix byte, n int) []string {
 	return out
 }
 
-// colorFromWire is colorToWire read back. Palette entries are resolved through
-// the emulator that will hold them, so a restored cell is colored by the same
-// rule as a cell the guest writes live into that emulator.
 func colorFromWire(t vt.Terminal, s string) color.Color {
 	if s == "" {
 		return nil
 	}
 	if s[0] == '#' {
-		// Read by hand rather than through fmt.Sscanf: this runs once per
-		// coloured cell on the client's UI goroutine, and Sscanf was over
-		// two microseconds of reflection per call, which put a truecolor
-		// pane at twenty milliseconds per workspace switch.
 		if len(s) != 7 {
 			return nil
 		}
@@ -565,7 +518,6 @@ func colorFromWire(t vt.Terminal, s string) color.Color {
 	return nil
 }
 
-// hexNibble is the value of one hex digit, or -1 for anything else.
 func hexNibble(c byte) int {
 	switch {
 	case c >= '0' && c <= '9':
@@ -578,10 +530,6 @@ func hexNibble(c byte) int {
 	return -1
 }
 
-// colorWireCache remembers the wire form of each RGB colour it has encoded.
-// Palette colours have their strings built once for the process
-// (basicColorWire, indexedColorWire); an RGB string is built per distinct
-// colour per snapshot instead of per cell.
 type colorWireCache map[color.RGBA]string
 
 func (c colorWireCache) encode(col color.Color) string {
@@ -597,7 +545,6 @@ func (c colorWireCache) encode(col color.Color) string {
 	return s
 }
 
-// cellState is CellOf through the cache.
 func (c colorWireCache) cellState(cell *uv.Cell) CellState {
 	return CellState{
 		Content: cell.Content,

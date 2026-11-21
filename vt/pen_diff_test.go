@@ -27,7 +27,6 @@ func TestPenDiffMatchesStyleDiff(t *testing.T) {
 		case 3:
 			return color.RGBA{R: uint8(rng.Intn(256)), G: 1, B: 2, A: 255}
 		case 4:
-			// The RGBA of a palette colour, as a theme resolves one.
 			r, g, b, _ := ansi.IndexedColor(rng.Intn(256)).RGBA()
 			return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 255}
 		}

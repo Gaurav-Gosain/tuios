@@ -37,14 +37,6 @@ func ParseKittyHeader(data []byte) (*KittyCommand, error) {
 	return parseKittyCommand(data, true, false)
 }
 
-// parseKittyAPC parses the data of a graphics APC, from its leading 'G', and
-// returns with the command the whole sequence for the passthrough (see
-// kittyRawAPC), nil when headerOnly says no passthrough reads it.
-//
-// The sequence is the one copy of the payload made here: the command is
-// parsed from it rather than from data, and RawPayload is a view of its
-// payload bytes instead of a second copy. A 1.5 MB frame cost three copies
-// before, the sequence, RawPayload and the decoded image.
 func parseKittyAPC(data []byte, headerOnly bool) (*KittyCommand, []byte, error) {
 	if headerOnly {
 		cmd, err := parseKittyCommand(data[1:], true, false)
@@ -55,9 +47,6 @@ func parseKittyAPC(data []byte, headerOnly bool) (*KittyCommand, []byte, error) 
 	return cmd, rawData, err
 }
 
-// parseKittyCommand parses an APC body after its 'G'. owned says data is
-// never written again, so RawPayload may share its bytes instead of copying
-// them.
 func parseKittyCommand(data []byte, headerOnly, owned bool) (*KittyCommand, error) {
 	if len(data) == 0 {
 		return nil, nil
@@ -80,7 +69,6 @@ func parseKittyCommand(data []byte, headerOnly, owned bool) (*KittyCommand, erro
 			cmd.RawPayload = string(dataPart)
 		}
 		if kittyHasPNGHead(cmd) {
-			// The PNG header is in the first 33 bytes, 44 characters.
 			n := min(len(dataPart), 44) / 4 * 4
 			if head, err := DecodeKittyPayload(dataPart[:n]); err == nil {
 				cmd.pngHead = head
@@ -88,11 +76,6 @@ func parseKittyCommand(data []byte, headerOnly, owned bool) (*KittyCommand, erro
 		}
 		switch {
 		case kittyHeaderNamesObject(cmd, dataPart):
-			// The payload of a file medium transmission is only the
-			// object's name. The reader still needs it: the daemon deletes
-			// the frames no client reads, and with no name it deletes
-			// nothing and /dev/shm fills up. It also opens a file before it
-			// answers OK for it.
 			decoded, err := DecodeKittyPayload(dataPart)
 			if err != nil {
 				cmd.PayloadErr = err
@@ -106,10 +89,8 @@ func parseKittyCommand(data []byte, headerOnly, owned bool) (*KittyCommand, erro
 	}
 
 	if len(dataPart) > 0 {
-		// Always preserve raw payload for passthrough (avoids decode→re-encode cycle)
 		if owned {
 			// #nosec G103 - the caller guarantees data is never written
-			// again; see parseKittyAPC.
 			cmd.RawPayload = unsafe.String(&dataPart[0], len(dataPart))
 		} else {
 			cmd.RawPayload = string(dataPart)
@@ -117,9 +98,6 @@ func parseKittyCommand(data []byte, headerOnly, owned bool) (*KittyCommand, erro
 
 		decoded, err := DecodeKittyPayload(dataPart)
 		if err != nil {
-			// Undecodable text is never handed on as image data: a guest that
-			// sent it gets EINVAL (see KittyPayloadErrorResponse) and the
-			// passthrough drops the transmission it belonged to.
 			cmd.PayloadErr = err
 		} else {
 			switch cmd.Medium {
@@ -137,8 +115,6 @@ func parseKittyCommand(data []byte, headerOnly, owned bool) (*KittyCommand, erro
 	return cmd, nil
 }
 
-// kittyHasPNGHead reports whether a command's payload starts a PNG the
-// emulator checks. See kittyPNGHeadError.
 func kittyHasPNGHead(cmd *KittyCommand) bool {
 	return (cmd.Action == KittyActionTransmit || cmd.Action == KittyActionTransmitPlace) &&
 		cmd.Format == KittyFormatPNG && cmd.Medium == KittyMediumDirect &&
@@ -169,8 +145,6 @@ func DecodeKittyPayload(payload []byte) ([]byte, error) {
 		}
 		group := rest[:end]
 		rest = rest[end:]
-		// The padding run, and any line break inside it, which a wrapped
-		// encoding can put between two '='.
 		pad, skip := 0, 0
 		for skip < len(rest) && (rest[skip] == '=' || rest[skip] == '\n' || rest[skip] == '\r') {
 			if rest[skip] == '=' {
@@ -179,19 +153,10 @@ func DecodeKittyPayload(payload []byte) ([]byte, error) {
 			skip++
 		}
 		rest = rest[skip:]
-		// Padding only ever completes a group of four, with one or two '='.
-		// Anything else is not base64. Line breaks are not counted: the
-		// decoder below skips them, as base64 does everywhere, and a shell
-		// sender piping an image through base64 without -w 0 gets one every
-		// 76 characters. Counted, they made a wrapped payload's padding look
-		// misplaced whenever the breaks were not a multiple of four, and the
-		// image was refused (FuzzKittyPayloadDecode).
 		chars := len(group) - bytes.Count(group, []byte{'\n'}) - bytes.Count(group, []byte{'\r'})
 		if pad > 0 && (pad > 2 || (chars+pad)%4 != 0) {
 			return nil, errKittyPadding
 		}
-		// Decoded in place: out was sized for the whole payload, padding
-		// included, so the groups always fit and a frame is copied once.
 		n, err := base64.RawStdEncoding.Decode(out[len(out):cap(out)], group)
 		if err != nil {
 			return nil, err
@@ -201,7 +166,6 @@ func DecodeKittyPayload(payload []byte) ([]byte, error) {
 	return out, nil
 }
 
-// errKittyPadding is a payload whose '=' padding cannot end a base64 group.
 var errKittyPadding = errors.New("misplaced base64 padding")
 
 // KittyPayloadErrorResponse is the reply owed to a guest whose command carried
@@ -223,22 +187,14 @@ func KittyPayloadErrorResponse(cmd *KittyCommand) []byte {
 	return BuildKittyResponse(false, cmd.ImageID, "EINVAL:payload is not valid base64")
 }
 
-// maxKittyObjectName bounds the payload ParseKittyHeader decodes as an object
-// name: base64 of PATH_MAX bytes, rounded up. A longer payload is not a name.
 const maxKittyObjectName = 8192
 
-// kittyHeaderNamesObject reports whether ParseKittyHeader decodes the payload
-// of cmd as the name of a shared memory object, temp file or file. The daemon
-// needs the name to delete unread frames, and to check that a file it
-// answers OK for can be opened.
 func kittyHeaderNamesObject(cmd *KittyCommand, payload []byte) bool {
 	return (cmd.Medium == KittyMediumSharedMemory || cmd.Medium == KittyMediumTempFile ||
 		cmd.Medium == KittyMediumFile) &&
 		len(payload) <= maxKittyObjectName
 }
 
-// kittyPayloadErrorOwed reports whether cmd would be answered with EINVAL if
-// its payload did not decode. ParseKittyHeader decodes exactly these.
 func kittyPayloadErrorOwed(cmd *KittyCommand) bool {
 	if cmd.Quiet >= 2 || IsKittyEchoedResponse(cmd) {
 		return false
@@ -261,8 +217,6 @@ func IsKittyEchoedResponse(cmd *KittyCommand) bool {
 	return cmd != nil && !cmd.otherKeys && IsKittyResponsePayload(cmd.RawPayload)
 }
 
-// maxKittyResponsePayload is the longest payload IsKittyResponsePayload takes
-// for an echoed reply.
 const maxKittyResponsePayload = 256
 
 // IsKittyResponsePayload reports whether a graphics payload looks like an
@@ -285,8 +239,6 @@ func IsKittyResponsePayload(payload string) bool {
 	if payload == "OK" {
 		return true
 	}
-	// POSIX error name: 'E' followed by one or more uppercase letters, then an
-	// optional ":<message>". A base64 image payload is not all-uppercase.
 	if payload[0] != 'E' {
 		return false
 	}
@@ -295,7 +247,6 @@ func IsKittyResponsePayload(payload string) bool {
 		i++
 	}
 	if i < 2 {
-		// Need at least one uppercase letter after the leading 'E'.
 		return false
 	}
 	if i == len(payload) {

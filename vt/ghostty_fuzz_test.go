@@ -2,14 +2,6 @@
 
 package vt
 
-// Crash-safety fuzz for the cgo boundary. A segfault inside libghostty-vt
-// cannot be recovered the way a Go panic can, and the emulator runs inside
-// the daemon where a crash takes every session with it. This target feeds
-// arbitrary bytes through the full adapter write path in adversarial
-// chunkings, interleaved with the reads and resizes the app performs, so the
-// scanner, the library parser and the render-state sync all see torn
-// sequences.
-
 import (
 	"os"
 	"path/filepath"
@@ -21,7 +13,6 @@ func FuzzGhosttyTerminalWrite(f *testing.F) {
 	f.Add([]byte("\x1b[?1049h\x1b[2J\x1b[H\x1b]0;t\a\x1bP0q##\x1b\\\x1b_Gf=24;AAAA\x1b\\"), uint8(1), uint8(1))
 	f.Add([]byte("\x1b[38;2;1;2;3m日本\x1b[3;10r\x1b[?6h\x1b[H\x1b(0qq"), uint8(2), uint8(0))
 	f.Add([]byte("\x1b]52;c;?\a\x1b]4;1;rgb:aa/bb/cc\a\x1b[>5u\x1b[<u"), uint8(9), uint8(2))
-	// Truncated introducers and raw C1 bytes.
 	f.Add([]byte("\x1b"), uint8(1), uint8(0))
 	f.Add([]byte("\x1b_G"), uint8(1), uint8(0))
 	f.Add([]byte{0x9b, 0x90, 0x9d, 0x9c, 0x1b, 0xff, 0xfe, 0x00}, uint8(3), uint8(1))
@@ -62,9 +53,6 @@ func FuzzGhosttyTerminalWrite(f *testing.F) {
 				_ = term.GetModes()
 			}
 		}
-		// What the Go side reads back across the boundary has to describe a
-		// screen the Go side can index: a cursor or a cell past the edge is
-		// an out-of-range read in every caller that trusts it.
 		w, h := term.Width(), term.Height()
 		if p := term.CursorPosition(); p.X < 0 || p.Y < 0 || p.X >= w || p.Y >= h {
 			t.Fatalf("the cursor is at %d,%d on a %dx%d screen", p.X, p.Y, w, h)

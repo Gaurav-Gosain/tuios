@@ -34,8 +34,6 @@ func TestReleaseScrollbackCacheDropsTheLines(t *testing.T) {
 		defer sb.cacheMu.Unlock()
 		return len(sb.cache), sb.cacheCells
 	}
-	// readLines reads the first lines of the history and returns them with
-	// a copy of each.
 	readLines := func(e *Emulator) (kept, copies []uv.Line) {
 		for i := range read {
 			line := e.ScrollbackLine(i)

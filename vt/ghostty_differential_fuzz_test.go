@@ -2,21 +2,6 @@
 
 package vt
 
-// Fuzzing the differential harness rather than one emulator.
-//
-// Every other fuzz target here needs somebody to have written down what the
-// right answer is, so it can only find the bugs an invariant was written for.
-// Two independent emulators fed the same bytes need nothing written down: a
-// disagreement is a bug in one of them, and the campaign finds it without
-// anyone having predicted it. That is worth more than the invariants, and this
-// is the only build where both implementations exist in one process.
-//
-// The generator is vt/vtgen, the same grammar the single-emulator
-// targets use, because random bytes never leave the parser's ground state.
-// Comparison happens after every step, not once at the end: an emulator that
-// diverges and then converges again is still an emulator that drew the wrong
-// frame, and the frame is what a person sees.
-
 import (
 	"fmt"
 	"os"
@@ -29,24 +14,11 @@ import (
 	"tuios.dev/vt/vtgen"
 )
 
-// diffFuzzCols and diffFuzzRows size the screen for a campaign. Smaller than
-// the 80x24 the script targets use: a narrow short screen wraps and scrolls
-// constantly, so the same number of steps reaches far more of the scroll and
-// reflow paths, and each comparison walks fewer cells.
 const (
 	diffFuzzCols = 40
 	diffFuzzRows = 12
 )
 
-// divergence is one disagreement between the backends.
-//
-// Sig is what makes it *this* disagreement rather than any disagreement, and
-// it deliberately excludes step numbers, screen positions and the offending
-// text, all of which move as the shrinker cuts. The shrinker uses it as the
-// oracle's key: without one, a script carrying three separate bugs reduces to
-// whichever survives the cuts, and the reduction printed underneath a report
-// is then a repro for something else. That is not hypothetical; it is what
-// this harness did before Sig existed.
 type divergence struct {
 	Sig    string
 	Detail string
@@ -56,7 +28,6 @@ func (d divergence) found() bool { return d.Sig != "" }
 
 func (d divergence) String() string { return d.Detail }
 
-// at prefixes a divergence with where in the run it happened.
 func (d divergence) at(format string, args ...any) divergence {
 	if !d.found() {
 		return d
@@ -71,9 +42,6 @@ func differ(sig, format string, args ...any) divergence {
 	return divergence{Sig: sig, Detail: fmt.Sprintf(format, args...)}
 }
 
-// cellSig names what is wrong with a pair of cells, finely enough that two
-// different bugs never share a signature and coarsely enough that a bug keeps
-// its signature while the shrinker cuts around it.
 func cellSig(a, b *uv.Cell) string {
 	norm := func(c *uv.Cell) (string, int, uv.Style, string) {
 		if c == nil {
@@ -94,9 +62,6 @@ func cellSig(a, b *uv.Cell) string {
 
 	var parts []string
 	if ac != bc {
-		// The rune counts separate the cluster bugs from each other: a
-		// backend that split a cluster holds fewer runes than one that kept
-		// it whole, and a backend that swallowed a mark holds more.
 		switch an, bn := len([]rune(ac)), len([]rune(bc)); {
 		case an > bn:
 			parts = append(parts, "content:pure-holds-more-runes")
@@ -133,7 +98,6 @@ func cellSig(a, b *uv.Cell) string {
 	return "cell[" + strings.Join(parts, ",") + "]"
 }
 
-// diffScreens reports the first cell the two emulators disagree about.
 func diffScreens(pure, gh Terminal) divergence {
 	w, h := pure.Width(), pure.Height()
 	if gw, ghh := gh.Width(), gh.Height(); gw != w || ghh != h {
@@ -151,9 +115,6 @@ func diffScreens(pure, gh Terminal) divergence {
 	return agree
 }
 
-// diffCursor covers position and visibility. The cursor is not a cell, so a
-// screen comparison never sees it, and a pane whose cursor sits one column
-// off is a pane that types in the wrong place.
 func diffCursor(pure, gh Terminal) divergence {
 	pp, gp := pure.CursorPosition(), gh.CursorPosition()
 	switch {
@@ -170,8 +131,6 @@ func diffCursor(pure, gh Terminal) divergence {
 	return agree
 }
 
-// diffScreenState covers the flags the app reads to decide what to draw at
-// all: which screen is live, and how big the scroll region is.
 func diffScreenState(pure, gh Terminal) divergence {
 	if pa, ga := pure.IsAltScreen(), gh.IsAltScreen(); pa != ga {
 		return differ("altscreen", "alt screen pure=%v ghostty=%v", pa, ga)
@@ -182,9 +141,6 @@ func diffScreenState(pure, gh Terminal) divergence {
 	return agree
 }
 
-// diffModes compares the modes the app actually branches on. The full mode
-// map is not compared: an implementation is free to remember a mode it does
-// not implement, and only the ones with a reader here change what is drawn.
 func diffModes(pure, gh Terminal) divergence {
 	if pm, gm := pure.HasMouseMode(), gh.HasMouseMode(); pm != gm {
 		return differ("mode:mouse", "mouse mode pure=%v ghostty=%v", pm, gm)
@@ -198,10 +154,6 @@ func diffModes(pure, gh Terminal) divergence {
 	return agree
 }
 
-// diffScrollback compares the history the two have accumulated. Only the tail
-// is walked: an early divergence shows up in the tail too once more lines
-// push past it, and walking thousands of lines per step would cost more than
-// the whole campaign is worth.
 func diffScrollback(pure, gh Terminal, tail int) divergence {
 	pl, gl := pure.ScrollbackLen(), gh.ScrollbackLen()
 	if pl != gl {
@@ -217,10 +169,6 @@ func diffScrollback(pure, gh Terminal, tail int) divergence {
 	return agree
 }
 
-// diffRender compares what each side would send to the host. The two frames
-// are re-parsed rather than compared as bytes because the same colour has
-// several legal encodings and only the emulator knows which one the guest
-// used; what has to match is the picture, not the spelling.
 func diffRender(pure, gh Terminal) divergence {
 	pr, gr := pure.Render(), gh.Render()
 	if pr == gr {
@@ -246,9 +194,6 @@ func diffRender(pure, gh Terminal) divergence {
 	return agree
 }
 
-// diffCheap is what runs after every single step. Walking the grid and the
-// cursor is a few thousand comparisons; re-parsing two rendered frames is two
-// more emulators, so that is saved for the checkpoints.
 func diffCheap(pure, gh Terminal) divergence {
 	for _, d := range []divergence{
 		diffScreens(pure, gh),
@@ -263,7 +208,6 @@ func diffCheap(pure, gh Terminal) divergence {
 	return agree
 }
 
-// diffFull adds the expensive comparisons, run at checkpoints and at the end.
 func diffFull(pure, gh Terminal) divergence {
 	if d := diffCheap(pure, gh); d.found() {
 		return d
@@ -274,18 +218,12 @@ func diffFull(pure, gh Terminal) divergence {
 	return diffRender(pure, gh)
 }
 
-// diffCheckpoint is how often the expensive comparison runs during a replay.
 const diffCheckpoint = 16
 
-// newDiffFuzzPair builds both emulators without a *testing.T, so the shrinker
-// can replay a candidate hundreds of times without registering cleanups.
 func newDiffFuzzPair(w, h int) (*Emulator, *GhosttyTerminal) {
 	return NewEmulator(w, h), NewGhosttyTerminal(w, h)
 }
 
-// diffWrite feeds the same bytes to both and reports a write error as a
-// divergence, so a backend that starts refusing input is a finding rather
-// than a silent skip.
 func diffWrite(pure *Emulator, gh *GhosttyTerminal, b string) divergence {
 	if _, err := pure.WriteString(b); err != nil {
 		return differ("write:pure", "pure write: %v", err)
@@ -296,9 +234,6 @@ func diffWrite(pure *Emulator, gh *GhosttyTerminal, b string) divergence {
 	return agree
 }
 
-// diffReplay runs a script into both emulators a step at a time and returns
-// the first divergence. A panic on either side is a finding rather than a
-// dead test binary, so the shrinker survives it and reduces it.
 func diffReplay(s vtgen.Script) (found divergence) {
 	pure, gh := newDiffFuzzPair(diffFuzzCols, diffFuzzRows)
 	defer func() {
@@ -326,10 +261,6 @@ func diffReplay(s vtgen.Script) (found divergence) {
 	return diffFull(pure, gh).at("after %d steps", len(s))
 }
 
-// diffReplaySplit is the same comparison with the bytes arriving the way a
-// PTY reader hands them over. Two parsers holding half a sequence each is
-// where their state machines are most likely to differ, and it is the one
-// arrival pattern no structured test produces.
 func diffReplaySplit(s vtgen.Script, seed uint64) (found divergence) {
 	pure, gh := newDiffFuzzPair(diffFuzzCols, diffFuzzRows)
 	defer func() {
@@ -355,22 +286,11 @@ func diffReplaySplit(s vtgen.Script, seed uint64) (found divergence) {
 	return diffFull(pure, gh).at("after %d writes", len(writes))
 }
 
-// diffFilter drops the steps whose divergence is already understood, so a
-// campaign spends its budget on new ground instead of rediscovering the
-// pinned tests. Every filter here costs coverage, so each one names the test
-// that owns it; when that test starts failing because the two agree, the
-// filter goes too.
 func diffFilter(s vtgen.Script) vtgen.Script {
 	out := make(vtgen.Script, 0, len(s))
 	cols, rows := diffFuzzCols, diffFuzzRows
 	protected := false
 	for _, seq := range s {
-		// A cell DECSCA 1 protected keeps its protection through a reflow
-		// on the library and loses it on the pure emulator, so a later
-		// selective erase differs. Pinned by TestGhosttyDivergence_ProtectionLost.
-		// Only a resize that can reflow is dropped: one that changes the
-		// width, or one that adds rows, which pulls history back. RIS ends it,
-		// because it clears every cell.
 		if p, r := strings.LastIndex(seq.Bytes, "\x1b[1\"q"), strings.LastIndex(seq.Bytes, "\x1bc"); p > r {
 			protected = true
 		} else if r >= 0 {
@@ -383,21 +303,12 @@ func diffFilter(s vtgen.Script) vtgen.Script {
 			}
 			cols, rows = seq.Cols, seq.Rows
 		}
-		// SGR 21 is double underline to ghostty and nothing to the pure
-		// emulator. Pinned by TestGhosttyKnownDivergences/sgr21-double-underline.
 		if seq.Kind == "sgr" && sgrHasParam(seq.Bytes, "21") {
 			continue
 		}
-		// A raw C1 introducer is a control to the pure emulator and invalid
-		// UTF-8 to the library, so every one of these diverges on the first
-		// byte and the rest of the step is printed as text. Pinned by
-		// TestGhosttyEightBitControlsInUTF8.
 		if hasC1Introducer(seq.Bytes) {
 			continue
 		}
-		// Resetting mode 2027 turns clustering off in the library and not in
-		// the pure emulator, which clusters whatever the mode says. Pinned by
-		// TestGhosttyGraphemeClusteringDefault.
 		if seq.Kind == "mode" && strings.Contains(seq.Bytes, "2027") {
 			continue
 		}
@@ -406,15 +317,10 @@ func diffFilter(s vtgen.Script) vtgen.Script {
 	return out
 }
 
-// hasC1Introducer reports whether a sequence uses a raw eight-bit control
-// byte anywhere, including the C1 string terminator.
 func hasC1Introducer(b string) bool {
 	return strings.ContainsAny(b, "\x84\x85\x8e\x8f\x90\x9b\x9c\x9d\x9e\x9f")
 }
 
-// sgrHasParam reports whether an SGR sequence sets a given parameter. It reads
-// the parameter list rather than the whole string so "21" does not match the
-// 21 inside a colour component.
 func sgrHasParam(b, want string) bool {
 	i := strings.IndexByte(b, '[')
 	if i < 0 || !strings.HasSuffix(b, "m") {
@@ -428,25 +334,10 @@ func sgrHasParam(b, want string) bool {
 	return false
 }
 
-// shrinkTo reduces a script to the smallest one that still fails the same
-// way, where "the same way" is the signature and not merely "fails".
 func shrinkTo(s vtgen.Script, want string, replay func(vtgen.Script) divergence) vtgen.Script {
 	return vtgen.Shrink(s, func(c vtgen.Script) bool { return replay(c).Sig == want })
 }
 
-// diffFuzzGate keeps the differential targets opt-in.
-//
-// The two backends currently disagree about at least eight distinct things
-// (each pinned below), and several of them are common enough that most
-// generated streams hit one. A target that fails on nearly every input is
-// not a gate, it is noise, and the alternative (an allowlist of the 43
-// signatures a census turns up) covers so much of the space that it would
-// pass a genuinely new bug. So these run only when asked for, and the
-// durable regression value lives in the pinned tests instead: those assert
-// what each backend does today, and fire when either one changes.
-//
-// Once the pinned divergences are resolved these should become ungated, and
-// the sweep should become the gate.
 func diffFuzzGate(f *testing.F) {
 	f.Helper()
 	if os.Getenv("TUIOS_DIFF_FUZZ") == "" {
@@ -506,8 +397,6 @@ func FuzzGhosttyDifferentialSplit(f *testing.F) {
 	})
 }
 
-// envInt reads an integer knob, treating anything unparseable as a mistake
-// rather than as unset, so a typo in a shell export widens nothing silently.
 func envInt(t *testing.T, name string) int {
 	t.Helper()
 	v := os.Getenv(name)
@@ -714,20 +603,6 @@ func TestGhosttyGraphemeClusteringDefault(t *testing.T) {
 	}
 }
 
-// The pinned divergences.
-//
-// Each entry below is a root cause the differential census reduced to a
-// minimal input, with the behaviour of BOTH backends asserted rather than
-// merely "they differ". Asserting both is what makes these regression tests
-// instead of bug reports: if either backend changes in either direction the
-// test fires and somebody has to decide whether that was intended.
-//
-// Every entry says which side is right where that is knowable. Where it is a
-// defensible design choice rather than a conformance question, it says that
-// instead of pretending.
-
-// diffProbe drives both backends through the input, and reports what each ended up with, so a pinned case can state
-// both sides in one line.
 type diffProbe struct {
 	pureCell, ghCell     string
 	pureCursor, ghCursor uv.Position
@@ -809,10 +684,6 @@ func TestGhosttyDivergence_SurplusCSIParameters(t *testing.T) {
 // pure emulator already did, so the two now agree. That agreement is pinned
 // by TestGhosttyUTF8C1ControlsAgree below.
 func TestGhosttyDivergence_ControlCodePointsPrinted(t *testing.T) {
-	// The control is counted by how far the cursor moved: a backend that
-	// discards it advances only over the real characters, one that prints it
-	// advances one column further. Reading a fixed cell index cannot say this,
-	// because the two backends put the same text in different columns.
 	cases := []struct {
 		name, in          string
 		pureCol, ghostCol int
@@ -839,9 +710,6 @@ func TestGhosttyDivergence_ControlCodePointsPrinted(t *testing.T) {
 		})
 	}
 
-	// NUL is the control both already agree to discard, so it guards the
-	// probe itself: if this starts failing the harness is broken, not a
-	// backend.
 	t.Run("NUL is discarded by both", func(t *testing.T) {
 		p := probeBoth(t, "abc\x00", 3, 0)
 		if p.pureCell != " " || p.ghCell != " " {
@@ -867,9 +735,7 @@ func TestGhosttyDivergence_SelectiveErase(t *testing.T) {
 	}{
 		{"DECSED erases on both when nothing is protected", "ABCD\x1b[H\x1b[?2J", 0, " "},
 		{"DECSEL erases on both when nothing is protected", "abcdef\x1b[H\x1b[?0K", 0, " "},
-		// Column 2 holds an unprotected character, which both must clear.
 		{"DECSED clears an unprotected cell next to protected ones", "\x1b[1\"qAB\x1b[2\"qCD\x1b[H\x1b[?2J", 2, " "},
-		// Column 0 holds a character written under DECSCA 1.
 		{"DECSED keeps a protected cell on both", "\x1b[1\"qAB\x1b[2\"qCD\x1b[H\x1b[?2J", 0, "A"},
 		{"DECSEL keeps a protected cell on both", "ab\x1b[1\"qC\x1b[0\"q\x1b[H\x1b[?2K", 2, "C"},
 		{"ED erases a protected cell on both", "\x1b[1\"qAB\x1b[0\"q\x1b[H\x1b[2J", 0, " "},
@@ -898,7 +764,6 @@ func TestGhosttyDivergence_SelectiveErase(t *testing.T) {
 func TestGhosttyDivergence_ProtectionLost(t *testing.T) {
 	t.Run("a reflow drops the protection on the pure emulator", func(t *testing.T) {
 		p := newDiffPair(t, 40, 12)
-		// A row longer than the new width, so the narrowing reflows it.
 		p.write(t, []byte("\x1b[1\"qP\x1b[0\"q"+strings.Repeat("x", 35)))
 		p.pure.Resize(30, 12)
 		p.gh.Resize(30, 12)
@@ -1048,7 +913,6 @@ func TestGhosttyDECSTRResetsTheRegion(t *testing.T) {
 	}
 }
 
-// diffRowText is one row of the screen, trailing blanks trimmed.
 func diffRowText(term Terminal, y int) string {
 	var sb strings.Builder
 	for x := range term.Width() {

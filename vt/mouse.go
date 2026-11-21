@@ -80,22 +80,15 @@ func (e *Emulator) SendMouseAt(m Mouse, at MousePixel) {
 		return
 	}
 
-	// Gate motion events on modes that actually support them.
-	// Mode 1000/1001 (Normal/Highlight) only supports click/release.
-	// Mode 1002 (ButtonEvent) supports motion while a button is pressed.
-	// Mode 1003 (AnyEvent) supports all motion.
 	if r.motion {
 		switch mode {
 		case ansi.ModeMouseX10, ansi.ModeMouseNormal, ansi.ModeMouseHighlight:
-			// These modes don't support motion events at all
 			return
 		case ansi.ModeMouseButtonEvent:
-			// CellMotion: only forward motion if a button is pressed
 			if r.button == MouseNone {
 				return
 			}
 		}
-		// ModeMouseAnyEvent: forward all motion
 	}
 
 	if s := r.encode(); s != "" {
@@ -103,28 +96,13 @@ func (e *Emulator) SendMouseAt(m Mouse, at MousePixel) {
 	}
 }
 
-// mouseReportFor builds the report for a mouse event from the guest's modes:
-// the tracking mode in force, which is also returned, and the encoding. ok is
-// false when the guest tracks no mouse at all.
-//
-// SGR-pixel (DEC mode 1016) takes precedence over every other encoding when the
-// guest enabled it: a web page rendered by a kitty-graphics app (terminal-browser,
-// awrit) probes 1016 and, once it sees it enabled, reads every mouse report as
-// pixels. Reporting cell indices at that point places the pointer a cell-count of
-// pixels from the origin, which is why hover and clicks land in the top-left. So
-// when 1016 is set the cell position is scaled to host pixels.
-//
-// The pixel is the one the host reported (at), when the host reports pixels
-// and tuios asked it to. Otherwise it is the cell centre, matching the
-// cell->pixel convention a terminal app uses itself when it has only a cell
-// report to work from.
 func (e *Emulator) mouseReportFor(m Mouse, at MousePixel) (r mouseReport, mode ansi.Mode, ok bool) {
 	for _, mm := range []ansi.DECMode{
-		ansi.ModeMouseX10,         // Button press
-		ansi.ModeMouseNormal,      // Button press/release
-		ansi.ModeMouseHighlight,   // Button press/release/hilight
-		ansi.ModeMouseButtonEvent, // Button press/release/cell motion
-		ansi.ModeMouseAnyEvent,    // Button press/release/all motion
+		ansi.ModeMouseX10,
+		ansi.ModeMouseNormal,
+		ansi.ModeMouseHighlight,
+		ansi.ModeMouseButtonEvent,
+		ansi.ModeMouseAnyEvent,
 	} {
 		if e.isModeSet(mm) {
 			mode = mm
@@ -157,9 +135,6 @@ func (e *Emulator) mouseReportFor(m Mouse, at MousePixel) (r mouseReport, mode a
 	return r, mode, true
 }
 
-// cellToPixel maps a pane-relative cell position to the host pixel position at
-// that cell's centre, for SGR-pixel (mode 1016) reporting. The cell dimensions
-// are the host terminal's, set via SetCellSize from the detected capabilities.
 func (e *Emulator) cellToPixel(cellX, cellY int) (int, int) {
 	cw, ch := e.CellSize()
 	return cellX*cw + cw/2, cellY*ch + ch/2

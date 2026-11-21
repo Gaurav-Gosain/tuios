@@ -10,29 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// Fuzzing the kitty graphics command parser and its payload decoder against
-// the encodings real senders produce.
-//
-// The ways these could fail, written down before the targets:
-//
-//  1. DecodeKittyPayload rejects what a sender produces: padded base64 of any
-//     bytes (chafa, timg, mpv), unpadded base64 (kitten icat), or padded
-//     chunks joined into one payload.
-//  2. It accepts one of those and returns bytes other than the ones encoded.
-//  3. It disagrees with the standard library on a string the library decodes
-//     strictly, padded or not.
-//  4. It panics on padding in odd places, a length one past a group, or the
-//     line breaks the library skips.
-//  5. ParseKittyCommand loses the payload text (RawPayload must be exactly
-//     the bytes after the first ';', which the passthrough forwards as is),
-//     or decodes a direct payload to something other than its bytes.
-//  6. A real transmission chunk is taken for a terminal's reply echoed back
-//     and dropped. A short chunk of dark pixels encodes to an E and capital
-//     letters, the shape of "EINVAL"; the last chunk of a chunked image is
-//     often that short, and dropping it left the image without its m=0.
-//  7. A real reply ("i=3;OK", "i=3;ENOENT:msg") is not taken for one, and a
-//     guest that echoes input starts a loop of replies.
-
 func FuzzKittyPayloadDecode(f *testing.F) {
 	f.Add([]byte{}, uint8(0))
 	f.Add([]byte("a"), uint8(1))
@@ -61,8 +38,6 @@ func FuzzKittyPayloadDecode(f *testing.F) {
 		}
 		decode("padded base64", base64.StdEncoding.EncodeToString(data), data)
 		decode("unpadded base64", base64.RawStdEncoding.EncodeToString(data), data)
-		// What `base64` prints without -w 0: a line break every 76
-		// characters, or every cut+1 to reach the other residues.
 		padded := base64.StdEncoding.EncodeToString(data)
 		for _, width := range []int{76, int(cut)%13 + 1} {
 			var wrapped strings.Builder
@@ -76,8 +51,6 @@ func FuzzKittyPayloadDecode(f *testing.F) {
 		decode("two padded chunks joined",
 			base64.StdEncoding.EncodeToString(data[:k])+base64.StdEncoding.EncodeToString(data[k:]), data)
 
-		// The same bytes read as text: wherever the library decodes it, the
-		// decoder must agree.
 		s := string(data)
 		got, err := vt.DecodeKittyPayload(data)
 		for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding} {
@@ -95,7 +68,6 @@ func FuzzKittyPayloadDecode(f *testing.F) {
 	})
 }
 
-// kittyControlKeys are the keys a guest's control data may carry.
 var kittyControlKeys = []string{"a", "q", "i", "I", "p", "f", "t", "o", "s", "v", "S", "O", "m", "d", "x", "y", "w", "h", "X", "Y", "c", "r", "z", "C", "U"}
 
 func FuzzKittyCommand(f *testing.F) {
@@ -113,8 +85,6 @@ func FuzzKittyCommand(f *testing.F) {
 			enc = base64.StdEncoding.EncodeToString(payload)
 		}
 
-		// A continuation chunk: m= and nothing else but the id. Every chunk
-		// after the first looks like this.
 		for _, more := range []string{"0", "1"} {
 			ctrl := "i=" + strconv.FormatUint(uint64(id), 10) + ",m=" + more
 			cmd, err := vt.ParseKittyCommand([]byte(ctrl + ";" + enc))
@@ -138,7 +108,6 @@ func FuzzKittyCommand(f *testing.F) {
 			}
 		}
 
-		// A first chunk with a few more keys, picked by the bits of keys.
 		var parts []string
 		for i, k := range kittyControlKeys {
 			if keys&(1<<(i%8)) != 0 && i/8 == int(keys)%3 {
@@ -151,7 +120,6 @@ func FuzzKittyCommand(f *testing.F) {
 			t.Fatalf("a first chunk %q was taken for an echoed reply", strings.Join(parts, ","))
 		}
 
-		// Replies, with the keys a terminal puts on them.
 		for _, reply := range []string{"OK", "ENOENT", "EINVAL:bad " + strconv.Itoa(int(keys))} {
 			for _, ctrl := range []string{"", "i=" + strconv.FormatUint(uint64(id), 10), "i=1,p=2", "I=9"} {
 				cmd, _ := vt.ParseKittyCommand([]byte(ctrl + ";" + reply))

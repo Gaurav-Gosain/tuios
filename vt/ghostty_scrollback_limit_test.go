@@ -19,8 +19,6 @@ func TestGhosttyScrollbackKeepsTheLinesAskedFor(t *testing.T) {
 		}
 		got := term.ScrollbackLen()
 		term.Close()
-		// libghostty prunes whole pages, so the count lands near the limit
-		// rather than on it: 9555 and 9852 here, against 870 and 402 before.
 		if got < want*9/10 || got > want*12/10 {
 			t.Errorf("%d columns: %d scrollback lines held, want about %d", cols, got, want)
 		}

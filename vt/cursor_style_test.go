@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-// The DECSCUSR parameters and the shape each names. 0 and 1 are the same
-// blinking block; 2 is the shape a pane has before anything asks.
 var decscusrCases = []struct {
 	seq    string
 	style  CursorStyle

@@ -2,18 +2,6 @@
 
 package vt_test
 
-// The pending input of a sequence an 8-bit C1 control started. The pure Go
-// parser honours CSI, OSC, DCS, SOS, PM and APC in their 8-bit forms outside a
-// string; libghostty does not, so these cases run on the pure backend only.
-//
-// Ways this can go wrong:
-//   - the start is taken from the last ESC, which is before the C1 control,
-//     so a replay paints the text between them twice;
-//   - a byte with a C1 control's value inside a UTF-8 character or inside a
-//     string payload is taken for the start, so the replay loses the
-//     introducer and the rest prints as text;
-//   - a control carried out inside a C1 CSI is kept and carried out twice.
-
 import (
 	"testing"
 

@@ -57,8 +57,6 @@ func TestGhosttyScrollbackCopyMatchesTheLiveRead(t *testing.T) {
 			g.mu.Lock()
 			eager := g.copyScrollbackLocked(from, n)
 			if alt {
-				// The eager read of the main history under the alternate
-				// screen goes through the same decoded copy.
 				eager = func() *ScrollbackCopy {
 					src := g.altHistoryLocked()
 					c := &ScrollbackCopy{}

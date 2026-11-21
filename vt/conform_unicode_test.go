@@ -2,10 +2,6 @@ package vt_test
 
 import "testing"
 
-// Unicode cases small enough to state as a screen. The sweeps over the UAX data
-// files live in unicode_grapheme_test.go and unicode_width_test.go; these are
-// the individual shapes worth naming, plus the one divergence left open.
-
 func TestConform_UnicodeOnScreen(t *testing.T) {
 	runConform(t, []conformCase{
 		{
@@ -56,8 +52,6 @@ func TestConform_UnicodeOnScreen(t *testing.T) {
 			},
 		},
 		{
-			// Three in a row is two clusters, not one and a half: the pair
-			// rule takes them two at a time.
 			name:   "a third regional indicator starts a new flag",
 			in:     "\U0001f1fa\U0001f1f8\U0001f1fa",
 			cursor: "4,0",
@@ -104,20 +98,12 @@ func TestConform_UnicodeOnScreen(t *testing.T) {
 			},
 		},
 		{
-			// The bytes that can never start a character are dropped rather
-			// than drawn. What matters is that they never become a character
-			// the guest did not send.
 			name:   "bytes that cannot start a character are dropped",
 			in:     "a\xff\xfeb",
 			cursor: "2,0",
 			want:   "ab",
 		},
 		{
-			// An overlong encoding of U+0080 must not decode to U+0080: that
-			// is how a filter checking for raw C1 bytes gets walked past. It
-			// does not reach the screen here, but it does reach the control
-			// code dispatcher, which is why this case expects a rejection
-			// rather than silence.
 			name:      "an overlong encoding does not become the character it encodes",
 			in:        "a\xc0\x80b",
 			cursor:    "2,0",
@@ -125,10 +111,6 @@ func TestConform_UnicodeOnScreen(t *testing.T) {
 			unhandled: true,
 		},
 		{
-			// Only a continuation byte extends a rune. Before this, the
-			// decoder took whatever came next as the missing bytes, so a
-			// truncated rune ate the ESC of the sequence after it and the
-			// rest of that sequence printed as text.
 			name:   "a truncated rune does not swallow the escape after it",
 			in:     "a\xe4\xb8\x1b[5Gb",
 			cursor: "5,0",

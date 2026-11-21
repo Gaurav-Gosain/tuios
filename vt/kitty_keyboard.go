@@ -11,31 +11,20 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// maxKittyKeyboardStack is how many entries one screen's flag stack holds.
-// The protocol asks for a limit so a guest that pushes without popping cannot
-// grow it without bound. kitty and ghostty both hold eight, and evict the
-// oldest entry to make room for a new one, which is what Push does here.
 const maxKittyKeyboardStack = 8
 
-// kittyKeyboardState tracks the kitty keyboard protocol state for a terminal.
-// The protocol uses a stack of flag sets that can be pushed/popped by
-// applications, and the main and alternate screens each have their own: a
-// full-screen program that pushes flags on the alternate screen and exits
-// without popping them leaves the shell's keyboard as it found it.
 type kittyKeyboardState struct {
-	main, alt []int // flag stacks, oldest first; never empty
-	onAlt     bool  // the alternate screen is the active one
+	main, alt []int
+	onAlt     bool
 }
 
-// newKittyKeyboardState creates a new kitty keyboard state with an empty stack.
 func newKittyKeyboardState() *kittyKeyboardState {
 	return &kittyKeyboardState{
-		main: []int{0}, // Always have at least one entry (the base)
+		main: []int{0},
 		alt:  []int{0},
 	}
 }
 
-// active returns the stack of the screen in use.
 func (k *kittyKeyboardState) active() *[]int {
 	if k.onAlt {
 		return &k.alt
@@ -43,20 +32,14 @@ func (k *kittyKeyboardState) active() *[]int {
 	return &k.main
 }
 
-// Stack returns the active screen's stack, oldest entry first. The caller
-// must not modify it.
 func (k *kittyKeyboardState) Stack() []int {
 	return *k.active()
 }
 
-// SetStack replaces the active screen's stack, keeping the newest entries
-// when there are more than the limit allows. An empty stack is the base entry.
 func (k *kittyKeyboardState) SetStack(stack []int) {
 	setKittyStack(k.active(), stack)
 }
 
-// setKittyStack stores a copy of stack in dst, keeping the newest entries
-// past the limit, and the base entry for an empty stack.
 func setKittyStack(dst *[]int, stack []int) {
 	if len(stack) > maxKittyKeyboardStack {
 		stack = stack[len(stack)-maxKittyKeyboardStack:]
@@ -67,10 +50,6 @@ func setKittyStack(dst *[]int, stack []int) {
 	*dst = slices.Clone(stack)
 }
 
-// MainStack returns the main screen's stack while the alternate screen is in
-// use, and nil while the main screen is: the stack a snapshot taken on the
-// alternate screen has to carry besides the active one. The caller must not
-// modify it.
 func (k *kittyKeyboardState) MainStack() []int {
 	if !k.onAlt {
 		return nil
@@ -78,16 +57,10 @@ func (k *kittyKeyboardState) MainStack() []int {
 	return k.main
 }
 
-// SetMainStack replaces the main screen's stack, with the limits SetStack
-// applies, whichever screen is in use.
 func (k *kittyKeyboardState) SetMainStack(stack []int) {
 	setKittyStack(&k.main, stack)
 }
 
-// SetAltScreen follows a switch between the main and the alternate screen.
-// Entering the alternate screen starts it with an empty stack, as it starts
-// with an empty screen: flags a previous program left there are not the next
-// one's. The main screen's stack is kept as it was.
 func (k *kittyKeyboardState) SetAltScreen(on bool) {
 	if on && !k.onAlt {
 		k.alt = []int{0}
@@ -95,14 +68,10 @@ func (k *kittyKeyboardState) SetAltScreen(on bool) {
 	k.onAlt = on
 }
 
-// SelectScreen points the state at the main or the alternate screen without
-// touching either stack. It is for a restore, which puts back a stack that
-// was saved on whichever screen was in use.
 func (k *kittyKeyboardState) SelectScreen(alt bool) {
 	k.onAlt = alt
 }
 
-// CurrentFlags returns the currently active keyboard flags.
 func (k *kittyKeyboardState) CurrentFlags() int {
 	st := *k.active()
 	if len(st) == 0 {
@@ -111,8 +80,6 @@ func (k *kittyKeyboardState) CurrentFlags() int {
 	return st[len(st)-1]
 }
 
-// Push pushes a new set of flags onto the stack. A full stack drops its
-// oldest entry first.
 func (k *kittyKeyboardState) Push(flags int) {
 	st := k.active()
 	if len(*st) >= maxKittyKeyboardStack {
@@ -121,9 +88,6 @@ func (k *kittyKeyboardState) Push(flags int) {
 	*st = append(*st, flags)
 }
 
-// Pop removes n entries from the top of the stack. Popping every entry, or
-// more, leaves no flags set, as in kitty, where popping past the bottom is
-// how a program gets back to the legacy encoding whatever was pushed.
 func (k *kittyKeyboardState) Pop(n int) {
 	if n <= 0 {
 		n = 1
@@ -136,11 +100,6 @@ func (k *kittyKeyboardState) Pop(n int) {
 	*st = (*st)[:len(*st)-n]
 }
 
-// Set modifies the current flags based on the mode:
-//
-//	1 = set given flags, unset all others
-//	2 = set given flags, keep existing unchanged
-//	3 = unset given flags, keep existing unchanged
 func (k *kittyKeyboardState) Set(flags, mode int) {
 	current := k.CurrentFlags()
 	switch mode {
@@ -161,30 +120,24 @@ func (k *kittyKeyboardState) Set(flags, mode int) {
 	}
 }
 
-// Reset clears both stacks back to the base entry and selects the main
-// screen, which is where a hard reset leaves the terminal.
 func (k *kittyKeyboardState) Reset() {
 	k.main = []int{0}
 	k.alt = []int{0}
 	k.onAlt = false
 }
 
-// HasDisambiguate returns true if the disambiguate flag is set.
 func (k *kittyKeyboardState) HasDisambiguate() bool {
 	return k.CurrentFlags()&ansi.KittyDisambiguateEscapeCodes != 0
 }
 
-// HasReportEvents returns true if the report events flag is set.
 func (k *kittyKeyboardState) HasReportEvents() bool {
 	return k.CurrentFlags()&ansi.KittyReportEventTypes != 0
 }
 
-// HasReportAlternateKeys returns true if the report alternate keys flag is set.
 func (k *kittyKeyboardState) HasReportAlternateKeys() bool {
 	return k.CurrentFlags()&ansi.KittyReportAlternateKeys != 0
 }
 
-// HasReportAllKeys returns true if the report all keys flag is set.
 func (k *kittyKeyboardState) HasReportAllKeys() bool {
 	return k.CurrentFlags()&ansi.KittyReportAllKeysAsEscapeCodes != 0
 }
@@ -217,12 +170,10 @@ func (e *Emulator) DisableKittyKeyboardProtocol() {
 // called.
 func (e *Emulator) KittyKeyboardUnavailable() bool { return e.kkpUnavailable.Load() }
 
-// registerKittyKeyboardHandlers registers CSI handlers for kitty keyboard protocol.
 func (e *Emulator) registerKittyKeyboardHandlers() {
-	// CSI > flags u: Push keyboard mode
 	e.RegisterCsiHandler(ansi.Command('>', 0, 'u'), func(params ansi.Params) bool {
 		if e.kkpUnavailable.Load() {
-			return true // see DisableKittyKeyboardProtocol
+			return true
 		}
 		flags := 0
 		if len(params) > 0 {
@@ -233,10 +184,9 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		return true
 	})
 
-	// CSI < count u: Pop keyboard mode
 	e.RegisterCsiHandler(ansi.Command('<', 0, 'u'), func(params ansi.Params) bool {
 		if e.kkpUnavailable.Load() {
-			return true // see DisableKittyKeyboardProtocol
+			return true
 		}
 		count := 1
 		if len(params) > 0 {
@@ -247,23 +197,19 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		return true
 	})
 
-	// CSI ? u: Query keyboard mode. No reply when the protocol is off, see
-	// DisableKittyKeyboardProtocol.
 	e.RegisterCsiHandler(ansi.Command('?', 0, 'u'), func(_ ansi.Params) bool {
 		if e.kkpUnavailable.Load() {
 			return true
 		}
 		flags := e.kittyKbd.CurrentFlags()
-		// Respond with CSI ? flags u
 		response := fmt.Sprintf("\x1b[?%du", flags)
 		_, _ = io.WriteString(e.pipe, response)
 		return true
 	})
 
-	// CSI = flags ; mode u: Set keyboard mode
 	e.RegisterCsiHandler(ansi.Command('=', 0, 'u'), func(params ansi.Params) bool {
 		if e.kkpUnavailable.Load() {
-			return true // see DisableKittyKeyboardProtocol
+			return true
 		}
 		flags := 0
 		mode := 1
@@ -326,7 +272,6 @@ func (e *Emulator) RestoreKittyKeyboardMainStack(stack []int) {
 // from an older daemon leaves the default (empty) state untouched. The stack
 // goes to the screen in use, so restore the alternate screen first.
 func (e *Emulator) RestoreKittyKeyboardState(stack []int) {
-	// See DisableKittyKeyboardProtocol.
 	if e.kkpUnavailable.Load() || e.kittyKbd == nil || len(stack) == 0 {
 		return
 	}
@@ -334,8 +279,6 @@ func (e *Emulator) RestoreKittyKeyboardState(stack []int) {
 	e.updateKittyKeyboardCache()
 }
 
-// updateKittyKeyboardCache updates the thread-safe cached flags.
-// Must be called from the VT processing goroutine after any stack change.
 func (e *Emulator) updateKittyKeyboardCache() {
 	flags := 0
 	if e.kittyKbd != nil {
@@ -347,7 +290,6 @@ func (e *Emulator) updateKittyKeyboardCache() {
 // EncodeKeyCSIu encodes a key event in the CSI u format used by the kitty keyboard protocol.
 // Returns the encoded sequence, or empty string if the key should use legacy encoding.
 func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
-	// Only encode if at least disambiguate or report-all-keys flag is set
 	if flags&(ansi.KittyDisambiguateEscapeCodes|ansi.KittyReportAllKeysAsEscapeCodes) == 0 {
 		return ""
 	}
@@ -361,37 +303,22 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 
 	code := int(key.Code)
 
-	// Don't encode basic printable characters without modifiers
-	// (unless report-all-keys flag is set)
 	if flags&ansi.KittyReportAllKeysAsEscapeCodes == 0 {
-		// Caps Lock and Num Lock change the text, not the chord: NumLock+a is
-		// still text, and CapsLock+ш types Ш as text.
 		mods := key.Mod &^ (ModCapsLock | ModNumLock)
 		if mods == 0 && code >= 0x20 && code < 0x7f {
 			return ""
 		}
-		// The same for a key that types a non-ASCII character, such as "ш" on
-		// a Ukrainian layout: text is sent as text. Only report-all-keys turns
-		// a plain text key into an escape code.
 		if mods == 0 && key.Text != "" && unicode.IsPrint(key.Code) {
 			return ""
 		}
-		// For Shift+printable that produces different text (e.g., Shift+a → 'A'),
-		// the kitty spec says to send the text directly, not CSI u.
-		// Only use CSI u when there are other modifiers (Ctrl, Alt) besides Shift.
 		if key.Text != "" && mods == ModShift {
 			return ""
 		}
-		// A keypad key that types text is text too: keypad 1 with NumLock on
-		// is "1". Its code is one of ultraviolet's private ones, which the
-		// printable-code test above cannot see, so it is named here. Only the
-		// keypad keys that type nothing are CSI u under disambiguate.
 		if key.Text != "" && mods&^ModShift == 0 && isKittyKeypadKey(key.Code) {
 			return ""
 		}
 	}
 
-	// Map special keys to their CSI u key codes
 	form, ok := kittyKeyForm(key.Code)
 	if !ok {
 		return ""
@@ -402,16 +329,6 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 		return encodeFormCSIu(form, mods)
 	}
 
-	// For regular keys, encode as CSI code ; modifiers u.
-	//
-	// When the pane requested the associated-text flag, a key that produces
-	// text must carry that text as the third CSI-u field so the app inserts the
-	// character the user actually typed. Without it, an app that honours the
-	// flag it asked for (terminal-browser escalates to CSI >27u on text focus,
-	// awrit pushes CSI >31u) has only the base key code to work with: it inserts
-	// the unshifted character, so Shift+A types "a", ":" types ";", and any
-	// non-ASCII text is dropped. The field is a colon-separated list of the
-	// produced text's Unicode code points; see the kitty keyboard protocol.
 	keyField := strconv.Itoa(code)
 	if flags&ansi.KittyReportAlternateKeys != 0 {
 		keyField = kittyAlternateKeys(code, key)
@@ -427,11 +344,6 @@ func EncodeKeyCSIu(key KeyPressEvent, flags int) string {
 	return fmt.Sprintf("\x1b[%su", keyField)
 }
 
-// kittyModField renders the modifier field of a key press for a pane with
-// these flags: the modifier parameter, then ":2" for a repeat when the pane
-// asked for event types. kitty marks a held key's repeats that way, and a pane
-// that tracks presses and releases (a Wayland compositor does) would otherwise
-// read each repeat as a second press of a key that is already down.
 func kittyModField(key KeyPressEvent, flags int) string {
 	field := strconv.Itoa(kittyModParamFor(key.Mod, flags))
 	if key.IsRepeat && flags&ansi.KittyReportEventTypes != 0 {
@@ -440,11 +352,6 @@ func kittyModField(key KeyPressEvent, flags int) string {
 	return field
 }
 
-// kittyAlternateKeys renders the key field for a pane that asked for alternate
-// keys: code[:shifted[:base]]. The shifted key is only there with Shift held,
-// and the base-layout key (the US-layout key at the same position) only when it
-// differs from the code. A pane that did not ask gets the bare code, so the
-// alternate keys tuios asks the host for never reach it.
 func kittyAlternateKeys(code int, key KeyPressEvent) string {
 	field := strconv.Itoa(code)
 	shifted := 0
@@ -467,12 +374,6 @@ func kittyAlternateKeys(code int, key KeyPressEvent) string {
 	return field
 }
 
-// kittyAssociatedText renders a key's produced text as the colon-separated
-// decimal code-point list the kitty keyboard protocol uses for its associated
-// text field. It returns "" when there is no text to report: an empty string,
-// or text that is a lone control character (Enter, Tab, Backspace and Escape
-// carry their semantics in the key code, not as insertable text, and a kitty
-// app expects no text field for them).
 func kittyAssociatedText(text string) string {
 	if text == "" {
 		return ""
@@ -490,23 +391,11 @@ func kittyAssociatedText(text string) string {
 	return b.String()
 }
 
-// csiuForm is how one key is spelled in the CSI u family: a number, then the
-// modifier field, then a terminator. Three shapes exist: \x1b[<code>u for
-// ordinary keys, \x1b[1;<mods><letter> for the arrows and F1-F4, and
-// \x1b[<n>;<mods>~ for Insert through F12. They differ only in those two
-// values. Presses and releases read the same table, so a release can never name
-// a different key than the press it ends.
 type csiuForm struct {
 	num   int
 	final byte
 }
 
-// kittyKeyForm returns the CSI u spelling of a key code. Anything not named
-// here is its own code terminated by 'u', which is what the protocol says for
-// every ordinary character. ok is false for one of ultraviolet's private codes
-// the protocol has no number for (F36 and up, say): putting the private code on
-// the wire names a key no application knows, so the caller leaves it to the
-// legacy encoder instead.
 func kittyKeyForm(code rune) (form csiuForm, ok bool) {
 	switch code {
 	case KeyEnter:
@@ -536,9 +425,6 @@ func kittyKeyForm(code rune) (form csiuForm, ok bool) {
 	case KeyF2:
 		return csiuForm{1, 'Q'}, true
 	case KeyF3:
-		// CSI 13 ~, not CSI R: the kitty protocol moved F3 off CSI R because
-		// that is the cursor position report, and a program that knows this,
-		// such as fish 4, reads CSI R as no key (issue #1615).
 		return csiuForm{13, '~'}, true
 	case KeyF4:
 		return csiuForm{1, 'S'}, true
@@ -567,7 +453,6 @@ func kittyKeyForm(code rune) (form csiuForm, ok bool) {
 	case KeyF12:
 		return csiuForm{24, '~'}, true
 	case KeyBegin:
-		// KP_BEGIN in the protocol's table: the legacy CSI E, like the arrows.
 		return csiuForm{1, 'E'}, true
 	}
 	if n, ok := kittyModifierKeyCodes[code]; ok {
@@ -582,10 +467,6 @@ func kittyKeyForm(code rune) (form csiuForm, ok bool) {
 	return csiuForm{int(code), 'u'}, true
 }
 
-// kittyModifierKeyCodes are the kitty protocol's codes for the modifier and
-// lock keys, which a terminal reports as keys of their own in report-all-keys
-// mode. The decoder turns them into its own key codes, which are not what a
-// pane expects on the wire.
 var kittyModifierKeyCodes = map[rune]int{
 	KeyCapsLock:       57358,
 	KeyScrollLock:     57359,
@@ -606,13 +487,6 @@ var kittyModifierKeyCodes = map[rune]int{
 	KeyIsoLevel5Shift: 57454,
 }
 
-// kittyFunctionalKeys holds the kitty protocol's numbers for the other keys
-// that are not characters: the keypad, F13 and up, Print Screen, Pause and
-// Menu, and the media keys. The decoder hands these over as ultraviolet's
-// private codes, which sit past unicode.MaxRune, so falling through to "the
-// code is the number" put \x1b[1114126u on the wire for keypad Enter -- a key
-// no application has ever heard of. See "Functional key definitions" in the
-// kitty keyboard protocol for the table.
 var kittyFunctionalKeys = func() map[rune]int {
 	m := map[rune]int{
 		KeyKp0: 57399, KeyKp1: 57400, KeyKp2: 57401, KeyKp3: 57402, KeyKp4: 57403,
@@ -622,11 +496,8 @@ var kittyFunctionalKeys = func() map[rune]int {
 		KeyKpSep: 57416, KeyKpLeft: 57417, KeyKpRight: 57418, KeyKpUp: 57419,
 		KeyKpDown: 57420, KeyKpPgUp: 57421, KeyKpPgDown: 57422, KeyKpHome: 57423,
 		KeyKpEnd: 57424, KeyKpInsert: 57425, KeyKpDelete: 57426, KeyKpBegin: 57427,
-		// The protocol has no keypad comma; KP_SEPARATOR is the same key on
-		// the layouts that have one.
 		KeyKpComma: 57416,
 	}
-	// These blocks are declared in the protocol's own order, so they range.
 	blocks := []struct {
 		first, last rune
 		num         int
@@ -643,10 +514,6 @@ var kittyFunctionalKeys = func() map[rune]int {
 	return m
 }()
 
-// isKittyModifierKey reports whether code is a modifier pressed on its own,
-// which the protocol reports only under the report-all-keys flag. The lock keys
-// count, as they do in kitty's own is_modifier_key: without them every CapsLock
-// press reached a disambiguate pane as \x1b[57358u.
 func isKittyModifierKey(code rune) bool {
 	switch code {
 	case KeyCapsLock, KeyScrollLock, KeyNumLock:
@@ -655,16 +522,11 @@ func isKittyModifierKey(code rune) bool {
 	return code >= KeyLeftShift && code <= KeyIsoLevel5Shift
 }
 
-// isKittyKeypadKey reports whether code is one of the keypad keys the protocol
-// numbers 57399 (KP_0) through 57427 (KP_BEGIN).
 func isKittyKeypadKey(code rune) bool {
 	num, ok := kittyFunctionalKeys[code]
 	return ok && num >= 57399 && num <= 57427
 }
 
-// encodeFormCSIu spells a press of one of the letter- or tilde-terminated keys.
-// With no modifiers the sequence is the bare legacy one, which is what every
-// terminal sends and every application already reads.
 func encodeFormCSIu(form csiuForm, mods string) string {
 	if mods != "1" {
 		return fmt.Sprintf("\x1b[%d;%s%c", form.num, mods, form.final)
@@ -701,18 +563,11 @@ func EncodeKeyReleaseCSIu(key KeyPressEvent, flags int) string {
 	}
 	keyField := strconv.Itoa(form.num)
 	if form.final == 'u' && flags&ansi.KittyReportAlternateKeys != 0 {
-		// The release names the same alternate keys as its press, as kitty's
-		// does: CSI 97:65 ; 2:3 u for Shift+a.
 		keyField = kittyAlternateKeys(form.num, key)
 	}
 	return fmt.Sprintf("\x1b[%s;%d:3%c", keyField, kittyModParamFor(key.Mod, flags), form.final)
 }
 
-// isKittyLegacyTextKey reports whether key is Enter, Tab or Backspace with no
-// modifier for a pane that did not ask for every key. kitty sends those three
-// as their legacy bytes (CR, HT, DEL) under disambiguate and event types, and
-// sends no release or repeat event for them. Only the report-all-keys flag, or
-// a modifier, turns them into escape codes.
 func isKittyLegacyTextKey(key KeyPressEvent, flags int) bool {
 	if flags&ansi.KittyReportAllKeysAsEscapeCodes != 0 {
 		return false
@@ -727,14 +582,6 @@ func isKittyLegacyTextKey(key KeyPressEvent, flags int) bool {
 	return false
 }
 
-// kittyModParamFor is kittyModParam with the lock modifiers added for a pane
-// that asked for every key as an escape code: Caps Lock is 64 and Num Lock is
-// 128, as kitty sends them. Such a pane treats the lock keys as keys, and a
-// compositor among them keeps its own lock state, which it can only bring in
-// line with the host's from these bits: the desktop may have turned Num Lock on
-// before the pane ever had the keyboard. Other panes keep the field they always
-// got, so a Num Lock left on does not turn a plain arrow into CSI 1;129A for
-// them.
 func kittyModParamFor(mod KeyMod, flags int) int {
 	param := kittyModParam(mod)
 	if flags&ansi.KittyReportAllKeysAsEscapeCodes == 0 {
@@ -749,11 +596,6 @@ func kittyModParamFor(mod KeyMod, flags int) int {
 	return param
 }
 
-// kittyModParam converts modifier flags to the CSI parameter format.
-// The format is 1 + bitwise OR of: 1=shift, 2=alt, 4=ctrl, 8=super, 16=hyper,
-// 32=meta. Each bit is read from its own modifier. A CSI u key decodes Super
-// as ModSuper, and the input path corrects the legacy form, where the decoder
-// puts it in ModMeta (see app.fixKittyLegacyMods).
 func kittyModParam(mod KeyMod) int {
 	param := 1
 	if mod&ModShift != 0 {

@@ -18,7 +18,6 @@ func TestED2_RemovesOnScreenSemanticMarkers(t *testing.T) {
 	e := NewEmulator(80, 24)
 	defer e.Close()
 
-	// Emit an on-screen prompt marker (AbsLine = scrollbackLen + cursorY = 0).
 	e.Write([]byte("\x1b]133;A\x1b\\"))
 	if e.semanticMarkers.Len() == 0 {
 		t.Fatal("expected a semantic marker after OSC 133;A")
@@ -38,7 +37,6 @@ func TestThemedSGR_UnderlineSubparamNoLeak(t *testing.T) {
 	e := NewEmulator(80, 24)
 	defer e.Close()
 
-	// Activate the themed path.
 	var pal [16]color.Color
 	for i := range pal {
 		pal[i] = color.RGBA{R: uint8(i * 16), G: 0, B: 0, A: 255}
@@ -115,10 +113,8 @@ func TestOSC4_PaletteQuery(t *testing.T) {
 	e := NewEmulator(80, 24)
 	defer e.Close()
 
-	// Set a custom color for index 1
 	e.Write([]byte("\x1b]4;1;rgb:ff/00/00\x1b\\"))
 
-	// Query color index 1
 	responseChan := make(chan string, 1)
 	errChan := make(chan error, 1)
 	go func() {
@@ -135,7 +131,6 @@ func TestOSC4_PaletteQuery(t *testing.T) {
 
 	select {
 	case response := <-responseChan:
-		// Should contain a color response with index 1
 		if !strings.Contains(response, "4;1;") {
 			t.Errorf("expected response containing '4;1;', got %q", response)
 		}

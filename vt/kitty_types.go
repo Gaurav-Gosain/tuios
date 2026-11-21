@@ -134,12 +134,7 @@ type KittyCommand struct {
 	// 32-bit build, so it needs its own width.
 	BackgroundColor uint32
 
-	// pngHead is the start of a PNG upload's first chunk, decoded, so the
-	// emulator can answer a corrupt one. See kittyPNGHeadError.
 	pngHead []byte
 
-	// otherKeys is set when the control data named a key other than the
-	// image, image number and placement ids, which are the only keys a reply
-	// from a terminal carries. See IsKittyEchoedResponse.
 	otherKeys bool
 }

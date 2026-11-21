@@ -7,14 +7,6 @@ import (
 	gh "go.mitchellh.com/libghostty"
 )
 
-// The bulk history readers of Terminal. The library keeps history in its own
-// form, so each line is read through readHistoryLineLocked as ScrollbackLine
-// reads it, but not kept in the line cache: a walk of the whole history would
-// otherwise churn the cache and leave it holding the last lines walked.
-
-// historySourceLocked is the terminal that holds the main screen's history:
-// the live one, or while the alternate screen is up the decoded copy switched
-// back to the main screen. It returns nil when there is none.
 func (t *GhosttyTerminal) historySourceLocked() *gh.Terminal {
 	if t.closed.Load() {
 		return nil
@@ -25,8 +17,6 @@ func (t *GhosttyTerminal) historySourceLocked() *gh.Terminal {
 	return t.term
 }
 
-// historyRangeLocked clamps [from, end) to the history and returns the
-// terminal to read it from, or nil when there is nothing to read.
 func (t *GhosttyTerminal) historyRangeLocked(from, end int) (*gh.Terminal, int, int) {
 	from, end = max(from, 0), min(end, t.scrollbackLenLocked())
 	if from >= end {
@@ -65,10 +55,7 @@ func (t *GhosttyTerminal) ScrollbackText(from, end int, fn func(index, width int
 	var cells []TextCell
 	var text []byte
 	var ends []int
-	// Text and widths only, which is all the formatter path is exact about.
 	t.eachHistoryText(src, from, end, t.width, func(i int, line uv.Line) bool {
-		// The contents go into one buffer per line, and the cells are cut
-		// from it once it has stopped growing.
 		text, ends = text[:0], ends[:0]
 		for x := range line {
 			text = append(text, line[x].Content...)
@@ -123,8 +110,6 @@ func (t *GhosttyTerminal) CopyScrollback(from, end int) *ScrollbackCopy {
 	})
 }
 
-// copyScrollbackLocked reads the lines one by one under the lock, for when the
-// library writes no snapshot.
 func (t *GhosttyTerminal) copyScrollbackLocked(from, end int) *ScrollbackCopy {
 	src := t.historySourceLocked()
 	if src == nil {
@@ -138,10 +123,6 @@ func (t *GhosttyTerminal) copyScrollbackLocked(from, end int) *ScrollbackCopy {
 	return c
 }
 
-// decodeHistorySnapshot makes a terminal of its own from a snapshot. When the
-// alternate screen was active, the copy is switched back to the main screen,
-// whose history is the one every reader wants (see altHistoryLocked). It
-// returns nil when the snapshot does not decode. The caller closes it.
 func decodeHistorySnapshot(data []byte, alt bool) *gh.Terminal {
 	dec, err := gh.NewSnapshotDecoderBytes(data)
 	if err != nil {

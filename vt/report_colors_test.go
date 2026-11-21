@@ -9,15 +9,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// A program asks the terminal what its background is with OSC 11, and its
-// default text colour with OSC 10. With a pane background painted, tuios tells
-// the emulator the painted pair through SetReportColors, and the answer has to
-// be that pair, on whichever backend this binary was built with. These run
-// under the pure Go emulator by default and under libghostty-vt with -tags
-// ghostty.
-
-// oscAnswer writes in to t and returns the rgb: value of the first OSC 10 or
-// 11 answer the emulator wrote back, or "" when it wrote none.
 func oscAnswer(tb testing.TB, term vt.Terminal, in string) string {
 	tb.Helper()
 	if _, err := term.Write([]byte(in)); err != nil {
@@ -80,8 +71,6 @@ func TestReportColorsAnswerOSC10And11(t *testing.T) {
 	})
 
 	t.Run("a painted ground with the host's ink", func(t *testing.T) {
-		// A colour of the user's with no theme paints the ground and leaves
-		// the text to the host, so only OSC 11 changes.
 		term := vt.New(20, 4)
 		t.Cleanup(func() { _ = term.Close() })
 		before := oscAnswer(t, term, queryFg)
@@ -98,7 +87,6 @@ func TestReportColorsAnswerOSC10And11(t *testing.T) {
 		term := vt.New(20, 4)
 		t.Cleanup(func() { _ = term.Close() })
 		term.SetReportColors(ink, painted, [16]color.Color{})
-		// The program sets its own background, then asks.
 		if got := oscAnswer(t, term, "\x1b]11;rgb:ff/00/00\x1b\\"+queryBg); got != "rgb:ffff/0000/0000" {
 			t.Errorf("after OSC 11 set, the query answered %q, want the guest's rgb:ffff/0000/0000", got)
 		}

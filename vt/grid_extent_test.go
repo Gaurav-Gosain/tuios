@@ -7,10 +7,6 @@ import (
 	"tuios.dev/vt/vtgen"
 )
 
-// extentHolds reports the first cell that breaks the grid's extent invariant:
-// every cell of row y at or past ext[y] is a plain blank, and an unwritten row
-// has an extent of zero. A cell past the extent that is not blank is one the
-// scroll path would blank too little of, or leave out of the scrollback.
 func extentHolds(g *grid) string {
 	if len(g.ext) != len(g.rows) {
 		return fmt.Sprintf("%d extents for %d rows", len(g.ext), len(g.rows))

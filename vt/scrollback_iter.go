@@ -7,17 +7,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// Bulk history readers.
-//
-// Line decodes a stored line into a fresh uv.Line of 112-byte cells and keeps
-// it in a small cache, which is what a render of a scrolled pane wants: the
-// same few rows asked for again and again. A reader of the whole history
-// wants neither. Decoding every line of a full 10000-line ring at 207 columns
-// allocated 251 MB, and the cache was left holding the last 256 of them, about
-// 5 MB per pane, until the pane next printed. The readers here walk the
-// encoded lines directly: the row reader decodes each line into one buffer it
-// reuses, and the text reader does not build cells at all.
-
 // TextCell is one history cell without its style or link: what it shows and
 // how many columns it takes. Content is the cell's text, empty for the spacer
 // a wide character leaves in the column after it. It aliases the history's
@@ -28,9 +17,6 @@ type TextCell struct {
 	Width   int    // columns the cell takes
 }
 
-// eachRow calls fn with the lines from index from to end-1, oldest first, each
-// decoded into a buffer reused from line to line. It stops when fn returns
-// false. Nothing goes through the line cache.
 func (sb *Scrollback) eachRow(from, end int, fn func(index int, line uv.Line) bool) {
 	from, end = max(from, 0), min(end, sb.Len())
 	var buf uv.Line
@@ -50,11 +36,6 @@ func (sb *Scrollback) eachRow(from, end int, fn func(index int, line uv.Line) bo
 	}
 }
 
-// eachText calls fn with the lines from index from to end-1, oldest first, as
-// text cells: one per stored cell, column by column. A line stores its cells
-// only up to the last that is not blank, so the columns from len(cells) to
-// width are spaces. The cells slice is reused from line to line. It stops
-// when fn returns false.
 func (sb *Scrollback) eachText(from, end int, fn func(index, width int, cells []TextCell) bool) {
 	from, end = max(from, 0), min(end, sb.Len())
 	var cells []TextCell
@@ -71,10 +52,6 @@ func (sb *Scrollback) eachText(from, end int, fn func(index, width int, cells []
 	}
 }
 
-// appendTextCells appends the text cells of a stored line's token stream, its
-// width header already read, to cells. It reads a record the way decodeInto
-// does and stops where decodeInto would, so the cells are the decoded line's
-// cells up to where decodeInto starts padding.
 func appendTextCells(cells []TextCell, data []byte, width int) []TextCell {
 	i := 0
 	for i < len(data) && len(cells) < width {
@@ -119,8 +96,6 @@ func appendTextCells(cells []TextCell, data []byte, width int) []TextCell {
 	return cells
 }
 
-// readContentBytes is readContent without the string: the content's bytes,
-// aliasing data.
 func readContentBytes(data []byte, i int) ([]byte, int, bool) {
 	if i >= len(data) {
 		return nil, i, false
@@ -153,21 +128,16 @@ func readContentBytes(data []byte, i int) ([]byte, int, bool) {
 // A backend that cannot copy its lines cheaply copies something else under the
 // lock and makes the lines from it on first use: see build.
 type ScrollbackCopy struct {
-	sb *Scrollback
-	// build, when set, makes sb. It runs once, on the first call that reads
-	// the copy, which is after the reader let go of the terminal's lock.
+	sb    *Scrollback
 	build func() *Scrollback
 	once  sync.Once
 }
 
-// lazyScrollbackCopy is a copy whose lines build makes on first use.
-//
 //nolint:unused // Only the ghostty backend calls it (ghostty_scrollback_iter.go).
 func lazyScrollbackCopy(build func() *Scrollback) *ScrollbackCopy {
 	return &ScrollbackCopy{build: build}
 }
 
-// lines is the copy's ring, made now if the copy is lazy.
 func (c *ScrollbackCopy) lines() *Scrollback {
 	if c.build != nil {
 		c.once.Do(func() { c.sb = c.build() })
@@ -175,10 +145,6 @@ func (c *ScrollbackCopy) lines() *Scrollback {
 	return c.sb
 }
 
-// copyLines copies the lines from index from to end-1, with their row flags,
-// into a ScrollbackCopy. The bytes go into one allocation. The colour intern
-// table is shared, not copied: it is only ever appended to, so the entries
-// the copied lines name never change.
 func (sb *Scrollback) copyLines(from, end int) *ScrollbackCopy {
 	from, end = max(from, 0), min(end, sb.Len())
 	n := max(end-from, 0)
@@ -247,17 +213,12 @@ func (c *ScrollbackCopy) Padded(index int) bool {
 	return c.Len() > 0 && c.sb.lineFlags(index)&rowPadded != 0
 }
 
-// push appends a decoded line and its flags to a copy built line by line, for
-// a backend that does not keep the encoded form. n is the number of lines the
-// copy will hold.
-//
 //nolint:unused // Only the ghostty backend calls it (ghostty_scrollback_iter.go).
 func (c *ScrollbackCopy) push(line uv.Line, flags rowFlag, n int) {
 	if c.sb == nil {
 		c.sb = NewScrollback(max(n, 1))
 	}
 	if len(line) == 0 {
-		// PushLine skips an empty line, and the flags are by index.
 		c.sb.PushBlankLine(1)
 	} else {
 		c.sb.PushLine(line)

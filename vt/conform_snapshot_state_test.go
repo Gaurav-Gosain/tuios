@@ -1,33 +1,5 @@
 package vt_test
 
-// Conformance for the state a snapshot carries that no cell shows and that a
-// screen dump cannot see: the tab stops, the titles and the title stack, the
-// colours a guest set with OSC 4, 10, 11 and 12, the ANSI modes, and the input
-// the parser is part way through. Every case runs on the backend the test
-// binary was built with, so `go test -tags ghostty` runs them on libghostty.
-//
-// Ways this can go wrong, each a group of cases below:
-//   - the tab stop table is read wrong after HTS, TBC 0, TBC 3, DECST8C, RIS
-//     or a resize that changes the width;
-//   - RestoreTabStops does not replace the table, keeps a column past the
-//     right edge, or a tab after it does not stop where the table says;
-//   - the title stack loses an entry, the icon name, or which of the two an
-//     entry saved, or keeps more than ten entries;
-//   - RestoreTitles does not put the stack back, so a pop after it restores
-//     nothing;
-//   - a colour the guest reset with OSC 104, 110, 111 or 112 is still
-//     reported as set, or a restored palette entry does not paint what the
-//     guest prints next;
-//   - an ANSI mode is restored in the mode table and not in the cached flag
-//     the print path reads, so insert mode and newline mode do nothing;
-//   - PendingInput holds bytes from before the sequence started, which a
-//     replay would paint twice;
-//   - PendingInput holds a control the parser already carried out inside the
-//     sequence, which a replay would carry out twice;
-//   - PendingInput misses part of the sequence, so the rest prints as text;
-//   - RestorePendingInput keeps an unfinished sequence the emulator was in,
-//     so what comes next lands inside it.
-
 import (
 	"image/color"
 	"slices"
@@ -55,7 +27,7 @@ func TestSnapshotState_TabStops(t *testing.T) {
 	cases := []struct {
 		name   string
 		in     string
-		resize int // a width to resize to after the input, or 0
+		resize int
 		want   []int
 	}{
 		{name: "the default table", want: []int{0, 8, 16, 24}},
@@ -188,9 +160,6 @@ func TestSnapshotState_Titles(t *testing.T) {
 		}
 	})
 
-	// The backends differ on the icon name after RIS: libghostty clears the
-	// title, and the icon name goes with it. The explicit icon name is kept
-	// on both.
 	t.Run("RIS keeps the explicit icon name", func(t *testing.T) {
 		term := newStateEmulator(t, 20, 4)
 		feed(t, term, "\x1b]1;api\x07\x1bc")
@@ -312,8 +281,6 @@ func TestSnapshotState_ANSIModes(t *testing.T) {
 	})
 
 	t.Run("restored insert mode inserts", func(t *testing.T) {
-		// The restore comes first: on the libghostty backend a restore is
-		// replayed from a reset, which clears the screen.
 		term := newStateEmulator(t, 20, 4)
 		term.RestoreANSIModes(map[int]bool{4: true})
 		feed(t, term, "abc\rX")

@@ -14,17 +14,6 @@ import (
 	gh "go.mitchellh.com/libghostty"
 )
 
-// This file keeps the uv shadow grid in step with libghostty's render state.
-// The sync runs on demand: Write marks the grid stale, the first read after
-// that walks the dirty rows. Each cell costs one Go memory read thanks to the
-// packed-cell decoder; only grapheme cells, hyperlinks and style-cache misses
-// call into the library.
-
-// ghosttyCellDecoder decodes packed cell values using the bit layout the
-// library publishes at runtime via TypeJSON. The layout is explicitly not
-// ABI-stable, so it is read from the manifest rather than hardcoded; when the
-// manifest cannot be parsed the decoder is disabled and cells are read
-// through cgo getters instead.
 type ghosttyCellDecoder struct {
 	ok                bool
 	tagLSB, tagMask   uint64
@@ -33,15 +22,10 @@ type ghosttyCellDecoder struct {
 	styleMask         uint64
 	wideLSB, wideMask uint64
 	linkBit           uint64
-	// protBit is DECSCA's bit, when hasProt says the manifest names one. A
-	// library without it reads every cell as unprotected rather than
-	// giving up the fast decoder.
-	protBit uint64
-	hasProt bool
-	// Where a background-only cell keeps its colour, in the same union as the
-	// codepoint.
-	rLSB, gLSB, bLSB uint64
-	palLSB           uint64
+	protBit           uint64
+	hasProt           bool
+	rLSB, gLSB, bLSB  uint64
+	palLSB            uint64
 }
 
 func newGhosttyCellDecoder() ghosttyCellDecoder {
@@ -57,8 +41,6 @@ func newGhosttyCellDecoder() ghosttyCellDecoder {
 	}
 	cell, found := m.Types["GhosttyCell"]
 	if !found {
-		// Some manifest versions nest types differently; give up and use
-		// the getter path.
 		return d
 	}
 	type field struct {
@@ -80,8 +62,6 @@ func newGhosttyCellDecoder() ghosttyCellDecoder {
 	styleID, ok2 := get("style_id")
 	wide, ok3 := get("wide")
 	link, ok4 := get("hyperlink")
-	// The codepoint lives inside the content union; its lsb is the union's
-	// lsb because the CODEPOINT arm places it at offset 0.
 	var content struct {
 		LSB   uint64 `json:"lsb"`
 		Width uint64 `json:"width"`
@@ -145,7 +125,6 @@ func (d *ghosttyCellDecoder) decode(v uint64) decodedCell {
 	}
 }
 
-// background reads the colour out of a packed background-only cell.
 func (d *ghosttyCellDecoder) background(v uint64, tag gh.CellContentTag) gh.StyleColor {
 	if tag == gh.CellContentBgColorPalette {
 		return gh.StyleColor{Tag: gh.StyleColorPalette, Palette: uint8(v >> d.palLSB)}
@@ -157,20 +136,11 @@ func (d *ghosttyCellDecoder) background(v uint64, tag gh.CellContentTag) gh.Styl
 	}}
 }
 
-// backgroundMemo is backgroundOnlyStyle's last answer. The zero value holds no
-// colour, which matches a cell whose colour could not be read: it has no style.
 type backgroundMemo struct {
 	color gh.StyleColor
 	style uv.Style
 }
 
-// backgroundOnlyStyle is the style of a cell whose content tag says it holds
-// only a background. The library erases under a coloured pen with these: the
-// colour is in the cell, the style ID is 0, and no style lookup finds it.
-//
-// memo holds the last answer, because a clear fills whole rows with one colour
-// and boxing the colour per cell would allocate per cell. It lives for one row
-// or one history line, so it cannot outlast a palette change.
 func (t *GhosttyTerminal) backgroundOnlyStyle(memo *backgroundMemo, cell *gh.Cell, tag gh.CellContentTag, pal *ghosttyPalette) uv.Style {
 	var sc gh.StyleColor
 	switch {
@@ -192,8 +162,6 @@ func (t *GhosttyTerminal) backgroundOnlyStyle(memo *backgroundMemo, cell *gh.Cel
 	return memo.style
 }
 
-// decodeCellSlow reads the same fields through cgo getters, for builds whose
-// manifest the decoder does not understand.
 func decodeCellSlow(c *gh.Cell) decodedCell {
 	var out decodedCell
 	if tag, err := c.ContentTag(); err == nil {
@@ -217,8 +185,6 @@ func decodeCellSlow(c *gh.Cell) decodedCell {
 	return out
 }
 
-// syncLocked brings the shadow grid and cursor cache up to date. Call with
-// mu held.
 func (t *GhosttyTerminal) syncLocked() {
 	if t.closed.Load() {
 		return
@@ -229,7 +195,6 @@ func (t *GhosttyTerminal) syncLocked() {
 	}
 	t.gridStale = false
 
-	// Screen switches first: dirty tracking restarts on the new screen.
 	activeAlt := t.IsAltScreen()
 	idx := 0
 	if activeAlt {
@@ -241,10 +206,6 @@ func (t *GhosttyTerminal) syncLocked() {
 	if err := t.rs.Update(t.term); err != nil {
 		return
 	}
-	// Style IDs are only stable within one render snapshot: the library
-	// interns styles and recycles an ID as soon as its last cell is gone.
-	// A conversion cached across snapshots comes back as another style's
-	// colors after a clear, which puts text on a stale background. Cleared, not reallocated, so capacity survives.
 	clear(t.styleCache)
 	if err := t.rs.RowIterator(t.ri); err != nil {
 		return
@@ -261,7 +222,6 @@ func (t *GhosttyTerminal) syncLocked() {
 	}
 	_ = t.rs.Clean()
 
-	// Cursor cache.
 	if x, err := t.term.CursorX(); err == nil {
 		t.curX = int(x)
 	}
@@ -273,7 +233,6 @@ func (t *GhosttyTerminal) syncLocked() {
 	}
 }
 
-// syncRowLocked converts one dirty row into uv cells.
 func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 	view, err := t.ri.CellsRaw()
 	if err != nil {
@@ -294,14 +253,8 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 
 		switch dc.wide {
 		case gh.CellWideSpacerTail:
-			// uv.Line.Set manages wide-cell placeholders itself when the
-			// leading cell lands; writing one explicitly makes Set blank
-			// the wide cell it belongs to.
 			continue
 		case gh.CellWideSpacerHead:
-			// End-of-row spacer: the wide glyph wrapped to the next line,
-			// so this position holds nothing and must not keep whatever
-			// the previous frame left there.
 			buf.SetCell(x, y, &uv.Cell{Content: " ", Width: 1})
 			continue
 		}
@@ -320,8 +273,6 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 				out.Width = 1
 			}
 		case gh.CellContentCodepointGrapheme:
-			// Multi-codepoint cluster: fetch the tail through the cells
-			// iterator. Rare enough that the extra calls do not matter.
 			if !cellsLoaded {
 				if err := t.ri.Cells(t.rc); err != nil {
 					out.Content = string(dc.cp)
@@ -331,7 +282,6 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 			}
 			if err := t.rc.Select(uint16(x)); err == nil {
 				if cps, err := t.rc.Graphemes(); err == nil && len(cps) > 0 {
-					// Graphemes returns the full cluster, base included.
 					var sb strings.Builder
 					for _, cp := range cps {
 						sb.WriteRune(rune(cp))
@@ -344,7 +294,6 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 				out.Content = string(dc.cp)
 			}
 		default:
-			// Background-only cells carry no text.
 			out.Content = " "
 			out.Width = 1
 			out.Style = t.backgroundOnlyStyle(&bg, cell, dc.tag, nil)
@@ -353,21 +302,11 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 		if dc.styleID != 0 {
 			out.Style = t.styleFor(dc.styleID, x)
 		}
-		// A kitty placeholder cell names its image in its foreground colour,
-		// and the name the guest used is not the one the host knows the image
-		// by. libghostty owns the write side here, so the rewrite happens on
-		// the way out, which is the one place both readers of this buffer go
-		// through.
 		if IsKittyPlaceholder(out.Content) && t.kittyPlaceholderMode == KittyPlaceholdersDrop {
-			// libghostty owns the write side, so a host that cannot draw these
-			// has them blanked on the way out instead.
 			out.Content = " "
 			out.Width = 1
 		}
 		if IsKittyPlaceholder(out.Content) {
-			// Spell out the row and column from the cell to the left, which
-			// this loop has already built, so clipping the left of the row
-			// later cannot orphan what survives. See kitty_placeholder.go.
 			var left *uv.Cell
 			if x > 0 {
 				left = buf.CellAt(x-1, y)
@@ -384,15 +323,11 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 			buf.setProtected(x, y, out.Width, true)
 		}
 	}
-	// Rows narrower than the shadow (after a resize race) blank the rest.
 	for x := n; x < t.width; x++ {
 		buf.SetCell(x, y, &uv.Cell{Content: " ", Width: 1})
 	}
 }
 
-// styleFor converts a style ID to uv form through the cache. x is the cell
-// column for the miss path, which reads the full style from the current row's
-// cells iterator.
 func (t *GhosttyTerminal) styleFor(styleID uint16, x int) uv.Style {
 	if styleID == 0 {
 		return uv.Style{}
@@ -415,17 +350,10 @@ func (t *GhosttyTerminal) styleFor(styleID uint16, x int) uv.Style {
 	return s
 }
 
-// convertStyle maps a libghostty style onto uv.Style with the pure
-// emulator's color rules: palette indices resolve through the guest's OSC 4
-// overrides first and the user's theme second, and pass through as indices
-// when nothing claimed them.
 func (t *GhosttyTerminal) convertStyle(gs *gh.Style) uv.Style {
 	return t.convertStyleIn(gs, nil)
 }
 
-// convertStyleIn is convertStyle with the palette taken from pal, a copy made
-// under the lock, so a reader that holds no lock can convert. A nil pal reads
-// the terminal's own palette, which needs the lock.
 func (t *GhosttyTerminal) convertStyleIn(gs *gh.Style, pal *ghosttyPalette) uv.Style {
 	var s uv.Style
 	if gs.Bold() {
@@ -467,7 +395,6 @@ func (t *GhosttyTerminal) convertStyleIn(gs *gh.Style, pal *ghosttyPalette) uv.S
 	return s
 }
 
-// resolveStyleColor applies the pure emulator's paletteEntry rule.
 func (t *GhosttyTerminal) resolveStyleColor(sc gh.StyleColor, pal *ghosttyPalette) color.Color {
 	switch sc.Tag {
 	case gh.StyleColorRGB:
@@ -495,8 +422,6 @@ func (t *GhosttyTerminal) resolveStyleColor(sc gh.StyleColor, pal *ghosttyPalett
 	}
 }
 
-// paletteEntryLocked mirrors the pure emulator: guest OSC 4 first, theme
-// second, nil when the slot is the host terminal's to decide.
 func (t *GhosttyTerminal) paletteEntryLocked(i int) color.Color {
 	if i < 0 || i > 255 {
 		return nil
@@ -510,11 +435,8 @@ func (t *GhosttyTerminal) paletteEntryLocked(i int) color.Color {
 	return nil
 }
 
-// ghosttyPalette is a copy of every paletteEntryLocked answer.
 type ghosttyPalette [256]color.Color
 
-// paletteLocked copies the palette, for a reader that converts styles after
-// it lets go of the lock.
 func (t *GhosttyTerminal) paletteLocked() *ghosttyPalette {
 	var pal ghosttyPalette
 	for i := range pal {
@@ -523,7 +445,6 @@ func (t *GhosttyTerminal) paletteLocked() *ghosttyPalette {
 	return &pal
 }
 
-// hyperlinkAt fetches the hyperlink URI for an active-screen cell.
 func (t *GhosttyTerminal) hyperlinkAt(x, y int) string {
 	if t.closed.Load() {
 		return ""
@@ -539,7 +460,6 @@ func (t *GhosttyTerminal) hyperlinkAt(x, y int) string {
 	return uri
 }
 
-// cursorLocked returns the cursor position, syncing first.
 func (t *GhosttyTerminal) cursorLocked() (int, int) {
 	t.syncLocked()
 	return t.curX, t.curY
@@ -573,8 +493,6 @@ func (t *GhosttyTerminal) CursorPen() (uv.Style, uv.Link) {
 	if err != nil || gs == nil {
 		return uv.Style{}, uv.Link{}
 	}
-	// The pen's hyperlink is not exposed as data, so it is read from a
-	// formatter that emits it.
 	link, _ := t.penExtrasLocked()
 	return t.convertStyle(gs), link
 }
@@ -647,8 +565,6 @@ func (t *GhosttyTerminal) TailText(n int) []string {
 	}
 	grid := t.bufs[t.active]
 
-	// The same one-pass loop as Emulator.TailText; see there for why the rows
-	// can be cut from the buffer with unsafe.String.
 	m := min(n, h)
 	var endsStack [64]int
 	ends := endsStack[:0]
@@ -712,8 +628,6 @@ func (t *GhosttyTerminal) reserveImageSpaceLocked(rows, _ int) {
 	endY := startY + rows
 	scrollCount := 0
 	if endY > height {
-		// As the pure emulator: a picture taller than the screen runs into
-		// the scrollback, so every row is reserved, up to maxReserveScroll.
 		scrollCount = min(endY-height, maxReserveScroll)
 	}
 	finalY := startY + rows - scrollCount
@@ -723,7 +637,6 @@ func (t *GhosttyTerminal) reserveImageSpaceLocked(rows, _ int) {
 
 	var seq strings.Builder
 	if scrollCount > 0 {
-		// Save the pen, blank it, scroll from the bottom row, restore.
 		pen, err := t.term.CursorSGRStyle()
 		penSeq := ""
 		if err == nil && pen != nil {
@@ -744,15 +657,6 @@ func (t *GhosttyTerminal) reserveImageSpaceLocked(rows, _ int) {
 	t.scrollGeneration++
 }
 
-// placeSixelLocked marks an image's cells in the grid at the cursor, the
-// ghostty twin of Emulator.placeSixel. The grid is the library's, so the
-// cells are written as text: a scroll of the region (SU, as the pure
-// emulator's ScrollUp), then a run of marker characters on each row, then the
-// pen and cursor put back. Origin mode and insert mode are switched off while
-// the cells are written, so the absolute moves and the prints mean what they
-// say. Each marker keeps the background of the cell it replaces, as in the
-// pure emulator. The pen is read and restored by hand rather than with DECSC,
-// because DECSC's one slot belongs to the guest.
 func (t *GhosttyTerminal) placeSixelLocked(rows, cols int, id uint32) {
 	t.placeImageLocked(rows, cols, id, true)
 }
@@ -770,8 +674,6 @@ func (t *GhosttyTerminal) placeImageLocked(rows, cols int, id uint32, move bool)
 	}
 	startX, startY := t.cursorLocked()
 	height, width := t.height, t.width
-	// One row more than the image: the cursor ends on the row under it, as
-	// in Emulator.placeSixel.
 	scroll := 0
 	if move && startY+rows+1 > height {
 		scroll = min(startY+rows+1-height, height)
@@ -799,7 +701,6 @@ func (t *GhosttyTerminal) placeImageLocked(rows, cols int, id uint32, move bool)
 	t.term.VTWrite([]byte(seq.String()))
 	seq.Reset()
 
-	// The backgrounds the markers keep, read after the scroll.
 	t.gridStale = true
 	t.syncLocked()
 	var buf *grid
@@ -848,12 +749,8 @@ func (t *GhosttyTerminal) placeImageLocked(rows, cols int, id uint32, move bool)
 	t.scrollGeneration++
 }
 
-// restoreCursorLocked ends a synthesized write: the cursor at (x, y) and the
-// guest's origin mode and pen back.
 func (t *GhosttyTerminal) restoreCursorLocked(seq *strings.Builder, x, y int, origin bool, penSeq string) {
 	if origin {
-		// Setting DECOM homes the cursor, so the move comes after it, in
-		// the region's coordinates.
 		seq.WriteString("\x1b[?6h")
 		fmt.Fprintf(seq, "\x1b[%d;%dH", y-t.scrollRegion.Min.Y+1, x+1)
 	} else {

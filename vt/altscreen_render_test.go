@@ -5,16 +5,6 @@ import (
 	"testing"
 )
 
-// The renderer has two paths for a terminal pane. The focused pane is rendered
-// cell by cell via CellAt, and the unfocused pane takes a fast path that calls
-// Emulator.Render. Render reads e.scr, the currently active screen pointer, so
-// the two paths agree only as long as e.scr tracks the alternate screen
-// correctly. A blank unfocused pane running a full-screen application would be
-// explained by e.scr pointing at the main screen while the application draws on
-// the alternate one, so these tests pin that pointer down across every
-// operation that can move it.
-
-// cellText reads the emulator the way the focused (slow) render path does.
 func cellText(e *Emulator, width, height int) string {
 	var b strings.Builder
 	for y := range height {
@@ -50,15 +40,12 @@ func TestRenderFollowsAlternateScreenAcrossResize(t *testing.T) {
 	e := NewEmulator(width, height)
 	_, _ = e.Write([]byte("\x1b[?1049h\x1b[1;1HALTTEXT"))
 
-	// Shrink, as a retile onto a smaller tile would.
 	e.Resize(width-2, height-1)
 	if e.scr != &e.scrs[1] {
 		t.Fatal("resize moved the active screen off the alternate screen")
 	}
 	assertBothPathsSee(t, e, width-2, height-1, "ALTTEXT")
 
-	// Grow back. Both paths must still agree, and the fast path must not read
-	// the main screen.
 	e.Resize(width, height)
 	if e.scr != &e.scrs[1] {
 		t.Fatal("resize moved the active screen off the alternate screen")

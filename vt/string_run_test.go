@@ -10,25 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi/parser"
 )
 
-// Emulator.Write takes a run of APC or DCS payload bytes in one copy
-// (seqParser.putRun) instead of one byte at a time through the state machine.
-// What these tests hold it to is that nothing a guest can observe changes:
-// every APC and DCS dispatch carries the bytes, command and parameters the
-// byte-at-a-time parser produces, however the stream is split across writes.
-//
-// The ways the bulk path can go wrong, written down before the tests:
-//   - a byte that is not plain payload is swallowed into the run: a
-//     terminator (ESC, or the 8-bit ST if it were honoured), CAN or SUB,
-//     which abort, or a C0 control or DEL, which take the table's path;
-//   - a byte that is payload is left out of the run or counted twice, at the
-//     start of the run, at its end, or at the end of a write;
-//   - the run grows the buffer past dataCap, or keeps fewer bytes than put()
-//     would before the cap;
-//   - the run is taken in a state where a payload byte is not a plain put,
-//     such as DCS entry, where the first byte starts the string;
-//   - a write that ends inside a run leaves the parser in a different state.
-
-// stringDispatch is one APC or DCS dispatch as a guest can observe it.
 type stringDispatch struct {
 	kind   string
 	cmd    ansi.Cmd
@@ -48,8 +29,6 @@ func paramString(params ansi.Params) string {
 	return b.String()
 }
 
-// recordStrings wraps h so that every APC and DCS dispatch is appended to out
-// before h sees it.
 func recordStrings(h ansi.Handler, out *[]stringDispatch) ansi.Handler {
 	apc, dcs := h.HandleApc, h.HandleDcs
 	h.HandleApc = func(data []byte) {
@@ -67,8 +46,6 @@ func recordStrings(h ansi.Handler, out *[]stringDispatch) ansi.Handler {
 	return h
 }
 
-// byteAtATime runs in through a bare parser one byte at a time, with no bulk
-// path, and returns what it dispatched and the state it ends in.
 func byteAtATime(in []byte, dataCap int) ([]stringDispatch, byte) {
 	var out []stringDispatch
 	p := newSeqParser(dataCap)
@@ -79,8 +56,6 @@ func byteAtATime(in []byte, dataCap int) ([]stringDispatch, byte) {
 	return out, p.State()
 }
 
-// throughEmulator writes in to an emulator split at the given offsets and
-// returns what its parser dispatched and the state it ends in.
 func throughEmulator(in []byte, dataCap int, cuts []int) ([]stringDispatch, byte) {
 	var out []stringDispatch
 	e := NewEmulator(20, 4)
@@ -95,8 +70,6 @@ func throughEmulator(in []byte, dataCap int, cuts []int) ([]stringDispatch, byte
 	return out, e.parser.State()
 }
 
-// splits returns the ways a case is cut across writes: whole, one byte per
-// write, three bytes per write, and at every single offset.
 func splits(n int) [][]int {
 	out := [][]int{nil}
 	var one, three []int
@@ -126,8 +99,6 @@ func TestConform_StringPayloadRuns(t *testing.T) {
 			want: []stringDispatch{{kind: "APC", data: "Ga=T,f=32;QUJDRA=="}},
 		},
 		{
-			// BEL ends an OSC, not an APC or a DCS: in those it is a C0
-			// control the table puts into the string.
 			name: "BEL inside an APC is payload",
 			in:   "\x1b_Gq=2;AA\x07BB\x1b\\",
 			want: []stringDispatch{{kind: "APC", data: "Gq=2;AA\x07BB"}},
@@ -143,9 +114,6 @@ func TestConform_StringPayloadRuns(t *testing.T) {
 			want: []stringDispatch{{kind: "APC", data: "Gnext"}},
 		},
 		{
-			// A UTF-8 terminal does not honour 8-bit C1 controls, so 0x9c
-			// (ST), 0x90 (DCS) and 0x9f (APC) are payload, as is the middle
-			// byte of U+2733.
 			name: "C1 bytes inside an APC are payload",
 			in:   "\x1b_G\x9c\x90\x9f\xe2\x9c\xb3\xff\x1b\\",
 			want: []stringDispatch{{kind: "APC", data: "G\x9c\x90\x9f\xe2\x9c\xb3\xff"}},

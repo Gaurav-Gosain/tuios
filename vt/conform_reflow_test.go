@@ -1,13 +1,5 @@
 package vt_test
 
-// Conformance for reflow: what a width change does to the main screen.
-//
-// The main screen lays out again the lines the guest printed, joining the rows
-// autowrap split and splitting them again at the new width, as ghostty, kitty
-// and tmux do. A narrowing resize used to cut every column past the new edge
-// off the screen for good. The alternate screen does not reflow: the program
-// on it redraws.
-
 import (
 	"strings"
 	"testing"
@@ -46,8 +38,6 @@ func TestConform_Reflow(t *testing.T) {
 			cursor: "2,1",
 		},
 		{
-			// The rows a reflow adds go into the history from the top, and
-			// the cursor stays on the last row with the prompt.
 			name: "rows a narrowing adds push the oldest into the history",
 			cols: 8, rows: 3,
 			in:      "aaaaaaaa\r\nbbbbbbbb\r\n$ ",
@@ -81,8 +71,6 @@ func TestConform_Reflow(t *testing.T) {
 			cursor: "0,2",
 		},
 		{
-			// The cursor stands past the prompt, and the line keeps the
-			// column it stands on.
 			name: "the cursor stays on its character in a long line",
 			cols: 10, rows: 3,
 			in:     "abcdefghijklmno\x1b[2;3H",
@@ -91,9 +79,6 @@ func TestConform_Reflow(t *testing.T) {
 			cursor: "2,2",
 		},
 		{
-			// A line that ends exactly at the edge leaves the cursor in
-			// pending wrap; the next character after a reflow goes after
-			// the last one, not over it.
 			name: "a pending wrap carries across a widening",
 			cols: 5, rows: 3,
 			in:     "abcde",
@@ -121,8 +106,6 @@ func TestConform_Reflow(t *testing.T) {
 			cursor:  "2,3",
 		},
 		{
-			// With the cursor above the bottom, a full-screen program owns
-			// the rows, so nothing comes back from the history.
 			name: "a taller screen with the cursor above the bottom adds blank rows",
 			cols: 10, rows: 2,
 			in:      "l1\r\nl2\r\nl3\x1b[1;1H",
@@ -231,11 +214,8 @@ func TestReflowLeavesAMarkedPromptToTheShell(t *testing.T) {
 		for i := 1; i <= 4; i++ {
 			nw := w - i
 			emu.Resize(nw, h)
-			// fish's repaint: up one row onto the prompt, redraw both rows.
 			_, _ = emu.WriteString("\r\r\x1b[A\x1b[K" + strings.Repeat("p", nw) + "\r\n> \x1b[J\r\x1b[2C")
 		}
-		// The positive halves: without an open prompt the same repaint
-		// costs a row each time, so the first case is testing the marks.
 		if got := emu.ScrollbackLen() - start; got != tc.wantRows {
 			t.Errorf("%s: the prompt left %d rows behind over 4 narrowings, want %d", tc.name, got, tc.wantRows)
 		}
@@ -278,8 +258,6 @@ func TestReflowKeepsAnOpenPromptRowWhole(t *testing.T) {
 		if got := emuText(emu); !strings.Contains(got, "$ "+cmd) {
 			t.Errorf("%s: the typed command did not come back whole:\n%s", tc.name, got)
 		}
-		// The shell's next write to the row drops what was held, as it
-		// would after a repaint.
 		emu.Resize(12, 6)
 		_, _ = emu.WriteString("\r\x1b[K$ x")
 		emu.Resize(40, 6)
@@ -289,8 +267,6 @@ func TestReflowKeepsAnOpenPromptRowWhole(t *testing.T) {
 	}
 }
 
-// emuText is the history and the screen as text, one line the guest printed
-// to a line of text.
 func emuText(emu *vt.Emulator) string {
 	var b strings.Builder
 	for i := range emu.ScrollbackLen() {
@@ -339,7 +315,6 @@ func TestReflowReportsWhereRowsWent(t *testing.T) {
 			}
 			return strings.TrimSpace(b.String())
 		}
-		// Every row on the screen, by its text.
 		rows := map[int]string{}
 		for y := range emu.Height() {
 			abs := emu.ScrollbackLen() + y
@@ -356,7 +331,7 @@ func TestReflowReportsWhereRowsWent(t *testing.T) {
 		for abs, txt := range rows {
 			now := remap(abs)
 			if now < 0 {
-				continue // evicted with its line
+				continue
 			}
 			if got := rowText(now); !strings.HasPrefix(txt, got) || got == "" {
 				t.Errorf("ring %d: row %d %q went to row %d, which holds %q", ringCap, abs, txt, now, got)
@@ -368,10 +343,6 @@ func TestReflowReportsWhereRowsWent(t *testing.T) {
 func TestConform_ReflowSavedAndPending(t *testing.T) {
 	runConform(t, []conformCase{
 		{
-			// A program that saves the cursor after a label, and comes back
-			// to it after the pane was narrowed and widened. The label
-			// filled its last row at the narrow width, and the saved place
-			// went to that row's first column, over the label.
 			name: "a saved cursor just past text that fills a row stays after it",
 			cols: 40, rows: 4,
 			in:     "Progress: \x1b7\r\n",
@@ -380,9 +351,6 @@ func TestConform_ReflowSavedAndPending(t *testing.T) {
 			want:   "Progress: done",
 		},
 		{
-			// A resize that does not reflow, here a taller screen with the
-			// cursor above the bottom, kept the column but dropped the
-			// pending wrap, so the next character overwrote the last one.
 			name: "a pending wrap survives a resize that does not reflow",
 			cols: 5, rows: 3,
 			in:     "abcde",
@@ -419,8 +387,6 @@ func TestReflowOpenPromptRepaintDropsTheTail(t *testing.T) {
 // widens, so the next character typed goes after the command.
 func TestReflowCursorOnAnOpenPromptComesBack(t *testing.T) {
 	emu := vt.NewEmulator(60, 4)
-	// 2 + 5 + 87 = 94 columns: the second row holds 34, and the cursor
-	// stands at column 34.
 	_, _ = emu.WriteString("\x1b]133;A\x07$ \x1b]133;B\x07echo " + strings.Repeat("x", 87))
 	if p := emu.CursorPosition(); p.X != 34 {
 		t.Fatalf("the cursor is at column %d before the resize, want 34", p.X)

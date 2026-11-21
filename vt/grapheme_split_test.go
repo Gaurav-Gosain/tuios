@@ -79,7 +79,6 @@ func TestEmulator_SplitGraphemeVisibleImmediately(t *testing.T) {
 		t.Fatalf("trailing grapheme not rendered after Write: %q", got)
 	}
 
-	// Extending it must not leave a stale copy behind in the next cell.
 	if _, err := emu.WriteString("́"); err != nil {
 		t.Fatalf("Write: %v", err)
 	}

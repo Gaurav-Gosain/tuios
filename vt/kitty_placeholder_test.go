@@ -9,9 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi/kitty"
 )
 
-// placeholderRow is what an application using Unicode placeholders prints for
-// one row of an image: the id in the foreground, the row index as a combining
-// mark on the first cell, and the rest of the row continuing it.
 func placeholderRow(id uint32, row, cols int) string {
 	var b strings.Builder
 	b.WriteString("\x1b[38;2;")
@@ -185,7 +182,7 @@ func TestTheHighByteMarkFollowsTheTranslator(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		hostID   uint32
-		wantHigh int // -1 for no third mark
+		wantHigh int
 	}{
 		{"a small host id drops the mark", 1, -1},
 		{"a wide host id states its own high byte", 0x03000005, 3},
@@ -199,9 +196,6 @@ func TestTheHighByteMarkFollowsTheTranslator(t *testing.T) {
 				}
 				return 0, false
 			})
-			// icat's shape: row, column and high byte on the first cell,
-			// and the high byte alone is not allowed without them, so the
-			// rest of the row carries none.
 			var seq strings.Builder
 			seq.WriteString("\x1b[38;2;0;10;11m")
 			seq.WriteRune(kitty.Placeholder)
@@ -348,7 +342,7 @@ func TestEveryPlaceholderCellStandsOnItsOwn(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		seq  string
-		want [][]rc // per screen row, the (row, col) each cell states
+		want [][]rc
 	}{
 		{
 			name: "one row",

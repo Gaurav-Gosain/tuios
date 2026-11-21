@@ -47,19 +47,16 @@ func ParseSixelCommand(data []byte) *SixelCommand {
 	}
 
 	cmd := &SixelCommand{
-		AspectRatio:    2, // Default 2:1
-		BackgroundMode: 0, // Device default
+		AspectRatio:    2,
+		BackgroundMode: 0,
 		RawSequence:    data,
 	}
 
-	// Find the 'q' introducer that marks the start of sixel data
 	qIdx := bytes.IndexByte(data, 'q')
 	if qIdx == -1 {
-		// No sixel introducer found
 		return nil
 	}
 
-	// Parse parameters before 'q'
 	if qIdx > 0 {
 		paramStr := string(data[:qIdx])
 		params := bytes.Split([]byte(paramStr), []byte{';'})
@@ -79,28 +76,23 @@ func ParseSixelCommand(data []byte) *SixelCommand {
 		}
 	}
 
-	// Extract sixel data (everything after 'q')
 	if qIdx+1 < len(data) {
 		cmd.Data = data[qIdx+1:]
 	}
 
-	// Calculate dimensions from sixel data
 	cmd.Width, cmd.Height = calculateSixelDimensions(cmd.Data)
 
 	return cmd
 }
 
-// calculateSixelDimensions parses sixel data to determine image dimensions.
-// Returns width and height in pixels.
 func calculateSixelDimensions(data []byte) (width, height int) {
 	if len(data) == 0 {
 		return 0, 0
 	}
 
-	// Track position
 	x := 0
 	maxX := 0
-	sixelLines := 1 // At least one sixel line
+	sixelLines := 1
 
 	i := 0
 	for i < len(data) {
@@ -108,8 +100,6 @@ func calculateSixelDimensions(data []byte) (width, height int) {
 
 		switch {
 		case c == '#':
-			// Color introducer: #Pc;Pu;Px;Py;Pz or #Pc
-			// Skip until we hit a non-parameter character
 			i++
 			for i < len(data) && (data[i] >= '0' && data[i] <= '9' || data[i] == ';') {
 				i++
@@ -117,7 +107,6 @@ func calculateSixelDimensions(data []byte) (width, height int) {
 			continue
 
 		case c == '$':
-			// Carriage return: go to left edge
 			if x > maxX {
 				maxX = x
 			}
@@ -126,7 +115,6 @@ func calculateSixelDimensions(data []byte) (width, height int) {
 			continue
 
 		case c == '-':
-			// New sixel line (move down 6 pixels)
 			if x > maxX {
 				maxX = x
 			}
@@ -136,9 +124,7 @@ func calculateSixelDimensions(data []byte) (width, height int) {
 			continue
 
 		case c == '!':
-			// Repeat introducer: !<count><char>
 			i++
-			// Parse repeat count
 			countStart := i
 			for i < len(data) && data[i] >= '0' && data[i] <= '9' {
 				i++
@@ -149,7 +135,6 @@ func calculateSixelDimensions(data []byte) (width, height int) {
 					count = n
 				}
 			}
-			// The character being repeated
 			if i < len(data) && data[i] >= '?' && data[i] <= '~' {
 				x += count
 				i++
@@ -157,17 +142,11 @@ func calculateSixelDimensions(data []byte) (width, height int) {
 			continue
 
 		case c >= '?' && c <= '~':
-			// Sixel data character (represents 6 vertical pixels)
 			x++
 			i++
 			continue
 
 		case c == '"':
-			// Raster attributes: "Pan;Pad;Ph;Pv
-			// Pan = pixel aspect numerator
-			// Pad = pixel aspect denominator
-			// Ph = horizontal extent in pixels
-			// Pv = vertical extent in pixels
 			i++
 			params := make([]int, 0, 4)
 			for i < len(data) && len(params) < 4 {
@@ -186,24 +165,20 @@ func calculateSixelDimensions(data []byte) (width, height int) {
 					break
 				}
 			}
-			// If Ph and Pv are specified, use them directly
 			if len(params) >= 4 && params[2] > 0 && params[3] > 0 {
 				return params[2], params[3]
 			}
 			continue
 
 		default:
-			// Unknown character, skip
 			i++
 		}
 	}
 
-	// Final position check
 	if x > maxX {
 		maxX = x
 	}
 
-	// Height is sixel lines * 6 pixels per line
 	height = sixelLines * 6
 
 	return maxX, height

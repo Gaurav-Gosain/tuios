@@ -7,18 +7,6 @@ import (
 	gh "go.mitchellh.com/libghostty"
 )
 
-// The state a snapshot carries beyond the cells, the cursor and the DEC
-// modes, on the library: the tab stops, the titles, the colours the guest
-// set, the ANSI modes, and the input the parser is part way through.
-//
-// The library exposes the title, the ANSI modes and its unfinished input. It
-// keeps the tab stops where no query reaches them and does not keep the icon
-// name or a title stack at all, so those are read off the stream as it goes
-// past. The guest's colours never reach the library (handleColorOSC). The
-// restore puts each back the way a guest would set it.
-
-// cursorXLocked is the library's cursor column, after the scanner has handed
-// it everything before the sequence being observed.
 func (t *GhosttyTerminal) cursorXLocked() (int, bool) {
 	if t.closed.Load() {
 		return 0, false
@@ -31,27 +19,18 @@ func (t *GhosttyTerminal) cursorXLocked() (int, bool) {
 	return int(x), true
 }
 
-// setTabStopLocked follows HTS, and CTC 0: a stop at the cursor.
 func (t *GhosttyTerminal) setTabStopLocked() {
 	if x, ok := t.cursorXLocked(); ok && x < t.tabstops.Width() {
 		t.tabstops.Set(x)
 	}
 }
 
-// clearTabStopLocked follows TBC 0 and CTC 2: no stop at the cursor.
 func (t *GhosttyTerminal) clearTabStopLocked() {
 	if x, ok := t.cursorXLocked(); ok && x < t.tabstops.Width() {
 		t.tabstops.Reset(x)
 	}
 }
 
-// observeTabControl follows the CSI forms that change the tab stops, as the
-// library reads them: TBC (CSI g) with no parameter or 0 clears the stop at
-// the cursor and with 3 clears them all (libghostty before 1.0 did nothing
-// for the bare form); CTC (CSI W) with no parameter or 0
-// sets one at the cursor, with 2 clears it and with 5 clears them all; and
-// DECST8C (CSI ? 5 W) puts the default table back. Anything else changes
-// nothing in the library either.
 func (t *GhosttyTerminal) observeTabControl(prefix, final byte, params []byte) {
 	n := csiParamCount(params)
 	v, _ := csiFirstParam(params)
@@ -77,11 +56,6 @@ func (t *GhosttyTerminal) observeTabControl(prefix, final byte, params []byte) {
 	}
 }
 
-// observeTitleStack implements XTWINOPS 22 and 23, which the library reads
-// and does nothing with. 22 saves the title, the icon name or both, as its
-// second parameter says, and 23 puts back what the last entry saved. A title
-// put back reaches the library as an OSC 2 sent once the CSI has ended, so
-// the library reports it as it reports any other.
 func (t *GhosttyTerminal) observeTitleStack(params []byte) {
 	cmd, which := csiTwoParams(params, 0, 0)
 	if which < 0 || which > 2 {
@@ -134,7 +108,6 @@ func (t *GhosttyTerminal) observeTitleStack(params []byte) {
 	}
 }
 
-// sendTitleLocked sets the library's title the way a guest does.
 func (t *GhosttyTerminal) sendTitleLocked(title string) {
 	if t.closed.Load() {
 		return
@@ -206,15 +179,12 @@ func (t *GhosttyTerminal) RestoreGuestColors(c GuestColors) {
 	t.colors = c.Palette
 	t.guestFg, t.guestBg, t.guestCur = c.Fg, c.Bg, c.Cursor
 	t.refreshPaletteClaimsLocked()
-	// A palette entry changes how every cell that names it is drawn.
 	t.styleCache = make(map[uint16]uv.Style)
 	t.scrollCache = make(map[int]uv.Line)
 	t.scrollCacheGen = 0
 	t.markAllDirtyLocked()
 }
 
-// ghosttyANSIModes are the ANSI modes ANSIModes reports, the ones the pure
-// emulator implements too.
 var ghosttyANSIModes = []struct {
 	num  int
 	mode gh.Mode
@@ -310,13 +280,6 @@ func (t *GhosttyTerminal) RestorePendingInput(p []byte) {
 	t.drain(q)
 }
 
-// dropCutLocked makes the library let go of the sequence or the character
-// it is part way through. It does so at CAN. A sequence ends there with no
-// effect. A UTF-8 character ends with a U+FFFD printed at the cursor, which
-// the restore that follows paints over. At a pending wrap on the bottom row
-// the print would wrap and scroll a line into the history, which no paint
-// takes back, so the library prints it with autowrap off, in the last
-// column, and gets its autowrap back after.
 func (t *GhosttyTerminal) dropCutLocked() {
 	wrap, err := t.term.Mode(gh.ModeWraparound)
 	if err == nil && wrap {
@@ -328,12 +291,6 @@ func (t *GhosttyTerminal) dropCutLocked() {
 	}
 }
 
-// appendHeld appends to out the bytes the scanner has read and not yet handed
-// to the sink: the introducer and payload of a string it withholds, an ESC
-// whose meaning the next byte decides, or the prefix of a DCS before its
-// final byte. Fed to a fresh scanner, they leave it in the state this one is
-// in. A payload past ghosttyScanCap gets one byte more than the cap, so the
-// fresh scanner overflows too.
 func (s *ghosttyScanner) appendHeld(out []byte) []byte {
 	payload := func(intro ...byte) {
 		out = append(out, intro...)
@@ -367,7 +324,6 @@ func (s *ghosttyScanner) appendHeld(out []byte) []byte {
 		payload(0x1b, '_')
 		out = append(out, 0x1b)
 	case gsDcsBodyEsc:
-		// The body went to the sink as it came; only the ESC is held.
 		out = append(out, 0x1b)
 	case gsString:
 		out = append(out, 0x1b, s.stringKind)
@@ -377,8 +333,6 @@ func (s *ghosttyScanner) appendHeld(out []byte) []byte {
 	return out
 }
 
-// reset drops the sequence the scanner is in and puts it at ground, for a
-// restore that replaces the stream it was reading.
 func (s *ghosttyScanner) reset() {
 	s.state = gsGround
 	s.out = s.out[:0]

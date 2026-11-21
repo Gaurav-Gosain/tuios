@@ -6,11 +6,6 @@ import (
 	"strings"
 )
 
-// The places a kitty file medium may name. The client's passthrough and the
-// emulator's answer to an upload both apply them, so they live here.
-
-// kittySensitiveDirs are the places no file medium may name. /dev/shm is the one
-// part of /dev that holds image data, and it is allowed.
 var kittySensitiveDirs = []string{"/proc", "/sys", "/dev"}
 
 // KittySensitivePath reports whether path lies in a place no file medium may
@@ -31,8 +26,6 @@ func KittySensitivePath(path string) bool {
 // is for a host that reads such files itself.
 const KittyTempMarker = "tty-graphics-protocol"
 
-// kittyFixedTempDirs are the temporary directories on every unix. A variable
-// so a test, whose own home is under /tmp, can take them away.
 var kittyFixedTempDirs = []string{"/tmp", "/dev/shm", "/var/tmp"}
 
 // KittyTempDirs lists the temporary directories: the fixed ones and TMPDIR.
@@ -61,8 +54,6 @@ func KittyTempDirs() []string {
 		if t == home || strings.HasPrefix(home, strings.TrimSuffix(t, "/")+"/") {
 			return dirs
 		}
-		// Inside the home directory, only ~/tmp and ~/.tmp count. Anywhere
-		// else there (~/.ssh, ~/.config) holds the user's own files.
 		if rel, err := filepath.Rel(home, t); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
 			first, _, _ := strings.Cut(rel, "/")
 			if first != "tmp" && first != ".tmp" {

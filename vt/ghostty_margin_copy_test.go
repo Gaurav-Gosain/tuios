@@ -21,23 +21,19 @@ import (
 func TestGhosttyMarginCopyFollowsTheLibrary(t *testing.T) {
 	const w, h = 40, 12
 	full := uv.Rect(0, 0, w, h)
-	lr := uv.Rect(4, 0, 16, h)   // DECSLRM 5;20
-	tb := uv.Rect(0, 2, w, 8)    // DECSTBM 3;10
-	both := uv.Rect(4, 2, 16, 8) // both
+	lr := uv.Rect(4, 0, 16, h)
+	tb := uv.Rect(0, 2, w, 8)
+	both := uv.Rect(4, 2, 16, 8)
 	cases := []struct {
 		name, in         string
 		wantPure, wantGh uv.Rectangle
 	}{
 		{
-			// DECALN resets every margin (Terminal.zig decaln).
 			name:     "DECALN resets the margins",
 			in:       "\x1b[3;10r\x1b[?69h\x1b[5;20s\x1b#8",
 			wantPure: full, wantGh: full,
 		},
 		{
-			// XTRESTORE of DECLRMM saved off runs the library's ?69l path.
-			// The pure emulator does not implement XTSAVE or XTRESTORE, so
-			// on that side every XTRESTORE case leaves the margins alone.
 			name:     "XTRESTORE turns DECLRMM off and gives the columns back",
 			in:       "\x1b[?69s\x1b[?69h\x1b[5;20s\x1b[?69r",
 			wantPure: lr, wantGh: full,
@@ -58,9 +54,6 @@ func TestGhosttyMarginCopyFollowsTheLibrary(t *testing.T) {
 			wantPure: lr, wantGh: full,
 		},
 		{
-			// The library ignores DECSTBM with more than two parameters
-			// (stream.zig). The pure emulator obeys the first two, as it does
-			// every CSI with surplus parameters.
 			name:     "DECSTBM with three parameters",
 			in:       "\x1b[3;10;5r",
 			wantPure: tb, wantGh: full,

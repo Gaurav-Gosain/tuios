@@ -10,9 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// kittyFrame is one frame of a 513x720 RGBA kitty graphics stream: 1.5 MB of
-// base64 sent as a=T in 4096-byte chunks, the shape a compositor streaming a
-// window into a pane writes.
 func kittyFrame() []byte {
 	px := bytes.Repeat([]byte{1, 2, 3, 255}, 513*720)
 	enc := base64.StdEncoding.EncodeToString(px)

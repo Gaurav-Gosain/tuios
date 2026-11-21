@@ -4,45 +4,41 @@ package vt
 // This can be used to select a character set for G0 or G1 and others.
 type CharSet map[byte]string
 
-// Character sets.
 var (
-	// charsetUK is the British national replacement set. It differs from ASCII in
-	// one position, 0x23, where "#" becomes the pound sign (VT220 programmer
-	// reference, table 2-4; xterm and ghostty agree).
 	charsetUK = CharSet{
-		'#': "£", // U+00A3
+		'#': "£",
 	}
 	charsetSpecialDrawing = CharSet{
-		'`': "◆", // U+25C6
-		'a': "▒", // U+2592
-		'b': "␉", // U+2409
-		'c': "␌", // U+240C
-		'd': "␍", // U+240D
-		'e': "␊", // U+240A
-		'f': "°", // U+00B0
-		'g': "±", // U+00B1
-		'h': "␤", // U+2424
-		'i': "␋", // U+240B
-		'j': "┘", // U+2518
-		'k': "┐", // U+2510
-		'l': "┌", // U+250C
-		'm': "└", // U+2514
-		'n': "┼", // U+253C
-		'o': "⎺", // U+23BA
-		'p': "⎻", // U+23BB
-		'q': "─", // U+2500
-		'r': "⎼", // U+23BC
-		's': "⎽", // U+23BD
-		't': "├", // U+251C
-		'u': "┤", // U+2524
-		'v': "┴", // U+2534
-		'w': "┬", // U+252C
-		'x': "│", // U+2502
-		'y': "⩽", // U+2A7D
-		'z': "⩾", // U+2A7E
-		'{': "π", // U+03C0
-		'|': "≠", // U+2260
-		'}': "£", // U+00A3
-		'~': "·", // U+00B7
+		'`': "◆",
+		'a': "▒",
+		'b': "␉",
+		'c': "␌",
+		'd': "␍",
+		'e': "␊",
+		'f': "°",
+		'g': "±",
+		'h': "␤",
+		'i': "␋",
+		'j': "┘",
+		'k': "┐",
+		'l': "┌",
+		'm': "└",
+		'n': "┼",
+		'o': "⎺",
+		'p': "⎻",
+		'q': "─",
+		'r': "⎼",
+		's': "⎽",
+		't': "├",
+		'u': "┤",
+		'v': "┴",
+		'w': "┬",
+		'x': "│",
+		'y': "⩽",
+		'z': "⩾",
+		'{': "π",
+		'|': "≠",
+		'}': "£",
+		'~': "·",
 	}
 )

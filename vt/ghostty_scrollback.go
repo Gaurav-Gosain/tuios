@@ -7,23 +7,6 @@ import (
 	gh "go.mitchellh.com/libghostty"
 )
 
-// Scrollback is the MAIN screen's history, whichever screen is active: every
-// accessor on the pure emulator reads scrs[0], and consumers lean on that.
-// The app computes kitty-placement absolute lines as ScrollbackLen()+cursorY
-// while a full-screen guest owns the alternate screen, so an implementation
-// that reported the alternate screen's (empty) history shifted every
-// placement by the pane's real history and image previews vanished; wire
-// snapshots taken mid-yazi lost the pane's history the same way.
-//
-// The library reads history from the active screen only, so two shadows
-// bridge the gap: the count is cached whenever the main screen is active
-// (the alternate screen cannot grow or shrink primary history), and line
-// reads during alt go through a decoded snapshot whose private copy is
-// switched back to the main screen.
-
-// activeAltLiveLocked reports whether the alternate screen is active right
-// now, from the library rather than the post-write cache: scanner hooks run
-// mid-write, where the cache is one chunk stale.
 func (t *GhosttyTerminal) activeAltLiveLocked() bool {
 	if t.closed.Load() {
 		return false
@@ -64,7 +47,6 @@ func (t *GhosttyTerminal) ScrollbackLen() int {
 	return n
 }
 
-// ghosttyScrollCacheCap bounds the decoded history line cache.
 const ghosttyScrollCacheCap = 256
 
 // ScrollbackLine implements [Terminal.ScrollbackLine].
@@ -79,11 +61,6 @@ func (t *GhosttyTerminal) scrollbackLineLocked(index int) uv.Line {
 	if t.closed.Load() || index < 0 || index >= t.scrollbackLenLocked() {
 		return nil
 	}
-	// The cache is emptied when the pane writes, and also when it grows past
-	// a few screens of rows: a capture of the whole history is 10000 decoded
-	// lines of 112-byte cells, and a pane that is then idle would have kept
-	// them for as long as it stayed idle. Every line is the pane's width, so
-	// the pure ring's bound on cells is a bound on lines here.
 	limit := min(ghosttyScrollCacheCap, max(1, cacheCellCap/max(t.width, 1)))
 	if t.scrollCacheGen != t.scrollGeneration || len(t.scrollCache) >= limit {
 		clear(t.scrollCache)
@@ -104,16 +81,10 @@ func (t *GhosttyTerminal) scrollbackLineLocked(index int) uv.Line {
 	return line
 }
 
-// readHistoryLineLocked reads one history row as uv cells from src, which is
-// either the live terminal (main screen active) or the decoded snapshot copy.
 func (t *GhosttyTerminal) readHistoryLineLocked(src *gh.Terminal, index int) uv.Line {
 	return t.readHistoryLine(src, index, t.width, nil)
 }
 
-// readHistoryLine is readHistoryLineLocked for a reader that may hold no lock:
-// src is a terminal of its own, width the pane's width when src was copied,
-// and pal the palette copied with it. It reads nothing else of t but the cell
-// decoder, which never changes.
 func (t *GhosttyTerminal) readHistoryLine(src *gh.Terminal, index, width int, pal *ghosttyPalette) uv.Line {
 	line := make(uv.Line, width)
 	var bg backgroundMemo
@@ -142,11 +113,6 @@ func (t *GhosttyTerminal) readHistoryLine(src *gh.Terminal, index, width int, pa
 		if dc.wide == gh.CellWideWide {
 			out.Width = 2
 		}
-		// The tag decides what the content field holds. A cell the library
-		// filled with a background colour on a scroll keeps the palette
-		// index there, not a codepoint, and reading it as one put control
-		// characters into the history of every pane that scrolled under a
-		// coloured pen. The same switch as syncRowLocked.
 		switch dc.tag {
 		case gh.CellContentCodepoint:
 			if dc.cp != 0 {
@@ -165,7 +131,6 @@ func (t *GhosttyTerminal) readHistoryLine(src *gh.Terminal, index, width int, pa
 				out.Content = string(b)
 			}
 		default:
-			// Background-only cells carry no text.
 			out.Content = " "
 			out.Width = 1
 			out.Style = t.backgroundOnlyStyle(&bg, cell, dc.tag, pal)
@@ -185,9 +150,6 @@ func (t *GhosttyTerminal) readHistoryLine(src *gh.Terminal, index, width int, pa
 	return line
 }
 
-// altHistoryLocked returns a decoded snapshot of the terminal with its copy
-// switched to the main screen, so primary history is readable while the real
-// terminal shows the alternate screen. Cached per write generation.
 func (t *GhosttyTerminal) altHistoryLocked() *gh.Terminal {
 	if t.altHistory != nil && t.altHistoryGen == t.scrollGeneration {
 		return t.altHistory
@@ -206,8 +168,6 @@ func (t *GhosttyTerminal) altHistoryLocked() *gh.Terminal {
 	if err != nil || restored == nil {
 		return nil
 	}
-	// The copy replicated the alt-screen state; switching it back exposes
-	// the primary screen's history. Only the copy is written to.
 	restored.VTWrite([]byte("\x1b[?1049l\x1b[?1047l"))
 	t.altHistory = restored
 	t.altHistoryGen = t.scrollGeneration
@@ -266,8 +226,6 @@ func (t *GhosttyTerminal) PushScrollbackLine(line uv.Line) {
 	r.scrollback = append(r.scrollback, line)
 }
 
-// ghosttyLockedReader gives extractCommandTextFrom a read surface that does
-// not re-take the lock.
 type ghosttyLockedReader struct{ t *GhosttyTerminal }
 
 func (r ghosttyLockedReader) Width() int  { return r.t.width }
@@ -295,11 +253,6 @@ func (r ghosttyLockedReader) lineSoftWrapped(absLine int) bool {
 
 func (t *GhosttyTerminal) readerNoLock() markerGridReader { return ghosttyLockedReader{t} }
 
-// ghosttyMarkReader is ghosttyLockedReader for the command text an OSC 133 C
-// mark captures: it reads the few cells of the command straight from the
-// library instead of syncing the shadow grid first, which at every mark was a
-// render-state update and a copy of every dirty row for one or two rows of
-// text. The caller holds the terminal's lock.
 type ghosttyMarkReader struct{ t *GhosttyTerminal }
 
 func (r ghosttyMarkReader) Width() int                       { return r.t.width }
@@ -310,8 +263,6 @@ func (r ghosttyMarkReader) lineSoftWrapped(absLine int) bool {
 	return ghosttyLockedReader(r).lineSoftWrapped(absLine)
 }
 
-// CellAt reads the text of one cell of the active screen from the library.
-// Only Content is filled: the command text needs nothing else.
 func (r ghosttyMarkReader) CellAt(x, y int) *uv.Cell {
 	t := r.t
 	if t.closed.Load() || x < 0 || y < 0 || x >= t.width || y >= t.height {
@@ -331,8 +282,6 @@ func (r ghosttyMarkReader) CellAt(x, y int) *uv.Cell {
 	} else {
 		dc = decodeCellSlow(cell)
 	}
-	// As the shadow grid holds them: the second half of a wide character is
-	// an empty placeholder, a spacer at the end of a row a blank.
 	switch dc.wide {
 	case gh.CellWideSpacerTail:
 		return &uv.Cell{}
@@ -343,8 +292,6 @@ func (r ghosttyMarkReader) CellAt(x, y int) *uv.Cell {
 	if dc.wide == gh.CellWideWide {
 		out.Width = 2
 	}
-	// The same switch as readHistoryLine and syncRowLocked, so a blank cell
-	// reads as a space here as it does from the shadow grid.
 	switch dc.tag {
 	case gh.CellContentCodepoint:
 		out.Content = " "
@@ -363,7 +310,6 @@ func (r ghosttyMarkReader) CellAt(x, y int) *uv.Cell {
 			out.Content = string(b)
 		}
 	default:
-		// Background-only cells carry no text.
 		out.Content = " "
 		out.Width = 1
 	}

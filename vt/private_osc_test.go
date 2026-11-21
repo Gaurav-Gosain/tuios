@@ -7,15 +7,6 @@ import (
 	"testing"
 )
 
-// privateOSCCases is what Callbacks.PrivateOSC must see for each input, on
-// both backends. The ways it could go wrong:
-//   - a number the emulator interprets (OSC 2, 7, 8, 9, 777) reaches the
-//     host, which the ghostty backend did while it passed every number
-//     libghostty-vt handles on to the hook;
-//   - a body with no number, an empty body, or a number too long for an int
-//     reaches the host as a number nobody sent (the parser reports
-//     2147483647 or a wrapped value, libghostty-vt -1);
-//   - a private number is dropped, or arrives without its number.
 var privateOSCCases = []struct {
 	name, in string
 	want     []string
@@ -37,8 +28,6 @@ var privateOSCCases = []struct {
 	{"a urxvt notification", "\x1b]777;notify;a;b\x07", nil},
 }
 
-// runPrivateOSCCases writes each case to a fresh terminal from mk and checks
-// what the hook saw.
 func runPrivateOSCCases(t *testing.T, mk func() Terminal) {
 	t.Helper()
 	for _, tc := range privateOSCCases {

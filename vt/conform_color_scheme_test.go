@@ -1,28 +1,5 @@
 package vt_test
 
-// Conformance for mode 2031 and DSR 996, the colour scheme reports.
-//
-// The contour spec (docs/vt-extensions/color-palette-update-notifications.md)
-// has the terminal send CSI ? 997 ; Ps n, Ps 1 for dark and 2 for light, to a
-// program that set ?2031 whenever its palette changes, and answer CSI ? 996 n
-// with the same report at any time. Neovim 0.11 asks for OSC 11 again on any
-// 997, and opencode asks for the whole palette again, so a theme switch that
-// stays dark must still send one.
-//
-// The ways it could go wrong, written down before the cases:
-//   - a switch between two dark themes sends nothing (the old rule);
-//   - a change to the palette or the text colour alone sends nothing;
-//   - one theme push sends more than one notice;
-//   - a push that changes nothing sends a notice;
-//   - a program that never set ?2031, or reset it, gets a notice;
-//   - Ps reads a colour other than the one OSC 11 answers with;
-//   - DSR 996 goes unanswered, or is answered only with ?2031 set;
-//   - SetThemeColors sends a notice, which would tell the guest about a
-//     theme a host only previews.
-//
-// These run under the pure Go emulator by default and under libghostty-vt
-// with -tags ghostty.
-
 import (
 	"image/color"
 	"testing"
@@ -54,14 +31,11 @@ var (
 	}
 )
 
-// with returns r with one change applied.
 func (r reportSet) with(change func(*reportSet)) reportSet {
 	change(&r)
 	return r
 }
 
-// guestReplies starts collecting everything term writes back to the guest,
-// and returns a function that closes term and hands over what was written.
 func guestReplies(term vt.Terminal) func() string {
 	out := make(chan string, 1)
 	go func() {
@@ -86,13 +60,12 @@ func guestReplies(term vt.Terminal) func() string {
 func TestConform_ColorSchemeNotice(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
-		guest    string // written after the first push, before the second
+		guest    string
 		from, to reportSet
 		want     string
 	}{
 		{"dark to light", "\x1b[?2031h", tokyoNight, latte, "\x1b[?997;2n"},
 		{"light to dark", "\x1b[?2031h", latte, tokyoNight, "\x1b[?997;1n"},
-		// Background, text and palette all change, and one notice goes out.
 		{"dark to dark sends one notice", "\x1b[?2031h", tokyoNight, dracula, "\x1b[?997;1n"},
 		{"palette only", "\x1b[?2031h", tokyoNight, tokyoNight.with(func(r *reportSet) { r.pal = dracula.pal }), "\x1b[?997;1n"},
 		{"text colour only", "\x1b[?2031h", tokyoNight, tokyoNight.with(func(r *reportSet) { r.fg = dracula.fg }), "\x1b[?997;1n"},
@@ -102,8 +75,6 @@ func TestConform_ColorSchemeNotice(t *testing.T) {
 			tokyoNight.with(func(r *reportSet) { r.bg = color.NRGBA{R: 0x1a, G: 0x1b, B: 0x26, A: 0xff} }), ""},
 		{"no mode 2031", "", tokyoNight, dracula, ""},
 		{"mode 2031 reset", "\x1b[?2031h\x1b[?2031l", tokyoNight, dracula, ""},
-		// The program set its own light background with OSC 11, so that is
-		// what OSC 11 answers, and Ps follows it.
 		{"Ps reads the guest's own background", "\x1b[?2031h\x1b]11;rgb:ff/ff/ff\x1b\\", tokyoNight, dracula, "\x1b[?997;2n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

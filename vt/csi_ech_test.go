@@ -62,7 +62,6 @@ func TestEmulator_EraseCharacterClamped(t *testing.T) {
 	emu := vt.NewEmulator(10, 2)
 	defer emu.Close()
 
-	// Fill the first line, park the cursor at column 4, erase to end of line.
 	if _, err := emu.WriteString("abcdefghij\x1b[1;5H\x1b[999X"); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -75,7 +74,6 @@ func TestEmulator_EraseCharacterClamped(t *testing.T) {
 		t.Errorf("ECH moved the cursor to (%d,%d), want (4,0)", pos.X, pos.Y)
 	}
 
-	// A count that fits must still erase exactly that many cells.
 	emu2 := vt.NewEmulator(10, 2)
 	defer emu2.Close()
 	if _, err := emu2.WriteString("abcdefghij\x1b[1;1H\x1b[3X"); err != nil {

@@ -8,35 +8,28 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The rune ranges in which no rune carries a grapheme property that joins
-// across a cluster boundary: Latin and its extensions, the symbol blocks
-// from letterlike symbols to miscellaneous symbols and arrows (box drawing,
-// blocks, braille, geometric shapes among them), and the private use area,
-// where the Powerline and Nerd Font glyphs live.
 var neverJoiningRanges = [][2]rune{
 	{0x0020, 0x02FF},
 	{0x2100, 0x2BFF},
 	{0xE000, 0xF8FF},
 }
 
-// joinSpread is one rune of every kind that can take part in a join across
-// a boundary, plus a few that cannot but sit next to ones that do.
 var joinSpread = []rune{
-	0x0301,  // combining acute accent (Extend)
-	0x200D,  // zero width joiner
-	0xFE0F,  // variation selector 16 (Extend)
-	0x1F1E6, // regional indicator A
-	0x1F1E9, // regional indicator D
-	0x1100,  // Hangul choseong (L)
-	0x1161,  // Hangul jungseong (V)
-	0x11A8,  // Hangul jongseong (T)
-	0xAC00,  // Hangul syllable GA (LV)
-	0x0E33,  // Thai SARA AM (SpacingMark)
-	0x0600,  // Arabic number sign (Prepend)
-	0x1F600, // emoji
-	0x4E00,  // CJK ideograph
-	0x000D,  // carriage return
-	0x000A,  // line feed
+	0x0301,
+	0x200D,
+	0xFE0F,
+	0x1F1E6,
+	0x1F1E9,
+	0x1100,
+	0x1161,
+	0x11A8,
+	0xAC00,
+	0x0E33,
+	0x0600,
+	0x1F600,
+	0x4E00,
+	0x000D,
+	0x000A,
 }
 
 func neverJoiningCells() []string {
@@ -53,19 +46,12 @@ func singleASCII(s string) bool {
 	return len(s) == 1 && s[0] < 0x80
 }
 
-// segmenterJoins is the answer clustersJoin must give: whether the first
-// cluster of a+b reaches past a. buf is scratch space, so the full sweep
-// does not allocate a string per pair.
 func segmenterJoins(buf []byte, a, b string) ([]byte, bool) {
 	buf = append(append(buf[:0], a...), b...)
 	cl, _ := ansi.FirstGraphemeCluster(buf, ansi.GraphemeWidth)
 	return buf, len(cl) > len(a)
 }
 
-// multiRuneJoinPairs is a fixed corpus of pairs in which at least one side
-// is a cell of several runes: emoji ZWJ sequences, flags, VS16 tails,
-// combining tails, Hangul and Thai, each set beside single runes of the
-// symbol ranges and of the join spread and beside each other.
 func multiRuneJoinPairs() [][2]string {
 	named := [][2]string{
 		{"\u2764\u200D", "\u2B50"},
@@ -78,30 +64,30 @@ func multiRuneJoinPairs() [][2]string {
 		{"\u1100\u1161", "\u11A8"},
 	}
 	multi := []string{
-		"\U0001F468\u200D\U0001F469\u200D\U0001F467", // family
-		"\U0001F3F3\uFE0F\u200D\U0001F308",           // rainbow flag
-		"\U0001F441\uFE0F\u200D\U0001F5E8\uFE0F",     // eye in speech bubble
-		"\u2764\uFE0F\u200D\U0001F525",               // heart on fire
-		"\U0001F9D1\u200D\U0001F4BB",                 // technologist
-		"\U0001F600\u200D",                           // emoji ending in ZWJ
-		"\u2B50\u200D",                               // symbol-range emoji ending in ZWJ
-		"\u2500\u200D",                               // box drawing ending in ZWJ
-		"\U0001F1E6\U0001F1E9",                       // flag
-		"\U0001F1FA\U0001F1F8",                       // flag
-		"\U0001F1EF\U0001F1F5",                       // flag
-		"\u2764\uFE0F",                               // VS16 tail
-		"\u263A\uFE0F",                               // VS16 tail
-		"\u2194\uFE0F",                               // VS16 tail on an arrow
-		"e\u0301",                                    // combining tail
-		"a\u0308\u0323",                              // two combining marks
-		"\u2500\u0301",                               // box drawing with a mark
-		"\uE0B0\u0301",                               // private use with a mark
-		"\u1100\u1161",                               // Hangul L V
-		"\u1100\u1161\u11A8",                         // Hangul L V T
-		"\uAC00\u11A8",                               // Hangul LV T
-		"\u0E01\u0E33",                               // Thai KO KAI with SARA AM
-		"\u0E01\u0E34",                               // Thai KO KAI with SARA I
-		"\u0600\u0661",                               // Prepend before a digit
+		"\U0001F468\u200D\U0001F469\u200D\U0001F467",
+		"\U0001F3F3\uFE0F\u200D\U0001F308",
+		"\U0001F441\uFE0F\u200D\U0001F5E8\uFE0F",
+		"\u2764\uFE0F\u200D\U0001F525",
+		"\U0001F9D1\u200D\U0001F4BB",
+		"\U0001F600\u200D",
+		"\u2B50\u200D",
+		"\u2500\u200D",
+		"\U0001F1E6\U0001F1E9",
+		"\U0001F1FA\U0001F1F8",
+		"\U0001F1EF\U0001F1F5",
+		"\u2764\uFE0F",
+		"\u263A\uFE0F",
+		"\u2194\uFE0F",
+		"e\u0301",
+		"a\u0308\u0323",
+		"\u2500\u0301",
+		"\uE0B0\u0301",
+		"\u1100\u1161",
+		"\u1100\u1161\u11A8",
+		"\uAC00\u11A8",
+		"\u0E01\u0E33",
+		"\u0E01\u0E34",
+		"\u0600\u0661",
 	}
 	singles := []string{
 		"a", " ", "\u00E9", "\u0250", "\u2500", "\u2588", "\u28FF", "\u2B50", "\u2764",
@@ -205,12 +191,6 @@ const (
 	symbolScreenRows = 55
 )
 
-// symbolScreen draws a full 207x55 screen of the kind a system monitor or a
-// prompt theme draws: box drawing frames, block element bars, braille
-// graphs, Powerline separators and ASCII labels, every row filled to the
-// last column. The pen changes only its foreground, always to an indexed
-// colour, and is never reset, so every change takes the palette path in
-// penDiff and the cost left is the cluster check between cells.
 func symbolScreen() string {
 	var b strings.Builder
 	b.WriteString("\x1b[2J")
@@ -300,14 +280,14 @@ func TestRenderingASymbolScreenSkipsTheSegmenter(t *testing.T) {
 // that never joins.
 func TestClusterJoinAgreesWithTheSegmenterAtRangeEdges(t *testing.T) {
 	edges := []rune{
-		0x0300, // combining grave accent, just past the Latin range
-		0x0301, // combining acute accent
-		0x036F, // combining latin small letter x, end of the block
-		0x20D0, // combining left harpoon above, start of the symbol marks
-		0x20E3, // combining enclosing keycap
-		0x20F0, // combining asterisk above, end of the symbol marks
-		0x2C00, // Glagolitic, just past the symbol range
-		0xF900, // CJK compatibility ideograph, just past the private use area
+		0x0300,
+		0x0301,
+		0x036F,
+		0x20D0,
+		0x20E3,
+		0x20F0,
+		0x2C00,
+		0xF900,
 	}
 	var buf []byte
 	check := func(t *testing.T, a, b string) bool {
