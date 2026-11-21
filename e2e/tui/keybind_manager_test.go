@@ -337,6 +337,7 @@ func TestKeybindManagerChangesTheLeader(t *testing.T) {
 	if err := term.WaitForText("Leader key", uiTimeout); err != nil {
 		t.Fatalf("the Bindings list has no leader row: %v\n%s", err, term.Snapshot())
 	}
+	saveFrame(t, term, "keybind-leader-row")
 
 	// record arms the recorder on the leader row, presses key and takes it.
 	// "/" puts the Bindings tab back, whose cursor is still on the leader.
