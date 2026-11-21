@@ -25,7 +25,6 @@ It also has more about the verbs that need it.
 - [`ask-agent`](#ask-agent)
 - [`ask-human`](#ask-human)
 - [`askpass`](#askpass)
-- [`askpass-answer`](#askpass-answer)
 - [`attach-presence`](#attach-presence)
 - [`attach-task`](#attach-task)
 - [`block-task`](#block-task)
@@ -507,6 +506,8 @@ Answer an ask-human question for the person. Only a client attached right now ca
 | `human_nonce` | string |  |  | The nonce the daemon issued in an attach reply, for a client attached now over the same kind of connection. The TUI sends its own. |
 | `question` | string |  |  | The question the answer was picked from. When given and it is not the item's, nothing is answered: applied is false with reason changed. The TUI always sends it. |
 | `upgrade_dialog` | bool |  |  | The answer is a key pressed in a client's live upgrade dialog. A live upgrade's ask takes only an answer that carries it. The TUI sends it from that dialog alone, and gui-bridge drops it. |
+| `secret` | string |  |  | The answer to a secret prompt (see askpass), base64, at most 4096 bytes. A secret prompt takes secret or cancel in place of answer, and only on this machine. |
+| `cancel` | bool |  |  | End a secret prompt with no answer. |
 
 | Result field | Type | Description |
 |---|---|---|
@@ -660,7 +661,7 @@ Ask the person a question with a fixed set of answers, and wait for the answer. 
 
 ### `askpass`
 
-Ask the person for a secret on behalf of a program in the caller's pane, such as an ssh key's passphrase, and wait for the answer. tuios's askpass program calls it: ssh, git and gpg run that program when they have no terminal to ask on. The prompt goes in the Inbox as an ask marked secret, and a client opens it as a dialog with a hidden field. Only the person answers. The daemon finds the pane and the program that asks from the kernel. The secret is held in memory for this one answer and is never saved, logged or sent in an event. Only from inside a pane. Refused over a link.
+Ask the person for a secret on behalf of a program in the caller's pane, such as an ssh key's passphrase, and wait for the answer. tuios's askpass program calls it: ssh, git and gpg run that program when they have no terminal to ask on. The prompt goes in the Inbox as an ask marked secret, and a client opens it as a dialog with a hidden field. Only the person answers, with answer-ask. The daemon finds the pane and the program that asks from the kernel. The secret is held in memory for this one answer and is never saved, logged or sent in an event. Only from inside a pane. Refused over a link.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -675,27 +676,6 @@ Ask the person for a secret on behalf of a program in the caller's pane, such as
 
 ```json
 {"id":1,"verb":"askpass","params":{"prompt":"Enter passphrase for key '/home/u/.ssh/id_ed25519': "}}
-```
-
-### `askpass-answer`
-
-Answer a secret prompt for the person, or cancel it. Only a client attached right now can, with the nonce from its attach reply: an agent never can. The tuios client sends it from its secret dialog. Refused over a link.
-
-| Param | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `request_id` | string |  |  | The request_id of the secret prompt's ask item. |
-| `secret` | string |  |  | The answer, base64. Required unless cancel is true. At most 4096 bytes. |
-| `cancel` | bool |  |  | Cancel the prompt: the program gets no answer. |
-| `human_nonce` | string |  |  | The nonce the daemon issued in an attach reply, for a client attached now. The TUI sends its own. |
-
-| Result field | Type | Description |
-|---|---|---|
-| `request_id` | string | The prompt answered. |
-| `applied` | bool | False when the prompt had already ended. |
-| `reason` | string | answered or cancelled, or how the prompt ended before this answer. |
-
-```json
-{"id":1,"verb":"askpass-answer","params":{"request_id":"9f86d081884c7d65","secret":"aHVudGVyMg==","human_nonce":"<from the attach reply>"}}
 ```
 
 ### `attach-presence`

@@ -736,7 +736,7 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 			}
 			// A secret prompt about the pane in front of the person opens
 			// its dialog (syncAskpass), which is alert enough.
-			if m.askpassShownFor(*it) {
+			if w := m.GetFocusedWindow(); it.Secret != nil && w != nil && w.ID == it.Window && !m.ShowInbox {
 				continue
 			}
 			// A question about the pane in front of the person opens the
@@ -1590,7 +1590,7 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 		m.ShowNotification("This question just appeared. Read it, then answer", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	return m.inboxAnswerAskCmd(it, it.Options[n-1], false)
+	return m.inboxAnswerAskCmd(it, it.Options[n-1], nil)
 }
 
 // InboxAskAnsweredMsg is the answer to an answer-ask.
@@ -1609,7 +1609,11 @@ type InboxAskAnsweredMsg struct {
 
 // inboxAnswerAskCmd is the answer-ask call, with this client's attach nonce,
 // which is what lets the daemon take the answer as the person's.
-func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeDialog bool) tea.Cmd {
+//
+// extra are params the call carries besides: upgrade_dialog from the upgrade
+// dialog, secret or cancel from the secret dialog. A secret is zeroed once the
+// call is sent.
+func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, extra map[string]any) tea.Cmd {
 	if !m.inboxCanAct("Answering") || m.inboxElsewhere(it, "The answer") {
 		return nil
 	}
@@ -1634,10 +1638,13 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 			// it is not the one asked.
 			"question": it.Summary,
 		}
-		if upgradeDialog {
-			params["upgrade_dialog"] = true
+		for k, v := range extra {
+			params[k] = v
 		}
 		raw, err := call("answer-ask", params, 5*time.Second)
+		if b, ok := extra["secret"].([]byte); ok {
+			clear(b)
+		}
 		if err != nil {
 			return InboxAskAnsweredMsg{Name: name, Answer: answer, From: from, Err: err}
 		}

@@ -1,9 +1,9 @@
 package session
 
 import (
-	"bytes"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
@@ -14,17 +14,12 @@ const canWaitForeignExit = true
 // askpassParent is the parent of pid.
 func askpassParent(pid int) (int, bool) { return procinfo.ParentPID(pid) }
 
-// askingProgram reads the executable and the arguments of pid from the
-// kernel. Either is empty when it cannot be read.
-func askingProgram(pid int) (exe string, args []string) {
+// askingProgram reads the executable of pid and its command line, with the
+// arguments joined by spaces, from the kernel. Either is empty when it cannot
+// be read.
+func askingProgram(pid int) (exe, line string) {
 	dir := "/proc/" + strconv.Itoa(pid)
 	exe, _ = os.Readlink(dir + "/exe")
-	raw, err := os.ReadFile(dir + "/cmdline")
-	if err != nil {
-		return exe, nil
-	}
-	for a := range bytes.SplitSeq(bytes.TrimRight(raw, "\x00"), []byte{0}) {
-		args = append(args, string(a))
-	}
-	return exe, args
+	raw, _ := os.ReadFile(dir + "/cmdline")
+	return exe, strings.TrimSpace(strings.ReplaceAll(string(raw), "\x00", " "))
 }
