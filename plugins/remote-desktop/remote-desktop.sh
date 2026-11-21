@@ -102,6 +102,10 @@ for try in 1 2 3 4 5; do
 done
 [ -n "$lport" ] || stop "The ssh tunnel to $host did not start."
 
-SCREEN_RELAY_TOKEN=$token srterm "http://127.0.0.1:$lport"
+# When the engine does not answer, srterm asks the host why.
+why=""
+[ "$(sshx "$addr" uname -s 2>/dev/null)" = Darwin ] &&
+	why="ssh -o BatchMode=yes -o ConnectTimeout=5 $addr sh -s <'$here/why.sh'"
+SCREEN_RELAY_TOKEN=$token srterm --why "$why" "http://127.0.0.1:$lport"
 status=$?
 [ $status -eq 0 ] || stop "srterm stopped with status $status."
