@@ -107,6 +107,7 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="appearance.scroll_column_max"></a>`appearance.scroll_column_max` | int | `90` | Highest a column's width may be set to in the scrolling layout, as a percent. 100 lets a column fill the screen, at the cost of the next one peeking in at the edge. Range: 20 to 100. |
 | <a id="appearance.scroll_column_width"></a>`appearance.scroll_column_width` | int | `55` | Width of a column in the scrolling layout, as a percent of the screen Range: 20 to 100. |
 | <a id="appearance.scroll_lines"></a>`appearance.scroll_lines` | int | `3` | Lines scrolled per mouse wheel notch Range: 1 to 50. |
+| <a id="appearance.scrollback_keep_on_clear"></a>`appearance.scrollback_keep_on_clear` | bool | `true` | Keep the scrollback when a program sends ED 3, as clear does. Set false to let clear drop the scrollback. The daemon reads it when it starts |
 | <a id="appearance.scrollback_lines"></a>`appearance.scrollback_lines` | int | `10000` | Lines each pane keeps in its scrollback. A pane takes the value when it is made. The daemon reads it when it starts Range: 100 to 1000000. `--scrollback-lines` sets it for one run. |
 | <a id="appearance.session_border"></a>`appearance.session_border` | bool | `false` | Carry the session's colour on every pane border, not only on the rail |
 | <a id="appearance.session_colors"></a>`appearance.session_colors` | bool | `true` | Give each session its own colour on the rail and in the switcher |

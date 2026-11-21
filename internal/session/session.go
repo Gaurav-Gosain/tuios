@@ -33,6 +33,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/panescope"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"github.com/Gaurav-Gosain/tuios/internal/scrollclear"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
 	"github.com/Gaurav-Gosain/tuios/internal/shellinteg"
 	"tuios.dev/progstatus"
@@ -4637,7 +4638,7 @@ func (c ptyChunk) isResize() bool { return c.width > 0 && c.height > 0 }
 // resyncPrefix homes the cursor and clears the screen and the scrollback. It
 // goes in front of a catch-up the client cannot splice onto what it already
 // holds.
-var resyncPrefix = []byte("\x1b[H\x1b[2J\x1b[3J")
+var resyncPrefix = []byte("\x1b[H\x1b[2J" + scrollclear.Drop)
 
 // cancelPrefix is CAN, which ends any sequence a parser is part way through
 // and draws nothing. It goes in front of a rolled catch-up for a client that
@@ -5671,6 +5672,7 @@ type vtChunk struct {
 // first emulator and one rebuilt after a fault (rebuildTerminal) go through
 // here, so the two cannot differ.
 func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
+	scrollclear.Apply(terminal)
 	// A local pane on Windows runs on a ConPTY, which cannot carry the kitty
 	// keyboard protocol (see vt.Emulator.DisableKittyKeyboardProtocol). A
 	// remote pane runs on a real PTY at the far end and keeps it.

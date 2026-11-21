@@ -24,6 +24,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/debuglog"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"github.com/Gaurav-Gosain/tuios/internal/scrollclear"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/shellinteg"
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
@@ -773,6 +774,7 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 	// than read from a package global: one server process holds several
 	// sessions and they need not agree about it.
 	terminal := vt.NewWithScrollback(terminalWidth, terminalHeight, scrollbackLines)
+	scrollclear.Apply(terminal)
 
 	window := &Window{
 		Width:         width,

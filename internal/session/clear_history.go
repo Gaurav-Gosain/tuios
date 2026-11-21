@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/scrollclear"
 	"tuios.dev/vt"
 )
 
@@ -70,7 +71,7 @@ func ClearHistorySequence(t vt.Terminal, screen bool) ([]byte, error) {
 			fmt.Fprintf(&b, "\x1b[%d;1H%s\x1b[%d;%dH", t.Height(), strings.Repeat("\n", n), pos.Y-n+1, pos.X+1)
 		}
 	}
-	b.WriteString("\x1b[3J")
+	b.WriteString(scrollclear.Drop)
 	return []byte(b.String()), nil
 }
 

@@ -747,6 +747,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Name: "Advanced",
 		Items: m.resolveRows([]settingsRow{
 			opt("appearance.scrollback_lines"),
+			opt("appearance.scrollback_keep_on_clear"),
 			opt("appearance.scroll_lines"),
 			opt("appearance.copy_on_select"),
 			opt("appearance.word_characters"),
