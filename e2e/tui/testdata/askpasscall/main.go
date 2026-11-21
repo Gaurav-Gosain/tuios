@@ -23,8 +23,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -60,24 +58,6 @@ func (c *client) call(verb string, params map[string]any) (json.RawMessage, stri
 }
 
 func main() {
-	// Run by the name fish, this is an askpass program of an agent's own:
-	// ssh runs it with the prompt, and it asks the daemon itself.
-	if filepath.Base(os.Args[0]) == "fish" {
-		conn, err := net.Dial("unix", os.Getenv("TUIOS_SOCKET"))
-		if err != nil {
-			os.Exit(1)
-		}
-		c := &client{conn: conn, br: bufio.NewReader(conn)}
-		raw, code := c.call("askpass", map[string]any{"prompt": strings.Join(os.Args[1:], " "), "timeout": 60000})
-		var res struct {
-			Secret []byte `json:"secret"`
-		}
-		if code != "ok" || json.Unmarshal(raw, &res) != nil || len(res.Secret) == 0 {
-			os.Exit(1)
-		}
-		fmt.Println(string(res.Secret))
-		return
-	}
 	if len(os.Args) < 3 {
 		fmt.Fprintln(os.Stderr, "usage: askpasscall ask OUT PROMPT | askpasscall steal OUT")
 		os.Exit(2)

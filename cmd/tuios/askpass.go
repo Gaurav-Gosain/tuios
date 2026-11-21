@@ -2,12 +2,14 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -49,46 +51,48 @@ func runAsAskpass(args []string) int {
 	// stops on its own once the key is touched, and "confirm" is a yes or no
 	// question answered by the exit status.
 	kind := os.Getenv("SSH_ASKPASS_PROMPT")
-	// A tool that sets GIT_TERMINAL_PROMPT=0, as go mod download does, wants
-	// a prompt to fail at once rather than wait for a person. git runs
-	// SSH_ASKPASS before it looks at the variable, so the program does.
-	if os.Getenv("GIT_TERMINAL_PROMPT") == "0" {
-		fmt.Fprintln(os.Stderr, "tuios: GIT_TERMINAL_PROMPT=0 is set, so nothing was asked.")
-		return 1
-	}
-	tty, onTerminal := foregroundTerminal()
-	if onTerminal {
+	if tty, ok := foregroundTerminal(); ok {
 		defer func() { _ = tty.Close() }()
+		return askpassOnTerminal(tty, prompt, kind)
 	}
+	why := ""
 	switch {
 	case kind == "none":
-		if onTerminal {
-			_, _ = tty.WriteString(prompt + "\n")
-		}
 		return 0
-	case kind == "confirm" && onTerminal:
-		return askpassConfirm(tty, prompt)
 	case kind == "confirm":
-		fmt.Fprintln(os.Stderr, "tuios: the Inbox cannot ask this yes or no question yet. Run the command in a terminal.")
-		return 1
-	case onTerminal:
-		return askpassOnTerminal(tty, prompt)
+		why = "the Inbox cannot ask a yes or no question yet"
+	case os.Getenv("GIT_TERMINAL_PROMPT") == "0":
+		// A tool that sets it, as go mod download does, wants a prompt with
+		// nobody at the terminal to fail at once. git runs SSH_ASKPASS
+		// before it looks at the variable, so this program does. A person
+		// at the terminal is still asked there, as ssh would.
+		why = "GIT_TERMINAL_PROMPT=0 is set"
+	default:
+		secret, err := askpassDaemon(prompt)
+		if err == nil {
+			return askpassPrint(secret)
+		}
+		why = err.Error()
 	}
+	fmt.Fprintln(os.Stderr, "tuios: nothing was asked or sent, because "+why+". Run the command in a terminal to answer it there.")
+	return 1
+}
+
+// askpassDaemon asks the daemon for the answer to prompt: it goes in the
+// Inbox, and the person answers in the secret dialog.
+func askpassDaemon(prompt string) ([]byte, error) {
 	sock := os.Getenv("TUIOS_SOCKET")
 	if sock == "" {
-		fmt.Fprintln(os.Stderr, "tuios: no tuios daemon can ask for this. Run the command in a terminal.")
-		return 1
+		return nil, errors.New("no tuios daemon runs this pane")
 	}
 	client, err := session.DialVerbClientAt(sock, "")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tuios: the tuios daemon does not answer (%v). Run the command in a terminal.\n", err)
-		return 1
+		return nil, errfmt.Errorf("the tuios daemon does not answer (%w)", err)
 	}
 	defer func() { _ = client.Close() }()
 	raw, err := client.CallWithTimeout("askpass", map[string]any{"prompt": prompt}, askpassWait)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "tuios: the prompt could not be shown: %v.\n", err)
-		return 1
+		return nil, errfmt.Errorf("the prompt could not be shown (%w)", err)
 	}
 	var res struct {
 		Status string `json:"status"`
@@ -96,13 +100,17 @@ func runAsAskpass(args []string) int {
 	}
 	err = jsonx.Unmarshal(raw, &res)
 	clear(raw)
-	defer clear(res.Secret)
 	if err != nil || res.Status != "answered" {
-		fmt.Fprintln(os.Stderr, "tuios: "+askpassEnded(res.Status))
-		return 1
+		clear(res.Secret)
+		return nil, errors.New("the prompt ended with no answer: " + strings.ReplaceAll(res.Status, "_", " "))
 	}
-	out := append(res.Secret, '\n')
-	_, err = os.Stdout.Write(out)
+	return res.Secret, nil
+}
+
+// askpassPrint writes the answer for the program that asks, and zeroes it.
+func askpassPrint(answer []byte) int {
+	out := append(answer, '\n')
+	_, err := os.Stdout.Write(out)
 	clear(out)
 	if err != nil {
 		return 1
@@ -110,58 +118,36 @@ func runAsAskpass(args []string) int {
 	return 0
 }
 
-// askpassEnded says why a prompt has no answer.
-func askpassEnded(status string) string {
-	switch status {
-	case "cancelled", "dismissed":
-		return "the prompt was cancelled. Nothing was sent."
-	case "timeout":
-		return "nobody answered the prompt in 5 minutes. Nothing was sent."
-	case "":
-		return "the tuios daemon gave no answer. Nothing was sent."
-	}
-	return "the prompt ended (" + strings.ReplaceAll(status, "_", " ") + "). Nothing was sent."
-}
-
-// askpassConfirm asks a yes or no question on tty. Yes is exit status 0.
-func askpassConfirm(tty *os.File, prompt string) int {
-	if _, err := tty.WriteString(prompt + " (yes/no) "); err != nil {
-		return 1
-	}
-	line, _ := bufio.NewReader(tty).ReadString('\n')
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "yes", "y":
+// askpassOnTerminal asks on tty as ssh does. A notice is shown and asks
+// nothing. A yes or no question and a user name are read with echo, and a
+// confirm answers by the exit status. Anything else is read with echo off.
+func askpassOnTerminal(tty *os.File, prompt, kind string) int {
+	lower := strings.ToLower(prompt)
+	switch {
+	case kind == "none":
+		_, _ = tty.WriteString(prompt + "\n")
 		return 0
+	case kind == "confirm" && !strings.Contains(lower, "yes/no"):
+		prompt += " (yes/no) "
 	}
-	return 1
-}
-
-// askpassOnTerminal asks on tty as ssh does: a yes or no question and a user
-// name with echo, anything else with echo off.
-func askpassOnTerminal(tty *os.File, prompt string) int {
 	if _, err := tty.WriteString(prompt); err != nil {
 		return 1
 	}
-	lower := strings.ToLower(prompt)
-	if strings.Contains(lower, "yes/no") || strings.HasPrefix(lower, "username") {
-		line, err := bufio.NewReader(tty).ReadString('\n')
-		if err != nil && line == "" {
-			return 1
+	if kind == "confirm" || strings.Contains(lower, "yes/no") || strings.HasPrefix(lower, "username") {
+		line, _ := bufio.NewReader(tty).ReadString('\n')
+		line = strings.TrimRight(line, "\r\n")
+		if kind != "confirm" {
+			return askpassPrint([]byte(line))
 		}
-		fmt.Println(strings.TrimRight(line, "\r\n"))
-		return 0
+		if answer := strings.ToLower(strings.TrimSpace(line)); answer == "yes" || answer == "y" {
+			return 0
+		}
+		return 1
 	}
 	secret, err := readHidden(tty)
 	_, _ = tty.WriteString("\n")
-	defer clear(secret)
 	if err != nil {
 		return 1
 	}
-	out := append(secret, '\n')
-	_, err = os.Stdout.Write(out)
-	clear(out)
-	if err != nil {
-		return 1
-	}
-	return 0
+	return askpassPrint(secret)
 }

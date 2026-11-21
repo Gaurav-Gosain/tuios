@@ -64,12 +64,9 @@ func TestAskpassAgentSSHAsksInTheInbox(t *testing.T) {
 		t.Fatalf("send-text: %v\n%s", err, b)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Unlock a key", "Program: ssh-keygen -y -f", "Passphrase:")
+		return screenHas(s, "Unlock a key", "ssh-keygen in pane", "Command: ssh-keygen -y -f", "Passphrase:")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the secret dialog never opened for ssh-keygen: %v\n%s", err, term.Snapshot())
-	}
-	if strings.Contains(term.Snapshot(), "does not know this program") {
-		t.Errorf("ssh-keygen was shown as an unknown program\n%s", term.Snapshot())
 	}
 	saveFrame(t, term, "askpass-ssh-keygen")
 	pause(t, "let the dialog's settle time pass, as a person reading it does", answerSettle)
@@ -96,16 +93,32 @@ func TestAskpassAgentSSHAsksInTheInbox(t *testing.T) {
 // it: the prompt, then the passphrase with echo off. No dialog opens. The
 // person types the passphrase into the pane, and the key unlocks.
 //
+// It runs twice: as typed, and with GIT_TERMINAL_PROMPT=0, which a person may
+// export in a shell rc to stop git from hanging. ssh ignores that variable at
+// a terminal, so the person is asked in the pane either way.
+//
 // Negative control: with foregroundTerminal answering false, the prompt goes
 // to the Inbox instead, the dialog opens, and the check that no dialog opens
-// fails.
+// fails. With the GIT_TERMINAL_PROMPT check before the terminal check, the
+// second run gets no prompt.
 func TestAskpassSSHInAShellPaneAsksInThePane(t *testing.T) {
+	for _, prefix := range []string{"", "GIT_TERMINAL_PROMPT=0 "} {
+		t.Run("env "+strings.TrimSpace(prefix), func(t *testing.T) {
+			askpassInPane(t, prefix)
+		})
+	}
+}
+
+// askpassInPane runs ssh-keygen as the foreground job of a shell pane, with
+// prefix before it on the command line, and answers in the pane.
+func askpassInPane(t *testing.T, prefix string) {
+	t.Helper()
 	askpassCleanEnv(t)
 	key, pub := askpassKey(t)
 	term, base := attachClientBase(t)
 	out := filepath.Join(t.TempDir(), "pub.txt")
 
-	line := "ssh-keygen -y -f " + key + " > " + out + "; echo KG=$?\n"
+	line := prefix + "ssh-keygen -y -f " + key + " > " + out + "; echo KG=$?\n"
 	if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, b)
 	}
@@ -211,41 +224,38 @@ func TestAskpassGitTerminalPromptZeroFailsFast(t *testing.T) {
 	})
 }
 
-// TestAskpassWarnsWhenARealSSHRunsAnotherAskpass is a prompt that a real
-// ssh-keygen asks through an askpass program of an agent's own, which calls
-// askpass itself. The parent is a real ssh-keygen, but the chain is not
-// tuios's: the dialog shows the warning.
+// TestAskpassAgentInTheForegroundJobAsksInTheInbox is an agent that runs its
+// commands in its own foreground job, without a session of their own: here
+// sh -c runs ssh-keygen, and sh leads the job. The askpass program does not
+// read the terminal, which the agent owns, and asks in the Inbox. The person
+// answers in the dialog, and the key unlocks.
 //
-// Negative control: with askpassChainKnown back to a check of the parent
-// alone, no warning shows and the test fails.
-func TestAskpassWarnsWhenARealSSHRunsAnotherAskpass(t *testing.T) {
+// Negative control: with askpassJobTyped counting every job leader, the
+// prompt goes to the terminal and no dialog opens.
+func TestAskpassAgentInTheForegroundJobAsksInTheInbox(t *testing.T) {
 	askpassCleanEnv(t)
-	key, _ := askpassKey(t)
+	key, pub := askpassKey(t)
 	term, base := attachClientBase(t)
-	notty := buildNotty(t)
-	helper, _ := askpassHelper(t)
-	fish := filepath.Join(t.TempDir(), "fish")
-	b, err := os.ReadFile(helper)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(fish, b, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	out := filepath.Join(t.TempDir(), "pub.txt")
-	line := "SSH_ASKPASS=" + fish + " " + notty + " " + out + " ssh-keygen -y -f " + key + "\n"
+	line := "sh -c 'ssh-keygen -y -f " + key + " > " + out + "; echo SH=$?'\n"
 	if b, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, b)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Unlock a key", "Program: ssh-keygen", "tuios cannot check that this program asks")
+		return screenHas(s, "Unlock a key", "ssh-keygen in pane")
 	}, uiTimeout); err != nil {
-		t.Fatalf("a real ssh-keygen running another askpass program got no warning: %v\n%s", err, term.Snapshot())
+		t.Fatalf("a prompt from a job an agent leads did not go to the Inbox: %v\n%s", err, term.Snapshot())
 	}
-	saveFrame(t, term, "askpass-other-askpass")
 	pause(t, "let the dialog's settle time pass", answerSettle)
-	if err := term.SendKeys("\x1b"); err != nil {
-		t.Fatalf("esc: %v", err)
+	if err := term.SendKeys(askpassCanary + "\r"); err != nil {
+		t.Fatalf("type the passphrase: %v", err)
 	}
-	waitFileHas(t, out+".exit", "ssh-keygen ended", uiTimeout, func(s string) bool { return s != "" })
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "SH=0")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ssh-keygen did not unlock the key: %v\n%s", err, term.Snapshot())
+	}
+	if got, _ := os.ReadFile(out); !strings.HasPrefix(strings.TrimSpace(string(got)), pub) {
+		t.Fatalf("ssh-keygen printed %q, want %q", got, pub)
+	}
 }

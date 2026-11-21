@@ -55,7 +55,7 @@ type AgentsConfig struct {
 	// HERDR_ENV, herdr itself included, which refuses to start inside one
 	// unless its own config allows nesting. See docs/AGENT_STATE.md.
 	HerdrProtocol string `toml:"herdr_protocol,omitempty"`
-	// Askpass says whether a pane's ssh, git and gpg ask the person in the
+	// Askpass says whether a pane's ssh and git ask the person in the
 	// Inbox when they have no terminal: "on" (the default) or "off". A pane
 	// whose environment already names an SSH_ASKPASS program keeps it. See
 	// session/askpass.go.
