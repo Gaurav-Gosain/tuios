@@ -107,10 +107,12 @@ func (m *OS) flushReplyPreviewForFrame() {
 		next[at] = pl
 		if was, drawn := p.shown[at]; drawn && was == pl {
 			continue
-		} else if drawn {
+		} else if drawn && was.crop.Empty() && pl.crop.Empty() {
 			buf = appendKittyUnplace(buf, at.img, at.placement)
 		}
-		buf = appendKittyPlaceRows(buf, at.img, at.placement, pl.x, pl.y, pl.cols, pl.rows, pl.skip, pl.key.rows, pic.w, pic.h)
+		// A zoom or a pan step places the picture again under the same id,
+		// which replaces the placement: one command a step.
+		buf = appendPreviewPlace(buf, at, pl, pic.w, pic.h)
 	}
 	for at := range p.shown {
 		if _, kept := next[at]; !kept {
@@ -255,7 +257,16 @@ func (p *replyPreview) hostErased(kept bool) []byte {
 		if pic := p.pics[pl.key]; pic != nil {
 			pw, ph = pic.w, pic.h
 		}
-		buf = appendKittyPlaceRows(buf, at.img, at.placement, pl.x, pl.y, pl.cols, pl.rows, pl.skip, pl.key.rows, pw, ph)
+		buf = appendPreviewPlace(buf, at, pl, pw, ph)
 	}
 	return buf
+}
+
+// appendPreviewPlace places pl, a picture pw by ph pixels, under at: the part
+// its crop names when it has one, else the rows it shows.
+func appendPreviewPlace(buf []byte, at previewID, pl previewPlacement, pw, ph int) []byte {
+	if pl.crop.Empty() || pw <= 0 || ph <= 0 {
+		return appendKittyPlaceRows(buf, at.img, at.placement, pl.x, pl.y, pl.cols, pl.rows, pl.skip, pl.key.rows, pw, ph)
+	}
+	return appendKittyPlaceSrc(buf, at.img, at.placement, pl.x, pl.y, pl.cols, pl.rows, quickLookCropRect(pl.crop, pw, ph))
 }

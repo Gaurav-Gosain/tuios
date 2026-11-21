@@ -366,6 +366,15 @@ and says how far it went. Press `n` to go on.
 A PDF shows one page and a bar with the page number. Click the bar to go to a
 page. At 16 colours the preview shows the words of the page.
 
+On a terminal with kitty graphics, you can zoom a picture, a PDF page or a film
+frame. Turn the wheel over the picture to zoom in or out. The point under the
+pointer stays where it is. Press `+` or `-` to zoom, and `0` to fit the picture.
+When the picture is zoomed, press `1` to show it at 100%. The footer shows the zoom, for example "zoom 250%".
+The zoom goes up to 800%. When the picture is larger than the preview, drag it
+to move it. The arrow keys or `h`, `j`, `k` and `l` move it too. A PDF page
+gets sharper when you zoom past the pixels of the first read. A new file or a
+new page starts at the fit. On other terminals the picture does not zoom.
+
 A film shows one frame and a bar with the time. Click or drag the bar to move to a
 time. There is no playback. Press `t` to show 7 small frames from across the film.
 At 16 colours the preview shows the facts of the film.
@@ -406,6 +415,8 @@ other keys go to the sidebar.
 | `J` `K` | Move half a page, one page of a PDF, or 5 percent of a film |
 | `Ctrl+D` `Ctrl+U` | Move half a page |
 | Mouse wheel over the preview | Move 3 lines, one page of a PDF, or 1 percent of a film |
+| Mouse wheel over a picture | Zoom in or out, on a terminal with kitty graphics |
+| Drag over a zoomed picture | Move the picture |
 | `t` | Show the small frames of a film, or hide them |
 | `v` | Show the next view: the diff of a changed file, then the details |
 | `Tab` | Move the keyboard inside the file |

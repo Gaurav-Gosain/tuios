@@ -59,6 +59,10 @@ func (m *OS) quickLookPageTo(page int) bool {
 	if !ql.open || !quickLookPaged(ql.res) {
 		return false
 	}
+	if want := max(min(page, ql.res.pages), 1); want != ql.pageWant {
+		// Another page shows at the fit.
+		m.quickLookZoomFit()
+	}
 	ql.pageWant = max(min(page, ql.res.pages), 1)
 	ql.status = ""
 	return true
@@ -338,6 +342,9 @@ func (m *OS) quickLookBarMove(x int) {
 // so a drag runs one read at a time.
 func (m *OS) QuickLookBarDrag(x, y int) bool {
 	ql := &m.quickLook
+	if m.quickLookPanDrag(x, y) {
+		return true
+	}
 	if m.quickLookRulerDrag(y) {
 		return true
 	}
@@ -351,8 +358,8 @@ func (m *OS) QuickLookBarDrag(x, y int) bool {
 // QuickLookBarRelease ends a drag. It reports whether one was going on.
 func (m *OS) QuickLookBarRelease() bool {
 	ql := &m.quickLook
-	drag := ql.barDrag || ql.rulerDrag
-	ql.barDrag, ql.rulerDrag = false, false
+	drag := ql.barDrag || ql.rulerDrag || ql.zoom.drag
+	ql.barDrag, ql.rulerDrag, ql.zoom.drag = false, false, false
 	return drag
 }
 

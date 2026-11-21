@@ -103,6 +103,10 @@ var actionTable = [...]ActionSpec{
 	{Name: "column_left", Desc: "Preview: move a column left, or 1 second back in a film", Run: RunView},
 	{Name: "column_right", Desc: "Preview: move a column right, or 1 second on in a film", Run: RunView},
 	{Name: "go_to", Desc: "Preview: go to a line", Run: RunView},
+	{Name: "zoom_in", Desc: "Preview: zoom in on the picture", Run: RunView},
+	{Name: "zoom_out", Desc: "Preview: zoom out of the picture", Run: RunView},
+	{Name: "zoom_fit", Desc: "Preview: fit the picture in the panel", Run: RunView},
+	{Name: "zoom_actual", Desc: "Preview: show the picture at 100%", Run: RunView},
 	{Name: "wrap", Desc: "Preview: wrap long lines, or cut them", Run: RunView},
 	{Name: "open_editor", Desc: "Preview: open the file in your editor, in a new pane", Run: RunView},
 	// The menu of a right click on a selection in the agents view's thread.
