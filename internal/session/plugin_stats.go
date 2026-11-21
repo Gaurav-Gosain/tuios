@@ -25,7 +25,14 @@ type pluginStat struct {
 
 // herdrPluginStats is plugin.stats. It reads the process table once per
 // call, so it costs nothing until someone asks.
-func (d *Daemon) herdrPluginStats(_ *connState, _ json.RawMessage) (any, *herdrError) {
+//
+// herdrChecks lists it as herdrAdmin, and the check is here: the rows name
+// every plugin and what its processes use, so a pane or a plugin needs admin,
+// as for plugin.log.list.
+func (d *Daemon) herdrPluginStats(cs *connState, _ json.RawMessage) (any, *herdrError) {
+	if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
+		return nil, herdrErr("forbidden", "reading plugin stats needs the admin grant, and this pane holds "+pa.grants.String())
+	}
 	runs, sessions := d.plugins.runner.Stats()
 	var out []pluginStat
 	for _, e := range d.plugins.entries(false) {
