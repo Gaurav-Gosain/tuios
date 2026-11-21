@@ -6,17 +6,12 @@ import (
 	"maps"
 )
 
-// maxMult caps the product of nested each counts.
 const maxMult = 1 << 30
 
-// expansion is what a tree turns into against a state: the nodes each and
-// list repeat, the images after repetition, and the rows and data points of
-// tables, lists, trees and charts after repetition.
 type expansion struct {
 	nodes, images, rows int
 }
 
-// mult multiplies two counts, capped.
 func mult(a, b int) int {
 	if a == 0 || b == 0 {
 		return 0
@@ -29,8 +24,6 @@ func mult(a, b int) int {
 
 func addCap(a, b int) int { return min(a+b, maxMult) }
 
-// measure walks a tree against a state and counts what it expands to. A
-// count that cannot be known (no state, or a path that is not there) is 1.
 func measure(doc *Node, state map[string]any) expansion {
 	var e expansion
 	if doc != nil {
@@ -79,7 +72,6 @@ func measureNode(n *Node, state map[string]any, times int, elems map[string][]an
 	}
 }
 
-// dataAttr reports whether a component's attribute is a data attribute.
 func dataAttr(component, attr string) bool {
 	t, ok := AttrTypeOf(component, attr)
 	return ok && t == TData
@@ -99,10 +91,6 @@ func aliasOf(n *Node) string {
 	return "item"
 }
 
-// elementsOf returns how many times a data attribute repeats, and the
-// elements, when they are known. A literal array counts its elements. A
-// path into the state counts the array there. A path through an element
-// name (item.kids) counts the longest such array across the elements.
 func elementsOf(data Value, state map[string]any, elems map[string][]any) (int, []any) {
 	if data.Kind == KindArray {
 		var arr []any
@@ -149,7 +137,6 @@ func elementsOf(data Value, state map[string]any, elems map[string][]any) (int, 
 	return max(longest, 1), all
 }
 
-// check returns the limit problems of an expansion, empty when it fits.
 func (e expansion) check(lim Limits) []string {
 	var out []string
 	if e.nodes > lim.Each {

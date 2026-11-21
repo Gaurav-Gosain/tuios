@@ -91,9 +91,6 @@ type Node struct {
 	Text     string
 	Pos      Pos
 
-	// src is one more than the node's index in the JSON children list it
-	// came from, or 0. Empty strings and adjacent strings are merged, so the
-	// tree index can differ from the source index.
 	src int
 }
 
@@ -220,7 +217,6 @@ func (n *Node) State() (map[string]any, error) {
 	}
 	var m map[string]any
 	if err := json.Unmarshal(v.Raw, &m); err != nil {
-		// encoding/json words its errors differently by Go release.
 		return nil, fmt.Errorf("the state is not a JSON object of values a float64 can hold")
 	}
 	if m == nil {

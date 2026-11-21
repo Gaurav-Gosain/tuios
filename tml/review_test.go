@@ -9,11 +9,6 @@ import (
 	"testing"
 )
 
-// These tests hold the findings of the wave 1 security review. Each one
-// is a small input that beat a limit before the fix. The review's probe
-// program reproduced each with the same input.
-
-// allocated returns the bytes f allocates.
 func allocated(f func()) uint64 {
 	var a, b runtime.MemStats
 	runtime.GC()
@@ -26,10 +21,6 @@ func allocated(f func()) uint64 {
 // High 1: copies of the root grew the state exponentially before the size
 // check ran. 18 copies of 675 bytes allocated 122 MB.
 func TestReviewPatchGrowth(t *testing.T) {
-	// 12 copies of a root of 500 members would make 2 million map entries,
-	// about 200 MB, without the check after each operation. The sizes are
-	// kept small so that a build without the fix fails this test instead of
-	// exhausting the machine.
 	var ops []string
 	for i := range 12 {
 		ops = append(ops, fmt.Sprintf(`{"op":"copy","from":"","path":"/a%d"}`, i))
@@ -204,8 +195,6 @@ func TestReviewLinearParsing(t *testing.T) {
 			t.Errorf("%s: allocated %d MB", name, mem>>20)
 		}
 	}
-	// Many unknown components or attributes: the suggestion work stops when
-	// the problem slots are full.
 	b.Reset()
 	b.WriteString(`<tml version="1"><row>`)
 	for b.Len() < 250000 {

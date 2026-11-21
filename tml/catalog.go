@@ -119,8 +119,6 @@ func Roles() []string { return slices.Clone(roles[:]) }
 // Slots returns the ANSI colours the root's accent may name as slot:NAME.
 func Slots() []string { return slices.Clone(slots[:]) }
 
-// roleAlias maps a colour word an author reaches for to the role that means
-// the same thing.
 func roleAlias(s string) string {
 	switch s {
 	case "red", "danger":
@@ -147,8 +145,6 @@ func roleAlias(s string) string {
 	return ""
 }
 
-// componentAlias maps a tag name from HTML or another toolkit to the TML
-// component an author most likely meant.
 func componentAlias(s string) string {
 	switch s {
 	case "div", "vbox":
@@ -205,8 +201,6 @@ func componentAlias(s string) string {
 	return ""
 }
 
-// lookup returns the catalog entry itself. Code in this package must not
-// change it.
 func lookup(name string) *Component {
 	for i := range table {
 		if table[i].Name == name {
@@ -328,7 +322,6 @@ func (c Component) Accepts(child string) bool {
 	return false
 }
 
-// accepted lists the child types c accepts, sorted.
 func (c Component) accepted() []string {
 	var out []string
 	switch c.Content {
@@ -345,9 +338,6 @@ func (c Component) accepted() []string {
 	return out
 }
 
-// globals are the attributes every component takes.
-// motionEffects are the values of enter and exit. A host that does not
-// animate, or a person who turned motion off, sees the node at once.
 var motionEffects = []string{"fade", "slide-up", "slide-down", "slide-left", "slide-right", "iris", "decode"}
 
 // MotionEffects returns the effects enter and exit accept.
@@ -374,8 +364,6 @@ var globals = [...]AttrSpec{
 	{Name: "w", Type: TSize, Bind: true, Doc: "Width: cells, 50%, fill or fill:2."},
 }
 
-// table is the catalog, sorted by group, then by name. It is static data:
-// the linker lays it out, so it costs no start-up code.
 var table = [...]Component{
 	{Name: "tml", Group: "document", Doc: "The document root.", Content: ContentBlocks, Attrs: []AttrSpec{
 		{Name: "accent", Type: TAccent, Doc: "The accent: a role, or an ANSI slot such as slot:magenta."},

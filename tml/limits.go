@@ -46,8 +46,6 @@ func DefaultLimits() Limits {
 	}
 }
 
-// resolve returns the limits to use: the defaults for a nil pointer and for
-// each zero field.
 func (l *Limits) resolve() Limits {
 	d := DefaultLimits()
 	if l == nil {
@@ -247,9 +245,6 @@ func sanitizeValue(v any, strict bool) (any, bool, error) {
 	return nil, true, nil
 }
 
-// canonicalJSON compacts JSON text and sanitizes the strings and keys in
-// it. Clean text keeps its key order and number spelling. Text that held an
-// unsafe character is encoded again, with sorted keys.
 func canonicalJSON(text []byte) (json.RawMessage, error) {
 	if serr := scanJSON(text); serr != nil {
 		return nil, serr
@@ -260,7 +255,6 @@ func canonicalJSON(text []byte) (json.RawMessage, error) {
 	}
 	var v any
 	if err := json.Unmarshal(buf.Bytes(), &v); err != nil {
-		// The syntax is valid, so this is a number too large for a float64.
 		return nil, errors.New("a number is too large")
 	}
 	clean, changed, err := sanitizeValue(v, true)

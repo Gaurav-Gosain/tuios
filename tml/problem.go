@@ -126,10 +126,6 @@ func pointerOrRoot(p string) string {
 	return p
 }
 
-// suggest returns the closest candidate to s, or "". A hyphen segment that
-// is itself a candidate wins: chart-bar suggests bar. Otherwise the candidate
-// at the smallest edit distance wins, when that distance is small for the
-// length of s.
 func suggest(s string, candidates []string) string {
 	ls := strings.ToLower(s)
 	for _, c := range candidates {
@@ -155,13 +151,11 @@ func suggest(s string, candidates []string) string {
 	}
 	limit := max(2, len(ls)/3)
 	if len(ls) <= 4 {
-		limit = 1 // body is not a typo of code
+		limit = 1
 	}
 	if bestD <= limit && bestD < len(ls) {
 		return best
 	}
-	// A candidate that is a prefix of s, or s of it, still reads as a typo:
-	// sortBy suggests sort.
 	for _, c := range sortedCopy(candidates) {
 		if len(c) >= 3 && (strings.HasPrefix(ls, strings.ToLower(c)) || strings.HasPrefix(strings.ToLower(c), ls) && len(ls) >= 3) {
 			return c

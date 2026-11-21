@@ -67,7 +67,6 @@ func checkOp(op Op) *PatchError {
 	return nil
 }
 
-// splitPointer splits an RFC 6901 JSON Pointer into its unescaped tokens.
 func splitPointer(p string) ([]string, error) {
 	if p == "" {
 		return nil, nil
@@ -93,28 +92,8 @@ func escapePointer(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "~", "~0"), "/", "~1")
 }
 
-// maxPathCopyOps is the longest patch applyPatch applies by copying only the
-// containers on each op's path. Each op clones its own path, so a long patch
-// would clone the same containers again and again; past this length one full
-// copy costs less and bounds the work.
 const maxPathCopyOps = 8
 
-// applyPatch applies ops to doc and returns the new document and its size
-// as compact JSON. It is atomic: on an error, doc is unchanged and the
-// result is nil. size is doc's size. The running size is checked after every
-// operation, so a patch of copies cannot grow the state past
-// lim.StateBytes before the check runs.
-//
-// A short patch does not copy doc. Each op writes only into the containers
-// on its own path, down to the op's parent, so applyPatch clones those
-// before the op and the result shares every other container with doc. A
-// move is not taken that way: its remove shifts array indexes before its
-// add, so the path its add writes along is not the path as written.
-// A move, or a patch of more than maxPathCopyOps ops, copies the whole tree.
-//
-// On the path-copy route doc must hold no typed-nil map or slice off the
-// patch's paths: they stay nil in the result, where a full copy makes them
-// empty. A Store guarantees this by copying its root on its first patch.
 func applyPatch(doc any, size int, ops []Op, lim Limits) (any, int, error) {
 	pathCopy := len(ops) <= maxPathCopyOps
 	for _, op := range ops {
@@ -144,11 +123,6 @@ func applyPatch(doc any, size int, ops []Op, lim Limits) (any, int, error) {
 	return cur, size, nil
 }
 
-// clonePath returns doc with the container at every level of path's parent
-// cloned, shallowly, and linked into its cloned parent: the containers
-// applyOp may write into for an op at path. A nil map or slice is cloned as
-// an empty one, as deepCopy does. It stops without an error where get would
-// fail, so applyOp reports the error.
 func clonePath(doc any, path string) any {
 	toks, err := splitPointer(path)
 	if err != nil || len(toks) == 0 {
@@ -185,8 +159,6 @@ func clonePath(doc any, path string) any {
 	return root
 }
 
-// cloneContainer copies a map or slice one level deep. The second result is
-// false for a scalar.
 func cloneContainer(v any) (any, bool) {
 	switch x := v.(type) {
 	case map[string]any:
@@ -210,7 +182,6 @@ func overLimit(size int, lim Limits) error {
 	return nil
 }
 
-// entrySize is the size a value adds at path, with its key or comma.
 func entrySize(path []string, v any, limit int) int {
 	n := cappedSize(v, limit) + 1
 	if len(path) > 0 {
@@ -241,7 +212,7 @@ func applyOp(doc any, size int, op Op, lim Limits) (any, int, error) {
 			size += entrySize(path, v, lim.StateBytes) - entrySize(path, old, lim.StateBytes)
 		case getErr == nil && isObjectMember(doc, path):
 			size += entrySize(path, v, lim.StateBytes) - entrySize(path, old, lim.StateBytes)
-		default: // a new member, or an insert into an array
+		default:
 			size += entrySize(path, v, lim.StateBytes)
 		}
 		if err := overLimit(size, lim); err != nil {
@@ -280,7 +251,6 @@ func applyOp(doc any, size int, op Op, lim Limits) (any, int, error) {
 		if err != nil {
 			return nil, 0, err
 		}
-		// Measure before copying: a copy of the root doubles the state.
 		size += entrySize(path, v, lim.StateBytes)
 		if err := overLimit(size, lim); err != nil {
 			return nil, 0, err
@@ -310,8 +280,6 @@ func isObjectMember(doc any, path []string) bool {
 	return err == nil && isObj
 }
 
-// decodeValue decodes a patch value, with every string and key passed
-// through Sanitize.
 func decodeValue(raw json.RawMessage) (any, error) {
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
@@ -340,8 +308,6 @@ func notFound(path []string) error {
 	return &PatchError{Code: CodePathMissing, Message: "the state has no /" + strings.Join(path, "/")}
 }
 
-// arrayIndex reads an RFC 6901 array index: 0, or digits with no leading
-// zero. A sign is not allowed.
 func arrayIndex(tok string, n int, allowEnd bool) (int, bool) {
 	if allowEnd && tok == "-" {
 		return n, true
@@ -364,7 +330,6 @@ func arrayIndex(tok string, n int, allowEnd bool) (int, bool) {
 	return i, i < n
 }
 
-// get returns the value at path.
 func get(doc any, path []string) (any, error) {
 	cur := doc
 	for i, tok := range path {
@@ -388,8 +353,6 @@ func get(doc any, path []string) (any, error) {
 	return cur, nil
 }
 
-// add sets the value at path, inserting into an array. The parent must
-// exist. It changes containers in place, so callers pass a copy.
 func add(doc any, path []string, v any) (any, error) {
 	if len(path) == 0 {
 		return v, nil
@@ -416,7 +379,6 @@ func add(doc any, path []string, v any) (any, error) {
 	return nil, notFound(path)
 }
 
-// remove deletes the value at path and returns it.
 func remove(doc any, path []string) (any, any, error) {
 	if len(path) == 0 {
 		return nil, doc, nil
@@ -447,8 +409,6 @@ func remove(doc any, path []string) (any, any, error) {
 	return nil, nil, notFound(path)
 }
 
-// setAt replaces the container at path, for an array whose slice header
-// changed.
 func setAt(doc any, path []string, v any) (any, error) {
 	if len(path) == 0 {
 		return v, nil

@@ -19,7 +19,6 @@ func FormatXML(n *Node) []byte {
 	return b.Bytes()
 }
 
-// contentOf returns how the children of n print: block, inline or raw.
 func contentOf(n *Node) Content {
 	if n.Type == "state" {
 		return ContentRaw
@@ -46,8 +45,6 @@ func printXML(b *bytes.Buffer, n *Node, indent int, block bool) {
 	var state *Value
 	for i := range n.Attrs {
 		a := &n.Attrs[i]
-		// Only the document root prints its state as an element: the root
-		// is the one node printed at indent 0 as a block.
 		if a.Name == "state" && n.Type == "tml" && a.Value.Kind == KindObject && indent == 0 && block {
 			state = &a.Value
 			continue
@@ -84,9 +81,6 @@ func printXML(b *bytes.Buffer, n *Node, indent int, block bool) {
 		}
 	default:
 		if !block {
-			// A block container inside inline content: print it on one
-			// line. The parser trims each of its text children, so the
-			// ends are escaped.
 			for _, c := range n.Children {
 				if c.IsText() {
 					b.WriteString(escapeText(c.Text, true, true))
@@ -119,9 +113,6 @@ func printXML(b *bytes.Buffer, n *Node, indent int, block bool) {
 	b.WriteByte('>')
 }
 
-// stateText prints the state on one line when it is short, and indented
-// under the <state> element when it is not. The parser compacts it again, so
-// both read back as the same tree.
 func stateText(raw []byte, indent int) string {
 	if len(raw) <= 72 {
 		return string(raw)
@@ -166,9 +157,6 @@ func escapeRaw(s string) string {
 	return r.Replace(s)
 }
 
-// escapeText escapes a text run for content the parser collapses. A tab or
-// newline becomes a character reference. A space stays literal unless it
-// follows another space, or sits at an end the parser trims.
 func escapeText(s string, trimStart, trimEnd bool) string {
 	var b strings.Builder
 	prevSpace := false
@@ -256,7 +244,7 @@ func writeJSONString(b *bytes.Buffer, s string) {
 	enc := json.NewEncoder(b)
 	enc.SetEscapeHTML(false)
 	_ = enc.Encode(s)
-	b.Truncate(b.Len() - 1) // Encode adds a newline
+	b.Truncate(b.Len() - 1)
 }
 
 // Encoding names a TML encoding for Format.

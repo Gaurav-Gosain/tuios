@@ -75,10 +75,9 @@ type xmlParser struct {
 	lines []int
 }
 
-// rawChild is a child before the content model of its parent applies.
 type rawChild struct {
 	node  *Node
-	parts []string // raw source text, entities not yet decoded, joined once
+	parts []string
 	pos   Pos
 }
 
@@ -89,7 +88,6 @@ func (p *xmlParser) posAt(off int) Pos {
 	return posFromLines(p.lines, off)
 }
 
-// lineStarts returns the offset of the first byte of each line.
 func lineStarts(src []byte) []int {
 	starts := []int{0}
 	for i, c := range src {
@@ -122,7 +120,6 @@ func (p *xmlParser) skipSpace() {
 
 func isXMLSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
 
-// misc skips white space and comments, and rejects what TML leaves out.
 func (p *xmlParser) misc() error {
 	for {
 		p.skipSpace()
@@ -192,7 +189,6 @@ func isNameChar(c byte) bool {
 	return isNameStart(c) || c == '-' || c == '.' || (c >= '0' && c <= '9')
 }
 
-// validName reports whether s is a legal component or attribute name.
 func validName(s string) bool {
 	if s == "" || len(s) > 64 || !isNameStart(s[0]) {
 		return false
@@ -231,7 +227,7 @@ func (p *xmlParser) element(depth int) (*Node, error) {
 	if p.nodes > p.lim.Nodes {
 		return nil, p.fail(start, CodeLimit, "The document has more than %d nodes.", p.lim.Nodes)
 	}
-	p.pos++ // <
+	p.pos++
 	typ, err := p.name()
 	if err != nil {
 		return nil, err
@@ -305,7 +301,6 @@ func (p *xmlParser) element(depth int) (*Node, error) {
 		n.Attrs = append(n.Attrs, Attr{Name: an, Value: tv, Pos: p.posAt(aoff)})
 	}
 
-	// Content.
 	var kids []rawChild
 	for {
 		if p.eof() {
@@ -351,8 +346,6 @@ func (p *xmlParser) element(depth int) (*Node, error) {
 			}
 			text := string(p.src[p.pos : p.pos+end])
 			p.pos += end
-			// Text split by comments is one run. The pieces are joined once
-			// in finish, so many comments cost linear time.
 			if len(kids) > 0 && kids[len(kids)-1].node == nil {
 				kids[len(kids)-1].parts = append(kids[len(kids)-1].parts, text)
 			} else {
@@ -362,7 +355,6 @@ func (p *xmlParser) element(depth int) (*Node, error) {
 	}
 }
 
-// finish applies the content model of n to its raw children.
 func (p *xmlParser) finish(n *Node, kids []rawChild, depth int) error {
 	comp := lookup(n.Type)
 	content := ContentBlocks
@@ -414,8 +406,6 @@ func (p *xmlParser) finish(n *Node, kids []rawChild, depth int) error {
 		}
 		n.Children = append(n.Children, &Node{Text: dec, Pos: k.pos})
 	}
-	// The JSON form has one children key, so a node cannot hold both a
-	// children attribute (tree's field name) and child nodes.
 	if _, has := n.Attr("children"); has && len(n.Children) > 0 {
 		return p.fail(n.Pos.Offset, CodeSyntax, "<%s> has a children attribute and child nodes. Keep one.", n.Type)
 	}
@@ -432,9 +422,6 @@ func (p *xmlParser) finish(n *Node, kids []rawChild, depth int) error {
 	return nil
 }
 
-// absorbState turns the root's first <state> element into the state
-// attribute. A later or nested <state> stays a node, and the validator
-// reports it.
 func (p *xmlParser) absorbState(root *Node) error {
 	for i, c := range root.Children {
 		if _, has := root.Attr("state"); has {
@@ -465,7 +452,6 @@ func (p *xmlParser) absorbState(root *Node) error {
 		}
 		root.Attrs = append(root.Attrs, Attr{Name: "state", Value: Value{Kind: KindObject, Raw: raw}, Pos: c.Pos})
 		root.Children = append(root.Children[:i:i], root.Children[i+1:]...)
-		// Text on both sides of <state> is now one run.
 		if i > 0 && i < len(root.Children) && root.Children[i-1].IsText() && root.Children[i].IsText() {
 			root.Children[i-1].Text += root.Children[i].Text
 			root.Children = append(root.Children[:i:i], root.Children[i+1:]...)
@@ -475,7 +461,6 @@ func (p *xmlParser) absorbState(root *Node) error {
 	return nil
 }
 
-// collapse turns each run of literal white space into one space.
 func collapse(s string) string {
 	var b strings.Builder
 	space := false
@@ -509,7 +494,6 @@ func entity(name string) (string, bool) {
 	return "", false
 }
 
-// decode replaces entity and character references.
 func (p *xmlParser) decode(raw []byte, off int) (string, error) {
 	if bytes.IndexByte(raw, '&') < 0 {
 		return string(raw), nil
@@ -547,9 +531,6 @@ func (p *xmlParser) decode(raw []byte, off int) (string, error) {
 	return b.String(), nil
 }
 
-// typedValue gives an attribute its canonical value from its text, by the
-// type the catalog gives it. Both parsers use it, so the two encodings of
-// one tree are equal.
 func typedValue(typ, name, text string) (Value, error) {
 	comp := lookup(typ)
 	if comp == nil {
@@ -579,8 +560,6 @@ func typedValue(typ, name, text string) (Value, error) {
 			open, kind = '{', KindObject
 		}
 		if strings.HasPrefix(text, string(open)) && json.Valid([]byte(text)) {
-			// A literal array or object is data a renderer shows, so its
-			// strings and keys are sanitized here, once.
 			raw, err := canonicalJSON([]byte(text))
 			if err != nil {
 				return Value{}, err
@@ -591,7 +570,6 @@ func typedValue(typ, name, text string) (Value, error) {
 	return StringValue(text), nil
 }
 
-// isJSONNumber reports whether s is a number in JSON syntax.
 func isJSONNumber(s string) bool {
 	i := 0
 	if i < len(s) && s[i] == '-' {
@@ -635,8 +613,6 @@ func isJSONNumber(s string) bool {
 	return i == len(s)
 }
 
-// oneLine turns the tabs and line breaks of a one-line text attribute into
-// spaces.
 func oneLine(s string) string {
 	if !strings.ContainsAny(s, "\n\t") {
 		return s
@@ -649,9 +625,6 @@ func oneLine(s string) string {
 	}, s)
 }
 
-// stateLast moves the root's state attribute to the end of its attributes.
-// TML text writes state as an element after the tag, so this is its one
-// canonical place, and both encodings agree on the order.
 func stateLast(root *Node) {
 	if root.Type != "tml" {
 		return
