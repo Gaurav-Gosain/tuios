@@ -285,7 +285,8 @@ e2e-flake test n="20":
     cd e2e/tui
     TUIOS_E2E=1 TUIOS_E2E_BIN={{ quote(out / "e2e/tuios") }} \
         {{ NICE }} {{ TASKSET }} go test -c -o {{ quote(out / "e2e/e2e.test") }} . || exit 1
-    if ! {{ quote(out / "e2e/e2e.test") }} -test.list "^$1\$" | grep -qx "$1"; then
+    # TestMain skips the whole suite without TUIOS_E2E=1, and lists nothing.
+    if ! TUIOS_E2E=1 {{ quote(out / "e2e/e2e.test") }} -test.list "^$1\$" | grep -qx "$1"; then
         echo "No e2e test named $1." >&2
         exit 1
     fi
