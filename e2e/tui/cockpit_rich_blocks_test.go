@@ -88,11 +88,11 @@ func TestCockpitThreadDrawsRichBlocks(t *testing.T) {
 	clickWord(t, term, rowWith(term.Screen(), "show the diagram"), "show the diagram")
 	railLists(t, term, "a second click shows the diagram", []string{"Plan", "show the source"}, []string{"flowchart LR"})
 
-	// P does the same for the lowest block on screen, the diagram.
-	sendKeys(t, term, "P")
-	railLists(t, term, "P shows the source", []string{"flowchart LR", "show the diagram"}, nil)
-	sendKeys(t, term, "P")
-	railLists(t, term, "P again shows the diagram", []string{"Plan", "show the source"}, []string{"flowchart LR"})
+	// V does the same for the lowest block on screen, the diagram.
+	sendKeys(t, term, "V")
+	railLists(t, term, "V shows the source", []string{"flowchart LR", "show the diagram"}, nil)
+	sendKeys(t, term, "V")
+	railLists(t, term, "V again shows the diagram", []string{"Plan", "show the source"}, []string{"flowchart LR"})
 
 	// C copies the lowest block as its source.
 	before := mustCLIOr(t, base, "show-buffer")

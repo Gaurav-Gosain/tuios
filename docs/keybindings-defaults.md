@@ -251,7 +251,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `o` | `inbox_artifact` | Agents view: open what the agent has shown, such as a TML form, and use it |
 | `h`, `left` | `inbox_back` | Agents view: go back from the focus on a narrow screen |
 | `T` | `inbox_block_picture` | Agents view: draw the lowest Mermaid diagram on screen as a picture, or as text |
-| `P` | `inbox_block_source` | Agents view: show the lowest diagram on screen as its source, or as the diagram again |
+| `V` | `inbox_block_source` | Agents view: show the lowest diagram on screen as its source, or as the diagram again |
 | `b` | `inbox_board` | Agents view: show the task board, or the agents again |
 | `B` | `inbox_board_layout` | Agents view: show the board as columns or as a list |
 | `.` | `inbox_child` | Agents view: select the next agent a card in the thread started or sent mail to. Enter opens its thread |
@@ -289,6 +289,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `pgup` | `inbox_page_up` | Agents view: ten rows up |
 | `p` | `inbox_pass_on` | Agents view: pass held mail on to the agent it was for |
 | `space` | `inbox_peek` | Agents view: read the prompt here and answer it |
+| `P` | `inbox_pin` | Agents view: pin the agent under the cursor to the top of its group, or unpin it |
 | `}` | `inbox_prompt_next` | Agents view: show the thread's next prompt at the top |
 | `{` | `inbox_prompt_prev` | Agents view: show the thread's previous prompt at the top |
 | `tab` | `inbox_region_next` | Agents view: focus the next region: list, focus, reply, side column |

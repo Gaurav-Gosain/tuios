@@ -100,6 +100,10 @@ type sidebarStateFile struct {
 	// group absent here takes its default, which [agents] fold_working sets
 	// for Working.
 	AgentsFolds map[string]bool `json:"agents_folds,omitempty"`
+	// AgentsPins lists the agents the person pinned with P in the agents
+	// view, by pane id (ckPinKey), sorted. A pinned agent's row comes first
+	// in its group.
+	AgentsPins []string `json:"agents_pins,omitempty"`
 	// BoardList says the person chose the task board's list over its
 	// columns (B in the agents view).
 	BoardList bool `json:"board_list,omitempty"`
@@ -170,6 +174,7 @@ func (m *OS) loadSidebarState() {
 	m.SidebarAgentsSeen = st.AgentsSeen
 	m.Inbox.ck.spawnPreset = st.SpawnPreset
 	m.Inbox.ck.ckFoldsFromFile(st.AgentsFolds)
+	m.Inbox.ck.ckPinsFromFile(st.AgentsPins)
 	m.Inbox.ck.boardList = st.BoardList
 	if st.AgentsList == config.AgentsViewListColumn || st.AgentsList == config.AgentsViewListStrip {
 		m.Inbox.ck.listMode = st.AgentsList
@@ -288,6 +293,7 @@ func (m *OS) saveSidebarState() {
 		AgentsSeen:             m.SidebarAgentsSeen,
 		SpawnPreset:            m.Inbox.ck.spawnPreset,
 		AgentsFolds:            m.Inbox.ck.ckFoldsToFile(),
+		AgentsPins:             m.Inbox.ck.ckPinsToFile(),
 		BoardList:              m.Inbox.ck.boardList,
 		AgentsList:             m.Inbox.ck.listMode,
 		AgentsListWidth:        m.Inbox.ck.listWidth,

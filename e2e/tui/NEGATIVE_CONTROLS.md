@@ -18667,3 +18667,19 @@ go test -count=1 -run '^TestRestrictedTableNamesEveryVerbItAllows$' ./internal/s
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^(TestClearKeepsScrollback|TestClearScrollback)$' .
 ```
+
+## Pins in the agents view
+
+`TestCockpitNarrowFoldsRows/pin` presses `P` on the last Working agent and waits for its row to be first in Working. A new client must draw the same order, and `P` again must put `cache-1` first again.
+
+Run on 2026-11-21 on Linux, on main at 177fb9260 with this change. Each control is a local build that cuts one line. It is not committed.
+
+| Control | Failure | Verdict |
+| --- | --- | --- |
+| `buildCockpitRows` does not call `ckPinFirst` | `P did not pin migrate-c to the top of Working` | **caught** |
+| `sidebarState` does not write `AgentsPins` | `the pin did not outlive the client` | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -run '^TestCockpitNarrowFoldsRows$/^pin$' -v .
+```

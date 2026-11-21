@@ -204,6 +204,7 @@ var (
 	ckGlyphPR      = ckGlyph{"\uf407", "PR", "PR"}
 	ckGlyphFan     = ckGlyph{"\uf192", "+", "+"}
 	ckGlyphUnseen  = ckGlyph{"•", "•", "*"}
+	ckGlyphPin     = ckGlyph{"\uf435", "↑", "^"}
 )
 
 // g picks the form the terminal can draw.
@@ -1213,13 +1214,18 @@ func (m *OS) drawFleetRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x,
 	if r.lines != 1 || w >= 48 {
 		nx = max(nx, x+5)
 	}
+	// Marks that follow the name: unseen, for a row finished or failed since
+	// the person last viewed the thread, and the pin.
+	var after []ckSeg
 	if r.agent >= 0 && m.agentRowUnseen(e) {
-		// Finished or failed since the person last viewed the thread: the
-		// unseen mark follows the name.
-		ex := c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-3), fg: ink(nameInk), attrs: ckBold})
-		c.text(ex+1, y, nx+nameW-1, ckSeg{t: l.g(ckGlyphUnseen), fg: ink(pal.AccentBright), attrs: ckBold})
-	} else {
-		c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-1), fg: ink(nameInk), attrs: ckBold})
+		after = append(after, ckSeg{t: l.g(ckGlyphUnseen), fg: ink(pal.AccentBright), attrs: ckBold})
+	}
+	if ck.ckPinned(r, ck.agents) {
+		after = append(after, ckSeg{t: l.g(ckGlyphPin), fg: ink(pal.FgDim)})
+	}
+	ex := c.text(nx, y, nx+nameW-1, ckSeg{t: ckTrunc(name, nameW-1-2*len(after)), fg: ink(nameInk), attrs: ckBold})
+	for _, s := range after {
+		ex = c.text(ex+1, y, nx+nameW-1, s)
 	}
 	rx := c.textR(right, y, ckSeg{t: wait, fg: ink(pal.FgMute)})
 	if r.agent >= 0 && m.ckArtifactNew(e, false) {
@@ -2300,6 +2306,13 @@ func (m *OS) cockpitHints(now time.Time) []overlay.Hint {
 	if ok && r.kind != ckRowHead {
 		// Optional, so a narrow footer gives it up first: ? lists it too.
 		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxFold, "fold group"))...)
+	}
+	if ok && r.kind == ckRowAgent && !st.ck.board {
+		pin := "pin"
+		if st.ck.ckPinned(r, st.ck.agents) {
+			pin = "unpin"
+		}
+		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxPin, pin))...)
 	}
 	if m.cockpitNeedsCount() > 1 {
 		hints = append(hints, overlay.Optional(m.keyHints(config.ActionInboxNextNeeds, "next needs you"))...)
