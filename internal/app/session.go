@@ -1342,6 +1342,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	m.takeDaemonCwd(w, ws)
 	m.takeDaemonDnD(w, ws)
 	m.noteHostEnded(ws)
+	m.noteHostKeysLost(ws)
 	w.HostLink = ws.HostLink
 	w.ScreenStopped = ws.ScreenStopped
 	w.Recording = ws.Recording
@@ -1562,6 +1563,7 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 	m.takeDaemonCwd(window, ws)
 	m.takeDaemonDnD(window, ws)
 	m.noteHostEnded(ws)
+	m.noteHostKeysLost(ws)
 	window.HostLink = ws.HostLink
 	window.ScreenStopped = ws.ScreenStopped
 	window.Recording = ws.Recording
@@ -2659,4 +2661,29 @@ func (m *OS) noteHostEnded(ws *session.WindowState) {
 		name = "A pane"
 	}
 	m.ShowNotification(printableTitle(name)+" on "+printableTitle(ws.Host)+" ended: "+ws.HostEnded+".", "warning", m.Settings.NotificationDuration)
+}
+
+// noteHostKeysLost tells the person that keys typed into a pane on another
+// machine did not reach it, once for each time the daemon dropped them with
+// the link. The daemon does not send them again later, where they could run
+// a command the person no longer means, so the person has to know to type
+// them again. The first count a client sees is taken as known, so attaching
+// does not report an old loss.
+func (m *OS) noteHostKeysLost(ws *session.WindowState) {
+	seen, known := m.hostKeysLostSeen[ws.ID]
+	if m.hostKeysLostSeen == nil {
+		m.hostKeysLostSeen = make(map[string]int)
+	}
+	m.hostKeysLostSeen[ws.ID] = ws.HostKeysLost
+	if !known || ws.HostKeysLost <= seen {
+		return
+	}
+	name := ws.CustomName
+	if name == "" {
+		name = ws.Title
+	}
+	if name == "" {
+		name = "the pane"
+	}
+	m.ShowNotification("Some keys did not reach "+printableTitle(name)+" on "+printableTitle(ws.Host)+". The link dropped.", "warning", m.Settings.NotificationDuration)
 }

@@ -980,6 +980,10 @@ type OS struct {
 	// hostEndedTold is the windows whose pane on another machine ended that
 	// this client has told the person about, so each is told once.
 	hostEndedTold map[string]bool
+	// hostKeysLostSeen is the last HostKeysLost this client saw for each
+	// window on another machine, so it tells the person once for each loss
+	// and says nothing of a loss from before it attached.
+	hostKeysLostSeen map[string]int
 	// RestoredStreamSeq is the stream position each pane's snapshot was taken
 	// at, from the restore that precedes the subscribe on the attach path.
 	RestoredStreamSeq map[string]int64

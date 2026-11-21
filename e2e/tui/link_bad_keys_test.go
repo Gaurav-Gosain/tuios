@@ -187,3 +187,86 @@ func goroutineDumps(t *testing.T, base string, client int, clientStderr string) 
 	return "client goroutines:\n" + read(clientStderr, "goroutine ") +
 		"\ndaemon goroutines (pid " + fmt.Sprint(daemonPid) + "):\n" + read(daemonLog, "SIGQUIT")
 }
+
+// TestKeysLostWithALinkAreDroppedAndThePersonIsTold is what happens to input
+// that waits for a pane on build when the link drops under it. It must not be
+// sent later on the new link: keys typed into a shell long before can run a
+// command the person no longer means. The person is told once, in the dock,
+// and the resize verb that waited on the stalled link says it failed.
+//
+// The input waits behind a size: the link is stopped, the resize verb puts a
+// size on it that is not answered, and send-text queues a command behind it.
+// Then the link is killed.
+//
+// Negative controls: send the waiting input on the new connection, and
+// LOSTKEYS-7 runs on build after the link is back. Remove the notice, and the
+// dock never says it. Answer "resized" without waiting, and the resize verb
+// passes. See NEGATIVE_CONTROLS.md.
+func TestKeysLostWithALinkAreDroppedAndThePersonIsTold(t *testing.T) {
+	requireReal(t, "real ssh or sshd")
+	base, _, env := endedRig(t)
+	openFarShell(t, base, env, "far-pane")
+	term := startIn(t, base, startOpts{args: []string{"attach", "near"}, env: env, cols: 140, rows: 32})
+	if err := term.WaitForText("far-pane", uiTimeout); err != nil {
+		t.Fatalf("the client never drew the session: %v\n%s", err, term.Snapshot())
+	}
+
+	daemonLog := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log")
+	resizedBefore := countIn(daemonLog, " resized ")
+	for _, pid := range testProxies(t) {
+		_ = syscall.Kill(pid, syscall.SIGSTOP)
+	}
+	resized := make(chan error, 1)
+	go func() {
+		_, err := callVerb(t, base, "resize", map[string]any{"session": "near", "window": "far-pane", "width": 61, "height": 17})
+		resized <- err
+	}()
+	waitUntil(t, "the daemon took the new size of far-pane", uiTimeout, func() (bool, string) {
+		n := countIn(daemonLog, " resized ")
+		return n > resizedBefore, fmt.Sprintf("%d resize lines, %d before", n, resizedBefore)
+	})
+	// Taken by the daemon and queued behind the size, which waits on the
+	// stopped link.
+	if _, err := callVerb(t, base, "send-text", map[string]any{"session": "near", "window": "far-pane", "text": "echo LOST\"\"KEYS-7\n"}); err != nil {
+		t.Fatalf("send-text to far-pane: %v", err)
+	}
+	for _, pid := range testProxies(t) {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+	}
+
+	select {
+	case err := <-resized:
+		if err == nil || !strings.Contains(err.Error(), "host_unreachable") {
+			t.Errorf("ASSERTION: the resize verb said the size was taken while the link was down: %v", err)
+		}
+	case <-time.After(scaled(uiTimeout * 2)):
+		t.Errorf("ASSERTION: the resize verb never answered")
+	}
+	if err := term.WaitForText("Some keys did not reach far-pane on build. The link dropped.", uiTimeout*2); err != nil {
+		t.Fatalf("ASSERTION: the person was not told that keys did not reach far-pane: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "keys-lost-notice")
+	waitUntil(t, "list-windows counts the lost keys and far-pane is back", uiTimeout*3, func() (bool, string) {
+		w, out := farPane(base)
+		lost, _ := w["host_keys_lost"].(float64)
+		return w != nil && lost >= 1 && w["host_link"] == nil, out
+	})
+
+	// The pane answers again, and the lost command never runs there.
+	waitUntil(t, "far-pane answers after the link is back", uiTimeout*2, func() (bool, string) {
+		_, _ = callVerb(t, base, "send-text", map[string]any{"session": "near", "window": "far-pane", "text": "echo BACK-\"\"FAR\n"})
+		out, _ := tuiosOut(base, "capture-pane", "-s", "near", "-w", "far-pane")
+		return strings.Contains(out, "\nBACK-FAR"), out
+	})
+	stayTrue(t, "the lost command is not sent on the new link", 3*time.Second, func() (bool, string) {
+		out, _ := tuiosOut(base, "capture-pane", "-s", "near", "-w", "far-pane")
+		return !strings.Contains(out, "LOSTKEYS-7"), out
+	})
+	alive(t, term, "after keys were lost with the link")
+}
+
+// countIn is how many times s is in the file at path.
+func countIn(path, s string) int {
+	b, _ := os.ReadFile(path)
+	return strings.Count(string(b), s)
+}

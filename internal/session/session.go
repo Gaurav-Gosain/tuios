@@ -146,6 +146,10 @@ type WindowState struct {
 	// HostLink "ended". Like HostLink it is true only while it is true and
 	// is filled from the live pane on every snapshot.
 	HostEnded string `json:"host_ended,omitempty"`
+	// HostKeysLost counts the times input typed into a pane on another
+	// machine was dropped because the link dropped before it was sent. A live
+	// fact like HostLink. A client tells the person when it goes up.
+	HostKeysLost int `json:"host_keys_lost,omitempty"`
 	// ScreenStopped is set while the daemon has stopped feeding the pane's
 	// terminal emulator after it failed again and again: the program runs
 	// and the clients draw its output, but a new client, capture-pane and
@@ -3211,6 +3215,7 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 	// cleared first.
 	for i := range state.Windows {
 		state.Windows[i].HostLink, state.Windows[i].HostLinkUntil, state.Windows[i].HostEnded = "", 0, ""
+		state.Windows[i].HostKeysLost = 0
 	}
 	for id, link := range s.liveHostLinks() {
 		for i := range state.Windows {
@@ -3218,6 +3223,7 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 				state.Windows[i].HostLink = link.state
 				state.Windows[i].HostLinkUntil = link.until
 				state.Windows[i].HostEnded = link.ended
+				state.Windows[i].HostKeysLost = link.keysLost
 			}
 		}
 	}
@@ -3231,13 +3237,14 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 
 // hostLinkFact is one remote pane's link state for a snapshot.
 type hostLinkFact struct {
-	state string
-	until int64
-	ended string
+	state    string
+	until    int64
+	ended    string
+	keysLost int
 }
 
 // liveHostLinks is the link state of every window on another machine whose
-// link is not up, by PTY id.
+// link is not up, or that lost input to a dropped link, by PTY id.
 func (s *Session) liveHostLinks() map[string]hostLinkFact {
 	s.ptysMu.RLock()
 	defer s.ptysMu.RUnlock()
@@ -3248,13 +3255,14 @@ func (s *Session) liveHostLinks() map[string]hostLinkFact {
 			continue
 		}
 		state, until := rp.linkState()
-		if state == "" {
+		lost := rp.lostKeys()
+		if state == "" && lost == 0 {
 			continue
 		}
 		if out == nil {
 			out = make(map[string]hostLinkFact)
 		}
-		fact := hostLinkFact{state: state, ended: rp.endedWhy()}
+		fact := hostLinkFact{state: state, ended: rp.endedWhy(), keysLost: lost}
 		if !until.IsZero() {
 			fact.until = until.Unix()
 		}

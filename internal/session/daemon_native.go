@@ -421,6 +421,9 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 			info["host_ended"] = w.HostEnded
 		}
 	}
+	if w.HostKeysLost > 0 {
+		info["host_keys_lost"] = w.HostKeysLost
+	}
 	// Always report the agent state (as "none" when unset) so a consumer building
 	// an attention view can read every pane's state in one list-windows call.
 	info["agent_state"] = w.AgentState.Name()

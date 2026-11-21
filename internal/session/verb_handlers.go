@@ -2,6 +2,7 @@ package session
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1441,6 +1442,21 @@ func (d *Daemon) verbResize(cs *connState, params json.RawMessage) (any, *verbEr
 	}
 	if err := pty.Resize(p.Width, p.Height); err != nil {
 		return nil, newVerbError(ErrVerbInternal, err.Error())
+	}
+	// A pane on another machine takes its size there. Resize only queues it,
+	// so the client loop never waits on the link, and the verb waits for the
+	// answer here, so it says "resized" only when the far machine took it.
+	if rp, ok := pty.pty.(*remotePane); ok {
+		w, h := pty.Size()
+		ctx, cancel := context.WithTimeout(context.Background(), remotePaneResizeBudget+time.Second)
+		err := rp.resizeWait(ctx, w, h)
+		cancel()
+		if rerr := (*remoteResizeError)(nil); errors.As(err, &rerr) {
+			return nil, newVerbError(ErrVerbHostUnreachable, rerr.Error())
+		}
+		if err != nil {
+			return nil, ptyWriteError(err)
+		}
 	}
 	return map[string]any{"type": "resized", "width": p.Width, "height": p.Height}, nil
 }
