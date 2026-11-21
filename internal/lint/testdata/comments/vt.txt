@@ -1,0 +1,4 @@
+vt 6790
+vt/dnd 39
+vt/snapshot 440
+vt/vtgen 197

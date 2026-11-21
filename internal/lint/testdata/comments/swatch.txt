@@ -1,0 +1,4 @@
+swatch 19
+swatch/omarchy 55
+swatch/teaswatch 3
+swatch/termconfig 23

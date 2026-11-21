@@ -1,0 +1,3 @@
+shot 647
+shot/fonts 1
+shot/mosaic 96
