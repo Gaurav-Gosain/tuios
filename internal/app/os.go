@@ -1479,6 +1479,9 @@ type OS struct {
 	// per frame is the difference between an overlay that costs nothing to
 	// leave open and one that does not.
 	LauncherItems []LauncherItem
+	// launcherScanned says a scan has landed, so an empty list is a scan that
+	// found nothing rather than one still running.
+	launcherScanned bool
 	// LauncherOpenedAt is when the launcher last opened, which is when its
 	// scan started: "Scanning for programs" waits for the loading delay.
 	LauncherOpenedAt time.Time

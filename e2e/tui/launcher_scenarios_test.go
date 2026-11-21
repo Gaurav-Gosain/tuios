@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -51,13 +52,41 @@ func newLauncherFixture(t *testing.T, n int, extraEnv ...string) *launcherFixtur
 	stream := &hostStream{}
 	base := t.TempDir()
 	plantApps(t, base, n)
+	// The planted apps are desktop entries that run /bin/sh and /bin/true by
+	// path, and their shell needs sleep. The launcher scans every program on
+	// $PATH, and iconEnv's PATH is the agent-free shadow of /usr/bin and of
+	// /bin: about 12000 links on Arch, each one a stat and a stat of its
+	// target. That scan is what a loaded machine made slow enough to outlast
+	// the wait for the rows (TestLauncherIconsCloseByShortLivedProgram stayed
+	// on "Scanning for programs" for 10 s). These tests list the planted apps
+	// only, so their PATH holds the few programs the apps run.
+	env := append([]string{"PATH=" + launcherToolPath(t, base)}, extraEnv...)
 	term := startIn(t, base, startOpts{
 		args: []string{"--standalone"},
-		env:  iconEnv(base, extraEnv...),
+		env:  iconEnv(base, env...),
 		out:  stream,
 	})
 	waitBoot(t, term)
 	return &launcherFixture{term: term, stream: stream, base: base}
+}
+
+// launcherToolPath is a folder of links to the programs the planted apps run.
+func launcherToolPath(t *testing.T, base string) string {
+	t.Helper()
+	dir := filepath.Join(base, "launcher-tools")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("launcher tools: %v", err)
+	}
+	for _, name := range []string{"sh", "sleep", "true", "env"} {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			t.Fatalf("launcher tools: %s: %v", name, err)
+		}
+		if err := os.Symlink(path, filepath.Join(dir, name)); err != nil {
+			t.Fatalf("launcher tools: %v", err)
+		}
+	}
+	return dir
 }
 
 // live is the launcher placements the host still holds.

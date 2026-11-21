@@ -82,6 +82,7 @@ func (m *OS) knownPathApps() []applist.Entry {
 // holding a few thousand built rows for an overlay nobody is looking at.
 func (m *OS) applyPathApps(entries []applist.Entry) {
 	m.launcherSource = entries
+	m.launcherScanned = true
 	if !m.ShowLauncher {
 		return
 	}

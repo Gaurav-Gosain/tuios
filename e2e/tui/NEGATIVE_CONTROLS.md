@@ -18750,3 +18750,18 @@ Run on 2026-11-21 on Linux. Each control is one change to the branch, run alone 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestKeysLostWithALinkAreDroppedAndThePersonIsTold$' .
 ```
+
+## A launcher scan that found nothing
+
+`TestLauncherSaysWhenTheScanFoundNothing` opens the launcher with an empty $PATH and no desktop entry. The knob `hold_scan` holds the scan, so the panel says "Scanning for programs" first. Once the scan is let go, the panel must say "No programs found on PATH." and not go back to scanning.
+
+Run on 2026-11-21 on Linux, real backend.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Main: the empty line keyed on the list alone | `TestLauncherSaysWhenTheScanFoundNothing` | 2 of 2 runs: the panel still said "Scanning for programs" after the scan landed | **caught** |
+| This change | `TestLauncherSaysWhenTheScanFoundNothing` | 5 of 5 runs pass | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestLauncherSaysWhenTheScanFoundNothing$' .
+```

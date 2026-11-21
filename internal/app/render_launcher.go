@@ -163,9 +163,13 @@ func (m *OS) LauncherVisibleIcons() []string {
 // "no program matches" then is simply wrong.
 //
 // The scan is a loading state, so it is only said once the scan has run past
-// the loading delay; before that the list is blank.
+// the loading delay; before that the list is blank. A scan that landed with
+// nothing says so: it used to read as one still running, forever.
 func (m *OS) launcherEmptyLine() string {
 	if len(m.LauncherItems) == 0 {
+		if m.launcherScanned {
+			return "No programs found on PATH."
+		}
 		if !overlay.ShowLoading(m.LauncherOpenedAt, time.Now()) {
 			return ""
 		}
