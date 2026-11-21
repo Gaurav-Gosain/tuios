@@ -24,7 +24,9 @@ import (
 // talks to a unix socket, the installed command is a line of sh instead: it
 // sends the event to the daemon's agent-hook-event verb over TUIOS_SOCKET and
 // prints what the daemon answers, which is what tuios agent-hook would have
-// printed. The line falls back to tuios agent-hook when there is no socket,
+// printed. When tuios is not on PATH (a settings file shared with a host
+// without it), the line exits 0 and the status line runs the person's own
+// command alone. The line falls back to tuios agent-hook when there is no socket,
 // when the daemon does not answer with the forwarder's mark (a daemon older
 // than the verb answers with a JSON error), or when the payload is empty. The
 // program is chosen when the integration is installed (DetectHookSocket), not
@@ -93,6 +95,7 @@ func (run Runner) command(harnessID string, version int) string {
 		forwardEnvLoop() +
 		`printf "},\"payload_json\":"; printf "%s" "$p"; printf "}}\n"; } | ` + conn + ` 2>/dev/null; echo .); ` +
 		`o=${o%.}; case $o in (` + forwarderMark + `?*) printf "%s" "${o#` + forwarderMark + `?}"; exit 0;; esac; fi; ` +
+		`command -v ` + shellWord(run.Program) + ` >/dev/null 2>&1 || exit 0; ` +
 		`printf "%s" "$p" | exec ` + plain
 	return "sh -c " + shellWord(script)
 }
@@ -118,6 +121,8 @@ func (run Runner) statusLineCommand(then string) string {
 		forwardEnvLoop() +
 		`printf "},\"payload_json\":"; printf "%s" "$p"; printf "}}\n"; } | ` + conn + ` 2>/dev/null; echo .); ` +
 		`case $o in (` + forwarderMark + `*) ;; (*) printf "%s" "$p" | ` + plain + ` >/dev/null 2>&1;; esac; ` +
+		`if [ -n "$1" ]; then printf "%s" "$p" | sh -c "$1"; exit $?; fi; exit 0; fi; ` +
+		`if ! command -v ` + shellWord(run.Program) + ` >/dev/null 2>&1; then ` +
 		`if [ -n "$1" ]; then printf "%s" "$p" | sh -c "$1"; exit $?; fi; exit 0; fi; ` +
 		`if [ -n "$1" ]; then printf "%s" "$p" | ` + plain + ` --then "$1"; exit $?; fi; ` +
 		`printf "%s" "$p" | exec ` + plain
