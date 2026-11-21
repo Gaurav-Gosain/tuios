@@ -44,8 +44,10 @@ concurrency:
 # A shard is one runner. A lane is one go test process, and the lanes of a
 # shard run side by side on its runner. shardplan packs the tests into
 # E2E_SHARDS times E2E_LANES lanes by the measured times in
-# e2e/tui/shardplan/durations.txt. The shard plan job fails when a lane's
-# estimate is over E2E_LANE_LIMIT, which leaves a wide margin under the 12
+# e2e/tui/shardplan/durations.txt. The tests in e2e/tui/shardplan/alone.txt
+# go to lane 0 of a shard, which runs them one at a time after its other
+# lanes. The shard plan job fails when a shard's estimate (its longest lane,
+# then lane 0) is over E2E_LANE_LIMIT, which leaves a wide margin under the 12
 # minute go test timeout. The shard plan job makes the matrix from E2E_SHARDS.
 env:
   E2E_SHARDS: "16"
@@ -137,7 +139,7 @@ jobs:
         working-directory: e2e/tui
         run: |
           set -euo pipefail
-          go run ./shardplan -shards "$((E2E_SHARDS * E2E_LANES))" -max "$E2E_LANE_LIMIT" < "$RUNNER_TEMP/all.txt"
+          go run ./shardplan -shards "$E2E_SHARDS" -lanes "$E2E_LANES" -max "$E2E_LANE_LIMIT" < "$RUNNER_TEMP/all.txt"
 
       # The frame paths (appearance.cell_frames) and the backends the shards
       # run on. A pull request runs the default path, cells, on the real
@@ -196,20 +198,19 @@ jobs:
           set -euo pipefail
           mode=$(sed -n 's/^mode=//p' "$RUNNER_TEMP/select.out")
           go build -o "$RUNNER_TEMP/shardplan" ./shardplan
-          lanes=$((E2E_SHARDS * E2E_LANES))
           mkdir -p "$RUNNER_TEMP/suite"
           # pack FILL: write every lane's list, and print the shards that got a test.
           pack() {
-            local shard lane v n f
+            local shard lane n f
             for shard in $(seq 1 "$E2E_SHARDS"); do
               n=0
-              for lane in $(seq 1 "$E2E_LANES"); do
-                v=$(( (shard - 1) * E2E_LANES + lane ))
+              # Lane 0 is the tests that run alone after the other lanes.
+              for lane in $(seq 0 "$E2E_LANES"); do
                 f="$RUNNER_TEMP/suite/names-$shard-$lane.txt"
                 if [ "$mode" = none ]; then
                   : > "$f"
                 else
-                  "$RUNNER_TEMP/shardplan" -shards "$lanes" -shard "$v" "$@" < "$RUNNER_TEMP/selected.txt" | grep . > "$f" || true
+                  "$RUNNER_TEMP/shardplan" -shards "$E2E_SHARDS" -lanes "$E2E_LANES" -shard "$shard" -lane "$lane" "$@" < "$RUNNER_TEMP/selected.txt" | grep . > "$f" || true
                 fi
                 n=$((n + $(grep -c . "$f" || true)))
               done
@@ -449,7 +450,7 @@ jobs:
           set -euo pipefail
           # An artifact keeps no file modes.
           chmod +x "$RUNNER_TEMP/suite/tuios" "$RUNNER_TEMP"/suite/*.test
-          for lane in $(seq 1 "$E2E_LANES"); do
+          for lane in $(seq 0 "$E2E_LANES"); do
             grep . "$RUNNER_TEMP/suite/names-$SHARD-$lane.txt" > "$RUNNER_TEMP/names-$lane.txt" || true
             # The sim shard keeps the tests of its lanes that pass in process.
             if [ "$BACKEND" = sim ]; then
@@ -620,13 +621,22 @@ jobs:
             pids+=("$!")
           done
           wait "${pids[@]}"
+          # Lane 0: the tests in e2e/tui/shardplan/alone.txt, one at a time
+          # with no lane beside them, once the other lanes are done.
+          if [ -s "$RUNNER_TEMP/names-0.txt" ]; then
+            lstart=$SECONDS
+            lstatus=0
+            suite "$(paste -sd'|' "$RUNNER_TEMP/names-0.txt")" > "$RUNNER_TEMP/e2e-0.log" 2>&1 || lstatus=$?
+            echo "$lstatus" > "$RUNNER_TEMP/status-0"
+            echo "$((SECONDS - lstart))" > "$RUNNER_TEMP/took-0"
+          fi
           kill "$vmstat_pid" || true
           awk 'NR > 3 { n++; idle += $15; wa += $16; if ($1 > r) r = $1 }
             END { if (n) printf "runner while the lanes ran: %d%% idle, %d%% io wait, run queue up to %d\n", idle / n, wa / n, r }' "$RUNNER_TEMP/vmstat.log"
           # A failed test fails the shard. No test runs twice.
           status=0
           limit=$(( ${E2E_LANE_LIMIT%m} * 60 ))
-          for lane in $(seq 1 "$E2E_LANES"); do
+          for lane in $(seq 0 "$E2E_LANES"); do
             [ -s "$RUNNER_TEMP/names-$lane.txt" ] || continue
             took=$(cat "$RUNNER_TEMP/took-$lane")
             lstatus=$(cat "$RUNNER_TEMP/status-$lane")
@@ -639,6 +649,9 @@ jobs:
               echo "::warning title=Slow e2e lane::Lane $lane of shard $SHARD ran ${took}s, over the $E2E_LANE_LIMIT limit. Refresh e2e/tui/shardplan/durations.txt or add a shard."
             fi
           done
+          if [ $((SECONDS - start)) -gt "$limit" ]; then
+            echo "::warning title=Slow e2e shard::Shard $SHARD ran $((SECONDS - start))s, over the $E2E_LANE_LIMIT limit. Refresh e2e/tui/shardplan/durations.txt or add a shard."
+          fi
           echo "shard $SHARD ran in $((SECONDS - start))s"
           exit "$status"
 
