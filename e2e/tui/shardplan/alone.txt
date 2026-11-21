@@ -23,3 +23,7 @@ TestKittyPlacementStressUnderPerturbation
 
 # The wakeups and context switches of an idle client have a budget.
 TestIdleCostStaysLow
+
+# Counts the frames of the workspace slide with motion.zoom off. With other
+# runs on the same cores it saw one slide frame where it wants a slide.
+TestMotionZoomOffKeepsWorkspaceSlide
