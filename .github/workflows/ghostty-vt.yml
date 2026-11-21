@@ -33,28 +33,44 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The three setup steps download and unpack, and none reads what another
-      # writes, so they run at the same time.
-      - parallel:
-          - uses: ./.github/actions/setup-go
-            with:
-              go-version-file: go.mod
-              cache-id: ghostty
+      # The library is keyed on scripts/ghostty-lib.sh, which pins its
+      # release. Only a build of the library needs zig, so a cache hit skips
+      # the zig download below, and a failed download fails no run that hits.
+      - name: Restore libghostty-vt
+        id: libghostty
+        uses: actions/cache/restore@v6
+        with:
+          path: .ghostty-vt
+          key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-native
 
-          # setup-zig has no release on the Node 24 runtime yet, so the runner
-          # warns that it forces it onto Node 24. It works there.
-          - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-            with:
-              version: 0.17.1
+      - uses: ./.github/actions/setup-go
+        with:
+          go-version-file: go.mod
+          cache-id: ghostty
 
-          - name: Cache libghostty-vt
-            uses: actions/cache@v6
-            with:
-              path: .ghostty-vt
-              key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-native
+      # setup-zig has no release on the Node 24 runtime yet, so the runner
+      # warns that it forces it onto Node 24. It works there.
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        if: steps.libghostty.outputs.cache-hit != 'true'
+        with:
+          version: 0.17.1
+          # Its cache of zig build output helps only the library build, and
+          # the library has a cache of its own. Each run saved a new entry of
+          # 80 to 135 MB, and those pushed other caches out of the repo's
+          # 10 GB.
+          use-cache: false
 
       - name: Build libghostty-vt
         run: ./scripts/ghostty-lib.sh
+
+      # Saved now, not at the end of the job, so a failed test later in the
+      # job still keeps the library for the next run.
+      - name: Save libghostty-vt
+        if: steps.libghostty.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .ghostty-vt
+          key: ${{ steps.libghostty.outputs.cache-primary-key }}
 
       # The two builds run in the slack of the test step, which spends most of
       # its time in a few long packages. A failure in any of the three fails
