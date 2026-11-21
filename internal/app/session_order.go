@@ -2,10 +2,12 @@ package app
 
 import (
 	"slices"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // The session order is the daemon's (set-session-order), not this client's.
@@ -38,6 +40,8 @@ type sessionOrderPush struct {
 	// waiting move still goes there after the client moved to another
 	// machine.
 	dial agentMailDial
+	// out is the order that is out, while sending is set.
+	out []string
 }
 
 // SessionOrderAppliedMsg reports how a session order sent to the daemon
@@ -71,7 +75,47 @@ func (m *OS) commitSessionOrder(order []string) {
 	}
 	push.sending = true
 	push.dial = m.verbDialer()
+	push.out = order
 	m.queueSidebarCmd(sessionOrderCmd(push.dial, m.DaemonClient, host, order))
+}
+
+// flushSessionOrders sends the newest order of each machine whose move is
+// still out or waiting, and waits for the answers up to timeout. A client
+// that quit right after a move on the rail lost it: the command that carried
+// it ended with the client. The daemon ranks the sessions by the order it is
+// given, so an order it already holds changes nothing when it comes again.
+func (m *OS) flushSessionOrders(timeout time.Duration) {
+	type send struct {
+		dial  agentMailDial
+		order []string
+	}
+	var sends []send
+	for _, push := range m.sessionOrderPush {
+		order := push.next
+		if order == nil && push.sending {
+			order = push.out
+		}
+		if order != nil && push.dial != nil {
+			sends = append(sends, send{push.dial, order})
+		}
+	}
+	if len(sends) == 0 {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for _, s := range sends {
+			if c, err := s.dial(); err == nil {
+				_, _ = c.Call("set-session-order", map[string]any{"order": s.order, "skip_missing": true})
+				_ = c.Close()
+			}
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+	}
 }
 
 // sessionOrderIsLocal reports whether host's daemon turned the order down,
@@ -109,7 +153,12 @@ func (m *OS) sessionOrderPending(host string) bool {
 // labelVerbCmd does, then refreshes the listing, so the rail can drop its own
 // copy of the order with the daemon's already in the cache.
 func sessionOrderCmd(dial agentMailDial, client *session.TUIClient, host string, order []string) tea.Cmd {
+	hold := testknob.Millis("session_order_hold_ms")
 	return func() tea.Msg {
+		// A test holds the move on its way out, to quit while it is out.
+		if hold > 0 {
+			time.Sleep(hold)
+		}
 		c, err := dial()
 		if err != nil {
 			return SessionOrderAppliedMsg{Host: host, Order: order, Err: err}

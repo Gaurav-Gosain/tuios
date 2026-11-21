@@ -18772,3 +18772,18 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestLauncher
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestKeybindManagerChangesTheLeader$' .
 ```
+
+## A rail move and a quit right after it
+
+`TestARailMoveSurvivesAQuitRightAfterIt` drags bravo above alpha on the rail and closes the client as soon as the rail draws the move. The knob `session_order_hold_ms=3000` holds the move on its way to the daemon, so the client always quits while the move is out. The daemon must list bravo above alpha after the client is gone.
+
+Run on 2026-11-21 on Linux, real backend.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| No send on the way out (main with the knob) | `TestARailMoveSurvivesAQuitRightAfterIt` | 3 of 3 runs: "the daemon lists [alpha bravo] after the client quit, want [bravo alpha]: the move was lost" | **caught** |
+| This change | `TestARailMoveSurvivesAQuitRightAfterIt` | 10 of 10 runs pass | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestARailMoveSurvivesAQuitRightAfterIt$' .
+```
