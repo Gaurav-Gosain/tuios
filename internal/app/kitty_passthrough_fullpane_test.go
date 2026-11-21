@@ -38,7 +38,7 @@ func feedTBFrameBorder(t *testing.T, stream []byte, screenW, screenH, border int
 	if err != nil {
 		t.Fatal(err)
 	}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: hostFile})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: hostFile})
 	if !kp.IsEnabled() {
 		t.Fatal("passthrough not enabled")
 	}

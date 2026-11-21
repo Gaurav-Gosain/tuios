@@ -44,7 +44,7 @@ func newSyncHoldHarness(t *testing.T) *syncHoldHarness {
 	}
 	return &syncHoldHarness{
 		t:     t,
-		kp:    NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host}),
+		kp:    newTestKitty(t, KittyPassthroughOptions{Output: host}),
 		host:  host,
 		panes: map[string]*syncPane{},
 		info:  map[string]*WindowPositionInfo{},

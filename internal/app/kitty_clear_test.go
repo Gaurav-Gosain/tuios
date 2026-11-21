@@ -23,7 +23,7 @@ func TestKittyClearOnED2(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer devnull.Close()
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+	kp := newTestKitty(t, KittyPassthroughOptions{
 		ForceEnable: true,
 		Output:      devnull,
 	})
@@ -112,7 +112,7 @@ func TestKittyNoStaleAccumulation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer devnull.Close()
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+	kp := newTestKitty(t, KittyPassthroughOptions{
 		ForceEnable: true,
 		Output:      devnull,
 	})

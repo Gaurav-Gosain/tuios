@@ -60,7 +60,7 @@ func newPaneRig(t *testing.T, screenW, screenH, border int) *paneRig {
 		screenW: screenW, screenH: screenH, border: border,
 		winW: screenW, winH: screenH,
 	}
-	r.kp = NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: hostFile})
+	r.kp = newTestKitty(t, KittyPassthroughOptions{Output: hostFile})
 	if !r.kp.IsEnabled() {
 		t.Fatal("passthrough not enabled")
 	}

@@ -38,7 +38,7 @@ func newVideoDragHarness(t *testing.T, out io.Writer, rec *recWriter) *videoDrag
 	})
 	shmName := makeShmFrame(t, 400, 300)
 	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: out, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: out, RemoteClient: true})
 
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {

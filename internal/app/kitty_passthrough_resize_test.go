@@ -26,7 +26,7 @@ func placementHarness(t *testing.T, screenW, screenH, border int) (*KittyPassthr
 	if err != nil {
 		t.Fatal(err)
 	}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: hostFile})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: hostFile})
 	if kp.inlineGraphics {
 		t.Fatal("expected native mode")
 	}

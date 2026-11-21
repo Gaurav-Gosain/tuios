@@ -99,7 +99,7 @@ func TestKeptImageDecodeBounds(t *testing.T) {
 //     i=0 must still be kept.
 func TestUnnamedTransmitIsNotKept(t *testing.T) {
 	withClientCaps(t, &HostCapabilities{KittyGraphics: true, KittyFileTransfer: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20})
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: &hostRecorder{}})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: &hostRecorder{}})
 	if !kp.hostReadsFiles() {
 		t.Fatal("the host should read files in this test")
 	}

@@ -33,6 +33,7 @@ func customClient(t *testing.T, name string) *OS {
 		MasterRatio:          config.Global.MasterRatioFraction(),
 		FocusedWindow:        -1,
 	}
+	closeWindowsAtEnd(t, m)
 	for i := range 2 {
 		w := benchWindow(t, fmt.Sprintf("%s-w%d", name, i), 80, 40)
 		w.Workspace, w.Width, w.Height = 3, 80, 40

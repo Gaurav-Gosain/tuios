@@ -57,6 +57,7 @@ func modeOS(t *testing.T, mode string, shared bool, gap, n, w, h int) *OS {
 		WorkspaceMasterRatio: map[int]float64{},
 		PendingResizes:       map[string][2]int{},
 	}
+	closeWindowsAtEnd(t, m)
 	for i := range n {
 		win := newTestWindow(t, fmt.Sprintf("mode-%s-%d-%dx%d-%d", mode, n, w, h, i), 40, 20)
 		win.Workspace = 1

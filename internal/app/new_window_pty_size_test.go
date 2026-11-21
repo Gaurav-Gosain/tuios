@@ -25,8 +25,8 @@ func (p *ptySpy) install(win *terminal.Window) {
 }
 
 // newTilingClient is an attached client with a known viewport, tiling on, BSP.
-func newTilingClient(width, height, workspace int) *OS {
-	return &OS{
+func newTilingClient(t testing.TB, width, height, workspace int) *OS {
+	m := &OS{
 		Settings:             config.Global,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     workspace,
@@ -39,6 +39,8 @@ func newTilingClient(width, height, workspace int) *OS {
 		AutoTiling:           true,
 		UseBSPLayout:         true,
 	}
+	closeWindowsAtEnd(t, m)
+	return m
 }
 
 // daemonNewWindow appends the box AddDaemonWindow produces: a nominal full-size
@@ -78,7 +80,7 @@ func TestNewWindowPTYMatchesPaneAfterRepeatedUnplacedSync(t *testing.T) {
 
 	const width, height = 130, 55
 
-	m := newTilingClient(width, height, 1)
+	m := newTilingClient(t, width, height, 1)
 	daemonState := &session.SessionState{
 		Name:             "tiling",
 		CurrentWorkspace: 1,

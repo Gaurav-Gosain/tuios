@@ -19,13 +19,13 @@ type openAnimHarness struct {
 	next  int
 }
 
-func newOpenAnimHarness(width, height int) *openAnimHarness {
-	return newOpenAnimHarnessWithLayout(width, height, true)
+func newOpenAnimHarness(t testing.TB, width, height int) *openAnimHarness {
+	return newOpenAnimHarnessWithLayout(t, width, height, true)
 }
 
 // newOpenAnimHarnessWithLayout is the same harness under either tiled layout, so
 // the open animation can be checked in both. bsp false is master-stack.
-func newOpenAnimHarnessWithLayout(width, height int, bsp bool) *openAnimHarness {
+func newOpenAnimHarnessWithLayout(t testing.TB, width, height int, bsp bool) *openAnimHarness {
 	h := &openAnimHarness{
 		m: &OS{
 			Settings:         config.Global,
@@ -45,6 +45,7 @@ func newOpenAnimHarnessWithLayout(width, height int, bsp bool) *openAnimHarness 
 			Version:          1,
 		},
 	}
+	closeWindowsAtEnd(t, h.m)
 	return h
 }
 
@@ -102,7 +103,7 @@ func TestOpenAnimationGrowsFromItsOwnTile(t *testing.T) {
 	config.Global.Motion = config.MotionFull
 	defer func() { config.Global.Motion = prev }()
 
-	h := newOpenAnimHarness(120, 40)
+	h := newOpenAnimHarness(t, 120, 40)
 
 	for i := 1; i <= 4; i++ {
 		anims := h.createWindow(t)
@@ -152,7 +153,7 @@ func TestRepeatCreationSyncLeavesAPlacedPaneAlone(t *testing.T) {
 	config.Global.Motion = config.MotionFull
 	defer func() { config.Global.Motion = prev }()
 
-	h := newOpenAnimHarness(120, 40)
+	h := newOpenAnimHarness(t, 120, 40)
 	h.createWindow(t)
 	h.createWindow(t)
 
@@ -237,7 +238,7 @@ func TestOpenAnimationPlaysUnderMasterStack(t *testing.T) {
 	config.Global.Motion = config.MotionFull
 	defer func() { config.Global.Motion = prev }()
 
-	h := newOpenAnimHarnessWithLayout(120, 40, false)
+	h := newOpenAnimHarnessWithLayout(t, 120, 40, false)
 
 	for i := 1; i <= 3; i++ {
 		anims := h.createWindow(t)
@@ -271,7 +272,7 @@ func TestMasterStackAnimatesThePanesThatMove(t *testing.T) {
 	config.Global.Motion = config.MotionFull
 	defer func() { config.Global.Motion = prev }()
 
-	h := newOpenAnimHarnessWithLayout(120, 40, false)
+	h := newOpenAnimHarnessWithLayout(t, 120, 40, false)
 	for i := 1; i <= 3; i++ {
 		anims := h.createWindow(t)
 		if len(anims) == 0 {

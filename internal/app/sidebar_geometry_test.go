@@ -32,6 +32,7 @@ func tileDaemonWindowsMode(t *testing.T, width, height, count int, layoutMode st
 		Height:               height,
 		AutoTiling:           true,
 	}
+	closeWindowsAtEnd(t, m)
 	m.ApplyLayoutModeName(layoutMode)
 
 	daemonState := &session.SessionState{

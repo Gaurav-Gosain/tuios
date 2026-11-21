@@ -94,7 +94,7 @@ func remoteKittyRecording(t *testing.T) (*KittyPassthrough, *recordingWriter) {
 	t.Helper()
 	withClientCaps(t, &HostCapabilities{KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20})
 	host := &recordingWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, RemoteClient: true})
 	if !kp.IsEnabled() {
 		t.Fatal("passthrough not enabled")
 	}

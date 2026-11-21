@@ -1353,9 +1353,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 			height:      cmd.Height,
 			encoded:     base64.StdEncoding.EncodeToString(data),
 		}
-		select {
-		case kp.asyncFrameCh <- asyncFrame{job: job}:
-		default:
+		if !kp.queueAsyncFrame(asyncFrame{job: job}) {
 			kittyPassthroughLog("forwardFileTransmitInline: dropped frame (async channel full)")
 		}
 		return
@@ -1395,9 +1393,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 		// (channel full) to prevent unbounded lag. The writer skips the
 		// queue, so what the window holds goes first.
 		kp.unholdWindow(windowID)
-		select {
-		case kp.asyncFrameCh <- asyncFrame{data: frameData}:
-		default:
+		if !kp.queueAsyncFrame(asyncFrame{data: frameData}) {
 			// Previous frame still in flight, drop this one.
 			kittyPassthroughLog("forwardFileTransmitInline: dropped frame (async channel full)")
 		}

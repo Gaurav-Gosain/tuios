@@ -66,7 +66,7 @@ func newOcclusionHarness(t *testing.T) *occlusionHarness {
 		KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20,
 	})
 	host := &recWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{ForceEnable: true, Output: host})
+	kp := newTestKitty(t, KittyPassthroughOptions{ForceEnable: true, Output: host})
 	kp.enabled = true
 
 	const winID = "window-0000-0000-0000-000000000000"

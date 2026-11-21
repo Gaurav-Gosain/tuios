@@ -16,7 +16,7 @@ import (
 
 // tiledOS builds an auto-tiling model holding one window, sized so tiling has
 // room to work.
-func tiledOS(existingID string) *OS {
+func tiledOS(t testing.TB, existingID string) *OS {
 	m := &OS{
 		Settings:         config.Global,
 		NumWorkspaces:    9,
@@ -31,6 +31,7 @@ func tiledOS(existingID string) *OS {
 		},
 		FocusedWindow: 0,
 	}
+	closeWindowsAtEnd(t, m)
 	m.TileAllWindows()
 	return m
 }
@@ -61,7 +62,7 @@ func TestSyncedWindowJoinsTheScrollingLayout(t *testing.T) {
 	const existingID = "win-0000-0000-0000-0000-000000000001"
 	const daemonID = "win-0000-0000-0000-0000-000000000002"
 
-	m := tiledOS(existingID)
+	m := tiledOS(t, existingID)
 	m.UseBSPLayout = false
 	m.UseScrollingLayout = true
 	m.TileAllWindows()
@@ -85,7 +86,7 @@ func TestSyncedCloseLeavesNoTile(t *testing.T) {
 	const keepID = "win-0000-0000-0000-0000-000000000001"
 	const goneID = "win-0000-0000-0000-0000-000000000002"
 
-	m := tiledOS(keepID)
+	m := tiledOS(t, keepID)
 	m.Windows = append(m.Windows, &terminal.Window{ID: goneID, Workspace: 1, Width: 60, Height: 40})
 	m.TileAllWindows()
 	if !m.WorkspaceTrees[1].HasWindow(m.GetWindowIntID(goneID)) {
@@ -141,7 +142,7 @@ func TestSyncedCloseLeavesNoTile(t *testing.T) {
 func TestSyncFromAnEqualPeerDoesNotRetile(t *testing.T) {
 	const existingID = "win-0000-0000-0000-0000-000000000001"
 
-	m := tiledOS(existingID)
+	m := tiledOS(t, existingID)
 	w := m.Windows[0]
 	x, y, width, height := w.X, w.Y, w.Width, w.Height
 

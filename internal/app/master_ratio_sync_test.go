@@ -13,7 +13,7 @@ import (
 // where any pane ends up.
 func ratioClient(t *testing.T) *OS {
 	t.Helper()
-	return &OS{
+	m := &OS{
 		Settings:             config.Global,
 		SharedBorders:        config.Global.SharedBorders,
 		PaneGap:              config.Global.PaneGap,
@@ -28,6 +28,8 @@ func ratioClient(t *testing.T) *OS {
 		NumWorkspaces:        9,
 		MasterRatio:          config.Global.MasterRatioFraction(),
 	}
+	closeWindowsAtEnd(t, m)
+	return m
 }
 
 // TestATunedMasterRatioReachesAClientThatNeverVisitedTheWorkspace is the two

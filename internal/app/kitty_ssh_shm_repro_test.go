@@ -124,7 +124,7 @@ func TestSSHShmFrameSurvives(t *testing.T) {
 	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
 
 	host := &countingWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+	kp := newTestKitty(t, KittyPassthroughOptions{
 		Output:       host,
 		RemoteClient: true,
 	})

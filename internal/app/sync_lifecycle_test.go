@@ -23,6 +23,7 @@ func syncWindow(id string) session.WindowState {
 func osWithWindow(t *testing.T, id string) (*OS, *terminal.Window) {
 	t.Helper()
 	m := NewOS(OSOptions{})
+	closeWindowsAtEnd(t, m)
 	m.Width, m.Height = 100, 40
 	m.CurrentWorkspace = 1
 
@@ -104,6 +105,7 @@ func TestSyncCloseOfLastWindowLeavesTerminalMode(t *testing.T) {
 // with the same rule it uses for a window it was asked for directly.
 func TestSyncPlacesUnplacedWindow(t *testing.T) {
 	m := NewOS(OSOptions{})
+	closeWindowsAtEnd(t, m)
 	m.Width, m.Height = 100, 40
 	m.CurrentWorkspace = 1
 	m.AutoTiling = false
@@ -140,6 +142,7 @@ func TestSyncPlacesUnplacedWindow(t *testing.T) {
 // windows around on every push.
 func TestSyncLeavesPlacedWindowAlone(t *testing.T) {
 	m := NewOS(OSOptions{})
+	closeWindowsAtEnd(t, m)
 	m.Width, m.Height = 100, 40
 	m.CurrentWorkspace = 1
 	m.AutoTiling = false

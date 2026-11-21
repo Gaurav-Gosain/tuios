@@ -32,7 +32,7 @@ func remoteKitty(t *testing.T) (*KittyPassthrough, *countingWriter) {
 	t.Helper()
 	withClientCaps(t, &HostCapabilities{KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20})
 	host := &countingWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, RemoteClient: true})
 	if !kp.IsEnabled() {
 		t.Fatal("passthrough not enabled")
 	}
@@ -144,7 +144,7 @@ func TestKittyTempFileAsIcatWritesItIsSent(t *testing.T) {
 func TestKittyShmNameWithSlashIsNotForwarded(t *testing.T) {
 	withClientCaps(t, &HostCapabilities{KittyGraphics: true, KittyFileTransfer: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20})
 	host := &hostRecorder{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host})
 	if !kp.hostReadsFiles() {
 		t.Fatal("the host should read files in this test")
 	}
