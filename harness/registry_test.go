@@ -39,7 +39,7 @@ import (
 func TestBundledScreenRulesPolicy(t *testing.T) {
 	screenIdleHarnesses := map[string]bool{
 		"claude-code": true, "codex": true, "gemini-cli": true, "opencode": true,
-		"cline": true, "devin": true, "grok": true, "kiro": true, "letta": true, "maki": true, "qwen": true,
+		"cline": true, "devin": true, "grok": true, "kiro": true, "letta": true, "maki": true, "qwen": true, "vibe": true,
 	}
 	r, _ := Load()
 	for _, id := range r.IDs() {
