@@ -243,7 +243,7 @@ func TestAskpassWarnsAboutAFakeSSH(t *testing.T) {
 		t.Fatalf("send-text: %v\n%s", err, b)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Unlock a key", "tuios does not know this program", "bob:***@example.com")
+		return screenHas(s, "Unlock a key", "tuios cannot check that this program asks", "bob:***@example.com")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the dialog did not warn about a copy named ssh, or did not mask its token: %v\n%s", err, term.Snapshot())
 	}
