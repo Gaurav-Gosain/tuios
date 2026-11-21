@@ -2629,6 +2629,10 @@ func (m *OS) Cleanup() {
 		m.FireDetached()
 	}
 
+	// A move on the rail the person made just before the client went, and
+	// the client had not sent yet.
+	m.flushSessionOrders(time.Second)
+
 	m.stopSidebarSessions()
 	// The copy of an image the desktop viewer was given.
 	m.replyPreview.removeOpened()
