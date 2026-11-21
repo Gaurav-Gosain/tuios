@@ -18771,4 +18771,18 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestLauncher
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestKeybindManagerChangesTheLeader$' .
+## Two clients agree on a floated pane
+
+`TestTwoClientsAgreeOnTilingAndFloat` attaches two clients to one tiled session with shared borders. The peer turns tiling off, the first client turns it on and floats a pane, then tiles it again. Both clients must draw the same pane corners after each step.
+
+Run on 2026-11-21 on Linux, real and sim backends. Controls: main at 6419a7d9f, and v0.13.3.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Main | `TestTwoClientsAgreeOnTilingAndFloat` | "the peer, after the client floated a pane: 0 pane corners on screen, want 1". Last state "client [0,61], peer []" | **caught** |
+| v0.13.3 | `TestTwoClientsAgreeOnTilingAndFloat` | the same failure | **caught** |
+| Main, sim backend | `TestTwoClientsAgreeOnTilingAndFloat` | the same failure | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestTwoClientsAgreeOnTilingAndFloat$' .
 ```

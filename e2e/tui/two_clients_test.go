@@ -275,3 +275,65 @@ func waitStream(t *testing.T, out *syncBuffer, text, what string) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+// TestTwoClientsAgreeOnTilingAndFloat holds the tiling mode and a floating pane to the
+// session, from either client: the peer turns tiling off, the first client
+// turns it on again and floats a pane, and both clients draw the same pane
+// corners after each step. A YouTube review of 0.13 reported two clients that
+// drifted between floating and tiled.
+//
+// NEGATIVE CONTROL: on main before the fix, and on 0.13.3, the peer keeps the
+// floated pane borderless, so it draws 0 pane corners where the client that
+// floated it draws 1.
+func TestTwoClientsAgreeOnTilingAndFloat(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\nlayout = \"bsp\"\n[appearance]\nshared_borders = true\n")
+	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "both"}})
+	waitWindowCount(t, term, 1, "first pane")
+	newWindow(t, term)
+	waitPaneCorners(t, term, 0, "the tiled panes")
+	peer := attachIn(t, base, "both", startOpts{cols: 120, rows: 40})
+	if err := peer.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 2 && len(paneStarts(s)) == 0
+	}, uiTimeout); err != nil {
+		t.Fatalf("the peer never showed the tiled layout: %v\n%s", err, peer.Snapshot())
+	}
+	windowManagementMode(t, peer)
+
+	same := func(what string) {
+		t.Helper()
+		waitUntil(t, "both clients to draw one layout "+what, uiTimeout, func() (bool, string) {
+			a, b := fmt.Sprint(paneStarts(term.Screen())), fmt.Sprint(paneStarts(peer.Screen()))
+			return a == b, "client " + a + ", peer " + b
+		})
+		stayTrue(t, "both clients keep one layout "+what, time.Second, func() (bool, string) {
+			a, b := fmt.Sprint(paneStarts(term.Screen())), fmt.Sprint(paneStarts(peer.Screen()))
+			return a == b, "client " + a + ", peer " + b
+		})
+	}
+
+	if err := peer.SendKeys("t"); err != nil {
+		t.Fatal(err)
+	}
+	waitPaneCorners(t, term, 2, "the client, after the peer turned tiling off")
+	same("after the peer turned tiling off")
+
+	if err := term.SendKeys("t"); err != nil {
+		t.Fatal(err)
+	}
+	waitPaneCorners(t, peer, 0, "the peer, after the client turned tiling on")
+	same("after the client turned tiling on")
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "t", "f"); err != nil {
+		t.Fatal(err)
+	}
+	waitPaneCorners(t, peer, 1, "the peer, after the client floated a pane")
+	same("after the client floated a pane")
+	saveFrame(t, peer, "two-clients-floated-pane")
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "t", "f"); err != nil {
+		t.Fatal(err)
+	}
+	waitPaneCorners(t, peer, 0, "the peer, after the client tiled the pane again")
+	same("after the client tiled the pane again")
+}
