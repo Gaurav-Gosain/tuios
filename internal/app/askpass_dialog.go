@@ -160,7 +160,7 @@ func (m *OS) AskpassPaste(text string) {
 }
 
 // askpassSend sends the answer, or the cancel, through answer-ask with this
-// client's attach nonce, and zeroes the field. The call's copy is zeroed once
+// client's attach nonce, and zeroes the field. The call's own copy is zeroed once
 // the call is sent.
 func (m *OS) askpassSend(cancel bool) tea.Cmd {
 	st := &m.askpass

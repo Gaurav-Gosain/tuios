@@ -31,7 +31,9 @@ import (
 //   - The secret is held in memory only, for one answer. It is never in the
 //     item, so it is never in the Inbox file, an event, a log line or a mail.
 //     The item is not saved at all: the call that waits on it ends with the
-//     daemon. The buffers the daemon owns are zeroed after the answer.
+//     daemon. The daemon zeroes the buffers it decodes the secret into and
+//     hands it on in. The copies inside the encoded request and reply frames
+//     are not cleared: Go gives no hold on them, and they are reused.
 //   - askpass and a secret's answer are refused over a link. A secret never
 //     leaves the machine it is typed on for another one.
 
@@ -124,10 +126,15 @@ func (d *Daemon) verbAskpass(cs *connState, params json.RawMessage) (any, *verbE
 	LogBasic("Secret prompt %s opened for pane %s", hold.id, shortID(own))
 
 	// A program that is killed while it waits, such as an ssh the agent
-	// stopped, takes its prompt with it.
+	// stopped, takes its prompt with it. OpenSSH does not stop its askpass
+	// program when ssh itself is killed, so the daemon watches both.
 	stop := make(chan struct{})
 	defer close(stop)
 	gone := askpassWatch(cs.peerPID, stop)
+	asker := make(<-chan struct{})
+	if ppid, ok := askpassParent(cs.peerPID); ok && ppid > 1 {
+		asker = askpassWatch(ppid, stop)
+	}
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	var out askOutcome
@@ -136,6 +143,8 @@ func (d *Daemon) verbAskpass(cs *connState, params json.RawMessage) (any, *verbE
 	case <-timer.C:
 		out, _ = d.attention.closeAsk(hold, approvalEndTimeout)
 	case <-gone:
+		out, _ = d.attention.closeAsk(hold, AskpassCancelled)
+	case <-asker:
 		out, _ = d.attention.closeAsk(hold, AskpassCancelled)
 	case <-d.ctx.Done():
 		out, _ = d.attention.closeAsk(hold, askEndShutdown)

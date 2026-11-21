@@ -63,6 +63,9 @@ func main() {
 		os.Exit(2)
 	}
 	if os.Args[1] == "spawn" {
+		// Its pid goes in OUT.pid, so a test can kill it alone, as ssh is
+		// killed while its askpass program waits.
+		_ = os.WriteFile(os.Args[2]+".pid", []byte(fmt.Sprint(os.Getpid())), 0o600)
 		self, _ := os.Executable()
 		cmd := exec.Command(self, "ask", os.Args[2], os.Args[3])
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
