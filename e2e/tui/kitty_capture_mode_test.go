@@ -173,7 +173,7 @@ func TestReplyPreviewInScreenCapture(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "window management mode", "Window management mode")
+	waitWindowMode(t, term)
 
 	hook := func(payload string) {
 		t.Helper()

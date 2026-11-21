@@ -56,9 +56,7 @@ func TestProtocolPaneTurnAndInboxApproval(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("normalise to window mode: %v", err)
 	}
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 
 	out, err := tuiosCLI(t, base, "start-agent", fake, "--protocol", "acp", "-s", "e2e-agent", "--name", "helper", "--prompt", "hello there")
 	if err != nil {

@@ -39,9 +39,7 @@ func TestInboxOnTheShippedLooks(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("normalise to window mode: %v", err)
 	}
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 	if s := term.Screen(); !dockOnTop(s) || railHeaderColumn(s) < 0 {
 		t.Fatalf("not the shipped looks: dock on top %v, rail at column %d\n%s",
 			dockOnTop(s), railHeaderColumn(s), term.Snapshot())

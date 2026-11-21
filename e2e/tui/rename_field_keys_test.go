@@ -41,9 +41,7 @@ func TestRenameFieldWordKeys(t *testing.T) {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
 	sendKeys(t, term, tuitest.Alt(tuitest.Esc))
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("not in window mode: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 	art := artifactDir(t)
 	for _, k := range renameWordKeys {
 		openRenameOn(t, term, "alpha beta gamma")
@@ -118,9 +116,7 @@ func TestRenameFieldSelects(t *testing.T) {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
 	sendKeys(t, term, tuitest.Alt(tuitest.Esc))
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("not in window mode: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 	art := artifactDir(t)
 	openRenameOn(t, term, "alpha beta gamma")
 	press := func(seq string, n int) {

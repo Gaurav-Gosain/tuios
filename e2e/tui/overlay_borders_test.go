@@ -165,9 +165,7 @@ func startOverlaySession(t *testing.T, appearance string, env []string) (*tuites
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("normalise to window mode: %v", err)
 	}
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 	return term, base
 }
 

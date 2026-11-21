@@ -31,7 +31,7 @@ func TestThemeEventsFollowThePicker(t *testing.T) {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
 	sendKeys(t, term, tuitest.Alt(tuitest.Esc))
-	waitScreen(t, term, "the client never settled in window management mode", "Window management mode")
+	waitWindowMode(t, term)
 	read := subscribeLines(t, base, "--types", "theme")
 
 	type themeEv struct {
