@@ -44,9 +44,18 @@ type askpassState struct {
 	sent bool
 	// hidden is a prompt the person closed here with esc while an answer
 	// to it could not get through. It stays in the Inbox, and the dialog
-	// does not open on it again.
+	// opens on it again when the person comes back to its pane.
 	hidden string
+	// holdPane and holdUntil keep the dialog shut for a moment on a pane
+	// whose prompt the person just cancelled, so a program that asks again
+	// at once, such as a retry loop around ssh, does not take the keys
+	// back before the person can move.
+	holdPane  string
+	holdUntil time.Time
 }
+
+// askpassHold is how long the dialog stays shut on a pane after esc.
+const askpassHold = 3 * time.Second
 
 // AskpassOpen reports whether the dialog owns the keyboard.
 func (m *OS) AskpassOpen() bool { return m.askpass.open != nil }
@@ -69,20 +78,30 @@ func (m *OS) askpassFor() *session.AttentionItem {
 // syncAskpass opens the dialog on a secret prompt about the pane in front of
 // the person, and closes it once its prompt is gone. It runs after every
 // message, so the dialog opens the moment the person focuses the pane.
+//
+// The dialog is about one pane. When the person moves to another pane, or
+// opens the Inbox, it closes and gives the keys back. The prompt waits in
+// the Inbox and the dialog opens again when the person comes back.
 func (m *OS) syncAskpass() {
 	st := &m.askpass
-	if st.open != nil && m.inboxIndex(st.open.ID) >= 0 {
+	front := m.askpassFor()
+	if st.open != nil && front != nil && front.ID == st.open.ID {
 		return
+	}
+	if st.hidden != "" && (front == nil || front.RequestID != st.hidden) {
+		// The person left the pane of the prompt they closed.
+		st.hidden = ""
 	}
 	clear(st.buf)
-	*st = askpassState{buf: st.buf[:0], hidden: st.hidden}
-	if m.UpgradeConfirmOpen() || m.inboxNonce() == "" {
+	*st = askpassState{buf: st.buf[:0], hidden: st.hidden, holdPane: st.holdPane, holdUntil: st.holdUntil}
+	if front == nil || front.RequestID == st.hidden || m.UpgradeConfirmOpen() || m.inboxNonce() == "" {
 		return
 	}
-	if it := m.askpassFor(); it != nil && it.RequestID != st.hidden {
-		cp := *it
-		st.open, st.openedAt = &cp, time.Now()
+	if front.Window == st.holdPane && time.Now().Before(st.holdUntil) {
+		return
 	}
+	cp := *front
+	st.open, st.openedAt = &cp, time.Now()
 }
 
 // AskpassKey handles a key while the dialog is open.
@@ -108,6 +127,7 @@ func (m *OS) AskpassKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.askpassSend(false)
 		}
 	case "esc":
+		st.holdPane, st.holdUntil = st.open.Window, time.Now().Add(askpassHold)
 		return m.askpassSend(true)
 	case "backspace":
 		_, n := utf8.DecodeLastRune(st.buf)
@@ -174,7 +194,14 @@ func (m *OS) renderAskpass() (string, overlay.Geometry) {
 	pal := m.overlayUI()
 	width := overlay.DialogFitWidth(64, m.modalRoomWidth())
 	title, field := "Enter a secret", "Answer:"
+	// A yes or no question and a user name are not secrets: the person
+	// sees what they type.
+	shown := false
 	switch sec.Kind {
+	case "confirm":
+		title, field, shown = "Answer a question", "Answer (yes or no):", true
+	case "username":
+		title, field, shown = "Enter a user name", "User name:", true
 	case "passphrase":
 		title, field = "Unlock a key", "Passphrase:"
 	case "password":
@@ -216,7 +243,11 @@ func (m *OS) renderAskpass() (string, overlay.Geometry) {
 	}
 	// The field is a band of the surface colour across the dialog, so it
 	// reads as a field when it is empty. A bar marks where text goes.
-	dots := fieldTail(strings.Repeat("•", utf8.RuneCount(st.buf)), max(width-5, 1))
+	text := strings.Repeat("•", utf8.RuneCount(st.buf))
+	if shown {
+		text = printableTitle(string(st.buf))
+	}
+	dots := fieldTail(text, max(width-5, 1))
 	body = append(body, dialogBodyLine(" "+dots+"▏", width, pal.Fg, pal.Surface),
 		dialogBodyLine("", width, pal.FgDim, pal.Canvas), dialogBodyLine(note, width, pal.FgMute, pal.Canvas))
 	hints := []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
