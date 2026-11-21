@@ -12,9 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Flags for the certificate sip manages on this user's behalf. They are
-// persistent on the root command because --auto-tls and every cert subcommand
-// have to mean the same keypair.
 var (
 	webCertDir     string
 	webCertHosts   []string
@@ -23,8 +20,6 @@ var (
 	webCertKeyPath bool
 )
 
-// certValidity turns --cert-days into a duration, with 0 meaning sip's own
-// default of a year.
 func certValidity() time.Duration {
 	if webCertDays <= 0 {
 		return 0
@@ -32,21 +27,12 @@ func certValidity() time.Duration {
 	return time.Duration(webCertDays) * 24 * time.Hour
 }
 
-// registerCertFlags adds the flags shared by --auto-tls and the cert commands.
 func registerCertFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&webCertDir, "cert-dir", "", "Where --auto-tls keeps its keypair (default: sip's directory in your user config dir)")
 	cmd.PersistentFlags().StringSliceVar(&webCertHosts, "cert-host", nil, "Extra DNS name or IP for the --auto-tls certificate (repeatable)")
 	cmd.PersistentFlags().IntVar(&webCertDays, "cert-days", 0, "Days an --auto-tls certificate is valid for (0 = 365, under 14 also keeps Chrome's WebTransport path)")
 }
 
-// newCertCmd builds the `tuios-web cert` group. It mirrors `sip cert`, because
-// the keypair is sip's and a user who read sip's documentation should not have
-// to learn a second spelling of the same thing.
-//
-// Nothing in this group asks a question. tuios-web is run from unit files and
-// containers as often as from a shell, and a command that prompts under a
-// terminal and does something else under a pipe has two behaviours to reason
-// about. Anything destructive wants --force instead, in both.
 func newCertCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cert",
@@ -152,9 +138,6 @@ func runCertInfo(w io.Writer) error {
 }
 
 func runCertNew(w io.Writer) error {
-	// Refusing rather than replacing. Whoever ran this asked for something
-	// that throws away trust every device has already granted, and the answer
-	// to an ambiguous instruction is to stop, not to guess.
 	if existing, err := sip.LoadManagedCert(webCertDir); err == nil && !webCertForce {
 		return fmt.Errorf("a certificate already exists (valid until %s). Pass --force to replace it. Every device that trusted it will ask again",
 			existing.NotAfter.Format("2006-01-02"))
@@ -189,9 +172,6 @@ func runCertRemove(w io.Writer) error {
 	return nil
 }
 
-// printCertSummary says everything needed to use the certificate and nothing
-// that helps anyone attack it. The private key's path is deliberately absent;
-// see the `tuios-web cert path --key` help.
 func printCertSummary(w io.Writer, cert *sip.ManagedCert) {
 	fmt.Fprintf(w, "  Certificate: %s\n", cert.CertFile)
 	fmt.Fprintf(w, "  Private key: sip.key beside it, readable only by you (0600)\n")

@@ -15,19 +15,12 @@ import (
 	"time"
 )
 
-// These tests drive the tmux shim the way Collie's tmux adapter
-// (github.com/AltanS/collie, bridge/mux/tmux) drives tmux: from outside any
-// pane, with -S naming the shim's socket, one listing call per snapshot,
-// replies through a paste buffer, and a control-mode client per session for
-// its events.
-
 const sep = "\x1f"
 
-// shimEnv is a tuios install with the shim's tmux link.
 type shimEnv struct {
 	*env
-	tmux string // the link named tmux
-	sock string // the shim's socket, for -S
+	tmux string
+	sock string
 }
 
 func newShimEnv(t *testing.T) *shimEnv {
@@ -45,8 +38,6 @@ func newShimEnv(t *testing.T) *shimEnv {
 	return &shimEnv{env: e, tmux: link, sock: filepath.Join(e.dirs["XDG_RUNTIME_DIR"], "tuios", "tmux", "socket")}
 }
 
-// outside is the environment of a tool outside tuios: the isolated XDG
-// directories, and none of a pane's variables.
 func (s *shimEnv) outside() []string {
 	var out []string
 	for _, kv := range s.environ() {
@@ -60,8 +51,6 @@ func (s *shimEnv) outside() []string {
 	return out
 }
 
-// tmuxRun runs one tmux call through the shim, with stdin, and returns its
-// stdout, stderr and exit status.
 func (s *shimEnv) tmuxRun(stdin string, args ...string) (string, string, int) {
 	s.t.Helper()
 	cmd := exec.Command(s.tmux, append([]string{"-S", s.sock}, args...)...)
@@ -88,7 +77,6 @@ func (s *shimEnv) mustTmux(stdin string, args ...string) string {
 	return out
 }
 
-// waitScreen waits until the pane's screen holds want.
 func (s *shimEnv) waitScreen(pane, want string) string {
 	s.t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -104,7 +92,6 @@ func (s *shimEnv) waitScreen(pane, want string) string {
 	}
 }
 
-// listing is Collie's snapshot call.
 func listing() []string {
 	j := func(f ...string) string { return strings.Join(f, sep) }
 	return []string{
@@ -149,23 +136,19 @@ func TestTmuxShimTheWayCollieDrivesIt(t *testing.T) {
 		t.Errorf("pane_current_command is empty: %q", panes[0])
 	}
 
-	// Keys, as Collie's sendKeys sends them.
 	s.mustTmux("", "send-keys", "-t", pane, "--", "e", "c", "h", "o", "Space", "k", "e", "y", "s", "-", "o", "k", "Enter")
 	s.waitScreen(pane, "\nkeys-ok")
 
-	// A reply, as Collie's typeText sends it: the text on stdin.
 	s.mustTmux("echo reply-ok;\n", "load-buffer", "-b", "collie-type", "-", ";", "paste-buffer", "-d", "-b", "collie-type", "-t", pane, "-s", "\n")
 	s.waitScreen(pane, "\nreply-ok")
 	if _, errs, code := s.tmuxRun("", "paste-buffer", "-b", "collie-type", "-t", pane); code == 0 || !strings.Contains(errs, "no buffer collie-type") {
 		t.Errorf("the buffer outlived paste-buffer -d: %d %q", code, errs)
 	}
 
-	// Scrollback reads.
 	if out := s.mustTmux("", "capture-pane", "-p", "-e", "-t", pane, "-S", "-50"); !strings.Contains(out, "reply-ok") {
 		t.Errorf("capture-pane -S -50 lacks the reply:\n%s", out)
 	}
 
-	// A tab and a space.
 	created := "#{pane_id}" + sep + "#{window_id}" + sep + "#{session_id}" + sep + "#{session_name}" + sep + "#{pane_current_path}"
 	tab := strings.Split(strings.TrimSpace(s.mustTmux("", "new-window", "-d", "-t", sessID, "-P", "-F", created, "-c", "/tmp", "-n", "tab2")), sep)
 	if len(tab) != 5 || tab[2] != sessID || tab[3] != "coll" {
@@ -184,14 +167,12 @@ func TestTmuxShimTheWayCollieDrivesIt(t *testing.T) {
 		t.Errorf("the renamed tab is not listed:\n%q", out)
 	}
 
-	// Rename and close, as Collie does.
 	s.mustTmux("", "select-pane", "-t", tab[0], "-T", "label")
 	s.mustTmux("", "kill-pane", "-t", tab[0])
 	if out := s.mustTmux("", "list-panes", "-a", "-F", "#{pane_id}"); strings.Contains(out, tab[0]) {
 		t.Errorf("kill-pane left %s:\n%s", tab[0], out)
 	}
 
-	// No real tmux ever started on the shim's socket.
 	if _, err := os.Stat(s.sock); err == nil {
 		t.Errorf("a file exists at the shim's socket path %s", s.sock)
 	}
@@ -248,11 +229,9 @@ func TestTmuxShimControlModeEvents(t *testing.T) {
 	until(`^%end \d+ 1 0$`)
 	until(`^%session-changed ` + regexp.QuoteMeta(sessID) + ` coll$`)
 
-	// Output in the pane.
 	s.mustTmux("", "send-keys", "-t", pane, "echo out", "Enter")
 	until(`^%output ` + pane + ` $`)
 
-	// A tab opens and closes.
 	win := strings.TrimSpace(s.mustTmux("", "new-window", "-d", "-t", sessID, "-P", "-F", "#{window_id}"))
 	until(`^%window-add ` + win + `$`)
 	s.mustTmux("", "rename-window", "-t", win, "logs")
@@ -260,7 +239,6 @@ func TestTmuxShimControlModeEvents(t *testing.T) {
 	s.mustTmux("", "kill-window", "-t", win)
 	until(`^%window-close ` + win + `$`)
 
-	// A command on stdin is framed, and the client is read-only.
 	fmt.Fprintln(stdin, "list-sessions -F '#{session_name}'")
 	until(`^%begin \d+ \d+ 1$`)
 	if l := until(`^coll`); l != "coll" {

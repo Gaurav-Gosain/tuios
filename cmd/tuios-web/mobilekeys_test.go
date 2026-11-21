@@ -7,13 +7,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// defaultRegistry is the keybind registry a user who has changed nothing gets.
 func defaultRegistry(t *testing.T) *config.KeybindRegistry {
 	t.Helper()
 	return config.NewKeybindRegistry(config.DefaultConfig())
 }
 
-// findKey returns the button with a given label.
 func findKey(keys []sip.MobileKey, label string) (sip.MobileKey, bool) {
 	for _, k := range keys {
 		if k.Label == label {
@@ -41,11 +39,9 @@ func TestMobileBarFollowsRebinds(t *testing.T) {
 	if newWindow.Key != "w" {
 		t.Errorf("new sends %q, want the rebound w", newWindow.Key)
 	}
-	// A key sip cannot encode drops its button instead of shipping a dead one.
 	if _, ok := findKey(keys, "close"); ok {
 		t.Error("close kept a button for f4, which sip's client cannot send")
 	}
-	// A modified second half is still one button: the leader, then Ctrl+P.
 	cmds, ok := findKey(keys, "cmds")
 	if !ok {
 		t.Fatal("no cmds button for the ctrl+p binding")

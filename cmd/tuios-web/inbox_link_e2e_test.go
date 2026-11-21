@@ -25,7 +25,6 @@ import (
 func TestNotificationLinkOpensTheInboxOnItsItem(t *testing.T) {
 	d := startWebDaemon(t)
 
-	// An approval in another session, the item the link names.
 	verbs, err := session.DialVerbClient()
 	if err != nil {
 		t.Fatalf("dial the daemon: %v", err)
@@ -54,8 +53,6 @@ func TestNotificationLinkOpensTheInboxOnItsItem(t *testing.T) {
 
 	port := serveWeb(t, "linkweb")
 
-	// The link: a cookie naming the item, and a redirect to the page. The
-	// server starts in the background, so the first tries can be refused.
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	var resp *http.Response
 	for deadline := time.Now().Add(10 * time.Second); ; {
@@ -81,7 +78,6 @@ func TestNotificationLinkOpensTheInboxOnItsItem(t *testing.T) {
 	if cookie == nil || cookie.Value != item || !cookie.HttpOnly || cookie.MaxAge != inboxCookieAge {
 		t.Fatalf("/inbox set %v, want an HttpOnly cookie naming item %s", resp.Cookies(), item)
 	}
-	// A value that is not an item id sets nothing.
 	bad, err := client.Get("http://127.0.0.1:" + port + "/inbox?item=1%3B%20Path%3D%2F")
 	if err != nil {
 		t.Fatalf("open a bad link: %v", err)
@@ -104,7 +100,6 @@ func TestNotificationLinkOpensTheInboxOnItsItem(t *testing.T) {
 	}
 }
 
-// waitForText waits for s in what the browser has been sent.
 func waitForText(r *webExitRun, s string, d time.Duration) bool {
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
@@ -116,8 +111,6 @@ func waitForText(r *webExitRun, s string, d time.Duration) bool {
 	return false
 }
 
-// saveWebArtifact keeps what the browser was sent, in $TUIOS_E2E_FRAMES when
-// it is set.
 func saveWebArtifact(t *testing.T, name, text string) {
 	t.Helper()
 	dir := os.Getenv("TUIOS_E2E_FRAMES")

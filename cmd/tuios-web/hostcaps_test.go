@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/sip"
 )
 
-// fakeSipSession is the part of a browser connection the model builder reads.
 type fakeSipSession struct {
 	pty   sip.Pty
 	slave *os.File
@@ -38,7 +37,6 @@ func TestEphemeralWebSessionGetsTheBrowsersCell(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = slave.Close() })
 
-	// 15x24 cells, a size no fallback uses.
 	sess := &fakeSipSession{pty: sip.Pty{Width: 80, Height: 24, WidthPx: 1200, HeightPx: 576}, slave: slave}
 	model := createTUIOSHandler(sess)
 	if model == nil {

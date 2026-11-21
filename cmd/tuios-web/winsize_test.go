@@ -14,9 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// sizedSession is a browser connection whose size the test sets the way
-// sip's resize handler does: the size goes on the session first, and the
-// message for it after.
 type sizedSession struct {
 	mu   sync.Mutex
 	pty  sip.Pty
@@ -77,10 +74,8 @@ func TestWebSizeIsTheTerminalsAfterAStaleStartSize(t *testing.T) {
 		done <- result{m, err}
 	}()
 
-	// The key bar takes the bottom rows: sip stores the size and sends it.
 	sess.resize(47, 41)
 	program.Send(tea.WindowSizeMsg{Width: 47, Height: 41})
-	// The start size, sent by the goroutine that lost the race, lands last.
 	program.Send(tea.WindowSizeMsg{Width: 48, Height: 46})
 	program.Quit()
 

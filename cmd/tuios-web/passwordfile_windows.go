@@ -11,17 +11,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/winacl"
 )
 
-// passwordFileAccess is the access to a password file that only its owner may
-// have: read the password, change it, or change who may do either.
 const passwordFileAccess = windows.FILE_READ_DATA | windows.FILE_WRITE_DATA | windows.FILE_APPEND_DATA |
 	windows.GENERIC_READ | windows.GENERIC_WRITE | windows.GENERIC_ALL |
 	windows.WRITE_DAC | windows.WRITE_OWNER
 
-// checkPasswordFileMode refuses a password file that another user owns, or
-// whose DACL lets anyone other than its owner, SYSTEM and Administrators read
-// or change it. Windows keeps no Unix mode, so the owner and the DACL in the
-// file's security descriptor are what is checked. They are read from the open
-// handle, so the file cannot be swapped between the check and the read.
 func checkPasswordFileMode(f *os.File, path string, _ os.FileInfo, _ int) error {
 	sd, err := winacl.FileSecurity(windows.Handle(f.Fd()))
 	if err != nil {

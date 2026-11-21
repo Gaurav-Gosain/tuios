@@ -36,8 +36,6 @@ func main() {
 	}
 }
 
-// options are the knobs, each with a default that makes the bare command do the
-// most useful thing: one seed, drawn, at the cadence that is legible.
 type options struct {
 	seed    uint64
 	seeds   int
@@ -79,8 +77,6 @@ func parse() (options, error) {
 	if seed != "" {
 		v, err := strconv.ParseUint(seed, 0, 64)
 		if err != nil {
-			// The end card prints the seed as bare hex, so that is what a reader
-			// copies back in.
 			v, err = strconv.ParseUint(seed, 16, 64)
 			if err != nil {
 				return o, fmt.Errorf("seed %q is not a number", seed)
@@ -109,7 +105,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.RemoveAll(dir) }() // best-effort cleanup of a temp dir
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	actions, err := loadReplay(o)
 	if err != nil {
@@ -123,8 +119,6 @@ func run() error {
 			return fmt.Errorf("seed %d: %w", seed, err)
 		}
 		if res.Failed {
-			// The exit code is what a script reads, and a finding is a finding
-			// whether or not anybody was watching it happen.
 			fmt.Fprint(os.Stderr, res.Repro())
 			os.Exit(2)
 		}
@@ -146,9 +140,6 @@ func loadReplay(o options) ([]fuzz.Action, error) {
 	return fuzz.ParseScript(string(raw))
 }
 
-// campaign runs one seed. The display, when it is on, is attached as the
-// engine's observer and as a decorator around the target that captures the
-// app's frame; neither can change what the engine explores.
 func campaign(o options, dir string, seed uint64, actions []fuzz.Action) (fuzz.Result, error) {
 	live := &current{}
 	newTarget := func() (fuzz.Target, error) {
@@ -229,12 +220,6 @@ func cadenceBatch(o options) int {
 	return 0
 }
 
-// floorW and floorH default the generator above the host size where every pane
-// clamps and stacks. Every finding below that floor belongs to one class, and a
-// run with no floor reports that class within two actions and never reaches
-// anything else, so the floor is what lets a campaign step over a class it has
-// already reported. Setting it to zero is how that class gets hunted on purpose.
-// The defaults match the in-package campaign's.
 const (
 	floorW = 60
 	floorH = 20
@@ -267,8 +252,6 @@ func rawMode() func() {
 	if err != nil {
 		return func() {}
 	}
-	// A run killed mid-frame must not leave the terminal in raw mode with the
-	// cursor hidden, so the restore is wired to the signals that kill it too.
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	done := make(chan struct{})
@@ -293,9 +276,6 @@ func rawMode() func() {
 	}
 }
 
-// waitForKey holds the end card up. The card is the artifact a recording ends
-// on, so it stays until somebody dismisses it rather than for a guessed number
-// of seconds.
 func waitForKey() {
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {

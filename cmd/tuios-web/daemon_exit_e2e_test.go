@@ -18,17 +18,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// The sip wire protocol, as the browser speaks it. The first byte of every
-// frame is the type; the rest is the payload.
 const (
 	wsOutput = '1'
 	wsResize = '2'
 	wsClose  = '7'
 )
 
-// webExitRun is a running daemon, a real sip server in front of it, and a
-// websocket client where the browser would be, holding everything the server has
-// written to the terminal so far.
 type webExitRun struct {
 	daemon *session.Daemon
 	name   string
@@ -39,16 +34,12 @@ type webExitRun struct {
 	done   chan struct{}
 }
 
-// startWebExitRun brings the whole stack up and waits until the client has
-// painted its first frame.
 func startWebExitRun(t *testing.T, name string) *webExitRun {
 	t.Helper()
 	d := startWebDaemon(t)
 	return dialWebRun(t, d, serveWeb(t, name), name, nil)
 }
 
-// startWebDaemon starts a daemon in this process, in an isolated runtime
-// directory.
 func startWebDaemon(t *testing.T) *session.Daemon {
 	t.Helper()
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
@@ -66,8 +57,6 @@ func startWebDaemon(t *testing.T) *session.Daemon {
 	return d
 }
 
-// serveWeb starts the web server in front of the daemon, with the routes and
-// middleware main installs, and returns its port.
 func serveWeb(t *testing.T, name string) string {
 	t.Helper()
 	webServerConfig.defaultSession = name
@@ -101,8 +90,6 @@ func serveWeb(t *testing.T, name string) string {
 	return port
 }
 
-// dialWebRun connects a browser's websocket, sending header with the
-// handshake, and waits for the first frame.
 func dialWebRun(t *testing.T, d *session.Daemon, port, name string, header http.Header) *webExitRun {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -123,8 +110,6 @@ func dialWebRun(t *testing.T, d *session.Daemon, port, name string, header http.
 	}
 	t.Cleanup(func() { _ = conn.CloseNow() })
 
-	// The browser's first frame is its size, and the server waits for it before
-	// it makes the session.
 	size, _ := json.Marshal(map[string]int{"cols": 120, "rows": 40})
 	if err := conn.Write(ctx, websocket.MessageBinary, append([]byte{wsResize}, size...)); err != nil {
 		t.Fatalf("send initial size: %v", err)
@@ -174,8 +159,6 @@ func (r *webExitRun) text() string {
 	return r.seen.String()
 }
 
-// waitForClose waits for the server to tell the browser the session is over. A
-// session that never closes is the bug: the tab keeps its last frame for ever.
 func (r *webExitRun) waitForClose(t *testing.T, d time.Duration) string {
 	t.Helper()
 	select {
@@ -187,8 +170,6 @@ func (r *webExitRun) waitForClose(t *testing.T, d time.Duration) string {
 	return printable(r.text())
 }
 
-// printable keeps the readable characters of a terminal stream so a failure
-// message can be read.
 func printable(s string) string {
 	var b strings.Builder
 	for _, r := range s {

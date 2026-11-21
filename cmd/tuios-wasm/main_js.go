@@ -29,8 +29,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
 
-// jsBridge holds the callbacks the page registered. Output and events that
-// arrive before a callback is registered are held and delivered to it.
 type jsBridge struct {
 	mu       sync.Mutex
 	output   js.Value
@@ -41,14 +39,6 @@ type jsBridge struct {
 
 var bridge = &jsBridge{}
 
-// Write sends terminal output to the page.
-//
-// Bubble Tea's renderer runs with no TTY here, and with no TTY it assumes the
-// output is cooked: that a bare LF comes out as CR LF, which is what the
-// kernel's ONLCR does on a real pty. There is no pty between it and the
-// renderer in the page, so the mapping is done here. Without it every LF the
-// renderer emits leaves the cursor in its column, and the first one at the
-// bottom row scrolls the whole screen up a line.
 func (b *jsBridge) Write(p []byte) (int, error) {
 	n := len(p)
 	p = mapNewlines(p)
@@ -64,9 +54,6 @@ func (b *jsBridge) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// mapNewlines turns every LF not already preceded by CR into CR LF, which is
-// what ONLCR does. The result is always a copy, since the caller's buffer may
-// be reused after Write returns.
 func mapNewlines(p []byte) []byte {
 	out := make([]byte, 0, len(p)+bytes.Count(p, []byte("\n")))
 	for i, c := range p {
@@ -99,19 +86,14 @@ func (b *jsBridge) emit(ev map[string]any) {
 func main() {
 	_ = os.Setenv("TERM", "xterm-256color")
 	_ = os.Setenv("COLORTERM", "truecolor")
-	// Colour detection says "no TTY, no colour" for a writer that is not a
-	// terminal unless this is set.
 	_ = os.Setenv("CLICOLOR_FORCE", "1")
 	_ = os.Setenv("HOME", webshell.Home)
 	_ = os.Setenv("USER", "guest")
 	_ = os.Setenv("SHELL", "/bin/sh")
 
-	// Every pane gets an in-memory pty running the fake shell.
 	ptyspawn.NewGuestPty = func(width, height int) (xpty.Pty, error) {
 		return webshell.NewPty(width, height), nil
 	}
-	// A pane opened in a folder, such as a worktree's, starts in the fake
-	// shell's folder.
 	ptyspawn.GuestDir = webshell.IsDir
 
 	cols, rows := 120, 36
@@ -119,7 +101,6 @@ func main() {
 		cols, rows = v.Index(0).Int(), v.Index(1).Int()
 	}
 
-	// The shipped defaults, the screen a person sees after installing tuios.
 	cfg := learn.Config()
 	app.SetInputHandler(input.HandleInput)
 	seed := config.Resolve(cfg, config.Overrides{})
@@ -142,37 +123,23 @@ func main() {
 
 	var prog *tea.Program
 	send := func(msg tea.Msg) {
-		// A js.Func must not block, and Send blocks until the program's loop
-		// takes the message.
 		go prog.Send(msg)
 	}
 	inputPipe := newInputPipe()
-	// The lesson engine: it sets each step's scene and checks the person's
-	// progress, and the page draws the lesson.* events it sends.
 	var model *learn.Model
 	tutor, err := learn.NewLessons(lessons.SurfaceWeb, learn.LessonHooks{
-		Emit: func(e learn.Event) { bridge.emit(e.ToMap()) },
-		// The lesson's own goroutines call this, never a js.Func, so it may
-		// block, and two calls reach the program in order.
+		Emit:  func(e learn.Event) { bridge.emit(e.ToMap()) },
 		Send:  func(msg tea.Msg) { prog.Send(msg) },
 		Input: func(s string) { inputPipe.write([]byte(s)) },
 		State: func() map[string]any { return model.State().ToMap() },
 	})
 	if err != nil {
-		// The lessons are checked by the lint, so this is a broken build.
 		panic(err)
 	}
 	model = learn.New(osModel, func(e learn.Event) {
 		bridge.emit(e.ToMap())
 		tutor.Observe(e)
 	}, send)
-	// The transport's own options: the page's input, the output writer, and
-	// the size, the three things sip's MakeOptions supplies for a served
-	// session. The size has to be an option: with no TTY to ask, Bubble Tea
-	// otherwise starts at 0x0 and reports that after any WindowSizeMsg sent
-	// before Run.
-	// The page's terminal gets the frames as cells diffed by the model's own
-	// screen. See app.UseScreen.
 	ownScreen := osModel.Settings.CellFramesFor(true)
 	if ownScreen {
 		osModel.UseScreen(bridge, []string{"TERM=xterm-256color", "COLORTERM=truecolor"}, colorprofile.TrueColor, termio.Output{Raw: false})
@@ -181,17 +148,9 @@ func main() {
 		tea.WithInput(inputPipe),
 		tea.WithOutput(bridge),
 		tea.WithWindowSize(cols, rows),
-		// Last, so it replaces the filter ProgramOptions set: that one only
-		// recognises *app.OS, and the program runs the tour's model. This one
-		// unwraps it, turns a quit into a note, and runs the same motion
-		// filter.
 		tea.WithFilter(learn.Filter),
 	)
 	prog = tea.NewProgram(model, opts...)
-	// Every tuios program is bound to its model. Unbound, the frame ticker
-	// never stops at idle, kickFlush does nothing, so every frame waits for
-	// the next tick, and panes keep the default render floor instead of one
-	// frame at the session's rate.
 	osModel.BindProgram(prog)
 
 	api := js.Global().Get("Object").New()
@@ -292,10 +251,6 @@ func main() {
 		}
 		return js.ValueOf(out)
 	}))
-	// stop ends the program, so a page that is done with this tuios gets its
-	// memory back. Learn mode turns every quit into a note, so nothing else
-	// ends it. os.Exit rather than Program.Kill: Kill waits for every running
-	// command and for the input reader, which never returns here.
 	api.Set("stop", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		if js.Global().Get("tuios").Equal(api) {
 			js.Global().Delete("tuios")
@@ -323,7 +278,6 @@ func stringMap(m map[string]string) map[string]any {
 	return out
 }
 
-// inputPipe is what Bubble Tea reads the page's input from.
 type inputPipe struct {
 	mu   sync.Mutex
 	cond *sync.Cond

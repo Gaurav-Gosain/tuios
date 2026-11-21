@@ -9,8 +9,6 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-// frameSink is the terminal a test program renders to. It records every write
-// and whether one landed after the teardown ran.
 type frameSink struct {
 	mu    sync.Mutex
 	torn  bool
@@ -28,7 +26,6 @@ func (f *frameSink) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-// tearDown marks the point the session's Cleanup would run.
 func (f *frameSink) tearDown() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -41,13 +38,10 @@ func (f *frameSink) counts() (wrote, late int) {
 	return f.wrote, f.late
 }
 
-// plainModel is a model with nothing in it but a view to render.
 type plainModel struct{}
 
 func (plainModel) Init() tea.Cmd { return nil }
 
-// Update returns the model itself, the way app.OS does, so the programStart
-// wrapper drops away after the first message.
 func (plainModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return plainModel{}, nil }
 
 func (plainModel) View() tea.View { return tea.NewView("teardown test") }
@@ -61,8 +55,6 @@ func (plainModel) View() tea.View { return tea.NewView("teardown test") }
 // program's finished channel before Run writes it, so this test is also where
 // the race detector sees that bug if the wait for running is ever dropped.
 func TestWebTeardownRunsAfterTheProgramHasStopped(t *testing.T) {
-	// A pipe stands in for the browser's keyboard: it blocks until the test
-	// closes it, so the input reader behaves like a real one.
 	input, keys := io.Pipe()
 	t.Cleanup(func() { _ = keys.Close() })
 

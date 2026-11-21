@@ -57,8 +57,6 @@ func TestArchiveMatchesFiles(t *testing.T) {
 		check(name, disk[name])
 	}
 
-	// "all" as the embed.FS version built it: the core, then each topic by
-	// name, trailing newlines trimmed, a blank line between.
 	parts := []string{strings.TrimRight(core, "\n")}
 	for _, name := range topics {
 		parts = append(parts, strings.TrimRight(disk[name], "\n"))
