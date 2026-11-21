@@ -414,7 +414,7 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		// The body sits inside the fence the CLI prints, so the person reads
 		// the same frame an agent reading the same mail does: what is inside
 		// was written by another program.
-		for _, l := range agentMailFenceOpen(agentMailSender(mm), width-2) {
+		for _, l := range agentMailFenceOpen(agentMailFenceSender(mm), width-2) {
 			lines = append(lines, mute.Render("  "+l))
 		}
 		gutter := agentMailGutter()

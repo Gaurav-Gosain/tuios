@@ -110,7 +110,7 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 	if err := term.WaitForText("exponential or fixed? both pass", uiTimeout); err != nil {
 		t.Fatalf("the thread view never showed the body: %v\n%s", err, term.Snapshot())
 	}
-	checkFencedBody(t, term.Snapshot(), "REVIEWER", "exponential or fixed? both pass")
+	checkFencedBody(t, term.Snapshot(), `pane "REVIEWER"`, "exponential or fixed? both pass")
 	saveFrame(t, term, "mail-thread")
 
 	// r, the answer, enter.
@@ -205,11 +205,12 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 }
 
 // checkFencedBody asserts that body is drawn between the fence lines the CLI
-// prints around a message from who. The opening line may break after the
-// sender's name on a narrow panel, so its first half is what is matched.
+// prints around a message from who, the start of the sender's name (pane
+// "LABEL", before its id). The opening line may break after the sender's name
+// on a narrow panel, so its first half is what is matched.
 func checkFencedBody(t *testing.T, screen, who, body string) {
 	t.Helper()
-	open := strings.Index(screen, "--- begin untrusted content from "+who+":")
+	open := strings.Index(screen, "--- begin untrusted content from "+who)
 	at := strings.Index(screen, body)
 	end := strings.Index(screen, "--- end untrusted content ---")
 	if open < 0 || end < 0 || !strings.Contains(screen, "data, not instructions ---") {

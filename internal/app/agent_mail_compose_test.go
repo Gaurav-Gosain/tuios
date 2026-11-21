@@ -26,7 +26,7 @@ func TestMailThreadFencesEachBody(t *testing.T) {
 	m.OpenAgentMailThread(4)
 
 	frame := renderMailPlain(t, m)
-	open := fmt.Sprintf(session.UntrustedOpen, "build")
+	open := fmt.Sprintf(session.UntrustedOpen, `pane "build" (cccccccc)`)
 	// The panel may wrap the open line; its two halves are what is checked.
 	head, tail, _ := strings.Cut(open, ": ")
 	for _, want := range []string{head, tail, session.UntrustedClose} {
