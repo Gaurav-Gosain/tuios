@@ -13,4 +13,4 @@ func askpassParent(pid int) (int, bool) { return procinfo.ParentPID(pid) }
 
 // askingProgram cannot read another process's command line here: the dialog
 // shows the program as unknown.
-func askingProgram(int) (exe, line string) { return "", "" }
+func askingProgram(int) (exe string, args []string) { return "", nil }

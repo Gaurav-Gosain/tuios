@@ -44,7 +44,7 @@ const askpassDefaultWait = 5 * time.Minute
 const (
 	askpassMaxPrompt  = 1024
 	askpassMaxSecret  = 4096
-	askpassMaxProgram = 200
+	askpassMaxProgram = 512
 )
 
 // AskpassCancelled ends a prompt the person cancelled, or one whose program
@@ -60,7 +60,8 @@ type SecretAsk struct {
 	// Prompt is the prompt as the program wrote it.
 	Prompt string `json:"prompt"`
 	// Program is the command line of the program that asks, as the kernel
-	// records it, with likely secrets masked.
+	// records it, with the passwords and tokens in it masked
+	// (askpass.MaskCommandLine).
 	Program string `json:"program,omitempty"`
 	// Known is true when the program is one that asks through an askpass
 	// program in the normal course of its work, such as ssh or git. The
@@ -116,9 +117,10 @@ func (d *Daemon) verbAskpass(cs *connState, params json.RawMessage) (any, *verbE
 	// The caller is the askpass program. The program that asks is the one
 	// that started it.
 	if ppid, ok := askpassParent(cs.peerPID); ok {
-		exe, line := askingProgram(ppid)
-		item.Secret.Program = attentionText(line, askpassMaxProgram)
-		item.Secret.Known = exe != "" && askpass.KnownProgram(exe)
+		exe, args := askingProgram(ppid)
+		item.Secret.Program = attentionText(askpass.MaskCommandLine(args), askpassMaxProgram)
+		self, _ := d.agentProtoExecutable()
+		item.Secret.Known = exe != "" && (askpass.KnownProgram(exe) || exe == self)
 	}
 	hold, err := d.attention.openAsk(item, true)
 	if err != nil {
