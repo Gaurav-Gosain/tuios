@@ -829,3 +829,38 @@ func TestRailRevealsGroupedRow(t *testing.T) {
 	}
 	railShot(t, term, "reveal-folded-main-row")
 }
+
+// TestWorktreeNewFromAPaneSwitchesTheClient holds tuios worktree new, run in a
+// pane without --detach, to a switch of the client that shows the pane. An
+// attach there would draw a second client inside the pane. Before the fix it
+// did: the outer client stayed on plain and a nested one showed the new
+// session, so two sessions counted as attached.
+func TestWorktreeNewFromAPaneSwitchesTheClient(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	repo := testutil.GitRepo(t)
+	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
+		t.Fatalf("create the plain session: %v: %s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	waitShown(t, base, "plain", "the client attached")
+
+	pane := focusedWindowOf(t, base, "plain")
+	code := filepath.Join(t.TempDir(), "code")
+	typeInPane(t, base, "plain", pane, tuiosBin+" worktree new feat/inpane --repo "+repo+"; echo $? >"+code)
+
+	waitShown(t, base, "repo-feat-inpane", "worktree new from a pane")
+	waitUntil(t, "worktree new to exit", uiTimeout, func() (bool, string) {
+		b, err := os.ReadFile(code)
+		return err == nil && strings.TrimSpace(string(b)) == "0", string(b)
+	})
+	alive(t, term, "after worktree new from a pane")
+	saveFrame(t, term, "worktree-new-from-pane")
+}

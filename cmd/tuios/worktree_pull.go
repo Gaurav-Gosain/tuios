@@ -268,7 +268,7 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 		fmt.Printf("Attach with 'tuios attach %s'.\n", made.Session)
 		return nil
 	}
-	return runDaemonSession(made.Session, false)
+	return showMadeSession("", made.Session)
 }
 
 // landBranch makes localBranch in the repository at root from a transfer:

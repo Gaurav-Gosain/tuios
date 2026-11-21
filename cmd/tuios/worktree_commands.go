@@ -124,7 +124,8 @@ names. A branch that does not exist is created from --base, or from HEAD.
 
 The session is named <repo>-<branch>, with every slash in the branch turned
 into a hyphen. --name picks another name. The session attaches at once, or
-stays headless with --detach.
+stays headless with --detach. In a tuios pane, the client that shows the pane
+switches to the session. No client is drawn inside the pane.
 
 --agent starts an agent CLI in the session instead of a shell. Name it the
 way you type it: claude, codex, gemini. tuios recognises the agents its
@@ -631,7 +632,7 @@ func runWorktreeNew(branch, repo, base, name, agent, host, prompt string, clone,
 		fmt.Printf("Attach with 'tuios attach %s'.\n", res.Session)
 		return nil
 	}
-	return runDaemonSessionOn(t.host, res.Session, false)
+	return showMadeSession(t.host, res.Session)
 }
 
 // listWorktrees calls list-worktrees on this machine and decodes the rows.

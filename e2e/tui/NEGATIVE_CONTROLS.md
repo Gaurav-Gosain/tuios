@@ -18590,6 +18590,9 @@ TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
 ## worktree rm of the session a client shows
 
 `TestWorktreeRmMovesTheAttachedClient` attaches a client to `plain`, switches it to a worktree session, and runs `tuios worktree rm` on that session. The client must go back to `plain` and stay up. A session named `aaa` sorts first, so a client that took the first other session would fail too.
+## worktree new from a pane
+
+`TestWorktreeNewFromAPaneSwitchesTheClient` types `tuios worktree new` without `--detach` into the pane of an attached client. The client must switch to the new session, and only one session may count as attached.
 
 Run on 2026-11-21 on Linux, real backend, against main at 6419a7d9f.
 
@@ -18599,4 +18602,8 @@ Run on 2026-11-21 on Linux, real backend, against main at 6419a7d9f.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestWorktreeRmMovesTheAttachedClient$' .
+| Main | `TestWorktreeNewFromAPaneSwitchesTheClient` | "worktree new from a pane: the client shows [plain repo-feat-inpane], want repo-feat-inpane". A second client ran inside the pane. | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestWorktreeNewFromAPaneSwitchesTheClient$' .
 ```

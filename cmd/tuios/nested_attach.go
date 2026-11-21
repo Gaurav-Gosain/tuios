@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -18,6 +19,25 @@ var attachDetachOthers bool
 // own session: --force, or TUIOS_ALLOW_NESTED=1.
 func nestedAllowed() bool {
 	return attachForce || session.NestedAllowedByEnv()
+}
+
+// showMadeSession shows a session a command just made. Outside tuios it
+// attaches, as before. In a tuios pane an attach would draw a second client
+// inside the pane, so it switches the client that shows the pane instead, as
+// tuios switch-session does. host is the machine of the session, "" for this
+// one.
+func showMadeSession(host, name string) error {
+	if !inPane() {
+		return runDaemonSessionOn(host, name, false)
+	}
+	if err := runSwitchSession(name, host, "", "", false, "", false); err != nil {
+		target := name
+		if host != "" {
+			target = host + ":" + name
+		}
+		return errfmt.Errorf("session %s is ready, and the client did not switch to it: %w. Run 'tuios switch-session %s'", target, err, target)
+	}
+	return nil
 }
 
 // explainNestedAttach words the refusal of an attach from inside the session
