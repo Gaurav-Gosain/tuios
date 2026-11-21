@@ -67,6 +67,10 @@ func TestHelpOverlayIsModalInWindowMode(t *testing.T) {
 			}
 
 			openHelp(t, term)
+			if !strings.Contains(term.Screen().Text(), tmuxGlossary) {
+				t.Fatalf("the help panel has no glossary line\n%s", term.Snapshot())
+			}
+			saveFrame(t, term, "help-glossary-"+tc.name)
 
 			if err := term.SendKeys(tc.key); err != nil {
 				t.Fatalf("send %q: %v", tc.key, err)

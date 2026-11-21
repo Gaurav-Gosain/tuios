@@ -12,6 +12,10 @@ import (
 
 const welcomeQuestion = "How do you want to use tuios?"
 
+// tmuxGlossary is the line the first start and the help panel show a tmux
+// user.
+const tmuxGlossary = "A window here is a tmux pane. A workspace is a tmux window."
+
 // configText is the config.toml under base.
 func configText(t *testing.T, base string) string {
 	t.Helper()
@@ -57,6 +61,11 @@ func TestWelcomeAsksOnTheFirstStart(t *testing.T) {
 	}
 	if !screenHas(term.Screen(), "Simple", "Keyboard", "tmux keys") {
 		t.Fatalf("the question is missing a choice\n%s", term.Snapshot())
+	}
+	// A tmux user reads "window" as a tab, so the first start says what
+	// the two words mean here.
+	if !strings.Contains(term.Screen().Text(), tmuxGlossary) {
+		t.Fatalf("the first start has no glossary line\n%s", term.Snapshot())
 	}
 	welcomeShot(t, term, "welcome-question")
 	if err := term.SendKeys("1"); err != nil {
