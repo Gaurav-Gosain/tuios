@@ -66,15 +66,32 @@ func reviewFanAt(t *testing.T, base, repo, name string) (string, string) {
 	return second, path
 }
 
-// sendKeys presses keys one after another, a moment apart, as a person types.
+// sendKeys presses keys one after another, each in a write of its own. A
+// lone esc waits insertGuard before the next key, so the next key is not
+// read with it as alt and that key. No other key waits: tuios reads the keys
+// in order, and a test that needs a key's effect waits for it on the screen.
 func sendKeys(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	t.Helper()
 	for _, k := range keys {
 		if err := term.SendKeys(k); err != nil {
 			t.Fatalf("press %q: %v", k, err)
 		}
-		time.Sleep(insertGuard)
+		if loneEsc(k) {
+			time.Sleep(insertGuard)
+		}
 	}
+}
+
+// loneEsc reports whether k sends a bare esc, the one key whose meaning
+// depends on what follows it.
+func loneEsc(k any) bool {
+	switch v := k.(type) {
+	case tuitest.Key:
+		return v == tuitest.Esc
+	case string:
+		return v == "\x1b"
+	}
+	return false
 }
 
 // waitScreen waits for every marker to be on screen.

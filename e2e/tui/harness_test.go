@@ -115,9 +115,9 @@ const (
 
 	// insertGuard was tuios's window after entering terminal mode in which it
 	// dropped unmodified single-character keys. tuios lost it in 815cb8a02,
-	// and the tests no longer wait it out. sendKeys still uses the span as the
-	// gap between keys, so that each key is its own read and a lone esc is
-	// not read as alt and the next key.
+	// and the tests no longer wait it out. sendKeys still waits the span after
+	// a lone esc, so the esc and the next key are not read as alt and that
+	// key.
 	insertGuard = 150 * time.Millisecond
 
 	// bootTimeout is generous because the first run also starts the daemon.

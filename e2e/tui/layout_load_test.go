@@ -70,8 +70,13 @@ func TestALoadedLayoutShowsItsShells(t *testing.T) {
 	}
 
 	// Load it: prefix, the layout prefix, load, and the only entry.
+	// The picker's row, not the name alone: the notice of the save names
+	// the layout too, and can still be on the dock.
 	sendKeys(t, term, tuitest.Ctrl('b'), "L", "l")
-	if err := term.WaitForText("trio", uiTimeout); err != nil {
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, "Load layout") && strings.Contains(text, "3 windows")
+	}, uiTimeout); err != nil {
 		t.Fatalf("the layout picker never listed the layout: %v\n%s", err, term.Snapshot())
 	}
 	sendKeys(t, term, tuitest.Enter)

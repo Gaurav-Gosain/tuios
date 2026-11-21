@@ -2144,10 +2144,12 @@ func TestQuickLookMovesInsideAFile(t *testing.T) {
 	// window read found comes with it, and N comes back.
 	sendKeys(t, term, "/", "row 5000 x", tuitest.Enter)
 	railLists(t, term, "the search did not find a row far down the file", []string{"row 5000 x", "n next"}, nil)
-	copiesFrame(t, term, "quick-look-log-search")
-	if q := quickLookLitCells(term.Screen(), "row 5000 x"); q == 0 {
-		t.Errorf("ASSERTION: the match on screen is not lit")
+	// The query line shows the words as they are typed, so the search is
+	// done when the match is lit, not when the words are on screen.
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return quickLookLitCells(s, "row 5000 x") > 0 }, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: the match on screen is not lit: %v", err)
 	}
+	copiesFrame(t, term, "quick-look-log-search")
 	sendKeys(t, term, "n")
 	railLists(t, term, "n past the last match did not say so", []string{"No more matches."}, nil)
 	// N goes back past what is held, through the machine's backward search.
