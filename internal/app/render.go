@@ -1061,6 +1061,12 @@ func (m *OS) focusedBorderColor(state color.Color) color.Color {
 	}
 	tint, tintTerminal, _, tinted := m.sessionBorderTint()
 	switch {
+	case m.windowModeIndicator("border"):
+		// appearance.window_mode_indicator = "border": the focused border
+		// wears the mode pill's window mode colour, so window mode shows
+		// where the eye already is. It outranks the session's colour, which
+		// would otherwise look the same in both modes.
+		return theme.DockColorWindow()
 	case m.Mode == TerminalMode && tinted:
 		return tintTerminal
 	case m.Mode == TerminalMode:

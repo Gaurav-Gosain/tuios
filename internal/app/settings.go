@@ -615,6 +615,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.dock_mode_icon_terminal"),
 			opt("appearance.dock_mode_icon_tiling"),
 			opt("appearance.dock_mode_pill"),
+			opt("appearance.window_mode_indicator"),
 			opt("appearance.dock_mode_split_letter"),
 			opt("appearance.dock_compact"),
 		}),

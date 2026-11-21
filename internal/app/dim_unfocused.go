@@ -53,6 +53,31 @@ func paneDim(isFocused bool, s *config.Settings) int {
 	return s.DimUnfocused
 }
 
+// windowModeTint is how far appearance.window_mode_indicator = "tint" carries
+// every pane's content toward its ground while the client is in window mode.
+// Enough to read as a different screen at a glance, little enough that the
+// text stays legible, which is what a person reads to choose a pane.
+const windowModeTint = 50
+
+// paneDimFor is paneDim with the window mode tint: in window mode, under
+// "tint", every pane is dimmed, the focused one too, so the whole screen says
+// that keys are commands and not text for a pane. The focused pane keeps its
+// border.
+func (m *OS) paneDimFor(isFocused bool) int {
+	dim := paneDim(isFocused, &m.Settings)
+	if m.windowModeIndicator("tint") {
+		dim = max(dim, windowModeTint)
+	}
+	return dim
+}
+
+// windowModeIndicator reports whether the client is in window mode and
+// appearance.window_mode_indicator is kind. A held window mode counts: it
+// takes keys as commands as well.
+func (m *OS) windowModeIndicator(kind string) bool {
+	return m.Mode == WindowManagementMode && m.Settings.WindowModeIndicator == kind
+}
+
 // dimCell fills dst with src carried toward the pane's ground and returns it,
 // or returns src unchanged when there is nothing to dim.
 //

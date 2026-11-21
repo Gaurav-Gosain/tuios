@@ -18586,3 +18586,19 @@ Run on 2026-11-19 on Linux, sim backend, against main at 61507834e. The control 
 TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -v -run '^(TestScreenshotRegionDragOpensThePreview|TestScreenshotTwoCapturesInOneSecondKeepBothFiles)$' .
 ```
+
+## The window mode indicator
+
+`TestWindowModeIndicator` prints a coloured marker in a pane at truecolor, 256 and 16 colours, then leaves terminal mode. Under `bar` the marker keeps its colour. Under `border` the focused border must take the colour of the dock's mode pill. Under `tint` the marker must dim, and come back in terminal mode.
+
+Run on 2026-11-21 on Linux, real backend, against main at 6419a7d9f, which has no such option.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Main | `TestWindowModeIndicator/*/border` | "the focused border to wear the mode pill's window mode colour" timed out, at all three depths | **caught** |
+| Main | `TestWindowModeIndicator/*/tint` | "the marker to dim in window mode" timed out, at all three depths | **caught** |
+| Main | `TestWindowModeIndicator/*/bar` | passes: bar is the look main has | not a control |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestWindowModeIndicator$' .
+```
