@@ -268,10 +268,5 @@ func appendPreviewPlace(buf []byte, at previewID, pl previewPlacement, pw, ph in
 	if pl.crop.Empty() || pw <= 0 || ph <= 0 {
 		return appendKittyPlaceRows(buf, at.img, at.placement, pl.x, pl.y, pl.cols, pl.rows, pl.skip, pl.key.rows, pw, ph)
 	}
-	src := quickLookCropRect(pl.crop, pw, ph)
-	buf = append(buf, "\x1b7"...)
-	buf = fmt.Appendf(buf, "\x1b[%d;%dH", pl.y+1, pl.x+1)
-	buf = fmt.Appendf(buf, "\x1b_Ga=p,i=%d,p=%d,c=%d,r=%d,x=%d,y=%d,w=%d,h=%d,q=2,C=1;\x1b\\",
-		at.img, at.placement, pl.cols, pl.rows, src.Min.X, src.Min.Y, src.Dx(), src.Dy())
-	return append(buf, "\x1b8"...)
+	return appendKittyPlaceSrc(buf, at.img, at.placement, pl.x, pl.y, pl.cols, pl.rows, quickLookCropRect(pl.crop, pw, ph))
 }

@@ -2473,9 +2473,18 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		// Zoomed past the pixels the page was read at, the long side of the
 		// panes' area (140 by 40 cells of 8 by 16), the page is read again
 		// sharper and placed with a source rect.
+		//
+		// The first zoom goes back to the fit at once, which stops its read,
+		// and the same zoom again asks for a read of the same size. The
+		// answer to the stopped read must not take the place of the new one.
 		const readPx = 140 * 8
+		pc, pr := page.Col+page.Cols/2, page.Row+page.Rows/2
+		// TestQuickLookSharpReadAfterAReset holds the order where the stopped
+		// read answers while the new one is out.
 		mark = len(out.String())
-		wheelAt(t, term, page.Col+page.Cols/2, page.Row+page.Rows/2, tuitest.MouseWheelUp, 8)
+		wheelAt(t, term, pc, pr, tuitest.MouseWheelUp, 8)
+		sendKeys(t, term, "0")
+		wheelAt(t, term, pc, pr, tuitest.MouseWheelUp, 8)
 		var sharp quickLookCrop
 		var w, h int
 		if err := term.WaitFor(func(tuitest.Screen) bool {
@@ -2578,6 +2587,15 @@ func quickLookZoomSteps(t *testing.T, term *tuitest.Terminal, out *lockedBuffer,
 	}
 	saveCockpitFrames(t, term, "quick-look-zoom-drag", pics[0])
 	s := out.String()[mark:]
+	// h moves the view back to the left, with the keyboard inside the file.
+	keyMark := len(out.String())
+	sendKeys(t, term, "h")
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		c := lastQuickLookCrop(out.String()[keyMark:])
+		return c.ok && c.x < moved.x && c.y == moved.y
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: h did not move the zoomed tall.png left from %+v: %v", moved, err)
+	}
 	if strings.Contains(s, "a=t,") {
 		t.Error("ASSERTION: the drag sent a picture: a pan step must only place it again")
 	}

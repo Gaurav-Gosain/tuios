@@ -1373,7 +1373,7 @@ func (m *OS) drawQuickLookPicture(c *ckCanvas, l ckLook, r *quickLookResult, w, 
 		if g, ok := m.quickLookZoomGeomAt(w, h); ok {
 			z := &m.quickLook.zoom
 			v, _, _ := g.view(z.scale, z.ox, z.oy)
-			return m.quickLookZoomPic(g, r.img, cols, rows, v)
+			return m.quickLookZoomPic(r.img, cols, rows, v)
 		}
 	}
 	return quickLookPic{ok: true, key: pixelsKey(r.img, cols, rows), x: x, y: y, cols: cols, rows: rows}
@@ -1547,14 +1547,9 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 			h, closeKey = add(nil, first(in("go_back")), "close"), ""
 		}
 		if zoom {
-			h = add(h, pair(in, "zoom_in", "zoom_out"), m.quickLookZoomLabel())
+			h = m.quickLookZoomHints(h, config.TableQuickLookInside)
 		}
 		if ql.zoom.scale > 0 {
-			h = add(h, first(in("zoom_fit")), "fit")
-			if keys := [4][]string{in("column_left"), in("line_down"), in("line_up"), in("column_right")}; len(keys[0]) > 0 && len(keys[1]) > 0 && len(keys[2]) > 0 && len(keys[3]) > 0 {
-				h = add(h, keys[0][0]+" "+keys[1][0]+" "+keys[2][0]+" "+keys[3][0], "move")
-			}
-			h = add(h, first(in("zoom_actual")), "100%")
 			h = add(h, first(in("full_size")), "full size")
 			return add(h, closeKey, "close")
 		}
@@ -1611,7 +1606,7 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 	out := func(action string) []string { return reg.Keys(config.TableQuickLook, action) }
 	h := add(nil, closeKey, "close")
 	if zoom {
-		h = add(h, pair(out, "zoom_in", "zoom_out"), m.quickLookZoomLabel())
+		h = m.quickLookZoomHints(h, config.TableQuickLook)
 	}
 	if quickLookMoves(ql.res) {
 		label := "half page"

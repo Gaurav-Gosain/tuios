@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -45,8 +46,13 @@ const (
 	// quickLookZoomReadPx is the long side of the sharpest read: the most a
 	// machine sends (previewMaxPxLimit).
 	quickLookZoomReadPx = 4096
-	// quickLookZoomUploadPx bounds the pixels of a sharper copy on the host.
-	quickLookZoomUploadPx = 16 << 20
+	// quickLookZoomUploadPx bounds the pixels of a sharper copy on the host:
+	// 4 Mpx, a few MB of PNG, over an SSH link too.
+	quickLookZoomUploadPx = 4 << 20
+	// quickLookZoomTier is the step between two sharper copies: a copy has
+	// 4, 16 ... times the fit's pixels on a side, so a zoom to 800% sends at
+	// most two copies.
+	quickLookZoomTier = 4
 )
 
 // quickLookZoom is the zoom of quick look's picture. A zero scale is the fit.
@@ -64,9 +70,10 @@ type quickLookZoom struct {
 	// sharper one is ready.
 	held   previewKey
 	heldOK bool
-	// sharpOut says a sharper read is out, sharpPx the long side it asks
-	// for, and sharpCancel stops it.
+	// sharpOut says a sharper read is out, sharpSeq which one, sharpPx the
+	// long side it asks for, and sharpCancel stops it.
 	sharpOut    bool
+	sharpSeq    uint64
 	sharpPx     int
 	sharpCancel context.CancelFunc
 }
@@ -75,7 +82,7 @@ type quickLookZoom struct {
 type quickLookSharpMsg struct {
 	target quickLookTarget
 	page   int
-	px     int
+	seq    uint64
 	img    *composer.Image
 }
 
@@ -84,7 +91,9 @@ func (ql *quickLookState) quickLookZoomReset() {
 	if ql.zoom.sharpCancel != nil {
 		ql.zoom.sharpCancel()
 	}
-	ql.zoom = quickLookZoom{}
+	// The sequence goes on, so the answer to a read stopped here matches no
+	// later read.
+	ql.zoom = quickLookZoom{sharpSeq: ql.zoom.sharpSeq}
 }
 
 // QuickLookZoomed reports whether the picture is zoomed in.
@@ -246,8 +255,9 @@ func (m *OS) quickLookZoomFit() {
 }
 
 // QuickLookZoom runs a zoom key: zoom_in, zoom_out, zoom_fit or zoom_actual,
-// around the middle of the view. It reports false where the picture cannot
-// zoom, so the key goes on.
+// around the middle of the view, or a line or column key that moves a zoomed
+// view. It reports false where the picture cannot zoom or the key does
+// nothing, so the key goes on.
 func (m *OS) QuickLookZoom(act string) bool {
 	g, ok := m.quickLookZoomGeomNow()
 	if !ok {
@@ -257,7 +267,17 @@ func (m *OS) QuickLookZoom(act string) bool {
 	s, ox, oy := ql.quickLookZoomNow(g)
 	v, _, _ := g.view(s, ox, oy)
 	ax, ay := float64(v.cols*g.cw)/2, float64(v.rows*g.ch)/2
+	// The line and column keys move a zoomed view by an eighth of it.
+	dx, dy := 0.0, 0.0
 	switch act {
+	case "line_down":
+		dy = ay / 4
+	case "line_up":
+		dy = -ay / 4
+	case "column_left":
+		dx = -ax / 4
+	case "column_right":
+		dx = ax / 4
 	case "zoom_in":
 		m.quickLookZoomTo(g, s*quickLookZoomStep, ax, ay)
 	case "zoom_out":
@@ -269,34 +289,20 @@ func (m *OS) QuickLookZoom(act string) bool {
 	default:
 		return false
 	}
+	if dx != 0 || dy != 0 {
+		if ql.zoom.scale <= 0 {
+			return false
+		}
+		z := &ql.zoom
+		_, z.ox, z.oy = g.view(s, ox+dx/s, oy+dy/s)
+	}
 	return true
 }
 
 // QuickLookPan moves the zoomed view by an eighth of it for a key that moves
 // a line or a column. It reports false when the picture is not zoomed.
 func (m *OS) QuickLookPan(act string) bool {
-	ql := &m.quickLook
-	g, ok := m.quickLookZoomGeomNow()
-	if !ok || ql.zoom.scale <= 0 {
-		return false
-	}
-	v, _, _ := g.view(ql.zoom.scale, ql.zoom.ox, ql.zoom.oy)
-	dx, dy := float64(v.cols*g.cw)/8, float64(v.rows*g.ch)/8
-	switch act {
-	case "line_down":
-		dx = 0
-	case "line_up":
-		dx, dy = 0, -dy
-	case "column_left":
-		dx, dy = -dx, 0
-	case "column_right":
-		dy = 0
-	default:
-		return false
-	}
-	z := &ql.zoom
-	_, z.ox, z.oy = g.view(z.scale, z.ox+dx/z.scale, z.oy+dy/z.scale)
-	return true
+	return m.quickLook.zoom.scale > 0 && m.QuickLookZoom(act)
 }
 
 // quickLookOnPicture reports whether screen cell x, y is on the picture, and
@@ -363,18 +369,27 @@ func (m *OS) quickLookPanDrag(x, y int) bool {
 	return true
 }
 
-// quickLookZoomLabel is the zoom in the footer: "zoom" at the fit, else the
-// scale, as "zoom 250%".
-func (m *OS) quickLookZoomLabel() string {
+// quickLookZoomHints adds the zoom keys to the footer with the scale, as
+// "zoom 250%", and once zoomed the key that fits.
+func (m *OS) quickLookZoomHints(h []overlay.Hint, t config.Table) []overlay.Hint {
+	reg := m.KeybindRegistry
+	in, out := reg.Keys(t, "zoom_in"), reg.Keys(t, "zoom_out")
+	if len(in) == 0 || len(out) == 0 {
+		return h
+	}
 	s := m.quickLook.zoom.scale
 	if s <= 0 {
-		return "zoom"
+		return append(h, overlay.Hint{Key: in[0] + " " + out[0], Label: "zoom"})
 	}
-	return "zoom " + strconv.Itoa(int(math.Round(s*100))) + "%"
+	h = append(h, overlay.Hint{Key: in[0] + " " + out[0], Label: "zoom " + strconv.Itoa(int(math.Round(s*100))) + "%"})
+	if k := reg.Keys(t, "zoom_fit"); len(k) > 0 {
+		h = append(h, overlay.Hint{Key: k[0], Label: "fit"})
+	}
+	return h
 }
 
 // quickLookZoomKey is the picture the zoom shows best: the fit picture at a
-// power of two of its size, up to the read's own pixels.
+// power of quickLookZoomTier of its size, up to the read's own pixels.
 func quickLookZoomKey(g quickLookZoomGeom, s float64, img *composer.Image, cols, rows int) previewKey {
 	k := pixelsKey(img, cols, rows)
 	// The view spans s*bw screen pixels across the whole picture, and the
@@ -383,7 +398,7 @@ func quickLookZoomKey(g quickLookZoomGeom, s float64, img *composer.Image, cols,
 	need := min(s*g.bw, float64(img.Width))
 	z := 1
 	for fitW*float64(z) < need*0.99 && fitW*float64(z) < float64(img.Width) {
-		z *= 2
+		z *= quickLookZoomTier
 	}
 	if z > 1 {
 		k.zoom = z
@@ -391,31 +406,15 @@ func quickLookZoomKey(g quickLookZoomGeom, s float64, img *composer.Image, cols,
 	return k
 }
 
-// quickLookZoomPic is the picture placed for the zoomed view v: the one the
-// zoom wants when it is ready, else the last one placed, else the fit
-// picture.
-func (m *OS) quickLookZoomPic(g quickLookZoomGeom, img *composer.Image, cols, rows int, v quickLookZoomView) quickLookPic {
-	ql := &m.quickLook
-	z := &ql.zoom
-	p := m.replyPreviewer()
-	want := quickLookZoomKey(g, z.scale, img, cols, rows)
-	ready := func(k previewKey) bool {
-		pic := p.pics[k]
-		return pic != nil && len(pic.png) > 0
-	}
-	p.mu.Lock()
-	k := want
-	switch {
-	case ready(want):
-	case z.heldOK && ready(z.held):
+// quickLookZoomPic is the picture placed for the zoomed view v: the last
+// sharper copy that was ready (see quickLookZoomPrepare), else the fit
+// picture. The frame only reads the choice.
+func (m *OS) quickLookZoomPic(img *composer.Image, cols, rows int, v quickLookZoomView) quickLookPic {
+	z := &m.quickLook.zoom
+	k := pixelsKey(img, cols, rows)
+	if z.heldOK {
 		k = z.held
-	default:
-		k = pixelsKey(img, cols, rows)
 	}
-	if ready(k) {
-		z.held, z.heldOK = k, true
-	}
-	p.mu.Unlock()
 	return quickLookPic{ok: true, key: k, x: v.x, y: v.y, cols: v.cols, rows: v.rows, crop: v.crop}
 }
 
@@ -433,8 +432,16 @@ func (m *OS) quickLookZoomPrepare(innerW, bodyH int) tea.Cmd {
 	}
 	r := ql.res
 	_, _, cols, rows := m.quickLookPicBox(r.img, innerW, bodyH)
-	cmd := m.quickLookPrepareKey(r.img, quickLookZoomKey(g, ql.zoom.scale, r.img, cols, rows))
-	return tea.Batch(cmd, m.quickLookSharpRead(g))
+	want := quickLookZoomKey(g, ql.zoom.scale, r.img, cols, rows)
+	// The copy the zoom wants takes over once it is ready. Until then the
+	// last one placed stays: it is on screen, so the previewer keeps it.
+	p := m.replyPreviewer()
+	p.mu.Lock()
+	if pic := p.pics[want]; pic != nil && len(pic.png) > 0 {
+		ql.zoom.held, ql.zoom.heldOK = want, true
+	}
+	p.mu.Unlock()
+	return tea.Batch(m.quickLookPrepareKey(r.img, want), m.quickLookSharpRead(g))
 }
 
 // quickLookSharpRead reads an image or a PDF page again at the size the zoom
@@ -469,11 +476,13 @@ func (m *OS) quickLookSharpRead(g quickLookZoomGeom) tea.Cmd {
 	}
 	ascii := overlay.UseASCII()
 	ctx, cancel := context.WithTimeout(context.Background(), quickLookTimeout)
+	z.sharpSeq++
 	z.sharpOut, z.sharpPx, z.sharpCancel = true, need, cancel
+	seq := z.sharpSeq
 	return func() tea.Msg {
 		defer cancel()
 		raw, err := quickLookWantReply(ctx, call, t, want)
-		msg := quickLookSharpMsg{target: t, page: page, px: need}
+		msg := quickLookSharpMsg{target: t, page: page, seq: seq}
 		if err == nil {
 			msg.img = quickLookDecode(t, raw, nil, ascii).img
 		}
@@ -486,7 +495,9 @@ func (m *OS) quickLookSharpRead(g quickLookZoomGeom) tea.Cmd {
 func (m *OS) applyQuickLookSharp(msg quickLookSharpMsg) {
 	ql := &m.quickLook
 	z := &ql.zoom
-	if !z.sharpOut || msg.px != z.sharpPx {
+	// Only the answer to the read out now: one a reset stopped matches no
+	// later read, so it cannot take that read's place.
+	if !z.sharpOut || msg.seq != z.sharpSeq {
 		return
 	}
 	z.sharpOut, z.sharpCancel = false, nil
