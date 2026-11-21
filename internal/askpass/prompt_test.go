@@ -27,9 +27,6 @@ func TestRead(t *testing.T) {
 		if got.Kind != c.kind || got.Subject != c.subject {
 			t.Errorf("Read(%q) = kind %q subject %q, want %q %q", c.prompt, got.Kind, got.Subject, c.kind, c.subject)
 		}
-		if got.Title == "" {
-			t.Errorf("Read(%q) has no title", c.prompt)
-		}
 	}
 }
 

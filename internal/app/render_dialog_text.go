@@ -12,6 +12,13 @@ import (
 // dialog, so a change to how one dialog draws cannot change another by
 // accident.
 
+// dialogTitleLine is a dialog's bold first line: text cut to limit cells,
+// indented one cell and filled to width with bg.
+func dialogTitleLine(text string, limit, width int, ink, bg color.Color) string {
+	return overlay.Fill(overlay.Style(bg).Render(" ")+
+		overlay.Style(bg).Foreground(ink).Bold(true).Render(overlay.Truncate(text, limit)), width, bg)
+}
+
 // dialogBodyLine is one indented, truncated, canvas-filled body line.
 func dialogBodyLine(text string, width int, ink, bg color.Color) string {
 	return overlay.Fill(overlay.Style(bg).Render(" ")+

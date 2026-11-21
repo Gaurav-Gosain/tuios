@@ -114,7 +114,7 @@ func main() {
 			_ = json.Unmarshal(raw, &res)
 			nonce = res.Nonce
 		}
-		_, code := c.call("askpass-answer", map[string]any{"request_id": requestID, "human_nonce": nonce, "secret": []byte("stolen")})
+		_, code := c.call("answer-ask", map[string]any{"request_id": requestID, "human_nonce": nonce, "secret": []byte("stolen")})
 		fmt.Fprintln(out, "STEAL="+code)
 	}
 }

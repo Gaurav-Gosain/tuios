@@ -117,7 +117,7 @@ func noCanaryIn(t *testing.T, base string) {
 // file under the test's base dir (the daemon's state, the Inbox file and the
 // logs), in no event of the session's stream and on no frame.
 //
-// Negative control: with both nonce checks in verbAskpassAnswer cut
+// Negative control: with both nonce checks in verbAnswerAsk cut
 // (humanNonceHeld and humanNonceFor), the pane's own call answers the prompt
 // before the person sees it, and the wait for the dialog fails.
 func TestAskpassAsksThePersonForASecret(t *testing.T) {

@@ -43,8 +43,7 @@ func (m *OS) renderSessionClose() (string, overlay.Geometry, []overlayRowHit) {
 	}
 
 	body := []string{
-		overlay.Fill(overlay.Style(bg).Render(" ")+
-			overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate(m.sessionCloseQuestion(), max(width-1, 1))), width, bg),
+		dialogTitleLine(m.sessionCloseQuestion(), max(width-1, 1), width, pal.Fg, bg),
 		overlay.Fill(overlay.Style(bg).Render(" ")+
 			overlay.Style(bg).Foreground(tollColor).Render(overlay.Truncate(tollLine, max(width-1, 1))), width, bg),
 		overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg),
