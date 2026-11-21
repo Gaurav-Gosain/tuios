@@ -6038,7 +6038,7 @@ Block until a condition matches, or fail with the timeout code.
 |---|---|---|
 | `condition` | string | The condition that matched. |
 | `window` | string | The window that matched, for a condition about a window. |
-| `exit_code` | int | For window-exit and command-finished: the exit status, -1 when a signal ended the process. Omitted when it is not known, such as for a window on another machine. |
+| `exit_code` | int | For window-exit and command-finished: the exit status, -1 when a signal ended the process. Omitted when it is not known, such as for a window on another machine, or on Linux before 6.15 for a program whose parent died before a live upgrade's keeper brought the daemon back. |
 | `signal` | int | For window-exit: the signal that ended the process. Omitted when it exited on its own. |
 | `new` | bool | For window-output: true when the wait matched only output written after it started. |
 

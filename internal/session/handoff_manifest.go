@@ -57,6 +57,24 @@ type handoffSession struct {
 	// WindowStartDirs is each window's start folder, by window id.
 	WindowStartDirs map[string]string `json:"window_start_dirs,omitempty"`
 	LastUsed        int64             `json:"last_used,omitempty"`
+	// Created and LastActive are the session's own, in Unix nanoseconds.
+	Created    int64 `json:"created,omitempty"`
+	LastActive int64 `json:"last_active,omitempty"`
+	// ReturnTo and WorkspaceTrail are where the session goes when the
+	// workspace on screen loses its last pane. See empty_workspace.go.
+	ReturnTo       map[int]int `json:"return_to,omitempty"`
+	WorkspaceTrail []int       `json:"workspace_trail,omitempty"`
+	// ReportColors are the colours the last client pushed for the panes'
+	// emulators to answer OSC 10, 11 and 4 with. See report_colors.go.
+	ReportColors handoffReportColors `json:"report_colors,omitzero"`
+}
+
+// handoffReportColors is a session's report colours, as the client pushed
+// them.
+type handoffReportColors struct {
+	Bg      string `json:"bg,omitempty"`
+	Fg      string `json:"fg,omitempty"`
+	Palette string `json:"palette,omitempty"`
 }
 
 // handoffPane is one pane: the descriptor of its master, which the exec keeps,
@@ -78,6 +96,9 @@ type handoffPane struct {
 	ExitCode   int
 	ExitSignal int
 	KeepOpen   bool
+	// CloseOnExit is a pane whose window closes when its process exits. See
+	// PTY.closeOnExit.
+	CloseOnExit bool
 	// State is the pane's emulator, packed, with handoffHistoryRows of its
 	// history and the character cluster it left open.
 	State *TerminalState
@@ -111,6 +132,13 @@ type handoffDaemon struct {
 	// Only this daemon knows them, and a pane that closes after the
 	// upgrade must still let its card go there (task_project.go).
 	FarHolds []handoffFarHold `json:"far_holds,omitempty"`
+
+	// What the daemon keeps about windows outside the sessions, each by
+	// window id. See handoff_window_records.go.
+	PluginPanes   map[string]handoffPluginPane `json:"plugin_panes,omitempty"`
+	ProtocolPanes map[string]string            `json:"protocol_panes,omitempty"`
+	PaneCreators  map[string]string            `json:"pane_creators,omitempty"`
+	MovedWindows  map[string]handoffMovedFrom  `json:"moved_windows,omitempty"`
 }
 
 // handoffFarHold is one card a local window holds on another machine.
@@ -119,6 +147,18 @@ type handoffFarHold struct {
 	Host    string `json:"host"`
 	Session string `json:"session"`
 	ID      string `json:"id"`
+}
+
+// handoffPluginPane is a pluginPane.
+type handoffPluginPane struct {
+	Plugin     string `json:"plugin"`
+	Entrypoint string `json:"entrypoint"`
+}
+
+// handoffMovedFrom is a movedFrom.
+type handoffMovedFrom struct {
+	IDs   []string `json:"ids"`
+	Names []string `json:"names"`
 }
 
 // handoffManifest is a manifest as read.
