@@ -235,6 +235,17 @@ jobs:
           else
             pack > "$RUNNER_TEMP/shards.txt"
           fi
+          # Every lane computes its list in a shardplan run of its own, so the
+          # lanes hold each selected test once only if every run packs the
+          # same plan. Check that here, before a shard starts.
+          if [ "$mode" != none ]; then
+            grep -h '^Test' "$RUNNER_TEMP/selected.txt" | sort -u > "$RUNNER_TEMP/want.txt"
+            cat "$RUNNER_TEMP"/suite/names-*.txt | sort > "$RUNNER_TEMP/packed.txt"
+            if ! cmp -s "$RUNNER_TEMP/want.txt" "$RUNNER_TEMP/packed.txt"; then
+              echo "::error title=Shard plan::The lanes do not hold each selected test once. In two lanes or more: $(uniq -d "$RUNNER_TEMP/packed.txt" | wc -l). In no lane: $(comm -23 "$RUNNER_TEMP/want.txt" <(sort -u "$RUNNER_TEMP/packed.txt") | wc -l)."
+              exit 1
+            fi
+          fi
           echo "::notice title=e2e-tui selection::mode=$mode"
           mapfile -t shards < "$RUNNER_TEMP/shards.txt"
           list=$(IFS=,; echo "${shards[*]:-}")
