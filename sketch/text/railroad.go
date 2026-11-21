@@ -9,13 +9,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// A railroad diagram is drawn as the SVG draws it, in cells: each rule's name, then its track
-// from a start mark to an end mark. A terminal is a rounded box, a nonterminal a square one and
-// a special a dashed one. A choice stacks its branches between two rails, an optional part has a
-// track over it that passes it by, and a repetition a track under it that runs back, with its
-// count. A sequence too wide for the columns folds into rows, as the SVG does for a narrow
-// width. A rule that still does not fit is written out in EBNF.
-
 const (
 	rrTerminal = iota
 	rrNonTerminal
@@ -27,8 +20,6 @@ const (
 	rrLoop
 )
 
-// rrBox is a laid-out element in cells. The track enters at the left edge and leaves at the
-// right edge on its baseline, with up rows above it and down rows below it.
 type rrBox struct {
 	kind         int
 	w, up, down  int
@@ -39,7 +30,6 @@ type rrBox struct {
 	branchOffset []int
 }
 
-// rrCount is the count a repetition shows, as pele writes it.
 func rrCount(min, max float64) string {
 	if math.IsInf(max, 1) && min <= 1 {
 		return ""
@@ -61,8 +51,6 @@ func rrCount(min, max float64) string {
 	return str(min) + "–" + str(max) + "×"
 }
 
-// foldTree builds a value for every node of a tree from the values of its children, without
-// recursion, so that a deep tree does not exhaust the stack.
 func foldTree[R any](root *types.GeoRailNode, build func(*types.GeoRailNode, []R) R) R {
 	nodes := []*types.GeoRailNode{root}
 	done := [][]R{nil}
@@ -86,7 +74,6 @@ func rrBypassOf(kid *rrBox) *rrBox {
 	return &rrBox{kind: rrBypass, w: kid.w + 4, up: kid.up + 1, down: kid.down, kids: []*rrBox{kid}, reach: kid.up + 1}
 }
 
-// rrMeasure lays a rule out to fit room columns where a sequence can fold.
 func rrMeasure(root *types.GeoRailNode, room int) *rrBox {
 	budgets := map[*types.GeoRailNode]int{}
 	type item struct {
@@ -197,7 +184,6 @@ func rrMeasure(root *types.GeoRailNode, room int) *rrBox {
 			}
 			return rrBypassOf(kids[0])
 		}
-		// A repetition.
 		if len(kids) == 0 {
 			return &rrBox{kind: rrSequence, w: 2}
 		}
@@ -217,7 +203,6 @@ func rrMeasure(root *types.GeoRailNode, room int) *rrBox {
 	})
 }
 
-// rrPlace draws a box with its left edge at x and its baseline at y.
 func rrPlace(c *canvas, root *rrBox, x0, y0 int) {
 	type item struct {
 		box  *rrBox
@@ -292,8 +277,6 @@ func rrPlace(c *canvas, root *rrBox, x0, y0 int) {
 					c.hline(x, kx, y, light, roleLine)
 					c.hline(kx+kid.w-1, right, y, light, roleLine)
 				} else {
-					// From the branch above, not from the top: the strokes are the same, and
-					// many branches cost linear time.
 					c.vline(x+1, prev, ky, light, roleLine)
 					c.hline(x+1, kx, ky, light, roleLine)
 					c.hline(kx+kid.w-1, right-1, ky, light, roleLine)
@@ -330,8 +313,6 @@ func rrPlace(c *canvas, root *rrBox, x0, y0 int) {
 	}
 }
 
-// rrText writes a rule's tree in EBNF, for a rule too wide to draw. A choice inside another
-// node is in parentheses.
 func rrText(root *types.GeoRailNode) (string, bool) {
 	type out struct {
 		s      string

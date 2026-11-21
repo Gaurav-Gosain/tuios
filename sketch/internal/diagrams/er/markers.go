@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/er/markers.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package er
 
 import "tuios.dev/sketch/internal/svg"
@@ -14,8 +12,6 @@ const (
 	RING        = 3.5
 )
 
-// markerAt is at() of erMarker: the point `back` along the line from (x, y) and `side` across it.
-//
 //go:noinline
 func markerAt(x, y, dx, dy, back, side float64) string {
 	return svg.Num(x-float64(dx*back)-float64(dy*side)) + "," + svg.Num(y-float64(dy*back)+float64(dx*side))
@@ -31,8 +27,6 @@ func markerRing(x, y, dx, dy, back float64) string {
 
 func markerPath(d string) string { return `<path class="pele-marker" d="` + d + `"/>` }
 
-// Draws a crow's foot cardinality marker over the end of a line that meets a box at (x, y)
-// while travelling along the unit vector (dx, dy). Types are Mermaid's lower-cased cardinalities.
 func erMarker(typ string, x, y, dx, dy float64) string {
 	foot := func() string {
 		return "M" + markerAt(x, y, dx, dy, 0, -FOOT) + "L" + markerAt(x, y, dx, dy, FOOT_LENGTH, 0) + "L" + markerAt(x, y, dx, dy, 0, FOOT)

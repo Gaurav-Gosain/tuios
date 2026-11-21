@@ -7,10 +7,6 @@ import (
 	"strings"
 )
 
-// HTML backend: one self-contained file with inline styles. Selectable
-// text, links preserved, opens on any machine with a monospace fallback and
-// no fonts installed. The frame carries over as CSS on two nested divs.
-
 // RenderHTML renders the grid and frame to a standalone HTML document.
 func RenderHTML(g *Grid, f *Frame) []byte {
 	var b strings.Builder
@@ -49,8 +45,6 @@ func RenderHTML(g *Grid, f *Frame) []byte {
 
 	images := len(g.Images) > 0
 	if images {
-		// The images are placed on the cell grid in ch and em, so the box they
-		// sit in carries the same font as the text.
 		fmt.Fprintf(&b, `<div style="position:relative;display:inline-block;vertical-align:top;overflow:hidden;font-family:%s;font-size:14px;background:%s">`+"\n",
 			family, Hex(g.BG))
 		writeHTMLImages(&b, g, true)
@@ -94,7 +88,6 @@ func writeHTMLTitleBar(b *strings.Builder, g *Grid, f *Frame) {
 	if f.Title != "" {
 		fmt.Fprintf(b, `<span style="flex:1;text-align:center;color:%s;font-family:%s;font-size:13px">%s</span>`,
 			Hex(mix(g.FG, g.BG, 0.3)), f.FontFamily, html.EscapeString(f.Title))
-		// Balance the controls so the title centers on the card.
 		b.WriteString(`<span style="width:47px"></span>`)
 	}
 	b.WriteString("</div>\n")
@@ -108,7 +101,6 @@ func writeHTMLRow(b *strings.Builder, g *Grid, y int) {
 		if c.Width == 0 {
 			continue
 		}
-		// Merge forward while the style holds.
 		start := c
 		var text strings.Builder
 		text.WriteString(displayCluster(c))
@@ -179,14 +171,6 @@ func writeHTMLSpan(b *strings.Builder, g *Grid, c Cell, text string) {
 	fmt.Fprintf(b, `%s<span style="%s">%s</span>%s`, open, strings.Join(css, ";"), escaped, close)
 }
 
-// writeHTMLImages writes the images of one layer as absolutely placed <img>
-// elements with PNG data URIs. A row is 1.3em, the line height of the <pre>,
-// and a column is 1ch.
-//
-// An image below the text sits under the whole <pre>, so a cell with a
-// background of its own covers it. PNG and SVG draw such an image over the
-// cell backgrounds, as kitty does. HTML has no layer between a span's
-// background and its text.
 func writeHTMLImages(b *strings.Builder, g *Grid, below bool) {
 	z := 2
 	if below {

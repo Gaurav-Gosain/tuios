@@ -19,8 +19,8 @@ func TestFlowchartKeepsItsDirectionWhenItFits(t *testing.T) {
 	for _, tc := range []struct {
 		name, src string
 		cols      int
-		rows      int    // the most rows the drawing may take
-		want      string // a text the drawing shows
+		rows      int
+		want      string
 	}{
 		{"seven in a row", "flowchart LR\n  A[Plan] --> B[Build] --> C[Test] --> D[Review] --> E[Ship] --> F[Watch] --> G[Learn]", 90, 3, "Learn"},
 		{"six labels", "flowchart LR\n  A[Read issue] --> B[Write test] --> C[Fix bug] --> D[Run suite] --> E[Open PR] --> F[Merge]", 90, 3, "Merge"},
@@ -50,7 +50,6 @@ func TestFlowchartKeepsItsDirectionWhenItFits(t *testing.T) {
 	})
 }
 
-// drawSource parses src and draws it at cols columns.
 func drawSource(t *testing.T, src string, cols int) []string {
 	t.Helper()
 	d, err := sketch.Parse(src, sketch.ParseOptions{})

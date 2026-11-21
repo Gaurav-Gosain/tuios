@@ -71,7 +71,6 @@ func runErrorToEmptySuccess(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-// mentions reports whether body refers to the error that the if checks.
 func mentions(info *types.Info, body ast.Node, errExpr ast.Expr) bool {
 	var obj types.Object
 	if id, ok := ast.Unparen(errExpr).(*ast.Ident); ok {
@@ -98,7 +97,6 @@ func mentions(info *types.Info, body ast.Node, errExpr ast.Expr) bool {
 	return found
 }
 
-// allZero reports whether every expression is a zero literal.
 func allZero(info *types.Info, results []ast.Expr) bool {
 	for _, e := range results {
 		if !isZero(info, e) {

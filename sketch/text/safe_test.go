@@ -87,7 +87,6 @@ func TestNoTerminalControls(t *testing.T) {
 				}
 				out := strings.Join(lines, "\n")
 				if color {
-					// The only escapes are the SGR colours Draw writes itself.
 					out = reSGR.ReplaceAllString(out, "")
 				}
 				for _, r := range out {
@@ -108,11 +107,9 @@ func TestNoTerminalControls(t *testing.T) {
 func TestCellCap(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("flowchart TD\n")
-	// A wide rank: 400 nodes under one root, with long labels.
 	for i := range 400 {
 		b.WriteString("  R --> W" + itoa(i) + "[\"" + strings.Repeat("w", 40) + "\"]\n")
 	}
-	// A deep chain below it.
 	for i := range 1500 {
 		b.WriteString("  C" + itoa(i) + " --> C" + itoa(i+1) + "\n")
 	}

@@ -12,8 +12,6 @@ import (
 	"strings"
 )
 
-// table is the data as tplot sees it: the labels of the rows, from the first
-// text column, and a series per number column.
 type table struct {
 	labels []string
 	series []series
@@ -21,11 +19,10 @@ type table struct {
 
 type series struct {
 	name   string
-	named  bool      // the name came from the data, not from the column number
-	values []float64 // NaN where a cell is empty
+	named  bool
+	values []float64
 }
 
-// guess picks a chart for the shape of the data.
 func (t *table) guess() string {
 	n := len(t.series[0].values)
 	switch {
@@ -37,7 +34,6 @@ func (t *table) guess() string {
 	return "line"
 }
 
-// pick keeps the series that list names, by name or by number from 1.
 func (t *table) pick(list string) error {
 	var out []series
 	for want := range strings.SplitSeq(list, ",") {
@@ -62,8 +58,6 @@ func (t *table) pick(list string) error {
 	return nil
 }
 
-// readTable reads CSV, TSV, whitespace-separated numbers or JSON. format
-// names one, or is empty for a guess from the name and the data.
 func readTable(data []byte, format, name string, noHeader bool) (*table, error) {
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	trimmed := bytes.TrimSpace(data)
@@ -140,8 +134,6 @@ func firstLine(b []byte) []byte {
 	return b
 }
 
-// number parses a cell: a number, with spaces, a thousands "_" or a trailing
-// % allowed. ok is false for text. An empty cell is a missing value.
 func number(s string) (v float64, ok bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -160,8 +152,6 @@ func isNumber(s string) bool {
 	return ok && strings.TrimSpace(s) != ""
 }
 
-// hasHeader says whether the first record names the columns: one of its
-// cells is text where the rest of that column is numbers.
 func hasHeader(records [][]string) bool {
 	if len(records) < 2 {
 		return false
@@ -188,8 +178,6 @@ func hasHeader(records [][]string) bool {
 	return false
 }
 
-// build turns records into a table: the first text column gives the labels,
-// and every column of numbers is a series.
 func build(records [][]string, header bool) (*table, error) {
 	var names []string
 	if header && len(records) > 0 {
@@ -245,14 +233,6 @@ func build(records [][]string, header bool) (*table, error) {
 	return t, nil
 }
 
-// jsonRecords turns JSON into records. header says the first record names
-// the columns.
-//
-//	[1, 2, 3]                     one series
-//	{"a": 1, "b": 2}              labels and a series
-//	{"rx": [1, 2], "tx": [3, 4]}  a series per key
-//	[[1, 2], [3, 4]]              rows, as CSV
-//	[{"name": "a", "v": 1}, ...]  rows, the keys as names
 func jsonRecords(data []byte) ([][]string, bool, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
@@ -344,7 +324,6 @@ func jsonRecords(data []byte) ([][]string, bool, error) {
 	return [][]string{{scalar(v)}}, false, nil
 }
 
-// object is a JSON object with its keys in order.
 type object []struct {
 	key string
 	val any
@@ -359,10 +338,8 @@ func (o object) get(k string) any {
 	return nil
 }
 
-// maxDepth bounds the nesting decode follows.
 const maxDepth = 64
 
-// decode reads one JSON value, keeping the order of object keys.
 func decode(dec *json.Decoder, depth int) (any, error) {
 	if depth > maxDepth {
 		return nil, errors.New("the JSON is nested too deeply")
@@ -413,8 +390,6 @@ func cells(r []any) []string {
 	return out
 }
 
-// scalar writes a JSON value as a cell. Null, true, false, arrays and
-// objects are empty: they are not numbers and not labels.
 func scalar(v any) string {
 	switch v := v.(type) {
 	case json.Number:

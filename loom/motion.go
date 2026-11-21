@@ -12,24 +12,6 @@ import (
 	"tuios.dev/tml"
 )
 
-// Motion: the enter and exit effects, the skeleton placeholder, stagger and
-// the toast's ttl.
-//
-// The effects are small versions, written for loom, of ideas from bloom
-// (github.com/lrstanley/bloom, MIT, by Liam Stanley): its Fade, Slide, Iris,
-// Decode and Shimmer cell effects, its Skeleton placeholder, and stagger.
-// loom takes no code from it. An effect here is a pure function of the
-// box's own cells, what is under them and the progress, so it draws the same
-// at every depth: colours blend at truecolor and 256 colours, and step
-// through faint at 16 colours and in ASCII.
-//
-// Nothing here runs a timer. NextFrame tells the host when the surface
-// wants Render again: a frame gap while an effect plays or a skeleton
-// shimmers, the end of a toast's ttl, or never. With Options.Motion off an
-// effect draws its last frame at once, a skeleton stands still and no exit
-// plays; a toast still goes away at the end of its ttl.
-
-// effect is one enter or exit effect.
 type effect uint8
 
 const (
@@ -43,7 +25,6 @@ const (
 	fxDecode
 )
 
-// effectOf returns the effect a TML enter or exit value names.
 func effectOf(name string) effect {
 	switch name {
 	case "fade":
@@ -64,8 +45,6 @@ func effectOf(name string) effect {
 	return fxNone
 }
 
-// enterTime is how long each effect plays when a node shows. An exit
-// plays in three quarters of it: leaving is quicker than arriving.
 var enterTime = [...]time.Duration{
 	fxFade: 200 * time.Millisecond, fxSlideUp: 240 * time.Millisecond, fxSlideDown: 240 * time.Millisecond,
 	fxSlideLeft: 240 * time.Millisecond, fxSlideRight: 240 * time.Millisecond,
@@ -80,32 +59,29 @@ const (
 	FrameGap      = time.Second / 30
 	shimmerGap    = time.Second / 20
 	shimmerPeriod = 1600 * time.Millisecond
-	maxStagger    = 12 // children past this one start with the twelfth
+	maxStagger    = 12
 	maxGhosts     = 16
 )
 
-// motion is what one box key carries across builds.
 type motion struct {
-	b           *box // the box that carries it now; nil once it left
+	b           *box
 	enter, exit effect
-	start       time.Time // when the enter starts, after its stagger
-	playing     bool      // the enter runs, or its last frame is due
+	start       time.Time
+	playing     bool
 	skeleton    bool
 	ttl         time.Duration
-	until       time.Time // when a toast's ttl runs out
-	expired     bool      // the ttl ran out: the toast stays away
-	label       string    // the toast's text when it ran out
-	fresh       bool      // made by this Render's build
+	until       time.Time
+	expired     bool
+	label       string
+	fresh       bool
 	parentPtr   string
 	parentKey   string
 }
 
-// ghost is a box that left with an exit effect: its last cells, drawn
-// over what is now under them until the effect ends.
 type ghost struct {
 	r     Rect
 	cells []uv.Cell
-	eff   effect // drawn as an enter played backwards
+	eff   effect
 	start time.Time
 	dur   time.Duration
 }
@@ -161,7 +137,6 @@ func (s *Surface) NextFrame() (time.Duration, bool) {
 	return wait, ok
 }
 
-// timeNow is the time of ago() and of the effects.
 func (s *Surface) timeNow() time.Time {
 	if s.opts.Now != nil {
 		return s.opts.Now()
@@ -169,14 +144,11 @@ func (s *Surface) timeNow() time.Time {
 	return time.Now()
 }
 
-// track records the motion attributes of a box just built. A box with none
-// costs the attribute lookups and nothing else.
 func (s *Surface) track(b *box, n *tml.Node, vars map[string]any) {
 	enter, exit := effectOf(n.AttrString("enter")), effectOf(n.AttrString("exit"))
 	_, skel := n.Attr("skeleton")
 	var ttl time.Duration
 	if n.Type == "toast" {
-		// A toast fades in and out unless it asks for another effect.
 		if _, set := n.Attr("enter"); !set {
 			enter = fxFade
 		}
@@ -210,8 +182,6 @@ func (s *Surface) track(b *box, n *tml.Node, vars map[string]any) {
 	}
 	m.skeleton = skel && s.truthy(n, "skeleton", vars)
 	if was && !m.skeleton && old != nil && s.opts.Motion && !s.resized && s.buf != nil {
-		// The content arrived: the skeleton fades out over it. The
-		// buffer still holds the skeleton, as this Render paints later.
 		s.addGhost(old, fxFade)
 	}
 	if bw, ok := b.w.(*badgeWidget); ok {
@@ -220,8 +190,6 @@ func (s *Surface) track(b *box, n *tml.Node, vars map[string]any) {
 	b.mo = m
 }
 
-// expiredToast reports whether a toast's ttl ran out and its text is the
-// same: it stays away. A new text forgets the old toast, so it shows again.
 func (s *Surface) expiredToast(n *tml.Node, key string, vars map[string]any) bool {
 	m := s.motions[key]
 	if m == nil || !m.expired {
@@ -234,8 +202,6 @@ func (s *Surface) expiredToast(n *tml.Node, key string, vars map[string]any) boo
 	return false
 }
 
-// staggerChildren starts the enter of each child built in this Render the
-// stagger of their parent after the one before it.
 func (s *Surface) staggerChildren(n *tml.Node, kids []*box) {
 	st := n.AttrString("stagger")
 	if st == "" || len(kids) < 2 {
@@ -253,21 +219,16 @@ func (s *Surface) staggerChildren(n *tml.Node, kids []*box) {
 	}
 }
 
-// beginMotion runs at the start of Render: it reads the clock, ends the
-// ttl of toasts that ran out, and marks the boxes that play for a paint.
 func (s *Surface) beginMotion() {
 	s.now = s.timeNow()
 	s.animate = false
 	if len(s.ghosts) > 0 {
-		// The ghosts are drawn over the tree, so the tree under them is
-		// painted again first, and once more when the last one ends.
 		s.repaint = true
 		s.ghosts = slices.DeleteFunc(s.ghosts, func(g ghost) bool { return s.now.Sub(g.start) >= g.dur })
 	}
 	for _, m := range s.motions {
 		if m.ttl > 0 && !m.expired && !s.now.Before(m.until) {
 			m.expired = true
-			// The toast leaves the tree: build it again without it.
 			s.full = true
 		}
 		if m.b == nil {
@@ -276,7 +237,6 @@ func (s *Surface) beginMotion() {
 		if m.playing {
 			m.b.dirty, s.animate = true, true
 			if s.enterProgress(m) >= 1 {
-				// This frame draws the box as it is, and the last.
 				m.playing = false
 			}
 		}
@@ -286,9 +246,6 @@ func (s *Surface) beginMotion() {
 	}
 }
 
-// departures finds the boxes with motion that the build of this Render
-// dropped. One whose parent is still there plays its exit as a ghost; one
-// that left with its parent, such as the content of a tab closed, does not.
 func (s *Surface) departures() {
 	for k, m := range s.motions {
 		if m.b == nil || s.inTree(m.b) {
@@ -304,7 +261,6 @@ func (s *Surface) departures() {
 		}
 	}
 	if len(s.motions) > 1024 {
-		// Toasts that ran out and whose node never came back.
 		for k, m := range s.motions {
 			if m.b == nil {
 				delete(s.motions, k)
@@ -313,7 +269,6 @@ func (s *Surface) departures() {
 	}
 }
 
-// endMotion clears what was new in this Render.
 func (s *Surface) endMotion() {
 	for _, m := range s.motions {
 		m.fresh = false
@@ -341,8 +296,6 @@ func (s *Surface) parentAlive(m *motion) bool {
 	return false
 }
 
-// addGhost keeps the cells a leaving box last drew, from the buffer before
-// this Render paints over them.
 func (s *Surface) addGhost(b *box, e effect) {
 	r := b.rect.Intersect(s.buf.Bounds())
 	if r.Empty() || len(s.ghosts) >= maxGhosts {
@@ -352,8 +305,6 @@ func (s *Surface) addGhost(b *box, e effect) {
 	for y := r.Min.Y; y < r.Max.Y; y++ {
 		cells = append(cells, s.buf.Line(y)[r.Min.X:r.Max.X]...)
 	}
-	// An exit plays an enter backwards, so a slide leaves the way it is
-	// named: slide-down leaves as slide-up arrives.
 	switch e {
 	case fxSlideUp:
 		e = fxSlideDown
@@ -368,7 +319,6 @@ func (s *Surface) addGhost(b *box, e effect) {
 	s.repaint = true
 }
 
-// enterProgress is how far an enter has come, eased out: 0 hidden, 1 shown.
 func (s *Surface) enterProgress(m *motion) float64 {
 	d := enterTime[m.enter]
 	if d <= 0 {
@@ -384,7 +334,6 @@ func (s *Surface) enterProgress(m *motion) float64 {
 	return 1 - (1-u)*(1-u)*(1-u)
 }
 
-// playEnter draws the enter of b over the cells paintBox just drew.
 func (s *Surface) playEnter(b *box, c *canvas) {
 	p := s.enterProgress(b.mo)
 	if p >= 1 {
@@ -410,7 +359,6 @@ func (s *Surface) playEnter(b *box, c *canvas) {
 	s.fxDraw(b.mo.enter, p, vis, own, &under)
 }
 
-// drawGhosts draws each leaving box over the tree.
 func (s *Surface) drawGhosts() {
 	bounds := s.buf.Bounds()
 	for _, g := range s.ghosts {
@@ -424,10 +372,6 @@ func (s *Surface) drawGhosts() {
 	}
 }
 
-// fxDraw draws effect e at progress p (0 hidden, 1 shown) over r. own
-// holds the box's cells over r, row by row. under is what shows where the
-// box does not: a ground cell for an enter, or nil for a ghost, whose
-// buffer already holds the tree under it.
 func (s *Surface) fxDraw(e effect, p float64, r Rect, own []uv.Cell, under *uv.Cell) {
 	w, h := r.Dx(), r.Dy()
 	at := func(lx, ly int) *uv.Cell {
@@ -436,7 +380,6 @@ func (s *Surface) fxDraw(e effect, p float64, r Rect, own []uv.Cell, under *uv.C
 		}
 		return &own[ly*w+lx]
 	}
-	// The slide's offset, in cells, and the way the box comes from.
 	var sx, sy, off int
 	switch e {
 	case fxSlideUp, fxSlideDown:
@@ -452,11 +395,10 @@ func (s *Surface) fxDraw(e effect, p float64, r Rect, own []uv.Cell, under *uv.C
 		}
 		off = int(math.Round((1 - p) * float64(clampInt(w/4, 2, 8))))
 	}
-	// The iris: rows count double, so the circle looks round.
 	cx, cy := float64(w)/2, float64(h)/2
 	r2 := (cx*cx + 4*cy*cy) * p * p
 	s.fxBase, s.fxFg = s.fadeGround(), s.pal.Color("fg")
-	step := uint32(p * 48) // the decode glyphs change 48 times
+	step := uint32(p * 48)
 	accent := s.pal.Color("accent-bright")
 	for ly := range h {
 		line := s.buf.Line(r.Min.Y + ly)
@@ -488,8 +430,6 @@ func (s *Surface) fxDraw(e effect, p float64, r Rect, own []uv.Cell, under *uv.C
 					out, shown = u, false
 				}
 			case fxDecode:
-				// Each column starts after a random delay and falls to the
-				// bottom by the end; its front shows a random glyph.
 				delay := hash01(lx, -1, 7) * 0.5
 				front := (p - delay) / (1 - delay) * float64(h+1)
 				switch {
@@ -506,7 +446,6 @@ func (s *Surface) fxDraw(e effect, p float64, r Rect, own []uv.Cell, under *uv.C
 			default:
 				out = *o
 			}
-			// The tail of a wide glyph goes with its lead.
 			if out.Width == 0 && !shownPrev {
 				out = u
 			}
@@ -517,12 +456,8 @@ func (s *Surface) fxDraw(e effect, p float64, r Rect, own []uv.Cell, under *uv.C
 	}
 }
 
-// decodeGlyphs are what the front of a decode column shows. All ASCII, so
-// they draw at every depth.
 const decodeGlyphs = `0123456789ABCDEF:=+*<>|/\`
 
-// mendRow blanks a wide lead whose tail was replaced and a tail whose lead
-// was, so an effect that mixes two sources never leaves a broken row.
 func mendRow(line uv.Line, x0, x1 int) {
 	for x := max(x0-1, 0); x < min(x1+1, len(line)); x++ {
 		c := &line[x]
@@ -535,9 +470,6 @@ func mendRow(line uv.Line, x0, x1 int) {
 	}
 }
 
-// fadeCell blends from u, what is under the box, to o, the box's own cell,
-// by p. At 16 colours and in ASCII there is nothing to blend: the cell
-// steps from u through o in faint to o.
 func (s *Surface) fadeCell(o, u uv.Cell, p float64) uv.Cell {
 	if p >= 1 {
 		return o
@@ -561,7 +493,6 @@ func (s *Surface) fadeCell(o, u uv.Cell, p float64) uv.Cell {
 	case blankUnder:
 		out.Style.Fg = s.mix(bg, cmpColor(o.Style.Fg, s.fxFg), p)
 	case p < 0.5 && u.Width == 1 && o.Width == 1:
-		// A crossfade: what was under fades out, then the box fades in.
 		out = u
 		out.Style.Fg = s.mix(cmpColor(u.Style.Fg, s.fxFg), bg, 2*p)
 	default:
@@ -575,8 +506,6 @@ func (s *Surface) fadeCell(o, u uv.Cell, p float64) uv.Cell {
 	return out
 }
 
-// fadeGround is the colour a fade starts from where a cell has no ground
-// of its own, or nil when the palette cannot blend.
 func (s *Surface) fadeGround() color.Color {
 	if s.pal.Depth > Color256 {
 		return nil
@@ -597,22 +526,17 @@ func cmpColor(c, or color.Color) color.Color {
 	return c
 }
 
-// mixKey names a blend the surface already made: two colours and a step of
-// sixteen.
 type mixKey struct {
 	a, b color.RGBA
 	k    uint8
 }
 
-// lastMix is the last blend mix made.
 type lastMix struct {
 	a, b, c color.Color
 	k       uint8
 	ok      bool
 }
 
-// mix blends a toward b by t, in sixteen steps, at the palette's depth.
-// Each blend is made once: an effect asks for the same few on every frame.
 func (s *Surface) mix(a, b color.Color, t float64) color.Color {
 	k := uint8(math.Round(min(max(t, 0), 1) * 16))
 	switch {
@@ -621,8 +545,6 @@ func (s *Surface) mix(a, b color.Color, t float64) color.Color {
 	case b == nil || k == 0:
 		return a
 	}
-	// Neighbouring cells blend the same pair: compare the colours as
-	// given before converting them for the map.
 	if l := &s.lastMix; l.ok && l.k == k && l.a == a && l.b == b {
 		return l.c
 	}
@@ -643,7 +565,6 @@ func (s *Surface) mix(a, b color.Color, t float64) color.Color {
 	return c
 }
 
-// hash01 is a well mixed number in [0, 1) for a cell and a seed.
 func hash01(x, y int, seed uint32) float64 {
 	h := uint64(x)*0x9e3779b97f4a7c15 ^ uint64(y)*0xc2b2ae3d27d4eb4f ^ uint64(seed)*0x165667b19e3779f9 //nolint:gosec // a hash wraps
 	h ^= h >> 33
@@ -654,9 +575,6 @@ func hash01(x, y int, seed uint32) float64 {
 	return float64(h>>11) / (1 << 53)
 }
 
-// paintSkeleton draws a placeholder for b while its content loads: a card
-// keeps its frame and title, and the rest is bars of uneven length, with a
-// band of light across them while motion is on.
 func (s *Surface) paintSkeleton(b *box, c *canvas) {
 	in := b.inner()
 	if cw, ok := b.w.(*cardWidget); ok {
@@ -671,7 +589,6 @@ func (s *Surface) paintSkeleton(b *box, c *canvas) {
 	if s.pal.Depth == ASCII {
 		bar = "-"
 	}
-	// The band runs on a diagonal, a row counting as two columns.
 	band, center := 6.0, -1e9
 	if s.opts.Motion {
 		ph := float64(s.now.Sub(b.mo.start)%shimmerPeriod) / float64(shimmerPeriod)

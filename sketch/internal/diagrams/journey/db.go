@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/journey/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package journey
 
 import (
@@ -11,11 +9,9 @@ import (
 )
 
 type JourneyTask struct {
-	task string
-	// As written: any number, or NaN when the score is not one.
-	score  float64
-	people []string
-	// Name of the section in force when the task was declared, "" before the first one.
+	task    string
+	score   float64
+	people  []string
 	section string
 }
 
@@ -29,7 +25,6 @@ type JourneyDb struct {
 	currentSection string
 }
 
-// journeyActors is everyone named on a task, once each, in code unit order.
 func journeyActors(tasks []JourneyTask) []string {
 	seen := map[string]bool{}
 	var names []string
@@ -56,7 +51,6 @@ func (db *JourneyDb) addSection(text string) {
 	db.sections = append(db.sections, text)
 }
 
-// addTask: data is the rest of the line from its first colon: `:score` or `:score:actor, actor`.
 func (db *JourneyDb) addTask(task string, data string) {
 	pieces := strings.Split(data[1:], ":")
 	var people []string
@@ -69,7 +63,6 @@ func (db *JourneyDb) addTask(task string, data string) {
 	db.tasks = append(db.tasks, JourneyTask{task: task, score: js.Number(pieces[0]), people: people, section: db.currentSection})
 }
 
-// joinLines is text.replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	if !strings.Contains(text, "\n") {
 		return text

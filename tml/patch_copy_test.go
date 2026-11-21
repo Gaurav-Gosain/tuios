@@ -14,8 +14,6 @@ import (
 	"testing"
 )
 
-// applyPatchByFullCopy is applyPatch as it was when every patch began with a
-// copy of the whole document. It is the reference the path copy must match.
 func applyPatchByFullCopy(doc any, size int, ops []Op, lim Limits) (any, int, error) {
 	cur := deepCopy(doc)
 	for i, op := range ops {
@@ -48,8 +46,6 @@ func TestApplyPatchMatchesTheFullCopy(t *testing.T) {
 		return string(b)
 	}
 
-	// call runs one apply and turns a panic into an error, so the report
-	// still names the patch.
 	call := func(apply func(any, int, []Op, Limits) (any, int, error), doc any, size int, ops []Op) (res any, n int, panicked any, err error) {
 		defer func() {
 			if p := recover(); p != nil {
@@ -60,7 +56,6 @@ func TestApplyPatchMatchesTheFullCopy(t *testing.T) {
 		return res, n, nil, err
 	}
 
-	// differ describes how the two applies differ, or returns "".
 	differ := func(doc any, size int, ops []Op) (string, any, error) {
 		wantDoc, wantSize, wantPanic, wantErr := call(applyPatchByFullCopy, doc, size, ops)
 		gotDoc, gotSize, gotPanic, gotErr := call(applyPatch, doc, size, ops)
@@ -95,10 +90,6 @@ func TestApplyPatchMatchesTheFullCopy(t *testing.T) {
 		return "", gotDoc, nil
 	}
 
-	// chain applies the patches next gives, each to the previous result,
-	// and checks every patch against the full copy. A deep snapshot of each
-	// state is taken when it appears; after the chain every state, the
-	// input of a failed patch included, must still equal its snapshot.
 	chain := func(t *testing.T, label string, doc any, n int, next func(cur any, k int) []Op) (applied, failed int) {
 		t.Helper()
 		cur := doc
@@ -178,7 +169,6 @@ func TestApplyPatchMatchesTheFullCopy(t *testing.T) {
 		*out = append(*out, node{path, v})
 		switch c := v.(type) {
 		case map[string]any:
-			// Sorted, so a seed draws the same patches on every run.
 			for _, k := range slices.Sorted(maps.Keys(c)) {
 				walk(c[k], append(path[:len(path):len(path)], k), out)
 			}
@@ -200,13 +190,8 @@ func TestApplyPatchMatchesTheFullCopy(t *testing.T) {
 		return pointer(append(path[:len(path):len(path)], tok))
 	}
 
-	// randomPatch draws a patch of 1 to 12 ops. Each op's paths come from
-	// the document as the ops before it left it.
 	randomPatch := func(r *rand.Rand, doc any) []Op {
 		shadow := doc
-		// Three patches in five draw only paths that resolve and tests that
-		// pass, so that long patches apply too. The rest draw a path that
-		// does not resolve one time in four, and a failing test one in three.
 		badPaths := r.IntN(5) < 2
 		ops := make([]Op, 1+r.IntN(12))
 		for i := range ops {
@@ -221,9 +206,7 @@ func TestApplyPatchMatchesTheFullCopy(t *testing.T) {
 				}
 				return nodes[0]
 			}
-			// existing is a path that is there, or now and then the root.
 			existing := func() string { return pointer(pick().path) }
-			// invalid is a path that does not resolve.
 			invalid := func() string {
 				nd := pick()
 				switch c := nd.v.(type) {
@@ -256,8 +239,6 @@ func TestApplyPatchMatchesTheFullCopy(t *testing.T) {
 				}
 				return child(nd.path, "-") + "/x"
 			}
-			// target is where an add may write: a key of an object, an
-			// index of an array up to its length, or -.
 			target := func() string {
 				var containers []node
 				for _, nd := range nodes {

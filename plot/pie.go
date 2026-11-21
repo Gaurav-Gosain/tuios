@@ -27,16 +27,10 @@ type Pie struct {
 	NoLegend bool
 }
 
-// minArc is the smallest share of the circle a slice takes on screen, so
-// a slice of 1% is still a visible arc. The legend keeps the real share.
 const minArc = 0.035
 
-// maxSlices bounds the slices drawn: the slices after the first
-// maxSlices-1 fold into one, labelled "other".
 const maxSlices = 12
 
-// fold returns the pie with its slices after the first maxSlices-1 summed
-// into one.
 func (p Pie) fold() Pie {
 	if len(p.Values) <= maxSlices {
 		return p
@@ -58,10 +52,6 @@ func (p Pie) fold() Pie {
 	return q
 }
 
-// role is the colour of slice i. Slices take the series colours in turn.
-// When the last slice with a share would take the colour of the first, the
-// two would meet at twelve o'clock in one colour, so the last takes the
-// next colour.
 func (p Pie) role(i int) Role {
 	if i < len(p.Roles) && p.Roles[i] != None {
 		return p.Roles[i]
@@ -72,7 +62,6 @@ func (p Pie) role(i int) Role {
 	return SeriesRole(i)
 }
 
-// lastShare is the index of the last slice with a positive value, or -1.
 func (p Pie) lastShare() int {
 	for i, v := range slices.Backward(p.Values) {
 		if finite(v) && v > 0 {
@@ -82,14 +71,10 @@ func (p Pie) lastShare() int {
 	return -1
 }
 
-// shaded reports whether slice i is drawn in a shade instead of solid. The
-// series colours run out after six, and at 16 colours there are no more
-// hues to take, so the slices of the second round of colours are shaded.
 func (p Pie) shaded(i int) bool {
 	return i >= len(series) && (i >= len(p.Roles) || p.Roles[i] == None)
 }
 
-// fill is the glyph of a cell that slice i covers whole.
 func (p Pie) fill(i int) string {
 	if p.shaded(i) {
 		return "▒"
@@ -108,8 +93,6 @@ func (p Pie) Mark(i int, m Mode) (string, Role) {
 	return p.fill(i), p.role(i)
 }
 
-// shares returns each slice's share of the total, and false when the total
-// is not positive.
 func (p Pie) shares() ([]float64, bool) {
 	total := 0.0
 	for _, v := range p.Values {
@@ -129,9 +112,6 @@ func (p Pie) shares() ([]float64, bool) {
 	return out, true
 }
 
-// arcs returns where each slice ends on the circle, from 0 to 1: the
-// shares, with every slice that has a share widened to at least minArc
-// and the rest scaled down to make room.
 func arcs(shares []float64) []float64 {
 	n := 0
 	for _, s := range shares {
@@ -199,8 +179,6 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 			legendW += labelW + 1
 		}
 	}
-	// The disc's size in cells: as tall as the grid and as wide as that is
-	// round, leaving room for the legend.
 	room := g.W
 	if p.NoLegend {
 		legendW = 0
@@ -218,10 +196,6 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 	if nc < 1 || nr < 1 {
 		return g
 	}
-	// Units: one cell is 1 wide and aspect tall. Each cell holds two
-	// pixels, its upper and lower half, so a pixel is 1 wide and aspect/2
-	// tall: square at the common 1:2 cell. The disc is centred on the
-	// pixel grid.
 	ph := aspect / 2
 	cx, cy := float64(nc)/2, float64(2*nr)*ph/2
 	r := math.Min(cx, cy) - 0.02
@@ -236,7 +210,6 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 		if d > 1 || d < hole {
 			return -1
 		}
-		// Clockwise from twelve o'clock.
 		a := math.Atan2(dx, -dy) / (2 * math.Pi)
 		if a < 0 {
 			a++
@@ -247,9 +220,6 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 		}
 		return min(i, len(shares)-1)
 	}
-	// pixel returns the slice that covers most of a pixel, from a 4 by 4
-	// sample grid inside it, or -1 when less than half of it is on the
-	// ring.
 	const ss = 4
 	count := make([]int, len(shares))
 	pixel := func(px, py int) int {
@@ -292,9 +262,6 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 				}
 				continue
 			}
-			// A shade shows in a whole cell only: in a half block the
-			// slice would show solid, in the colour of the slice six
-			// before it. The cell goes to the shaded slice whole.
 			if up >= 0 && down != up && p.shaded(up) {
 				down = up
 			} else if down >= 0 && up != down && p.shaded(down) {
@@ -317,7 +284,6 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 	}
 	lx := nc + 2
 	ly := max(0, (g.H-len(legend))/2)
-	// The shares stand in one column, right-aligned after the longest label.
 	labelW = min(labelW, max(0, g.W-lx-2-1-pctW))
 	for i := range legend {
 		if ly+i >= g.H {
@@ -336,7 +302,6 @@ func (p Pie) Draw(w, h int, m Mode) *Grid {
 	return g
 }
 
-// legendParts is slice i's label and its share, such as "go" and "62%".
 func (p Pie) legendParts(shares []float64, i int) (label, pct string) {
 	if i < len(p.Labels) {
 		label = p.Labels[i]
@@ -344,7 +309,6 @@ func (p Pie) legendParts(shares []float64, i int) (label, pct string) {
 	return label, strconv.Itoa(int(math.Round(shares[i]*100))) + "%"
 }
 
-// legend is each slice's label and share, such as "go 62%".
 func (p Pie) legend(shares []float64) []LegendItem {
 	var out []LegendItem
 	for i := range shares {

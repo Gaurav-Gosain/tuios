@@ -70,8 +70,6 @@ func (r *Registry) ExplainDetect(p ProcInfo) []DetectReport {
 	return out
 }
 
-// refusal says why a manifest did not match, naming what it compared against so
-// the answer can be checked without reading the matcher's source.
 func (d *Detect) refusal(p ProcInfo, run string) string {
 	var parts []string
 	if d.Require.any() && !d.Require.satisfied(p) {

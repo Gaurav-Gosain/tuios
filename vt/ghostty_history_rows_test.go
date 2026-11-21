@@ -15,14 +15,6 @@ import (
 	"tuios.dev/vt/vtgen"
 )
 
-// The ghostty backend reads the text of history rows for search through the
-// formatter and decodes it in Go (ghostty_history_rows.go), and reads a row
-// cell by cell only when a check says the decoded row may be wrong. These
-// tests hold every row the fast path calls exact to the cell-by-cell read in
-// text and width, so a row that does not line up is found here and not by a
-// person.
-
-// historyCompare writes data to a pane with history and compares its rows.
 func historyCompare(t *testing.T, name string, cols, rows int, writes []string) (exact, fallback int) {
 	t.Helper()
 	term := vt.NewGhosttyTerminal(cols, rows)
@@ -30,7 +22,6 @@ func historyCompare(t *testing.T, name string, cols, rows int, writes []string) 
 	for _, w := range writes {
 		_, _ = term.Write([]byte(w))
 	}
-	// Push the screen into the history so every row written is compared.
 	_, _ = term.Write([]byte("\x1b[0m" + strings.Repeat("\r\n", rows)))
 	exact, fallback, mismatches := vt.CompareHistoryRows(term)
 	for i, m := range mismatches {
@@ -120,7 +111,6 @@ func TestGhosttyHistoryRowsFallbackRate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Each stream three times over, so it leaves history behind.
 		text := mainScreen.Replace(string(data))
 		e, fb := historyCompare(t, filepath.Base(f), 207, 55, []string{text, "\r\n", text, "\r\n", text})
 		exact, fallback = exact+e, fallback+fb

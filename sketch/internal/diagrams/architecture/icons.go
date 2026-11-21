@@ -1,10 +1,5 @@
-// Ported from pele src/diagrams/architecture/icons.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package architecture
 
-// glyph: outlines for the icon names Mermaid's architecture diagrams know without an icon pack, drawn on
-// a 24 by 24 grid. Any other name is left to the host's icon resolver.
-// It is a switch rather than a map, which would allocate at init.
 func glyph(name string) (string, bool) {
 	switch name {
 	case "database":

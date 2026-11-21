@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/c4/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package c4 draws Mermaid's C4 diagrams: people, systems, containers and components in
 // boundaries on a grid, joined by relations routed around the shapes.
 package c4

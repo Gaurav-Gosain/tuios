@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/info/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package info
 
 import (
@@ -10,7 +8,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// version is the version of pele that sketch ports, which pele reads from its package.json.
 const version = "1.13.0"
 
 func renderInfo(model *InfoModel, _ types.Config, options types.RenderOptions) types.Rendered {

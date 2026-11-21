@@ -7,11 +7,6 @@ import (
 	sketch "tuios.dev/sketch/internal/engine"
 )
 
-// A kanban board is drawn from its lists: each column is a frame with its name
-// and the count of its cards at the top, and the cards in boxes under it. The
-// columns run across, and fold into more rows of columns when they are wider
-// than the columns of the terminal.
-
 func drawKanban(l *sketch.Layout, opt Options) (*canvas, error) {
 	k := l.Kanban
 	if k == nil {
@@ -19,7 +14,6 @@ func drawKanban(l *sketch.Layout, opt Options) (*canvas, error) {
 	}
 	type card struct {
 		lines []string
-		// label is the count of lines of the label; a line of ticket, assignee and priority may follow.
 		label int
 	}
 	type column struct {
@@ -35,7 +29,6 @@ func drawKanban(l *sketch.Layout, opt Options) (*canvas, error) {
 			col.head = []string{""}
 		}
 		col.head[len(col.head)-1] += count
-		// The frame holds the cards one cell in from each side.
 		w := widest(col.head) + 4
 		h := len(col.head) + 2
 		for _, item := range c.Cards {
@@ -56,7 +49,6 @@ func drawKanban(l *sketch.Layout, opt Options) (*canvas, error) {
 		col.w, col.h = w, h+1
 		cols[i] = col
 	}
-	// Columns go into rows from the left while they fit.
 	type place struct{ x, row int }
 	at := make([]place, len(cols))
 	x, row, wd := 0, 0, widest(k.Title)

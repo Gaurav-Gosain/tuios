@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/journey/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The port reads UTF-8 bytes. Where pele steps one unit past a character, the port
-// steps the whole character.
-
 package journey
 
 import (
@@ -49,7 +44,6 @@ var TOKEN_NAMES = [...]string{
 	":",
 }
 
-// codeAt decodes the character at a byte offset: -1 past the end.
 func codeAt(src string, q int) rune {
 	if q < 0 || q >= len(src) {
 		return -1
@@ -62,7 +56,6 @@ func codeAt(src string, q int) rune {
 	return r
 }
 
-// sizeAt is the length in bytes of the character at q.
 func sizeAt(src string, q int) int {
 	if q >= len(src) || src[q] < utf8.RuneSelf {
 		return 1
@@ -71,7 +64,6 @@ func sizeAt(src string, q int) int {
 	return s
 }
 
-// spaceAt is the length in bytes of the whitespace character at q, or 0 if there is none.
 func spaceAt(src string, q int) int {
 	if util.IsSpace(codeAt(src, q)) {
 		return sizeAt(src, q)
@@ -79,7 +71,6 @@ func spaceAt(src string, q int) int {
 	return 0
 }
 
-// textEnd: `#`, a line break, and `;` end every kind of text; a colon also ends a task name or a section.
 func textEnd(src string, from int, colon bool) int {
 	n := len(src)
 	e := from
@@ -123,7 +114,6 @@ func tokenize(src string) common.ScanTokens {
 			continue
 		}
 		if common.KeywordAt(src, p, "title") {
-			// Unlike Mermaid, ignore bare titles.
 			e = p + 5
 			for codeAt(src, e) != 10 && util.IsSpace(codeAt(src, e)) {
 				e += sizeAt(src, e)
@@ -145,7 +135,6 @@ func tokenize(src string) common.ScanTokens {
 			p = e
 			continue
 		}
-		// Like Mermaid, a bare section uses the next line as its name.
 		if s := spaceAt(src, p+7); common.KeywordAt(src, p, "section") && s > 0 {
 			e = textEnd(src, p+7+s, true)
 			if e > p+7+s {
@@ -167,8 +156,6 @@ func tokenize(src string) common.ScanTokens {
 		}
 	}
 
-	// Jison marks its lexer done when a rule runs on empty input, so an accessibility value that
-	// matches nothing at the very end of the text is followed by no EOF token.
 	if len(out.Starts) == 0 || out.Starts[len(out.Starts)-1] < n {
 		emit(T_EOF, n)
 	}

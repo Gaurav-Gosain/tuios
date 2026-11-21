@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/wardley/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package wardley
 
 import (
@@ -56,7 +54,6 @@ func clamp(value, min, max float64) float64 {
 	return value
 }
 
-// startLabel writes a label with its lines starting at x and its first baseline at y.
 func startLabel(label text.Label, x, y float64, attrs string) string {
 	shared := svg.SharedStyle(label)
 	var body strings.Builder
@@ -117,7 +114,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 	}
 	pad := types.Or(options.Padding, 8)
 
-	// A narrower map is not as much shorter, so that components keep some room between them.
 	plotH := float64(dimension(config, sizeOf(model, 1), "height", 600) * math.Max(0.75, plotW/naturalW))
 	showGrid := section(config)["showGrid"] == true
 
@@ -201,7 +197,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 		positionOf[node.id] = positions[i]
 	}
 
-	// Pipelines: a box around the components, with the parent as a square on its top edge.
 	var pipelines strings.Builder
 	members := map[string]map[string]bool{}
 	for _, pipeline := range model.pipelines {
@@ -238,7 +233,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 		pipelines.WriteString("</g>")
 	}
 
-	// How far from a node's center a line to it stops.
 	anchorLabels := map[*WardleyNode]text.Label{}
 	anchorWidth := 4000.0
 	if tight {
@@ -263,7 +257,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 		return R
 	}
 
-	// Quadrants around a node that a link runs through: 1 up and right, 2 down and right, 4 up and left, 8 down and left.
 	taken := map[*Placed]int{}
 	occupy := func(at *Placed, ux, uy float64) {
 		if math.Abs(ux) < 0.25 || math.Abs(uy) < 0.25 {
@@ -289,7 +282,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 		if from == nil || to == nil || from == to {
 			continue
 		}
-		// A pipeline component belongs to its parent already.
 		if members[link.target][link.source] {
 			continue
 		}
@@ -326,7 +318,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 		caption := ""
 		if link.label != "" {
 			label := textAt(link.label, tiny+1, 200, 0)
-			// Beside the middle of the line, on its upper side.
 			side := -1.0
 			if ux >= 0 {
 				side = 1
@@ -345,7 +336,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 			heads.String(), caption, "</g>")
 	}
 
-	// Evolution: a dashed arrow to where the component is heading, drawn as an open circle.
 	var trends strings.Builder
 	for _, trend := range model.trends {
 		origin := positionOf[trend.nodeID]
@@ -449,7 +439,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 			} else if node.inPipeline {
 				caption = centered(label, x, y+2*R+4+label.Height/2, attrs)
 			} else {
-				// The label goes up and to the right unless a link leaves that way; then the next free corner.
 				busy := taken[at]
 				corner := 1
 				switch {
@@ -523,7 +512,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 		}
 		width += 20
 		height += 14
-		// Without a position the list goes under the map, where it covers nothing.
 		bx, by := 0.0, legendTop
 		if box := model.annotationsBox; box != nil {
 			bx = clamp(projectX(box[0]), 0, math.Max(0, plotW-width))
@@ -546,7 +534,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 			` class="pele-wardley-note" font-size="`+smallText+`" font-weight="var(--_hw)"`))
 	}
 
-	// Accelerators point right, deaccelerators left.
 	var forces strings.Builder
 	force := func(name string, px, py float64, forward bool) {
 		x := projectX(px)
@@ -614,7 +601,6 @@ func draw(model *WardleyModel, config types.Config, options types.RenderOptions,
 	return rendered
 }
 
-// geometry is the map as lists, for a drawing in text. Not part of pele.
 func geometry(model *WardleyModel, title text.Label, stages []string) *types.GeoWardley {
 	geo := &types.GeoWardley{Title: title.Plain(), Stages: stages}
 	if model.axes.hasBoundaries && len(model.axes.stageBoundaries) == len(stages) {
@@ -634,7 +620,6 @@ func geometry(model *WardleyModel, title text.Label, stages []string) *types.Geo
 		}
 		geo.Nodes = append(geo.Nodes, types.GeoWardleyNode{Label: node.label, Evolution: node.x, Visibility: node.y, Kind: kind, Strategy: node.sourceStrategy, Inertia: node.inertia})
 	}
-	// A pipeline's parent sits over the middle of its components, as the SVG draws it.
 	for _, pipeline := range model.pipelines {
 		i, ok := index[pipeline.nodeID]
 		if !ok {

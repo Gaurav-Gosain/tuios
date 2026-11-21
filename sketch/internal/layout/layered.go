@@ -1,5 +1,3 @@
-// Ported from pele src/layout/layered.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package layout holds pele's own graph layouts: layered (Sugiyama style),
 // compound (clusters on top of layered) and lanes.
 package layout
@@ -10,34 +8,6 @@ import (
 
 	"tuios.dev/sketch/internal/js"
 )
-
-// Layered (Sugiyama-style) layout of one flat graph. Ranks run down the y axis; callers
-// rotate the result for other directions.
-//
-// What the layout of edges aims for, most important first. Where two aims pull apart, the one
-// higher up decides, and each names where it is carried out.
-//
-// 1. Lines can be told apart. No two touch or run along each other, and none runs through a
-//    node or a label. Ends on one side of a node have places of their own (`spread`), and
-//    curves that would pass within a few pixels turn at levels of their own (`assignTracks`).
-// 2. Lines cross as little as the order of the nodes allows (`reduceCrossings`, and the order
-//    of the levels in `assignTracks`).
-// 3. An edge takes the shortest and simplest way: straight if it can, else one curve, else a
-//    curve with a level run. One that passes several ranks runs in line with one of its ends
-//    and turns once, at the other (`alignLabels`, `straighten`). Ends slide along their sides,
-//    and nodes move a little, where that makes an edge straight (`settle`, `snap`).
-// 4. An edge meets the middle of a side. An end with a side to itself stays there, and ends
-//    that share a side sit around the middle in the order of where they lead. An end moves off
-//    the middle only for the aims above (`settle`).
-// 5. The drawing is balanced, and what is alike is drawn alike. A label sits midway along the
-//    line that shows, the curves either side of it have much the same room to turn in, and a gap
-//    whose curves mostly cross has them all as the same plain curve rather than each on a
-//    level of its own (`headRoom` in `layered`, the crossed gaps in `assignTracks`).
-// 6. An edge leaves and reaches a node square to it, and an arrowhead points straight at the
-//    node (`routePath` in svg/edges.ts, which draws the routes).
-// 7. Nodes keep the order they were written in, where nothing above says otherwise.
-// 8. The drawing stays compact. A gap between ranks grows only to hold the levels in it, or
-//    to let curves that cross do so at a clear angle.
 
 type Kind uint8
 
@@ -224,7 +194,6 @@ var (
 	negInf = math.Inf(-1)
 )
 
-// sign turns the number a JavaScript comparator returns into an int.
 func sign(x float64) int {
 	switch {
 	case x < 0:
@@ -235,12 +204,10 @@ func sign(x float64) int {
 	return 0
 }
 
-// sortBy is a stable sort with a JavaScript comparator, as Array.prototype.sort is.
 func sortBy(s []int, cmp func(a, b int) float64) {
 	slices.SortStableFunc(s, func(a, b int) int { return sign(cmp(a, b)) })
 }
 
-// or is `a || b` for numbers.
 func or(a, b float64) float64 { return js.Or(a, b) }
 
 func sortRangeInt(list []int, from, to int, key []int) {
@@ -256,7 +223,6 @@ func sortRangeInt(list []int, from, to int, key []int) {
 	}
 }
 
-// Avoid the comparator overhead of built-in sort.
 func sortByBary(list []int, count int, bary []float64, pos []int, right bool, spare []int) {
 	before := func(a, b int) bool {
 		if right {
@@ -337,7 +303,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		return LayeredResult{Width: node.W, Height: node.H}
 	}
 
-	// Every edge gets a middle rank of its own when labels or parallel edges need the room.
 	step := 1
 	if m > 0 {
 		seen := map[int]bool{}
@@ -400,7 +365,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		}
 	}
 
-	// The graph that gets ordered and positioned: every edge cut into rank-to-rank segments.
 	segments := 0
 	for ei := 0; ei < m; ei++ {
 		if direct[ei] == 0 {
@@ -412,7 +376,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 	EFD := make([]float64, segments)
 	ETD := make([]float64, segments)
 	firstDummy := fillInt(m, -1)
-	// Which way the edges with a label in each rank head: 1 down, 2 up, 3 both.
 	heads := make([]uint8, maxRank+1)
 	labelNode := fillInt(m, -1)
 	spans := false
@@ -421,7 +384,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			spans = true
 		}
 	}
-	// What each segment's end is to the node it meets, for the ends that may move along the node's side.
 	var EFK, ETK []End
 	if spans {
 		EFK = make([]End, segments)
@@ -458,11 +420,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			rb := RANK[b]
 			labelRank := -1
 			if e.LabelW > 0 {
-				// The label goes halfway along. An edge that passes ranks of nodes on its way has its
-				// label in one of those, beside the nodes, where it takes no height of its own: the one
-				// halfway, or of the two either side of halfway, the one nearer the node the edge starts
-				// from, which is the lower when the edge runs against the flow. An edge between two
-				// neighbouring ranks has its label in the rank between them.
 				labelRank = ra + ((rb - ra) >> 1)
 				adj := -1
 				if e.Reversed {
@@ -540,7 +497,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		}
 	}
 
-	// Bends belong to the innermost group containing both edge endpoints.
 	var GRP []int
 	if opt.Groups != nil {
 		of, parent := opt.Groups.Of, opt.Groups.Parent
@@ -615,7 +571,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 	order := make([]int, n)
 	pos := make([]int, n)
 
-	// Initial order: depth-first from the top so that subtrees start out contiguous.
 	{
 		byRank := make([]int, n)
 		fill := slices.Clone(layerStart[:maxRank+1])
@@ -697,7 +652,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			copy(order[layerStart[r]:], layer)
 		}
 	}
-	// Preserve port order to avoid crossings outside the group.
 	fixed := make([]uint8, maxRank+1)
 	hint := func(v int) float64 {
 		if v < real && (nodes[v].Kind == KindStartPort || nodes[v].Kind == KindEndPort) {
@@ -732,7 +686,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		setPositions()
 	}
 	if opt.OrderOnly {
-		// Points are (rank, cross-flow position) pairs.
 		at := position(g, opt)
 		for i := 0; i < real; i++ {
 			nodes[i].X = at[i]
@@ -784,9 +737,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 
 	alignPorts(g, xs, empty)
 
-	// A rank that holds nothing but the bends of edges is only there because some other edge has a
-	// label or a twin. Its bends move onto the straight line between the ends of their edges, and
-	// one that gets there is left out of the route, so that the edge is drawn as a single curve.
 	onLine := make([]uint8, n)
 	if empty != nil && !opt.Tracks {
 		sep := opt.EdgeSep
@@ -798,14 +748,9 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 	if !opt.Tracks {
 		pastLabels(g, xs, firstDummy, span, opt.EdgeSep, onLine)
 	}
-	// An edge is cut where it passes a rank that holds something, and each piece crosses one gap.
-	// With `tracks`, every piece that does not run straight gets a track to run across on at
-	// right angles. Otherwise, where edges spread along their nodes, a piece gets one only if it
-	// needs a level to turn onto. `pieceStart` gives every edge's run of pieces.
 	pieceStart := make([]int, m+1)
 	var pieces *Pieces
 	if opt.Tracks || (EFK != nil && !opt.Straight) {
-		// Each edge has one piece more than the dummies it passes, so m+n bounds them all.
 		c := m + n
 		fl := make([]float64, 2*c)
 		in := make([]int, 2*c)
@@ -823,10 +768,8 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			if d0 >= 0 {
 				end = d0 + span[ei] - 1
 			}
-			// An edge that keeps a bend to stay clear of its twin is drawn through the bend, as it is.
 			twin := false
 			for d := d0; d < end; d++ {
-				// So is one that has a bend left out in a rank of labels: its curve crosses that rank.
 				bare := empty != nil && empty[RANK[d]] == 1
 				if !opt.Tracks && bare != (onLine[d] == 1) {
 					twin = true
@@ -856,7 +799,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		pieceStart[m] = len(pieces.from)
 	}
 
-	// Ranks that hold only border ports or their pass-through dummies need little room of their own.
 	portOnly := func(r int, kind Kind) bool {
 		found := false
 		for i := layerStart[r]; i < layerStart[r+1]; i++ {
@@ -877,7 +819,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 	if portOnly(maxRank, KindEndPort) {
 		endRanks = step
 	}
-	// The longest way across that any edge travels in the gap below each rank.
 	run := make([]float64, maxRank+1)
 	for e := 0; e < segments; e++ {
 		across := math.Abs(xs[EF[e]] + EFD[e] - xs[ET[e]] - ETD[e])
@@ -894,7 +835,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		}
 		return sep / float64(step)
 	}
-	// The room under each rank. Edges that are not cut into pieces need more where they run far across.
 	gapUnder := make([]float64, maxRank+1)
 	for r := 0; r < maxRank; r++ {
 		if pieces != nil {
@@ -903,7 +843,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			gapUnder[r] = math.Max(usual(r), math.Min((MAX_GAP*opt.RankSep)/float64(step), run[r]*MIN_SLOPE))
 		}
 	}
-	// A rank between two ranks of nodes, which holds labels and bends only.
 	between := make([]uint8, maxRank+1)
 	for i := range between {
 		between[i] = 1
@@ -928,18 +867,12 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			gapUnder[r] += -shift
 		}
 	}
-	// The part of its rank that an edge runs straight through at a bend or label. A bare bend
-	// beside labels keeps to the middle half, which leaves the curves either side of it more room
-	// and still keeps them clear of the labels' corners.
 	inset := func(d int) float64 {
 		if KIND[d] == KindDummy && between[RANK[d]] != 0 && !opt.Tracks {
 			return (bandBottom[RANK[d]] - bandTop[RANK[d]]) / 4
 		}
 		return 0
 	}
-	// The rank that the pieces leaving each rank arrive at, past any that hold only bends, and
-	// the room between the two, which grows to hold the gap's tracks or levels: these keep
-	// `margin` from the ranks, and between `leastPitch` and `mostPitch` from each other.
 	margin, leastPitch, mostPitch := float64(LEVEL_MARGIN), float64(LEVEL_PITCH), float64(LEVEL_PITCH)
 	if opt.Tracks {
 		margin, leastPitch, mostPitch = TRACK_MARGIN, TRACK_PITCH, TRACK_SPREAD
@@ -990,8 +923,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 		y += h + gapUnder[r]
 	}
 	height := y
-	// Where a piece runs across its gap, or would on another track of its group: its tracks sit
-	// in the middle of the gap, the first at the top.
 	trackY := func(piece int, onTrack int) float64 {
 		r := pieces.rank[piece]
 		top := bandBottom[r]
@@ -1018,10 +949,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			maxX = xs[i] + half
 		}
 	}
-	// Where edges spread along their nodes, a rank whose nodes only send edges on stands on one
-	// line, and a rank whose nodes only receive them hangs from one, so that the edges of nodes of
-	// different heights set out from, or arrive at, the same level. In any other rank the nodes
-	// are centered.
 	arrives := make([]uint8, maxRank+1)
 	leaves := make([]uint8, maxRank+1)
 	for i := 0; i < real; i++ {
@@ -1057,7 +984,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 			firstDx, lastDx = e.HeadDx, e.TailDx
 		}
 		d0 := firstDummy[ei]
-		// Room for every point the cases below can add.
 		most := 4
 		if pieces != nil && pieceStart[ei+1] > pieceStart[ei] {
 			most += 8 * (pieceStart[ei+1] - pieceStart[ei])
@@ -1072,8 +998,6 @@ func Layered(nodes []*LNode, edges []*LEdge, opt LayeredOptions) LayeredResult {
 					across := trackY(k, pieces.track[k])
 					pts = append(pts, pieces.from[k]-minX, across, pieces.to[k]-minX, across)
 				} else if pieces.track[k] > 0 {
-					// A short piece among levels runs straight until it is past the level before its
-					// own, and turns in one S from there, so that it crosses none of them.
 					pts = append(pts, pieces.from[k]-minX, trackY(k, pieces.track[k]-1))
 				}
 				d := pieces.lower[k]
@@ -1151,19 +1075,18 @@ type Graph struct {
 	KIND    []Kind
 	RANK    []int
 	// Segment endpoints, and where each segment attaches on them.
-	EF         []int
-	ET         []int
-	EFD        []float64
-	ETD        []float64
-	succStart  []int
-	succE      []int
-	predStart  []int
-	predE      []int
-	layerStart []int
-	order      []int
-	pos        []int
-	offsets    bool
-	// Ranks whose order must remain fixed.
+	EF          []int
+	ET          []int
+	EFD         []float64
+	ETD         []float64
+	succStart   []int
+	succE       []int
+	predStart   []int
+	predE       []int
+	layerStart  []int
+	order       []int
+	pos         []int
+	offsets     bool
 	fixed       []uint8
 	GRP         []int
 	groupParent []int
@@ -1261,7 +1184,6 @@ func Rank(nodes []*LNode, edges []*LEdge, step int) {
 	}
 
 	r := make([]int, n)
-	// Start ports go above every node later, so they don't push their targets down a rank.
 	for i := 0; i < n; i++ {
 		if nodes[i].Kind == KindStartPort {
 			r[i] = -step
@@ -1295,8 +1217,6 @@ func Rank(nodes []*LNode, edges []*LEdge, step int) {
 		}
 	}
 
-	// Longest-path ranking leaves loosely attached nodes far from their neighbours.
-	// Move each node toward the side that has more edges.
 	const none = math.MaxInt
 	for pass := 0; pass < 8; pass++ {
 		changed := false
@@ -1371,13 +1291,6 @@ func Rank(nodes []*LNode, edges []*LEdge, step int) {
 	}
 }
 
-// The ends of edges that may move along one side of a node (0 the side its edges arrive at, 1 the
-// other), ordered by their opposite nodes to avoid crossings. `ids` and `room` must start empty.
-// `ids` receives the ends; `room` receives their minimum gaps. Returns the sum of the gaps.
-// When there is too little room for a full pitch between each pair, the edges that leave side by
-// side move closer together, since they have no arrowheads to keep apart. With less room still,
-// neighbours that run the same way share a place, which keeps an arrowhead apart from an edge
-// that leaves beside it.
 func sideEnds(g *Graph, v int, side int, span float64, kinds []End, ids *[]int, room *[]float64) float64 {
 	start, list, other := g.succStart, g.succE, g.ET
 	if side == 0 {
@@ -1437,7 +1350,6 @@ func sideEnds(g *Graph, v int, side int, span float64, kinds []End, ids *[]int, 
 	return total * pitch
 }
 
-// Gives the edges that meet one side of a node places of their own along it, around its middle.
 func spread(g *Graph, nodes []*LNode, EFK, ETK []End) {
 	W, EFD, ETD := g.W, g.EFD, g.ETD
 	var ids []int
@@ -1471,8 +1383,6 @@ func spread(g *Graph, nodes []*LNode, EFK, ETK []End) {
 	}
 }
 
-// The segment of an edge that reaches the next point held in place, on the way up from segment
-// `e` (side 0) or down: past the bends in ranks that hold nothing else.
 func follow(g *Graph, empty []uint8, e int, side int) int {
 	if empty == nil {
 		return e
@@ -1494,10 +1404,6 @@ func follow(g *Graph, empty []uint8, e int, side int) int {
 	return e
 }
 
-// Aligns border ports with the ends on their nodes so edges run straight across the gap.
-// Ports are kept `edgeSep` apart while placed, more than ends on a short side get, so
-// without this an edge turns outside the border and again in the gap.
-// Leaves a rank alone unless every port can move without passing or meeting its neighbors.
 func alignPorts(g *Graph, xs []float64, empty []uint8) {
 	var to []float64
 	for pass := 0; pass < 2; pass++ {
@@ -1546,9 +1452,6 @@ func alignPorts(g *Graph, xs []float64, empty []uint8) {
 	}
 }
 
-// How many ends that may move along it each node has on the side its edges arrive at, and on
-// the other. An end that has a side to itself keeps to the middle; ends that share one cannot
-// all be there, so those may move.
 func freeEnds(g *Graph, EFK, ETK []End) [2][]int {
 	free := [2][]int{make([]int, g.n), make([]int, g.n)}
 	for e := 0; e < len(g.EF); e++ {
@@ -1570,13 +1473,6 @@ func Ease(across, along float64) float64 {
 	return math.Max(0.25, math.Min(0.5, (4*math.Abs(along))/or(math.Abs(across), 1)))
 }
 
-// Brings the labels and bends of each edge into line with an end of the edge, so that it runs
-// straight from that end and turns once, at the other: with the end that has fewer edges beside
-// it on its node, which is the one nearer the middle of its side, or else with the other, and
-// as near to that as what is beside them in their ranks leaves room. The other end may then move
-// along its node to meet the line. Bends in ranks that hold nothing else are left to `straighten`.
-// An edge with no one line that all of its labels and bends have room on has each brought into
-// line with the nearest point above or below that is held in place.
 func alignLabels(g *Graph, nodes []*LNode, xs []float64, free [2][]int, opt LayeredOptions, empty []uint8) {
 	sep := opt.EdgeSep
 	n, real, maxRank, KIND, RANK, W := g.n, g.real, g.maxRank, g.KIND, g.RANK, g.W
@@ -1586,8 +1482,6 @@ func alignLabels(g *Graph, nodes []*LNode, xs []float64, free [2][]int, opt Laye
 	placed := func(v int) bool {
 		return KIND[v] == KindLabel || (KIND[v] == KindDummy && !(empty != nil && empty[RANK[v]] == 1))
 	}
-	// Where segment `e` ends on the way up (side 0) or down, and how many ends share that side of
-	// the node there: none for a point that is not on a node.
 	end := func(e int, side int) [2]float64 {
 		u := ET[e]
 		x := xs[u] + ETD[e]
@@ -1601,8 +1495,6 @@ func alignLabels(g *Graph, nodes []*LNode, xs []float64, free [2][]int, opt Laye
 		}
 		return [2]float64{x, float64(c)}
 	}
-	// The room the neighbours in its rank leave a label or bend: a full gap from a node or between
-	// two labels, half of one between a label and a line that passes it.
 	room := func(v int) (float64, float64) {
 		s := layerStart[RANK[v]]
 		i := s + pos[v]
@@ -1624,7 +1516,6 @@ func alignLabels(g *Graph, nodes []*LNode, xs []float64, free [2][]int, opt Laye
 		}
 		return lo, hi
 	}
-	// The place between `lo` and `hi` that is in line with one of two ends, or else nearest the first choice.
 	choose := func(x float64, up, down [2]float64, lo, hi float64) float64 {
 		var upFirst bool
 		if up[1] != down[1] {
@@ -1650,7 +1541,6 @@ func alignLabels(g *Graph, nodes []*LNode, xs []float64, free [2][]int, opt Laye
 			if !placed(order[i]) || done[order[i]] != 0 {
 				continue
 			}
-			// The edge's labels and bends from its first node to its last, and the room they share.
 			top := order[i]
 			for isDummy(KIND[EF[predE[predStart[top]]]]) {
 				top = EF[predE[predStart[top]]]
@@ -1692,17 +1582,9 @@ func alignLabels(g *Graph, nodes []*LNode, xs []float64, free [2][]int, opt Laye
 	}
 }
 
-// Once the nodes have their places, moves an end along its side when that lets its edge run
-// straight: when the point the edge runs to, or some part of the side it runs to, is in line
-// with the end's own side. Any other end leans towards the point its edge runs to, where its
-// side is long enough, and an end with a side to itself stays in the middle. On a group, the
-// ends keep clear of the points where other edges pass through its border.
 func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]int, empty []uint8) {
 	real, W, EF, ET, EFD, ETD := g.real, g.W, g.EF, g.ET, g.EFD, g.ETD
 	succStart, succE, predStart, predE, pos := g.succStart, g.succE, g.predStart, g.predE, g.pos
-	// Where the end of segment `e` on node `v` should be, from the middle of its side. The edge is
-	// followed up from the segment (side 0) or down, past the bends in ranks that hold nothing
-	// else, to where it next comes to a point that is held in place or to another node's side.
 	wanted := func(e int, side int, v int, span float64, again bool) float64 {
 		if free[side][v] < 2 {
 			return 0
@@ -1714,11 +1596,9 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 			u = EF[e]
 			point = xs[u] + EFD[e]
 		}
-		// Once the other end has its place, this one comes into line with it if it can.
 		if again && math.Abs(point-xs[v]) <= span/2+IN_LINE {
 			return math.Max(-span/2, math.Min(span/2, point-xs[v]))
 		}
-		// The part of the other side that its end may move along, if it may move.
 		middle := point
 		width := 0.0
 		kinds := ETK
@@ -1733,17 +1613,13 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 		}
 		lo := math.Max(xs[v]-span/2, middle-width/2)
 		hi := math.Min(xs[v]+span/2, middle+width/2)
-		// Two sides with no part in line: the end leans towards the other, if its side is long enough.
 		if lo > hi+IN_LINE {
 			lean := math.Max(0, span/2-LEAN_CLEAR)
 			return math.Max(-lean, math.Min(lean, point-xs[v]))
 		}
-		// Both ends settle on one place in the part the two sides share: nearer the middle of the narrower.
 		place := (float64(xs[v]*width) + float64(middle*span)) / (width + span)
 		return math.Max(lo, math.Min(hi, place)) - xs[v]
 	}
-	// End order and spacing stay fixed across passes; held ends divide free ends into runs.
-	// (sketch keeps every side's ids, room and all in three shared slices.)
 	type sideRun struct {
 		v      int
 		side   int
@@ -1790,8 +1666,6 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 			sides = append(sides, run)
 		}
 	}
-	// The ends of an edge follow each other, so the nodes are gone over until none moves: a few
-	// times at most, in practice.
 	var sum []float64
 	var count []float64
 	moved := true
@@ -1813,7 +1687,6 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 				if i < len(all) && !held {
 					continue
 				}
-				// Free ends since the last held end occupy ids[k..k + size).
 				size := 0
 				for j := i - 1; j >= 0 && kinds[all[j]] != EndHeld; j-- {
 					size++
@@ -1823,7 +1696,6 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 					hi = dx[all[i]] - PORT_PITCH
 				}
 				if size > 0 {
-					// Isotonic fitting preserves order and spacing by pooling neighbours that are too close.
 					sum = sum[:0]
 					count = count[:0]
 					before := 0.0
@@ -1833,7 +1705,6 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 						}
 						sum = append(sum, wanted(ids[k+j], side, v, span, pass > 0)-before)
 						count = append(count, 1)
-						// Keep ends together when spacing forced them to share a place.
 						together := j > 0 && room[k+j] == 0
 						for len(sum) > 1 && (together || sum[len(sum)-2]/count[len(count)-2] > sum[len(sum)-1]/count[len(count)-1]) {
 							together = false
@@ -1849,7 +1720,6 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 					j := 0
 					before = 0
 					for b := 0; b < len(sum); b++ {
-						// Center the run if it cannot fit between held ends.
 						var level float64
 						if hi-total < lo {
 							level = (lo + hi - total) / 2
@@ -1876,7 +1746,6 @@ func settle(g *Graph, nodes []*LNode, xs []float64, EFK, ETK []End, free [2][]in
 	}
 }
 
-// allDummies reports whether every node of a block is a bend.
 func allDummies(g *Graph, block []int) bool {
 	for _, v := range block {
 		if g.KIND[v] != KindDummy {
@@ -1886,14 +1755,10 @@ func allDummies(g *Graph, block []int) bool {
 	return true
 }
 
-// Brings edges that are nearly straight into line, by moving a node or bend a little across the
-// flow along with everything it is in line with already, where the nodes beside them leave room.
-// What is in line stays in line, so each move leaves one more edge straight.
 func snap(g *Graph, xs []float64, empty []uint8, opt LayeredOptions) {
 	n, KIND, RANK, EF, ET, EFD, ETD := g.n, g.KIND, g.RANK, g.EF, g.ET, g.EFD, g.ETD
 	layerStart, order, pos := g.layerStart, g.order, g.pos
 	passed := func(u int) bool { return empty != nil && KIND[u] == KindDummy && empty[RANK[u]] == 1 }
-	// Each edge from one point that is held in place to the next, past the bends in ranks that hold nothing else.
 	var a, b []int
 	var da, db []float64
 	for e := 0; e < len(EF); e++ {
@@ -1907,7 +1772,6 @@ func snap(g *Graph, xs []float64, empty []uint8, opt LayeredOptions) {
 		db = append(db, ETD[f])
 	}
 	off := func(k int) float64 { return xs[b[k]] + db[k] - xs[a[k]] - da[k] }
-	// The nodes in line with each other move as one.
 	block := make([]int, n)
 	members := make([][]int, n)
 	for i := 0; i < n; i++ {
@@ -1943,7 +1807,6 @@ func snap(g *Graph, xs []float64, empty []uint8, opt LayeredOptions) {
 	}
 	sortBy(near, func(x, y int) float64 { return or(math.Abs(off(x))-math.Abs(off(y)), float64(x-y)) })
 	gap := func(v int) float64 { return halfRoom(g, opt, v) }
-	// Whether every node of a block can move by `shift` and keep its room from those beside it.
 	free := func(id int, shift float64) bool {
 		for _, v := range members[id] {
 			s := layerStart[RANK[v]]
@@ -1967,7 +1830,6 @@ func snap(g *Graph, xs []float64, empty []uint8, opt LayeredOptions) {
 		if math.Abs(d) > BEND_SNAP || block[a[k]] == block[b[k]] {
 			continue
 		}
-		// The smaller of the two blocks moves, if it can; else the other.
 		upper := block[a[k]]
 		lower := block[b[k]]
 		first := lower
@@ -1998,7 +1860,6 @@ func snap(g *Graph, xs []float64, empty []uint8, opt LayeredOptions) {
 	}
 }
 
-// Marks the ranks that hold nothing but the bends of edges, if there are any.
 func emptyRanks(g *Graph) []uint8 {
 	empty := make([]uint8, g.maxRank+1)
 	any := false
@@ -2020,14 +1881,6 @@ func emptyRanks(g *Graph) []uint8 {
 	return nil
 }
 
-// Gives every piece that does not run straight down a track across its gap, and counts the
-// tracks of each gap. Two pieces in one gap share a track only where they cannot be mistaken
-// for each other: where they do not overlap, or where they leave from or arrive at the same
-// point, as the branches of a tree do. Which of two goes above the other is whichever makes
-// them cross less. With `curved`, the tracks are levels for curves to turn onto, and only the
-// pieces that would run along or too near another get one: each group of those counts its
-// tracks from its own first. `room` is the height of the gap under each rank, and `tall`
-// receives the height that a gap whose curves mostly cross each other should have instead of levels.
 func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64, tall []float64) {
 	from, to, rank, wide := pieces.from, pieces.to, pieces.rank, pieces.wide
 	total := len(from)
@@ -2050,7 +1903,6 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 	if len(byRankKeys) == 0 {
 		return
 	}
-	// The pieces are compared pair by pair, so where each begins and ends across the flow is worked out once.
 	LO := make([]float64, total)
 	HI := make([]float64, total)
 	for k := 0; k < total; k++ {
@@ -2065,15 +1917,11 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 	}
 	mates := func(a, b int) bool { return math.Abs(from[a]-from[b]) < IN_LINE || math.Abs(to[a]-to[b]) < IN_LINE }
 	overlap := func(a, b int) bool { return LO[a] < HI[b]-IN_LINE && LO[b] < HI[a]-IN_LINE }
-	// Whether a and b need tracks of their own.
 	clash := func(a, b int) bool { return overlap(a, b) && !mates(a, b) }
-	// Whether one of a and b could cross the other, depending on which is above.
 	meet := func(a, b int) bool {
 		return overlap(a, b) || within(to[a], b)+within(from[b], a)+within(to[b], a)+within(from[a], b) > 0
 	}
-	// How often a and b cross with a on the higher track: a's way down through b, and b's way down to itself through a.
 	crossings := func(a, b int) int { return within(to[a], b) + within(from[b], a) }
-	// Returns pairs of list indices, smaller first. Omitted pairs cannot meet or clash.
 	nearPairs := func(list []int) []int {
 		byLo := make([]int, len(list))
 		for i := range byLo {
@@ -2092,12 +1940,7 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 		return pairs
 	}
 
-	// Gives the pieces of one gap in `list` their tracks, and each the number of tracks that the
-	// pieces it has to do with take between them, counting its own from the first of those.
-	// Returns the number of tracks. The pieces come without tracks.
 	lay := func(list []int) int {
-		// A plain order to start from, and to keep where nothing says otherwise: the pieces that
-		// reach furthest go first, so that those of one fan nest.
 		sortBy(list, func(a, b int) float64 {
 			return or(or(HI[b]-LO[b]-(HI[a]-LO[a]), LO[a]-LO[b]), float64(a-b))
 		})
@@ -2116,7 +1959,6 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 			return i
 		}
 		weighed := count <= MAX_WEIGHED
-		// Avoid storing quadratically many pairs in dense gaps.
 		var pairs []int
 		var clashes [][]int
 		if weighed {
@@ -2137,9 +1979,6 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 			sequence[i] = i
 		}
 		if weighed {
-			// above[j] lists the pieces that should be above list[j]. The order follows as many of
-			// these as it can: a piece is placed once all that should be above it are, and when
-			// none is free, the one with the fewest still waiting.
 			waiting := make([]int, count)
 			after := make([][]int, count)
 			above = make([][]int, count)
@@ -2188,8 +2027,6 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 				}
 			}
 		}
-		// taken is the Set of tracks the placed pieces that clash with this one hold: taken[t]
-		// is the step of the last piece that found track t taken. Every track is below count.
 		var taken []int
 		if weighed {
 			taken = make([]int, count+1)
@@ -2197,8 +2034,6 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 		var onTrack [][]int
 		rows := 0
 		if !weighed {
-			// sketch: plainTracks gives the same tracks as the loop below without trying every
-			// track in turn, unless the pieces fall outside what it relies on.
 			if got, ok := plainTracks(list, from, to, LO, HI, track); ok {
 				rows, sequence = got, nil
 			}
@@ -2265,7 +2100,6 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 	lineA := make([]float64, 2*SAMPLES+2)
 	lineB := make([]float64, 2*SAMPLES+2)
 	reaches := func(points, line []float64, limit float64) bool {
-		// Allow rounding error in the cheap distance check before calling Math.hypot.
 		bound := float64(limit*limit) * (1 + 1e-9)
 		for i := 0; i <= SAMPLES; i++ {
 			px := points[2*i]
@@ -2299,9 +2133,6 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 		if len(all) > MAX_WEIGHED {
 			continue
 		}
-		// The pieces that turn onto levels: first those that run far across and have another such
-		// piece to be told apart from, then any two that would pass too near each other as plain
-		// curves.
 		var far []int
 		for _, k := range all {
 			if wide[k] == 1 {
@@ -2370,8 +2201,6 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 			}
 			continue
 		}
-		// With them go the short pieces that could cross one of them, so that each has its place
-		// among the levels and crosses none.
 		var members []int
 		for _, k := range all {
 			if level[k] || (wide[k] != 1 && beside[k]) {
@@ -2389,16 +2218,11 @@ func assignTracks(pieces *Pieces, trackCount []int, curved bool, room []float64,
 	}
 }
 
-// Moves the bends in ranks that hold only bends onto the straight line between the nearest points
-// of their edges that are held in place, and marks the ones that can be left out of the route.
-// `firstDummy` and `span` give each edge's run of bends, one in every rank. `sep` is the room
-// kept between the bends of twin edges, or 0 to leave those out as well.
 func straighten(g *Graph, xs []float64, empty []uint8, firstDummy []int, span []int, sep float64, onLine []uint8) {
 	EF, ET, EFD, ETD := g.EF, g.ET, g.EFD, g.ETD
 	succStart, succE, predStart, predE, layerStart, order := g.succStart, g.succE, g.predStart, g.predE, g.layerStart, g.order
 
 	want := make([]float64, len(xs))
-	// The points that each bend's edge runs between, across the ranks that hold only bends.
 	from := make([]float64, len(xs))
 	to := make([]float64, len(xs))
 	for ei := 0; ei < len(firstDummy); ei++ {
@@ -2407,7 +2231,6 @@ func straighten(g *Graph, xs []float64, empty []uint8, firstDummy []int, span []
 			continue
 		}
 		end := d0 + span[ei] - 1
-		// A bend's rank is its place in the run, counted from the rank after the edge's first node.
 		base := g.RANK[d0]
 		for d := d0; d < end; d++ {
 			if empty[base+d-d0] == 0 {
@@ -2431,9 +2254,6 @@ func straighten(g *Graph, xs []float64, empty []uint8, firstDummy []int, span []
 		}
 	}
 
-	// Nothing in such a rank is in a bend's way, so each one goes onto its line and out of the
-	// route. Only twins stay: bends of edges that run between the same two points, which would
-	// otherwise be drawn as one. They take places a little apart, around the line.
 	var twins []int
 	for r := 1; r < g.maxRank; r++ {
 		if empty[r] == 0 {
@@ -2447,7 +2267,6 @@ func straighten(g *Graph, xs []float64, empty []uint8, firstDummy []int, span []
 			for ; j < len(row) && math.Abs(from[row[j]]-from[row[i]]) < TWIN && math.Abs(to[row[j]]-to[row[i]]) < TWIN; j++ {
 				twins = append(twins, row[j])
 			}
-			// The twins keep the order the rank gave them, so that two edges do not swap sides on the way.
 			sortBy(twins, func(a, b int) float64 { return float64(g.pos[a] - g.pos[b]) })
 			for k := 0; k < len(twins); k++ {
 				d := twins[k]
@@ -2461,9 +2280,6 @@ func straighten(g *Graph, xs []float64, empty []uint8, firstDummy []int, span []
 	}
 }
 
-// In a rank that holds labels and bends but no nodes, a bend is there to take its edge straight
-// through between the labels. Where the edge would pass clear of every label anyway, the bend
-// is left out, and the edge turns in the whole height between the ranks on either side.
 func pastLabels(g *Graph, xs []float64, firstDummy []int, span []int, clear float64, onLine []uint8) {
 	maxRank, W, KIND, RANK, EF, ET, EFD, ETD := g.maxRank, g.W, g.KIND, g.RANK, g.EF, g.ET, g.EFD, g.ETD
 	succStart, succE, predStart, predE, layerStart, order := g.succStart, g.succE, g.predStart, g.predE, g.layerStart, g.order
@@ -2497,7 +2313,6 @@ func pastLabels(g *Graph, xs []float64, firstDummy []int, span []int, clear floa
 			if KIND[d] != KindDummy || labelled[RANK[d]] == 0 {
 				continue
 			}
-			// The points on either side that the edge is held at, past any bends already left out.
 			first := d
 			last := d
 			for first > d0 && onLine[first-1] != 0 {
@@ -2524,7 +2339,6 @@ func pastLabels(g *Graph, xs []float64, firstDummy []int, span []int, clear floa
 				continue
 			}
 			onLine[d] = 1
-			// The bends left out between the two points lie on the line between them.
 			steps := float64(last - first + 2)
 			for k := first; k <= last; k++ {
 				xs[k] = from + ((to-from)*float64(k-first+1))/steps
@@ -2533,7 +2347,6 @@ func pastLabels(g *Graph, xs []float64, firstDummy []int, span []int, clear floa
 	}
 }
 
-// Returns [final crossings, crossings before grouping or reordering].
 func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 	n, real, maxRank, W, EF, ET, EFD, ETD := g.n, g.real, g.maxRank, g.W, g.EF, g.ET, g.EFD, g.ETD
 	succStart, succE, predStart, predE, layerStart, order, pos, offsets := g.succStart, g.succE, g.predStart, g.predE, g.layerStart, g.order, g.pos, g.offsets
@@ -2545,12 +2358,10 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 	if widest < 2 {
 		return 0, 0
 	}
-	// With offsets, edges that reach one node at different offsets take separate places along it.
 	var place []int
 	if offsets {
 		place = make([]int, len(EF))
 	}
-	// Local offset indices and counts do not depend on node order.
 	var placeIn, places []int
 	var mixed []uint8
 	leaving := succE
@@ -2633,7 +2444,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 					continue
 				}
 				if place != nil && mixed[v] != 0 {
-					// Sort equal-offset edges by destination to avoid counting shared endpoints as crossings.
 					for a := t0 + 1; a < t; a++ {
 						item := targets[a]
 						dx := EFD[leaving[from+a-t0]]
@@ -2686,7 +2496,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 	moving := make([]int, widest)
 	spare := make([]int, widest)
 
-	// Keep groups contiguous, ordering each by its mean key.
 	groups := len(groupParent)
 	depth := make([]int, groups)
 	for gr := 0; gr < groups; gr++ {
@@ -2716,7 +2525,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 				groupCount[gr]++
 			}
 		}
-		// Compare siblings in their nearest common group; group items use n + group ID.
 		value := func(item int) float64 {
 			if item >= n {
 				return groupSum[item-n] / float64(groupCount[item-n])
@@ -2758,8 +2566,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 			}
 			return or(value(ia)-value(ib), float64(first(ia)-first(ib)))
 		}
-		// pos is read by the comparator and not changed until the row is sorted, so the row is
-		// sorted in place rather than in a copy.
 		sortBy(order[s:e], compare)
 		for i := s; i < e; i++ {
 			pos[order[i]] = i - s
@@ -2782,7 +2588,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 		return 0, declared
 	}
 	bestOrder := slices.Clone(order)
-	// Require improvements over both the grouped and ungrouped starting orders.
 	start := min(best, declared)
 
 	sweep := func(down bool, biasRight bool) {
@@ -2817,7 +2622,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 				to := start[v+1]
 				if from == to {
 					if GRP != nil {
-						// Preserve relative position when there are no neighbours in the adjacent rank.
 						across := layerStart[r+2] - layerStart[r+1]
 						if down {
 							across = layerStart[r] - layerStart[r-1]
@@ -2861,7 +2665,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 		}
 	}
 
-	// How many pairs of nodes in one rank are not in the order they were given.
 	outOfOrder := func() int {
 		total := 0
 		for r := 0; r <= maxRank; r++ {
@@ -2886,7 +2689,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 		}
 	}
 
-	// Adjacent swaps can remove crossings missed by barycenter sweeps.
 	pinOf := func(v int) float64 {
 		if v < real {
 			return nodes[v].Pin
@@ -2905,10 +2707,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 		}
 		return float64(pos[u])
 	}
-	// Crossings between a and b, assuming a is left of b.
-	//
-	// sketch sorts the places of b's edges once and counts those below each of a's by binary
-	// search, rather than comparing every pair: the same count in O(d log d) instead of O(d²).
 	var sorted []float64
 	below := func(x float64) int {
 		lo, hi := 0, len(sorted)
@@ -2976,10 +2774,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 		}
 	}
 
-	// The sweeps are run twice from the same start, going down first and going up first. They
-	// often end with as few crossings either way but a different order, and then the one that
-	// keeps more of the nodes in the order they were given is the less surprising.
-	// Only for graphs small enough to be read node by node: a second run costs as much as the first.
 	initial := slices.Clone(order)
 	small := n <= 600
 	chosen := bestOrder
@@ -3030,12 +2824,10 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 	copy(order, chosen)
 	settlePositions()
 	copy(bestOrder, chosen)
-	// The retained grouped order may exceed the ungrouped threshold; recount it.
 	if GRP != nil {
 		best = count()
 	}
 
-	// A drawing and its mirror image cross as often too. Of those two, likewise.
 	if !small {
 		return best, declared
 	}
@@ -3057,8 +2849,6 @@ func reduceCrossings(g *Graph, nodes []*LNode) (int, int) {
 	return best, declared
 }
 
-// Half the room a node, bend or port takes across the flow, with its share of the gap beside it.
-// A port on a group's border is a point that an edge passes through, and needs no more than a bend.
 func halfRoom(g *Graph, opt LayeredOptions, v int) float64 {
 	sep := opt.EdgeSep
 	if g.KIND[v] == KindNode {
@@ -3067,7 +2857,6 @@ func halfRoom(g *Graph, opt LayeredOptions, v int) float64 {
 	return g.W[v]/2 + sep/2
 }
 
-// Brandes-Köpf horizontal coordinate assignment: four aligned layouts, balanced.
 func position(g *Graph, opt LayeredOptions) []float64 {
 	n, maxRank, W, KIND, EF, ET, EFD, ETD := g.n, g.maxRank, g.W, g.KIND, g.EF, g.ET, g.EFD, g.ETD
 	succStart, succE, predStart, predE, layerStart, order, pos := g.succStart, g.succE, g.predStart, g.predE, g.layerStart, g.order, g.pos
@@ -3077,7 +2866,6 @@ func position(g *Graph, opt LayeredOptions) []float64 {
 		gap[i] = halfRoom(g, opt, i)
 	}
 
-	// Neighbours in left-to-right order, so the medians can be read off directly.
 	key := make([]int, segments)
 	for e := 0; e < segments; e++ {
 		key[e] = pos[ET[e]]
@@ -3096,7 +2884,6 @@ func position(g *Graph, opt LayeredOptions) []float64 {
 		}
 	}
 
-	// An edge between two real nodes may not cross a dummy-to-dummy segment; mark those that would.
 	conflict := make([]uint8, segments)
 	for r := 1; r <= maxRank; r++ {
 		prevLen := layerStart[r] - layerStart[r-1]
@@ -3135,13 +2922,11 @@ func position(g *Graph, opt LayeredOptions) []float64 {
 		}
 	}
 
-	// The four layouts share one allocation, and x is cleared for each.
 	var results [4][]float64
 	all := make([]float64, 4*n)
 	x := make([]float64, n)
 	root := make([]int, n)
 	align := make([]int, n)
-	// Offset of each node from its block's root, so that aligned edges meet at their attachment points.
 	shift := make([]float64, n)
 	eFrom := make([]int, n)
 	eTo := make([]int, n)
@@ -3352,7 +3137,6 @@ func position(g *Graph, opt LayeredOptions) []float64 {
 		if c > d {
 			c, d = d, c
 		}
-		// Only b and c are read below: the larger of a and c, the smaller of b and d.
 		if a > c {
 			c = a
 		}

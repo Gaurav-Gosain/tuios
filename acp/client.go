@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// versions this package speaks, newest first.
 var versions = []int{2, 1}
 
 // LatestVersion is the newest version this package speaks. Version 2 is a
@@ -206,8 +205,6 @@ func Connect(ctx context.Context, t Transport, o ClientOptions) (*Client, error)
 			return nil, verr
 		}
 		refused[v] = err
-		// An agent that names the versions it speaks, and not 1, is not
-		// asked again.
 		var rpc *RPCError
 		if errors.As(err, &rpc) && rpc.Code == codeUnsupportedProtocolVersion {
 			var data struct {
@@ -224,8 +221,6 @@ func Connect(ctx context.Context, t Transport, o ClientOptions) (*Client, error)
 	return nil, &VersionError{Client: asked, Refused: refused, client: o.Info.Name}
 }
 
-// dialInit opens a connection and sends initialize asking for version v.
-// bounded puts NegotiateTimeout on the wait.
 func dialInit(ctx context.Context, t Transport, o ClientOptions, v int, bounded bool) (*Client, error) {
 	rw, err := t.Dial(ctx)
 	if err != nil {
@@ -248,8 +243,6 @@ func dialInit(ctx context.Context, t Transport, o ClientOptions, v int, bounded 
 		params["info"] = o.Info
 		params["capabilities"] = map[string]any{}
 	} else {
-		// Version 1: no file system and no terminal, so a conforming agent
-		// never sends fs/* or terminal/*.
 		params["clientInfo"] = o.Info
 		params["clientCapabilities"] = map[string]any{
 			"fs":       map[string]bool{"readTextFile": false, "writeTextFile": false},
@@ -281,14 +274,11 @@ func dialInit(ctx context.Context, t Transport, o ClientOptions, v int, bounded 
 	switch {
 	case chose == v:
 	case chose >= 1 && chose < v:
-		// The agent chose an older version it speaks, as the spec lets it.
 	default:
 		_ = rw.Close()
 		return nil, &VersionError{Agent: []int{chose}}
 	}
 	if chose >= 2 && res.Info == nil && (res.AgentInfo != nil || len(res.AgentCapabilities) > 0) {
-		// info is required in version 2. An answer in the version 1 shape
-		// that says 2 is a version 1 agent echoing what it was asked for.
 		chose = 1
 	}
 	c.version = chose
@@ -351,7 +341,6 @@ type Session struct {
 	turn *turn
 }
 
-// turn is a version 2 prompt waiting for the idle state that ends it.
 type turn struct {
 	accepted bool
 	active   bool
@@ -485,8 +474,6 @@ func (s *Session) Prompt(ctx context.Context, blocks ...ContentBlock) (TurnEnd, 
 		}
 		return TurnEnd{Reason: res.StopReason}, nil
 	}
-	// The turn is set up before the prompt is sent: the agent may report
-	// the state that ends it before it answers.
 	t := &turn{done: make(chan TurnEnd, 1)}
 	s.mu.Lock()
 	s.turn = t
@@ -502,8 +489,6 @@ func (s *Session) Prompt(ctx context.Context, blocks ...ContentBlock) (TurnEnd, 
 		return TurnEnd{}, err
 	}
 	if res.MessageID == "" && res.StopReason != "" {
-		// An answer with a stop reason and no message id is the version 1
-		// answer: that agent ends the turn here.
 		return TurnEnd{Reason: res.StopReason}, nil
 	}
 	s.mu.Lock()
@@ -513,8 +498,6 @@ func (s *Session) Prompt(ctx context.Context, blocks ...ContentBlock) (TurnEnd, 
 	case e := <-t.done:
 		return e, nil
 	case <-s.c.conn.Done():
-		// A turn whose end was reported just before the connection closed
-		// still ended.
 		select {
 		case e := <-t.done:
 			return e, nil
@@ -541,7 +524,6 @@ func (s *Session) Close(ctx context.Context) error {
 	return s.c.conn.Call(ctx, "session/close", map[string]string{"sessionId": s.ID}, nil)
 }
 
-// onState applies a state update to the session's turn.
 func (s *Session) onState(u *StateUpdate) {
 	s.mu.Lock()
 	t := s.turn
@@ -555,9 +537,6 @@ func (s *Session) onState(u *StateUpdate) {
 		s.mu.Unlock()
 		return
 	case StateIdle:
-		// Idle ends the turn once the turn has run, or once the prompt was
-		// taken and the idle says why it stopped. An idle with neither is a
-		// state from before the prompt, and does not end it.
 		ends := t.active || (t.accepted && u.StopReason != "")
 		s.mu.Unlock()
 		if ends {

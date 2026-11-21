@@ -2,11 +2,6 @@
 
 package vt
 
-// The differential harness: the same bytes go to the pure emulator and the
-// libghostty-backed one, and the observable surface must agree. This is the
-// only place both implementations exist in one process; the shipped binary
-// compiles exactly one.
-
 import (
 	"fmt"
 	"os"
@@ -18,7 +13,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// diffPair drives both emulators in lockstep.
 type diffPair struct {
 	pure *Emulator
 	gh   *GhosttyTerminal
@@ -41,7 +35,6 @@ func (p *diffPair) write(t *testing.T, data []byte) {
 	}
 }
 
-// ghDiffCellText renders a cell for comparison messages.
 func ghDiffCellText(c *uv.Cell) string {
 	if c == nil {
 		return "<nil>"
@@ -49,7 +42,6 @@ func ghDiffCellText(c *uv.Cell) string {
 	return fmt.Sprintf("%q w=%d fg=%v bg=%v attrs=%x ul=%d", c.Content, c.Width, c.Style.Fg, c.Style.Bg, c.Style.Attrs, c.Style.Underline)
 }
 
-// compareScreens asserts the visible grids agree cell by cell.
 func (p *diffPair) compareScreens(t *testing.T, context string) {
 	t.Helper()
 	w, h := p.pure.Width(), p.pure.Height()
@@ -74,8 +66,6 @@ func (p *diffPair) compareScreens(t *testing.T, context string) {
 	}
 }
 
-// cellsEquivalent compares what a renderer would draw. Blank forms (nil,
-// empty content, space) are interchangeable when unstyled.
 func cellsEquivalent(a, b *uv.Cell) bool {
 	blank := func(c *uv.Cell) bool {
 		return c == nil || ((c.Content == "" || c.Content == " ") && c.Style.IsZero() && c.Link.URL == "")
@@ -130,13 +120,6 @@ func colorEquivalent(a, b interface {
 	return ar == br && ag == bg && ab_ == bb
 }
 
-// compareRender asserts the two rendered frames display the same thing. The
-// frames are re-parsed through fresh emulators and compared as displayed
-// cells rather than as bytes: the same color legitimately encodes as SGR 30
-// or 38;5;0 depending on which form the guest used, and only one side knows
-// which that was. The grid comparison sees converted cells; this sees the
-// layer that turns them into host output, which is where the style-churn
-// bug lived.
 func (p *diffPair) compareRender(t *testing.T, context string) {
 	t.Helper()
 	pr, gr := p.pure.Render(), p.gh.Render()
@@ -235,8 +218,6 @@ func TestGhosttyDiffBasicSequences(t *testing.T) {
 		{"tabs", "a\tb\tc"},
 		{"reverse-video", "\x1b[7minv\x1b[27mnorm"},
 		{"insert-line", "a\r\nb\r\nc\x1b[2;1H\x1b[L"},
-		// Every row holds text, so the rows a line shift pushes off carry
-		// something and the rows it opens have to come out blank.
 		{"insert-line-over-text", "a\r\nb\r\nc\r\nd\r\ne\x1b[2;1H\x1b[2L"},
 		{"delete-line-over-text", "a\r\nb\r\nc\r\nd\r\ne\x1b[2;1H\x1b[2M"},
 		{"region-delete-line-over-text", "a\r\nb\r\nc\r\nd\r\ne\x1b[2;4r\x1b[2;1H\x1b[M\x1b[r"},
@@ -299,9 +280,6 @@ func TestGhosttyDiffCorpus(t *testing.T) {
 				t.Fatal(err)
 			}
 			p := newDiffPair(t, 80, 24)
-			// Feed in PTY-sized chunks, and read between chunks: a sync
-			// per chunk is what the app does, and per-snapshot state such
-			// as style IDs only churns when reads interleave writes.
 			for off := 0; off < len(data); off += 4096 {
 				end := off + 4096
 				if end > len(data) {
@@ -327,11 +305,6 @@ func TestGhosttyDiffCorpus(t *testing.T) {
 // it is now an ordinary case in TestGhosttyDiffBasicSequences.
 func TestGhosttyKnownDivergences(t *testing.T) {
 	t.Run("sgr-underline-unknown-style", func(t *testing.T) {
-		// No standard defines underline style 7. libghostty falls back to a
-		// single underline; tmux leaves the underline off, and so does the
-		// pure emulator, which consumes the subparameter and changes
-		// nothing. Neither is wrong by any specification. The pure emulator
-		// follows tmux, and TestThemedSGR_UnderlineSubparamNoLeak pins it.
 		p := newDiffPair(t, 20, 5)
 		p.write(t, []byte("\x1b[4:7mx"))
 		pc := p.pure.CellAt(0, 0)
@@ -341,11 +314,6 @@ func TestGhosttyKnownDivergences(t *testing.T) {
 		}
 	})
 	t.Run("sgr-implementation-defined-colour", func(t *testing.T) {
-		// "38;0" names colour type 0, implementation defined. xterm and tmux
-		// consume the 0 as the colour type, so "1;38;0" leaves the text bold.
-		// libghostty consumes only 38 and then reads the 0 as SGR 0, which
-		// resets the bold. The pure emulator follows xterm and tmux, which
-		// is right: the 0 is a subordinate parameter of 38, not an SGR.
 		p := newDiffPair(t, 20, 5)
 		p.write(t, []byte("\x1b[1;38;0mx"))
 		pc := p.pure.CellAt(0, 0)
@@ -409,9 +377,7 @@ func TestGhosttyDiffDECRQM(t *testing.T) {
 		"\x1b[?47$p", "\x1b[?47h\x1b[?47$p",
 		"\x1b[?1016$p", "\x1b[?1016h\x1b[?1016$p",
 		"\x1b[?2048$p",
-		// A mode neither backend defines.
 		"\x1b[?9999h\x1b[?9999$p",
-		// DECXCPR, with the page number on both.
 		"\x1b[3;4H\x1b[?6n", "\x1b[10;20r\x1b[?6h\x1b[3;5H\x1b[?6n",
 	} {
 		t.Run(fmt.Sprintf("%q", in), func(t *testing.T) {
@@ -423,11 +389,6 @@ func TestGhosttyDiffDECRQM(t *testing.T) {
 		})
 	}
 
-	// Mode 2027 is answered differently on purpose, and each answer is true
-	// for its own backend. The pure emulator always measures by grapheme
-	// cluster, so it reports 3 (permanently set) and ignores a reset. The
-	// library honours a reset and stops clustering, so it reports 1 and then
-	// 2. See TestGhosttyGraphemeClusteringDefault for the layout half.
 	for _, tc := range []struct{ in, pure, gh string }{
 		{"\x1b[?2027$p", "\x1b[?2027;3$y", "\x1b[?2027;1$y"},
 		{"\x1b[?2027l\x1b[?2027$p", "\x1b[?2027;3$y", "\x1b[?2027;2$y"},
@@ -489,8 +450,6 @@ func TestGhosttyDiffPixelSizeReports(t *testing.T) {
 		if a, g := read(p.pure), read(p.gh); a != g || a != "\x1b[48;5;20;80;160t" {
 			t.Errorf("reply pure=%q ghostty=%q, want both %q", a, g, "\x1b[48;5;20;80;160t")
 		}
-		// The same cell again sends nothing. The daemon sets the cell on
-		// every pane resize and every attach.
 		p.pure.SetCellSize(8, 16)
 		p.gh.SetCellSize(8, 16)
 		if a, g := readQuick(p.pure), readQuick(p.gh); a != "" || g != "" {
@@ -499,8 +458,6 @@ func TestGhosttyDiffPixelSizeReports(t *testing.T) {
 	})
 }
 
-// readQuick is what term wrote back within a short wait, or "". The reader
-// it starts outlives a wait that saw nothing, so it is used last in a test.
 func readQuick(term Terminal) string {
 	got := make(chan string, 1)
 	go func() {
@@ -550,8 +507,6 @@ func TestGhosttyDiffAltScreenScrollback(t *testing.T) {
 	p.write(t, []byte(b.String()))
 	p.compareScrollback(t, "before alt", 0)
 
-	// Reading between generations matters: the count must hold across the
-	// switch, not merely at the end.
 	p.write(t, []byte("\x1b[?1049h\x1b[Halt content"))
 	if a, g := p.pure.ScrollbackLen(), p.gh.ScrollbackLen(); a != g {
 		t.Fatalf("alt active: scrollback len pure=%d ghostty=%d", a, g)
@@ -559,14 +514,10 @@ func TestGhosttyDiffAltScreenScrollback(t *testing.T) {
 	p.compareScrollback(t, "alt active", 0)
 	p.compareScreens(t, "alt active")
 
-	// More main-screen history cannot appear while alt is active; leaving
-	// alt must reveal the same history plus nothing.
 	p.write(t, []byte("\x1b[?1049l"))
 	p.compareScrollback(t, "back on main", 0)
 	p.compareScreens(t, "back on main")
 
-	// ClearScrollback during alt applies to the main history, deferred on
-	// the library until the main screen returns.
 	p.write(t, []byte("\x1b[?1049halt again"))
 	p.pure.ClearScrollback()
 	p.gh.ClearScrollback()
@@ -591,11 +542,7 @@ func TestGhosttyDiffKittyPassthroughContext(t *testing.T) {
 	type seen struct {
 		x, y, sb int
 		alt      bool
-		// cbAlt is the alt flag as the AltScreen callback last reported
-		// it, the way terminal.Window tracks it. The callback must have
-		// fired before a passthrough later in the same chunk, or the
-		// placement is stamped with the pre-switch screen and suppressed.
-		cbAlt bool
+		cbAlt    bool
 	}
 	capture := func(term Terminal) *[]seen {
 		out := &[]seen{}
@@ -616,12 +563,9 @@ func TestGhosttyDiffKittyPassthroughContext(t *testing.T) {
 	for i := range 30 {
 		fmt.Fprintf(&b, "history %d\r\n", i)
 	}
-	// One chunk: junk that parks the cursor bottom-right, then the
-	// alt-screen switch, a cursor move, and the image APC.
 	b.WriteString("\x1b[8;38Hjunk")
 	b.WriteString("\x1b[?1049h\x1b[3;5H")
 	b.WriteString("\x1b_Ga=T,f=32,s=1,v=1,i=7,p=1,q=2;AAAA\x1b\\")
-	// A second APC after more cursor movement, still the same chunk.
 	b.WriteString("\x1b[6;2H\x1b_Ga=p,i=7,p=2,q=2\x1b\\")
 	p.write(t, []byte(b.String()))
 

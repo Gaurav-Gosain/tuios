@@ -10,8 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// A 16x12 sixel: red on the top band, blue on the bottom one, with raster
-// attributes stating the size, the way img2sixel and chafa write it.
 const testSixel = "\x1bPq\"1;1;16;12#1;2;100;0;0#2;2;0;0;100#1!16~-#2!16~\x1b\\"
 
 // TestSixelMarksCells checks both backends write an image's cells as markers
@@ -34,7 +32,6 @@ func TestSixelMarksCells(t *testing.T) {
 	if gotX != 2 || gotY != 1 {
 		t.Fatalf("passthrough saw cursor %d,%d, want 2,1", gotX, gotY)
 	}
-	// 16x12 pixels at 8x6 cells is 2 columns by 2 rows, from (2,1).
 	for y := range 6 {
 		for x := range 20 {
 			c := term.CellAt(x, y)
@@ -59,8 +56,6 @@ func TestSixelMarksCells(t *testing.T) {
 		t.Fatalf("cursor at %v after the image, want 0,3", pos)
 	}
 
-	// Text over one cell takes that cell out of the image; an erase takes
-	// the rest.
 	if _, err := term.Write([]byte("\x1b[2;3HX")); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +82,6 @@ func TestSixelScrollsIntoScrollback(t *testing.T) {
 	t.Cleanup(func() { _ = term.Close() })
 	term.SetCellSize(8, 3)
 	term.SetSixelPassthroughFunc(func(*vt.SixelCommand, int, int) uint32 { return 5 })
-	// 12 pixels at 3 per row is 4 rows on a 3-row screen, from the last row.
 	if _, err := term.Write([]byte("\x1b[3;1H" + testSixel)); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +117,6 @@ func TestSixelDecodeEncodeRoundTrip(t *testing.T) {
 	if c, ok := img.At(3, 8); !ok || c.B != 255 || c.R != 0 {
 		t.Fatalf("bottom band pixel = %v %v, want blue", c, ok)
 	}
-	// Crop the right half of rows 4..10, which straddles the band edge.
 	crop := image.Rect(8, 4, 16, 10)
 	seq := vt.EncodeSixel(img, crop, crop.Dx(), crop.Dy())
 	if !strings.HasPrefix(string(seq), "\x1bP") || !strings.HasSuffix(string(seq), "\x1b\\") {
@@ -142,7 +135,6 @@ func TestSixelDecodeEncodeRoundTrip(t *testing.T) {
 			}
 		}
 	}
-	// Scaled to double size, each source pixel becomes a 2x2 block.
 	big := vt.DecodeSixel(vt.ParseSixelCommand(func() []byte {
 		s := vt.EncodeSixel(img, crop, 16, 12)
 		return s[2 : len(s)-2]
@@ -185,8 +177,6 @@ func TestSixelDecodeLimits(t *testing.T) {
 	}
 }
 
-// benchImage is a 1000x600 picture using all 256 registers in bands, about
-// what a photo-sized sixel from chafa or img2sixel holds.
 func benchImage() *vt.SixelImage {
 	img := &vt.SixelImage{Width: 1000, Height: 600, Palette: make([]color.RGBA, vt.SixelMaxRegisters)}
 	img.Pix = make([]uint16, img.Width*img.Height)
@@ -249,7 +239,6 @@ func TestSixelCursorBelowImage(t *testing.T) {
 		term := vt.New(10, 6)
 		term.SetCellSize(8, 6)
 		term.SetSixelPassthroughFunc(func(*vt.SixelCommand, int, int) uint32 { return 9 })
-		// Two image rows (12 pixels at 6 per row).
 		if _, err := fmt.Fprintf(term, "\x1b[%d;1H%sAFTER", startRow+1, testSixel); err != nil {
 			t.Fatal(err)
 		}
@@ -277,8 +266,6 @@ func TestSixelUnderScrollRegionAndOriginMode(t *testing.T) {
 	t.Cleanup(func() { _ = term.Close() })
 	term.SetCellSize(8, 6)
 	term.SetSixelPassthroughFunc(func(*vt.SixelCommand, int, int) uint32 { return 4 })
-	// Region rows 2..7, origin mode on, cursor at region row 3 (screen row
-	// 4, index 3), which is painted blue first.
 	in := "\x1b[2;7r\x1b[?6h\x1b[3;1H\x1b[44mABCD\x1b[0m\x1b[3;1H" + testSixel + "Z"
 	if _, err := term.Write([]byte(in)); err != nil {
 		t.Fatal(err)
@@ -320,12 +307,10 @@ func TestSixelExact(t *testing.T) {
 			t.Errorf("%s: exact = %v, want %v", tc.name, img != nil && img.Exact, tc.exact)
 		}
 	}
-	// An opaque gap is filled with register 0, so every crop agrees.
 	img := vt.DecodeSixel(vt.ParseSixelCommand([]byte("0;0;0q\"1;1;10;6#0;2;0;0;100#1;2;100;0;0!5~")))
 	if c, ok := img.At(8, 2); !ok || c.B != 255 {
 		t.Errorf("unpainted pixel under an opaque background = %v %v, want register 0 (blue)", c, ok)
 	}
-	// Colours past the 256 a pane is told fold into the first 256.
 	var b strings.Builder
 	b.WriteString("0;1;0q\"1;1;300;6")
 	for i := range 300 {

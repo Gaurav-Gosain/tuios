@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-// These tests hold the findings of the verification of the wave 1 fixes.
-// Each case has a deadline: an input that once took seconds must now take
-// well under one.
-
 const deadline = 200 * time.Millisecond
 
 func within(t *testing.T, name string, f func()) {
@@ -22,16 +18,11 @@ func within(t *testing.T, name string, f func()) {
 		defer close(done)
 		f()
 	}()
-	// A case that hangs fails here instead of at the test binary's timeout.
-	// Its goroutine keeps running until the test binary exits.
 	select {
 	case <-done:
 	case <-time.After(20 * deadline):
 		t.Fatalf("%s is still running after %v", name, 20*deadline)
 	}
-	// The race detector slows this code by far more than the margin in deadline.
-	// Each case guards against a cost that grows without bound, which takes minutes
-	// or never ends, so it stays caught at ten times the deadline.
 	limit := deadline
 	if raceEnabled {
 		limit = 10 * deadline

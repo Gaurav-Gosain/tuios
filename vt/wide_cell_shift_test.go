@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// rowRunes renders a row the way a user would read it: the lead of a wide rune
-// contributes its text and its continuation cells contribute nothing, so the
-// string's length is the row's column count only when every rune is narrow.
 func rowRunes(e *Emulator, y int) string {
 	var b strings.Builder
 	for x := range e.Width() {
@@ -39,7 +36,6 @@ func TestCellShiftKeepsWideRunes(t *testing.T) {
 		seq   string
 		want  string
 	}{
-		// A row of nothing but wide runes: the case that used to empty the line.
 		{"delete 1 of wide", "中日本", "\x1b[1P", " 日本"},
 		{"delete 2 of wide", "中日本", "\x1b[2P", "日本"},
 		{"delete 3 of wide", "中日本", "\x1b[3P", " 本"},
@@ -47,8 +43,6 @@ func TestCellShiftKeepsWideRunes(t *testing.T) {
 		{"insert 2 of wide", "中日本", "\x1b[2@", "  中日本"},
 		{"insert 3 of wide", "中日本", "\x1b[3@", "   中日本"},
 
-		// Narrow runes on both sides, so the shift crosses a boundary in each
-		// direction rather than only ever starting on a lead.
 		{"delete 1 of mixed", "ab中日本cd", "\x1b[1P", "b中日本cd"},
 		{"delete 3 of mixed", "ab中日本cd", "\x1b[3P", " 日本cd"},
 		{"insert 1 of mixed", "ab中日本cd", "\x1b[1@", " ab中日本cd"},
@@ -83,8 +77,6 @@ func TestCellShiftLeavesNoOrphanedHalf(t *testing.T) {
 				if c == nil || c.Width != 0 {
 					continue
 				}
-				// A continuation must be preceded by a lead wide enough to
-				// reach it.
 				lead := e.CellAt(x-1, 0)
 				if x == 0 || lead == nil || lead.Width < 2 {
 					t.Errorf("CSI %d%s: column %d is a continuation with no lead", n, seq, x)

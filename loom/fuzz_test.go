@@ -8,7 +8,6 @@ import (
 	"tuios.dev/tml"
 )
 
-// reader hands out fuzz bytes as small choices.
 type reader struct {
 	b []byte
 	i int
@@ -34,8 +33,6 @@ var fuzzSizes = []string{"", "1", "3", "10", "50%", "100%", "fill", "fill:3", "0
 
 var fuzzTexts = []string{"", "a", "hello world", "日本語のテキスト", "👍🏽🇯🇵", "e\u0301", "\x1b[2J", "tab\there", "line\nbreak", "\u202eevil", "{state.n}", "{state.s}", "{len(state.rows)}"}
 
-// fuzzTree builds a random tree, not necessarily one tml.Check accepts:
-// loom must draw any tree.
 func fuzzTree(r *reader, depth int) *tml.Node {
 	typ := fuzzTypes[r.pick(len(fuzzTypes))]
 	if depth > 32 {
@@ -121,8 +118,6 @@ func fuzzTree(r *reader, depth int) *tml.Node {
 		set("x", tml.StringValue("k"))
 		set("label", tml.StringValue("k"))
 		set("v", tml.StringValue("v"))
-		// No new byte is read here: the kept corpus inputs must decode to
-		// the same trees.
 		set("style", tml.StringValue("donut"))
 		if r.pick(2) == 0 {
 			set("dir", tml.StringValue("h"))
@@ -177,13 +172,9 @@ func FuzzLayout(f *testing.F) {
 		W, H := int(w%160), int(h%60)
 		buf := s.Render(W, H)
 		checkFits(t, buf, W, H)
-		// The time bound, without a clock: layout measures each box a
-		// bounded number of times, whatever the nesting.
 		if n := countBoxes(s.root); s.stats.measures > 64*(n+1) {
 			t.Fatalf("one render measured %d times for %d boxes", s.stats.measures, n)
 		}
-		// Keys and clicks must not panic either, and the picture after them
-		// must equal a full redraw.
 		for _, k := range []string{"down", "tab", "enter", "s", "right"} {
 			_, _ = s.Key(k)
 		}
@@ -239,15 +230,11 @@ func FuzzIncremental(f *testing.F) {
 	})
 }
 
-// rowChainSeed is FuzzLayout input for one row nested depth times, around
-// one text: each row reads type 0 (row), no w or h, no pad, gap, min-w,
-// align, show or each, and one child.
 func rowChainSeed(depth int) []byte {
-	b := []byte{0} // one root child
+	b := []byte{0}
 	for range depth {
 		b = append(b, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1)
 	}
-	// The text: type 10, no w or h, none of the options, the text "a", no b.
 	return append(b, 10, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1)
 }
 
@@ -262,8 +249,6 @@ func countBoxes(b *box) int {
 	return n
 }
 
-// listDoc has if and each inside a list's item template, a form whose
-// text reads form.x, and a button inside a box that show hides.
 const listDoc = `<tml version="1"><state>{"more": true, "rows": [{"x": "a", "n": [1, 2]}, {"x": "b", "n": [3]}], "y": "hello"}</state>
 <col>
   <list items="state.rows" select="single">
@@ -322,9 +307,6 @@ func FuzzIncrementalList(f *testing.F) {
 	})
 }
 
-// assertReachable checks that every box the pointer index holds is in the
-// tree: a rebuild must not leave orphans, which would hold a share of the
-// expansion budget and of memory.
 func assertReachable(t testing.TB, s *Surface) {
 	t.Helper()
 	in := map[*box]bool{}

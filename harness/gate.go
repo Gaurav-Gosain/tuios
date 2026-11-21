@@ -34,42 +34,29 @@ type Gate struct {
 	AnyOf    []Gate   `toml:"any_of"`
 	NoneOf   []Gate   `toml:"none_of"`
 
-	// Compiled forms of Regex and NotRegex, index-aligned so a report can name
-	// the pattern as the manifest spells it. Filled by compile.
-	regex    []*regexp.Regexp
-	notRegex []*regexp.Regexp
-	// substrings is whether this gate or one nested in it names a substring,
-	// which is when a scan needs the folded haystack. Filled by compile.
+	regex      []*regexp.Regexp
+	notRegex   []*regexp.Regexp
 	substrings bool
 }
 
-// Limits on one manifest's predicate tree. Nesting is for readability, not for
-// building programs, and the screen scan runs in the daemon on every settle, so
-// a manifest past these is refused at load where the error names the file.
 const (
 	maxGateDepth    = 8
 	maxGatesPerFile = 512
 	maxPredicates   = 1024
 )
 
-// gateBudget counts one manifest's gates and predicates against the limits.
 type gateBudget struct {
 	gates, predicates int
 }
 
-// positive reports whether the gate names anything that must be present. A
-// gate with only vetoes would match every screen that lacks them.
 func (g *Gate) positive() bool {
 	return len(g.All)+len(g.Any)+len(g.Regex)+len(g.AllOf)+len(g.AnyOf) > 0
 }
 
-// empty reports whether the gate names nothing at all.
 func (g *Gate) empty() bool {
 	return !g.positive() && len(g.Not)+len(g.NotRegex)+len(g.NoneOf) == 0
 }
 
-// compile folds the gate's substrings when the manifest folds case, compiles
-// its patterns, and checks every nested gate, counting all of it against b.
 func (g *Gate) compile(foldCase bool, depth int, b *gateBudget) error {
 	if depth > maxGateDepth {
 		return errorf("gates nest deeper than %d", maxGateDepth)
@@ -80,9 +67,6 @@ func (g *Gate) compile(foldCase bool, depth int, b *gateBudget) error {
 	if b.predicates += len(g.All) + len(g.Any) + len(g.Not) + len(g.Regex) + len(g.NotRegex); b.predicates > maxPredicates {
 		return errorf("more than %d predicates in one manifest", maxPredicates)
 	}
-	// substringText keeps a region's lines and their joined form apart with a
-	// NUL, so a substring holding one could match across the two. No screen
-	// or title holds one, so such a substring could never match anyway.
 	for _, list := range [][]string{g.All, g.Any, g.Not} {
 		for _, s := range list {
 			if strings.IndexByte(s, 0) >= 0 {
@@ -110,9 +94,6 @@ func (g *Gate) compile(foldCase bool, depth int, b *gateBudget) error {
 	}{{"all_of", g.AllOf}, {"any_of", g.AnyOf}, {"none_of", g.NoneOf}} {
 		for i := range set.gates {
 			nested := &set.gates[i]
-			// A group inside all_of or any_of is a claim and must name
-			// something present. A group inside none_of is a veto and may
-			// be vetoes all the way down, but not nothing.
 			if set.name == "none_of" {
 				if nested.empty() {
 					return errorf("%s group %d is empty", set.name, i)
@@ -130,10 +111,6 @@ func (g *Gate) compile(foldCase bool, depth int, b *gateBudget) error {
 	return nil
 }
 
-// provesShape reports whether the gate carries a pattern on every path to a
-// match. A pattern pins the structure of a rendered line, which is what an
-// idle rule reading more than the input box has to have: a loose substring
-// could be any word in any output.
 func (g *Gate) provesShape() bool {
 	if len(g.Regex) > 0 {
 		return true
@@ -154,9 +131,6 @@ func (g *Gate) provesShape() bool {
 	return true
 }
 
-// positiveStrings appends every substring the gate needs present, its own
-// first and then its nested groups', skipping vetoes. A prompt line is found by
-// looking for these, and a rule's kind is guessed from them.
 func (g *Gate) positiveStrings(out []string) []string {
 	out = append(out, g.All...)
 	out = append(out, g.Any...)
@@ -169,7 +143,6 @@ func (g *Gate) positiveStrings(out []string) []string {
 	return out
 }
 
-// nestedPositiveStrings is positiveStrings for the nested groups alone.
 func (g *Gate) nestedPositiveStrings() []string {
 	var out []string
 	for i := range g.AllOf {
@@ -181,26 +154,12 @@ func (g *Gate) nestedPositiveStrings() []string {
 	return out
 }
 
-// match applies the gate to a region's text. Substrings check the folded
-// haystack, which regionText.get builds: lowercased when the manifest folds
-// case, and joined across a wrap for after_last_horizontal_rule. Patterns
-// always read the plain haystack, because a pattern chooses its own case
-// handling with (?i).
-//
-// A non-nil rep collects why each predicate refused, which is what a person
-// writing a rule needs and what classification does not. Passing nil skips
-// every allocation, so the diagnostic costs the hot path nothing. Only the
-// top-level gate fills the per-predicate lists; a nested group that refused is
-// named in rep.Groups by its path, such as "all_of[1]".
 func (g *Gate) match(hay, folded string, rep *RuleReport, contains func(hay, needle string) bool) bool {
 	ok := true
 	fail := func() bool {
 		ok = false
 		return rep == nil
 	}
-	// Substrings first, then patterns: a substring is a plain search and a
-	// pattern can cost microseconds, and without a report the first refusal
-	// ends the match.
 	for _, s := range g.All {
 		if contains(folded, s) {
 			continue
@@ -288,9 +247,6 @@ func (g *Gate) match(hay, folded string, rep *RuleReport, contains func(hay, nee
 	return ok
 }
 
-// checkRule applies a rule's gate to one haystack. A rule naming no positive
-// predicate would match every screen the harness ever paints, which is a rule
-// that says the pane is always in its state, so it matches nothing instead.
 func checkRule(rl *ScreenRule, hay, folded string, rep *RuleReport, contains func(hay, needle string) bool) bool {
 	if !rl.positive() {
 		if rep != nil {

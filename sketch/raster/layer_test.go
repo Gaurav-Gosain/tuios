@@ -1,8 +1,5 @@
 //go:build !race
 
-// The race detector makes this drawing several times slower than the
-// test's 10 s limit allows, so the test runs without it.
-
 package raster
 
 import (

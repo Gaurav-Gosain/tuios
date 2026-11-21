@@ -2,10 +2,7 @@ package layout
 
 import "testing"
 
-// The case pele 1.8.0 added in tests/layout/layered.test.ts.
-
 func TestGroupedOrderCountsItsCrossings(t *testing.T) {
-	// orders a flat graph with groups side by side, and counts the crossings of that order
 	nodes := make([]*LNode, 6)
 	for i := range nodes {
 		nodes[i] = Lnode(40, 40, KindNode)
@@ -20,7 +17,6 @@ func TestGroupedOrderCountsItsCrossings(t *testing.T) {
 		Groups:    &Groups{Of: of, Parent: []int{-1, -1}},
 		OrderOnly: true,
 	})
-	// Points are (rank, cross-flow position) pairs.
 	var pieces [][3]float64
 	for _, e := range edges {
 		for k := 2; k < len(e.Points); k += 2 {

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/block/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package block
 
 import (
@@ -49,7 +47,6 @@ func typeStr2Type(typeStr string) string {
 	}
 }
 
-// edgeStrToEdgeData: a link's text is ASCII once trimmed, so its last byte is its last character.
 func edgeStrToEdgeData(typeStr string) string {
 	s := js.Trim(typeStr)
 	if s == "" {
@@ -106,7 +103,6 @@ type frame struct {
 	columns  float64
 }
 
-// newFrame: pele flattens the statements here; the parser's lists are flat already.
 func newFrame(list []*Block, parent *Block) *frame {
 	columns := -1.0
 	for _, block := range list {
@@ -124,10 +120,8 @@ type BlockDb struct {
 	blocks  []*Block
 	edges   []*Block
 	classes map[string]*BlockClassDef
-	// Mermaid keeps the root in here too, which makes a block called `root` vanish. Here it stays out.
-	byId map[string]*Block
+	byId    map[string]*Block
 
-	// Ids that a class or style statement named before any block had them.
 	pending   map[string]bool
 	edgeCount map[string]int
 	ids       int
@@ -145,7 +139,6 @@ func newBlockDb() *BlockDb {
 	}
 }
 
-// generateId: Mermaid's ids are random. These are counted, so the same text always gives the same output.
 func (db *BlockDb) generateId() string {
 	db.ids++
 	return "id-" + strconv.Itoa(db.ids)
@@ -174,7 +167,6 @@ func (db *BlockDb) addStyle2Node(id, styles string) {
 	db.named(id).styles = strings.Split(styles, ",")
 }
 
-// setCssClass: Mermaid looks each id up before trimming it, so `class a, b hot` misses b. Here it is trimmed first.
 func (db *BlockDb) setCssClass(itemIds, cssClassName string) {
 	for _, id := range strings.Split(itemIds, ",") {
 		block := db.named(js.Trim(id))
@@ -182,8 +174,6 @@ func (db *BlockDb) setCssClass(itemIds, cssClassName string) {
 	}
 }
 
-// named: Mermaid throws on a style for an unknown id, and a class for one makes the block of that id
-// disappear when it is declared later. Here both wait for the block.
 func (db *BlockDb) named(id string) *Block {
 	block := db.byId[id]
 	if block == nil {
@@ -205,7 +195,6 @@ func (db *BlockDb) setHierarchy(statements []*Block) {
 		}
 		block := f.list[f.at]
 		f.at++
-		// pele warns here of a block wider than the columns, through an option nothing sets.
 		switch block.typ {
 		case "classDef":
 			db.addStyleClass(block.id, block.css)
@@ -229,7 +218,6 @@ func (db *BlockDb) setHierarchy(statements []*Block) {
 			continue
 		}
 
-		// A composite whose header was a link statement has no id of its own.
 		if block.id == "" {
 			block.id = db.generateId()
 		}

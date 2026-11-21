@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/cynefin/boundaries.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package cynefin
 
 import (
@@ -10,11 +8,6 @@ import (
 	"tuios.dev/sketch/internal/svg"
 )
 
-// The geometry of Mermaid's Cynefin boundaries: seeded wavy lines between the domains and the
-// S-shaped cliff between Clear and Chaotic. Curves are flat lists of numbers: a start point, then
-// six numbers (two control points and an end point) per cubic segment.
-
-// toUint32 is ToInt32 of a number, as its 32 bits.
 func toUint32(x float64) uint32 {
 	if math.IsNaN(x) || math.IsInf(x, 0) {
 		return 0
@@ -26,7 +19,6 @@ func toUint32(x float64) uint32 {
 	return uint32(m)
 }
 
-// seededRandom is mulberry32, one step.
 func seededRandom(seed float64) float64 {
 	t := toUint32(seed + 0x6d2b79f5)
 	t = (t ^ (t >> 15)) * (t | 1)
@@ -48,7 +40,6 @@ func hashString(str string) int32 {
 	return hash
 }
 
-// resolveSeed: a configured seed other than zero wins; otherwise the seed comes from the diagram's id.
 func resolveSeed(configured float64, id string) float64 {
 	if !math.IsNaN(configured) && !math.IsInf(configured, 0) && configured != 0 {
 		return configured
@@ -57,9 +48,8 @@ func resolveSeed(configured float64, id string) float64 {
 }
 
 type WaveOptions struct {
-	segments int
-	vertical bool
-	// Multipliers Mermaid uses to vary the seed per point and per control point.
+	segments     int
+	vertical     bool
 	pointStep    float64
 	controlStep  float64
 	controlShift float64
@@ -70,8 +60,6 @@ type WaveOptions struct {
 var FOLD = WaveOptions{segments: 7, vertical: true, pointStep: 17, controlStep: 31, controlShift: 7}
 var HORIZON = WaveOptions{segments: 7, vertical: false, pointStep: 23, controlStep: 37, controlShift: 11}
 
-// wave is a wavy line along one axis from `from` to `to`, centered on `center` in the other axis.
-// Points jitter by up to the amplitude; a pinned end stays on the center line.
 func wave(from, to, center, seed, amplitude float64, o WaveOptions) []float64 {
 	step := (to - from) / float64(o.segments)
 	along := make([]float64, 0, o.segments+1)
@@ -108,7 +96,6 @@ func wave(from, to, center, seed, amplitude float64, o WaveOptions) []float64 {
 	return out
 }
 
-// cliff is a steep S from (cx, top) down to (cx, bottom).
 func cliff(cx, top, bottom, amplitude float64) []float64 {
 	h := bottom - top
 	return []float64{
@@ -118,14 +105,12 @@ func cliff(cx, top, bottom, amplitude float64) []float64 {
 	}
 }
 
-// forward writes path commands that continue from the curve's start point to its end.
 func forward(b *strings.Builder, curve []float64) {
 	for i := 2; i+5 < len(curve); i += 6 {
 		svg.WriteStrings(b, "C", svg.Num(curve[i]), ",", svg.Num(curve[i+1]), " ", svg.Num(curve[i+2]), ",", svg.Num(curve[i+3]), " ", svg.Num(curve[i+4]), ",", svg.Num(curve[i+5]))
 	}
 }
 
-// backward writes path commands that continue from the curve's end point back to its start.
 func backward(b *strings.Builder, curve []float64) {
 	for i := len(curve) - 6; i >= 2; i -= 6 {
 		svg.WriteStrings(b, "C", svg.Num(curve[i+2]), ",", svg.Num(curve[i+3]), " ", svg.Num(curve[i]), ",", svg.Num(curve[i+1]), " ", svg.Num(curve[i-2]), ",", svg.Num(curve[i-1]))

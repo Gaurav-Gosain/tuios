@@ -7,21 +7,10 @@ import (
 	"strings"
 )
 
-// SVG backend. Real <text> and <rect> elements, never foreignObject: carbon
-// and ray.so export HTML wrapped in foreignObject and design tools render it
-// blank. We have a cell grid, so we do not need their trap. Every run gets
-// an explicit x from the grid plus textLength with spacingAndGlyphs, so a
-// viewer with a different font still keeps the columns; background rects use
-// exact grid widths, so freeze's half-cell fudge and its gap bug are
-// unconstructible here.
-
 const (
 	svgFontSize = 14.0
-	// svgCellW is the advance of a monospace cell at svgFontSize. 0.6em is
-	// JetBrains Mono's advance; textLength pins other fonts to the grid
-	// anyway, this only sets the grid's absolute scale.
-	svgCellW = svgFontSize * 0.6
-	svgCellH = svgFontSize * 1.3
+	svgCellW    = svgFontSize * 0.6
+	svgCellH    = svgFontSize * 1.3
 )
 
 // RenderSVG renders the grid and frame to an SVG document.
@@ -56,18 +45,9 @@ func RenderSVG(g *Grid, f *Frame) []byte {
 		fmt.Fprintf(&b, `<rect width="%s" height="%s" fill="%s"/>`+"\n", fnum(l.w), fnum(l.h), Hex(g.BG))
 	}
 
-	// The content group carries the one transform from cell units to
-	// pixels; a decoration layer appended later addresses (col,row) and
-	// inherits this geometry. It is a whole number of units, so a position
-	// snapped to the pixel grid inside the group is on the grid outside it as
-	// well: the box glyphs and the background cells are laid on whole pixels
-	// (see boxdraw.go), and a fractional offset here would put every one of
-	// them back between two.
 	l.gridX, l.gridY = math.Round(l.gridX), math.Round(l.gridY)
 	fmt.Fprintf(&b, `<g transform="translate(%s,%s)">`+"\n", fnum(l.gridX), fnum(l.gridY))
 	for _, r := range bgRuns(g) {
-		// On whole pixels like the PNG backend's cell backgrounds, so a
-		// background and a block glyph drawn over it cover the same pixels.
 		x0, x1 := math.Round(float64(r.col)*l.cw), math.Round(float64(r.col+r.cells)*l.cw)
 		y0, y1 := math.Round(float64(r.row)*l.ch), math.Round(float64(r.row+1)*l.ch)
 		fmt.Fprintf(&b, `<rect x="%s" y="%s" width="%s" height="%s" fill="%s" shape-rendering="crispEdges"/>`+"\n",
@@ -105,8 +85,6 @@ func writeSVGDefs(b *strings.Builder, g *Grid, f *Frame, l layout, family string
 	b.WriteString("</defs>\n")
 }
 
-// svgPrimaryFamily is the first name in a CSS font stack, so the embedded
-// face registers under the name the stack asks for.
 func svgPrimaryFamily(stack string) string {
 	name := stack
 	if before, _, ok := strings.Cut(stack, ","); ok {
@@ -117,7 +95,6 @@ func svgPrimaryFamily(stack string) string {
 
 func writeSVGTitleBar(b *strings.Builder, g *Grid, f *Frame, l layout, family string) {
 	barY := l.cardY
-	// A hairline under the bar, quiet against the card.
 	rule := mix(g.BG, g.FG, 0.12)
 	fmt.Fprintf(b, `<rect x="%s" y="%s" width="%s" height="1" fill="%s"/>`+"\n",
 		fnum(l.cardX), fnum(barY+l.titleH-1), fnum(l.cardW), Hex(rule))
@@ -163,8 +140,6 @@ func writeSVGRun(b *strings.Builder, r run, l layout) {
 	}
 
 	if r.procedural != 0 {
-		// Laid out in the document's units and handed back in them, so the
-		// group's own offset comes off again.
 		paths, _ := proceduralPaths(r.procedural, l.gridX+x, l.gridY+y, l.cw, l.ch)
 		for _, p := range paths {
 			op := opacity
@@ -203,21 +178,14 @@ func writeSVGRun(b *strings.Builder, r run, l layout) {
 	writeSVGDecor(b, r, x, y, w, l)
 }
 
-// cellsOf is the cell count of the run text after right-trimming spaces.
 func cellsOf(trimmed string, r run) int {
 	if r.wide {
 		return 2
 	}
-	// One cluster per cell in a narrow run, so trimming spaces off the end
-	// removes exactly one cell per space.
 	removed := len([]rune(r.text)) - len([]rune(trimmed))
-	// Note: multi-rune clusters make rune counting approximate; runs are
-	// split so narrow multi-rune clusters are rare, and textLength keeps
-	// the columns honest regardless.
 	return r.cells - removed
 }
 
-// writeSVGDecor draws underline styles and strikethrough as geometry.
 func writeSVGDecor(b *strings.Builder, r run, x, y, w float64, l layout) {
 	c := r.cell
 	t := l.ch / 14
@@ -250,7 +218,6 @@ func writeSVGDecor(b *strings.Builder, r run, x, y, w float64, l layout) {
 	}
 }
 
-// curlyPath is one wave period per cell, quadratic segments.
 func curlyPath(x, y, w, t float64) string {
 	var b strings.Builder
 	amp := t * 1.2
@@ -271,7 +238,6 @@ func curlyPath(x, y, w, t float64) string {
 	return b.String()
 }
 
-// pathData serializes a gpath at a cell origin.
 func pathData(p gpath, ox, oy float64) string {
 	var b strings.Builder
 	for _, o := range p.ops {
@@ -292,7 +258,6 @@ func pathData(p gpath, ox, oy float64) string {
 	return b.String()
 }
 
-// fnum formats a coordinate with just enough precision for a crisp grid.
 func fnum(f float64) string {
 	s := fmt.Sprintf("%.2f", f)
 	s = strings.TrimRight(s, "0")
@@ -308,9 +273,6 @@ func xmlEscape(s string) string {
 	return r.Replace(s)
 }
 
-// writeSVGImages writes the images of one layer as <image> elements with PNG
-// data URIs, inside a nested <svg> the size of the grid, which clips them to
-// it.
 func writeSVGImages(b *strings.Builder, g *Grid, l layout, below bool) {
 	opened := false
 	for _, img := range g.Images {

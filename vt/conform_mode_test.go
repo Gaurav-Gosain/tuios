@@ -1,17 +1,5 @@
 package vt_test
 
-// Conformance for the mode matrix: the flags that change what every subsequent
-// character does.
-//
-// A mode is worse than a sequence when it is wrong. A mishandled CUP misplaces
-// one character; a mishandled DECAWM or IRM misplaces everything after it, and
-// the guest has no way to notice because it is not looking at the screen.
-//
-// Cases follow esctest, whose mode coverage lives in tests/decset.py and the
-// per-sequence files around it,
-// the VT510 reference manual's mode tables, and the pending-wrap model xterm
-// and ghostty share.
-
 import (
 	"testing"
 )
@@ -39,7 +27,6 @@ func TestConform_InsertReplaceMode(t *testing.T) {
 			want:   "Zbcdef",
 			cursor: "1,0",
 		}, {
-			// A double-width cluster opens two columns, not one.
 			name:   "IRM opens as many columns as the character is wide",
 			in:     "abcdef\x1b[1;1H\x1b[4h世",
 			want:   "世abcd",
@@ -49,14 +36,10 @@ func TestConform_InsertReplaceMode(t *testing.T) {
 			in:   "abcdef\x1b[1;4H\x1b[4hZ",
 			want: "abcZde",
 		}, {
-			// Insert mode is about the row the cursor is on. The row below is
-			// not a continuation of it.
 			name: "IRM does not disturb the row below",
 			in:   "abcdef\x1b[2;1Hghijkl\x1b[1;1H\x1b[4hZ",
 			want: "Zabcde\nghijkl",
 		}, {
-			// Wrapping is DECAWM's business; insert mode does not change when
-			// a line ends.
 			name:   "IRM still wraps at the margin",
 			in:     "\x1b[4habcdefg",
 			want:   "abcdef\ng",
@@ -111,8 +94,6 @@ func TestConform_PendingWrap(t *testing.T) {
 			want:   "abcdef\ng",
 			cursor: "1,1",
 		}, {
-			// SGR is not cursor motion. A program that colours the next word
-			// before printing it must not lose the wrap.
 			name:   "SGR does not clear the pending wrap",
 			in:     "abcdef\x1b[0mg",
 			want:   "abcdef\ng",
@@ -123,8 +104,6 @@ func TestConform_PendingWrap(t *testing.T) {
 			want:   "abcdef\ng",
 			cursor: "1,1",
 		}, {
-			// CUF cannot move, because the cursor is already on the last
-			// column, but it still clears the flag.
 			name:   "CUF clears the pending wrap without moving",
 			in:     "abcdef\x1b[Cg",
 			want:   "abcdeg",
@@ -135,9 +114,6 @@ func TestConform_PendingWrap(t *testing.T) {
 			want:   "abcdgf",
 			cursor: "5,0",
 		}, {
-			// This is the case tmux answers differently. xterm's CursorBack
-			// clears the flag first and then moves, so the cursor lands one
-			// column earlier than the last.
 			name:   "backspace clears it and moves back one",
 			in:     "abcdef\bg",
 			want:   "abcdgf",
@@ -153,9 +129,6 @@ func TestConform_PendingWrap(t *testing.T) {
 			want:   "abgdef",
 			cursor: "3,0",
 		}, {
-			// A wide cluster that ends flush against the margin has to arm the
-			// flag too, or the next character lands on the cluster's own
-			// second cell.
 			name:   "a wide cluster ending at the margin arms it",
 			in:     "世世世X",
 			want:   "世世世\nX",
@@ -170,7 +143,6 @@ func TestConform_PendingWrap(t *testing.T) {
 func TestConform_AutoWrapAndOriginMode(t *testing.T) {
 	runConform(t, []conformCase{
 		{
-			// The wrap lands on the next line of the region.
 			name:   "wrapping inside a region stays inside it",
 			cols:   4,
 			rows:   5,
@@ -178,8 +150,6 @@ func TestConform_AutoWrapAndOriginMode(t *testing.T) {
 			want:   "\nabcd\nefgh",
 			cursor: "3,2",
 		}, {
-			// Reaching the bottom of the region scrolls the region, not the
-			// screen: the rows outside it do not move.
 			name:   "a wrap past the region bottom scrolls the region",
 			cols:   4,
 			rows:   5,
@@ -194,8 +164,6 @@ func TestConform_AutoWrapAndOriginMode(t *testing.T) {
 			want:   "\nabch",
 			cursor: "3,1",
 		}, {
-			// Turning autowrap off does not retroactively cancel a wrap that
-			// is already pending.
 			name: "DECAWM off after a line fills keeps the cursor on the last column",
 			in:   "abcdef\x1b[?7lg",
 			want: "abcdeg",
@@ -227,8 +195,6 @@ func TestConform_SaveRestoreCarriesTheWrapFlag(t *testing.T) {
 			want:   "abcdeg",
 			cursor: "5,0",
 		}, {
-			// The saved cursor is per-screen state; the flag has to travel
-			// with the rest of it.
 			name:   "DECRC restores origin mode along with the position",
 			cols:   6,
 			rows:   6,

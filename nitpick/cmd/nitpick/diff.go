@@ -12,13 +12,10 @@ import (
 	"strings"
 )
 
-// emptyTree is the hash of the tree with no files, which every git
-// repository knows. A diff against it shows every line as new.
 const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 type lineRange struct{ from, to int }
 
-// changes maps a file (normPath) to its added or changed lines.
 type changes map[string][]lineRange
 
 func (c changes) has(path string, line int) bool {
@@ -30,8 +27,6 @@ func (c changes) has(path string, line int) bool {
 	return false
 }
 
-// packages returns the package directories of the changed Go files, as
-// patterns from cwd.
 func (c changes) packages(cwd string) []string {
 	var out []string
 	for f := range c {
@@ -40,7 +35,7 @@ func (c changes) packages(cwd string) []string {
 			continue
 		}
 		if _, err := os.Stat(f); err != nil {
-			continue // deleted
+			continue
 		}
 		rel, err := filepath.Rel(normPath(cwd), filepath.Dir(f))
 		if err != nil {
@@ -55,9 +50,6 @@ func (c changes) packages(cwd string) []string {
 	return slices.Compact(out)
 }
 
-// gitChanges reads the changed lines of the Go files in the repository at
-// dir. The base is HEAD, or the merge base of base and HEAD. Without
-// staged, the working tree counts and untracked files count as all new.
 func gitChanges(dir, base string, staged bool) (changes, error) {
 	out, err := git(dir, "rev-parse", "--show-toplevel")
 	if err != nil {
@@ -67,7 +59,7 @@ func gitChanges(dir, base string, staged bool) (changes, error) {
 	rev := base
 	if base == "HEAD" {
 		if _, err := git(top, "rev-parse", "--verify", "-q", "HEAD"); err != nil {
-			rev = emptyTree // no commit yet
+			rev = emptyTree
 		}
 	} else if mb, err := git(top, "merge-base", base, "HEAD"); err == nil {
 		rev = strings.TrimSpace(mb)
@@ -97,7 +89,6 @@ func gitChanges(dir, base string, staged bool) (changes, error) {
 	return c, nil
 }
 
-// parseDiff reads the new-side line ranges of a unified diff with -U0.
 func parseDiff(diff, top string) changes {
 	c := changes{}
 	var cur string
@@ -112,7 +103,6 @@ func parseDiff(diff, top string) changes {
 			}
 			cur = normPath(filepath.Join(top, strings.TrimPrefix(p, "b/")))
 		case strings.HasPrefix(line, "@@ ") && cur != "":
-			// @@ -a,b +c,d @@: the new side starts at c and has d lines.
 			fields := strings.Fields(line)
 			if len(fields) < 3 {
 				continue

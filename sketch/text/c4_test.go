@@ -9,7 +9,6 @@ import (
 	"tuios.dev/sketch"
 )
 
-// drawPinned parses src, draws it at cols, and compares the lines with want.
 func drawPinned(t *testing.T, src string, cols int, want string) {
 	t.Helper()
 	d, err := sketch.Parse(src, sketch.ParseOptions{})
@@ -25,7 +24,6 @@ func drawPinned(t *testing.T, src string, cols int, want string) {
 	}
 }
 
-// fitsCorpus draws every corpus diagram of a type at cols and wants each to fit.
 func fitsCorpus(t *testing.T, name string, cols int) {
 	t.Helper()
 	data, err := os.ReadFile("../testdata/corpus/" + name + "-docs.json")

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/c4/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package c4
 
 import (
@@ -50,7 +48,6 @@ func link(body, url, id string, links *[]types.LinkInfo, options types.RenderOpt
 	if url == "" {
 		return body
 	}
-	// Entity encoding has hidden any `#name;` in the address. Put it back, so that the check sees what a browser would.
 	if strings.Contains(url, "¶ß") {
 		url = strings.ReplaceAll(url, "ﬂ°°", "#")
 		url = strings.ReplaceAll(url, "ﬂ°", "#")
@@ -130,7 +127,6 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		targets[b] = true
 	}
 
-	// What a relation's label should not cover: shapes, arrowheads, boundary headings, and the labels placed before it.
 	nodes := []*Box{}
 	var taken []float64
 	for _, group := range order {
@@ -168,7 +164,6 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		geo = &types.Geometry{}
 	}
 
-	// Every line is drawn before any label is placed, so that labels can keep off the arrowheads.
 	var casings strings.Builder
 	var edgesOut strings.Builder
 	trim := svg.MarkerTrim("arrow_point")
@@ -270,7 +265,6 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		}
 	}
 
-	// A boundary's heading goes at the left, the middle or the right of its top edge: the first of them no line crosses.
 	for _, group := range order {
 		if !careful || group.headW == 0 {
 			continue
@@ -317,14 +311,11 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 			continue
 		}
 
-		// The label sits on the line, or just beside it when another relation runs the opposite way.
 		beside := float64(math.Abs(r.nx)*(lw/2)) + float64(math.Abs(r.ny)*(lh/2)) + 2
 		aside := beside
 		if truthy(r.lean) {
 			aside = math.Max(0, math.Min(r.lean, beside-14))
 		}
-		// Manual offsets are tuned to the original spacing. Reposition compact labels beside
-		// their routed arrows so an offset cannot leave them floating outside a boundary.
 		extraX, extraY := 0.0, 0.0
 		if !tight {
 			extraX, extraY = offset(rel.offsetX), offset(rel.offsetY)
@@ -333,8 +324,6 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 		dy := float64(r.ny*aside) + extraY
 		at := 0.5
 		if careful {
-			// Slide along the line to the spot that covers least. Offsets from the diagram are kept unless a spot
-			// on the line itself covers less than any they lead to: they are often tuned for Mermaid's spacing.
 			least := math.Inf(1)
 			moved := dx != float64(r.nx*aside) || dy != float64(r.ny*aside)
 			passes := 1
@@ -501,9 +490,6 @@ func draw(db *C4Db, _ types.Config, options types.RenderOptions, tight bool, gap
 	return rendered, lanes.squeezed
 }
 
-// fillGeometry gives the boundaries and shapes as sketch/text reads them: boundaries as groups,
-// shapes as boxes with their lines of text, and the relations, all moved by the body's translate.
-// Not in pele.
 func fillGeometry(geo *types.Geometry, index map[*Box]int, order []*Group, ends []*Box, width, height, ox, oy float64) {
 	geo.Width, geo.Height = width, height
 	parentOf := func(group *Group) int {

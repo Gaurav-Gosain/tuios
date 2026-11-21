@@ -5,11 +5,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// A timeline is drawn from its lists, not from the places of the SVG: the
-// periods run across as boxes on an axis, with their events in boxes below.
-// When that is wider than the columns, the periods run down instead, each
-// with its events in a list beside it.
-
 func drawTimeline(l *sketch.Layout, opt Options) (*canvas, error) {
 	tl := l.Timeline
 	if tl == nil {
@@ -21,8 +16,6 @@ func drawTimeline(l *sketch.Layout, opt Options) (*canvas, error) {
 	return timelineDown(tl, opt)
 }
 
-// box draws a box with its top left corner at (x, y), w by h cells, and the
-// lines of label inside it from the second column.
 func (c *canvas) box(x, y, w, h int, label []string, role, textRole uint8) {
 	c.hline(x, x+w-1, y, light, role)
 	c.hline(x, x+w-1, y+h-1, light, role)
@@ -34,7 +27,6 @@ func (c *canvas) box(x, y, w, h int, label []string, role, textRole uint8) {
 }
 
 func timelineAcross(tl *types.GeoTimeline, opt Options) (*canvas, error) {
-	// Each period is a column as wide as its widest label, period or event.
 	cols := make([]int, len(tl.Periods))
 	chip := 0
 	for i, p := range tl.Periods {
@@ -50,7 +42,6 @@ func timelineAcross(tl *types.GeoTimeline, opt Options) (*canvas, error) {
 			continue
 		}
 		header = max(header, len(g.Label)+2)
-		// A section is as wide as its periods, and its name widens the last of them.
 		span := -1
 		for _, i := range g.Periods {
 			span += cols[i] + 1
@@ -59,8 +50,6 @@ func timelineAcross(tl *types.GeoTimeline, opt Options) (*canvas, error) {
 			cols[g.Periods[len(g.Periods)-1]] += need - span
 		}
 	}
-	// The x of each column, in the order the groups draw them. A section with no
-	// periods takes a column of its own.
 	x := make([]int, len(tl.Periods))
 	groupX := make([]int, len(tl.Groups))
 	groupW := make([]int, len(tl.Groups))
@@ -132,7 +121,6 @@ func timelineAcross(tl *types.GeoTimeline, opt Options) (*canvas, error) {
 }
 
 func timelineDown(tl *types.GeoTimeline, opt Options) (*canvas, error) {
-	// Periods in one column of boxes, each with its events listed right of it.
 	boxW := 6
 	events := 0
 	for _, p := range tl.Periods {
@@ -141,7 +129,6 @@ func timelineDown(tl *types.GeoTimeline, opt Options) (*canvas, error) {
 			events = max(events, widest(e))
 		}
 	}
-	// The events hang from a line at column sx and start at sx+3.
 	sx := boxW + 1
 	wd := boxW
 	if events > 0 {

@@ -7,35 +7,12 @@ import (
 	"testing"
 )
 
-// Both backends rewrap logical lines on resize. These tests pin what that
-// costs and what it must never cost. The pure emulator reflows the screen and
-// keeps history at its width; ghostty reflows both.
-//
-// The report behind them: "on every resize, the ghostty pty adds an empty new
-// line". It does, but nothing in the emulator invents the line. A shell that
-// draws a prompt filling the pane to its last column, then repaints on
-// SIGWINCH by stepping up a fixed number of rows, is off by one the moment
-// reflow splits that full-width line in two. fish's default prompt truncates
-// the path to exactly the terminal width, so in a pane narrow enough to
-// truncate, every prompt is full width and every narrowing resize costs a
-// line. A wide pane never triggers it, because the path fits.
-
-// promptRow is a prompt line drawn to exactly w columns, the way fish's
-// path-truncating prompt does.
 func promptRow(w int) string { return strings.Repeat("p", w) }
 
-// shellRepaint is fish's SIGWINCH repaint, in the shape captured from a live
-// session: home the cursor, step up onto the prompt's first row, redraw both
-// prompt rows at the new width, clear below, and put the cursor back after
-// the "> ". Stepping up one row is right only if the first row is still one
-// row, which is exactly the assumption reflow breaks.
 func shellRepaint(w int) string {
 	return "\r\r\x1b[A\x1b[K" + promptRow(w) + "\r\n> " + "\x1b[J\r\x1b[2C"
 }
 
-// seedShellSession fills the screen so the cursor sits on the last row under
-// a full-width prompt, which is where a shell prompt lives once anything has
-// scrolled.
 func seedShellSession(tm Terminal, w, h int) {
 	var b strings.Builder
 	for range h + 5 {
@@ -82,18 +59,15 @@ func TestGhosttyReflowIsReversible(t *testing.T) {
 func TestGhosttyResizeSplitsAFullWidthLine(t *testing.T) {
 	const w, h = 31, 8
 	p := newDiffPair(t, w, h)
-	// Distinguishable characters so a dropped one is visible.
 	line := strings.Repeat("ab", w/2) + "Z"[:w%2]
 	p.write(t, []byte("top\r\n"+line[:w]+"\r\n> "))
 
 	p.pure.Resize(w-1, h)
 	p.gh.Resize(w-1, h)
 
-	// Ghostty keeps the last column by moving it to a second row.
 	if got := rowString(p.gh, 2); got != line[w-1:w] {
 		t.Errorf("ghostty row 2 = %q, want the wrapped last column %q", got, line[w-1:w])
 	}
-	// The pure emulator reflows the same way.
 	if got := rowString(p.pure, 2); got != line[w-1:w] {
 		t.Errorf("pure row 2 = %q, want the wrapped last column %q", got, line[w-1:w])
 	}
@@ -122,8 +96,6 @@ func TestGhosttyResizeCostsALinePerShrinkWhenAShellRepaints(t *testing.T) {
 
 	pureStart, ghStart := p.pure.ScrollbackLen(), p.gh.ScrollbackLen()
 
-	// Four narrowing steps, each followed by the shell's repaint at the new
-	// width, exactly as a SIGWINCH-driven prompt redraw arrives.
 	const shrinks = 4
 	for i := 1; i <= shrinks; i++ {
 		nw := w - i
@@ -132,9 +104,6 @@ func TestGhosttyResizeCostsALinePerShrinkWhenAShellRepaints(t *testing.T) {
 		p.write(t, []byte(shellRepaint(nw)))
 	}
 
-	// The pure emulator reflows too now, so without OSC 133 marks it costs
-	// the same line. With the marks it costs nothing; see
-	// TestPureResizeKeepsAMarkedPromptAcrossShellRepaints.
 	if got := p.pure.ScrollbackLen() - pureStart; got != shrinks {
 		t.Errorf("pure emulator lost %d lines over %d shrinks, want %d like ghostty", got, shrinks, shrinks)
 	}
@@ -179,7 +148,6 @@ func TestGhosttyResizeCostsNothingWhenThePromptFits(t *testing.T) {
 	}
 }
 
-// rowString reads one visible row as plain text.
 func rowString(tm Terminal, y int) string {
 	var b strings.Builder
 	for x := range tm.Width() {

@@ -1,17 +1,5 @@
 package vt_test
 
-// Conformance for OSC payloads that are truncated, oversized or hostile.
-//
-// conform_string_test.go covers the OSC commands this emulator implements with
-// payloads they expect. This covers the parser underneath them: which
-// terminators end a string, which control bytes abort one, and what happens
-// when a guest sends a megabyte and no terminator at all. An OSC accumulator is
-// the one place in a terminal where a guest chooses how much memory to spend,
-// and this one runs in the daemon, so the answer has to be bounded.
-//
-// Cases follow kitty's kitty_tests/parser.py, ghostty's src/terminal/osc.zig
-// tests, and xterm's rules for what ends a string in charproc.c.
-
 import (
 	"strings"
 	"testing"
@@ -27,41 +15,13 @@ func TestConform_OSCTerminators(t *testing.T) {
 		{"BEL ends an OSC", "\x1b]0;hello\x07", "hello"},
 		{"seven-bit ST ends an OSC", "\x1b]0;hello\x1b\\", "hello"},
 
-		// The eight-bit ST does not end an OSC here, and that is a decision
-		// rather than an omission.
-		//
-		// It is one byte, 0x9C, and it is also the middle byte of U+2733 and
-		// of everything else whose encoding carries it. This terminal is
-		// always UTF-8, so the two uses cannot both be honoured: a title of
-		// "✳ Say hello in three words" ended its own OSC after one byte and
-		// printed the rest at the cursor, which in a terminal UI is wherever
-		// the program last put it. That was reported as text appearing inside
-		// an input box.
-		//
-		// xterm makes the same choice, honouring eight-bit controls only when
-		// it is not in UTF-8 mode, and the scanner for the other backend in
-		// this repository already says so in its own header.
-		//
-		// What is given up is real: a guest that sends a bare 0x9C to end a
-		// string will have that string run on until a BEL, an ESC-backslash,
-		// or the length cap. No program that expects to run in a UTF-8
-		// terminal sends one, because it is ambiguous for them too.
 		{"eight-bit ST does not end an OSC in a UTF-8 terminal", "\x1b]0;hello\x9c", ""},
 
-		// An OSC with no payload separator is still a command. Setting an
-		// empty title is a thing programs do on exit.
 		{"an OSC with no semicolon sets an empty title", "\x1b]0\x07", ""},
 		{"an OSC with an empty payload sets an empty title", "\x1b]0;\x07", ""},
 
-		// A semicolon inside the payload belongs to the payload. Titles
-		// contain them.
 		{"a semicolon in the payload is kept", "\x1b]0;a;b\x07", "a;b"},
 
-		// A C0 byte that is not a terminator does not end the string. xterm
-		// keeps it in the payload; this drops it, and for a multiplexer that
-		// is the better answer. A title reaches the outer terminal, so a
-		// control byte smuggled into one is a sequence the guest gets to
-		// execute in a terminal it does not own.
 		{"a C0 byte in the payload is dropped rather than ending the string", "\x1b]0;a\x01b\x07", "ab"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -80,9 +40,6 @@ func TestConform_OSCTerminators(t *testing.T) {
 func TestConform_OSCAbortAndTruncation(t *testing.T) {
 	runConform(t, []conformCase{
 		{
-			// CAN abandons the sequence in progress. Whatever follows is
-			// ordinary output again, which is the point: it is how a program
-			// gets the parser back to a known state.
 			name: "CAN abandons an OSC and the text after it prints",
 			cols: 12,
 			in:   "A\x1b]0;half\x18B",
@@ -93,16 +50,11 @@ func TestConform_OSCAbortAndTruncation(t *testing.T) {
 			in:   "A\x1b]0;half\x1aB",
 			want: "AB",
 		}, {
-			// An OSC that never terminates swallows everything after it. That
-			// is correct rather than a bug: the guest said it was still
-			// sending a string. What matters is that the emulator survives it.
 			name: "an unterminated OSC swallows the text after it",
 			cols: 12,
 			in:   "A\x1b]0;forever" + strings.Repeat("x", 4096) + "B",
 			want: "A",
 		}, {
-			// A truncated introducer leaves the parser mid-state with the next
-			// write arriving behind it.
 			name:  "an OSC split across writes still completes",
 			cols:  12,
 			split: []string{"A\x1b]0;he", "llo\x07B"},
@@ -146,9 +98,6 @@ func TestConform_OSCOversizedPayloads(t *testing.T) {
 			if _, err := emu.WriteString(tc.in); err != nil {
 				t.Fatalf("write: %v", err)
 			}
-			// The emulator has to be usable afterwards, which is the whole
-			// claim: a payload the guest chose the size of must not leave the
-			// parser stuck in a string state forever.
 			if _, err := emu.WriteString("\x1b[1;1HOK"); err != nil {
 				t.Fatalf("write after the payload: %v", err)
 			}

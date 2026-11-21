@@ -1,17 +1,5 @@
 package vt_test
 
-// Grapheme clustering, driven by the official UAX #29 break test file.
-//
-// The file is used as a corpus of adversarial input, not as an oracle. The
-// emulator does not implement clustering itself, it delegates to the segmenter
-// in x/ansi, which tracks its own Unicode version; holding the emulator to
-// Unicode 17 would mostly measure that library's release schedule. What these
-// tests assert is the part the emulator owns: a cluster its segmenter
-// recognises has to end up in one cell group, has to survive a write boundary
-// falling anywhere inside it, and has to survive a resize.
-//
-// See testdata/unicode/README.md for provenance and licence.
-
 import (
 	"bufio"
 	"os"
@@ -26,8 +14,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// uaxCase is one line of GraphemeBreakTest.txt: the input string and the
-// clusters the file says it breaks into.
 type uaxCase struct {
 	line     int
 	input    string
@@ -35,12 +21,6 @@ type uaxCase struct {
 	comment  string
 }
 
-// loadGraphemeBreakTest parses GraphemeBreakTest.txt.
-//
-// Each data line is a run of code points separated by ÷ (a break here) or ×
-// (no break here), starting and ending with ÷, followed by a # comment:
-//
-//	÷ 0061 × 0301 ÷ 0062 ÷	#  ÷ [0.2] LATIN SMALL LETTER A ...
 func loadGraphemeBreakTest(t *testing.T) []uaxCase {
 	t.Helper()
 	path := filepath.Join("testdata", "unicode", "GraphemeBreakTest.txt")
@@ -78,7 +58,6 @@ func loadGraphemeBreakTest(t *testing.T) []uaxCase {
 					current.Reset()
 				}
 			case "×":
-				// No break: the next code point joins the current cluster.
 			default:
 				cp, err := strconv.ParseUint(tok, 16, 32)
 				if err != nil {
@@ -105,8 +84,6 @@ func loadGraphemeBreakTest(t *testing.T) []uaxCase {
 	return cases
 }
 
-// segment splits s the way the emulator's own segmenter does, which is the
-// clustering the emulator is held to.
 func segment(s string) []string {
 	var out []string
 	for len(s) > 0 {
@@ -120,14 +97,6 @@ func segment(s string) []string {
 	return out
 }
 
-// visible drops the clusters that leave no mark on the grid, so that a screen
-// can be compared against them.
-//
-// Two kinds go. A cluster of zero width is a combining mark with no base to
-// attach to, which every terminal discards rather than giving a cell of its
-// own. A cluster that is a single space is indistinguishable from the blank
-// cell underneath it once it is on the grid, so it is dropped from both sides
-// rather than guessed at.
 func visible(clusters []string) []string {
 	out := clusters[:0:0]
 	for _, c := range clusters {
@@ -139,9 +108,6 @@ func visible(clusters []string) []string {
 	return out
 }
 
-// cellGroups reads a row back as the clusters it holds: each occupied cell and
-// its continuation cells collapse to one entry. A cluster that got split across
-// cells shows up here as two entries where there should be one.
 func cellGroups(emu *vt.Emulator, y int) []string {
 	var out []string
 	for x := 0; x < emu.Width(); {
@@ -151,9 +117,6 @@ func cellGroups(emu *vt.Emulator, y int) []string {
 			continue
 		}
 		step := max(c.Width, 1)
-		// Filtered the same way visible filters the expectation, so the two
-		// sides are comparable. A cluster that got split still shows up, as a
-		// head whose content is short of what it should be.
 		if c.Content != "" && c.Content != " " && ansi.StringWidth(c.Content) > 0 {
 			out = append(out, c.Content)
 		}
@@ -162,20 +125,6 @@ func cellGroups(emu *vt.Emulator, y int) []string {
 	return out
 }
 
-// knownSplit reports whether the emulator is known to split this input, so the
-// sweep can pass while the divergence stays on the record.
-//
-// One pattern is known: a Prepend character followed by a printable ASCII base.
-// Prepend binds forwards, so `U+0600 b` is one cluster, but the printable-ASCII
-// path draws its character as soon as it sees it and cannot be talked out of it
-// by a character that arrived earlier. The two end up in separate cells.
-//
-// It is left unfixed on purpose. The fix is to route ASCII through the buffered
-// path whenever anything is buffered, and that turns every character after the
-// first non-ASCII one on a line into a buffered write, which is a performance
-// cliff on the hottest path in the emulator for the sake of six Arabic and two
-// Kaithi code points. TestConform_PrependBeforeASCII records the divergence and
-// will announce itself if it is ever fixed.
 func knownSplit(input string) bool {
 	prepend := []rune{0x0600, 0x0601, 0x0602, 0x0603, 0x0604, 0x0605, 0x06DD,
 		0x070F, 0x0890, 0x0891, 0x08E2, 0x110BD, 0x110CD}
@@ -287,8 +236,6 @@ func TestUnicode_SegmenterAgreesWithUAX29(t *testing.T) {
 	t.Logf("segmenter disagrees with UAX #29 on %d of %d sequences", differ, len(cases))
 }
 
-// boundaries returns the byte offsets to split an input at. In short mode it
-// samples rather than trying every one.
 func boundaries(s string, short bool) []int {
 	var out []int
 	for i := 1; i < len(s); i++ {

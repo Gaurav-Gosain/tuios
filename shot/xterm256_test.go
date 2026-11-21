@@ -2,11 +2,6 @@ package shot
 
 import "testing"
 
-// referenceXTerm256 is the xterm 256-colour table worked out from its
-// definition: the basic 16 as xterm paints them, a 6x6x6 cube whose nonzero
-// levels are 55+40v, and a grey ramp of 8+10n. It is written independently of
-// XTerm256 so a change to the table behind XTerm256 cannot move a colour
-// without this test noticing.
 func referenceXTerm256(i int) (r, g, b uint8) {
 	basic := [16][3]uint8{
 		{0x00, 0x00, 0x00}, {0xcd, 0x00, 0x00}, {0x00, 0xcd, 0x00}, {0xcd, 0xcd, 0x00},

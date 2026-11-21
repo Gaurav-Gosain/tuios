@@ -1,5 +1,3 @@
-// Ported from pele src/svg/ink.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package svg
 
 import (
@@ -10,14 +8,11 @@ import (
 	"tuios.dev/sketch/internal/lazyre"
 )
 
-// Named colors that #fff contrasts with more than #1f1f1f does, and the rest.
 var (
 	inkDark  = wordList("black blue blueviolet brown crimson darkblue darkcyan darkgreen darkmagenta darkolivegreen darkorchid darkred darkslateblue darkslategray darkviolet dimgray firebrick forestgreen green indigo maroon mediumblue mediumslateblue mediumvioletred midnightblue navy olive purple rebeccapurple royalblue saddlebrown seagreen sienna slateblue steelblue teal")
 	inkLight = wordList("aliceblue antiquewhite aqua aquamarine azure beige bisque blanchedalmond burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk cyan darkgoldenrod darkgray darkkhaki darkorange darksalmon darkseagreen darkturquoise deeppink deepskyblue dodgerblue floralwhite fuchsia gainsboro ghostwhite gold goldenrod gray greenyellow honeydew hotpink indianred ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightpink lightsalmon lightseagreen lightskyblue lightslategray lightsteelblue lightyellow lime limegreen linen magenta mediumaquamarine mediumorchid mediumpurple mediumseagreen mediumspringgreen mediumturquoise mintcream mistyrose moccasin navajowhite oldlace olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue red rosybrown salmon sandybrown seashell silver skyblue slategray snow springgreen tan thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen")
 )
 
-// wordList is a list of words, with a space at each end, so that a lookup
-// needs no map built at init.
 func wordList(words string) string { return " " + words + " " }
 
 func listed(list, name string) bool {
@@ -53,7 +48,6 @@ func luminance(r, g, b float64) float64 {
 
 func clamp01(n float64) float64 { return math.Min(math.Max(n, 0), 1) }
 
-// Luminance where #1f1f1f and #fff have equal contrast.
 var inkEven = math.Sqrt(1.05*(luminance(31.0/255, 31.0/255, 31.0/255)+0.05)) - 0.05
 
 func amount(raw string, full float64) float64 {
@@ -84,7 +78,6 @@ func hue(raw string) float64 {
 	return n
 }
 
-// The comma syntax takes no `none`, rgb() channels all or none in %, and hsl() saturation and lightness in %.
 func colorArgs(body string, hsl bool) []string {
 	legacy := strings.Contains(body, ",")
 	main := body
@@ -145,7 +138,6 @@ func PlainColor(raw string) bool {
 	return reHex.MatchString(value) || listed(inkDark, name) || listed(inkLight, name) || value == "transparent" || value == "currentcolor"
 }
 
-// Luminance and alpha; named colors use 0 or 1 to preserve the contrast choice.
 func parseInkColor(raw string) (lum, alpha float64, ok bool) {
 	value := strings.ToLower(js.Trim(raw))
 	name := strings.Replace(value, "grey", "gray", 1)
@@ -207,7 +199,6 @@ func parseInkColor(raw string) (lum, alpha float64, ok bool) {
 	return lum, alpha, true
 }
 
-// How opaque a style's fill-opacity and opacity leave its fill, or NaN when either isn't a plain number.
 func styleOpacity(shape string) float64 {
 	product := 1.0
 	for _, m := range reOpacities.Re().FindAllStringSubmatch(shape, -1) {
@@ -231,7 +222,6 @@ func Ink(shape, text string) string {
 	if !ok {
 		return ""
 	}
-	// An opacity that isn't a plain number, such as calc() or var(), may still be low.
 	if !(alpha*styleOpacity(shape) >= 0.5) {
 		return ""
 	}
@@ -271,8 +261,6 @@ func InkFill(style ResolvedStyle, fallback string) string {
 	if color == "" {
 		color = fallback
 	}
-	// The attributes a render asks for most are constants, so a render does not
-	// build the same string for every label.
 	switch color {
 	case "":
 		return ""

@@ -30,7 +30,6 @@ func TestThemeOffRestoresHostPalette(t *testing.T) {
 		t.Fatal("SGR 31 stayed an index while a theme was active")
 	}
 
-	// Turning theming off, exactly as applyTheme("none") does.
 	e.SetThemeColors(nil, nil, nil, [16]color.Color{})
 
 	e.Write([]byte("\x1b[0m\x1b[31mx"))

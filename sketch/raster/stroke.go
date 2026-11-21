@@ -4,16 +4,13 @@ import "math"
 
 type strokeStyle struct {
 	width      float64
-	cap        string // butt, round, square
-	join       string // miter, round, bevel
+	cap        string
+	join       string
 	miterLimit float64
 	dashes     []float64
 	dashOffset float64
 }
 
-// polygon is a closed outline to fill. Every polygon a stroke makes winds the
-// same way, so that where they overlap the coverage adds up and is clamped,
-// which fills their union.
 type polygon []pt
 
 func area(p polygon) float64 {
@@ -34,7 +31,6 @@ func positive(p polygon) polygon {
 	return p
 }
 
-// circlePoly approximates a circle closely enough at its size.
 func circlePoly(c pt, r float64) polygon {
 	n := int(math.Ceil(math.Pi / math.Acos(math.Max(-1, 1-0.15/math.Max(r, 0.15)))))
 	if n < 8 {
@@ -51,7 +47,6 @@ func circlePoly(c pt, r float64) polygon {
 	return p
 }
 
-// dash cuts polylines into the dashes of a dash array.
 func dash(lines []polyline, dashes []float64, offset float64) []polyline {
 	total := 0.0
 	for _, d := range dashes {
@@ -72,7 +67,6 @@ func dash(lines []polyline, dashes []float64, offset float64) []polyline {
 		if pl.closed && len(pts) > 1 {
 			pts = append(append([]pt{}, pts...), pts[0])
 		}
-		// Where in the dash array the line starts.
 		idx := 0
 		left := dashes[0]
 		pos := math.Mod(offset, total)
@@ -128,10 +122,8 @@ func dash(lines []polyline, dashes []float64, offset float64) []polyline {
 	return out
 }
 
-// maxPolygons bounds the outlines one stroke can make.
 const maxPolygons = 100000
 
-// stroke outlines polylines as polygons to fill.
 func stroke(lines []polyline, st strokeStyle) []polygon {
 	if st.width <= 0 {
 		return nil
@@ -144,7 +136,6 @@ func stroke(lines []polyline, st strokeStyle) []polygon {
 	for _, pl := range lines {
 		pts := dedupe(pl.pts)
 		if len(pts) == 1 {
-			// A zero-length subpath shows only with round or square caps.
 			switch st.cap {
 			case "round":
 				out = append(out, circlePoly(pts[0], hw))
@@ -184,7 +175,6 @@ func stroke(lines []polyline, st strokeStyle) []polygon {
 				return out
 			}
 		}
-		// Joins.
 		first, last := 1, n-1
 		if closed {
 			first, last = 0, n
@@ -218,7 +208,6 @@ func dedupe(pts []pt) []pt {
 	return out
 }
 
-// join fills the outer corner between two segments that meet at `at`.
 func join(prev, at, next pt, hw float64, st strokeStyle) polygon {
 	ax, ay := at.x-prev.x, at.y-prev.y
 	bx, by := next.x-at.x, next.y-at.y
@@ -232,7 +221,6 @@ func join(prev, at, next pt, hw float64, st strokeStyle) polygon {
 	if math.Abs(cross) < 1e-9 && dot > 0 {
 		return nil
 	}
-	// The outer side is to the left of the turn when it turns right, and the other way.
 	side := 1.0
 	if cross > 0 {
 		side = -1
@@ -241,7 +229,6 @@ func join(prev, at, next pt, hw float64, st strokeStyle) polygon {
 	p2 := pt{at.x - by*hw*side, at.y + bx*hw*side}
 	switch st.join {
 	case "round":
-		// A slight turn needs only the bevel; the arc would differ by a fraction of a pixel.
 		if math.Acos(math.Max(-1, math.Min(1, dot))) < 0.2 {
 			return positive(polygon{at, p1, p2})
 		}
@@ -249,7 +236,6 @@ func join(prev, at, next pt, hw float64, st strokeStyle) polygon {
 	case "bevel":
 		return positive(polygon{at, p1, p2})
 	}
-	// Miter, or bevel past the miter limit.
 	theta := math.Acos(math.Max(-1, math.Min(1, -dot)))
 	limit := st.miterLimit
 	if limit <= 0 {
@@ -258,7 +244,6 @@ func join(prev, at, next pt, hw float64, st strokeStyle) polygon {
 	if s := math.Sin(theta / 2); s == 0 || 1/s > limit {
 		return positive(polygon{at, p1, p2})
 	}
-	// The miter tip lies where the two outer edges meet.
 	mx, my := (p1.x+p2.x)/2-at.x, (p1.y+p2.y)/2-at.y
 	ml := math.Hypot(mx, my)
 	if ml == 0 {

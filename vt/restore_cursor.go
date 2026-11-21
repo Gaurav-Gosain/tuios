@@ -2,11 +2,6 @@ package vt
 
 import uv "github.com/charmbracelet/ultraviolet"
 
-// The state a snapshot carries that no cell shows: DECSCA protection on the
-// pen and on the cells, the cursor DECSC saved, and the character REP repeats.
-// Each decides what output that has not arrived yet does, so a client that
-// comes back without it diverges at the next byte that uses it.
-
 // CursorProtected reports whether DECSCA protects what is printed next.
 func (e *Emulator) CursorProtected() bool {
 	return e.scr.cur.Protected

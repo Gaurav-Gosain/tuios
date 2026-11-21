@@ -18,7 +18,6 @@ type Regexp struct {
 	re      *regexp.Regexp
 }
 
-// all lists every pattern made by New, for MustCompileAll.
 var all []*Regexp
 
 // New returns a Regexp for pattern. The pattern compiles on first use and

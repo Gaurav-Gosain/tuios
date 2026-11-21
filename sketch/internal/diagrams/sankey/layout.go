@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/sankey/layout.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package sankey
 
 import (
@@ -16,14 +14,12 @@ type LayoutOptions struct {
 	height      float64
 	nodeWidth   float64
 	nodePadding float64
-	// Height of a label line; thin nodes are kept at least this far apart where there is room.
 	labelHeight float64
 	alignment   Alignment
 }
 
 type PlacedNode struct {
-	layer int
-	// Total flow through the node, in the diagram's units.
+	layer  int
 	value  float64
 	x      float64
 	y      float64
@@ -35,9 +31,8 @@ type PlacedLink struct {
 	target    int
 	value     float64
 	thickness float64
-	// Vertical centers of the band where it leaves its source and where it enters its target.
-	sourceY float64
-	targetY float64
+	sourceY   float64
+	targetY   float64
 }
 
 const PASSES = 6
@@ -46,7 +41,6 @@ const PASSES = 6
 // double below for pass 3. TestPullAgainstNode checks the table.
 var PULL = [PASSES]float64{1, 0.99, 0.9801, 0.970299, 0.96059601, 0.9509900498999999}
 
-// sort: most nodes have a handful of bands, and the built-in sort is slow to start on short lists.
 func sort(list []int, compare func(a, b int) float64) {
 	if len(list) > 8 {
 		js.Sort(list, compare)
@@ -63,7 +57,6 @@ func sort(list []int, compare func(a, b int) float64) {
 	}
 }
 
-// or is a || b for numbers.
 func or(a, b float64) float64 {
 	if a != 0 && !math.IsNaN(a) {
 		return a
@@ -71,8 +64,6 @@ func or(a, b float64) float64 {
 	return b
 }
 
-// layoutSankey places nodes in columns by their distance from a source, sizes them by their flow, and
-// then lets each column settle next to its neighbours so that the bands cross less.
 func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []PlacedLink) {
 	n := len(model.nodes)
 	links := make([]PlacedLink, len(model.links))
@@ -90,7 +81,6 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 		incoming[link.target] = append(incoming[link.target], k)
 	}
 
-	// Longest distance from a source, in topological order; what is left over lies on a cycle.
 	depth := make([]int32, n)
 	pending := make([]int32, n)
 	order := make([]int, 0, n)
@@ -114,7 +104,6 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 		}
 	}
 	if len(order) < n {
-		// Every node left over has a predecessor that is left over too; walking back finds the loop.
 		stuck := 0
 		for pending[stuck] == 0 {
 			stuck++
@@ -148,7 +137,6 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 		}
 	}
 
-	// Flows are scaled to the largest one, so that sums of huge values stay finite.
 	largest := 0.0
 	for _, link := range links {
 		if link.value > largest {
@@ -229,8 +217,6 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 		scale = 0
 	}
 
-	// A thin node still needs room for its label. Where every column can afford it, each node
-	// claims at least a label's height, and the flows are scaled down to make that fit.
 	claim := math.Max(0, options.labelHeight-gap)
 	fits := func(s float64) bool {
 		for _, column := range columns {
@@ -261,7 +247,6 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 		}
 	}
 
-	// The room a node keeps clear above and below itself.
 	margin := make([]float64, n)
 	for k := range links {
 		links[k].thickness = float64(links[k].value * unit * scale)
@@ -274,7 +259,6 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 			nodes[i].y = y + margin[i]
 			y += nodes[i].height + float64(2*margin[i]) + gap
 		}
-		// Spare room is shared out between the nodes of a column.
 		spare := (options.height - y + gap) / float64(len(column)+1)
 		for k, i := range column {
 			nodes[i].y += float64(spare * float64(k+1))
@@ -283,8 +267,6 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 
 	center := func(i int) float64 { return nodes[i].y + nodes[i].height/2 }
 
-	// Bands leave and enter a node in the order of where they go, so they do not cross at it.
-	// These are the offsets of each band's middle from the top of the node at either end.
 	sourceOffset := make([]float64, len(links))
 	targetOffset := make([]float64, len(links))
 	byTarget := func(a, b int) float64 { return or(center(links[a].target)-center(links[b].target), float64(a-b)) }
@@ -313,8 +295,6 @@ func layoutSankey(model *SankeyDb, options LayoutOptions) ([]PlacedNode, []Place
 		}
 	}
 
-	// settle moves each node of a column towards where its bands would run level, then restores the
-	// order and the gaps. `forward` looks at the bands coming in, otherwise at those going out.
 	settle := func(column []int, pull float64, forward bool) {
 		for _, i := range column {
 			list := outgoing[i]

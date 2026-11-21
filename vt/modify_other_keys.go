@@ -8,18 +8,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// modifyOtherKeysResource is the XTMODKEYS resource number of modifyOtherKeys.
-// The other resources (modifyCursorKeys, modifyFunctionKeys and the rest)
-// change encodings this emulator does not offer a choice of, so they are left
-// unrecognised.
 const modifyOtherKeysResource = 4
 
-// registerModifyOtherKeysHandlers registers xterm's key modifier options,
-// XTMODKEYS (CSI > Pp ; Pv m), its reset (CSI > Pp n) and its query, XTQMODKEYS
-// (CSI ? Pp m), for the modifyOtherKeys resource.
 func (e *Emulator) registerModifyOtherKeysHandlers() {
 	e.RegisterCsiHandler(ansi.Command('>', 0, 'm'), func(params ansi.Params) bool {
-		// "CSI > m" with no resource resets every resource, this one included.
 		if len(params) == 0 {
 			e.modifyOtherKeys.Store(0)
 			return true
@@ -27,10 +19,8 @@ func (e *Emulator) registerModifyOtherKeysHandlers() {
 		if res, _, _ := params.Param(0, -1); res != modifyOtherKeysResource {
 			return false
 		}
-		// A missing value resets the resource to its initial value, 0.
 		level, _, _ := params.Param(1, 0)
 		if level < 0 || level > 2 {
-			// Level 3 (xterm patch 397) has no meaning to an application here.
 			return false
 		}
 		e.modifyOtherKeys.Store(int32(level))
@@ -38,7 +28,6 @@ func (e *Emulator) registerModifyOtherKeysHandlers() {
 	})
 
 	e.RegisterCsiHandler(ansi.Command('>', 0, 'n'), func(params ansi.Params) bool {
-		// "CSI > 4 n" disables modifyOtherKeys.
 		if res, _, _ := params.Param(0, -1); res != modifyOtherKeysResource {
 			return false
 		}
@@ -47,7 +36,6 @@ func (e *Emulator) registerModifyOtherKeysHandlers() {
 	})
 
 	e.RegisterCsiHandler(ansi.Command('?', 0, 'm'), func(params ansi.Params) bool {
-		// XTQMODKEYS: answered CSI > 4 ; level m.
 		if res, _, _ := params.Param(0, -1); res != modifyOtherKeysResource {
 			return false
 		}
@@ -117,7 +105,6 @@ func EncodeModifyOtherKeys(key KeyPressEvent, level int) string {
 	encode := false
 	switch code {
 	case KeyTab:
-		// Shift+Tab alone is back-tab, CSI Z, at both levels.
 		encode = !shiftOnly
 	case KeyEnter:
 		encode = true
@@ -140,14 +127,10 @@ func EncodeModifyOtherKeys(key KeyPressEvent, level int) string {
 		case level >= 2 && controlChar:
 			encode = true
 		case level >= 2:
-			// A shifted character is just the character, except Space,
-			// which would lose the Shift.
 			encode = !shiftOnly || code == KeySpace
 		case controlChar:
 			encode = !ctrlOnly && !shiftOnly
 		default:
-			// Level 1: Alt with a character keeps its ESC prefix, and a
-			// shifted character is the character.
 			encode = ctrl
 		}
 	}
@@ -157,8 +140,6 @@ func EncodeModifyOtherKeys(key KeyPressEvent, level int) string {
 	return "\x1b[27;" + strconv.Itoa(param) + ";" + strconv.Itoa(int(code)) + "~"
 }
 
-// makesControlChar reports whether Ctrl with this key makes a C0 control
-// character in the ordinary encoding: the letters, Space, and @ [ \ ] ^ _ / ?.
 func makesControlChar(code rune) bool {
 	switch {
 	case code >= 'a' && code <= 'z', code >= 'A' && code <= 'Z':

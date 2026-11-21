@@ -22,8 +22,6 @@ func ParseJSON(src []byte, opts *ParseOptions) (*Node, error) {
 	}
 	src = bytes.TrimPrefix(src, []byte("\xef\xbb\xbf"))
 	p := &jsonParser{src: src, lim: lim, dec: json.NewDecoder(bytes.NewReader(src))}
-	// Syntax is checked first by tml's own scanner, so a problem's text and
-	// position do not depend on the Go release.
 	if serr := scanJSON(src); serr != nil {
 		return nil, p.fail(serr.off, CodeSyntax, "%s", serr.msg)
 	}
@@ -78,8 +76,6 @@ func (p *jsonParser) syntax(err error) *Error {
 	return p.fail(off, CodeSyntax, "The JSON does not parse here.")
 }
 
-// tokenStart returns the offset of the next token after off, past white
-// space, commas and colons.
 func (p *jsonParser) tokenStart(off int) int {
 	for off < len(p.src) {
 		switch p.src[off] {
@@ -92,7 +88,6 @@ func (p *jsonParser) tokenStart(off int) int {
 	return off
 }
 
-// object parses a node whose { the decoder has read.
 func (p *jsonParser) object(depth, start int) (*Node, error) {
 	if depth > p.lim.Depth {
 		return nil, p.fail(start, CodeLimit, "The document nests deeper than %d levels.", p.lim.Depth)
@@ -143,7 +138,7 @@ func (p *jsonParser) object(depth, start int) (*Node, error) {
 				}
 				continue
 			}
-			fallthrough // tree has a children attribute: the field name
+			fallthrough
 		default:
 			if !validName(key) {
 				return nil, p.fail(koff, CodeSyntax, "%q is not a valid attribute name. Use letters, digits, - and _.", key)
@@ -155,7 +150,7 @@ func (p *jsonParser) object(depth, start int) (*Node, error) {
 			attrs = append(attrs, pending{key, raw, p.posAt(koff)})
 		}
 	}
-	if _, err := p.dec.Token(); err != nil { // }
+	if _, err := p.dec.Token(); err != nil {
 		return nil, p.syntax(err)
 	}
 	if !hasType {
@@ -178,14 +173,10 @@ func (p *jsonParser) object(depth, start int) (*Node, error) {
 	return n, nil
 }
 
-// children parses a children list.
 func (p *jsonParser) children(n *Node, depth int) error {
-	if _, err := p.dec.Token(); err != nil { // [
+	if _, err := p.dec.Token(); err != nil {
 		return p.syntax(err)
 	}
-	// Adjacent strings are one text run. They are collected and joined once,
-	// so many strings cost linear time. A node keeps its index in the source
-	// list, so a problem's pointer matches what the author wrote.
 	var pending []string
 	pendingIdx, pendingPos := 0, Pos{}
 	flush := func() error {
@@ -236,14 +227,12 @@ func (p *jsonParser) children(n *Node, depth int) error {
 	if err := flush(); err != nil {
 		return err
 	}
-	if _, err := p.dec.Token(); err != nil { // ]
+	if _, err := p.dec.Token(); err != nil {
 		return p.syntax(err)
 	}
 	return nil
 }
 
-// rawToValue turns one JSON value into a Value. null is refused: an absent
-// attribute is written by leaving it out.
 func rawToValue(raw json.RawMessage) (Value, error) {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 {
@@ -261,9 +250,6 @@ func rawToValue(raw json.RawMessage) (Value, error) {
 	case 'n':
 		return Value{}, errors.New("null is not a value; leave the attribute out")
 	case '[', '{':
-		// C1 controls and bidi overrides may sit unescaped in a JSON
-		// string. They are never JSON syntax, so dropping them from the raw
-		// bytes keeps the value valid.
 		raw = []byte(Sanitize(string(raw)))
 		var buf bytes.Buffer
 		if err := json.Compact(&buf, raw); err != nil {

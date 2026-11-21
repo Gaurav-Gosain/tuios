@@ -11,21 +11,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// The command text an OSC 133 C mark captures is bounded.
-//
-// The failure modes this is written against:
-//   - every C after one B reads every line from B to the cursor and keeps
-//     the text, so a run of C marks after a long output costs lines times
-//     marks in time and memory;
-//   - one C after a very long span keeps all of it;
-//   - the bound cuts what a shell sends in normal use: one B and one C per
-//     command, a command of a few lines, a long command that soft-wraps.
-//
-// Both tests use NewWithScrollback, so they run against whichever backend the
-// build selected.
-
-// captureLimit is the most bytes of command text one C mark may keep. It is
-// vt's maxCommandBytes.
 const captureLimit = 16 << 10
 
 func writeTerm(t *testing.T, term vt.Terminal, s string) {
@@ -35,8 +20,6 @@ func writeTerm(t *testing.T, term vt.Terminal, s string) {
 	}
 }
 
-// keptBytes is the bytes of command text the C marks in marks keep. Two marks
-// that share one string count it once.
 func keptBytes(marks []vt.SemanticMarker) (n, cMarks int) {
 	seen := map[*byte]bool{}
 	for _, m := range marks {
@@ -52,7 +35,6 @@ func keptBytes(marks []vt.SemanticMarker) (n, cMarks int) {
 	return n, cMarks
 }
 
-// short is s cut for a failure message.
 func short(s string) string {
 	if len(s) > 60 {
 		return s[:60] + "..."
@@ -91,9 +73,6 @@ func TestCommandCaptureIsBounded(t *testing.T) {
 			if kept > captureLimit {
 				t.Errorf("%d C marks keep %d bytes of command text, want at most %d", cMarks, kept, captureLimit)
 			}
-			// Read once, the lines cost well under a megabyte. Read for
-			// every mark they cost hundreds. The bound leaves the marks and
-			// the callback room.
 			if alloc := after.TotalAlloc - before.TotalAlloc; alloc > 4<<20 {
 				t.Errorf("writing %d C marks allocated %d bytes, want at most %d", cMarks, alloc, 4<<20)
 			}

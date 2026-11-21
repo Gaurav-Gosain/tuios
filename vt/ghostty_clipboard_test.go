@@ -19,7 +19,6 @@ func TestGhosttyClipboardWriteEffectFires(t *testing.T) {
 	term.SetCallbacks(Callbacks{
 		ClipboardSet: func(sel, content string) { got = append(got, [2]string{sel, content}) },
 	})
-	// OSC 1337 ; Copy=: base64("hello") ST
 	if _, err := term.Write([]byte("\x1b]1337;Copy=:aGVsbG8=\x1b\\")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -48,8 +47,6 @@ func TestGhosttyClipboardWriteIsAnswered(t *testing.T) {
 	term.SetCallbacks(Callbacks{
 		ClipboardSet: func(sel, content string) { got = append(got, [2]string{sel, content}) },
 	})
-	// A full OSC 5522 write transaction: begin, one data chunk, commit.
-	// dGV4dC9wbGFpbg== is "text/plain" and R2hvc3R0eQ== is "Ghostty".
 	seqs := []string{
 		"\x1b]5522;type=write:id=c1\x1b\\",
 		"\x1b]5522;type=wdata:mime=dGV4dC9wbGFpbg==;R2hvc3R0eQ==\x1b\\",

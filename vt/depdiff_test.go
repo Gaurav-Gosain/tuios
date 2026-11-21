@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// depDiffOut is the directory a dependency-bump differential run writes its
-// dumps into. Empty means the harness is skipped.
 func depDiffOut(t *testing.T) string {
 	t.Helper()
 	dir := os.Getenv("TUIOS_DEPDIFF_OUT")
@@ -23,8 +21,6 @@ func depDiffOut(t *testing.T) string {
 	return dir
 }
 
-// dumpCells renders every occupied cell of an emulator as position, content
-// and width, which is the shape a width-table change would move.
 func dumpCells(e *Emulator) string {
 	var b strings.Builder
 	for y := 0; y < e.Height(); y++ {
@@ -45,9 +41,6 @@ func dumpCells(e *Emulator) string {
 	return b.String()
 }
 
-// depDiffVTCases are byte streams chosen to put width decisions under
-// pressure: wide runes at and over the right margin, combining marks arriving
-// after their base, and grapheme clusters split across writes.
 var depDiffVTCases = []struct {
 	name  string
 	parts []string
@@ -105,8 +98,6 @@ func TestDepDiffVT(t *testing.T) {
 		_ = e.Close()
 	}
 
-	// Every case again at a narrow width, where the wrap and the right margin
-	// do most of the deciding.
 	for _, c := range depDiffVTCases {
 		e := NewEmulator(10, 6)
 		for _, p := range c.parts {

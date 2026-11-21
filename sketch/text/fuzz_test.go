@@ -30,7 +30,6 @@ func FuzzDraw(f *testing.F) {
 			f.Add(s, 120)
 		}
 	}
-	// The pinned sources, labels of XY points and bars among them.
 	pinned, _ := filepath.Glob("testdata/pinned/*.mmd")
 	for _, path := range pinned {
 		if data, err := os.ReadFile(path); err == nil {

@@ -63,9 +63,6 @@ func (currentSource) Name() string { return SourceName }
 
 func (s currentSource) WatchPaths() []string { return s.dirs }
 
-// Relevant is true for the theme directory, theme.name and theme.generation
-// of any current directory, and for a current directory itself, which
-// appears when Omarchy is installed.
 func (s currentSource) Relevant(path string) bool {
 	path = filepath.Clean(path)
 	for _, dir := range s.dirs {
@@ -84,11 +81,6 @@ func (s currentSource) Relevant(path string) bool {
 	return false
 }
 
-// Load reads the first current directory that holds a theme or a theme.name.
-// It does not fall through to an older layout once a newer one is in use: a
-// machine upgraded from Omarchy 3 can keep a stale ~/.config/omarchy/current,
-// and a read in the gap of an Omarchy 4 switch must fail, so the watcher keeps
-// the palette in force, rather than serve that stale theme.
 func (s currentSource) Load() (swatch.Palette, error) {
 	for _, dir := range s.dirs {
 		if !exists(filepath.Join(dir, "theme")) && !exists(filepath.Join(dir, "theme.name")) {
@@ -104,7 +96,6 @@ func exists(path string) bool {
 	return err == nil
 }
 
-// loadCurrent reads the theme applied in one current directory.
 func loadCurrent(dir string) (swatch.Palette, error) {
 	theme := filepath.Join(dir, "theme")
 	id := ""
@@ -114,7 +105,6 @@ func loadCurrent(dir string) (swatch.Palette, error) {
 	return load(theme, id)
 }
 
-// load reads the colors.toml in dir as the theme id.
 func load(dir, id string) (swatch.Palette, error) {
 	data, err := readCapped(filepath.Join(dir, "colors.toml"), MaxFileSize)
 	if err != nil {
@@ -126,9 +116,6 @@ func load(dir, id string) (swatch.Palette, error) {
 	_, statErr := os.Stat(filepath.Join(dir, "light.mode"))
 	colors := Resolve(data, statErr == nil)
 	if colors["background"] == "" {
-		// An empty or broken file, or one caught half written. Resolve
-		// derives nothing without a background, and a black on white
-		// palette from it would replace the theme in force.
 		return swatch.Palette{}, fmt.Errorf("omarchy: %s names no background", filepath.Join(dir, "colors.toml"))
 	}
 	p := FromColors(colors)
@@ -136,7 +123,6 @@ func load(dir, id string) (swatch.Palette, error) {
 	return p, nil
 }
 
-// readCapped reads a regular file of at most limit bytes.
 func readCapped(path string, limit int64) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -215,8 +201,6 @@ func FromColors(c map[string]string) swatch.Palette {
 	p.ANSI[0], p.ANSI[7] = p.Background, p.Foreground
 	for i := range p.ANSI {
 		if p.ANSI[i] == nil {
-			// A bright slot falls back to its normal one, and a normal
-			// one to the text colour.
 			if i >= 8 && p.ANSI[i-8] != nil {
 				p.ANSI[i] = p.ANSI[i-8]
 			} else {
@@ -241,10 +225,6 @@ func FromColors(c map[string]string) swatch.Palette {
 	return p
 }
 
-// gradientStart is the first colour of a Hyprland border spec, such as
-// "rgba(26a269ee) rgba(2ec27eee) 45deg", as gradient_start in Omarchy's
-// template renderer reads it. A stop may also name another key. It returns
-// nil when the spec has no colour it can read. Alpha is dropped.
 func gradientStart(spec string, c map[string]string) color.Color {
 	for part := range strings.FieldsSeq(spec) {
 		if isAngle(part) {
@@ -262,7 +242,6 @@ func gradientStart(spec string, c map[string]string) color.Color {
 	return nil
 }
 
-// isAngle matches -?[0-9]+(\.[0-9]+)?deg.
 func isAngle(s string) bool {
 	s, ok := strings.CutSuffix(s, "deg")
 	if !ok {
@@ -285,8 +264,6 @@ func digits(s string) bool {
 	return true
 }
 
-// hyprColor reads #rrggbb, #rrggbbaa, rgb(rrggbb), rgba(rrggbbaa) and
-// rgb(r,g,b) or rgba(r,g,b,a), the forms Omarchy's renderer accepts.
 func hyprColor(s string) (color.Color, bool) {
 	if strings.HasPrefix(s, "#") && (len(s) == 7 || len(s) == 9) {
 		col, ok := swatch.ParseHex(s[:7])

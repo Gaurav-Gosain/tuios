@@ -17,35 +17,21 @@ import (
 
 //go:generate go run gen.go
 
-// bundledArchive is manifests/*.toml packed by gen.go, each file under its
-// base name. The gzipped tar is about a quarter of the files' size. Run `go
-// generate ./harness` after editing a bundled manifest.
-// TestBundledArchiveMatchesFiles fails while the archive is stale.
-//
 //go:embed manifests.tar.gz
 var bundledArchive []byte
 
-// bundledFile is one manifest from the archive, named "manifests/<file>".
 type bundledFile struct {
 	name string
 	data []byte
 }
 
-// maxBundledBytes bounds what bundledFiles unpacks, in all and per entry. The
-// manifests are about 100 KB.
 const maxBundledBytes = 4 << 20
 
-// bundledFiles unpacks the archive in name order. It unpacks on each call and
-// keeps nothing, because Load runs once per daemon start and a kept copy would
-// sit in memory for the life of the process.
 func bundledFiles() ([]bundledFile, error) {
 	zr, err := gzip.NewReader(bytes.NewReader(bundledArchive))
 	if err != nil {
 		return nil, errorf("bundled manifests: %w", err)
 	}
-	// The archive is built into the binary, so these limits guard against a
-	// bad gen.go or a corrupt commit, not an attacker: the whole stream stops
-	// at maxBundledBytes, and a header cannot ask for more than that.
 	tr := tar.NewReader(io.LimitReader(zr, maxBundledBytes))
 	var out []bundledFile
 	for {
@@ -87,8 +73,6 @@ func (e LoadError) Error() string { return e.Err.Error() }
 // Unwrap returns the error that stopped the manifest from loading.
 func (e LoadError) Unwrap() error { return e.Err }
 
-// LoadError is an error as a value, the form Load returns. errors.As needs a
-// *LoadError target for it, not a **LoadError.
 var _ error = LoadError{}
 
 // Load builds the registry from the manifests compiled into the binary, then
@@ -153,8 +137,6 @@ func Load(dirs ...string) (*Registry, []LoadError) {
 	for _, m := range byID {
 		r.manifests = append(r.manifests, m)
 	}
-	// Highest priority first, then by id, so two manifests that both match the
-	// same process always resolve to the same one.
 	sort.Slice(r.manifests, func(i, j int) bool {
 		if r.manifests[i].Priority != r.manifests[j].Priority {
 			return r.manifests[i].Priority > r.manifests[j].Priority
@@ -165,9 +147,6 @@ func Load(dirs ...string) (*Registry, []LoadError) {
 	return r, errs
 }
 
-// dropTakenAliases keeps every name pointing at one harness: an alias that is
-// another manifest's id, or that a manifest earlier in lookup order already
-// uses, is dropped with an error naming both.
 func (r *Registry) dropTakenAliases() []LoadError {
 	var errs []LoadError
 	owner := make(map[string]string, len(r.manifests))
@@ -252,8 +231,6 @@ func (r *Registry) CanProveWorking(id string) bool {
 	return r.canShow(id, "working")
 }
 
-// canShow reports whether the harness has an enabled screen or title rule that
-// reports state.
 func (r *Registry) canShow(id, state string) bool {
 	m := r.Lookup(id)
 	if m == nil {

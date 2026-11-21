@@ -21,11 +21,6 @@ func (e *Emulator) AppendScrollbackText(buf *strings.Builder) {
 	if sb == nil {
 		return
 	}
-	// A line's text is never longer than its record: ASCII cells are one
-	// byte in both, other content is stored inline, and styles and links
-	// only add tokens. Growing by the records' total once replaces the
-	// doublings that copied a 450 kB capture about twenty times. The screen
-	// the capture writes next gets room as well, at one byte a cell.
 	size := sb.Len() + e.Height()*(e.Width()+1)
 	for i := range sb.Len() {
 		size += len(sb.lines[sb.slot(i)])
@@ -37,37 +32,14 @@ func (e *Emulator) AppendScrollbackText(buf *strings.Builder) {
 	}
 }
 
-// appendLineText writes what uv.Line.String would return for
-// decodeLine(data), without building the line.
-//
-// uv.Line.String skips a cell equal to the zero Cell, holds back a cell equal
-// to EmptyCell as a pending space, and writes any other cell's content after
-// the pending spaces. Spaces still pending at the end are dropped. The rules
-// below are those two comparisons applied to the style and link in force:
-//
-//   - A zero Cell has no content, width 0, a zero style and no link.
-//   - EmptyCell is " " of width 1 with a zero style and no link.
-//
-// Both comparisons need the style to be the zero style. Cell.IsZero compares
-// with ==, and Cell.Equal compares colours by RGBA, but a colour only equals a
-// nil colour when it is nil, so the two agree. A link compares with == in both.
-//
-// The decoder's padding past the stored cells is EmptyCell, which is only ever
-// pending, so the stored cells are all that can reach buf. A record that ends
-// in the middle of a token stops the decoder, and the rest of its line is
-// padding, so it stops here too.
 func (sb *Scrollback) appendLineText(buf *strings.Builder, data []byte) {
 	width, n := binary.Uvarint(data)
 	if n <= 0 {
 		return
 	}
-	// plain is whether the style and link in force are both zero, which is
-	// when a space can be pending and an empty cell of width 0 is skipped.
 	plain := true
 	var style uv.Style
 	var link uv.Link
-	// The links this line has written so far, which a later link token can
-	// refer back to. See readLink.
 	var links []uv.Link
 	pending := 0
 	flush := func() {
@@ -107,9 +79,6 @@ func (sb *Scrollback) appendLineText(buf *strings.Builder, data []byte) {
 			x++
 			switch {
 			case plain && w == 0 && content == "":
-				// The zero Cell: String skips it. A styled or linked cell
-				// of width 0 is not the zero Cell, so it writes its empty
-				// content and releases the pending spaces like any other.
 			case plain && w == 1 && content == " ":
 				pending++
 			default:
@@ -118,7 +87,6 @@ func (sb *Scrollback) appendLineText(buf *strings.Builder, data []byte) {
 			}
 		default:
 			if c := data[i]; c < utf8.RuneSelf {
-				// One ASCII byte is a whole cell of width one: most of a log.
 				i++
 				x++
 				if c == ' ' && plain {
@@ -135,8 +103,6 @@ func (sb *Scrollback) appendLineText(buf *strings.Builder, data []byte) {
 			}
 			i = j
 			x++
-			// Width one, and not a space, which is ASCII: never skipped or
-			// held back.
 			flush()
 			buf.WriteString(content)
 		}

@@ -72,7 +72,6 @@ func TreemapOf(items []TreeItem, format func(float64) string) Treemap {
 		if sum <= 0 || len(t.Boxes) >= MaxTreemapBoxes {
 			return
 		}
-		// The biggest first, as a treemap is read.
 		order := make([]int, len(list))
 		for i := range order {
 			order[i] = i
@@ -103,8 +102,6 @@ func TreemapOf(items []TreeItem, format func(float64) string) Treemap {
 
 type tmRect struct{ x0, y0, x1, y1 int }
 
-// cells places the boxes in a w by h grid, and reports whether every box
-// has room for a line round it and a short label.
 func (t Treemap) cells(w, h int) ([]tmRect, []int, bool) {
 	if len(t.Boxes) == 0 || len(t.Boxes) > MaxTreemapBoxes || w < 3 || h < 3 {
 		return nil, nil, false
@@ -128,9 +125,6 @@ func (t Treemap) cells(w, h int) ([]tmRect, []int, bool) {
 		}
 	}
 	deepest = min(deepest, 64)
-	// A level at a time, so that a box keeps to the lines its parent ended
-	// with. A child shares its parent's sides and bottom, and starts under
-	// its top line.
 	for depth := 0; depth <= deepest; depth++ {
 		for i, b := range t.Boxes {
 			if b.Depth != depth {
@@ -155,8 +149,6 @@ func (t Treemap) cells(w, h int) ([]tmRect, []int, bool) {
 			}
 			cells[i] = r
 		}
-		// Boxes in one section may share a line, but no more. Two lines side
-		// by side become one.
 		for i := range cells {
 			if t.Boxes[i].Depth != depth {
 				continue
@@ -190,7 +182,6 @@ func (t Treemap) cells(w, h int) ([]tmRect, []int, bool) {
 		if r.x1-r.x0 < 2 || r.y1-r.y0 < 2 {
 			return nil, nil, false
 		}
-		// A label shortened past three cells says nothing.
 		if b.Section && min(width(b.Label), 4)+4 > r.x1-r.x0-1 {
 			return nil, nil, false
 		}
@@ -212,8 +203,6 @@ func (t Treemap) Fits(w, h int) bool {
 	return ok
 }
 
-// The light box-drawing glyph for each set of strokes: up 1, right 2,
-// down 4, left 8.
 var tmJoins = [16]string{
 	0: " ", 1: "│", 4: "│", 5: "│", 2: "─", 8: "─", 10: "─",
 	6: "┌", 12: "┐", 3: "└", 9: "┘", 7: "├", 13: "┤", 14: "┬", 11: "┴", 15: "┼",
@@ -227,7 +216,6 @@ func (t Treemap) Draw(w, h int, m Mode) *Grid {
 	if !ok {
 		return g
 	}
-	// The colour of each box: that of its branch of the root.
 	role := make([]Role, len(t.Boxes))
 	next := 0
 	for i := range t.Boxes {
@@ -245,9 +233,6 @@ func (t Treemap) Draw(w, h int, m Mode) *Grid {
 			role[i] = role[top]
 		}
 	}
-	// The lines, as strokes a cell, joined. A cell takes the colour of the
-	// first box that draws on it: the root's frame first, then the rest from
-	// the last, and then each box's top line, which carries its name.
 	mask := make([]uint8, g.W*g.H)
 	lineRole := make([]Role, g.W*g.H)
 	stroke := func(x, y int, bits uint8, r Role) {

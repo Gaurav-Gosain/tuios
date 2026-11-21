@@ -21,7 +21,7 @@ type finding struct {
 	Message   string  `json:"message"`
 	Precision float64 `json:"precision"`
 
-	path string // the absolute path, for the diff scope
+	path string
 }
 
 type result struct {
@@ -31,7 +31,6 @@ type result struct {
 	GateFailed bool      `json:"gate_failed"`
 }
 
-// analyze loads the packages and runs the rules on them.
 func analyze(dir string, patterns []string, rules []nitpick.Rule, tests bool) result {
 	var res result
 	cfg := &packages.Config{
@@ -46,7 +45,6 @@ func analyze(dir string, patterns []string, rules []nitpick.Rule, tests bool) re
 	}
 	var roots []*packages.Package
 	for _, p := range pkgs {
-		// The test main that go list makes has no code of the module.
 		if strings.HasSuffix(p.ID, ".test") {
 			continue
 		}
@@ -69,7 +67,6 @@ func analyze(dir string, patterns []string, rules []nitpick.Rule, tests bool) re
 		res.Errors = append(res.Errors, err.Error())
 		return res
 	}
-	// A package and its test variant hold the same files: keep one copy.
 	seen := map[string]bool{}
 	for _, act := range graph.Roots {
 		if act.Err != nil {
@@ -102,8 +99,6 @@ func analyze(dir string, patterns []string, rules []nitpick.Rule, tests bool) re
 	return res
 }
 
-// normPath gives one spelling of a path, so that the paths of git and of
-// go list compare equal.
 func normPath(p string) string {
 	if abs, err := filepath.Abs(p); err == nil {
 		p = abs
@@ -114,7 +109,6 @@ func normPath(p string) string {
 	return filepath.Clean(p)
 }
 
-// relPath shows a path from the working directory when it is below it.
 func relPath(cwd, p string) string {
 	if rel, err := filepath.Rel(normPath(cwd), p); err == nil && !strings.HasPrefix(rel, "..") {
 		return rel

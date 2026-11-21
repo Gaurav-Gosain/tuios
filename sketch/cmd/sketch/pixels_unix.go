@@ -8,7 +8,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// windowPixels is the terminal's size in pixels and cells, where it reports one.
 func windowPixels(f *os.File) (pw, ph, cols, rows int, ok bool) {
 	ws, err := unix.IoctlGetWinsize(int(f.Fd()), unix.TIOCGWINSZ)
 	if err != nil {

@@ -1,13 +1,10 @@
-// Ported from pele src/diagrams/ishikawa/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package ishikawa
 
 // IshikawaDb is the model: the root is the effect; its children are the categories of causes,
 // theirs the causes, and so on.
 type IshikawaDb struct {
-	title string
-	root  *IshikawaNode
-	// The line of ancestors of the last node, each with its level.
+	title     string
+	root      *IshikawaNode
 	stack     []levelNode
 	baseLevel int
 	hasBase   bool
@@ -18,8 +15,6 @@ type levelNode struct {
 	node  *IshikawaNode
 }
 
-// addNode: the first line is the effect. Every later line is a cause, nested by its indentation relative
-// to the first cause, so the effect itself may be indented more than the causes.
 func (db *IshikawaDb) addNode(rawLevel int, text string) {
 	node := &IshikawaNode{text: text}
 	if db.root == nil {

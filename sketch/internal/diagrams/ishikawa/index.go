@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/ishikawa/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package ishikawa draws Mermaid's ishikawa diagram: a fishbone of causes that lead to an
 // effect, the categories of causes as bones off a spine.
 package ishikawa

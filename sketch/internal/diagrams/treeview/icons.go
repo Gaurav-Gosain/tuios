@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/treeview/icons.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package treeview
 
 import (
@@ -13,7 +11,6 @@ import (
 // name is offered to the host's icon resolver.
 const BUILTIN_PACK = "mermaid-treeview"
 
-// glyph is an outline on a 24 by 24 grid, or "" for a name with none.
 func glyph(name string) string {
 	switch name {
 	case "folder":
@@ -38,8 +35,6 @@ func own(m IconMap, key string) (string, bool) {
 	return value, ok
 }
 
-// detectIcon is a file's icon from the configured maps. A file name wins over an extension, and extensions
-// match in lower case with or without the leading dot.
 func detectIcon(name string, config IconConfig) (string, bool) {
 	if byName, ok := own(config.filenameIcons, name); ok && byName != "" {
 		return byName, true
@@ -64,8 +59,6 @@ func qualifyIcon(icon, defaultIconPack string) string {
 	return defaultIconPack + ":" + icon
 }
 
-// getNodeIcon is the qualified icon name for a node, or "" when it shows none. An `icon()` annotation
-// always wins; otherwise icons appear only with `showIcons`.
 func getNodeIcon(node *TreeNode, config IconConfig) string {
 	if node.icon == "none" {
 		return ""

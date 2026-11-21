@@ -7,13 +7,6 @@ import (
 	sketch "tuios.dev/sketch/internal/engine"
 )
 
-// A git graph is drawn the way git log --graph draws one: the history runs
-// down, oldest first, each branch is a column with its name at the top, and
-// each commit is a row with its id and tags right of the lanes. A line across
-// a commit's row joins it to a parent on another branch. Each branch takes
-// a series colour, as pele's do: its lane, its name, its commits and the
-// lines that join it to other branches.
-
 var commitMarks = map[string]rune{
 	"normal":      '●',
 	"reverse":     '×',
@@ -28,7 +21,6 @@ func drawGit(l *sketch.Layout, opt Options) (*canvas, error) {
 		return nil, ErrUnsupported
 	}
 	lanes := len(g.Lanes)
-	// Commits that share a place stay in the order they were made.
 	order := make([]int, len(g.Commits))
 	for i := range order {
 		order[i] = i
@@ -51,7 +43,6 @@ func drawGit(l *sketch.Layout, opt Options) (*canvas, error) {
 	if len(g.Title) > 0 {
 		titleH = len(g.Title) + 1
 	}
-	// One row for each branch name, then one for each commit.
 	top := titleH + lanes
 	for r, i := range order {
 		c := g.Commits[i]
@@ -76,7 +67,6 @@ func drawGit(l *sketch.Layout, opt Options) (*canvas, error) {
 	if opt.Cols > 0 && wd > opt.Cols {
 		return nil, ErrTooWide
 	}
-	// The lanes run one row past the last commit, as pele's run past it.
 	c, err := newCanvas(max(wd, 1), top+len(order)+1)
 	if err != nil {
 		return nil, err

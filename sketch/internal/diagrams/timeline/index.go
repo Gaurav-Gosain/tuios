@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/timeline/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package timeline draws Mermaid's timeline: time periods in order along an axis, each
 // with its events, grouped in sections.
 package timeline

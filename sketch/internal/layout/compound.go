@@ -1,5 +1,3 @@
-// Ported from pele src/layout/compound.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package layout
 
 import (
@@ -69,7 +67,6 @@ type portEdge struct {
 	inner int
 	out   bool
 	side  Side
-	// Cross-flow position outside the group from a previous layout; NaN if unknown.
 	hint  float64
 	px    float64
 	py    float64
@@ -168,8 +165,6 @@ func restore(s *snapshotOf, nodes []*CNode, edges []*CEdge, levels []*level) Com
 // Ignore crossings within this distance of a shared node.
 const FAN = 24
 
-// Tolerance for collinear points: IN_LINE, which layered.go declares with the same value.
-
 const (
 	CURVE_PIECES  = 3
 	CORNER_PIECES = 2
@@ -215,7 +210,6 @@ func RouteCrossings(nodes []*CNode, edges []*CEdge, style Style) int {
 	low := make([]float64, size)
 	high := make([]float64, size)
 	owner := make([]int, size)
-	// Endpoint flags: 1 for the first segment, 2 for the last.
 	ends := make([]uint8, size)
 	count := 0
 	top := inf
@@ -275,7 +269,6 @@ func RouteCrossings(nodes []*CNode, edges []*CEdge, style Style) int {
 				length(k+3) >= 0.01 &&
 				(math.Abs(r[k]-r[k-3]) < 0.01) != (math.Abs(r[k+3]-r[k]) < 0.01)
 		}
-		// An edge to its own group has no route yet: pele reads undefined and adds nothing.
 		if len(r) < 2 {
 			continue
 		}
@@ -300,7 +293,6 @@ func RouteCrossings(nodes []*CNode, edges []*CEdge, style Style) int {
 					add(ei, part, x0, y0, x1, y1)
 					continue
 				}
-				// Adjacent corners share a leg, so each gets half.
 				before := length(k)
 				if turns(k - 3) {
 					before = length(k) / 2
@@ -354,7 +346,6 @@ func RouteCrossings(nodes []*CNode, edges []*CEdge, style Style) int {
 				add(ei, part, nx, ny, x1, y1)
 				continue
 			}
-			// Approximate the rendered S-curve with straight segments.
 			down := r[k+2] == 0
 			var c float64
 			if down {
@@ -381,7 +372,6 @@ func RouteCrossings(nodes []*CNode, edges []*CEdge, style Style) int {
 			}
 		}
 	}
-	// Count each pair only in the first band shared by both segments.
 	bands := 1
 	scale := 0.0
 	if bottom > top {
@@ -408,7 +398,6 @@ func RouteCrossings(nodes []*CNode, edges []*CEdge, style Style) int {
 			fill[b]++
 		}
 	}
-	// Edges merging into a shared endpoint run do not count as crossings.
 	runs := make([]float64, len(edges)*8)
 	inLine := func(r []float64, a, b, c int) bool {
 		return (math.Abs(r[a]-r[b]) < IN_LINE && math.Abs(r[a]-r[c]) < IN_LINE) || (math.Abs(r[a+1]-r[b+1]) < IN_LINE && math.Abs(r[a+1]-r[c+1]) < IN_LINE)
@@ -475,7 +464,6 @@ func RouteCrossings(nodes []*CNode, edges []*CEdge, style Style) int {
 				}
 				d1 := float64(dx*(ay[q]-ay[p])) - float64(dy*(ax[q]-ax[p]))
 				d2 := float64(dx*(by[q]-ay[p])) - float64(dy*(bx[q]-ax[p]))
-				// Treat points on the line as one side to count segment-boundary crossings once.
 				if (d1 > 0) == (d2 > 0) {
 					continue
 				}
@@ -491,7 +479,6 @@ func RouteCrossings(nodes []*CNode, edges []*CEdge, style Style) int {
 				at := d3 / (d3 - d4)
 				x := ax[p] + float64(at*dx)
 				y := ay[p] + float64(at*dy)
-				// Exclude fan-in and fan-out at shared nodes.
 				fan := func(v int, pe, qe uint8) bool {
 					return ((ends[p]&pe) != 0 && (ends[q]&qe) != 0) ||
 						(math.Abs(x-nodes[v].X) < nodes[v].W/2+FAN && math.Abs(y-nodes[v].Y) < nodes[v].H/2+FAN) ||
@@ -519,7 +506,6 @@ func RouteCrossings(nodes []*CNode, edges []*CEdge, style Style) int {
 // InheritCrossedDirections matches Mermaid: groups crossed by edges inherit their parent's
 // direction. `end` gives the node indices of edge i, -1 for none, for n edges.
 func InheritCrossedDirections(nodes []*CNode, n int, end func(i int) (src, dst int)) {
-	// Only a group with a direction of its own can lose it; most diagrams have none.
 	directed := false
 	for _, c := range nodes {
 		if c.Dir != "" {
@@ -530,7 +516,6 @@ func InheritCrossedDirections(nodes []*CNode, n int, end func(i int) (src, dst i
 	if !directed {
 		return
 	}
-	// inside reports whether g is an ancestor of node i.
 	inside := func(i, g int) bool {
 		for p, steps := nodes[i].Parent, 0; p >= 0 && steps <= len(nodes); p, steps = nodes[p].Parent, steps+1 {
 			if p == g {
@@ -643,7 +628,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 		}
 	}
 	descend(0)
-	// Groups that contain each other are unreachable from the root; lift them out.
 	for i := 0; i < n; i++ {
 		if placed[i] != 0 {
 			continue
@@ -680,8 +664,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 		sortBy(lv.items, func(a, b int) float64 { return or(float64(nodes[a].Seq-nodes[b].Seq), float64(a-b)) })
 	}
 
-	// Every group border an edge crosses costs a port. Past the budget, an edge is drawn between
-	// the groups that hold its ends, at the level they share.
 	ports := 0
 	for _, e := range edges {
 		a := e.Src
@@ -769,8 +751,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 		return ei*2 + 1
 	}
 
-	// Set below, before build is first called: whether nodes take their keys from the flat
-	// layout, the keys, and the hint for a port on the far side of a group.
 	key := make([]float64, n)
 	for i := range key {
 		key[i] = math.NaN()
@@ -880,7 +860,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 
 	ordered := ports > 1 && ports <= MAX_ORDERED_PORTS && len(edges) <= MAX_ORDERED_EDGES
 
-	// Use a flat layout to coordinate node and port order across groups.
 	flatCrossings := 0
 	flat := len(order) > 1 && ordered
 	for _, lv := range order {
@@ -944,7 +923,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 		flatCrossings = min(flatLayout.Crossings, flatLayout.Declared)
 		sum := make([]float64, n)
 		count := make([]int, n)
-		// Last rank occupied by each group.
 		last := fillInt(n, -1)
 		for i := 0; i < n; i++ {
 			if leaf[i] < 0 {
@@ -962,7 +940,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 				key[i] = sum[i] / float64(count[i])
 			}
 		}
-		// Order outgoing ports at the group's last rank; break ties using the next rank.
 		farHint = func(lv *level, port *portEdge) float64 {
 			le := ledgeOf[port.e]
 			if le < 0 || lv.id < 0 || !port.out || port.side != opposite(startSide(lv.dir)) {
@@ -983,7 +960,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 		}
 	}
 
-	// Reuse unchanged levels across layout attempts.
 	type layoutOf struct {
 		given  []float64
 		lnodes []*LNode
@@ -997,7 +973,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 		}
 		return 0
 	}
-	// Object.is for numbers: NaN is NaN, and 0 is not -0.
 	same := func(a, b float64) bool {
 		if math.IsNaN(a) {
 			return math.IsNaN(b)
@@ -1032,7 +1007,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 
 	total := CompoundResult{}
 	place := func() {
-		// Rank parents first to determine which group sides edges cross.
 		for _, lv := range order {
 			for _, port := range lv.ports {
 				if nodes[port.inner].IsGroup && endpointBelow(port.inner, edges[port.e], port.out) {
@@ -1076,7 +1050,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 			}
 		}
 
-		// Lay out children first so their sizes are known.
 		for q := len(order) - 1; q >= 0; q-- {
 			lv := order[q]
 			var group *CNode
@@ -1285,7 +1258,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 		}
 	}
 
-	// The flat layout ignores group boxes, so independent ordering may yield fewer crossings.
 	style := StyleOf(opt)
 	keyed = flat
 	place()
@@ -1306,8 +1278,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 		}
 	}
 
-	// Refine port order using routes outside each group. Skip this if independent ordering won;
-	// it rarely helps enough to justify another layout.
 	if keyed == flat && ordered {
 		again := false
 		for _, lv := range order {
@@ -1322,7 +1292,6 @@ func CompoundLayout(nodes []*CNode, edges []*CEdge, rootDir Dir, opt LayeredOpti
 				if port.side != end {
 					continue
 				}
-				// Skip the straight run out of the port to find where the edge turns.
 				route := edges[port.e].Route
 				bx := lv.x + port.px
 				by := lv.y + port.py

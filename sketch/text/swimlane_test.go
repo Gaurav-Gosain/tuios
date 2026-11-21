@@ -17,7 +17,6 @@ func TestSwimlaneText(t *testing.T) {
  │                                     └──────┘      └──────┘  │
  └─────────────────────────────────────────────────────────────┘
 `)
-	// A node outside every lane gets a lane without a title.
 	drawPinned(t, "swimlane-beta TD\n  start --> a\n  subgraph Team\n    a --> b\n  end", 0, `
  ┌──────────────┐┌─ Team ───┐
  │              ││          │

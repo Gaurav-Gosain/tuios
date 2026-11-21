@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/state/graph.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package state
 
 import (
@@ -70,7 +68,6 @@ func direction(doc []Stmt) string {
 	return docDirection(doc)
 }
 
-// flat is `[description].flat()`.
 func flat(d *Description) []string {
 	if d.IsList {
 		return append([]string{}, d.List...)
@@ -78,7 +75,6 @@ func flat(d *Description) []string {
 	return []string{d.Text}
 }
 
-// Mermaid's dataFetcher: walks the documents and resolves them into the nodes and edges that are drawn.
 func buildStateGraph(rootDoc []Stmt, states map[string]*StateStmt, classes map[string]*StateClassDef) StateGraph {
 	var nodes []*StateNode
 	var edges []StateEdge
@@ -89,12 +85,10 @@ func buildStateGraph(rootDoc []Stmt, states map[string]*StateStmt, classes map[s
 	nextSlot := 0
 
 	insert := func(node *StateNode) {
-		// The two literal ids are what DOMPurify leaves of `<<fork>>` and `<<choice>>` in Mermaid; kept for parity.
 		if node.ID == "" || node.ID == "</join></fork>" || node.ID == "</choice>" {
 			return
 		}
 		if node.CssClasses != "" {
-			// One copy, however many classes: a state named in a class statement many times has a long list.
 			var compiled []string
 			have := false
 			for _, name := range strings.Split(node.CssClasses, " ") {
@@ -118,7 +112,6 @@ func buildStateGraph(rootDoc []Stmt, states map[string]*StateStmt, classes map[s
 			if parentId == nil {
 				parentId = existing.ParentID
 			}
-			// Object.assign: the keys pele's object has.
 			existing.ID = node.ID
 			existing.Shape = node.Shape
 			existing.Label = node.Label
@@ -188,8 +181,6 @@ func buildStateGraph(rootDoc []Stmt, states map[string]*StateStmt, classes map[s
 		if item.Description.truthy() {
 			if d.description.IsList {
 				d.shape = "rectWithTitle"
-				// pele copies the list here. The draft owns its list (every branch below makes a new one),
-				// so appending in place is the same and keeps a state with many descriptions linear.
 				d.description.List = append(d.description.List, flat(item.Description)...)
 			} else if d.description.Text != "" {
 				d.shape = "rectWithTitle"
@@ -227,7 +218,6 @@ func buildStateGraph(rootDoc []Stmt, states map[string]*StateStmt, classes map[s
 			} else {
 				d.shape = "roundedWithTitle"
 			}
-			// A container takes the next palette slot unless it is a region, which shares its composite's.
 			has := false
 			if parent != nil {
 				_, has = slots[parent.ID]
@@ -268,8 +258,6 @@ func buildStateGraph(rootDoc []Stmt, states map[string]*StateStmt, classes map[s
 		if full.IsList {
 			if len(full.List) > 0 {
 				node.Label = full.List[0]
-				// Shared, not copied: a state is visited once per statement, and nothing writes the list.
-				// The capped capacity makes an append copy rather than write into the draft's list.
 				node.Description = full.List[1:len(full.List):len(full.List)]
 			}
 		} else {
@@ -288,8 +276,6 @@ func buildStateGraph(rootDoc []Stmt, states map[string]*StateStmt, classes map[s
 			insert(node)
 			return
 		}
-		// Mermaid puts each note in a group of its own, named after the state. Pele keeps that
-		// group in the model and lays the note out beside its state instead.
 		aside := func(asideId, shape, cssClasses string, isGroup bool) *StateNode {
 			typ := "node"
 			if isGroup {

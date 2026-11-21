@@ -3,7 +3,7 @@ package plot
 import (
 	"bytes"
 	"compress/flate"
-	_ "embed" // the world map data
+	_ "embed"
 	"encoding/binary"
 	"io"
 	"math"
@@ -14,25 +14,17 @@ import (
 
 //go:generate go run ./internal/worldgen -o world.bin
 
-// worldBin is the land and the countries of the world, as worldgen writes
-// them: Natural Earth 1:50m Admin 0 Countries, version 5.1.1, from
-// https://naciscdn.org/naturalearth/50m/cultural/ne_50m_admin_0_countries.zip.
-// Natural Earth is in the public domain
-// (https://www.naturalearthdata.com/about/terms-of-use/). It is 720 by 288
-// cells of half a degree, from 180 W to 180 E and from 84 N to 60 S.
-//
 //go:embed world.bin
 var worldBin string
 
-// world is worldBin decoded.
 type world struct {
 	w, h        int
 	top, bottom float64
 	codes       []string
-	cells       []uint8 // 0 sea, 1 land with no code, k+2 for codes[k]
+	cells       []uint8
 	small       map[int]uint8
-	smallBits   []uint64         // the cells in small, so a lookup is a bit test
-	index       map[string]uint8 // code to its cell value
+	smallBits   []uint64
+	index       map[string]uint8
 }
 
 var (
@@ -40,8 +32,6 @@ var (
 	worldMap  *world
 )
 
-// loadWorld decodes the map on first use, so a program that draws no map
-// spends nothing on it.
 func loadWorld() *world {
 	worldOnce.Do(func() {
 		raw, err := io.ReadAll(flate.NewReader(strings.NewReader(worldBin)))
@@ -207,9 +197,6 @@ func (mp Map) land() Role {
 	return Track
 }
 
-// rng returns the range of the values, and false when there is none. A value
-// under a code the map does not know shades nothing, so it sets no range: one
-// large one would push every real country into the lowest shade.
 func (mp Map) rng() (lo, hi float64, ok bool) {
 	if (mp.Min != 0 || mp.Max != 0) && finite(mp.Min) && finite(mp.Max) && mp.Max > mp.Min {
 		return mp.Min, mp.Max, true
@@ -235,8 +222,6 @@ func (mp Map) rng() (lo, hi float64, ok bool) {
 	return 0, hi, true
 }
 
-// valueAt returns the value at position t of the range, from 0 to 1, on
-// the map's scale.
 func (mp Map) valueAt(t, lo, hi float64) float64 {
 	if mp.Log && lo > 0 {
 		return lo * math.Exp(t*math.Log(hi/lo))
@@ -247,10 +232,6 @@ func (mp Map) valueAt(t, lo, hi float64) float64 {
 	return lo + t*(hi-lo)
 }
 
-// bounds returns the lowest value of each shade: the bottom of the range,
-// then the range split evenly on the map's scale, each rounded to two
-// digits so the legend reads 2.8k and not 2786. When rounding would merge
-// two bounds, none is rounded.
 func (mp Map) bounds(lo, hi float64, n int) []float64 {
 	exact := make([]float64, n)
 	for k := range exact {
@@ -338,8 +319,6 @@ func (mp Map) LegendGrid(w int, m Mode) *Grid {
 	return g
 }
 
-// round2 rounds v to two significant digits, so a legend reads 2.8k and
-// not 2786.
 func round2(v float64) float64 {
 	if v == 0 || !finite(v) {
 		return v
@@ -348,8 +327,6 @@ func round2(v float64) float64 {
 	return math.Round(v/p) * p
 }
 
-// pixelsPerCell returns the pixels of a cell across and down: braille dots,
-// half blocks, or whole cells.
 func pixelsPerCell(m Mode) (int, int) {
 	switch m {
 	case Braille:
@@ -360,14 +337,8 @@ func pixelsPerCell(m Mode) (int, int) {
 	return 1, 1
 }
 
-// maxSlack is how far the map may stretch its short side past its true
-// shape to fill the grid: a box a little taller or wider than the map is
-// filled edge to edge, and a much taller or wider one leaves a margin.
 const maxSlack = 1.1
 
-// layout returns the map's size in pixels and in cells for a w by h grid.
-// A pixel is 1/px of a cell wide and aspect/py of a cell tall, in cell
-// widths, and the map spans 360 by top-bottom degrees.
 func (mp Map) layout(w, h int, m Mode) (pw, ph, cw, ch int) {
 	wd := loadWorld()
 	px, py := pixelsPerCell(m)
@@ -375,12 +346,10 @@ func (mp Map) layout(w, h int, m Mode) (pw, ph, cw, ch int) {
 	if aspect <= 0 || !finite(aspect) || aspect > 10 {
 		aspect = 2.2
 	}
-	ratio := 360 / (wd.top - wd.bottom) // width over height
+	ratio := 360 / (wd.top - wd.bottom)
 	pw, ph = w*px, h*py
 	if !mp.Stretch {
 		rows := float64(pw) / float64(px) / ratio / aspect * float64(py)
-		// A box up to a tenth past the map's shape is filled. A larger one
-		// gets the true shape, centred.
 		if rows <= float64(ph) {
 			if float64(ph) > rows*maxSlack {
 				ph = max(1, int(math.Round(rows)))
@@ -417,7 +386,6 @@ func (mp Map) Draw(w, h int, m Mode) *Grid {
 	pw, ph, cw, ch := mp.layout(g.W, g.H, m)
 	x0, y0 := (g.W-cw)/2, (g.H-ch)/2
 
-	// level holds the shade of each cell value of the world, -1 for none.
 	level := make([]int8, len(wd.codes)+2)
 	for i := range level {
 		level[i] = -1
@@ -434,16 +402,10 @@ func (mp Map) Draw(w, h int, m Mode) *Grid {
 			for k+1 < len(bounds) && v >= bounds[k+1] {
 				k++
 			}
-			// Codes are case-blind: when "de" and "DE" both have a value,
-			// the larger one counts.
 			level[id] = max(level[id], int8(k))
 		}
 	}
 
-	// pixel returns whether pixel i, j is land and its shade, -1 for
-	// plain land. A pixel covers a window of the world's cells: it is land
-	// when a third of them are, or when one of them is a country with a
-	// shade, so a small country with a value still shows.
 	pixel := func(i, j int) (bool, int) {
 		sx0, sx1 := i*wd.w/pw, max((i+1)*wd.w/pw, i*wd.w/pw+1)
 		sy0, sy1 := j*wd.h/ph, max((j+1)*wd.h/ph, j*wd.h/ph+1)
@@ -464,7 +426,6 @@ func (mp Map) Draw(w, h int, m Mode) *Grid {
 		total := (min(sy1, wd.h) - sy0) * (min(sx1, wd.w) - sx0)
 		return best >= 0 || landN*3 >= total && landN > 0, best
 	}
-	// Markers by pixel.
 	marks := map[int]Role{}
 	for _, mk := range mp.Markers {
 		if !finite(mk.Lat) || !finite(mk.Lon) || mk.Lat > wd.top || mk.Lat < wd.bottom || mk.Lon < -180 || mk.Lon > 180 {
@@ -549,7 +510,6 @@ func (mp Map) Draw(w, h int, m Mode) *Grid {
 				case k < 0:
 					g.set(x, y, ".", mp.land())
 				default:
-					// The marks DrawLegend gives the legend's items.
 					g.set(x, y, asciiMarks[k%len(asciiMarks)], ramp[k])
 				}
 			}

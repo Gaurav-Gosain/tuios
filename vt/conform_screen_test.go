@@ -2,16 +2,9 @@ package vt_test
 
 import "testing"
 
-// The alternate screen, the saved cursor, and the two resets. These decide what
-// a full-screen program leaves behind when it exits, which is the difference
-// between a shell prompt back where it was and a scrollback with a hole in it.
-
 func TestConform_AlternateScreen(t *testing.T) {
 	runConform(t, []conformCase{
 		{
-			// This case used to want "X" in the first column, because the
-			// switch homed the cursor. xterm, tmux and ghostty leave the
-			// cursor where it stood, and so does this emulator now.
 			name: "1049 keeps the main screen while the alternate is up",
 			in:   "main\x1b[?1049hX",
 			want: "    X",
@@ -41,19 +34,11 @@ func TestConform_AlternateScreen(t *testing.T) {
 			cursor: "5,1",
 		},
 		{
-			// Leaving restores the whole saved cursor, as DECRC does, and
-			// the character sets are part of it. This emulator used to keep
-			// the primary screen's position and leave the alternate screen's
-			// character sets in force, so the q came out a letter.
 			name: "leaving 1049 restores the character sets saved on entry",
 			in:   "\x1b(0\x1b[?1049h\x1b(B\x1b[?1049lq",
 			want: "─",
 		},
 		{
-			// Each screen has its own saved cursor, character sets included.
-			// A DECSC on the alternate screen used to replace the one slot
-			// both screens shared, so leaving with 1049 gave the program's
-			// sets to the shell.
 			name: "a save on the alternate screen leaves the primary screen's character sets",
 			in:   "\x1b[?1049h\x1b(0\x1b7\x1b(B\x1b[?1049lq",
 			want: "q",
@@ -69,8 +54,6 @@ func TestConform_AlternateScreen(t *testing.T) {
 			want: "",
 		},
 		{
-			// A program that leaves the alternate screen twice must not end up
-			// somewhere else. The second reset is a no-op, not a second switch.
 			name: "leaving the alternate screen twice is harmless",
 			in:   "main\x1b[?1049hX\x1b[?1049l\x1b[?1049l",
 			want: "main",
@@ -81,8 +64,6 @@ func TestConform_AlternateScreen(t *testing.T) {
 			want: "XY",
 		},
 		{
-			// The alternate screen has its own scroll region, and returning
-			// must not bring it back to the main one.
 			name:   "the alternate screen has its own scroll region",
 			in:     "\x1b[2;3r\x1b[?1049h",
 			region: "0,0-6,4",
@@ -98,9 +79,6 @@ func TestConform_AlternateScreen(t *testing.T) {
 			want: "main",
 		},
 		{
-			// Mode 47 is the original alternate screen, still smcup in older
-			// terminfo entries. Unhandled, the program draws over the main
-			// screen and the main screen never comes back.
 			name: "47 switches to the alternate screen",
 			in:   "main\x1b[?47hX",
 			want: "    X",
@@ -111,9 +89,6 @@ func TestConform_AlternateScreen(t *testing.T) {
 			want: "main",
 		},
 		{
-			// Neither 47 nor 1047 saves the cursor. xterm and tmux keep one
-			// cursor across the switch, so leaving puts it where the
-			// alternate screen left it, not where the main screen last had it.
 			name:   "leaving 47 keeps the cursor the alternate screen had",
 			in:     "main\x1b[?47h\x1b[3;2H\x1b[?47l",
 			want:   "main",
@@ -126,8 +101,6 @@ func TestConform_AlternateScreen(t *testing.T) {
 			cursor: "1,2",
 		},
 		{
-			// A program that sends rmcup defensively, with no smcup before it,
-			// must not have its cursor moved.
 			name:   "resetting 47 on the main screen leaves the cursor alone",
 			in:     "\x1b[2;3Hab\x1b[?47l",
 			want:   "\n  ab",
@@ -163,16 +136,12 @@ func TestConform_SaveAndRestoreCursor(t *testing.T) {
 			want:   "\n\n   X",
 		},
 		{
-			// DECRC with nothing saved goes home rather than somewhere
-			// arbitrary.
 			name:   "DECRC with nothing saved homes the cursor",
 			in:     "\x1b[3;4H\x1b8X",
 			cursor: "1,0",
 			want:   "X",
 		},
 		{
-			// The saved cursor carries the pen with it, which is what lets a
-			// program set a colour, save, print elsewhere, and come back.
 			name: "DECSC and DECRC carry the pen",
 			in:   "\x1b[31m\x1b7\x1b[0m\x1b8X",
 			want: "X",
@@ -221,9 +190,6 @@ func TestConform_Resets(t *testing.T) {
 			want: "",
 		},
 		{
-			// DECSTR is the soft reset: it puts the modes and the region back
-			// but leaves what is on the screen alone, which is what makes it
-			// usable in the middle of a session.
 			name:   "DECSTR resets the scroll region",
 			in:     "\x1b[2;3r\x1b[!p",
 			region: "0,0-6,4",
@@ -284,8 +250,6 @@ func TestConform_DECSTRResetList(t *testing.T) {
 			},
 		},
 		{
-			// A soft reset in the middle of an open hyperlink would otherwise
-			// leave every character after it addressed to somebody's URL.
 			name: "an open hyperlink is closed",
 			in:   "\x1b]8;;https://example.invalid/\x07a\x1b[!pb",
 			want: "ab",
@@ -313,10 +277,6 @@ func TestConform_DECSTRLeavesTheseAlone(t *testing.T) {
 			want: "abc\ndef",
 		},
 		{
-			// DEC has a soft reset turn autowrap off. xterm and iTerm2 both
-			// decline, and esctest marks its own case for it as an intentional
-			// deviation from the spec. Following the spec would stop the line
-			// wrapping of every program that soft-resets and then prints.
 			name:   "autowrap is left on, deviating from the spec on purpose",
 			cols:   4,
 			in:     "\x1b[!pabcdef",
@@ -324,8 +284,6 @@ func TestConform_DECSTRLeavesTheseAlone(t *testing.T) {
 			cursor: "2,1",
 		},
 		{
-			// Left alone means left alone in both directions: a guest that
-			// turned autowrap off keeps it off across a soft reset.
 			name:   "autowrap a guest turned off stays off",
 			cols:   4,
 			in:     "\x1b[?7l\x1b[!pabcdef",

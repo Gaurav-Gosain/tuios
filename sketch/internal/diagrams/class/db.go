@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/class/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package class
 
 import (
@@ -54,7 +52,6 @@ func lookupId(id string) string {
 	return className(id)
 }
 
-// nodeSet is a Set of classes that keeps insertion order.
 type nodeSet struct {
 	list []*ClassNode
 	has  map[*ClassNode]bool
@@ -114,8 +111,6 @@ func (db *ClassDb) tag(node *ClassNode, cssClass string) {
 	}
 }
 
-// Returns the class for a name that may carry a generic type, creating it if needed.
-// Mermaid throws a TypeError where this creates, as for an annotation on a class not yet declared.
 func (db *ClassDb) ensure(id string) *ClassNode {
 	db.addClass(id)
 	node, _ := db.Classes.Get(className(id))
@@ -216,8 +211,6 @@ func (db *ClassDb) defineClass(ids []string, style []string) {
 			}
 			styleClass.Styles = append(styleClass.Styles, s)
 		}
-		// Mermaid tests `cssClasses.includes(id)`, which also matches part of a longer name
-		// (a classDef named `def` styles every class, through `default`). Whole names are compared here.
 		tagged := db.withCssClass[id]
 		if tagged == nil {
 			continue
@@ -241,7 +234,6 @@ func (db *ClassDb) setTooltip(ids string, tooltip string) {
 }
 
 func (db *ClassDb) setLink(ids, link string, target *string) {
-	// Entity codes are resolved first, so that what is checked is what a browser would follow.
 	url := js.Trim(text.DecodeEntities(link))
 	for _, id := range strings.Split(ids, ",") {
 		if node, ok := db.Classes.Get(lookupId(id)); ok {
@@ -259,7 +251,6 @@ func (db *ClassDb) setLink(ids, link string, target *string) {
 	db.setCssClass(ids, "clickable")
 }
 
-// Callbacks are never executed; the class is only marked clickable, as in Mermaid's strict mode.
 func (db *ClassDb) setClickEvent(ids string) {
 	for _, id := range strings.Split(ids, ",") {
 		if node, ok := db.Classes.Get(className(id)); ok {
@@ -300,7 +291,6 @@ func (db *ClassDb) addNamespace(id string, label string) string {
 		return qualified
 	}
 
-	// The enclosing namespace and its ancestors exist already, so only the parts of `id` are walked.
 	var parentId *string
 	from := 0
 	if prefix != "" {

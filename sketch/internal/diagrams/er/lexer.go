@@ -1,10 +1,3 @@
-// Ported from pele src/diagrams/er/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// As in the other lexers, the port reads UTF-8 bytes: code() decodes the character at a
-// byte offset, and a step past a character that may not be ASCII steps the whole
-// character. pele's closures are methods of a lexer here. The sticky regular expressions
-// are written out as hand matchers.
-
 package er
 
 import (
@@ -62,7 +55,6 @@ var CLASS = func() (class [128]uint8) {
 
 var directionNames = [4]string{"tb", "bt", "rl", "lr"}
 
-// Mermaid's attribute pattern is case-insensitive, which lets the micro sign into its À-￿ range.
 func isAttr(c rune, kind uint8) bool {
 	if c < 0 {
 		return false
@@ -73,7 +65,6 @@ func isAttr(c rune, kind uint8) bool {
 	return c >= 0xc0 || c == 0xb5
 }
 
-// inClass is c >= 128 || (CLASS[c] & kind) !== 0 for a byte, which is false past the end.
 func inClass(src string, q int, kind uint8) bool {
 	if q >= len(src) {
 		return false
@@ -96,7 +87,6 @@ func indexFrom(s, sub string, from int) int {
 	return from + i
 }
 
-// indexFold finds a lower-case ASCII word from a byte offset, ignoring case.
 func indexFold(s, word string, from int) int {
 	for q := max(from, 0); q+len(word) <= len(s); q++ {
 		if hasFold(s, q, word) {
@@ -106,7 +96,6 @@ func indexFold(s, word string, from int) int {
 	return -1
 }
 
-// hasFold is whether a lower-case ASCII word is at q, ignoring case.
 func hasFold(s string, q int, word string) bool {
 	if q < 0 || q+len(word) > len(s) {
 		return false
@@ -121,8 +110,6 @@ func hasFold(s string, q int, word string) bool {
 	return true
 }
 
-// codeAt decodes the character at a byte offset: -1 past the end, 0xfffe for a broken
-// sequence, and 0xd800 for a character outside the BMP, which pele reads as a surrogate.
 func codeAt(src string, q int) rune {
 	if q < 0 || q >= len(src) {
 		return -1
@@ -141,7 +128,6 @@ func codeAt(src string, q int) rune {
 	return r
 }
 
-// sizeAt is the length in bytes of the character at q.
 func sizeAt(src string, q int) int {
 	if q >= len(src) || src[q] < utf8.RuneSelf {
 		return 1
@@ -150,7 +136,6 @@ func sizeAt(src string, q int) int {
 	return s
 }
 
-// RE_LINE_END: /[\n\r  ]/g.
 func reLineEnd(src string, from int) int {
 	for i := max(from, 0); i < len(src); i++ {
 		c := src[i]
@@ -191,7 +176,6 @@ func (l *lexer) emit(typ int, s, e int) bool {
 	return true
 }
 
-// Matches a lower-case keyword at p, ignoring case.
 func (l *lexer) kw(word string) bool { return hasFold(l.src, l.p, word) }
 
 //go:noinline
@@ -238,8 +222,6 @@ func (l *lexer) until(ch string, from int) int {
 	return e
 }
 
-// accAt matches /accTitle\s*:\s*/iy and its siblings at p: a word, spaces, the mark and
-// spaces. Returns the end of the match, or -1.
 func (l *lexer) accAt(word string, mark byte) int {
 	if !l.kw(word) {
 		return -1
@@ -251,9 +233,6 @@ func (l *lexer) accAt(word string, mark byte) int {
 	return l.skipWs(q + 1)
 }
 
-// RE_DIRECTION[kind] at p: /.*direction\s+TB[^\n]*/iy and its siblings. The greedy `.*` takes
-// the last `direction` on the line that is followed by the direction, and the match runs to
-// the line feed after it. Returns the end of the match, or -1.
 func (l *lexer) matchDirection(kind int, le int) int {
 	src := l.src
 	name := directionNames[kind]
@@ -268,7 +247,6 @@ func (l *lexer) matchDirection(kind int, le int) int {
 	return end
 }
 
-// A direction statement swallows its whole line, from wherever the lexer stands on it.
 func (l *lexer) direction() bool {
 	if l.dirNext == -1 {
 		return false
@@ -551,7 +529,6 @@ func (l *lexer) initial(c rune) {
 	l.emit(T_CHAR, p, p+1)
 }
 
-// Mermaid's generic type rule: a run of non-space characters holding a `~`, through the last `~` on the line.
 func (l *lexer) generic() bool {
 	if l.tildeNext == -1 {
 		return false
@@ -627,8 +604,6 @@ func (l *lexer) block(c rune) {
 	l.emit(T_CHAR, p, p+sizeAt(l.src, p))
 }
 
-// step lexes one token, or one skipped stretch, in the current state. It returns false on text
-// that no rule of the state matches.
 func (l *lexer) step(c rune) bool {
 	p := l.p
 	switch l.state {
@@ -706,8 +681,6 @@ func tokenize(src string) Tokens {
 		}
 	}
 
-	// At the end of input Jison's INITIAL state yields EOF, the title and description states yield
-	// an empty value, and the block and style states yield nothing.
 	last := -1
 	switch l.state {
 	case S_INITIAL:

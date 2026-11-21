@@ -94,8 +94,6 @@ func checkEmptyErrBlock(pass *analysis.Pass, f *ast.File, n *ast.IfStmt) {
 	})
 }
 
-// returnsErr reports whether a function with this signature returns an
-// error as its last result.
 func returnsErr(sig *types.Signature) bool {
 	if sig == nil || sig.Results().Len() == 0 {
 		return false
@@ -103,10 +101,9 @@ func returnsErr(sig *types.Signature) bool {
 	return isError(sig.Results().At(sig.Results().Len() - 1).Type())
 }
 
-// returnsError reports whether the last result of call is an error.
 func returnsError(info *types.Info, call *ast.CallExpr) bool {
 	if tv, ok := info.Types[call.Fun]; ok && tv.IsType() {
-		return false // a conversion
+		return false
 	}
 	t := info.TypeOf(call)
 	if tuple, ok := t.(*types.Tuple); ok {
@@ -118,10 +115,6 @@ func returnsError(info *types.Info, call *ast.CallExpr) bool {
 	return isError(t)
 }
 
-// cannotFail reports whether the error of call cannot happen or has no
-// use: a write to a buffer, output with fmt.Fprint, and cleanup such as
-// Close, Remove and Kill, which code calls on a path where it has nothing
-// left to do with a failure.
 func cannotFail(info *types.Info, call *ast.CallExpr) bool {
 	fn, ok := typeutil.Callee(info, call).(*types.Func)
 	if !ok {

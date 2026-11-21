@@ -58,12 +58,8 @@ type Resume struct {
 // ResumePlaceholder is the token part a resume command's session id replaces.
 const ResumePlaceholder = "{session_id}"
 
-// maxResumeTokens bounds a resume command. Every real one is two or three
-// tokens; the bound only stops a manifest from typing a paragraph.
 const maxResumeTokens = 16
 
-// maxKeptTokens bounds the flags a resume carries over, values included, and
-// maxKeepNames the names a manifest may list.
 const (
 	maxKeptTokens = 16
 	maxKeepNames  = 32
@@ -73,7 +69,6 @@ const (
 // set-agent-state and set-agent-session put on a reported id.
 const MaxResumeSessionID = 256
 
-// resumeTokenByte reports whether b may appear in a resume token as typed.
 func resumeTokenByte(b byte) bool {
 	switch {
 	case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9':
@@ -82,8 +77,6 @@ func resumeTokenByte(b byte) bool {
 	return strings.IndexByte("_./:=+-", b) >= 0
 }
 
-// safeResumeToken reports whether s is one token every supported shell reads
-// as itself, unquoted.
 func safeResumeToken(s string) bool {
 	if s == "" {
 		return false
@@ -111,8 +104,6 @@ func ValidResumeSessionID(id string) bool {
 	return safeResumeToken(id)
 }
 
-// normalize checks the block. An empty block is valid and means the harness
-// cannot be resumed.
 func (r *Resume) normalize() error {
 	r.Source = strings.TrimSpace(r.Source)
 	if len(r.Argv) == 0 {
@@ -162,9 +153,6 @@ func (r *Resume) normalize() error {
 	return nil
 }
 
-// checkKeepName refuses a kept flag name that is not one plain flag, that is
-// listed twice, or that the resume command itself spells: a kept --resume
-// would name a second conversation.
 func (r *Resume) checkKeepName(name string, seen map[string]bool) error {
 	if len(name) < 2 || name[0] != '-' || name == "--" || strings.Contains(name, "=") || !safeResumeToken(name) {
 		return errorf("kept flag %q: a flag is - or -- and then letters, digits and _ . / : + -", name)
@@ -181,8 +169,6 @@ func (r *Resume) checkKeepName(name string, seen map[string]bool) error {
 	return nil
 }
 
-// keptValue reports whether v can follow a kept option: one token every shell
-// reads as itself, not starting with "-", so it cannot be read as a flag.
 func keptValue(v string) bool {
 	return v != "" && len(v) <= MaxResumeSessionID && v[0] != '-' && safeResumeToken(v)
 }

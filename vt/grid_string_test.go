@@ -10,8 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// linesText is the text uv.Line.String gives each row, joined with newlines,
-// a nil row empty.
 func linesText(rows []uv.Line) string {
 	var b strings.Builder
 	for y, row := range rows {
@@ -32,23 +30,22 @@ func linesText(rows []uv.Line) string {
 // cells a row ends in.
 func TestGridStringMatchesTheLines(t *testing.T) {
 	plain := func(s string) uv.Cell { return uv.Cell{Content: s, Width: 1} }
-	// cases are the cells uv.Line.String treats differently from their neighbours.
 	cases := [][]uv.Cell{
-		{plain("x")},   // a row of text
-		{uv.EmptyCell}, // a blank
-		{{Content: " ", Width: 1, Style: uv.Style{Fg: ansi.BasicColor(1)}}},                 // a blank with a foreground
-		{{Content: " ", Width: 1, Style: uv.Style{Bg: ansi.IndexedColor(17)}}},              // a blank with a background
-		{{Content: " ", Width: 1, Style: uv.Style{UnderlineColor: ansi.IndexedColor(200)}}}, // a blank with only an underline colour
-		{{Content: " ", Width: 1, Style: uv.Style{Attrs: uv.AttrBold}}},                     // a blank with an attribute
-		{{Content: " ", Width: 1, Style: uv.Style{Underline: uv.UnderlineSingle}}},          // a blank with an underline
-		{{Content: " ", Width: 1, Link: uv.Link{URL: "https://example.com"}}},               // a blank with a URL
-		{{Content: " ", Width: 1, Link: uv.Link{Params: "id=1"}}},                           // a blank with only link params
-		{{}},                           // a zero cell
-		{{Content: "", Width: 1}},      // an unstyled empty narrow cell
-		{{Content: "漢", Width: 2}, {}}, // a wide cell and its placeholder
-		{{Content: "", Width: 0, Style: uv.Style{Fg: ansi.BasicColor(2)}}}, // a styled width-0 cell
-		{plain("é")}, // an accent
-		{{Content: "👨‍👩‍👧", Width: 2}, {}}, // a ZWJ cluster
+		{plain("x")},
+		{uv.EmptyCell},
+		{{Content: " ", Width: 1, Style: uv.Style{Fg: ansi.BasicColor(1)}}},
+		{{Content: " ", Width: 1, Style: uv.Style{Bg: ansi.IndexedColor(17)}}},
+		{{Content: " ", Width: 1, Style: uv.Style{UnderlineColor: ansi.IndexedColor(200)}}},
+		{{Content: " ", Width: 1, Style: uv.Style{Attrs: uv.AttrBold}}},
+		{{Content: " ", Width: 1, Style: uv.Style{Underline: uv.UnderlineSingle}}},
+		{{Content: " ", Width: 1, Link: uv.Link{URL: "https://example.com"}}},
+		{{Content: " ", Width: 1, Link: uv.Link{Params: "id=1"}}},
+		{{}},
+		{{Content: "", Width: 1}},
+		{{Content: "漢", Width: 2}, {}},
+		{{Content: "", Width: 0, Style: uv.Style{Fg: ansi.BasicColor(2)}}},
+		{plain("é")},
+		{{Content: "👨‍👩‍👧", Width: 2}, {}},
 	}
 
 	check := func(t *testing.T, what string, g *grid) {
@@ -60,8 +57,6 @@ func TestGridStringMatchesTheLines(t *testing.T) {
 			t.Fatalf("%s: grid.String() = %q, the lines give %q", what, got, want)
 		}
 	}
-	// line fills a row of the grid's width from the given cells, padding the
-	// rest with tail.
 	line := func(width int, tail func(x int) uv.Cell, cells ...uv.Cell) uv.Line {
 		l := make(uv.Line, width)
 		for x := range l {
@@ -81,7 +76,6 @@ func TestGridStringMatchesTheLines(t *testing.T) {
 	})
 
 	t.Run("random grids", func(t *testing.T) {
-		// cell mixes the grid test's random cells with every case above.
 		cell := func(rng *rand.Rand) []uv.Cell {
 			if rng.Intn(2) == 0 {
 				c := randomGridCell(rng)
@@ -100,8 +94,6 @@ func TestGridStringMatchesTheLines(t *testing.T) {
 				if rng.Intn(6) == 0 {
 					continue
 				}
-				// A third of the rows end in blanks and zero cells from a
-				// random column, as a line of text on a wide screen does.
 				tailFrom := w
 				if rng.Intn(3) == 0 {
 					tailFrom = rng.Intn(w + 1)
@@ -118,8 +110,6 @@ func TestGridStringMatchesTheLines(t *testing.T) {
 					}
 				}
 				g.rows[y] = line(w, blanks, cells[:w]...)
-				// The extent is the tightest the grid allows: the column
-				// after the last cell that is not a plain blank.
 				for x := range w {
 					if !isBlankCell(&g.rows[y][x]) {
 						g.ext[y] = x + 1

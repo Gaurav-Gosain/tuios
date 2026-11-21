@@ -10,19 +10,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// A sankey diagram is drawn from its lists. The nodes are boxes in columns, one
-// column per layer of the layout, in the order the layout stacks them. Each
-// flow runs from the right side of its source to the left side of its target,
-// through a lane of its own between the columns, to an arrow, with its value
-// on it. A flow of a third of the largest node or more is a heavy line, so the
-// big flows stand out. A flow that passes a column runs straight through it.
-//
-// Lines that cross are hard to follow in cells. When the lines would cross more
-// than maxCrossings times, or the columns do not fit, the diagram is a table
-// instead: source, target and value, a group of rows for each source.
-
-// maxCrossings is the most places where two flows cross that a drawing of
-// columns may have.
 const maxCrossings = 3
 
 var errCrossed = errors.New("text: the flows cross too often")
@@ -38,25 +25,22 @@ func drawSankey(l *sketch.Layout, opt Options) (*canvas, error) {
 	return sankeyTable(s, opt)
 }
 
-// An item is a node's box in its column, or, for a flow that passes the
-// column, the row it passes on.
 type flowItem struct {
-	node  int // -1 for a flow that passes
+	node  int
 	flow  int
 	layer int
 	y     float64
 	h     int
 	top   int
-	ins   []int // segments that end here
-	outs  []int // segments that start here
+	ins   []int
+	outs  []int
 }
 
-// A segment is the part of a flow between one column and the next.
 type flowSeg struct {
 	flow     int
 	from, to *flowItem
-	rs, rt   int // the rows where it leaves and where it arrives
-	lane     int // the column of its lane, -1 for a straight line
+	rs, rt   int
+	lane     int
 	first    bool
 }
 
@@ -64,9 +48,6 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 	if len(s.Nodes) == 0 {
 		return nil, errCrossed
 	}
-	// thick is the rows of a flow. weightOf is the weight of its line: heavy
-	// for a flow of a third of the largest node or more, so the big flows
-	// stand out.
 	thick := func(int) int { return 1 }
 	weightOf := func(int) uint8 { return light }
 	{
@@ -132,7 +113,6 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 		}
 	}
 
-	// Box sizes and column widths.
 	values := false
 	for _, n := range s.Nodes {
 		values = values || n.Value != ""
@@ -155,8 +135,6 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 			colW[k] = max(colW[k], width(n.Label)+4, width(n.Value)+4)
 		}
 	}
-	// The rows: each column is stacked in the layout's order, every item as near
-	// to the layout's place for it as the items above it leave room for.
 	tall := 0
 	lo, hi := math.Inf(1), math.Inf(-1)
 	for _, col := range cols {
@@ -197,8 +175,6 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 			bottom = max(bottom, it.top+it.h)
 		}
 	}
-	// Ports: the rows where segments leave and arrive, in the order of the rows
-	// at their other ends, so that the lines of one box do not cross.
 	ports := func(it *flowItem, list []int, other func(*flowSeg) float64, set func(*flowSeg, int)) {
 		sort.SliceStable(list, func(i, j int) bool { return other(segs[list[i]]) < other(segs[list[j]]) })
 		if it.node < 0 {
@@ -222,8 +198,6 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 		}
 	}
 
-	// The gutters between columns: the value, then a lane per segment that
-	// turns, then the arrow.
 	gutters := make([][]*flowSeg, max(layers-1, 0))
 	for _, g := range segs {
 		gutters[g.from.layer] = append(gutters[g.from.layer], g)
@@ -286,8 +260,8 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 		}
 	}
 	for k, gs := range gutters {
-		bx := x[k] + colW[k] - 1 // the right edge of the column
-		tx := x[k+1]             // the left edge of the next one
+		bx := x[k] + colW[k] - 1
+		tx := x[k+1]
 		laneX := bx + 2
 		if valueW[k] > 0 {
 			laneX += valueW[k] + 1
@@ -299,7 +273,6 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 				end = tx
 			}
 			weight := weightOf(g.flow)
-			// The box's side keeps its light line where the flow leaves it.
 			if g.from.node >= 0 {
 				c.stroke(bx, g.rs, right, light, role)
 			}
@@ -322,11 +295,6 @@ func sankeyColumns(s *types.GeoSankey, opt Options) (*canvas, error) {
 	return c, nil
 }
 
-// assignLanes gives each segment of a gutter that changes rows a lane, and
-// counts the places where two segments cross. A segment that runs down takes
-// a lane further right the higher it starts, and one that runs up the lower it
-// starts: then two segments cross only where one of them spans both ends of
-// the other. The order of the two groups is the one with fewer crossings.
 func assignLanes(gs []*flowSeg) (lanes, crossings int) {
 	var down, up []*flowSeg
 	for _, g := range gs {
@@ -360,11 +328,6 @@ func assignLanes(gs []*flowSeg) (lanes, crossings int) {
 	return len(down) + len(up), best
 }
 
-// countCrossings counts where a horizontal part of one segment meets the lane
-// of another. Meeting at a corner counts too: the lines would join there. Two
-// segments whose horizontal parts share a row join along it, and the drawing
-// would read as other flows, so a join counts as more crossings than a drawing
-// may have. The count stops once it is past maxCrossings.
 func countCrossings(gs []*flowSeg) int {
 	rows := make(map[int]*flowSeg, 2*len(gs))
 	for _, g := range gs {
@@ -405,8 +368,6 @@ func countCrossings(gs []*flowSeg) int {
 	return n
 }
 
-// sankeyTable draws the flows as a table: source, target and value, the
-// flows of each source together, the sources in the order of the source text.
 func sankeyTable(s *types.GeoSankey, opt Options) (*canvas, error) {
 	const (
 		headSource = "Source"
@@ -415,7 +376,7 @@ func sankeyTable(s *types.GeoSankey, opt Options) (*canvas, error) {
 	)
 	sw, tw, vw := width(headSource), width(headTarget), width(headValue)
 	bySource := make([][]int, len(s.Nodes))
-	var sources []int // in the order they first send a flow
+	var sources []int
 	for f, fl := range s.Flows {
 		if len(bySource[fl.Source]) == 0 {
 			sources = append(sources, fl.Source)
@@ -425,14 +386,11 @@ func sankeyTable(s *types.GeoSankey, opt Options) (*canvas, error) {
 		tw = max(tw, width(s.Nodes[fl.Target].Label))
 		vw = max(vw, width(fl.Value))
 	}
-	// Each cell has a space either side; four rules between and around them.
 	if opt.Cols > 0 && sw+tw+vw+10 > opt.Cols {
 		room := opt.Cols - 10 - vw
 		if room < 12 {
 			return nil, ErrTooWide
 		}
-		// Each column keeps its longest word whole while the other keeps six
-		// cells.
 		sWord, tWord := 0, 0
 		for _, fl := range s.Flows {
 			sWord = max(sWord, longestWord(s.Nodes[fl.Source].Label))
@@ -460,11 +418,11 @@ func sankeyTable(s *types.GeoSankey, opt Options) (*canvas, error) {
 		first          bool
 	}
 	var rows []row
-	height := 3 // the rules at the top, under the head and at the bottom
+	height := 3
 	if len(title) > 0 {
 		height += len(title) + 1
 	}
-	height++ // the head
+	height++
 	groups := 0
 	for _, i := range sources {
 		flows := bySource[i]
@@ -490,9 +448,9 @@ func sankeyTable(s *types.GeoSankey, opt Options) (*canvas, error) {
 	if len(title) > 0 {
 		top = len(title) + 1
 	}
-	x1 := sw + 3      // the rule between source and target
-	x2 := x1 + tw + 3 // the rule between target and value
-	x3 := x2 + vw + 3 // the right edge
+	x1 := sw + 3
+	x2 := x1 + tw + 3
+	x3 := x2 + vw + 3
 	rule := func(y int) { c.hline(0, x3, y, light, roleFrame) }
 	rule(top)
 	c.text(2, top+1, headSource, roleHead)

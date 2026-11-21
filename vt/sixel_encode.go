@@ -27,7 +27,6 @@ func EncodeSixel(img *SixelImage, src image.Rectangle, dstW, dstH int) []byte {
 		return nil
 	}
 	sw, sh := src.Dx(), src.Dy()
-	// Source column for every destination column, computed once.
 	xmap := make([]int, dstW)
 	for dx := range xmap {
 		xmap[dx] = src.Min.X + dx*sw/dstW
@@ -37,7 +36,6 @@ func EncodeSixel(img *SixelImage, src image.Rectangle, dstW, dstH int) []byte {
 		return img.Pix[y*img.Width : (y+1)*img.Width]
 	}
 
-	// Registers the crop uses, renumbered from zero.
 	remap := make([]int, len(img.Palette)+1)
 	for i := range remap {
 		remap[i] = -1
@@ -55,8 +53,6 @@ func EncodeSixel(img *SixelImage, src image.Rectangle, dstW, dstH int) []byte {
 	}
 
 	if len(used) > SixelMaxRegisters {
-		// More colours than a pane is told it has: the rest take the
-		// nearest of the first 256.
 		keep := used[:SixelMaxRegisters]
 		for _, v := range used[SixelMaxRegisters:] {
 			remap[v] = nearestRegister(img, keep, img.Palette[v-1])
@@ -81,10 +77,6 @@ func EncodeSixel(img *SixelImage, src image.Rectangle, dstW, dstH int) []byte {
 		out = strconv.AppendInt(out, int64((int(c.B)*100+127)/255), 10)
 	}
 
-	// One row of sixel bits per colour for the band being encoded, the
-	// colours the band uses in the order first seen, and the span of columns
-	// each one touches, so a colour used in a few columns costs a few columns
-	// and not the whole width.
 	bits := make([][]byte, len(used))
 	lo := make([]int, len(used))
 	hi := make([]int, len(used))
@@ -134,8 +126,6 @@ func EncodeSixel(img *SixelImage, src image.Rectangle, dstW, dstH int) []byte {
 	return append(out, "\x1b\\"...)
 }
 
-// appendSixelRuns appends one colour's row of sixels between columns from and
-// to, run-length encoded, with the empty columns before from as one run.
 func appendSixelRuns(out, row []byte, from, to int) []byte {
 	out = appendRun(out, '?', from)
 	for i := from; i < to; {
@@ -161,7 +151,6 @@ func appendRun(out []byte, ch byte, n int) []byte {
 	return out
 }
 
-// nearestRegister is the index in keep of the colour closest to c.
 func nearestRegister(img *SixelImage, keep []int, c color.RGBA) int {
 	best, bestD := 0, -1
 	for i, v := range keep {

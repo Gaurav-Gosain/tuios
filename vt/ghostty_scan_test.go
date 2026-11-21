@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// scanRecorder captures everything a scanner run produced so runs can be
-// compared across chunkings.
 type scanRecorder struct {
 	forwarded bytes.Buffer
 	events    []string
@@ -42,7 +40,6 @@ func nz(b byte) byte {
 	return b
 }
 
-// scanAll runs the scanner over input in the given chunk size.
 func scanAll(input []byte, chunk int, withholdOSC func(int) bool) *scanRecorder {
 	r := &scanRecorder{}
 	s := newGhosttyScanner(r.hooks(withholdOSC))
@@ -62,8 +59,8 @@ func TestGhosttyScan(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		in     string
-		fwd    string   // what is forwarded; "" when only chunking is checked
-		events []string // nil when only chunking is checked
+		fwd    string
+		events []string
 	}{
 		{
 			name:   "a plain stream is forwarded whole",
@@ -72,9 +69,6 @@ func TestGhosttyScan(t *testing.T) {
 			events: []string{`csi:..m:"1;32"`, `csi:..m:"0"`, `csi:..m:"38;2;1;2;3"`},
 		},
 		{
-			// Kitty APC and sixel are gone; the non-kitty APC survives.
-			// Any other APC is withheld too: the library does nothing with
-			// one, and would read an 8-bit control inside it.
 			name:   "kitty and sixel are withheld",
 			in:     "a\x1b_Gf=100,a=T;QUJD\x1b\\b\x1bP0;1;0q#0;2;0;0;0-\x1b\\c\x1b_other\x1b\\d",
 			fwd:    "abcd",
@@ -93,16 +87,12 @@ func TestGhosttyScan(t *testing.T) {
 			events: []string{`osc:133:"133;A"`},
 		},
 		{
-			// Cyrillic А is D0 90 (0x90 = 8-bit DCS), Ü is C3 9C (0x9C =
-			// 8-bit ST). Neither may open or close a sequence.
 			name:   "UTF-8 with C1 lookalike bytes",
 			in:     "А Ü \x1b]0;tÜtle\a done",
 			fwd:    "А Ü \x1b]0;tÜtle\a done",
 			events: []string{`osc:0:"0;tÜtle"`},
 		},
 		{
-			// DECRQSS: DCS $ q m ST has an intermediate, so it is not sixel
-			// and is forwarded byte for byte.
 			name:   "a DCS that is not sixel passes through",
 			in:     "x\x1bP$qm\x1b\\y",
 			fwd:    "x\x1bP$qm\x1b\\y",
@@ -121,7 +111,6 @@ func TestGhosttyScan(t *testing.T) {
 			events: []string{`esc:(0`, `esc:.c`, `esc:.7`},
 		},
 		{
-			// The withheld payload disappears, and the CSI still parses.
 			name:   "an OSC aborted by a CSI",
 			in:     "x\x1b]0;half\x1b[2Jy",
 			fwd:    "x\x1b[2Jy",

@@ -39,8 +39,6 @@ func TestOpaquePNGDecodesToTheSamePixels(t *testing.T) {
 	framed := raster(FrameSpec{Frame: "window", Title: "build", Padding: 24, Radius: 10, Shadow: true, Scale: 2})
 	bare := raster(FrameSpec{Frame: "none", Scale: 2})
 	transparent := raster(FrameSpec{Frame: "window", Background: "none", Title: "build", Padding: 24, Radius: 10, Shadow: true, Scale: 2})
-	// The wash strip above the card, clear of the shadow: 48 px of padding at
-	// scale 2, and the shadow's blur starts below row 16.
 	wash, ok := framed.SubImage(image.Rect(3, 2, framed.Rect.Dx()-7, 16)).(*image.RGBA)
 	if !ok {
 		t.Fatal("SubImage did not return an *image.RGBA")

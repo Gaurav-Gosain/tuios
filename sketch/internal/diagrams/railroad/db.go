@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/railroad/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package railroad
 
 import (
@@ -16,8 +14,7 @@ type RailroadDb struct {
 	title    string
 	accTitle string
 	accDescr string
-	// Every rule in source order. A name defined twice appears twice.
-	rules []RailroadRule
+	rules    []RailroadRule
 }
 
 func (db *RailroadDb) setTitle(text string) { db.title = text }
@@ -26,11 +23,8 @@ func (db *RailroadDb) setAccTitle(text string) { db.accTitle = js.TrimStart(text
 
 func (db *RailroadDb) setAccDescription(text string) { db.accDescr = joinLines(text) }
 
-// addRule: a name defined again is drawn again.
 func (db *RailroadDb) addRule(rule RailroadRule) { db.rules = append(db.rules, rule) }
 
-// notationOf answers as /^\s*railroad-(ebnf-|abnf-|peg-)?beta/i: Mermaid has a detector per
-// keyword, each matching without regard to case.
 func notationOf(source string) (Notation, bool) {
 	s := js.TrimStart(source)
 	if !common.WordAt(s, 0, "railroad-") {
@@ -69,7 +63,6 @@ func grammar(source string, notation Notation) (parsed, []RailroadRule) {
 	return ast.meta(), irRules(ast)
 }
 
-// populate parses the text in one notation and loads the result into the model, as Mermaid's four parsers do.
 func populate(db *RailroadDb, source string, notation Notation) {
 	ast, rules := grammar(source, notation)
 	db.notation = notation
@@ -97,7 +90,6 @@ func parseRailroad(source string, title string) *RailroadDb {
 	return db
 }
 
-// joinLines is .replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {

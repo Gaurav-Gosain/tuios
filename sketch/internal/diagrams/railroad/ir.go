@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/railroad/ir.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package railroad
 
 import (
@@ -7,8 +5,6 @@ import (
 
 	"tuios.dev/sketch/internal/diagrams/common"
 )
-
-// `railroad-beta`: Mermaid's own notation, one constructor call per node.
 
 const (
 	IR_keyword = iota

@@ -9,9 +9,6 @@ import (
 	"tuios.dev/sketch/internal/lazyre"
 )
 
-// lazyPatterns is how many patterns sketch's packages declare. A package that
-// drops out of this test binary would take its patterns out of the check, so
-// the count is exact. Change it when a pattern is added or removed.
 const lazyPatterns = 124
 
 // Patterns compile on first use. A pattern that does not compile would panic
@@ -22,8 +19,6 @@ func TestLazyPatternsCompile(t *testing.T) {
 	}
 }
 
-// regexpDetectors are Mermaid's detector regexps as pele writes them. detect
-// matches them by hand; FuzzDetect holds the two to the same answer.
 var regexpDetectors = sync.OnceValue(func() []struct {
 	typ Type
 	re  *regexp.Regexp

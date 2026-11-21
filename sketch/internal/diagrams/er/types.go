@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/er/types.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package er
 
 // Cardinality is 'ZERO_OR_ONE' | 'ZERO_OR_MORE' | 'ONE_OR_MORE' | 'ONLY_ONE' | 'MD_PARENT'.
@@ -55,7 +53,6 @@ type ErSubgraph struct {
 	title     string
 	classes   []string
 	cssStyles []string
-	// dir is "" for none.
 	dir       string
 	labelType string
 }
@@ -66,7 +63,6 @@ type DocItem struct {
 	value string
 }
 
-// orderedMap is a Map that keeps insertion order.
 type orderedMap[V any] struct {
 	keys []string
 	m    map[string]V

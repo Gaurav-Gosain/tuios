@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/treemap/format.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// RE_SPEC is a hand matcher: every part after the fill and alignment is optional and
-// greedy, and none can start with what the part after it takes, so only the fill and
-// alignment need trying in more than one way.
-
 package treemap
 
 import (
@@ -14,8 +8,6 @@ import (
 	"tuios.dev/sketch/internal/js"
 )
 
-// spec holds the groups of RE_SPEC:
-// /^(?:.?[<>=^])?([-+( ])?(\$)?0?\d*(,)?(?:\.(\d+))?(~)?([a-zA-Z%])?$/.
 type spec struct {
 	sign      string
 	dollar    bool
@@ -30,7 +22,6 @@ func isAlign(c byte) bool { return c == '<' || c == '>' || c == '=' || c == '^' 
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 
-// specFrom matches what follows the fill and alignment, to the end.
 func specFrom(s string, p int) (spec, bool) {
 	var m spec
 	if p < len(s) && strings.IndexByte("-+( ", s[p]) >= 0 {
@@ -71,7 +62,6 @@ func specFrom(s string, p int) (spec, bool) {
 }
 
 func matchSpec(s string) (spec, bool) {
-	// .?[<>=^]: `.` is one UTF-16 unit that is not a line end.
 	if r, size := utf8.DecodeRuneInString(s); len(s) > 0 && r <= 0xffff && r != '\n' && r != '\r' && r != 0x2028 && r != 0x2029 &&
 		size < len(s) && isAlign(s[size]) {
 		if m, ok := specFrom(s, size+1); ok {
@@ -99,7 +89,6 @@ func group(digits string) string {
 	return out
 }
 
-// trimZeros drops the zeros at the end of body, and a point before them: /\.?0+$/ replaced by nothing.
 func trimZeros(body string) string {
 	end := len(body)
 	for end > 0 && body[end-1] == '0' {
@@ -115,7 +104,6 @@ func trimZeros(body string) string {
 }
 
 func formatter(specText string) func(value float64) string {
-	// Mermaid documents `$0,0` for a dollar amount with thousands separators.
 	if specText == "$0,0" {
 		specText = "$,"
 	}

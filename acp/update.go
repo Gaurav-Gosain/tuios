@@ -7,13 +7,6 @@ import (
 	"slices"
 )
 
-// What the agent sends in session/update, one Go type per kind.
-//
-// The types follow version 2, which can say more than version 1: a version 1
-// update arrives as the same type with the fields version 1 cannot state left
-// at their zero value. That direction loses nothing. The other one would, so
-// the package never turns a version 2 update into a version 1 one.
-
 // Update is one session/update notification. It is one of *MessageUpdate,
 // *StateUpdate, *ToolCallUpdate, *ToolContentChunk, *TerminalUpdate,
 // *PlanUpdate, *UsageUpdate, *Notice, *CommandsUpdate, *ConfigUpdate,
@@ -25,7 +18,6 @@ type Update interface {
 	UpdateKind() string
 }
 
-// head is what every update carries.
 type head struct {
 	SessionID string `json:"-"`
 	KindName  string `json:"-"`
@@ -420,7 +412,6 @@ func (c ContentBlock) String() string {
 	return "[" + c.Type + "]"
 }
 
-// wireTool is a tool call's fields on the wire, in both versions.
 type wireTool struct {
 	ToolCallID string                   `json:"toolCallId"`
 	Name       Field[string]            `json:"name"`
@@ -431,7 +422,6 @@ type wireTool struct {
 	RawInput   json.RawMessage          `json:"rawInput"`
 }
 
-// wireToolContent is one tool content item on the wire, in both versions.
 type wireToolContent struct {
 	Type       string        `json:"type"`
 	Content    *ContentBlock `json:"content"`
@@ -455,8 +445,6 @@ func (w wireTool) update(h head, created bool) *ToolCallUpdate {
 	return u
 }
 
-// v1Patch turns a version 1 field's null into omitted: version 1 reads null
-// as not sent.
 func v1Patch[T any](f Field[T]) Field[T] {
 	if f.Presence == Null {
 		return Field[T]{}
@@ -464,10 +452,6 @@ func v1Patch[T any](f Field[T]) Field[T] {
 	return f
 }
 
-// wireUpdate is every field a session/update's update object has, in either
-// version, decoded once. A field whose shape differs by kind is kept raw and
-// read by the kind that owns it. One type for all kinds keeps the binary
-// smaller than a struct per kind.
 type wireUpdate struct {
 	SessionUpdate string                 `json:"sessionUpdate"`
 	MessageID     string                 `json:"messageId"`
@@ -514,7 +498,6 @@ type wireUpdate struct {
 	CompactionID  string            `json:"compactionId"`
 }
 
-// knownKinds are the update kinds parseUpdate reads in some version.
 var knownKinds = []string{
 	"user_message_chunk", "agent_message_chunk", "agent_thought_chunk", "user_message", "agent_message", "agent_thought",
 	"state_update", "tool_call", "tool_call_update", "tool_call_content_chunk", "terminal_update", "terminal_output_chunk",
@@ -522,9 +505,6 @@ var knownKinds = []string{
 	"current_mode_update", "session_info_update", "compaction_update", "compaction_summary_chunk",
 }
 
-// parseUpdate reads one session/update's update object in version v. It
-// returns nil for an update it cannot read at all: one that is not an object
-// or names no kind, or a known kind whose fields are malformed.
 func parseUpdate(v int, sessionID string, raw json.RawMessage) Update {
 	var u wireUpdate
 	if err := unmarshal(raw, &u); err != nil {
@@ -534,8 +514,6 @@ func parseUpdate(v int, sessionID string, raw json.RawMessage) Update {
 		if unmarshal(raw, &kind) != nil || kind.SessionUpdate == "" || slices.Contains(knownKinds, kind.SessionUpdate) {
 			return nil
 		}
-		// A kind this package does not know may use the field names in
-		// its own way: it is kept as it came.
 		u = wireUpdate{SessionUpdate: kind.SessionUpdate}
 	}
 	if u.SessionUpdate == "" {
@@ -582,8 +560,6 @@ func parseUpdate(v int, sessionID string, raw json.RawMessage) Update {
 			return nil
 		}
 		s := &StateUpdate{head: h, State: u.State}
-		// A stop reason that is missing, null or not a string is no stop
-		// reason; the state still holds.
 		_ = unmarshal(u.StopReason, &s.StopReason)
 		var e RPCError
 		if len(u.Error) > 0 && unmarshal(u.Error, &e) == nil && e.Message != "" {
@@ -656,9 +632,6 @@ func parseUpdate(v int, sessionID string, raw json.RawMessage) Update {
 		}
 		return &PlanUpdate{head: h, PlanID: u.Plan.PlanID, Type: u.Plan.Type, Entries: u.Plan.Entries}
 	case "usage_update":
-		// used and size are tokens, and cost an {amount, currency}. Each is
-		// read on its own, so a field that is missing or changes shape
-		// costs only that field.
 		usage := &UsageUpdate{head: h}
 		if unmarshal(u.Used, &usage.Used) == nil && unmarshal(u.Size, &usage.Size) == nil && usage.Size > 0 && usage.Used >= 0 {
 			usage.SizeKnown = true
@@ -735,8 +708,6 @@ func messageRole(kind string) Role {
 	return RoleAgent
 }
 
-// parseConfigOptions reads session config options: configId in version 2,
-// id in version 1. An option that cannot be read is left out.
 func parseConfigOptions(v int, raws []json.RawMessage) []ConfigOption {
 	out := []ConfigOption{}
 	for _, raw := range raws {
@@ -773,8 +744,6 @@ func parseConfigOptions(v int, raws []json.RawMessage) []ConfigOption {
 	return out
 }
 
-// selectName finds the name of value among a select option's values, which
-// are a flat list or a list of groups.
 func selectName(raw json.RawMessage, value string) string {
 	type choice struct {
 		Value string `json:"value"`

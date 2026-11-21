@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/usecase/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package usecase
 
 import (
@@ -57,7 +55,6 @@ type DraftJson struct {
 
 type DraftEndpoint struct {
 	Named
-	// Whether this mention declares the element, and whether it carries a `:::` suffix.
 	declares bool
 	classed  bool
 }
@@ -131,8 +128,7 @@ type Origin struct {
 	kind      string
 	span      Span
 	generated bool
-	// The label a generated id was derived from.
-	label string
+	label     string
 }
 
 type ElementState struct {
@@ -172,9 +168,7 @@ func pushUnique(target *[]string, values []string) {
 	}
 }
 
-// inferKind is which kind of element the keys of a metadata block could only belong to, for the error message.
 func inferKind(properties []DraftProperty) string {
-	// actor, usecase, boundary, edge, in the order a Set keeps them.
 	possible := []string{"actor", "usecase", "boundary", "edge"}
 	remove := func(k string) {
 		if i := slices.Index(possible, k); i >= 0 {
@@ -212,9 +206,6 @@ type stylable struct {
 	styles  *[]string
 }
 
-// resolveUsecase resolves what the parser read into a model, once the whole diagram is read: which ids are
-// actors, use cases, boundaries, JSON nodes or edges, in what order they appear, and whether the
-// statements about them agree. Ports Mermaid's UsecaseModelBuilder, with its messages.
 func resolveUsecase(src string, drafts *Drafts, headerSpan Span, statements []*GraphStatement, title *string) *UsecaseModel {
 	model := emptyModel()
 	actors, useCases, systemBoundaries := &model.actors, &model.useCases, &model.systemBoundaries
@@ -222,7 +213,6 @@ func resolveUsecase(src string, drafts *Drafts, headerSpan Span, statements []*G
 	elements := newOmap[*ElementState]()
 	boundaries := newOmap[*BoundaryState]()
 	edges := map[string]*Relationship{}
-	// The offset at which each id is first mentioned, which decides the order of the model.
 	first := map[string]int{}
 
 	where := func(span Span) string { return locationText(src, span[0], span[1]) }
@@ -262,7 +252,6 @@ func resolveUsecase(src string, drafts *Drafts, headerSpan Span, statements []*G
 		symbols[named.id] = Origin{kind: kind, span: named.span, generated: named.generated, label: named.label.text}
 	}
 
-	// claim: an id means one thing in the whole diagram, and an id made from a label may be declared once.
 	claim := func(draft *Named, kind string) {
 		origin, ok := symbols[draft.id]
 		if !ok {
@@ -294,7 +283,6 @@ func resolveUsecase(src string, drafts *Drafts, headerSpan Span, statements []*G
 		symbols[id] = Origin{kind: kind, span: span}
 	}
 
-	// actorProperty: a metadata statement replaces what a declaration said; two declarations have to agree.
 	actorProperty := func(state *ElementState, property DraftProperty, replace bool) {
 		key, value := property.key, property.value
 		clash := func(previous any, has bool) {
@@ -405,7 +393,6 @@ func resolveUsecase(src string, drafts *Drafts, headerSpan Span, statements []*G
 		if draft.shape != "" && existing.shape != "" && draft.shape != existing.shape {
 			conflict("Use case '"+draft.id+"' has conflicting shapes", draft.span, existing.span, nil, nil)
 		}
-		// A boundary whose title makes an empty id is no parent, but it still takes the place of one.
 		if parent != nil && existing.parent != nil && existing.parent.id != "" && parent.id != existing.parent.id {
 			conflict("Element '"+draft.id+"' belongs to more than one system boundary", parent.span, existing.parent.span, nil, nil)
 		}
@@ -447,7 +434,6 @@ func resolveUsecase(src string, drafts *Drafts, headerSpan Span, statements []*G
 		register(&draft.Named, "boundary")
 	}
 
-	// endpoint: an end of a relationship that nothing declares becomes a use case.
 	endpoint := func(end *DraftEndpoint) string {
 		if end.classed && !end.declares {
 			fail("Relationship endpoint '"+end.id+"' uses ::: without declaring the node", end.span)
@@ -492,7 +478,6 @@ func resolveUsecase(src string, drafts *Drafts, headerSpan Span, statements []*G
 		return stylable{}
 	}
 
-	// A declaration is an element, a boundary, a JSON node or an edge id, by its index in drafts.
 	type declaration struct {
 		offset int
 		kind   int
@@ -592,7 +577,6 @@ func resolveUsecase(src string, drafts *Drafts, headerSpan Span, statements []*G
 		edges[id] = relationship
 	}
 
-	// The relationships may have added use cases; put all elements back in the order of first mention.
 	declaredActors := actors.clone()
 	declaredUseCases := useCases.clone()
 	actors.clear()
@@ -730,7 +714,6 @@ func resolveUsecase(src string, drafts *Drafts, headerSpan Span, statements []*G
 	return model
 }
 
-// dropIndent is text.replace(/\n\s+/g, '\n').
 func dropIndent(text string) string {
 	if !strings.Contains(text, "\n") {
 		return text

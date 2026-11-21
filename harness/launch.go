@@ -57,7 +57,6 @@ type Launch struct {
 	signedIn *regexp.Regexp
 }
 
-// launchValueMax bounds a model name, an effort or a permission mode.
 const launchValueMax = 128
 
 // LaunchValueOK reports whether v can follow a launch flag as one argument:
@@ -71,7 +70,6 @@ func LaunchValueOK(v string) bool {
 	return !strings.ContainsFunc(v, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) })
 }
 
-// normalize checks the table when the manifest loads.
 func (l *Launch) normalize() error {
 	l.Source = strings.TrimSpace(l.Source)
 	for _, f := range []struct{ name, flag string }{{"model_flag", l.ModelFlag}, {"effort_flag", l.EffortFlag}, {"permission_flag", l.PermissionFlag}, {"add_dir_flag", l.AddDirFlag}} {

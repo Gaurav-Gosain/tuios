@@ -1,18 +1,5 @@
 package vt_test
 
-// Fuzzing the emulator with generated terminal input rather than random bytes.
-//
-// The existing FuzzEmulatorWrite targets feed the parser raw bytes, which is
-// worth having but spends nearly its whole budget in the parser's ground state:
-// almost no random byte string is a sequence, so almost nothing downstream of
-// the parser is ever reached. These targets draw from vt/vtgen,
-// which builds real sequences carrying hostile parameters, and check invariants
-// after every step rather than only watching for a panic.
-//
-// The generator is a package of its own, vt/vtgen, because the
-// shipped binary must not link it, which cmd/tuios/imports_test.go asserts. A test file may import
-// it freely: `go list -deps` on the binary does not follow test imports.
-
 import (
 	"fmt"
 	"strings"
@@ -22,9 +9,6 @@ import (
 	"tuios.dev/vt/vtgen"
 )
 
-// replay runs a script into a fresh emulator and returns the first invariant it
-// broke, or "" if it survived. A panic is caught and reported as a finding
-// rather than taking the test binary down, so the shrinker can keep going.
 func replay(s vtgen.Script) (broken string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -43,17 +27,11 @@ func replay(s vtgen.Script) (broken string) {
 			return fmt.Sprintf("step %d (%s): %s", i+1, seq.Desc, bad)
 		}
 	}
-	// Rendering is where a bad cell width turns into a bad row, so the whole
-	// screen is read back once at the end.
 	_ = emu.String()
 	_ = emu.Render()
 	return ""
 }
 
-// invariants are the things that must hold after any input at all. Each one is
-// a class of bug that has actually shipped here: a scroll region past the end
-// of the screen was a daemon-wide panic, and a cell claiming more columns than
-// the row has left is a character drawn over the pane next door.
 func invariants(emu *vt.Emulator) string {
 	w, h := emu.Width(), emu.Height()
 	if w < 0 || h < 0 {
@@ -91,10 +69,6 @@ func invariants(emu *vt.Emulator) string {
 	return ""
 }
 
-// replaySplit runs a script's bytes through a fresh emulator in the pieces a
-// PTY reader would have handed it, rather than one write per step. The
-// invariants are the same; what changes is that every sequence has a chance of
-// arriving in two halves with the parser holding state in between.
 func replaySplit(s vtgen.Script, seed uint64) (broken string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -116,11 +90,6 @@ func replaySplit(s vtgen.Script, seed uint64) (broken string) {
 	return ""
 }
 
-// invariantSig strips what moves as the shrinker cuts (the step number, the
-// step's description, every number in the message) from an invariant failure,
-// so a reduction is held to the same broken invariant rather than to any
-// failure at all. Without it a script carrying two bugs reduced to whichever
-// survived the cuts, and printed that under the report of the other.
 func invariantSig(broken string) string {
 	if i := strings.Index(broken, "): "); i >= 0 {
 		broken = broken[i+3:]
@@ -133,8 +102,6 @@ func invariantSig(broken string) string {
 	}, broken)
 }
 
-// shrinkInvariant reduces a script to the smallest that breaks the same
-// invariant.
 func shrinkInvariant(s vtgen.Script, broken string, run func(vtgen.Script) string) vtgen.Script {
 	want := invariantSig(broken)
 	return vtgen.Shrink(s, func(c vtgen.Script) bool {
@@ -143,9 +110,6 @@ func shrinkInvariant(s vtgen.Script, broken string, run func(vtgen.Script) strin
 	})
 }
 
-// splitSeed picks where a fuzz input's bytes are cut. It hashes the whole
-// input rather than taking its length, so the mutator moves the cuts with any
-// byte it changes instead of only with the input's length.
 func splitSeed(data []byte) uint64 {
 	h := uint64(14695981039346656037)
 	for _, c := range data {
@@ -266,9 +230,6 @@ func TestVTGen_ReachesTheInterestingStates(t *testing.T) {
 		"kitty graphics":       false,
 		"DECALN":               false,
 
-		// The classes added for this round. A generator that silently stopped
-		// producing them would leave every campaign below passing while
-		// covering nothing new.
 		"DECSLRM":               false,
 		"DECOM":                 false,
 		"single shift":          false,
@@ -280,8 +241,6 @@ func TestVTGen_ReachesTheInterestingStates(t *testing.T) {
 		"variation selector":    false,
 		"a lone combining mark": false,
 
-		// Keyboard, cursor style, reports, shell integration, text sizing,
-		// real kitty transmissions and placements, and sixel rasters.
 		"kitty keyboard":          false,
 		"modifyOtherKeys":         false,
 		"DECSCUSR":                false,

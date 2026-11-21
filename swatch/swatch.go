@@ -90,7 +90,6 @@ func (p Palette) Equal(q Palette) bool {
 	return maps.EqualFunc(p.Raw, q.Raw, sameColor)
 }
 
-// sameColor compares two colours by value. Two nil colours are the same.
 func sameColor(a, b color.Color) bool {
 	if a == nil || b == nil {
 		return a == nil && b == nil

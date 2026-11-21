@@ -34,8 +34,6 @@ func TestConnMatchesAnswersToCalls(t *testing.T) {
 	if ma["jsonrpc"] != "2.0" {
 		t.Errorf("a request left out jsonrpc: %v", ma)
 	}
-	// Answered out of order, one with the id as a string, and a line that is
-	// not JSON between them: the answers still find their calls.
 	p.send(map[string]any{"jsonrpc": "2.0", "id": mb["id"], "error": map[string]any{"code": -1, "message": "no"}})
 	p.line("some banner the agent printed")
 	p.send(map[string]any{"jsonrpc": "2.0", "method": "note"})

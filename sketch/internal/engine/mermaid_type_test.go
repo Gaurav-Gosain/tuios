@@ -1,5 +1,3 @@
-// Ported from pele tests/render/mermaid-type.test.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package engine
 
 import (
@@ -28,7 +26,6 @@ func TestMermaidType(t *testing.T) {
 		t.Fatalf("no railroad source starts with %s", header)
 		return ""
 	}
-	// [source, pele's type, what Mermaid 12.1's detectType() returns]
 	cases := []struct {
 		src string
 		typ Type
@@ -53,7 +50,6 @@ func TestMermaidType(t *testing.T) {
 			t.Errorf("Detect(%q) = %q, want %q", c.src, typ, c.typ)
 		}
 		if !registered(c.typ) {
-			// sketch does not draw this type yet: the error names both types.
 			_, err := Render(c.src, RenderOptions{})
 			var e *Error
 			if !errors.As(err, &e) || e.Code != CodeUnsupported || e.Type != string(c.typ) || e.MermaidType != string(c.mt) {
@@ -75,7 +71,6 @@ func TestMermaidType(t *testing.T) {
 		}
 	}
 
-	// finds the type after front matter, directives and comments
 	for src, mt := range map[string]MermaidType{
 		"---\ntitle: T\n---\nclassDiagram\n  class A":            "classDiagram",
 		"%%{init: {\"theme\": \"dark\"}}%%\ngraph TD\n  A --> B": "flowchart-v2",
@@ -86,13 +81,11 @@ func TestMermaidType(t *testing.T) {
 		}
 	}
 
-	// leaves the SVG named by pele's type
 	out, err := Render("graph TD\n  A --> B", RenderOptions{})
 	if err != nil || !strings.Contains(out.Data, `class="pele pele-flowchart"`) || !strings.Contains(out.Data, `aria-roledescription="flowchart"`) {
 		t.Errorf("graph TD: %v", err)
 	}
 
-	// is on errors once the type is known
 	thrown := func(err error) *Error {
 		t.Helper()
 		var e *Error

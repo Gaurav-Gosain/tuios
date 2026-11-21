@@ -61,7 +61,7 @@ type validator struct {
 	state    map[string]any
 	problems []Problem
 	errors   int
-	ids      map[string]string // id -> pointer
+	ids      map[string]string
 	tabRefs  []tabRef
 	nodes    int
 }
@@ -72,7 +72,6 @@ type tabRef struct {
 	pos Pos
 }
 
-// scope is what names an expression may start with at a node.
 type scope struct {
 	roots  map[string]bool
 	inForm bool
@@ -87,9 +86,6 @@ func newValidator(doc *Node, opts *ValidateOptions) *validator {
 	return v
 }
 
-// room reports whether a problem of severity sev would be kept. Every error
-// is counted, kept or not. The last slot is kept for an error, so warnings
-// cannot push every error out of the report.
 func (v *validator) room(sev Severity) bool {
 	if sev == SevWarning {
 		return len(v.problems) < v.lim.Problems-1
@@ -129,8 +125,6 @@ func (v *validator) run() {
 		if sv.Kind != KindObject {
 			v.add(Problem{At: "/state", Code: CodeBadValue, Message: "state must be a JSON object, such as {\"count\": 0}."}, root.Pos)
 		} else if st, err := root.State(); err != nil {
-			// The store loads the state the same way, so a state the store
-			// refuses fails here too.
 			v.add(Problem{At: "/state", Code: CodeBadValue, Message: fmt.Sprintf("The state does not load: %v.", err)}, root.Pos)
 		} else if _, err := NewStore(st, &v.lim); err != nil {
 			v.add(Problem{At: "/state", Code: CodeLimit, Message: sentence(strings.ToUpper(err.Error()[:1]) + err.Error()[1:])}, root.Pos)
@@ -163,9 +157,6 @@ func (v *validator) tabIDs() []string {
 	return out
 }
 
-// childPointer is the pointer of child i of the node at ptr. A node parsed
-// from JSON keeps its index in the source list, so the pointer matches what
-// the author wrote even where empty strings were dropped.
 func childPointer(ptr string, c *Node, i int) string {
 	if c.src > 0 {
 		i = c.src - 1
@@ -173,7 +164,6 @@ func childPointer(ptr string, c *Node, i int) string {
 	return ptr + "/children/" + strconv.Itoa(i)
 }
 
-// candidates are the component types legal where a child of parent sits.
 func candidates(parent *Component) []string {
 	if parent != nil {
 		return parent.accepted()
@@ -197,7 +187,6 @@ func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth
 		return
 	}
 	if n.IsText() {
-		// Raw content (code, markdown, diff, mermaid, kbd) is literal text.
 		if parent == nil || parent.Content != ContentRaw {
 			v.text(n, ptr, sc)
 		}
@@ -232,7 +221,6 @@ func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth
 		}
 	}
 
-	// each binds its element name for the node itself.
 	nodeScope := sc
 	if _, ok := n.Attr("each"); ok {
 		nodeScope = sc.with(aliasOf(n))
@@ -244,7 +232,6 @@ func (v *validator) node(n *Node, ptr string, parent *Component, sc scope, depth
 		v.attrs(n, comp, ptr, nodeScope)
 	}
 
-	// Children.
 	childScope := nodeScope
 	if n.Type == "list" {
 		alias := n.AttrString("as")
@@ -346,7 +333,6 @@ func sentence(s string) string {
 	return s
 }
 
-// expr checks the roots, functions and state paths of one expression.
 func (v *validator) expr(e *Expr, at string, pos Pos, sc scope) {
 	rs := map[string]int{}
 	roots(e.root, rs)
@@ -398,8 +384,6 @@ func (v *validator) expr(e *Expr, at string, pos Pos, sc scope) {
 	}
 }
 
-// available lists the paths beside a missing one, at the deepest level that
-// exists.
 func (v *validator) available(toks []string) []string {
 	var cur any = v.state
 	var prefix strings.Builder
@@ -428,8 +412,6 @@ func (v *validator) available(toks []string) []string {
 	return out
 }
 
-// suggestPath picks the available path whose last name is closest to the
-// last name of want: state.cuont suggests state.count.
 func suggestPath(want string, avail []string) string {
 	last := func(p string) string { return p[strings.LastIndexAny(p, ".[")+1:] }
 	names := make([]string, len(avail))
@@ -465,7 +447,6 @@ func pointerToPath(ptr string) string {
 	return b.String()
 }
 
-// funcAlias maps a function name from another language to the TML one.
 func funcAlias(s string) string {
 	switch s {
 	case "percent", "percentage":
@@ -500,9 +481,6 @@ func funcAlias(s string) string {
 	return ""
 }
 
-// Byte checks for the small value grammars. Each is what a regular
-// expression would say, written out, so nothing is compiled at start-up.
-
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 func isLetter(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_'
@@ -518,12 +496,10 @@ func allBytes(s string, ok func(byte) bool) bool {
 	return true
 }
 
-// isHexColor matches #rgb up to #rrggbbaa.
 func isHexColor(s string) bool {
 	return len(s) >= 4 && len(s) <= 9 && s[0] == '#' && allBytes(s[1:], isHex)
 }
 
-// isDuration matches 300ms, 5s, 2m and 1h.
 func isDuration(s string) bool {
 	i := 0
 	for i < len(s) && isDigit(s[i]) {
@@ -539,13 +515,11 @@ func isDuration(s string) bool {
 	return false
 }
 
-// isIdent matches a name: a letter or _, then letters, digits, - and _.
 func isIdent(s string) bool {
 	return s != "" && len(s) <= 64 && isLetter(s[0]) &&
 		allBytes(s, func(c byte) bool { return isLetter(c) || isDigit(c) || c == '-' })
 }
 
-// isField matches a field name, or a comma list of them.
 func isField(s string) bool {
 	if s == "" {
 		return false
@@ -560,8 +534,6 @@ func isField(s string) bool {
 	return true
 }
 
-// isKey matches a key name: modifiers joined by +, then a key such as enter,
-// r or ?.
 func isKey(s string) bool {
 	parts := strings.Split(s, "+")
 	for i, p := range parts {
@@ -582,7 +554,6 @@ func isKey(s string) bool {
 	return false
 }
 
-// isSize matches cells (12), a percentage (50%), fill and fill:2.
 func isSize(s string) bool {
 	switch {
 	case s == "fill":
@@ -595,7 +566,6 @@ func isSize(s string) bool {
 	return s != "" && allBytes(s, isDigit)
 }
 
-// dataImagePrefix returns the data:image prefix of s, or "".
 func dataImagePrefix(s string) string {
 	for _, t := range [...]string{"png", "jpeg", "gif", "webp"} {
 		p := "data:image/" + t + ";base64,"
@@ -666,11 +636,9 @@ func (v *validator) bad(a Attr, at, format string, args ...any) {
 	v.add(Problem{At: at, Code: CodeBadValue, Message: fmt.Sprintf(format, args...)}, a.Pos)
 }
 
-// value checks one attribute value against its spec.
 func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 	val := a.Value
 	text := val.Text()
-	// A binding stands in for any value of a bindable attribute.
 	if spec.Bind && val.Kind == KindString && strings.ContainsAny(text, "{}") {
 		t, err := ParseTemplate(text)
 		if err != nil {
@@ -793,8 +761,6 @@ func (v *validator) value(n *Node, a Attr, spec AttrSpec, at string, sc scope) {
 		if len(text) > 256 {
 			v.bad(a, at, "pattern is longer than 256 characters.")
 		} else if _, err := regexp.Compile(text); err != nil {
-			// The regexp package's own text varies by Go release, so it
-			// stays out of the message.
 			v.bad(a, at, "pattern is not a valid RE2 regular expression. Check its brackets, parentheses and escapes.")
 		}
 	case TObject:
@@ -920,7 +886,6 @@ func (v *validator) src(a Attr, at, text string) {
 	}
 }
 
-// checkFilePath refuses a path that leaves the owner's files folder.
 func checkFilePath(p string) error {
 	if p == "" {
 		return fmt.Errorf("the file: path is empty")

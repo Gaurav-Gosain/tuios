@@ -9,40 +9,12 @@ import (
 	"github.com/charmbracelet/x/ansi/kitty"
 )
 
-// Sixel image cells.
-//
-// A sixel image is pixels a terminal paints at the cursor. tuios cannot pass
-// that through as it is: a pane is a sub-rectangle of the host screen, and the
-// host would paint the picture over whatever tuios drew next to the pane, over
-// popups, and past the pane's edges, with no way to take it back.
-//
-// So the emulator does what a sixel terminal does, in text. When a guest draws
-// an image, every cell the image covers is written with a marker cell that
-// names the image and the cell's row and column inside it. From then on the
-// image is wherever its cells are: it scrolls into the scrollback with them,
-// text written over a cell takes that cell's part of the picture away, and an
-// erase clears it, all because those are things the grid already does to
-// cells. Both emulator backends get this for free, because to them a marker is
-// just a character with combining marks.
-//
-// The compositor finds the markers on the finished frame, replaces them with
-// blanks, and tells the host to draw exactly the parts of each image whose
-// cells survived: cropped to the pane, cut around a popup, gone when cleared.
-// See internal/app/sixel_frame.go.
-//
-// A marker is U+10EEED, a private-use character next to kitty's placeholder
-// U+10EEEE, followed by four combining marks from kitty's diacritic table:
-// the cell's row, its column, and the image id in two base-297 digits. The
-// id rides in marks and not in the foreground colour, as kitty's does,
-// because tuios dims and re-themes colours and a mark survives both.
 const sixelMarkerRune = '\U0010EEED'
 
 // SixelMarkerLead is the UTF-8 encoding of sixelMarkerRune, for a byte
 // compare on the hot path.
 const SixelMarkerLead = "\xf4\x8e\xbb\xad"
 
-// sixelDigits is the number of combining marks kitty's table has, and so the
-// base the marks count in.
 const sixelDigits = 297
 
 // SixelMaxCells bounds an image's rows and columns: a marker states them in
@@ -122,7 +94,6 @@ func StripSixelMarkers(s string) string {
 		b.WriteString(s[i : i+j])
 		b.WriteByte(' ')
 		i += j + len(SixelMarkerLead)
-		// Skip the marks that belong to the marker.
 		for i < len(s) {
 			r, size := utf8.DecodeRuneInString(s[i:])
 			if _, mark := diacriticIndex()[r]; !mark {

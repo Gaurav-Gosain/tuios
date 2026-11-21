@@ -22,14 +22,12 @@ func drawSequence(l *sketch.Layout, opt Options) (*canvas, error) {
 			sx = math.Max(sx, float64(w+4)/math.Abs(m.X1-m.X0))
 		}
 		if n := len(m.Label); n > 0 && !m.Self {
-			// The label sits above the line, from its top to 4 units above the line.
 			top := m.LabelY - (m.Y - 4 - m.LabelY)
 			if span := m.Y - top; span > 0 {
 				sy = math.Max(sy, float64(n+1)/span)
 			}
 		}
 	}
-	// A self message's label goes right of its loop, and must end before the next lifeline.
 	for _, m := range l.Messages {
 		if !m.Self || widest(m.Label) == 0 {
 			continue
@@ -53,9 +51,6 @@ func drawSequence(l *sketch.Layout, opt Options) (*canvas, error) {
 			sy = math.Max(sy, float64(len(n.Label)+2)/n.H)
 		}
 	}
-	// A block's frame keeps a row of its own between the messages around it.
-	// Since pele 1.11 a message can sit as little as a few units from a block
-	// edge, which rounds onto the same row and hides the arrow head.
 	for _, b := range l.Blocks {
 		for _, m := range l.Messages {
 			for _, gap := range [2]float64{b.Top - m.Y, m.Y - b.Bottom} {
@@ -82,7 +77,6 @@ func drawSequence(l *sketch.Layout, opt Options) (*canvas, error) {
 			foot[i] = box(col(a.X), a.Foot, a.W, a.H, a.Label)
 		}
 	}
-	// A foot box starts below the last thing drawn above it.
 	lastRow := 0
 	for i := range l.Actors {
 		lastRow = max(lastRow, head[i].y1)
@@ -143,7 +137,6 @@ func drawSequence(l *sketch.Layout, opt Options) (*canvas, error) {
 	}
 	move := func(r rect) rect { return rect{r.x0 + dx, r.y0 + dy, r.x1 + dx, r.y1 + dy} }
 
-	// Blocks, as frames that lifelines and messages cross.
 	for _, b := range l.Blocks {
 		r := move(rect{col(b.X0), row(b.Top), col(b.X1), row(b.Bottom)})
 		c.hline(r.x0, r.x1, r.y0, light, roleFrame)
@@ -154,7 +147,6 @@ func drawSequence(l *sketch.Layout, opt Options) (*canvas, error) {
 			c.hline(r.x0, r.x1, row(d)+dy, dotted, roleFrame)
 		}
 	}
-	// Lifelines.
 	for i, a := range l.Actors {
 		x := col(a.X) + dx
 		end := row(a.LifeEnd) + dy
@@ -163,7 +155,6 @@ func drawSequence(l *sketch.Layout, opt Options) (*canvas, error) {
 		}
 		c.vline(x, head[i].y1+dy+1, end, light, roleLine)
 	}
-	// Messages.
 	type mark struct {
 		x, y int
 		r    rune
@@ -210,7 +201,6 @@ func drawSequence(l *sketch.Layout, opt Options) (*canvas, error) {
 			heads = append(heads, mark{start, y, map[int]rune{1: '◄', -1: '►'}[dir]})
 		}
 	}
-	// Notes and participants.
 	for i, n := range l.Notes {
 		r := move(notes[i])
 		drawNode(c, r, "rect", n.Label)
@@ -228,7 +218,6 @@ func drawSequence(l *sketch.Layout, opt Options) (*canvas, error) {
 			drawNode(c, move(foot[i]), "rect", a.Label)
 		}
 	}
-	// Labels and heads.
 	for _, m := range l.Messages {
 		if len(m.Label) == 0 || widest(m.Label) == 0 {
 			continue

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/railroad/ebnf.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package railroad
 
 import (
@@ -9,8 +7,6 @@ import (
 	"tuios.dev/sketch/internal/diagrams/common"
 	"tuios.dev/sketch/internal/js"
 )
-
-// `railroad-ebnf-beta`: EBNF in the W3C and ISO 14977 styles.
 
 const (
 	EB_keyword = iota
@@ -37,8 +33,6 @@ const (
 	EB_special
 )
 
-// specialSequence is a question mark, text with something other than blanks in it and no `?` or `;`, and a question mark.
-// Mermaid's pattern looks ahead with two nested runs, which rescans; this reads the text once.
 func specialSequence(src string, at int) int {
 	if src[at] != 63 {
 		return -1
@@ -107,15 +101,13 @@ func EBNF_TOKENS() []*common.TokenType {
 	return ebnfTokens
 }
 
-// ebnfFrame is one open bracket, or the rule itself at the bottom of the stack.
 type ebnfFrame struct {
 	choice   *astNode
 	sequence *astNode
 	term     *astNode
-	// The bracket's node, its closing token, and whether it is the right side of an exception.
-	node   *astNode
-	close  int
-	except bool
+	node     *astNode
+	close    int
+	except   bool
 }
 
 func newEbnfFrame(node, choice *astNode, close int, except bool) *ebnfFrame {
@@ -220,7 +212,6 @@ func ebnfNode(part *astNode, kids []*RailroadNode) *RailroadNode {
 	case "EbnfSequence":
 		return sequence(kids)
 	case "EbnfTerm":
-		// Each postfix operator applies to everything before it in the term.
 		result := kids[0]
 		next := 1
 		for _, postfix := range part.postfixes {

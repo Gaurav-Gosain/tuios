@@ -1,13 +1,8 @@
-// Ported from pele src/util/chars.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package util holds pele's small shared helpers: character tests, the YAML
 // subset for front matter, and URL sanitising.
 package util
 
 import "tuios.dev/sketch/internal/js"
-
-// Tests on characters, as the lexers read them. Past the end of a string the
-// code is -1, which is none of these.
 
 // IsSpace is whitespace as `\s` sees it.
 //

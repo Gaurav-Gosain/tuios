@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/requirement/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package requirement
 
 import (
@@ -16,8 +14,7 @@ import (
 const MAX_STYLE_COPIES = 1_000_000
 
 type RequirementDb struct {
-	direction string
-	// requirements, elements and classes keep the order pele's maps do.
+	direction         string
 	requirements      []*Requirement
 	requirementByName map[string]*Requirement
 	elements          []*RequirementElement
@@ -29,7 +26,6 @@ type RequirementDb struct {
 	accTitle          string
 	accDescr          string
 
-	// The grammar reports a body's fields before the requirement or element they belong to.
 	newId           string
 	newText         string
 	newRisk         string
@@ -104,7 +100,6 @@ func (db *RequirementDb) addRelationship(typ, src, dst string) {
 	db.relations = append(db.relations, Relation{typ: typ, src: src, dst: dst})
 }
 
-// node gives the styles and classes of the requirement or element of that name.
 func (db *RequirementDb) node(id string) (cssStyles, classes *[]string) {
 	if r := db.requirementByName[id]; r != nil {
 		return &r.cssStyles, &r.classes
@@ -118,7 +113,6 @@ func (db *RequirementDb) node(id string) (cssStyles, classes *[]string) {
 func (db *RequirementDb) setCssStyle(ids, styles []string) {
 	for _, id := range ids {
 		cssStyles, _ := db.node(id)
-		// Mermaid stops at the first unknown id, leaving the rest of the list unstyled.
 		if cssStyles == nil {
 			return
 		}
@@ -182,7 +176,6 @@ func (db *RequirementDb) setAccTitle(text string) {
 	db.accTitle = js.TrimStart(text)
 }
 
-// setAccDescription: text.replace(/\n\s+/g, '\n').
 func (db *RequirementDb) setAccDescription(text string) {
 	if !strings.Contains(text, "\n") {
 		db.accDescr = text

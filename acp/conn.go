@@ -12,9 +12,6 @@ import (
 	"sync"
 )
 
-// maxMessage bounds one JSON-RPC message. A diff of a large file arrives in one
-// message, so the bound is generous; a line past it ends the connection rather
-// than growing without limit.
 const maxMessage = 32 << 20
 
 // Error codes a Request handler answers with through ReplyError.
@@ -26,14 +23,11 @@ const (
 	CodeInvalidParams = -32602
 )
 
-// Error codes the package reads or sends itself.
 const (
 	codeInvalidRequest             = -32600
 	codeUnsupportedProtocolVersion = -32022
 )
 
-// methodCancelRequest is the notification either side sends to cancel a
-// request it sent.
 const methodCancelRequest = "$/cancel_request"
 
 // RPCError is an error a peer answered a request with.
@@ -54,7 +48,6 @@ func (e *RPCError) Error() string {
 // ErrClosed is returned by a call on a connection that has ended.
 var ErrClosed = errors.New("the agent's connection closed")
 
-// message is any JSON-RPC message, decoded far enough to route it.
 type message struct {
 	JSONRPC string          `json:"jsonrpc,omitempty"`
 	ID      json.RawMessage `json:"id,omitempty"`
@@ -72,11 +65,9 @@ type Request struct {
 	// Method is the method the peer calls.
 	Method string
 	// Params are the request's params as they came.
-	Params json.RawMessage
-	conn   *Conn
-	once   sync.Once
-	// cancelled is closed when the peer cancels the request with
-	// $/cancel_request, or the connection ends, before it is answered.
+	Params    json.RawMessage
+	conn      *Conn
+	once      sync.Once
 	cancelled chan struct{}
 	cancelOne sync.Once
 }
@@ -85,7 +76,6 @@ type Request struct {
 func (r *Request) Reply(result any) {
 	raw := mustJSON(result)
 	if raw == nil {
-		// A result is required in a response, and null is the empty one.
 		raw = json.RawMessage("null")
 	}
 	r.answer(message{ID: r.ID, Result: raw})
@@ -211,8 +201,6 @@ func (c *Conn) Call(ctx context.Context, method string, params, out any) error {
 		return ErrClosed
 	case <-ctx.Done():
 		if c.cancels {
-			// The caller stopped waiting: tell the peer, so it can stop
-			// the work and drop any question it shows for it.
 			_ = c.Notify(methodCancelRequest, map[string]json.RawMessage{"requestId": json.RawMessage(id)})
 		}
 		return ctx.Err()
@@ -249,15 +237,11 @@ func (c *Conn) readLoop(r io.Reader) {
 			continue
 		}
 		if line[0] == '[' {
-			// ACP uses no JSON-RPC batches: one Invalid Request answers an
-			// array, with a null id.
 			_ = c.send(message{ID: json.RawMessage("null"), Error: &RPCError{Code: codeInvalidRequest, Message: "batches are not used"}})
 			continue
 		}
 		var m message
 		if unmarshal(line, &m) != nil {
-			// A line that is not JSON is not a message: some agents print a
-			// banner or a log line on stdout. It is skipped.
 			continue
 		}
 		c.dispatch(m)
@@ -298,7 +282,6 @@ func (c *Conn) dispatch(m message) {
 		if unmarshal(m.Params, &p) != nil || len(p.RequestID) == 0 {
 			return
 		}
-		// An id that is unknown or already answered is ignored.
 		c.mu.Lock()
 		req := c.open[idKey(p.RequestID)]
 		c.mu.Unlock()
@@ -319,7 +302,6 @@ func (c *Conn) dispatch(m message) {
 	}
 }
 
-// forget drops an answered request from the open set.
 func (c *Conn) forget(r *Request) {
 	if !c.cancels {
 		return
@@ -331,8 +313,6 @@ func (c *Conn) forget(r *Request) {
 	c.mu.Unlock()
 }
 
-// idKey is an id as the pending map keys it: the number or the string, so a
-// peer that echoes 7 as "7" is still matched.
 func idKey(raw json.RawMessage) string {
 	var s string
 	if unmarshal(raw, &s) == nil {

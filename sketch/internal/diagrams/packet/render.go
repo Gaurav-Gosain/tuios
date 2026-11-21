@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/packet/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package packet
 
 import (
@@ -17,7 +15,6 @@ func renderPacket(model *PacketModel, config types.Config, options types.RenderO
 	return common.TurnToFit(options, func(down bool) types.Rendered { return draw(model, config, options, down) })
 }
 
-// pow2 is 2 ** k for a whole k.
 func pow2(k float64) float64 {
 	if math.IsNaN(k) || math.IsInf(k, 0) || k > 2000 || k < -2000 {
 		return math.Pow(2, k)
@@ -52,8 +49,6 @@ func draw(model *PacketModel, config types.Config, options types.RenderOptions, 
 	if down {
 		maxWidth := types.Or(options.MaxWidth, 320)
 		count := math.Max(1, math.Floor((maxWidth-float64(2*pad))/math.Min(bitWidth, 18)))
-		// A byte is the shortest row. Below that every label is one character to a line, and a long
-		// packet is a row to a bit.
 		bitsPerRow = math.Min(bitsPerRow, math.Max(8, pow2(math.Floor(js.Log2(count)))))
 		last := 0.0
 		if n := len(model.rows); n > 0 {
@@ -65,8 +60,6 @@ func draw(model *PacketModel, config types.Config, options types.RenderOptions, 
 			bitsPerRow = model.bitsPerRow
 		}
 		bitWidth = math.Min(bitWidth, math.Max(18, (maxWidth-float64(2*pad))/bitsPerRow))
-		// The model has split each field at its own rows. Its pieces are joined again first, so that
-		// a field is only split where one of the new rows ends. A piece counts one bit short.
 		piece := func(block *PacketBlock) bool { return block.bits == block.end-block.start }
 		var whole []PacketBlock
 		for _, row := range model.rows {
@@ -108,7 +101,6 @@ func draw(model *PacketModel, config types.Config, options types.RenderOptions, 
 			}
 		}
 	}
-	// Bit numbers sit above each row and need room of their own.
 	numbers := 0.0
 	if showBits {
 		numbers = bitSize + 4
@@ -151,7 +143,6 @@ func draw(model *PacketModel, config types.Config, options types.RenderOptions, 
 		}
 	}
 
-	// The pieces of a field split across rows share its label, so each width is fitted once.
 	fits := map[string]map[float64]fitted{}
 	fit := func(label string, max float64) fitted {
 		byWidth := fits[label]
@@ -225,7 +216,6 @@ func draw(model *PacketModel, config types.Config, options types.RenderOptions, 
 	if bits.Len() > 0 {
 		svg.WriteStrings(&content, `<g class="pele-packet-bits" font-size="`, js.Num(bitSize), `" fill="var(--_m)">`, bits.String(), `</g>`)
 	}
-	// Mermaid puts a packet's title under it.
 	content.WriteString(svg.LabelSvg(title, totalWidth/2, totalHeight-pad-title.Height/2, ` class="pele-title" font-weight="var(--_tw)"`, nil))
 
 	rendered := types.Rendered{

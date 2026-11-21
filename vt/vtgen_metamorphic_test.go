@@ -1,20 +1,5 @@
 package vt_test
 
-// Oracles that need nobody to write down the right answer.
-//
-// The other generated-input targets check structural invariants: the screen
-// is not negative, the scroll region is inside it, the cursor is inside it,
-// and no cell claims more columns than the row has. A campaign measured over
-// vt reaches 55% of its statements, and 590k executions found none of
-// the eleven bugs a conformance round found by hand. The generator does
-// produce the sequences (DECSED, DECSTBM and the rest, thousands of times),
-// but those targets do not look at what they did. An emulator that silently does the wrong thing satisfies all four
-// invariants.
-//
-// The two properties below need no expectations. They relate one run of the
-// emulator to another run of the same emulator, so they are as strong as the
-// emulator is self-consistent, and a violation is a bug by construction.
-
 import (
 	"fmt"
 	"image/color"
@@ -33,7 +18,6 @@ const (
 	metaRows = 12
 )
 
-// cellText renders a cell for a mismatch message.
 func cellText(c *uv.Cell) string {
 	if c == nil {
 		return "<nil>"
@@ -42,11 +26,6 @@ func cellText(c *uv.Cell) string {
 		c.Content, c.Width, c.Style.Fg, c.Style.Bg, c.Style.Attrs, c.Style.Underline)
 }
 
-// sameRGB compares colors by the value a frame can carry: the frame writer
-// treats palette 16 and rgb(0,0,0) as one color and emits a single SGR run
-// for both, and no SGR encodes an alpha, so an oracle comparing spellings or
-// alpha would call a faithful frame wrong. nil only matches nil, because it
-// means the terminal default.
 func sameRGB(a, b color.Color) bool {
 	if a == nil || b == nil {
 		return a == nil && b == nil
@@ -56,16 +35,12 @@ func sameRGB(a, b color.Color) bool {
 	return ar == br && ag == bg && ab == bb
 }
 
-// sameStyle is style equality with colors compared by value.
 func sameStyle(a, b uv.Style) bool {
 	return a.Attrs == b.Attrs && a.Underline == b.Underline &&
 		sameRGB(a.Fg, b.Fg) && sameRGB(a.Bg, b.Bg) &&
 		sameRGB(a.UnderlineColor, b.UnderlineColor)
 }
 
-// sameCell treats the several spellings of an empty cell as one, the way a
-// renderer does: a nil, an empty string and an unstyled space all draw
-// nothing.
 func sameCell(a, b *uv.Cell) bool {
 	blank := func(c *uv.Cell) bool {
 		return c == nil || ((c.Content == "" || c.Content == " ") &&
@@ -94,7 +69,6 @@ func sameCell(a, b *uv.Cell) bool {
 	return ac == bc && aw == bw && sameStyle(a.Style, b.Style) && a.Link == b.Link
 }
 
-// compareGrids reports the first cell two emulators disagree about.
 func compareGrids(a, b *vt.Emulator, aName, bName string) string {
 	w, h := a.Width(), a.Height()
 	if bw, bh := b.Width(), b.Height(); bw != w || bh != h {
@@ -112,14 +86,6 @@ func compareGrids(a, b *vt.Emulator, aName, bName string) string {
 	return ""
 }
 
-// splitEquivalence is the property that where a read boundary fell cannot
-// change what ends up on screen.
-//
-// A PTY hands the parser whatever the kernel had ready, so the same output
-// arrives in different pieces on every run. If the screen depends on the
-// pieces, a pane renders differently depending on machine load, which is the
-// shape of bug that gets reported as "intermittent" and never reproduced.
-// Both runs get the same bytes; only the write boundaries differ.
 func splitEquivalence(s vtgen.Script, seed uint64) (broken string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -140,9 +106,6 @@ func splitEquivalence(s vtgen.Script, seed uint64) (broken string) {
 		}
 	}
 
-	// The piece count is deliberately kept out of these messages: it changes
-	// with every cut the shrinker makes, and brokenSig would then treat each
-	// reduction as a different failure and refuse to reduce at all.
 	if d := compareGrids(whole, split, "whole", "split"); d != "" {
 		return "the same bytes split at different boundaries drew a different screen: " + d
 	}
@@ -152,18 +115,6 @@ func splitEquivalence(s vtgen.Script, seed uint64) (broken string) {
 	return ""
 }
 
-// renderRoundTrip is the property that a frame the emulator emits describes
-// the screen the emulator holds.
-//
-// Render is what the app sends to the host terminal. Nothing else checks that
-// it is faithful: the grid tests read cells, and the frame goes out unread. If
-// a frame drops an attribute or mis-sizes a wide character, every pane is
-// wrong on screen while every test passes, and the round trip catches it
-// without anyone predicting which attribute.
-//
-// The frame is replayed into a fresh emulator of the same size, so what is
-// compared is the picture rather than the spelling: several encodings of the
-// same colour are all correct, and re-parsing normalises them.
 func renderRoundTrip(s vtgen.Script) (broken string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -188,11 +139,6 @@ func renderRoundTrip(s vtgen.Script) (broken string) {
 	}
 	frame := src.Render()
 
-	// The frame separates rows with a bare LF, the way a host with ONLCR
-	// expects; replayed into an emulator without the carriage return, every
-	// row lands one column further right than the last and the screen
-	// scrolls out from under itself. Feeding it back is only a fair test
-	// with the carriage return the host would have added.
 	dst := vt.NewEmulator(w, h)
 	if _, err := dst.WriteString(strings.ReplaceAll(frame, "\n", "\r\n")); err != nil {
 		return fmt.Sprintf("replaying the frame: %v", err)
@@ -203,10 +149,6 @@ func renderRoundTrip(s vtgen.Script) (broken string) {
 	return ""
 }
 
-// brokenSig strips the varying detail from a failure so the shrinker can
-// insist a candidate still fails the SAME way. An oracle of "still fails"
-// reduces a script holding two bugs to whichever survives the cuts, and then
-// prints that reduction under a report about the other one.
 func brokenSig(broken string) string {
 	if broken == "" {
 		return ""
@@ -220,7 +162,6 @@ func brokenSig(broken string) string {
 	return broken
 }
 
-// shrinkSame reduces to the smallest script that still fails the same way.
 func shrinkSame(s vtgen.Script, want string, replay func(vtgen.Script) string) vtgen.Script {
 	return vtgen.Shrink(s, func(c vtgen.Script) bool { return brokenSig(replay(c)) == want })
 }
@@ -374,9 +315,6 @@ func TestVTGen_ZeroWidthAttachesOrDrops(t *testing.T) {
 		{"combining mark with no base", "\u0301"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// DECALN fills every cell with E and homes the cursor, so there is
-			// no cell before it to combine with: the arrival is dropped and
-			// every E survives, on the grid and in the frame.
 			src := vt.NewEmulator(w, h)
 			if _, err := src.WriteString("\x1b#8" + tc.zeroWidth); err != nil {
 				t.Fatal(err)
@@ -390,9 +328,6 @@ func TestVTGen_ZeroWidthAttachesOrDrops(t *testing.T) {
 		})
 	}
 
-	// A mark with a base joins it, whether the base is in the same write or
-	// the cluster was closed in between: after a control it combines with the
-	// cell just written, which is where ghostty and xterm put it.
 	src := vt.NewEmulator(w, h)
 	if _, err := src.WriteString("ab\a\u0301"); err != nil {
 		t.Fatal(err)
@@ -400,7 +335,6 @@ func TestVTGen_ZeroWidthAttachesOrDrops(t *testing.T) {
 	if c := src.CellAt(1, 0); c == nil || c.Content != "b\u0301" {
 		t.Errorf("cell (1,0) = %s, want the mark combined with the b", cellText(c))
 	}
-	// The bidi control cannot extend the b\u0301 cluster and is dropped.
 	if _, err := src.WriteString("\u202e"); err != nil {
 		t.Fatal(err)
 	}

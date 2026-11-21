@@ -8,25 +8,14 @@ import (
 	"testing"
 )
 
-// screenFixture is one pane screen and what the harness's rules must make of
-// it. Each fixture says in its header how the screen was obtained, so a
-// derived screen is never passed off as a measured one.
-//
-// A file holds one fixture, or several separated by a line of five equals
-// signs, each with its own header. The per-harness files under
-// testdata/screens/rules keep one fixture for every rule of a manifest
-// together, which is where someone changing that manifest will look.
 type screenFixture struct {
 	file    string
 	harness string
-	want    string // a state, or "none" for no rule matching
-	// box is what the fixture's input box holds, "empty" or "draft", and
-	// "" for a fixture that does not say.
-	box    string
-	screen []string
+	want    string
+	box     string
+	screen  []string
 }
 
-// fixtureSeparator splits the fixtures of one file.
 const fixtureSeparator = "\n=====\n"
 
 func loadScreenFixtures(t *testing.T) []screenFixture {
@@ -90,8 +79,6 @@ func parseScreenFixture(t *testing.T, name, chunk string) screenFixture {
 	return fx
 }
 
-// fixtureTail reads a screen the way the emulator's TailText does: the bottom n
-// lines that carry anything, with trailing space trimmed.
 func fixtureTail(screen []string, n int) []string {
 	var out []string
 	for i := len(screen) - 1; i >= 0 && len(out) < n; i-- {
@@ -181,9 +168,6 @@ func TestBoxDraftLeavesFaintTextOut(t *testing.T) {
 	if draft, known := r.BoxDraft("claude-code", tail, shown); !known || draft {
 		t.Errorf("faint left out: draft %v known %v, want an empty box", draft, known)
 	}
-	// Codex draws its placeholder dim (chat_composer.rs:4952 at
-	// rust-v0.165.0). A placeholder a later release adds is not in the
-	// manifest's list, and still reads as empty once the faint cells go.
 	codex := []string{"• All tests pass.", "› Ask Codex to fix the build", "  ? for shortcuts"}
 	codexShown := []string{"• All tests pass.", "›", "  ? for shortcuts"}
 	if draft, known := r.BoxDraft("codex", codex, nil); !known || !draft {

@@ -9,14 +9,11 @@ import (
 	"tuios.dev/tml"
 )
 
-// chartWidget draws a chart component through tuios.dev/plot: bar, line,
-// area, sparkline, gauge, progress and histogram. A title takes the first
-// row.
 type chartWidget struct {
 	kind  string
 	title string
 	role  string
-	label string // gauge: the label at the left
+	label string
 
 	values []float64
 	labels []string
@@ -27,16 +24,16 @@ type chartWidget struct {
 	axis   bool
 	horiz  bool
 	donut  bool
-	roles  []plot.Role // bar: a role per row, from the row's role field
+	roles  []plot.Role
 	keys   []plot.LegendItem
-	grid   [][]float64        // heatmap: rows of columns
-	rowsL  []string           // heatmap row labels
-	colsL  []string           // heatmap column labels
-	codes  map[string]float64 // map: country code to value
-	logv   bool               // map: shade by the logarithm of the value
-	unit   string             // map: a prefix for the legend values
-	height int                // the rows the chart wants, without the title
-	width  int                // the cells it wants, 0 for the whole width
+	grid   [][]float64
+	rowsL  []string
+	colsL  []string
+	codes  map[string]float64
+	logv   bool
+	unit   string
+	height int
+	width  int
 }
 
 func (s *Surface) buildChart(b *box, vars map[string]any) widget {
@@ -73,8 +70,6 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 	case "line", "area":
 		rows := s.data(n, "data", vars)
 		fields := strings.Split(n.AttrString("y"), ",")
-		// Each field allocates a value per row, so the list is bounded;
-		// the series roles cycle after six anyway.
 		if len(fields) > maxSeries {
 			fields = fields[:maxSeries]
 		}
@@ -97,9 +92,6 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 		keys := ChartLabels(rows, n.AttrString("x"))
 		w.codes = make(map[string]float64, len(keys))
 		for i, k := range keys {
-			// The plot map is keyed by ISO 3166-1 alpha-2. A row that names
-			// anything else cannot be placed, so it is dropped rather than
-			// guessed at.
 			c := strings.ToUpper(strings.TrimSpace(k))
 			if len(c) != 2 || i >= len(vals) || math.IsNaN(vals[i]) {
 				continue
@@ -108,7 +100,7 @@ func (s *Surface) buildChart(b *box, vars map[string]any) widget {
 		}
 		w.logv = s.flag(n, "log", vars, false)
 		w.unit = s.str(n, "unit", vars)
-		w.height = 0 // measured from the width, since the map keeps its shape
+		w.height = 0
 	case "pie":
 		rows := s.data(n, "data", vars)
 		w.values = ChartValues(rows, n.AttrString("v"))
@@ -199,7 +191,6 @@ func ChartGrid(rows []any, xf, yf, vf string) ([][]float64, []string, []string) 
 	return grid, ys, xs
 }
 
-// maxSeries bounds the y fields of a line or an area.
 const maxSeries = 12
 
 // ChartValues reads a data array as numbers: the elements themselves, or the
@@ -225,8 +216,6 @@ func ChartValues(rows []any, field string) []float64 {
 	return out
 }
 
-// firstNumber returns a number field of a row, by name so the choice does
-// not depend on map order.
 func firstNumber(m map[string]any) any {
 	best := ""
 	for k, v := range m {
@@ -255,7 +244,6 @@ func ChartLabels(rows []any, field string) []string {
 	return out
 }
 
-// world returns the plot map a map chart draws, on the client's cell shape.
 func (w *chartWidget) world(s *Surface) plot.Map {
 	mp := plot.Map{Values: w.codes, Log: w.logv, Aspect: s.opts.CellAspect}
 	if w.unit != "" {
@@ -278,14 +266,10 @@ func (w *chartWidget) measure(s *Surface, _ *box, maxW int) (int, int) {
 	case "gauge", "progress":
 		return min(maxW, max(20, width(w.label)+16)), h
 	case "map":
-		// A map keeps its true shape, so its height follows from the width. One
-		// more row goes to the legend under it. A map is always wider than it
-		// is tall, so the width is a safe bound on the height.
 		_, rows := w.world(s).Fit(maxW, maxW, s.mode)
 		return maxW, rows + w.titleRows() + 1
 	case "sparkline":
 		if w.title != "" && w.height == 1 {
-			// One row: the title, the trend, the last value.
 			return min(maxW, width(w.title)+1+w.width+1+width(w.last())), 1
 		}
 		return min(maxW, max(w.width, width(w.title))), h
@@ -293,7 +277,6 @@ func (w *chartWidget) measure(s *Surface, _ *box, maxW int) (int, int) {
 	return maxW, h
 }
 
-// last is the last value of a sparkline as text.
 func (w *chartWidget) last() string {
 	for _, v := range slices.Backward(w.values) {
 		if !math.IsNaN(v) && !math.IsInf(v, 0) {
@@ -303,15 +286,11 @@ func (w *chartWidget) last() string {
 	return ""
 }
 
-// legend is what the title row shows at the right: the series of a line
-// or an area with more than one.
 func (w *chartWidget) legend() []plot.LegendItem {
 	if (w.kind == "line" || w.kind == "area") && len(w.series) > 1 {
 		return plot.Line{Series: w.series}.Legend()
 	}
 	if w.kind == "bar" {
-		// The legend names the chart's own role as well, when some rows
-		// take it.
 		return w.keys
 	}
 	return nil
@@ -329,7 +308,6 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 		g := plot.Sparkline{Values: w.values, Role: plot.Role(w.role)}.Draw(n, 1, s.mode)
 		s.blit(c, g, x, r.Min.Y)
 		if last != "" && room > 0 {
-			// The last value sits right after the trend, where the eye ends.
 			c.text(x+n+1, r.Min.Y, last, style{fg: "fg", attrs: attrBold}, -1)
 		}
 		return
@@ -337,8 +315,6 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	var world plot.Map
 	mapRows := 0
 	if w.kind == "map" {
-		// A map keeps its shape, so it cannot fill a tall box. The title, the
-		// map and the legend stay together as one block, centred.
 		world = w.world(s)
 		_, mapRows = world.Fit(r.Dx(), max(r.Dy()-w.titleRows()-1, 1), s.mode)
 		r.Min.Y += max(r.Dy()-w.titleRows()-mapRows-1, 0) / 2
@@ -385,20 +361,14 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	case "histogram":
 		g = plot.Histogram{Values: w.values, Bins: w.bins, Role: role}.Draw(r.Dx(), r.Dy(), s.mode)
 	case "bar":
-		// Columns get an axis when they have the room for one.
 		axis := !w.horiz && r.Dy() >= 4 && r.Dx() >= 16
-		// Rows of bars are thin, so each bar stands apart from the next,
-		// with a quiet track where the palette has grounds to set it on.
 		bar := plot.Bar{Values: w.values, Labels: w.labels, Role: role, Roles: w.roles, Horizontal: w.horiz, Thin: w.horiz, Guide: s.pal.grounded(), Axis: axis}
 		g = bar.Draw(r.Dx(), r.Dy(), s.mode)
 	case "line", "area":
-		// An area has no axis attribute; it gets one when it has the room,
-		// as columns do.
 		axis := w.axis || w.kind == "area" && r.Dy() >= 4 && r.Dx() >= 16
 		g = plot.Line{Series: w.series, Fill: w.kind == "area", Axis: axis, Labels: w.labels}.Draw(r.Dx(), r.Dy(), s.mode)
 	case "map":
 		g = world.Draw(r.Dx(), mapRows, s.mode)
-		// The legend goes right under the map, when a row is left for it.
 		if r.Dy() > mapRows {
 			lg := world.LegendGrid(r.Dx(), s.mode)
 			s.blit(c, lg, r.Min.X+(r.Dx()-lg.W)/2, r.Min.Y+mapRows)
@@ -411,8 +381,6 @@ func (w *chartWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	s.blit(c, g, r.Min.X, r.Min.Y)
 }
 
-// blit copies a plot grid onto the canvas, its roles resolved by the
-// palette.
 func (s *Surface) blit(c *canvas, g *plot.Grid, x0, y0 int) {
 	for y := 0; y < g.H; y++ {
 		for x := 0; x < g.W; x++ {

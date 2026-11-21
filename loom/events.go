@@ -40,7 +40,6 @@ type Mouse struct {
 	Action MouseAction
 }
 
-// focusable reports whether b takes keys.
 func focusable(s *Surface, b *box) bool {
 	if b.hidden {
 		return false
@@ -53,9 +52,6 @@ func focusable(s *Surface, b *box) bool {
 	case *tabsWidget:
 		return len(w.ids) > 1
 	case *cardWidget:
-		// A folded card stays a stop whatever folded it, so a click on a title
-		// or the fold action never leaves a card the keyboard cannot open. The
-		// card that has the focus keeps it once it opens, until tab moves on.
 		return !w.modal && (w.foldable || w.folded || len(w.press) > 0 || s.view.Focus == b.key)
 	case *buttonWidget:
 		return !w.disabled
@@ -75,10 +71,6 @@ func (s *Surface) Focus() string {
 	return s.view.Focus
 }
 
-// defaultFocus is the first table or list, else the first focusable box
-// that is not a text field. A text field takes the focus only from tab or a
-// click: with it focused a letter types, so a document whose buttons have
-// keys keeps them until the person goes into the field.
 func (s *Surface) defaultFocus() *box {
 	for _, b := range s.focus {
 		switch b.w.(type) {
@@ -104,8 +96,6 @@ func (s *Surface) focused() *box {
 				return b
 			}
 		}
-		// The focused node is gone: no node has the focus until the person
-		// gives it again, so enter cannot fire some other node.
 		return nil
 	}
 	return s.defaultFocus()
@@ -129,8 +119,6 @@ func (s *Surface) Key(key string) (Result, error) {
 		return Result{}, nil
 	}
 	s.flush()
-	// A text field with the focus takes the keys that type and edit before
-	// a button's key, so a letter goes into the field.
 	if b, w := s.textField(); b != nil {
 		if res, ok, err := s.fieldKey(b, w, key); ok || err != nil {
 			return res, err
@@ -170,7 +158,6 @@ func (s *Surface) Key(key string) (Result, error) {
 			return res, err
 		}
 	}
-	// A key the focused box did not use scrolls a page that does not fit.
 	if s.pageKey(key) {
 		return Result{View: true}, nil
 	}
@@ -180,7 +167,6 @@ func (s *Surface) Key(key string) (Result, error) {
 	return Result{}, nil
 }
 
-// keyOn handles a key on one focused box. ok reports that it took the key.
 func (s *Surface) keyOn(b *box, key string) (Result, bool, error) {
 	press := key == "enter" || key == "space" || key == " "
 	switch w := b.w.(type) {
@@ -228,8 +214,6 @@ func (s *Surface) keyOn(b *box, key string) (Result, bool, error) {
 				res, err := s.run(b, w.press, nil)
 				return res, true, err
 			}
-			// The focus may be here only as the default. Name it, so it stays
-			// when the card opens and stops being a stop by itself.
 			s.setFocus(b)
 			s.toggleFold(b, w)
 			return Result{View: true}, true, nil
@@ -257,7 +241,6 @@ func (s *Surface) keyOn(b *box, key string) (Result, bool, error) {
 	return Result{}, false, nil
 }
 
-// cursorMove returns where a cursor goes on a key, among n positions.
 func cursorMove(key string, cur, n, page int) (int, bool) {
 	if n <= 0 {
 		return 0, false
@@ -282,7 +265,6 @@ func cursorMove(key string, cur, n, page int) (int, bool) {
 	return clampInt(next, 0, n-1), true
 }
 
-// cycleSort sorts the table by the next sortable column.
 func (s *Surface) cycleSort(b *box, w *tableWidget) {
 	start := -1
 	for i, c := range w.cols {
@@ -299,7 +281,6 @@ func (s *Surface) cycleSort(b *box, w *tableWidget) {
 	}
 }
 
-// sortBy sorts by field, or flips the order when the table is sorted by it.
 func (s *Surface) sortBy(b *box, w *tableWidget, field string) {
 	spec := w.sort
 	if spec.Field == field {
@@ -319,8 +300,6 @@ func (s *Surface) toggleFold(b *box, w *cardWidget) {
 	s.markView(b.key)
 }
 
-// openTab opens tab i: in the state when the tabs name a value path, else in
-// the view. on-change runs with event.value set to the tab's id.
 func (s *Surface) openTab(b *box, w *tabsWidget, i int) (Result, error) {
 	if i < 0 || i >= len(w.ids) || i == w.active {
 		return Result{}, nil
@@ -347,8 +326,6 @@ func (s *Surface) openTab(b *box, w *tabsWidget, i int) (Result, error) {
 	return res, nil
 }
 
-// run runs actions from box b with an event value. State changes mark
-// their readers; a view change from an action repaints the surface.
 func (s *Surface) run(b *box, acts []tml.Action, event map[string]any) (Result, error) {
 	if len(acts) == 0 {
 		return Result{}, nil
@@ -362,8 +339,6 @@ func (s *Surface) run(b *box, acts []tml.Action, event map[string]any) (Result, 
 	res, err := runActions(s.doc, s.store, s.view, b.ptr, acts, &tml.Env{Vars: vars, Now: s.opts.Now})
 	s.pending = append(s.pending, res.Changed...)
 	if res.View {
-		// tab, sort, filter, fold and focus name their targets by id; the
-		// view keys are the same, so mark every box that has one changed.
 		s.full = true
 	}
 	return res, err
@@ -379,7 +354,6 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 	s.flush()
 	pt := image.Point{m.X, m.Y}
 	if s.drag != nil && m.Action == Press {
-		// The release was lost: a new press ends the drag.
 		s.drag = nil
 	}
 	if s.drag != nil {
@@ -399,7 +373,6 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 				}
 				return Result{View: true}, nil
 			case *mermaidWidget:
-				// A diagram that fits leaves the wheel to the page.
 				if w := p.w.(*mermaidWidget); w.over {
 					for range 3 {
 						s.scrollBy(p, key)
@@ -408,7 +381,6 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 				}
 			}
 		}
-		// Over anything else, the wheel scrolls a page that does not fit.
 		if pw := s.pageOf(); pw != nil && pw.over {
 			d := 3
 			if m.Button == WheelUp {
@@ -423,8 +395,6 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 		return Result{}, nil
 	}
 	if href := s.links[pt]; href != "" {
-		// A link opens only after the host asks the person: it comes back
-		// as an effect, never as an OSC 8 link the outer terminal follows.
 		return Result{Effects: []Effect{{Action: "link", Name: href, Value: href, HasValue: true}}}, nil
 	}
 	for _, b := range slices.Backward(path) {
@@ -442,7 +412,6 @@ func (s *Surface) Mouse(m Mouse) (Result, error) {
 	return Result{}, nil
 }
 
-// scrollBy moves a table's view, a scroll box or a diagram by one row.
 func (s *Surface) scrollBy(b *box, key string) {
 	d := 1
 	if key == "up" {
@@ -452,7 +421,6 @@ func (s *Surface) scrollBy(b *box, key string) {
 	case *tableWidget:
 		s.view.Scroll[b.key] = max(w.offset+d, 0)
 		w.offset = s.view.Scroll[b.key]
-		// The cursor stays where it is unless it leaves the view.
 		vis := max(b.inner().Dy()-1, 1)
 		if w.cursor < w.offset || w.cursor >= w.offset+vis {
 			w.cursor = clampInt(w.cursor, w.offset, w.offset+vis-1)
@@ -467,7 +435,6 @@ func (s *Surface) scrollBy(b *box, key string) {
 	s.markView(b.key)
 }
 
-// clickOn handles a left press at pt on box b. ok reports that it took it.
 func (s *Surface) clickOn(b *box, pt image.Point) (Result, bool, error) {
 	in := b.inner()
 	switch w := b.w.(type) {
@@ -522,8 +489,6 @@ func (s *Surface) clickOn(b *box, pt image.Point) (Result, bool, error) {
 		}
 	case *fieldWidget:
 		if w.editable() {
-			// The click puts the caret at the end of the text; the focus
-			// follows (Mouse).
 			return s.moveCaret(b, w, utf8.RuneCountInString(w.value)), true, nil
 		}
 	}
@@ -534,7 +499,6 @@ func (s *Surface) clickOn(b *box, pt image.Point) (Result, bool, error) {
 	return Result{}, false, nil
 }
 
-// hit returns the boxes under pt, outermost first.
 func (s *Surface) hit(b *box, pt image.Point, path []*box) []*box {
 	if !pt.In(b.rect) || b.hidden {
 		return path
@@ -555,8 +519,6 @@ func (s *Surface) hit(b *box, pt image.Point, path []*box) []*box {
 		if b.kind != "stack" {
 			return sub
 		}
-		// In a stack, a layer that takes no input lets the click through
-		// to the layers under it.
 		if top == nil {
 			top = sub
 		}
@@ -570,7 +532,6 @@ func (s *Surface) hit(b *box, pt image.Point, path []*box) []*box {
 	return path
 }
 
-// clickable reports whether a click on b does anything.
 func (s *Surface) clickable(b *box) bool {
 	switch b.w.(type) {
 	case *tabsWidget, *tableWidget, *listWidget, *cardWidget, *buttonWidget, *scrollWidget:
@@ -579,7 +540,6 @@ func (s *Surface) clickable(b *box) bool {
 	return len(s.actionsOf(b.src, "on-press")) > 0
 }
 
-// onDivider reports whether pt is on a split's divider.
 func (s *Surface) onDivider(b *box, pt image.Point) bool {
 	if len(b.kids) < 2 {
 		return false

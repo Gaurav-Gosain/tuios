@@ -35,7 +35,6 @@ func fileSurface(t testing.TB, path string) *Surface {
 	return mustSurface(t, string(src))
 }
 
-// rows returns the text of a buffer, one string per row.
 func rows(buf *Buffer) []string {
 	var out []string
 	for y := 0; y < buf.Height(); y++ {
@@ -60,7 +59,6 @@ func screenHas(t *testing.T, buf *Buffer, want string) {
 	t.Fatalf("the screen has no %q:\n%s", want, strings.Join(rows(buf), "\n"))
 }
 
-// rowWith returns the row that holds s, or -1.
 func rowWith(buf *Buffer, s string) int {
 	for i, r := range rows(buf) {
 		if strings.Contains(r, s) {
@@ -70,10 +68,6 @@ func rowWith(buf *Buffer, s string) int {
 	return -1
 }
 
-// sameAsFresh asserts that what s drew incrementally equals what a new
-// surface with the same state and view draws from scratch. This is the
-// contract of the retained tree: dirty tracking may skip work, never
-// change the picture.
 func sameAsFresh(t testing.TB, s *Surface, w, h int) {
 	t.Helper()
 	got := s.Render(w, h)
@@ -109,7 +103,7 @@ func TestPatchRedrawsOnlyReaders(t *testing.T) {
 	const w, h = 64, 16
 	s.Render(w, h)
 	full := s.stats
-	s.Damage() // the first render's
+	s.Damage()
 	if err := s.Patch([]tml.Op{{Op: "replace", Path: "/skipped", Value: []byte("10")}}); err != nil {
 		t.Fatal(err)
 	}
@@ -133,14 +127,11 @@ func TestPatchRedrawsOnlyReaders(t *testing.T) {
 	}
 	sameAsFresh(t, s, w, h)
 
-	// A render with nothing changed paints nothing.
 	s.Render(w, h)
 	if s.stats.cells != 0 || len(s.Damage()) != 0 || s.stats.built != 0 {
 		t.Errorf("an idle render did work: %+v, damage %v", s.stats, s.Damage())
 	}
 
-	// A patch that changes a row count rebuilds the rows' readers, moves
-	// what is under them, and still equals a full redraw.
 	if err := s.Patch([]tml.Op{{Op: "add", Path: "/failures/-", Value: []byte(`{"pkg": "tml", "test": "TestPatch", "ms": 5000}`)},
 		{Op: "replace", Path: "/failed", Value: []byte("4")}}); err != nil {
 		t.Fatal(err)
@@ -171,7 +162,6 @@ func TestLocalActions(t *testing.T) {
 	}
 	sameAsFresh(t, s, w, h)
 
-	// enter selects: on-select emits the row under the cursor.
 	res, err = s.Key("enter")
 	if err != nil || len(res.Effects) != 1 {
 		t.Fatalf("enter: %+v %v", res, err)
@@ -182,7 +172,6 @@ func TestLocalActions(t *testing.T) {
 		t.Fatalf("enter emitted %+v", e)
 	}
 
-	// s sorts by the next column; the cursor keeps its row by key.
 	if _, err := s.Key("s"); err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +187,6 @@ func TestLocalActions(t *testing.T) {
 	}
 	sameAsFresh(t, s, w, h)
 
-	// A click on the TIME header sorts by time; a second click flips it.
 	head := rowWith(buf, "PACKAGE")
 	x := strings.Index(rows(buf)[head], "TIME")
 	x = len([]rune(rows(buf)[head][:x]))
@@ -213,7 +201,6 @@ func TestLocalActions(t *testing.T) {
 	}
 	sameAsFresh(t, s, w, h)
 
-	// r presses the button with that key, anywhere on the surface.
 	res, _ = s.Key("r")
 	if len(res.Effects) != 1 || res.Effects[0].Name != "rerun" {
 		t.Fatalf("r: %+v", res)
@@ -257,7 +244,6 @@ func TestTabsAndFold(t *testing.T) {
 	}
 	sameAsFresh(t, s, w, h)
 
-	// set and tab run locally, in order, from one key.
 	if _, err := s.Key("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -352,13 +338,11 @@ func TestFocusAccentMoves(t *testing.T) {
 		}
 		sameAsFresh(t, s, w, h)
 	}
-	// A click moves the focus too.
 	if _, err := s.Mouse(Mouse{X: 4, Y: rowWith(buf, "OK"), Button: MouseLeft}); err != nil {
 		t.Fatal(err)
 	}
 	s.Render(w, h)
 	sameAsFresh(t, s, w, h)
-	// A patch that takes the focused box away takes the accent with it.
 	for s.Focus() != "tb" {
 		if _, err := s.Key("tab"); err != nil {
 			t.Fatal(err)
@@ -400,7 +384,6 @@ func TestCardFocus(t *testing.T) {
 		}
 	}
 
-	// Enter runs on-press, and folds only when there is none.
 	s := mustSurface(t, `<tml version="1"><col><card id="c" title="C" fold="false" on-press="emit('p')"><text>x</text></card></col></tml>`)
 	s.Render(w, h)
 	res, err := s.Key("enter")
@@ -409,8 +392,6 @@ func TestCardFocus(t *testing.T) {
 	}
 	screenHas(t, s.Render(w, h), "x")
 
-	// A plain card that a click folded stays in reach of the keyboard, and
-	// keeps the focus when enter opens it.
 	s = mustSurface(t, `<tml version="1"><col><card id="c" title="C"><text>inside</text></card><button id="b" on-press="emit('b')">OK</button></col></tml>`)
 	buf := s.Render(w, h)
 	if _, err := s.Mouse(Mouse{X: 3, Y: rowWith(buf, "C"), Button: MouseLeft}); err != nil {
@@ -434,7 +415,6 @@ func TestCardFocus(t *testing.T) {
 		t.Fatalf("enter opened the card and the focus went to %v", s.focused())
 	}
 	sameAsFresh(t, s, w, h)
-	// Once tab leaves it, the open card is a plain card again.
 	if _, err := s.Key("tab"); err != nil {
 		t.Fatal(err)
 	}
@@ -493,7 +473,6 @@ func TestMapBlockInTallBox(t *testing.T) {
 	if above, below := title, h-1-legend; above < 15 || above-below > 1 || below-above > 1 {
 		t.Errorf("the block is not centred: %d rows above, %d below", above, below)
 	}
-	// One row: the map takes it, and no legend mark lands on it.
 	s = mustSurface(t, strings.ReplaceAll(src, ` title="Rates"`, ""))
 	if got := rowWith(s.Render(w, 1), "≥"); got >= 0 {
 		t.Errorf("a legend on the only row: %q", rows(s.Render(w, 1))[got])
@@ -506,8 +485,6 @@ func TestMapBlockInTallBox(t *testing.T) {
 func TestControlCharsDropped(t *testing.T) {
 	doc := &tml.Node{Type: "tml"}
 	doc.SetAttr("version", tml.NumberValue(1))
-	// A text run passes through tml's templates, which sanitize; code keeps
-	// its text raw, so it reaches loom's own filter at the cell.
 	txt := &tml.Node{Type: "text"}
 	txt.Children = []*tml.Node{tml.TextNode("a\x1b[2Jb\u009b31mc\x7fd\x07e")}
 	code := &tml.Node{Type: "code"}
@@ -753,7 +730,7 @@ func TestFocusBelowTheFold(t *testing.T) {
 	if rowWith(buf, "button 5") >= 0 {
 		t.Fatal("button 5 is on screen at the start")
 	}
-	for range 6 { // from the table, which has the focus first, to button 5
+	for range 6 {
 		if _, err := s.Key("tab"); err != nil {
 			t.Fatal(err)
 		}
@@ -807,8 +784,6 @@ func TestDamageAcrossInput(t *testing.T) {
 	}
 }
 
-// pageDoc is a report of n paragraphs with a button under them, too tall
-// for a short surface.
 func pageDoc(n int) string {
 	var b strings.Builder
 	b.WriteString(`<tml version="1"><state>{"n": 1, "rows": [{"k": "a"}, {"k": "b"}, {"k": "c"}, {"k": "d"}, {"k": "e"}, {"k": "f"}]}</state><col gap="1"><text>TOP</text>`)
@@ -832,8 +807,6 @@ func TestPageScroll(t *testing.T) {
 	if r := rows(buf); !strings.HasSuffix(r[0], "┃") || !strings.HasSuffix(r[9], "│") {
 		t.Fatalf("no scroll bar in the last column:\n%s", strings.Join(r, "\n"))
 	}
-	// The table has the focus by default, and takes up and down: the page
-	// follows its cursor down to it.
 	if _, err := s.Key("down"); err != nil {
 		t.Fatal(err)
 	}
@@ -842,8 +815,6 @@ func TestPageScroll(t *testing.T) {
 	if strings.Contains(strings.Join(rows(buf), "\n"), "TOP") {
 		t.Fatalf("the page did not follow the table's cursor:\n%s", strings.Join(rows(buf), "\n"))
 	}
-	// pgup is the table's too; home goes to its first row. Tab to the
-	// button, which takes no j: j scrolls the page.
 	s.Key("tab")
 	s.Render(30, 10)
 	before := s.View().Page
@@ -856,7 +827,6 @@ func TestPageScroll(t *testing.T) {
 	if got := s.View().Page; got != 2 {
 		t.Fatalf("j j moved the page to %d, want 2 (it was %d)", got, before)
 	}
-	// The wheel over text scrolls the page.
 	s.Render(30, 10)
 	if _, err := s.Mouse(Mouse{X: 2, Y: 3, Button: WheelDown}); err != nil {
 		t.Fatal(err)
@@ -864,7 +834,6 @@ func TestPageScroll(t *testing.T) {
 	if got := s.View().Page; got != 5 {
 		t.Fatalf("the wheel moved the page to %d, want 5", got)
 	}
-	// A patch and a resize keep the offset.
 	if err := s.Patch([]tml.Op{{Op: "replace", Path: "/n", Value: []byte("7")}}); err != nil {
 		t.Fatal(err)
 	}
@@ -877,7 +846,6 @@ func TestPageScroll(t *testing.T) {
 	if got := s.View().Page; got != 5 {
 		t.Fatalf("a resize moved the page to %d", got)
 	}
-	// G goes to the end; a shorter document clamps the offset.
 	s.Render(30, 10)
 	s.Key("G")
 	s.Render(30, 10)
@@ -896,7 +864,6 @@ func TestPageScroll(t *testing.T) {
 	}
 	screenHas(t, s.Render(30, 10), "BOTTOM")
 
-	// A dashboard that fits once its table gives rows back has no page.
 	d := fileSurface(t, "testdata/examples/dashboard.tml")
 	d.Render(58, 15)
 	if d.pageOf().over {
@@ -909,8 +876,6 @@ func TestPageScroll(t *testing.T) {
 		t.Fatal("j scrolled a page that fits")
 	}
 
-	// The end of the page is the end of the document at any length: a box
-	// that a short page drops takes its gap with it.
 	for _, n := range []int{10, 40, 80} {
 		var b strings.Builder
 		b.WriteString(`<tml version="1"><col pad="1" gap="1">`)

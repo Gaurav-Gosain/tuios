@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/sankey/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package sankey
 
 import (
@@ -22,8 +20,6 @@ const (
 	CAREFUL    = 300
 )
 
-// contentId is two 32-bit hashes, so different gradients practically never share an id.
-// It hashes UTF-16 code units, as charCodeAt gives them.
 func contentId(text string) string {
 	a := uint32(0x811c9dc5)
 	b := uint32(5381)
@@ -34,21 +30,18 @@ func contentId(text string) string {
 	return strconv.FormatUint(uint64(a), 36) + strconv.FormatUint(uint64(b), 36)
 }
 
-// fillOf is /^ style="fill:(.*);"$/.exec(style)?.[1]: the colour of a node's style, or false.
 func fillOf(style string) (string, bool) {
 	const head, foot = ` style="fill:`, `;"`
 	if len(style) < len(head)+len(foot) || !strings.HasPrefix(style, head) || !strings.HasSuffix(style, foot) {
 		return "", false
 	}
 	fill := style[len(head) : len(style)-len(foot)]
-	// `.` matches no line terminator.
 	if strings.ContainsAny(fill, "\n\r\u2028\u2029") {
 		return "", false
 	}
 	return fill, true
 }
 
-// wordsOnly is /^[\w-]+$/.test(text).
 func wordsOnly(text string) bool {
 	if text == "" {
 		return false
@@ -62,7 +55,6 @@ func wordsOnly(text string) bool {
 	return true
 }
 
-// sankeyLabel is where a node's label sits.
 type sankeyLabel struct {
 	value string
 	width float64
@@ -90,7 +82,6 @@ func textOption(conf map[string]any, key string) string {
 	return ""
 }
 
-// rounded: two decimals, as Mermaid shows values; numbers too large for that are left as they are.
 func rounded(value float64) float64 {
 	if math.Abs(value) < 1e15 {
 		return js.Round(value*100) / 100
@@ -98,7 +89,6 @@ func rounded(value float64) float64 {
 	return value
 }
 
-// fillStyle is a colour from the configuration, as an inline style that overrides the series colour.
 func fillStyle(color any) string {
 	if s, ok := color.(string); ok {
 		return svg.ResolveStyle([]string{"fill:" + s}).Shape
@@ -121,7 +111,6 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 	num := svg.Num
 	size := types.Or(options.FontSize, 16)
 	least := js.Round(size * 0.625)
-	// Labels shrink with a chart narrowed to fit, as they would if the whole picture were scaled down.
 	small := math.Max(least, js.Round(size*0.875*math.Min(1, chartWidth/natural)))
 	measurer := options.Measurer
 	if measurer == nil {
@@ -159,7 +148,6 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 		})
 	}
 	nodes, links := lay(small)
-	// Labels also shrink with the most crowded column, so each keeps about LABEL_ROOM lines.
 	rows := map[int]int{}
 	fullest := 1
 	for _, node := range nodes {
@@ -185,7 +173,6 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 		}
 	}
 	nodeStyle := func(i int) string { return custom[model.nodes[i].id] }
-	// Match the whole fill to preserve semicolons in escaped entities.
 	nodeColor := func(i int) string {
 		if fill, ok := fillOf(nodeStyle(i)); ok {
 			return fill
@@ -193,8 +180,6 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 		return svg.SeriesColor(i)
 	}
 
-	// Labels sit beside the bars, on the side that faces the middle of the chart unless that
-	// side is crowded.
 	central := 0
 	most := 0.0
 	for _, node := range nodes {
@@ -241,7 +226,6 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 		maxY = math.Max(maxY, y+float64(small*0.75))
 		labels[i] = &sankeyLabel{value: value, width: width, after: after, left: left, y: y}
 	}
-	// A label moves at most one line; retain two bands on each side.
 	bands := map[float64][]*sankeyLabel{}
 	if len(nodes) <= CAREFUL {
 		for _, label := range labels {
@@ -268,7 +252,6 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 			}
 			return false
 		}
-		// Try the other side, then an adjacent line when both sides are crowded.
 		if len(nodes) <= CAREFUL && overlapsLabel(label.left, label.y) {
 		place:
 			for _, dy := range [3]float64{0, -lineHeight, lineHeight} {
@@ -291,7 +274,6 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 					if blocked {
 						continue
 					}
-					// A label stays nearer its own bar than any other in the column, so it can't name that one.
 					own := math.Max(0, math.Max(node.y-y, y-node.y-node.height))
 					for j, bar := range nodes {
 						if j != i && bar.x == node.x && math.Max(0, math.Max(bar.y-y, y-bar.y-bar.height)) <= own {
@@ -338,8 +320,6 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 	if linkColor != "gradient" && linkColor != "source" && linkColor != "target" {
 		fixed = fillStyle(linkColor)
 	}
-	// Without an idPrefix diagrams share gradient ids, and Chrome then uses a hidden or differently
-	// themed copy's gradient. Other characters would end the url() and void the whole fill.
 	idPrefix := types.Or(options.IDPrefix, "")
 	gradient := linkColor == "gradient" && wordsOnly(idPrefix)
 	var gradientIds []string
@@ -362,8 +342,6 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 		}
 		paint := `fill="` + svg.SeriesColor(end) + `"` + style
 		if gradient {
-			// Ids come from the gradient itself, so diagrams sharing a prefix agree on them. The colour
-			// after the url() is the fallback.
 			stops := `x1="` + num(x0) + `" x2="` + num(x1) + `"><stop offset="0" stop-color="` + nodeColor(link.source) + `"/>` +
 				`<stop offset="1" stop-color="` + nodeColor(link.target) + `"/>`
 			id := idPrefix + "-sankey-" + contentId(stops)
@@ -405,7 +383,6 @@ func draw(model *SankeyDb, conf map[string]any, options types.RenderOptions, cha
 
 	var geometry *types.Geometry
 	if options.Geometry != nil {
-		// Not part of pele: the diagram as lists, for a text drawing (sketch/text).
 		g := &types.GeoSankey{Title: title.Plain()}
 		for i, node := range nodes {
 			value := ""

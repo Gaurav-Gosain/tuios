@@ -1,5 +1,3 @@
-// Ported from pele src/detect.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package engine
 
 import (
@@ -18,58 +16,48 @@ type Type = types.DiagramType
 // "flowchart-v2" for `graph TD` and "classDiagram" for `classDiagram-v2`.
 type MermaidType = types.MermaidType
 
-// detected is a diagram type and the name Mermaid gives it.
 type detected struct {
 	typ Type
 	mt  MermaidType
 }
 
-// A detector is one of Mermaid's detector regexps, /^\s*keyword.../, written
-// out. detect strips the leading whitespace, so each checks that the text
-// starts with its keyword and that what follows is allowed.
 type detector struct {
-	typ Type
-	mt  MermaidType
-	kw  string
-	// fold: the regexp has the i flag. Go's (?i) and this match a letter by
-	// Unicode simple case folding, so "K" (U+212A) matches "k".
+	typ  Type
+	mt   MermaidType
+	kw   string
 	fold bool
-	// rest checks the text after the keyword; nil allows anything.
 	rest func(rest string) bool
 }
 
-// Mermaid's detectors, in the order Mermaid registers them. The first match wins.
 var detectors = []detector{
 	{typ: "flowchart", mt: "flowchart-elk", kw: "flowchart-elk"},
 	{typ: "mindmap", mt: "mindmap", kw: "mindmap"},
 	{typ: "architecture", mt: "architecture", kw: "architecture"},
-	{typ: "agentflow", mt: "agentflow", kw: "agentflow-beta", rest: wordEnd}, // agentflow-beta\b
-	{typ: "c4", mt: "c4", kw: "C4Context"},                                   // see c4Keywords
+	{typ: "agentflow", mt: "agentflow", kw: "agentflow-beta", rest: wordEnd},
+	{typ: "c4", mt: "c4", kw: "C4Context"},
 	{typ: "kanban", mt: "kanban", kw: "kanban"},
 	{typ: "class", mt: "classDiagram", kw: "classDiagram"},
 	{typ: "er", mt: "er", kw: "erDiagram"},
 	{typ: "gantt", mt: "gantt", kw: "gantt"},
 	{typ: "info", mt: "info", kw: "info"},
 	{typ: "pie", mt: "pie", kw: "pie"},
-	{typ: "requirement", mt: "requirement", kw: "requirement"}, // requirement(Diagram)?
+	{typ: "requirement", mt: "requirement", kw: "requirement"},
 	{typ: "sequence", mt: "sequence", kw: "sequenceDiagram"},
-	{typ: "swimlane", mt: "swimlane", kw: "swimlane-beta", rest: wordEnd}, // swimlane-beta\b
-	{typ: "flowchart", mt: "flowchart-v2", kw: "graph"},                   // (graph|flowchart)
+	{typ: "swimlane", mt: "swimlane", kw: "swimlane-beta", rest: wordEnd},
+	{typ: "flowchart", mt: "flowchart-v2", kw: "graph"},
 	{typ: "flowchart", mt: "flowchart-v2", kw: "flowchart"},
 	{typ: "timeline", mt: "timeline", kw: "timeline"},
 	{typ: "gitGraph", mt: "gitGraph", kw: "gitGraph"},
 	{typ: "state", mt: "stateDiagram", kw: "stateDiagram"},
 	{typ: "journey", mt: "journey", kw: "journey"},
 	{typ: "quadrantChart", mt: "quadrantChart", kw: "quadrantChart"},
-	{typ: "sankey", mt: "sankey", kw: "sankey"},    // sankey(-beta)?
-	{typ: "packet", mt: "packet", kw: "packet"},    // packet(-beta)?
-	{typ: "xychart", mt: "xychart", kw: "xychart"}, // xychart(-beta)?
-	{typ: "block", mt: "block", kw: "block"},       // block(-beta)?
+	{typ: "sankey", mt: "sankey", kw: "sankey"},
+	{typ: "packet", mt: "packet", kw: "packet"},
+	{typ: "xychart", mt: "xychart", kw: "xychart"},
+	{typ: "block", mt: "block", kw: "block"},
 	{typ: "eventmodeling", mt: "eventmodeling", kw: "eventmodeling"},
 	{typ: "treeView", mt: "treeView", kw: "treeView-beta"},
 	{typ: "radar", mt: "radar", kw: "radar-beta"},
-	// /ishikawa(-beta)?\b/i: "-" is not a word character, so \b holds
-	// after "ishikawa" whenever "-beta" could follow it.
 	{typ: "ishikawa", mt: "ishikawa", kw: "ishikawa", fold: true, rest: wordEnd},
 	{typ: "treemap", mt: "treemap", kw: "treemap"},
 	{typ: "railroad", mt: "railroad", kw: "railroad-beta", fold: true},
@@ -78,16 +66,12 @@ var detectors = []detector{
 	{typ: "railroad", mt: "railroadPeg", kw: "railroad-peg-beta", fold: true},
 	{typ: "venn", mt: "venn", kw: "venn-beta"},
 	{typ: "wardley", mt: "wardley", kw: "wardley-beta", fold: true},
-	{typ: "cynefin", mt: "cynefin", kw: "cynefin-beta", rest: func(r string) bool { return spaceOrEnd(r, ':') }}, // (?:[\s:]|$)
-	{typ: "usecase", mt: "usecase", kw: "usecase-beta", rest: func(r string) bool { return spaceOrEnd(r, -1) }},  // (?:\s|$)
+	{typ: "cynefin", mt: "cynefin", kw: "cynefin-beta", rest: func(r string) bool { return spaceOrEnd(r, ':') }},
+	{typ: "usecase", mt: "usecase", kw: "usecase-beta", rest: func(r string) bool { return spaceOrEnd(r, -1) }},
 }
 
-// detectPrefix bounds the text a detector is run on. Every detector reads only
-// the keyword after the leading whitespace.
 const detectPrefix = 64
 
-// /^\s*(?:C4Context|C4Container|...)/: the other four keywords of C4, besides
-// the one in its detector.
 var c4Keywords = []string{"C4Container", "C4Component", "C4Dynamic", "C4Deployment"}
 
 func detect(cleaned string) (Type, bool) {
@@ -138,9 +122,6 @@ func (d *detector) match(head string) bool {
 	return d.rest == nil || d.rest(head[n:])
 }
 
-// foldPrefix reports whether s starts with the ASCII keyword kw under Unicode
-// simple case folding, as a (?i) regexp literal matches, and how many bytes of
-// s that takes.
 func foldPrefix(s, kw string) (int, bool) {
 	n := 0
 	for i := 0; i < len(kw); i++ {
@@ -156,7 +137,6 @@ func foldPrefix(s, kw string) (int, bool) {
 	return n, true
 }
 
-// foldEqual reports whether r is k or in k's simple case folding orbit.
 func foldEqual(r, k rune) bool {
 	if r == k {
 		return true
@@ -169,8 +149,6 @@ func foldEqual(r, k rune) bool {
 	return false
 }
 
-// wordEnd is \b after a keyword that ends in a word character: the next byte
-// is not an ASCII word character.
 func wordEnd(rest string) bool {
 	if rest == "" {
 		return true
@@ -179,7 +157,6 @@ func wordEnd(rest string) bool {
 	return !(c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_')
 }
 
-// spaceOrEnd is (?:[\s<also>]|$).
 func spaceOrEnd(rest string, also rune) bool {
 	if rest == "" {
 		return true

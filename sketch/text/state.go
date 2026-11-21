@@ -5,10 +5,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// State diagrams: states as rounded boxes, a description under a rule,
-// composite states as frames around what they hold, ● for the start, ◉ for
-// the end, a small diamond for a choice and a bar for a fork or a join.
-
 var stateKind = graphKind{
 	size: func(n *types.GeoNode) (int, int, bool) {
 		switch n.Shape {
@@ -64,7 +60,6 @@ var stateKind = graphKind{
 			c.clear(b.x0, b.y0)
 		case "fork":
 			if n.H <= n.W {
-				// A bar across a flow that runs down: the flowchart's.
 				return false
 			}
 			for y := b.y0; y <= b.y1; y++ {
@@ -87,7 +82,6 @@ var stateKind = graphKind{
 }
 
 func drawState(l *sketch.Layout, opt Options) (*canvas, error) {
-	// The start and the end are one cell, as a flowchart's small circles are.
 	for i := range l.Nodes {
 		switch l.Nodes[i].Shape {
 		case "state-start":

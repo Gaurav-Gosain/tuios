@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/ishikawa/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package ishikawa
 
 import (
@@ -11,10 +9,6 @@ import (
 
 const STOP = "'SPACELINE', 'NL', 'EOF'"
 
-// parseIshikawa follows the parser Jison builds from Mermaid's grammar: blank lines and comments may come first,
-// then the keyword and at most one line break, then statements. A statement is a line of text,
-// with or without indentation, or a blank line; each is ended by a blank line, a line break or
-// the end of the text, and any number of line breaks after that.
 func parseIshikawa(src string, db *IshikawaDb) {
 	tokens := tokenize(src)
 	typesOf, starts, ends := tokens.types, tokens.starts, tokens.ends
@@ -53,7 +47,6 @@ func parseIshikawa(src string, db *IshikawaDb) {
 			}
 			level := 0
 			if typ != T_TEXT {
-				// The run is white space only, each character one UTF-16 unit.
 				level = utf8.RuneCountInString(src[starts[text-1]:ends[text-1]])
 			}
 			db.addNode(level, js.Trim(src[starts[text]:ends[text]]))

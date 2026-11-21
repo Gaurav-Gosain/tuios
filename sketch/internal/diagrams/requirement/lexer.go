@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/requirement/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The port reads UTF-8 bytes, and offsets are byte offsets. Every character the lexer
-// matches is ASCII, except whitespace, which is read as a whole character. The regular
-// expressions are hand matchers: with the i flag and without u, only ASCII letters fold.
-
 package requirement
 
 import (
@@ -31,7 +25,6 @@ const (
 
 const LONGEST_KEYWORD = 22
 
-// isStop: characters that end an unquoted string: `:,{<>-=` and line breaks.
 func isStop(c byte) bool {
 	return strings.IndexByte(":,\r\n{<>-=", c) >= 0
 }
@@ -43,7 +36,6 @@ func byteAt(src string, q int) int {
 	return int(src[q])
 }
 
-// spaceAt is the length in bytes of the whitespace character at q, or 0 if there is none.
 func spaceAt(src string, q int) int {
 	if q >= len(src) {
 		return 0
@@ -71,7 +63,6 @@ func spaces(src string, q int) int {
 	}
 }
 
-// hasFold reports whether src at q starts with word, ASCII letters in any case. word is lower case.
 func hasFold(src string, q int, word string) bool {
 	return q+len(word) <= len(src) && strings.EqualFold(src[q:q+len(word)], word) && isASCII(src[q:q+len(word)])
 }
@@ -85,7 +76,6 @@ func isASCII(s string) bool {
 	return true
 }
 
-// matchAcc is /accTitle\s*:\s*/iy, /accDescr\s*:\s*/iy or /accDescr\s*\{\s*/iy at q: the end, or -1.
 func matchAcc(src string, q int, word string, sep byte) int {
 	if !hasFold(src, q, word) {
 		return -1
@@ -97,7 +87,6 @@ func matchAcc(src string, q int, word string, sep byte) int {
 	return spaces(src, e+1)
 }
 
-// directions finds every match of /direction\s+(?:(TB)|(BT)|(RL)|LR)/gi, as exec does with the g flag.
 func directions(src string) (starts, ends [4][]int, any bool) {
 	for p := 0; p+len("direction") <= len(src); {
 		at := indexFold(src, p, "direction")
@@ -134,7 +123,6 @@ func directions(src string) (starts, ends [4][]int, any bool) {
 	return starts, ends, any
 }
 
-// indexFold is the first place at or after p where word starts, ASCII letters in any case, or -1.
 func indexFold(src string, p int, word string) int {
 	for q := p; q+len(word) <= len(src); q++ {
 		if src[q]|32 == word[0] && hasFold(src, q, word) {
@@ -148,7 +136,6 @@ func isWordAt(src string, q int) bool {
 	return q < len(src) && util.IsWord(rune(src[q]))
 }
 
-// lexer is the state of one run of tokenize: the tokens so far, the mode stack and the read position.
 type lexer struct {
 	src   string
 	n     int
@@ -157,7 +144,6 @@ type lexer struct {
 	state int
 	p     int
 
-	// Where each kind of direction statement starts and where its keyword ends, found in one pass.
 	dirStarts [4][]int
 	dirEnds   [4][]int
 	anyDir    bool
@@ -194,7 +180,6 @@ func (l *lexer) lineBreak(q int) int {
 	return l.n
 }
 
-// direction: `.*direction\s+XX[^\n]*`: the last such statement that starts on this line decides the token.
 func (l *lexer) direction() bool {
 	if l.lineEnd < l.p {
 		l.lineEnd = l.n
@@ -410,8 +395,6 @@ func (l *lexer) style(c int) bool {
 	return false
 }
 
-// tokenize produces the token stream of Mermaid's requirement lexer. Its rules are tried in order and
-// the first match wins, so a line that holds a direction statement anywhere is one token.
 func tokenize(src string) Tokens {
 	l := &lexer{src: src, n: len(src), state: S_INITIAL, lineEnd: -1}
 	l.dirStarts, l.dirEnds, l.anyDir = directions(src)
@@ -457,7 +440,6 @@ func tokenize(src string) Tokens {
 		}
 	}
 
-	// At the end of input Jison still tries the rules that can match nothing, once.
 	last := -1
 	switch l.state {
 	case S_INITIAL:

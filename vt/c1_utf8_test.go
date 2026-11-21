@@ -6,18 +6,6 @@ import (
 	"testing"
 )
 
-// The 8-bit C1 controls and UTF-8 occupy the same bytes, and a terminal has to
-// choose. This one is a UTF-8 terminal, so the 8-bit forms are not recognised
-// while a string sequence is being collected.
-//
-// What went wrong without that: 0x9C is the 8-bit String Terminator, and it is
-// also the middle byte of U+2733 (e2 9c b3). A window title of "✳ Say hello in
-// three words" therefore ended its own OSC after one byte, and the rest of the
-// payload was printed at the cursor, which in a terminal UI is wherever that
-// program last put it. In Claude Code that is the input box, so the title
-// appeared as text inside it and typing overwrote it character by character.
-
-// screenOf is everything the emulator has on its grid.
 func screenOf(e *Emulator, w, h int) string {
 	var b strings.Builder
 	for y := range h {
@@ -37,11 +25,11 @@ func screenOf(e *Emulator, w, h int) string {
 // screen and leaves the title empty.
 func TestATitleWhoseBytesContainAC1ControlIsNotTornApart(t *testing.T) {
 	for _, r := range []rune{
-		'✳', // ✳ e2 9c b3, the one that was reported
-		'✅', // ✅ e2 9c 85
-		'✐', // ✐ e2 9c 90, which carries the 8-bit DCS byte
-		'✝', // ✝ e2 9c 9d, the 8-bit OSC byte
-		'✟', // ✟ e2 9c 9f, the 8-bit APC byte
+		'✳',
+		'✅',
+		'✐',
+		'✝',
+		'✟',
 	} {
 		e := NewEmulator(40, 4)
 		_, _ = e.Write([]byte("\x1b]0;" + string(r) + " Title\x07"))
@@ -85,7 +73,6 @@ func TestTheStreamThatWasReported(t *testing.T) {
 		t.Skipf("no captured stream: %v", err)
 	}
 	e := NewEmulator(80, 24)
-	// In the chunks a 16KB reader would have produced.
 	for i := 0; i < len(data); i += 16 * 1024 {
 		_, _ = e.Write(data[i:min(i+16*1024, len(data))])
 	}
@@ -96,7 +83,6 @@ func TestTheStreamThatWasReported(t *testing.T) {
 			input.WriteString(c.String())
 		}
 	}
-	// The input box holds its prompt mark and nothing else.
 	if got := strings.TrimSpace(input.String()); got != "❯" {
 		t.Errorf("the input row reads %q, want just the prompt", got)
 	}

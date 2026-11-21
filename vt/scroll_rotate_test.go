@@ -8,9 +8,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// snapshotCells copies the whole grid, so a scroll can be checked against what
-// the screen held before it rather than against the implementation that
-// produced the new screen.
 func snapshotCells(e *Emulator) [][]uv.Cell {
 	w, h := e.Width(), e.Height()
 	grid := make([][]uv.Cell, h)
@@ -27,18 +24,10 @@ func snapshotCells(e *Emulator) [][]uv.Cell {
 	return grid
 }
 
-// cellsEqual compares the two things a scroll must get right: which glyph is in
-// a column and how it is styled.
 func cellsEqual(a, b uv.Cell) bool {
 	return a.Content == b.Content && a.Width == b.Width && a.Style.Equal(&b.Style)
 }
 
-// assertScrolledUp checks the grid against the expectation that rows top+n..bottom
-// moved up by n, rows outside the region did not move, and the n rows at the
-// bottom of the region are blank. It is written against the semantics of the
-// sequence rather than against either implementation, so it holds for the
-// whole-screen rotation and for the DeleteLineArea path a limited region still
-// takes.
 func assertScrolledUp(t *testing.T, e *Emulator, before [][]uv.Cell, top, bottom, n int) {
 	t.Helper()
 
@@ -67,8 +56,6 @@ func assertScrolledUp(t *testing.T, e *Emulator, before [][]uv.Cell, top, bottom
 	}
 }
 
-// fillScreen paints every row with distinguishable content and a per-row colour,
-// so a scroll that moves the right glyphs but loses their style is still caught.
 func fillScreen(e *Emulator, w, h int) {
 	for y := 1; y <= h; y++ {
 		row := fmt.Sprintf("row%02d-", y) + strings.Repeat("x", max(w-8, 1))
@@ -137,8 +124,6 @@ func TestScrollUpMovesTheRightRows(t *testing.T) {
 		e := NewEmulator(w, h)
 		fillScreen(e, w, h)
 		before := snapshotCells(e)
-		// DECSTBM rows 3..9 (1-based), then scroll inside it. Rows outside the
-		// region must not move.
 		e.WriteString("\x1b[3;9r\x1b[2S")
 		assertScrolledUp(t, e, before, 2, 8, 2)
 	})
@@ -156,8 +141,6 @@ func TestScrollUpMovesTheRightRows(t *testing.T) {
 	t.Run("blank rows inherit the background", func(t *testing.T) {
 		e := NewEmulator(w, h)
 		fillScreen(e, w, h)
-		// Set a background colour on the pen, which the erased rows a scroll
-		// leaves behind are supposed to take.
 		e.WriteString("\x1b[48;5;52m\x1b[2S")
 		bottom := e.CellAt(0, h-1)
 		if bottom == nil || bottom.Style.Bg == nil {
@@ -177,7 +160,6 @@ func TestScrollUpFillsScrollback(t *testing.T) {
 	e := NewEmulator(w, h)
 	e.SetScrollbackMaxLines(100)
 
-	// Print more rows than fit, so the early ones scroll off the top.
 	const printed = 20
 	for i := range printed {
 		fmt.Fprintf(e, "line-%02d\r\n", i)
@@ -203,8 +185,6 @@ func TestScrollUpFillsScrollback(t *testing.T) {
 		}
 	}
 
-	// Writing on after the scrolls must not reach back into a retained line,
-	// which is what an aliased push would allow.
 	e.WriteString("\x1b[H\x1b[2Joverwritten")
 	line := e.ScrollbackLine(0)
 	var b strings.Builder
@@ -278,9 +258,6 @@ func TestScrollWindowKeepsEveryRowInOrder(t *testing.T) {
 		}
 	}
 
-	// The alternate screen keeps no scrollback and never reflows, so a
-	// taller screen there is the grid growing its own tables, which the
-	// window has to notice are no longer the ones it handed out.
 	alt := NewEmulator(w, 8)
 	alt.WriteString("\x1b[?1049h")
 	n := 0
@@ -371,7 +348,6 @@ func TestAltScreenRetainsNothing(t *testing.T) {
 	}
 }
 
-// scrollbackText reads a retained line back as plain text.
 func scrollbackText(e *Emulator, i int) string {
 	var b strings.Builder
 	for _, c := range e.ScrollbackLine(i) {
@@ -397,7 +373,6 @@ func TestScrollUpRecyclesEvictedScrollbackStorage(t *testing.T) {
 	e := NewEmulator(w, h)
 	e.SetScrollbackMaxLines(ring)
 
-	// Enough lines that the ring wraps several times over.
 	const printed = 200
 	for i := range printed {
 		fmt.Fprintf(e, "line-%03d\r\n", i)
@@ -407,7 +382,6 @@ func TestScrollUpRecyclesEvictedScrollbackStorage(t *testing.T) {
 		t.Fatalf("scrollback holds %d lines, want the full ring of %d", got, ring)
 	}
 
-	// The oldest retained line is the one printed `ring` scrolls ago.
 	firstRetained := printed + 1 - h - ring
 	for i := range ring {
 		want := fmt.Sprintf("line-%03d", firstRetained+i)
@@ -416,9 +390,6 @@ func TestScrollUpRecyclesEvictedScrollbackStorage(t *testing.T) {
 		}
 	}
 
-	// Repaint every row of the screen without scrolling, so nothing new is
-	// retained and the ring must read back exactly as it did. A recycled row
-	// the ring could still reach would take this text with it.
 	e.WriteString("\x1b[H\x1b[2J")
 	for y := range h {
 		fmt.Fprintf(e, "\x1b[%d;1H%s", y+1, strings.Repeat("Z", w))
@@ -430,8 +401,6 @@ func TestScrollUpRecyclesEvictedScrollbackStorage(t *testing.T) {
 		}
 	}
 
-	// With the ring full, a scroll that retains a line allocates nothing: the
-	// line it evicts pays for the one it takes.
 	if got := testing.AllocsPerRun(200, func() {
 		e.WriteString("\x1b[S")
 	}); got > 0 {
@@ -449,8 +418,6 @@ func TestScrollRegionStillRetainsLines(t *testing.T) {
 	e := NewEmulator(w, h)
 	e.SetScrollbackMaxLines(4)
 
-	// A region covering all but the last row: top-anchored, so it retains, but
-	// not the whole buffer, so it cannot rotate.
 	fmt.Fprintf(e, "\x1b[1;%dr", h-1)
 	for i := range 12 {
 		fmt.Fprintf(e, "\x1b[%d;1Hkeep-%02d", min(i+1, h-1), i)

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/common/fit-text.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package common
 
 import (
@@ -27,7 +25,6 @@ func FitText(t string, max, size, min float64, measurer text.TextMeasurer, style
 		return Fitted{t, size, width}, true
 	}
 
-	// Width grows with font size, so one division lands on the right size or just above it.
 	fitted := math.Max(min, math.Floor((size*max)/width))
 	for fitted >= min {
 		width = measurer.Width(t, fitted, style)
@@ -37,7 +34,6 @@ func FitText(t string, max, size, min float64, measurer text.TextMeasurer, style
 		fitted--
 	}
 
-	// Array.from(text): code points, which a rune of Go stands for.
 	chars := []rune(t)
 	low := 0
 	high := len(chars) - 1

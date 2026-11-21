@@ -78,8 +78,6 @@ func Fidelity(img Indexed, cellW, cellH, stride int, region image.Rectangle, cel
 	return sv / math.Sqrt(ss*vv)
 }
 
-// blocks averages v over 2x2 windows, sliding one cell at a time. A picture
-// one cell high or wide is used as it is.
 func blocks(v []float64, rows, cols int) []float64 {
 	if rows < 2 || cols < 2 {
 		return v
@@ -93,12 +91,10 @@ func blocks(v []float64, rows, cols int) []float64 {
 	return out
 }
 
-// lightness is a colour's luma, 0 to 1.
 func lightness(c color.RGBA) float64 {
 	return (0.299*float64(c.R) + 0.587*float64(c.G) + 0.114*float64(c.B)) / 255
 }
 
-// colorLightness is lightness, with no colour (alpha 0) counted as black.
 func colorLightness(c color.RGBA) float64 {
 	if c.A == 0 {
 		return 0
@@ -106,7 +102,6 @@ func colorLightness(c color.RGBA) float64 {
 	return lightness(c)
 }
 
-// coverage is the part of a cell a glyph's foreground covers.
 func coverage(glyph string) float64 {
 	if f, ok := glyphCoverage[glyph]; ok {
 		return f

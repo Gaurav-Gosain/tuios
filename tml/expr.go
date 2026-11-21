@@ -55,8 +55,7 @@ func (e *SyntaxError) Error() string { return fmt.Sprintf("at %d: %s", e.Offset,
 type exprNode any
 
 type (
-	litNode struct{ v any }
-	// pathNode reads a root name: state, item, form and the others.
+	litNode  struct{ v any }
 	pathNode struct {
 		name string
 		off  int
@@ -104,8 +103,6 @@ type token struct {
 	off  int
 }
 
-// maxExprLen bounds one expression's source. maxExprDepth bounds its nesting,
-// so a hostile expression cannot exhaust the stack.
 const (
 	maxExprLen   = 4096
 	maxExprDepth = 64
@@ -465,10 +462,6 @@ func (p *exprParser) primary() (exprNode, error) {
 	return nil, &SyntaxError{Offset: t.off, Message: fmt.Sprintf("unexpected %q", t.text)}
 }
 
-// staticPath returns the root and pointer a chain of member and constant
-// index nodes reads, and whether the chain ends at a root name. dyn reports
-// that an index computed at run time ended the pointer: nothing after it is
-// added, so the dependency covers the whole array.
 func staticPath(n exprNode) (root, ptr string, dyn, ok bool) {
 	switch x := n.(type) {
 	case *pathNode:
@@ -544,8 +537,6 @@ func collectDeps(n exprNode, out *[]Dep) {
 	}
 }
 
-// indexDeps collects the dependencies of the computed indexes in a chain of
-// member and index nodes: state.i in state.items[state.i].name.
 func indexDeps(n exprNode, out *[]Dep) {
 	switch x := n.(type) {
 	case *memberNode:
@@ -558,7 +549,6 @@ func indexDeps(n exprNode, out *[]Dep) {
 	}
 }
 
-// roots returns the root names an expression reads, with their offsets.
 func roots(n exprNode, out map[string]int) {
 	switch x := n.(type) {
 	case *pathNode:
@@ -594,7 +584,6 @@ func roots(n exprNode, out map[string]int) {
 	}
 }
 
-// calls returns each call in an expression with its offset.
 func calls(n exprNode, fn func(c *callNode)) {
 	switch x := n.(type) {
 	case *callNode:

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/cynefin/model.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package cynefin
 
 import (
@@ -21,10 +19,9 @@ type CynefinTransition struct {
 }
 
 type CynefinModel struct {
-	title    string
-	accTitle string
-	accDescr string
-	// The domains the source declares. All five are drawn either way.
+	title       string
+	accTitle    string
+	accDescr    string
 	domains     map[DomainName]*CynefinDomain
 	transitions []CynefinTransition
 }
@@ -34,7 +31,6 @@ type CynefinDb struct {
 	transitions []CynefinTransition
 }
 
-// setDomains: a later block for a domain replaces an earlier one.
 func (db *CynefinDb) setDomains(blocks []DomainBlockAst) {
 	for _, block := range blocks {
 		db.domains[block.domain] = &CynefinDomain{name: block.domain, items: block.items}
@@ -67,7 +63,6 @@ func buildCynefin(ast *CynefinAst, title string) *CynefinModel {
 	return model
 }
 
-// joinLines is .replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {

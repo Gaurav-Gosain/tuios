@@ -37,7 +37,6 @@ default.`,
 	Run: runConfigFallback,
 }
 
-// devValue matches a value meant for a development machine.
 var devValue = regexp.MustCompile(`(?i)(\blocalhost\b|\b127\.0\.0\.1\b|\b0\.0\.0\.0\b|\[::1\]|\bchange-?me\b|sslmode=disable|\bexample\.(com|org|net)\b|^(dev|development|debug|password|secret|admin)$)`)
 
 func isDevValue(e ast.Expr) bool {
@@ -45,7 +44,6 @@ func isDevValue(e ast.Expr) bool {
 	return ok && devValue.MatchString(s)
 }
 
-// isEnvRead reports whether call reads an environment variable.
 func isEnvRead(info *types.Info, call *ast.CallExpr) bool {
 	fn, ok := typeutil.Callee(info, call).(*types.Func)
 	if !ok {
@@ -58,7 +56,6 @@ func isEnvRead(info *types.Info, call *ast.CallExpr) bool {
 	return false
 }
 
-// envName returns the variable name a read names, or a stand-in.
 func envName(call *ast.CallExpr) string {
 	if len(call.Args) > 0 {
 		if s, ok := stringLit(call.Args[0]); ok {
@@ -68,7 +65,6 @@ func envName(call *ast.CallExpr) string {
 	return "an environment variable"
 }
 
-// forTests reports whether the package is test support or an example.
 func forTests(pass *analysis.Pass) bool {
 	name := pass.Pkg.Name()
 	if strings.HasPrefix(name, "test") || strings.HasSuffix(name, "test") {
@@ -111,9 +107,7 @@ func runConfigFallback(pass *analysis.Pass) (any, error) {
 		if !files[f] || isTestFile(pass, f) {
 			continue
 		}
-		// envVars maps a variable to the read that set it.
 		envVars := map[types.Object]*ast.CallExpr{}
-		// devVars maps a variable to the development literal it starts with.
 		devVars := map[types.Object]ast.Expr{}
 		record := func(lhs []ast.Expr, rhs []ast.Expr) {
 			if len(rhs) != 1 {
@@ -180,8 +174,6 @@ func runConfigFallback(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-// checkFallbackCall reports cmp.Or(os.Getenv("X"), "localhost") and a call
-// to a helper of the package with a development default.
 func checkFallbackCall(info *types.Info, call *ast.CallExpr, helpers map[*types.Func]bool, report func(ast.Expr, string)) {
 	if isEnvRead(info, call) {
 		return
@@ -210,9 +202,6 @@ func checkFallbackCall(info *types.Info, call *ast.CallExpr, helpers map[*types.
 	}
 }
 
-// checkFallbackStmt reports a statement in an if on a read value that sets
-// or returns a development literal, or copies the read into a variable that
-// starts as one.
 func checkFallbackStmt(info *types.Info, st ast.Stmt, read *ast.CallExpr, envVars map[types.Object]*ast.CallExpr, devVars map[types.Object]ast.Expr, report func(ast.Expr, string)) {
 	switch st := st.(type) {
 	case *ast.AssignStmt:
@@ -240,7 +229,6 @@ func checkFallbackStmt(info *types.Info, st ast.Stmt, read *ast.CallExpr, envVar
 	}
 }
 
-// condRead returns the read behind a variable that cond uses.
 func condRead(info *types.Info, cond ast.Expr, envVars map[types.Object]*ast.CallExpr) *ast.CallExpr {
 	var read *ast.CallExpr
 	ast.Inspect(cond, func(n ast.Node) bool {
@@ -252,8 +240,6 @@ func condRead(info *types.Info, cond ast.Expr, envVars map[types.Object]*ast.Cal
 	return read
 }
 
-// envHelpers finds the functions of the package that read the variable a
-// parameter names: func getenv(key, def string) string.
 func envHelpers(pass *analysis.Pass, files map[*ast.File]bool) map[*types.Func]bool {
 	info := pass.TypesInfo
 	out := map[*types.Func]bool{}

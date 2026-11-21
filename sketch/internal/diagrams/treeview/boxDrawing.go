@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/treeview/boxDrawing.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele indexes lines in UTF-16 code units. Every box character is one unit, so the port keeps
-// byte offsets for slicing and counts units only where an index is a number: the column of a
-// branch character.
-
 package treeview
 
 import (
@@ -17,10 +11,6 @@ import (
 	"tuios.dev/sketch/internal/util"
 )
 
-// Mermaid's box-drawing preprocessor: turns `├──`, `└──`, `│` (and the heavy variants) into the
-// indentation the grammar reads.
-
-// ALL_BOX_CHARS is /[─━│┃└┗├┣]/.
 func isBoxChar(c rune) bool {
 	switch c {
 	case '─', '━', '│', '┃', '└', '┗', '├', '┣':
@@ -29,15 +19,12 @@ func isBoxChar(c rune) bool {
 	return false
 }
 
-// BRANCH_CHAR is /[└┗├┣]/.
 func isBranchChar(c rune) bool { return c == '└' || c == '┗' || c == '├' || c == '┣' }
 
-// DASH_CHAR is /[─━]/.
 func isDashChar(c rune) bool { return c == '─' || c == '━' }
 
 func hasBoxChar(s string) bool { return strings.IndexFunc(s, isBoxChar) >= 0 }
 
-// every is /^[...]+$/ for a set of characters.
 func every(s string, in func(rune) bool) bool {
 	if s == "" {
 		return false
@@ -50,17 +37,14 @@ func every(s string, in func(rune) bool) bool {
 	return true
 }
 
-// DECORATION_ONLY is /^[\s│┃]+$/.
 func decorationOnly(s string) bool {
 	return every(s, func(c rune) bool { return js.IsSpace(c) || c == '│' || c == '┃' })
 }
 
-// BOX_ONLY is /^[\s─━│┃└┗├┣]+$/.
 func boxOnly(s string) bool {
 	return every(s, func(c rune) bool { return js.IsSpace(c) || isBoxChar(c) })
 }
 
-// METADATA_LINE is /^\s*(title[\t ]|accTitle[\t ]*:|accDescr[\t ]*[:{])/.
 func metadataLine(s string) bool {
 	s = js.TrimStart(s)
 	blanksThen := func(word string, ends string) bool {
@@ -76,7 +60,6 @@ func metadataLine(s string) bool {
 	return blanksThen("accTitle", ":") || blanksThen("accDescr", ":{")
 }
 
-// COMMENT_LINE is /^\s*%%/.
 func commentLine(s string) bool { return strings.HasPrefix(js.TrimStart(s), "%%") }
 
 const INDENT_UNIT = "    "
@@ -86,8 +69,6 @@ const INDENT_UNIT = "    "
 type PreprocessResult struct {
 	text    string
 	lineMap map[int]int
-	// columns maps, per output line, a UTF-16 index of the rewritten line to a byte offset in
-	// the original line.
 	columns map[int]func(at int) int
 }
 
@@ -100,8 +81,6 @@ func isBoxDrawingFormat(lines []string) bool {
 	return false
 }
 
-// branchAt is BRANCH_CHAR.exec(line): the byte offset and the UTF-16 index of the first branch
-// character, or -1.
 func branchAt(line string) (int, int) {
 	units := 0
 	for i, c := range line {
@@ -125,8 +104,6 @@ func inferSegmentWidth(contentLines []string) int {
 	return 4
 }
 
-// remapErrorLines is message.replace(/\bline\s+(\d+)\b/gi, ...): each line number the map holds
-// becomes the original one.
 func remapErrorLines(message string, lineMap map[int]int) string {
 	var out strings.Builder
 	last := 0
@@ -170,7 +147,6 @@ func remapErrorLines(message string, lineMap map[int]int) string {
 	return out.String()
 }
 
-// lineStart is the byte offset of a line, from 1, as text.indexOf('\n', at) + 1 finds it.
 func lineStart(text string, line int) int {
 	at := 0
 	for n := 1; n < line; n++ {
@@ -183,7 +159,6 @@ func lineStart(text string, line int) int {
 	return at
 }
 
-// unitsToBytes is the byte offset of the UTF-16 index at in s.
 func unitsToBytes(s string, at int) int {
 	i := 0
 	for units := 0; units < at && i < len(s); {
@@ -197,8 +172,6 @@ func unitsToBytes(s string, at int) int {
 	return i
 }
 
-// beforeTabs undoes four-space tab expansion: the byte offset in line of byte offset at of
-// the expanded line.
 func beforeTabs(line string, at int) int {
 	i := 0
 	for n := 0; i < len(line) && n < at; {
@@ -305,7 +278,6 @@ func preprocessBoxDrawing(input string) PreprocessResult {
 		} else if boxOnly(normalized) {
 			continue
 		} else if hasBoxChar(normalized) {
-			// A name that happens to contain a box character, such as "Section ─ A.txt", is a root item.
 			keep(line, i, nil)
 		} else if c, _ := utf8.DecodeRuneInString(normalized); normalized != "" && js.IsSpace(c) {
 			fail(input, i, "Unexpected indentation without box-drawing characters. In box-drawing format, use ├── or └── prefixes for indented nodes.")

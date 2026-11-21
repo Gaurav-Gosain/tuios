@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/agentflow/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package agentflow
 
 import (
@@ -27,8 +25,7 @@ var (
 )
 
 type Frame struct {
-	global bool
-	// Token index of the `flow` keyword.
+	global   bool
 	at       int
 	id       *FlowText
 	title    *FlowText
@@ -44,10 +41,6 @@ const (
 	SEPARATORS  = "'COMMENT', 'SEMI', 'NEWLINE', 'EOF'"
 )
 
-// trimBraceTrail is source.replace(/}[^\S\n]*\n/g, '}\n'): Mermaid trims the whitespace between a closing
-// brace and the end of its line before parsing. The source is copied only where there is some.
-// edits, when not nil, gets each run it trims, as replacements(source, RE_BRACE_TRAIL, 2) lists
-// them; a brace right before its line break is left out, as an edit that changes nothing.
 func trimBraceTrail(source string, edits *[]types.Edit) string {
 	var b strings.Builder
 	from := 0
@@ -86,7 +79,6 @@ const STATEMENT_START = "'COMMENT', 'SEMI', 'NEWLINE', 'SPACE', 'EOF', 'flow', '
 
 func strp(s string) *string { return &s }
 
-// parseAgentflow: `raw` parses the text as it is, the way Mermaid's generated parser does without its wrapper.
 func parseAgentflow(source string, db *AgentflowDb) {
 	src := source
 	if strings.Contains(source, "}") {
@@ -94,7 +86,6 @@ func parseAgentflow(source string, db *AgentflowDb) {
 	}
 	tk := tokenize(src)
 	typesT, texts, starts, locs := tk.types, tk.texts, tk.starts, tk.locs
-	// pele reads past the last token as undefined. Padding with END keeps the port's reads in range.
 	last := len(typesT) - 1
 	for k := 0; k < 4; k++ {
 		typesT = append(typesT, T_END)
@@ -111,7 +102,6 @@ func parseAgentflow(source string, db *AgentflowDb) {
 		t := typesT[i]
 		at := starts[i]
 		if t == T_EOF || t == T_END {
-			// Comments are tokens here, so skip trailing ones.
 			k := i
 			for k > 0 && trailing(typesT[k-1]) {
 				k--
@@ -129,7 +119,6 @@ func parseAgentflow(source string, db *AgentflowDb) {
 		panic(types.SyntaxError("agentflow", source, at, "Expecting "+expected+", got '"+TOKEN_NAMES[t]+"'", false))
 	}
 
-	// span is the span from the start of token `a` to the end of token `b`.
 	span := func(a, b int) Loc {
 		return Loc{FirstLine: locs[4*a], FirstColumn: locs[4*a+1], LastLine: locs[4*b+2], LastColumn: locs[4*b+3]}
 	}
@@ -153,7 +142,6 @@ func parseAgentflow(source string, db *AgentflowDb) {
 		i++
 	}
 
-	// join is the texts of the tokens from i on that more allows, after the first.
 	join := func(more func(t int) bool) string {
 		first := i
 		i++
@@ -586,7 +574,6 @@ func parseAgentflow(source string, db *AgentflowDb) {
 		}
 	}
 
-	// header reads `flow` or `connector` up to the separator: an id, an optional bracketed title, optional metadata.
 	header := func(at int) *Frame {
 		expect(T_SPACE, SEPARATORS)
 		id := textNoTags()
@@ -678,7 +665,6 @@ func parseAgentflow(source string, db *AgentflowDb) {
 		}
 	}
 
-	// document: blocks nest without recursion: each open one keeps the list and collect flag of its parent.
 	document := func() {
 		var open []*Frame
 		var list []DocItem
@@ -710,7 +696,6 @@ func parseAgentflow(source string, db *AgentflowDb) {
 					list = append(list, DocItem{Kind: docText, Text: id})
 				}
 			case t == T_SEMI || t == T_NEWLINE || t == T_SPACE || t == T_EOF:
-				// A blank separator would be dropped as a member anyway; only `;` is kept.
 				if collect && js.Trim(texts[i]) != "" {
 					list = append(list, DocItem{Kind: docText, Text: texts[i]})
 				}

@@ -144,14 +144,12 @@ func fetch(src string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-// shape is one country: rings of lon, lat points, and its bounding box.
 type shape struct {
 	rings                  [][][2]float64
 	minX, minY, maxX, maxY float64
 	code                   string
 }
 
-// readShapes reads the polygons of a .shp file. A null shape has no rings.
 func readShapes(b []byte) ([]shape, error) {
 	if len(b) < 100 || binary.BigEndian.Uint32(b) != 9994 {
 		return nil, fmt.Errorf("not a shapefile")
@@ -164,7 +162,7 @@ func readShapes(b []byte) ([]shape, error) {
 		var s shape
 		if len(rec) >= 44 {
 			switch binary.LittleEndian.Uint32(rec) {
-			case 5, 15, 25: // polygon, with z, with m
+			case 5, 15, 25:
 			default:
 				out = append(out, s)
 				continue
@@ -195,7 +193,6 @@ func readShapes(b []byte) ([]shape, error) {
 	return out, nil
 }
 
-// readDBF reads the records of a .dbf file as field name to text.
 func readDBF(b []byte) ([]map[string]string, error) {
 	if len(b) < 32 {
 		return nil, fmt.Errorf("not a dbf file")
@@ -212,8 +209,6 @@ func readDBF(b []byte) ([]map[string]string, error) {
 		name := strings.TrimRight(string(b[off:off+11]), "\x00")
 		n := int(b[off+16])
 		if b[off+11] == 'C' {
-			// A text field longer than 255 keeps the high byte of its length
-			// where the decimal count would be.
 			n |= int(b[off+17]) << 8
 		}
 		fields = append(fields, field{name, n})
@@ -232,9 +227,8 @@ func readDBF(b []byte) ([]map[string]string, error) {
 			return nil, fmt.Errorf("record %d is short", i)
 		}
 		m := map[string]string{}
-		pos := 1 // the deletion flag
+		pos := 1
 		for _, f := range fields {
-			// Natural Earth pads text with NUL as well as spaces.
 			m[f.name] = strings.Trim(string(rec[pos:pos+f.n]), " \x00")
 			pos += f.n
 		}
@@ -243,9 +237,6 @@ func readDBF(b []byte) ([]map[string]string, error) {
 	return out, nil
 }
 
-// isoCode returns the ISO 3166-1 alpha-2 code of a record, or "". Natural
-// Earth's ISO_A2_EH fills the codes ISO_A2 leaves as -99, such as France
-// and Norway.
 func isoCode(r map[string]string) string {
 	for _, k := range []string{"ISO_A2_EH", "ISO_A2"} {
 		if c := r[k]; len(c) == 2 && c[0] >= 'A' && c[0] <= 'Z' && c[1] >= 'A' && c[1] <= 'Z' {
@@ -255,8 +246,6 @@ func isoCode(r map[string]string) string {
 	return ""
 }
 
-// inside reports whether lon, lat is inside the shape: inside an odd number
-// of its rings, so a hole is outside.
 func (s *shape) inside(x, y float64) bool {
 	if x < s.minX || x > s.maxX || y < s.minY || y > s.maxY {
 		return false
@@ -274,25 +263,15 @@ func (s *shape) inside(x, y float64) bool {
 	return in
 }
 
-// sub is the samples per cell along each side, and minHits the samples
-// that must be on land for the cell to be land: a third of them, so a cell
-// that is mostly sea stays sea and a small island still shows.
 const (
 	sub     = 3
 	minHits = 3
 )
 
-// rasterise returns, for each cell, whether it is land and the shape that
-// covers most of it.
-//
-// A country that wins no cell gets one cell in small: the free cell where
-// most of its samples fell, else the free cell nearest it. A country on
-// the map that gets no cell stops the run.
 func rasterise(shapes []shape, w, h int, top, bottom float64) (land []bool, country []string, small map[int]string) {
 	land = make([]bool, w*h)
 	country = make([]string, w*h)
 	hits := map[int]int{}
-	// cover is, per shape, its samples in each cell it touches.
 	cover := make([]map[int]int, len(shapes))
 	for y := range h {
 		for x := range w {
@@ -342,8 +321,6 @@ func rasterise(shapes []shape, w, h int, top, bottom float64) (land []bool, coun
 		if s.code == "" || won[s.code] {
 			continue
 		}
-		// The cells it covers, most samples first, then the free cell
-		// nearest the best of them or the middle of its largest ring.
 		cells := make([]int, 0, len(cover[i]))
 		for c := range cover[i] {
 			cells = append(cells, c)
@@ -379,8 +356,6 @@ func rasterise(shapes []shape, w, h int, top, bottom float64) (land []bool, coun
 	return land, country, small
 }
 
-// nearestFree returns the free cell nearest start, in rings of growing
-// size, or -1 when start is off the map or no cell within 8 is free.
 func nearestFree(start, w, h int, free func(int) bool) int {
 	if start < 0 {
 		return -1
@@ -409,8 +384,6 @@ func abs(v int) int {
 	return v
 }
 
-// middleCell returns the cell under the middle of the shape's largest ring,
-// or -1 when it is off the map.
 func (s *shape) middleCell(w, h int, top, bottom float64) int {
 	var best [][2]float64
 	for _, r := range s.rings {

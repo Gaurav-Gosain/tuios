@@ -2,59 +2,39 @@ package vt
 
 import "github.com/charmbracelet/x/ansi"
 
-// defaultModes lists the recognized modes and their default values, in the
-// order their effects apply on a reset. The order is fixed because several
-// setMode calls have side effects (resetting 1048 restores the cursor,
-// resetting DECOM homes it, resetting DECLRMM clears the margins, resetting
-// the alternate screen switches back to the main one), and ranging over a
-// map would apply them in a different order on every run, leaving RIS with a
-// terminal state that varies between runs. DECOM goes last so a reset
-// deterministically ends with the cursor homed.
-//
-// A mode the emulator acts on has to be listed here even when its default is
-// reset. DECRQM answers from the mode map, and a mode missing from it is
-// reported as not recognised, so a program that probes before enabling a
-// feature turns off one that works.
-//
-// The list is also the whole of what the emulator recognises. A mode missing
-// from it is never stored, whatever the guest sends (see handleMode), so
-// DECRQM cannot report set for a mode nothing acts on, such as DECCOLM (?3)
-// or a number nobody defines. A guest that probes before it
-// enables a feature reads that answer and keeps its fallback.
 var defaultModes = []struct {
 	mode    ansi.Mode
 	setting ansi.ModeSetting
 }{
-	{ansi.ModeCursorKeys, ansi.ModeReset},           // ?1
-	{ansi.ModeInsertReplace, ansi.ModeReset},        // 4, an ANSI mode
-	{ansi.ModeAutoWrap, ansi.ModeSet},               // ?7
-	{ansi.ModeMouseX10, ansi.ModeReset},             // ?9
-	{ansi.ModeLineFeedNewLine, ansi.ModeReset},      // ?20
-	{ansi.ModeTextCursorEnable, ansi.ModeSet},       // ?25
-	{ansi.ModeNumericKeypad, ansi.ModeReset},        // ?66
-	{ansi.ModeMouseNormal, ansi.ModeReset},          // ?1000
-	{ansi.ModeMouseHighlight, ansi.ModeReset},       // ?1001
-	{ansi.ModeMouseButtonEvent, ansi.ModeReset},     // ?1002
-	{ansi.ModeMouseAnyEvent, ansi.ModeReset},        // ?1003
-	{ansi.ModeFocusEvent, ansi.ModeReset},           // ?1004
-	{ansi.ModeMouseExtUtf8, ansi.ModeReset},         // ?1005
-	{ansi.ModeMouseExtSgr, ansi.ModeReset},          // ?1006
-	{ansi.ModeMouseExtUrxvt, ansi.ModeReset},        // ?1015
-	{ansi.ModeMouseExtSgrPixel, ansi.ModeReset},     // ?1016
-	{modeAltScreenLegacy, ansi.ModeReset},           // ?47
-	{ansi.ModeAltScreen, ansi.ModeReset},            // ?1047
-	{ansi.ModeSaveCursor, ansi.ModeReset},           // ?1048
-	{ansi.ModeAltScreenSaveCursor, ansi.ModeReset},  // ?1049
-	{ansi.ModeInBandResize, ansi.ModeReset},         // ?2048
-	{ansi.ModeBracketedPaste, ansi.ModeReset},       // ?2004
-	{ansi.ModeSynchronizedOutput, ansi.ModeReset},   // ?2026
-	{ansi.ModeUnicodeCore, ansi.ModePermanentlySet}, // ?2027, see WidthMethod
-	{ansi.ModeLightDark, ansi.ModeReset},            // ?2031
-	{ansi.ModeLeftRightMargin, ansi.ModeReset},      // ?69
-	{ansi.ModeOrigin, ansi.ModeReset},               // ?6
+	{ansi.ModeCursorKeys, ansi.ModeReset},
+	{ansi.ModeInsertReplace, ansi.ModeReset},
+	{ansi.ModeAutoWrap, ansi.ModeSet},
+	{ansi.ModeMouseX10, ansi.ModeReset},
+	{ansi.ModeLineFeedNewLine, ansi.ModeReset},
+	{ansi.ModeTextCursorEnable, ansi.ModeSet},
+	{ansi.ModeNumericKeypad, ansi.ModeReset},
+	{ansi.ModeMouseNormal, ansi.ModeReset},
+	{ansi.ModeMouseHighlight, ansi.ModeReset},
+	{ansi.ModeMouseButtonEvent, ansi.ModeReset},
+	{ansi.ModeMouseAnyEvent, ansi.ModeReset},
+	{ansi.ModeFocusEvent, ansi.ModeReset},
+	{ansi.ModeMouseExtUtf8, ansi.ModeReset},
+	{ansi.ModeMouseExtSgr, ansi.ModeReset},
+	{ansi.ModeMouseExtUrxvt, ansi.ModeReset},
+	{ansi.ModeMouseExtSgrPixel, ansi.ModeReset},
+	{modeAltScreenLegacy, ansi.ModeReset},
+	{ansi.ModeAltScreen, ansi.ModeReset},
+	{ansi.ModeSaveCursor, ansi.ModeReset},
+	{ansi.ModeAltScreenSaveCursor, ansi.ModeReset},
+	{ansi.ModeInBandResize, ansi.ModeReset},
+	{ansi.ModeBracketedPaste, ansi.ModeReset},
+	{ansi.ModeSynchronizedOutput, ansi.ModeReset},
+	{ansi.ModeUnicodeCore, ansi.ModePermanentlySet},
+	{ansi.ModeLightDark, ansi.ModeReset},
+	{ansi.ModeLeftRightMargin, ansi.ModeReset},
+	{ansi.ModeOrigin, ansi.ModeReset},
 }
 
-// recognisedModes is the set of modes in defaultModes.
 var recognisedModes = func() map[ansi.Mode]ansi.ModeSetting {
 	set := make(map[ansi.Mode]ansi.ModeSetting, len(defaultModes))
 	for _, m := range defaultModes {
@@ -63,19 +43,16 @@ var recognisedModes = func() map[ansi.Mode]ansi.ModeSetting {
 	return set
 }()
 
-// modeRecognised reports whether the emulator implements mode.
 func modeRecognised(mode ansi.Mode) bool {
 	_, ok := recognisedModes[mode]
 	return ok
 }
 
-// modePermanent reports whether mode has a value no guest can change.
 func modePermanent(mode ansi.Mode) bool {
 	s := recognisedModes[mode]
 	return s == ansi.ModePermanentlySet || s == ansi.ModePermanentlyReset
 }
 
-// resetModes resets all modes to their default values.
 func (e *Emulator) resetModes() {
 	e.modesMu.Lock()
 	e.modes = make(ansi.Modes, len(defaultModes))
@@ -84,8 +61,6 @@ func (e *Emulator) resetModes() {
 	}
 	e.modesMu.Unlock()
 
-	// Set mode effects. setMode locks modesMu itself, so this must run after the
-	// reassignment above is unlocked to avoid a re-entrant lock.
 	for _, m := range defaultModes {
 		e.setMode(m.mode, m.setting)
 	}

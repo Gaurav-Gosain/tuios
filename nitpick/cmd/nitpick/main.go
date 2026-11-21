@@ -168,7 +168,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// parseArgs parses flags that come before, between or after the packages.
 func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 	var rest []string
 	for {
@@ -187,7 +186,6 @@ func parseArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
-// parseGate reads 0.9, 90 or 90% as 0.9.
 func parseGate(s string) (float64, error) {
 	pct := strings.HasSuffix(s, "%")
 	v, err := strconv.ParseFloat(strings.TrimSuffix(s, "%"), 64)
@@ -203,7 +201,6 @@ func parseGate(s string) (float64, error) {
 	return v, nil
 }
 
-// selectRules returns the default rules, with the changes that the flags ask for.
 func selectRules(enable, disable string) ([]nitpick.Rule, error) {
 	on := map[string]bool{}
 	for _, r := range nitpick.Rules {

@@ -27,8 +27,6 @@ func TestRunDrawsARareType(t *testing.T) {
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// sketch runs the command with args and the source file, and gives what it
-	// wrote to standard output and to standard error.
 	sketch := func(t *testing.T, args ...string) (string, string) {
 		t.Helper()
 		name := filepath.Join(t.TempDir(), "out")

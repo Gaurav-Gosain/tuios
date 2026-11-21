@@ -55,7 +55,6 @@ func TestSemanticMarkCallback(t *testing.T) {
 	if got := marks[4].ExitCode; got != -1 {
 		t.Errorf("D with no status: exit code = %d, want -1", got)
 	}
-	// The mark the callback saw is the one the list recorded.
 	if last := term.SemanticMarkers().Last(vt.MarkerCommandExecuted); last == nil || last.AbsLine != marks[2].AbsLine {
 		t.Errorf("recorded C mark %+v does not match the callback's %+v", last, marks[2])
 	}

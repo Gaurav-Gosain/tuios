@@ -5,17 +5,12 @@ import (
 	"unicode/utf8"
 )
 
-// jsonScanner checks JSON syntax and reports the first error with tml's
-// own message and byte offset. encoding/json words its errors and places
-// its offsets differently from one Go release to the next, so a problem
-// built from them would change with the toolchain.
 type jsonScanner struct {
 	src   []byte
 	pos   int
 	depth int
 }
 
-// jsonError is a syntax error at a byte offset.
 type jsonError struct {
 	off int
 	msg string
@@ -23,11 +18,8 @@ type jsonError struct {
 
 func (e *jsonError) Error() string { return e.msg }
 
-// maxJSONDepth matches the nesting encoding/json accepts.
 const maxJSONDepth = 10000
 
-// scanJSON checks that src holds one JSON value, with only white space
-// around it.
 func scanJSON(src []byte) *jsonError {
 	s := &jsonScanner{src: src}
 	s.space()
@@ -45,7 +37,6 @@ func (s *jsonScanner) fail(format string, args ...any) *jsonError {
 	return &jsonError{off: s.pos, msg: fmt.Sprintf(format, args...)}
 }
 
-// found describes the byte at the scan position for a message.
 func (s *jsonScanner) found() string {
 	if s.pos >= len(s.src) {
 		return "the end of the text"
@@ -103,7 +94,7 @@ func (s *jsonScanner) object() *jsonError {
 	if err := s.enter(); err != nil {
 		return err
 	}
-	s.pos++ // {
+	s.pos++
 	s.space()
 	if s.pos < len(s.src) && s.src[s.pos] == '}' {
 		s.pos++
@@ -148,7 +139,7 @@ func (s *jsonScanner) array() *jsonError {
 	if err := s.enter(); err != nil {
 		return err
 	}
-	s.pos++ // [
+	s.pos++
 	s.space()
 	if s.pos < len(s.src) && s.src[s.pos] == ']' {
 		s.pos++
@@ -175,7 +166,7 @@ func (s *jsonScanner) array() *jsonError {
 }
 
 func (s *jsonScanner) str() *jsonError {
-	s.pos++ // "
+	s.pos++
 	for s.pos < len(s.src) {
 		c := s.src[s.pos]
 		switch {

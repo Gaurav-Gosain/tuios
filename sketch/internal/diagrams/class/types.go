@@ -1,7 +1,3 @@
-// Ported from pele src/diagrams/class/types.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele's optional strings are pointers here where `undefined` and "" differ.
-
 package class
 
 // RelationEnd is a relationType number, or NONE for pele's 'none'.
@@ -73,7 +69,6 @@ type StyleClass struct {
 	TextStyles []string
 }
 
-// orderedMap is a Map that keeps insertion order.
 type orderedMap[V any] struct {
 	keys []string
 	m    map[string]V

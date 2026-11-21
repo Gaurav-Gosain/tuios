@@ -14,49 +14,18 @@ import (
 	"tuios.dev/vt/vtgen"
 )
 
-// Pinned generator findings, replayed on every ordinary test run.
-//
-// A corpus entry under testdata/fuzz is the input bytes of a vtgen target, and
-// those bytes mean a script only through the generator that decoded them. Any
-// change to vtgen (a new sequence family, a reweighted draw) decodes every
-// entry to a different script, and a regression seed that guarded a bug
-// silently stops guarding it while still passing. That happened to the two
-// FuzzEmulatorRenderRoundTrip entries when the generator grew.
-//
-// A file here is the script itself, the steps with their bytes, so it means
-// the same thing whatever the generator becomes. Every oracle the vtgen
-// targets have runs over it. The fuzz targets print this form on failure; to
-// pin a finding, save the printed JSON under testdata/vtgen-repros with a name
-// that says what it broke and a why line.
 const vtgenReproDir = "testdata/vtgen-repros"
 
-// budgetPasses is how many passes of the oracles a script with a time budget
-// gets before the budget fails it. Only a pass over the budget is repeated.
 const budgetPasses = 3
 
-// vtgenRepro is one pinned script.
 type vtgenRepro struct {
-	// Why says what the script broke and which commit fixed it.
-	Why string `json:"why"`
-	// SplitSeed is the seed the split-write oracles cut the bytes with.
-	SplitSeed uint64 `json:"split_seed"`
-	// BudgetMS, when set, is how long one pass of all the oracles may take.
-	// It is a coarse catch for a blowup the allocation budget cannot see, so
-	// it is set hundreds of times above the fixed time and well below the time
-	// the bug took. A busy runner can stall one pass for longer than that, so
-	// a pass over the budget is timed again, and the check fails only when
-	// the fastest of budgetPasses passes is over. The race detector multiplies
-	// the time by more than any margin a budget can keep, so an instrumented
-	// build skips it and relies on BudgetAllocMB.
-	BudgetMS int `json:"budget_ms,omitempty"`
-	// BudgetAllocMB, when set, is how many megabytes all the oracles together
-	// may allocate. Unlike the time it does not move with the machine, its
-	// load or the race detector, so it holds in every build.
+	Why           string       `json:"why"`
+	SplitSeed     uint64       `json:"split_seed"`
+	BudgetMS      int          `json:"budget_ms,omitempty"`
 	BudgetAllocMB uint64       `json:"budget_alloc_mb,omitempty"`
 	Script        vtgen.Script `json:"script"`
 }
 
-// pinnable renders a failing script in the form a file here takes.
 func pinnable(s vtgen.Script, seed uint64, broken string) string {
 	b, err := json.MarshalIndent(vtgenRepro{Why: broken, SplitSeed: seed, Script: s}, "", "  ")
 	if err != nil {
@@ -116,8 +85,6 @@ func TestVTGenRepros(t *testing.T) {
 			if r.BudgetMS > 0 && !raceEnabled {
 				budget := time.Duration(r.BudgetMS) * time.Millisecond
 				passes := 1
-				// Load stalls one pass, not every pass: time it again and keep
-				// the fastest, so only a real blowup stays over the budget.
 				for ; passes < budgetPasses && took > budget; passes++ {
 					start := time.Now()
 					for _, o := range oracles {

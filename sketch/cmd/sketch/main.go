@@ -47,8 +47,6 @@ Examples:
 Flags:
 `
 
-// maxSource is the most bytes sketch reads: far above the 50,000 characters
-// sketch draws, and small enough that a stray large file cannot fill memory.
 const maxSource = 4 << 20
 
 func main() {
@@ -82,7 +80,6 @@ func run(args []string, stdout *os.File, stderr io.Writer) error {
 		fmt.Fprint(stderr, usage)
 		fs.PrintDefaults()
 	}
-	// Flags may come before or after FILE.
 	var rest []string
 	for {
 		if err := fs.Parse(args); err != nil {
@@ -183,7 +180,6 @@ func draw(name string, o options, stdout *os.File, stderr io.Writer) error {
 	for i, src := range sources {
 		if err := drawOne(src, i, len(sources), format, cols, color, th, o, stdout, stderr); err != nil {
 			failed++
-			// The message quotes the source, so it is made safe as the source is.
 			fmt.Fprintf(stderr, "diagram %d: %s\n", i+1, termSafe(err.Error()))
 		}
 	}
@@ -193,10 +189,6 @@ func draw(name string, o options, stdout *os.File, stderr io.Writer) error {
 	return nil
 }
 
-// writeCells writes the text drawing as one line of JSON, for a host that
-// draws the cells in its own colours: {"rows":[[[rune,role,bg],...],...],
-// "cut":bool}. cut says the drawing is wider than cols. tuios draws a TML
-// <mermaid> of a type it does not have with it.
 func writeCells(src string, cols int, stdout io.Writer) error {
 	d, err := sketch.Parse(src, sketch.ParseOptions{})
 	if err != nil {
@@ -245,7 +237,6 @@ func drawOne(src string, i, n int, format string, cols int, color bool, th *sket
 		}
 		lines, err := sketchtext.Draw(d, sketchtext.Options{Cols: cols, Color: color})
 		if errors.Is(err, sketchtext.ErrTooWide) {
-			// Drawn at its full width: the terminal wraps or cuts the lines.
 			lines, err = sketchtext.Draw(d, sketchtext.Options{Color: color})
 			if err == nil {
 				fmt.Fprintf(stderr, "diagram %d: the text drawing is wider than %d columns.\n", i+1, cols)
@@ -259,8 +250,6 @@ func drawOne(src string, i, n int, format string, cols int, color bool, th *sket
 			}
 			return nil
 		}
-		// No text drawing for this type, or none that fits: say so on stderr,
-		// so that piped output stays the source alone.
 		switch {
 		case errors.Is(err, sketchtext.ErrUnsupported):
 			fmt.Fprintf(stderr, "diagram %d: %s diagrams have no text drawing. The source follows.\n", i+1, termSafe(string(d.Type)))
@@ -285,8 +274,6 @@ func drawOne(src string, i, n int, format string, cols int, color bool, th *sket
 	if format == "kitty" {
 		var cols, rows, cellH int
 		cols, rows, cellW, cellH = terminalCells(stdout)
-		// As large as the terminal allows, leaving two rows for the prompt, and
-		// no larger than twice the SVG size.
 		scale = math.Min(2, math.Min(float64(cols*cellW)/math.Max(1, out.Width), float64(max(rows-2, 4)*cellH)/math.Max(1, out.Height)))
 	}
 	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Background: true, Readable: true})
@@ -303,8 +290,6 @@ func drawOne(src string, i, n int, format string, cols int, color bool, th *sket
 	return kitty(stdout, b.Bytes(), int(math.Ceil(float64(img.Bounds().Dx())/float64(cellW))))
 }
 
-// terminalCells is the width and height of the terminal in cells and the size
-// of a cell in pixels, with a common guess where the terminal does not say.
 func terminalCells(w io.Writer) (cols, rows, cellW, cellH int) {
 	cols, rows, cellW, cellH = 100, 40, 10, 20
 	f, ok := w.(*os.File)
@@ -320,9 +305,6 @@ func terminalCells(w io.Writer) (cols, rows, cellW, cellH int) {
 	return cols, rows, max(cellW, 1), max(cellH, 1)
 }
 
-// kitty writes a PNG as a kitty graphics image cols cells wide. The terminal
-// keeps the picture's aspect and moves the cursor below it, so the next
-// diagram starts under this one.
 func kitty(w io.Writer, png []byte, cols int) error {
 	enc := base64.StdEncoding.EncodeToString(png)
 	var b bytes.Buffer
@@ -344,8 +326,6 @@ func kitty(w io.Writer, png []byte, cols int) error {
 	return err
 }
 
-// readSource reads a diagram file, or standard input for "-". It reads only
-// regular files, after symlinks, and at most maxSource bytes.
 func readSource(name string) ([]byte, error) {
 	var r io.Reader = os.Stdin
 	if name != "-" {
@@ -375,8 +355,6 @@ func readSource(name string) ([]byte, error) {
 
 var reFence = regexp.MustCompile("(?ms)^[ \t]*(```+|~~~+)[ \t]*mermaid[^\n]*\n(.*?)^[ \t]*(```+|~~~+)[ \t]*$")
 
-// sources lists the diagrams in a file: each mermaid fence of a Markdown
-// file, or the whole text of any other.
 func sources(name string, data []byte) []string {
 	text := string(data)
 	lower := strings.ToLower(name)
@@ -393,7 +371,6 @@ func sources(name string, data []byte) []string {
 	return []string{text}
 }
 
-// numbered is the output file for diagram i of n: name, or name-2.ext and so on.
 func numbered(name string, i, n int) string {
 	if n == 1 {
 		return name
@@ -402,11 +379,6 @@ func numbered(name string, i, n int) string {
 	return strings.TrimSuffix(name, ext) + "-" + strconv.Itoa(i+1) + ext
 }
 
-// termSafe is s with every character a terminal would act on written as
-// U+FFFD: C0 controls other than tab and newline, DEL, C1 controls, the
-// bidirectional overrides, isolates and marks, and the line and paragraph
-// separators. A label such as "#27;]2;x#7;" decodes to OSC 2, and a source
-// may hold a raw ESC, so every string from a diagram file goes through it.
 func termSafe(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {

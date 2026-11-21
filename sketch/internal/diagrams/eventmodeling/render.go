@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/eventmodeling/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package eventmodeling
 
 import (
@@ -14,7 +12,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// series is the series slot for each kind of entity. A UI has none and is drawn plain.
 func series(kind EntityKind) (int, bool) {
 	switch kind {
 	case "command":
@@ -57,12 +54,9 @@ type Band struct {
 	y, h  float64
 }
 
-// hardWrap splits text into lines of at most `columns` UTF-16 units, keeping its own line breaks.
-// A cut inside a surrogate pair leaves each half alone, which UTF-8 writes as U+FFFD.
 func hardWrap(raw string, columns int) []string {
 	var out []string
 	for _, line := range strings.Split(text.DecodeEntities(raw), "\n") {
-		// Count code points, as Array.from does, so an emoji is never split.
 		var chars []rune
 		if js.Len(line) > columns {
 			chars = []rune(line)
@@ -149,8 +143,6 @@ func across(model *EventModelingModel, options types.RenderOptions) types.Render
 	}
 	labelColumn += 2 * LANE_PAD
 
-	// Time runs left to right. A frame in a new lane starts under the end of the one before it,
-	// so the arrow between them can drop straight down; a frame in the same lane follows on.
 	placed := make([]*Placed, 0, len(model.boxes))
 	var previous *Placed
 	for _, box := range model.boxes {
@@ -255,7 +247,6 @@ func across(model *EventModelingModel, options types.RenderOptions) types.Render
 		svg.WriteStrings(&edges, `<g class="pele-edge" data-id="`, svg.EscText(relation.source.id), "-", svg.EscText(relation.target.id), `"><path d="`)
 		var head strings.Builder
 		if s.box.lane == t.box.lane {
-			// Along the lane, from the side of one box to the side of the other.
 			forward := t.x >= s.x
 			sx, tx := s.x, t.x+t.w
 			if forward {
@@ -270,7 +261,6 @@ func across(model *EventModelingModel, options types.RenderOptions) types.Render
 			svg.WriteStrings(&edges, "M", svg.Num(sx), ",", svg.Num(sy), "L", svg.Num(tx-float64(dir*trim)), ",", svg.Num(ty))
 			svg.WriteMarker(&head, "arrow_point", tx, ty, dir, 0, "var(--_l)")
 		} else {
-			// Between lanes, straight down or up where the boxes overlap, else in an S.
 			down := t.y > s.y
 			from := math.Max(s.x, t.x)
 			to := math.Min(s.x+s.w, t.x+t.w)
@@ -302,7 +292,6 @@ func across(model *EventModelingModel, options types.RenderOptions) types.Render
 		svg.WriteStrings(&edges, `" fill="none" stroke="var(--_l)"/>`, head.String(), `</g>`)
 	}
 
-	// Notes and given/when/then specifications, listed under the lanes with the frame they belong to.
 	names := map[string]string{}
 	for _, box := range model.boxes {
 		names[box.id] = box.name
@@ -362,7 +351,6 @@ func across(model *EventModelingModel, options types.RenderOptions) types.Render
 	}
 }
 
-// specRows are the lines of a given/when/then specification.
 func specRows(spec EmSpecification) []string {
 	rows := []string{"Given  " + strings.Join(spec.given, ", ")}
 	if len(spec.when) > 0 {
@@ -393,9 +381,6 @@ func verticalEventModel(model *EventModelingModel, options types.RenderOptions) 
 		measurer = text.DefaultMeasurer(options.FontFamily, options.FontFamilyMono)
 	}
 	room := math.Max(160, types.Or(options.MaxWidth, 320)-float64(2*pad))
-	// A relation that skips a card runs down a rail beside the cards. Relations into one card
-	// share a rail; others whose runs overlap take the next rail out, so that no two follow the
-	// same line.
 	order := func(box *EmBox) int { return slices.Index(model.boxes, box) }
 	type run struct {
 		target   *EmBox
@@ -410,7 +395,6 @@ func verticalEventModel(model *EventModelingModel, options types.RenderOptions) 
 		}
 		return nil
 	}
-	// A relation between neighbouring cards passes the lower card's lane heading.
 	passed := map[*EmBox]bool{}
 	for _, relation := range model.relations {
 		s, t := order(relation.source), order(relation.target)
@@ -442,7 +426,6 @@ func verticalEventModel(model *EventModelingModel, options types.RenderOptions) 
 		railOf[r.target] = rail
 	}
 	gutter := 24 + float64(RAIL_GAP*max(0, len(railEnds)-1))
-	// Rails are never shared to save room: past what the width allows, the drawing is wider.
 	cardWidth := math.Max(CARD_MIN, room-gutter)
 	textRoom := cardWidth - 2*BOX_PAD_X
 	title := text.LayoutLabel(model.title, false, measurer, size, room, text.Bold)
@@ -530,7 +513,6 @@ func verticalEventModel(model *EventModelingModel, options types.RenderOptions) 
 		svg.WriteStrings(&edges, `<g class="pele-edge" data-id="`, svg.EscText(relation.source.id), "-", svg.EscText(relation.target.id), `"><path d="`)
 		var head strings.Builder
 		if abs(s.index-t.index) == 1 {
-			// The lower card's lane heading sits in the gap, and wraps to leave the arrow room beside it.
 			lower := s
 			if down {
 				lower = t
@@ -540,7 +522,6 @@ func verticalEventModel(model *EventModelingModel, options types.RenderOptions) 
 			svg.WriteMarker(&head, "arrow_point", cx, ty, 0, dir, "var(--_l)")
 		} else {
 			rail := pad + width - gutter + 12 + float64(RAIL_GAP*railOf[relation.target])
-			// A card can send one relation and receive another: they leave above and arrive below its middle.
 			from, to := s.y+s.h/2-5, t.y+t.h/2+5
 			svg.WriteStrings(&edges, "M", svg.Num(pad+s.w), ",", svg.Num(from), "H", svg.Num(rail), "V", svg.Num(to), "H", svg.Num(pad+t.w+trim))
 			svg.WriteMarker(&head, "arrow_point", pad+t.w, to, -1, 0, "var(--_l)")
@@ -592,7 +573,6 @@ func abs(n int) int {
 	return n
 }
 
-// geometry is the model as lists, for a drawing in text. Not part of pele.
 func geometry(model *EventModelingModel, options types.RenderOptions) *types.GeoEventModel {
 	measurer := options.Measurer
 	if measurer == nil {

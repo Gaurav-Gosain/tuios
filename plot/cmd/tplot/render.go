@@ -7,8 +7,6 @@ import (
 	"tuios.dev/plot"
 )
 
-// ansi16 maps each role to an ANSI colour slot, as loom's 16-colour palette
-// does, so a chart takes the colours of the terminal's own theme.
 var ansi16 = map[plot.Role]int{
 	plot.Fg: 15, plot.Dim: 7, plot.Mute: 8, plot.Edge: 8, plot.Track: 8,
 	plot.Accent: 5, plot.AccentBright: 13,
@@ -17,8 +15,6 @@ var ansi16 = map[plot.Role]int{
 	plot.Heat1: 4, plot.Heat2: 12, plot.Heat3: 6, plot.Heat4: 5, plot.Heat5: 13,
 }
 
-// slot is the ANSI slot of a role, or -1 for none. A faded bright colour is
-// its normal slot from fade 2, as plot.Fade asks of a 16-colour host.
 func slot(r plot.Role) int {
 	base, k := r.Faded()
 	c, ok := ansi16[base]
@@ -31,7 +27,6 @@ func slot(r plot.Role) int {
 	return c
 }
 
-// sgr is the SGR sequence for a foreground slot, a background slot and bold.
 func sgr(fg, bg int, bold bool) string {
 	var p []string
 	if bold {
@@ -56,7 +51,6 @@ func code(slot, normal, bright int) int {
 	return normal + slot
 }
 
-// render writes a grid as lines of text, with SGR colours when color is set.
 func render(g *plot.Grid, color bool) string {
 	if !color {
 		s := g.String()
@@ -100,8 +94,6 @@ func render(g *plot.Grid, color bool) string {
 	return b.String()
 }
 
-// title is the chart's title line, bold in colour. Control characters are
-// dropped, so a title cannot steer the terminal.
 func title(s string, color bool) string {
 	s = strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {

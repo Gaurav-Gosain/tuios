@@ -7,13 +7,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// A quadrant chart is a box split into four, each quadrant named in its outer
-// corner. The y axis names its low and high ends left of the bottom and the top
-// half, and the x axis under the left and the right half. Points are dots with
-// their labels beside them: right of the dot, else left of it, else on the
-// row above or below. When the columns leave too little room left of the box,
-// the names of the y axis go above and below it.
-
 func drawQuadrant(l *sketch.Layout, opt Options) (*canvas, error) {
 	q := l.Quadrant
 	if q == nil {
@@ -26,7 +19,6 @@ func drawQuadrant(l *sketch.Layout, opt Options) (*canvas, error) {
 }
 
 func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error) {
-	// The names of the y axis, in a margin left of the box when side is set.
 	margin := 0
 	var yHigh, yLow []string
 	if side && (q.YHigh != "" || q.YLow != "") {
@@ -41,7 +33,6 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 	if boxW < 24 || (side && margin > 0 && boxW < 40) {
 		return nil, ErrTooWide
 	}
-	// Two halves of equal width either side of the middle line.
 	half := (boxW - 3) / 2
 	boxW = 2*half + 3
 	if !side {
@@ -89,7 +80,6 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 	c.hline(x0, x1, mid, light, roleBox)
 	c.vline(midX, top, bottom, light, roleBox)
 
-	// taken marks the cells that a label must not cover.
 	taken := make([]bool, wd*height)
 	take := func(x, y, w int) {
 		for i := max(x, 0); i < min(x+w, wd); i++ {
@@ -110,7 +100,6 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 		return true
 	}
 
-	// The places of the points.
 	type spot struct{ x, y int }
 	dots := make([]spot, len(q.Points))
 	for i, p := range q.Points {
@@ -127,10 +116,6 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 		return false
 	}
 
-	// The names of the quadrants in their outer corners: 1 top right, 2 top
-	// left, 3 bottom left, 4 bottom right. A name moves in a row from the edge
-	// while a point is in its way.
-	// titleRow is the row of each quadrant's name, and inward the way to the middle.
 	var titleRow, inward [4]int
 	for k, name := range q.Quadrants {
 		titleRow[k], inward[k] = top+1, 1
@@ -160,7 +145,6 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 		titleRow[k] = ty
 	}
 
-	// The axis names.
 	if side {
 		for i, line := range yHigh {
 			c.text(margin-1-width(line), top+1+(halfH-len(yHigh))/2+i, line, roleHead)
@@ -189,7 +173,6 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 		}
 	}
 
-	// The dots, then their labels, which keep clear of every dot.
 	for _, d := range dots {
 		c.put(d.x, d.y, '●', seriesRole(0))
 		take(d.x, d.y, 1)
@@ -204,8 +187,6 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 		tries := []spot{{d.x + 2, d.y}, {d.x - 1 - w, d.y}, {d.x - w/2, d.y - 1}, {d.x - w/2, d.y + 1},
 			{d.x + 2, d.y - 1}, {d.x - 1 - w, d.y - 1}, {d.x + 2, d.y + 1}, {d.x - 1 - w, d.y + 1},
 			{d.x - w/2, d.y - 2}, {d.x - w/2, d.y + 2}}
-		// Then under the name of the point's quadrant, as pele 1.9.0 does, kept
-		// clear of the box's edge.
 		k := 3
 		switch {
 		case d.x < midX && d.y < mid:
@@ -238,7 +219,6 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 			}
 		}
 		if !placed {
-			// No free place: beside the dot, over what is there.
 			x := d.x + 2
 			if x+w > x1 {
 				x = max(d.x-1-w, x0+1)
@@ -247,7 +227,6 @@ func quadrantDraw(q *types.GeoQuadrant, opt Options, side bool) (*canvas, error)
 			take(x, d.y, w)
 		}
 	}
-	// The dots again, over any label that had no free place.
 	for _, d := range dots {
 		c.put(d.x, d.y, '●', seriesRole(0))
 	}

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/requirement/graph.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package requirement
 
 import (
@@ -16,10 +14,9 @@ type GraphNode struct {
 }
 
 type GraphEdge struct {
-	id    string
-	start string
-	end   string
-	// hasStart and hasEnd are false for a name that is neither a requirement nor an element.
+	id       string
+	start    string
+	end      string
 	hasStart bool
 	hasEnd   bool
 	typ      string
@@ -32,7 +29,6 @@ type RequirementGraph struct {
 	direction string
 }
 
-// buildRequirementGraph gives the nodes and edges to lay out: requirements first, then elements, as Mermaid orders them.
 func buildRequirementGraph(model *RequirementDb) RequirementGraph {
 	nodes := make([]GraphNode, 0, len(model.requirements)+len(model.elements))
 	for _, requirement := range model.requirements {

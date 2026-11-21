@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/sankey/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package sankey draws Mermaid's sankey diagram: flows between nodes as bands as wide as
 // their values, with the nodes in columns.
 package sankey

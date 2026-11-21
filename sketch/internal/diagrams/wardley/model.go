@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/wardley/model.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package wardley
 
 import (
@@ -17,7 +15,6 @@ type WardleyModel struct {
 	accDescr string
 }
 
-// toPercent: values up to 1 are fractions; larger ones are already percentages.
 func toPercent(value float64, context string) float64 {
 	normalized := value
 	if value <= 1 {
@@ -80,7 +77,6 @@ func offsets(label *LabelAst) (*float64, *float64) {
 	return &x, &y
 }
 
-// populate is Mermaid's populateDb: fills the builder from the syntax tree, in Mermaid's order.
 func populate(ast *WardleyAst, db *WardleyBuilder) {
 	if ast.size != nil {
 		db.size = &[2]float64{ast.size[0], ast.size[1]}
@@ -196,7 +192,6 @@ func buildWardley(ast *WardleyAst, title string) *WardleyModel {
 	return model
 }
 
-// joinLines is .replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {

@@ -27,8 +27,6 @@ type Line struct {
 	Format   func(float64) string
 }
 
-// asciiMarks tell series apart where colour may not: in ASCII and at 16
-// colours.
 var asciiMarks = [...]string{"*", "+", "o", "x", "%", "@"}
 
 func (l Line) rng() (lo, hi float64, ok bool) {
@@ -67,7 +65,6 @@ func (l Line) Legend() []LegendItem {
 	return out
 }
 
-// maxSeries bounds the series a chart draws; the rest are left out.
 const maxSeries = 64
 
 // Draw draws the chart into a w by h grid.
@@ -108,8 +105,6 @@ func (l Line) Draw(w, h int, m Mode) *Grid {
 	return g
 }
 
-// area fills below each series with eighth blocks, so the top edge is
-// smooth to an eighth of a cell. Later series draw over earlier ones.
 func (l Line) area(g *Grid, lo, hi float64) {
 	for s := range l.Series {
 		pts := points(l.Series[s].Values, g.W)
@@ -132,9 +127,6 @@ func (l Line) area(g *Grid, lo, hi float64) {
 	}
 }
 
-// points spreads a series across n columns: a value per column, NaN where
-// the series has a gap. More values than columns are downsampled. Fewer
-// values are joined by straight lines between neighbours.
 func points(vals []float64, n int) []float64 {
 	out := make([]float64, n)
 	for i := range out {
@@ -171,7 +163,6 @@ func points(vals []float64, n int) []float64 {
 	return out
 }
 
-// braille draws with a 2 by 4 dot grid per cell, joining points with lines.
 func (l Line) braille(g *Grid, lo, hi float64) {
 	dw, dh := g.W*2, g.H*4
 	dots := make([]uint8, g.W*g.H)
@@ -189,8 +180,6 @@ func (l Line) braille(g *Grid, lo, hi float64) {
 	}
 	for s := range l.Series {
 		pts := points(l.Series[s].Values, dw)
-		// Lines join points that exist, across the empty columns between
-		// them when the values were fewer than the columns.
 		prevX, prevY := -1, 0
 		for x, v := range pts {
 			if !finite(v) {
@@ -198,8 +187,6 @@ func (l Line) braille(g *Grid, lo, hi float64) {
 				continue
 			}
 			y := dh - 1 - int(math.Round(unit(v, lo, hi)*float64(dh-1)))
-			// Consecutive points join with a Bresenham line in the dot grid,
-			// so each series is one unbroken stroke one dot wide.
 			stroke := func(px, py int) { setDot(px, py, s) }
 			if prevX >= 0 {
 				line(prevX, prevY, x, y, stroke)
@@ -207,7 +194,6 @@ func (l Line) braille(g *Grid, lo, hi float64) {
 				stroke(x, y)
 			}
 			if l.Fill {
-				// Fill every column from the previous point to this one.
 				from := x
 				if prevX >= 0 {
 					from = prevX
@@ -232,8 +218,6 @@ func (l Line) braille(g *Grid, lo, hi float64) {
 	}
 }
 
-// brailleBit is the dot bit for column x (0 or 1) and row y (0 to 3) of a
-// braille cell.
 func brailleBit(x, y int) uint8 {
 	if y == 3 {
 		return [2]uint8{0x40, 0x80}[x]
@@ -241,7 +225,6 @@ func brailleBit(x, y int) uint8 {
 	return uint8(1) << uint(y+3*x)
 }
 
-// line calls plot for each point of a line from x0,y0 to x1,y1.
 func line(x0, y0, x1, y1 int, plot func(x, y int)) {
 	dx, dy := abs(x1-x0), -abs(y1-y0)
 	sx, sy := 1, 1
@@ -276,8 +259,6 @@ func abs(x int) int {
 	return x
 }
 
-// columns draws one level per column: eighth blocks in Blocks mode, a mark
-// in ASCII. An area fills below.
 func (l Line) columns(g *Grid, lo, hi float64, m Mode) {
 	for s := range l.Series {
 		pts := points(l.Series[s].Values, g.W)

@@ -1,7 +1,3 @@
-// Ported from pele src/diagrams/architecture/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The sticky regular expressions are hand matchers.
-
 package architecture
 
 import (
@@ -45,7 +41,6 @@ func isWordByte(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_'
 }
 
-// matchID is /[\w]([-\w]*\w)?/y: a word character, then the longest run of [-\w] that ends in \w.
 func matchID(src string, p int) int {
 	if p >= len(src) || !isWordByte(src[p]) {
 		return -1
@@ -62,7 +57,6 @@ func matchID(src string, p int) int {
 	return end
 }
 
-// matchDirection is /L|R|T|B/y.
 func matchDirection(src string, p int) int {
 	if p < len(src) && strings.IndexByte("LRTB", src[p]) >= 0 {
 		return p + 1
@@ -70,7 +64,6 @@ func matchDirection(src string, p int) int {
 	return -1
 }
 
-// matchInto is /<|>/y.
 func matchInto(src string, p int) int {
 	if p < len(src) && (src[p] == '<' || src[p] == '>') {
 		return p + 1
@@ -78,7 +71,6 @@ func matchInto(src string, p int) int {
 	return -1
 }
 
-// matchIcon is /\([\w-:]+\)/y. Without the u flag, `\w-:` in a class is \w, a hyphen and a colon.
 func matchIcon(src string, p int) int {
 	if p >= len(src) || src[p] != '(' {
 		return -1
@@ -93,8 +85,6 @@ func matchIcon(src string, p int) int {
 	return -1
 }
 
-// quotedEnd is the end of `"([^"\\]|\\.)*"` (or the same with single quotes) at q, or -1.
-// The closing quote is the first one not escaped, and `.` takes no line terminator.
 func quotedEnd(src string, q int) int {
 	quote := src[q]
 	for i := q + 1; i < len(src); {
@@ -121,7 +111,6 @@ func quotedEnd(src string, q int) int {
 	return -1
 }
 
-// matchTitle is /\[(?:"([^"\\]|\\.)*"|'([^'\\]|\\.)*'|[^\[\]\r\n]+)\]/y.
 func matchTitle(src string, p int) int {
 	if p >= len(src) || src[p] != '[' {
 		return -1
@@ -229,7 +218,6 @@ type ArchitectureAst struct {
 	alignments []AlignmentAst
 }
 
-// labelValue is Mermaid's ArchitectureValueConverter for ARCH_TITLE.
 func labelValue(text string) string {
 	result := js.Trim(text[1 : len(text)-1])
 	if (strings.HasPrefix(result, `"`) && strings.HasSuffix(result, `"`)) || (strings.HasPrefix(result, "'") && strings.HasSuffix(result, "'")) {

@@ -39,18 +39,11 @@ type Image struct {
 	Below bool
 }
 
-// imageCut is the part of an image that lands on the grid, in two spaces:
-// cells for where it goes, and Pixels' own pixels for what it shows.
 type imageCut struct {
-	// col0, row0, col1, row1 are the cells it covers, as fractions, so a
-	// source rectangle that rounds to whole pixels lands where it should.
 	col0, row0, col1, row1 float64
-	// src is the rectangle of Pixels drawn into them.
-	src image.Rectangle
+	src                    image.Rectangle
 }
 
-// cut works out what of img lands on the grid. It reports false when nothing
-// does, so a backend skips the image without touching its pixels.
 func (img Image) cut(cols, rows int) (imageCut, bool) {
 	if img.Pixels == nil || img.Cols <= 0 || img.Rows <= 0 {
 		return imageCut{}, false
@@ -63,7 +56,6 @@ func (img Image) cut(cols, rows int) (imageCut, bool) {
 	if source.Empty() {
 		return imageCut{}, false
 	}
-	// The box, clipped to the grid, as a fraction of the box on each axis.
 	fx0 := float64(max(img.Col, 0)-img.Col) / float64(img.Cols)
 	fy0 := float64(max(img.Row, 0)-img.Row) / float64(img.Rows)
 	fx1 := float64(min(img.Col+img.Cols, cols)-img.Col) / float64(img.Cols)
@@ -71,7 +63,6 @@ func (img Image) cut(cols, rows int) (imageCut, bool) {
 	if fx1 <= fx0 || fy1 <= fy0 {
 		return imageCut{}, false
 	}
-	// The same fractions of the source, kept to the pixels Pixels has.
 	sw, sh := float64(source.Dx()), float64(source.Dy())
 	sx0 := math.Max(float64(source.Min.X)+fx0*sw, float64(bounds.Min.X))
 	sy0 := math.Max(float64(source.Min.Y)+fy0*sh, float64(bounds.Min.Y))
@@ -81,8 +72,6 @@ func (img Image) cut(cols, rows int) (imageCut, bool) {
 	if src.Empty() {
 		return imageCut{}, false
 	}
-	// Back from the whole pixels to cells, so a rounded-out pixel lands on
-	// the fraction of a cell it stands for and the picture is not stretched.
 	toCol := func(x int) float64 {
 		return float64(img.Col) + (float64(x)-float64(source.Min.X))/sw*float64(img.Cols)
 	}
@@ -96,8 +85,6 @@ func (img Image) cut(cols, rows int) (imageCut, bool) {
 	}, true
 }
 
-// drawPNGImages draws the images of one layer onto the raster, clipped to the
-// grid.
 func drawPNGImages(dst *image.RGBA, g *Grid, l layout, below bool) {
 	if len(g.Images) == 0 {
 		return
@@ -129,12 +116,7 @@ func drawPNGImages(dst *image.RGBA, g *Grid, l layout, below bool) {
 	}
 }
 
-// imageDataURI encodes the part of an image a backend shows as a PNG data
-// URI. Only the visible part is encoded, so a picture that is mostly off the
-// grid costs only what is on it.
 func imageDataURI(pixels image.Image, src image.Rectangle) (string, bool) {
-	// A copy rather than SubImage: asking for SubImage through an interface
-	// links the method of every image type in the standard library.
 	part := image.NewNRGBA(image.Rect(0, 0, src.Dx(), src.Dy()))
 	draw.Draw(part, part.Bounds(), pixels, src.Min, draw.Src)
 	var buf bytes.Buffer

@@ -12,11 +12,6 @@ import (
 	gh "go.mitchellh.com/libghostty"
 )
 
-// ghosttyModeNumbers maps every DEC mode the library tracks to its number,
-// for GetModes. The pure emulator serializes every DEC mode it has seen set
-// or reset; the library cannot distinguish "explicitly reset" from "still at
-// its default", so the snapshot carries current values for this fixed set.
-// RestoreModes applies them all, which lands on the same state either way.
 var ghosttyModeNumbers = []struct {
 	num  int
 	mode gh.Mode
@@ -51,8 +46,6 @@ var ghosttyModeNumbers = []struct {
 	{2027, gh.ModeGraphemeCluster},
 	{2031, gh.ModeReportColorScheme},
 	{2048, gh.ModeInBandSizeReports},
-	// Last, so the restore turns it on after it has set 3: with 40 on,
-	// setting 3 is DECCOLM, which clears the screen and the tab stops.
 	{40, gh.ModeEnableMode3},
 }
 
@@ -141,8 +134,6 @@ func (t *GhosttyTerminal) RestoreCharsets(ids [4]byte, gl, gr int) {
 // ActiveScreenIsAlt implements [Terminal.ActiveScreenIsAlt].
 // On this backend it is the same as IsAltScreen.
 func (t *GhosttyTerminal) ActiveScreenIsAlt() bool {
-	// The library has no separate screen pointer to diverge from the mode
-	// bits; RestoreAltScreenMode synthesizes the mode change itself.
 	return t.IsAltScreen()
 }
 
@@ -253,12 +244,9 @@ func (t *GhosttyTerminal) SetThemeColors(fg, bg, cur color.Color, ansiPalette [1
 		t.themePal = ansiPalette
 	}
 	t.refreshPaletteClaimsLocked()
-	// Converted styles depend on the theme.
 	t.styleCache = make(map[uint16]uv.Style)
 	t.scrollCache = make(map[int]uv.Line)
 	t.scrollCacheGen = 0
-	// Repaint everything on the next read: cells already on screen were
-	// converted under the old theme.
 	t.markAllDirtyLocked()
 }
 
@@ -279,7 +267,6 @@ func (t *GhosttyTerminal) SetReportColors(fg, bg color.Color, pal [16]color.Colo
 	}
 }
 
-// reportedBackgroundLocked is the answer to an OSC 11 query. t.mu is held.
 func (t *GhosttyTerminal) reportedBackgroundLocked() color.Color {
 	return firstColor(t.guestBg, t.reportBg, t.defaultBg, color.Black)
 }
@@ -294,7 +281,6 @@ func (t *GhosttyTerminal) refreshPaletteClaimsLocked() {
 	}
 }
 
-// markAllDirtyLocked forces a full shadow refresh on the next sync.
 func (t *GhosttyTerminal) markAllDirtyLocked() {
 	if t.closed.Load() {
 		return
@@ -329,9 +315,6 @@ func (t *GhosttyTerminal) IndexedColor(i int) color.Color {
 	return ansi.IndexedColor(uint8(i)) //nolint:gosec // bounded above
 }
 
-// handleColorOSC owns OSC 4/104 (palette) and 10/11/12/110/111/112 (default
-// colors), mirroring the pure emulator. These are never forwarded: the
-// library would answer color queries a second time.
 func (t *GhosttyTerminal) handleColorOSC(number int, payload []byte) {
 	parts := bytes.Split(payload, []byte{';'})
 	switch number {
@@ -379,10 +362,6 @@ func (t *GhosttyTerminal) handleColorOSC(number int, payload []byte) {
 	}
 }
 
-// handleDefaultColorOSC mirrors the pure emulator's OSC 10/11/12 family:
-// guest-set colors override the theme defaults, "?" queries answer with
-// whichever is in force, each item after the first applies to the next
-// colour, and a reply ends the way the query did.
 func (t *GhosttyTerminal) handleDefaultColorOSC(number int, parts [][]byte) {
 	set := func(number int, c color.Color) {
 		switch number {
@@ -616,8 +595,6 @@ func (t *GhosttyTerminal) SemanticMarkers() *SemanticMarkerList {
 	return t.semanticMarkers
 }
 
-// penStyleSequence renders a uv style as the SGR sequence that reproduces
-// it. uv.Style.String is exactly that encoding.
 func penStyleSequence(s *uv.Style) string {
 	if s.IsZero() {
 		return ""

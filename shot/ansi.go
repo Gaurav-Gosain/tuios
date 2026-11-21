@@ -5,11 +5,6 @@ import (
 	"strings"
 )
 
-// ANSI and plain text backends. ANSI is the exact styled stream for
-// terminals: cat it anywhere, pipe it into other tools, diff it. No frame,
-// because a frame has no meaning in a stream. Text is for quoting and
-// grepping.
-
 // RenderANSI emits the grid as truecolor SGR text, one line per row, reset
 // at every style change and at each line end so a partial paste cannot
 // bleed style into the host.
@@ -17,13 +12,8 @@ func RenderANSI(g *Grid) []byte {
 	var b strings.Builder
 	b.Grow(g.Cols * g.Rows * 2)
 	for y := 0; y < g.Rows; y++ {
-		// cur is the SGR currently in effect on this line, empty for the
-		// default style. Tracking the string rather than the cell is what
-		// keeps an unstyled run unstyled: two cells can differ in a field the
-		// stream cannot express (a background equal to the default) and still
-		// need no escape between them.
 		cur := ""
-		pending := 0 // trailing default-style blanks held back
+		pending := 0
 		emit := func(want string) {
 			if want == cur {
 				return
@@ -51,16 +41,12 @@ func RenderANSI(g *Grid) []byte {
 			emit(sgrFor(g, c))
 			b.WriteString(displayCluster(c))
 		}
-		// Reset unconditionally, even on a line that ended unstyled: the
-		// stream is meant to be pasted in pieces, and four bytes a line buys
-		// the guarantee that no fragment can bleed style into the host.
 		b.WriteString("\x1b[0m")
 		b.WriteByte('\n')
 	}
 	return []byte(b.String())
 }
 
-// sgrFor builds the SGR prefix for one cell's style.
 func sgrFor(g *Grid, c Cell) string {
 	var parts []string
 	if c.Bold {

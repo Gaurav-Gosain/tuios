@@ -54,8 +54,6 @@ func TestDecodeKittyPayload(t *testing.T) {
 	}
 }
 
-// testImage is bytes standing in for a PNG. Its length is not a multiple of
-// three, so its base64 needs padding and an unpadded sender leaves it off.
 func testImage(n int) []byte {
 	img := make([]byte, n)
 	for i := range img {
@@ -64,8 +62,6 @@ func testImage(n int) []byte {
 	return img
 }
 
-// chunkBase64 splits encoded text the way senders do: every chunk but the last
-// a multiple of four characters.
 func chunkBase64(encoded string, size int) []string {
 	var chunks []string
 	for len(encoded) > size {
@@ -79,16 +75,13 @@ func chunkBase64(encoded string, size int) []string {
 // kitten icat and chafa write, captured from their output, and checks the
 // bytes that come out are the bytes that went in.
 func TestParseKittyCommandSenderShapes(t *testing.T) {
-	img := testImage(50318) // 50318 % 3 == 2
+	img := testImage(50318)
 	raw := base64.RawStdEncoding.EncodeToString(img)
 	padded := base64.StdEncoding.EncodeToString(img)
 	if raw == padded {
 		t.Fatal("the test image needs padding, or the unpadded case tests nothing")
 	}
 
-	// kitten icat, stream mode: a=T with the geometry and m=1 on the first
-	// chunk of 131072 characters, then a bare "a=T,q=2" final chunk, all of it
-	// from Go's RawStdEncoding, so the final chunk has no padding.
 	icatChunks := chunkBase64(raw, 4096*8)
 	var icatCmds []string
 	for i, c := range icatChunks {
@@ -102,8 +95,6 @@ func TestParseKittyCommandSenderShapes(t *testing.T) {
 		}
 	}
 
-	// chafa: a params-only first chunk, then m=1 continuations of 4096
-	// characters and an m=0 final chunk, padded.
 	chafaCmds := []string{"a=T,f=100,s=301,v=211,c=30,r=10,m=1"}
 	chafaChunks := chunkBase64(padded, 4096)
 	for i, c := range chafaChunks {
@@ -114,7 +105,6 @@ func TestParseKittyCommandSenderShapes(t *testing.T) {
 		chafaCmds = append(chafaCmds, "m="+more+";"+c)
 	}
 
-	// icat in one command, the shape it uses for an image small enough.
 	icatSingle := []string{"a=T,q=2,f=100,s=7,v=5,X=1;" + raw}
 
 	for _, tc := range []struct {
@@ -160,10 +150,10 @@ func firstDiff(a, b []byte) int {
 // out empty, so the image was silently never drawn.
 func TestParseKittyCommandFileMedia(t *testing.T) {
 	paths := []string{
-		"/tmp/a.png",         // 10 bytes: needs two '='
-		"/tmp/ab.png",        // 11 bytes: needs one '='
-		"/tmp/abc.png",       // 12 bytes: needs none
-		"icat-AB7TAIZ4DG2QI", // a shared memory name icat uses
+		"/tmp/a.png",
+		"/tmp/ab.png",
+		"/tmp/abc.png",
+		"icat-AB7TAIZ4DG2QI",
 		"/var/folders/w6/hzb0jzqd647bzm2v_kg5k6k80000gn/T/tty-graphics-protocol-545021856",
 	}
 	for _, medium := range []string{"f", "t", "s"} {
@@ -215,9 +205,6 @@ func TestParseKittyCommandUndecodable(t *testing.T) {
 	}
 }
 
-// responseReader collects everything an emulator writes back to its guest.
-// The response pipe blocks a writer until it is read, so it has to be read
-// the whole time the test writes.
 type responseReader struct {
 	mu  sync.Mutex
 	buf strings.Builder
@@ -246,7 +233,6 @@ func (r *responseReader) String() string {
 	return r.buf.String()
 }
 
-// waitFor returns what was read once it contains want, or fails the test.
 func (r *responseReader) waitFor(t *testing.T, want string) string {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -267,7 +253,7 @@ func TestKittyPayloadErrorAnswered(t *testing.T) {
 	tests := []struct {
 		name string
 		apc  string
-		want string // "" means no reply at all
+		want string
 	}{
 		{"transmit with an id", "a=T,f=100,i=7;@@@@", "\x1b_Gi=7;" + einval + "\x1b\\"},
 		{"transmit with q=1 still hears an error", "a=T,f=100,i=7,q=1;@@@@", "\x1b_Gi=7;" + einval + "\x1b\\"},
@@ -292,8 +278,6 @@ func TestKittyPayloadErrorAnswered(t *testing.T) {
 				if _, err := e.Write([]byte("\x1b_G" + tt.apc + "\x1b\\")); err != nil {
 					t.Fatalf("Write: %v", err)
 				}
-				// A marker behind the APC, so "nothing was answered" is
-				// asserted after the emulator has certainly processed it.
 				if _, err := e.Write([]byte("\x1b[c")); err != nil {
 					t.Fatalf("Write: %v", err)
 				}

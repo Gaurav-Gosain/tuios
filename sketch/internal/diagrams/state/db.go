@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/state/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package state
 
 import (
@@ -34,7 +32,6 @@ func NewStateDb() *StateDb {
 	}
 }
 
-// docDirection is the last `direction` statement of a document, or TB.
 func docDirection(doc []Stmt) string {
 	dir := "TB"
 	for _, item := range doc {
@@ -56,8 +53,6 @@ func (db *StateDb) setRootDoc(doc []Stmt) {
 	db.extract(doc)
 }
 
-// Only the root document's statements become states, relations and classes here; the
-// statements inside composites are read when the graph is built.
 func (db *StateDb) extract(doc []Stmt) {
 	db.States = map[string]*StateStmt{}
 	db.Relations = nil
@@ -98,8 +93,6 @@ type pendingItem struct {
 	first    bool
 }
 
-// Mermaid's docTranslator: gives each `[*]` an id scoped to its parent, and turns a document
-// split by `--` into one region per part.
 func (db *StateDb) translate() {
 	rootDoc := db.RootDoc
 	pending := []pendingItem{{"root", &rootStmt{ID: "root", Doc: &rootDoc}, true}}
@@ -149,9 +142,6 @@ func (db *StateDb) translate() {
 				current = append(current, item)
 			}
 		}
-		// Mermaid names the region after the last divider with a random id; here it continues the
-		// divider numbering. Mermaid also leaves a document that ends with a divider ungrouped and
-		// then fails to draw it; here the regions before that divider are kept.
 		if len(regions) > 0 {
 			if len(current) > 0 {
 				cur := current
@@ -251,8 +241,6 @@ func (db *StateDb) setCssClass(itemIds, cssClassName string) {
 	}
 }
 
-// The grammar calls this while it is still building the document, so the statement lands in the
-// previous root document and the direction is read from the parsed `dir` statements instead.
 func (db *StateDb) setDirection(dir string) {
 	for _, item := range db.RootDoc {
 		if d, ok := item.(*DirectionStmt); ok {
@@ -280,8 +268,6 @@ func (db *StateDb) setAccDescription(text string) {
 	db.AccDescr = reAccDescr.ReplaceAllString(text, "\n")
 }
 
-// The states a comma-separated list of ids names, created where they do not exist yet. As in
-// Mermaid, an id is looked up as written and trimmed only when it has to be created.
 func (db *StateDb) named(ids string) []*StateStmt {
 	var out []*StateStmt
 	for _, id := range strings.Split(ids, ",") {

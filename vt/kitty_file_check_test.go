@@ -12,14 +12,6 @@ import (
 	"time"
 )
 
-// These guard the boundary between a pane's guest and this machine's files,
-// and the emulator's lock, which every byte of the pane waits on. The ways
-// the check of a file upload could fail them:
-//   - an open that blocks: a FIFO opened for reading waits for a writer, and
-//     a guest can swap one in after the path was checked;
-//   - a look that blocks: a network mount that stops answering holds even a
-//     non-blocking open, and the emulator parses with its lock held.
-
 // TestKittyOpenRegularDoesNotWaitOnAFIFO opens a FIFO the way the check opens
 // a file. Without O_NONBLOCK the open waits for a writer that never comes.
 func TestKittyOpenRegularDoesNotWaitOnAFIFO(t *testing.T) {

@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/treemap/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The token patterns are hand matchers. CLASS_DEF and RE_CLASS_DEF match the same text: the
-// name takes two or more word characters, and `\s+` after it may cross a line break.
-
 package treemap
 
 import (
@@ -48,8 +43,6 @@ func spaceRun(src string, q int) int {
 func isIDStart(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' }
 func isIDPart(c byte) bool  { return isIDStart(c) || c >= '0' && c <= '9' }
 
-// classDef matches /classDef\s+([a-zA-Z_][a-zA-Z0-9_]+)(?:\s+([^;\r\n]*))?(?:;)?/y at p: the end,
-// the class name, and the style text with whether its group matched. end is -1 for no match.
 func classDef(src string, p int) (end int, name, style string, hasStyle bool) {
 	if !strings.HasPrefix(src[p:], "classDef") {
 		return -1, "", "", false
@@ -251,7 +244,6 @@ func parseTreemap(src string) *TreemapAst {
 
 		name := r.Expect(T_string)
 		name = name[1 : len(name)-1]
-		// A leaf is a name followed by a colon or comma, with or without whitespace before it.
 		after := r.I
 		if kinds[r.I] == T_indentation {
 			after = r.I + 1

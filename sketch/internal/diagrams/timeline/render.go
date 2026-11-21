@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/timeline/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package timeline
 
 import (
@@ -64,7 +62,6 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 	periods := model.periods
 	hasSections := len(model.sections) > 0
 
-	// Mermaid draws nothing for periods that come before the first section; here they lead, in a neutral color.
 	groups := make([]Group, len(model.sections))
 	for section := range groups {
 		groups[section].section = section
@@ -81,8 +78,6 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 		groups = append([]Group{leading}, groups...)
 	}
 
-	// Columns widen, up to a point, for a word that would not fit; past that the word is cut.
-	// Running down, the two columns share the width the host has.
 	room := math.Inf(1)
 	if vertical && options.MaxWidth != nil && *options.MaxWidth > 0 {
 		room = *options.MaxWidth - float64(2*pad)
@@ -147,8 +142,6 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 	eventW := eventTextW() + 2*PAD_X
 	chipHeight := func(label text.Label) float64 { return math.Max(label.Height, lineHeight) + 2*PAD_Y }
 	eventHeight := func(label text.Label) float64 { return math.Max(label.Height, js.Round(small*1.5)) + 2*PAD_Y }
-	// seriesOf is the series of a period's color, or -1 for the muted color of a period
-	// outside the sections of a timeline that has them.
 	seriesOf := func(group Group, period int) int {
 		if group.section >= 0 {
 			return group.section
@@ -167,8 +160,6 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 		}
 		return "var(--_m)"
 	}
-	// onColor is the fill of a label on the color of series, ON_COLOR unless the palette
-	// sets a color that needs another.
 	onColor := func(series int) string {
 		if series >= 0 {
 			if ink := svg.SeriesInkFill(options.Palette, series); ink != "" {
@@ -243,7 +234,6 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 		svg.WriteStrings(&body, `<g class="pele-node pele-period" data-id="`, svg.EscText(js.Trim(periods[i].text)), `">`)
 	}
 
-	// The labels of the groups as drawn, for the geometry.
 	groupLabels := make([]text.Label, len(groups))
 	var axis string
 	var height float64
@@ -265,7 +255,6 @@ func draw(model *TimelineDb, config types.Config, options types.RenderOptions, v
 			for _, i := range group.periods {
 				color := colorOf(group, i)
 				h := chipHeight(periodLabels[i])
-				// A period and its first event share one center line, so the line between them runs straight.
 				first := h
 				if len(eventLabels[i]) > 0 {
 					first = eventHeight(eventLabels[i][0])

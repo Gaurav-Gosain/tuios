@@ -17,8 +17,6 @@ func TestMargins_OutOfRangeDoesNotPanic(t *testing.T) {
 		name  string
 		input string
 	}{
-		// The reported repro: 80x24, resized to 80x10, then a region sized for
-		// the old screen followed by a scroll up.
 		{"stbm past bottom then SU", "\x1b[1;24r\x1b[3S"},
 		{"stbm past bottom then SD", "\x1b[1;24r\x1b[3T"},
 		{"stbm past bottom then IL", "\x1b[1;24r\x1b[5L"},
@@ -28,7 +26,6 @@ func TestMargins_OutOfRangeDoesNotPanic(t *testing.T) {
 		{"stbm past bottom then linefeeds", "\x1b[1;24r\nx\n\n\n\n\n\n\n\n\n\n\n\n"},
 		{"stbm past bottom then RI at bottom", "\x1b[1;24r\x1b[24;1H\x1bM"},
 		{"stbm past bottom with origin mode", "\x1b[1;24r\x1b[?6h\x1b[20;1H\x1b[3S"},
-		// DECSLRM has the same shape, behind DECLRMM.
 		{"slrm past right then SU", "\x1b[?69h\x1b[1;200s\x1b[3S"},
 		{"slrm past right then ICH", "\x1b[?69h\x1b[1;200s\x1b[5@"},
 		{"slrm past right then DCH", "\x1b[?69h\x1b[1;200s\x1b[5P"},
@@ -43,8 +40,6 @@ func TestMargins_OutOfRangeDoesNotPanic(t *testing.T) {
 			}
 			_ = emu.String()
 
-			// The region a guest named must never reach past the screen, or
-			// every later scroll is a panic waiting for a trigger.
 			r := emu.ScrollRegion()
 			if r.Max.Y > emu.Height() || r.Min.Y < 0 {
 				t.Errorf("vertical margins %v escape a %d-row screen", r, emu.Height())

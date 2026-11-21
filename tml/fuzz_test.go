@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-// The parsers, the expression evaluator and the patch applier take input
-// from strangers, so each is a fuzz target. The seeds are the design's
-// examples, the error fixtures, and the files under testdata/fuzz.
-
 func addFiles(f *testing.F, patterns ...string) {
 	for _, p := range patterns {
 		files, _ := filepath.Glob(p)
@@ -25,16 +21,12 @@ func addFiles(f *testing.F, patterns ...string) {
 	}
 }
 
-// roomy are limits for reading back printed output, which escaping can make
-// longer than the input.
 func roomy() *ParseOptions {
 	l := DefaultLimits()
 	l.DocBytes = 64 << 20
 	return &ParseOptions{Limits: &l}
 }
 
-// checkTree asserts what every parsed tree must hold: no control or bidi
-// override characters, and the depth and node limits.
 func checkTree(t *testing.T, doc *Node) {
 	lim := DefaultLimits()
 	nodes := 0
@@ -62,9 +54,6 @@ func checkTree(t *testing.T, doc *Node) {
 	}
 }
 
-// roundTrip asserts that a parsed tree prints and reads back to itself in
-// both encodings, through either one, and that the validator accepts any
-// tree without a panic.
 func roundTrip(t *testing.T, doc *Node) {
 	checkTree(t, doc)
 	x1 := FormatXML(doc)
@@ -86,7 +75,6 @@ func roundTrip(t *testing.T, doc *Node) {
 	if x3 := FormatXML(fromJSON); !bytes.Equal(x1, x3) {
 		t.Fatalf("JSON to TML text differs:\n%s\n%s", x1, x3)
 	}
-	// JSON to TML text and back gives the same JSON, whatever the source.
 	if j3 := FormatJSON(fromXML, false); !bytes.Equal(j1, j3) {
 		t.Fatalf("TML text to JSON differs:\n%s\n%s", j1, j3)
 	}
@@ -111,7 +99,6 @@ func FuzzParseXML(f *testing.F) {
 func FuzzParseJSON(f *testing.F) {
 	addFiles(f, "testdata/examples/*.json", "testdata/errors/*.json", "testdata/golden/*.json")
 	f.Fuzz(func(t *testing.T, src []byte) {
-		// tml's scanner and encoding/json agree on what is JSON.
 		if ok := scanJSON(src) == nil; ok != json.Valid(src) {
 			t.Fatalf("scanJSON says %v and json.Valid says %v for %q", ok, !ok, src)
 		}

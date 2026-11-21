@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/architecture/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// An optional text of pele's model is "" here for none: pele reads each of them only for
-// its truthiness or as text, and an id is never empty.
-
 package architecture
 
 import (
@@ -16,8 +11,7 @@ import (
 
 // ArchNode is a service or a junction.
 type ArchNode struct {
-	id string
-	// typ is "service" or "junction".
+	id       string
 	typ      string
 	icon     string
 	iconText string
@@ -54,17 +48,15 @@ func fail(message string) {
 }
 
 type ArchitectureDb struct {
-	title    string
-	accTitle string
-	accDescr string
-	// nodes and groups keep the order pele's maps do.
+	title       string
+	accTitle    string
+	accDescr    string
 	nodes       []*ArchNode
 	nodeById    map[string]*ArchNode
 	groups      []*ArchGroup
 	edges       []ArchEdge
 	layoutHints []ArchLayoutHint
-	// registered is "node" or "group" for each id.
-	registered map[string]string
+	registered  map[string]string
 }
 
 func newArchitectureDb() *ArchitectureDb {
@@ -94,7 +86,6 @@ func (db *ArchitectureDb) register(kind, id, parent string) {
 	}
 }
 
-// setNode: register has refused an id in use, so every node is new.
 func (db *ArchitectureDb) setNode(node *ArchNode) {
 	db.nodes = append(db.nodes, node)
 	db.nodeById[node.id] = node
@@ -127,7 +118,6 @@ func (db *ArchitectureDb) addEdge(e EdgeAst) {
 			fail("The " + en.side + "-hand id [" + en.id + "] does not yet exist. Please create the service/group before declaring an edge to it.")
 		}
 	}
-	// Mermaid lets a group id through the check above and then fails with a TypeError.
 	for _, en := range ends {
 		if db.nodeById[en.id] == nil {
 			fail("The " + en.side + "-hand id [" + en.id + "] is a group. Add {group} to a service inside it instead.")
@@ -162,7 +152,6 @@ func (db *ArchitectureDb) addLayoutHint(hint ArchLayoutHint) {
 	db.layoutHints = append(db.layoutHints, hint)
 }
 
-// collapseIndents is text.replace(/\n\s+/g, '\n').
 func collapseIndents(text string) string {
 	if !strings.Contains(text, "\n") {
 		return text
@@ -190,7 +179,6 @@ func collapseIndents(text string) string {
 	return b.String()
 }
 
-// populate is Mermaid's populateDb: every group, then services, junctions, edges, and alignments.
 func populate(ast *ArchitectureAst, db *ArchitectureDb) {
 	if ast.accDescr != "" {
 		db.accDescr = collapseIndents(ast.accDescr)

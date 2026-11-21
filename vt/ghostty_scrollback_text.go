@@ -49,9 +49,6 @@ func (t *GhosttyTerminal) AppendScrollbackText(buf *strings.Builder) {
 	}
 }
 
-// historyTextLocked is the first n history lines of src as plain text, joined
-// by newlines with no newline at the end. ok is false when the library failed
-// or its text does not line up with the rows.
 func (t *GhosttyTerminal) historyTextLocked(src *gh.Terminal, n int) (string, bool) {
 	if n <= 0 || t.width <= 0 {
 		return "", false
@@ -97,8 +94,6 @@ func (t *GhosttyTerminal) historyTextLocked(src *gh.Terminal, n int) (string, bo
 			exact[i] = true
 		}
 	}
-	// The rows the formatter left out are read one by one. They must be
-	// blank: anything else means its lines are not the rows.
 	for i := got; i < n; i++ {
 		if t.readHistoryLineLocked(src, i).String() != "" {
 			return "", false
@@ -121,12 +116,6 @@ func (t *GhosttyTerminal) historyTextLocked(src *gh.Terminal, n int) (string, bo
 	return text + strings.Repeat("\n", n-got), true
 }
 
-// styledTailRows reads the VT form of n history rows, rows ended by CR LF, and
-// marks each row that prints a space while an SGR attribute is set, after the
-// row's last other character. Such a row may end in a space that has a style,
-// which the plain text has trimmed. The SGR state carries from row to row, as
-// it does in the stream. It is conservative: any SGR but a plain reset counts
-// as set. ok is false when the text holds more than n rows.
 func styledTailRows(vt string, n int) (marks []bool, ok bool) {
 	marks = make([]bool, n)
 	row, set, tail := 0, false, false
@@ -143,8 +132,6 @@ func styledTailRows(vt string, n int) (marks []bool, ok bool) {
 		case c == 0x1b:
 			var final byte
 			i, final = skipVTEscape(vt, i, &set)
-			// libghostty 1.0 writes a run of blanks as ECH and CUF over
-			// it, which under a set SGR are styled spaces.
 			if set && (final == 'X' || final == 'C') {
 				tail = true
 			}
@@ -166,9 +153,6 @@ func styledTailRows(vt string, n int) (marks []bool, ok bool) {
 	return marks, true
 }
 
-// skipVTEscape returns the index past the escape sequence at vt[i], and the
-// final byte of a CSI sequence (0 for any other). An SGR sequence sets *set:
-// false for a plain reset, true for anything else.
 func skipVTEscape(vt string, i int, set *bool) (int, byte) {
 	if i+1 >= len(vt) {
 		return len(vt), 0
@@ -188,7 +172,6 @@ func skipVTEscape(vt string, i int, set *bool) (int, byte) {
 		}
 		return j + 1, vt[j]
 	case ']', 'P', '_', '^', 'X':
-		// A string runs to BEL or ST.
 		for j := i + 2; j < len(vt); j++ {
 			if vt[j] == 0x07 {
 				return j + 1, 0
@@ -203,10 +186,6 @@ func skipVTEscape(vt string, i int, set *bool) (int, byte) {
 	}
 }
 
-// formatSelection is the text of sel in format, trimmed and with soft wraps
-// kept as line breaks. It asks for no extras: a formatter adds the palette,
-// the pen style and the open hyperlink by default, and styledTailRows reads
-// the output row by row, so a prefix that is no row would shift every row.
 func formatSelection(src *gh.Terminal, sel *gh.Selection, format gh.FormatterFormat) (string, error) {
 	f, err := gh.NewFormatter(src,
 		gh.WithFormatterFormat(format),

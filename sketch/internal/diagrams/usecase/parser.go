@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/usecase/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package usecase
 
 import (
@@ -11,11 +9,6 @@ import (
 	"tuios.dev/sketch/internal/js"
 	"tuios.dev/sketch/internal/types"
 )
-
-// Mermaid parses use case diagrams with a Chevrotain parser, which decides each choice by looking
-// at most three tokens ahead and reports the first token that fits nowhere. This parser makes the
-// same decisions from the same lookahead, so it accepts the same text and names the same token in
-// its errors. It builds the model directly, where Mermaid builds a syntax tree and then visits it.
 
 const (
 	fLINE           = 1
@@ -38,7 +31,6 @@ const (
 var FLAGS = func() (flags [T_RPAREN + 1]uint8) {
 	flag := func(names string, bits uint8) {
 		for name := range strings.SplitSeq(names, "|") {
-			// WORD is a category: every keyword and IDENTIFIER.
 			if name == "WORD" {
 				for t := T_USECASE; t <= T_IDENTIFIER; t++ {
 					flags[t] |= bits
@@ -72,9 +64,8 @@ type Item struct {
 	stereotypeSpan *Span
 	classes        []string
 	classSpans     []Span
-	// Whether this mention says something about the element, and so declares it.
-	explicit bool
-	nodeSpan Span
+	explicit       bool
+	nodeSpan       Span
 }
 
 type Tail struct {
@@ -90,12 +81,11 @@ type Tail struct {
 }
 
 type parser struct {
-	src    string
-	types  []int
-	starts []int
-	ends   []int
-	p      int
-	// Where the last token before the most recent line end stops, which is where its statement stops.
+	src         string
+	types       []int
+	starts      []int
+	ends        []int
+	p           int
 	lastEnd     int
 	drafts      *Drafts
 	parent      *DraftBoundary
@@ -130,7 +120,6 @@ func (ps *parser) expect(typ int) int {
 	return ps.p - 1
 }
 
-// noAlternative: Chevrotain lists every token sequence that would have been accepted.
 func (ps *parser) noAlternative(expected string) {
 	var b strings.Builder
 	i := 0
@@ -182,7 +171,6 @@ func (ps *parser) lineEnd() {
 	}
 }
 
-// content is the text of a name or string token, without its quotes.
 func (ps *parser) content(k int) Span {
 	trim := 0
 	switch ps.types[k] {
@@ -203,7 +191,6 @@ func (ps *parser) tokenLabel(k int) DraftLabel {
 	return DraftLabel{text: ps.src[at[0]:at[1]], typ: typ, span: at}
 }
 
-// generatedID is label.replace(/\W/g, '_'): every UTF-16 unit that is not a word character becomes an underscore.
 func generatedID(label string) string {
 	var b strings.Builder
 	for _, r := range label {
@@ -219,7 +206,6 @@ func generatedID(label string) string {
 	return b.String()
 }
 
-// label: an unquoted label runs to the next delimiter and is taken from the source as written.
 func (ps *parser) label() DraftLabel {
 	typ := ps.types[ps.p]
 	if typ == T_PLAIN_STRING || typ == T_MARKDOWN_STRING {
@@ -266,9 +252,6 @@ func (ps *parser) property() DraftProperty {
 	return DraftProperty{MetadataOccurrence{key: ps.src[keySpan[0]:keySpan[1]], span: Span{ps.starts[key], ps.ends[value]}, keySpan: keySpan, valueSpan: valueSpan}, v}
 }
 
-// separatorAhead is whether another property follows. A comma or line breaks before the closing brace do not count,
-// but Chevrotain looks only three tokens ahead, so a comma and two line breaks, or three line
-// breaks, are taken for a separator and the brace after them is then an error.
 func (ps *parser) separatorAhead() bool {
 	a := ps.types[ps.p]
 	b := ps.types[ps.p+1]
@@ -337,7 +320,6 @@ func (ps *parser) classSuffix(classes *[]string, spans *[]Span) {
 	}
 }
 
-// name is an id with an optional label in parentheses or brackets, or a string that stands for both.
 func (ps *parser) name(brackets bool) Item {
 	k := ps.p
 	typ := ps.types[ps.p]
@@ -420,7 +402,6 @@ func occurrence(item *Item, defines bool) NodeOccurrence {
 	return out
 }
 
-// labeledRight is whether a label and then one of the operators that can close it come next.
 func (ps *parser) labeledRight(closers uint8) bool {
 	if ps.types[ps.p] < T_USECASE || ps.types[ps.p] > T_MARKDOWN_STRING {
 		return false
@@ -436,7 +417,6 @@ func (ps *parser) labeledRight(closers uint8) bool {
 	}
 }
 
-// minimumLength: each dash beyond the second asks for one more rank between the two ends.
 func (ps *parser) minimumLength(k int) int {
 	dashes := ps.ends[k] - ps.starts[k]
 	if ps.types[k] != T_MARKERLESS_SOLID {
@@ -476,7 +456,6 @@ func (ps *parser) relationTail() *Tail {
 		tail.minlen = ps.minimumLength(k)
 	case T_BACKWARD_SOLID:
 		tail.arrowType = BACK_ARROW
-		// Only the shortest operator can open a label: `A <-- label -- B`.
 		if ps.ends[k]-ps.starts[k] == 3 && ps.labeledRight(0) {
 			label := ps.label()
 			tail.label = &label
@@ -567,7 +546,6 @@ func declaration(nodes []NodeOccurrence) *GraphStatement {
 	return out
 }
 
-// actors: `actor A, B` declares several actors; at the top level `actor A --> B` declares one and relates it.
 func (ps *parser) actors(top bool) *GraphStatement {
 	ps.p++
 	items := []Item{ps.element(true)}
@@ -681,7 +659,6 @@ func (ps *parser) style() string {
 	for FLAGS[ps.types[ps.p]]&fSTYLE_PART != 0 {
 		ps.p++
 	}
-	// The value is taken from the source, so the spaces inside `1px solid red` survive.
 	return strings.ReplaceAll(ps.src[ps.starts[first]:ps.ends[ps.p-1]], "\\,", ",")
 }
 
@@ -835,7 +812,6 @@ func (ps *parser) topStatement() *GraphStatement {
 			ps.drafts.metadata = append(ps.drafts.metadata, draftMetadata{target: target.id, span: target.span, properties: assigned, statement: out})
 		} else {
 			follows := FLAGS[next]&fFOLLOWS_NAME != 0 || (typ == T_IDENTIFIER && (next == T_LPAREN || next == T_LBRACKET))
-			// Mermaid turns away the PlantUML statements people are most likely to try.
 			if !follows || (typ == T_IDENTIFIER && slices.Contains(FORBIDDEN[:], strings.ToLower(ps.image(k)))) {
 				ps.noAlternative(statementSequences())
 			}
@@ -886,7 +862,6 @@ func parseUsecase(source string, title *string) *UsecaseModel {
 	if ps.types[ps.p] != T_EOF {
 		ps.fail("Redundant input, expecting EOF but found: " + ps.image(ps.p))
 	}
-	// The whole text has to be well formed before the JSON in it is looked at, as in Mermaid.
 	for _, pending := range ps.pendingJson {
 		literal := pending.literal
 		parsed := parseOrderedJson(ps.image(literal), func() (int, int) { return lineColumn(source, ps.starts[literal]) })

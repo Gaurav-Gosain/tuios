@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/architecture/layout.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package architecture
 
 import (
@@ -7,17 +5,9 @@ import (
 	"slices"
 )
 
-// Grid placement. Mermaid hands the edge sides to a force-directed solver as relative placement
-// constraints. Pele applies them directly: every service and junction takes a cell, an edge
-// `a:R -- L:b` puts b in the cell to the right of a, and a group is a solid rectangle of cells, so a
-// group never encloses a node that is not in it. Each container (the diagram, then every group) is
-// laid out on its own, innermost first, and a finished group is placed in its parent as one block.
-
 type Grid struct {
-	// Cell of each node, in the order of the nodes passed in.
-	col []int
-	row []int
-	// Cell rectangle and parent of each group. A group with nothing in it takes one cell.
+	col         []int
+	row         []int
 	groupCol    []int
 	groupRow    []int
 	groupCols   []int
@@ -55,7 +45,6 @@ func placeOnGrid(nodes []*ArchNode, groups []*ArchGroup, edges []ArchEdge, hints
 	root := G
 	nodeIndex := make(map[string]int, N)
 	groupIndex := make(map[string]int, G)
-	// Items are nodes (0..N-1) then groups (N..N+G-1). Containers are groups (0..G-1) then the root.
 	parent := make([]int, N+G)
 	for i := range parent {
 		parent[i] = root
@@ -88,8 +77,6 @@ func placeOnGrid(nodes []*ArchNode, groups []*ArchGroup, edges []ArchEdge, hints
 		kids[parent[N+g]] = append(kids[parent[N+g]], N+g)
 	}
 
-	// A link asks for one node to sit beside another. It belongs to the innermost container that
-	// holds both ends, and there it relates the two children of that container the ends are in.
 	var linkA, linkB, sideA, sideB, itemA, itemB []int
 	hintLinks := make([][]int, N+G)
 	edgeLinks := make([][]int, N+G)
@@ -132,7 +119,6 @@ func placeOnGrid(nodes []*ArchNode, groups []*ArchGroup, edges []ArchEdge, hints
 			}
 		}
 	}
-	// An edge between two like sides says least about where its ends go, so those come last.
 	for _, likeSides := range [2]bool{false, true} {
 		for _, edge := range edges {
 			if (edge.lhsDir == edge.rhsDir) != likeSides {
@@ -146,7 +132,6 @@ func placeOnGrid(nodes []*ArchNode, groups []*ArchGroup, edges []ArchEdge, hints
 		}
 	}
 
-	// Position of each item in its container, and its size in cells.
 	x := make([]int, N+G)
 	y := make([]int, N+G)
 	w := make([]int, N+G)
@@ -216,8 +201,6 @@ func placeOnGrid(nodes []*ArchNode, groups []*ArchGroup, edges []ArchEdge, hints
 		return -1
 	}
 
-	// slide: how far a block must slide along (sx, sy) to be clear. Each step jumps past what it hit, and
-	// the result is kept, because a later block starting from the same place cannot stop sooner.
 	slide := func(rx, ry, rw, rh, sx, sy int) int {
 		key := reachKey{rx, ry, rw, rh, sx, sy}
 		k := reach[key]
@@ -266,14 +249,12 @@ func placeOnGrid(nodes []*ArchNode, groups []*ArchGroup, edges []ArchEdge, hints
 		shiftX, shiftY := 0, 0
 		facing := DX[sp]+DX[sq] == 0 && DY[sp]+DY[sq] == 0
 		if sp == sq {
-			// Like sides: the edge loops around, so the nodes stack across the direction it leaves in.
 			dx = 0
 			if DX[sp] == 0 {
 				dx = 1
 			}
 			dy = 1 - dx
 		} else if !facing {
-			// A bend: one step along the side the edge leaves, one step back from the side it enters.
 			shiftX = -DX[sq]
 			shiftY = -DY[sq]
 		}
@@ -294,8 +275,6 @@ func placeOnGrid(nodes []*ArchNode, groups []*ArchGroup, edges []ArchEdge, hints
 			bx = x[from] + pax + shiftX - ax
 		}
 		if facing {
-			// When several placed nodes reach this one through the same pair of sides, line it up
-			// with the middle one, not with whichever happened to be visited first.
 			if list := edgeLinks[to]; len(list) > 1 {
 				wanted = wanted[:0]
 				for _, j := range list {
@@ -336,7 +315,6 @@ func placeOnGrid(nodes []*ArchNode, groups []*ArchGroup, edges []ArchEdge, hints
 					}
 				}
 			}
-			// Taken: move sideways, to whichever side is nearer, so the edge can still leave straight.
 			px := 0
 			if dx == 0 {
 				px = 1
@@ -378,7 +356,6 @@ func placeOnGrid(nodes []*ArchNode, groups []*ArchGroup, edges []ArchEdge, hints
 			large = large[:0]
 			clear(reach)
 			put(start, 0, 0)
-			// Declared alignments are followed as soon as a node is placed, ahead of any edge.
 			hintAt, edgeAt, linkAt := first, first, 0
 			for {
 				if hintAt < len(order) {
@@ -404,7 +381,6 @@ func placeOnGrid(nodes []*ArchNode, groups []*ArchGroup, edges []ArchEdge, hints
 		}
 		starts = append(starts, len(order))
 
-		// Unconnected parts go side by side, wrapping into rows that keep the whole roughly square.
 		count := len(starts) - 1
 		minX := make([]int, count)
 		minY := make([]int, count)

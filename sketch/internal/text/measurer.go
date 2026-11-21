@@ -1,8 +1,3 @@
-// Ported from pele src/text/measurer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The canvas measurer is browser only and is not ported. defaultMeasurer always
-// gives the metrics measurer, which is what pele uses outside a browser.
-
 // Package text measures and lays out label text.
 package text
 
@@ -22,7 +17,6 @@ const (
 	Underline = 32
 )
 
-// smaller is the approximate divisor for CSS font-size="smaller".
 const smaller = 1.2
 
 // TextMeasurer gives the width of text at a font size in a style.
@@ -86,8 +80,6 @@ func (metrics) Width(text string, size float64, style int) float64 {
 	}
 	units := 0
 	for _, c := range text {
-		// A character past the BMP is two UTF-16 units in pele: a high surrogate,
-		// which counts as wide, and a low one, which counts as nothing.
 		if c > 0xffff {
 			c = 0xd800
 		}

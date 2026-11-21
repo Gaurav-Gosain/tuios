@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/pie/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package pie
 
 import (
@@ -64,7 +62,6 @@ type outsideLabel struct {
 	x, y, width float64
 }
 
-// clear reports whether a label outside the rim at (x, y) keeps clear of those placed before it.
 func clear(placedOutside []outsideLabel, x, y, width, small float64) bool {
 	for _, other := range placedOutside {
 		if !(math.Abs(x-other.x) >= (width+other.width)/2+2 || math.Abs(y-other.y) >= small+2) {
@@ -74,7 +71,6 @@ func clear(placedOutside []outsideLabel, x, y, width, small float64) bool {
 	return true
 }
 
-// `tight` is set when the chart does not fit the width it has with its legend beside it.
 func draw(model *PieModel, config types.Config, options types.RenderOptions, radius float64, tight bool) types.Rendered {
 	num := svg.Num
 	size := types.Or(options.FontSize, 16)
@@ -131,7 +127,6 @@ func draw(model *PieModel, config types.Config, options types.RenderOptions, rad
 		titleHeight = title.Height + 16
 	}
 
-	// A slice too thin for its percentage gets the label outside the rim, which needs a margin.
 	shares := make([]float64, len(entries))
 	for i, label := range entries {
 		share := 0.0

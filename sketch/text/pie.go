@@ -8,29 +8,12 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// Pie charts are drawn as a disc of half blocks with a legend at its right:
-// each slice's mark, label, share and, with showData, value. The disc is
-// tuios.dev/plot's pie: slices in the series colours, clockwise from twelve
-// o'clock as pele draws them, and slices of the second round of colours
-// shaded, so no two slices look the same at 16 colours.
-//
-// Without colour the disc says nothing, and in 40 columns or fewer it is too
-// small to read, so the slices are listed instead: a bar for each, as long as
-// its share, with a blank line between slices.
-
-// pieAspect is the height of a cell over its width that the disc is drawn
-// for: between the 2.0 of a tight line height and the 2.2 of a common
-// terminal font, so it is round to the eye in either.
 const pieAspect = 2.1
 
-// pieMaxSlices is the most slices the disc draws. tuios.dev/plot folds the
-// rest into one, which the legend would have to show as well.
 const pieMaxSlices = 12
 
-// eighths are the blocks that end a bar, from one eighth of a cell to a whole one.
 var eighths = [...]rune{'▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'}
 
-// bar is a run of blocks n eighths of a cell long.
 func bar(n int) string {
 	if n <= 0 {
 		return ""
@@ -55,8 +38,6 @@ func drawPie(l *sketch.Layout, opt Options) (*canvas, error) {
 	return pieList(p, opt)
 }
 
-// drawn is the share a slice takes on the disc: pele leaves out a slice
-// under 1%, though it keeps it in the legend.
 func drawn(s types.GeoSlice) float64 {
 	if s.Share*100 >= 1 && s.Percent != "0%" {
 		return s.Share
@@ -64,7 +45,6 @@ func drawn(s types.GeoSlice) float64 {
 	return 0
 }
 
-// pieOf is the pie tuios.dev/plot draws for the slices.
 func pieOf(p *types.GeoPie) plot.Pie {
 	vals := make([]float64, len(p.Slices))
 	for i, s := range p.Slices {
@@ -73,7 +53,6 @@ func pieOf(p *types.GeoPie) plot.Pie {
 	return plot.Pie{Values: vals, NoLegend: true, Aspect: pieAspect}
 }
 
-// pieColumns are the widths of the legend's columns: label, share and value.
 func pieColumns(p *types.GeoPie) (label, pct, value int) {
 	for _, s := range p.Slices {
 		label = max(label, width(s.Label))
@@ -85,8 +64,6 @@ func pieColumns(p *types.GeoPie) (label, pct, value int) {
 	return label, pct, value
 }
 
-// shareAndValue writes a slice's share and value right-aligned in their
-// columns from x.
 func (c *canvas) shareAndValue(x, y int, s types.GeoSlice, pctW, valW int) {
 	c.text(x+pctW-width(s.Percent), y, s.Percent, roleTitle)
 	if valW > 0 {
@@ -113,8 +90,6 @@ func pieDisc(p *types.GeoPie, opt Options) (*canvas, error) {
 		}
 		return w
 	}
-	// The disc is 12 rows tall, 14 when there are columns to spare, and
-	// down to 8 when the columns are few. Past that the labels get shorter.
 	rows := 12
 	if opt.Cols == 0 || opt.Cols >= 110 {
 		rows = 14
@@ -165,9 +140,6 @@ func pieDisc(p *types.GeoPie, opt Options) (*canvas, error) {
 	return withTitle(c, p.Title, opt.Cols)
 }
 
-// pieList lists the slices in the order pele draws them: the label, a bar as
-// long as the slice's share of the largest slice, the share and, with
-// showData, the value, with a blank line between slices.
 func pieList(p *types.GeoPie, opt Options) (*canvas, error) {
 	pie := pieOf(p)
 	labelW, pctW, valW := pieColumns(p)
@@ -175,7 +147,6 @@ func pieList(p *types.GeoPie, opt Options) (*canvas, error) {
 	for _, s := range p.Slices {
 		top = max(top, s.Share)
 	}
-	// Columns: label, bar, share, value, two cells apart.
 	right := pctW
 	if valW > 0 {
 		right += 2 + valW

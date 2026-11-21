@@ -7,13 +7,6 @@ import (
 	"strings"
 )
 
-// This file is a port of bin/omarchy-theme-color, the resolver every Omarchy
-// consumer shares, at basecamp/omarchy 246f33a. It reads a colors.toml the
-// way that script's bash reads it, quirks included, and derives the missing
-// keys with the same cascade, so a theme resolves here to the colours
-// Omarchy gives every other app. testdata/ holds the script's own output for
-// every shipped theme, and the parity test holds this port to it.
-
 // MaxFileSize is the most bytes of a colors.toml this package reads. A
 // shipped one is about 1 KiB. A larger file is not read at all.
 const MaxFileSize = 64 << 10
@@ -31,17 +24,13 @@ func Resolve(data []byte, lightFile bool) map[string]string {
 	return c
 }
 
-// parseColors reads key = value lines as parse_colors_file does.
 func parseColors(data []byte) map[string]string {
 	c := map[string]string{}
-	// bash's read loop never runs its body for a last line with no newline,
-	// so that line is not read.
 	end := bytes.LastIndexByte(data, '\n')
 	if end < 0 {
 		return c
 	}
 	for line := range strings.SplitSeq(string(data[:end]), "\n") {
-		// bash drops NUL bytes from what read returns.
 		line = strings.ReplaceAll(line, "\x00", "")
 		key, value := splitLine(line)
 		key = strings.Map(func(r rune) rune {
@@ -67,9 +56,6 @@ func parseColors(data []byte) map[string]string {
 	return c
 }
 
-// splitLine splits a line as IFS='=' read -r key value does: the key is the
-// text before the first '=', and the value is the rest, less one trailing
-// '=' when the rest holds no other.
 func splitLine(line string) (key, value string) {
 	key, value, found := strings.Cut(line, "=")
 	if !found {
@@ -81,7 +67,6 @@ func splitLine(line string) (key, value string) {
 	return key, value
 }
 
-// cutAny is strings.Cut at the first byte of value that is one of chars.
 func cutAny(s, chars string) (before, after string, found bool) {
 	i := strings.IndexAny(s, chars)
 	if i < 0 {
@@ -105,8 +90,6 @@ func allIn(s, set string) bool {
 	return true
 }
 
-// legacyPalette maps each canonical ground and text key to the short name
-// older themes used.
 var legacyPalette = [][2]string{
 	{"background", "bg"},
 	{"dark_background", "dark_bg"},
@@ -118,7 +101,6 @@ var legacyPalette = [][2]string{
 	{"bright_foreground", "bright_fg"},
 }
 
-// semanticANSI is the ANSI slot behind each named colour.
 var semanticANSI = [][2]string{
 	{"red", "color1"},
 	{"green", "color2"},
@@ -134,23 +116,17 @@ var semanticANSI = [][2]string{
 	{"bright_cyan", "color14"},
 }
 
-// ansiKeys is the key each ANSI slot takes its colour from, 0 to 15. It is
-// also the mapping of Omarchy's kitty, ghostty and foot templates.
 var ansiKeys = [16]string{
 	"background", "red", "green", "yellow", "blue", "magenta", "cyan", "foreground",
 	"muted", "bright_red", "bright_green", "bright_yellow", "bright_blue", "bright_magenta", "bright_cyan", "bright_foreground",
 }
 
-// resolveColors is resolve_theme_colors and resolve_theme_mode.
 func resolveColors(c map[string]string, lightFile bool) {
-	// alias sets key to fallback's value when key is empty. Like the
-	// script, it creates key even when fallback is empty too.
 	alias := func(key, fallback string) {
 		if c[key] == "" {
 			c[key] = c[fallback]
 		}
 	}
-	// or is ${a:-b}.
 	or := func(keys ...string) string {
 		for _, k := range keys {
 			if c[k] != "" {
@@ -257,11 +233,6 @@ func isHex6(s string) bool {
 	return true
 }
 
-// mixColor is mix_color: start moved toward end by amount, both read as six
-// hex digits after an optional '#'. It does what the script's awk does with
-// anything else too, so a theme with a broken colour derives the same broken
-// colour here: a missing digit reads as 0, any other non-digit as -1, and a
-// negative channel prints as gawk prints it.
 func mixColor(start, end string, amount float64) string {
 	start = strings.TrimPrefix(start, "#")
 	end = strings.TrimPrefix(end, "#")
@@ -280,13 +251,10 @@ func mixColor(start, end string, amount float64) string {
 	return b.String()
 }
 
-// awkHexPair is hex_pair_to_int: the two characters of hex at i as a number.
 func awkHexPair(hex string, i int) int {
 	return awkHexValue(hex, i)*16 + awkHexValue(hex, i+1)
 }
 
-// awkHexValue is hex_value of substr(hex, i+1, 1). substr past the end is
-// the empty string, which gawk's index finds at position 1.
 func awkHexValue(hex string, i int) int {
 	if i >= len(hex) {
 		return 0

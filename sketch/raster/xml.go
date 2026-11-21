@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-// node is one element of the SVG, with its attributes in order and its children.
-// Text content is held in text nodes, whose name is "".
 type node struct {
 	name     string
 	attrs    [][2]string
@@ -24,13 +22,8 @@ func (n *node) attr(name string) (string, bool) {
 	return "", false
 }
 
-// maxDepth bounds the nesting of elements, so that hostile markup cannot run the
-// drawing out of stack.
 const maxDepth = 256
 
-// parseXML reads the subset of XML that pele writes: elements with quoted
-// attributes, character data and the five entities plus numeric references.
-// Comments, processing instructions and CDATA are skipped.
 func parseXML(s string) (*node, error) {
 	root := &node{}
 	stack := []*node{root}

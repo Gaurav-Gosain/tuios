@@ -72,11 +72,9 @@ type Surface struct {
 	g     *glyphs
 	mode  plot.Mode
 
-	cache map[*tml.Node]*compiled
-	// sketches keeps the Mermaid diagrams drawn, by source and width.
+	cache    map[*tml.Node]*compiled
 	sketches *sketchCache
-	// hooks are what the surface tells its host about its diagrams.
-	hooks Hooks
+	hooks    Hooks
 
 	root  *box
 	byPtr map[string][]*box
@@ -84,60 +82,45 @@ type Surface struct {
 	out   *Buffer
 	w, h  int
 
-	full    bool                   // the next Render rebuilds and repaints everything
-	clock   bool                   // Tick asked for the ago() readers to evaluate again
-	links   map[image.Point]string // the link under each cell
-	pending []string               // state pointers changed since the last Render
-	viewDue []string               // view keys changed since the last Render
+	full    bool
+	clock   bool
+	links   map[image.Point]string
+	pending []string
+	viewDue []string
 	damage  []Rect
 
-	budget   *tml.Budget
-	exp      *expansion
-	focus    []*box // focusable boxes in tree order, from the last layout
-	gen      uint64 // the layout pass, for the measure cache
-	boxSteps int    // each box's share of the frame's step budget
-	drag     *box   // the split whose divider is being dragged
-	// focusMoved is set by tab and shift+tab: the next layout scrolls the
-	// focused box into view. A wheel scroll leaves it, so the person can
-	// look away from the focus.
+	budget     *tml.Budget
+	exp        *expansion
+	focus      []*box
+	gen        uint64
+	boxSteps   int
+	drag       *box
 	focusMoved bool
-	// litFocus is the key of the box the cards last drew the focus for.
-	litFocus string
-	// relayout says the page scrolled: the next Render places and paints
-	// again, with no binding evaluated.
-	relayout bool
-	// reveal says the focused box took a key: the next layout of a page
-	// brings its cursor into view.
-	reveal bool
+	litFocus   string
+	relayout   bool
+	reveal     bool
 
-	// The work of the last Render, for the budgets the tests hold.
 	stats renderStats
 
-	// Motion; see motion.go. motions holds the boxes with an enter, an
-	// exit, a skeleton or a ttl, by key; ghosts the boxes that left with
-	// an exit still playing.
-	motions map[string]*motion
-	ghosts  []ghost
-	now     time.Time // the clock of this Render
-	animate bool      // a box plays: paint it this frame
-	repaint bool      // paint every box this frame, with no build
-	resized bool      // this Render made a new buffer
-	fxCells []uv.Cell
-	mixes   map[mixKey]color.Color
-	lastMix lastMix
-	// The colours a fade blends from, read once per effect drawn.
+	motions      map[string]*motion
+	ghosts       []ghost
+	now          time.Time
+	animate      bool
+	repaint      bool
+	resized      bool
+	fxCells      []uv.Cell
+	mixes        map[mixKey]color.Color
+	lastMix      lastMix
 	fxBase, fxFg color.Color
 }
 
-// renderStats counts the work of one Render.
 type renderStats struct {
-	built    int // boxes evaluated
-	steps    int // expression steps the boxes spent
-	cells    int // cells written
-	measures int // boxes measured (not counting cache hits)
+	built    int
+	steps    int
+	cells    int
+	measures int
 }
 
-// compiled holds the parsed bindings and actions of one source node.
 type compiled struct {
 	tmpl    map[string]*tml.Template
 	exprs   map[string]*tml.Expr
@@ -278,8 +261,6 @@ func (s *Surface) Patch(ops []tml.Op) error {
 	return nil
 }
 
-// addPending records changed state paths for the next Render, once each,
-// so a hidden surface that gets many patches pays once per path.
 func (s *Surface) addPending(changed []string) {
 	for _, c := range changed {
 		if !slices.Contains(s.pending, c) {
@@ -288,8 +269,6 @@ func (s *Surface) addPending(changed []string) {
 	}
 }
 
-// flush brings the boxes up to date with pending changes before input
-// acts on them, at the last size.
 func (s *Surface) flush() {
 	if s.root != nil && (s.full || len(s.pending) > 0 || len(s.viewDue) > 0 || s.clock || s.relayout) {
 		s.Render(s.w, s.h)
@@ -357,8 +336,6 @@ func (s *Surface) Damage() []Rect {
 	return out
 }
 
-// addDamage records a repainted rectangle. Past 256 rectangles they
-// collapse into their union, so a host that never asks keeps no more.
 func (s *Surface) addDamage(r Rect) {
 	if r.Empty() {
 		return
@@ -374,8 +351,6 @@ func (s *Surface) addDamage(r Rect) {
 	s.damage = append(s.damage, r)
 }
 
-// maxSide bounds the width and height of a surface, so a resize passed on
-// unchecked cannot allocate without bound.
 const maxSide = 4096
 
 // Render draws the surface into a w by h buffer and returns it. The buffer
@@ -443,7 +418,6 @@ func (s *Surface) ground() string {
 	return "panel"
 }
 
-// rebuildAll builds the whole box tree from the document.
 func (s *Surface) rebuildAll() {
 	s.pending, s.viewDue = nil, nil
 	s.byPtr = map[string][]*box{}
@@ -453,15 +427,12 @@ func (s *Surface) rebuildAll() {
 		root.kids = s.buildChildren(s.doc, "", nil, root)
 		root.w = &pageWidget{}
 	} else {
-		// A fragment, such as the one row of a dock cell.
 		root.kids = s.build(s.doc, "", nil, root)
 	}
 	root.align = "stretch"
 	s.root = root
 }
 
-// rebuildDirty evaluates again the boxes that read changed state or whose
-// view state changed. It reports whether anything changed.
 func (s *Surface) rebuildDirty() bool {
 	if len(s.pending) == 0 && len(s.viewDue) == 0 && !s.clock {
 		return false
@@ -475,8 +446,6 @@ func (s *Surface) rebuildDirty() bool {
 	for _, ptr := range ptrs {
 		boxes := s.byPtr[ptr]
 		for p := ptr; len(boxes) == 0 && p != ""; {
-			// A node with no box (if was false, or a closed modal):
-			// build the nearest ancestor that has one.
 			p = parentPointer(p)
 			boxes = s.byPtr[p]
 			if p == "" {
@@ -484,15 +453,11 @@ func (s *Surface) rebuildDirty() bool {
 			}
 		}
 		for _, b := range boxes {
-			// Inside a form, the field values are the form's scope: the form
-			// builds again, so form.NAME readers see the new values.
 			if f := formOf(b); f != nil {
 				targets = append(targets, f)
 				continue
 			}
 			if _, each := b.src.Attr("each"); each || b.src.AttrString("if") != "" {
-				// The count of copies, or whether there is one, may change:
-				// build the parent's children again.
 				if b.parent != nil {
 					b = b.parent
 				}
@@ -513,16 +478,12 @@ func (s *Surface) rebuildDirty() bool {
 	if len(targets) == 0 {
 		return false
 	}
-	// A list item is its list's to build, so it counts as the list before
-	// the targets are deduplicated: an if inside a list template marks
-	// every item, and the list must build once, not once per item.
 	for i, b := range targets {
 		for b.kind == listItem && b.parent != nil {
 			b = b.parent
 		}
 		targets[i] = b
 	}
-	// A target inside another target is rebuilt with it.
 	s.exp = newExpansion(s.opts.Limits)
 	done := map[*box]bool{}
 	for _, b := range targets {
@@ -535,9 +496,6 @@ func (s *Surface) rebuildDirty() bool {
 	return true
 }
 
-// held reports whether b is still in the tree: each box up to the root is
-// among its parent's children. A rebuild replaces boxes, and a target that
-// was replaced must not be built again into an orphan.
 func held(b *box) bool {
 	for ; b.parent != nil; b = b.parent {
 		if !slices.Contains(b.parent.kids, b) {
@@ -547,7 +505,6 @@ func held(b *box) bool {
 	return true
 }
 
-// formOf returns the nearest form box that holds b, or nil.
 func formOf(b *box) *box {
 	for p := b.parent; p != nil; p = p.parent {
 		if p.kind == "form" {
@@ -566,12 +523,8 @@ func insideAny(b *box, set map[*box]bool) bool {
 	return false
 }
 
-// rebuild evaluates a box again in place: its attributes, its widget and
-// its children. The box keeps its place in the tree.
 func (s *Surface) rebuild(b *box) {
 	if b.kind == listItem {
-		// An item's box is the list's to build: building its src (the list
-		// node) here would nest a second list inside the item.
 		s.rebuild(b.parent)
 		return
 	}
@@ -586,7 +539,6 @@ func (s *Surface) rebuild(b *box) {
 	s.forget(b)
 	nb := s.buildOne(b.src, b.ptr, b.scope, b.parent)
 	if nb == nil {
-		// if turned false: the parent builds its children again.
 		s.rebuild(b.parent)
 		return
 	}
@@ -599,7 +551,6 @@ func (s *Surface) rebuild(b *box) {
 	}
 }
 
-// forget drops b and its children from the pointer index.
 func (s *Surface) forget(b *box) {
 	list := s.byPtr[b.ptr]
 	for i, x := range list {
@@ -613,12 +564,10 @@ func (s *Surface) forget(b *box) {
 	}
 }
 
-// markView records that the view state of the node with key changed.
 func (s *Surface) markView(key string) {
 	s.viewDue = append(s.viewDue, key)
 }
 
-// vars returns the names an expression of a box can read.
 func (s *Surface) vars(sc *scope) map[string]any {
 	m := map[string]any{
 		"state": s.store.State(),
@@ -628,8 +577,6 @@ func (s *Surface) vars(sc *scope) map[string]any {
 	return m
 }
 
-// band names the width class of a surface, for layouts that change with
-// the width: narrow under 72 cells, medium under 120, wide from 120.
 func band(w int) string {
 	switch {
 	case w < 72:
@@ -653,7 +600,6 @@ func (s *Surface) compiledOf(n *tml.Node) *compiled {
 	return c
 }
 
-// template returns the parsed template of an attribute or text run.
 func (s *Surface) template(n *tml.Node, key, src string) *tml.Template {
 	c := s.compiledOf(n)
 	t, ok := c.tmpl[key]
@@ -664,7 +610,6 @@ func (s *Surface) template(n *tml.Node, key, src string) *tml.Template {
 	return t
 }
 
-// expr returns the parsed expression of an attribute such as if or each.
 func (s *Surface) expr(n *tml.Node, key, src string) *tml.Expr {
 	c := s.compiledOf(n)
 	e, ok := c.exprs[key]
@@ -675,7 +620,6 @@ func (s *Surface) expr(n *tml.Node, key, src string) *tml.Expr {
 	return e
 }
 
-// actionsOf returns the parsed actions of an action attribute.
 func (s *Surface) actionsOf(n *tml.Node, attr string) []tml.Action {
 	c := s.compiledOf(n)
 	a, ok := c.actions[attr]
@@ -686,8 +630,6 @@ func (s *Surface) actionsOf(n *tml.Node, attr string) []tml.Action {
 	return a
 }
 
-// value evaluates an attribute: a binding gives its value, a literal its
-// own. The second result is false when the attribute is absent.
 func (s *Surface) value(n *tml.Node, attr string, vars map[string]any) (any, bool) {
 	v, ok := n.Attr(attr)
 	if !ok {
@@ -720,7 +662,6 @@ func (s *Surface) value(n *tml.Node, attr string, vars map[string]any) (any, boo
 	return tml.SanitizeValue(d), true
 }
 
-// str evaluates an attribute to text.
 func (s *Surface) str(n *tml.Node, attr string, vars map[string]any) string {
 	v, ok := s.value(n, attr, vars)
 	if !ok || v == nil {
@@ -729,7 +670,6 @@ func (s *Surface) str(n *tml.Node, attr string, vars map[string]any) string {
 	return tml.Stringify(v)
 }
 
-// num evaluates an attribute to a number.
 func (s *Surface) num(n *tml.Node, attr string, vars map[string]any, def float64) float64 {
 	v, ok := s.value(n, attr, vars)
 	if !ok {
@@ -751,9 +691,6 @@ func (s *Surface) num(n *tml.Node, attr string, vars map[string]any, def float64
 	return def
 }
 
-// count evaluates an attribute to a whole number in [lo, hi]. NaN and
-// infinities give def, so no value from a document can size an allocation
-// past hi, and the result is the same on every architecture.
 func (s *Surface) count(n *tml.Node, attr string, vars map[string]any, def, lo, hi int) int {
 	f := s.num(n, attr, vars, float64(def))
 	if math.IsNaN(f) || math.IsInf(f, 0) {
@@ -762,7 +699,6 @@ func (s *Surface) count(n *tml.Node, attr string, vars map[string]any, def, lo, 
 	return int(math.Max(float64(lo), math.Min(float64(hi), math.Trunc(f))))
 }
 
-// flag evaluates an attribute to a boolean.
 func (s *Surface) flag(n *tml.Node, attr string, vars map[string]any, def bool) bool {
 	v, ok := s.value(n, attr, vars)
 	if !ok {
@@ -774,8 +710,6 @@ func (s *Surface) flag(n *tml.Node, attr string, vars map[string]any, def bool) 
 	return tml.Truthy(v)
 }
 
-// data evaluates a data attribute: a literal array, or a path such as
-// state.items or item.kids. Anything else is nil.
 func (s *Surface) data(n *tml.Node, attr string, vars map[string]any) []any {
 	v, ok := n.Attr(attr)
 	if !ok {
@@ -792,10 +726,6 @@ func (s *Surface) data(n *tml.Node, attr string, vars map[string]any) []any {
 	if v.Kind != tml.KindString {
 		return nil
 	}
-	// A plain path (state.rows, item.kids) resolves straight from the
-	// store or the element in scope. It reads no more than its own names,
-	// so it costs no steps: a list of 1,000 rows must not need a budget of
-	// 1,000.
 	if root, ptr, err := tml.SplitPath(v.Str); err == nil {
 		var base any
 		switch {
@@ -823,7 +753,6 @@ func (s *Surface) data(n *tml.Node, attr string, vars map[string]any) []any {
 	return arr
 }
 
-// truthy evaluates if or show; an absent attribute is true.
 func (s *Surface) truthy(n *tml.Node, attr string, vars map[string]any) bool {
 	v, ok := n.Attr(attr)
 	if !ok {
@@ -843,7 +772,6 @@ func (s *Surface) truthy(n *tml.Node, attr string, vars map[string]any) bool {
 	return tml.Truthy(out)
 }
 
-// walkPointer follows a JSON Pointer through decoded JSON, or returns nil.
 func walkPointer(v any, ptr string) any {
 	if ptr == "" {
 		return v

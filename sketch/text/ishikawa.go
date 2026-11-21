@@ -7,17 +7,9 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// An ishikawa diagram is drawn as a fishbone: a spine that runs right to the effect, and each
-// category of causes as a bone that meets it, above and below in turn, with the category's
-// causes hanging off the bone as a tree. The first pair of categories is nearest the effect, as
-// in the SVG. When that does not fit the columns, the diagram is an indented tree: the effect,
-// its categories, and their causes.
-
-// fishBlock is the drawing of one category: its lines, and the column of its bone in them.
 type fishBlock struct {
 	lines []treeLine
 	w     int
-	// names is the count of lines of the category's name, at the top.
 	names int
 }
 
@@ -32,18 +24,13 @@ func drawIshikawa(l *sketch.Layout, opt Options) (*canvas, error) {
 	return ishikawaTree(ik, opt)
 }
 
-// fishCauses are a category's causes as tree lines that hang off a bone at column 0. above keeps
-// the bone running past the last cause, down to the spine. With cols set, a cause wider than
-// cols wraps.
 func fishCauses(causes []types.GeoCause, above bool, cols int) []treeLine {
-	// The category is the root, at depth 0, and its line is dropped: the name is drawn apart.
 	rows := make([]types.GeoTreeRow, 0, len(causes)+2)
 	rows = append(rows, types.GeoTreeRow{})
 	for _, cause := range causes {
 		rows = append(rows, types.GeoTreeRow{Depth: cause.Depth, Name: cause.Label})
 	}
 	if above {
-		// A row at depth 1 after the causes keeps the last cause's branch open.
 		rows = append(rows, types.GeoTreeRow{Depth: 1})
 	}
 	last, _ := treeLast(rows)
@@ -59,9 +46,6 @@ func fishCauses(causes []types.GeoCause, above bool, cols int) []treeLine {
 	return lines
 }
 
-// ishikawaBones draws the fishbone. Each category takes a series colour for
-// its name and its bone. When the bones do not fit the columns, the causes
-// wrap to the room there is; with less than 10 cells a bone, it gives up.
 func ishikawaBones(ik *types.GeoIshikawa, opt Options) *canvas {
 	if c := fishbone(ik, opt, 0); c != nil {
 		return c
@@ -71,8 +55,6 @@ func ishikawaBones(ik *types.GeoIshikawa, opt Options) *canvas {
 		return nil
 	}
 	pairs := (n + 1) / 2
-	// Two cells of tail, the columns of the pairs three cells apart, then
-	// the head and the effect.
 	room := (opt.Cols-2-2-width(ik.Effect)-3)/pairs - 3
 	if room < 10 {
 		return nil
@@ -109,7 +91,6 @@ func fishbone(ik *types.GeoIshikawa, opt Options, room int) *canvas {
 			downH = max(downH, len(b.lines))
 		}
 	}
-	// Columns from the tail to the head: the first pair is nearest the effect.
 	colW := make([]int, pairs)
 	for p := range pairs {
 		for side := range 2 {
@@ -157,7 +138,6 @@ func fishbone(ik *types.GeoIshikawa, opt Options, room int) *canvas {
 					c.text(bx, top+k, line.prefix, bone)
 				}
 			}
-			// The bone runs from under the name to the spine.
 			for y := top + b.names; y < spine; y++ {
 				if p := c.at(bx, y); p != nil && p.r == 0 {
 					c.vline(bx, y, y+1, light, bone)
@@ -178,7 +158,6 @@ func fishbone(ik *types.GeoIshikawa, opt Options, room int) *canvas {
 	return c
 }
 
-// ishikawaTree draws the effect, its categories and their causes as an indented tree.
 func ishikawaTree(ik *types.GeoIshikawa, opt Options) (*canvas, error) {
 	rows := []types.GeoTreeRow{{Depth: 0, Name: ik.Effect, Directory: true}}
 	for _, cat := range ik.Categories {

@@ -1,5 +1,3 @@
-// Ported from pele src/svg/palette.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package svg
 
 import (
@@ -11,10 +9,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// paletteVars are Mermaid's palette theme variables, which set a diagram's own series
-// colors. first is the number of the variable for the first series. Mindmap branches start
-// at cScale1, as cScale0 is the root's in Mermaid's styles. A venn palette repeats the colors
-// it sets, as in Mermaid.
 var paletteVars = map[string]struct {
 	prefix string
 	first  int
@@ -31,14 +25,10 @@ var paletteVars = map[string]struct {
 
 const paletteSlots = 8
 
-// paletteFunctions are the CSS functions a palette color may call.
 var paletteFunctions = wordList("rgb rgba hsl hsla hwb lab lch oklab oklch color color-mix light-dark var")
 
-// wordByte reports whether c is in JavaScript's [\w-].
 func wordByte(c byte) bool { return classByte(c) }
 
-// paletteChars is RE_CHARS, /^[\w\s#%.,+\-/()]{1,200}$/: a value of 1 to 200 UTF-16
-// units, each a word character, a JavaScript space or one of #%.,+-/().
 func paletteChars(s string) bool {
 	n := 0
 	for _, r := range s {
@@ -56,9 +46,6 @@ func paletteChars(s string) bool {
 	return n > 0
 }
 
-// safeColor is a color that cannot load a resource, end its declaration or read the page's
-// own variables. Values outside functions are checked as colors, so a typo keeps the theme
-// color.
 func safeColor(value any) (string, bool) {
 	raw, ok := value.(string)
 	if !ok {
@@ -86,8 +73,6 @@ func safeColor(value any) (string, bool) {
 	if depth != 0 {
 		return "", false
 	}
-	// RE_FUNCTION, /([\w-]*)\s*\(/g: the name before each parenthesis, past the spaces
-	// between them.
 	for i := 0; i < len(color); i++ {
 		if color[i] != '(' {
 			continue
@@ -108,7 +93,6 @@ func safeColor(value any) (string, bool) {
 			return "", false
 		}
 	}
-	// RE_VAR, /var\(\s*([\w-]*)/gi: each variable read must be one of pele's.
 	lower := strings.ToLower(color)
 	for i := 0; ; {
 		at := strings.Index(lower[i:], "var(")
@@ -135,8 +119,6 @@ func safeColor(value any) (string, bool) {
 	return color, true
 }
 
-// splitPaletteList splits at the commas between colors, not those inside rgb() and other
-// functions.
 func splitPaletteList(value string) []any {
 	var parts []any
 	depth := 0

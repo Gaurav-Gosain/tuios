@@ -10,37 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Regions: the part of what a pane shows that a rule reads.
-//
-// Most rules read the whole tail, which is right for a prompt that says what it
-// is in words. Others need less. What proves an agent is at rest is the shape
-// of the screen, an empty input box waiting at the bottom, and a rule reading
-// the whole tail cannot tell a prompt character inside that box from the same
-// character in the transcript above it. An answered prompt that is still in
-// the tail keeps a whole-tail rule matching after the question is gone, and a
-// rule reading only what sits under the last horizontal rule does not. So a
-// rule can name the part it reads, and a screen without that part gives it
-// nothing to match.
-//
-// The names follow herdr's manifests where the meaning is the same, so a rule
-// ported from there keeps its region. Screen regions:
-//
-//	tail (or whole_recent, or empty)   the whole tail the manifest reads
-//	bottom_non_empty_lines(N)          the last N lines of the tail
-//	prompt_box (or prompt_box_body)    between the last two border lines
-//	above_prompt_box                   everything above that box
-//	last_non_empty_above_prompt_box    the one line just above the box
-//	framed_above_prompt_box            the block just above the box, from the
-//	                                   border line before it (or the top of
-//	                                   the tail) to the box's top border
-//	after_last_horizontal_rule         everything under the last border line,
-//	                                   past a titled one at the very bottom
-//
-// Title rules read osc_title, the pane's window title, unless they name
-// osc_progress, the last OSC 9;4 progress report written as "4;<state>" for
-// the states that carry no percentage and "4;<state>;<percent>" for the ones
-// that do. Notify rules read the notification and take no region.
-
 // Screen region names, as they are stored after loading.
 const (
 	RegionTail                   = "tail"
@@ -57,8 +26,6 @@ const (
 	screenRegionNamesForMessages = "tail, bottom_non_empty_lines(N), prompt_box, above_prompt_box, last_non_empty_above_prompt_box, framed_above_prompt_box or after_last_horizontal_rule"
 )
 
-// screenRegionAliases maps the names a manifest may write to the name stored.
-// The whole tail is stored as "" so the common case needs no lookup.
 var screenRegionAliases = map[string]string{
 	"":                       "",
 	RegionTail:               "",
@@ -72,8 +39,6 @@ var screenRegionAliases = map[string]string{
 	RegionFramedAbovePromptBox: RegionFramedAbovePromptBox,
 }
 
-// normalizeScreenRegion returns the stored form of a screen region name and,
-// for bottom_non_empty_lines(N), the N it reads.
 func normalizeScreenRegion(name string) (region string, bottom int, err error) {
 	name = strings.ToLower(strings.TrimSpace(name))
 	if r, ok := screenRegionAliases[name]; ok {
@@ -88,8 +53,6 @@ func normalizeScreenRegion(name string) (region string, bottom int, err error) {
 	return "", 0, errorf("unknown region %q (%s)", name, screenRegionNamesForMessages)
 }
 
-// parseBottomRegion reads N out of bottom_non_empty_lines(N). N is a plain
-// decimal between 1 and maxRegionLines.
 func parseBottomRegion(name string) (int, bool) {
 	inner, ok := strings.CutPrefix(name, regionBottomPrefix)
 	if !ok {
@@ -106,8 +69,6 @@ func parseBottomRegion(name string) (int, bool) {
 	return n, true
 }
 
-// normalizeTitleRegion returns the stored form of a title rule's region: "" for
-// the title, or osc_progress.
 func normalizeTitleRegion(name string) (string, error) {
 	switch name = strings.ToLower(strings.TrimSpace(name)); name {
 	case "", RegionOSCTitle:
@@ -118,15 +79,8 @@ func normalizeTitleRegion(name string) (string, error) {
 	return "", errorf("region %q: a title rule reads osc_title or osc_progress", name)
 }
 
-// boxCorners are the runes that may open a border line before its dashes: the
-// corners and tees a TUI frames an input box with.
 const boxCorners = "╭╰┌└├┏┗┣"
 
-// isBoxBorder reports whether a line is a horizontal rule: a run of at least
-// three box-drawing dashes, optionally opened by a corner, with anything after
-// the run. Claude Code draws its prompt between two bare dash rules, Gemini CLI
-// inside a rounded box, and both pass. It is the one definition of a border
-// every region uses.
 func isBoxBorder(line string) bool {
 	t := strings.TrimLeft(strings.TrimSpace(line), boxCorners)
 	n := 0
@@ -139,12 +93,6 @@ func isBoxBorder(line string) bool {
 	return n >= 3
 }
 
-// isTitledRule reports whether a border line is a bare dash rule with a title
-// after its dashes. Claude Code 2.1.311 draws one with the session's name
-// under a form: "──── My session ─". A line opened by a corner is a box's
-// border, titled or not. After the dashes, a title needs a character that
-// shows: box drawing, block elements, spaces, combining marks and format
-// characters alone are not one.
 func isTitledRule(line string) bool {
 	t := strings.TrimSpace(line)
 	if t == "" || strings.ContainsRune(boxCorners, []rune(t)[0]) {
@@ -161,7 +109,6 @@ func isTitledRule(line string) bool {
 	return false
 }
 
-// blankFrom reports whether every line of tail from i on is blank.
 func blankFrom(tail []string, i int) bool {
 	for _, t := range tail[i:] {
 		if strings.TrimSpace(t) != "" {
@@ -171,8 +118,6 @@ func blankFrom(tail []string, i int) bool {
 	return true
 }
 
-// promptBox finds the input box at the bottom of tail: the lines between the
-// last two border lines. ok is false when the tail holds fewer than two.
 func promptBox(tail []string) (top, bottom int, ok bool) {
 	bottom = -1
 	for i, t := range slices.Backward(tail) {
@@ -188,10 +133,6 @@ func promptBox(tail []string) (top, bottom int, ok bool) {
 	return -1, -1, false
 }
 
-// regionLines returns the lines of tail a region covers. A box region on a
-// screen with no box is nil, so a rule reading it matches nothing.
-// after_last_horizontal_rule on a screen with no rule is the whole tail, as it
-// is in herdr: with no rule on screen, nothing marks older output as settled.
 func regionLines(tail []string, region string) []string {
 	lo, hi, ok := regionBounds(tail, region)
 	if !ok {
@@ -200,9 +141,6 @@ func regionLines(tail []string, region string) []string {
 	return tail[lo:hi]
 }
 
-// regionBounds is regionLines as indices into tail, so the same span can be
-// cut from a lowercased copy of the tail. ok is false for a region that is not
-// on the screen.
 func regionBounds(tail []string, region string) (lo, hi int, ok bool) {
 	switch region {
 	case "", RegionTail:
@@ -231,11 +169,6 @@ func regionBounds(tail []string, region string) (lo, hi int, ok bool) {
 		}
 		return 0, 0, false
 	case RegionFramedAbovePromptBox:
-		// A form Claude Code draws over its input box, between two rules:
-		// the one above the form and the box's own top border. Only that
-		// block, so an answered form further up in the transcript is not
-		// read. A tail that starts inside the form has no rule above it,
-		// and the block then starts at the top of the tail.
 		top, _, ok := promptBox(tail)
 		if !ok {
 			return 0, 0, false
@@ -247,12 +180,6 @@ func regionBounds(tail []string, region string) (lo, hi int, ok bool) {
 		}
 		return 0, top, true
 	case RegionAfterLastRule:
-		// A titled rule with nothing under it closes the frame rather than
-		// separating settled output from what is live: Claude Code 2.1.311
-		// draws one under a form. It is skipped, once, so the region is what
-		// sits between the rule before it and it. Any other rule counts. With
-		// no rule above it, the region stays empty, as it was before: the
-		// whole tail would let settled output in.
 		end := len(tail)
 		for i, t := range slices.Backward(tail) {
 			if !isBoxBorder(t) {
@@ -275,11 +202,6 @@ func regionBounds(tail []string, region string) (lo, hi int, ok bool) {
 	return 0, 0, false
 }
 
-// regionText is the joined and, when asked, lowercased text of each region,
-// built once per scan and only for the regions a manifest's rules read. Each
-// line is lowercased at most once per scan however many regions share it, and
-// only for a rule that has a substring to look for: lowering a screen of box
-// drawing costs more than most patterns.
 type regionText struct {
 	tail     []string
 	lowered  []string
@@ -297,11 +219,6 @@ func newRegionText(tail []string, foldCase bool) *regionText {
 	return &regionText{tail: tail, foldCase: foldCase}
 }
 
-// get returns the plain haystack for a region, the one its substrings are
-// looked for in, and false when the region is empty on this screen. The
-// second is lowercased when the manifest folds case, and for
-// after_last_horizontal_rule it is substringText, so a wrapped phrase is
-// found. Otherwise, or with needFolded false, it is the plain one.
 func (t *regionText) get(region string, needFolded bool) (hay, folded string, ok bool) {
 	if region == RegionTail {
 		region = ""
@@ -319,9 +236,6 @@ func (t *regionText) get(region string, needFolded bool) (hay, folded string, ok
 		}
 		t.cache[region] = e
 	}
-	// Only the form under the last rule is read across a wrap. A wider
-	// region holds transcript prose, which wraps anywhere, and joining it
-	// would let a rule match words that were never one phrase on the screen.
 	wrap := region == RegionAfterLastRule
 	if needFolded && !e.hasFolded && e.hay != "" && (t.foldCase || wrap) {
 		lines := t.tail[e.lo:e.hi]
@@ -344,12 +258,6 @@ func (t *regionText) get(region string, needFolded bool) (hay, folded string, ok
 	return e.hay, e.folded, e.hay != ""
 }
 
-// substringText is what a rule reading after_last_horizontal_rule looks for
-// its substrings in: the lines as they are, then the same lines joined into
-// one, so a footer a narrow pane wrapped at a space is found too ("… · Esc" /
-// "to cancel"). A NUL keeps the two apart, and no substring holds one, so
-// whatever matched before matches the same way. Patterns read the lines as
-// they are.
 func substringText(lines []string) string {
 	var b strings.Builder
 	n := 1
@@ -378,8 +286,6 @@ func substringText(lines []string) string {
 	return b.String()
 }
 
-// foldLine lowercases a line, returning it as it is when nothing in it has a
-// lower case, which is most of a TUI's frame: rules, borders and spinners.
 func foldLine(s string) string {
 	for _, r := range s {
 		if r < utf8.RuneSelf {
@@ -395,15 +301,6 @@ func foldLine(s string) string {
 	return s
 }
 
-// Dialogs: the box a harness draws its prompt in over its transcript.
-//
-// Crush draws its permission prompt as a bordered box in the middle of the
-// pane, with the chat still showing on either side of it. The lines a rule
-// reads are whole screen rows, so a peek of them shows the chat cut through
-// by the box. dialogBoxes finds each box and cuts it out: its rows, each cut
-// to the columns between its side borders.
-
-// Corners and sides of a box, in the light, heavy, double and rounded sets.
 const (
 	dialogTopLeft     = "╭┌┏╔"
 	dialogTopRight    = "╮┐┓╗"
@@ -412,13 +309,8 @@ const (
 	dialogSides       = "│┃║"
 )
 
-// maxDialogLines bounds the rows a dialog may span, so a box drawn around a
-// whole screen is not taken for a prompt.
 const maxDialogLines = 60
 
-// cells splits a line into terminal cells: a wide rune takes its cell and
-// leaves the next one empty, so a column in one line is the same column in
-// the next.
 func cells(line string) []rune {
 	out := make([]rune, 0, len(line))
 	for _, r := range line {
@@ -430,8 +322,6 @@ func cells(line string) []rune {
 	return out
 }
 
-// cellAt is the rune at column col of a line split into cells, 0 when the
-// line is shorter.
 func cellAt(c []rune, col int) rune {
 	if col < 0 || col >= len(c) {
 		return 0
@@ -439,22 +329,15 @@ func cellAt(c []rune, col int) rune {
 	return c[col]
 }
 
-// dialogBox is one bordered box on the screen: the rows of its borders, the
-// columns of its sides, and its inside as dialogInside cuts it.
 type dialogBox struct {
 	top, bottom, left, right int
 	inside                   []string
 }
 
-// within reports whether box b lies wholly inside box o.
 func (b dialogBox) within(o dialogBox) bool {
 	return b.top > o.top && b.bottom < o.bottom && b.left > o.left && b.right < o.right
 }
 
-// dialogBoxes finds every bordered box in lines: a top border whose corners
-// stand over a side on every row down to a bottom border with corners in the
-// same columns. Boxes are listed bottom first, since a live dialog is drawn
-// over the transcript and so below what scrolled past.
 func dialogBoxes(lines []string) []dialogBox {
 	grid := make([][]rune, len(lines))
 	for i, l := range lines {
@@ -489,9 +372,6 @@ func dialogBoxes(lines []string) []dialogBox {
 	return out
 }
 
-// dialogsHolding is the boxes of lines whose inside holds every one of
-// strs, innermost only: a box around another box that holds them is left
-// out, since the inner one is the dialog. Bottom first.
 func dialogsHolding(lines []string, strs []string, foldCase bool) []dialogBox {
 	var hits []dialogBox
 	for _, b := range dialogBoxes(lines) {
@@ -526,11 +406,6 @@ func dialogsHolding(lines []string, strs []string, foldCase bool) []dialogBox {
 	return out
 }
 
-// ruleDialog is the one dialog a show = "dialog" rule reads on lines: the
-// innermost box that holds every all[] string of the rule. ok is false when
-// no box holds them, or when more than one does: a box quoted in the
-// transcript, or drawn by something else, must never be taken for the live
-// dialog, and two candidates cannot be told apart.
 func ruleDialog(m *Manifest, rl *ScreenRule, lines []string) (dialogBox, bool) {
 	boxes := dialogsHolding(lines, rl.All, m.Screen.FoldCase)
 	if len(boxes) != 1 {
@@ -539,11 +414,9 @@ func ruleDialog(m *Manifest, rl *ScreenRule, lines []string) (dialogBox, bool) {
 	return boxes[0], true
 }
 
-// dialogInside cuts each row to the columns between left and right, trims
-// the edges, and keeps one blank row of each run.
 func dialogInside(rows [][]rune, left, right int) []string {
 	var out []string
-	blank := true // drops the blank rows at the top
+	blank := true
 	for _, c := range rows {
 		var b strings.Builder
 		for col := left + 1; col < right && col < len(c); col++ {

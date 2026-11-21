@@ -53,41 +53,27 @@ type state struct {
 	color                      color.NRGBA
 	fontSize                   float64
 	bold, italic, mono         bool
-	// shift moves text off the baseline, down for <sub> and up for <sup>.
-	shift     float64
-	underline bool
-	anchor    string
-	preserve  bool
-	m         matrix
-	// plain is m without the overrides of a motion frame. moved says they differ,
-	// so text is shifted to where its anchor went instead of being scaled.
-	plain matrix
-	moved bool
-	// authored says a fill or text colour came from the diagram's own style,
-	// not from the theme.
-	authored bool
+	shift                      float64
+	underline                  bool
+	anchor                     string
+	preserve                   bool
+	m                          matrix
+	plain                      matrix
+	moved                      bool
+	authored                   bool
 }
 
 type renderer struct {
-	env  map[string]string
-	dst  *image.RGBA
-	z    vector.Rasterizer
-	mask *image.Alpha
-	// budget bounds the drawing work, so that hostile markup cannot run for long:
-	// each fill costs the pixels of its mask and the rows its edges cross.
-	budget int
-	// over holds the overrides of a motion frame, by element. nil for a still drawing.
-	over map[*node]*override
-	// base is the device matrix of the root's user space.
-	base matrix
-	// readable is Options.Readable.
+	env      map[string]string
+	dst      *image.RGBA
+	z        vector.Rasterizer
+	mask     *image.Alpha
+	budget   int
+	over     map[*node]*override
+	base     matrix
 	readable bool
-	// layered is set while a group layer is drawn. A group with an opacity
-	// inside it draws its shapes with the opacity folded in, so there is at
-	// most one layer at a time.
-	layered bool
-	// probe, when set, sees each run of text before it is drawn. Tests use it.
-	probe func(r *renderer, p path, st state)
+	layered  bool
+	probe    func(r *renderer, p path, st state)
 }
 
 // Draw rasterises an SVG that sketch wrote. Its budgets bound the work a
@@ -132,13 +118,9 @@ func Draw(svg string, opt Options) (*image.RGBA, error) {
 	return r.dst, nil
 }
 
-// newRenderer sets up drawing root into dst with m as the root's device matrix.
 func newRenderer(root *node, dst *image.RGBA, theme *sketch.Theme, m matrix) (*renderer, state) {
 	r := &renderer{env: map[string]string{}, dst: dst, budget: 300_000_000, base: m}
 	style, _ := root.attr("style")
-	// sketch writes the series colors that the diagram's theme variables set after the
-	// font. They are the diagram's own, so they win over the theme here as they do in the
-	// SVG.
 	var palette [][2]string
 	afterFont := false
 	for _, d := range declarations(style) {
@@ -154,8 +136,6 @@ func newRenderer(root *node, dst *image.RGBA, theme *sketch.Theme, m matrix) (*r
 	for _, v := range theme.Vars() {
 		r.env[v[0]] = v[1]
 	}
-	// A color this package cannot read, such as oklch(), leaves the series in the
-	// theme's color, where a browser would show it.
 	for _, d := range palette {
 		if _, ok := parseColor(r.resolve(d[1])); ok {
 			r.env[d[0]] = d[1]
@@ -180,7 +160,6 @@ func newRenderer(root *node, dst *image.RGBA, theme *sketch.Theme, m matrix) (*r
 	return r, st
 }
 
-// paintBackground fills the image with the diagram's background colour.
 func (r *renderer) paintBackground() {
 	if c, ok := parseColor(r.resolve("var(--_bg)")); ok {
 		draw.Draw(r.dst, r.dst.Bounds(), &image.Uniform{c}, image.Point{}, draw.Src)
@@ -213,7 +192,6 @@ func number(n *node, name string) float64 {
 	return lengthOf(v, 0)
 }
 
-// apply sets the properties an element gives, from its attributes and then its style.
 func (r *renderer) apply(n *node, st state) state {
 	props := make([][2]string, 0, len(n.attrs))
 	props = append(props, n.attrs...)
@@ -265,13 +243,11 @@ func (r *renderer) apply(n *node, st state) state {
 			st.miterLimit = lengthOf(value, 4)
 		case "font-size":
 			if value == "smaller" {
-				// pele measures smaller text at this size.
 				st.fontSize /= 1.2
 			} else if v := lengthOf(value, -1); v > 0 {
 				st.fontSize = math.Min(v, 2000)
 			}
 		case "baseline-shift":
-			// pele writes the shift before the smaller size, so this is the parent's size.
 			switch value {
 			case "sub":
 				st.shift = st.fontSize * 0.25
@@ -438,13 +414,7 @@ func (r *renderer) element(n *node, parent state) {
 	}
 }
 
-// groupLayer draws a group with an opacity of its own the way SVG does: its
-// children are drawn together on a layer, and the layer is laid over the
-// image once at that opacity, so shapes that overlap inside the group do not
-// add up.
 func (r *renderer) groupLayer(n *node, parent, st state, a float64) {
-	// The layer covers the group's shapes, with room for stroke widths. Text
-	// is not measured here, so a group with text takes the whole image.
 	rect := r.dst.Bounds()
 	if !hasText(n, 0) {
 		b := emptyBox()
@@ -455,13 +425,10 @@ func (r *renderer) groupLayer(n *node, parent, st state, a float64) {
 		pad := 2 + st.strokeWidth*st.m.scale()*4
 		rect = image.Rect(int(math.Floor(b.x0-pad)), int(math.Floor(b.y0-pad)), int(math.Ceil(b.x1+pad)), int(math.Ceil(b.y1+pad))).Intersect(rect)
 	}
-	// One layer at a time. Nested groups would each take up to 64 MB, and
-	// the XML allows 256 levels.
 	if r.layered || rect.Empty() || rect.Dx()*rect.Dy() > 16_000_000 {
 		r.children(n, st)
 		return
 	}
-	// The layer is work too: its pixels are allocated, cleared and composed.
 	cost := float64(rect.Dx()) * float64(rect.Dy())
 	if cost > float64(r.budget) {
 		r.budget = -1
@@ -495,7 +462,6 @@ func hasText(n *node, depth int) bool {
 	return false
 }
 
-// paintColor is the colour a paint gives with an opacity, or false for none.
 func (st state) paintColor(p paint, opacity float64) (color.NRGBA, bool) {
 	if p.none {
 		return color.NRGBA{}, false
@@ -512,7 +478,6 @@ func (st state) paintColor(p paint, opacity float64) (color.NRGBA, bool) {
 	return c, true
 }
 
-// shape fills and strokes a path.
 func (r *renderer) shape(p path, st state, fillable bool) {
 	if len(p) == 0 {
 		return
@@ -529,9 +494,6 @@ func (r *renderer) shape(p path, st state, fillable bool) {
 		}
 	}
 	if c, ok := st.paintColor(st.stroke, st.strokeOpacity); ok && st.strokeWidth > 0 {
-		// A stroke wider than the image covers all of it, so widths and dash
-		// lengths are held to four diagonals. Without the bound a width such
-		// as 1e20 puts the stroke's vertices ~1e19 pixels away.
 		b := r.dst.Bounds()
 		bound := 4 * math.Hypot(float64(b.Dx()), float64(b.Dy()))
 		clamp := func(v float64) float64 { return math.Max(-bound, math.Min(bound, v)) }
@@ -546,9 +508,6 @@ func (r *renderer) shape(p path, st state, fillable bool) {
 	}
 }
 
-// clipRect keeps the part of a polygon between x0 and x1 and between y0 and
-// y1. Clipping each polygon to a convex window keeps its winding inside the
-// window, so the nonzero union is the same there.
 func clipRect(p polygon, x0, x1, y0, y1 float64) polygon {
 	clip := func(in polygon, keep func(pt) bool, cross func(a, b pt) pt) polygon {
 		if len(in) == 0 {
@@ -587,7 +546,6 @@ func clipRect(p polygon, x0, x1, y0, y1 float64) polygon {
 	return clip(p, func(q pt) bool { return q.y <= y1 }, atY(y1))
 }
 
-// fill paints the union of polygons, nonzero, in one colour.
 func (r *renderer) fill(polys []polygon, c color.NRGBA) {
 	if len(polys) == 0 {
 		return
@@ -607,9 +565,6 @@ func (r *renderer) fill(polys []polygon, c color.NRGBA) {
 		if bad {
 			continue
 		}
-		// y is clipped a pixel outside the image, so every coordinate that
-		// reaches the rasterizer is in range and the rows at the edges keep
-		// their coverage.
 		q := clipRect(p, X0, X1, Y0-1, Y1+1)
 		if len(q) < 3 {
 			continue
@@ -629,8 +584,6 @@ func (r *renderer) fill(polys []polygon, c color.NRGBA) {
 		return
 	}
 	w, h := x1-x0, y1-y0
-	// The cost is summed in float64 and checked before any conversion, so no
-	// value can wrap around an int.
 	cost := float64(w) * float64(h)
 	for _, p := range clipped {
 		for i := range p {

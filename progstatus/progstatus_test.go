@@ -1,24 +1,5 @@
 package progstatus
 
-// The parser is a security boundary: every byte comes from a program that
-// already controls the screen, and a report that should be discarded must
-// leave no trace. The ways it could fail, and the cases below that pin each:
-//
-//   - a malformed pair is applied, or it takes the whole report with it
-//   - a discard rule is skipped: oversize sequence, long key, bad base64,
-//     decoded control character, missing or unknown state, bad id
-//   - a limit is off by one: sequence, key, msg and title before and after
-//     decoding, app, id length, segment length and depth
-//   - an optional key that is invalid discards the report instead of being
-//     treated as absent (kind, progress, app characters)
-//   - a repeated key keeps the first value
-//   - whitespace around a key or value is kept, or whitespace inside is
-//     removed
-//   - clear removes a sibling whose id only starts with the cleared id
-//   - eviction removes something other than the least recently updated
-//   - app inheritance stops at a missing parent
-//   - the summary picks a less urgent record, or loses the root among equals
-
 import (
 	"encoding/base64"
 	"strings"
@@ -27,7 +8,6 @@ import (
 
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
 
-// parse runs Parse on body as if it came in a sequence ended with ST.
 func parse(body string) (Report, bool) {
 	return Parse([]byte(body), SequenceLen(len("7501;")+len(body), false))
 }
@@ -136,9 +116,7 @@ func TestParse(t *testing.T) {
 	}
 }
 
-// longID is an id of exactly n bytes, in segments of 32 or fewer.
 func longID(n int) string {
-	// Segments of 30 bytes and a slash, then one last segment for the rest.
 	var b strings.Builder
 	for n-b.Len() > 31 {
 		b.WriteString(strings.Repeat("x", 30))
@@ -149,8 +127,7 @@ func longID(n int) string {
 }
 
 func TestParseSequenceLimit(t *testing.T) {
-	// The whole sequence, OSC through ST, may be 4096 bytes and no more.
-	body := "state=idle:x=" // an unknown key pads the report
+	body := "state=idle:x="
 	pad := MaxSequence - SequenceLen(len("7501;")+len(body), false)
 	full := body + strings.Repeat("a", pad)
 	if _, ok := Parse([]byte(full), SequenceLen(len("7501;")+len(full), false)); !ok {
@@ -160,14 +137,12 @@ func TestParseSequenceLimit(t *testing.T) {
 	if _, ok := Parse([]byte(over), SequenceLen(len("7501;")+len(over), false)); ok {
 		t.Errorf("a 4097-byte sequence was kept")
 	}
-	// BEL is one byte shorter than ESC \.
 	if _, ok := Parse([]byte(over), SequenceLen(len("7501;")+len(over), true)); !ok {
 		t.Errorf("a 4096-byte sequence ended with BEL was discarded")
 	}
 }
 
 func TestSpecExamplesRoundTrip(t *testing.T) {
-	// The examples of the specification, decoded.
 	for body, want := range map[string]Report{
 		"state=blocked:kind=permission:app=terraform:msg=QXBwbHkgMyB0byBhZGQsIDEgdG8gY2hhbmdlLCAwIHRvIGRlc3Ryb3k/": {
 			State: Blocked, Kind: Permission, App: "terraform", Msg: "Apply 3 to add, 1 to change, 0 to destroy?", Progress: -1},
@@ -180,7 +155,6 @@ func TestSpecExamplesRoundTrip(t *testing.T) {
 		if !ok || got != want {
 			t.Errorf("Parse(%q) = %+v, %v, want %+v", body, got, ok, want)
 		}
-		// Encode writes what Parse reads back.
 		again, ok := parse(Encode(got))
 		if !ok || again != got {
 			t.Errorf("round trip of %+v = %+v, %v", got, again, ok)
@@ -219,18 +193,14 @@ func TestStoreReplaceAndClear(t *testing.T) {
 	if got := ids(s.Records()); got != "<root>=working build=working build/test=working build/test/unit=blocked builder=working" {
 		t.Fatalf("records = %s", got)
 	}
-	// A report replaces its record whole: the msg is gone.
 	apply(t, &s, "state=working:app=deploy")
 	if r := s.Records()[0]; r.Msg != "" {
 		t.Errorf("root msg = %q after a report without one", r.Msg)
 	}
-	// clear removes the record and every record beneath it, and not a
-	// sibling whose id only starts the same.
 	apply(t, &s, "state=clear:id=build")
 	if got := ids(s.Records()); got != "<root>=working builder=working" {
 		t.Errorf("after clear build: %s", got)
 	}
-	// A record beneath a parent that does not exist is still cleared.
 	apply(t, &s, "state=idle:id=x/y/z")
 	apply(t, &s, "state=clear:id=x")
 	if got := ids(s.Records()); got != "<root>=working builder=working" {
@@ -274,13 +244,11 @@ func TestStoreEviction(t *testing.T) {
 	apply(t, &s, "state=idle:id=a")
 	apply(t, &s, "state=idle:id=b")
 	apply(t, &s, "state=idle:id=c")
-	// a is updated, so b is now the least recently updated.
 	apply(t, &s, "state=working:id=a")
 	apply(t, &s, "state=idle:id=d")
 	if got := ids(s.Records()); got != "a=working c=idle d=idle" {
 		t.Errorf("after eviction: %s", got)
 	}
-	// Replacing a record at the cap evicts nothing.
 	apply(t, &s, "state=done:id=c")
 	if got := ids(s.Records()); got != "a=working c=done d=idle" {
 		t.Errorf("after a replace at the cap: %s", got)
@@ -300,7 +268,7 @@ func TestStoreDefaultCap(t *testing.T) {
 func TestInheritApp(t *testing.T) {
 	var s Store
 	apply(t, &s, "state=working:app=deploy")
-	apply(t, &s, "state=working:id=eu-west/db/migrate") // parents missing
+	apply(t, &s, "state=working:id=eu-west/db/migrate")
 	apply(t, &s, "state=working:id=us-east:app=docker")
 	apply(t, &s, "state=working:id=us-east/push")
 	got := map[string]string{}
@@ -364,9 +332,6 @@ func FuzzParse(f *testing.F) {
 		if len(body)+len("7501;")+4 > MaxSequence {
 			t.Fatalf("kept a report of %d bytes", len(body))
 		}
-		// The discard rules, worked out again from the raw pairs: a key over
-		// the limit, a malformed id anywhere, or a last id outside the grammar
-		// must each have thrown the report away.
 		lastID, hasID := "", false
 		for pair := range strings.SplitSeq(string(body), ":") {
 			k, v, found := strings.Cut(pair, "=")

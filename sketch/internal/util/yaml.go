@@ -1,8 +1,3 @@
-// Ported from pele src/util/yaml.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele throws; the port panics with yamlError or incomplete and ParseYaml
-// recovers them into an error.
-
 package util
 
 import (
@@ -15,15 +10,11 @@ import (
 	"tuios.dev/sketch/internal/lazyre"
 )
 
-// A small YAML reader covering what Mermaid feeds to js-yaml with the JSON schema:
-// block and flow collections, quoted and plain scalars, and block scalars.
-
 // YamlValue is nil, bool, float64, string, []any or map[string]any.
 type YamlValue = any
 
 type yamlError struct{ message string }
 
-// Thrown when a quoted scalar or flow collection runs past the text read so far.
 type incomplete struct{ message string }
 
 func fail(message string) { panic(yamlError{message}) }
@@ -83,7 +74,6 @@ var (
 	reNewlines    = lazyre.New(`\n+`)
 )
 
-// at is the byte of s at i, or 0 past its end, where pele reads undefined.
 func at(s string, i int) byte {
 	if i < 0 || i >= len(s) {
 		return 0
@@ -100,7 +90,6 @@ type keyMatch struct {
 	length int
 }
 
-// Splits `key: rest` at the start of a line. Returns the raw key and the offset where the value starts.
 func splitKey(line string) (keyMatch, bool) {
 	if line == "" {
 		return keyMatch{}, false
@@ -224,9 +213,6 @@ var escapes = map[byte]string{
 	'P':  " ",
 }
 
-// Folds the line breaks of a scalar: blanks around a break go, one break becomes a space, and
-// each further break stays. The lines are trimmed by hand, because a pattern for blanks before
-// a line break rescans a long run of blanks from every one of them.
 func fold(text string) string {
 	if !strings.Contains(text, "\n") {
 		return text
@@ -298,7 +284,6 @@ func unquoteDouble(body string) string {
 	return out.String()
 }
 
-// prevIsSpace is `/\s/.test(s[pos - 1])`.
 func prevIsSpace(s string, pos int) bool {
 	if pos <= 0 {
 		return false
@@ -326,7 +311,6 @@ func skip(s string, pos int, commas bool) int {
 	return pos
 }
 
-// Entries of a flow collection are separated by exactly one comma, as js-yaml requires.
 func entryStart(ch byte, separated bool) {
 	if !separated {
 		fail("YAML: missed comma between flow collection entries")
@@ -336,7 +320,6 @@ func entryStart(ch byte, separated bool) {
 	}
 }
 
-// Parses a flow value starting at s[pos]; returns the value and the index after it.
 func flow(s string, pos int, stops string, depth int) (YamlValue, int) {
 	if depth > MAX_DEPTH {
 		fail("YAML: nesting is too deep")
@@ -467,12 +450,8 @@ func stripComment(s string) string {
 	return s
 }
 
-// leadingWidth is `line.length - line.trimStart().length`: the leading whitespace in UTF-16
-// units, which count a no-break space as one where UTF-8 has two bytes.
 func leadingWidth(line string) int { return js.Len(line[:len(line)-len(js.TrimStart(line))]) }
 
-// sliceUnits is line.slice(k) for a k that falls within the leading whitespace, which is in the BMP:
-// it skips k characters.
 func sliceUnits(line string, k int) string {
 	i := 0
 	for ; k > 0 && i < len(line); k-- {
@@ -565,7 +544,6 @@ func inlineValue(r *reader, rest string, indent int) YamlValue {
 		}
 	}
 	if first == '{' || first == '[' || first == '"' || first == '\'' {
-		// The value may continue on later lines. Read them in growing batches until it closes.
 		start := r.i
 		text := rest
 		taken := 0
@@ -640,7 +618,6 @@ func inlineValue(r *reader, rest string, indent int) YamlValue {
 	return scalar(text)
 }
 
-// tryFlow runs flow and catches an incomplete value, as the batch loop does.
 func tryFlow(text string) (value YamlValue, end int, inc *incomplete) {
 	defer func() {
 		if e := recover(); e != nil {

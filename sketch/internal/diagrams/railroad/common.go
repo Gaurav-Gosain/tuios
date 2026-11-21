@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/railroad/common.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package railroad
 
 import (
@@ -10,15 +8,10 @@ import (
 	"tuios.dev/sketch/internal/js"
 )
 
-// What the four railroad grammars share: the title and accessibility tokens (which, unlike
-// the ones in Mermaid's common grammar, do not take leading blanks), the hidden tokens, the
-// statements before the first rule, string values, and the walk from a syntax tree to the rule model.
-
 func isSpace(c rune) bool {
 	return c == 32 || (c >= 9 && c <= 13) || (c > 127 && js.IsSpace(c))
 }
 
-// spaceAt reports whether src holds a white space character at i, and its length.
 func spaceAt(src string, i int) (bool, int) {
 	if i >= len(src) {
 		return false, 0
@@ -27,8 +20,6 @@ func spaceAt(src string, i int) (bool, int) {
 	return isSpace(c), size
 }
 
-// accDescrScanner: the braced form scans to the next closing brace. Once none is found, none exists further on
-// either, so later braced descriptions fail without scanning again.
 func accDescrScanner() common.Scanner {
 	unclosed := -1
 	return func(src string, at int) int {
@@ -70,7 +61,6 @@ func accDescrScanner() common.Scanner {
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-// toCommentOrLineEnd is [^\n\r]*?(?=%%)|[^\n\r]* from q.
 func toCommentOrLineEnd(src string, q int) int {
 	end := q
 	for end < len(src) && src[end] != '\n' && src[end] != '\r' {
@@ -82,8 +72,6 @@ func toCommentOrLineEnd(src string, q int) int {
 	return end
 }
 
-// title is /title(?:[\t ][^\n\r]*?(?=%%)|[\t ][^\n\r]*|(?!rest))/y: `rest` reports whether a name
-// suffix starts at q, so `title` does not split longer names.
 func title(rest func(c byte) bool) *common.TokenType {
 	return &common.TokenType{Name: "TITLE", First: "t", Match: func(src string, p int) int {
 		if !strings.HasPrefix(src[p:], "title") {
@@ -100,11 +88,9 @@ func title(rest func(c byte) bool) *common.TokenType {
 	}}
 }
 
-// titleWordRest is [\w-] and titleAbnfRest [A-Za-z0-9-].
 func titleWordRest(c byte) bool { return common.IsWord(int(c)) || c == '-' }
 func titleAbnfRest(c byte) bool { return c != '_' && titleWordRest(c) }
 
-// /accTitle[\t ]*:(?:[^\n\r]*?(?=%%)|[^\n\r]*)/y
 func matchAccTitle(src string, p int) int {
 	if !strings.HasPrefix(src[p:], "accTitle") {
 		return -1
@@ -126,14 +112,12 @@ func literal(name string, longer ...*common.TokenType) *common.TokenType {
 	return &common.TokenType{Name: name, Pattern: name, Longer: longer}
 }
 
-// opening is the diagram's keyword. A name that starts with it and goes on is a name.
 func opening(word string, name *common.TokenType) *common.TokenType {
 	kw := *common.Keyword(word)
 	kw.Longer = []*common.TokenType{name}
 	return &kw
 }
 
-// /[A-Z_a-z][\w-]*/y
 func matchIdentifier(src string, p int) int {
 	c := src[p]
 	if !(c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
@@ -161,7 +145,6 @@ func quoted(name string) *common.TokenType {
 	return &t
 }
 
-// /[\t \r\n]+/y
 func matchWhitespace(src string, p int) int {
 	q := p
 	for q < len(src) && (src[q] == '\t' || src[q] == ' ' || src[q] == '\r' || src[q] == '\n') {
@@ -173,7 +156,6 @@ func matchWhitespace(src string, p int) int {
 	return q
 }
 
-// hiddenTokens are whitespace, front matter, directive, and `%%` comment, in the order every railroad grammar lists them.
 func hiddenTokens(prefix string) []*common.TokenType {
 	yaml, directive, comment := *common.YAML, *common.DIRECTIVE, *common.SINGLE_LINE_COMMENT
 	yaml.Name, yaml.First = prefix+"_YAML", "-"
@@ -187,8 +169,6 @@ func hiddenTokens(prefix string) []*common.TokenType {
 	}
 }
 
-// blockComment matches open, any text, and close, the first close after open; openOnly
-// matches open alone, for the Opener that marks an unclosed comment.
 func blockComment(open, close string) (match, openOnly common.Scanner) {
 	match = func(src string, p int) int {
 		if !strings.HasPrefix(src[p:], open) {
@@ -208,7 +188,6 @@ func blockComment(open, close string) (match, openOnly common.Scanner) {
 	return match, openOnly
 }
 
-// unescape: Mermaid's railroad value converters know three escapes; any other escaped character stands for itself.
 func unescape(text string) string {
 	if len(text) < 2 {
 		return ""
@@ -256,8 +235,6 @@ type astRule struct {
 	definition *astNode
 }
 
-// astNode is a node of any of the four syntax trees. typ is its $type; the other fields are the
-// union of what the types hold.
 type astNode struct {
 	typ          string
 	value, name  string
@@ -276,8 +253,6 @@ type astNode struct {
 	except       *astNode
 }
 
-// parseGrammar parses the keyword, then any titles and accessibility statements, then rules to the end of the text.
-// Every table starts with its keyword and has TITLE, ACC_TITLE, and ACC_DESCR in a row from `meta`.
 func parseGrammar(src string, tokenTypes []*common.TokenType, meta int, unquote func(string) string, rule func(r *common.Reader) *astRule) *Grammar {
 	r := common.NewReader(common.Tokenize(src, tokenTypes, "railroad"), tokenTypes, "railroad")
 	ast := &Grammar{}
@@ -305,7 +280,6 @@ func parseGrammar(src string, tokenTypes []*common.TokenType, meta int, unquote 
 	return ast
 }
 
-// parts are the fields that hold a node's parts, in any of the four syntax trees.
 func parts(p *astNode) []*astNode {
 	if p.base != nil {
 		list := []*astNode{p.base}
@@ -335,7 +309,6 @@ func parts(p *astNode) []*astNode {
 	return nil
 }
 
-// modelParts are the parts of a node of the rule model.
 func modelParts(n *RailroadNode) []*RailroadNode {
 	switch n.typ {
 	case "choice":
@@ -358,7 +331,6 @@ func repetition(element *RailroadNode, min, max float64) *RailroadNode {
 	return &RailroadNode{typ: "repetition", element: element, min: min, max: max}
 }
 
-// sequence: a sequence or a choice of one is that one, in every notation.
 func sequence(elements []*RailroadNode) *RailroadNode {
 	if len(elements) == 1 {
 		return elements[0]
@@ -373,7 +345,6 @@ func choice(alternatives []*RailroadNode) *RailroadNode {
 	return &RailroadNode{typ: "choice", alternatives: alternatives}
 }
 
-// toRules turns each rule's syntax tree into the common model, given how one node is built from its parts.
 func toRules(ast *Grammar, build func(part *astNode, kids []*RailroadNode) *RailroadNode) []RailroadRule {
 	out := make([]RailroadRule, len(ast.rules))
 	for i, rule := range ast.rules {
@@ -382,7 +353,6 @@ func toRules(ast *Grammar, build func(part *astNode, kids []*RailroadNode) *Rail
 	return out
 }
 
-// fold rebuilds a tree bottom-up without recursion, so that nesting depth is bounded by memory, not by the stack.
 func fold[T, R any](root T, children func(T) []T, build func(T, []R) R) R {
 	nodes := []T{root}
 	lists := [][]T{children(root)}

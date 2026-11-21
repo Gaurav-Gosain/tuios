@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/xychart/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package xychart
 
 import (
@@ -27,7 +25,6 @@ type parser struct {
 	i    int
 }
 
-// typ is types[i], or -1 past the end, which pele reads as undefined.
 func (p *parser) typ(i int) int {
 	if i < 0 || i >= len(p.toks.types) {
 		return -1
@@ -80,7 +77,6 @@ func (p *parser) text() XyText {
 			p.i++
 		}
 	}
-	// One join, not a += per token: Go copies the string on each +=, where JavaScript ropes do not.
 	return XyText{text: strings.Join(p.toks.texts[start:p.i], ""), typ: "text"}
 }
 

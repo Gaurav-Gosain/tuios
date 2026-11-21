@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/state/tokens.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package state parses and draws Mermaid state diagrams.
 package state
 

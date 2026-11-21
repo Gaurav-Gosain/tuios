@@ -2,40 +2,18 @@ package shot
 
 import "slices"
 
-// Emoji sequences: a flag, a ZWJ family, a keycap or a skin tone is several
-// code points that a colour font draws as one glyph. The font says which
-// glyph by a ligature: Noto Color Emoji in GSUB (lookup type 4), Apple Color
-// Emoji in morx, the AAT table, as a chain of subtables run in order.
-//
-// shapeSequence runs that table over the glyphs of one cluster and returns
-// the glyphs it leaves. Only what an emoji font uses is read: GSUB ligature
-// lookups of the ccmp, liga and rlig features, and the morx noncontextual
-// and ligature subtables the chain turns on by default. Every
-// offset is checked against its table, every state machine is bounded in
-// steps and stack, and a table that breaks a bound is refused: the cluster
-// keeps its glyphs, the renderer draws the first one, and it never loops.
-
 const (
-	// maxShapeGlyphs is the longest cluster shaped. A family with skin tones
-	// is 7 code points, 11 with variation selectors.
 	maxShapeGlyphs = 32
-	// maxLigStack bounds the morx ligature component stack.
-	maxLigStack = 32
-	// deletedGlyph is the glyph AAT writes for one a subtable took out, such
-	// as the variation selector of a keycap; it goes after each subtable. A
-	// cluster that comes out with none left is refused.
-	deletedGlyph = 0xFFFF
+	maxLigStack    = 32
+	deletedGlyph   = 0xFFFF
 )
 
-// shaper is one face's ligature table, read whole on first use.
 type shaper struct {
 	gsub []byte
 	morx []byte
-	// bad is set once a table broke a bound: the face shapes nothing more.
-	bad bool
+	bad  bool
 }
 
-// tbl is a bounded view of a table: every read past its end reports false.
 type tbl []byte
 
 func (t tbl) u16(off int) (int, bool) {
@@ -45,7 +23,6 @@ func (t tbl) u16(off int) (int, bool) {
 	return int(t[off])<<8 | int(t[off+1]), true
 }
 
-// w32 is the 32-bit word at off, whole.
 func (t tbl) w32(off int) (uint32, bool) {
 	if off < 0 || off+4 > len(t) {
 		return 0, false
@@ -53,7 +30,6 @@ func (t tbl) w32(off int) (uint32, bool) {
 	return uint32(t[off])<<24 | uint32(t[off+1])<<16 | uint32(t[off+2])<<8 | uint32(t[off+3]), true
 }
 
-// u32 is a 32-bit offset or count at off; one past 1<<30 reads as broken.
 func (t tbl) u32(off int) (int, bool) {
 	if off < 0 || off+4 > len(t) {
 		return 0, false
@@ -65,7 +41,6 @@ func (t tbl) u32(off int) (int, bool) {
 	return int(v), true
 }
 
-// shape returns the glyphs of a cluster after the face's ligatures.
 func (s *shaper) shape(glyphs []int) []int {
 	if s == nil || s.bad || len(glyphs) < 2 || len(glyphs) > maxShapeGlyphs {
 		return glyphs
@@ -85,8 +60,6 @@ func (s *shaper) shape(glyphs []int) []int {
 	return out
 }
 
-// gsubShape applies the ligature lookups of ccmp, liga and rlig, in lookup
-// order.
 func gsubShape(t tbl, g []int) ([]int, bool) {
 	featOff, ok1 := t.u16(6)
 	lookOff, ok2 := t.u16(8)
@@ -140,7 +113,7 @@ func gsubShape(t tbl, g []int) ([]int, bool) {
 			}
 			sub += l
 			subKind := kind
-			if kind == 7 { // extension: the real subtable is further on
+			if kind == 7 {
 				subKind, ok1 = t.u16(sub + 2)
 				ext, ok2 := t.u32(sub + 4)
 				if !ok1 || !ok2 {
@@ -159,7 +132,6 @@ func gsubShape(t tbl, g []int) ([]int, bool) {
 	return g, true
 }
 
-// gsubLigature applies one ligature substitution subtable (format 1).
 func gsubLigature(t tbl, sub int, g []int) ([]int, bool) {
 	cov, ok1 := t.u16(sub + 2)
 	nSets, ok2 := t.u16(sub + 4)
@@ -214,7 +186,6 @@ func gsubLigature(t tbl, sub int, g []int) ([]int, bool) {
 	return g, true
 }
 
-// coverageIndex is the coverage index of glyph, -1 when it is not covered.
 func coverageIndex(t tbl, cov, glyph int) (int, bool) {
 	format, ok1 := t.u16(cov)
 	n, ok2 := t.u16(cov + 2)
@@ -265,16 +236,12 @@ func coverageIndex(t tbl, cov, glyph int) (int, bool) {
 	return -1, true
 }
 
-// morxShape runs the subtables of the first morx chain that its default
-// flags turn on.
 func morxShape(t tbl, g []int) ([]int, bool) {
 	version, ok1 := t.u16(0)
 	nChains, ok2 := t.u32(4)
 	if !ok1 || !ok2 || version < 2 || nChains == 0 {
 		return g, false
 	}
-	// The flags and the coverage are bit masks, read whole: u32 is for
-	// offsets and counts, and turns a mask with a high bit into a miss.
 	flags, ok1 := t.w32(8)
 	chainLen, ok2 := t.u32(12)
 	nFeat, ok3 := t.u32(16)
@@ -294,7 +261,7 @@ func morxShape(t tbl, g []int) ([]int, bool) {
 		body := chain[off+12 : off+length]
 		off += length
 		if subFlags&flags == 0 || cov&0x80000000 != 0 && cov&0x20000000 == 0 {
-			continue // off by default, or vertical text only
+			continue
 		}
 		var ok bool
 		switch cov & 0xFF {
@@ -303,9 +270,6 @@ func morxShape(t tbl, g []int) ([]int, bool) {
 		case 2:
 			g, ok = morxLigature(body, g)
 		default:
-			// Rearrangement and insertion change no emoji glyph, and
-			// Apple Color Emoji's contextual subtables change none of
-			// 780 flags, ZWJ sequences, keycaps and skin tones checked.
 			continue
 		}
 		if !ok {
@@ -316,7 +280,6 @@ func morxShape(t tbl, g []int) ([]int, bool) {
 	return g, true
 }
 
-// aatLookup looks glyph up in an AAT lookup table of 16-bit values.
 func aatLookup(t tbl, off, glyph int) (int, bool, bool) {
 	format, ok := t.u16(off)
 	if !ok {
@@ -345,7 +308,7 @@ func aatLookup(t tbl, off, glyph int) (int, bool, bool) {
 				return 0, false, false
 			}
 			if last == 0xFFFF && first == 0xFFFF {
-				hi = m // the end marker
+				hi = m
 				continue
 			}
 			switch {
@@ -384,7 +347,6 @@ func aatLookup(t tbl, off, glyph int) (int, bool, bool) {
 	return 0, false, false
 }
 
-// stateTable is an extended state table header (STXHeader).
 type stateTable struct {
 	t                         tbl
 	nClasses, classes, states int
@@ -402,7 +364,6 @@ func readStateTable(t tbl, entrySize int) (stateTable, bool) {
 	return stateTable{t: t, nClasses: n, classes: c, states: s, entries: e, entrySize: entrySize}, true
 }
 
-// class is the class of the glyph at i, end of text past the end.
 func (st stateTable) class(g []int, i int) (int, bool) {
 	if i >= len(g) {
 		return 0, true
@@ -420,7 +381,6 @@ func (st stateTable) class(g []int, i int) (int, bool) {
 	return v, true
 }
 
-// entry is the entry offset for a state and class.
 func (st stateTable) entry(state, class int) (int, bool) {
 	idx, ok := st.t.u16(st.states + 2*(state*st.nClasses+class))
 	if !ok {
@@ -433,9 +393,6 @@ func (st stateTable) entry(state, class int) (int, bool) {
 	return off, true
 }
 
-// run drives a state machine over g: act performs an entry at glyph i and
-// returns its flags, of which 0x4000 holds the glyph for the next step. The
-// steps are bounded, so a table that holds a glyph forever is refused.
 func (st stateTable) run(g []int, act func(entry, i int) (int, bool)) bool {
 	state := 0
 	for i, steps := 0, 0; i <= len(g); steps++ {
@@ -466,7 +423,6 @@ func (st stateTable) run(g []int, act func(entry, i int) (int, bool)) bool {
 	return true
 }
 
-// morxNoncontextual swaps each glyph its lookup table names.
 func morxNoncontextual(t tbl, g []int) ([]int, bool) {
 	for i, v := range g {
 		if v == deletedGlyph {
@@ -483,11 +439,6 @@ func morxNoncontextual(t tbl, g []int) ([]int, bool) {
 	return g, true
 }
 
-// morxLigature joins the glyphs an entry's actions name into one. It
-// follows HarfBuzz and CoreText: an action walks the component stack down
-// from the top, adds each glyph's component value to the ligature index, and
-// at a store or the last action replaces the glyph under the cursor with the
-// ligature and deletes the components above it.
 func morxLigature(t tbl, g []int) ([]int, bool) {
 	st, ok := readStateTable(t, 6)
 	actions, ok1 := t.u32(16)
@@ -501,7 +452,6 @@ func morxLigature(t tbl, g []int) ([]int, bool) {
 		flags, _ := t.u16(e + 2)
 		action, _ := t.u16(e + 4)
 		if flags&0x8000 != 0 && i < len(g) {
-			// A glyph held by dontAdvance is not pushed twice.
 			if n := len(stack); n == 0 || stack[n-1] != i {
 				if n == maxLigStack {
 					return 0, false
@@ -524,7 +474,7 @@ func morxLigature(t tbl, g []int) ([]int, bool) {
 			}
 			offset := int(word & 0x3FFFFFFF)
 			if offset&0x20000000 != 0 {
-				offset -= 0x40000000 // the offset is 30 bits, signed
+				offset -= 0x40000000
 			}
 			pos := stack[cursor]
 			if g[pos] == deletedGlyph {
@@ -535,7 +485,7 @@ func morxLigature(t tbl, g []int) ([]int, bool) {
 				return 0, false
 			}
 			index += c
-			if word&0xC0000000 != 0 { // store or last
+			if word&0xC0000000 != 0 {
 				lig, ok := t.u16(ligatures + 2*index)
 				if !ok {
 					return 0, false

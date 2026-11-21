@@ -1,6 +1,3 @@
-// Not a file of pele: the port's theme, which sets the --pele-* tokens that
-// pele leaves to the page.
-
 package types
 
 import (
@@ -14,9 +11,6 @@ import (
 	"tuios.dev/sketch/internal/lazyre"
 )
 
-// A list of font names, quoted or not, and nothing that could end the
-// declaration it is put in. It is the check of families() in pele's
-// src/svg/theme.ts; internal/svg uses it too.
 const family = `(?:"[^"'\\\n<>{}();:@]*"|'[^"'\\\n<>{}();:@]*'|[\p{L}\p{N}_-][\p{L}\p{N}_ .-]*)`
 
 var reFamilies = lazyre.New(`^[` + js.S + `]*` + family + `(?:[` + js.S + `]*,[` + js.S + `]*` + family + `)*[` + js.S + `]*$`)
@@ -49,8 +43,6 @@ func hexColor(c color.Color) string {
 	if a == 0 {
 		return "transparent"
 	}
-	// Un-premultiply. A colour with a channel above its alpha is not a valid
-	// premultiplied colour; its channels are held to the alpha.
 	r, g, b = min(r, a)*0xffff/a, min(g, a)*0xffff/a, min(b, a)*0xffff/a
 	if a == 0xffff {
 		return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)

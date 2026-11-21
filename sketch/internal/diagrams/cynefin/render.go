@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/cynefin/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package cynefin
 
 import (
@@ -29,7 +27,6 @@ var QUADRANTS = [...]quadrant{
 
 const CONFUSION_COLOR = 4
 
-// meta is [name, decision model, kind of practice].
 func meta(name DomainName) [3]string {
 	switch name {
 	case "complex":
@@ -158,7 +155,6 @@ func renderCynefin(model *CynefinModel, config types.Config, options types.Rende
 		quadW = math.Max(quadW, b.w+2*MARGIN)
 		quadH = math.Max(quadH, b.h+2*MARGIN)
 	}
-	// A block sits in the middle of its quadrant, so its inner corner must stay clear of the ellipse.
 	for _, b := range quadrants {
 		dx := (quadW - b.w) / 2
 		dy := (quadH - b.h) / 2
@@ -333,14 +329,12 @@ func renderCynefin(model *CynefinModel, config types.Config, options types.Rende
 		length := js.Or(js.Hypot(dx, dy), 1)
 		mx := (from.cx + to.cx) / 2
 		my := (from.cy + to.cy) / 2
-		// Curves bow away from the middle of the diagram, which keeps them off the ellipse.
 		outward := -1.0
 		if float64(-dy*(mx-cx))+float64(dx*(my-cy)) >= 0 {
 			outward = 1
 		}
 		nx := float64((-dy / length) * outward)
 		ny := float64((dx / length) * outward)
-		// A diagonal runs through the middle, so it bows far enough to pass the ellipse.
 		diagonal := from != &confusion && to != &confusion && math.Abs(dx) > 1 && math.Abs(dy) > 1
 		var bow float64
 		if diagonal {
@@ -435,7 +429,6 @@ func renderCynefin(model *CynefinModel, config types.Config, options types.Rende
 	return rendered
 }
 
-// geometry is the model as lists, for a drawing in text. Not part of pele.
 func geometry(model *CynefinModel, title text.Label, measurer text.TextMeasurer, descriptions bool) *types.GeoCynefin {
 	plain := func(s string) string {
 		return strings.Join(text.LayoutLabel(s, false, measurer, 16, math.Inf(1), 0).Plain(), " ")

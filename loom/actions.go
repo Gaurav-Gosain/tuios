@@ -15,7 +15,6 @@ type SortSpec struct {
 	Desc  bool
 }
 
-// parseSort parses field, field:asc or field:desc.
 func parseSort(s string) (SortSpec, bool) {
 	f, dir, has := strings.Cut(s, ":")
 	if f == "" || (has && dir != "asc" && dir != "desc") {
@@ -53,7 +52,6 @@ type View struct {
 	PageRow    int
 }
 
-// newView returns an empty view.
 func newView() *View {
 	return &View{Tabs: map[string]string{}, Sort: map[string]SortSpec{}, Filter: map[string]string{},
 		Fold: map[string]bool{}, Cursor: map[string]string{}, Scroll: map[string]int{}, Split: map[string]float64{},
@@ -104,13 +102,6 @@ func SortRows(rows []any, spec SortSpec) []any { return sortRows(rows, spec) }
 // to case, as a Surface filters a table.
 func FilterRows(rows []any, text string) []any { return filterRows(rows, text) }
 
-// runActions runs the actions of one attribute. source is the JSON Pointer
-// of the node that holds the attribute; sort without a table id and tab use
-// it to find their target. env supplies event, form and the other roots;
-// runActions adds state.
-//
-// Local actions apply in order, so set('a', 1); emit('x', state.a) emits 1.
-// Effects for the owner and the host come back in Result in order.
 func runActions(doc *tml.Node, store *tml.Store, view *View, source string, actions []tml.Action, env *tml.Env) (Result, error) {
 	var res Result
 	if env == nil {
@@ -246,8 +237,6 @@ func parentPointer(ptr string) string {
 	return ptr[:i]
 }
 
-// nearest returns the closest node of type typ at or above the node at ptr,
-// or the only one in the document.
 func nearest(doc *tml.Node, ptr, typ string) (*tml.Node, string) {
 	for p := ptr; ; p = parentPointer(p) {
 		if n := doc.At(p); n != nil && n.Type == typ {
@@ -280,8 +269,6 @@ func nodeKey(n *tml.Node, ptr string) string {
 	return ptr
 }
 
-// sortRows returns rows sorted by spec, stably. Numbers sort by value and
-// strings without regard to case. Rows that lack the field sort last.
 func sortRows(rows []any, spec SortSpec) []any {
 	out := append([]any(nil), rows...)
 	fieldOf := func(r any) any {
@@ -310,8 +297,6 @@ func sortRows(rows []any, spec SortSpec) []any {
 	return out
 }
 
-// filterRows returns the rows that contain text in any field, without regard
-// to case. An empty text keeps every row.
 func filterRows(rows []any, text string) []any {
 	text = strings.ToLower(strings.TrimSpace(text))
 	if text == "" {

@@ -8,14 +8,6 @@ import (
 	sketch "tuios.dev/sketch/internal/engine"
 )
 
-// A packet is drawn as its rows of bit fields: each field a box as wide as its bits, the
-// boxes of a row side by side, with the bit numbers above them as in the SVG. A label that
-// does not fit its box wraps, and a word too long for it is cut. A row of bits that does not
-// fit the columns gives ErrTooWide, and Draw asks for the narrow layout, which has fewer
-// bits to a row.
-
-// wrapCells breaks s into lines of at most w cells, at spaces, cutting a word longer than
-// a line. At most most lines are kept; the last one kept ends in … when text is left.
 func wrapCells(s string, w, most int) []string {
 	if w < 1 || most < 1 {
 		return nil
@@ -45,7 +37,6 @@ func wrapCells(s string, w, most int) []string {
 				lw = ww
 				break
 			}
-			// Cut the word at w cells.
 			cut, n := 0, 0
 			for i, r := range word {
 				if n+runeWidth(r) > w {
@@ -90,8 +81,6 @@ func drawPacket(l *sketch.Layout, opt Options) (*canvas, error) {
 	if rowCount > 20_000 {
 		return nil, ErrTooLarge
 	}
-	// Cells to a bit: enough for every label on one line, at most 6, within the columns.
-	// A label that does not fit wraps.
 	per := 1
 	for _, f := range p.Fields {
 		bits := int(math.Min(f.End-f.Start+1, float64(bpr)))
@@ -104,10 +93,8 @@ func drawPacket(l *sketch.Layout, opt Options) (*canvas, error) {
 		}
 		per = min(per, (opt.Cols-1)/bpr)
 	} else {
-		// Without a bound, a row stays within 120 columns unless one cell to a bit is wider.
 		per = max(1, min(per, 119/bpr))
 	}
-	// Each field's place in its row and its lines of text.
 	type field struct {
 		x0, x1 int
 		lines  []string
@@ -161,7 +148,6 @@ func drawPacket(l *sketch.Layout, opt Options) (*canvas, error) {
 	for r, row := range rows {
 		inner := max(heights[r], 1)
 		if numbers > 0 {
-			// Numbers left to right, each kept clear of the one before it.
 			end := -2
 			put := func(x int, s string) {
 				if x > end+1 && x >= 0 && x+width(s) <= w {

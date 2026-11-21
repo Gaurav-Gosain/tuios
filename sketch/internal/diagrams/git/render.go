@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/git/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package git
 
 import (
@@ -108,7 +106,6 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 	}
 	laneCount := len(model.lanes)
 	medium := js.Round(size * 0.875)
-	// Mermaid writes branch names, tags, and commit ids as plain text, so tags in them show as written.
 	names := make([]text.Label, laneCount)
 	for i, name := range model.lanes {
 		if !showBranches {
@@ -144,8 +141,6 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 		byId[commit.id] = view
 	}
 
-	// Room each commit needs: along the main axis on either side, and across it towards the
-	// previous lane (`lo`) and the next one (`hi`). Tags sit on one side of a lane and ids on the other.
 	half := make([]float64, len(views))
 	tagHalf := make([]float64, len(views))
 	lo := make([]float64, laneCount)
@@ -197,9 +192,6 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 		}
 	}
 
-	// In a left-to-right graph the tags stand over their commit. A connector that comes down from
-	// a lane above joins the commit's lane this far before the commit, clear of the tags, and the
-	// commit is placed far enough along to leave room for that.
 	lead := make([]float64, len(views))
 	if !vertical {
 		for k, view := range views {
@@ -228,8 +220,6 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 			}
 			continue
 		}
-		// Mermaid's `parallelCommits`: a commit sits one step after its furthest parent, so branches
-		// that grow side by side share positions instead of taking turns.
 		m := 0.0
 		for _, id := range view.commit.parents {
 			parent := byId[id]
@@ -336,7 +326,6 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 		}
 	}
 
-	// Positions of the commits on each lane, to tell whether a connector may run along it.
 	taken := make([][]float64, laneCount)
 	perLane := make([]int, laneCount)
 	for _, view := range views {
@@ -412,13 +401,11 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 				mid := (m1 + m2) / 2
 				curve(mid, c1, mid, c2, m2, c2)
 			} else if !merged && !busy(view.lane, m1, m2) {
-				// Leaves the parent at once and runs along the child's lane.
 				s := math.Min(CURVE, m2-m1)
 				curve(m1+s/2, c1, m1+s/2, c2, m1+s, c2)
 				d.WriteString("L")
 				point(d, m2, c2)
 			} else {
-				// Turns in just before the child, or before its tags when it comes from their side.
 				to := m2
 				if parent.lane < view.lane && m2-lead[view.index] > m1 {
 					to = m2 - lead[view.index]
@@ -426,8 +413,6 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 				s := math.Min(CURVE, to-m1)
 				along := c1
 				if !merged || busy(parent.lane, m1, m2) {
-					// Neither lane is free to run along. Between two lanes, past the ids of one and before
-					// the tags of the next, a strip stays empty, and the connector takes that.
 					if c1 > c2 {
 						along = c2 + hi[view.lane] + GAP/2
 					} else {
@@ -477,7 +462,6 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 		}
 		svg.WriteStrings(&commits, `<g class="pele-commit pele-commit-`, class, merge, `" data-id="`, svg.EscText(commit.id), `">`)
 		body := &commits
-		// Merges and cherry-picks carry a message Mermaid makes up; only a written one is worth showing.
 		if commit.typ < MERGE && commit.message != "" {
 			svg.WriteStrings(body, `<title>`, svg.EscText(commit.message), `</title>`)
 		}
@@ -490,7 +474,6 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 				svg.WriteStrings(body, `<rect x="`, num(cx-w/2-2), `" y="`, num(cy-h/2+2), `" width="`, num(w+4), `" height="`, num(h-4), `" rx="3" fill="var(--_bg)"/>`)
 			}
 			if rotate {
-				// The text ends beside the commit and trails back the way the history came.
 				k := (HALF * h) / 2
 				ax, ay := x+3, y+DOT+3+k
 				if vertical {
@@ -521,7 +504,6 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 			}
 		}
 
-		// Beside the lane the tags form a row; above it they stack, the first one furthest out.
 		offset := float64(DOT + TAG_GAP)
 		t, stepT := len(tags)-1, -1
 		if vertical {
@@ -616,8 +598,6 @@ func draw(model *GitModel, config types.Config, options types.RenderOptions, dir
 	}
 }
 
-// branchLabelAttrs are the attributes of the name of branch i: in the background color, or in
-// the label color that the palette's color for the branch needs.
 func branchLabelAttrs(p *types.Palette, i int) string {
 	if ink := svg.SeriesInkFill(p, i); ink != "" {
 		return ` class="pele-label"` + ink

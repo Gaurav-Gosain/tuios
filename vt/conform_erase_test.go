@@ -1,15 +1,5 @@
 package vt_test
 
-// Conformance for DECALN and the selective-erase family.
-//
-// conform_edit_test.go covers ED and EL. This covers the private forms nothing
-// asserted: DECSCA character protection, DECSED and DECSEL, and the alignment
-// pattern vttest opens with.
-//
-// Cases follow the VT510 reference manual entries for DECALN, DECSCA, DECSED
-// and DECSEL, esctest tests/{decsca,decsed,decsel,decaln}.py, and xterm's
-// CASE_DECALN in charproc.c.
-
 import (
 	"testing"
 
@@ -27,15 +17,6 @@ func TestConform_ScreenAlignmentPattern(t *testing.T) {
 			want:   "EEEE\nEEEE\nEEEE",
 			cursor: "0,0",
 		}, {
-			// The pattern covers the screen, so the margins that were confining
-			// output to part of it have to go with it. xterm calls resetmargins
-			// on the way through, and vttest's alignment check is followed by
-			// margin tests that assume a clean slate.
-			//
-			// ghostty resets origin mode here as well. This does not, because
-			// with the region back to the whole screen origin mode addresses
-			// the same cells either way, and clearing a mode the guest set is
-			// a larger side effect than the manual asks for.
 			name:   "DECALN resets both pairs of margins",
 			cols:   4,
 			rows:   4,
@@ -43,9 +24,6 @@ func TestConform_ScreenAlignmentPattern(t *testing.T) {
 			want:   "EEEE\nEEEE\nEEEE\nEEEE",
 			region: "0,0-4,4",
 		}, {
-			// It uses the default pen, which is what makes it an alignment
-			// check: a screen of E in the guest's current colours would not
-			// show a misaligned attribute.
 			name: "DECALN ignores the current pen",
 			cols: 3,
 			rows: 1,
@@ -82,7 +60,6 @@ func TestConform_EraseSavedLines(t *testing.T) {
 			in:   "a\r\nb\r\nc\r\nd\r\ne\x1b[2J",
 			want: "",
 		}, {
-			// What `clear` actually sends. Both halves have to happen.
 			name: "the pair a clear sends empties both",
 			cols: 6,
 			rows: 3,
@@ -91,8 +68,6 @@ func TestConform_EraseSavedLines(t *testing.T) {
 		},
 	})
 
-	// The scrollback half is not visible in a screen dump, so it is checked
-	// directly.
 	for _, tc := range []struct {
 		name string
 		in   string
@@ -173,9 +148,6 @@ func TestConform_SelectiveErase(t *testing.T) {
 			in:   "x\r\n\x1b[1\"qP\x1b[0\"q\x1b[S\x1b[1;1H\x1b[?2J",
 			want: "P",
 		}, {
-			// The protection moves with its row, and a row that moves in
-			// keeps none of what was there before. Each case below fails when
-			// the protection stays where the row was.
 			name: "protection moves down with an inserted line",
 			in:   "ab\r\n\x1b[1\"qP\x1b[0\"q\x1b[1;1H\x1b[L\x1b[?2J",
 			want: "\n\nP",
@@ -196,9 +168,6 @@ func TestConform_SelectiveErase(t *testing.T) {
 			in:   "a\r\nab\x1b[1\"qC\x1b[0\"qd\x1b[?69h\x1b[2;5s\x1b[1;2H\x1b[M\x1b[?69l\x1b[?2J",
 			want: "  C",
 		}, {
-			// An erased cell is not protected any more. The background a
-			// selective erase paints shows it: a cell still protected keeps
-			// the default one.
 			name:  "an erase in line unprotects the cells it erases",
 			in:    "\x1b[1\"qA\x1b[0\"q\x1b[1;1H\x1b[K\x1b[41m\x1b[?J",
 			cells: []cellWant{{x: 0, y: 0, bg: ansi.Red}},
@@ -207,8 +176,6 @@ func TestConform_SelectiveErase(t *testing.T) {
 			in:    "\x1b[1\"qP\x1b[0\"q\x1b[S\x1b[41m\x1b[1;1H\x1b[?J",
 			cells: []cellWant{{x: 0, y: 3, bg: ansi.Red}},
 		}, {
-			// These two cases used to want "ABC" and an unhandled sequence:
-			// the selective erase erased nothing.
 			name: "DECSED erases like ED when nothing is protected",
 			in:   "ABC\x1b[1;1H\x1b[?2J",
 			want: "",
@@ -233,9 +200,6 @@ func TestConform_SelectiveErase(t *testing.T) {
 			in:   "ABC\r\nDEF\x1b[1;2H\x1b[?2K",
 			want: "\nDEF",
 		}, {
-			// The unprotected forms do work, and DA1 claims selective erase
-			// (parameter 6), so a guest is entitled to try. It gets the plain
-			// behaviour, which for an unprotected screen is the same answer.
 			name: "the unprotected forms erase as normal",
 			in:   "ABC\x1b[1;2H\x1b[0K",
 			want: "A",

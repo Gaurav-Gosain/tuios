@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/er/graph.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package er
 
 import (
@@ -9,20 +7,18 @@ import (
 )
 
 type ErGraphNode struct {
-	id         string
-	label      string
-	alias      string
-	attributes []*ErAttribute
-	isGroup    bool
-	// parentId is undefined when hasParent is false.
+	id                string
+	label             string
+	alias             string
+	attributes        []*ErAttribute
+	isGroup           bool
 	parentId          string
 	hasParent         bool
 	cssStyles         []string
 	cssCompiledStyles []string
 	cssClasses        string
-	// dir is "" for none.
-	dir       string
-	labelType string
+	dir               string
+	labelType         string
 }
 
 type ErGraphEdge struct {
@@ -40,8 +36,6 @@ type ErGraph struct {
 	edges []*ErGraphEdge
 }
 
-// Resolves a parsed ER diagram into what is drawn: subgraphs as groups, entities as nodes with
-// their class styles, and relationships as edges with a marker type at each end.
 func buildErGraph(model *ErDb) ErGraph {
 	var nodes []*ErGraphNode
 	var edges []*ErGraphEdge
@@ -91,8 +85,6 @@ func buildErGraph(model *ErDb) ErGraph {
 		})
 	}
 
-	// A name that is also a subgraph id stands for the subgraph. Mermaid drops such an entity and
-	// leaves relationships written before the subgraph pointing at nothing; here they follow it.
 	moved := map[string]string{}
 	for _, name := range model.entities.keys {
 		entity := model.entities.m[name]

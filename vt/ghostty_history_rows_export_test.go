@@ -4,11 +4,6 @@ package vt
 
 import "fmt"
 
-// CompareHistoryRows reads every history row of t both ways, the formatter
-// path and the per-cell read, and reports how many rows the fast path called
-// exact, how many it handed to the fallback, and every exact row whose text
-// or widths are not the per-cell read's, cell for cell. For
-// ghostty_history_rows_test.go.
 func CompareHistoryRows(t *GhosttyTerminal) (exact, fallback int, mismatches []string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

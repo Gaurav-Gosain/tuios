@@ -1,19 +1,5 @@
 package vt_test
 
-// Conformance for the left and right margins: DECLRMM (private mode 69) and
-// DECSLRM (CSI Pl ; Pr s).
-//
-// conform_margins_test.go covers the vertical pair. The horizontal pair had no
-// tests at all, which matters more than it sounds: this emulator answers
-// DECLRMM with a set, so a guest that asks for horizontal margins is told it
-// has them. Advertising a feature and then ignoring half of it is worse than
-// refusing it, because the guest lays its output out on the strength of the
-// answer.
-//
-// Cases follow the VT420 and VT510 reference manuals for DECSLRM and DECLRMM,
-// esctest tests/decslrm.py, and xterm's implementation, which is where the
-// feature reached the modern world.
-
 import (
 	"testing"
 )
@@ -28,17 +14,12 @@ func TestConform_SetLeftRightMargins(t *testing.T) {
 			want:   "",
 			region: "2,0-6,4",
 		}, {
-			// Without DECLRMM the same sequence is SCOSC, save cursor, which
-			// is why the mode exists: the two share a final byte.
 			name:   "without DECLRMM the sequence saves the cursor instead",
 			cols:   8,
 			in:     "\x1b[1;4HX\x1b[3;6s\x1b[1;1H\x1b[uY",
 			want:   "   XY",
 			region: "0,0-8,4",
 		}, {
-			// A left margin at or past the right one describes no columns, so
-			// the pair is refused and the previous one stands. The emulator
-			// logs it as a sequence it did not act on, which is honest.
 			name:      "a left margin past the right one is ignored",
 			cols:      8,
 			in:        "\x1b[?69h\x1b[6;3s",
@@ -52,15 +33,12 @@ func TestConform_SetLeftRightMargins(t *testing.T) {
 			want:   "",
 			region: "0,0-8,4",
 		}, {
-			// Resetting the mode has to give the columns back, or output goes
-			// on being confined to a region the guest no longer believes in.
 			name:   "resetting DECLRMM releases the margins",
 			cols:   8,
 			in:     "\x1b[?69h\x1b[3;6s\x1b[?69l",
 			want:   "",
 			region: "0,0-8,4",
 		}, {
-			// DECSLRM homes the cursor, as DECSTBM does for the vertical pair.
 			name:   "DECSLRM homes the cursor",
 			cols:   8,
 			in:     "\x1b[3;4H\x1b[?69h\x1b[3;6sX",
@@ -90,15 +68,12 @@ func TestConform_PrintingInsideLeftRightMargins(t *testing.T) {
 			want:   "  ABCD\n  E",
 			cursor: "3,1",
 		}, {
-			// Reaching the bottom row inside the margins scrolls only the
-			// columns the margins name, leaving the ones outside alone.
 			name: "wrapping off the last row scrolls only the margin columns",
 			cols: 8,
 			rows: 2,
 			in:   "zzzzzzzz\x1b[2;1Hyyyyyyyy\x1b[?69h\x1b[3;6s\x1b[2;3HABCDEFG",
 			want: "zzABCDzz\nyyEFG yy",
 		}, {
-			// CUF cannot leave the margins when it starts inside them.
 			name:   "CUF stops at the right margin",
 			cols:   8,
 			in:     "\x1b[?69h\x1b[3;6s\x1b[1;3H\x1b[9CX",
@@ -146,12 +121,6 @@ func TestConform_EditingInsideLeftRightMargins(t *testing.T) {
 			in:   "12345678\x1b[2;1Habcdefgh\x1b[?69h\x1b[3;6s\x1b[1;3H\x1b[M",
 			want: "12cdef78\nab    gh",
 		}, {
-			// Erasing is deliberately not margin-aware. The VT510 manual
-			// lists what DECSLRM affects, and it is the operations that shift
-			// or wrap cells: DECIC, DECDC, IL, DL, ICH, DCH and line
-			// wrapping. Erase in line is not among them, and a program that
-			// clears to the end of a line means the line. xterm erases to the
-			// screen edge here as well.
 			name: "EL clears to the screen edge, which margins do not narrow",
 			cols: 8,
 			in:   "12345678\x1b[?69h\x1b[3;6s\x1b[1;3H\x1b[K",
@@ -165,8 +134,6 @@ func TestConform_EditingInsideLeftRightMargins(t *testing.T) {
 func TestConform_LeftRightMarginsWithOriginMode(t *testing.T) {
 	runConform(t, []conformCase{
 		{
-			// Under DECOM the home position is the top-left of the region, and
-			// with both pairs set that means both margins.
 			name:   "origin mode homes to the corner of both margin pairs",
 			cols:   8,
 			rows:   5,
@@ -181,8 +148,6 @@ func TestConform_LeftRightMarginsWithOriginMode(t *testing.T) {
 			want:   "\n\n\n     X",
 			cursor: "5,3",
 		}, {
-			// The report a guest reads back has to use the same coordinates it
-			// just addressed with.
 			name:   "the cursor comes back where origin mode put it",
 			cols:   8,
 			rows:   5,

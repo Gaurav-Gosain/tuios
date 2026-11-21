@@ -1,8 +1,3 @@
-// Ported from pele src/util/url.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// `new URL()` is approximated for http and https: the scheme and host are
-// lowercased and an empty path becomes "/". decodeURIComponent is ported as is.
-
 package util
 
 import (
@@ -26,15 +21,13 @@ var (
 	reInvalidProtocol = lazyre.New(`(?im)^([^\w]*)(javascript|data|vbscript)`)
 	reHTMLEntities    = lazyre.New(`&#(\w+)(;)?`)
 	reHTMLCtrlEntity  = lazyre.New(`(?i)&(newline|tab);`)
-	// pele also strips lone surrogates, which valid UTF-8 cannot hold.
-	reCtrl        = lazyre.New(`[\x{0}-\x{1F}\x{7F}-\x{9F}\x{2000}-\x{200D}\x{FEFF}\x{FFFE}\x{FFFF}]`)
-	reScheme      = lazyre.New(`(?im)^` + js.Dot + `+(:|&colon;)`)
-	reWSEscape    = lazyre.New(`(\\|%5[cC])((%(6[eE]|72|74))|[nrt])`)
-	reSchemeName  = lazyre.New(`(?i)^([a-z][a-z0-9+.-]*):`)
-	reNetworkPath = lazyre.New(`^[\\/]{2}`)
+	reCtrl            = lazyre.New(`[\x{0}-\x{1F}\x{7F}-\x{9F}\x{2000}-\x{200D}\x{FEFF}\x{FFFE}\x{FFFF}]`)
+	reScheme          = lazyre.New(`(?im)^` + js.Dot + `+(:|&colon;)`)
+	reWSEscape        = lazyre.New(`(\\|%5[cC])((%(6[eE]|72|74))|[nrt])`)
+	reSchemeName      = lazyre.New(`(?i)^([a-z][a-z0-9+.-]*):`)
+	reNetworkPath     = lazyre.New(`^[\\/]{2}`)
 )
 
-// decodeURIComponent, or false where JavaScript throws a URIError.
 func decodeURIComponent(s string) (string, bool) {
 	if !strings.Contains(s, "%") {
 		return s, true
@@ -105,9 +98,6 @@ func decode(uri string) string {
 	return uri
 }
 
-// strip removes every match of re from s. It returns s itself when nothing
-// matches, because ReplaceAllString copies the string even then, and a URL
-// rarely holds anything to remove.
 func strip(re *lazyre.Regexp, s string) string {
 	if !re.MatchString(s) {
 		return s
@@ -115,16 +105,11 @@ func strip(re *lazyre.Regexp, s string) string {
 	return re.ReplaceAllString(s, "")
 }
 
-// entityChar is String.fromCharCode of the code in an entity that reHTMLEntities matches.
 func entityChar(m string) string {
 	sub := reHTMLEntities.FindStringSubmatch(m)
-	// String.fromCharCode(dec): the number mod 2^16, or 0 for one that is not a number.
 	n := js.Number(sub[1])
 	code := 0
 	if !math.IsNaN(n) && !math.IsInf(n, 0) {
-		// ToUint16: the truncated number mod 2^16, done in float64 so a
-		// number past the int64 range does not hit an
-		// implementation-defined conversion.
 		m := math.Mod(math.Trunc(n), 65536)
 		if m < 0 {
 			m += 65536
@@ -134,8 +119,6 @@ func entityChar(m string) string {
 	return string(rune(code))
 }
 
-// unwrap removes the control characters, entity codes and escapes that could hide a scheme, and
-// with `percent`, percent escapes too. ok is false for a URL wrapped too many times to be a real one.
 func unwrap(u string, percent bool) (out string, ok bool) {
 	out = js.Trim(u)
 	if percent {
@@ -220,8 +203,6 @@ var (
 	imageSchemes = []string{"http", "https"}
 )
 
-// Stricter than Mermaid, which lets any scheme but three through: a diagram in a shared note
-// could otherwise open a local file, a network share, or another application.
 func allowed(u string, schemes []string) bool {
 	if reNetworkPath.MatchString(u) {
 		return false
@@ -230,7 +211,6 @@ func allowed(u string, schemes []string) bool {
 	return scheme == nil || slices.Contains(schemes, strings.ToLower(scheme[1]))
 }
 
-// allow checks the decoded URL too, for an app that decodes the href before opening it.
 func allow(u string, schemes []string) (string, bool) {
 	decoded, ok := unwrap(u, true)
 	if ok && allowed(u, schemes) && allowed(decoded, schemes) {
@@ -274,8 +254,6 @@ func InternalLink(name string, options types.RenderOptions) bool {
 	if _, ok := LinkUrl(u, options); !ok {
 		return false
 	}
-	// Match character removal by Esc() and the browser: Esc() drops what XML does not
-	// allow, a browser drops tabs and line breaks and then leading C0 controls and spaces.
 	seen := strings.Map(func(r rune) rune {
 		if r == '\t' || r == '\n' || r == '\r' || r <= 0x08 || r == 0x0b || r == 0x0c ||
 			(r >= 0x0e && r <= 0x1f) || r == 0x7f || r == 0xfffe || r == 0xffff {

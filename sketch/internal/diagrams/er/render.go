@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/er/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package er
 
 import (
@@ -55,20 +53,18 @@ type Row struct {
 }
 
 type NodeView struct {
-	node  *ErGraphNode
-	style svg.ResolvedStyle
-	label text.Label
-	w     float64
-	h     float64
-	headH float64
-	rows  []Row
-	// Left edge of each column, measured from the left edge of the box.
+	node    *ErGraphNode
+	style   svg.ResolvedStyle
+	label   text.Label
+	w       float64
+	h       float64
+	headH   float64
+	rows    []Row
 	cols    []float64
 	rowSize float64
 	keySize float64
 	mono    int
-	// Whether self-relationships loop out of the bottom side rather than the right.
-	below bool
+	below   bool
 }
 
 // A relationship from an entity to itself, with the stretch of the side it loops out of.
@@ -78,14 +74,12 @@ type Loop struct {
 	at    float64
 }
 
-// Writes a measured label starting at x, with the baseline of its first line at y.
 func textLeft(label text.Label, x, y float64, attrs string, icons svg.IconResolver, mono int) string {
 	num := svg.Num
 	lines := label.Lines
 	if len(lines) == 0 {
 		return ""
 	}
-	// The short form collapses repeated spaces in monospace text.
 	if len(lines) == 1 && len(lines[0]) == 1 && lines[0][0].Icon == "" && lines[0][0].Math == nil && lines[0][0].Style == mono && !(mono != 0 && strings.Contains(lines[0][0].Text, "  ")) {
 		return `<text` + svg.TextStyle(attrs, mono) + ` x="` + num(x) + `" y="` + num(y) + `">` + svg.Esc(lines[0][0].Text) + `</text>`
 	}
@@ -131,8 +125,6 @@ func textLeft(label text.Label, x, y float64, attrs string, icons svg.IconResolv
 	return `<text` + svg.TextStyle(attrs, shared) + ` xml:space="preserve">` + body.String() + `</text>` + extra.String()
 }
 
-// Mermaid reads `~` pairs as angle brackets. They are written as entities so the label parser
-// does not take `<int>` for a tag.
 func cellText(raw string) string {
 	converted := common.ParseGenericTypes(raw)
 	if converted == raw {
@@ -141,7 +133,6 @@ func cellText(raw string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(converted, "<", "&lt;"), ">", "&gt;")
 }
 
-// stripDefault is cssClasses.replace(/^default\s?/, ”).
 func stripDefault(s string) string {
 	if !strings.HasPrefix(s, "default") {
 		return s
@@ -160,7 +151,6 @@ func renderEr(db *ErDb, config types.Config, options types.RenderOptions) types.
 	return common.TurnToFit(options, func(down bool) types.Rendered { return draw(db, config, options, down) })
 }
 
-// draw: `turned` draws a diagram that runs across as one that runs down.
 func draw(db *ErDb, config types.Config, options types.RenderOptions, turned bool) types.Rendered {
 	num := svg.Num
 	graph := buildErGraph(db)
@@ -219,10 +209,8 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		cedges = append(cedges, &layout.CEdge{Src: src, Dst: dst, Minlen: 1, LabelW: labelW, LabelH: labelH, Route: []float64{}})
 	}
 
-	// The direction of the level a node is laid out in: its nearest subgraph that sets one, or the diagram's.
 	horizontal := func(i int) bool {
 		at := i
-		// Subgraphs can name each other as members, so the walk up is bounded.
 		for steps := 0; steps < len(graph.nodes); steps++ {
 			node := graph.nodes[at]
 			if !node.hasParent {
@@ -275,8 +263,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 			label = text.LayoutLabel(name, true, measurer, nameSize, 240, base)
 		}
 		own := loops[i]
-		// Loops leave by a side the layout keeps free of other edges: the right when ranks run down,
-		// the bottom when they run across.
 		below := len(own) > 0 && !node.isGroup && horizontal(i)
 		view := &NodeView{node: node, style: style, label: label, rowSize: rowSize, keySize: keySize, mono: mono, below: below}
 		reach := 0.0
@@ -355,7 +341,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 					columns++
 				}
 				view.w = math.Max(math.Max(inner+2*CELL_PAD_X, label.Width+2*BOX_PAD_X), minW)
-				// A box wider than its table shares the spare width between the columns.
 				spare := 0.0
 				if columns > 0 {
 					spare = (view.w - inner - 2*CELL_PAD_X) / float64(columns)
@@ -370,7 +355,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 				view.headH = nameH + 2*HEAD_PAD_Y
 				view.h += view.headH
 			}
-			// The layout keeps a node centered in its box, so room for loops is added on both sides.
 			room := 0.0
 			if len(own) > 0 {
 				room = 2 * (MARKER_LENGTH + LOOP*0.75 + 10 + reach)
@@ -407,7 +391,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 
 	spreadEnds(cedges, cnodes, views)
 
-	// A subgraph gets its size from the layout, so its loops hang outside it and may widen the diagram.
 	layoutWidth := lay.Width
 	for _, i := range loopKeys {
 		c := cnodes[i]
@@ -449,7 +432,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 
 	var clusters, nodesOut strings.Builder
 	var fills []svg.Fill
-	// An entity takes about 700 bytes of markup and a relationship about 400.
 	nodesOut.Grow(len(views) * 704)
 	for i, view := range views {
 		c := cnodes[i]
@@ -497,7 +479,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		}
 		display = text.DecodeEntities(display)
 		if strings.Contains(classes+" ", " internal-link ") && name != "" && (options.Links == nil || *options.Links) {
-			// The name ends up in an href, so it gets the same check as a URL.
 			safe := util.InternalLink(display, options)
 			target := svg.Esc(display)
 			href := ""
@@ -518,7 +499,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 				lineColor = svg.Esc(view.style.Stroke)
 			}
 			var stripes, cells strings.Builder
-			// Every row shares these attributes, so they are built once a box.
 			typeAttrs := ` class="pele-er-type"` + muted + txt
 			nameAttrs := ` class="pele-er-name"` + color + txt
 			keysAttrs := ` class="pele-er-keys" font-size="` + js.Num(view.keySize) + `"` + muted + txt
@@ -528,7 +508,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 				if r%2 == 0 {
 					span := `x="` + num(x0) + `" width="` + num(w) + `"`
 					if r == len(view.rows)-1 {
-						// The last row follows the box's rounded bottom corners: a rounded rect, squared off on top.
 						stripes.WriteString(`<rect ` + span + ` y="` + num(y) + `" height="` + num(row.h) + `"` + svg.ROUNDED + `/>` +
 							`<rect ` + span + ` y="` + num(y) + `" height="` + num(row.h/2) + `"/>`)
 					} else {
@@ -543,7 +522,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 				y += row.h
 			}
 			dividerY := num(y0 + view.headH)
-			// Keep row shading light on light fills and dark on dark fills to preserve text contrast.
 			tone := svg.Ink(view.style.Shape, "")
 			shade := "var(--_bg)"
 			if tone == svg.ON_LIGHT {
@@ -556,8 +534,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 				opacity = ` opacity="0.6"`
 			}
 			body = `<rect ` + shape + svg.Rounded(BOX_ATTRS+view.style.Shape) + `/>` +
-				// Over a fill the diagram chose, the shading is a tint of that fill. The opacity is on the
-				// group because the two parts of the last row overlap.
 				`<g class="pele-er-stripes" fill="` + shade + `"` + opacity + `>` + stripes.String() + `</g>` +
 				`<path class="pele-er-divider" d="M` + num(x0) + `,` + dividerY + `H` + num(x0+w) + `" stroke="` + lineColor + `"/>` +
 				`<rect ` + shape + ` fill="none" stroke="var(--_b)"` + svg.Rounded(view.style.Line) + `/>` +
@@ -568,7 +544,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 		nodesOut.WriteString(`<g class="pele-node pele-entity` + classes + `" data-id="` + svg.EscText(node.label) + `" transform="translate(` + num(c.X) + `,` + num(c.Y) + `)">` + body + `</g>`)
 	}
 
-	// Self-relationships share the side they loop out of, squeezed together if it is too short for them.
 	for _, i := range loopKeys {
 		own := loops[i]
 		view := views[i]
@@ -628,7 +603,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 			}
 			inset(route, 0, views[ce.Src], cnodes[ce.Src])
 			inset(route, len(route)-3, views[ce.Dst], cnodes[ce.Dst])
-			// A curve stops short of each box so that the marker sits on a straight run of line.
 			dx := math.Abs(route[len(route)-3] - route[0])
 			dy := math.Abs(route[len(route)-2] - route[1])
 			direct := len(route) == 6 && (dx < 0.01 || dy < 0.01 || js.Hypot(dx, dy) <= 3*MARKER_LENGTH)
@@ -699,7 +673,6 @@ func draw(db *ErDb, config types.Config, options types.RenderOptions, turned boo
 	return rendered
 }
 
-// erGeometry is the layout in SVG units, for drawing the diagram some other way.
 func erGeometry(graph ErGraph, views []*NodeView, cnodes []*layout.CNode, cedges []*layout.CEdge, drawn []*ErGraphEdge, edgeLabels []text.Label,
 	title text.Label, width, height float64) *types.Geometry {
 	g := &types.Geometry{Width: width, Height: height, Title: title.Plain()}
@@ -748,8 +721,6 @@ type End struct {
 	toward float64
 }
 
-// The layout brings every edge that ends on one side of a box to the middle of that side, where
-// their markers would cover each other. This spaces them along the side, in the order they fan out.
 func spreadEnds(cedges []*layout.CEdge, cnodes []*layout.CNode, views []*NodeView) {
 	sides := map[int][]*End{}
 	var keys []int
@@ -828,8 +799,6 @@ func spreadEnds(cedges []*layout.CEdge, cnodes []*layout.CNode, views []*NodeVie
 	}
 }
 
-// An entity with a self-relationship is laid out larger than it is drawn; this moves a route end
-// from the side of that larger box onto the entity's own side.
 func inset(route []float64, at int, view *NodeView, c *layout.CNode) {
 	if c.IsGroup {
 		return

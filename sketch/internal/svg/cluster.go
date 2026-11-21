@@ -1,5 +1,3 @@
-// Ported from pele src/svg/cluster.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package svg
 
 import (
@@ -79,7 +77,6 @@ func StruckTitle(label text.Label, x, y float64, attrs string, id string, parent
 	for p := parents[index]; p >= 0 && depth < 8; p = parents[p] {
 		depth++
 	}
-	// Each cluster is half its fill over what is behind it.
 	fill := "color-mix(in srgb,var(--_a) " + Num(100*(1-math.Pow(0.5, float64(depth)))) + "%,var(--_bg))"
 	return `<g class="pele-cluster-title" data-id="` + id + `">` +
 		LabelSvg(label, x, y, ` fill="none" stroke="`+fill+`" stroke-width="5" stroke-linejoin="round"`, icons) +

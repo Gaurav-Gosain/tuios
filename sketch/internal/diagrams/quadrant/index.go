@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/quadrant/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package quadrant draws Mermaid's quadrantChart: points on a square of four
 // quadrants, with labelled axes.
 package quadrant

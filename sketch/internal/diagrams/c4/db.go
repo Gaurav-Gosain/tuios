@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/c4/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package c4
 
 import (
@@ -8,7 +6,6 @@ import (
 	"tuios.dev/sketch/internal/js"
 )
 
-// parseInt is the global parseInt without a radix: 0x starts a hexadecimal number.
 func parseInt(s string) float64 {
 	t := js.TrimStart(s)
 	body := t
@@ -21,9 +18,6 @@ func parseInt(s string) float64 {
 	return js.ParseIntPrefix(t, 10)
 }
 
-// set assigns a named argument to an element field: Mermaid assigns a named argument to whatever
-// property it names, structural ones included. Here it reaches only the fields of ELEMENT_FIELDS;
-// any other name is dropped (pele keeps it aside in `extra`, which nothing reads).
 func (el *C4Element) set(attr *C4Named) {
 	v := attr.value
 	switch attr.key {
@@ -58,7 +52,6 @@ func (el *C4Element) set(attr *C4Named) {
 	}
 }
 
-// set assigns a named argument to a relation field, of REL_FIELDS or an offset.
 func (rel *C4Rel) set(attr *C4Named) {
 	v := attr.value
 	switch attr.key {
@@ -85,7 +78,6 @@ func (rel *C4Rel) set(attr *C4Named) {
 	}
 }
 
-// put: a positional argument fills the field of its slot. A named one fills the field it names, whichever slot it is in.
 func (el *C4Element) put(field *string, attr *C4Attr) {
 	if attr == nil {
 		return
@@ -134,7 +126,6 @@ func (rel *C4Rel) setLabel(attr *C4Attr) {
 	}
 }
 
-// arg is attrs[i], or nil past the end.
 func arg(attrs []C4Attr, i int) *C4Attr {
 	if i < len(attrs) {
 		return &attrs[i]
@@ -143,20 +134,17 @@ func arg(attrs []C4Attr, i int) *C4Attr {
 }
 
 type C4Db struct {
-	c4Type   string
-	title    string
-	accTitle string
-	accDescr string
-	shapes   []*C4Shape
-	// The first boundary is the unnamed one that holds everything at the top level.
+	c4Type        string
+	title         string
+	accTitle      string
+	accDescr      string
+	shapes        []*C4Shape
 	boundaries    []*C4Boundary
 	rels          []*C4Rel
 	shapeInRow    float64
 	boundaryInRow float64
 
-	shapeIndex map[string]*C4Shape
-	// The top-level boundary is not listed, so a boundary a diagram names `global` is its own box.
-	// In Mermaid it replaces the top level and nothing is drawn.
+	shapeIndex    map[string]*C4Shape
 	boundaryIndex map[string]*C4Boundary
 	relIndex      map[string]map[string]*C4Rel
 	current       *C4Boundary
@@ -184,7 +172,6 @@ func (db *C4Db) setTitle(title string) {
 	db.title = title
 }
 
-// setAccDescription keeps descr.replace(/\n\s+/g, '\n').
 func (db *C4Db) setAccDescription(descr string) {
 	if !strings.Contains(descr, "\n") {
 		db.accDescr = descr
@@ -255,14 +242,12 @@ func (db *C4Db) boundaryElement(alias, title *C4Attr) *C4Boundary {
 	return el
 }
 
-// addPersonOrSystem: alias, label, ?descr, ?sprite, ?tags, $link
 func (db *C4Db) addPersonOrSystem(kind string, attrs []C4Attr) {
 	shape := db.shape(arg(attrs, 0), arg(attrs, 1))
 	shape.put(&shape.descr, arg(attrs, 2))
 	db.finishShape(shape, kind, attrs, 3)
 }
 
-// addContainer: alias, label, ?techn, ?descr, ?sprite, ?tags, $link
 func (db *C4Db) addContainer(kind string, attrs []C4Attr) {
 	shape := db.shape(arg(attrs, 0), arg(attrs, 1))
 	shape.put(&shape.techn, arg(attrs, 2))
@@ -298,7 +283,6 @@ func (db *C4Db) open(boundary *C4Boundary) {
 	db.current = boundary
 }
 
-// addPersonOrSystemBoundary: alias, label, ?type, ?tags, $link
 func (db *C4Db) addPersonOrSystemBoundary(attrs []C4Attr, fallback string) {
 	boundary := db.boundary(attrs, fallback)
 	boundary.put(&boundary.tags, arg(attrs, 3))
@@ -310,11 +294,9 @@ func (db *C4Db) addContainerBoundary(attrs []C4Attr) {
 	db.addPersonOrSystemBoundary(attrs, "container")
 }
 
-// addDeploymentNode: alias, label, ?type, ?descr, ?sprite, ?tags, $link
 func (db *C4Db) addDeploymentNode(nodeType string, attrs []C4Attr) {
 	boundary := db.boundary(attrs, "node")
 	boundary.put(&boundary.descr, arg(attrs, 3))
-	// Mermaid drops whatever is in the sprite slot, a named argument included.
 	boundary.put(&boundary.sprite, arg(attrs, 4))
 	boundary.put(&boundary.tags, arg(attrs, 5))
 	boundary.put(&boundary.link, arg(attrs, 6))
@@ -331,7 +313,6 @@ func (db *C4Db) popBoundaryParseStack() {
 	}
 }
 
-// addRel: from, to, label, ?techn, ?descr, ?sprite, ?tags, $link
 func (db *C4Db) addRel(typ string, attrs []C4Attr) {
 	from := arg(attrs, 0)
 	to := arg(attrs, 1)
@@ -374,7 +355,6 @@ func (db *C4Db) addRel(typ string, attrs []C4Attr) {
 	rel.put(&rel.link, arg(attrs, 7))
 }
 
-// getC4Shape is the shape or boundary with an alias, or nil.
 func (db *C4Db) getC4Shape(alias string) *C4Element {
 	if s := db.shapeIndex[alias]; s != nil {
 		return &s.C4Element
@@ -385,7 +365,6 @@ func (db *C4Db) getC4Shape(alias string) *C4Element {
 	return nil
 }
 
-// updateElStyle: elementName, ?bgColor, ?fontColor, ?borderColor, ?shadowing, ?shape, ?sprite, ?techn, ?legendText, ?legendSprite
 func (db *C4Db) updateElStyle(attrs []C4Attr) {
 	if attrs[0].named != nil {
 		return
@@ -405,7 +384,6 @@ func (db *C4Db) updateElStyle(attrs []C4Attr) {
 	el.put(&el.legendSprite, arg(attrs, 9))
 }
 
-// updateRelStyle: from, to, ?textColor, ?lineColor, ?offsetX, ?offsetY
 func (db *C4Db) updateRelStyle(attrs []C4Attr) {
 	from := arg(attrs, 0)
 	to := arg(attrs, 1)
@@ -430,11 +408,10 @@ func (db *C4Db) updateRelStyle(attrs []C4Attr) {
 	}
 }
 
-// updateLayoutConfig: ?c4ShapeInRow, ?c4BoundaryInRow. As in Mermaid, the slot decides which one a value sets, not its name.
 func (db *C4Db) updateLayoutConfig(attrs []C4Attr) {
 	count := func(attr *C4Attr) float64 {
 		if attr == nil {
-			return 0 // NaN in pele; only `>= 1` reads it.
+			return 0
 		}
 		if attr.named == nil {
 			return parseInt(attr.str)

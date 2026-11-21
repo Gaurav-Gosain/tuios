@@ -6,16 +6,6 @@ import (
 	"strings"
 )
 
-// Shrinking is what decides whether this generator is worth having. A failing
-// script is a few hundred sequences of noise around the two that matter, and
-// nobody reads that. The passes below run to a fixpoint: drop a block, drop a
-// single step, then simplify what is left in place, stopping when a whole round
-// changes nothing.
-//
-// still is the oracle. It replays a candidate from a clean emulator and says
-// whether the same thing still goes wrong, so every reduction is kept only when
-// it reproduces and the result is guaranteed to.
-
 // Shrink returns the smallest script it could reach that still fails.
 //
 // simpler makes the steps that remain plainer without making the script
@@ -66,18 +56,12 @@ func Reduce[S ~[]E, E any](s S, still func(S) bool, simpler func(E) []E, note fu
 		best = dropSingles(best, still, note)
 		best = simplify(best, still, simpler, note)
 		if len(best) >= start {
-			// A round that removed nothing has reached the fixpoint. simplify
-			// can change elements without shortening, so the loop ends on
-			// length rather than on equality of the slices.
 			break
 		}
 	}
 	return simplify(best, still, simpler, note)
 }
 
-// dropBlocks is the delta-debugging half: remove contiguous runs, coarse first.
-// A failure that needs a setup step and a trigger collapses fast this way,
-// where removing one at a time stalls on the setup.
 func dropBlocks[S ~[]E, E any](s S, still func(S) bool, note func(string, int, bool)) S {
 	for n := len(s) / 2; n >= 1; n /= 2 {
 		for i := 0; i+n <= len(s); {
@@ -97,8 +81,6 @@ func dropBlocks[S ~[]E, E any](s S, still func(S) bool, note func(string, int, b
 	return s
 }
 
-// dropSingles sweeps back to front so an accepted removal never invalidates an
-// index still to be visited.
 func dropSingles[S ~[]E, E any](s S, still func(S) bool, note func(string, int, bool)) S {
 	for i := len(s) - 1; i >= 0; i-- {
 		if i >= len(s) {
@@ -113,8 +95,6 @@ func dropSingles[S ~[]E, E any](s S, still func(S) bool, note func(string, int, 
 	return s
 }
 
-// simplify replaces each element in place with the first of its simpler
-// versions that still fails.
 func simplify[S ~[]E, E any](s S, still func(S) bool, simpler func(E) []E, note func(string, int, bool)) S {
 	for i := range s {
 		for _, cand := range simpler(s[i]) {
@@ -131,16 +111,7 @@ func simplify[S ~[]E, E any](s S, still func(S) bool, simpler func(E) []E, note 
 	return s
 }
 
-// simpler offers plainer versions of one step, most aggressive first, so the
-// first one that still fails is also the smallest the step can become in one
-// move. Every candidate is strictly shorter than the step, which is what makes
-// Shrink terminate.
 func simpler(seq Seq) []Seq {
-	// The description was written for the bytes the generator drew, and a
-	// simplified step no longer carries them: "SU scroll up (params 63;24;3)"
-	// beside the bytes of a bare SU contradicts itself. So a simplified step
-	// keeps the original description, marked as describing what it was
-	// reduced from, once, however many times it is simplified after that.
 	desc := seq.Desc
 	if !strings.Contains(desc, reducedMarker) {
 		from := quote(seq.Bytes)
@@ -157,13 +128,11 @@ func simpler(seq Seq) []Seq {
 		}
 	}
 
-	// A long run of the same payload almost never needs to be long.
 	if n := len(seq.Bytes); n > 64 {
 		add(seq.Bytes[:16])
 		add(seq.Bytes[:n/2])
 	}
 
-	// A CSI with parameters usually turns on one of them, or on none.
 	if strings.HasPrefix(seq.Bytes, "\x1b[") && len(seq.Bytes) > 3 {
 		body := seq.Bytes[2:]
 		last := len(body) - 1
@@ -180,7 +149,6 @@ func simpler(seq Seq) []Seq {
 	return out
 }
 
-// reducedMarker introduces the note a simplified step's description carries.
 const reducedMarker = " (reduced from "
 
 func without[S ~[]E, E any](s S, i, j int) S {

@@ -18,8 +18,8 @@ type Store struct {
 	version uint64
 	size    int
 	lim     Limits
-	doc     *Node // the tree whose each, list and data the patches may grow
-	patched bool  // root was produced by a patch: it is not the map passed to NewStore and holds no nil map or slice
+	doc     *Node
+	patched bool
 }
 
 // NewStore returns a store holding state. state may be nil. The store keeps
@@ -87,9 +87,6 @@ func (s *Store) Apply(ops []Op) ([]string, error) {
 	if s.root == nil {
 		s.root, s.lim = map[string]any{}, (*Limits)(nil).resolve()
 	}
-	// The first patch copies the root: it may be the caller's map, and may
-	// hold nil maps and slices that a patch must see as empty. Later roots
-	// are the store's own, and a patch copies only the paths it writes.
 	root := any(s.root)
 	if !s.patched {
 		root = deepCopy(s.root)
@@ -193,8 +190,6 @@ func PathPointer(path string) (string, error) {
 	return ptr, nil
 }
 
-// cappedSize returns the length of v as compact JSON, or a number past
-// limit as soon as the walk passes it.
 func cappedSize(v any, limit int) int {
 	n := 0
 	var walk func(v any)

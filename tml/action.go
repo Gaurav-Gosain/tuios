@@ -12,16 +12,12 @@ type Action struct {
 	Off  int // byte offset of the call in the attribute
 }
 
-// actionSpec is the shape of one action.
 type actionSpec struct {
 	name     string
 	min, max int
-	literal  int // how many leading arguments must be string literals
+	literal  int
 }
 
-// actionSpecs lists the actions, sorted by name. set, toggle, tab, sort,
-// filter, fold and focus run locally. emit and close go to the owner. copy,
-// open and pane go to the host.
 var actionSpecs = [...]actionSpec{
 	{"close", 0, 1, 0},
 	{"copy", 1, 1, 0},
@@ -153,7 +149,6 @@ func checkActionArgs(a Action) error {
 	return nil
 }
 
-// splitTop splits s at sep outside quotes and brackets, as byte ranges.
 func splitTop(s string, sep byte) [][2]int {
 	var out [][2]int
 	depth, start := 0, 0
@@ -185,7 +180,6 @@ func splitTop(s string, sep byte) [][2]int {
 	return append(out, [2]int{start, len(s)})
 }
 
-// parseSort reads field, field:asc or field:desc.
 func parseSort(s string) bool {
 	f, dir, has := strings.Cut(s, ":")
 	return f != "" && (!has || dir == "asc" || dir == "desc")

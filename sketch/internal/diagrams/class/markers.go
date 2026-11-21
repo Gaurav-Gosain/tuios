@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/class/markers.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package class
 
 import "tuios.dev/sketch/internal/svg"
@@ -11,7 +9,6 @@ const (
 	RING     = 5
 )
 
-// How far the line stops short of the node so that it meets the back of the marker.
 func classMarkerTrim(typ EndMarker) float64 {
 	switch typ {
 	case "extension":
@@ -26,7 +23,6 @@ func classMarkerTrim(typ EndMarker) float64 {
 	return 0
 }
 
-// Draws an end marker whose tip is at (x, y), pointing along (dx, dy).
 func classMarker(typ EndMarker, x, y, dx, dy float64, color string) string {
 	num := svg.Num
 	nx := -dy

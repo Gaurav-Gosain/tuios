@@ -13,7 +13,7 @@ type Template struct {
 type tmplPart struct {
 	lit  string
 	expr *Expr
-	off  int // byte offset of the expression source in the template
+	off  int
 }
 
 // TemplateError is a binding that does not parse. Offset is a byte offset
@@ -73,8 +73,6 @@ func ParseTemplate(s string) (*Template, error) {
 	return t, nil
 }
 
-// matchBrace finds the } that closes the { at start, past strings and nested
-// object literals.
 func matchBrace(s string, start int) (int, error) {
 	depth := 0
 	var quote byte

@@ -47,8 +47,6 @@ func ParseHex(s string) (Color, bool) {
 	return RGB(r, g, b), true
 }
 
-// mix blends a toward b by t in [0,1], per channel in sRGB. Good enough for
-// deriving wash stops and chrome tints; this is styling, not color science.
 func mix(a, b Color, t float64) Color {
 	lerp := func(x, y uint8) uint8 {
 		return uint8(float64(x) + (float64(y)-float64(x))*t + 0.5)
@@ -56,7 +54,6 @@ func mix(a, b Color, t float64) Color {
 	return Color{R: lerp(a.R, b.R), G: lerp(a.G, b.G), B: lerp(a.B, b.B), A: 255}
 }
 
-// luma is the WCAG relative luminance of c.
 func luma(c Color) float64 {
 	lin := func(v uint8) float64 {
 		f := float64(v) / 255

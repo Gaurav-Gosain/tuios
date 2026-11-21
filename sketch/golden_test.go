@@ -16,8 +16,6 @@ import (
 	"tuios.dev/sketch/internal/js"
 )
 
-// done lists the corpus files whose goldens must all match. A type joins it
-// in the pull request that ports it.
 var done = map[string]bool{
 	"agentflow":     true,
 	"architecture":  true,
@@ -54,12 +52,8 @@ var done = map[string]bool{
 	"xychart":       true,
 }
 
-// goldenNow is the time gen.mjs renders with, for gantt.
 var goldenNow = time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 
-// goldenZone is the time zone the gantt goldens were written in. pele reads dates in
-// the process's zone, and gen.mjs ran in Asia/Dubai. The zone comes from the tzdata
-// embedded in the test binary, so the test passes on a machine without the zone files.
 var goldenZone = func() *time.Location {
 	loc, err := time.LoadLocation("Asia/Dubai")
 	if err != nil {
@@ -69,7 +63,7 @@ var goldenZone = func() *time.Location {
 }()
 
 type goldenCase struct {
-	name   string // corpus file without -docs.json
+	name   string
 	index  int
 	source string
 	want   []byte
@@ -104,7 +98,6 @@ func loadGoldens(t testing.TB) []goldenCase {
 	return cases
 }
 
-// firstDifference shows where got and want part, from the element that holds the first differing byte.
 func firstDifference(got, want []byte) string {
 	n := min(len(got), len(want))
 	at := 0
@@ -177,8 +170,6 @@ func TestGolden(t *testing.T) {
 	t.Logf("golden matches by type (types not ported yet are left out):\n%s  all            %3d/%3d", report.String(), passed, total)
 }
 
-// goldenMath is fakeMath of testdata/extra/gen.mjs, the math resolver of the
-// extra cases that set "math".
 func goldenMath(tex string, size float64) (MathMarkup, bool) {
 	if strings.Contains(tex, "none") {
 		return MathMarkup{}, false

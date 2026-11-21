@@ -22,8 +22,6 @@ the reason. The rule is off by default.`,
 	Run: runNolintWithoutReason,
 }
 
-// reasonAbove reports whether a comment with words ends on the line above
-// the directive, or opens the group that holds it.
 func reasonAbove(fset *token.FileSet, f *ast.File, c *ast.Comment) bool {
 	line := fset.Position(c.Pos()).Line
 	for _, g := range f.Comments {
@@ -55,7 +53,6 @@ func runNolintWithoutReason(pass *analysis.Pass) (any, error) {
 				if !ok || (rest != "" && rest[0] != ':' && rest[0] != ' ' && rest[0] != '\t') {
 					continue
 				}
-				// Skip the list of linters, then look for "// reason".
 				if strings.HasPrefix(rest, ":") {
 					if i := strings.IndexAny(rest, " \t"); i < 0 {
 						rest = ""

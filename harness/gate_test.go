@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// manifestHead is the part of a test manifest every case shares.
 const manifestHead = "schema_version = 1\nid = \"x-agent\"\n[detect]\ncomm = [\"x-agent\"]\n"
 
 func mustManifest(t *testing.T, body string) *Registry {
@@ -60,8 +59,6 @@ none_of = [ { all = ["auto-approved", "yes"] } ]
 			}
 		})
 	}
-	// The none_of group is "auto-approved" and "yes" together, so it vetoes
-	// only when both are on the screen.
 	if got := classified(r, "Bash command", "Do you want to proceed?", "  2. No", "auto-approved"); got != "needs_input" {
 		t.Errorf("a partial none_of group vetoed: got %s", got)
 	}
@@ -91,7 +88,6 @@ func TestNestedGateLoadErrors(t *testing.T) {
 			}
 		})
 	}
-	// A veto group of vetoes is allowed: "none of: a screen without X".
 	body := "[screen]\nenabled = true\n[[screen.rule]]\nstate = \"working\"\nall = [\"x\"]\nnone_of = [ { not = [\"y\"] } ]\n"
 	if _, err := parseManifest("x.toml", []byte(manifestHead+body)); err != nil {
 		t.Errorf("a veto group of vetoes was refused: %v", err)
@@ -155,8 +151,6 @@ func TestScreenRegions(t *testing.T) {
 			}
 		})
 	}
-	// No rule on the screen: after_last_horizontal_rule reads everything, as
-	// herdr's does, and the box regions read nothing.
 	plain := []string{"a", "b"}
 	if got := regionLines(plain, RegionAfterLastRule); len(got) != 2 {
 		t.Errorf("after_last_horizontal_rule with no rule = %q, want the whole tail", got)
@@ -330,7 +324,6 @@ all    = ["esc to cancel"]
 	if got := classified(r, "esc to", "x", "cancel"); got != "none" {
 		t.Errorf("words on rows with other text between them matched: got %s, want none", got)
 	}
-	// A pattern reads the rows as they are: the wrap does not join them for it.
 	p := mustManifest(t, `
 [screen]
 enabled = true
@@ -343,7 +336,6 @@ regex  = ['(?m)^Esc to cancel$']
 	if got := classified(p, "Esc", "to cancel"); got != "none" {
 		t.Errorf("a pattern matched across a wrap: got %s, want none", got)
 	}
-	// Without fold_case the wrap is read the same way.
 	c := mustManifest(t, `
 [screen]
 enabled = true
@@ -356,9 +348,6 @@ all    = ["Esc to cancel"]
 	if got := classified(c, "Enter to select · Esc", "to cancel"); got != "needs_input" {
 		t.Errorf("a wrapped footer without fold_case: got %s, want needs_input", got)
 	}
-	// The whole tail holds transcript prose: a phrase wrapped there is not
-	// joined, so prose that only reads as the phrase across a wrap matches
-	// nothing.
 	w := mustManifest(t, `
 [screen]
 enabled   = true
@@ -371,8 +360,6 @@ any    = ["waiting for permission"]
 	if got := classified(w, "⏺ The pane stops at the line that says it is waiting for", "  permission, and then nothing happens."); got != "none" {
 		t.Errorf("a tail rule matched prose across a wrap: got %s, want none", got)
 	}
-	// The lines and their joined form are kept apart by a NUL, so a
-	// substring holding one is refused at load.
 	if _, err := parseManifest("x.toml", []byte(manifestHead+"[screen]\nenabled = true\n[[screen.rule]]\nstate = \"working\"\nall = [\"a\\u0000b\"]\n")); err == nil {
 		t.Error("a substring holding a NUL loaded")
 	}

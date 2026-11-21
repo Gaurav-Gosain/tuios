@@ -2,7 +2,6 @@ package plot
 
 import "math"
 
-// niceStep returns a round step near span/n: 1, 2 or 5 times a power of 10.
 func niceStep(span float64, n int) float64 {
 	if span <= 0 || !finite(span) || n < 1 {
 		return 1
@@ -17,7 +16,6 @@ func niceStep(span float64, n int) float64 {
 	return 10 * mag
 }
 
-// niceRange widens [lo, hi] to round numbers, about n steps apart.
 func niceRange(lo, hi float64, n int) (float64, float64) {
 	if !finite(lo) || !finite(hi) || hi < lo {
 		return 0, 1
@@ -37,17 +35,11 @@ func niceRange(lo, hi float64, n int) (float64, float64) {
 	return nlo, nhi
 }
 
-// axisFrame is the layout of a chart with a y axis at the left and an x
-// axis under it: the plot area, and where the labels go.
 type axisFrame struct {
-	x0, y0, pw, ph int // the plot area
+	x0, y0, pw, ph int
 	labelW         int
 }
 
-// drawAxes draws y tick labels for lo and hi (and the middle when there are
-// five rows or more), the axis line, the base line, and the x labels under
-// it. It returns the plot area. With too little room it draws no axis and
-// the plot area is the whole grid.
 func drawAxes(g *Grid, lo, hi float64, format func(float64) string, xLabels [3]string, m Mode) axisFrame {
 	if format == nil {
 		format = Compact
@@ -70,7 +62,6 @@ func drawAxes(g *Grid, lo, hi float64, format func(float64) string, xLabels [3]s
 	}
 	labelW = min(labelW, g.W/4)
 	ax := labelW + 1
-	// Tick rows: the top row is hi, the bottom row is lo.
 	tickRow := func(i int) int { return i * (rows - 1) / (len(ticks) - 1) }
 	for y := 0; y < rows; y++ {
 		g.set(ax-1, y, block(m, "│", "|"), Edge)
@@ -102,11 +93,8 @@ func drawAxes(g *Grid, lo, hi float64, format func(float64) string, xLabels [3]s
 	return axisFrame{x0: ax, y0: 0, pw: g.W - ax, ph: rows, labelW: labelW}
 }
 
-// sub returns a grid for the plot area, sharing nothing; paste copies it
-// back.
 func (a axisFrame) sub() *Grid { return NewGrid(a.pw, a.ph) }
 
-// paste copies the cells of p that hold a glyph into g at the plot area.
 func (a axisFrame) paste(g, p *Grid) {
 	for y := 0; y < p.H; y++ {
 		for x := 0; x < p.W; x++ {
@@ -157,8 +145,6 @@ func LegendWidth(items []LegendItem) int {
 	return n
 }
 
-// xLabels picks the labels under the first, middle and last of n values.
-// A label the data does not have stays empty.
 func xLabels(labels []string, n int) [3]string {
 	var out [3]string
 	at := func(i int) string {

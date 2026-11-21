@@ -9,7 +9,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// rect is a box in cells, edges included.
 type rect struct{ x0, y0, x1, y1 int }
 
 func (r rect) union(o rect) rect {
@@ -18,32 +17,18 @@ func (r rect) union(o rect) rect {
 
 type point struct{ x, y int }
 
-// Shapes drawn with rounded corners, and shapes drawn as a diamond.
 var pointShapes = map[string]bool{"diam": true, "hex": true}
 
-// slantShapes have slanted sides, and need a cell more on each side for
-// each row past the first. cylShapes have a rim under their top edge.
 var slantShapes = map[string]bool{"lean-r": true, "lean-l": true, "trap-b": true, "trap-t": true}
 var cylShapes = map[string]bool{"cyl": true, "lin-cyl": true}
 var dotShapes = map[string]bool{"sm-circ": true, "f-circ": true, "fr-circ": true, "cross-circ": true}
 
-// graphKind is what a diagram type changes in the drawing of a graph of
-// boxes and edges. The zero value draws a flowchart.
 type graphKind struct {
-	// size gives the cells a node's box needs, borders included. ok false
-	// keeps the flowchart rule.
-	size func(n *types.GeoNode) (w, h int, ok bool)
-	// node draws a node; false leaves it to drawNode.
-	node func(c *canvas, b rect, n *types.GeoNode) bool
-	// head draws the marker at an edge end; false leaves it to head.
-	head func(c *canvas, at point, side int, kind string) bool
-	// endText is the text beside an edge end. nil gives StartText and EndText.
-	endText func(e *types.GeoEdge, last bool) string
-	// frame says whether to draw a group's frame and title, and with what line.
-	frame func(n *types.GeoNode) (draw bool, weight uint8, title bool)
-	// squeeze lets a drawing up to squeezeSpan times too wide be drawn and
-	// then narrowed by dropping columns that hold only gaps and horizontal
-	// lines. tight gives each box no more room than its text needs.
+	size           func(n *types.GeoNode) (w, h int, ok bool)
+	node           func(c *canvas, b rect, n *types.GeoNode) bool
+	head           func(c *canvas, at point, side int, kind string) bool
+	endText        func(e *types.GeoEdge, last bool) string
+	frame          func(n *types.GeoNode) (draw bool, weight uint8, title bool)
 	squeeze, tight bool
 }
 
@@ -72,8 +57,6 @@ func scaleOf(l *sketch.Layout, kind *graphKind) (sx, sy float64) {
 		if n.W <= 0 || n.H <= 0 {
 			continue
 		}
-		// A dot or a bar takes the cells it takes, whatever the scale. The
-		// flowchart keeps its rule, so that its drawings stay as they are.
 		if kind.size != nil && (dotShapes[n.Shape] || n.Shape == "fork") {
 			continue
 		}
@@ -91,8 +74,6 @@ func scaleOf(l *sketch.Layout, kind *graphKind) (sx, sy float64) {
 			sy = math.Max(sy, tall/n.H)
 		}
 	}
-	// An edge with text at its ends is long enough for both texts apart:
-	// across, the two side by side with room between them; down, a row each.
 	for k := range l.Edges {
 		e := &l.Edges[k]
 		ts, te := width(kind.textAt(e, false)), width(kind.textAt(e, true))
@@ -108,9 +89,6 @@ func scaleOf(l *sketch.Layout, kind *graphKind) (sx, sy float64) {
 			sy = math.Max(sy, 4/dy)
 		}
 	}
-	// A label between two boxes side by side fits the gap between them, so
-	// that it covers neither box: pele leaves that room, as C4 does since
-	// pele 1.9.0.
 	for k := range l.Edges {
 		e := &l.Edges[k]
 		w := widest(e.Label)
@@ -128,15 +106,10 @@ func scaleOf(l *sketch.Layout, kind *graphKind) (sx, sy float64) {
 		}
 		sx = math.Max(sx, float64(w+4)/(right-left))
 	}
-	// A cell is about twice as tall as it is wide.
 	sy = math.Max(sy, sx*0.45)
 	return sx, sy
 }
 
-// drawFlowchart draws a graph from its layout. With squeeze, a drawing up to
-// squeezeSpan times too wide is drawn and then narrowed by dropping columns
-// that hold only gaps and horizontal lines. If that is not enough, the boxes
-// lose the room the layout gave them beyond their text, and it is tried again.
 func drawFlowchart(l *sketch.Layout, opt Options, squeeze bool) (*canvas, error) {
 	c, err := drawGraph(l, opt, &graphKind{squeeze: squeeze})
 	if err == ErrTooWide && squeeze {
@@ -145,14 +118,11 @@ func drawFlowchart(l *sketch.Layout, opt Options, squeeze bool) (*canvas, error)
 	return c, err
 }
 
-// drawGraph draws boxes joined by edges: a flowchart, or a state, class or ER
-// diagram, as kind says.
 func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) {
 	sx, sy := scaleOf(l, kind)
 	col := func(x float64) int { return int(math.Round(x * sx)) }
 	row := func(y float64) int { return int(math.Round(y * sy)) }
 
-	// Where an edge meets a node in the layout: 0 top, 1 right, 2 bottom, 3 left.
 	side := func(i int, x, y float64) int {
 		n := l.Nodes[i]
 		dx, dy := x-n.X, y-n.Y
@@ -169,7 +139,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 			}
 			return 1
 		}
-		// Nearest side by angle.
 		if math.Abs(dy)*hw > math.Abs(dx)*hh {
 			if dy < 0 {
 				return 0
@@ -181,7 +150,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		}
 		return 1
 	}
-	// The ends on each side of each node, in the order pele spread them.
 	ends := map[[2]int][]graphEnd{}
 	for k, e := range l.Edges {
 		if e.From == e.To || len(e.Route) < 6 || e.Stroke == "invisible" {
@@ -213,9 +181,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		if kind.tight {
 			w = widest(n.Label) + 4
 		}
-		// As tall as the text needs, or as the ends on a side need: a taller
-		// box only spreads the drawing. A shape takes the room its outline
-		// needs past that: see shapeRoom.
 		_, dh := shapeRoom(n.Shape, len(n.Label), len(n.Label)+2)
 		h := len(n.Label) + 2 + dh
 		sized := false
@@ -232,7 +197,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		}
 		if !sized {
 			if h%2 == 0 && (pointShapes[n.Shape] || n.Shape == "odd") {
-				// A point is on one middle row.
 				h++
 			}
 			dw, _ := shapeRoom(n.Shape, len(n.Label), h)
@@ -247,7 +211,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		cx, cy := col(n.X), row(n.Y)
 		boxes[i] = rect{cx - w/2, cy - h/2, cx - w/2 + w - 1, cy - h/2 + h - 1}
 	}
-	// Groups, the deepest first, around what they hold.
 	depth := func(i int) int {
 		d := 0
 		for p := l.Nodes[i].Parent; p >= 0 && d < 64; p = l.Nodes[p].Parent {
@@ -277,7 +240,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		boxes[g] = r
 	}
 
-	// The cell just outside a box on a side.
 	outside := func(b rect, s int, at point) point {
 		cx := min(max(at.x, b.x0+1), b.x1-1)
 		cy := min(max(at.y, b.y0+1), b.y1-1)
@@ -298,10 +260,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		return point{b.x1 + 1, cy}
 	}
 
-	// Each end gets a cell of its own along its side, in the layout's order.
-	// Edges that arrive on one side with the same head, the same stroke and
-	// no text beside it share one end, so they join into one arrow instead of
-	// a row of heads side by side.
 	placed := map[[2]int]point{}
 	for key, list := range ends {
 		node, sd := key[0], key[1]
@@ -341,7 +299,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 			lo, hi = b.y0+1, b.y1-1
 			scale = row
 			if pointShapes[l.Nodes[node].Shape] {
-				// Edges meet a hexagon or a decision at its point.
 				lo = (b.y0 + b.y1) / 2
 				hi = lo
 			}
@@ -350,7 +307,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		gap := 1
 		for k, e := range list {
 			want := min(max(scale(e.at), lo), hi)
-			// Keep order and room for the ends still to come.
 			want = max(want, prev+gap)
 			want = min(want, hi-room(list[k:], sd == 1 || sd == 3))
 			want = max(want, lo)
@@ -420,7 +376,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		paths = append(paths, p)
 	}
 
-	// The canvas covers everything; shift so nothing is left of or above it.
 	all := rect{0, 0, col(l.Width), row(l.Height)}
 	for i, b := range boxes {
 		if l.Nodes[i].W > 0 || l.Nodes[i].Group {
@@ -450,7 +405,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 	}
 	move := func(r rect) rect { return rect{r.x0 + dx, r.y0 + dy, r.x1 + dx, r.y1 + dy} }
 
-	// Group frames, the outermost first, as lines that edges cross.
 	for k := len(groups) - 1; k >= 0; k-- {
 		weight := uint8(light)
 		if kind.frame != nil {
@@ -467,9 +421,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		c.vline(b.x1, b.y0, b.y1, weight, roleFrame)
 	}
 
-	// Edges. An edge from an actor of a use case diagram takes the actor's
-	// series colour, so each actor's edges can be told apart where they run
-	// side by side.
 	actor := map[int]uint8{}
 	for i, n := range l.Nodes {
 		if n.Shape == "actor" {
@@ -486,8 +437,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		if r, ok := actor[p.from]; ok {
 			role = r
 		}
-		// The first cell joins the box it leaves. A group's frame is a line, so
-		// it gets a junction where the edge leaves it.
 		c.stroke(p.pts[0].x+dx, p.pts[0].y+dy, toward[p.startSide], p.weight, role)
 		if l.Nodes[p.from].Group {
 			in := [4]point{{0, 1}, {-1, 0}, {0, -1}, {1, 0}}[p.startSide]
@@ -527,7 +476,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		}
 	}
 
-	// Nodes.
 	for i, n := range l.Nodes {
 		if n.Group {
 			continue
@@ -536,7 +484,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 			drawNode(c, move(boxes[i]), n.Shape, n.Label)
 		}
 		if r, ok := actor[i]; ok {
-			// The stick figure in the actor's colour.
 			b := move(boxes[i])
 			top := b.y0 + (b.y1-b.y0+1-len(n.Label))/2
 			for y := top; y < top+3; y++ {
@@ -548,7 +495,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 			}
 		}
 	}
-	// Group titles, on the top line.
 	for _, g := range groups {
 		if kind.frame != nil {
 			if draw, _, title := kind.frame(&l.Nodes[g]); !draw || !title {
@@ -561,7 +507,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 		}
 	}
 
-	// Edge labels and heads.
 	for _, p := range paths {
 		if p.invisible {
 			continue
@@ -612,8 +557,6 @@ func drawGraph(l *sketch.Layout, opt Options, kind *graphKind) (*canvas, error) 
 	return c, nil
 }
 
-// endRoom is the cells an end with text of width w takes along its side
-// before the next end.
 func endRoom(w int, upright bool) int {
 	switch {
 	case w == 0:
@@ -624,16 +567,13 @@ func endRoom(w int, upright bool) int {
 	return w + 3
 }
 
-// graphEnd is where an edge meets a side of a node, in the layout.
 type graphEnd struct {
 	edge int
 	last bool
 	at   float64
-	// text is the width of the text beside the end.
 	text int
 }
 
-// room is the cells from the first end of a list to the last, along a side.
 func room(list []graphEnd, upright bool) int {
 	n := 0
 	for k := 0; k+1 < len(list); k++ {
@@ -642,7 +582,6 @@ func room(list []graphEnd, upright bool) int {
 	return n
 }
 
-// span is the cells a list of ends needs along a side, the text after the last included.
 func span(list []graphEnd, upright bool) int {
 	if len(list) == 0 {
 		return 0
@@ -654,13 +593,8 @@ func span(list []graphEnd, upright bool) int {
 	return n
 }
 
-// endLabel writes the text beside an edge end: right of a line that comes in
-// from above or below, above one that comes in from a side.
 func endLabel(c *canvas, at point, side int, s string) {
 	w := width(s)
-	// Where the text may go, the first choice first: a cell of space and
-	// then the text, beside the line for an end on the top or the bottom,
-	// over or under it for an end on a side.
 	var tries [2]point
 	switch side {
 	case 0, 2:
@@ -676,17 +610,14 @@ func endLabel(c *canvas, at point, side int, s string) {
 			return
 		}
 	}
-	// No room on either side: the first choice, over what is there.
 	c.text(tries[0].x, tries[0].y, s, roleNote)
 }
 
-// free reports whether the cells from x0 to x1 on row y hold nothing yet.
 func (c *canvas) free(x0, x1, y int) bool {
 	for x := x0; x <= x1; x++ {
 		p := c.at(x, y)
 		if p == nil {
 			if x == x0 || x == x1 {
-				// The margin may run off the canvas.
 				continue
 			}
 			return false
@@ -698,11 +629,8 @@ func (c *canvas) free(x0, x1, y int) bool {
 	return true
 }
 
-// squeezeSpan is how many times wider than the columns a graph may be drawn
-// before it is squeezed.
 const squeezeSpan = 3
 
-// head draws a marker in the cell outside a box's side, pointing into the box.
 func head(c *canvas, at point, side int, kind string) {
 	switch kind {
 	case "arrow_point":
@@ -714,9 +642,7 @@ func head(c *canvas, at point, side int, kind string) {
 	}
 }
 
-// drawNode draws a node's box and its label, centred.
 func drawNode(c *canvas, b rect, shape string, label []string) {
-	// Clear what edges left inside the box.
 	for y := b.y0; y <= b.y1; y++ {
 		for x := b.x0; x <= b.x1; x++ {
 			c.clear(x, y)
@@ -745,7 +671,6 @@ func drawNode(c *canvas, b rect, shape string, label []string) {
 	}
 	y0, h := b.y0, b.y1-b.y0+1
 	if cylShapes[shape] && h >= 4 {
-		// The text goes under the rim.
 		y0, h = b.y0+1, h-1
 	}
 	top := y0 + (h-len(label))/2

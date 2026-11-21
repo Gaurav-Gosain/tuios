@@ -5,27 +5,6 @@ import (
 	"strings"
 )
 
-// The pane's window title as evidence, and the one rule that makes it safe to
-// read.
-//
-// A title is a short string the program publishes about itself with OSC 0 or
-// OSC 2, and the agents already use it: Claude Code puts a spinner there while
-// it works, Codex writes "Action Required" there when it is blocked. tuios
-// parsed the sequence and kept the string for the window's name, and no tier
-// ever looked at it.
-//
-// The catch is what a title is made of. A screen is prose, so matching a
-// substring anywhere in it is right. A title is mostly paths, branches and
-// program names, and a substring test against those finds the agent's own name
-// inside words that are not it: a pane sitting in ~/src/opencode-blinker
-// matches a rule for "opencode", and the false positive arrives wearing the
-// right label. So a title predicate has to match a whole token.
-
-// tokenByte reports whether b continues a word. The hyphen is in here, which is
-// the whole point: "opencode-blinker" has to fail a rule for "opencode", and it
-// only fails if the hyphen is a letter as far as the boundary is concerned.
-// Paths are split on their separators because a rule for a program name should
-// still match ~/bin/opencode.
 func tokenByte(b byte) bool {
 	switch {
 	case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9':
@@ -36,14 +15,6 @@ func tokenByte(b byte) bool {
 	return false
 }
 
-// containsToken reports whether needle appears in hay bounded by non-word
-// bytes on both sides. An empty needle is not a match: a rule that names an
-// empty string is asking for every pane, which is what checkRule refuses a
-// rule with no predicates for.
-//
-// A needle that itself begins or ends with a non-word byte is matched plainly
-// at that end, because the boundary it would be held to is already written
-// into the rule. That is what lets a rule say "] " or "> " and mean it.
 func containsToken(hay, needle string) bool {
 	if needle == "" {
 		return false
@@ -63,9 +34,6 @@ func containsToken(hay, needle string) bool {
 		if beforeOK && afterOK {
 			return true
 		}
-		// Advance by one rather than by the needle: overlapping candidates are
-		// rare but real, and skipping the whole needle would step over the one
-		// that is bounded.
 		from = i + 1
 	}
 }
@@ -97,8 +65,6 @@ func (r *Registry) ClassifyOSC(id, title, progress string) (state string, rule i
 	})
 }
 
-// oscText holds the two strings title rules read, each folded once when the
-// block folds case.
 type oscText struct {
 	title, titleFolded       string
 	progress, progressFolded string

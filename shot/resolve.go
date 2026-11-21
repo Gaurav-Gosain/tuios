@@ -8,23 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Color resolution. The emulator preserves color kinds (basic, indexed,
-// truecolor), so this is the one place they become concrete RGB: themed
-// sessions resolve through the theme palette, unthemed sessions fall back to
-// the xterm-256 table.
-//
-// Why the fallback renders at all instead of refusing: tuios can never read
-// the host terminal's palette, so with no theme set every choice is a guess,
-// and the docs already say only the host can settle it. Between refusing to
-// render, demanding a theme first, and guessing the way every terminal
-// tool guesses, the guess is the only option that keeps "works with no
-// setup" true: the xterm table is the documented default of the reference
-// implementation, truecolor cells (most modern TUIs) are exact regardless,
-// and the render result carries a one-line notice naming the guess so
-// nobody mistakes it for the host's colors. A --theme flag re-renders
-// indexed cells through any registered palette when the guess is not good
-// enough.
-
 // Palette resolves preserved color kinds to concrete RGB.
 type Palette struct {
 	// FG and BG are the default foreground and background.
@@ -43,7 +26,6 @@ var (
 	XTermBg = RGB(0x00, 0x00, 0x00)
 )
 
-// xtermBasic is the xterm reference palette for the basic 16.
 var xtermBasic = [16]Color{
 	RGB(0x00, 0x00, 0x00), RGB(0xcd, 0x00, 0x00), RGB(0x00, 0xcd, 0x00), RGB(0xcd, 0xcd, 0x00),
 	RGB(0x00, 0x00, 0xee), RGB(0xcd, 0x00, 0xcd), RGB(0x00, 0xcd, 0xcd), RGB(0xe5, 0xe5, 0xe5),
@@ -268,9 +250,6 @@ func BuildFrame(spec FrameSpec, in FrameInputs) *Frame {
 	case "none":
 		f.Controls = ControlsNone
 	default:
-		// "auto", "macos", and anything unrecognised, which includes the
-		// retired "dots" spelling. A config file that still says dots captures
-		// as if it said auto rather than refusing to capture at all.
 		f.Controls = ControlsMacOS
 	}
 	accents := in.Accents

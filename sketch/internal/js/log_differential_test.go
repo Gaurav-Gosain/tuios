@@ -12,9 +12,6 @@ import (
 	"testing"
 )
 
-// The node script reads float64 inputs and writes Math.log10 and Math.log of each, then
-// reads pairs and writes x ** y of each pair, as float64 in the same order. It runs every function twice, the second time after the
-// loop is hot, so that the optimizing compiler's code is checked as well.
 const logScript = `
 const fs = require('fs');
 const [,, input, pairs, output, powOutput] = process.argv;
@@ -42,18 +39,15 @@ fs.writeFileSync(powOutput, Buffer.from(pow.buffer));
 func logInputs() []float64 {
 	rng := rand.New(rand.NewPCG(1, 2))
 	var xs []float64
-	// Every exponent, any mantissa.
 	for range 600_000 {
 		bits := rng.Uint64() & 0x7fffffffffffffff
 		if x := math.Float64frombits(bits); !math.IsNaN(x) {
 			xs = append(xs, x)
 		}
 	}
-	// Near 1, where fdlibm takes its short path.
 	for range 200_000 {
 		xs = append(xs, 0.5+1.5*rng.Float64())
 	}
-	// Around every power of ten, a few units in the last place either way.
 	for k := -323; k <= 308; k++ {
 		p := math.Pow(10, float64(k))
 		x, y := p, p
@@ -62,7 +56,6 @@ func logInputs() []float64 {
 			x, y = math.Nextafter(x, 0), math.Nextafter(y, math.Inf(1))
 		}
 	}
-	// What a chart asks for: a span over a count of steps.
 	for range 100_000 {
 		span := float64(rng.IntN(2_000_000)) / float64(1+rng.IntN(1000))
 		xs = append(xs, span/float64(2+rng.IntN(9)))
@@ -70,7 +63,6 @@ func logInputs() []float64 {
 	for i := 1; i <= 100_000; i++ {
 		xs = append(xs, float64(i))
 	}
-	// Subnormals and the special values.
 	for range 10_000 {
 		xs = append(xs, math.Float64frombits(rng.Uint64()&0x000fffffffffffff))
 	}
@@ -81,8 +73,6 @@ func logInputs() []float64 {
 	return xs
 }
 
-// powInputs are the pairs 10 ** k for every whole k a double can reach, and past it.
-// xychart raises 10 to a whole power and to nothing else.
 func powInputs() []float64 {
 	var ps []float64
 	for k := -400; k <= 400; k++ {

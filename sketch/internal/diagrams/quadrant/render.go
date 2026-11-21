@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/quadrant/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package quadrant
 
 import (
@@ -36,8 +34,6 @@ func length(config types.Config, key string, fallback, max float64) float64 {
 	return fallback
 }
 
-// textSize is one of Mermaid's quadrantChart font size keys, between 4 and 72. Without it
-// the size follows fontSize.
 func textSize(config types.Config, key string, fallback float64) float64 {
 	if value, ok := setting(config, key).(float64); ok && !math.IsNaN(value) && !math.IsInf(value, 0) {
 		return math.Min(72, math.Max(4, value))
@@ -45,7 +41,6 @@ func textSize(config types.Config, key string, fallback float64) float64 {
 	return fallback
 }
 
-// sizeAttr is a font-size attribute for own, when it differs from the size a label inherits.
 func sizeAttr(own, inherited float64) string {
 	if own == inherited {
 		return ""
@@ -96,7 +91,6 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 
 	hasX := (model.xAxisLeft != nil && model.xAxisLeft.text != "") || (model.xAxisRight != nil && model.xAxisRight.text != "")
 	hasY := (model.yAxisBottom != nil && model.yAxisBottom.text != "") || (model.yAxisTop != nil && model.yAxisTop.text != "")
-	// Mermaid moves the x axis labels below the chart as soon as there are points.
 	xBelow := hasPoints || setting(config, "xAxisPosition") == "bottom"
 	yRight := setting(config, "yAxisPosition") == "right"
 
@@ -138,12 +132,9 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 	tileW := math.Max(0, (w-GAP)/2)
 	tileH := math.Max(0, (h-GAP)/2)
 
-	// Boxes a point label keeps clear of: the gaps between quadrants, quadrant labels, points,
-	// and the labels placed before it.
 	taken := []float64{left + tileW, top, left + w - tileW, top + h, left, top + tileH, left + w, top + h - tileH}
 	isClear := func(from int, x0, y0, x1, y1 float64) bool {
 		for k := from; k < len(taken); k += 4 {
-			// Empty quadrant labels must not block point labels.
 			if taken[k] >= taken[k+2] || taken[k+1] >= taken[k+3] {
 				continue
 			}
@@ -262,7 +253,6 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		if hasStrokeWidth {
 			reach += math.Min(js.ParseIntPrefix(*strokeWidth, 10), 400) / 2
 		}
-		// Mermaid keeps point labels on one line; wrap only what is wider than the plot.
 		dots = append(dots, Dot{cx: cx, cy: cy, reach: reach, text: label(&point.text, pointSize, w)})
 		if geo != nil {
 			geo.Points = append(geo.Points, types.GeoQPoint{X: point.x, Y: point.y, Label: plainLabel(dots[len(dots)-1].text)})
@@ -275,10 +265,6 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 			`" cx="`+num(cx)+`" cy="`+num(cy)+`" r="`+num(r)+`"`+stroke+svg.ResolveStyle(styles).Shape+`/>`)
 	}
 
-	// A label goes below its point, or above, right or left of it, or below its quadrant's title,
-	// when that is the first place that is inside the chart and free. A second round lets it
-	// cross the gaps between quadrants.
-	// Large charts skip the search for a free place.
 	careful := len(dots) <= CAREFUL
 	if careful {
 		for _, d := range dots {
@@ -292,7 +278,6 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		halfH := float64(t.Size*0.6) + (t.Height-t.LineHeight)/2
 		away := d.reach + textPad
 		inset := math.Min(away, math.Max(0, (tileW-t.Width)/2))
-		// The title of the point's quadrant: 0 top right, 1 top left, 2 bottom left, 3 bottom right.
 		var quadrant int
 		switch {
 		case cx < left+w/2 && cy < top+h/2:
@@ -312,7 +297,6 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		found := false
 		for k := 0; k < 20; k += 2 {
 			spot := k % 10
-			// A label moved below a title keeps clear of the plot's edge.
 			margin := 0.0
 			if spot == 8 {
 				margin = inset
@@ -345,7 +329,6 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 		labels.WriteString(svg.LabelSvg(t, tx, ty, ` class="pele-label"`, nil))
 	}
 
-	// Mermaid puts each new point under the ones before it.
 	parts := []string{
 		svg.LabelSvg(title, width/2, titlePad/2+title.Height/2, ` class="pele-title"`+sizeAttr(titleSize, size)+` font-weight="var(--_tw)"`, nil),
 		`<g class="pele-quadrants" fill="var(--_s)" stroke="var(--_b)">` + quadrants.String() + `</g>`,
@@ -376,6 +359,4 @@ func renderQuadrant(model *QuadrantDb, config types.Config, options types.Render
 	}
 }
 
-// plainLabel is a label as one line of text. Not part of pele: it is for a
-// text drawing (sketch/text).
 func plainLabel(l text.Label) string { return strings.Join(l.Plain(), " ") }

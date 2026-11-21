@@ -7,9 +7,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// backendReply feeds in to the backend this build selects (pure-Go, or
-// libghostty under the ghostty tag) and returns what it wrote back to the
-// guest, or "" when it wrote nothing within a short wait.
 func backendReply(t *testing.T, in string) string {
 	t.Helper()
 	term := vt.New(80, 24)
@@ -50,24 +47,16 @@ func TestStatusReportFormPerBackend(t *testing.T) {
 		{"DSR 5, ANSI", "\x1b[5n", "\x1b[0n"},
 		{"DSR 5, DEC private", "\x1b[?5n", "\x1b[?0n"},
 		{"CPR, ANSI", "\x1b[3;4H\x1b[6n", "\x1b[3;4R"},
-		// The page number follows, page 1, on both backends.
 		{"DECXCPR, DEC private", "\x1b[3;4H\x1b[?6n", "\x1b[?3;4;1R"},
 		{"DECXCPR under DECOM", "\x1b[10;20r\x1b[?6h\x1b[3;5H\x1b[?6n", "\x1b[?3;5;1R"},
 		{"ANSI and private replies stay in order", "ab\x1b[6n\x1b[?5n", "\x1b[1;3R\x1b[?0n"},
-		// Unanswered on both backends, the same as before.
 		{"printer status", "\x1b[?15n", ""},
 		{"UDK status", "\x1b[?25n", ""},
 		{"keyboard status", "\x1b[?26n", ""},
-		// Answered on both backends as the mode 2031 notice. See
-		// TestConform_ColorSchemeDSR.
 		{"colour scheme", "\x1b[?996n", "\x1b[?997;1n"},
-		// No sixel (4) until the host is known to show it. See
-		// TestSixelAdvertisedFollowsHost.
 		{"DA1", "\x1b[c", "\x1b[?62;22c"},
 		{"DA1 with 0", "\x1b[0c", "\x1b[?62;22c"},
 		{"DA2", "\x1b[>c", pick("\x1b[>1;10;0c", "\x1b[>0;0;0c")},
-		// The same on both backends: the pure emulator answers with the
-		// text libghostty sends, and libghostty is handed vt.XTVersionName.
 		{"DA3", "\x1b[=c", "\x1bP!|00000000\x1b\\"},
 		{"XTVERSION", "\x1b[>0q", "\x1bP>|vt\x1b\\"},
 	} {

@@ -34,8 +34,6 @@ var elision = regexp.MustCompile(`(?i)(^\W*(\.\.\.\s*)?(the )?rest of (the )?(im
 	`|^\W*(\.\.\.\s*)?([\w-]+ ){0,4}omitted for brevity\W*$` +
 	`|^\W*\.\.\.\s*(rest|existing|remaining|more|other|same)\b(\W+\w+){0,5}\W*$)`)
 
-// isElision reports whether a line of a comment is an elision marker. An
-// indented line belongs to an example in a doc comment.
 func isElision(line string) bool {
 	return !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") && elision.MatchString(line)
 }

@@ -7,19 +7,13 @@ import (
 	"tuios.dev/tml"
 )
 
-// cardWidget is a titled box in the cockpit card style: a fold mark, the
-// title, the meta in the card's role, then the children indented. A modal
-// draws the same way inside a frame.
 type cardWidget struct {
 	title, meta, role string
 	folded            bool
 	modal             bool
-	indent            int // 2, or 0 when the body starts with a cursor margin of its own
+	indent            int
 	press             []tml.Action
-	// foldable is true when the document declared fold. A plain card is not a
-	// tab stop, or a screen of titled panels would be a screen of stops the
-	// person never wants (see focusable).
-	foldable bool
+	foldable          bool
 }
 
 func (s *Surface) buildCard(b *box, vars map[string]any) widget {
@@ -51,8 +45,6 @@ func (s *Surface) buildCard(b *box, vars map[string]any) widget {
 	return w
 }
 
-// body returns the rectangle of the children inside the card's inner
-// rectangle.
 func (w *cardWidget) body(in Rect) Rect {
 	if w.modal {
 		return rect(in.Min.X+2, in.Min.Y+1, in.Dx()-4, in.Dy()-2)
@@ -87,9 +79,6 @@ func (w *cardWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	if w.folded {
 		mark = s.g.foldShut
 	}
-	// A card holding the focused box says so. Without it a document with
-	// several tables gives no clue which one the arrow keys reach: every table
-	// draws its own cursor row, and only the focused one takes the keys.
 	markRole, titleRole := "mute", "fg"
 	if holdsFocus(s, b) {
 		markRole, titleRole = "accent", "accent"
@@ -101,7 +90,6 @@ func (w *cardWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	c.drawLine(r.Min.X, r.Min.Y, r.Dx(), l, alignLeft)
 }
 
-// holdsFocus reports whether the focused box is b or sits inside it.
 func holdsFocus(s *Surface, b *box) bool {
 	for f := s.focused(); f != nil; f = f.parent {
 		if f == b {
@@ -111,12 +99,6 @@ func holdsFocus(s *Surface, b *box) bool {
 	return false
 }
 
-// markFocusCards repaints the cards the focus left or entered. A card draws
-// its title from the focus, and a focus move marks only the boxes it moved
-// between, which sit inside the card. Whatever moved it (tab, a click, a
-// patch that took the focused box away) comes through here. A repaint is
-// enough: nothing a card evaluates reads the focus, so its subtree is not
-// built again.
 func (s *Surface) markFocusCards() {
 	key := ""
 	if f := s.focused(); f != nil {
@@ -143,8 +125,6 @@ func (s *Surface) markFocusCards() {
 	walk(s.root)
 }
 
-// frame draws a rounded border on r with a title on the top edge and a
-// label at the right of it, the frame a host puts around a popup.
 func (s *Surface) frame(c *canvas, r Rect, title, right, edge string) {
 	if r.Dx() < 2 || r.Dy() < 2 {
 		return
@@ -172,14 +152,12 @@ func (s *Surface) frame(c *canvas, r Rect, title, right, edge string) {
 	}
 }
 
-// tabsWidget shows a strip of tab titles and the open tab. Only the open
-// tab is built.
 type tabsWidget struct {
 	ids, titles []string
 	active      int
 	statePath   string
 	change      []tml.Action
-	spans       [][2]int // the x range of each title at the last paint
+	spans       [][2]int
 }
 
 func (s *Surface) buildTabs(b *box, vars map[string]any) widget {
@@ -250,7 +228,6 @@ func (w *tabsWidget) paint(s *Surface, _ *box, c *canvas, r Rect) {
 	}
 }
 
-// titleAt returns the tab whose title covers column x, or -1.
 func (w *tabsWidget) titleAt(x int) int {
 	for i, sp := range w.spans {
 		if x >= sp[0] && x < sp[1] {
@@ -260,14 +237,8 @@ func (w *tabsWidget) titleAt(x int) int {
 	return -1
 }
 
-// listItem is the kind of the box that holds one element's children in a
-// list. Its src is the list node, so it is never built on its own: a
-// rebuild of an item rebuilds the list.
 const listItem = "list-item"
 
-// listWidget repeats its children once per element of a state array.
-// Each element's children sit in a group box. With select, a cursor marks
-// one group.
 type listWidget struct {
 	selectable bool
 	items      []any
@@ -314,7 +285,6 @@ func (w *listWidget) measure(s *Surface, b *box, maxW int) (int, int) {
 
 func (w *listWidget) place(s *Surface, b *box, in Rect) {
 	inner := rect(in.Min.X+w.indent(), in.Min.Y, in.Dx()-w.indent(), in.Dy())
-	// Keep the cursor's group in view.
 	heights := make([]int, len(b.kids))
 	tops := make([]int, len(b.kids))
 	y := 0
@@ -335,8 +305,6 @@ func (w *listWidget) place(s *Surface, b *box, in Rect) {
 	w.offset = clampInt(w.offset, 0, max(y-b.gap-in.Dy(), 0))
 	s.view.Scroll[b.key] = w.offset
 	for i, k := range b.kids {
-		// The cursor row's ground is under its children: a child that
-		// repaints alone fills with it.
 		k.ground = b.ground
 		if w.selectable && i == w.cursor && s.pal.grounded() {
 			k.ground = RoleCursor
@@ -357,18 +325,14 @@ func (w *listWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	}
 }
 
-// cursorGround paints the cursor row: the cursor ground, or at 16 colours
-// and in ASCII nothing, since the text goes reverse instead.
 func cursorGround(s *Surface, c *canvas, r Rect) {
 	if s.pal.grounded() {
 		c.fill(r, RoleCursor)
 	}
 }
 
-// scrollWidget scrolls its children in its height, with a bar at the right
-// when they do not fit.
 type scrollWidget struct {
-	content int // the children's height
+	content int
 	over    bool
 }
 
@@ -393,8 +357,6 @@ func (w *scrollWidget) place(s *Surface, b *box, in Rect) {
 	off = clampInt(off, 0, limit)
 	mark := len(s.focus)
 	s.placeCol(b, rect(in.Min.X, in.Min.Y-off, width, ch))
-	// After tab, bring the focused box into view, and place again at that
-	// offset.
 	if f := focusedIn(s, b); f != nil {
 		want := off
 		switch {
@@ -411,15 +373,12 @@ func (w *scrollWidget) place(s *Surface, b *box, in Rect) {
 		}
 	}
 	if b.src.AttrString("follow") == "end" && ok && off >= limit {
-		// Keep following the end as content grows.
 		s.view.Scroll[b.key] = -1
 	} else {
 		s.view.Scroll[b.key] = off
 	}
 }
 
-// focusedIn returns the focused box when tab just moved the focus to a box
-// inside b, or nil.
 func focusedIn(s *Surface, b *box) *box {
 	if s.view.Focus == "" || !s.focusMoved {
 		return nil
@@ -456,7 +415,6 @@ func (w *scrollWidget) paint(s *Surface, b *box, c *canvas, r Rect) {
 	}
 }
 
-// viewport is where the children of a box may draw: its content area.
 func viewport(b *box) Rect {
 	in := b.inner()
 	switch w := b.w.(type) {
@@ -478,8 +436,6 @@ func viewport(b *box) Rect {
 	return in
 }
 
-// scrolls reports whether b moves its children past its own edges, so
-// their rectangles may lie outside it.
 func scrolls(b *box) bool {
 	switch b.w.(type) {
 	case *scrollWidget, *listWidget:
@@ -488,8 +444,6 @@ func scrolls(b *box) bool {
 	return false
 }
 
-// needsPaint reports whether b or a box inside it changed since the last
-// paint.
 func needsPaint(b *box) bool {
 	if b.dirty || b.rect != b.prev {
 		return true
@@ -497,9 +451,6 @@ func needsPaint(b *box) bool {
 	return slices.ContainsFunc(b.kids, needsPaint)
 }
 
-// paint draws b when it changed or force is set, and otherwise looks for
-// changed boxes inside it. A box whose children moved repaints whole, as
-// does a stack with any change, since its children overlap.
 func (s *Surface) paint(b *box, c *canvas, force bool) {
 	changed := force || b.dirty || b.rect != b.prev
 	if !changed {
@@ -514,8 +465,6 @@ func (s *Surface) paint(b *box, c *canvas, force bool) {
 		if cw, ok := b.w.(*cardWidget); ok && cw.folded {
 			return
 		}
-		// Children draw inside their parent's viewport, as a full paint
-		// clips them.
 		kc := c.withClip(viewport(b))
 		for _, k := range b.kids {
 			s.paint(k, kc, false)
@@ -534,7 +483,6 @@ func (s *Surface) paint(b *box, c *canvas, force bool) {
 	s.paintBox(b, cc)
 }
 
-// paintBox draws b and all of its children, and marks them painted.
 func (s *Surface) paintBox(b *box, c *canvas) {
 	b.prev, b.dirty = b.rect, false
 	if b.hidden {
@@ -558,7 +506,6 @@ func (s *Surface) paintBox(b *box, c *canvas) {
 	}
 }
 
-// paintContent draws b's widget and its children.
 func (s *Surface) paintContent(b *box, c *canvas) {
 	if b.w != nil {
 		b.w.paint(s, b, c, b.inner())

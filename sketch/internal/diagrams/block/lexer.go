@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/block/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The port reads UTF-8 bytes. Every character the lexer matches is ASCII, except
-// whitespace, which is read as a whole character. A byte offset stands for pele's unit
-// offset.
-
 package block
 
 import (
@@ -40,7 +34,6 @@ const (
 
 var DIRECTIONS = [...]string{"right", "left", "x", "y", "up", "down"}
 
-// isIDStop: characters that end a node id: ( ) [ { } < > - : = and whitespace.
 func isIDStop(c byte) bool {
 	switch c {
 	case 9, 10, 11, 12, 13, 32, 40, 41, 45, 58, 60, 61, 62, 91, 123, 125:
@@ -49,7 +42,6 @@ func isIDStop(c byte) bool {
 	return false
 }
 
-// byteAt is the byte at q, or -1 past the end, where pele's charCodeAt gives NaN.
 func byteAt(src string, q int) int {
 	if q < 0 || q >= len(src) {
 		return -1
@@ -57,7 +49,6 @@ func byteAt(src string, q int) int {
 	return int(src[q])
 }
 
-// spaceAt is the length in bytes of the whitespace character at q, or 0 if there is none.
 func spaceAt(src string, q int) int {
 	if q >= len(src) {
 		return 0
@@ -80,7 +71,6 @@ func isWordAt(src string, q int) bool {
 	return q < len(src) && util.IsWord(rune(src[q]))
 }
 
-// lexer is the state of one run of tokenize: the tokens so far, the mode stack and the read position.
 type lexer struct {
 	src   string
 	n     int
@@ -168,7 +158,6 @@ func (l *lexer) quote() bool {
 	return true
 }
 
-// dotted: end of `.+-[xo>]?` at q, or -1.
 func (l *lexer) dotted(q int) int {
 	if byteAt(l.src, q) != 46 {
 		return -1
@@ -187,7 +176,6 @@ func (l *lexer) dotted(q int) int {
 	return q + 1
 }
 
-// linkEnd: end of a complete link at q, before its trailing whitespace, or -1.
 func (l *lexer) linkEnd(q int) int {
 	c := byteAt(l.src, q)
 	if c == 120 || c == 111 || c == 60 {
@@ -248,7 +236,6 @@ func (l *lexer) lineState(typ int) bool {
 	return l.emit(typ, e)
 }
 
-// idList: `\w+(,\s*\w+)*`
 func (l *lexer) idList(typ, next int) bool {
 	k := l.word(l.p)
 	if k == l.p {

@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/git/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele's GitDbParseProvider is the closures of buildGit; the port keeps them as methods of
-// a builder. Maps that pele reads in insertion order keep that order in a slice beside them.
-
 package git
 
 import (
@@ -24,29 +19,24 @@ const (
 )
 
 type GitCommit struct {
-	id      string
-	message string
-	seq     int
-	typ     int
-	tags    []string
-	parents []string
-	branch  string
-	// customType is -1 for none.
+	id         string
+	message    string
+	seq        int
+	typ        int
+	tags       []string
+	parents    []string
+	branch     string
 	customType int
 	customId   bool
 }
 
 type GitModel struct {
-	title    string
-	accTitle string
-	accDescr string
-	// LR, TB or BT.
-	direction string
-	// Keyed by commit id.
-	commits map[string]*GitCommit
-	// The id of each branch's latest commit, or "" while the branch has none.
-	branches map[string]string
-	// Branch names in drawing order: by `order`, then by creation.
+	title         string
+	accTitle      string
+	accDescr      string
+	direction     string
+	commits       map[string]*GitCommit
+	branches      map[string]string
 	lanes         []string
 	currentBranch string
 	head          *GitCommit
@@ -68,18 +58,15 @@ type BranchDB struct {
 type MergeDB struct {
 	branch string
 	id     string
-	// typ is -1 for none.
-	typ  int
-	tags []string
+	typ    int
+	tags   []string
 }
 
 type CherryPickDB struct {
 	id       string
 	targetId string
-	// parent is "" for none.
-	parent string
-	// tags is nil for none.
-	tags []string
+	parent   string
+	tags     []string
 }
 
 func fail(message string) {
@@ -142,9 +129,8 @@ type lane struct {
 }
 
 type gitBuilder struct {
-	commits  map[string]*GitCommit
-	branches map[string]string
-	// A branch with no commit yet is in branches with "".
+	commits   map[string]*GitCommit
+	branches  map[string]string
 	orders    []lane
 	warnings  []string
 	head      *GitCommit
@@ -153,8 +139,6 @@ type gitBuilder struct {
 	seq       int
 }
 
-// nextId: Mermaid appends seven random hex digits to the sequence number. These digits are derived
-// from the sequence number instead, so the same text always gives the same ids.
 func (b *gitBuilder) nextId() string {
 	for salt := int64(b.seq) + 1; ; salt += 0x9e3779b1 {
 		h := strconv.FormatUint(uint64(uint32(salt)*0x9e3779b1), 16)
@@ -310,10 +294,6 @@ func (b *gitBuilder) cherryPick(c CherryPickDB) {
 		}
 		tags = []string{tag}
 	}
-	// pele sets message to `cherry-picked ${source.message} into ${current}`. A pick of
-	// a pick nests the text, which JavaScript ropes share but Go copies, so a chain of
-	// picks costs memory in the square of its length. The renderer shows a message only
-	// below MERGE, so this one is never read and is left out.
 	b.add(&GitCommit{
 		id:         b.nextId(),
 		seq:        b.seq,
@@ -346,7 +326,6 @@ func buildGit(ast *GitGraphAst, config types.Config, title *string) *GitModel {
 	}
 	populate(ast, b)
 
-	// A branch made without an order sorts by creation among those of order zero, as in Mermaid.
 	type ordered struct {
 		name  string
 		order float64
@@ -383,7 +362,6 @@ func buildGit(ast *GitGraphAst, config types.Config, title *string) *GitModel {
 	return model
 }
 
-// joinLines is text.replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	if !strings.Contains(text, "\n") {
 		return text

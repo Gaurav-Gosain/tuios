@@ -73,9 +73,6 @@ func main() {
 	writeNames(paths)
 }
 
-// writeNames writes names_gen.go: each id names itself, then each alias names
-// its manifest unless an id or an earlier alias already took it. Sorted by
-// name for a binary search. TestBundledArchiveMatchesFiles holds the same rule.
 func writeNames(paths []string) {
 	type entry struct{ name, id string }
 	var ids, aliases []entry

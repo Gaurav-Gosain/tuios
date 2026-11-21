@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/cynefin/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package cynefin draws Mermaid's cynefin diagram: the four domains of the Cynefin framework
 // around confusion in the middle, with the items placed in each and the transitions between them.
 package cynefin

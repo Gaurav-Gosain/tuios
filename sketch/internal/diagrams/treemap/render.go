@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/treemap/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package treemap
 
 import (
@@ -36,7 +34,6 @@ func leafCount(roots []*TreemapNode) int {
 	return count
 }
 
-// corners caps corners at a quarter of a small box's shorter side; 4px is the default radius.
 func corners(attrs string, b *Box) string {
 	limit := math.Min(b.w, b.h) / 4
 	if limit < 4 {
@@ -53,7 +50,6 @@ func option(config types.Config, key string, fallback, min, max float64) float64
 	return fallback
 }
 
-// hasFill is /[";]fill:/.test(shape).
 func hasFill(shape string) bool {
 	return strings.Contains(shape, `"fill:`) || strings.Contains(shape, ";fill:")
 }
@@ -75,7 +71,6 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 		pad = option(config, "diagramPadding", 8, 0, 2000)
 	}
 
-	// Mermaid sizes the diagram as ten times `nodeWidth` by ten times `nodeHeight`.
 	width := js.Round(common.CapWidth(options, option(config, "nodeWidth", 64, 1, 400)*10, 200, 2*pad))
 	height := js.Round(option(config, "nodeHeight", 40, 1, 400) * 10)
 	showValues := treemap["showValues"] != false
@@ -84,7 +79,6 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 		spec = s
 	}
 	format := formatter(spec)
-	// Reduce gaps and insets as average leaf area shrinks.
 	crowd := math.Min(1, math.Max(0, math.Log10((width*height)/math.Max(1, float64(leafCount(model.roots)))/800)))
 	boxes := layoutTreemap(model.roots, width, height, Insets{
 		gap:    option(config, "padding", js.Round(2+float64(2*crowd)), 0, 200),
@@ -125,7 +119,6 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 			geo.Boxes = append(geo.Boxes, types.GeoTreeBox{X: b.x, Y: b.y, W: b.w, H: b.h, Label: name, Value: value, Section: node.section, Depth: depth})
 		}
 		t.Reset()
-		// Include headerless ancestors in tooltips because their children cover them.
 		own := titlePart(node.name)
 		var path []string
 		if own != "" {
@@ -137,7 +130,6 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 			}
 		}
 		full := strings.Join(path, " › ")
-		// tooltip takes the text drawn in the box, if any.
 		tooltip := func(drawn string, ok bool) string {
 			if full == "" || (ok && drawn == name && full == own) {
 				return ""
@@ -147,7 +139,6 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 		rect := func(w *strings.Builder) {
 			svg.WriteStrings(w, `<rect x="`, svg.Num(x), `" y="`, svg.Num(y), `" width="`, svg.Num(b.w), `" height="`, svg.Num(b.h), `" fill="`, color, `"`)
 		}
-		// Inline font sizes override SVG attributes, so truncate instead of shrinking.
 		fixed := style.FontSize
 		textStyle := 0
 		if style.Bold {
@@ -156,7 +147,6 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 		if style.Italic {
 			textStyle |= text.Italic
 		}
-		// A fill the style sets decides the label color; else the palette's color for the series.
 		var ink string
 		if svg.SetsFill(style.Shape) {
 			ink = svg.InkFill(style, "")
@@ -209,8 +199,6 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 						`" text-anchor="end"`, valueInk, style.Text, `>`, svg.Esc(value), `</text>`)
 				}
 			}
-			// A section is a tint of its color, unless a class gives it a fill of its own. Headerless
-			// sections draw no box, so their children blend into the grid.
 			tint := ` fill-opacity="0.12"`
 			if hasFill(style.Shape) {
 				tint = ""
@@ -301,8 +289,6 @@ func renderTreemap(model *TreemapModel, config types.Config, options types.Rende
 	return rendered
 }
 
-// sumOf is the value layoutTreemap gives a node's box: a leaf's own value, or the leaves under a
-// section added in the same order. Not in pele.
 func sumOf(node *TreemapNode) float64 {
 	value := newBox(node, nil, 0).value
 	for i := len(node.children) - 1; i >= 0; i-- {

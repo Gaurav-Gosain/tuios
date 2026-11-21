@@ -8,12 +8,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// A wardley map is drawn as its grid: visibility up, evolution across, the stages as columns
-// named under the axis. A component is a dot with its name beside it, an anchor a diamond, and a
-// pipeline a square over its components. Links are lines of braille dots under the names, and an evolving
-// component has a dashed line to an open circle where it is heading. Labelled links and notes are
-// listed under the map. Under 40 columns the map is a table of its components and links.
-
 func drawWardley(l *sketch.Layout, opt Options) (*canvas, error) {
 	wm := l.Wardley
 	if wm == nil {
@@ -27,7 +21,6 @@ func drawWardley(l *sketch.Layout, opt Options) (*canvas, error) {
 		plotW = min(plotW, opt.Cols-2)
 	}
 	plotH := max(12, min(30, 2*len(wm.Nodes)+4))
-	// The plot starts at column 2, after the axis, and row top, under the title and the axis name.
 	title := wm.Title
 	if widest(title) > plotW+2 {
 		title = wrapCells(strings.Join(title, " "), plotW+2, 1000)
@@ -66,7 +59,6 @@ func drawWardley(l *sketch.Layout, opt Options) (*canvas, error) {
 	py := func(visibility float64) int {
 		return top + int(math.Round((100-math.Max(0, math.Min(100, visibility)))/100*float64(plotH-1)))
 	}
-	// Stages: a dashed line at each boundary and the name under the middle of its column.
 	n := len(wm.Stages)
 	edge := func(k int) float64 {
 		if len(wm.Boundaries) == n && k > 0 {
@@ -91,13 +83,10 @@ func drawWardley(l *sketch.Layout, opt Options) (*canvas, error) {
 	at := make([][2]int, len(wm.Nodes))
 	for i, node := range wm.Nodes {
 		at[i] = [2]int{px(node.Evolution), py(node.Visibility)}
-		// A pipeline sits on the row over its components.
 		if node.Kind == "pipeline" && at[i][1] > top {
 			at[i][1]--
 		}
 	}
-	// Links are lines of braille dots from mark to mark, drawn last into the cells that
-	// names, marks and stage lines leave free.
 	links := newDotGrid(c.w, c.h)
 	linkLayer := links.layer(roleLine)
 	for _, link := range wm.Links {
@@ -130,8 +119,6 @@ func drawWardley(l *sketch.Layout, opt Options) (*canvas, error) {
 		}
 		c.put(at[i][0], at[i][1], mark, role)
 	}
-	// Names beside their marks: on the right where that is free, else on the left, else on the
-	// next free row.
 	free := func(x, y, n int) bool {
 		if x < 2 || x+n > w || y < top || y >= axisY {
 			return false
@@ -154,7 +141,6 @@ func drawWardley(l *sketch.Layout, opt Options) (*canvas, error) {
 		placed := false
 		rows := []int{0, -1, 1, -2, 2}
 		if node.Kind == "pipeline-component" {
-			// Under the mark, as the SVG writes it, so that the pipeline's own name has the row above.
 			rows = []int{1, 0, 2, -1}
 		}
 		for _, dy := range rows {
@@ -187,7 +173,6 @@ func abs(n int) int {
 	return n
 }
 
-// wardleyTable lists the components with their visibility and evolution, then the links.
 func wardleyTable(wm *types.GeoWardley, opt Options) (*canvas, error) {
 	w := opt.Cols
 	var lines []styled

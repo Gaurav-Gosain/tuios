@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// The alternate screen is a full grid of 112-byte cells that most panes never
-// use, so it is not built until the guest first switches to it.
-
 func altText(e *Emulator, y int) string {
 	var b strings.Builder
 	for x := range e.Width() {
@@ -24,7 +21,6 @@ func TestAlternateScreenIsBuiltOnFirstSwitch(t *testing.T) {
 		t.Fatalf("a fresh emulator's alternate screen is %dx%d, want 1x1 until it is used", w, h)
 	}
 
-	// A resize on the main screen must not build it either.
 	e.Resize(100, 30)
 	if w, h := e.scrs[1].buf.Width(), e.scrs[1].buf.Height(); w != 1 || h != 1 {
 		t.Fatalf("a resize built the alternate screen at %dx%d", w, h)
@@ -41,7 +37,6 @@ func TestAlternateScreenIsBuiltOnFirstSwitch(t *testing.T) {
 		t.Fatalf("row 5 of the alternate screen is %q, want the text written there", got)
 	}
 
-	// Once built it follows resizes like it always did.
 	e.Resize(60, 20)
 	if w, h := e.Width(), e.Height(); w != 60 || h != 20 {
 		t.Fatalf("alternate screen is %dx%d after a resize, want 60x20", w, h)

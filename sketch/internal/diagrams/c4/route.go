@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/c4/route.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package c4
 
 import (
@@ -17,20 +15,14 @@ type Box struct {
 }
 
 type Route struct {
-	d string
-	// Where the markers go: the tip, and the way it points.
+	d                string
 	sx, sy, sdx, sdy float64
 	ex, ey, edx, edy float64
-	// The stretch the label may sit on.
-	x0, y0, x1, y1 float64
-	// The side of that stretch the label is pushed to, as a unit vector; zero centers it on the stretch.
-	nx, ny float64
-	// When set, the label stays over the line and moves that way by at most this much.
-	lean float64
-	// The widest the label should be.
-	room float64
-	// The corners of the line, as x, y pairs.
-	points []float64
+	x0, y0, x1, y1   float64
+	nx, ny           float64
+	lean             float64
+	room             float64
+	points           []float64
 }
 
 const LOOP = 28
@@ -51,11 +43,9 @@ const WIDE = 160
 // HEAD: the shared person shape is a head of radius 13 centered 14 below the top, over a body that starts 26 below it.
 const HEAD = 26
 
-// cylRy and queueRx are the cap radii drawShape uses for the two cylinders.
 func cylRy(w float64) float64   { return math.Min(12, math.Max(6, w/14)) }
 func queueRx(h float64) float64 { return math.Min(12, h/4) }
 
-// hitRect is how far along the segment from (px, py) by (dx, dy) it first meets the rectangle; Infinity when it misses.
 func hitRect(x0, y0, x1, y1, px, py, dx, dy float64) float64 {
 	enter := 0.0
 	leave := 1.0
@@ -107,7 +97,6 @@ func hitEllipse(cx, cy, rx, ry, px, py, dx, dy float64) float64 {
 	return math.Inf(1)
 }
 
-// hit is where a segment from outside first meets the outline of a shape, as a fraction of the segment.
 func hit(box *Box, px, py, qx, qy float64) float64 {
 	x, y, w, h := box.x, box.y, box.w, box.h
 	dx := qx - px
@@ -149,7 +138,6 @@ func contains(outer, inner *Box) bool {
 		outer.y+outer.h >= inner.y+inner.h
 }
 
-// connect is the straight line from a to b: x, y of its start, then of its end.
 func connect(a, b *Box, shift float64) (float64, float64, float64, float64) {
 	ax := a.x + a.w/2
 	ay := a.y + a.h/2
@@ -157,7 +145,6 @@ func connect(a, b *Box, shift float64) (float64, float64, float64, float64) {
 	by := b.y + b.h/2
 	down := contains(a, b)
 	if down || contains(b, a) {
-		// One holds the other: a short line from the nearest side of the outer box.
 		outer, inner := b, a
 		if down {
 			outer, inner = a, b
@@ -194,7 +181,6 @@ func connect(a, b *Box, shift float64) (float64, float64, float64, float64) {
 	py := ay
 	qx := bx
 	qy := by
-	// Shapes that share a column or a row are joined by an upright or level line through the shared span.
 	x0 := math.Max(a.x, b.x)
 	x1 := math.Min(a.x+a.w, b.x+b.w)
 	y0 := math.Max(a.y, b.y)
@@ -239,12 +225,10 @@ const PORT_STEP = 12
 // Lanes holds what the routes drawn so far take up, so that the next keeps apart from them: upright stretches
 // as x, top, bottom; level ones as y, left, right; and where lines leave or reach each side of a shape.
 type Lanes struct {
-	upright []float64
-	level   []float64
-	frames  [2][]float64
-	taken   map[*Box][]float64
-	// squeezed counts routes that found no lane of their own: a line left straight behind a shape, or a lane that
-	// runs along another.
+	upright  []float64
+	level    []float64
+	frames   [2][]float64
+	taken    map[*Box][]float64
 	squeezed int
 }
 
@@ -311,8 +295,6 @@ func (l *Lanes) take(points []float64) {
 	}
 }
 
-// ports gives where on one side of a shape (0 left, 1 right, 2 top, 3 bottom) a line can leave or arrive,
-// between lo and hi: the places clear of the lines already there, nearest `want` first.
 func (l *Lanes) ports(box *Box, side int, want, lo, hi float64) []float64 {
 	used := l.taken[box]
 	var out []float64
@@ -345,7 +327,6 @@ func (l *Lanes) claim(box *Box, side int, at float64) {
 	l.taken[box] = append(l.taken[box], float64(side), at)
 }
 
-// truthy is a number as a condition: neither zero nor NaN.
 func truthy(x float64) bool { return x != 0 && !math.IsNaN(x) }
 
 func path(points []float64, startTrim, endTrim float64) string {
@@ -391,8 +372,6 @@ func clearOf(points []float64, others []*Box, a, b *Box) bool {
 	return true
 }
 
-// bent is the route for a line with corners through `points`, from a's outline to b's. `along` is the
-// stretch its label sits on; nx, lean and room place the label.
 func bent(points []float64, along int, startTrim, endTrim, nx, lean, room float64) Route {
 	n := len(points)
 	return Route{
@@ -446,7 +425,6 @@ func elbow(a, b *Box, others []*Box, lanes *Lanes, startTrim, endTrim float64) (
 	bx := b.x + b.w/2
 	by := b.y + b.h/2
 	var best *elbowBest
-	// consider is handed a scratch array; it copies the points only when they are the best yet.
 	var scratch [8]float64
 	consider := func(points []float64, upright bool, sides [2]int) {
 		if !clearOf(points, others, a, b) {
@@ -542,7 +520,6 @@ func elbow(a, b *Box, others []*Box, lanes *Lanes, startTrim, endTrim float64) (
 		lanes.claim(a, sides[0], points[0])
 		lanes.claim(b, sides[1], points[6])
 	}
-	// The label sits on the middle stretch, across the gap.
 	room := float64(WIDE)
 	if upright {
 		room = NARROW
@@ -557,9 +534,6 @@ type detour struct {
 	step   int
 }
 
-// route routes a relation from a to b. `shift` moves the line sideways when another runs the opposite way.
-// `others` are the shapes to steer clear of; nil skips that check. `lanes` holds what the
-// routes before it take up, so that this one keeps apart from them.
 func route(a, b *Box, shift float64, others []*Box, lanes *Lanes, startTrim, endTrim float64) Route {
 	if a == b {
 		spread := math.Min(a.h/2-4, 10)
@@ -666,10 +640,6 @@ func route(a, b *Box, shift float64, others []*Box, lanes *Lanes, startTrim, end
 		if upright {
 			towards = js.Sign(by - ay)
 		}
-		// The route on one side: each end leaves its shape a quarter of the way from the middle towards
-		// the other, clear of the straight lines that meet the middle of that side and of other routes
-		// there. The lane runs a little further out for each route already along that gap, and never
-		// behind a shape. `step` is how many lanes out it went; 5 when none was free.
 		along := func(forward bool) detour {
 			lane := laneOn(forward)
 			sign := -1.0
@@ -719,10 +689,6 @@ func route(a, b *Box, shift float64, others []*Box, lanes *Lanes, startTrim, end
 			}
 			return detour{points, side, p0, p1, 5}
 		}
-		// A detour takes the outside of the drawing when only one side is outside, leaving the gaps
-		// between columns and rows to the relations that cross them. Otherwise it takes the side where
-		// it crosses fewer lines, then the one where it runs nearer its shapes, so that detours spread
-		// over both sides.
 		natural := ex < sx
 		if upright {
 			natural = ey > sy

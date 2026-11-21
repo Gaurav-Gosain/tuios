@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/info/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package info draws Mermaid's info diagram: the version of pele, which sketch
 // ports, and an optional title.
 package info

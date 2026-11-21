@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/ishikawa/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// Offsets are byte offsets. A run of white space is measured in UTF-16 units where its length
-// is a number: every JavaScript white space character is one unit.
-
 package ishikawa
 
 import (
@@ -53,7 +48,6 @@ func keyword(src string, at int) int {
 		}
 		k++
 	}
-	// `ishikawa-beta`, or failing that `ishikawa`, either one ending at a word boundary.
 	if k == 13 && !isWordAt(src, at+13) {
 		return 13
 	}
@@ -63,10 +57,6 @@ func keyword(src string, at int) int {
 	return 0
 }
 
-// tokenize produces the tokens of Mermaid's Jison lexer for Ishikawa diagrams, where the first rule that
-// matches wins: white space up to a comment or up to the last line break in it is a blank line,
-// a single line break before text is a new line, other white space is indentation, and the rest
-// of a line is text.
 func tokenize(src string) Tokens {
 	var t Tokens
 	n := len(src)

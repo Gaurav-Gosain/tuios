@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/flowchart/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package flowchart
 
 import (
@@ -31,7 +29,6 @@ func labelType(typ string) LabelType {
 func unquote(text string) string {
 	if len(text) >= 1 && strings.HasPrefix(text, `"`) && strings.HasSuffix(text, `"`) {
 		if len(text) == 1 {
-			// substring(1, 0) swaps its arguments: the empty string.
 			return ""
 		}
 		return text[1 : len(text)-1]
@@ -253,7 +250,6 @@ func (db *FlowDb) AddVertex(id string, textObj *FlowText, typ *string, style []s
 	if dir != nil {
 		vertex.Dir = *dir
 	}
-	// pele writes props ?? {}; a nil map reads as an empty one.
 	if vertex.Props == nil {
 		vertex.Props = props
 
@@ -321,7 +317,6 @@ func (db *FlowDb) AddVertex(id string, textObj *FlowText, typ *string, style []s
 	}
 }
 
-// toNumber is Number(v) for a YAML value.
 func toNumber(v any) float64 {
 	switch t := v.(type) {
 	case float64:
@@ -360,7 +355,6 @@ func (db *FlowDb) AddSingleLink(start, end string, typ *LinkInfo, id string) {
 		edge.LabelType = labelType(typ.Text.Type)
 	}
 	if typ != nil {
-		// The edge's own copies, in one allocation.
 		own := &struct {
 			typ, stroke string
 			length      int
@@ -425,8 +419,6 @@ func (db *FlowDb) UpdateLinkInterpolate(positions []string, interpolate string) 
 }
 
 func (db *FlowDb) UpdateLink(positions []string, style []string) {
-	// pele stores one array for every position and pushes `fill:none` onto it at the first
-	// edge, so every holder of it, the default style included, ends up with the fill.
 	final := style
 	for _, pos := range positions {
 		if pos != "default" && len(style) > 0 {
@@ -623,7 +615,6 @@ func (db *FlowDb) AddSubGraph(idText *FlowText, list []DocItem, titleText *FlowT
 	if dir != nil {
 		subgraph.Dir = *dir
 	}
-	// A node belongs to the first subgraph that lists it, and a subgraph never contains itself.
 	subgraph.Nodes = []string{}
 	for _, nodeID := range nodeList {
 		if !db.members[nodeID] && nodeID != *id {

@@ -18,15 +18,12 @@ func TestNarrowingResizeBlanksTheWideRuneItCuts(t *testing.T) {
 		name       string
 		from, to   int
 		wantLast   string
-		wantRowSum int // display cells the row is worth
+		wantRowSum int
 	}{
-		// The cut cases: the new last column held a lead.
 		{"6 to 5", 6, 5, " ", 4},
 		{"6 to 3", 6, 3, " ", 2},
 		{"8 to 3", 8, 3, " ", 2},
 		{"20 to 3", 20, 3, " ", 2},
-		// The clean cases: the new edge falls between two runes, so nothing is
-		// cut and the rune on the edge stays.
 		{"6 to 4", 6, 4, "", 4},
 		{"6 to 6", 6, 6, "", 6},
 	} {

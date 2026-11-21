@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/common/fit.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The three regular expressions are hand matchers here: RE_TAG_START has a lookahead,
-// and RE_UNIT cuts text into UTF-16 units, which a rune of Go stands for.
-
 package common
 
 import (
@@ -13,7 +8,6 @@ import (
 	"tuios.dev/sketch/internal/text"
 )
 
-// brAt is the end of `<br\s*\/?>` at p, ignoring case, or -1.
 func brAt(s string, p int) int {
 	if !(p+3 <= len(s) && s[p] == '<' && s[p+1]|32 == 'b' && s[p+2]|32 == 'r') {
 		return -1
@@ -35,7 +29,6 @@ func brAt(s string, p int) int {
 	return -1
 }
 
-// text.replace(/<(?!br\s*\/?>)/gi, '&lt;')
 func escapeTagStarts(s string) string {
 	var b strings.Builder
 	last := 0
@@ -64,9 +57,6 @@ func wordRun(s string, p int) int {
 	return p
 }
 
-// unitAt is the end of the RE_UNIT match at p:
-// /<br\s*\/?>|ﬂ°°?\w+¶ß|&#?\w+;|[\ud800-\udbff][\udc00-\udfff]|[\s\S]/gi.
-// A line break, an encoded entity, a surrogate pair, or one character: the pieces a word can be cut between.
 func unitAt(s string, p int) int {
 	if e := brAt(s, p); e != -1 {
 		return e
@@ -74,7 +64,6 @@ func unitAt(s string, p int) int {
 	if strings.HasPrefix(s[p:], "ﬂ°") {
 		q := p + len("ﬂ°")
 		if strings.HasPrefix(s[q:], "°") {
-			// °? is greedy, and gives the ° back when \w+ cannot follow it.
 			if e := wordRun(s, q+len("°")); e > q+len("°") && strings.HasPrefix(s[e:], "¶ß") {
 				return e + len("¶ß")
 			}

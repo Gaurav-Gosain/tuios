@@ -2,13 +2,6 @@ package harness
 
 import "testing"
 
-// The window title as evidence, and the boundary rule that makes it safe.
-//
-// A screen is prose and a substring anywhere in it is a fair match. A title is
-// mostly paths, branches and program names, so the same test finds an agent's
-// name inside words that are not it, and the false positive arrives wearing
-// the right label.
-
 // TestContainsToken holds a title predicate to whole tokens.
 //
 //   - A rule must not match inside a longer word; this is the case the issue
@@ -80,8 +73,6 @@ any = ["quiet"]
 	}
 }
 
-// registryFromTOML builds a registry holding one manifest written inline, so a
-// rule shape can be pinned without adding a manifest to the bundled set.
 func registryFromTOML(t *testing.T, body string) *Registry {
 	t.Helper()
 	m, err := parseManifest("inline.toml", []byte(body))

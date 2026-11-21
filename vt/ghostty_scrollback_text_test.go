@@ -44,7 +44,6 @@ func TestGhosttyScrollbackTextMatchesTheLines(t *testing.T) {
 			fmt.Fprintf(&b, "line %d\r\n", i)
 		}
 	}
-	// Blank rows at the end of the history.
 	b.WriteString(strings.Repeat("\r\n", 30))
 	if _, err := g.Write([]byte(b.String())); err != nil {
 		t.Fatal(err)

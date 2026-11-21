@@ -7,18 +7,6 @@ import (
 	"strings"
 )
 
-// kittyUploadFileError checks that the file a t=f or t=t upload names can be
-// read, and returns kitty's error for it, or "" when it can. It follows the
-// rules the client's passthrough applies before it reads or forwards a path:
-// an absolute path, symlinks followed, nothing under /proc, /sys or /dev, a
-// regular file this user owns, and for t=t a name with the kitty marker in a
-// temporary directory.
-//
-// The file is opened and closed, not read: the host terminal or the client
-// reads it, and a temporary file is theirs to delete once read. The open
-// itself cannot block on a FIFO swapped in after the path was resolved (see
-// kittyOpenRegular). It can still wait on a network mount that does not
-// answer, which is why the caller runs it off the emulator's lock.
 func kittyUploadFileError(medium KittyGraphicsMedium, path string) string {
 	if path == "" || !filepath.IsAbs(path) || strings.ContainsRune(path, 0) {
 		return "EINVAL:the file path is not an absolute path"
@@ -40,7 +28,6 @@ func kittyUploadFileError(medium KittyGraphicsMedium, path string) string {
 	return ""
 }
 
-// errKittyNotRegular is a path that is not a regular file this user owns.
 var errKittyNotRegular = errors.New("not a regular file of this user")
 
 func kittyOpenError(err error) string {
@@ -53,8 +40,6 @@ func kittyOpenError(err error) string {
 	return "EBADF:Failed to open file for graphics transmission: " + kittyErrText(err)
 }
 
-// kittyErrText is an error's text without the path, which a reply has no
-// room for and the guest already knows.
 func kittyErrText(err error) string {
 	if pathErr, ok := errors.AsType[*fs.PathError](err); ok {
 		err = pathErr.Err

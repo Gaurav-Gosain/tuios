@@ -33,8 +33,6 @@ func TestTruecolorGradientAllocatesPerSlab(t *testing.T) {
 		e.WriteString(lines[n])
 		n++
 	})
-	// 64 new colours a line is one slab; allow one more for the slab
-	// boundary falling inside the line.
 	if got > 2 {
 		t.Errorf("a line of 64 new truecolor cells allocates %.1f times, want at most 2", got)
 	}

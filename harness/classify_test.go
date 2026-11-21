@@ -5,11 +5,6 @@ import (
 	"testing"
 )
 
-// The screen tier is the only channel carrying "this pane is waiting for a
-// human" for a harness that paints its prompt and then goes silent. These are
-// the rules that keep it from becoming the thing it replaced: a source confident
-// about a screen it no longer understands.
-
 // A rule fires on the strings it names and not on the topic they belong to.
 // Transcript history mentioning a past prompt must not read as a live one.
 func TestClassifyIgnoresProseAboutPrompts(t *testing.T) {
@@ -30,7 +25,6 @@ func TestRuleWithNoPredicatesMatchesNothing(t *testing.T) {
 	if checkRule(rl, "anything at all", "anything at all", nil, strings.Contains) {
 		t.Fatal("a rule with no predicates matched; it would claim every pane")
 	}
-	// Not alone is a veto with nothing to veto for, not a positive claim.
 	rl = &ScreenRule{State: "needs_input", Gate: Gate{Not: []string{"quiet"}}}
 	if checkRule(rl, "anything at all", "anything at all", nil, strings.Contains) {
 		t.Fatal("a rule with only a veto matched; it would claim every pane not naming its veto")
@@ -47,8 +41,6 @@ func TestNotPredicateVetoesAMatch(t *testing.T) {
 	}
 }
 
-// mustRule builds a compiled rule the way parseManifest would, so regex tests
-// exercise the same compile path a manifest goes through.
 func mustRule(t *testing.T, rl ScreenRule, foldCase bool) *ScreenRule {
 	t.Helper()
 	if err := rl.compile(foldCase); err != nil {

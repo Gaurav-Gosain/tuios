@@ -1,12 +1,3 @@
-// Not a file of pele: named themes for the --pele-* tokens.
-//
-// pele leaves colours to the page. Its site and its launch video set them from
-// a few palettes (website/src/styles/pele-theme.scss and
-// website/src/lib/video-themes.ts); those are copied here with their values.
-// The rest are popular terminal themes mapped the same way the video maps its
-// palettes: lines in the text colour, the alternate surface equal to the
-// border, the accent the blue series colour and critical the red one.
-
 package engine
 
 import (
@@ -25,28 +16,19 @@ type NamedTheme struct {
 	Theme Theme
 }
 
-// themeSpec is one named theme as plain values. The table below is static
-// data, built by the linker, so it costs nothing at start; a Theme is built
-// from it when a caller asks for one.
 type themeSpec struct {
-	Name, Title string
-	Dark        bool
-	// Video marks a palette mapped as pele's launch video maps its palettes:
-	// Line is Fg, SurfaceAlt is Border, Accent is Series[5], Critical is
-	// Series[0] and Radius is 6, so those fields are left out of the entry.
+	Name, Title                                                        string
+	Dark                                                               bool
 	Video                                                              bool
 	Radius                                                             float64
 	Bg, Fg, Muted, Line, Surface, SurfaceAlt, Border, Accent, Critical uint32
-	// Series runs red, orange, yellow, green, cyan, blue, purple, pink.
-	Series [8]uint32
+	Series                                                             [8]uint32
 }
 
 func rgb(v uint32) color.Color {
 	return color.NRGBA{uint8(v >> 16), uint8(v >> 8), uint8(v), 0xff}
 }
 
-// named builds the NamedTheme from a copy of the spec. A video palette is
-// palette() of pele's website/src/lib/video-themes.ts.
 func (p *themeSpec) named() NamedTheme {
 	s := *p
 	if s.Video {
@@ -64,18 +46,15 @@ func (p *themeSpec) named() NamedTheme {
 }
 
 var namedThemes = [...]themeSpec{
-	// pele's fallbacks, written out: src/svg/theme.ts.
 	{Name: "pele", Title: "pele", Dark: false, Radius: 0,
 		Bg: 0xffffff, Fg: 0x1f1f1f, Muted: 0x6e6e6e, Line: 0x1f1f1f, Surface: 0xf3f3f3, SurfaceAlt: 0xe6e6e6, Border: 0x8a8a8a, Accent: 0x5b7bd5, Critical: 0xe45756,
 		Series: [8]uint32{0x4c78a8, 0xf58518, 0x54a24b, 0xe45756, 0x72b7b2, 0xeeca3b, 0xb279a2, 0x9d755d}},
-	// pele.run, light and dark: website/src/styles/pele-theme.scss (Flexoki).
 	{Name: "flexoki", Title: "Flexoki", Dark: false, Radius: 6,
 		Bg: 0xfffcf0, Fg: 0x100f0f, Muted: 0x6f6e69, Line: 0x100f0f, Surface: 0xf2f0e5, SurfaceAlt: 0xe6e4d9, Border: 0xcecdc3, Accent: 0x205ea6, Critical: 0xaf3029,
 		Series: [8]uint32{0xaf3029, 0xbc5215, 0xad8301, 0x66800b, 0x24837b, 0x205ea6, 0x5e409d, 0xa02f6f}},
 	{Name: "flexoki-dark", Title: "Flexoki dark", Dark: true, Radius: 6,
 		Bg: 0x100f0f, Fg: 0xcecdc3, Muted: 0x878580, Line: 0xcecdc3, Surface: 0x1c1b1a, SurfaceAlt: 0x282726, Border: 0x403e3c, Accent: 0x4385be, Critical: 0xd14d41,
 		Series: [8]uint32{0xd14d41, 0xda702c, 0xd0a215, 0x879a39, 0x3aa99f, 0x4385be, 0x8b7ec8, 0xce5d97}},
-	// pele's launch video: website/src/lib/video-themes.ts.
 	{Name: "nord", Title: "Nord", Dark: true, Video: true,
 		Bg: 0x2e3440, Fg: 0xd8dee9, Muted: 0x9eafcc, Surface: 0x3b4252, Border: 0x434c5e,
 		Series: [8]uint32{0xbf616a, 0xd08770, 0xebcb8b, 0xa3be8c, 0x88c0d0, 0x81a1c1, 0xb48ead, 0xb48ead}},
@@ -88,7 +67,6 @@ var namedThemes = [...]themeSpec{
 	{Name: "rose-pine", Title: "Rosé Pine", Dark: true, Video: true,
 		Bg: 0x1f1d2e, Fg: 0xe0def4, Muted: 0x908caa, Surface: 0x191724, Border: 0x312f41,
 		Series: [8]uint32{0xeb6f92, 0xea9a97, 0xf6c177, 0x31748f, 0x9ccfd8, 0x9ccfd8, 0xc4a7e7, 0xc4a7e7}},
-	// Popular terminal themes, from each project's published palette.
 	{Name: "catppuccin-mocha", Title: "Catppuccin Mocha", Dark: true, Video: true,
 		Bg: 0x1e1e2e, Fg: 0xcdd6f4, Muted: 0xa6adc8, Surface: 0x313244, Border: 0x45475a,
 		Series: [8]uint32{0xf38ba8, 0xfab387, 0xf9e2af, 0xa6e3a1, 0x94e2d5, 0x89b4fa, 0xcba6f7, 0xf5c2e7}},

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/venn/render.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package venn
 
 import (
@@ -33,16 +31,12 @@ type Region struct {
 	sets   []string
 	inside []int
 	spot   Spot
-	// What is written in the region: its label first, then its texts. The id is that of a text.
-	lines []regionLine
-	style svg.ResolvedStyle
-	size  float64
-	// across tells whether its text is written across other circles.
+	lines  []regionLine
+	style  svg.ResolvedStyle
+	size   float64
 	across bool
 }
 
-// keyOf is one key for a list of set ids. Ids may hold any character but a double quote, so a
-// list is written with quotes between its ids.
 func keyOf(ids []string) string {
 	if len(ids) == 1 {
 		return ids[0]
@@ -66,7 +60,6 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 		index[c.id] = i
 	}
 
-	// Styles for the same targets add up, later declarations winning.
 	type declared struct {
 		props [][2]string
 		at    map[string]int
@@ -100,7 +93,6 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 		return svg.ResolveStyle(list)
 	}
 
-	// Circles that touch each circle; only those can cut into a region of it.
 	neighbors := make([][]int, len(circles))
 	for a := 0; a < len(circles); a++ {
 		for b := a + 1; b < len(circles); b++ {
@@ -111,7 +103,6 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 		}
 	}
 
-	// One region for each set and each stated overlap; a later statement about the same sets replaces an earlier one.
 	var keys []string
 	stated := map[string]VennSubset{}
 	for _, subset := range model.subsets {
@@ -160,7 +151,6 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 			}
 		}
 		spot := findSpot(circles, inside, outside)
-		// A region that other circles cover, or all but cover, is written across them instead.
 		across := len(outside) > 0 && spot.margin < float64(circles[smallest].r*0.2)
 		if across {
 			spot = findSpot(circles, inside, nil)
@@ -186,8 +176,6 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 		}
 	}
 
-	// Lengths so far are in units of the layout. The scale gives the largest circle a set radius,
-	// and grows, within limits, until every region holds what is written in it.
 	largest := 0.0
 	for _, c := range circles {
 		if c.r > largest {
@@ -213,7 +201,6 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 	}
 	scale *= growth
 
-	// What is still too wide for its region is wrapped to it.
 	for _, region := range order {
 		room := math.Max(float64(float64(region.spot.margin*scale)*1.8), 72)
 		for i := range region.lines {
@@ -286,7 +273,6 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 			painted = append(painted, r)
 		}
 	}
-	// The fill under a region's text is the last overlap drawn over all of it, or its own circle when the style sets an opacity.
 	under := func(region *Region) string {
 		if region.across {
 			return ""
@@ -307,7 +293,6 @@ func renderVenn(model *VennDb, _ types.Config, options types.RenderOptions) type
 	smallText, tinyText := js.Num(small), js.Num(tiny)
 	for _, region := range order {
 		id := svg.EscText(strings.Join(region.sets, "|"))
-		// An overlap is only drawn when a style gives it a look of its own; otherwise the circles show it.
 		if len(region.sets) > 1 && region.style.Shape != "" {
 			parts := make([]*Circle, len(region.inside))
 			for k, i := range region.inside {

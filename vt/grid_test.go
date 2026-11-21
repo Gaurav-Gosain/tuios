@@ -11,11 +11,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The grid replaces uv.Buffer, and its cell semantics are claimed to be
-// uv's. The claim is checked here the only way it can be: by driving both
-// with the same random operations and comparing every cell after each one.
-// uv.Buffer is the reference; a divergence is a bug in the grid.
-
 type gridOp func(g *grid, b *uv.Buffer)
 
 func randomGridCell(rng *rand.Rand) *uv.Cell {
@@ -259,8 +254,6 @@ func TestScrollRetainsUnwrittenRowsAsBlankLines(t *testing.T) {
 	for range h + 2 {
 		e.WriteString("\r\n")
 	}
-	// The first newline only moves the cursor to the last row; each of the
-	// other h+1 scrolls a line off.
 	if got, want := e.ScrollbackLen(), h+1; got != want {
 		t.Fatalf("scrollback holds %d lines, want %d", got, want)
 	}

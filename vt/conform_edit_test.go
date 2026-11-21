@@ -2,10 +2,6 @@ package vt_test
 
 import "testing"
 
-// Insert and delete, of lines and of characters, at the boundaries where they
-// are decided: the edges of the screen, the edges of a scroll region, and the
-// cell next to a double-width character.
-
 func TestConform_InsertDeleteLines(t *testing.T) {
 	const fill = "a\r\nb\r\nc\r\nd"
 
@@ -36,8 +32,6 @@ func TestConform_InsertDeleteLines(t *testing.T) {
 			want: "a",
 		},
 		{
-			// Inserting at the top of a region moves only the region's rows;
-			// the row below it must not be dragged along.
 			name: "IL inside a region stays inside it",
 			in:   fill + "\x1b[2;3r\x1b[2;1H\x1b[1L",
 			want: "a\n\nb\nd",
@@ -48,8 +42,6 @@ func TestConform_InsertDeleteLines(t *testing.T) {
 			want: "a\nc\n\nd",
 		},
 		{
-			// Outside the region both are ignored outright, rather than
-			// operating on the screen.
 			name: "IL below a region does nothing",
 			in:   fill + "\x1b[2;3r\x1b[4;1H\x1b[1L",
 			want: "a\nb\nc\nd",
@@ -113,8 +105,6 @@ func TestConform_InsertDeleteCharacters(t *testing.T) {
 			want: "a\nghijkl",
 		},
 		{
-			// Neither touches any other row, which is what distinguishes them
-			// from the line operations above.
 			name: "ICH leaves the row below alone",
 			in:   fill + "\x1b[1;1H\x1b[3@",
 			want: "   abc\nghijkl",
@@ -227,7 +217,6 @@ func TestConform_Tabs(t *testing.T) {
 			cursor: "1,0",
 		},
 		{
-			// A count of zero means one, the same as everywhere else.
 			name:   "CHT with a zero parameter moves one stop",
 			cols:   20,
 			in:     "\x1b[0IX",

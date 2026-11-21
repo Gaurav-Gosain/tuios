@@ -1,10 +1,3 @@
-// Ported from pele src/diagrams/usecase/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The port reads UTF-8 bytes. Every character the lexer tells apart is ASCII; any other
-// character is a run of bytes of 0x80 and above, which the lexer reads as pele reads a
-// run of UTF-16 units of 0x7f and above. Offsets are bytes, and turn into UTF-16 units
-// where a message shows them.
-
 package usecase
 
 import (
@@ -45,7 +38,6 @@ var charClass = func() (class [128]uint8) {
 
 var KEYWORD_LENGTH = [...]int{0, 12, 5, 14, 3, 9, 2, 2, 2, 2, 2, 4, 3, 4, 8, 5, 5, 7, 6, 4, 5}
 
-// at is src.charCodeAt(k) for a byte, or -1 past the end, where pele gets NaN.
 func at(src string, k int) int {
 	if k < 0 || k >= len(src) {
 		return -1
@@ -62,7 +54,6 @@ func isDigit(c int) bool  { return util.IsDigit(rune(c)) }
 func isLetter(c int) bool { return util.IsLetter(rune(c)) }
 func isHex(c int) bool    { return util.IsHex(rune(c)) }
 
-// startsWithNoCase: Mermaid's INCLUDE and EXTEND are the only keywords matched without regard to case.
 func startsWithNoCase(src string, from int, word string) bool {
 	for k := 0; k < len(word); k++ {
 		if at(src, from+k)|32 != int(word[k]) {
@@ -76,7 +67,6 @@ func startsWith(src string, from int, word string) bool {
 	return from <= len(src) && strings.HasPrefix(src[from:], word)
 }
 
-// keywordAt is the keyword that is a prefix of the text at `at`, tried in the order of Mermaid's token list.
 func keywordAt(src string, i int, c int) int {
 	pick := func(ok bool, t int) int {
 		if ok {
@@ -136,7 +126,6 @@ func keywordAt(src string, i int, c int) int {
 	return 0
 }
 
-// units is the length in UTF-16 units of src[from:to].
 func units(src string, from, to int) int {
 	n := 0
 	for k := from; k < to; {
@@ -157,7 +146,6 @@ func units(src string, from, to int) int {
 	return n
 }
 
-// lineColumn is the line and the column, in UTF-16 units, of a byte offset.
 func lineColumn(src string, offset int) (int, int) {
 	src, offset = types.Written(src, offset)
 	line := 1
@@ -182,13 +170,11 @@ func locationText(src string, start, end int) string {
 	return "line " + strconv.Itoa(line) + ", column " + strconv.Itoa(column) + " [" + strconv.Itoa(from) + "," + strconv.Itoa(to) + ")"
 }
 
-// writtenUnits is the offset in UTF-16 units, in the source as written, of a byte offset of src.
 func writtenUnits(src string, offset int) int {
 	src, offset = types.Written(src, offset)
 	return units(src, 0, offset)
 }
 
-// stringEnd is the end of a quoted string that opens at `at`, or -1 when the line ends first.
 func stringEnd(src string, from int, quote byte) int {
 	for k := from + 1; k < len(src); k++ {
 		c := src[k]
@@ -210,8 +196,6 @@ func startsToken(src string, from int) bool {
 	return (c == 34 && at(src, from+1) == 96) || stringEnd(src, from, c) != -1
 }
 
-// lexError: Mermaid reports the first character no token starts with, and how many characters its lexer
-// skipped before one did.
 func lexError(src string, offset int, length int) *types.PeleError {
 	line, column := lineColumn(src, offset)
 	from := writtenUnits(src, offset)
@@ -226,7 +210,6 @@ func lexError(src string, offset int, length int) *types.PeleError {
 		types.CodeSyntax, types.ErrorInfo{Type: "usecase", Line: line, Column: column})
 }
 
-// lexer holds the tokens of one run of tokenize.
 type lexer struct {
 	tk Tokens
 }
@@ -238,16 +221,11 @@ func (l *lexer) push(t, s, e int) {
 	l.tk.ends = append(l.tk.ends, e)
 }
 
-// tokenize produces the tokens of Mermaid's Chevrotain lexer for use case diagrams: the first pattern in
-// its list that matches wins, a keyword gives way to a longer identifier, and `json id@` and `<<`
-// switch to modes that read a JSON object and a stereotype.
 func tokenize(src string) Tokens {
-	// A token is at least one byte, and most are longer.
 	room := len(src)/2 + 4
 	l := &lexer{tk: Tokens{types: make([]int, 0, room), starts: make([]int, 0, room), ends: make([]int, 0, room)}}
 	n := len(src)
 	i := 0
-	// Whether only blanks came before on this line, where comments and accessibility lines may start.
 	lineStart := true
 	noBrace := false
 
@@ -361,7 +339,6 @@ func tokenize(src string) Tokens {
 				keyword := keywordAt(src, i, c)
 				switch {
 				case keyword != 0:
-					// A keyword that is only the start of a longer word is an identifier.
 					if keyword == T_USECASE || end-i == KEYWORD_LENGTH[keyword] {
 						typ = keyword
 						end = i + KEYWORD_LENGTH[keyword]
@@ -375,7 +352,6 @@ func tokenize(src string) Tokens {
 					}
 					end = i + 3
 				case isDigit(c):
-					// `1mg` is an identifier, and `1.5px` is a number because the identifier stops at the dot.
 					digits := i + 1
 					for isDigit(at(src, digits)) {
 						digits++

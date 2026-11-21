@@ -5,29 +5,6 @@ import (
 	"slices"
 )
 
-// Not part of pele. The plain order of assignTracks (a gap of more than MAX_WEIGHED pieces)
-// gives each piece, in turn, the lowest track on which no placed piece clashes with it. pele
-// tries every track against every piece on it, which is quadratic where many pieces cross one
-// gap: stepped edges between two groups put thousands of tracks in one gap. plainTracks finds
-// the same tracks in O(n log² n).
-//
-// It rests on three facts about the pieces of the gap, and checks each before it starts:
-//
-//   - Every piece is at least IN_LINE long across, and its ends are below 2^40, so HI-IN_LINE
-//     is exact. Then `overlap` is the overlap of half-open intervals [LO, HI-IN_LINE), and the
-//     values can be replaced by their ranks.
-//   - The pieces come longest first, as `lay` sorts them, ties by LO. Then a placed piece is
-//     never strictly inside the new one, so it overlaps the new one only if it covers its first
-//     or its last cell.
-//   - Two ends that differ differ by IN_LINE or more. Then `mates` is equality of `from` or of
-//     `to`, and all the pieces of one track that cover one cell share a `from` or share a `to`
-//     (they overlap each other, so each two are mates).
-//
-// A track can take the new piece if each of its two end cells is free, or is covered only by
-// pieces that share the new piece's `from` or `to`. The lowest track with both cells free comes
-// from an index of the free runs of every track. The lowest of the others can only be a track
-// that already holds a piece with the same `from` or `to`. Those are tried lowest first; they
-// are few unless the pieces of one end spread over many tracks.
 func plainTracks(seq []int, from, to, LO, HI []float64, track []int) (int, bool) {
 	const exact = 1 << 40
 	n := len(seq)
@@ -63,7 +40,6 @@ func plainTracks(seq []int, from, to, LO, HI []float64, track []int) (int, bool)
 	fromTracks := make([][]int32, len(froms))
 	toTracks := make([][]int32, len(tos))
 	var scratch []coverRun
-	// The run of track tr that covers cell x, if one does.
 	at := func(tr, x int32) (coverRun, bool) {
 		r := runs[tr]
 		j, _ := slices.BinarySearchFunc(r, x, func(c coverRun, x int32) int { return int(c.b - x - 1) })
@@ -72,7 +48,6 @@ func plainTracks(seq []int, from, to, LO, HI []float64, track []int) (int, bool)
 		}
 		return r[j], true
 	}
-	// Whether the pieces of track tr that cover cell x, if any, all share f or t.
 	fits := func(tr, x, f, t int32) bool {
 		c, ok := at(tr, x)
 		return !ok || c.f == f || c.t == t
@@ -89,7 +64,6 @@ func plainTracks(seq []int, from, to, LO, HI []float64, track []int) (int, bool)
 		if best < 0 {
 			best = rows
 		}
-		// The tracks below that which hold a piece with the same from or to, lowest first.
 		a, b := fromTracks[f], toTracks[t]
 		for len(a)+len(b) > 0 {
 			var tr int32
@@ -125,7 +99,6 @@ func plainTracks(seq []int, from, to, LO, HI []float64, track []int) (int, bool)
 	return int(rows), true
 }
 
-// distinct sorts vs and drops repeats.
 func distinct(vs []float64) []float64 {
 	slices.Sort(vs)
 	return slices.Compact(vs)
@@ -138,12 +111,8 @@ func insertSorted(list []int32, v int32) []int32 {
 	return list
 }
 
-// A run of cells [a, b) of one track that the same pieces cover. f and t are the from and to
-// that all those pieces share, or -1.
 type coverRun struct{ a, b, f, t int32 }
 
-// cover adds a piece over cells [l, s) with from f and to t to the runs r of track tr, and
-// tells free which free runs it fills. scratch is reused between calls.
 func cover(r, scratch []coverRun, l, s, f, t, cells, tr int32, free *freeRuns) ([]coverRun, []coverRun) {
 	mix := func(old, v int32) int32 {
 		if old == v {
@@ -156,7 +125,6 @@ func cover(r, scratch []coverRun, l, s, f, t, cells, tr int32, free *freeRuns) (
 	for i1 < len(r) && r[i1].a < s {
 		i1++
 	}
-	// The free run that ends where run j starts (or at the end of the track).
 	hole := func(j int, from, to int32) {
 		start, end := int32(0), cells
 		if j > 0 {
@@ -204,7 +172,6 @@ func cover(r, scratch []coverRun, l, s, f, t, cells, tr int32, free *freeRuns) (
 		out = append(out, r[hi])
 		hi++
 	}
-	// Join neighbours that touch and are covered alike.
 	w := 0
 	for _, c := range out {
 		if w > 0 && out[w-1].b == c.a && out[w-1].f == c.f && out[w-1].t == c.t {
@@ -218,16 +185,10 @@ func cover(r, scratch []coverRun, l, s, f, t, cells, tr int32, free *freeRuns) (
 	return slices.Replace(r, lo, hi, out...), out
 }
 
-// freeRuns indexes the free runs of cells [a, b) of every track that holds a piece, to find
-// the lowest track with a free run around given cells. It is a segment tree over blocks of
-// trackBlock tracks, and each of its nodes keeps the free runs of its tracks in a treap
-// ordered by start, which knows the furthest end among the runs that start at or before a
-// cell. Within a block, the tracks are tried one by one.
 type freeRuns struct {
-	size  int
-	root  []int32
-	nodes []freeNode // nodes[0] is none
-	// unused lists the nodes that can be given out again.
+	size   int
+	root   []int32
+	nodes  []freeNode
 	unused []int32
 	seed   uint32
 }
@@ -252,8 +213,6 @@ func newFreeRuns(tracks int) *freeRuns {
 	}
 }
 
-// lowest returns the lowest track with a free run that holds cells [l, s), or -1. holds says
-// whether a given track has such a run.
 func (h *freeRuns) lowest(l, s int32, holds func(tr int32) bool) int32 {
 	node := 1
 	if h.reach(h.root[node], l) < s {
@@ -272,7 +231,6 @@ func (h *freeRuns) lowest(l, s int32, holds func(tr int32) bool) int32 {
 	}
 }
 
-// reach is the furthest end among the runs of treap x that start at or before cell l.
 func (h *freeRuns) reach(x, l int32) int32 {
 	best := int32(-1)
 	for x != 0 {
@@ -333,7 +291,6 @@ func (h *freeRuns) pull(x int32) {
 	}
 }
 
-// split parts treap x into the nodes before (a, tr) and the others.
 func (h *freeRuns) split(x, a, tr int32) (int32, int32) {
 	if x == 0 {
 		return 0, 0

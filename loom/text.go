@@ -2,13 +2,11 @@ package loom
 
 import "strings"
 
-// span is a run of text in one style.
 type span struct {
 	text string
 	st   style
 }
 
-// line is one row of spans.
 type line []span
 
 func (l line) width() int {
@@ -19,7 +17,6 @@ func (l line) width() int {
 	return n
 }
 
-// wrapMode is how text breaks across rows.
 type wrapMode uint8
 
 const (
@@ -28,14 +25,12 @@ const (
 	wrapNone
 )
 
-// atom is one grapheme of a span sequence.
 type atom struct {
 	g  string
 	w  int
-	si int // the span the atom came from
+	si int
 }
 
-// atomize cuts spans into graphemes, keeping newlines as atoms of width 0.
 func atomize(spans []span) []atom {
 	var out []atom
 	for i, s := range spans {
@@ -61,15 +56,12 @@ func atomize(spans []span) []atom {
 	return out
 }
 
-// wrap breaks spans into rows of at most w cells. With wrapNone a row
-// breaks only at a newline, and may be wider than w: the painter cuts it.
 func wrap(spans []span, w int, mode wrapMode) []line {
 	atoms := atomize(spans)
 	var rows [][]atom
 	var cur []atom
 	curW, lastSpace := 0, -1
 	push := func(soft bool) {
-		// A soft break drops the spaces at the end of the row.
 		if soft {
 			for len(cur) > 0 && cur[len(cur)-1].g == " " {
 				cur = cur[:len(cur)-1]
@@ -101,7 +93,6 @@ func wrap(spans []span, w int, mode wrapMode) []line {
 			}
 		}
 		if a.g == " " && len(cur) == 0 && len(rows) > 0 && mode != wrapNone {
-			// No space at the start of a wrapped row.
 			if prev := rows[len(rows)-1]; len(prev) > 0 {
 				continue
 			}
@@ -122,7 +113,6 @@ func wrap(spans []span, w int, mode wrapMode) []line {
 	return out
 }
 
-// joinAtoms rebuilds spans from atoms, merging runs of one span.
 func joinAtoms(atoms []atom, spans []span) line {
 	var out line
 	var b strings.Builder
@@ -144,7 +134,6 @@ func joinAtoms(atoms []atom, spans []span) line {
 	return out
 }
 
-// textAlign is a horizontal alignment.
 type textAlign uint8
 
 const (
@@ -153,8 +142,6 @@ const (
 	alignRight
 )
 
-// drawLine draws one row of spans into w cells from x, aligned, and cut with
-// an ellipsis when it is wider.
 func (c *canvas) drawLine(x, y, w int, l line, al textAlign) {
 	if w <= 0 {
 		return
@@ -175,8 +162,6 @@ func (c *canvas) drawLine(x, y, w int, l line, al textAlign) {
 	}
 }
 
-// cutLine cuts a row to w cells, the last cell an ellipsis in the style of
-// the text it replaces.
 func cutLine(l line, w int, ellipsis string) line {
 	ew := width(ellipsis)
 	if w < ew {
@@ -198,5 +183,4 @@ func cutLine(l line, w int, ellipsis string) line {
 	return out
 }
 
-// plainLine returns a row of one span.
 func plainLine(s string, st style) line { return line{{text: s, st: st}} }

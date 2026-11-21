@@ -1,5 +1,3 @@
-// Ported from pele src/svg/theme.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package svg
 
 import (
@@ -47,8 +45,6 @@ func Rounded(attrs string) string {
 // may put those in any order.
 const CRITICAL = "var(--pele-critical,#e45756)"
 
-// A list of font names, quoted or not, and nothing that could end the declaration it is put in.
-// The check is types.SafeFamilies, which the theme uses too.
 func families(list string, generic string) string {
 	if list != "" && types.SafeFamilies(list) {
 		return list
@@ -88,7 +84,6 @@ type ResolvedStyle struct {
 
 var NONE = ResolvedStyle{}
 
-// orderedProps keeps a Map's insertion order: setting a key again keeps its place.
 type orderedProps struct {
 	keys []string
 	vals map[string]string
@@ -202,8 +197,6 @@ func ClassNames(raw string) string {
 	return string(b)
 }
 
-// classByte reports whether c is in [\w-]. Go's \w is ASCII, so every byte of
-// a character past ASCII is outside it.
 func classByte(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' || c == '-'
 }
@@ -215,7 +208,6 @@ func SeriesColor(index int) string {
 	return seriesVars[((index%8)+8)%8]
 }
 
-// seriesVars are the eight colors as SeriesColor writes them, so that a call allocates nothing.
 var seriesVars = [8]string{
 	"var(--pele-series-1,#4c78a8)", "var(--pele-series-2,#f58518)", "var(--pele-series-3,#54a24b)", "var(--pele-series-4,#e45756)",
 	"var(--pele-series-5,#72b7b2)", "var(--pele-series-6,#eeca3b)", "var(--pele-series-7,#b279a2)", "var(--pele-series-8,#9d755d)",

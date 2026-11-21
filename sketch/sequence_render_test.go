@@ -1,6 +1,3 @@
-// Ported from pele tests/render/sequence.test.ts at 8fad23bd51783e4df1204e177a7fb0d2a30dcd13:
-// the case v1.8.0 added. The rest of that file is covered by the goldens.
-
 package sketch
 
 import (
@@ -77,8 +74,6 @@ func TestSequenceNarrowLabelBreaksBetweenWords(t *testing.T) {
 		if len(lines) < 2 {
 			t.Fatalf("%s: %q did not wrap at width %v: %q", m[1], raw, width, lines)
 		}
-		// Each line is the next piece of the message, and a break falls after
-		// a hyphen or at a space.
 		rest := raw
 		for i, line := range lines {
 			if !strings.HasPrefix(rest, line) {

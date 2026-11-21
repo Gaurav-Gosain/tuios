@@ -106,9 +106,6 @@ func (w *Watcher) Close() error {
 	return err
 }
 
-// arm watches each of the source's directories, or its nearest existing
-// parent while it does not exist, and drops watches that are no longer
-// needed. It reports whether the set changed.
 func (w *Watcher) arm() bool {
 	want := map[string]bool{}
 	for _, dir := range w.src.WatchPaths() {
@@ -138,8 +135,6 @@ func (w *Watcher) arm() bool {
 	return changed
 }
 
-// nearestExisting is dir when it is a directory, else its nearest parent
-// that is one. It is empty when not even the root is.
 func nearestExisting(dir string) string {
 	dir = filepath.Clean(dir)
 	for {
@@ -154,8 +149,6 @@ func nearestExisting(dir string) string {
 	}
 }
 
-// onChain reports whether path is one of the source's directories or a
-// parent of one, so its appearance or removal moves a watch.
 func (w *Watcher) onChain(path string) bool {
 	path = filepath.Clean(path)
 	for _, dir := range w.src.WatchPaths() {
@@ -175,8 +168,6 @@ func (w *Watcher) onChain(path string) bool {
 
 func (w *Watcher) run() {
 	defer w.wg.Done()
-	// fire is nil while no read is pending, so an idle Watcher waits on the
-	// file system alone.
 	var timer *time.Timer
 	var fire <-chan time.Time
 	schedule := func() {
@@ -199,9 +190,6 @@ func (w *Watcher) run() {
 				return
 			}
 			if ev.Op&(fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 && w.onChain(ev.Name) {
-				// A directory on the way to the source appeared or went.
-				// The new watch can miss what was made under it before it
-				// was added, so read again either way.
 				w.arm()
 				schedule()
 				continue
@@ -213,8 +201,6 @@ func (w *Watcher) run() {
 			if !ok {
 				return
 			}
-			// An overflow or a dropped watch: read again, which is right
-			// whatever was missed.
 			w.arm()
 			schedule()
 		case <-fire:
@@ -224,10 +210,6 @@ func (w *Watcher) run() {
 	}
 }
 
-// reload reads the source and delivers the palette when it changed. A read
-// that fails keeps the palette in force: Omarchy's switch removes the theme
-// and renames the new one in its place, and a read in that gap fails, but the
-// rename that follows is another event and another read.
 func (w *Watcher) reload() {
 	p, err := w.src.Load()
 	if err != nil {

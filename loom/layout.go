@@ -2,27 +2,14 @@ package loom
 
 import "slices"
 
-// Layout runs in two passes. measure returns a box's natural size within a
-// width. place gives each box its rectangle, from the root down, sharing
-// space along a row or a column the way flex boxes do: fixed and percent
-// sizes first, then natural sizes, then the free space by fill weight and
-// grow, and when space is short the boxes that can shrink give it back.
-
-// item is one child on the main axis of a row or column.
 type item struct {
 	base, weight int
-	lo, hi       int // min and max; hi < 0 means none
+	lo, hi       int
 	shrink       bool
-	// elastic gives way first when space is short: a chart, which still
-	// says what it says narrower, before text, which a cut loses.
-	elastic bool
-	// give is how many rows a column item gives way before the elastic
-	// items and text: the rows of the tables, lists and scroll boxes in it,
-	// which keep every row and show the rest when they scroll.
-	give int
+	elastic      bool
+	give         int
 }
 
-// distribute shares avail cells among items and returns each one's size.
 func distribute(avail int, items []item) []int {
 	out := make([]int, len(items))
 	used, weights := 0, 0
@@ -32,7 +19,6 @@ func distribute(avail int, items []item) []int {
 		weights += it.weight
 	}
 	free := avail - used
-	// Grow by weight, a few rounds so a capped item passes its share on.
 	for round := 0; free > 0 && weights > 0 && round < 4; round++ {
 		share, rem := free/weights, free%weights
 		given, nextWeights := 0, 0
@@ -59,18 +45,12 @@ func distribute(avail int, items []item) []int {
 			break
 		}
 	}
-	// Shrink what may shrink, in proportion to its size: the boxes that
-	// scroll first, then the elastic items, then the rest.
 	for pass := 0; pass < 3 && free < 0; pass++ {
 		free = shrinkItems(items, out, free, pass)
 	}
 	return out
 }
 
-// dropNarrowCharts gives a row's charts that were squeezed under their
-// minimum no width at all, and hands the cells to the children that were
-// cut, so a gauge squeezed to a stub goes and the text beside it is whole.
-// A chart that asked for fewer cells than the minimum and got them stays.
 func (s *Surface) dropNarrowCharts(kids []*box, items []item, out []int) {
 	freed := 0
 	for i, k := range kids {
@@ -97,9 +77,6 @@ func (s *Surface) dropNarrowCharts(kids []*box, items []item, out []int) {
 	}
 }
 
-// shrinkItems takes -free cells back from the items that may shrink, and
-// returns what is still free. Pass 0 takes from the scrollers only, pass 1
-// from the elastic items only, and pass 2 from all of them.
 func shrinkItems(items []item, out []int, free int, pass int) int {
 	may := func(it item) bool {
 		switch pass {
@@ -143,12 +120,8 @@ func shrinkItems(items []item, out []int, free int, pass int) int {
 	return free
 }
 
-// minChartWidth is as narrow as a chart in a row gets before the text
-// beside it gives way.
 const minChartWidth = 8
 
-// minGaugeWidth is that for a gauge: ten cells of bar and its label, so a
-// gauge squeezed by its neighbours still reads as a share.
 const minGaugeWidth = 16
 
 func minChartWidthOf(kind string) int {
@@ -158,8 +131,6 @@ func minChartWidthOf(kind string) int {
 	return minChartWidth
 }
 
-// elasticKind reports whether a box of this kind is a chart, which gives
-// way before text in a row that is short of space.
 func elasticKind(kind string) bool {
 	switch kind {
 	case "gauge", "progress", "sparkline", "bar", "line", "area", "histogram":
@@ -178,20 +149,13 @@ func clampSize(v, lo, hi int) int {
 	return max(v, 0)
 }
 
-// bounds returns the min and max a pair of size attributes give against
-// the parent's size.
 func bounds(lo, hi size, parent int) (int, int) {
 	l, h := lo.resolve(parent), hi.resolve(parent)
 	return max(l, 0), h
 }
 
-// measure returns the natural size of b within maxW cells, padding
-// included. The width is at most maxW.
 func (s *Surface) measure(b *box, maxW int) (int, int) {
 	maxW = max(maxW, 0)
-	// One layout pass measures a box at a width once. Without the cache a
-	// chain of rows costs 2^depth measures: each row measures a child to
-	// share the width, then again for its height.
 	if b.mgen != s.gen {
 		b.mgen, b.mcache = s.gen, b.mcache[:0]
 	}
@@ -235,7 +199,7 @@ func (s *Surface) measureNew(b *box, maxW int) (int, int) {
 			ch = max(ch, kh)
 		}
 	case b.kind == "spacer":
-	default: // col, form, tab, tml and unknown containers stack their children
+	default:
 		cw, ch = s.measureCol(b.kids, inner, b.gap)
 	}
 	w := cw + b.padW()
@@ -253,7 +217,6 @@ func (s *Surface) measureNew(b *box, maxW int) (int, int) {
 	return w, clampSize(h, hlo, hhi)
 }
 
-// measureCol returns the size of boxes stacked top to bottom.
 func (s *Surface) measureCol(kids []*box, inner, gap int) (int, int) {
 	cw, ch := 0, 0
 	for i, k := range kids {
@@ -294,7 +257,6 @@ func (s *Surface) measureRow(b *box, inner int) (int, int) {
 	return min(cw, inner), ch
 }
 
-// lineHeight is the height of one line of a row: its tallest child.
 func (s *Surface) lineHeight(kids []*box, widths []int) int {
 	h := 0
 	for i, k := range kids {
@@ -304,12 +266,6 @@ func (s *Surface) lineHeight(kids []*box, widths []int) int {
 	return h
 }
 
-// rowLines splits a row that holds a button or a stat into lines when its
-// children do not fit side by side at their natural widths: an action bar
-// wraps whole buttons, and a row of stats whole stats, to the next line
-// instead of cutting their labels. A spacer
-// goes with the child after it, so a hint pushed to the right stays at the
-// right on its own line. nil means one line, laid out as before.
 func (s *Surface) rowLines(b *box, inner int) [][]*box {
 	if len(b.kids) < 2 || !slices.ContainsFunc(b.kids, func(k *box) bool { return k.kind == "button" || k.kind == "stat" }) {
 		return nil
@@ -368,7 +324,6 @@ func (s *Surface) rowLines(b *box, inner int) [][]*box {
 	return lines
 }
 
-// rowWidths shares a row's inner width among the given children.
 func (s *Surface) rowWidths(kids []*box, gap, inner int) []int {
 	n := len(kids)
 	if n == 0 {
@@ -383,8 +338,6 @@ func (s *Surface) rowWidths(kids []*box, gap, inner int) []int {
 		case fixed >= 0:
 			it.base = fixed
 			if elasticKind(k.kind) {
-				// A chart's width is a wish: it narrows before the text
-				// beside it is cut, and below its minimum it is not drawn.
 				it.shrink, it.elastic = true, true
 			}
 		case k.width.kind == sizeFill:
@@ -431,8 +384,6 @@ func (s *Surface) gridCols(b *box) int {
 	return min(v.n, 24)
 }
 
-// layoutRoot places the whole tree in the surface. A document that does not
-// fit scrolls as a page: see page.go.
 func (s *Surface) layoutRoot() {
 	s.gen++
 	s.root.rect = rect(0, 0, s.w, s.h)
@@ -441,12 +392,8 @@ func (s *Surface) layoutRoot() {
 	s.layoutPage()
 }
 
-// placeRoot places the root's children in a w by h page whose top is off
-// rows above the surface's.
 func (s *Surface) placeRoot(off, w, h int) {
 	s.focus = s.focus[:0]
-	// The document's one top box fills the surface, unless it asks for a
-	// height of its own.
 	if len(s.root.kids) == 1 && s.root.kids[0].height.kind == sizeAuto {
 		k := s.root.kids[0]
 		s.place(k, rect(0, -off, s.colChildWidth(s.root, k, w), h))
@@ -455,11 +402,7 @@ func (s *Surface) placeRoot(off, w, h int) {
 	s.placeCol(s.root, rect(0, -off, w, h))
 }
 
-// place gives b its rectangle and places its children inside it.
 func (s *Surface) place(b *box, r Rect) {
-	// A box never reaches past its parent's content area, so siblings
-	// never overlap and a box can repaint alone. Inside a scroll the
-	// children move past the edges and the clip cuts them instead.
 	b.pw = r.Dx()
 	if p := b.parent; p != nil && p != s.root && !scrolls(p) {
 		r = r.Intersect(viewport(p))
@@ -469,13 +412,8 @@ func (s *Surface) place(b *box, r Rect) {
 		b.ground = b.parent.ground
 	}
 	if b.hidden {
-		// show is false: the box keeps its space, and nothing inside it is
-		// laid out, takes the focus, a key or a click.
 		return
 	}
-	// Every box that takes keys is in the focus order, on the screen or
-	// not: tab reaches a button below the fold, and a scroll brings the
-	// focused box into view. Shortcuts and clicks need the box on screen.
 	if focusable(s, b) {
 		s.focus = append(s.focus, b)
 	}
@@ -500,7 +438,6 @@ func (s *Surface) place(b *box, r Rect) {
 	}
 }
 
-// placer is a widget that holds children and places them itself.
 type placer interface {
 	place(s *Surface, b *box, inner Rect)
 }
@@ -520,7 +457,6 @@ func (s *Surface) placeRow(b *box, in Rect) {
 	}
 }
 
-// placeLine places one line of a row's children at the given widths.
 func (s *Surface) placeLine(b *box, kids []*box, widths []int, in Rect) {
 	used := 0
 	for i, wd := range widths {
@@ -549,7 +485,6 @@ func (s *Surface) placeLine(b *box, kids []*box, widths []int, in Rect) {
 	for i, k := range kids {
 		wd := widths[i]
 		h := in.Dy()
-		// fill on the cross axis stretches, as align="stretch" does.
 		if (b.align != "stretch" && b.align != "" || k.height.kind != sizeAuto) && k.height.kind != sizeFill {
 			_, kh := s.measure(k, wd)
 			if fixed := k.height.resolve(in.Dy()); fixed >= 0 {
@@ -569,8 +504,6 @@ func (s *Surface) placeLine(b *box, kids []*box, widths []int, in Rect) {
 	}
 }
 
-// colHeights shares a column's inner height among boxes of the given
-// widths.
 func (s *Surface) colHeights(kids []*box, widths []int, in Rect, gap int) []int {
 	n := len(kids)
 	avail := max(in.Dy()-gap*max(n-1, 0), 0)
@@ -587,7 +520,6 @@ func (s *Surface) colHeights(kids []*box, widths []int, in Rect, gap int) []int 
 			it.weight = max(it.weight, 1)
 		default:
 			_, it.base = s.measure(k, widths[i])
-			// A box that scrolls can give rows back.
 			if shrinks(k) {
 				it.shrink = true
 				it.lo = max(it.lo, min(it.base, 3))
@@ -599,10 +531,6 @@ func (s *Surface) colHeights(kids []*box, widths []int, in Rect, gap int) []int 
 	return distribute(avail, items)
 }
 
-// give returns how many of its h rows b gives back without cutting
-// anything: a table, list or scroll box down to three rows, and a column of
-// boxes what its children give. A row and the rest give nothing, so they
-// shrink only after the elastic items.
 func (s *Surface) give(b *box, w, h int) int {
 	if b.hidden {
 		return 0
@@ -681,8 +609,6 @@ func (s *Surface) placeCol(b *box, in Rect) {
 	}
 }
 
-// colChildWidth is a child's width in a column: its own w, or the column's
-// width unless the column aligns its children.
 func (s *Surface) colChildWidth(col, k *box, inner int) int {
 	if fixed := k.width.resolve(inner); fixed >= 0 {
 		lo, hi := bounds(k.minW, k.maxW, inner)
@@ -733,8 +659,6 @@ func (s *Surface) placeSplit(b *box, in Rect) {
 	}
 }
 
-// splitRatio is the first child's share: the one a person dragged to, or
-// the ratio attribute, or a half.
 func (s *Surface) splitRatio(b *box) float64 {
 	if r, ok := lookup(s.view.Split, b); ok {
 		return r
@@ -746,9 +670,6 @@ func (s *Surface) splitRatio(b *box) float64 {
 	return 0.5
 }
 
-// visible reports whether some of b is on the screen: its rectangle meets
-// the viewport of every box above it. A box that a short column squeezed
-// to nothing, or that a scroll moved out of view, is not.
 func visible(b *box) bool {
 	r := b.rect
 	for p := b.parent; p != nil && !r.Empty(); p = p.parent {

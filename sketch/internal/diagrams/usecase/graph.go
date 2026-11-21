@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/usecase/graph.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package usecase
 
 import (
@@ -11,18 +9,15 @@ import (
 )
 
 type JsonRow struct {
-	// Blank on the second and later values of an array.
-	key string
-	// The key again, for every row.
+	key           string
 	accessibleKey string
 	value         string
 }
 
 type UsecaseGraphNode struct {
-	id        string
-	label     string
-	labelType string
-	// Mermaid's shape names.
+	id                string
+	label             string
+	labelType         string
 	shape             string
 	isGroup           bool
 	padding           float64
@@ -57,8 +52,7 @@ type UsecaseGraphEdge struct {
 	animation         string
 	minlen            int
 	explicitID        bool
-	// The dotted line from a note to what it is about.
-	internal bool
+	internal          bool
 }
 
 type UsecaseGraph struct {
@@ -104,8 +98,6 @@ type jsonItem struct {
 	pointer int
 }
 
-// jsonPath is a row's key path, kept as its last piece and its parent so that a deep text
-// does not copy the path at every level. Not in pele.
 type jsonPath struct {
 	parent *jsonPath
 	piece  string
@@ -129,8 +121,6 @@ func (p *jsonPath) String() string {
 	return string(b)
 }
 
-// flattenJsonRows gives one row for each leaf of a JSON object, depth first in the order the keys were written.
-// Nesting is kept on a stack of its own, so depth is limited by memory and not by the call stack.
 func flattenJsonRows(value *jsonObject, propertyOrder *keyOrder) []JsonRow {
 	var rows []JsonRow
 	stack := []jsonItem{{value, &jsonPath{}, 0}}
@@ -199,7 +189,6 @@ func flattenJsonRows(value *jsonObject, propertyOrder *keyOrder) []JsonRow {
 	return rows
 }
 
-// classList joins four names and a list with spaces, leaving out the empty ones.
 func classList(a, b, c, d string, rest []string) string {
 	size := len(a) + len(b) + len(c) + len(d) + 4
 	for _, name := range rest {
@@ -246,14 +235,10 @@ func when(ok bool, s string) string {
 	return ""
 }
 
-// buildUsecaseGraph resolves a parsed use case diagram into what is drawn: every actor, use case, note, JSON table
-// and boundary as a node with its class styles, and every relationship and note connector as an
-// edge with its markers. Ports getData from Mermaid's use case DB.
 func buildUsecaseGraph(model *UsecaseModel) UsecaseGraph {
 	nodes := make([]UsecaseGraphNode, 0, model.actors.size+model.useCases.size+model.notes.size+model.jsonNodes.size+model.systemBoundaries.size)
 	edges := make([]UsecaseGraphEdge, 0, len(model.relationships)+model.notes.size)
 
-	// compiled: a later class wins a property but keeps the place the property first took.
 	compiled := func(classNames []string) []string {
 		if model.classDefs.size == 0 {
 			return nil
@@ -359,7 +344,6 @@ func buildUsecaseGraph(model *UsecaseModel) UsecaseGraph {
 			style: append([]string{}, relationship.styles...), cssCompiledStyles: compiled(relationship.classes),
 			animate: relationship.animate, animation: relationship.animation, minlen: relationship.minlen, explicitID: relationship.explicitID,
 		}
-		// Include and extend are labelled with their kind, whatever label the relationship carries.
 		if semantic {
 			label := relationship.typ
 			edge.label = &label

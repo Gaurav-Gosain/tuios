@@ -1,8 +1,3 @@
-// Ported from pele src/core.ts and src/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// mount() and enableZoom() are browser only and are not ported. pele throws a
-// PeleError; the port panics with one inside and returns it as an error here.
-
 // Package sketch draws Mermaid diagrams as SVG. It is a Go port of pele
 // (github.com/obsidianmd/pele), which draws them without a browser.
 package engine
@@ -100,9 +95,6 @@ const DefaultOutputLimit = 4_000_000
 // multiplies: without a limit, a few kilobytes of source ask for millions of edges.
 const DefaultMaxEdges = 5000
 
-// guarded turns the PeleError a parser or renderer panics with into an error.
-// Any other panic is a bug in the port; it is reported as an error too, so that
-// a host is never brought down by a diagram.
 func guarded(err *error) {
 	if e := recover(); e != nil {
 		switch t := e.(type) {
@@ -114,11 +106,6 @@ func guarded(err *error) {
 	}
 }
 
-// tagErrors names the diagram type on a PeleError that run panics with and that
-// does not name one yet.
-//
-// pele also turns a RangeError, a JavaScript stack overflow, into a limit error
-// here. Go grows the stack instead, so the port has nothing to catch.
 func tagErrors(found detected) {
 	if e := recover(); e != nil {
 		if pe, ok := e.(*types.PeleError); ok {
@@ -144,8 +131,6 @@ type parsed struct {
 }
 
 func parseSource(src string, limit, maxEdges int, extra Config) parsed {
-	// JavaScript strings cannot hold invalid UTF-8, and a browser refuses an
-	// SVG that does. Each invalid byte becomes U+FFFD, as TextDecoder does.
 	src = strings.ToValidUTF8(src, "\uFFFD")
 	if limit <= 0 {
 		limit = DefaultLimit
@@ -192,8 +177,6 @@ func parseModel(found detected, diagram *types.Diagram, source string, config Co
 	return diagram.Parse(source, config, pre.title, pre.lineOffset, types.ParseLimits{MaxEdges: maxEdges})
 }
 
-// inSource maps an offset of the parsed text to the source as written. It records
-// the edits of preprocessing only when an error needs a position.
 type inSource struct {
 	text         string
 	keepComments bool
@@ -211,7 +194,6 @@ func (s *inSource) Find(at int) (string, int) {
 			kept = cleanupComments(pre.withComments, &s.steps)
 		}
 		encodeEntities(kept, &s.steps)
-		// Match the line break appended for parsing.
 		s.source = normalizeLineBreaks(s.text) + "\n"
 	}
 	return s.source, types.InputOffset(s.steps, at)
@@ -293,8 +275,6 @@ func render(p parsed, options RenderOptions) SVG {
 	if options.Responsive == nil {
 		options.Responsive = types.Ptr(!fixed)
 	}
-	// The host's icon resolver and the ids in `links` see names as the author meant them, with
-	// entity codes turned into their characters, as `data-icon` and `data-id` in the SVG do.
 	var icons text.IconResolver
 	if resolve := options.Icons; resolve != nil {
 		icons = func(name string) string { return resolve(text.DecodeEntities(name)) }
@@ -314,7 +294,6 @@ func render(p parsed, options RenderOptions) SVG {
 	if outputLimit <= 0 {
 		outputLimit = DefaultOutputLimit
 	}
-	// A UTF-16 length is never more than the UTF-8 one, so only a long SVG is counted.
 	if len(rendered.SVG) > outputLimit && js.Len(rendered.SVG) > outputLimit {
 		types.Throw("Diagram output is longer than the limit of "+strconv.Itoa(outputLimit)+" characters.", types.CodeLimit,
 			types.ErrorInfo{Type: string(p.typ), MermaidType: string(p.mt)})

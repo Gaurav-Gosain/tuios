@@ -104,8 +104,6 @@ func DrawCells(d *sketch.Diagram, opt Options) ([][]Cell, error) {
 	return c.rows(), nil
 }
 
-// drawFit draws a diagram within opt.Cols, narrowing the layout when the
-// first drawing is too wide.
 func drawFit(d *sketch.Diagram, opt Options) (*canvas, error) {
 	switch d.Type {
 	case "flowchart", "sequence", "state", "class", "er", "pie", "mindmap", "gantt", "timeline", "xychart", "quadrantChart", "journey", "kanban", "gitGraph", "sankey", "block", "architecture", "requirement", "c4", "packet", "radar", "treemap", "info", "treeView", "ishikawa", "cynefin", "eventmodeling", "venn", "wardley", "railroad", "swimlane", "usecase", "agentflow":
@@ -113,12 +111,6 @@ func drawFit(d *sketch.Diagram, opt Options) (*canvas, error) {
 		return nil, ErrUnsupported
 	}
 	c, err := draw(d, opt, sketch.RenderOptions{}, false)
-	// across is a flowchart drawn in the direction its source gives, with
-	// the columns that hold only gaps and lines dropped, when that fits.
-	// Asked for a narrower layout, pele turns a chart that runs across to run
-	// down, which is far taller: seven boxes in a row take three rows across
-	// and over thirty down. The shorter of the two drawings is kept. A back
-	// edge routes around the boxes either way.
 	var across *canvas
 	if err == ErrTooWide && d.Type == "flowchart" {
 		if a, aerr := draw(d, opt, sketch.RenderOptions{}, true); aerr == nil {
@@ -126,25 +118,13 @@ func drawFit(d *sketch.Diagram, opt Options) (*canvas, error) {
 		}
 	}
 	if err == ErrTooWide {
-		// pele draws narrower when it is told the width there is: a flowchart
-		// that runs across turns to run down, and spacing tightens. A cell is
-		// about 8 units of the layout.
 		w := float64(opt.Cols) * 8
 		turn := true
-		// A graph still too wide loses the columns that hold only gaps and
-		// horizontal lines.
 		c, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
-		// A class diagram puts its groups of classes that are not joined in
-		// rows that fit the width. A cell can take fewer units than 8, so the
-		// rows are asked for narrower until they fit, a few times at most.
 		for try := 0; err == ErrTooWide && d.Type == "class" && try < 4; try++ {
 			w *= 0.8
 			c, err = draw(d, opt, sketch.RenderOptions{MaxWidth: &w, AutoDirection: &turn, DirectionBreakpoint: &[]float64{w + 1}[0]}, true)
 		}
-		// Labels take more cells than the units the layout gives them, so a
-		// layout that fits 8 units a cell can still be too wide in cells: a
-		// flowchart with long labels then runs across where running down
-		// would fit. Ask for narrower layouts, which turn it sooner.
 		for _, units := range []float64{6, 5, 4} {
 			if err != ErrTooWide {
 				break
@@ -182,10 +162,6 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 		c, err = drawGantt(layout, opt)
 	case "sequence":
 		if squeeze {
-			// pele wraps message labels only when the layout runs past MaxWidth. A label
-			// of 64 characters fits a layout 640 units wide, so at 80 columns it does not
-			// wrap, and its cells make the drawing wider than 80 columns. Narrower
-			// layouts wrap it.
 			c, err = narrower(d, layout, opt, squeeze, func(l *sketch.Layout, opt Options, _ bool) (*canvas, error) {
 				return drawSequence(l, opt)
 			})
@@ -204,7 +180,6 @@ func draw(d *sketch.Diagram, opt Options, ro sketch.RenderOptions, squeeze bool)
 	return c, nil
 }
 
-// Roles of a cell, which pick its colour.
 const (
 	roleNone = iota
 	roleLine
@@ -215,31 +190,25 @@ const (
 	roleTitle
 	roleHead
 	roleCrit
-	// roleSeries is the first of six roles, one per data series of a chart.
 	roleSeries
 )
 
-// seriesRoles is the count of series roles; series past it take them again.
 const seriesRoles = 6
 
-// seriesRole is the role of series i, counting from 0.
 func seriesRole(i int) uint8 {
 	return roleSeries + uint8(((i%seriesRoles)+seriesRoles)%seriesRoles)
 }
 
 var roleSGR = [...]string{
-	roleNone:  "",
-	roleLine:  "90",
-	roleBox:   "36",
-	roleText:  "",
-	roleNote:  "33",
-	roleFrame: "90",
-	roleTitle: "1",
-	roleHead:  "",
-	roleCrit:  "31",
-	// The series take the hues of the SVG's first six series colours, at 16
-	// colours: blue, orange as yellow, green, red, teal as cyan, and magenta.
-	// The blue is the bright one: plain blue is hard to read on a dark ground.
+	roleNone:       "",
+	roleLine:       "90",
+	roleBox:        "36",
+	roleText:       "",
+	roleNote:       "33",
+	roleFrame:      "90",
+	roleTitle:      "1",
+	roleHead:       "",
+	roleCrit:       "31",
 	roleSeries:     "94",
 	roleSeries + 1: "33",
 	roleSeries + 2: "32",
@@ -248,8 +217,6 @@ var roleSGR = [...]string{
 	roleSeries + 5: "35",
 }
 
-// bgSGR is the ground colour of a series role: the same hue as its
-// text colour.
 func bgSGR(role uint8) string {
 	if role < roleSeries || int(role) >= len(roleSGR) {
 		return ""
@@ -261,7 +228,6 @@ func bgSGR(role uint8) string {
 	return "4" + fg[1:]
 }
 
-// Directions of the strokes in a cell, for joining lines.
 const (
 	up    = 1
 	right = 2
@@ -269,7 +235,6 @@ const (
 	left  = 8
 )
 
-// Line weights.
 const (
 	light = iota
 	dotted
@@ -277,17 +242,12 @@ const (
 )
 
 type cell struct {
-	r    rune
-	role uint8
-	// bg is the role whose colour fills the ground of the cell, roleNone
-	// for the terminal's own. Only series roles have a ground colour.
-	bg uint8
-	// mask holds the strokes of lines drawn through the cell; r is worked out
-	// from it when the cell holds no other character.
+	r      rune
+	role   uint8
+	bg     uint8
 	mask   uint8
 	weight uint8
-	// wide is set on the cell after a wide character, which it covers.
-	wide bool
+	wide   bool
 }
 
 type canvas struct {
@@ -309,7 +269,6 @@ func (c *canvas) at(x, y int) *cell {
 	return &c.cells[y*c.w+x]
 }
 
-// stroke adds line strokes to a cell, unless it holds a character already.
 func (c *canvas) stroke(x, y int, mask uint8, weight uint8, role uint8) {
 	p := c.at(x, y)
 	if p == nil || p.r != 0 {
@@ -324,8 +283,6 @@ func (c *canvas) stroke(x, y int, mask uint8, weight uint8, role uint8) {
 	}
 }
 
-// put writes a character, over any strokes. A character that could steer
-// the terminal or reorder the text is written as U+FFFD: see safeRune.
 func (c *canvas) put(x, y int, r rune, role uint8) {
 	p := c.at(x, y)
 	if p == nil {
@@ -338,7 +295,6 @@ func (c *canvas) put(x, y int, r rune, role uint8) {
 	p.wide = false
 }
 
-// putBg writes a character in the colour of role on the ground of bg.
 func (c *canvas) putBg(x, y int, r rune, role, bg uint8) {
 	c.put(x, y, r, role)
 	if p := c.at(x, y); p != nil {
@@ -346,15 +302,12 @@ func (c *canvas) putBg(x, y int, r rune, role, bg uint8) {
 	}
 }
 
-// clear empties a cell, strokes included.
 func (c *canvas) clear(x, y int) {
 	if p := c.at(x, y); p != nil {
 		*p = cell{}
 	}
 }
 
-// text writes a string from x, wide characters taking two cells. A break
-// hint takes no cell and is not written.
 func (c *canvas) text(x, y int, s string, role uint8) {
 	for _, r := range s {
 		if isHint(r) {
@@ -372,7 +325,6 @@ func (c *canvas) text(x, y int, s string, role uint8) {
 	}
 }
 
-// hline and vline draw straight lines between two cells, ends included.
 func (c *canvas) hline(x0, x1, y int, weight uint8, role uint8) {
 	if x0 > x1 {
 		x0, x1 = x1, x0
@@ -405,7 +357,6 @@ func (c *canvas) vline(x, y0, y1 int, weight uint8, role uint8) {
 	}
 }
 
-// joins maps a stroke mask to its character, for the light weight.
 var joins = [16]rune{
 	0:                        ' ',
 	up:                       '│',
@@ -465,7 +416,6 @@ func (p *cell) glyph() rune {
 	return joins[p.mask]
 }
 
-// plainColumn reports whether a column holds nothing but straight horizontal lines.
 func (c *canvas) plainColumn(x int) bool {
 	for y := 0; y < c.h; y++ {
 		p := &c.cells[y*c.w+x]
@@ -476,10 +426,6 @@ func (c *canvas) plainColumn(x int) bool {
 	return true
 }
 
-// squeeze drops up to n columns that hold only gaps and horizontal lines. It
-// takes them from the widest runs of such columns first, from the middle of
-// each run, and keeps one column of every run, so boxes keep a space between
-// them and lines across a gap stay joined.
 func (c *canvas) squeeze(n int) {
 	type run struct{ x, n int }
 	var runs []run
@@ -496,7 +442,6 @@ func (c *canvas) squeeze(n int) {
 		runs = append(runs, run{s, x - s})
 		longest = max(longest, x-s)
 	}
-	// The least length every run can be cut to with n columns or fewer.
 	cut := func(t int) int {
 		k := 0
 		for _, r := range runs {
@@ -546,7 +491,6 @@ func (c *canvas) squeeze(n int) {
 	c.w, c.cells = w, cells
 }
 
-// plain reports whether a row holds nothing but straight vertical lines.
 func (c *canvas) plain(y int) bool {
 	for x := 0; x < c.w; x++ {
 		p := &c.cells[y*c.w+x]
@@ -557,9 +501,6 @@ func (c *canvas) plain(y int) bool {
 	return true
 }
 
-// lines writes the canvas, without the spaces at the end of each line. Where
-// rows in a row hold only vertical lines, one of them is kept: the layout's
-// gaps are wider than text needs.
 func (c *canvas) lines(color bool) []string {
 	out := make([]string, 0, c.h)
 	for y := 0; y < c.h; y++ {
@@ -567,8 +508,6 @@ func (c *canvas) lines(color bool) []string {
 			continue
 		}
 		var b strings.Builder
-		// The SGR state written so far: a role and a ground, 255 at the
-		// start of the line.
 		role, bg := uint8(255), uint8(255)
 		open := false
 		for x := 0; x < c.w; x++ {
@@ -604,7 +543,6 @@ func (c *canvas) lines(color bool) []string {
 		}
 		out = append(out, line)
 	}
-	// Drop blank lines at the start and the end.
 	for len(out) > 0 && strings.TrimSpace(stripSGR(out[0])) == "" {
 		out = out[1:]
 	}
@@ -614,8 +552,6 @@ func (c *canvas) lines(color bool) []string {
 	return out
 }
 
-// rows gives the cells that lines writes, row for row: the same rows
-// dropped, without the gaps at the end of each row.
 func (c *canvas) rows() [][]Cell {
 	out := make([][]Cell, 0, c.h)
 	for y := 0; y < c.h; y++ {
@@ -639,7 +575,6 @@ func (c *canvas) rows() [][]Cell {
 		}
 		out = append(out, row[:end:end])
 	}
-	// Drop blank rows at the start and the end, as lines does.
 	blank := func(row []Cell) bool {
 		for _, p := range row {
 			if p.Rune != 0 && p.Rune != ' ' {
@@ -671,8 +606,6 @@ func stripSGR(s string) string {
 	return b.String()
 }
 
-// runeWidth is the cells a character takes: two for the wide East Asian
-// ranges that pele's width table counts as wide, one otherwise.
 func runeWidth(c rune) int {
 	if isHint(c) {
 		return 0
@@ -685,13 +618,6 @@ func runeWidth(c rune) int {
 	return 1
 }
 
-// safeRune maps the characters a terminal acts on to U+FFFD: C0 controls,
-// DEL, C1 controls, the bidirectional overrides and isolates (U+202A to
-// U+202E, U+2066 to U+2069), the bidi marks (U+200E, U+200F, U+061C) and the
-// line and paragraph separators (U+2028, U+2029). Labels are entity-decoded, so "#27;" in a source
-// is an ESC; without this, a label could set the window title or write the
-// clipboard on the terminal that shows the drawing. Each of these is one cell
-// wide in runeWidth, as U+FFFD is, so the layout does not move.
 func safeRune(r rune) rune {
 	switch {
 	case r < 0x20, r >= 0x7f && r <= 0x9f,
@@ -702,9 +628,6 @@ func safeRune(r rune) rune {
 	return r
 }
 
-// safeString is s with each character safeRune maps changed, and break
-// hints left out: for text handed to tuios.dev/plot, which leaves a control out
-// instead.
 func safeString(s string) string {
 	return strings.Map(func(r rune) rune {
 		if isHint(r) {
@@ -714,12 +637,8 @@ func safeString(s string) string {
 	}, s)
 }
 
-// isHint reports a break hint of a label: a zero-width space, or a soft
-// hyphen, which shows as "-" only where a line breaks at it. A hint takes no
-// cell. A terminal can give a soft hyphen a cell, so a hint is never written.
 func isHint(r rune) bool { return r == 0x200b || r == 0xad }
 
-// width is the cells a string takes.
 func width(s string) int {
 	n := 0
 	for _, r := range s {
@@ -736,7 +655,6 @@ func widest(lines []string) int {
 	return w
 }
 
-// fit cuts s to at most w cells, ending it in "…" when it is cut.
 func fit(s string, w int) string {
 	if width(s) <= w {
 		return s

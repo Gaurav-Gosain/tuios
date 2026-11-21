@@ -22,9 +22,6 @@ import (
 // after it along the row, and in a multiplexer the column it shifts into
 // belongs to the pane next door.
 func TestWidthMethod_MatchesHowCharactersAreActuallyPlaced(t *testing.T) {
-	// The classes where the two methods disagree. Everything else, including
-	// ambiguous width, combining marks, skin tones and joined sequences, comes
-	// out the same either way.
 	samples := []struct {
 		name string
 		s    string
@@ -50,8 +47,6 @@ func TestWidthMethod_MatchesHowCharactersAreActuallyPlaced(t *testing.T) {
 				t.Fatal("nothing was placed")
 			}
 
-			// What ultraviolet would build for the same text, having asked the
-			// screen which method it uses.
 			built := uv.NewCell(emu.WidthMethod(), tc.s)
 			if built == nil {
 				t.Fatal("uv.NewCell returned nothing")

@@ -2,14 +2,6 @@
 
 package raster
 
-// Draws every flowchart golden with sketch/raster and with rsvg-convert, an
-// independent renderer, and compares the two pictures. Needs rsvg-convert and
-// the full Arimo fonts in SKETCH_ARIMO_DIR (rsvg finds them through fontconfig).
-//
-//	SKETCH_ARIMO_DIR=~/fonts/arimo go test -tags differential -run TestDifferential -v ./raster/
-//
-// SKETCH_DIFF_OUT keeps the pictures of the worst cases in that folder.
-
 import (
 	"bytes"
 	"compress/gzip"
@@ -27,10 +19,6 @@ import (
 	"testing"
 )
 
-// The share of pixels that may differ by more than 24/255 in a channel, after
-// both pictures are blurred by a pixel so that antialiasing and font hinting do
-// not count. Correct output measures 0; leaving out the dashes of dotted edges
-// measures 0.2% and more.
 const maxFaint = 0.0005
 
 var (
@@ -41,8 +29,6 @@ var (
 	reStyleRxIn = regexp.MustCompile(`style="rx:([\d.]+)px;`)
 )
 
-// resolveForRsvg writes the variables out, as resolve.py does: rsvg does not read var().
-// It is written apart from css.go, so that a fault there does not hide in both pictures.
 func resolveForRsvg(svg string) string {
 	env := map[string]string{"--pele-font": "Arimo", "--pele-font-mono": "Go Mono"}
 	ev := func(v string) string {
@@ -79,7 +65,6 @@ func blur(img image.Image) ([]float64, int, int) {
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			r, g, bl, a := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
-			// Over white.
 			wa := float64(0xffff - a)
 			i := (y*w + x) * 3
 			src[i], src[i+1], src[i+2] = (float64(r)+wa)/257, (float64(g)+wa)/257, (float64(bl)+wa)/257
@@ -106,9 +91,6 @@ func blur(img image.Image) ([]float64, int, int) {
 	return out, w, h
 }
 
-// difference is the share of pixels that differ by more than a quarter of the
-// range in some channel, the share that differ by more than a tenth, the mean
-// difference, and a picture of where.
 func difference(a, b image.Image) (float64, float64, float64, *image.RGBA) {
 	pa, w, h := blur(a)
 	pb, w2, h2 := blur(b)
@@ -140,7 +122,6 @@ func difference(a, b image.Image) (float64, float64, float64, *image.RGBA) {
 	return float64(count) / n, float64(faint) / n, mean / n, heat
 }
 
-// covered reports whether the embedded faces have a glyph for every character of the SVG's text.
 func covered(svg string) bool {
 	if err := loadFaces(); err != nil {
 		return false
@@ -228,7 +209,6 @@ func TestDifferential(t *testing.T) {
 	for _, r := range results {
 		sum += r.differ
 		if !r.covered {
-			// rsvg draws such characters from a system font; sketch leaves a box of the measured width.
 			t.Logf("%s: has characters the embedded fonts lack; %.2f%% of pixels differ", r.name, 100*r.differ)
 			continue
 		}

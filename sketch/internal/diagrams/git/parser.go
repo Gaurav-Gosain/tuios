@@ -1,7 +1,3 @@
-// Ported from pele src/diagrams/git/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// The two sticky regular expressions are hand matchers: INT has a lookahead.
-
 package git
 
 import (
@@ -48,8 +44,6 @@ func isWordByte(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_'
 }
 
-// matchReference is /\w([-\./\w]*[-\w])?/y: a word character, then the longest run of
-// [-./\w] that ends in [-\w].
 func matchReference(src string, p int) int {
 	if p >= len(src) || !isWordByte(src[p]) {
 		return -1
@@ -66,8 +60,6 @@ func matchReference(src string, p int) int {
 	return end
 }
 
-// matchInt is /0|[1-9][0-9]*(?!\.)/y. The lookahead binds to the second branch only, which
-// gives back digits until no dot follows.
 func matchInt(src string, p int) int {
 	if p >= len(src) {
 		return -1
@@ -91,7 +83,6 @@ func matchInt(src string, p int) int {
 	return q
 }
 
-// openAccDescr is /[\t ]*accDescr\s*{/y.
 func openAccDescr(src string, p int) int {
 	q := p
 	for q < len(src) && (src[q] == ' ' || src[q] == '\t') {
@@ -121,7 +112,6 @@ func openAccDescr(src string, p int) int {
 var REFERENCE = &common.TokenType{Name: "REFERENCE", Match: matchReference, First: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"}
 var NAME = []*common.TokenType{REFERENCE}
 
-// word: a keyword that is the start of a longer name is part of that name: `commits` is a branch.
 func word(name string) *common.TokenType {
 	return &common.TokenType{Name: name, Pattern: name, Longer: NAME}
 }
@@ -154,8 +144,6 @@ var GIT_TOKENS = []*common.TokenType{
 	word("TB"),
 	word("BT"),
 	{Name: ":", Pattern: ":"},
-	// Without a closing brace the block form scans to the end of the text, and a brace is not a
-	// token on its own, so the first failure is final.
 	with(common.ACC_DESCR, func(t *common.TokenType) { t.Opener = openAccDescr }),
 	common.ACC_TITLE,
 	common.TitleBefore(common.RunEndsIn("-./", "-")),
@@ -175,11 +163,10 @@ type CommitTypeName = string
 // An id, message or parent that is not given is "": pele reads each of them as text that
 // is empty when it is missing.
 type StatementAst struct {
-	typ     string
-	id      string
-	message string
-	tags    []string
-	// commitType is "" for none.
+	typ        string
+	id         string
+	message    string
+	tags       []string
 	commitType CommitTypeName
 	name       string
 	order      *float64
@@ -283,7 +270,6 @@ func parseGit(src string) *GitGraphAst {
 			r.I++
 			node := StatementAst{typ: "Branch", name: name()}
 			if r.Accept(T_order) {
-				// parseInt of a run of digits.
 				order := js.Number(r.Expect(T_int))
 				node.order = &order
 			}

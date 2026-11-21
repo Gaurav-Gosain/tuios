@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/state/types.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// A statement is a Stmt: a string or a pointer to one of the statement
-// structs. Fields that pele leaves undefined are "" or nil where pele never
-// tells them from an empty value, and pointers where it does.
-
 package state
 
 type StateNote struct {
@@ -20,7 +14,6 @@ type Description struct {
 	List   []string
 }
 
-// truthy is `if (description)`: a list is always truthy.
 func (d *Description) truthy() bool {
 	return d != nil && (d.IsList || d.Text != "")
 }
@@ -71,7 +64,6 @@ type ClickStmt struct {
 	Tooltip string
 }
 
-// rootStmt is the db's `{ stmt: 'root' }`.
 type rootStmt struct {
 	ID  string
 	Doc *[]Stmt

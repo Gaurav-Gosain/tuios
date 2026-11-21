@@ -9,13 +9,6 @@ import (
 	"tuios.dev/sketch/internal/types"
 )
 
-// A venn diagram is drawn as its circles, in braille dots, each in its set's series colour, with
-// each region's label and texts where the SVG writes them. Without colour, or when the labels do
-// not fit inside the circles, it is a table: the sets, then the overlaps the source states, each
-// with its label, its relative size, and the texts written in it. When a row does not fit the
-// columns, its label and texts go on the lines under its name, and long text wraps.
-
-// vennSize writes a relative size with at most three decimals.
 func vennSize(v float64) string {
 	if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) >= 1e15 {
 		return number(v)
@@ -23,7 +16,6 @@ func vennSize(v float64) string {
 	return strconv.FormatFloat(math.Round(v*1000)/1000, 'f', -1, 64)
 }
 
-// piece is a piece of a line of text at a column.
 type piece struct {
 	x    int
 	text string
@@ -43,7 +35,6 @@ func drawVenn(l *sketch.Layout, opt Options) (*canvas, error) {
 	return vennTable(vn, opt)
 }
 
-// vennCircles draws the circles, or gives nil when the labels do not fit.
 func vennCircles(vn *types.GeoVenn, opt Options) *canvas {
 	if len(vn.Circles) == 0 || len(vn.Circles) > 8 {
 		return nil
@@ -56,8 +47,6 @@ func vennCircles(vn *types.GeoVenn, opt Options) *canvas {
 	if !(maxX > minX) || !(maxY > minY) {
 		return nil
 	}
-	// The circles take 64 columns, fewer when the columns are fewer. A
-	// cell is pieAspect times as tall as it is wide.
 	cols := 64
 	if opt.Cols > 0 {
 		cols = min(cols, opt.Cols-2)
@@ -74,8 +63,6 @@ func vennCircles(vn *types.GeoVenn, opt Options) *canvas {
 	}
 	cellX := func(x float64) float64 { return (x-minX)*sx + 1 }
 	cellY := func(y float64) float64 { return (y - minY) * sy }
-	// The labels first, where the SVG centres them. One that would leave
-	// the canvas, or cover another, means the circles are too small.
 	for _, r := range vn.Regions {
 		var lines []string
 		role := uint8(roleText)
@@ -108,7 +95,6 @@ func vennCircles(vn *types.GeoVenn, opt Options) *canvas {
 	d.merge = true
 	for i, circle := range vn.Circles {
 		l := d.layer(seriesRole(i))
-		// In dots: two to a cell across, four down.
 		cx, cy := cellX(circle.X)*2, cellY(circle.Y)*4
 		rx, ry := circle.R*sx*2, circle.R*sy*4
 		steps := int(math.Max(rx, ry)*7) + 16
@@ -146,7 +132,6 @@ func vennTable(vn *types.GeoVenn, opt Options) (*canvas, error) {
 			overlaps = append(overlaps, rw)
 		}
 	}
-	// A row is two cells of indent, the name, the label and the size, two cells between each.
 	labelX := 2 + nameW + 2
 	sizeEnd := labelX + sizeW
 	if labelW > 0 {

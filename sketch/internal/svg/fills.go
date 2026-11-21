@@ -1,6 +1,3 @@
-// Ported from pele src/svg/edges.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac: the checks of
-// an edge against the fills a diagram's styles set, and the casing under an edge that crosses one.
-
 package svg
 
 import (
@@ -11,7 +8,6 @@ import (
 	"tuios.dev/sketch/internal/lazyre"
 )
 
-// pathTokens reads a path's d. Each command stores its character code, argument count, and arguments.
 func pathTokens(d string) []float64 {
 	at := func(i int) int {
 		if i < 0 || i >= len(d) {
@@ -28,7 +24,6 @@ func pathTokens(d string) []float64 {
 			out = append(out, float64(c), 0)
 			i++
 		} else if c == 45 || c == 46 || (c >= 48 && c <= 57) {
-			// Scale exact integers to match Number() rounding; otherwise use Number().
 			j := i
 			if c == 45 {
 				j = i + 1
@@ -73,7 +68,6 @@ func pathTokens(d string) []float64 {
 	return out
 }
 
-// samplePath samples the curves and arcs of tokenized path data; NaN separates subpaths.
 func samplePath(tokens []float64) []float64 {
 	var out []float64
 	x, y := 0.0, 0.0
@@ -106,7 +100,6 @@ func samplePath(tokens []float64) []float64 {
 					x3, y3 = tokens[k+4], tokens[k+5]
 				}
 				for t := 0.125; t <= 1; t += 0.125 {
-					// Preserve the original De Casteljau operation order to keep rounding unchanged.
 					ax := x + float64((x1-x)*t)
 					ay := y + float64((y1-y)*t)
 					bx := x1 + float64((x2-x1)*t)
@@ -141,7 +134,6 @@ func samplePath(tokens []float64) []float64 {
 	return out
 }
 
-// sampleArc samples an unrotated arc from (x1, y1), after SVG's conversion from end points to a center.
 func sampleArc(out []float64, x1, y1, rx, ry, large, sweep, x2, y2 float64) []float64 {
 	hx := (x1 - x2) / 2
 	hy := (y1 - y2) / 2
@@ -172,7 +164,6 @@ func sampleArc(out []float64, x1, y1, rx, ry, large, sweep, x2, y2 float64) []fl
 	return out
 }
 
-// clips tests segment overlap with the box using Liang-Barsky clipping.
 func clips(x, y, dx, dy, l, t, r, b float64) bool {
 	lo, hi := 0.0, 1.0
 	for side := 0; side < 4; side++ {
@@ -200,7 +191,6 @@ func clips(x, y, dx, dy, l, t, r, b float64) bool {
 	return lo < hi
 }
 
-// jsMax and jsMin are Math.max and Math.min of two numbers: NaN wins.
 func jsMax(a, b float64) float64 {
 	if math.IsNaN(a) || math.IsNaN(b) {
 		return math.NaN()
@@ -298,7 +288,6 @@ var (
 	reCaseWidth = lazyre.New(`^[\d.]+(?:px)?$`)
 )
 
-// caseDecl finds the value of a declaration `[";]prop:value;` in a line style.
 func caseDecl(line, prop string) (string, bool) {
 	for i := 0; ; {
 		at := strings.Index(line[i:], prop+":")
@@ -315,7 +304,6 @@ func caseDecl(line, prop string) (string, bool) {
 		for end < len(line) && line[end] != ';' && line[end] != '"' {
 			end++
 		}
-		// [^;"]+ then ;
 		if end == start || end >= len(line) || line[end] != ';' {
 			continue
 		}

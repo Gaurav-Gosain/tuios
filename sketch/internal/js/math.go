@@ -2,13 +2,6 @@ package js
 
 import "math"
 
-// Sin and Cos are Math.sin and Math.cos as V8 computes them: fdlibm's kernels and its
-// argument reduction, ported from V8's src/base/ieee754.cc. Go's math.Sin and math.Cos
-// use other polynomials and can differ in the last bit. Products are converted to
-// float64 so that the compiler does not fuse them into FMA instructions, which would
-// round differently. Past 2^19 times pi/2 the reduction needs fdlibm's long
-// __kernel_rem_pio2, and the port falls back to Go's functions there.
-
 const (
 	sinS1 = -1.66666666666666324348e-01
 	sinS2 = 8.33333333332248946124e-03
@@ -33,7 +26,6 @@ const (
 	pio2_3t = 8.47842766036889956997e-32
 )
 
-// The high words of n*pi/2 for n from 1 to 32.
 var npio2_hw = [32]uint32{
 	0x3FF921FB, 0x400921FB, 0x4012D97C, 0x401921FB, 0x401F6A7A, 0x4022D97C,
 	0x4025FDBB, 0x402921FB, 0x402C463A, 0x402F6A7A, 0x4031475C, 0x4032D97C,
@@ -80,8 +72,6 @@ func kernelCos(x, y float64) float64 {
 	return a - (hz - (float64(z*r) - float64(x*y)))
 }
 
-// remPio2 reduces x to y0 + y1 in [-pi/4, pi/4] and returns n, with x = n*pi/2 + y0 + y1.
-// ok is false past the medium range.
 func remPio2(x float64) (n int32, y0, y1 float64, ok bool) {
 	hx := int32(highWord(x))
 	ix := uint32(hx) & 0x7fffffff

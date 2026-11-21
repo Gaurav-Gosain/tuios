@@ -1,5 +1,3 @@
-// Ported from pele src/svg/shapes.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package svg
 
 import (
@@ -25,12 +23,8 @@ const (
 type sizer func(tw, th float64) ShapeSize
 type drawer func(w, h float64, a string, line string) string
 
-// Distance from the bounding box to the outline on a side: 0 top, 1 right, 2 bottom, 3 left.
-// `t` is how far along the side from its middle, to the right or down.
 type insetFn func(w, h float64, side int, t float64) float64
 
-// How much of a side edges may spread along, centered on its middle: the top and bottom, or the
-// left and right when `sideways`. A shape without one keeps its edges at the middle.
 type spanFn func(w, h float64, sideways bool) float64
 
 type shapeDef struct {
@@ -39,11 +33,9 @@ type shapeDef struct {
 	inset   insetFn
 	span    spanFn
 	noLabel bool
-	// Ignores style fills.
-	bare bool
+	bare    bool
 }
 
-// Kept clear at each end of a straight side, for the corner.
 const shapeCorner = 12
 
 func flat(w, h float64, sideways bool) float64 {
@@ -53,7 +45,6 @@ func flat(w, h float64, sideways bool) float64 {
 	return w - 2*shapeCorner
 }
 
-// Straight along the top and bottom except for `cut(h)` at each end, and not straight at the sides.
 func flatAcross(cut func(h float64) float64) spanFn {
 	return func(w, h float64, sideways bool) float64 {
 		if sideways {
@@ -63,7 +54,6 @@ func flatAcross(cut func(h float64) float64) spanFn {
 	}
 }
 
-// How far an ellipse's outline has fallen away from its bounding box, `t` from the middle of a side `half` long.
 func bulge(t, half, depth float64) float64 {
 	k := math.Min(1, math.Abs(t)/half)
 	return depth * (1 - math.Sqrt(1-float64(k*k)))
@@ -780,7 +770,6 @@ var shapes = map[string]*shapeDef{
 	},
 }
 
-// Math.SQRT1_2 as JavaScript defines it.
 const sqrt1_2 = 0.7071067811865476
 
 func leanSize(tw, th float64) ShapeSize {

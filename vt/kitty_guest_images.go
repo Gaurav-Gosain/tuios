@@ -9,28 +9,14 @@ import (
 	"time"
 )
 
-// kittyImageNumberIDBase is where the ids given to images sent by number
-// start. Kitty assigns the id itself when a guest transmits with I= and no i=,
-// and the guest may name the image by that id later. Starting high keeps the
-// ids clear of the small ones guests choose for themselves.
 const kittyImageNumberIDBase uint32 = 1 << 31
 
-// maxKittyKnownImages bounds how many image ids one pane is remembered to
-// hold. A guest that uploads more than this under fresh ids loses the oldest
-// from the record, as kitty's storage quota would drop them.
 const maxKittyKnownImages = 1 << 16
 
-// maxKittyFileChecks bounds the file checks one pane may have running. A
-// check runs off the emulator's lock and can wait on a stalled network
-// mount; past this many, an upload is answered EBUSY at once.
 const maxKittyFileChecks = 4
 
-// kittyFileCheckTimeout is how long an answer waits for its file check. A
-// variable so a test can shorten it.
 var kittyFileCheckTimeout = 2 * time.Second
 
-// kittyFileCheck is the look at a file an upload names. A variable so a test
-// can make it hang, as a dead network mount does.
 var kittyFileCheck = kittyUploadFileError
 
 // KittyGuestImages is what one pane's emulator knows about the images its
@@ -52,23 +38,15 @@ var kittyFileCheck = kittyUploadFileError
 //
 // The zero value answers and is ready to use.
 type KittyGuestImages struct {
-	numbers map[uint32]uint32
-	known   map[uint32]struct{}
-	next    uint32
-	// guestHigh holds the ids at or above kittyImageNumberIDBase that the
-	// guest chose itself with i=, so a number is never given one of them.
+	numbers   map[uint32]uint32
+	known     map[uint32]struct{}
+	next      uint32
 	guestHigh map[uint32]struct{}
 	pending   *kittyUploadReply
 
-	// silent turns every answer and file check off. See
-	// SetKittyUploadAnswers.
-	silent bool
-	// filesElsewhere refuses every file medium upload without looking at the
-	// file. The pane runs on another machine, where its path names a file
-	// this machine has no business checking.
+	silent         bool
 	filesElsewhere bool
-	// checks holds a token for each file check running.
-	checks chan struct{}
+	checks         chan struct{}
 }
 
 // KittyGuestImagesState is the part of KittyGuestImages a client takes from
@@ -112,8 +90,6 @@ func (g *KittyGuestImages) Restore(s *KittyGuestImagesState) {
 	g.pending = nil
 }
 
-// kittyUploadReply is an answer owed to the guest: the keys it names, and an
-// error found before the last chunk arrived.
 type kittyUploadReply struct {
 	id, number, placement uint32
 	quiet                 int
@@ -133,7 +109,6 @@ func (g *KittyGuestImages) Handle(cmd *KittyCommand, write func([]byte)) bool {
 		write = nil
 	}
 	if cmd.PayloadErr != nil {
-		// Answered with EINVAL already. The upload it was part of is over.
 		g.pending = nil
 		return true
 	}
@@ -150,7 +125,6 @@ func (g *KittyGuestImages) Handle(cmd *KittyCommand, write func([]byte)) bool {
 		return g.continueUpload(cmd, write)
 	}
 	if upload {
-		// A new upload ends one that never sent its last chunk.
 		g.pending = nil
 	}
 
@@ -184,13 +158,6 @@ func (g *KittyGuestImages) SetAnswers(on bool) { g.silent = !on }
 // uploads are refused without a look at the file.
 func (g *KittyGuestImages) SetFilesElsewhere(on bool) { g.filesElsewhere = on }
 
-// resolve turns a command that names its image by number (I=) and not by id
-// (i=) into one that names it by id. It sets ImageID, turns d=n and d=N into
-// d=i and d=I, and reports false when the number names no image.
-//
-// Every transmission under a number is a new image with a new id, as in
-// kitty, and the number names the newest of them from then on. The older
-// images stay until the guest deletes them.
 func (g *KittyGuestImages) resolve(cmd *KittyCommand) bool {
 	if cmd.ImageID != 0 {
 		if cmd.ImageID >= kittyImageNumberIDBase && isKittyUpload(cmd) {
@@ -216,8 +183,6 @@ func (g *KittyGuestImages) resolve(cmd *KittyCommand) bool {
 		cmd.ImageID = id
 
 	case KittyActionDelete:
-		// Only d=n and d=N name an image by number. Every other target
-		// ignores I=.
 		if cmd.Delete != KittyDeleteByNumber && cmd.Delete != KittyDeleteByNumberFree {
 			return true
 		}
@@ -230,9 +195,6 @@ func (g *KittyGuestImages) resolve(cmd *KittyCommand) bool {
 			cmd.Delete = KittyDeleteByID
 		} else {
 			cmd.Delete = KittyDeleteByIDFree
-			// d=N frees the image's data, after which the number names
-			// nothing. With p= it deletes that one placement, and the
-			// image stays while its other placements remain.
 			if cmd.PlacementID == 0 {
 				delete(g.numbers, number)
 			}
@@ -251,7 +213,6 @@ func (g *KittyGuestImages) resolve(cmd *KittyCommand) bool {
 	return true
 }
 
-// forget drops what a delete frees from the record.
 func (g *KittyGuestImages) forget(cmd *KittyCommand) {
 	switch cmd.Delete {
 	case KittyDeleteAllFree:
@@ -264,7 +225,6 @@ func (g *KittyGuestImages) forget(cmd *KittyCommand) {
 	}
 }
 
-// allocate picks the next id for an image sent by number.
 func (g *KittyGuestImages) allocate() uint32 {
 	for {
 		if g.next < kittyImageNumberIDBase {
@@ -299,18 +259,12 @@ func kittyReplyOf(cmd *KittyCommand) kittyUploadReply {
 	return kittyUploadReply{id: cmd.ImageID, number: cmd.ImageNumber, placement: cmd.PlacementID, quiet: cmd.Quiet}
 }
 
-// startUpload records the first chunk of an upload, and answers it when it
-// is also the last.
 func (g *KittyGuestImages) startUpload(cmd *KittyCommand, write func([]byte)) {
 	if cmd.ImageID == 0 {
-		// Kitty answers no upload that names no image.
 		return
 	}
 	r := kittyReplyOf(cmd)
 	r.failed = kittyPNGHeadError(cmd)
-	// The id is recorded even for a PNG that fails the check: the upload
-	// still goes to the host, which decides for itself, and a placement of
-	// it is no business of this record to drop.
 	g.know(cmd.ImageID)
 	if cmd.More {
 		g.pending = &r
@@ -319,14 +273,11 @@ func (g *KittyGuestImages) startUpload(cmd *KittyCommand, write func([]byte)) {
 	g.finishUpload(cmd, r, write)
 }
 
-// continueUpload takes a later chunk of the upload in progress. A chunk that
-// names the upload's number again keeps the id the first chunk was given.
 func (g *KittyGuestImages) continueUpload(cmd *KittyCommand, write func([]byte)) bool {
 	r := *g.pending
 	if cmd.ImageNumber != 0 {
 		cmd.ImageID = r.id
 	}
-	// The last chunk's q= counts, as the answer is the last chunk's.
 	r.quiet = max(r.quiet, cmd.Quiet)
 	if cmd.More {
 		*g.pending = r
@@ -337,8 +288,6 @@ func (g *KittyGuestImages) continueUpload(cmd *KittyCommand, write func([]byte))
 	return true
 }
 
-// finishUpload answers an upload whose last chunk is in. A file medium is
-// checked first, off the emulator's lock.
 func (g *KittyGuestImages) finishUpload(cmd *KittyCommand, r kittyUploadReply, write func([]byte)) {
 	if r.failed != "" {
 		g.send(write, r, r.failed)
@@ -358,15 +307,8 @@ func (g *KittyGuestImages) finishUpload(cmd *KittyCommand, r kittyUploadReply, w
 	g.checkFileAsync(cmd.Medium, cmd.FilePath, r, write)
 }
 
-// kittyFileElsewhereRefusal is the answer to a file upload from a pane on
-// another machine. It is the answer a query for a file medium gets there.
 const kittyFileElsewhereRefusal = "ENOTSUPPORTED:the path would be read on another machine"
 
-// checkFileAsync answers a file upload once kittyUploadFileError has looked
-// at the file. The look runs on its own goroutine: opening a file can wait on
-// a network mount that does not answer, and the emulator holds its lock while
-// it parses. An answer that takes longer than kittyFileCheckTimeout is
-// EBADF, and at most maxKittyFileChecks looks run at once.
 func (g *KittyGuestImages) checkFileAsync(medium KittyGraphicsMedium, path string, r kittyUploadReply, write func([]byte)) {
 	if g.checks == nil {
 		g.checks = make(chan struct{}, maxKittyFileChecks)
@@ -382,8 +324,6 @@ func (g *KittyGuestImages) checkFileAsync(medium KittyGraphicsMedium, path strin
 	check, timeout := kittyFileCheck, kittyFileCheckTimeout
 	go func() { done <- check(medium, path) }()
 	go func() {
-		// The token goes back when the look itself ends, so looks stuck
-		// on a dead mount stay counted.
 		defer func() { <-checks }()
 		select {
 		case failed := <-done:
@@ -398,9 +338,6 @@ func (g *KittyGuestImages) checkFileAsync(medium KittyGraphicsMedium, path strin
 	}()
 }
 
-// send writes an answer, unless q= suppresses it: q=1 suppresses an OK and
-// q=2 every answer. It reads nothing of g, so a file check's goroutine may
-// call it.
 func (g *KittyGuestImages) send(write func([]byte), r kittyUploadReply, msg string) {
 	if write == nil || r.quiet >= 2 || (r.quiet >= 1 && msg == "OK") {
 		return
@@ -424,15 +361,8 @@ func (g *KittyGuestImages) send(write func([]byte), r kittyUploadReply, msg stri
 	write(append(reply, "\x1b\\"...))
 }
 
-// pngSignature opens every PNG.
 var pngSignature = []byte("\x89PNG\r\n\x1a\n")
 
-// kittyPNGHeadError checks the start of a PNG upload's first chunk: the
-// signature, then an IHDR with a size. A payload that fails it answers
-// EBADPNG, as kitty answers a PNG it cannot decode. The rest of the image is
-// not checked: the daemon reads only the head of a payload, and decoding a
-// whole frame there to answer it would cost what the header-only parse
-// saves. A compressed payload (o=z) is not checked at all.
 func kittyPNGHeadError(cmd *KittyCommand) string {
 	if cmd.Format != KittyFormatPNG || cmd.Medium != KittyMediumDirect ||
 		cmd.Compression == KittyCompressionZlib || cmd.pngHead == nil {
@@ -441,7 +371,6 @@ func kittyPNGHeadError(cmd *KittyCommand) string {
 	head := cmd.pngHead
 	if len(head) < 24 {
 		if cmd.More {
-			// Too little of it to tell yet.
 			return ""
 		}
 		return "EBADPNG:Failed to decode PNG image data"

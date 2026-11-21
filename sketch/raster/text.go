@@ -12,19 +12,14 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// Arimo, regular and bold, has Arial's metrics, which pele's width table
-// measures in, so text fits the boxes it was measured for. Go Mono draws
-// monospace text. fonts/NOTICE has their licences.
-//
 //go:embed fonts/*.ttf.gz
 var fontFiles embed.FS
 
 type face struct {
-	font *sfnt.Font
-	upem float64
-	mu   sync.Mutex
-	buf  sfnt.Buffer
-	// glyphs caches outlines in font units, y down, by rune.
+	font   *sfnt.Font
+	upem   float64
+	mu     sync.Mutex
+	buf    sfnt.Buffer
 	glyphs map[rune]*glyph
 	kerns  map[[2]sfnt.GlyphIndex]float64
 }
@@ -38,7 +33,7 @@ type glyph struct {
 
 var (
 	facesOnce sync.Once
-	faces     [3]*face // regular, bold, mono
+	faces     [3]*face
 	facesErr  error
 )
 
@@ -73,7 +68,6 @@ func loadFaces() error {
 	return facesErr
 }
 
-// glyphFor is the outline and advance of r in font units.
 func (f *face) glyphFor(r rune) *glyph {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -131,7 +125,6 @@ func (f *face) glyphFor(r rune) *glyph {
 	return g
 }
 
-// kern is the kerning between two glyphs of the face, in font units.
 func (f *face) kern(a, b *glyph) float64 {
 	key := [2]sfnt.GlyphIndex{a.index, b.index}
 	f.mu.Lock()
@@ -148,7 +141,6 @@ func (f *face) kern(a, b *glyph) float64 {
 	return v
 }
 
-// runWidth is the advance of a run of text, kerned.
 func (st state) runWidth(text string) float64 {
 	width := 0.0
 	var pf *face
@@ -167,7 +159,6 @@ func (st state) runWidth(text string) float64 {
 	return width
 }
 
-// isWide matches the width table: wide characters take a whole em.
 func isWide(c rune) bool {
 	return (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) ||
 		(c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe30 && c <= 0xfe4f) || (c >= 0xff00 && c <= 0xff60) ||
@@ -204,9 +195,6 @@ func (st state) face() *face {
 	return faces[0]
 }
 
-// glyphOf finds a glyph for r in the run's face, then in the others.
-// hidden is a character that takes no room and shows nothing: a zero-width
-// space, or a soft hyphen where the line does not break. pele measures both as nothing.
 func hidden(r rune) bool { return r == 0x200b || r == 0xad }
 
 func (st state) glyphOf(r rune) (*face, *glyph) {
@@ -241,8 +229,6 @@ func (st state) advance(r rune) float64 {
 	return g.advance * st.fontSize / f.upem
 }
 
-// text lays out a text element: each x or y starts a new chunk, and the
-// text-anchor of a chunk places it.
 func (r *renderer) text(n *node, st state) {
 	first := &textChunk{anchor: st.anchor}
 	if v, ok := n.attr("x"); ok {
@@ -283,7 +269,6 @@ func (r *renderer) text(n *node, st state) {
 	}
 	walk(n, st, 0)
 	if !st.preserve {
-		// Spaces at the start and the end of the text are dropped.
 		trimRuns(chunks, true)
 		trimRuns(chunks, false)
 	}
@@ -322,7 +307,6 @@ func (r *renderer) text(n *node, st state) {
 				if g == nil {
 					adv := run.st.advance(ru)
 					if ru > ' ' {
-						// A character no embedded face has: a box of the width pele measured.
 						s := run.st.fontSize
 						x0, x1 := penX+adv*0.12, penX+adv*0.88
 						y0, y1 := penY-s*0.7, penY+s*0.05

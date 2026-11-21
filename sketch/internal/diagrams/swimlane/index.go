@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/swimlane/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package swimlane draws swimlane diagrams: flowcharts whose top-level subgraphs are
 // lanes that run the length of the diagram.
 package swimlane
@@ -20,8 +18,6 @@ type variant struct{}
 
 func (variant) Type() string { return "swimlane" }
 
-// Prepare puts nodes outside every lane in one unnamed lane, as in Mermaid. Lanes all run
-// the same way, so a `direction` inside a subgraph has no effect.
 func (variant) Prepare(graph *flowchart.FlowGraph) {
 	loose := false
 	for _, node := range graph.Nodes {
@@ -58,7 +54,6 @@ func (variant) Layout(nodes []*layout.CNode, edges []*layout.CEdge, dir layout.D
 	return layout.LaneLayout(nodes, edges, dir, opt, pad)
 }
 
-// DrawGroup draws a lane: an outline the length of the diagram, with its title in a band at the start.
 func (variant) DrawGroup(c *layout.CNode, label text.Label, style svg.ResolvedStyle, classes string, id string, dir layout.Dir, icons text.IconResolver) (string, bool) {
 	left := c.X - c.W/2
 	top := c.Y - c.H/2
@@ -104,7 +99,6 @@ func (variant) DrawGroup(c *layout.CNode, label text.Label, style svg.ResolvedSt
 	return b.String(), true
 }
 
-// FilledBox is the part of a lane that takes its fill, as [left, top, right, bottom]: the title band.
 func (variant) FilledBox(c *layout.CNode, dir layout.Dir) [4]float64 {
 	left := c.X - c.W/2
 	top := c.Y - c.H/2

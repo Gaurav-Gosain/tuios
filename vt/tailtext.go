@@ -63,8 +63,6 @@ func (e *Emulator) TailText(n int) []string {
 		}
 	}
 
-	// Handed back top-down: a rule is written against what the pane looks like,
-	// and that is the order someone reads it in.
 	k := len(ends)
 	out := make([]string, k)
 	if k == 0 {

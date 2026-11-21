@@ -83,16 +83,12 @@ func (r Radar) Draw(w, h int, m Mode) *Grid {
 		labels[i] = truncate(r.Axes[i], 20, ellipsis(m))
 		labelW = max(labelW, width(labels[i]))
 	}
-	// The radius in cell widths: from the rows there are, a row each for
-	// the labels above and below, and from the columns there are, a label
-	// and two cells each side.
 	rows := g.H - 2
 	rho := (float64(rows)/2 - 0.25) * aspect
 	rho = math.Min(rho, float64(g.W-2*labelW-4)/2-0.5)
 	if rho < 2 {
 		return g
 	}
-	// The centre, in cells.
 	cx, cy := float64(g.W)/2, 1+float64(rows)/2
 	angle := func(i int) float64 { return -math.Pi/2 + 2*math.Pi*float64(i)/float64(n) }
 	frac := func(v float64) float64 {
@@ -101,8 +97,6 @@ func (r Radar) Draw(w, h int, m Mode) *Grid {
 		}
 		return (math.Min(math.Max(v, lo), hi) - lo) / (hi - lo)
 	}
-	// The dots: two across and four down in a cell, in layers. A layer is
-	// drawn in one role, and the last layer with dots in a cell colours it.
 	type layer struct {
 		role Role
 		dots []uint8
@@ -181,8 +175,6 @@ func (r Radar) Draw(w, h int, m Mode) *Grid {
 			set(l, x0+1, y0)
 		}
 	}
-	// The labels, a cell past the rim, before the dots: the dots keep out
-	// of them.
 	for i, s := range labels {
 		a := angle(i)
 		ux, uy := math.Cos(a), math.Sin(a)

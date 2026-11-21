@@ -6,9 +6,6 @@ import (
 	"tuios.dev/tml"
 )
 
-// The README shows the bodies of these examples, and TestReadme keeps the
-// two the same, so the README code compiles.
-
 func ExampleCheck() {
 	src := []byte(`<tml version="1" title="Seconds">
   <state>{"secs": [41, 39, 44]}</state>

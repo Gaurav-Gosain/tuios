@@ -1,10 +1,3 @@
-// Ported from pele src/diagrams/class/lexer.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// As in the flowchart and state lexers, the port reads UTF-8 bytes: code() decodes
-// the character at a byte offset, and a step past a character that may not be
-// ASCII steps the whole character. pele's closures are methods of a lexer here,
-// which keeps each one out of line. RE_DIRECTION is written out as a hand matcher.
-
 package class
 
 import (
@@ -70,8 +63,6 @@ func indexFrom(s, sub string, from int) int {
 	return from + i
 }
 
-// codeAt decodes the character at a byte offset: -1 past the end, 0xfffe for a broken
-// sequence, and 0xd800 for a character outside the BMP, which pele reads as a surrogate.
 func codeAt(src string, q int) rune {
 	if q < 0 || q >= len(src) {
 		return -1
@@ -90,7 +81,6 @@ func codeAt(src string, q int) rune {
 	return r
 }
 
-// sizeAt is the length in bytes of the character at q.
 func sizeAt(src string, q int) int {
 	if q >= len(src) || src[q] < utf8.RuneSelf {
 		return 1
@@ -99,7 +89,6 @@ func sizeAt(src string, q int) int {
 	return s
 }
 
-// RE_LINE_END: /[\n\r  ]/g.
 func reLineEnd(src string, from int) int {
 	for i := max(from, 0); i < len(src); i++ {
 		c := src[i]
@@ -171,7 +160,6 @@ func (l *lexer) until(ch string) int {
 	return e
 }
 
-// A run of whitespace is a NEWLINE up to its last line feed; the rest is skipped.
 func (l *lexer) space(leaves bool) {
 	q := l.p
 	k := -1
@@ -195,7 +183,6 @@ func (l *lexer) space(leaves bool) {
 	l.emit(T_NEWLINE, l.p, k+1)
 }
 
-// The keywords that every state recognizes, even inside generics and backtick names.
 func (l *lexer) keyword(c rune) bool {
 	p := l.p
 	switch c {
@@ -331,9 +318,6 @@ func (l *lexer) common(c rune) bool {
 	return util.IsUnicodeLetter(c) && l.emit(T_UNICODE_TEXT, p, p+sizeAt(l.src, p))
 }
 
-// RE_DIRECTION[kind] at p: /.*direction\s+TB[^\n]*/y and its siblings. The greedy `.*` takes
-// the last `direction` on the line that is followed by the direction, and the match runs to
-// the line feed after it. Returns the end of the match, or -1.
 func (l *lexer) matchDirection(kind int, le int) int {
 	src := l.src
 	name := directionNames[kind]
@@ -375,7 +359,6 @@ func (l *lexer) direction() bool {
 			return l.emit(T_direction_tb+i, l.p, e)
 		}
 	}
-	// No direction statement starts anywhere in the rest of this line either.
 	l.dirFailed = l.lineEnd
 	return false
 }
@@ -462,8 +445,6 @@ func (l *lexer) initial(c rune) bool {
 	return l.common(c) || (c == 58 && l.emit(T_COLON, p, p+1))
 }
 
-// step lexes one token, or one skipped stretch, in the current state. It returns false on text
-// that no rule of the state matches.
 func (l *lexer) step(c rune) bool {
 	src := l.src
 	p := l.p
@@ -517,7 +498,6 @@ func (l *lexer) step(c rune) bool {
 			l.push(S_namespaceBody)
 			l.emit(T_STRUCT_START, p, p+1)
 		} else if c == 125 {
-			// The brace is read again in the state the namespace was opened from.
 			l.pop()
 		} else if c == 110 && l.kw("namespace") {
 			l.push(S_namespace)

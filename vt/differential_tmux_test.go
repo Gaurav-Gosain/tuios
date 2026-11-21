@@ -2,25 +2,6 @@
 
 package vt_test
 
-// A differential test against tmux.
-//
-// Every other test in this package states what the emulator should do in the
-// words of whoever wrote the test, which means a case can be wrong in exactly
-// the same way the code is. An independent implementation cannot be. tmux has
-// its own VT emulator, written in C, with no shared ancestry with the parser
-// here, and it can be driven headlessly: start a pane running `cat` on a file
-// of bytes, then ask tmux to print the resulting screen.
-//
-// It is behind a build tag because it needs the tmux binary and spawns
-// processes, which does not belong in the default suite. Run it with:
-//
-//	go test -tags differential ./vt/ -run TestDifferential -v
-//
-// A disagreement is a finding, not automatically a bug here: tmux is an
-// implementation with its own choices, not a specification. Cases where tmux is
-// the one that diverges are listed in tmuxDiffers with the reason, so the test
-// stays useful instead of being switched off.
-
 import (
 	"os"
 	"os/exec"
@@ -38,9 +19,6 @@ type diffCase struct {
 	in         string
 }
 
-// tmuxDiffers names the cases where tmux, not this emulator, is the odd one
-// out, with the reason. Nothing is listed here without a reason that says which
-// behaviour is right and why.
 var tmuxDiffers = map[string]string{
 	"wrap then backspace": "tmux lets the cursor sit one column past the last one and " +
 		"decrements from there, so a backspace after a full line leaves it on the last " +
@@ -94,7 +72,6 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 	}
 
 	cases := []diffCase{
-		// Wrapping, which is where the two most likely disagree.
 		{"plain wrap", 10, 4, "abcdefghijklm"},
 		{"wrap exactly at the margin", 10, 4, "abcdefghij"},
 		{"wrap then carriage return", 10, 4, "abcdefghij\rX"},
@@ -104,7 +81,6 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"a wide character with one column left", 10, 4, "abcdefghi世X"},
 		{"wide characters on an odd width", 9, 4, "世世世世世"},
 
-		// Scroll regions.
 		{"scroll up inside a region", 10, 6, "a\r\nb\r\nc\r\nd\r\ne\x1b[2;4r\x1b[1S"},
 		{"scroll down inside a region", 10, 6, "a\r\nb\r\nc\r\nd\r\ne\x1b[2;4r\x1b[1T"},
 		{"reverse index at the top of a region", 10, 6, "a\r\nb\r\nc\r\nd\r\ne\x1b[2;4r\x1b[2;1H\x1bM"},
@@ -114,7 +90,6 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"origin mode clamped below the region", 10, 6, "\x1b[2;4r\x1b[?6h\x1b[9;1HX"},
 		{"newline at the bottom of a region", 10, 6, "a\r\nb\r\nc\r\nd\r\ne\x1b[2;4r\x1b[4;1H\n"},
 
-		// Insert and delete.
 		{"insert characters", 10, 4, "abcdef\x1b[1;2H\x1b[2@"},
 		{"delete characters", 10, 4, "abcdef\x1b[1;2H\x1b[2P"},
 		{"insert lines", 10, 4, "a\r\nb\r\nc\x1b[2;1H\x1b[1L"},
@@ -126,7 +101,6 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"overwriting the lead of a wide character", 10, 4, "世界\x1b[1;1HX"},
 		{"overwriting the trail of a wide character", 10, 4, "世界\x1b[1;2HX"},
 
-		// Erasing.
 		{"erase to the end of the line", 10, 4, "abcdef\x1b[1;3H\x1b[K"},
 		{"erase to the start of the line", 10, 4, "abcdef\x1b[1;3H\x1b[1K"},
 		{"erase the whole line", 10, 4, "abcdef\x1b[1;3H\x1b[2K"},
@@ -136,7 +110,6 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"selective erase below", 10, 4, "abc\r\ndef\r\nghi\x1b[2;2H\x1b[?J"},
 		{"selective erase in line", 10, 4, "abcdef\x1b[1;3H\x1b[?K"},
 
-		// Cursor motion with awkward parameters.
 		{"cursor forward with a zero parameter", 10, 4, "\x1b[0CX"},
 		{"cursor position past the screen", 10, 4, "\x1b[99;99HX"},
 		{"cursor position with omitted parameters", 10, 4, "\x1b[;5HX"},
@@ -145,11 +118,6 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"position backward", 10, 4, "abcdef\x1b[3jX"},
 		{"line position backward", 10, 4, "\x1b[4;3H\x1b[2kX"},
 
-		// Tabs. Every one of these fills the screen with the alignment pattern
-		// first, so that no cell is left unset. tmux's capture-pane prints a
-		// literal tab for any run of unset cells, wherever the cursor actually
-		// ended up, so on a blank screen the two sides cannot be compared at
-		// all. Over a filled screen the column a tab landed on is visible.
 		{"default tab stops", 20, 4, "\x1b#8\tA\tB"},
 		{"a tab past the last stop", 20, 4, "\x1b#8\t\t\t\t\tX"},
 		{"clearing every tab stop", 20, 4, "\x1b#8\x1b[3g\tX"},
@@ -158,7 +126,6 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"forward tab several stops", 20, 4, "\x1b#8\x1b[2IX"},
 		{"tab with a zero parameter", 20, 4, "\x1b#8\x1b[0IX"},
 
-		// Resets and the alternate screen.
 		{"alignment pattern", 8, 3, "\x1b#8"},
 		{"soft reset leaves the screen", 10, 4, "abc\x1b[2;3r\x1b[!pX"},
 		{"full reset clears the screen", 10, 4, "abc\x1bcX"},
@@ -172,23 +139,12 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"resetting 47 on the main screen", 10, 4, "\x1b[2;3Hab\x1b[?47lX"},
 		{"save and restore the cursor", 10, 4, "\x1b[2;4H\x1b7\x1b[1;1H\x1b8X"},
 
-		// Text.
 		{"a combining mark on an ASCII base", 10, 4, "caféX"},
 		{"a keycap sequence", 10, 4, "1️⃣X"},
 		{"a joined emoji family", 10, 4, "\U0001f469‍\U0001f469‍\U0001f467X"},
 		{"a regional indicator pair", 10, 4, "\U0001f1fa\U0001f1f8X"},
 		{"backspace over a wide character", 10, 4, "世\bX"},
 
-		// The sequences this round fixed. Each was wrong here before, so
-		// checking them against a second implementation is worth more than
-		// checking the ones that already agreed.
-		//
-		// The character sets are absent on purpose. tmux implements them, but
-		// capture-pane prints the byte the guest sent rather than the glyph the
-		// designated set maps it to: ESC ( 0 q q q, which every curses program
-		// draws a rule with, dumps as qqq under tmux and as a rule here. There
-		// is no comparison to be had through this window, so the sets are left
-		// to conform_charset_test.go, which checks them against the manual.
 		{"shift out with nothing designated", 10, 4, "\x0eqqq"},
 		{"insert mode shifts the line right", 10, 4, "abcdef\x1b[1;1H\x1b[4hZ"},
 		{"insert mode with a wide character", 10, 4, "abcdef\x1b[1;1H\x1b[4h世"},
@@ -199,13 +155,6 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"restore a pending wrap", 10, 4, "abcdefghij\x1b7\x1b[1;1H\x1b8g"},
 		{"restore origin mode with the cursor", 10, 6, "\x1b[2;5r\x1b[?6h\x1b7\x1b[?6l\x1b8\x1b[1;1HX"},
 
-		// A C0 control inside a sequence is carried out where it is, and the
-		// sequence goes on: the DEC parser that VT500 terminals, xterm,
-		// ghostty and tmux follow executes it without leaving the state it
-		// is in. The control is VT, which moves down a line as LF does. An LF
-		// would not test this: the pane's pseudo-terminal turns it into CR
-		// LF on the way to tmux, and the CR makes tmux look as if it ended
-		// the sequence.
 		{"a vertical tab inside a charset designation", 10, 4, "ab\x1b(\v0X"},
 		{"a vertical tab inside a cursor style", 10, 4, "ab\x1b[1 \vqX"},
 		{"a vertical tab after a private marker", 10, 4, "ab\x1b[?\v1;2HX"},
@@ -244,7 +193,6 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 	}
 }
 
-// runCase writes a case into a fresh emulator.
 func runCase(t *testing.T, tc diffCase) *vt.Emulator {
 	t.Helper()
 	emu := vt.NewEmulator(tc.cols, tc.rows)
@@ -254,12 +202,6 @@ func runCase(t *testing.T, tc diffCase) *vt.Emulator {
 	return emu
 }
 
-// tmuxScreen runs the same bytes through tmux and returns what it drew.
-//
-// The bytes go into a file and a pane runs `cat` on it, because that puts them
-// on the pane's pseudo-terminal exactly as a program would write them, with no
-// shell echo or prompt in the way. A sentinel file marks when cat is finished,
-// which is more reliable than sleeping.
 func tmuxScreen(t *testing.T, tmux, sock, dir string, i int, tc diffCase) string {
 	t.Helper()
 
@@ -270,9 +212,6 @@ func tmuxScreen(t *testing.T, tmux, sock, dir string, i int, tc diffCase) string
 		t.Fatalf("write input: %v", err)
 	}
 
-	// A session per case, sized for the case. Reusing one costs less but a
-	// resize between cases is itself a thing under test elsewhere, and a fresh
-	// pane is the only way to be sure nothing carried over.
 	name := "c" + itoa(i)
 	cmd := exec.Command(tmux, "-L", sock, "-f", "/dev/null",
 		"new-session", "-d", "-s", name,
@@ -293,8 +232,6 @@ func tmuxScreen(t *testing.T, tmux, sock, dir string, i int, tc diffCase) string
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
-	// cat having exited means the bytes are on the pty, not that tmux has
-	// finished parsing them. One more short settle covers the gap.
 	time.Sleep(30 * time.Millisecond)
 
 	out, err := exec.Command(tmux, "-L", sock, "capture-pane", "-p", "-t", name).Output()

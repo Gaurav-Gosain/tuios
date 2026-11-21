@@ -135,19 +135,14 @@ func (d DivergingBar) Draw(w, h int, m Mode) *Grid {
 	return g
 }
 
-// lineRight draws a thin bar on cells x0 to x0+n-1 of row y from the left
-// to fraction f, to half a cell, and the track after it.
 func lineRight(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
 	lineSide(g, y, n, f, role, track, m, func(i int) int { return x0 + i }, "▖")
 }
 
-// lineLeft is lineRight growing from the right.
 func lineLeft(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
 	lineSide(g, y, n, f, role, track, m, func(i int) int { return x0 + n - 1 - i }, "▗")
 }
 
-// lineSide draws the cells of a line bar, the i-th from its base at x(i).
-// half is the glyph of a cell half full: the quadrant on the base's side.
 func lineSide(g *Grid, y, n int, f float64, role Role, track bool, m Mode, x func(int) int, half string) {
 	if n <= 0 {
 		return
@@ -168,7 +163,6 @@ func lineSide(g *Grid, y, n int, f float64, role Role, track bool, m Mode, x fun
 	}
 }
 
-// fillRight fills cells x0 to x0+n-1 of row y from the left to fraction f.
 func fillRight(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
 	if n <= 0 {
 		return
@@ -193,11 +187,6 @@ func fillRight(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) 
 	}
 }
 
-// fillLeft fills cells x0 to x0+n-1 of row y from the right to fraction f.
-// Block elements anchored at the right come only in an eighth and a half,
-// so on a track the partial cell is a left block in the track's colour on
-// a ground of the role, which is exact to an eighth. Without a track it is
-// the nearest of the eighth, the half and the full block.
 func fillLeft(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
 	if n <= 0 {
 		return
@@ -227,8 +216,6 @@ func fillLeft(g *Grid, y, x0, n int, f float64, role Role, track bool, m Mode) {
 	}
 }
 
-// share returns v / top clamped to [0, 1], and 0 for a missing value. It
-// divides directly, so a tiny top such as 5e-324 still gives 0 for 0.
 func share(v, top float64) float64 {
 	if !finite(v) || v <= 0 || top <= 0 {
 		return 0
@@ -236,8 +223,6 @@ func share(v, top float64) float64 {
 	return math.Min(v/top, 1)
 }
 
-// cellsOf returns f of n units, rounded, and at least 1 when f is above 0,
-// so a value above zero always shows.
 func cellsOf(f float64, n int) int {
 	k := int(math.Round(f * float64(n)))
 	if f > 0 && k == 0 {
@@ -246,8 +231,6 @@ func cellsOf(f float64, n int) int {
 	return min(k, n)
 }
 
-// fillASCII fills k of n cells with #, from the right when fromRight, and
-// the rest with . on a track.
 func fillASCII(g *Grid, y, x0, n, k int, fromRight bool, role Role, track bool) {
 	for i := range n {
 		x := x0 + i

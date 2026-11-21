@@ -69,9 +69,6 @@ func TestKittyMediumIsFrame(t *testing.T) {
 		}
 	})
 
-	// A file another user owns takes root to make, so the test plays another
-	// user instead. The positive half is the "f=32 right size" case above:
-	// the same file passes as this user.
 	t.Run("another user", func(t *testing.T) {
 		info := file(48)
 		if !KittyMediumIsFrame(rgba(4, 3), info) {

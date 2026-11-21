@@ -41,7 +41,6 @@ const (
 	Octant
 )
 
-// kindNames are the names ParseKind accepts, in Kind order.
 var kindNames = [...]string{"off", "half", "quadrant", "sextant", "octant"}
 
 func (k Kind) String() string {
@@ -61,7 +60,6 @@ func ParseKind(s string) (Kind, bool) {
 	return Off, false
 }
 
-// grid is the sub-pixel grid of a kind: gx columns by gy rows.
 func (k Kind) grid() (gx, gy int) {
 	switch k {
 	case Half:
@@ -185,7 +183,6 @@ func (p *Picture) EncodeRegion(dst []Cell, cellW, cellH, cols int, region image.
 		return
 	}
 	n := gx * gy
-	// Sub-pixel bounds inside a cell, the same for every cell.
 	var xs, ys [5]int
 	for i := range gx + 1 {
 		xs[i] = i * cellW / gx
@@ -217,9 +214,6 @@ func (p *Picture) EncodeRegion(dst []Cell, cellW, cellH, cols int, region image.
 	}
 }
 
-// linearPalette is img's palette in linear light. The average of a sub-pixel
-// is taken there, so a fine pattern of black and white averages to the grey
-// the eye sees from a distance.
 func linearPalette(img Indexed) [][3]float32 {
 	lin := make([][3]float32, len(img.Palette))
 	for i, c := range img.Palette {
@@ -228,17 +222,11 @@ func linearPalette(img Indexed) [][3]float32 {
 	return lin
 }
 
-// sample is one sub-pixel: its colour in OKLab (averaged in linear light), and
-// whether it is mostly transparent.
 type sample struct {
 	lab   [3]float32
 	clear bool
 }
 
-// average is the sub-pixel covering the image pixels in [x0,x1) x [y0,y1).
-// A large box is sampled on a lattice of at most 8x8 pixels: a cell is drawn
-// from a few dozen pixels, and reading every pixel of a large picture would
-// cost the time without changing the glyph.
 func average(img Indexed, lin [][3]float32, x0, y0, x1, y1 int) sample {
 	stepX := max(1, (x1-x0)/8)
 	stepY := max(1, (y1-y0)/8)
@@ -269,8 +257,6 @@ func average(img Indexed, lin [][3]float32, x0, y0, x1, y1 int) sample {
 	return sample{lab: linearToOKLab(sum[0]*f, sum[1]*f, sum[2]*f)}
 }
 
-// fit splits the sub-pixels into a foreground and a background group and
-// picks the glyph whose shape is the foreground group.
 func fit(sub []sample, glyphs []string) Cell {
 	n := len(sub)
 	full := uint32(1)<<n - 1
@@ -284,15 +270,9 @@ func fit(sub []sample, glyphs []string) Cell {
 		return Cell{Clear: true}
 	}
 	if clearMask != 0 {
-		// The transparent sub-pixels are the background, which is the
-		// pane's own, and the rest are one colour.
 		fg := mean(sub, full&^clearMask)
 		return Cell{Glyph: glyphs[full&^clearMask], Fg: fg}
 	}
-	// Every split, with the last sub-pixel always in the background: the
-	// other half of the splits are these with the colours swapped. The
-	// error of a group is sum|x|^2 - |sum x|^2 / count, so only the sums
-	// are needed per split.
 	var sq float32
 	var tot [3]float32
 	for _, s := range sub {
@@ -323,9 +303,6 @@ func fit(sub []sample, glyphs []string) Cell {
 			e -= (a[0]*a[0] + a[1]*a[1] + a[2]*a[2]) / float32(na)
 		}
 		e -= (b[0]*b[0] + b[1]*b[1] + b[2]*b[2]) / float32(nb)
-		// A split has to be better by more than rounding to win, so a
-		// flat cell stays a blank and does not become a glyph in one
-		// colour on the same colour.
 		if e < bestErr-1e-6 {
 			best, bestErr = m, e
 		}
@@ -337,7 +314,6 @@ func fit(sub []sample, glyphs []string) Cell {
 	return Cell{Glyph: glyphs[best], Fg: mean(sub, best), Bg: bg}
 }
 
-// mean is the colour of the sub-pixels in mask, averaged in OKLab.
 func mean(sub []sample, mask uint32) color.RGBA {
 	var s [3]float32
 	k := 0
@@ -356,7 +332,6 @@ func mean(sub []sample, mask uint32) color.RGBA {
 	return okLabToSRGB(s[0]*f, s[1]*f, s[2]*f)
 }
 
-// toLinear maps an sRGB channel to linear light.
 var toLinear = func() (t [256]float32) {
 	for i := range t {
 		v := float64(i) / 255

@@ -14,7 +14,6 @@ func TestRepeatedSyncOpenDoesNotExtendTheHold(t *testing.T) {
 	defer func() { _ = e.Close() }()
 	_, _ = e.Write([]byte("\x1b[?2026h"))
 	_, serial := e.SyncUpdate()
-	// Pretend the update opened longer ago than the limit.
 	e.syncSetAtNanos.Store(time.Now().Add(-2 * syncMaxHold).UnixNano())
 	_, _ = e.Write([]byte("\x1b[?2026h"))
 	if open, again := e.SyncUpdate(); open || again != serial {

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/treeview/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package treeview
 
 import (
@@ -26,8 +24,6 @@ const (
 	T_bareName
 )
 
-// charAt is src.charCodeAt(i) for the ASCII tests here: -1 past the end. A byte of a character
-// outside ASCII equals no ASCII character, so bytes stand for code units.
 func charAt(src string, i int) int {
 	if i < 0 || i >= len(src) {
 		return -1
@@ -52,8 +48,6 @@ func annotationAt(src string, at int) bool {
 	return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95
 }
 
-// The pattern looks ahead from every blank for an annotation, which rescans long runs of blanks.
-// This looks once per run.
 func matchBareName(src string, at int) int {
 	first := charAt(src, at)
 	if isBlank(first) || first == 10 || first == 13 || first == 34 || first == 39 {
@@ -85,7 +79,6 @@ func matchBareName(src string, at int) int {
 	return i
 }
 
-// blanksFrom is the end of /[ \t]+/ at p, or -1.
 func blanksFrom(src string, p int) int {
 	q := p
 	for isBlank(charAt(src, q)) {
@@ -97,10 +90,8 @@ func blanksFrom(src string, p int) int {
 	return q
 }
 
-// isWordOrDash is [\w-].
 func isWordOrDash(c int) bool { return c == '-' || (c >= 0 && util.IsWord(rune(c))) }
 
-// /[ \t]+:::[ \t]*[A-Za-z_][\w-]*/y
 func matchClassAnnotation(src string, p int) int {
 	q := blanksFrom(src, p)
 	if q < 0 || !strings.HasPrefix(src[q:], ":::") {
@@ -120,7 +111,6 @@ func matchClassAnnotation(src string, p int) int {
 	return q
 }
 
-// /[ \t]+icon\([\w-]*(?::[\w-]+)?\)/y
 func matchIconAnnotation(src string, p int) int {
 	q := blanksFrom(src, p)
 	if q < 0 || !strings.HasPrefix(src[q:], "icon(") {
@@ -142,7 +132,6 @@ func matchIconAnnotation(src string, p int) int {
 	return q + 1
 }
 
-// /[ \t]+##[^\n\r]*/y
 func matchDescAnnotation(src string, p int) int {
 	q := blanksFrom(src, p)
 	if q < 0 || !strings.HasPrefix(src[q:], "##") {
@@ -155,7 +144,6 @@ func matchDescAnnotation(src string, p int) int {
 	return q
 }
 
-// /"[^"]*"|'[^']*'/y
 func matchQuotedName(src string, p int) int {
 	quote := src[p]
 	if quote != '"' && quote != '\'' {
@@ -167,7 +155,6 @@ func matchQuotedName(src string, p int) int {
 	return -1
 }
 
-// /\%\%[^\n]*/y
 func matchComment(src string, p int) int {
 	if !strings.HasPrefix(src[p:], "%%") {
 		return -1
@@ -178,7 +165,6 @@ func matchComment(src string, p int) int {
 	return len(src)
 }
 
-// /\r?\n/y
 func matchNewline(src string, p int) int {
 	if src[p] == '\n' {
 		return p + 1
@@ -237,7 +223,6 @@ func trimBlanksEnd(text string) string {
 	return text[:end]
 }
 
-// Mermaid's TreeViewValueConverter, by terminal name, for the annotations.
 func convertValue(rule string, input string) string {
 	switch rule {
 	case "CLASS_ANNOTATION":
@@ -295,7 +280,6 @@ func parseTreeView(src string) *TreeViewAst {
 	return ast
 }
 
-// titleRest is the lookahead (?!%%)[^\n\r]: more of the line, not a comment.
 func titleRest(src string, q int) bool {
 	return q < len(src) && src[q] != '\n' && src[q] != '\r' && !strings.HasPrefix(src[q:], "%%")
 }

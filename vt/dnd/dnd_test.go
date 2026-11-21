@@ -10,13 +10,6 @@ import (
 	"tuios.dev/vt/dnd"
 )
 
-// The wire layer of the drag and drop protocol is checked the way the OSC
-// corpus is: against the exact bytes the real programs write. Each input
-// below is a sequence captured from yazi 26.9.1 or kitten 0.49.0 running in a
-// pty, or a reply kitty 0.49 writes (kitty/dnd.c), so a reader that passes
-// here reads what those programs send and a writer that passes here writes
-// what they read.
-
 func TestDnDParseRealSequences(t *testing.T) {
 	tests := []struct {
 		name string
@@ -24,7 +17,6 @@ func TestDnDParseRealSequences(t *testing.T) {
 		want dnd.Command
 	}{
 		{
-			// yazi, at startup.
 			name: "yazi offers drags",
 			body: "72;t=o:x=1;",
 			want: dnd.Command{Type: 'o', X: 1, Payload: []byte{}},
@@ -35,7 +27,6 @@ func TestDnDParseRealSequences(t *testing.T) {
 			want: dnd.Command{Type: 'a', Payload: []byte("text/uri-list")},
 		},
 		{
-			// The kitten writes m=0 even where it means nothing.
 			name: "kitten accepts drops",
 			body: "72;t=a:m=0;text/uri-list",
 			want: dnd.Command{Type: 'a', Payload: []byte("text/uri-list")},
@@ -51,7 +42,6 @@ func TestDnDParseRealSequences(t *testing.T) {
 			want: dnd.Command{Type: 'A', Payload: []byte{}},
 		},
 		{
-			// kitty, to a program it offered a drag to.
 			name: "kitty tells the program the drag gesture",
 			body: "72;t=o:x=3:y=4:X=31:Y=90",
 			want: dnd.Command{Type: 'o', X: 3, Y: 4, PX: 31, PY: 90, Payload: []byte{}},
@@ -62,7 +52,6 @@ func TestDnDParseRealSequences(t *testing.T) {
 			want: dnd.Command{Type: 'm', X: -1, Y: -1, Payload: []byte{}},
 		},
 		{
-			// The kitten's text drag image: base64 text, 6 by 1 units.
 			name: "kitten presents a text icon",
 			body: "72;t=p:x=-1:X=6:Y=1:m=0;8J+TgQ==",
 			want: dnd.Command{Type: 'p', X: -1, PX: 6, PY: 1, Payload: []byte("8J+TgQ==")},
@@ -73,7 +62,6 @@ func TestDnDParseRealSequences(t *testing.T) {
 			want: dnd.Command{Type: 'a', ID: 7, Payload: []byte("text/plain")},
 		},
 		{
-			// The kitten's chunks past the first carry only m.
 			name: "a continuation chunk has no type",
 			body: "72;m=1;AAAA",
 			want: dnd.Command{More: true, Payload: []byte("AAAA")},
@@ -84,14 +72,11 @@ func TestDnDParseRealSequences(t *testing.T) {
 			want: dnd.Command{Type: 'q', Payload: []byte{}},
 		},
 		{
-			// A key from a later version of the protocol is skipped, as kitty
-			// skips it, rather than the message refused.
 			name: "an unknown key is skipped",
 			body: "72;t=a:z=5;text/plain",
 			want: dnd.Command{Type: 'a', Payload: []byte("text/plain")},
 		},
 		{
-			// A payload may hold a semicolon; only the first two split.
 			name: "the payload keeps its semicolons",
 			body: "72;t=E;EINVAL:a;b",
 			want: dnd.Command{Type: 'E', Payload: []byte("EINVAL:a;b")},
@@ -215,7 +200,6 @@ func TestDnDAssemblerChains(t *testing.T) {
 		if got := feed(t, &a, bodies...); len(got) != 0 {
 			t.Errorf("got %d messages, want none", len(got))
 		}
-		// The next message is read as new.
 		if got := feed(t, &a, "72;t=A"); len(got) != 1 || got[0].Type != 'A' {
 			t.Errorf("after the dropped chain: got %+v", got)
 		}
@@ -261,8 +245,6 @@ func TestDnDEncodeKittyForm(t *testing.T) {
 			want: "\x1b]72;t=R:x=1:y=0:m=0;EPERM:cannot drop into self window\x1b\\",
 		},
 		{
-			// yazi reads t=e:x=4 only with its y, and t=e:x=1 only with its
-			// y, which is 0 for the first MIME type. kitty writes both.
 			name: "a finished drag carries y=0",
 			cmd:  dnd.Command{Type: 'e', X: 4},
 			want: "\x1b]72;t=e:x=4:y=0\x1b\\",
@@ -303,7 +285,7 @@ func TestDnDEncodeKittyForm(t *testing.T) {
 // assembler decodes to the data, which is the round trip yazi and the kitten
 // make.
 func TestDnDEncodeDataStream(t *testing.T) {
-	data := bytes.Repeat([]byte("0123456789abcdef"), 400) // 6400 bytes: three chunks
+	data := bytes.Repeat([]byte("0123456789abcdef"), 400)
 	out := dnd.EncodeData(dnd.Command{Type: 'r', X: 1}, data)
 	seqs := strings.Split(strings.TrimSuffix(string(out), "\x1b\\"), "\x1b\\")
 	if len(seqs) != 4 {

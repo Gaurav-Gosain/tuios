@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/eventmodeling/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package eventmodeling draws Mermaid's event modeling diagram: the frames of a system's
 // timeline as boxes in swimlanes, with the relations between them, notes and specifications.
 package eventmodeling

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/requirement/tokens.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package requirement
 
 // Token types.
@@ -131,8 +129,6 @@ var TOKEN_NAMES = [...]string{
 	"COMMA",
 }
 
-// keyword: every keyword is matched without regard to case and must end at a word boundary.
-// It is a switch rather than a map, which would allocate at init. lower is in lower case.
 func keyword(lower string) (int, bool) {
 	switch lower {
 	case "requirementdiagram":

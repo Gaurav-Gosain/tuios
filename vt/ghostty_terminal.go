@@ -34,110 +34,57 @@ type GhosttyTerminal struct {
 	scanner *ghosttyScanner
 	dec     ghosttyCellDecoder
 
-	// Cursor cache, refreshed by syncLocked.
 	curX, curY int
 	curHidden  bool
 
-	// The shape DECSCUSR asked for, observed by the scanner. libghostty's own
-	// CursorStyle() is the SGR pen, not this.
 	cursorStyle  CursorStyle
 	cursorSteady bool
 
-	// bufs shadow the two screens in uv cells; bufs[0] is main. active
-	// mirrors which one libghostty is drawing to. bufs[1] is nil until the
-	// guest first enters the alternate screen (see bufAt), so a pane that
-	// never runs a full-screen program does not carry a second grid of
-	// 112-byte cells.
-	bufs   [2]*grid
-	active int
-	// gridStale is set by Write and cleared by syncLocked.
+	bufs      [2]*grid
+	active    int
 	gridStale bool
 
-	width, height    int
-	cellW, cellH     int
-	scrollbackMax    int
-	scrollGeneration uint64 // bumped per write; invalidates scrollback cache
-	scrollCache      map[int]uv.Line
-	scrollCacheGen   uint64
-	// mainSbLen shadows the MAIN screen's history length; the library only
-	// reports the active screen's, and the alternate screen has none.
-	mainSbLen int
-	// modesDirty is set when the scanner sees a sequence that can change a
-	// mode refreshCachesLocked caches (SM/RM, DECSET/DECRST, DECSTR, RIS,
-	// XTRESTORE) or a restore runs; the caches are re-read only then. The
-	// scanner sees every CSI and ESC the library is given, so no other
-	// sequence reaches those modes.
-	modesDirty bool
-	// altHistory is a decoded snapshot switched to the main screen, for
-	// history line reads while the alternate screen is active.
-	altHistory    *gh.Terminal
-	altHistoryGen uint64
-	// pendingMainSbClear defers a ClearScrollback issued during the
-	// alternate screen until the main screen is next active, where ED 3
-	// can reach the primary history.
+	width, height      int
+	cellW, cellH       int
+	scrollbackMax      int
+	scrollGeneration   uint64
+	scrollCache        map[int]uv.Line
+	scrollCacheGen     uint64
+	mainSbLen          int
+	modesDirty         bool
+	altHistory         *gh.Terminal
+	altHistoryGen      uint64
 	pendingMainSbClear bool
 
-	// styleCache maps a libghostty style ID to its uv conversion. Reset
-	// when the theme changes, since conversion depends on the theme.
 	styleCache map[uint16]uv.Style
 
-	// Theme state, mirroring the pure emulator's resolution rules.
 	defaultFg, defaultBg, defaultCur color.Color
 	guestFg, guestBg, guestCur       color.Color
-	// reportFg and reportBg answer an OSC 10 or 11 query while the guest has
-	// not set its own colour. See SetReportColors.
-	reportFg, reportBg color.Color
-	// reportPal answers an OSC 4 query for a slot nothing else has set. See
-	// SetReportColors.
-	reportPal      [16]color.Color
-	themePal       [16]color.Color
-	paletteClaimed bool
-	// colors holds guest OSC 4 palette overrides, exactly as the pure
-	// emulator keeps them.
-	colors [256]color.Color
+	reportFg, reportBg               color.Color
+	reportPal                        [16]color.Color
+	themePal                         [16]color.Color
+	paletteClaimed                   bool
+	colors                           [256]color.Color
 
 	pipe *bufPipe
 
-	cb Callbacks
-	// cbq holds callback invocations queued while mu was held.
+	cb  Callbacks
 	cbq []func()
 
-	// Shadow state libghostty does not expose.
-	charsetIDs   [4]byte
-	gl, gr       int
-	scrollRegion uv.Rectangle
-	// savedCur is what DECSC saved on each screen, main first. The library
-	// keeps it where no query reaches, so the scanner reads the cursor as
-	// each save goes past (saveCursorShadowLocked).
-	savedCur [2]SavedCursor
-	// penProtected follows DECSCA on the pen, for savedCur. CursorProtected
-	// asks the library instead.
-	penProtected bool
-	// savedLRMM is the value XTSAVE (CSI ? 69 s) last saved for DECLRMM,
-	// which XTRESTORE (CSI ? 69 r) puts back. The library keeps its own
-	// copy. This one lets the margin copy follow a restore that turns the
-	// mode off, because the hook runs before the library has read the
-	// restore and cannot ask it for the result.
-	savedLRMM bool
-	kittyKbd  *kittyKeyboardState
-	// kkpUnavailable is set by DisableKittyKeyboardProtocol. See
-	// Emulator.DisableKittyKeyboardProtocol for why.
-	kkpUnavailable atomic.Bool
-	// tabstops follows the library's tab stops, which it keeps where no
-	// query reaches (observeTabControl).
-	tabstops *uv.TabStops
-	// iconName and titleStack are what OSC 0, OSC 1 and XTWINOPS 22 set. The
-	// library keeps neither (observeTitleStack). explicitIcon is the icon
-	// name as OSC 1 last set it (Callbacks.ExplicitIconName).
-	iconName     string
-	explicitIcon string
-	titleStack   []savedTitle
-	// modifyOtherKeys mirrors the XTMODKEYS level the guest set, for the
-	// input path. libghostty keeps its own copy for its key encoder, which
-	// tuios does not use.
+	charsetIDs      [4]byte
+	gl, gr          int
+	scrollRegion    uv.Rectangle
+	savedCur        [2]SavedCursor
+	penProtected    bool
+	savedLRMM       bool
+	kittyKbd        *kittyKeyboardState
+	kkpUnavailable  atomic.Bool
+	tabstops        *uv.TabStops
+	iconName        string
+	explicitIcon    string
+	titleStack      []savedTitle
 	modifyOtherKeys atomic.Int32
 
-	// Lock-free getter caches, refreshed after every write.
 	cachedHasMouse   atomic.Bool
 	cachedAllMotion  atomic.Bool
 	cachedCellMotion atomic.Bool
@@ -145,40 +92,29 @@ type GhosttyTerminal struct {
 	cachedMousePx    atomic.Bool
 	cachedMouseUTF8  atomic.Bool
 	cachedMouseURXVT atomic.Bool
-	cachedMouseX10   atomic.Bool // mode 9 alone: presses only
+	cachedMouseX10   atomic.Bool
 	cachedAltScreen  atomic.Bool
 	cachedSyncOutput atomic.Bool
 	syncSetAtNanos   atomic.Int64
 	syncOpens        atomic.Uint64
 	cachedKittyFlags atomic.Int32
 	closed           atomic.Bool
-	// restorePending makes the lock-free getters flush a buffered restore
-	// before answering, so state queried right after ApplyTerminalState is
-	// the restored state.
-	restorePending atomic.Bool
+	restorePending   atomic.Bool
 
-	// tuios graphics state, owned here exactly as the pure emulator owns it.
-	kittyMain, kittyAlt  *KittyState
-	semanticMarkers      *SemanticMarkerList
-	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
-	// kittyHeaderOnly: see Emulator.SetKittyHeaderOnly.
-	kittyHeaderOnly bool
-	// kittyImages: see Emulator.kittyImages.
-	kittyImages KittyGuestImages
-	// kittyImageIDTranslator rewrites the image id a placeholder cell names.
-	// See kitty_placeholder.go.
+	kittyMain, kittyAlt    *KittyState
+	semanticMarkers        *SemanticMarkerList
+	kittyPassthroughFunc   func(cmd *KittyCommand, rawData []byte)
+	kittyHeaderOnly        bool
+	kittyImages            KittyGuestImages
 	kittyImageIDTranslator KittyImageIDTranslator
-	// kittyPlaceholderMode decides whether placeholder cells survive the read.
-	kittyPlaceholderMode KittyPlaceholderMode
-	sixelPassthroughFunc SixelPassthroughFunc
-	sixelAdvertised      func() bool
-	textSizingFunc       func(rawOSC []byte, cursorX, cursorY, scale, textLen int)
+	kittyPlaceholderMode   KittyPlaceholderMode
+	sixelPassthroughFunc   SixelPassthroughFunc
+	sixelAdvertised        func() bool
+	textSizingFunc         func(rawOSC []byte, cursorX, cursorY, scale, textLen int)
 
 	restore *ghosttyRestore
 }
 
-// bufAt returns the shadow buffer for screen idx, making the alternate one on
-// first use. Callers hold mu.
 func (t *GhosttyTerminal) bufAt(idx int) *grid {
 	if t.bufs[idx] == nil {
 		t.bufs[idx] = newGrid(t.width, t.height)
@@ -188,13 +124,6 @@ func (t *GhosttyTerminal) bufAt(idx int) *grid {
 
 var _ Terminal = (*GhosttyTerminal)(nil)
 
-// ghosttyScrollbackRowBudget is the byte allowance per requested scrollback
-// line. libghostty keeps two limits and prunes at whichever is reached first.
-// Its default byte limit is 10 000 bytes, which is below one page, so with
-// only the line limit set a 207-column pane kept about 400 lines of the
-// 10 000 asked for and an 80-column one about 870. A row measures about 8
-// bytes a cell plus page overhead, so 4 KiB a line leaves the line limit as
-// the one that binds up to a few hundred columns.
 const ghosttyScrollbackRowBudget = 4096
 
 // NewGhosttyTerminal creates a libghostty-backed terminal with the default
@@ -233,7 +162,6 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 	}
 	t.savedCur = [2]SavedCursor{{Charsets: defaultCharsetIDs}, {Charsets: defaultCharsetIDs}}
 	t.bufs[0] = newGrid(w, h)
-	// bufs[1] is made by bufAt on the first switch to the alternate screen.
 	t.scrollRegion = uv.Rect(0, 0, w, h)
 	t.tabstops = uv.DefaultTabStops(w)
 	t.dec = newGhosttyCellDecoder()
@@ -242,23 +170,9 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		gh.WithSize(clampU16(w), clampU16(h)),
 		gh.WithMaxScrollbackLines(uint(t.scrollbackMax)),
 		gh.WithMaxScrollbackBytes(uint(t.scrollbackMax)*ghosttyScrollbackRowBudget),
-		// Grapheme clustering (DEC mode 2027) is on by default, and RIS
-		// restores it. The library's own default is off, which measures a
-		// ZWJ sequence, a flag or a base with VS16 one codepoint at a time:
-		// the family emoji takes eight columns in the grid. tuios re-emits
-		// the row as text, the host terminal clusters it into two, and the
-		// rest of the row and the pane border shift left. The pure emulator
-		// always clusters, and so does Ghostty itself by default. An app
-		// may still reset 2027 for itself.
 		gh.WithModeDefault(gh.ModeGraphemeCluster, true),
-		// The library keeps the start of a sequence or a character that
-		// has not ended, for PendingInput. The scanner withholds the long
-		// strings, so what the library keeps here is short.
 		gh.WithContinuationMaxBytes(uint(MaxPendingInput)),
 		gh.WithWritePty(func(_ *gh.Terminal, data []byte) {
-			// Query responses; the pipe write never blocks. libghostty
-			// answers CSI ? u itself, so the reply is dropped here when the
-			// protocol is off (see Emulator.DisableKittyKeyboardProtocol).
 			if t.kkpUnavailable.Load() {
 				data = dropKittyKeyboardReplies(data)
 				if len(data) == 0 {
@@ -308,12 +222,8 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 						cb.ClipboardSet(selection, data)
 					}
 				})
-				break // tuios's callback carries one payload per selection
+				break
 			}
-			// The reply is mandatory. libghostty denies a write that returns
-			// without one, so this must stay a success even when the host has
-			// no ClipboardSet callback: the guest already handed the payload
-			// over and a denial would report a failure that did not happen.
 			return gh.ClipboardWriteReply{Result: gh.ClipboardWriteSuccess}
 		}),
 		gh.WithDesktopNotification(func(_ *gh.Terminal, n gh.TerminalDesktopNotification) {
@@ -338,17 +248,7 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 				}
 			})
 		}),
-		// XTVERSION names tuios. The library's default, "libghostty", is the
-		// name of a terminal the pane is not in: yazi reads it as Ghostty and
-		// draws kitty graphics on a host that may only draw sixel. The text
-		// is the one the pure emulator sends, version included.
 		gh.WithXtversion(func(_ *gh.Terminal) string { return XTVersionName() }),
-		// XTWINOPS 14, 16 and 18 and the mode 2048 report are answered only
-		// when this is set: without it the library sends nothing, and a guest
-		// that waits for its pixel size waits for good. The size is the one
-		// the pure emulator answers with, from the host cell or the fallback
-		// cell (issue #506). The library calls this from inside a write or a
-		// resize, which hold t.mu, so the fields are read without it.
 		gh.WithSizeReport(func(_ *gh.Terminal) (gh.SizeReportSize, bool) {
 			cw, ch := cellSizeOr(t.cellW, t.cellH)
 			return gh.SizeReportSize{
@@ -363,15 +263,10 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 		}),
 	)
 	if err != nil {
-		// Construction fails only on allocation failure inside the C
-		// library; there is no meaningful degraded mode for the build that
-		// chose this backend.
 		panic("vt: libghostty terminal construction failed: " + err.Error())
 	}
 	t.term = term
 
-	// tuios owns kitty graphics end to end; storing decoded images in the C
-	// library would only duplicate memory.
 	var zero uint64
 	_ = t.term.SetKittyImageStorageLimit(&zero)
 
@@ -408,11 +303,8 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 }
 
 const (
-	// defaultCellWidth/Height match the pure emulator's assumptions until
-	// the host reports real pixel metrics via SetCellSize.
-	defaultCellWidth  = FallbackCellWidth
-	defaultCellHeight = FallbackCellHeight
-	// maxSemanticMarkers matches the pure emulator's marker list bound.
+	defaultCellWidth   = FallbackCellWidth
+	defaultCellHeight  = FallbackCellHeight
 	maxSemanticMarkers = 1000
 )
 
@@ -426,32 +318,23 @@ func clampU16(v int) uint16 {
 	return uint16(v)
 }
 
-// queue schedules a vt callback to run once mu is released.
 func (t *GhosttyTerminal) queue(f func(cb Callbacks)) {
 	cb := t.cb
 	t.cbq = append(t.cbq, func() { f(cb) })
 }
 
-// drain runs queued callbacks. Call with mu released.
 func (t *GhosttyTerminal) drain(q []func()) {
 	for _, f := range q {
 		f()
 	}
 }
 
-// takeQueue detaches the queued callbacks; call with mu held.
 func (t *GhosttyTerminal) takeQueue() []func() {
 	q := t.cbq
 	t.cbq = nil
 	return q
 }
 
-// forward hands scanner output to libghostty. The closed check covers a
-// Close that slipped in while a passthrough callback held the lock open.
-// Staleness is marked here rather than at the end of Write: scanner hooks
-// read cursor and grid state mid-chunk, right after the bytes preceding
-// their sequence were forwarded, and a kitty placement computed against the
-// previous sync's cursor lands wherever the last frame finished drawing.
 func (t *GhosttyTerminal) forward(p []byte) {
 	if t.closed.Load() {
 		return
@@ -538,23 +421,12 @@ func (t *GhosttyTerminal) Resize(width, height int) {
 		t.mu.Unlock()
 		return
 	}
-	// A resize to the size the terminal already is, is not a resize. Saying so
-	// here rather than at each caller is what makes it true everywhere: a
-	// resize resets the scroll region, so a caller that re-announces a size
-	// nothing changed drops the margins a full-screen program set, and every
-	// client of a session announces every pane's size for itself.
-	//
-	// A restore left pending is left pending: every other way into this
-	// terminal flushes it first, and the size it would be replayed at has not
-	// moved.
 	if width == t.width && height == t.height {
 		t.mu.Unlock()
 		return
 	}
 	t.flushRestoreLocked()
 	if width != t.width {
-		// The library puts the default tab stops back when the width
-		// changes, and only then.
 		t.tabstops = uv.DefaultTabStops(width)
 	}
 	t.width, t.height = width, height
@@ -563,13 +435,9 @@ func (t *GhosttyTerminal) Resize(width, height int) {
 	if t.bufs[1] != nil {
 		t.bufs[1].Resize(width, height)
 	}
-	// DECSTBM margins reset on resize, as on the pure emulator's screens.
 	t.scrollRegion = uv.Rect(0, 0, width, height)
 	t.gridStale = true
 	t.scrollGeneration++
-	// No cache refresh: a resize cannot flip a mode, and shared-border
-	// drags resize every crossing pane per motion event, so this path must
-	// not pay the query round-trips.
 	q := t.takeQueue()
 	t.mu.Unlock()
 	t.drain(q)
@@ -583,10 +451,6 @@ func (t *GhosttyTerminal) SetCellSize(width, height int) {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	// The same cell again is nothing. The library sends a 2048 report on
-	// every resize, and the daemon sets the cell on every pane resize and
-	// every attach, so passing it through sent a guest a report for a size
-	// it already had.
 	if t.closed.Load() || (width == t.cellW && height == t.cellH) {
 		return
 	}
@@ -629,11 +493,6 @@ func (t *GhosttyTerminal) SetScreenClearFunc(f func()) {
 	t.cb.ScreenClear = f
 }
 
-// refreshCachesLocked refreshes the atomic caches lock-free getters read.
-// Runs after every write. The 12 mode queries run only when modesDirty says a
-// sequence that can change a mode went by: each is a cgo call, and asking all
-// of them after every write was most of the cost of a small write (14 calls a
-// write, against 2 now). The history length is still read every time.
 func (t *GhosttyTerminal) refreshCachesLocked() {
 	if t.closed.Load() {
 		return
@@ -681,8 +540,6 @@ func (t *GhosttyTerminal) refreshCachesLocked() {
 	t.cachedKittyFlags.Store(int32(t.kittyKbd.CurrentFlags()))
 }
 
-// ensureRestored flushes a buffered restore so an atomic cache answers with
-// the restored state. The check is one atomic load on the common path.
 func (t *GhosttyTerminal) ensureRestored() {
 	if !t.restorePending.Load() {
 		return
@@ -740,8 +597,6 @@ func (t *GhosttyTerminal) SyncUpdate() (open bool, serial uint64) {
 	return t.IsSyncActive(), t.syncOpens.Load()
 }
 
-// noteSyncOutput records the guest's synchronized-output mode. An update
-// opened from reset takes a new serial and a new hold deadline.
 func (t *GhosttyTerminal) noteSyncOutput(sync bool) {
 	if sync && !t.cachedSyncOutput.Load() {
 		t.syncSetAtNanos.Store(time.Now().UnixNano())
@@ -788,8 +643,6 @@ func (t *GhosttyTerminal) DisableKittyKeyboardProtocol() {
 // KittyKeyboardUnavailable implements [Terminal.KittyKeyboardUnavailable].
 func (t *GhosttyTerminal) KittyKeyboardUnavailable() bool { return t.kkpUnavailable.Load() }
 
-// dropKittyKeyboardReplies removes every CSI ? <digits> u, the reply to a
-// kitty keyboard query, from a run of query responses.
 func dropKittyKeyboardReplies(data []byte) []byte {
 	out := data[:0:0]
 	for i := 0; i < len(data); {
@@ -803,8 +656,6 @@ func dropKittyKeyboardReplies(data []byte) []byte {
 	return out
 }
 
-// kittyKeyboardReplyEnd returns the end of a CSI ? <digits> u that starts
-// at i, or 0 if none does.
 func kittyKeyboardReplyEnd(data []byte, i int) int {
 	if i+3 >= len(data) || data[i] != 0x1b || data[i+1] != '[' || data[i+2] != '?' {
 		return 0
@@ -867,8 +718,6 @@ func (t *GhosttyTerminal) FocusReportingEnabled() bool {
 	return v
 }
 
-// ghosttyProgressState maps libghostty progress states onto the pure
-// emulator's OSC 9;4 states.
 func ghosttyProgressState(s gh.TerminalProgressState) (ProgressState, bool) {
 	switch s {
 	case gh.TerminalProgressStateRemove:
@@ -886,8 +735,6 @@ func ghosttyProgressState(s gh.TerminalProgressState) (ProgressState, bool) {
 	}
 }
 
-// ghosttyDeviceAttributes answers DA1 exactly as the pure emulator does. See
-// DeviceAttributes.
 func ghosttyDeviceAttributes(sixel bool) gh.DeviceAttributes {
 	var da gh.DeviceAttributes
 	features := DeviceAttributes(sixel)

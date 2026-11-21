@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/packet/index.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package packet draws Mermaid's packet diagram: the fields of a network packet as boxes
 // in rows of bits, with the bit numbers above them.
 package packet

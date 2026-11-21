@@ -10,9 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi/parser"
 )
 
-// randomSgrParams builds SGR parameter lists biased towards the colour forms:
-// 38, 48 and 58 followed by a colour type and components, with ';' and ':'
-// mixed at random and some parameters missing or out of range.
 func randomSgrParams(rng *rand.Rand) ansi.Params {
 	values := []int{38, 48, 58, 2, 2, 2, 5, 0, 1, 4, 7, 255, 256, 300, 17, parser.MissingParam}
 	params := make(ansi.Params, 1+rng.IntN(10))
@@ -56,12 +53,6 @@ func TestRGBParamsMatchReadStyleColor(t *testing.T) {
 	}
 }
 
-// sgrReadStyleDiffers reports whether params holds one of the two things
-// handleSgr deliberately reads differently from uv.ReadStyle: SGR 21, which
-// uv.ReadStyle drops and xterm reads as a double underline, and an underline
-// with a subparameter, where uv.ReadStyle reads an unknown style such as "4:7"
-// on as a bare SGR 7. The check is coarse, matching 21 anywhere in the list,
-// which only costs the comparison a few lists.
 func sgrReadStyleDiffers(params ansi.Params) bool {
 	for _, p := range params {
 		if p.Param(0) == 21 || (p.Param(0) == 4 && p.HasMore()) {
@@ -91,7 +82,6 @@ func TestHandleSgrMatchesReadStyle(t *testing.T) {
 		start := uv.Style{Fg: ansi.BasicColor(3), Bg: ansi.RGBColor{R: 0x10, G: 0x20, B: 0x30}, Attrs: uint8(rng.IntN(256))}
 		params := randomSgrParams(rng)
 		if rng.IntN(2) == 0 {
-			// The exact shape the shortcut takes, so it runs often.
 			params = ansi.Params{ansi.Param([]int{38, 48, 58}[rng.IntN(3)]), 2,
 				ansi.Param(rng.IntN(300)), ansi.Param(rng.IntN(300)), ansi.Param(rng.IntN(300))}
 			if rng.IntN(2) == 0 {

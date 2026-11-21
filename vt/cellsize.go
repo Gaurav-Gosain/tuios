@@ -14,8 +14,6 @@ const (
 	FallbackCellHeight = 20
 )
 
-// cellSizeOr returns w and h when both are positive, and the fallback cell
-// otherwise.
 func cellSizeOr(w, h int) (int, int) {
 	if w <= 0 || h <= 0 {
 		return FallbackCellWidth, FallbackCellHeight

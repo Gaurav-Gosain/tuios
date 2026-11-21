@@ -6,45 +6,17 @@ import (
 	"tuios.dev/shot/mosaic"
 )
 
-// Procedural geometry for the glyph ranges a font cannot be trusted with.
-// Terminals stretch box drawing to fill the whole cell; fonts do not, which
-// is why every serious terminal (kitty, alacritty, ghostty) draws these
-// ranges itself. The measured Go Mono coverage (box drawing 40/128, braille
-// 0/256, powerline 0/8) settles it for the raster backend, and the SVG
-// prototype showed the same seams from the other side. So both image
-// backends share this one geometry source: a glyph becomes a list of filled
-// paths in cell-local pixel coordinates, SVG serializes them, PNG feeds them
-// to the rasterizer, and the seams are unconstructible.
-//
-// The geometry is laid on the output's pixel grid, the way a terminal lays its
-// own box glyphs. Each cell is snapped to whole pixels, so two neighbours share
-// one edge exactly, and every straight stroke has a whole-pixel thickness and
-// whole-pixel edges, so it has no anti-aliased fringe. A line through a row of
-// cells is then one run of solid pixels with nothing at the joins. The pixel is
-// a device pixel for PNG, at whatever scale it is drawn, and a user unit for
-// SVG, which is a device pixel at any whole zoom.
-//
-// Covered: box drawing U+2500-257F, block elements U+2580-259F, braille
-// U+2800-28FF, powerline U+E0B0-E0B7.
-
-// A gop is one path operation. x1,y1 is the target point; quads use c1 as
-// control; cubes use c1 and c2.
 type gop struct {
-	op                       byte // 'M', 'L', 'Q', 'C', 'Z'
+	op                       byte
 	x, y, c1x, c1y, c2x, c2y float64
 }
 
-// A gpath is one filled subpath group with an optional opacity (0 means 1).
-// crisp marks an axis-aligned rectangle on whole pixels, which SVG draws
-// without anti-aliasing so that a viewer zoomed to a fraction does not open a
-// hairline between two cells that share an edge.
 type gpath struct {
 	ops     []gop
 	opacity float64
 	crisp   bool
 }
 
-// isProcedural reports whether r is drawn as geometry instead of font text.
 func isProcedural(r rune) bool {
 	switch {
 	case r >= 0x2500 && r <= 0x259F:
@@ -54,40 +26,21 @@ func isProcedural(r rune) bool {
 	case r >= 0xE0B0 && r <= 0xE0B7:
 		return true
 	case r >= 0x1CD00 && r <= 0x1FBFF:
-		// Sextants, octants and the quarter blocks beside them, which
-		// tuios draws a pane's image with on a host without graphics.
 		_, _, _, ok := mosaic.Shape(r)
 		return ok
 	case r == 0x21B5:
-		// The Enter key in tuios's own key hints. Go Mono, the embedded
-		// fallback, has no glyph for it, nor do common coding fonts, so a
-		// capture of an Inbox would otherwise show a box where the key is.
 		return true
 	}
 	return false
 }
 
-// proceduralPaths returns the filled paths for r in the cell whose top-left
-// corner is (x, y) and whose size is w by h, in the output's own coordinates:
-// device pixels for PNG, user units for SVG. The paths come back in those same
-// coordinates, snapped to the pixel grid as the note at the top of this file
-// says. ok is false when r is not in a covered range.
 func proceduralPaths(r rune, x, y, w, h float64) ([]gpath, bool) {
 	if !isProcedural(r) {
 		return nil, false
 	}
-	// The cell's own edges, on whole pixels. Rounding the absolute position of
-	// each edge, not the size, is what makes a cell's right edge the very pixel
-	// boundary its neighbour's left edge is: both are the same number rounded.
-	// It is also the rounding the PNG backend fills cell backgrounds with.
 	x0, y0 := math.Round(x), math.Round(y)
 	b := &glyphBuilder{w: math.Round(x+w) - x0, h: math.Round(y+h) - y0}
-	// Light stroke: about 1/14 of the cell height in whole pixels, never under
-	// one, so the weight tracks the font size the way a terminal's own box
-	// glyphs do and every stroke of a weight is the same width.
 	b.t = max(math.Round(b.h/14), 1)
-	// Double-line offset of each stroke's centre from the centreline, also
-	// whole pixels, and far enough apart that the two strokes never touch.
 	b.o = max(math.Round(b.t*1.6), 2)
 	switch {
 	case r >= 0x2500 && r <= 0x257F:
@@ -118,9 +71,9 @@ func proceduralPaths(r rune, x, y, w, h float64) ([]gpath, bool) {
 }
 
 type glyphBuilder struct {
-	w, h  float64 // cell size in px
-	t     float64 // light stroke thickness
-	o     float64 // double-line offset from center
+	w, h  float64
+	t     float64
+	o     float64
 	paths []gpath
 }
 
@@ -132,22 +85,6 @@ func (b *glyphBuilder) clampY(y float64) float64 {
 	return min(max(y, 0), b.h)
 }
 
-// rect appends an axis-aligned filled rectangle, clamped to the cell and with
-// every edge on a whole pixel.
-//
-// Every edge is rounded on its own, and that is enough to keep strokes even:
-// the strokes are whole pixels thick, so a stroke's two edges have the same
-// fractional part and round the same way, and so do the edges of two strokes
-// that are meant to meet. Where an edge lies on the cell's boundary it lands on
-// the boundary its neighbour's edge lands on, and the two fills abut with
-// nothing between them and nothing doubled.
-//
-// A half-pixel bleed past every cell edge a fill touches is not needed and is
-// wrong. It would close the seam between two cells at fractional positions,
-// but where it overlaps the neighbour's fill it draws the stroke's
-// anti-aliased fringe twice, which leaves a faint brighter nub beside the line
-// at every cell boundary, and past the end of a line it puts half a pixel of
-// ink in the next cell.
 func (b *glyphBuilder) rect(x0, y0, x1, y1 float64) {
 	x0, x1 = math.Round(b.clampX(x0)), math.Round(b.clampX(x1))
 	y0, y1 = math.Round(b.clampY(y0)), math.Round(b.clampY(y1))
@@ -163,25 +100,19 @@ func (b *glyphBuilder) rect(x0, y0, x1, y1 float64) {
 	}})
 }
 
-// opacityRect is rect with a fill opacity, for the shade blocks.
 func (b *glyphBuilder) opacityRect(x0, y0, x1, y1, opacity float64) {
 	b.rect(x0, y0, x1, y1)
 	b.paths[len(b.paths)-1].opacity = opacity
 }
 
-// hseg draws a horizontal stroke segment centered on y, spanning x0..x1
-// between stroke centerlines, extended by half a thickness at each end so
-// meeting strokes form clean corners.
 func (b *glyphBuilder) hseg(y, x0, x1, t float64) {
 	b.rect(x0-t/2, y-t/2, x1+t/2, y+t/2)
 }
 
-// vseg is hseg turned vertical.
 func (b *glyphBuilder) vseg(x, y0, y1, t float64) {
 	b.rect(x-t/2, y0-t/2, x+t/2, y1+t/2)
 }
 
-// poly appends a filled polygon.
 func (b *glyphBuilder) poly(pts ...[2]float64) {
 	if len(pts) < 3 {
 		return
@@ -194,10 +125,8 @@ func (b *glyphBuilder) poly(pts ...[2]float64) {
 	b.paths = append(b.paths, gpath{ops: ops})
 }
 
-// kappa approximates a quarter circle with one cubic.
 const kappa = 0.5522847498
 
-// dot appends a filled circle from four cubics.
 func (b *glyphBuilder) dot(cx, cy, r float64) {
 	k := r * kappa
 	b.paths = append(b.paths, gpath{ops: []gop{
@@ -210,15 +139,12 @@ func (b *glyphBuilder) dot(cx, cy, r float64) {
 	}})
 }
 
-// Arm weights for the single-weight box range.
 const (
 	armNone  = 0
 	armLight = 1
 	armHeavy = 2
 )
 
-// boxArms maps U+2500..U+254B and U+2574..U+257F to left,right,up,down arm
-// weights. Dashed and double variants are handled separately.
 var boxArms = map[rune][4]uint8{
 	0x2500: {1, 1, 0, 0}, 0x2501: {2, 2, 0, 0}, 0x2502: {0, 0, 1, 1}, 0x2503: {0, 0, 2, 2},
 	0x250C: {0, 1, 0, 1}, 0x250D: {0, 2, 0, 1}, 0x250E: {0, 1, 0, 2}, 0x250F: {0, 2, 0, 2},
@@ -249,15 +175,12 @@ func (b *glyphBuilder) armThickness(weight uint8) float64 {
 	return b.t
 }
 
-// drawArms renders a left/right/up/down arm combination in light and heavy
-// weights. Each arm runs from its cell edge to the center, overreaching by
-// half the thickest perpendicular stroke so junctions have no notch.
 func (b *glyphBuilder) drawArms(arms [4]uint8) {
 	cx, cy := b.w/2, b.h/2
 	l, r, u, d := arms[0], arms[1], arms[2], arms[3]
 	hMax := b.armThickness(max(l, r))
 	vMax := b.armThickness(max(u, d))
-	overH := 0.0 // how far horizontal arms reach past center
+	overH := 0.0
 	if u != armNone || d != armNone {
 		overH = vMax / 2
 	}
@@ -265,11 +188,6 @@ func (b *glyphBuilder) drawArms(arms [4]uint8) {
 	if l != armNone || r != armNone {
 		overV = hMax / 2
 	}
-	// Two arms of one weight on one axis are one stroke, drawn as one rect.
-	// Drawn as two that meet at the centre, each anti-aliases its own end, and
-	// where the centre falls between pixels the two partial pixels composite
-	// to less than full ink: a straight border came out with a faint notch in
-	// the middle of every cell.
 	switch {
 	case l != armNone && l == r:
 		t := b.armThickness(l)
@@ -300,7 +218,6 @@ func (b *glyphBuilder) drawArms(arms [4]uint8) {
 	}
 }
 
-// dashes renders an n-dash horizontal or vertical line in weight w.
 func (b *glyphBuilder) dashes(n int, vertical bool, weight uint8) {
 	t := b.armThickness(weight)
 	span := b.w
@@ -320,22 +237,12 @@ func (b *glyphBuilder) dashes(n int, vertical bool, weight uint8) {
 	}
 }
 
-// arcCorner renders one of the light rounded corners U+256D..U+2570.
-// dx,dy say which edges the arms leave through: dx=+1 right, -1 left;
-// dy=+1 down, -1 up.
-//
-// The straight legs are the pixels a straight line through the cell is, and
-// the elbow is built on the snapped centre with a radius that puts the legs'
-// inner ends on whole pixels, so the curve meets each leg on a pixel boundary
-// rather than half a pixel inside one.
 func (b *glyphBuilder) arcCorner(dx, dy float64) {
 	t := b.t
-	// The centre of the stroke rect draws for a line at w/2 and h/2.
 	cx := math.Round(b.w/2-t/2) + t/2
 	cy := math.Round(b.h/2-t/2) + t/2
-	frac := cx - math.Floor(cx) // cy has the same one: both are whole plus t/2
+	frac := cx - math.Floor(cx)
 	rr := math.Round(min(b.w/2, b.h/2)*0.75+frac) - frac
-	// Straight legs from the edges up to where the arc begins.
 	if dx > 0 {
 		b.rect(cx+rr, cy-t/2, b.w, cy+t/2)
 	} else {
@@ -346,16 +253,13 @@ func (b *glyphBuilder) arcCorner(dx, dy float64) {
 	} else {
 		b.rect(cx-t/2, 0, cx+t/2, cy-rr)
 	}
-	// The quarter-circle elbow as an outline: the outer arc out, the inner
-	// arc back, each one cubic about the center of curvature at
-	// (cx+dx*rr, cy+dy*rr).
 	ro, ri := rr+t/2, rr-t/2
 	ax, ay := cx+dx*rr, cy+dy*rr
 	k := kappa
-	p0x, p0y := ax, ay-dy*ro // outer edge, vertical-arm side
-	p1x, p1y := ax-dx*ro, ay // outer edge, horizontal-arm side
-	q0x, q0y := ax, ay-dy*ri // inner edge, vertical-arm side
-	q1x, q1y := ax-dx*ri, ay // inner edge, horizontal-arm side
+	p0x, p0y := ax, ay-dy*ro
+	p1x, p1y := ax-dx*ro, ay
+	q0x, q0y := ax, ay-dy*ri
+	q1x, q1y := ax-dx*ri, ay
 	b.paths = append(b.paths, gpath{ops: []gop{
 		{op: 'M', x: p1x, y: p1y},
 		{op: 'C', c1x: p1x, c1y: p1y - dy*k*ro, c2x: p0x - dx*k*ro, c2y: p0y, x: p0x, y: p0y},
@@ -365,7 +269,6 @@ func (b *glyphBuilder) arcCorner(dx, dy float64) {
 	}})
 }
 
-// diagonal renders a stroked diagonal from (x0,y0) to (x1,y1).
 func (b *glyphBuilder) diagonal(x0, y0, x1, y1 float64) {
 	dx, dy := x1-x0, y1-y0
 	l := math.Hypot(dx, dy)
@@ -411,129 +314,129 @@ func (b *glyphBuilder) boxDrawing(r rune) {
 		b.dashes(2, true, armLight)
 	case 0x254F:
 		b.dashes(2, true, armHeavy)
-	case 0x2550: // ═
+	case 0x2550:
 		H(cy-o, 0, b.w)
 		H(cy+o, 0, b.w)
-	case 0x2551: // ║
+	case 0x2551:
 		V(cx-o, 0, b.h)
 		V(cx+o, 0, b.h)
-	case 0x2552: // ╒
+	case 0x2552:
 		H(cy-o, cx, b.w)
 		H(cy+o, cx, b.w)
 		V(cx, cy-o, b.h)
-	case 0x2553: // ╓
+	case 0x2553:
 		V(cx-o, cy, b.h)
 		V(cx+o, cy, b.h)
 		H(cy, cx-o, b.w)
-	case 0x2554: // ╔
+	case 0x2554:
 		H(cy-o, cx-o, b.w)
 		H(cy+o, cx+o, b.w)
 		V(cx-o, cy-o, b.h)
 		V(cx+o, cy+o, b.h)
-	case 0x2555: // ╕
+	case 0x2555:
 		H(cy-o, 0, cx)
 		H(cy+o, 0, cx)
 		V(cx, cy-o, b.h)
-	case 0x2556: // ╖
+	case 0x2556:
 		V(cx-o, cy, b.h)
 		V(cx+o, cy, b.h)
 		H(cy, 0, cx+o)
-	case 0x2557: // ╗
+	case 0x2557:
 		H(cy-o, 0, cx+o)
 		H(cy+o, 0, cx-o)
 		V(cx+o, cy-o, b.h)
 		V(cx-o, cy+o, b.h)
-	case 0x2558: // ╘
+	case 0x2558:
 		H(cy-o, cx, b.w)
 		H(cy+o, cx, b.w)
 		V(cx, 0, cy+o)
-	case 0x2559: // ╙
+	case 0x2559:
 		V(cx-o, 0, cy)
 		V(cx+o, 0, cy)
 		H(cy, cx-o, b.w)
-	case 0x255A: // ╚
+	case 0x255A:
 		V(cx-o, 0, cy+o)
 		V(cx+o, 0, cy-o)
 		H(cy-o, cx+o, b.w)
 		H(cy+o, cx-o, b.w)
-	case 0x255B: // ╛
+	case 0x255B:
 		H(cy-o, 0, cx)
 		H(cy+o, 0, cx)
 		V(cx, 0, cy+o)
-	case 0x255C: // ╜
+	case 0x255C:
 		V(cx-o, 0, cy)
 		V(cx+o, 0, cy)
 		H(cy, 0, cx+o)
-	case 0x255D: // ╝
+	case 0x255D:
 		V(cx+o, 0, cy+o)
 		V(cx-o, 0, cy-o)
 		H(cy-o, 0, cx-o)
 		H(cy+o, 0, cx+o)
-	case 0x255E: // ╞
+	case 0x255E:
 		V(cx, 0, b.h)
 		H(cy-o, cx, b.w)
 		H(cy+o, cx, b.w)
-	case 0x255F: // ╟
+	case 0x255F:
 		V(cx-o, 0, b.h)
 		V(cx+o, 0, b.h)
 		H(cy, cx+o, b.w)
-	case 0x2560: // ╠
+	case 0x2560:
 		V(cx-o, 0, b.h)
 		V(cx+o, 0, cy-o)
 		V(cx+o, cy+o, b.h)
 		H(cy-o, cx+o, b.w)
 		H(cy+o, cx+o, b.w)
-	case 0x2561: // ╡
+	case 0x2561:
 		V(cx, 0, b.h)
 		H(cy-o, 0, cx)
 		H(cy+o, 0, cx)
-	case 0x2562: // ╢
+	case 0x2562:
 		V(cx-o, 0, b.h)
 		V(cx+o, 0, b.h)
 		H(cy, 0, cx-o)
-	case 0x2563: // ╣
+	case 0x2563:
 		V(cx+o, 0, b.h)
 		V(cx-o, 0, cy-o)
 		V(cx-o, cy+o, b.h)
 		H(cy-o, 0, cx-o)
 		H(cy+o, 0, cx-o)
-	case 0x2564: // ╤
+	case 0x2564:
 		H(cy-o, 0, b.w)
 		H(cy+o, 0, b.w)
 		V(cx, cy+o, b.h)
-	case 0x2565: // ╥
+	case 0x2565:
 		H(cy, 0, b.w)
 		V(cx-o, cy, b.h)
 		V(cx+o, cy, b.h)
-	case 0x2566: // ╦
+	case 0x2566:
 		H(cy-o, 0, b.w)
 		H(cy+o, 0, cx-o)
 		H(cy+o, cx+o, b.w)
 		V(cx-o, cy+o, b.h)
 		V(cx+o, cy+o, b.h)
-	case 0x2567: // ╧
+	case 0x2567:
 		V(cx, 0, cy-o)
 		H(cy-o, 0, b.w)
 		H(cy+o, 0, b.w)
-	case 0x2568: // ╨
+	case 0x2568:
 		H(cy, 0, b.w)
 		V(cx-o, 0, cy)
 		V(cx+o, 0, cy)
-	case 0x2569: // ╩
+	case 0x2569:
 		H(cy+o, 0, b.w)
 		H(cy-o, 0, cx-o)
 		H(cy-o, cx+o, b.w)
 		V(cx-o, 0, cy-o)
 		V(cx+o, 0, cy-o)
-	case 0x256A: // ╪
+	case 0x256A:
 		V(cx, 0, b.h)
 		H(cy-o, 0, b.w)
 		H(cy+o, 0, b.w)
-	case 0x256B: // ╫
+	case 0x256B:
 		H(cy, 0, b.w)
 		V(cx-o, 0, b.h)
 		V(cx+o, 0, b.h)
-	case 0x256C: // ╬
+	case 0x256C:
 		V(cx-o, 0, cy-o)
 		V(cx-o, cy+o, b.h)
 		V(cx+o, 0, cy-o)
@@ -542,25 +445,24 @@ func (b *glyphBuilder) boxDrawing(r rune) {
 		H(cy-o, cx+o, b.w)
 		H(cy+o, 0, cx-o)
 		H(cy+o, cx+o, b.w)
-	case 0x256D: // ╭ arcs down+right
+	case 0x256D:
 		b.arcCorner(1, 1)
-	case 0x256E: // ╮ down+left
+	case 0x256E:
 		b.arcCorner(-1, 1)
-	case 0x256F: // ╯ up+left
+	case 0x256F:
 		b.arcCorner(-1, -1)
-	case 0x2570: // ╰ up+right
+	case 0x2570:
 		b.arcCorner(1, -1)
-	case 0x2571: // ╱
+	case 0x2571:
 		b.diagonal(0, b.h, b.w, 0)
-	case 0x2572: // ╲
+	case 0x2572:
 		b.diagonal(0, 0, b.w, b.h)
-	case 0x2573: // ╳
+	case 0x2573:
 		b.diagonal(0, b.h, b.w, 0)
 		b.diagonal(0, 0, b.w, b.h)
 	}
 }
 
-// quadrant bits for U+2596..U+259F.
 const (
 	qUL = 1 << iota
 	qUR
@@ -578,15 +480,15 @@ var quadrants = map[rune]uint8{
 func (b *glyphBuilder) blockElement(r rune) {
 	w, h := b.w, b.h
 	switch {
-	case r == 0x2580: // ▀ upper half
+	case r == 0x2580:
 		b.rect(0, 0, w, h/2)
-	case r >= 0x2581 && r <= 0x2588: // ▁..█ lower eighths
+	case r >= 0x2581 && r <= 0x2588:
 		k := float64(r - 0x2580)
 		b.rect(0, h*(8-k)/8, w, h)
-	case r >= 0x2589 && r <= 0x258F: // ▉..▏ left eighths, 7/8 down to 1/8
+	case r >= 0x2589 && r <= 0x258F:
 		k := float64(0x2590 - r)
 		b.rect(0, 0, w*k/8, h)
-	case r == 0x2590: // ▐ right half
+	case r == 0x2590:
 		b.rect(w/2, 0, w, h)
 	case r == 0x2591:
 		b.opacityRect(0, 0, w, h, 0.25)
@@ -594,9 +496,9 @@ func (b *glyphBuilder) blockElement(r rune) {
 		b.opacityRect(0, 0, w, h, 0.5)
 	case r == 0x2593:
 		b.opacityRect(0, 0, w, h, 0.75)
-	case r == 0x2594: // ▔ upper eighth
+	case r == 0x2594:
 		b.rect(0, 0, w, h/8)
-	case r == 0x2595: // ▕ right eighth
+	case r == 0x2595:
 		b.rect(w*7/8, 0, w, h)
 	default:
 		q := quadrants[r]
@@ -615,9 +517,6 @@ func (b *glyphBuilder) blockElement(r rune) {
 	}
 }
 
-// mosaicBlock fills the sub-cells of a sextant or octant glyph. Each edge is
-// rounded to a whole pixel from its absolute position, so the sub-cells of
-// one glyph tile the cell with no gap and no overlap.
 func (b *glyphBuilder) mosaicBlock(r rune) {
 	gx, gy, mask, ok := mosaic.Shape(r)
 	if !ok {
@@ -635,8 +534,6 @@ func (b *glyphBuilder) mosaicBlock(r rune) {
 
 func (b *glyphBuilder) braille(r rune) {
 	bits := uint8(r - 0x2800)
-	// Dot layout: bits 0..2 left column rows 0..2, bits 3..5 right column
-	// rows 0..2, bit 6 left row 3, bit 7 right row 3.
 	radius := min(b.w/4.5, b.h/9)
 	if radius < 0.75 {
 		radius = 0.75
@@ -668,32 +565,29 @@ func (b *glyphBuilder) braille(r rune) {
 
 func (b *glyphBuilder) powerline(r rune) {
 	w, h := b.w, b.h
-	t := b.t * 1.4 // powerline chevrons read better slightly heavier
+	t := b.t * 1.4
 	switch r {
-	case 0xE0B0: // solid right-pointing triangle
+	case 0xE0B0:
 		b.poly([2]float64{0, 0}, [2]float64{w, h / 2}, [2]float64{0, h})
-	case 0xE0B1: // right chevron stroke
+	case 0xE0B1:
 		b.diagonalT(0, 0, w, h/2, t)
 		b.diagonalT(w, h/2, 0, h, t)
-	case 0xE0B2: // solid left-pointing triangle
+	case 0xE0B2:
 		b.poly([2]float64{w, 0}, [2]float64{0, h / 2}, [2]float64{w, h})
-	case 0xE0B3: // left chevron stroke
+	case 0xE0B3:
 		b.diagonalT(w, 0, 0, h/2, t)
 		b.diagonalT(0, h/2, w, h, t)
-	case 0xE0B4: // solid right half-ellipse
+	case 0xE0B4:
 		b.halfEllipse(1, false)
-	case 0xE0B5: // right half-ellipse stroke
+	case 0xE0B5:
 		b.halfEllipse(1, true)
-	case 0xE0B6: // solid left half-ellipse
+	case 0xE0B6:
 		b.halfEllipse(-1, false)
-	case 0xE0B7: // left half-ellipse stroke
+	case 0xE0B7:
 		b.halfEllipse(-1, true)
 	}
 }
 
-// returnArrow draws U+21B5, a downward stem on the right that turns left
-// into an arrowhead, sized like a lowercase letter so it sits on the text's
-// line.
 func (b *glyphBuilder) returnArrow() {
 	w, h := b.w, b.h
 	t := max(h/12, 1)
@@ -704,7 +598,6 @@ func (b *glyphBuilder) returnArrow() {
 	b.poly([2]float64{w * 0.1, y}, [2]float64{w * 0.4, y - head}, [2]float64{w * 0.4, y + head})
 }
 
-// diagonalT is diagonal with an explicit thickness.
 func (b *glyphBuilder) diagonalT(x0, y0, x1, y1, t float64) {
 	saved := b.t
 	b.t = t
@@ -712,8 +605,6 @@ func (b *glyphBuilder) diagonalT(x0, y0, x1, y1, t float64) {
 	b.t = saved
 }
 
-// halfEllipse draws the powerline round cap: dir=+1 bulges right from the
-// left edge, dir=-1 bulges left from the right edge.
 func (b *glyphBuilder) halfEllipse(dir float64, stroke bool) {
 	h := b.h
 	edge := 0.0
@@ -723,8 +614,6 @@ func (b *glyphBuilder) halfEllipse(dir float64, stroke bool) {
 	rx := b.w
 	ry := h / 2
 	arc := func(rxx, ryy float64, reverse bool) []gop {
-		// Half ellipse from (edge, cy-ryy) around apex (edge+dir*rxx, cy)
-		// to (edge, cy+ryy), as two cubics.
 		cy := h / 2
 		k := kappa
 		p0 := [2]float64{edge, cy - ryy}
@@ -753,8 +642,6 @@ func (b *glyphBuilder) halfEllipse(dir float64, stroke bool) {
 	t := b.t * 1.4
 	outer := arc(rx, ry, false)
 	inner := arc(rx-t, ry-t, true)
-	// Join outer forward and inner backward into one ring; nonzero winding
-	// with opposite directions leaves the stroke.
 	inner[0].op = 'L'
 	ops := append(outer, inner...)
 	ops = append(ops, gop{op: 'Z'})

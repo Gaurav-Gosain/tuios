@@ -80,13 +80,8 @@ type manifest struct {
 
 var stateMap = map[string]string{"blocked": "needs_input", "working": "working", "idle": "idle"}
 
-// wholeRecentLines approximates herdr's whole_recent region, which is the
-// whole visible screen. tuios reads a fixed tail; eight lines is the window the
-// hand-written manifests settled on for prompt-shaped chrome.
 const wholeRecentLines = 8
 
-// tailRegions are herdr's screen regions tuios reads the same way, mapped to
-// the name the draft writes.
 var tailRegions = map[string]string{
 	"":                                "",
 	"whole_recent":                    "",
@@ -96,8 +91,6 @@ var tailRegions = map[string]string{
 	"after_last_horizontal_rule":      "after_last_horizontal_rule",
 }
 
-// result is a converted manifest: the draft, and one line per rule saying
-// what happened to it.
 type result struct {
 	draft          string
 	report         []string
@@ -126,7 +119,6 @@ func main() {
 	}
 }
 
-// convert turns one herdr manifest into a tuios draft.
 func convert(data []byte) (result, error) {
 	var m manifest
 	if err := toml.Unmarshal(data, &m); err != nil {
@@ -204,8 +196,6 @@ func convert(data []byte) (result, error) {
 	return res, nil
 }
 
-// place says which block a rule goes to, the region it reads there, and the
-// tail window it needs, or why it cannot be carried.
 func place(r rule) (block, region string, window int, dropReason string) {
 	if stateMap[r.State] == "" {
 		return "", "", 0, fmt.Sprintf("state %q has no tuios equivalent", r.State)
@@ -230,8 +220,6 @@ func place(r rule) (block, region string, window int, dropReason string) {
 	return "", "", 0, fmt.Sprintf("region %q has no tuios equivalent", name)
 }
 
-// checkGate reports why a gate cannot be carried: an untranslatable pattern,
-// or no positive predicate at the top.
 func checkGate(g gate) string {
 	if len(g.Contains)+len(g.Regex)+len(g.LineRegex)+len(g.All)+len(g.Any) == 0 {
 		return "no positive predicate"
@@ -253,8 +241,6 @@ func checkGate(g gate) string {
 	return walk(g)
 }
 
-// provesShape mirrors the loader's idle rule check: a pattern on every path to
-// a match.
 func provesShape(g gate) bool {
 	if len(g.Regex)+len(g.LineRegex) > 0 {
 		return true
@@ -273,7 +259,6 @@ func provesShape(g gate) bool {
 	return true
 }
 
-// writeGate writes a rule's gate as top-level keys.
 func writeGate(w *strings.Builder, g gate) {
 	for _, kv := range gateFields(g) {
 		key := kv[0]
@@ -286,7 +271,6 @@ func writeGate(w *strings.Builder, g gate) {
 	}
 }
 
-// gateFields renders a gate as key and value pairs, the value already TOML.
 func gateFields(g gate) [][2]string {
 	var out [][2]string
 	add := func(key string, items []string) {
@@ -296,7 +280,6 @@ func gateFields(g gate) [][2]string {
 	}
 	add("all", g.Contains)
 
-	// An any group of lone substrings is a flat any list; richer groups nest.
 	var anySingles []string
 	var anyRich []gate
 	for _, sub := range g.Any {
@@ -312,7 +295,6 @@ func gateFields(g gate) [][2]string {
 		anyRich = append([]gate{{Contains: nil, Any: singlesAsGates(anySingles)}}, anyRich...)
 	}
 
-	// A not group of one substring or one pattern is a flat veto.
 	var notStr, notRegex []string
 	var noneOf []gate
 	for _, sub := range g.Not {
@@ -364,7 +346,6 @@ func lonePattern(g gate) (string, bool) {
 	return "", false
 }
 
-// inlineGates renders nested gates as a TOML array of inline tables.
 func inlineGates(gates []gate) string {
 	parts := make([]string, len(gates))
 	for i, g := range gates {
@@ -383,16 +364,13 @@ func translated(patterns []string) []string {
 	for _, p := range patterns {
 		q, err := translatePattern(p)
 		if err != nil {
-			continue // checkGate refused the rule already
+			continue
 		}
 		out = append(out, q)
 	}
 	return out
 }
 
-// tomlStrings renders strings as a TOML array. Literal strings keep patterns
-// readable; a string holding a single quote or a control character falls back
-// to a basic string.
 func tomlStrings(items []string) string {
 	quoted := make([]string, len(items))
 	for i, s := range items {
@@ -410,9 +388,6 @@ var (
 	bareEscape   = regexp.MustCompile(`\\u([0-9a-fA-F]{4})`)
 )
 
-// translatePattern rewrites a Rust-regex pattern into RE2 and proves it
-// compiles the way the loader will compile it. An untranslatable pattern drops
-// its whole rule: shipping the rule without a required pattern would loosen it.
 func translatePattern(p string) (string, error) {
 	q := bracedEscape.ReplaceAllString(p, `\x{$1}`)
 	q = bareEscape.ReplaceAllString(q, `\x{$1}`)

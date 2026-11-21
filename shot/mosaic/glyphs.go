@@ -1,15 +1,5 @@
 package mosaic
 
-// Glyph tables: the rune for every foreground shape a kind can draw.
-//
-// A shape is a bit mask over the kind's sub-pixels, row by row from the top
-// left: for an octant bit 0 is the top-left eighth, bit 1 the top-right, bit
-// 2 the left of the second row, and so on to bit 7, the bottom-right. Unicode
-// numbers sextant and octant cells the same way (BLOCK OCTANT-1 is bit 0), and
-// assigns the code points of each block in increasing mask order, skipping the
-// shapes that an older character already draws. The tables are built from
-// that rule rather than written out.
-
 var (
 	halfGlyphs     = []rune{' ', '▀', '▄', '█'}
 	quadrantGlyphs = []rune{
@@ -20,7 +10,6 @@ var (
 	octantGlyphs  = buildOctants()
 )
 
-// glyphStrings is glyphTable as strings, built once per kind.
 func glyphStrings(k Kind) []string {
 	if int(k) >= len(glyphStringTables) {
 		return nil
@@ -51,8 +40,6 @@ func glyphTable(k Kind) []rune {
 	return nil
 }
 
-// buildSextants: U+1FB00..U+1FB3B are the 60 shapes of a 2x3 cell other than
-// empty, full, the left half (cells 1, 3, 5) and the right half (2, 4, 6).
 func buildSextants() []rune {
 	t := make([]rune, 64)
 	t[0], t[63] = ' ', '█'
@@ -68,27 +55,23 @@ func buildSextants() []rune {
 	return t
 }
 
-// buildOctants: U+1CD00..U+1CDE5 are the 230 shapes of a 2x4 cell that no
-// earlier character draws. The other 26 are below.
 func buildOctants() []rune {
 	t := make([]rune, 256)
 	for m, r := range map[int]rune{
 		0x00: ' ', 0xFF: '█',
-		// Quadrants: each is two octants stacked.
 		0x05: '▘', 0x0A: '▝', 0x0F: '▀', 0x50: '▖', 0x55: '▌', 0x5A: '▞',
 		0x5F: '▛', 0xA0: '▗', 0xA5: '▚', 0xAA: '▐', 0xAF: '▜', 0xF0: '▄',
 		0xF5: '▙', 0xFA: '▟',
-		// Quarter blocks.
-		0x03: '\U0001FB82', // upper one quarter
-		0xC0: '▂',          // lower one quarter
-		0x3F: '\U0001FB85', // upper three quarters
-		0xFC: '▆',          // lower three quarters
-		0x14: '\U0001FBE6', // middle left one quarter
-		0x28: '\U0001FBE7', // middle right one quarter
-		0x01: '\U0001CEA8', // left half upper one quarter
-		0x02: '\U0001CEAB', // right half upper one quarter
-		0x40: '\U0001CEA3', // left half lower one quarter
-		0x80: '\U0001CEA0', // right half lower one quarter
+		0x03: '\U0001FB82',
+		0xC0: '▂',
+		0x3F: '\U0001FB85',
+		0xFC: '▆',
+		0x14: '\U0001FBE6',
+		0x28: '\U0001FBE7',
+		0x01: '\U0001CEA8',
+		0x02: '\U0001CEAB',
+		0x40: '\U0001CEA3',
+		0x80: '\U0001CEA0',
 	} {
 		t[m] = r
 	}

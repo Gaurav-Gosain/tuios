@@ -70,12 +70,6 @@ func TestBundledScreenRulesPolicy(t *testing.T) {
 	}
 }
 
-// corroborated reports whether a gate needs more than one loose substring to
-// match. A pattern counts on its own: it pins the structure of a rendered line,
-// which is harder to meet by accident than any one substring. An all[] string
-// counts, as it always has, because it is a named phrase the screen must carry
-// rather than one of several accepted. A nested group counts when every path
-// through it does.
 func corroborated(g *Gate) bool {
 	if len(g.Regex) > 0 || len(g.All) > 0 || len(g.Any) >= 2 {
 		return true
@@ -149,7 +143,6 @@ comm = ["finetool"]
 			t.Errorf("errors do not mention %q:\n%s", want, joined.String())
 		}
 	}
-	// The good file in the same directory still loaded.
 	if r.Lookup("fine") == nil {
 		t.Error("a valid manifest was lost because a sibling was broken")
 	}
@@ -193,8 +186,6 @@ func TestBundledArchiveMatchesFiles(t *testing.T) {
 		}
 	}
 
-	// The name table holds each id, then each alias not already taken, from
-	// the same files (the rule gen.go writes it by).
 	type entry = struct{ name, id string }
 	var ids, aliases []entry
 	for _, p := range paths {

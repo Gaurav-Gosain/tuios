@@ -22,8 +22,6 @@ func TestFrames(t *testing.T) {
 	cases := append(loadCases(t, "testdata/examples-golden"), loadCases(t, "testdata/components")...)
 	for _, c := range cases {
 		if c.name == "text-wide" {
-			// CJK and emoji are not in the font, and a frame never falls
-			// back to shot's built-in face. The text golden covers it.
 			continue
 		}
 		for _, d := range Depths() {
@@ -49,7 +47,6 @@ func TestFrames(t *testing.T) {
 	}
 }
 
-// frameFont reads LOOM_FRAMES and the font, or skips the test.
 func frameFont(t *testing.T) (out string, regular, bold []byte, face *sfnt.Font) {
 	t.Helper()
 	out = os.Getenv("LOOM_FRAMES")
@@ -124,9 +121,6 @@ func TestMotionFrames(t *testing.T) {
 	}
 }
 
-// shotPalette is the terminal the frames picture: the tuios canvas and
-// text, and at 16 colours a common dark theme (Tomorrow Night), which is
-// what the mock frames used.
 var shotPalette = &shot.Palette{
 	FG: rgb(0xFFFAF1), BG: rgb(0x201F26),
 	ANSI: [16]shot.Color{

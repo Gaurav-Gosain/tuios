@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/kanban/db.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// An optional field of pele's node is "" here for none: pele reads each of them only
-// for its truthiness or as text.
-
 package kanban
 
 import (
@@ -23,8 +18,7 @@ type KanbanNode struct {
 	ticket     string
 	priority   string
 	cssClasses string
-	// The cards of a section; nil for a card.
-	items []*KanbanNode
+	items      []*KanbanNode
 }
 
 type KanbanDb struct {
@@ -50,7 +44,6 @@ func (db *KanbanDb) AddNode(level int, id, descr string, _ int, shapeData *strin
 		if err != nil {
 			types.Throw(`Metadata of "`+node.id+`" is not valid YAML. `+err.Error(), types.CodeSyntax, types.ErrorInfo{Type: "kanban"})
 		}
-		// Mermaid throws a TypeError on metadata that is empty or not a mapping. Here it is ignored.
 		if m, ok := doc.(map[string]any); ok {
 			shape := ""
 			if js.Truthy(m["shape"]) {
@@ -72,7 +65,6 @@ func (db *KanbanDb) AddNode(level int, id, descr string, _ int, shapeData *strin
 		}
 	}
 
-	// A node indented less than the first column becomes a card, and Mermaid rejects whatever follows it.
 	if db.misplaced != nil {
 		types.Throw(`Items without section detected, found section ("`+db.misplaced.label+`")`, types.CodeSemantic, types.ErrorInfo{Type: "kanban"})
 	}

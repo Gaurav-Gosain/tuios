@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/treemap/layout.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package treemap
 
 import (
@@ -10,22 +8,18 @@ import (
 )
 
 type Box struct {
-	node   *TreemapNode
-	parent *Box
-	// series is the position among the top-level nodes of the branch this box belongs to, which picks its color.
-	series int
-	// value is a leaf's own value, or the sum of the leaves under a section.
-	value    float64
-	children []*Box
-	// headed and header: small sections give their header space to their children.
+	node       *TreemapNode
+	parent     *Box
+	series     int
+	value      float64
+	children   []*Box
 	headed     bool
 	header     float64
 	x, y, w, h float64
 }
 
 type Insets struct {
-	gap float64
-	// header and side: space a section keeps for its header, and around its children on the other three sides.
+	gap    float64
 	header float64
 	short  float64
 	side   float64
@@ -46,8 +40,6 @@ func clamp(v, low, high float64) float64 {
 	return low
 }
 
-// squarify lays out boxes in the rectangle as one squarified treemap: rows are added along the
-// shorter side, and a row stops growing when another box would make its boxes less square.
 func squarify(boxes []*Box, total, x, y, w, h, gap float64) {
 	rest := total
 	from := 0
@@ -86,7 +78,6 @@ func squarify(boxes []*Box, total, x, y, w, h, gap float64) {
 			if w >= h {
 				bw, bh = thickness, length
 			}
-			// Omit the gap if it would erase the box.
 			gx, gy := 0.0, 0.0
 			if js.Round(bx+bw-gap/2) > js.Round(bx+gap/2) {
 				gx = gap / 2
@@ -112,7 +103,6 @@ func squarify(boxes []*Box, total, x, y, w, h, gap float64) {
 	}
 }
 
-// layoutTreemap returns boxes with positive values, including zero-size boxes, parents before children.
 func layoutTreemap(roots []*TreemapNode, width, height float64, insets Insets) []*Box {
 	top := make([]*Box, len(roots))
 	for index, node := range roots {
@@ -142,8 +132,6 @@ func layoutTreemap(roots []*TreemapNode, width, height float64, insets Insets) [
 				shown = append(shown, b)
 			}
 		}
-		// b.value - a.value is NaN only for two infinite sums, and then the total is not finite
-		// and nothing is placed, whatever the order.
 		slices.SortStableFunc(shown, func(a, b *Box) int {
 			switch d := b.value - a.value; {
 			case d < 0:

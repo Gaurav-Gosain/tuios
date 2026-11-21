@@ -14,10 +14,8 @@ import (
 // shows the binding as "!".
 var ErrBudget = errors.New("tml: expression step budget exhausted")
 
-// errTooLong stops a string an expression builds at maxString.
 var errTooLong = errors.New("tml: string too long")
 
-// maxString bounds a string an expression builds.
 const maxString = 64 << 10
 
 // Budget is the step allowance of one surface for one frame. Every node an
@@ -40,7 +38,6 @@ func (b *Budget) spend(n int) error {
 	return nil
 }
 
-// spendBytes charges for n bytes of text.
 func (b *Budget) spendBytes(n int) error { return b.spend(1 + n/32) }
 
 // Env is what an expression can read. Vars maps each root name (state, item,
@@ -78,10 +75,6 @@ func withBudget(env *Env) *Env {
 	return env
 }
 
-// sanitizeCharged sanitizes a result and charges for the scan: a step per
-// value and per 32 bytes of string and key. A string result longer than
-// 64 KiB is cut first, so a large state string cannot be scanned in full
-// for every binding.
 func sanitizeCharged(v any, b *Budget) (any, error) {
 	if s, ok := v.(string); ok {
 		s = cutRunes(s, maxString)
@@ -115,7 +108,6 @@ func sanitizeCharged(v any, b *Budget) (any, error) {
 	return SanitizeValue(v), nil
 }
 
-// finite turns a number that is not finite into null.
 func finite(v any) any {
 	if f, ok := v.(float64); ok && (math.IsNaN(f) || math.IsInf(f, 0)) {
 		return nil
@@ -344,9 +336,6 @@ func Truthy(v any) bool {
 	return true
 }
 
-// normalize turns the other numeric types into float64, so code that builds
-// an Env by hand can pass int. Any value outside the JSON model, such as a
-// []string, reads as null: Env values must be JSON values.
 func normalize(v any) any {
 	switch x := v.(type) {
 	case nil, bool, float64, string, []any, map[string]any:
@@ -380,15 +369,11 @@ func toNum(v any) (float64, bool) {
 	return 0, false
 }
 
-// equal compares two JSON values with no budget. The patch test operation
-// uses it; the state limit bounds its work.
 func equal(a, b any) bool {
 	eq, _ := equalB(a, b, nil)
 	return eq
 }
 
-// equalB compares two JSON values, charging a step per value and per 32
-// bytes of string it compares.
 func equalB(a, b any, bud *Budget) (bool, error) {
 	if bud != nil {
 		if err := bud.spend(1); err != nil {
@@ -475,8 +460,6 @@ func Stringify(v any) string {
 	return cutRunes(b.String(), maxString)
 }
 
-// str formats a value as Stringify does, charging the budget for each value
-// and each 32 bytes. ok is false when the text would pass maxString.
 func str(v any, bud *Budget) (string, bool, error) {
 	var b strings.Builder
 	switch err := writeText(&b, v, bud); err {
@@ -515,8 +498,6 @@ func writeText(b *strings.Builder, v any, bud *Budget) error {
 	return writeJSON(b, v, bud)
 }
 
-// writeJSON writes v as compact JSON with sorted keys, as encoding/json
-// does, and stops at maxString.
 func writeJSON(b *strings.Builder, v any, bud *Budget) error {
 	if bud != nil {
 		if err := bud.spend(1); err != nil {
@@ -615,7 +596,6 @@ func writeQuoted(b *strings.Builder, s string) {
 	b.WriteByte('"')
 }
 
-// cutRunes cuts s to at most n bytes at a rune boundary.
 func cutRunes(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -651,7 +631,6 @@ func arg(a []any, i int) any {
 	return nil
 }
 
-// call runs one function. An unknown function gives null.
 func call(name string, a []any, env *Env) (any, error) {
 	bud := env.Budget
 	switch name {
@@ -860,8 +839,6 @@ func call(name string, a []any, env *Env) (any, error) {
 	return nil, nil
 }
 
-// numbers reads the numbers of a call: one array, optionally with a field
-// name for an array of rows, or several numbers.
 func numbers(a []any, bud *Budget) ([]float64, error) {
 	var out []float64
 	if arr, ok := arg(a, 0).([]any); ok {
@@ -888,9 +865,6 @@ func numbers(a []any, bud *Budget) ([]float64, error) {
 	return out, nil
 }
 
-// fnFmt formats a number with thousands separators and a fixed number of
-// decimals: fmt(1234.5) is 1,234.5 and fmt(1234.5, 0) is 1,235. Any other
-// value is formatted as Stringify does.
 func fnFmt(a []any, bud *Budget) (any, error) {
 	v := arg(a, 0)
 	f, ok := v.(float64)
@@ -905,7 +879,7 @@ func fnFmt(a []any, bud *Budget) (any, error) {
 	if d, ok := toNum(arg(a, 1)); ok {
 		digits = int(math.Max(0, math.Min(d, 10)))
 		p := math.Pow(10, float64(digits))
-		f = math.Round(f*p) / p // half away from zero, as people round
+		f = math.Round(f*p) / p
 	}
 	if math.IsNaN(f) || math.IsInf(f, 0) {
 		return nil, nil
@@ -945,9 +919,6 @@ func durScale(unit string) float64 {
 	return 1e-3
 }
 
-// formatDur formats an amount of unit (default ms) as a short duration:
-// 120µs, 840ms, 2.21s, 4m 5s, 1h 4m. A duration too large to count gives
-// null.
 func formatDur(v float64, unit string) any {
 	s := v * durScale(unit)
 	if math.IsNaN(s) || math.IsInf(s, 0) || math.Abs(s) > 1e15 {
@@ -983,7 +954,6 @@ func trimZeros(s string) string {
 	return strings.TrimSuffix(s, ".")
 }
 
-// formatBytes formats a byte count with binary units: 512B, 1.5K, 3.1G.
 func formatBytes(v float64) string {
 	const units = "BKMGTPE"
 	sign := ""
@@ -1019,8 +989,6 @@ func toTime(v any) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// formatAgo formats how long ago a moment was: just now, 5s ago, 3m ago,
-// 2h ago, 4d ago, or in 3m for a moment ahead.
 func formatAgo(d time.Duration) string {
 	future := d < 0
 	if future {

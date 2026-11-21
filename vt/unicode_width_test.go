@@ -1,15 +1,5 @@
 package vt_test
 
-// Character width, driven by the official UAX #11 East Asian Width property
-// file.
-//
-// Width is the property that breaks layout rather than just looking wrong. A
-// character the emulator thinks is one cell wide and the renderer thinks is two
-// pushes everything after it along by a column, and in a multiplexer that
-// column belongs to the pane next door.
-//
-// See testdata/unicode/README.md for provenance and licence.
-
 import (
 	"bufio"
 	"fmt"
@@ -25,10 +15,9 @@ import (
 	"tuios.dev/vt"
 )
 
-// eawRange is one line of EastAsianWidth.txt.
 type eawRange struct {
 	lo, hi rune
-	class  string // one of A, F, H, N, Na, W
+	class  string
 }
 
 func loadEastAsianWidth(t *testing.T) []eawRange {
@@ -81,20 +70,6 @@ func loadEastAsianWidth(t *testing.T) []eawRange {
 	return out
 }
 
-// wantWidth is the number of cells a terminal gives a character.
-//
-// Wide and Fullwidth take two. Everything else takes one, Ambiguous included: a
-// character is Ambiguous because its width depends on the font the reader
-// happens to be using, and a multiplexer that guessed wide would misplace every
-// pane boundary for every reader whose font guessed narrow. Narrow is what
-// xterm, ghostty and kitty all default to.
-//
-// The regional indicators are the one place where East Asian Width is not the
-// last word. UAX #11 calls them Neutral, but UTS #51 gives them default emoji
-// presentation, and a character that renders as emoji takes two cells whatever
-// its width class says. Running the sweep is what established that this is the
-// only such disagreement in the whole of Unicode: 26 code points out of 147,000
-// printable ones.
 func wantWidth(r rune, class string) int {
 	if r >= 0x1F1E6 && r <= 0x1F1FF {
 		return 2
@@ -107,10 +82,6 @@ func wantWidth(r rune, class string) int {
 	}
 }
 
-// printableForWidth reports whether a code point is one whose cell width is
-// meaningful. Zero-width categories, unassigned code points, surrogates and
-// controls are all excluded: none of them is a character a guest can put in a
-// cell and expect to see.
 func printableForWidth(r rune) bool {
 	switch {
 	case r < 0x20, r >= 0x7f && r <= 0x9f:
@@ -232,8 +203,6 @@ func TestUnicode_MeasuringAgreesWithPlacing(t *testing.T) {
 	}
 }
 
-// cellsConsumed writes s to a fresh wide screen and returns how many columns it
-// took up, counting each cluster once by its recorded width.
 func cellsConsumed(t *testing.T, s string) int {
 	t.Helper()
 	emu := vt.NewEmulator(200, 1)

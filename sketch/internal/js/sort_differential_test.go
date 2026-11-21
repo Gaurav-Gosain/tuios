@@ -13,8 +13,6 @@ import (
 	"testing"
 )
 
-// The node script reads arrays of numbers, with null for NaN and strings for the
-// infinities, sorts the indexes of each by (a, b) => a - b, and writes them.
 const sortScript = `
 const fs = require('fs');
 const [,, input, output] = process.argv;

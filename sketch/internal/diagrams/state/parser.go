@@ -1,8 +1,3 @@
-// Ported from pele src/diagrams/state/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele's StateBuilder interface, the calls Mermaid's grammar makes on its
-// `yy` object, is the *StateDb here: it has no other implementation.
-
 package state
 
 import (
@@ -20,7 +15,6 @@ const STATEMENT = "'NL', 'ID', 'HIDE_EMPTY', 'scale', 'COMPOSIT_STATE', 'STATE_D
 
 func parseState(src string, db *StateDb) []Stmt {
 	tokens := tokenize(src)
-	// Padding past the end token, so that a look ahead never runs off the arrays.
 	typs := append(tokens.types, T_END, T_END)
 	texts := append(tokens.texts, "", "")
 	starts := append(tokens.starts, len(src), len(src))
@@ -69,7 +63,6 @@ func parseState(src string, db *StateDb) []Stmt {
 
 	doc := &[]Stmt{}
 	var outer []*[]Stmt
-	// The grammar drops a statement whose value is the string it uses for a blank line.
 	add := func(value Stmt) {
 		if s, ok := value.(string); ok && s == "nl" {
 			return

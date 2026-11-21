@@ -1,9 +1,3 @@
-// Ported from pele src/text/icons.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele keeps the resolver of the render in progress in module state. The port
-// carries it on the measurer instead (WithIcons), so that renders can run at
-// the same time.
-
 package text
 
 // IconResolver gives the SVG markup of an icon by name, or "" for none.
@@ -14,8 +8,6 @@ type iconState struct {
 	found    map[string]string
 }
 
-// hosted is a measurer that carries what the host gave one render: its icons
-// and its math resolver.
 type hosted struct {
 	TextMeasurer
 	icons *iconState

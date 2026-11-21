@@ -15,7 +15,6 @@ type JSONObject struct {
 	Values map[string]any
 }
 
-// JSON tokens, as V8's JsonParser names the token of a character.
 const (
 	jsonEOS = iota
 	jsonString
@@ -86,8 +85,6 @@ func (p *jsonParser) skip() {
 	}
 }
 
-// location is V8's CalculateFileLocation: the line and column of the cursor, where \r\n
-// is one line break.
 func (p *jsonParser) location() (int, int) {
 	line := 1
 	lastBreak := 0
@@ -104,7 +101,6 @@ func (p *jsonParser) location() (int, int) {
 	return line, 1 + k - lastBreak
 }
 
-// fail is V8's ReportUnexpectedToken: the message given, or the one for the token at the cursor.
 func (p *jsonParser) fail(message string) {
 	if message == "" {
 		switch jsonToken(p.cur()) {
@@ -139,7 +135,6 @@ func (p *jsonParser) fail(message string) {
 	panic(&JSONError{message + " at position " + strconv.Itoa(p.pos) + " (line " + strconv.Itoa(line) + " column " + strconv.Itoa(column) + ")"})
 }
 
-// expect is V8's ExpectNext: whitespace, then the token, or the message.
 func (p *jsonParser) expect(token int, message string) {
 	p.skip()
 	if jsonToken(p.cur()) != token {
@@ -148,7 +143,6 @@ func (p *jsonParser) expect(token int, message string) {
 	p.pos++
 }
 
-// check is V8's Check: whitespace, then the token if it is there.
 func (p *jsonParser) check(token int) bool {
 	p.skip()
 	if jsonToken(p.cur()) != token {
@@ -170,7 +164,6 @@ func hexValue(c int) int {
 	return -1
 }
 
-// str reads a string whose opening quote is at the cursor.
 func (p *jsonParser) str() string {
 	p.pos++
 	var out []uint16
@@ -213,7 +206,6 @@ func (p *jsonParser) str() string {
 				out = append(out, uint16(value))
 			default:
 				if e < 0 || e > 0xff {
-					// A character past Latin-1 is no escape V8 knows, and is reported as itself.
 					p.fail("")
 				}
 				p.fail("Bad escaped character")
@@ -228,7 +220,6 @@ func (p *jsonParser) str() string {
 
 func isDecimal(c int) bool { return c >= '0' && c <= '9' }
 
-// number reads a number that starts at the cursor.
 func (p *jsonParser) number() float64 {
 	start := p.pos
 	if p.cur() == '-' {
@@ -276,7 +267,6 @@ func (p *jsonParser) number() float64 {
 	return v
 }
 
-// literal reads true, false or null, failing at the first character that differs.
 func (p *jsonParser) literal(word string) {
 	for k := 0; k < len(word); k++ {
 		if p.cur() != int(word[k]) {
@@ -307,7 +297,6 @@ func ParseJSON(s []uint16) (value any, err error) {
 	p := &jsonParser{s: s}
 	var stack []jsonFrame
 	for {
-		// A value.
 	readValue:
 		for {
 			p.skip()
@@ -355,7 +344,6 @@ func ParseJSON(s []uint16) (value any, err error) {
 			}
 			break
 		}
-		// What follows it.
 	readFollow:
 		for {
 			if len(stack) == 0 {
@@ -402,7 +390,6 @@ func ParseJSON(s []uint16) (value any, err error) {
 	}
 }
 
-// arrayIndex is the value of a key that is an array index, a canonical number below 2^32-1, or -1.
 func arrayIndex(key string) int64 {
 	if key == "" || len(key) > 10 || (len(key) > 1 && key[0] == '0') {
 		return -1
@@ -420,7 +407,6 @@ func arrayIndex(key string) int64 {
 	return n
 }
 
-// orderKeys puts integer keys first, in order, as JavaScript orders an object's own keys.
 func orderKeys(obj *JSONObject) {
 	var ints []string
 	rest := obj.Keys[:0:0]

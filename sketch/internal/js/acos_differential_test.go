@@ -11,8 +11,6 @@ import (
 	"testing"
 )
 
-// The node script reads float64 inputs and writes Math.acos of each, twice, the second
-// time after the loop is hot, so that the optimizing compiler's code is checked as well.
 const acosScript = `
 const fs = require('fs');
 const [,, input, output] = process.argv;
@@ -28,11 +26,9 @@ fs.writeFileSync(output, Buffer.from(out.buffer));
 func acosInputs() []float64 {
 	rng := rand.New(rand.NewPCG(7, 8))
 	var xs []float64
-	// Every exponent, any mantissa.
 	for range 200_000 {
 		xs = append(xs, randomBits(rng))
 	}
-	// The domain, evenly, and near its ends and its middle.
 	for range 1_000_000 {
 		xs = append(xs, 2*rng.Float64()-1)
 	}
@@ -40,7 +36,6 @@ func acosInputs() []float64 {
 		d := math.Ldexp(rng.Float64(), -rng.IntN(60))
 		xs = append(xs, 1-d, d-1, d, -d)
 	}
-	// A few units in the last place either way of every bound fdlibm branches on.
 	for _, b := range []float64{0.5, 1, math.Ldexp(1, -57), math.Float64frombits(0x3c60000000000000)} {
 		lo, hi := b, b
 		for range 500 {
@@ -48,7 +43,6 @@ func acosInputs() []float64 {
 			lo, hi = math.Nextafter(lo, 0), math.Nextafter(hi, math.Inf(1))
 		}
 	}
-	// What venn asks for: a cosine from the sides of a triangle of circles.
 	for range 300_000 {
 		d := 1 + 300*rng.Float64()
 		r1, r2 := 1+200*rng.Float64(), 1+200*rng.Float64()

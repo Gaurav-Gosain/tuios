@@ -68,16 +68,12 @@ func Parse(data []byte) (swatch.Palette, Format, error) {
 }
 
 func parse(body string) (map[string]color.Color, Format, error) {
-	// Toml first: it is the only one that fails to parse as itself, so the
-	// line formats are never mistaken for a broken toml file.
 	if colors, format, ok := parseTOML(body); ok {
 		return colors, format, nil
 	}
 	return parseLines(body)
 }
 
-// parseLines reads kitty's "key value" and ghostty's "key = value", which are
-// the same format with and without an equals sign.
 func parseLines(body string) (map[string]color.Color, Format, error) {
 	colors := map[string]color.Color{}
 	format := Kitty
@@ -88,8 +84,6 @@ func parseLines(body string) (map[string]color.Color, Format, error) {
 		}
 		key, value, ok := strings.Cut(line, "=")
 		if ok {
-			// An equals sign is ghostty's spelling. Kitty takes it too, so
-			// this only settles which name to report.
 			format = Ghostty
 		} else {
 			key, value, ok = strings.Cut(line, " ")
@@ -99,7 +93,6 @@ func parseLines(body string) (map[string]color.Color, Format, error) {
 		}
 		key = strings.ToLower(strings.TrimSpace(key))
 		value = strings.TrimSpace(value)
-		// ghostty's palette is one line per entry: palette = 4=#83a598.
 		if key == "palette" {
 			if idx, hex, ok := strings.Cut(value, "="); ok {
 				if n, err := strconv.Atoi(strings.TrimSpace(idx)); err == nil {
@@ -116,7 +109,6 @@ func parseLines(body string) (map[string]color.Color, Format, error) {
 	return colors, format, nil
 }
 
-// alacrittyFile and weztermFile are the subset of each toml shape this reads.
 type alacrittyFile struct {
 	Colors struct {
 		Primary struct {
@@ -141,8 +133,6 @@ type weztermFile struct {
 	} `toml:"colors"`
 }
 
-// parseTOML reads alacritty's and wezterm's toml: wezterm keeps the sixteen
-// as two arrays, alacritty as two tables of named colours.
 func parseTOML(body string) (map[string]color.Color, Format, bool) {
 	colors := map[string]color.Color{}
 
@@ -184,15 +174,12 @@ func parseTOML(body string) (map[string]color.Color, Format, bool) {
 	return nil, "", false
 }
 
-// ansiNames are the sixteen by name, in index order, as alacritty spells
-// them. purple is bubbletint's name for magenta.
 var ansiNames = [16]string{
 	"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
 	"bright_black", "bright_red", "bright_green", "bright_yellow",
 	"bright_blue", "bright_magenta", "bright_cyan", "bright_white",
 }
 
-// setIndexed records ANSI colour n.
 func setIndexed(colors map[string]color.Color, n int, value string) {
 	if n < 0 || n >= 16 {
 		return
@@ -202,9 +189,6 @@ func setIndexed(colors map[string]color.Color, n int, value string) {
 	}
 }
 
-// setNamed records a colour under its Raw key. A name none of the formats
-// uses, and a value that is not a colour, are skipped, so a partial scheme
-// reads as far as it goes.
 func setNamed(colors map[string]color.Color, name, value string) {
 	key, ok := canonicalKey(name)
 	if !ok {
@@ -215,7 +199,6 @@ func setNamed(colors map[string]color.Color, name, value string) {
 	}
 }
 
-// canonicalKey maps the spellings the four formats use onto the Raw keys.
 func canonicalKey(name string) (string, bool) {
 	switch name {
 	case "foreground", "fg":
@@ -229,7 +212,6 @@ func canonicalKey(name string) (string, bool) {
 	case "bright_purple":
 		name = "bright_magenta"
 	}
-	// kitty and ghostty write the sixteen as color0 to color15.
 	for _, prefix := range []string{"color", "colour"} {
 		if n, ok := strings.CutPrefix(name, prefix); ok {
 			if i, err := strconv.Atoi(n); err == nil && i >= 0 && i < 16 {
@@ -245,9 +227,6 @@ func canonicalKey(name string) (string, bool) {
 	return "", false
 }
 
-// parseColor reads #rgb or #rrggbb, with or without the hash and in quotes
-// or not, and alacritty's 0xrrggbb, which is every way these formats write a
-// colour.
 func parseColor(v string) (color.Color, bool) {
 	v = strings.TrimSpace(strings.Trim(strings.TrimSpace(v), `"'`))
 	if h, ok := strings.CutPrefix(v, "0x"); ok && len(h) == 6 {
@@ -263,7 +242,6 @@ func parseColor(v string) (color.Color, bool) {
 	return c, true
 }
 
-// xterm is the colour of each ANSI slot a scheme leaves out.
 var xterm = func() [8]color.Color {
 	var out [8]color.Color
 	for i, h := range []string{"#000000", "#cd0000", "#00cd00", "#cdcd00", "#0000ee", "#cd00cd", "#00cdcd", "#e5e5e5"} {
@@ -272,7 +250,6 @@ var xterm = func() [8]color.Color {
 	return out
 }()
 
-// build fills a palette from the colours a file named.
 func build(colors map[string]color.Color) swatch.Palette {
 	p := swatch.Palette{Source: SourceName, Raw: colors}
 	or := func(key string, fallback color.Color) color.Color {

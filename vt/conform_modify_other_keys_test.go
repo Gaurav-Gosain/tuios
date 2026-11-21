@@ -1,11 +1,5 @@
 package vt_test
 
-// Conformance for xterm's modifyOtherKeys: XTMODKEYS (CSI > 4 ; Pv m) sets the
-// level, CSI > 4 n turns it off, XTQMODKEYS (CSI ? 4 m) reports it as
-// CSI > 4 ; Pv m, and EncodeModifyOtherKeys sends a modified key as
-// CSI 27 ; modifier ; code ~ where xterm would. The expected encodings are
-// xterm's (input.c, ModifyOtherKeys), level 1 and level 2.
-
 import (
 	"testing"
 
@@ -26,7 +20,6 @@ func TestConform_XTMODKEYS(t *testing.T) {
 		{"CSI > m resets every resource", "\x1b[>4;2m\x1b[>m" + q, "\x1b[>4;0m"},
 		{"CSI > 4 n turns it off", "\x1b[>4;2m\x1b[>4n" + q, "\x1b[>4;0m"},
 		{"RIS turns it off", "\x1b[>4;2m\x1bc" + q, "\x1b[>4;0m"},
-		// It is not part of the screen, so the alternate screen shares it.
 		{"the alternate screen keeps it", "\x1b[>4;2m\x1b[?1049h" + q, "\x1b[>4;2m"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -36,8 +29,6 @@ func TestConform_XTMODKEYS(t *testing.T) {
 		})
 	}
 
-	// The other resources change encodings this emulator has no choice of,
-	// so setting one is not recognised, and does not touch this one.
 	emu := vt.NewEmulator(10, 3)
 	log := &unhandledLog{}
 	emu.SetLogger(log)
@@ -62,7 +53,7 @@ func TestConform_ModifyOtherKeysEncoding(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		key    vt.KeyPressEvent
-		level1 string // "" means the ordinary encoding
+		level1 string
 		level2 string
 	}{
 		{"an unmodified letter", key('a', 0), "", ""},

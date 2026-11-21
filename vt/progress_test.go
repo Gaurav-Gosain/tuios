@@ -19,12 +19,10 @@ func TestParseProgress(t *testing.T) {
 		{"4;4;90", ProgressWarning, 90, true},
 		{"4", ProgressClear, 0, true},
 		{"4\a", ProgressClear, 0, true},
-		{"4;1;250", ProgressNormal, 100, true}, // clamped
-		{"4;1;-5", ProgressNormal, 0, true},    // clamped
-		{"4;9", 0, 0, false},                   // no such state
-		{"4;x", 0, 0, false},                   // not a number
-		// A notification body that merely starts with "4" is not a progress
-		// report and has to stay a notification.
+		{"4;1;250", ProgressNormal, 100, true},
+		{"4;1;-5", ProgressNormal, 0, true},
+		{"4;9", 0, 0, false},
+		{"4;x", 0, 0, false},
 		{"42 files changed", 0, 0, false},
 		{"finished", 0, 0, false},
 	}
@@ -55,7 +53,6 @@ func TestEmulatorRoutesProgressAndNotify(t *testing.T) {
 		Notify: func(_, body string) { notified = append(notified, body) },
 	})
 
-	// A working report.
 	_, _ = em.Write([]byte("\x1b]9;4;3;0\x07"))
 	if progressCalls != 1 || gotState != ProgressIndeterminate {
 		t.Fatalf("after 9;4;3: calls=%d state=%d, want 1 and indeterminate", progressCalls, gotState)
@@ -64,19 +61,16 @@ func TestEmulatorRoutesProgressAndNotify(t *testing.T) {
 		t.Fatalf("progress report leaked to Notify: %q", notified)
 	}
 
-	// A determinate report carries its percentage.
 	_, _ = em.Write([]byte("\x1b]9;4;1;42\x07"))
 	if gotState != ProgressNormal || gotPercent != 42 {
 		t.Fatalf("after 9;4;1;42: state=%d percent=%d, want normal and 42", gotState, gotPercent)
 	}
 
-	// Clearing it.
 	_, _ = em.Write([]byte("\x1b]9;4;0\x07"))
 	if gotState != ProgressClear {
 		t.Fatalf("after 9;4;0: state=%d, want clear", gotState)
 	}
 
-	// An ordinary notification is untouched by any of this.
 	_, _ = em.Write([]byte("\x1b]9;build finished\x07"))
 	if len(notified) != 1 || notified[0] != "build finished" {
 		t.Fatalf("notifications = %q, want one \"build finished\"", notified)

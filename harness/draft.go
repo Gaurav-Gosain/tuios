@@ -6,18 +6,6 @@ import (
 	"unicode"
 )
 
-// Drafts: whether the person has text waiting in the agent's input box.
-//
-// The idle rules prove the box is on the screen. They do not prove it is
-// empty: Claude Code's idle rule reads "^\s*❯" in the box, and a half-written
-// prompt starts with the same character. A queued message typed into that box
-// lands in the middle of the person's draft. So a manifest may say what its box
-// looks like with nothing in it, and the queue holds its entries while the box
-// looks like anything else.
-//
-// A manifest without the block cannot tell, and BoxDraft says so: the queue
-// then waits only for the person to stop typing.
-
 // BoxRule is a manifest's [prompt_box] block: where the input box is, and what
 // it reads when it is empty.
 type BoxRule struct {
@@ -37,8 +25,6 @@ type BoxRule struct {
 	empty []*regexp.Regexp
 }
 
-// check normalises the region and compiles the patterns. lines is how far up
-// the manifest's screen reads.
 func (b *BoxRule) check(lines int, screenOn bool) error {
 	if len(b.Empty) == 0 {
 		if strings.TrimSpace(b.Region) != "" {
@@ -98,7 +84,6 @@ func (r *Registry) BoxDraft(id string, tail, shown []string) (draft, known bool)
 		return false, false
 	}
 	if m.Box.Region == RegionPromptBox && lo == hi {
-		// Two rules with nothing between them: no box.
 		return false, false
 	}
 	var kept []string

@@ -1,29 +1,20 @@
-// Ported from pele src/diagrams/block/types.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// An optional field of pele's block is "" or nil here for none, where pele reads it only
-// for its truthiness or as text. The numbers that pele reads with `?? 1` or `?? -1` start
-// at that value.
-
 package block
 
 // Block is one shape for blocks, edges, and the statements that set columns, classes, and styles, as in Mermaid.
 type Block struct {
-	// id is "" for none: a composite whose header was a link statement.
 	id             string
 	typ            string
 	label          string
 	children       []*Block
 	columns        float64
 	widthInColumns float64
-	// Number of cells a `space` statement asked for.
-	width      float64
-	directions []string
-	classes    []string
-	styles     []string
-	colorIndex int
-	start      string
-	end        string
-	// arrowTypeStart and arrowTypeEnd are Mermaid marker names; "" draws nothing.
+	width          float64
+	directions     []string
+	classes        []string
+	styles         []string
+	colorIndex     int
+	start          string
+	end            string
 	arrowTypeStart string
 	arrowTypeEnd   string
 	thickness      string

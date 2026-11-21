@@ -6,19 +6,11 @@ import "strconv"
 // (XTSMGRAPHICS), and the most a decoded image may use.
 const SixelMaxRegisters = 256
 
-// XTSMGRAPHICS answers. See sixelGraphicsReply.
 const (
 	xtsmColors   = 1
 	xtsmGeometry = 2
 )
 
-// sixelGraphicsReply answers XTSMGRAPHICS (CSI ? Pi ; Pa ; Pv S), which lsix,
-// notcurses and others ask before they draw: how many colour registers there
-// are, and the largest image in pixels. Only reads are honoured; a request to
-// change either value is answered with the value that stands, which is what
-// xterm does when it refuses one. A pane that is not told sixel gets the
-// error status, so a program that asks here and not in DA1 comes to the same
-// answer.
 func sixelGraphicsReply(item, action int, on bool, widthPx, heightPx int) string {
 	if !on {
 		return "\x1b[?" + strconv.Itoa(item) + ";3;0S"

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/packet/model.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package packet
 
 import (
@@ -14,7 +12,6 @@ import (
 type PacketBlock struct {
 	start float64
 	end   float64
-	// As Mermaid counts it: one less than the width for the pieces of a field split across rows.
 	bits  float64
 	label string
 }
@@ -29,7 +26,6 @@ type PacketModel struct {
 
 const MAX_ROWS = 10_000
 
-// packetOption is config.packet[key] when it is a number of at least min, capped at max.
 func packetOption(config types.Config, key string, fallback, min, max float64) float64 {
 	section, _ := config["packet"].(map[string]any)
 	if value, ok := section[key].(float64); ok && value >= min {
@@ -42,7 +38,6 @@ func invalid(message string) {
 	types.Throw(message, types.CodeSemantic, types.ErrorInfo{Type: "packet"})
 }
 
-// joinLines is .replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {

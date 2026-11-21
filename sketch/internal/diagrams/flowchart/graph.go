@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/flowchart/graph.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package flowchart
 
 import (
@@ -103,8 +101,6 @@ func isCollapsedMeta(m map[string]types.YamlValue) bool {
 	return ok && v == "collapsed"
 }
 
-// buildFlowGraph resolves a parsed flowchart into the nodes and edges that are actually drawn:
-// group membership, collapsed subgraphs, class styles and edge defaults.
 func buildFlowGraph(model *FlowDb, defaultCurve string) FlowGraph {
 	var nodes []*GraphNode
 	var edges []*GraphEdge
@@ -176,8 +172,6 @@ func buildFlowGraph(model *FlowDb, defaultCurve string) FlowGraph {
 			anyCollapsed = true
 		}
 	}
-	// The outermost collapsed subgraph around each subgraph, resolved once per chain of parents.
-	// "" is none.
 	outermost := map[string]string{}
 	outermostCollapsed := func(id string) string {
 		var chain []string

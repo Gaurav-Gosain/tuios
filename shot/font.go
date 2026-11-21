@@ -31,10 +31,8 @@ type Font struct {
 	Index int
 }
 
-// present reports whether the font has data to read.
 func (f Font) present() bool { return len(f.Data) > 0 || f.File != nil }
 
-// reader is the font file as an io.ReaderAt.
 func (f Font) reader() io.ReaderAt {
 	if len(f.Data) > 0 {
 		return bytes.NewReader(f.Data)
@@ -42,56 +40,30 @@ func (f Font) reader() io.ReaderAt {
 	return f.File
 }
 
-// faceSet is the order a PNG render looks for a glyph in:
-//
-//  1. the primary font: Frame.Font (and Frame.BoldFont for bold cells), or Go
-//     Mono when the frame names no font;
-//  2. Frame.Fallback, in order;
-//  3. Go Mono, when the primary font is not Go Mono already.
-//
-// A glyph in none of them draws as a dotted box. The first face that covers a
-// rune ends the search, and the answer is kept for the rest of the render, so
-// a screen of one missing glyph asks each face once and not once per cell.
 type faceSet struct {
 	faces []faceEntry
 	size  float64
 	opts  *opentype.FaceOptions
 	buf   sfnt.Buffer
-	// picks caches the search. The key is the rune doubled, plus one for
-	// bold. The value is the index of the face in faces, or -1 for none.
 	picks map[rune]int
-	// tiles caches the colour glyphs drawn, scaled to their box.
 	tiles map[colorTileKey]*image.RGBA
-	// seqs caches pickSequence by cluster, a NUL after it for bold.
-	seqs map[string]seqGlyph
+	seqs  map[string]seqGlyph
 }
 
-// colorTileKey is one colour glyph at one box size.
 type colorTileKey struct {
 	face, glyph, w, h int
 }
 
-// faceEntry is one face in the search order.
 type faceEntry struct {
-	// src is the font to parse on first use. A fallback face is parsed only
-	// when a rune reaches it, so a fallback list costs nothing on a screen
-	// the primary font covers.
-	src    Font
-	parsed bool
-	font   *sfnt.Font
-	face   font.Face
-	// bold is true for a bold cut. A regular face drawing a bold cell is
-	// double-struck.
-	bold bool
-	// boldOnly faces answer bold cells only.
+	src      Font
+	parsed   bool
+	font     *sfnt.Font
+	face     font.Face
+	bold     bool
 	boldOnly bool
-	// color is the face's colour glyph tables, nil for none.
-	color *colorFace
+	color    *colorFace
 }
 
-// loadFaces builds the search order for a frame at one pixel size. The
-// primary font must parse. A bold cut or a fallback that does not parse is
-// passed over: the capture is the point, and the font is how it looks.
 func loadFaces(f *Frame, size float64) (*faceSet, error) {
 	regular, bold, err := goMonoFonts()
 	if err != nil {
@@ -123,25 +95,15 @@ func loadFaces(f *Frame, size float64) (*faceSet, error) {
 	if own {
 		fs.faces = append(fs.faces, goMono...)
 	}
-	// The cell is measured from the primary face, so it is parsed now.
 	return fs, fs.parse(&fs.faces[1])
 }
 
-// parse makes the face of an entry. It runs once per entry: a failure leaves
-// the entry with no font, and the search passes over it.
-//
-// The font is read as a collection because fontconfig answers plenty of
-// families with a .ttc, and opentype.Parse refuses one ("invalid single
-// font"). ParseCollection reads a plain TTF or OTF as a collection of one, so
-// it is the one path for both.
 func (fs *faceSet) parse(e *faceEntry) error {
 	if e.parsed {
 		return nil
 	}
 	e.parsed = true
 	if !e.src.present() {
-		// An empty font is a face the caller does not have, such as the bold
-		// cut of a font with none. sfnt.ParseCollection panics on it.
 		return errors.New("parse font: no font data")
 	}
 	var coll *sfnt.Collection
@@ -156,9 +118,6 @@ func (fs *faceSet) parse(e *faceEntry) error {
 	}
 	index := e.src.Index
 	if index < 0 || index >= coll.NumFonts() {
-		// An index the file does not have is a resolver and a file that
-		// disagree. The first face is from the family that was asked for,
-		// which beats no capture at all.
 		index = 0
 	}
 	sf, err := coll.Font(index)
@@ -174,9 +133,6 @@ func (fs *faceSet) parse(e *faceEntry) error {
 	return nil
 }
 
-// pick returns the face that draws r, and whether a bold cell drawn in it
-// needs a double strike because the face is not a bold cut. A nil face means
-// no face covers r.
 func (fs *faceSet) pick(r rune, bold bool) (font.Face, bool) {
 	key := r * 2
 	if bold {
@@ -193,7 +149,6 @@ func (fs *faceSet) pick(r rune, bold bool) (font.Face, bool) {
 	return fs.faces[i].face, bold && !fs.faces[i].bold
 }
 
-// search returns the index of the first face that has r, or -1.
 func (fs *faceSet) search(r rune, bold bool) int {
 	for i := range fs.faces {
 		e := &fs.faces[i]
@@ -210,9 +165,6 @@ func (fs *faceSet) search(r rune, bold bool) int {
 		if err != nil || idx == 0 {
 			continue
 		}
-		// A colour font lists its emoji and has no outline for them: it
-		// covers a glyph it has as a bitmap or as an outline, and passes over
-		// one it has in neither form.
 		if e.color != nil && !e.color.has(int(idx)) && !fs.hasOutline(e, idx) {
 			continue
 		}
@@ -221,19 +173,16 @@ func (fs *faceSet) search(r rune, bold bool) int {
 	return -1
 }
 
-// hasOutline reports whether face e draws glyph idx as an outline.
 func (fs *faceSet) hasOutline(e *faceEntry, idx sfnt.GlyphIndex) bool {
 	segs, err := e.font.LoadGlyph(&fs.buf, idx, fixed.I(16), nil)
 	return err == nil && len(segs) > 0
 }
 
-// pickColor returns the colour glyph that draws r, scaled into a box w by h
-// pixels, or nil when the face that draws r draws it as an outline.
 func (fs *faceSet) pickColor(r rune, bold bool, w, h int) *image.RGBA {
 	if w <= 0 || h <= 0 {
 		return nil
 	}
-	fs.pick(r, bold) // fills picks
+	fs.pick(r, bold)
 	i := fs.picks[r*2+boolInt(bold)]
 	if i < 0 {
 		return nil
@@ -249,7 +198,6 @@ func (fs *faceSet) pickColor(r rune, bold bool, w, h int) *image.RGBA {
 	return fs.colorTile(i, int(idx), w, h)
 }
 
-// colorTile is colour glyph gid of face i, scaled into a box w by h, cached.
 func (fs *faceSet) colorTile(i, gid, w, h int) *image.RGBA {
 	key := colorTileKey{face: i, glyph: gid, w: w, h: h}
 	if t, ok := fs.tiles[key]; ok {
@@ -268,15 +216,8 @@ func (fs *faceSet) colorTile(i, gid, w, h int) *image.RGBA {
 	return tile
 }
 
-// seqGlyph is the colour glyph a cluster of several code points draws as.
 type seqGlyph struct{ face, glyph int }
 
-// pickSequence returns the colour glyph that draws cl, a cluster of several
-// code points such as a flag, a ZWJ sequence, a keycap or a skin tone, or nil
-// when no colour face draws it. The first colour face whose ligatures turn
-// the cluster into a glyph it has a bitmap for draws it; a face with no
-// ligature for it draws the first glyph its table leaves, the way a terminal
-// draws a sequence it does not know.
 func (fs *faceSet) pickSequence(cl string, bold bool, w, h int) *image.RGBA {
 	if w <= 0 || h <= 0 {
 		return nil
@@ -320,8 +261,6 @@ faces:
 			case err == nil && idx != 0:
 				glyphs = append(glyphs, int(idx))
 			case r == 0xFE0F || r == 0xFE0E:
-				// A variation selector the font does not list asks
-				// for nothing it can draw.
 			default:
 				continue faces
 			}
@@ -336,8 +275,6 @@ faces:
 	return seqGlyph{face: -1}
 }
 
-// fitColorTile scales a glyph bitmap to fit w by h, keeping its proportions:
-// a box filter down, bilinear up (at most twice the size).
 func fitColorTile(src image.Image, w, h int) *image.RGBA {
 	b := src.Bounds()
 	rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
@@ -359,18 +296,8 @@ func boolInt(b bool) rune {
 	return 0
 }
 
-// cellSize derives the grid cell from the primary face: the advance of "M"
-// wide, the face's own line box tall.
-//
-// Both dimensions are measured from the font. A hardcoded 1.25 em height
-// against JetBrainsMono (advance 0.600 em, hhea line box 1.320 em) gives an
-// aspect of 0.486 where the terminal draws 0.455, so every capture comes out
-// about seven percent wider per cell than the screen it pictures.
-// Metrics().Height is ascent - descent + lineGap, which is the same line box
-// kitty and ghostty size their cells from, so taking it makes the picture's
-// aspect the host's.
 func (fs *faceSet) cellSize() (float64, float64) {
-	face := fs.faces[1].face // the primary face, which loadFaces parsed
+	face := fs.faces[1].face
 	adv, ok := face.GlyphAdvance('M')
 	if !ok || adv == 0 {
 		adv = fixed.I(int(fs.size * 0.6))
@@ -378,8 +305,6 @@ func (fs *faceSet) cellSize() (float64, float64) {
 	cw := fixedToFloat(adv)
 	ch := fixedToFloat(face.Metrics().Height)
 	if ch <= 0 {
-		// A face with no usable metrics still has to draw somewhere. The old
-		// hardcode is the fallback rather than the rule.
 		ch = fs.size * 1.25
 	}
 	return cw, ch
@@ -405,8 +330,6 @@ func MissingGlyphs(g *Grid, f *Frame) ([]rune, error) {
 	var missing []rune
 	for _, row := range g.Cells {
 		for _, c := range row {
-			// A cell draws the first rune of its cluster in a face that
-			// covers that rune, so that rune is the one a face must have.
 			missing = fs.appendMissing(missing, firstRune(c.Cluster))
 		}
 	}
@@ -423,14 +346,11 @@ func MissingGlyphs(g *Grid, f *Frame) ([]rune, error) {
 	return missing, nil
 }
 
-// appendMissing appends r to missing when no face has it and it is not there
-// already.
 func (fs *faceSet) appendMissing(missing []rune, r rune) []rune {
 	if r == 0 || r == ' ' || isProcedural(r) {
 		return missing
 	}
 	if _, seen := fs.picks[r*2]; seen {
-		// The search ran for r already, and pick keeps every answer.
 		return missing
 	}
 	if face, _ := fs.pick(r, false); face == nil {

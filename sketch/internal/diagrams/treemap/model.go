@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/treemap/model.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package treemap
 
 import (
@@ -10,11 +8,9 @@ import (
 )
 
 type TreemapNode struct {
-	name string
-	// Sections have a list, which may be empty. Leaves have none.
-	section  bool
-	children []*TreemapNode
-	// value is NaN when a leaf has none.
+	name              string
+	section           bool
+	children          []*TreemapNode
 	value             float64
 	classSelector     string
 	cssCompiledStyles []string
@@ -36,7 +32,6 @@ type TreemapModel struct {
 	roots    []*TreemapNode
 }
 
-// buildHierarchy: a row belongs to the nearest section above it that is indented less.
 func buildHierarchy(items []TreemapItem) []*TreemapNode {
 	var roots []*TreemapNode
 	type entry struct {
@@ -62,7 +57,6 @@ func buildHierarchy(items []TreemapItem) []*TreemapNode {
 	return roots
 }
 
-// joinLines is .replace(/\n\s+/g, '\n').
 func joinLines(text string) string {
 	var out strings.Builder
 	for i := 0; i < len(text); {
@@ -91,7 +85,6 @@ func buildTreemap(ast *TreemapAst, title string) *TreemapModel {
 		if !row.classDef {
 			continue
 		}
-		// An escaped comma stays in the value; the others separate declarations.
 		text := strings.ReplaceAll(row.styleText, `\,`, "§§§")
 		text = strings.ReplaceAll(text, ",", ";")
 		text = strings.ReplaceAll(text, "§§§", ",")

@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/sequence/types.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package sequence
 
 // The message kinds, numbered as in Mermaid.

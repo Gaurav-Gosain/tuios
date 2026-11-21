@@ -1,5 +1,3 @@
-// Ported from pele src/svg/builder.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 // Package svg writes the SVG that every diagram type shares: text, shapes,
 // edges, clusters and the root element.
 package svg
@@ -31,8 +29,6 @@ func needsEsc(s string) bool {
 	return false
 }
 
-// nonCharAt reports whether U+FFFE or U+FFFF starts at byte i. Valid UTF-8 holds no
-// surrogate, the other characters RE_INVALID_XML names.
 func nonCharAt(s string, i int) bool {
 	return s[i] == 0xef && i+2 < len(s) && s[i+1] == 0xbf && (s[i+2] == 0xbe || s[i+2] == 0xbf)
 }
@@ -93,8 +89,6 @@ func Num(value float64) string {
 	}
 	if n > -1e11 && n < 1e11 {
 		if n > 0 && n < 10000 {
-			// n is whole. A small whole number of units comes from strconv,
-			// which keeps these, so it costs no allocation.
 			if i := int(n); i%100 == 0 {
 				return strconv.Itoa(i / 100)
 			}
@@ -136,8 +130,6 @@ func WriteNum(b *strings.Builder, value float64) {
 	b.Write(AppendNum(buf[:0], value))
 }
 
-// appendHundredths writes n/100 for a whole n with 0 < |n| < 1e11: the whole
-// part, then up to two decimals without trailing zeros.
 func appendHundredths(b []byte, n float64) []byte {
 	if n < 0 {
 		b = append(b, '-')
@@ -248,16 +240,12 @@ var (
 	reStyleOpacity = lazyre.New(`(?:^|;)[` + js.S + `]*opacity:([^;]*)`)
 )
 
-// Copy only color and opacity to preserve measured math dimensions.
-// Use a solid patch for the cluster title's outline to hide edges behind math.
 type mathLook struct {
-	attrs string
-	// haloed is pele's `halo !== undefined`.
+	attrs  string
 	haloed bool
 	halo   string
 }
 
-// group is RE.exec(s)?.[1], and whether it matched.
 func group(re *lazyre.Regexp, s string) (string, bool) {
 	m := re.FindStringSubmatch(s)
 	if m == nil {
@@ -292,7 +280,6 @@ func lookOfMath(attrs string) *mathLook {
 	return &mathLook{attrs: out}
 }
 
-// Resolver markup is trusted.
 func mathSvg(math *text.MathMarkup, box string, size float64, attrs string) string {
 	if !math.HTML {
 		return `<svg class="pele-math" ` + box + ` overflow="visible"` + attrs + `>` + math.Markup + `</svg>`

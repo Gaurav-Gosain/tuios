@@ -18,28 +18,19 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden files")
 
-// goldenCase is a document and the size to draw it at. A case file starts
-// with a comment that gives the size, such as <!-- 48x10 -->, and may ask
-// for a frame around the surface with <!-- 64x16 frame -->.
 type goldenCase struct {
 	name  string
 	path  string
 	w, h  int
 	frame bool
-	owner bool // the frame names an owner, as a tuios popup does
+	owner bool
 }
 
 var sizeLine = regexp.MustCompile(`^<!--(.*)-->`)
 var sizeItem = regexp.MustCompile(`^\s*(\d+)x(\d+)(\s+frame(-owner)?)?\s*$`)
 
-// cellAspect is the cell of the frames: JetBrainsMono NFM through shot at
-// scale 1 is 8 by 19 pixels.
 const cellAspect = 19.0 / 8
 
-// loadCases reads the cases of a folder. The first line of a case file
-// gives the sizes, comma separated: <!-- 48x10 --> or
-// <!-- 150x38 frame, 100x30 frame -->. A case with several sizes is named
-// NAME-WxH for each.
 func loadCases(t *testing.T, dir string) []goldenCase {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(dir, "*.tml"))
@@ -75,8 +66,6 @@ func loadCases(t *testing.T, dir string) []goldenCase {
 	return out
 }
 
-// render draws a case at one depth. A framed case draws the surface inside
-// a host frame, as a popup shows it.
 func (c goldenCase) render(t testing.TB, d Depth) *Buffer {
 	t.Helper()
 	src, err := os.ReadFile(c.path)
@@ -100,7 +89,6 @@ func (c goldenCase) render(t testing.TB, d Depth) *Buffer {
 	if !c.frame {
 		return s.Render(c.w, c.h)
 	}
-	// A framed case is a popup, so view.placement says so.
 	s.SetPlacement("popup")
 	out := NewBuffer(c.w, c.h)
 	owner := ""
@@ -159,12 +147,9 @@ func compareGolden(t *testing.T, path, got string) {
 	}
 }
 
-// checkFits asserts that every row of the buffer is exactly w cells wide by
-// the width of its graphemes, as ansi.StringWidth counts them.
 func checkFits(t testing.TB, buf *Buffer, w, h int) {
 	t.Helper()
 	if h == 0 || w == 0 {
-		// An empty buffer has no rows to measure its width by.
 		if buf.Height() != h {
 			t.Fatalf("buffer is %d rows, want %d", buf.Height(), h)
 		}
@@ -196,8 +181,6 @@ func checkFits(t testing.TB, buf *Buffer, w, h int) {
 	}
 }
 
-// dumpBuffer writes the text of a buffer between bars, then a letter per
-// cell for its style, with a legend that names each style by its roles.
 func dumpBuffer(buf *Buffer, p *Palette) string {
 	roleOf := map[color.Color]string{}
 	for _, r := range roleNames {
@@ -285,16 +268,12 @@ func nextLetter(b byte) byte {
 	return b + 1
 }
 
-// motionStep is one frame of a motion case: the clock, and a state path to
-// set just before the frame is drawn.
 type motionStep struct {
 	at    time.Duration
 	path  string
 	value any
 }
 
-// motionCases are the documents of testdata/motion and the frames each is
-// drawn at, before and during its effect.
 var motionCases = []struct {
 	name  string
 	w, h  int
@@ -312,8 +291,6 @@ var motionCases = []struct {
 		{at: 1400 * time.Millisecond, path: "state.msg", value: "Saved theme.toml"}, {at: 1480 * time.Millisecond}, {at: 1700 * time.Millisecond}}},
 }
 
-// motionSurface opens a motion case with the effects on and a clock the
-// test moves.
 func motionSurface(t testing.TB, name string, d Depth, now *time.Time, motion bool) *Surface {
 	t.Helper()
 	src, err := os.ReadFile(filepath.Join("testdata", "motion", name+".tml"))
@@ -360,8 +337,6 @@ func TestMotionGolden(t *testing.T) {
 					fmt.Fprintf(&b, "=== %s %dx%d at %s\n", d, c.w, c.h, st.at)
 					b.WriteString(dumpBuffer(buf, DefaultPalette(d)))
 				}
-				// Run the clock out: past every effect and ttl, the surface
-				// draws once more and then asks for nothing.
 				for range 3 {
 					now = now.Add(2 * time.Second)
 					s.Render(c.w, c.h)
@@ -375,7 +350,6 @@ func TestMotionGolden(t *testing.T) {
 			compareGolden(t, filepath.Join("testdata", "golden", "motion-"+c.name+".golden"), b.String())
 		})
 	}
-	// Motion off: the first frame is the finished one, and nothing waits.
 	for _, name := range []string{"fade", "stagger", "iris", "decode"} {
 		now := t0
 		off := motionSurface(t, name, TrueColor, &now, false)

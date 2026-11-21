@@ -23,7 +23,6 @@ func TestHerdrManifestsSpotTheirBlockers(t *testing.T) {
 			"  Waiting for approval",
 			"  [a] Allow all for this session   [d] Deny with feedback",
 		}},
-		// Captured from a live amp pane.
 		{"amp", "login prompt", []string{
 			"arch-btw% amp",
 			"No API key found. Starting login flow...",
@@ -49,8 +48,6 @@ func TestHerdrManifestsSpotTheirBlockers(t *testing.T) {
 		{"devin", "tool approval footer", []string{
 			"  Approve once   Select   Confirm   Esc cancel",
 		}},
-		// Captured from a live copilot pane; the dialog the daemon classified
-		// needs_input end to end.
 		{"copilot", "folder trust dialog", []string{
 			"│ Do you trust the files in this folder?                                     │",
 			"│                                                                            │",

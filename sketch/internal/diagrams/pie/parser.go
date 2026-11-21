@@ -1,5 +1,3 @@
-// Ported from pele src/diagrams/pie/parser.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package pie
 
 import (
@@ -40,8 +38,6 @@ type numberScanner struct {
 	fraction int
 }
 
-// Answers as NUMBER_PIE's pattern does. The pattern reads a whole run of digits before it finds
-// there is no fraction, and would do so again from every digit of a long run of zeros.
 func newNumberScanner() common.Scanner {
 	s := &numberScanner{fraction: -1}
 	return s.scan

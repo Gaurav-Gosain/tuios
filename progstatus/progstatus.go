@@ -115,10 +115,6 @@ func IsQuery(body []byte) bool {
 	return trimBlank(string(body)) == "?"
 }
 
-// trimBlank removes the whitespace the specification means around a key or a
-// value: ASCII space and tab. Not unicode.IsSpace: a value never holds more
-// than ASCII, and NBSP or U+0085 around one is a byte outside the value set,
-// which makes the pair malformed rather than something to trim.
 func trimBlank(s string) string {
 	return strings.Trim(s, " \t")
 }
@@ -127,7 +123,7 @@ func trimBlank(s string) string {
 // (the bytes between OSC and ST, "7501;..." included) is payloadLen bytes and
 // which ended with BEL when bel is true.
 func SequenceLen(payloadLen int, bel bool) int {
-	n := 2 + payloadLen + 2 // ESC ] ... ESC \
+	n := 2 + payloadLen + 2
 	if bel {
 		n--
 	}
@@ -143,8 +139,6 @@ func Parse(body []byte, seqLen int) (Report, bool) {
 	if seqLen > MaxSequence || len(body) > MaxSequence {
 		return r, false
 	}
-	// The last value of a repeated key wins, so values are gathered first and
-	// checked once, as the report's own.
 	var (
 		state, id, kind, progress, app, title, msg string
 		hasID, hasTitle, hasMsg                    bool
@@ -152,24 +146,21 @@ func Parse(body []byte, seqLen int) (Report, bool) {
 	for pair := range strings.SplitSeq(string(body), ":") {
 		before, after, ok := strings.Cut(pair, "=")
 		if !ok {
-			continue // no "=": malformed, skipped
+			continue
 		}
 		key := trimBlank(before)
 		value := trimBlank(after)
 		if len(key) > MaxKey {
-			return r, false // a limit: the whole report goes
+			return r, false
 		}
 		if !validKey(key) {
-			continue // malformed: skipped
+			continue
 		}
 		if !validValue(value) {
 			if key == "id" {
-				// An id outside the grammar ignores the report. Skipping the
-				// pair would land the report on the root record, which is
-				// what the specification says a malformed id must not do.
 				return r, false
 			}
-			continue // malformed: skipped
+			continue
 		}
 		switch key {
 		case "state":
@@ -187,19 +178,17 @@ func Parse(body []byte, seqLen int) (Report, bool) {
 		case "msg":
 			msg, hasMsg = value, true
 		}
-		// Any other key is unknown and ignored: that is how the protocol is
-		// extended.
 	}
 
 	switch State(state) {
 	case Idle, Working, Done, Blocked, Error, Clear:
 		r.State = State(state)
 	default:
-		return r, false // no state, or one this terminal does not know
+		return r, false
 	}
 	if hasID {
 		if !ValidID(id) {
-			return r, false // never falls back to the root record
+			return r, false
 		}
 		r.ID = id
 	}
@@ -233,13 +222,11 @@ func Parse(body []byte, seqLen int) (Report, bool) {
 		r.Progress = parseProgress(progress)
 	}
 	if r.State == Clear {
-		// A clear carries nothing but the id it addresses.
 		r = Report{State: Clear, ID: r.ID, Progress: NoProgress}
 	}
 	return r, true
 }
 
-// validKey is the key grammar, [a-z]+.
 func validKey(k string) bool {
 	if k == "" {
 		return false
@@ -252,7 +239,6 @@ func validKey(k string) bool {
 	return true
 }
 
-// validValue is the value grammar, [A-Za-z0-9_.,+/=-]*.
 func validValue(v string) bool {
 	for i := 0; i < len(v); i++ {
 		c := v[i]
@@ -266,8 +252,6 @@ func validValue(v string) bool {
 	return true
 }
 
-// segmentByte is the segment character set, [A-Za-z0-9_.+-], which app
-// shares.
 func segmentByte(c byte) bool {
 	switch {
 	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
@@ -311,8 +295,6 @@ func ValidApp(app string) bool {
 	return true
 }
 
-// parseProgress reads progress: an integer 0 to 100, NoProgress for anything
-// else.
 func parseProgress(v string) int {
 	if v == "" || len(v) > 3 {
 		return NoProgress
@@ -329,16 +311,10 @@ func parseProgress(v string) int {
 	return n
 }
 
-// decodeText decodes a base64 free-text value. The encoded size is checked
-// before decoding. It fails on bad base64, on decoded text over maxDecoded
-// bytes, on text that is not UTF-8, and on any control character.
 func decodeText(v string, maxEncoded, maxDecoded int) (string, bool) {
 	if len(v) > maxEncoded {
 		return "", false
 	}
-	// Padding is optional. A value without it is padded here; a value with
-	// it must have it right. Strict decoding refuses non-zero bits in the
-	// unused tail, so each text has exactly one encoding.
 	if !strings.Contains(v, "=") {
 		switch len(v) % 4 {
 		case 2:
@@ -414,13 +390,10 @@ func (r Record) IsRoot() bool { return r.ID == "" }
 // Store holds one terminal's records. Its zero value is empty and ready. It is
 // safe for concurrent use, and it never calls out while it holds its lock.
 type Store struct {
-	mu   sync.Mutex
-	recs map[string]*Record
-	seq  uint64
-	// seen is set by any report and cleared by a full reset. It is what stops
-	// OSC 9;4 being read as program status once the program speaks for itself.
-	seen bool
-	// limit overrides MaxRecords in tests. Zero means MaxRecords.
+	mu    sync.Mutex
+	recs  map[string]*Record
+	seq   uint64
+	seen  bool
 	limit int
 }
 
@@ -532,7 +505,6 @@ func (s *Store) DropEnded(ended func(group int) bool) bool {
 	return changed
 }
 
-// evictLocked removes the record updated least recently.
 func (s *Store) evictLocked() {
 	var oldest *Record
 	for _, rec := range s.recs {
@@ -636,8 +608,6 @@ func (s *Store) Records() []Record {
 		out = append(out, *rec)
 	}
 	s.mu.Unlock()
-	// sort.Slice, because a generic sort links one copy of pdqsort for each
-	// struct type, about 30 KB in the file, and a store holds 256 records at most.
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	InheritApp(out)
 	return out

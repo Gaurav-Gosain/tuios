@@ -1,5 +1,3 @@
-// Ported from pele src/svg/edges.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-
 package svg
 
 import (
@@ -32,9 +30,6 @@ type EdgePath struct {
 	Edy    float64
 }
 
-// Marker types are Mermaid's: arrow_point, arrow_circle, arrow_cross; anything else draws nothing.
-
-// The most a corner is rounded by in a stepped route.
 const edgeCorner = 12
 
 // How far the handles of a wide turn reach along its two legs. A little more than a circle's,
@@ -83,7 +78,6 @@ func DefaultReach(trim float64) float64 {
 func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, endReach float64) EdgePath {
 	linear := curve == "linear"
 	stepped := curve == "step" || curve == "stepBefore" || curve == "stepAfter"
-	// A stepped route adds up to two turns at a point, and a lead adds a point at each end.
 	room := len(route)/3*3 + 2
 	all := make([]float64, 3*room)
 	xs, ys, axes := all[:0:room], all[room:room:2*room], all[2*room:2*room:3*room]
@@ -93,7 +87,6 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 		y := route[i+1]
 		axis := route[i+2]
 		last := len(xs) - 1
-		// A stepped route turns at right angles where a smooth one would curve.
 		if stepped && last >= 0 && math.Abs(x-xs[last]) >= 0.01 && math.Abs(y-ys[last]) >= 0.01 {
 			px := xs[last]
 			py := ys[last]
@@ -124,7 +117,6 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 	last := len(xs) - 1
 	aligned := func(i int) bool { return math.Abs(xs[i]-xs[i-1]) < 0.01 || math.Abs(ys[i]-ys[i-1]) < 0.01 }
 	straight := func(i int) bool { return linear || aligned(i) }
-	// The way the route heads from point i to point j: along the flow where an S joins them.
 	unit := func(i, j int, axis float64) (float64, float64) {
 		if !straight(max(i, j)) {
 			if axis == 0 {
@@ -148,19 +140,13 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 	xs[last] -= float64(edx * endTrim)
 	ys[last] -= float64(edy * endTrim)
 	length := func(i int) float64 { return math.Abs(xs[i]-xs[i-1]) + math.Abs(ys[i]-ys[i-1]) }
-	// Whether the route turns a corner at point i, from running one way to running the other.
 	turns := func(i int) bool {
 		return !linear && i > 0 && i < last && aligned(i) && aligned(i+1) && length(i) >= 0.01 && length(i+1) >= 0.01 &&
 			(math.Abs(xs[i]-xs[i-1]) < 0.01) != (math.Abs(xs[i+1]-xs[i]) < 0.01)
 	}
-	// An edge that curves into a marker runs straight for a little way first, where it has the
-	// room, so that the marker does not sit on the bend.
 	along := func(i int, ux, uy float64) float64 {
 		return float64(math.Abs(xs[i]-xs[i-1])*math.Abs(ux)) + float64(math.Abs(ys[i]-ys[i-1])*math.Abs(uy))
 	}
-	// Of the way from the end of a run to where it turns, the part that makes up for a larger
-	// marker beside this one is kept where it can be, and the rest is at most a quarter of what
-	// is left, so that ends on one side of a node turn equally far from it.
 	lead := func(reach, trim, run float64) float64 {
 		room := math.Min(math.Max(0, reach-LEAD-trim), run/4)
 		return room + math.Min(reach-trim-room, (run-room)/4)
@@ -227,15 +213,12 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 			continue
 		}
 		if !turns(i) {
-			// A point part of the way along one straight run adds nothing to the path.
 			if i < last && aligned(i) && aligned(i+1) && float64((x-xs[i-1])*(xs[i+1]-x))+float64((y-ys[i-1])*(ys[i+1]-y)) > 0 {
 				continue
 			}
 			lineTo(x, y)
 			continue
 		}
-		// How much of the leg before the turn and of the leg after it the turn takes: all of one
-		// that ends at a node, short of the straight run into a marker, and half of one it shares.
 		before := length(i)
 		if turns(i - 1) {
 			before = length(i) / 2
@@ -272,7 +255,6 @@ func RoutePath(route []float64, curve string, startTrim, endTrim, startReach, en
 	return EdgePath{D: string(d), Sx: sx, Sy: sy, Sdx: -sdx, Sdy: -sdy, Ex: ex, Ey: ey, Edx: edx, Edy: edy}
 }
 
-// appendPoint appends "x,y".
 func appendPoint(b []byte, x, y float64) []byte {
 	b = AppendNum(b, x)
 	b = append(b, ',')
@@ -353,7 +335,6 @@ func WriteMarkerStroke(b *strings.Builder, typ string, x, y, dx, dy float64, col
 	}
 }
 
-// writePoint writes "x,y" to b.
 func writePoint(b *strings.Builder, x, y float64) {
 	WriteNum(b, x)
 	b.WriteByte(',')
@@ -386,7 +367,6 @@ func LoopPath(cx, cy, w, h float64, k int, sideways bool, base, trim float64, e 
 	spread := math.Min(half-4, 8+float64(float64(k)*6))
 	reach := base + float64(float64(k)*8)
 	length := js.Or(js.Hypot(reach, spread), 1)
-	// Local frame: `out` points away from the node, `along` runs along its side.
 	at := func(out, along float64) string {
 		if sideways {
 			return Num(cx+along) + "," + Num(cy+h/2+out)

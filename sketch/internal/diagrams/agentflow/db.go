@@ -1,9 +1,3 @@
-// Ported from pele src/diagrams/agentflow/db.ts and diagnostics.ts at 3a2f075ee0c3d914f0fad3545fc0f193693975ac.
-//
-// pele's AgentflowDb also keeps where each statement sits (mappings) and builds a semantic
-// model for tools; sketch reads neither, so the port leaves them out, and its diagnostics
-// carry no position.
-
 package agentflow
 
 import (
@@ -48,15 +42,12 @@ func labelType(typ any) string {
 }
 
 func unquote(text string) string {
-	// A lone quote stays: substring(1, 0) swaps its ends and gives the quote back.
 	if len(text) >= 2 && strings.HasPrefix(text, `"`) && strings.HasSuffix(text, `"`) {
 		return text[1 : len(text)-1]
 	}
 	return text
 }
 
-// stripPrototypeKeys drops `__proto__`, `constructor` and `prototype` keys at every level, so that a consumer
-// merging metadata into its own objects cannot be made to pollute a prototype.
 func stripPrototypeKeys(root any) any {
 	if !hasPrototypeKeys(root) {
 		return root
@@ -81,8 +72,6 @@ func stripPrototypeKeys(root any) any {
 	return root
 }
 
-// hasPrototypeKeys is whether stripPrototypeKeys would drop anything; when not, the value is kept
-// as it is, where pele copies it. Not in pele.
 func hasPrototypeKeys(v any) bool {
 	switch t := v.(type) {
 	case []any:
@@ -101,11 +90,8 @@ func hasPrototypeKeys(v any) bool {
 	return false
 }
 
-// merge adds what a metadata block holds to an element's metadata. Mermaid spreads the parsed YAML
-// whatever it is, so a list adds its indexes as keys and a string its characters.
 func merge(into Metadata, doc any) Metadata {
 	if m, ok := doc.(map[string]any); ok && into == nil {
-		// A parsed block belongs to this element alone, so it can be the element's metadata.
 		return m
 	}
 	if into == nil {
@@ -135,7 +121,6 @@ var (
 	RE_ESCAPED_COMMA  = lazyre.New(`\\,`)
 )
 
-// indentOf is line.length - line.trimStart().length, in UTF-16 units.
 func indentOf(line string) int {
 	trimmed := js.TrimStart(line)
 	n := 0
@@ -149,8 +134,6 @@ func indentOf(line string) int {
 	return n
 }
 
-// stripLineTrailingCommas removes the comma that ends a line of a multi-line metadata body, which block YAML does not allow.
-// Commas inside quoted scalars, flow collections and block scalars are content and stay.
 func stripLineTrailingCommas(body string) string {
 	inSingle, inDouble := false, false
 	flowDepth := 0
@@ -254,7 +237,6 @@ func destructEndLink(raw string) (typ, stroke string, length int) {
 	return typ, stroke, length
 }
 
-// strMap is a JavaScript Map with string keys, which keeps the order keys were first set in. Not in pele.
 type strMap[V any] struct {
 	keys []string
 	m    map[string]V
@@ -329,7 +311,6 @@ func (db *AgentflowDb) metadata(id string, source string, loc Loc) any {
 	}
 	parsed, err := util.ParseYaml(text)
 	if err != nil {
-		// Block YAML rejects the comma-separated style of the single-line form, so try once more without the commas.
 		stripped := source
 		if multiline {
 			stripped = stripLineTrailingCommas(source)
@@ -358,7 +339,6 @@ func (db *AgentflowDb) metadata(id string, source string, loc Loc) any {
 	return stripPrototypeKeys(parsed)
 }
 
-// errorAt is the line and column of loc in the source as written. A zero Loc has none.
 func (db *AgentflowDb) errorAt(loc Loc) (int, int) {
 	if loc.FirstLine == 0 {
 		return 0, 0
@@ -375,7 +355,6 @@ func (db *AgentflowDb) errorAt(loc Loc) (int, int) {
 			start = 0
 		}
 	}
-	// The column counts UTF-16 units; Locate takes a byte offset.
 	at := start
 	for units := 0; units < loc.FirstColumn && at < len(source); {
 		r, size := utf8.DecodeRuneInString(source[at:])
@@ -401,8 +380,6 @@ func jsonMarshal(s string) (string, error) {
 
 func sortStrings(s []string) { slices.SortFunc(s, js.Compare) }
 
-// jsonOf is JSON.stringify of a YAML value. A YAML map's keys come out in sorted order, where pele
-// keeps the order they were written in.
 func jsonOf(v any) string {
 	switch t := v.(type) {
 	case nil:
@@ -471,7 +448,6 @@ func (db *AgentflowDb) AddVertex(id string, textObj *FlowText, typ *string, styl
 		return
 	}
 
-	// Mermaid reserves this id and creates no node for it.
 	if id == "connectors" {
 		return
 	}
@@ -552,8 +528,6 @@ func (db *AgentflowDb) AddVertex(id string, textObj *FlowText, typ *string, styl
 	}
 }
 
-// curveName is the curve an edge asks for. A value that is not a string names no curve
-// RoutePath knows, as in pele, where it is compared with the names.
 func curveName(v any) string {
 	if s, ok := v.(string); ok {
 		return s
@@ -632,8 +606,6 @@ func (db *AgentflowDb) UpdateLinkInterpolate(positions []string, interpolate str
 }
 
 func (db *AgentflowDb) UpdateLink(positions []string, style []string) {
-	// pele gives every position the same list and adds fill:none to it at the first edge, so
-	// that every position, the default too, ends up with it.
 	if len(style) > 0 {
 		for _, pos := range positions {
 			if pos == "default" {
@@ -660,7 +632,6 @@ func (db *AgentflowDb) UpdateLink(positions []string, style []string) {
 	}
 }
 
-// edgeAt: Mermaid checks the bounds only for a numeric index and crashes on the strings its own parser passes.
 func (db *AgentflowDb) edgeAt(pos string) *AgentEdge {
 	k := js.Number(pos)
 	if k >= 0 && k < float64(len(db.Edges)) && k == math.Trunc(k) {
@@ -759,7 +730,6 @@ func (db *AgentflowDb) SetAccDescription(text string) {
 	db.AccDescr = dropIndent(text)
 }
 
-// dropIndent is text.replace(/\n\s+/g, '\n').
 func dropIndent(text string) string {
 	if !strings.Contains(text, "\n") {
 		return text
@@ -836,7 +806,6 @@ func (db *AgentflowDb) AddSubGraph(idText *FlowText, list []DocItem, titleText *
 	}
 	db.subCount++
 
-	// A flow never contains itself, a globally scoped node, or a node another flow already holds.
 	nodes := []string{}
 	for _, nodeID := range nodeList {
 		if nodeID != *id && !db.globalNodes[nodeID] && !db.members[nodeID] {
@@ -848,7 +817,6 @@ func (db *AgentflowDb) AddSubGraph(idText *FlowText, list []DocItem, titleText *
 	}
 
 	if existing, ok := db.subgraphLookup[*id]; ok {
-		// A repeated id adds its members to the first flow; its title and direction win.
 		existing.Nodes = append(existing.Nodes, nodes...)
 		if js.Trim(title) != "" {
 			existing.Title = js.Trim(title)
@@ -945,7 +913,6 @@ func (db *AgentflowDb) AddConnector(textObj *FlowText, titleObj *FlowText) strin
 func (db *AgentflowDb) DestructLink(end string, start *string) *LinkInfo {
 	typ, stroke, length := destructEndLink(end)
 	if start != nil && *start != "" {
-		// The first half of a split arrow only says whether the line is dotted.
 		s := "normal"
 		if strings.Contains(*start, ".") {
 			s = "dotted"
@@ -982,7 +949,6 @@ func (db *AgentflowDb) vertexKind(vertex *AgentNode) string {
 
 func (db *AgentflowDb) emit(id, severity, message, nodeID string) {
 	diagnostic := Diagnostic{ID: id, Severity: severity, Message: message, NodeID: nodeID}
-	// The graph may be built more than once; each finding is recorded once.
 	for _, d := range db.reported[nodeID] {
 		if d == diagnostic {
 			return

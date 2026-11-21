@@ -11,8 +11,6 @@ import (
 	"testing"
 )
 
-// The node script reads float64 inputs and writes Math.log2 of each, twice, the second
-// time after the loop is hot, so that the optimizing compiler's code is checked as well.
 const log2Script = `
 const fs = require('fs');
 const [,, input, output] = process.argv;
@@ -25,9 +23,6 @@ for (let round = 0; round < 2; round++) {
 fs.writeFileSync(output, Buffer.from(out.buffer));
 `
 
-// log2Inputs are the inputs of logInputs, every whole number up to 2^20, and every power
-// of two with the doubles either side of it: packet takes the log2 of a whole count of bits
-// and floors it, so a power of two must give its exponent exactly.
 func log2Inputs() []float64 {
 	xs := logInputs()
 	for i := 1; i <= 1<<20; i++ {

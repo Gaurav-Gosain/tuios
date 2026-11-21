@@ -45,11 +45,9 @@ type SemanticMarker struct {
 // them).
 type SemanticMarkerList struct {
 	mu       sync.Mutex
-	markers  []SemanticMarker // AbsLine is stored plus trimmed
+	markers  []SemanticMarker
 	trimmed  int
 	maxItems int
-	// nonEmpty mirrors len(markers) > 0, so a trim on a pane that has no
-	// markers, which is most of them, takes no lock. Written under mu.
 	nonEmpty atomic.Bool
 }
 
@@ -64,8 +62,6 @@ func NewSemanticMarkerList(maxItems int) *SemanticMarkerList {
 	}
 }
 
-// setMarkersLocked replaces the stored slice and keeps nonEmpty in step.
-// Callers hold mu.
 func (l *SemanticMarkerList) setMarkersLocked(markers []SemanticMarker) {
 	l.markers = markers
 	l.nonEmpty.Store(len(markers) > 0)
@@ -77,7 +73,6 @@ func (l *SemanticMarkerList) Add(m SemanticMarker) {
 	defer l.mu.Unlock()
 	markers := l.markers
 	if len(markers) >= l.maxItems {
-		// Discard oldest 10% to avoid frequent shifts
 		trim := max(l.maxItems/10, 1)
 		markers = markers[trim:]
 	}
@@ -98,8 +93,6 @@ func (l *SemanticMarkerList) Markers() []SemanticMarker {
 	return out
 }
 
-// replace swaps in a list the caller built from Markers, such as one a
-// reflow moved.
 func (l *SemanticMarkerList) replace(markers []SemanticMarker) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -153,12 +146,6 @@ func (l *SemanticMarkerList) Last(t SemanticMarkerType) *SemanticMarker {
 	return nil
 }
 
-// commandStartForCapture is what a new C marker captures its command from.
-// Walking back, the first B or C met decides: a B is returned as b, to read
-// from, and a C as prevC, whose text the new C reuses (empty when that C had
-// no B). A shell sends one C per B, so b is the answer in normal use. A run
-// of C markers stops at the one before it, so each costs one step and reads
-// nothing.
 func (l *SemanticMarkerList) commandStartForCapture() (b, prevC *SemanticMarker) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -202,8 +189,6 @@ func (l *SemanticMarkerList) RemoveOnScreen(scrollbackLen int) {
 // front.
 func (l *SemanticMarkerList) AdjustForScrollbackTrim(linesRemoved int) {
 	if linesRemoved <= 0 || !l.nonEmpty.Load() {
-		// With no markers the origin has nothing to stay consistent with,
-		// so it need not move.
 		return
 	}
 	l.mu.Lock()

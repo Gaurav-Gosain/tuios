@@ -7,11 +7,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// CSI parameter parsing and cursor motion. Parameters are where a guest's
-// output stops looking like anything a person would write: a program computing
-// a column can emit a negative one, an overflowed one, or none at all, and the
-// terminal has to have an answer for each.
-
 func TestConform_CSIParameters(t *testing.T) {
 	runConform(t, []conformCase{
 		{
@@ -33,9 +28,6 @@ func TestConform_CSIParameters(t *testing.T) {
 			want:   "\n\nX",
 		},
 		{
-			// A zero parameter means the default, which for CUP is row and
-			// column one. Programs emit it constantly by computing an index
-			// from a value that turned out to be empty.
 			name:   "zero parameters mean one",
 			in:     "\x1b[0;0HX",
 			cursor: "1,0",
@@ -60,17 +52,12 @@ func TestConform_CSIParameters(t *testing.T) {
 			want:   "\n  X",
 		},
 		{
-			// The parser has a fixed parameter capacity. Running past it must
-			// not corrupt the parameters it did keep, and must not wedge the
-			// parser for what comes after.
 			name:   "more parameters than the parser holds",
 			in:     "\x1b[" + strings.Repeat("1;", 40) + "HX",
 			cursor: "1,0",
 			want:   "X",
 		},
 		{
-			// CAN and SUB abandon a sequence in progress. What follows is
-			// ordinary text, not the rest of the sequence.
 			name:      "CAN abandons a sequence in progress",
 			in:        "\x1b[1;1\x18Hxy",
 			cursor:    "3,0",
@@ -85,10 +72,6 @@ func TestConform_CSIParameters(t *testing.T) {
 			unhandled: true,
 		},
 		{
-			// A C0 control inside a CSI is carried out where it is, and the
-			// CSI goes on to its final byte, as in xterm. The parser used to
-			// fold the control into the command, so this CUP with a line
-			// feed inside it came out as ED 2 and erased the x.
 			name:   "a control inside a CSI is carried out and the CSI goes on",
 			in:     "x\x1b[2\n;3Hy",
 			cursor: "3,1",
@@ -120,9 +103,6 @@ func TestConform_CSIParameters(t *testing.T) {
 			unhandled: true,
 		},
 		{
-			// DEL is ignored wherever it appears inside a sequence, so this
-			// is CUU 1 followed by a printed B, not a broken sequence whose
-			// bytes leak onto the screen.
 			name:   "DEL inside a sequence is ignored, not printed",
 			in:     "\x1b[1\x7fAB",
 			want:   "B",
@@ -199,8 +179,6 @@ func TestConform_CursorMotion(t *testing.T) {
 			cursor: "4,0",
 			want:   "   X",
 		},
-		// HPB and VPB are ECMA-48's backward moves, the opposites of HPR
-		// and VPR. They used to be unhandled, so the cursor stayed put.
 		{
 			name:   "HPB moves the cursor left",
 			in:     "\x1b[1;5H\x1b[2jX",
@@ -238,8 +216,6 @@ func TestConform_CursorMotion(t *testing.T) {
 			want:   "  X",
 		},
 		{
-			// Inside a scroll region VPB stops at the top margin, as CUU does
-			// and as ghostty does with VPB.
 			name:   "VPB stops at the top margin",
 			in:     "\x1b[2;4r\x1b[4;3H\x1b[9kX",
 			cursor: "3,1",
@@ -289,18 +265,12 @@ func TestConform_Erase(t *testing.T) {
 			want: "",
 		},
 		{
-			// Erasing does not move the cursor, which is what lets a program
-			// clear a line and rewrite it in place.
 			name:   "ED 2 leaves the cursor alone",
 			in:     fill + "\x1b[2;3H\x1b[2J",
 			cursor: "2,1",
 			want:   "",
 		},
 		{
-			// ED 2 erases to the pen's background, as ED 0, ED 1 and EL do.
-			// neovim clears with its colour scheme's background set and then
-			// draws only its text, so a clear to the default background left
-			// every cell past the text in the host's colour (#624).
 			name:  "ED 2 erases to the current background",
 			in:    fill + "\x1b[41m\x1b[2J",
 			want:  "",

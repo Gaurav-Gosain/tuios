@@ -1,7 +1,3 @@
-// Not a file of pele: the geometry a renderer worked out, kept for drawing the
-// diagram some other way, such as with box-drawing characters (sketch/text).
-// Coordinates are those of the SVG.
-
 package types
 
 // Geometry is filled by a renderer when RenderOptions.Geometry is set. It has
